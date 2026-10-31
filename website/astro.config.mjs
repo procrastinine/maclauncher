@@ -1,6 +1,8 @@
 // @ts-check
+import { readFileSync } from "node:fs";
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
+import { unified } from "@astrojs/markdown-remark";
 import { sidebar } from "./src/sidebar.mjs";
 
 // The dev server serves public/ files but not their directory indexes, which GitHub Pages does.
@@ -25,14 +27,26 @@ const devDemoIndex = {
   }
 };
 
+// Markdown images load with the page instead of when scrolled into view;
+// src/components/graphics/Compare.astro explains why.
+const eagerImages = () => tree => {
+  const visit = node => {
+    if (node.type === "element" && node.tagName === "img") node.properties.loading = "eager";
+    node.children?.forEach(visit);
+  };
+  visit(tree);
+};
+
 // Published by .github/workflows/pages.yml at procrastinine.github.io/maclauncher.
 export default defineConfig({
   site: "https://procrastinine.github.io",
   base: "/maclauncher",
+  markdown: { processor: unified({ rehypePlugins: [eagerImages] }) },
   vite: { plugins: [devDemoIndex] },
   integrations: [
     starlight({
       title: "MacLauncher",
+      disable404Route: true,
       description: "Play games on macOS with native runtimes, a Metal graphics and effects layer, and tools for tinkering.",
       logo: { src: "./src/assets/maclauncher.svg" },
       favicon: "/favicon.svg",
@@ -44,6 +58,10 @@ export default defineConfig({
       head: [{
         tag: "script",
         content: "if(new URLSearchParams(location.search).has('preview')){const r=document.documentElement,l=()=>{if(r.dataset.theme!=='light')r.dataset.theme='light'};l();new MutationObserver(l).observe(r,{attributes:true,attributeFilter:['data-theme']})}"
+      }, {
+        // Download links offer the Apple Silicon or Intel build for the visitor's Mac.
+        tag: "script",
+        content: readFileSync(new URL("./src/mac-download.js", import.meta.url), "utf8")
       }],
       // Every page links its Markdown copy (see src/markdown.ts).
       components: { Head: "./src/components/Head.astro", PageTitle: "./src/components/PageTitle.astro" },

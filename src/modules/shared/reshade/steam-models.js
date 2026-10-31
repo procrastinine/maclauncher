@@ -1,15 +1,16 @@
-const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
+const fs = require("node:fs"), path = require("node:path");
 const { promisify } = require("node:util"), { execFile } = require("node:child_process");
 const { setTimeout: delay } = require("node:timers/promises");
 const Writable = require("../writable-input");
-const { fetchUrlBuffer } = require("../runtime/download-utils");
+const Upstream = require("../runtime/upstream");
 const { runDownloadTask } = require("../runtime/download-manager");
 const Models = require("./models");
+const Native = require("../runtime/local-native");
 const run = promisify(execFile);
-// Valve's macOS bootstrap updates itself after launch. Pin the downloaded
-// bootstrap; Steam verifies the authenticated application download separately.
-const BOOTSTRAP = Object.freeze({ url: "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_osx.tar.gz",
-  sha256: "8ecc17c8988e5acadcc78e631c48490f76150f2dfaa6cf8d7b4b67b097bd753b" });
+// Valve replaces this bootstrap in place, and SteamCMD updates itself after
+// launch. The downloaded executable must carry Valve's Developer ID signature;
+// Steam verifies its own updates and the authenticated application download.
+const BOOTSTRAP = Upstream.vendor({ location: "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_osx.tar.gz", teamIdentifier: "MXGJJ98X76" });
 const quote = text => "'" + text.replace(/'/g, "'\\''") + "'";
 function terminalScript(session) {
   if (!path.isAbsolute(session) || /[\x00-\x1f]/.test(session)) throw new Error("Invalid Steam download directory.");
@@ -49,9 +50,22 @@ printf 'Steam account name: '
 IFS= read -r steam_account || exit 1
 case "$steam_account" in ''|*[!a-zA-Z0-9_]*|anonymous) printf '%s\\n' 'A Steam account name is required.'; exit 1;; esac
 [ -f active ] && [ ! -f cancel ] || exit 1
-/usr/bin/env -i HOME="$PWD/home" TMPDIR="$PWD/tmp/" PATH=/usr/bin:/bin:/usr/sbin:/sbin \\
-  ./tools/steamcmd.sh +@sSteamCmdForcePlatformType windows +@ShutdownOnFailedCommand 1 \\
-  +force_install_dir "$PWD/content" +login "$steam_account" +app_update 993090 validate +quit &
+# Start the signed executable with the environment of Valve's steamcmd.sh.
+# Status 42 asks for a restart after SteamCMD updates itself.
+run_steamcmd() {
+  ulimit -n 2048
+  while :; do
+    steamcmd="$PWD/tools/steamcmd"
+    [ -x "$steamcmd" ] || steamcmd="$PWD/tools/Steam.AppBundle/Steam/Contents/MacOS/steamcmd"
+    /usr/bin/env -i HOME="$PWD/home" TMPDIR="$PWD/tmp/" PATH=/usr/bin:/bin:/usr/sbin:/sbin \\
+      DYLD_LIBRARY_PATH="$PWD/tools" DYLD_FRAMEWORK_PATH="$PWD/tools" \\
+      "$steamcmd" +@sSteamCmdForcePlatformType windows +@ShutdownOnFailedCommand 1 \\
+      +force_install_dir "$PWD/content" +login "$steam_account" +app_update 993090 validate +quit
+    status=$?
+    [ "$status" -eq 42 ] || return "$status"
+  done
+}
+run_steamcmd &
 steam_pid=$!
 printf '%s' "$steam_pid" > steam.pid
 # Bring SteamCMD's job to the foreground so its password/Guard prompts own the TTY.
@@ -89,20 +103,52 @@ async function terminalDownload(session, { signal, execute = run, timeout = 30 *
     if (!finished) await delay(3500);
   }
 }
+// Valve's archive holds steamcmd at its top level. A package that moves it
+// deeper is used from that folder; the self-updated app bundle stays intact.
+function steamcmdExecutable(tools) {
+  const executable = root => ["steamcmd", "Steam.AppBundle/Steam/Contents/MacOS/steamcmd"].map(name => path.join(root, name))
+    .find(file => { try { return fs.lstatSync(file).isFile(); } catch { return false; } });
+  if (executable(tools)) return executable(tools);
+  let found = null;
+  (function visit(directory, depth) {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (found || !entry.isDirectory() || entry.name === "__MACOSX" || /\.(?:app|AppBundle)$/.test(entry.name)) continue;
+      const child = path.join(directory, entry.name);
+      if (executable(child)) found = child; else if (depth < 3) visit(child, depth + 1);
+    }
+  })(tools, 0);
+  if (!found) return null;
+  const unpacked = tools + "-package";
+  fs.renameSync(tools, unpacked); fs.renameSync(path.join(unpacked, path.relative(tools, found)), tools);
+  return executable(tools);
+}
 async function acquire(context = {}, dependencies = {}) {
   const { userDataDir, signal, onProgress } = context;
-  const { fetchBootstrap = fetchUrlBuffer, execute = run, authenticate = terminalDownload, importModel = Models.importModel } = dependencies;
+  const { execute = run, authenticate = terminalDownload, importModel = Models.importModel } = dependencies;
   const root = path.join(userDataDir, "runtimes/lossless-steam");
   Writable.assertOwnDirectory(userDataDir, root);
   const session = fs.mkdtempSync(path.join(root, ".download-"));
   try {
     for (const name of ["tools", "home", "tmp", "content"]) fs.mkdirSync(path.join(session, name), { mode: 0o700 });
     onProgress?.({ detail: "Downloading SteamCMD", downloaded: 0, total: null });
-    const { body: bytes } = await fetchBootstrap(BOOTSTRAP.url, { signal, maxBytes: 32 * 1024 * 1024 });
-    if (crypto.createHash("sha256").update(bytes).digest("hex") !== BOOTSTRAP.sha256)
-      throw new Error("The SteamCMD download has changed. Import an installed Lossless Scaling DLL or update MacLauncher.");
-    const archive = path.join(session, "steamcmd.tar.gz"); fs.writeFileSync(archive, bytes, { mode: 0o600, flag: "wx" });
-    await execute("/usr/bin/tar", ["-xzf", archive, "-C", path.join(session, "tools")], { signal, timeout: 30000 });
+    const [listed] = (await BOOTSTRAP.discover({ signal }))[0]?.files || [];
+    const archive = path.join(session, "steamcmd.tar.gz");
+    try { await BOOTSTRAP.download(listed, archive, { signal }); }
+    catch (error) {
+      signal?.throwIfAborted();
+      throw new Error(`SteamCMD could not be downloaded${error.statusCode ? ` (${error.statusCode})` : ""}. Import an installed Lossless Scaling DLL instead.`, { cause: error });
+    }
+    await execute("/usr/bin/tar", ["-xf", archive, "-C", path.join(session, "tools")], { signal, timeout: 30000 });
+    try {
+      const executable = steamcmdExecutable(path.join(session, "tools"));
+      if (!executable) throw new Error("SteamCMD is not a regular file.");
+      Native.readMachOArchitectures(executable);
+      await BOOTSTRAP.verifySigner(executable, { execute, signal });
+      fs.chmodSync(executable, 0o755);
+    } catch (error) {
+      signal?.throwIfAborted();
+      throw new Error("The SteamCMD download is not Valve's signed macOS SteamCMD. Import an installed Lossless Scaling DLL instead.", { cause: error });
+    }
     await context.ensureRosetta?.({ signal });
     onProgress?.({ detail: "Complete Steam sign-in in Terminal", downloaded: 0, total: null });
     await authenticate(session, { signal });

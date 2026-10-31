@@ -1,7 +1,7 @@
 const { createManagedPythonTool } = require("../../shared/runtime/managed-python-tool");
-const { createGithubCommitDiscovery } = require("../../shared/runtime/github-runtime-catalog");
+const Upstream = require("../../shared/runtime/upstream");
 const Custom = require("../../shared/runtime/custom-runtime");
-const { selectRuntimeVersion, managerDefaultVersion } = require("../../shared/runtime/version-choices");
+const { selectRuntimeVersion, managerDefaultVersion, usableDefaultVersion } = require("../../shared/runtime/version-choices");
 const { createManager: createLegacyManager } = require("./legacy-manager");
 const NativeTools = require("./native-tools");
 
@@ -12,16 +12,16 @@ function createManager(dependencies = {}) {
   const source = dependencies.sourceManager || createManagedPythonTool({ id: "nxnative", sourceId: "upstream", label: "nxnative",
     archiveLimits: { archive: 128 * 1024 ** 2, expanded: 512 * 1024 ** 2, entries: 10000 },
     scriptName: SOURCE_FILES[0], requiredFiles: SOURCE_FILES, sourceUrl: "https://github.com/seedds/nxnative",
-    discoverCatalog: createGithubCommitDiscovery({ owner: "seedds", repo: "nxnative", dependencies }) });
+    upstream: Upstream.githubCommits({ repository: "seedds/nxnative", recognize: () => ({ archive: true }) }) });
   const legacy = dependencies.legacyManager || createLegacyManager(dependencies);
   const tools = dependencies.toolsManager || NativeTools.createManager(dependencies);
   const configured = (entry, settings, userDataDir, options = {}) => {
     const manual = [options.version, entry?.runtimeData?.nxnative?.version]
       .find(value => typeof value === "string" && !["", "auto", "latest"].includes(value.trim()));
     const recommendation = options.recommendedVersion ?? options.recommended;
+    // A saved default that is neither listed nor installed gives way to the newest usable version.
     return selectRuntimeVersion({ manual, recommended: manual ? null : typeof recommendation === "function" ? recommendation() : recommendation,
-      defaultVersion: source.normalizeSettings(settings?.runtimes?.nxnative).defaultVersion,
-      fallback: manager.getState({ userDataDir, settings: settings?.runtimes?.nxnative, runtimeSettings: settings?.runtimes }).defaultVersion }).version;
+      defaultVersion: usableDefaultVersion(manager.getState({ userDataDir, settings: settings?.runtimes?.nxnative, runtimeSettings: settings?.runtimes })) }).version;
   };
   const runtimeUses = (version, sourceInstall, native) => sourceInstall && native.ready ? [
     { managerId: "nxnative", version, sectionId: "default", sourcePath: sourceInstall.root || sourceInstall.installDir },

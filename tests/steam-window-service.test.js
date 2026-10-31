@@ -69,9 +69,9 @@ test("remembered Steam session is encrypted and private; unavailable encryption 
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
   let available = true;
   const safeStorage = {
-    isEncryptionAvailable: () => available,
-    encryptString: text => Buffer.from(text.split("").reverse().join("")),
-    decryptString: bytes => bytes.toString().split("").reverse().join("")
+    isAsyncEncryptionAvailable: async () => available,
+    encryptStringAsync: async text => Buffer.from(text.split("").reverse().join("")),
+    decryptStringAsync: async bytes => ({ result: bytes.toString().split("").reverse().join(""), shouldReEncrypt: false })
   };
   const storage = createSteamSessionStorage({ userDataDir: directory, safeStorage });
   assert.equal(await storage.loadSession(), null);
@@ -85,6 +85,47 @@ test("remembered Steam session is encrypted and private; unavailable encryption 
   available = false;
   await assert.rejects(storage.saveSession(session), /Keychain/);
   await assert.rejects(fs.stat(file), { code: "ENOENT" });
+});
+
+test('async vault operations read existing ciphertext and preserve it through encryption or decryption failures', async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'steam-async-vault-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const legacy = { accountName: 'Legacy', refreshToken: 'fixture-existing-token' };
+  const encode = text => Buffer.from(text.split('').reverse().join(''));
+  const file = path.join(directory, 'steam/session.enc');
+  await fs.mkdir(path.dirname(file));
+  const ciphertext = encode(JSON.stringify(legacy));
+  await fs.writeFile(file, ciphertext, { mode: 0o600 });
+  let encryptionFails = false, decryptionFails = false;
+  const safeStorage = {
+    isEncryptionAvailable: () => assert.fail('Deprecated synchronous availability API was used'),
+    encryptString: () => assert.fail('Deprecated synchronous encryption API was used'),
+    decryptString: () => assert.fail('Deprecated synchronous decryption API was used'),
+    isAsyncEncryptionAvailable: async () => true,
+    async encryptStringAsync(text) {
+      if (encryptionFails) throw new Error('Fixture async encryption failed');
+      return encode(text);
+    },
+    async decryptStringAsync(bytes) {
+      if (decryptionFails) throw new Error('Fixture async decryption failed');
+      return { result: bytes.toString().split('').reverse().join(''), shouldReEncrypt: false };
+    }
+  };
+  const storage = createSteamSessionStorage({ userDataDir: directory, safeStorage });
+  assert.deepEqual(await storage.loadSession('legacy'), legacy, 'Existing single-session ciphertext remains readable');
+  assert.deepEqual(await fs.readFile(file), ciphertext, 'Reading an existing vault does not replace its ciphertext');
+  encryptionFails = true;
+  await assert.rejects(storage.saveSession({ accountName: 'Second', refreshToken: 'fixture-new-token' }), /Fixture async encryption failed/);
+  assert.deepEqual(await fs.readFile(file), ciphertext, 'A failed async write preserves the original vault');
+  encryptionFails = false; decryptionFails = true;
+  assert.equal(await storage.loadSession(), null, 'An unreadable vault keeps the existing read fallback');
+  await assert.rejects(storage.saveSession({ accountName: 'Second' }), /Saved sign-ins could not be read/);
+  assert.deepEqual(await fs.readFile(file), ciphertext, 'Failed decryption cannot overwrite saved accounts');
+  decryptionFails = false;
+  await storage.saveSession({ accountName: 'Second', refreshToken: 'fixture-new-token' });
+  assert.deepEqual(await storage.loadSession('legacy'), legacy, 'A subsequent successful write retains the existing account');
+  assert.equal((await storage.loadSession('second')).refreshToken, 'fixture-new-token');
+  assert.equal((await fs.stat(file)).mode & 0o777, 0o600);
 });
 
 test('multiple manual Steam accounts coexist with desktop Steam and switch without cancelling downloads', async () => {
@@ -123,7 +164,8 @@ test('multiple manual Steam accounts coexist with desktop Steam and switch witho
 test('remembered account writes serialize and removal preserves other accounts', async t => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'steam-accounts-'));
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
-  const safeStorage = { isEncryptionAvailable: () => true, encryptString: text => Buffer.from(text), decryptString: bytes => bytes.toString() };
+  const safeStorage = { isAsyncEncryptionAvailable: async () => true, encryptStringAsync: async text => Buffer.from(text),
+    decryptStringAsync: async bytes => ({ result: bytes.toString(), shouldReEncrypt: false }) };
   const storage = createSteamSessionStorage({ userDataDir: directory, safeStorage });
   await Promise.all(['First', 'Second'].map(accountName => storage.saveSession({ accountName, refreshToken: accountName + '-token' })));
   assert.deepEqual((await storage.listAccounts()).map(row => row.accountName), ['First', 'Second']);
@@ -137,9 +179,9 @@ test('opening External lists account labels without querying or decrypting the K
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
   let allow = false, keychainCalls = 0;
   const safeStorage = {
-    isEncryptionAvailable() { keychainCalls++; assert.ok(allow, 'Opening External must not touch Keychain'); return true; },
-    encryptString: text => Buffer.from(text),
-    decryptString(bytes) { assert.ok(allow, 'Account listing must not decrypt credentials'); return bytes.toString(); }
+    async isAsyncEncryptionAvailable() { keychainCalls++; assert.ok(allow, 'Opening External must not touch Keychain'); return true; },
+    encryptStringAsync: async text => Buffer.from(text),
+    async decryptStringAsync(bytes) { assert.ok(allow, 'Account listing must not decrypt credentials'); return { result: bytes.toString(), shouldReEncrypt: false }; }
   };
   const storage = createSteamSessionStorage({ userDataDir: directory, safeStorage });
   assert.deepEqual(await storage.listAccounts(), []);
@@ -186,8 +228,9 @@ test('Google account metadata contains identity without secrets and reads with a
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'google-account-metadata-'));
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
   let locked = false;
-  const safeStorage = { isEncryptionAvailable() { assert.equal(locked, false); return true; },
-    encryptString: value => Buffer.from(value), decryptString: bytes => bytes.toString() };
+  const safeStorage = { async isAsyncEncryptionAvailable() { assert.equal(locked, false); return true; },
+    encryptStringAsync: async value => Buffer.from(value),
+    decryptStringAsync: async bytes => ({ result: bytes.toString(), shouldReEncrypt: false }) };
   const storage = createSteamSessionStorage({ userDataDir: directory, safeStorage, namespace: 'external/google-play' });
   await storage.saveSession({ accountName: 'google-play', session: { email: 'saved@example.invalid', aasToken: 'private-token', devices: { secret: true } } });
   locked = true;

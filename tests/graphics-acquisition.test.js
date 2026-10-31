@@ -1,3 +1,5 @@
+// Required first: it replaces the network functions before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os"), crypto = require("node:crypto");
 const Sources = require("../src/modules/shared/reshade/model-sources");
@@ -53,11 +55,41 @@ test("explicit discovery handles Steam libraries, CrossOver paths, duplicates an
 test("empty discovery is actionable and never downloads or changes defaults", async t => {
   const home = fixture(t); await assert.rejects(Sources.importFound({ home, clientRoots: [] }), /Import.*Download from Steam/);
 });
-test("Steam bootstrap integrity failure prevents execution and cleans temporary files", async t => {
-  const userDataDir = fixture(t); let executed = false;
-  await assert.rejects(Steam.acquire({ userDataDir }, { fetchBootstrap: async () => ({ body: Buffer.from("changed") }),
-    execute: async () => { executed = true; }, authenticate: async () => assert.fail("must not authenticate") }), /download has changed/);
-  assert.equal(executed, false); assert.deepEqual(fs.readdirSync(path.join(userDataDir, "runtimes/lossless-steam")), []);
+// tar materializes a SteamCMD executable; codesign reports the vendor signature check.
+function steamcmdRunner(calls, { signed = true, executable = true } = {}) {
+  return async (command, args) => {
+    calls.push([command, ...args]);
+    if (command === "/usr/bin/tar" && executable) {
+      const bytes = Buffer.alloc(64); bytes.writeUInt32LE(0xfeedfacf); bytes.writeUInt32LE(0x01000007, 4); bytes.writeUInt32LE(2, 12);
+      fs.writeFileSync(path.join(args[3], "steamcmd"), bytes, { mode: 0o755 }); fs.writeFileSync(path.join(args[3], "steamcmd.sh"), "#!/bin/sh\n");
+    } else if (command === "/usr/bin/codesign" && !signed) throw Object.assign(new Error("test-requirement: code failed to satisfy specified code requirement(s)"), { code: 3 });
+    else if (!["/usr/bin/tar", "/usr/bin/codesign"].includes(command)) assert.fail(`unexpected execution of ${command}`);
+    return { stdout: "", stderr: "" };
+  };
+}
+test("an updated SteamCMD download is accepted by Valve's Developer ID signature", async t => {
+  const userDataDir = fixture(t), calls = [];
+  Harness.network.routes = { [Steam.BOOTSTRAP.location]: Buffer.from("updated vendor bootstrap") }; t.after(() => { Harness.network.routes = null; });
+  const result = await Steam.acquire({ userDataDir }, {
+    execute: steamcmdRunner(calls), authenticate: async session => {
+      assert.deepEqual(calls.map(call => call[0]), ["/usr/bin/tar", "/usr/bin/codesign"]);
+      assert.deepEqual(calls[1].slice(1, 3), ["--verify", "--strict"]);
+      assert.match(calls[1][3], /^-R=anchor apple generic and .*certificate leaf\[subject\.OU\] = "MXGJJ98X76"$/);
+      assert.equal(calls[1][4], path.join(session, "tools/steamcmd"));
+      dll(path.join(session, "content"));
+    }, importModel: async () => ({ version: "3.2.2.0" }) });
+  assert.equal(result.version, "3.2.2.0"); assert.deepEqual(fs.readdirSync(path.join(userDataDir, "runtimes/lossless-steam")), []);
+});
+test("a SteamCMD download without Valve's signed executable prevents sign-in and cleans temporary files", async t => {
+  const userDataDir = fixture(t);
+  Harness.network.routes = { [Steam.BOOTSTRAP.location]: Buffer.from("changed") }; t.after(() => { Harness.network.routes = null; });
+  for (const options of [{ signed: false }, { executable: false }]) {
+    const calls = [];
+    await assert.rejects(Steam.acquire({ userDataDir }, {
+      execute: steamcmdRunner(calls, options), authenticate: async () => assert.fail("must not authenticate") }), /not Valve's signed macOS SteamCMD/);
+    assert.deepEqual(calls.map(call => call[0]), options.signed === false ? ["/usr/bin/tar", "/usr/bin/codesign"] : ["/usr/bin/tar"]);
+    assert.deepEqual(fs.readdirSync(path.join(userDataDir, "runtimes/lossless-steam")), []);
+  }
 });
 test("Terminal script passes only the account name, quotes paths, and uses a foreground SteamCMD job", t => {
   const root = fixture(t), session = path.join(root, "space ' and $(no-command)");
@@ -67,6 +99,9 @@ test("Terminal script passes only the account name, quotes paths, and uses a for
   assert.match(text, /sSteamCmdForcePlatformType windows/); assert.match(text, /fg %2/);
   assert.doesNotMatch(text, /read.*password|\+login anonymous/);
   assert.match(text, /kill -KILL -- "-\$steam_pid"/);
+  // Only the signed executable runs; the archive's unsigned shell launcher does not.
+  assert.match(text, /"\$steamcmd" \+@sSteamCmdForcePlatformType/); assert.match(text, /-eq 42/);
+  assert.doesNotMatch(text, /tools\/steamcmd\.sh/);
 });
 test("Terminal authentication completion and cancellation remove the active session marker", async t => {
   const root = fixture(t);

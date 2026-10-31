@@ -4,7 +4,8 @@ const crypto = require("node:crypto");
 const Native = require("../../../shared/runtime/local-native");
 const MachO = require("../../../shared/runtime/macho-load-commands");
 const Host = require("../../../shared/runtime/bundled-native");
-const { downloadToFile, throwIfAborted } = require("../../../shared/runtime/download-utils");
+const { throwIfAborted } = require("../../../shared/runtime/download-utils");
+const Upstream = require("../../../shared/runtime/upstream");
 const { extractArchive } = require("./archive");
 const Catalog = require("./catalog");
 
@@ -83,8 +84,24 @@ function inspectClosure(root, records, signal) {
       if (!available.length && dependency.kind !== "weak") throw new Error(`Sikarugir is missing a required runtime library: ${dependency.path}`);
     }
   }
-  return { minimumMacOS: images.reduce((floor, image) => later(floor, image.minimumMacOS), "14.0.0"),
+  // The engine's macOS floor is the highest its native images declare.
+  return { minimumMacOS: images.reduce((floor, image) => later(floor, image.minimumMacOS), images[0].minimumMacOS),
     nativeComponents: images.length, architectures: ["x86_64"] };
+}
+// Engines unpack to wswine.bundle. A package that moves the bundle deeper or
+// renames it is found by its Wine loader and server; the known path wins.
+function findWineRoot(root) {
+  const wine = directory => ["wine", "wineserver"].every(name => fs.existsSync(path.join(directory, "bin", name)));
+  const known = path.join(root, WINE_ROOT), found = [];
+  if (wine(known)) return known;
+  (function visit(directory, depth) {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name === "__MACOSX") continue;
+      const child = path.join(directory, entry.name);
+      if (wine(child)) found.push(child); else if (depth < 3) visit(child, depth + 1);
+    }
+  })(root, 0);
+  return found.length === 1 ? found[0] : known;
 }
 async function hashAsync(file, signal) {
   throwIfAborted(signal);
@@ -98,35 +115,37 @@ async function preparePayload({ unpacked, pin, signal, logger, onProgress }, dep
   throwIfAborted(signal);
   const template = pin.template;
   if (!Catalog.validateEntry(pin))
-    throw new Error("Sikarugir requires an identified matching support archive.");
+    throw new Error("The selected Wine download names no matching support archive. Reload versions and install it again.");
+  const wineRoot = findWineRoot(unpacked);
+  if (wineRoot !== path.join(unpacked, WINE_ROOT)) await fs.promises.rename(wineRoot, path.join(unpacked, WINE_ROOT));
   const scratch = await fs.promises.mkdtemp(path.join(path.dirname(unpacked), ".support-"));
   const stageProgress = (detail, downloaded = pin.downloadBytes) => onProgress?.({
     downloaded, total: pin.downloadBytes, detail: `${pin.versionLabel} · ${detail}`
   });
-  let graphics;
+  let graphics, archiveSha256;
   try {
     const archive = path.join(scratch, template.asset.filename);
     logger?.info?.(`[sikarugir] acquiring support ${template.version}`);
-    stageProgress("Downloading support libraries…", pin.asset.bytes);
-    await (dependencies.downloadToFile || downloadToFile)(template.asset.url, archive, { signal,
-      onProgress: progress => onProgress?.({ ...progress, downloaded: pin.asset.bytes + progress.downloaded,
-        total: pin.asset.bytes + template.asset.bytes, detail: `${pin.versionLabel} · Downloading support libraries…` }) });
+    stageProgress("Downloading support libraries…", pin.asset.bytes || 0);
+    // The publisher's size and digest verify the support archive when it lists them.
+    archiveSha256 = (await Catalog.templates.download(Upstream.listedFile(template.asset), archive, { signal,
+      onProgress: progress => onProgress?.({ ...progress, downloaded: (pin.asset.bytes || 0) + progress.downloaded,
+        total: pin.downloadBytes, detail: `${pin.versionLabel} · Downloading support libraries…` }) })).sha256;
     throwIfAborted(signal);
-    stageProgress("Verifying support archive…");
-    if (fs.statSync(archive).size !== template.asset.bytes || await hashAsync(archive, signal) !== template.asset.sha256)
-      throw new Error("Sikarugir support archive does not match the selected checksum. No runtime was installed.");
     const templateUnpacked = path.join(scratch, "unpacked"); await fs.promises.mkdir(templateUnpacked);
     stageProgress("Extracting support libraries…");
     await (dependencies.extractArchive || extractArchive)(archive, templateUnpacked, signal);
-    const templateRoot = path.join(templateUnpacked, `Template-${template.version}.app`, "Contents");
+    const templateRoot = require("../graphics/closure").templateContents(templateUnpacked, template.version);
     stageProgress("Preparing graphics libraries…");
     graphics = await (dependencies.stageTemplateClosure || require("../graphics").stageTemplateClosure)({
-      templateRoot, destinationRoot: path.join(unpacked, SUPPORT_ROOT), signal });
+      templateRoot, templateVersion: template.version, destinationRoot: path.join(unpacked, SUPPORT_ROOT), signal });
   } finally { await fs.promises.rm(scratch, { recursive: true, force: true }); }
   throwIfAborted(signal);
+  if (Host.versionAtLeast(template.version, "1.0.24") && !graphics?.relativePaths?.templateRenderers)
+    throw new Error("Sikarugir support libraries are incomplete. No runtime was installed.");
   stageProgress("Checking installed files…");
   const records = walk(unpacked, signal), native = inspectClosure(unpacked, records, signal);
-  const minimumMacOS = later(native.minimumMacOS, graphics.minimumBaseMacOS || "14.0.0");
+  const minimumMacOS = later(native.minimumMacOS, graphics.minimumBaseMacOS || native.minimumMacOS);
   const hostVersion = (dependencies.systemVersionSync || Host.systemVersionSync)();
   if (!Host.versionAtLeast(hostVersion, minimumMacOS)) throw new Error(`This Sikarugir engine requires macOS ${minimumMacOS}.`);
   for (const record of records) if (record.kind === "file") {
@@ -142,7 +161,7 @@ async function preparePayload({ unpacked, pin, signal, logger, onProgress }, dep
   return { schemaVersion: 1, engineVersion: pin.engineVersion, wineRoot: WINE_ROOT, supportRoot: SUPPORT_ROOT,
     inventory: { relativePath: INVENTORY, bytes: bytes.length, sha256: crypto.createHash("sha256").update(bytes).digest("hex"), count: records.length },
     minimumMacOS, architectures: native.architectures, nativeComponents: native.nativeComponents, capabilities,
-    template: { version: template.version, archiveSha256: template.asset.sha256, assetUrl: template.asset.url },
+    template: { version: template.version, archiveSha256, assetUrl: template.asset.url },
     graphics: { minimumBaseMacOS: graphics.minimumBaseMacOS, graphicsCapabilities: graphics.graphicsCapabilities,
       componentVersions: graphics.componentVersions, relativePaths: graphics.relativePaths } };
 }
@@ -159,6 +178,8 @@ function createPayloadResolver({ systemVersionSync = Host.systemVersionSync } = 
         !Number.isSafeInteger(seal.bytes) || seal.bytes < 1 || seal.bytes > MAXIMUM_INVENTORY_BYTES ||
         !Number.isSafeInteger(seal.count) || seal.count < 1 || seal.count > MAXIMUM_FILES)
         throw new Error("Sikarugir registration is incomplete. Remove and install this version again.");
+      if (Host.versionAtLeast(evidence.template?.version || "0.0.0", "1.0.24") && !evidence.graphics?.relativePaths?.templateRenderers)
+        throw new Error("Sikarugir support libraries are incomplete. Install this version again to restore its renderers.");
       const file = regularFile(install.installDir, INVENTORY), stat = fs.statSync(file), key = `${file}:${stamp(stat)}:${seal.sha256}`;
       if (stat.size !== seal.bytes) throw new Error("Sikarugir runtime metadata changed. Remove and install this version again.");
       let inventory = inventories.get(key);
@@ -209,4 +230,4 @@ function createPayloadResolver({ systemVersionSync = Host.systemVersionSync } = 
   };
 }
 
-module.exports = { WINE_ROOT, SUPPORT_ROOT, INVENTORY, walk, inspectClosure, hashAsync, preparePayload, createPayloadResolver };
+module.exports = { WINE_ROOT, SUPPORT_ROOT, INVENTORY, walk, inspectClosure, findWineRoot, hashAsync, preparePayload, createPayloadResolver };

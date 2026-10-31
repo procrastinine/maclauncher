@@ -43,7 +43,7 @@ function adapters(install) {
   const calls = [], graphicsCalls = [];
   return { calls, graphicsCalls, setVersion: value => { version = value; },
     manager: { resolveSelection: () => ({ ready: true, version, install }) },
-    host: { platform: "darwin", arch: "arm64", macOSVersion: "26.0" },
+    host: { platform: "darwin", hardwareArch: "arm64", macOSVersion: "26.0" },
     rosetta: { isAvailable: () => true, ensure: () => assert.fail("Rosetta should already be available") },
     prepareGraphicsView: async options => {
       graphicsCalls.push(options);
@@ -71,23 +71,32 @@ test("Sikarugir is offered for cached Windows evidence before installation and r
   const provider = Provider.createProvider({ platform: "darwin", manager: { resolveForPlay: () => assert.fail("support checks must stay offline") } });
   assert.equal(provider.canLaunchRuntime("sikarugir", entry), true);
   assert.equal(provider.canLaunchRuntime("crossover", entry), false);
-  assert.equal(Provider.decorateEntry(entry), entry, "cached detector facts are reused without a second scan");
-  const legacy = { ...entry, runtimeData: {} };
-  assert.equal(provider.canLaunchRuntime("sikarugir", legacy), true, "existing Windows library entries reuse bounded legacy evidence");
-  const noWindows = path.join(directory, "no-windows"); fs.mkdirSync(noWindows);
+  assert.equal(Provider.decorateEntry, Detection.decorateEntry, "both Windows runtimes share one evidence decorator");
   for (const invalid of [
-    { ...entry, importPath: path.join(directory, "Native.app") },
-    { ...entry, importPath: path.join(directory, "Linux.x86_64") },
-    { ...entry, importPath: path.join(directory, "Linux.AppImage") },
+    { ...entry, gamePath: path.join(directory, "Native.app") },
+    { ...entry, contentRootDir: path.join(directory, "Native.app", "Contents", "Resources") },
     { ...entry, runtimeData: { crossover: { ...entry.runtimeData.crossover, executableArchitecture: "arm64" } } },
     { ...entry, runtimeData: { crossover: { detectionComplete: true, windowsExecutablePath: null } } },
-    { ...entry, gamePath: noWindows, importPath: noWindows, runtimeData: {} }
+    { ...entry, runtimeData: {} }
   ]) assert.equal(provider.canLaunchRuntime("sikarugir", invalid), false);
-  const previouslyEmpty = { ...entry, gamePath: noWindows, importPath: noWindows, runtimeData: {} };
-  assert.equal(provider.canLaunchRuntime("sikarugir", previouslyEmpty), false);
+  assert.equal(provider.canLaunchRuntime("sikarugir", { ...entry, importPath: path.join(entry.gamePath, "Game.sh") }), true,
+    "a launcher script selected inside a folder game leaves the identity to the folder");
+  // Native builds that are the game itself are decided when detection records the evidence.
+  for (const name of ["Linux.x86_64", "Linux.AppImage"]) {
+    const file = path.join(entry.gamePath, name); fs.writeFileSync(file, "native");
+    const native = Detection.decorateEntry({ ...entry, gamePath: file, importPath: file, runtimeData: {} });
+    assert.equal(provider.canLaunchRuntime("sikarugir", native), false, name);
+  }
+  // An entry saved before Windows evidence existed is not searched; its next refresh records the evidence.
+  const noWindows = path.join(directory, "no-windows"); fs.mkdirSync(noWindows);
+  const legacy = { ...entry, gamePath: noWindows, importPath: noWindows, runtimeData: {} };
+  const reads = [], readdir = fs.readdirSync;
+  fs.readdirSync = (...args) => { reads.push(args[0]); return readdir(...args); };
+  try { assert.equal(provider.canLaunchRuntime("sikarugir", legacy), false); }
+  finally { fs.readdirSync = readdir; }
+  assert.deepEqual(reads, [], "runtime support never searches the game's folder");
   pe(path.join(noWindows, "Later.exe"));
-  assert.equal(provider.canLaunchRuntime("sikarugir", previouslyEmpty), false, "negative legacy evidence stays cached until an explicit refresh");
-  assert.equal(provider.canLaunchRuntime("sikarugir", Detection.decorateEntry(previouslyEmpty)), true);
+  assert.equal(provider.canLaunchRuntime("sikarugir", Detection.decorateEntry(legacy)), true);
   assert.equal(Provider.createProvider({ platform: "linux" }).canLaunchRuntime("sikarugir", entry), false);
 });
 

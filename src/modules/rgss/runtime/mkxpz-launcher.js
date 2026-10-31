@@ -130,7 +130,8 @@ function resolvePathList(label, input, { allowFiles = true, allowDirs = true, ba
 function resolveRuntime({ entry, settings, userDataDir }) {
   const version = MkxpzManager.selectedVersion(entry, settings, userDataDir);
   if (!version) throw new Error("No MKXP-Z versions are available to download.");
-  const installed = MkxpzManager.core.resolveOwnedRuntime({ userDataDir, version });
+  const installed = MkxpzManager.core.resolveOwnedRuntime({ userDataDir, version,
+    architecture: MkxpzManager.buildArchitecture(entry, settings, userDataDir) });
   if (!installed) throw new Error(`MKXP-Z ${version} is not installed. Install it from Runtimes.`);
   // Older registrations do not carry a sealed payload manifest.
   if (!AppBundle.resolveAppBundleExecutablePath(installed.appPath)) throw new Error("The selected MKXP-Z executable is missing.");

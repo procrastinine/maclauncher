@@ -1,3 +1,5 @@
+// Required first: it replaces the network functions before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path"), crypto = require("node:crypto"), vm = require("node:vm");
 const Setup = require("../src/modules/shared/reshade/neural/setup"), Models = require("../src/modules/shared/reshade/neural/models");
@@ -19,11 +21,11 @@ function fixture(t) {
   const source = {...Setup.sourceFor(), bytes: fs.statSync(archive).size, sha256: hash(fs.readFileSync(archive)),
     manifestHash: hash(bytes), weightsHash: hash(weights)};
   let downloads = 0;
-  const downloadToFile = async (url, destination, {signal, onProgress}) => {
-    assert.equal(url, source.url);assert.notEqual(destination, archive);signal?.throwIfAborted();downloads++;
-    fs.copyFileSync(archive, destination, fs.constants.COPYFILE_EXCL);onProgress?.({downloaded: source.bytes, total: source.bytes});signal?.throwIfAborted();
-  };
-  return {root, userDataDir, weights, archive, source, downloadToFile, downloads: () => downloads};
+  // The fixture archive stands in for the release asset; the publisher's
+  // release list is unavailable unless a test routes it.
+  Harness.network.routes = {[source.url]: () => {downloads++;return fs.readFileSync(archive);}};
+  t.after(() => {Harness.network.routes = null;});
+  return {root, userDataDir, weights, archive, source, downloads: () => downloads};
 }
 function noPartial(f) {
   const root = path.join(f.userDataDir, "runtimes", Models.ID);
@@ -58,9 +60,10 @@ test("consented download verifies the ZIP and imports only model files and notic
   assert.equal(fs.readFileSync(path.join(installed.installDir, "notices/0-NOTICE"), "utf8"), "Original model terms");
   assert.equal(JSON.parse(fs.readFileSync(path.join(installed.installDir, "download-source.json"))).sha256, f.source.sha256);
   assert.ok(!fs.existsSync(path.join(installed.installDir, "Contents")));noPartial(f);
+  const requests = Harness.network.requests.length;
   const again = await Setup.ensureNeuralModel({userDataDir: f.userDataDir, settings: {runtimes: {[Models.ID]: {defaultVersion: result.version}}},
-    confirmRuntimeInstall: () => assert.fail("installed selection needs no download consent")}, {downloadToFile: () => assert.fail("installed selection needs no network")});
-  assert.deepEqual(again, result);
+    confirmRuntimeInstall: () => assert.fail("installed selection needs no download consent")}, {});
+  assert.deepEqual(again, result);assert.equal(Harness.network.requests.length, requests, "installed selection needs no network");
   await Models.removeModel({userDataDir: f.userDataDir, version: result.version});
   assert.deepEqual(fs.readFileSync(f.archive), original, "download/import/removal preserves original source");
 });
@@ -84,11 +87,16 @@ test("a damaged downloaded copy can be repaired after fresh consent while declin
 });
 test("checksum and oversize failures publish no models and remove owned archive files", async t => {
   const f = fixture(t);
-  await assert.rejects(Setup.ensureNeuralModel({userDataDir: f.userDataDir, confirmRuntimeInstall: approved}, {...f, source: {...f.source, sha256: "a".repeat(64)}}), /checksum/);
+  // A replaced release archive installs when its model identity matches; another model does not.
+  await assert.rejects(Setup.ensureNeuralModel({userDataDir: f.userDataDir, confirmRuntimeInstall: approved}, {...f, source: {...f.source, weightsHash: "a".repeat(64)}}),
+    /different neural model package: its weights or manifest checksum differs/);
   assert.deepEqual(Models.listInstalled(f.userDataDir), []);noPartial(f);
-  await assert.rejects(Setup.ensureNeuralModel({userDataDir: f.userDataDir, confirmRuntimeInstall: approved}, {...f, downloadToFile: async (_url, file, {signal, onProgress}) => {
-    fs.writeFileSync(file, "partial");onProgress({downloaded: f.source.bytes + 1, total: f.source.bytes + 1});signal.throwIfAborted();
-  }}), /release size/);
+  // The publisher's release list states the archive size; a larger transfer stops.
+  const [, repository, tag, name] = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/releases\/download\/([^/]+)\/([^/]+)$/.exec(f.source.url);
+  const release = Harness.githubRelease(repository, decodeURIComponent(tag), [decodeURIComponent(name)]);
+  release.assets[0] = {...release.assets[0], size: f.source.bytes, digest: null, browser_download_url: f.source.url};
+  Harness.network.routes = {...Harness.githubRoutes(repository, [release]), [f.source.url]: Buffer.concat([fs.readFileSync(f.archive), Buffer.from("appended")])};
+  await assert.rejects(Setup.ensureNeuralModel({userDataDir: f.userDataDir, confirmRuntimeInstall: approved}, f), /release size/);
   assert.deepEqual(Models.listInstalled(f.userDataDir), []);noPartial(f);
 });
 test("abort during model import cleans download, extraction and partial copies", async t => {
@@ -102,13 +110,15 @@ test("backend shutdown cancels the registered download and waits for owned clean
   const f = fixture(t), downloads = new DownloadManager();let entered, releaseCleanup, reachedAbort, settled = false;
   const started = new Promise(resolve => {entered = resolve;}), cleanup = new Promise(resolve => {releaseCleanup = resolve;}),
     aborted = new Promise(resolve => {reachedAbort = resolve;});
-  const job = Setup.ensureNeuralModel({userDataDir: f.userDataDir, downloads, confirmRuntimeInstall: approved}, {...f,
-    downloadToFile: async (_url, file, {signal}) => {
-      assert.equal(downloads.list().length, 1, "task is registered before downloader starts");
-      assert.equal(downloads.list()[0].managerId, Models.ID);fs.writeFileSync(file, "partial");entered();
-      await new Promise(resolve => signal.addEventListener("abort", resolve, {once: true}));reachedAbort();
-      await cleanup;signal.throwIfAborted();
-    }}).finally(() => {settled = true;});
+  // A transfer that stays open until it is cancelled.
+  t.mock.method(require("../src/modules/shared/runtime/upstream-transport"), "downloadToFile", async (url, file, {signal}) => {
+    assert.equal(url, f.source.url);
+    assert.equal(downloads.list().length, 1, "task is registered before downloader starts");
+    assert.equal(downloads.list()[0].managerId, Models.ID);fs.writeFileSync(file, "partial");entered();
+    await new Promise(resolve => signal.addEventListener("abort", resolve, {once: true}));reachedAbort();
+    await cleanup;signal.throwIfAborted();
+  });
+  const job = Setup.ensureNeuralModel({userDataDir: f.userDataDir, downloads, confirmRuntimeInstall: approved}, f).finally(() => {settled = true;});
   await started;
   const backend = fs.readFileSync(require.resolve("../src/core/backend-operations"), "utf8"), start = backend.indexOf("    beginShutdown() {"),
     end = backend.indexOf("\n    removeGameData,", start);

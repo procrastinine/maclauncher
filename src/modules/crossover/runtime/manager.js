@@ -5,6 +5,7 @@ const crypto = require("node:crypto");
 const AppBundle = require("../../shared/runtime/app-bundle");
 const { selectRuntimeVersion, managerDefaultVersion } = require("../../shared/runtime/version-choices");
 const { readMachOArchitectures } = require("../../shared/runtime/local-native");
+const { imageRequiresRosetta } = require("../../shared/runtime/architecture");
 const { createRuntimeSettingsStore } = require("../../../core/runtime-settings");
 
 const AUTOMATIC_PATHS = ["/Applications/CrossOver.app", path.join(os.homedir(), "Applications", "CrossOver.app")];
@@ -58,7 +59,7 @@ function inspectApplication(runtimePath) {
   const install = { version: identity(appPath), upstreamVersion, versionLabel: `${upstreamVersion} · ${path.basename(appPath)}`,
     appPath, installDir: appPath, runtimePath: appPath, executablePath, bottleToolPath, loaderPath, serverPath,
     crossoverRoot: root, graphicsExecutablePath, architectures, loaderArchitectures, serverArchitectures,
-    needsRosetta: process.arch === "arm64" && (!loaderArchitectures.includes("arm64") || !architectures.includes("arm64") || !serverArchitectures.includes("arm64")),
+    needsRosetta: [loaderArchitectures, architectures, serverArchitectures].some(list => imageRequiresRosetta(list)),
     minimumMacOS: info?.LSMinimumSystemVersion || null, ready: true, external: true, imported: true,
     removalLabel: "Remove", removalConfirm: "Remove this application from Runtimes? The application will remain installed." };
   applicationCache.set(appPath, { key, install });

@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -47,6 +49,16 @@ function archive(root, version = "5-r.4.1", symbols = Native.requirements("8.5.2
   fs.writeFileSync(file, zip([{ name: `${base}/Core/dll/macos/libLive2DCubismCore.dylib`, bytes: macho(symbols) }, { name: `${base}/Core/LICENSE.md`, bytes: Buffer.from("Vendor license notice") }, ...extra]));
   return file;
 }
+// Live2D's download page and its archives, served offline.
+const PAGE = Live2D.SOURCE_URL, BIN = "https://cubism.live2d.com/sdk-native/bin/";
+function supplier(t, files, page = [...files.keys()].map(version => `<a href="${BIN}CubismSdkForNative-${version}.zip">SDK</a>`).join(""), extra = {}) {
+  const downloads = [];
+  Harness.network.routes = { [PAGE]: page, ...extra, ...Object.fromEntries([...files].map(([version, file]) => [`${BIN}CubismSdkForNative-${version}.zip`,
+    () => { downloads.push(version); return fs.readFileSync(file); }])) };
+  t.after(() => { Harness.network.routes = null; });
+  return downloads;
+}
+const live2dRequests = () => Harness.network.requests.filter(url => url.includes("live2d.com")).length;
 function sdk(root, version) {
   const major = Number(version[0]), installDir = path.join(root, "runtimes", "sdk", String(major), version);
   const lib = path.join(installDir, "lib", `py${major === 7 ? 2 : 3}-mac-universal`);
@@ -155,16 +167,16 @@ test("SDK row metadata and pure manager actions route imports to the selected ma
 
 test("cancelled explicit download never publishes a library or completes an install", async t => {
   const root = fixture(t), target = Live2D.sdkTarget(sdk(root, "8.5.2")), controller = new AbortController(); controller.abort();
-  let calls = 0;
-  await assert.rejects(Live2D.downloadLibrary(target, { userDataDir: root, signal: controller.signal, dependencies: { downloadToFile: () => { calls++; } } }), { name: "AbortError" });
-  assert.equal(calls, 0); assert.equal(fs.existsSync(target.libraryPath), false);
+  const before = live2dRequests();
+  await assert.rejects(Live2D.downloadLibrary(target, { userDataDir: root, signal: controller.signal }), { name: "AbortError" });
+  assert.equal(live2dRequests(), before); assert.equal(fs.existsSync(target.libraryPath), false);
 });
 
 test("Play library download consent is requested only for a missing official archive", async t => {
   const root = fixture(t), target = Live2D.sdkTarget(sdk(root, "8.5.3")); let called = 0;
-  await assert.rejects(Live2D.downloadLibrary(target, { userDataDir: root, confirmRuntimeInstall: plan => { called++; assert.equal(plan.libraryVersion, null); assert.equal(plan.recommendedVersion, "5-r.5"); assert.match(plan.detail, /Cubism 5.3/); return false; },
-    dependencies: { fetchUrlBuffer: () => assert.fail("lookup after rejection"), downloadToFile: () => assert.fail("network after rejection") } }), { name: "AbortError" });
-  assert.equal(called, 1); assert.equal(fs.existsSync(target.libraryPath), false);
+  const before = live2dRequests();
+  await assert.rejects(Live2D.downloadLibrary(target, { userDataDir: root, confirmRuntimeInstall: plan => { called++; assert.equal(plan.libraryVersion, null); assert.equal(plan.recommendedVersion, "5-r.5"); assert.match(plan.detail, /Cubism 5.3/); return false; } }), { name: "AbortError" });
+  assert.equal(called, 1); assert.equal(live2dRequests(), before, "no lookup or download after rejection"); assert.equal(fs.existsSync(target.libraryPath), false);
 });
 
 test("supplier SDKs preserve exact API recommendations, validate symbols and reuse their archives offline", async t => {
@@ -172,39 +184,38 @@ test("supplier SDKs preserve exact API recommendations, validate symbols and reu
   const newest = "5-r.5", older = "5-r.4.1", files = new Map([
     [newest, archive(root, newest, Native.requirements("8.5.3").symbols)],
     [older, archive(root, older, Native.requirements("8.5.2").symbols)]
-  ]), lookups = [], downloads = [], consents = [];
-  const installed = await Live2D.downloadLibrary(old, { userDataDir: root, confirmRuntimeInstall: plan => { consents.push(plan); return true; }, dependencies: {
-    fetchUrlBuffer: async source => {
-      lookups.push(source);
-      return { status: 200, body: Buffer.from(source.endsWith("download.js")
-        ? `let FILE_BASE_URL = "https://cubism.live2d.com/sdk-native/bin/"; const fileDataArray = {
-          old: { url: "CubismSdkForNative-${older}.zip" }, current: { url: "CubismSdkForNative-${newest}.zip" } };`
-        : '<script src="https://cubism.live2d.com/sdk-native/js/download.js"></script>') };
-    },
-    downloadToFile: async (source, destination) => { const version = /Native-(.+)\.zip$/.exec(source)[1]; downloads.push(version); fs.copyFileSync(files.get(version), destination); }
-  } });
+  ]), consents = [], script = "https://cubism.live2d.com/sdk-native/js/download.js";
+  const downloads = supplier(t, files, `<script src="${script}"></script>`, { [script]: `let FILE_BASE_URL = "${BIN}"; const fileDataArray = {
+    old: { url: "CubismSdkForNative-${older}.zip" }, current: { url: "CubismSdkForNative-${newest}.zip" } };` });
+  const before = Harness.network.requests.length;
+  const installed = await Live2D.downloadLibrary(old, { userDataDir: root, confirmRuntimeInstall: plan => { consents.push(plan); return true; } });
   assert.equal(installed.version, older); assert.equal(installed.ready, true); assert.equal(installed.officialArchive, true);
-  assert.deepEqual(downloads, [older]); assert.equal(lookups.length, 2); assert.equal(consents.length, 1);
+  assert.deepEqual(downloads, [older]); assert.equal(Harness.network.requests.length - before, 3, "page, download script and one archive"); assert.equal(consents.length, 1);
   const record = JSON.parse(fs.readFileSync(path.join(old.metadataDir, "record.json")));
   assert.equal(record.publisherDigestVerified, false); assert.match(record.archiveSha256, /^[a-f0-9]{64}$/);
-  const offline = { fetchUrlBuffer: () => assert.fail("offline lookup"), downloadToFile: () => assert.fail("offline download") };
-  const reused = await Live2D.downloadLibrary(old, { userDataDir: root, confirmRuntimeInstall: () => assert.fail("cached archive consent"), dependencies: offline });
-  assert.equal(reused.version, older); assert.equal(reused.ready, true);
-  await Live2D.downloadLibrary(modern, { userDataDir: root, confirmRuntimeInstall: () => true, dependencies: {
-    ...offline, downloadToFile: async (_source, destination) => fs.copyFileSync(files.get(newest), destination)
-  } });
+  Harness.network.routes = null;
+  const offline = live2dRequests();
+  const reused = await Live2D.downloadLibrary(old, { userDataDir: root, confirmRuntimeInstall: () => assert.fail("cached archive consent") });
+  assert.equal(reused.version, older); assert.equal(reused.ready, true); assert.equal(live2dRequests(), offline);
+  supplier(t, files);
+  await Live2D.downloadLibrary(modern, { userDataDir: root, confirmRuntimeInstall: () => true });
+  Harness.network.routes = null;
   Live2D.removeLibrary(old);
-  await assert.rejects(Live2D.downloadLibrary(old, { userDataDir: root, libraryVersion: newest, dependencies: offline }), { code: "LIVE2D_API_INCOMPATIBLE" });
+  await assert.rejects(Live2D.downloadLibrary(old, { userDataDir: root, libraryVersion: newest }), { code: "LIVE2D_API_INCOMPATIBLE" });
   assert.equal(fs.existsSync(old.libraryPath), false);
 });
 
-test("a missing recommended SDK never selects a different compatible published version", async t => {
-  const root = fixture(t), target = Live2D.sdkTarget(sdk(root, "8.5.2"));
-  await assert.rejects(Live2D.downloadLibrary(target, { userDataDir: root, confirmRuntimeInstall: () => true, dependencies: {
-    fetchUrlBuffer: async () => ({ status: 200, body: Buffer.from('<a href="https://cubism.live2d.com/sdk-native/bin/CubismSdkForNative-5-r.99.zip">SDK</a>') }),
-    downloadToFile: () => assert.fail("No arbitrary SDK version may download")
-  } }), /requested Cubism SDK is absent/);
-  assert.equal(fs.existsSync(target.libraryPath), false);
+test("a missing recommended SDK gives way to the newest published SDK on its API's side", async t => {
+  const root = fixture(t), old = Live2D.sdkTarget(sdk(root, "8.5.2")), modern = Live2D.sdkTarget(sdk(root, "8.5.3"));
+  const files = new Map([["5-r.99", archive(root, "5-r.99", Native.requirements("8.5.3").symbols)],
+    ["5-r.4.0", archive(root, "5-r.4.0", Native.requirements("8.5.2").symbols)], ["4-r.7", archive(root, "4-r.7", Native.requirements("8.5.2").symbols)]]);
+  // Another download page layout: links on another Live2D host and path.
+  const page = [...files.keys()].map(version => `<a href="https://www.live2d.com/files/sdk/CubismSdkForNative-${version}.zip">SDK</a>`).join("");
+  supplier(t, new Map(), page, Object.fromEntries([...files].map(([version, file]) =>
+    [`https://www.live2d.com/files/sdk/CubismSdkForNative-${version}.zip`, () => fs.readFileSync(file)])));
+  assert.equal((await Live2D.downloadLibrary(modern, { userDataDir: root, confirmRuntimeInstall: () => true })).version, "5-r.99");
+  assert.equal((await Live2D.downloadLibrary(old, { userDataDir: root, confirmRuntimeInstall: () => true })).version, "5-r.4.0");
+  await assert.rejects(Live2D.downloadLibrary(old, { userDataDir: root, libraryVersion: "5-r.98", confirmRuntimeInstall: () => true }), /requested Cubism SDK is absent/);
 });
 
 test("game patch uses copied runtime provenance and protects unrelated SDK/global libraries", async t => {
@@ -261,8 +272,7 @@ test("SDK preparation claims its actual Python generation before a Live2D mutati
   await assert.rejects(Module.prepareLaunch({ gamePath: root, moduleData: { major: 8 }, runtimeData: { sdk: { version: "8.5.3" } } },
     { runtimeId: "sdk", userDataDir: root, settings: { runtimes: { sdk: { v7: { defaultVersion: "7.8.7" }, v8: { defaultVersion: "8.4.1" } } } },
       useRuntime: async identity => events.push({ kind: "use", identity }),
-      withRuntimeMutation: async identity => { events.push({ kind: "mutation", identity }); throw error; },
-      dependencies: { downloadToFile: () => assert.fail("network before the SDK guard") } }), { code: "RUNTIME_IN_USE" });
+      withRuntimeMutation: async identity => { events.push({ kind: "mutation", identity }); throw error; } }), { code: "RUNTIME_IN_USE" });
   assert.equal(events[0].kind, "use");
   assert.deepEqual(events[0].identity, { managerId: "sdk", version: "8.5.3", sectionId: "v8", sourcePath: install.installDir });
   assert.deepEqual(events[1], { kind: "mutation", identity: { managerId: "sdk", version: "8.5.3" } });
@@ -275,14 +285,15 @@ test("an active SDK guards automatic Live2D downloads while another generation r
   const coordinator = createRuntimeCoordinator({ userDataDir: root }), running = coordinator.client(), writer = coordinator.client();
   const token = await running.acquireUse({ managerId: "sdk", version: legacy.version, sectionId: "v7", sourcePath: legacy.installDir });
   await running.bindUse(token, 42); t.after(() => running.release(token));
-  let downloads = 0, consent = 0;
+  let consent = 0;
   const options = { userDataDir: root,
     withRuntimeMutation: (identity, fn) => withRuntimeCoordinator(writer, root, () => withRuntimeMutation(identity, fn)),
-    confirmRuntimeInstall: () => { consent++; return false; }, dependencies: { downloadToFile: () => downloads++ } };
+    confirmRuntimeInstall: () => { consent++; return false; } };
+  const before = live2dRequests();
   await assert.rejects(Live2D.ensureSdkLibrary(legacy, options), { code: "RUNTIME_IN_USE" });
-  assert.equal(consent, 0); assert.equal(downloads, 0);
+  assert.equal(consent, 0); assert.equal(live2dRequests(), before);
   await assert.rejects(Live2D.ensureSdkLibrary(modern, options), { name: "AbortError" });
-  assert.equal(consent, 1); assert.equal(downloads, 0);
+  assert.equal(consent, 1); assert.equal(live2dRequests(), before);
   assert.equal(fs.existsSync(Live2D.sdkTarget(legacy).libraryPath), false);
   assert.equal(fs.existsSync(Live2D.sdkTarget(modern).libraryPath), false);
 });
@@ -376,19 +387,16 @@ test("Auto SDK plans consented discovery, then uses the committed catalog fallba
 });
 
 test("each Ren'Py API recommends its SDK from discovered releases while exact SDK choices stay exact", async t => {
-  const root = fixture(t), downloads = [], files = new Map([
+  const root = fixture(t), files = new Map([
     ["5-r.4.1", archive(root, "5-r.4.1", Native.requirements("8.5.2").symbols)],
     ["5-r.5", archive(root, "5-r.5", Native.requirements("8.5.3").symbols)],
     ["5-r.99", archive(root, "5-r.99", [...new Set([...Native.requirements("8.5.2").symbols, ...Native.requirements("8.5.3").symbols])])]
   ]);
-  const dependencies = {
-    fetchUrlBuffer: async () => ({ status: 200, body: Buffer.from([...files.keys()].reverse().map(version => `<a href="https://cubism.live2d.com/sdk-native/bin/CubismSdkForNative-${version}.zip">SDK</a>`).join('')) }),
-    downloadToFile: async (url, destination) => { const version = /Native-(.+)\.zip$/.exec(url)[1]; downloads.push(version); fs.copyFileSync(files.get(version), destination); }
-  };
+  const downloads = supplier(t, files, [...files.keys()].reverse().map(version => `<a href="${BIN}CubismSdkForNative-${version}.zip">SDK</a>`).join(""));
   const old = Live2D.sdkTarget(sdk(root, "8.5.2")), modern = Live2D.sdkTarget(sdk(root, "8.5.3"));
-  assert.equal((await Live2D.downloadLibrary(old, { userDataDir: root, confirmRuntimeInstall: () => true, dependencies })).version, "5-r.4.1");
-  assert.equal((await Live2D.downloadLibrary(modern, { userDataDir: root, confirmRuntimeInstall: () => true, dependencies })).version, "5-r.5");
+  assert.equal((await Live2D.downloadLibrary(old, { userDataDir: root, confirmRuntimeInstall: () => true })).version, "5-r.4.1");
+  assert.equal((await Live2D.downloadLibrary(modern, { userDataDir: root, confirmRuntimeInstall: () => true })).version, "5-r.5");
   assert.deepEqual(downloads, ["5-r.4.1", "5-r.5"]);
-  assert.equal((await Live2D.downloadLibrary(old, { userDataDir: root, libraryVersion: "5-r.99", confirmRuntimeInstall: () => true, dependencies })).version, "5-r.99");
+  assert.equal((await Live2D.downloadLibrary(old, { userDataDir: root, libraryVersion: "5-r.99", confirmRuntimeInstall: () => true })).version, "5-r.99");
   assert.equal(downloads.at(-1), "5-r.99");
 });

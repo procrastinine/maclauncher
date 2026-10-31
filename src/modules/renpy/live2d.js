@@ -2,7 +2,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { randomUUID } = require("node:crypto");
 const Native = require("../shared/runtime/local-native");
-const { downloadToFile, fetchUrlBuffer, throwIfAborted, createAbortError } = require("../shared/runtime/download-utils");
+const { throwIfAborted, createAbortError } = require("../shared/runtime/download-utils");
+const Upstream = require("../shared/runtime/upstream");
+const { compareVersions } = require("../shared/runtime/version-order");
 const { runDownloadTask } = require("../shared/runtime/download-manager");
 const { downloadApproved, approveDownloads } = require("../shared/runtime/tool-install");
 const { readCubismArchive, LIMITS } = require("./live2d-archive");
@@ -135,39 +137,51 @@ function removeLibrary(t) {
   });
 }
 
+// A Cubism SDK for Native archive on one of Live2D's hosts, named after its version.
+const SDK_FILE = /CubismSdkForNative-([0-9][0-9A-Za-z._-]*?)\.zip/;
+function liveHost(url) {
+  try { const { protocol, hostname } = new URL(url); return protocol === "https:" && (hostname === "live2d.com" || hostname.endsWith(".live2d.com")); }
+  catch { return false; }
+}
 function supplierRow(row) {
-  return row && /^[0-9]+-r\.[0-9]+(?:\.[0-9]+)*$/.test(row.version || "") &&
-    row.url === `https://cubism.live2d.com/sdk-native/bin/CubismSdkForNative-${row.version}.zip` &&
-    (!row.sha256 || /^[a-f0-9]{64}$/.test(row.sha256));
+  return Boolean(row && /^[0-9][0-9A-Za-z._-]*$/.test(row.version || "") && row.version.length <= 64 && liveHost(row.url) &&
+    SDK_FILE.exec(new URL(row.url).pathname)?.[1] === row.version && (!row.sha256 || /^[a-f0-9]{64}$/.test(row.sha256)));
 }
-async function supplierCatalog({ signal, dependencies }) {
-  const fetch = async url => {
-    const response = await (dependencies.fetchUrlBuffer || fetchUrlBuffer)(url, { signal, maxBytes: 2 * 1024 ** 2 });
-    throwIfAborted(signal);
-    if (response.status !== 200 || !Buffer.isBuffer(response.body) || response.body.length > 2 * 1024 ** 2)
-      throw new Error("The official Cubism SDK download catalog is unavailable.");
-    return response.body.toString("utf8");
-  };
-  const page = await fetch(SOURCE_URL), rows = new Map();
-  const add = (version, url) => {
-    const row = { version, url };
-    if (!supplierRow(row)) return;
-    rows.set(version, row);
-    if (rows.size > 64) throw new Error("The Cubism SDK supplier catalog exceeds its limit.");
-  };
-  for (const match of page.matchAll(/https:\/\/cubism\.live2d\.com\/sdk-native\/bin\/CubismSdkForNative-([0-9]+-r\.[0-9]+(?:\.[0-9]+)*)\.zip/g)) add(match[1], match[0]);
-  const scriptUrl = "https://cubism.live2d.com/sdk-native/js/download.js";
-  if (page.includes(scriptUrl)) {
-    const script = await fetch(scriptUrl);
-    if (!/\bFILE_BASE_URL\s*=\s*["']https:\/\/cubism\.live2d\.com\/sdk-native\/bin\/["']/.test(script))
-      throw new Error("The Cubism SDK supplier catalog has an unknown download origin.");
-    for (const match of script.matchAll(/\burl\s*:\s*["'](CubismSdkForNative-([0-9]+-r\.[0-9]+(?:\.[0-9]+)*)\.zip)["']/g))
-      add(match[2], "https://cubism.live2d.com/sdk-native/bin/" + match[1]);
+// Live2D's download page links each SDK archive directly or through a
+// download script that names the archives below a base URL.
+const source = Upstream.index({ locations: [SOURCE_URL], hosts: ["live2d.com"], parse: async ([page], { fetch: read }) => {
+  const rows = new Map(), links = new RegExp(`https://[^"'\\s<>]+?/${SDK_FILE.source}`, "g");
+  const add = (version, url) => { if (!rows.has(version) && rows.size < 64) rows.set(version, { version, sourceUrl: SOURCE_URL, files: [{ name: `CubismSdkForNative-${version}.zip`, url }] }); };
+  for (const match of page.text.matchAll(links)) add(match[1], match[0]);
+  const scripts = [...new Set([...page.text.matchAll(/<script[^>]+src\s*=\s*["']([^"']+)["']/gi)].map(match => { try { return new URL(match[1], page.url).href; } catch { return null; } })
+    .filter(url => url && liveHost(url) && /sdk|download/i.test(url)))].slice(0, 8);
+  for (const script of scripts) {
+    const document = await read(script).catch(() => null);
+    if (document?.status !== 200) continue;
+    for (const match of document.text.matchAll(links)) add(match[1], match[0]);
+    const base = /\bFILE_BASE_URL\s*=\s*["']([^"']+)["']/.exec(document.text)?.[1];
+    if (base) for (const match of document.text.matchAll(new RegExp(`["'](${SDK_FILE.source})["']`, "g")))
+      try { add(match[2], new URL(match[1], new URL(base, script)).href); } catch {}
   }
-  if (!rows.size) throw new Error("The official Cubism page has no SDK for Native download links.");
   return [...rows.values()];
+} });
+async function supplierCatalog({ signal, logger }) {
+  const rows = (await source.discover({ signal, logger })).filter(row => row.files.length)
+    .map(row => ({ version: row.version, url: row.files[0].url })).filter(supplierRow);
+  if (!rows.length) throw new Error("The official Cubism page has no SDK for Native download links.");
+  return rows;
 }
-async function downloadLibrary(t, { userDataDir, downloads, signal, logger, confirmRuntimeInstall, libraryVersion, dependencies = {} } = {}) {
+// The SDK for an API: an exact choice stays exact. Otherwise the recommended
+// version, or when Live2D no longer lists it, the newest listed version on its
+// API's side of the recommendation.
+function selectSupplierRows(rows, policy, libraryVersion) {
+  if (libraryVersion) return rows.filter(row => row.version === libraryVersion);
+  const recommended = rows.filter(row => row.version === policy.recommendedVersion);
+  if (recommended.length) return recommended;
+  const side = row => Math.sign(compareVersions(row.version, policy.recommendedVersion)) === (policy.newerCompatible ? 1 : -1);
+  return rows.filter(side).sort((a, b) => compareVersions(b.version, a.version)).slice(0, 1);
+}
+async function downloadLibrary(t, { userDataDir, downloads, signal, logger, confirmRuntimeInstall, libraryVersion } = {}) {
   throwIfAborted(signal);
   return runDownloadTask(downloads, { label: `Live2D ${t.policy.apiProfile}`, managerId: "sdk", version: t.renpyVersion,
     kind: "runtime-library", detail: t.policy.apiProfile, dedupeKey: `live2d:${t.libraryPath}:${libraryVersion || t.policy.apiProfile}` }, async task => {
@@ -178,7 +192,7 @@ async function downloadLibrary(t, { userDataDir, downloads, signal, logger, conf
       recommendedVersion: t.policy.recommendedVersion,
       licenseRequired: true, detail: `Required Core API: ${t.policy.apiProfile}. Live2D license terms apply.`,
       installOptions: { major: t.policy.major, sectionId: t.policy.major === 7 ? "v7" : "v8" } });
-    const candidates = rows => rows.filter(row => row.version === (libraryVersion || t.policy.recommendedVersion));
+    const candidates = rows => selectSupplierRows(rows, t.policy, libraryVersion);
     function cachedArchive(row) {
       const directory = path.join(userDataDir, "runtimes", "live2d", row.version), archivePath = path.join(directory, `CubismSdkForNative-${row.version}.zip`);
       try {
@@ -203,7 +217,7 @@ async function downloadLibrary(t, { userDataDir, downloads, signal, logger, conf
       if (!rows.length) {
         if (!await downloadApproved({ confirmRuntimeInstall }, plan())) throw createAbortError("Live2D download canceled.");
         approved = true; throwIfAborted(controller.signal);
-        rows = await supplierCatalog({ signal: controller.signal, dependencies });
+        rows = await supplierCatalog({ signal: controller.signal, logger });
         fs.mkdirSync(userDataDir, { recursive: true }); secureDirectory(fs.realpathSync(userDataDir), path.join(fs.realpathSync(userDataDir), "runtimes", "live2d"), true);
         writeRuntimeCatalog({ userDataDir, managerId: "live2d", source: SOURCE_URL, entries: rows, maxEntries: 64 });
         rows = candidates(rows);
@@ -220,9 +234,9 @@ async function downloadLibrary(t, { userDataDir, downloads, signal, logger, conf
           const archivePath = path.join(directory, `CubismSdkForNative-${row.version}.zip`), temporary = path.join(directory, `.download-${randomUUID()}.zip`);
           try {
             logger?.info?.(`[renpy] download Live2D ${row.version} from ${row.url}`);
-            await (dependencies.downloadToFile || downloadToFile)(row.url, temporary, { signal: controller.signal, onProgress: progress => {
-              if (progress.downloaded > LIMITS.archive || progress.total > LIMITS.archive) controller.abort(); task.onProgress?.(progress);
-            } });
+            // Live2D publishes no digest; the archive's SHA-256 is recorded.
+            await source.download(Upstream.listedFile({ filename: `CubismSdkForNative-${row.version}.zip`, url: row.url }), temporary, { signal: controller.signal,
+              onProgress: progress => { if (progress.downloaded > LIMITS.archive || progress.total > LIMITS.archive) controller.abort(); task.onProgress?.(progress); } });
             throwIfAborted(controller.signal); const archive = readCubismArchive(temporary);
             if (archive.version !== row.version || row.sha256 && row.sha256 !== archive.archiveSha256) throw new Error("Official Cubism archive identity/checksum does not match the selected version.");
             fs.renameSync(temporary, archivePath);
@@ -330,5 +344,5 @@ async function ensureSdkLibrary(install, options = {}) {
   }
 }
 
-module.exports = { SOURCE_URL, requirements, sdkTarget, describeSdk, performSdkAction, gameStatus, patchGame, removeGame,
+module.exports = { SOURCE_URL, source, requirements, sdkTarget, describeSdk, performSdkAction, gameStatus, patchGame, removeGame,
   detectModels, ensureSdkLibrary, target, status, importLibrary, removeLibrary, downloadLibrary };

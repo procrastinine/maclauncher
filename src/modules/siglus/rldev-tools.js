@@ -1,47 +1,42 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { createManagedWindowsTool, windowsPath } = require("../shared/runtime/managed-windows-tool");
-const SevenZip = require("../shared/runtime/sevenzip");
-const { readZipEntryBuffer } = require("../shared/runtime/zip");
-const { downloadToFile, throwIfAborted } = require("../shared/runtime/download-utils");
-const { runToolCommand } = require("../shared/runtime/tool-command");
+const Upstream = require("../shared/runtime/upstream");
+const { readZipEntries, readZipEntryBuffer } = require("../shared/runtime/zip");
+const { throwIfAborted } = require("../shared/runtime/download-utils");
 const { assertOwnDirectory } = require("../shared/writable-input");
 const Native = require("../shared/runtime/local-native");
 const Launch = require("./launch");
 const { realLiveProfile } = require("./source-profile");
 
-const notices = { url: "https://github.com/yoremi-trad-fr/rldev-2026/releases/download/rldev2026/Rldev2026.2.zip",
-  sha256: "a94eb906e013a9e68506e1cd0aef73fae42787fb8cc9aa791b7f2d26bbae5bc0" };
-const members = ["V1.40-Windows/bin/kprl16.exe", "V1.40-Windows/KFN/reallive.kfn", "V1.40-Windows/README.md"];
+// The Go publisher supplies no license file. The original RLdev and KFN
+// notices come from the newest RLdev 2026 release archive.
+const noticeSource = Upstream.github({ repository: "yoremi-trad-fr/rldev-2026",
+  recognize: release => {
+    const asset = (release.assets || []).find(item => /\.zip$/i.test(item?.name || ""));
+    return asset ? { version: release.tag_name, assets: [asset] } : null;
+  } });
+async function originalNotices({ unpacked, signal }) {
+  const listed = (await noticeSource.discover({ signal })).find(row => row.files.length)?.files[0];
+  if (!listed) throw new Error("The original RLdev notices are unavailable.");
+  const archive = path.join(unpacked, ".notices.zip");
+  try {
+    const { sha256, integrity } = await noticeSource.download(listed, archive, { signal });
+    const entries = readZipEntries(archive)?.entries || [];
+    for (const name of ["COPYING", "GPL", "LGPL"]) {
+      const item = entries.filter(entry => path.posix.basename(entry.name) === name).sort((a, b) => a.name.length - b.name.length)[0];
+      const bytes = item && readZipEntryBuffer(archive, item.name);
+      if (!bytes || bytes.length > 128 * 1024) throw new Error("An original RLdev license notice is missing.");
+      fs.writeFileSync(path.join(unpacked, name), bytes);
+    }
+    const originalNotices = { url: listed.url, sha256, integrity };
+    fs.writeFileSync(path.join(unpacked, "NOTICE-SOURCES.json"), JSON.stringify({ upstream: "https://github.com/yoremi-trad-fr/rldev2026-go-edition",
+      originalNotices, scope: "Original RLdev and bundled KFN notices; the publisher provides no separate Go license file." }, null, 2) + "\n");
+    return { originalNotices };
+  } finally { fs.rmSync(archive, { force: true }); }
+}
 const manager = createManagedWindowsTool({ id: "rldev", label: "RLdev", owner: "yoremi-trad-fr", repo: "rldev2026-go-edition",
-  executableName: "kprl16.exe", assetPattern: /^V1\.40-Windows\.7z$/, versionFromTag: tag => tag === "rldev2026-go" ? "1.4.0" : "", order: 269,
-  dependencies: { async extractArchive(archive, destination, signal) {
-    throwIfAborted(signal);
-    const sevenZip = SevenZip.resolveSevenZipBinary();
-    if (!sevenZip) throw new Error("The included archive extractor is unavailable.");
-    const work = path.join(destination, ".upstream"), noticeArchive = path.join(destination, ".notices.zip");
-    fs.mkdirSync(work);
-    try {
-      await runToolCommand(sevenZip, ["x", "-y", "-o" + work, archive, ...members],
-        { cwd: destination, logPath: path.join(destination, "install.log"), signal });
-      for (const member of members) {
-        const source = path.join(work, ...member.split("/")), stat = fs.lstatSync(source);
-        if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 32 * 1024 ** 2) throw new Error("The RLdev package has an invalid production file.");
-        fs.copyFileSync(source, path.join(destination, path.basename(member)));
-      }
-      // The publisher's Go package keeps the original KFN GPL declaration.
-      // Retain the original RLdev notices without assigning new Go code a license.
-      await downloadToFile(notices.url, noticeArchive, { signal });
-      if (Native.hashFile(noticeArchive) !== notices.sha256) throw new Error("The original RLdev notice package changed.");
-      for (const name of ["COPYING", "GPL", "LGPL"]) {
-        const bytes = readZipEntryBuffer(noticeArchive, name);
-        if (!bytes || bytes.length > 128 * 1024) throw new Error("An original RLdev license notice is missing.");
-        fs.writeFileSync(path.join(destination, name), bytes);
-      }
-      fs.writeFileSync(path.join(destination, "NOTICE-SOURCES.json"), JSON.stringify({ upstream: "https://github.com/yoremi-trad-fr/rldev2026-go-edition",
-        originalNotices: notices, scope: "Original RLdev and bundled KFN notices; the publisher provides no separate Go license file." }, null, 2) + "\n");
-    } finally { fs.rmSync(work, { recursive: true, force: true }); fs.rmSync(noticeArchive, { force: true }); }
-  } } });
+  executableName: "kprl16.exe", assetPattern: /^V[\d.]+-Windows\.7z$/i, files: ["reallive.kfn"], notices: originalNotices, order: 269 });
 
 function diagnostics(log) {
   const failed = new Map();
@@ -87,4 +82,4 @@ async function decompile(entry, payload, context, info, inventory) {
   context.ui?.shell?.showItemInFolder?.(outputDir); return result;
 }
 
-module.exports = { manager, decompile, realLiveProfile, __test: { diagnostics } };
+module.exports = { manager, decompile, realLiveProfile, __test: { diagnostics, originalNotices } };

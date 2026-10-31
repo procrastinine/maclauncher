@@ -32,7 +32,9 @@ test('shared settings and runtimes keep static detail in help while preserving c
   const general = render(SettingsView, { state, sectionId: `module:${mod.id}`, showIcons: true, showNonDefaultTags: true,
     onSetLauncherSettings() {}, onSetModuleSettings() {} });
   assert.doesNotMatch(general, /No settings available|No configurable runtime settings|class="settingsLabel">Runtime settings/);
-  assert.match(general, /class="settingsRuntimeHeading" role="heading" aria-level="3"[^>]*>Managed runtime</);
+  // Each runtime offered as the default has a tab, including one without settings.
+  assert.match(general, /role="tab"[^>]*id="settings-runtime-tab-[^"]*-managed"[^>]*>Managed runtime</);
+  assert.match(general, /role="tab"[^>]*id="settings-runtime-tab-[^"]*-native"[^>]*>Native app</);
   const section = { ...state.runtimeManagers['fixture-manager'].sections[0], description: 'Catalog explanation.',
     componentsTitle: 'Components', componentsDescription: 'Component explanation.',
     components: [{ id: 'part', label: 'Runtime part', available: false, status: 'Not installed', description: 'Part explanation.' }],
@@ -250,10 +252,13 @@ test('registry metadata exposes manageable production groups while exposing mana
     assert.equal(groups.at(-1).id, 'tools');
     assert.equal(groups.filter(group => group.label === 'GameMaker').length, 1);
     assert.equal(groups.some(group => group.label === 'Butterscotch'), false);
+    // CrossOver and Sikarugir share one DXMT support package, listed once under Graphics.
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'sikarugir'), sections).map(choice => [choice.label, choice.managerId]),
-      [['Sikarugir', 'sikarugir'], ['DXMT support', 'sikarugir-graphics-bridge']]);
+      [['Sikarugir', 'sikarugir']]);
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'crossover'), sections).map(choice => [choice.label, choice.managerId]),
-      [['CrossOver', 'crossover'], ['DXMT support', 'crossover-graphics-bridge']]);
+      [['CrossOver', 'crossover']]);
+    assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'graphics'), sections).filter(choice => choice.label === 'DXMT support')
+      .map(choice => choice.managerId), ['sikarugir-graphics-bridge']);
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.label === 'Flash'), sections).map(choice => [choice.label, choice.managerId]),
       [['Flash Player', 'flash-projector'], ['Ruffle', 'ruffle'], ['JPEXS FFDec', 'ffdec']]);
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.label === 'GameMaker'), sections).map(choice => [choice.label, choice.managerId]),
@@ -393,7 +398,7 @@ test('effective manager defaults remain visible when installed and only saved de
       const tree=h.render(),markup=renderToStaticMarkup(tree);
       assert.match(markup,/Default v2\.0/,'the effective default is named even when already installed');
       assert.match(markup,/badge badgeAccent[^>]*>Default<\/span>/,'the installed default keeps its marker');
-      const clear=elements(tree).find(node=>node.type==='button'&&node.props.children==='Clear default');
+      const clear=elements(tree).find(node=>node.type==='button'&&node.props.children==='Use automatic default');
       assert.equal(Boolean(clear),defaultSource==='saved');
       if(clear){clear.props.onClick();assert.deepEqual(calls,[['fixture','default',null]]);}
       else assert.deepEqual(calls,[]);

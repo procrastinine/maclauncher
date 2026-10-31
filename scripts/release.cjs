@@ -3,26 +3,16 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
+// The app's update check orders release tags with the same implementation.
+const SemanticVersion = require('../src/core/semantic-version');
 
 function parseVersion(value) {
-  const match = typeof value === 'string' && /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/.exec(value);
-  if (!match || (match[4] || '').split('.').some(id => /^0\d+$/.test(id))) throw new Error('package.json.version must be a valid semantic version.');
-  return { core: match.slice(1, 4).map(BigInt), pre: match[4]?.split('.') || [] };
+  const parsed = SemanticVersion.parse(typeof value === 'string' ? value : null);
+  if (!parsed) throw new Error('package.json.version must be a valid semantic version.');
+  return parsed;
 }
 function compareVersions(left, right) {
-  const a = parseVersion(left), b = parseVersion(right);
-  for (let i = 0; i < 3; i++) if (a.core[i] !== b.core[i]) return a.core[i] > b.core[i] ? 1 : -1;
-  if (!a.pre.length || !b.pre.length) return Number(!a.pre.length) - Number(!b.pre.length);
-  for (let i = 0; i < Math.max(a.pre.length, b.pre.length); i++) {
-    const x = a.pre[i], y = b.pre[i];
-    if (x === y) continue;
-    if (x === undefined || y === undefined) return x === undefined ? -1 : 1;
-    const xn = /^\d+$/.test(x), yn = /^\d+$/.test(y);
-    if (xn && yn) return BigInt(x) > BigInt(y) ? 1 : -1;
-    if (xn !== yn) return xn ? -1 : 1;
-    return x > y ? 1 : -1;
-  }
-  return 0;
+  return SemanticVersion.compare(parseVersion(left), parseVersion(right));
 }
 function planRelease({ eventName, ref, event, version, previousVersion }) {
   const parsed = parseVersion(version);
@@ -55,32 +45,63 @@ function getPlan({ env = process.env, repoRoot = path.resolve(__dirname, '..'), 
   }
   return planRelease({ eventName: env.GITHUB_EVENT_NAME, ref: env.GITHUB_REF || '', event, version, previousVersion });
 }
-function assetNames() {
-  return ['MacLauncher.app.zip',
-    'build-manifest.json', 'SHA256SUMS.txt', 'RELEASE_NOTES.md'];
+// One app per launcher CPU. The Apple Silicon download keeps the original
+// asset name, so existing links to MacLauncher.app.zip still resolve.
+const APP_ARCHITECTURES = Object.freeze(['arm64', 'x64']);
+const APP_ASSETS = Object.freeze({
+  arm64: Object.freeze({ name: 'MacLauncher.app.zip', label: 'Apple Silicon' }),
+  x64: Object.freeze({ name: 'MacLauncher-Intel.app.zip', label: 'Intel' })
+});
+function appAsset(arch) {
+  if (!APP_ARCHITECTURES.includes(arch)) throw new Error('Choose the Apple Silicon or Intel app build.');
+  return APP_ASSETS[arch];
 }
-async function verifyAssets(directory, { version, sha }) {
-  const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'build-manifest.json'), 'utf8'));
-  if (manifest.version !== version || manifest.sourceCommit !== sha || manifest.releaseTag !== `v${version}` || manifest.arch !== 'arm64' || !/^\d+\.\d+(?:\.\d+)?$/.test(manifest.maximumNativeMacOS || '')) {
-    throw new Error('Release artifacts must match the exact source commit, version and Apple Silicon target.');
+function assetNames(arch) {
+  return [appAsset(arch).name, appManifest(arch), 'SHA256SUMS.txt', 'RELEASE_NOTES.md'];
+}
+function appManifest(arch) {
+  appAsset(arch);
+  return `MacLauncher-${arch}.build-manifest.json`;
+}
+// One architecture's build outputs, in their own directory.
+async function verifyAssets(directory, { version, sha, arch }) {
+  const manifest = JSON.parse(fs.readFileSync(path.join(directory, appManifest(arch)), 'utf8'));
+  if (manifest.version !== version || manifest.sourceCommit !== sha || manifest.releaseTag !== `v${version}` || manifest.arch !== arch ||
+      manifest.appArchive !== appAsset(arch).name || !/^[a-f0-9]{64}$/.test(manifest.appArchiveSha256 || '') ||
+      !/^\d+\.\d+(?:\.\d+)?$/.test(manifest.maximumNativeMacOS || '')) {
+    throw new Error('Release artifacts must match the exact source commit, version and app architecture.');
   }
-  const names = assetNames(manifest);
+  const names = assetNames(arch);
   if (JSON.stringify(fs.readdirSync(directory).sort()) !== JSON.stringify([...names].sort())) throw new Error('Release asset set is incomplete or contains unexpected files.');
   for (const name of names) {
     const stat = fs.lstatSync(path.join(directory, name));
     if (!stat.isFile() || stat.size === 0 || stat.size >= 2 * 1024 ** 3) throw new Error('Release assets must be nonempty regular files smaller than 2 GiB.');
   }
   const checksums = fs.readFileSync(path.join(directory, 'SHA256SUMS.txt'), 'utf8').trim().split('\n');
-  const expected = new Set(['MacLauncher.app.zip']);
+  const expected = new Set([appAsset(arch).name]);
   for (const line of checksums) {
     const match = /^([a-f0-9]{64})  ([A-Za-z0-9._-]+)$/.exec(line);
     if (!match || !expected.delete(match[2])) throw new Error('Build checksums must cover exactly the application archive.');
     const hash = createHash('sha256');
     for await (const bytes of fs.createReadStream(path.join(directory, match[2]))) hash.update(bytes);
     if (hash.digest('hex') !== match[1]) throw new Error('Release archive checksum mismatch.');
+    if (manifest.appArchiveSha256 !== match[1]) throw new Error('The build manifest archive checksum differs from the release archive.');
   }
   if (expected.size) throw new Error('Release archive checksums are missing.');
   return names;
+}
+// The release directory holds one subdirectory per app architecture. Both
+// builds come from the same commit and carry the same release notes.
+async function verifyBuilds(directory, { version, sha }) {
+  if (JSON.stringify(fs.readdirSync(directory).sort()) !== JSON.stringify([...APP_ARCHITECTURES].sort()) ||
+      APP_ARCHITECTURES.some(arch => !fs.lstatSync(path.join(directory, arch)).isDirectory()))
+    throw new Error('Release assets need exactly one build directory for each app architecture.');
+  for (const arch of APP_ARCHITECTURES) await verifyAssets(path.join(directory, arch), { version, sha, arch });
+  const notes = APP_ARCHITECTURES.map(arch => fs.readFileSync(path.join(directory, arch, 'RELEASE_NOTES.md'), 'utf8'));
+  if (notes.some(value => value !== notes[0])) throw new Error('The app builds carry different release notes.');
+  return { notes: path.join(directory, APP_ARCHITECTURES[0], 'RELEASE_NOTES.md'),
+    files: APP_ARCHITECTURES.flatMap(arch => [appAsset(arch).name, appManifest(arch)]
+      .map(name => ({ arch, name, file: path.join(directory, arch, name) }))) };
 }
 async function githubRequest(route, { env = process.env, tool = execFileSync, pause = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
   // Uploads can block for minutes. A separate gh process avoids reusing an HTTP
@@ -131,12 +152,12 @@ async function publish({ directory, env = process.env, request = route => github
   const version = env.RELEASE_VERSION, sha = env.GITHUB_SHA;
   const prerelease = parseVersion(version).pre.length > 0, tag = `v${version}`;
   if (!/^[a-f0-9]{40}$/.test(sha || '') || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(env.GITHUB_REPOSITORY || '') || !env.GH_TOKEN) throw new Error('Release publication requires an exact commit, repository and GitHub token.');
-  await verifyAssets(directory, { version, sha });
-  // Build records remain in Actions artifacts. The public download is the app.
-  const names = ['MacLauncher.app.zip'];
+  const builds = await verifyBuilds(directory, { version, sha });
+  // Each public app has an attested record of its included packages.
+  const names = builds.files.map(item => item.name), files = new Map(builds.files.map(item => [item.name, item.file]));
   const identities = new Map();
   for (const name of names) {
-    const file = path.join(directory, name), hash = createHash('sha256');
+    const file = files.get(name), hash = createHash('sha256');
     for await (const bytes of fs.createReadStream(file)) hash.update(bytes);
     identities.set(name, { size: fs.statSync(file).size, digest: `sha256:${hash.digest('hex')}` });
   }
@@ -153,9 +174,9 @@ async function publish({ directory, env = process.env, request = route => github
   if (existing && !reference && existing.target_commitish !== sha) throw new Error('The existing draft belongs to another source commit.');
   if (existing?.assets?.some(asset => !names.includes(asset.name))) throw new Error('The existing draft contains unexpected assets.');
   const gh = args => tool('gh', args, { env, stdio: 'inherit' });
-  if (!existing) gh(['release', 'create', tag, '--repo', env.GITHUB_REPOSITORY, '--target', sha, '--draft', '--title', `MacLauncher ${tag}`, '--notes-file', path.join(directory, 'RELEASE_NOTES.md')]);
+  if (!existing) gh(['release', 'create', tag, '--repo', env.GITHUB_REPOSITORY, '--target', sha, '--draft', '--title', `MacLauncher ${tag}`, '--notes-file', builds.notes]);
   const pending = names.filter(name => !matches(existing?.assets, name));
-  if (pending.length) gh(['release', 'upload', tag, '--repo', env.GITHUB_REPOSITORY, '--clobber', ...pending.map(name => path.join(directory, name))]);
+  if (pending.length) gh(['release', 'upload', tag, '--repo', env.GITHUB_REPOSITORY, '--clobber', ...pending.map(name => files.get(name))]);
   const uploaded = await findRelease(tag, request);
   if (!Number.isSafeInteger(uploaded?.id) || !uploaded.draft || uploaded.assets?.length !== names.length || names.some(name => !matches(uploaded.assets, name))) throw new Error('GitHub has not received the complete release asset set with matching checksums.');
   gh(['api', '--method', 'PATCH', `repos/${env.GITHUB_REPOSITORY}/releases/${uploaded.id}`, '-F', 'draft=false', '-F', `prerelease=${prerelease}`, '-f', `make_latest=${prerelease ? 'false' : 'legacy'}`]);
@@ -171,4 +192,4 @@ async function main(args) {
   throw new Error('Usage: node scripts/release.cjs plan|publish <asset-directory>');
 }
 if (require.main === module) main(process.argv.slice(2)).then(result => console.log(JSON.stringify(result))).catch(error => { console.error(error.message); process.exitCode = 1; });
-module.exports = { parseVersion, compareVersions, planRelease, getPlan, assetNames, verifyAssets, githubRequest, findRelease, publish, main };
+module.exports = { parseVersion, compareVersions, planRelease, getPlan, APP_ARCHITECTURES, appAsset, appManifest, assetNames, verifyAssets, verifyBuilds, githubRequest, findRelease, publish, main };

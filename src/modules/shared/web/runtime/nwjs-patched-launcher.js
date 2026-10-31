@@ -238,6 +238,7 @@ async function ensureRuntimeInstalled({
   userDataDir,
   version,
   variant,
+  architecture,
   logger,
   onState,
   allowInstall = false,
@@ -248,7 +249,7 @@ async function ensureRuntimeInstalled({
     version,
     variant,
     platform: process.platform,
-    arch: process.arch
+    arch: architecture || require("../../runtime/architecture").selectedArchitecture()
   });
   if (resolved) return resolved;
   if (!allowInstall) {
@@ -262,6 +263,7 @@ async function ensureRuntimeInstalled({
     userDataDir,
     version,
     variant,
+    architecture,
     logger,
     downloads
   });
@@ -286,10 +288,6 @@ function copyDir(src, dest) {
 
 function findGreenworksTargets(rootDir) {
   return Greenworks.findGreenworksTargets(rootDir);
-}
-
-function resolveGreenworksVersion({ managerSettings, runtimeData, userDataDir }) {
-  return Greenworks.resolveRuntimeConfig({ managerSettings, runtimeData, userDataDir, needsGreenworks: true }).version;
 }
 
 function resolveGreenworksRequirement(options) {
@@ -585,7 +583,7 @@ async function launchRuntime({
     userDataDir,
     sourceRoot
   });
-  const { version, variant, greenworksVersion } = resolveRuntimeConfig({
+  const { version, variant, architecture, greenworksVersion } = resolveRuntimeConfig({
     managerSettings,
     runtimeData,
     userDataDir,
@@ -597,10 +595,12 @@ async function launchRuntime({
     userDataDir,
     version,
     variant,
+    architecture,
     logger,
     onState: onRuntimeStateChange,
     allowInstall: false
   });
+  await require("../../runtime/architecture").ensureArchitecture(installed.platformKey === "osx-x64" ? "x64" : "arm64", context || {});
 
   const greenworksInstall = greenworks.needsGreenworks
     ? ensureGreenworksInstalled({ userDataDir, version: greenworksVersion || version })
@@ -655,7 +655,7 @@ async function launchRuntime({
 
   logger?.info?.(`[nwjs-patched] launch ${cmd} ${args.join(" ")}`);
 
-  const needsRosetta = process.arch === "arm64" && installed.platformKey === "osx-x64";
+  const needsRosetta = installed.platformKey === "osx-x64" && require("../../runtime/architecture").requiresRosetta("x64");
   return launchNwjsProcess({ executable: cmd, args, wrapperDir, readinessFrame, needsRosetta, logger,
     context, spawn: context?.spawnDetachedChecked, ...(steam ? { env: steam.environment } : {}) });
 }
@@ -669,7 +669,6 @@ module.exports = {
   overlayGreenworks,
   ensureGreenworksInstalled,
   resolveGreenworksRequirement,
-  resolveGreenworksVersion,
   findGreenworksTargets,
   getRuntimeRequirements: Greenworks.getRuntimeRequirements
 };

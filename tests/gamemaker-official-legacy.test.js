@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Fixture = require("./helpers/gamemaker-official.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -11,7 +13,6 @@ const Installer = require("../src/modules/gamemaker/runtime/official-installer")
 const Catalog = require("../src/modules/gamemaker/runtime/official-catalog");
 const Compatibility = require("../src/modules/gamemaker/runtime/official-compatibility");
 
-const Fixture = require("./helpers/gamemaker-official.cjs");
 const filename = Fixture.legacyFilename;
 const member = "Interpreted/Mac/bin/quitxcode.sh";
 // One 39-byte member from the public vendor package. Its expected plaintext
@@ -41,11 +42,11 @@ test("legacy decoder checks CRC, headers and bounded input instead of extracting
 test("legacy installation verifies discovered package size before any native tool and needs no Igor", async t => {
   const root = temporary(t), source = path.join(root, "original-game"); fs.mkdirSync(source); fs.writeFileSync(path.join(source, "data.win"), "unchanged original");
   const version = "1.4.2900"; await Fixture.discover(path.join(root, "userData"), { legacy: version });
-  let nativeCalls = 0, downloadCalls = 0;
-  await assert.rejects(Installer.installOfficialVersion({ userDataDir: path.join(root, "userData"), version,
-    dependencies: { downloadToFile: async (url, file) => { downloadCalls++; assert.equal(url, `https://store.yoyogames.com/downloads/gm-studio/${filename}`); fs.writeFileSync(file, "changed ZIP"); },
-      runProcess: async () => { nativeCalls++; throw new Error("No native tool should run"); } } }), /size or SHA-256/);
-  assert.equal(nativeCalls, 0); assert.equal(downloadCalls, 1);
+  let nativeCalls = 0;
+  const url = `https://store.yoyogames.com/downloads/gm-studio/${filename}`, before = Fixture.Harness.network.requests.length;
+  await assert.rejects(Fixture.withFiles({ [url]: Buffer.from("changed ZIP") }, () => Installer.installOfficialVersion({ userDataDir: path.join(root, "userData"), version,
+    dependencies: { runProcess: async () => { nativeCalls++; throw new Error("No native tool should run"); } } })), /size/);
+  assert.equal(nativeCalls, 0); assert.deepEqual(Fixture.Harness.network.requests.slice(before), [url]);
   assert.equal(fs.existsSync(path.join(root, "userData", "runtimes", "gamemaker-official", "tools")), false);
   assert.equal(fs.existsSync(path.join(root, "userData", "runtimes", "gamemaker-official", version)), false);
   assert.equal(fs.readFileSync(path.join(source, "data.win"), "utf8"), "unchanged original");
@@ -56,7 +57,7 @@ test("legacy feed release identities come from the exact validated cached row", 
   const body = Buffer.from(`<rss><channel>${xml("1.4.1804")}${xml("1.4.2900")}</channel></rss>`);
   const feed = Catalog.FEEDS.find(item => item.family === "studio-1.4"), entries = Catalog.parseFeed(body, feed);
   assert.equal(entries.length, 2); assert.ok(entries.every(Catalog.validateEntry));
-  await Catalog.refreshCatalog({ userDataDir: root, sourceId: "official-3", fetch: async () => ({ status: 200, body }) });
+  await Fixture.refresh({ userDataDir: root, sourceId: "official-3" }, () => ({ status: 200, body }));
   for (const entry of entries) assert.deepEqual(Installer.resolveBuild({ userDataDir: root, version: entry.version }).packages, entry.packages);
   assert.throws(() => Legacy.resolveBuild("1.4.2900", { ...entries[1], packages: [] }), /cached official catalog/);
   assert.throws(() => Installer.resolveBuild({ userDataDir: root, version: "1.4.2700" }), /Refresh/);
@@ -91,19 +92,21 @@ test("format constraints filter discovered rows and preserve exact choices", asy
 });
 test("a discovered legacy release installs with recorded native identities and reuses its receipt offline", async t => {
   const root = temporary(t), version = "1.4.2900"; await Fixture.discover(root, { legacy: version });
-  let downloads = 0, images = 0;
+  let images = 0;
   t.mock.method(Codec, "readPackageMember", (_archive, name, member) => { assert.equal(name, filename); assert.equal(member, "Mac/Mac-YoYoRunner.dmg"); return Buffer.from("fixture disk image"); });
-  const result = await Installer.installOfficialVersion({ userDataDir: root, version, dependencies: {
-    downloadToFile: async (url, output) => { downloads++; assert.equal(url, `https://store.yoyogames.com/downloads/gm-studio/${filename}`); fs.writeFileSync(output, "ZIP"); },
+  const url = `https://store.yoyogames.com/downloads/gm-studio/${filename}`, before = Fixture.Harness.network.requests.length;
+  const result = await Fixture.withFiles({ [url]: Buffer.from("ZIP") }, () => Installer.installOfficialVersion({ userDataDir: root, version, dependencies: {
     extractRunnerApp: async (_image, app, options) => { images++; assert.equal(options.version, version); return Fixture.runnerApp(app); },
     runProcess: () => assert.fail("Legacy installation has no Igor prerequisite")
-  } });
-  assert.equal(result.ready, true); assert.equal(result.version, version); assert.deepEqual([downloads, images], [1, 1]);
+  } }));
+  assert.equal(result.ready, true); assert.equal(result.version, version);
+  assert.deepEqual(Fixture.Harness.network.requests.slice(before), [url]); assert.equal(images, 1);
   fs.rmSync(path.join(root, "runtimes/gamemaker-official/catalog.json"), { force: true });
   t.mock.method(Catalog, "cachedCatalog", () => null);
   assert.equal(Official.manager.core.resolveInstalled({ userDataDir: root, version }).ready, true);
   assert.equal(Official.manager.resolveSelection({}, {}, root).version, version, "An unset default reuses a verified installed receipt offline");
-  assert.equal(Official.manager.resolveSelection({}, {runtimes:{"gamemaker-official":{defaultVersion:null}}}, root).selectionRequired, true);
+  const cleared = Official.manager.resolveSelection({}, {runtimes:{"gamemaker-official":{defaultVersion:null}}}, root);
+  assert.equal(cleared.version, version); assert.equal(cleared.ready, true);
   assert.equal(Official.manager.resolveSelection({ runtimeData: { "official-studio": { version } } }, {}, root).version, version);
   fs.appendFileSync(result.diskImagePath, "tampered");
   assert.equal(Official.manager.core.resolveInstalled({ userDataDir: root, version }), null);
@@ -119,7 +122,7 @@ test("detected WAD and sequence recommendations preserve compatible fallbacks an
   assert.equal(cold.version, "2.3.7.476"); assert.equal(cold.recommendedVersion, "2.3.7.476"); assert.equal(cold.discoveryRequired, true);
   const versions = ["2024.12.0.1", "2024.11.0.227", "2.3.7.476"];
   const body = Buffer.from('<rss><channel>' + versions.map(version => Fixture.modernFeed(version).toString().match(/<item>[\s\S]*<\/item>/)[0]).join('') + '</channel></rss>');
-  await Catalog.refreshCatalog({ userDataDir: root, fetch: async url => ({ status: 200, body: url.includes('update-studio.rss') ? Fixture.legacyFeed("1.4.9999") : body }) });
+  await Fixture.refresh({ userDataDir: root }, url => ({ status: 200, body: url.includes('update-studio.rss') ? Fixture.legacyFeed("1.4.9999") : body }));
   assert.equal(Official.manager.resolveSelection({ moduleData: inspection }, {}, root).version, "2.3.7.476");
   const explicit = { moduleData: inspection, runtimeData: { "official-studio": { version: "2024.12.0.1" } } };
   assert.equal(Official.manager.resolveSelection(explicit, {}, root).version, "2024.12.0.1");
@@ -131,8 +134,8 @@ test("detected WAD and sequence recommendations preserve compatible fallbacks an
   assert.equal(Official.manager.resolveSelection(legacy, {}, root).version, "1.4.2800", "Compatible installed runners remain a WAD-derived choice");
   Fixture.legacyReceipt(root, "1.4.9999"); Fixture.legacyReceipt(root, "1.4.10000");
   assert.equal(Official.manager.resolveSelection(legacy, {}, root).version, "1.4.9999", "The detected format recommendation ranks compatible installed choices");
-  assert.equal(Official.manager.resolveSelection({}, {}, root).version, "1.4.10000", "The committed installed fallback applies only while the default is unset");
-  assert.equal(Official.manager.resolveSelection({}, {runtimes:{"gamemaker-official":{defaultVersion:null}}}, root).version, null);
+  assert.equal(Official.manager.resolveSelection({}, {}, root).version, "2024.12.0.1", "Without game evidence the default follows the newest catalog version");
+  assert.equal(Official.manager.resolveSelection({}, {runtimes:{"gamemaker-official":{defaultVersion:null}}}, root).version, "2024.12.0.1", "Clearing a saved default retains the manager default");
   const facts = Compatibility.capabilityForVersion("2.2.5.378");
   assert.deepEqual(facts.testedWadVersions, [16]); assert.equal(facts.observation.workaround, "software-opengl");
   assert.match(facts.observation.binarySha256, /^[a-f0-9]{64}$/); assert.equal('result' in facts.observation, false);

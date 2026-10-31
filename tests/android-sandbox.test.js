@@ -242,16 +242,16 @@ test('Android JVM sandbox seeds the shared namespace for original native getenv 
 }, async t => {
   const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'android environment namespace ')));
   t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
-  const declared=require('../src/modules/android/managed-packages.json')[0];
-  const runtime=path.resolve(process.env.KLEPTON_NATIVE_RUNTIME||path.join(__dirname,'../src/resources/native-runtimes',declared.directoryRelative));
+  const runtime=require('./helpers/android-java').runtimeRoot();
+  if (!runtime) return t.skip('Requires an Android runtime via KLEPTON_NATIVE_RUNTIME or MACLAUNCHER_TEST_USER_DATA');
   const data=path.join(root,'app/data'),files=path.join(data,'files'),cache=path.join(data,'cache'),inputs=path.join(root,'inputs'),classes=path.join(inputs,'classes');
   for(const directory of [files,cache,path.join(data,'obb'),classes])fs.mkdirSync(directory,{recursive:true});
   fs.writeFileSync(path.join(data,'obb/retained.obb'),'retained expansion bytes');
   const cp=[classes,path.join(runtime,'android-host.jar'),path.join(runtime,'android-framework.jar')].join(path.delimiter);
   const buildEnvironment={...Sandbox.environment(process.env)};
   run(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',classes,
-    'src/modules/android/native/java/maclauncher/android/framework/HostFilesystem.java',path.join(fixtures,'StorageNamespaceProbe.java')],{env:buildEnvironment});
-  fs.copyFileSync('src/modules/android/native/resources/storage-namespace.json',path.join(classes,'maclauncher/android/framework/storage-namespace.json'));
+    'src/external/maclauncher-android/src/modules/android/native/java/maclauncher/android/framework/HostFilesystem.java',path.join(fixtures,'StorageNamespaceProbe.java')],{env:buildEnvironment});
+  fs.copyFileSync('src/external/maclauncher-android/src/modules/android/native/resources/storage-namespace.json',path.join(classes,'maclauncher/android/framework/storage-namespace.json'));
   const library=path.join(inputs,'namespace-probe.dylib');
   run('/usr/bin/clang',['-std=c11','-Wall','-Wextra','-Werror','-dynamiclib','-mmacosx-version-min=13.0',
     '-I'+path.join(home,'include'),'-I'+path.join(home,'include/darwin'),path.join(fixtures,'sandbox-probe.c'),'-o',library],{env:buildEnvironment});
@@ -300,7 +300,7 @@ test('Android sandbox confines Java and JNI file access and inherited child JVMs
     fs.mkdirSync(path.join(runtime, 'native'));
     const storageLibrary = path.join(runtime, 'native/libandroid-storage.dylib');
     run('/usr/bin/clang', ['-dynamiclib', '-mmacosx-version-min=13.0',
-      path.join(__dirname, '../src/modules/android/native/native-storage.c'), '-o', storageLibrary], {env: buildEnvironment});
+      path.join(__dirname, '../src/external/maclauncher-android/src/modules/android/native/native-storage.c'), '-o', storageLibrary], {env: buildEnvironment});
     const processProduct = process.env.ANDROID_JVM_PROCESS_PRODUCT;
     const processLibrary = path.join(runtime, 'native/libandroid-jvm-process.dylib');
     if (processProduct) fs.copyFileSync(processProduct, processLibrary);

@@ -1,6 +1,20 @@
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), os = require("node:os"), path = require("node:path");
 const Tools = require("../src/modules/video/tools"), Export = require("../src/modules/video/export");
 function temporary(t){const root=fs.mkdtempSync(path.join(os.tmpdir(),"video-export-"));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));return root;}
+test("Export uses the selected helper floor and keeps newer optional helpers isolated", async t => {
+  const root=temporary(t),input=path.join(root,"input.mp4");fs.writeFileSync(input,"source");
+  let prepared=0,ran=0;
+  const context={platform:"darwin",macOSVersion:"13.0",userDataDir:root,graphicsRuntimeRoot:root};
+  const options={entry:{effects:{schema:2,enabled:false,mode:"advanced",video:[]}},input,output:path.join(root,"output.mp4"),context};
+  const dependencies={manifest:{minimumMacOS:"13.0",files:[{path:"maclauncher-graphics-video",optionalLoad:{minimumMacOS:"13.0"}}]},
+    verifyFile(){},prepare:async()=>{prepared++;return {environment:{},file:path.join(root,"plan.json")};},
+    run:async({executable})=>{ran++;assert.equal(executable,path.join(root,"maclauncher-graphics-video"));return {output:options.output};}};
+  assert.equal((await Export.exportVideo(options,dependencies)).output,options.output);
+  assert.equal(prepared,1);assert.equal(ran,1);
+  dependencies.manifest.files[0].optionalLoad.minimumMacOS="14.0";
+  await assert.rejects(Export.exportVideo(options,dependencies),/requires macOS 14\.0 or later/);
+  assert.equal(prepared,1);assert.equal(ran,1);
+});
 test("Preview uses the ordinary launch flow and the current saved settings",async()=>{
   const entry={gamePath:"/video.mp4",graphics:{spatialMethod:"metalfx"}},settings={runtimes:{}},signal=new AbortController().signal;
   let received;const result=await Tools.previewVideo(entry,{}, {settings,signal,launchForTools:async options=>{received=options;return {kind:"process"};}});

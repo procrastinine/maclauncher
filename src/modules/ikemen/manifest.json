@@ -55,7 +55,7 @@
     "entries": {
       "ikemen": {
         "graphicsHost": "window",
-        "label": "Ikemen GO (Apple Silicon)",
+        "label": "Ikemen GO",
         "settings": {
           "defaults": {
             "appArgs": []

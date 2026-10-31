@@ -38,7 +38,7 @@ int main(int count, char **arguments) {
         if (!strcmp(arguments[i], "sys.boot_completed")) { puts("1");return 0; }
         if (!strcmp(arguments[i], "get-started-user-state")) { puts("RUNNING_UNLOCKED");return 0; }
         if (!strcmp(arguments[i], "path")) { puts("package:/data/app/base.apk");return 0; }
-        if (!strcmp(arguments[i], "start")) { puts("Status: ok\nComplete");return 0; }
+        if (!strcmp(arguments[i], "start")) { puts("Status: ok\nTotalTime: 0\nComplete");return 0; }
     }
     puts("Success");return 0;
 }

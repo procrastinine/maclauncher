@@ -160,12 +160,16 @@ function setLibrarySort(library, sort) {
   return normalized;
 }
 
+// The library order lives in the launcher settings, and a record's own order is
+// only the legacy fallback. Adding or updating one game leaves every other
+// record unchanged, so an import never rewrites the whole library.
 function upsertLibraryEntry(entries, entry) {
   const next = entries.slice();
   const index = next.findIndex(game => game.gameId === entry.gameId);
-  if (index < 0) next.unshift(entry);
-  else next[index] = entry;
-  return applyOrderToEntries(next);
+  if (index >= 0) { next[index] = entry; return next; }
+  if (entry && typeof entry === "object") entry.order = Math.min(0, ...next.map(game => Number.isFinite(game?.order) ? game.order : 0)) - 1;
+  next.unshift(entry);
+  return next;
 }
 
 function reorderLibraryEntry(games, library, gamePath, toIndex) {

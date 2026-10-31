@@ -112,14 +112,14 @@
       },
       "native": {
         "graphicsHost": "window",
-        "label": "Native app"
+        "label": "Game's macOS app"
       }
     },
     "labels": {
       "electron": "Electron",
       "nwjs": "NW.js",
       "nwjs-patched": "NW.js (Patched)",
-      "native": "Native app"
+      "native": "Game's macOS app"
     },
     "hosted": {
       "id": "electron",

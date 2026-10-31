@@ -63,7 +63,7 @@ export function retainPathValues(values, gamePaths) {
   return retained;
 }
 
-const ACTIVITY_KEYS = ["running", "preparing", "importing", "downloads"];
+const ACTIVITY_KEYS = ["running", "preparing", "importing", "downloads", "appUpdate"];
 
 // Activity updates never traverse the library, runtime catalogs or game metadata.
 export function mergeLauncherActivity(previous, activity) {

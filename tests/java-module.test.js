@@ -312,7 +312,7 @@ test("launchRuntime preserves JVM options and appends shared arguments after Jav
   }
 });
 
-test("runtimeStatus reports readiness and unsupported lines", () => {
+test("runtimeStatus reports readiness for LTS lines and lines listed in Other", () => {
   const root = makeTempDir("maclauncher-java-module-");
   try {
     const userDataDir = path.join(root, "userData");
@@ -330,7 +330,8 @@ test("runtimeStatus reports readiness and unsupported lines", () => {
       userDataDir
     });
     assert.equal(unsupported.ready, false);
-    assert.equal(unsupported.unsupportedLine, true);
+    assert.equal(unsupported.requestedLine, 29);
+    assert.equal(unsupported.unsupportedLine, undefined);
 
     createJavaInstall(userDataDir, {
       line: 17,

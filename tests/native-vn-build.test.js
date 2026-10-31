@@ -5,7 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 const Build = require("../src/modules/shared/runtime/pinned-native-build");
-const { createPinnedNativeManager } = require("../src/modules/shared/runtime/pinned-native-manager");
+const { listedManager } = require("./helpers/listed-rows.cjs");
 
 function git(root, args) {
   return execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-C", root, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
@@ -52,11 +52,12 @@ test("source staging rejects escaping symlinks", async t => {
 
 test("source build isolates generator and module preparation writes, records both overlays and registers explicit version", { skip: process.platform !== "darwin" }, async t => {
   const { root, source, revision } = fixture(t);
-  const manager = createPinnedNativeManager({ id: "fixture-vn", label: "Fixture", catalog: [{ version: "1.0.0", upstreamRevision: revision }] });
+  const userDataDir = path.join(root, "userdata");
+  const manager = await listedManager({ id: "fixture-vn", label: "Fixture" }, [{ version: "1.0.0", upstreamRevision: revision }], userDataDir);
   // Resource availability must not prevent an explicit developer build from
   // registering its own exact-version artifact.
   const includedResolution = t.mock.method(manager.core, "resolveInstalled", () => ({ source: "bundled", readOnly: true, removable: false }));
-  const userDataDir = path.join(root, "userdata"); const overlay = path.join(root, "overlay.h"); fs.writeFileSync(overlay, "typedef unsigned char Byte;\n");
+  const overlay = path.join(root, "overlay.h"); fs.writeFileSync(overlay, "typedef unsigned char Byte;\n");
   const calls = [];
   const dependencies = { findBuildTool: name => `/fixture/${name}`, runBuildCommand: async (command, args, options) => {
     calls.push({ command, args, options });
@@ -96,7 +97,7 @@ test("source build isolates generator and module preparation writes, records bot
 
 test("cancellation in module source preparation runs no compiler and publishes no runtime", { skip: process.platform !== "darwin" }, async t => {
   const { root, source, revision } = fixture(t), userDataDir = path.join(root, "userdata");
-  const controller = new AbortController(), manager = createPinnedNativeManager({ id: "fixture-overlay-cancel", label: "Fixture", catalog: [{ version: "1.0.0", upstreamRevision: revision }] });
+  const controller = new AbortController(), manager = await listedManager({ id: "fixture-overlay-cancel", label: "Fixture" }, [{ version: "1.0.0", upstreamRevision: revision }], userDataDir);
   await assert.rejects(Build.buildPinnedRuntime({ manager, version: "1.0.0", sourceDir: source, userDataDir, signal: controller.signal,
     prepareSource: () => { controller.abort(); return { revision: "cancelled-overlay" }; }, resolveExecutable: dir => path.join(dir, "runtime"),
     dependencies: { findBuildTool: name => `/fixture/${name}`, runBuildCommand: () => { throw new Error("Compiler must not run"); } }
@@ -122,7 +123,7 @@ test("canceling a native command stops its process and reports AbortError", asyn
 test("canceling source configure leaves no published runtime and releases its lock", { skip: process.platform !== "darwin" }, async t => {
   const { root, source, revision } = fixture(t), userDataDir = path.join(root, "userdata");
   const controller = new AbortController();
-  const manager = createPinnedNativeManager({ id: "fixture-canceled", label: "Fixture", catalog: [{ version: "1.0.0", upstreamRevision: revision }] });
+  const manager = await listedManager({ id: "fixture-canceled", label: "Fixture" }, [{ version: "1.0.0", upstreamRevision: revision }], userDataDir);
   let calls = 0;
   await assert.rejects(Build.buildPinnedRuntime({ manager, version: "1.0.0", sourceDir: source, userDataDir,
     signal: controller.signal, resolveExecutable: dir => path.join(dir, "runtime"),
@@ -145,7 +146,7 @@ test("a native build timeout cannot succeed when the terminated child exits clea
 
 test("failed source builds leave no runtime registration and release the build lock", { skip: process.platform !== "darwin" }, async t => {
   const { root, source, revision } = fixture(t); const userDataDir = path.join(root, "userdata");
-  const manager = createPinnedNativeManager({ id: "fixture-failed", label: "Fixture", catalog: [{ version: "1.0.0", upstreamRevision: revision }] });
+  const manager = await listedManager({ id: "fixture-failed", label: "Fixture" }, [{ version: "1.0.0", upstreamRevision: revision }], userDataDir);
   await assert.rejects(() => Build.buildPinnedRuntime({ manager, version: "1.0.0", sourceDir: source, userDataDir,
     resolveExecutable: dir => path.join(dir, "runtime"), dependencies: { findBuildTool: name => `/fixture/${name}`, runBuildCommand: async () => { throw new Error("missing dependency"); } } }), /missing dependency/);
   const installDir = manager.core.getInstallDir({ userDataDir, version: "1.0.0" });

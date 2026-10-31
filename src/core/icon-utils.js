@@ -2,26 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const zlib = require("node:zlib");
 const AppBundle = require("../modules/shared/runtime/app-bundle");
-
-const BAD_EXE_TOKENS = [
-  "unins",
-  "uninstall",
-  "setup",
-  "installer",
-  "vcredist",
-  "dxsetup",
-  "redist",
-  "patch",
-  "update",
-  "launcher",
-  "config",
-  "settings",
-  "crash",
-  "helper",
-  "server",
-  "editor",
-  "tool"
-];
+const { executableRole, executablePriority } = require("../modules/shared/executable-candidates");
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
@@ -33,12 +14,12 @@ function normalizeToken(value) {
 
 function scoreExeCandidate(baseName, gameName, folderName) {
   const rawBase = String(baseName || "");
-  if (!rawBase) return -Infinity;
+  if (!rawBase || executableRole(rawBase + ".exe") === "support") return -Infinity;
   const normalized = normalizeToken(rawBase);
   const normalizedGame = normalizeToken(gameName);
   const normalizedFolder = normalizeToken(folderName);
 
-  let score = 0;
+  let score = executablePriority(rawBase + ".exe");
 
   if (normalizedGame) {
     if (normalized === normalizedGame) score += 140;
@@ -54,10 +35,6 @@ function scoreExeCandidate(baseName, gameName, folderName) {
 
   if (["game", "start", "play"].includes(rawBase.toLowerCase())) score += 10;
 
-  for (const token of BAD_EXE_TOKENS) {
-    if (normalized.includes(token)) score -= 70;
-  }
-
   const targetLen = normalizedGame.length || 6;
   score -= Math.min(20, Math.max(0, normalized.length - targetLen));
 
@@ -66,7 +43,6 @@ function scoreExeCandidate(baseName, gameName, folderName) {
 
 function pickBestExeCandidate(candidates, gameName, folderName) {
   if (!Array.isArray(candidates) || candidates.length === 0) return null;
-  if (candidates.length === 1) return candidates[0];
 
   let best = null;
   let bestScore = -Infinity;
@@ -100,7 +76,7 @@ function listExeCandidates(rootDir) {
   }
 
   return entries
-    .filter(entry => entry.isFile() && entry.name.toLowerCase().endsWith(".exe"))
+    .filter(entry => entry.isFile() && entry.name.toLowerCase().endsWith(".exe") && executableRole(entry.name) !== "support")
     .map(entry => entry.name);
 }
 

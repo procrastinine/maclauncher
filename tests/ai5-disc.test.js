@@ -53,7 +53,7 @@ test("native AI5 funopen stream reads and seeks the original raw image and rejec
   const owned = path.join(root, "private"), descriptor = path.join(owned, "bg.ARC"); fs.mkdirSync(owned);
   Disc.writeDescriptor(descriptor, { imagePath, sectorBytes: 2352, dataOffset: 16 }, fixture.positions["BG.ARC"]);
   const source = path.join(root, "stream.c"), executable = path.join(root, "stream");
-  fs.writeFileSync(source, '#include <stdio.h>\n#define file_open_utf8 fopen\n#include "' + path.resolve(__dirname, "../src/modules/ai5/runtime/macos-disc.h") + '"\nint main(int argc,char **argv) { bool virtual_file; FILE *f=maclauncher_ai5_archive_open(argv[1],&virtual_file); if(!f||!virtual_file)return 2; if(fseek(f,0,SEEK_END)||ftell(f)!=6500||fseek(f,1900,SEEK_SET))return 3; char b[4500]; if(fread(b,sizeof(b),1,f)!=1)return 4; fwrite(b,sizeof(b),1,stdout); fclose(f); return 0; }\n');
+  fs.writeFileSync(source, '#include <stdio.h>\n#define file_open_utf8 fopen\n#include "' + path.resolve(__dirname, "../../maclauncher-builds/producers/maclauncher/src/modules/ai5/runtime/macos-disc.h") + '"\nint main(int argc,char **argv) { bool virtual_file; FILE *f=maclauncher_ai5_archive_open(argv[1],&virtual_file); if(!f||!virtual_file)return 2; if(fseek(f,0,SEEK_END)||ftell(f)!=6500||fseek(f,1900,SEEK_SET))return 3; char b[4500]; if(fread(b,sizeof(b),1,f)!=1)return 4; fwrite(b,sizeof(b),1,stdout); fclose(f); return 0; }\n');
   cp.execFileSync("/usr/bin/clang", ["-std=c11", source, "-o", executable], { timeout: 30000 });
   const env = { ...process.env, MACLAUNCHER_AI5_RESOURCE_DIR: owned };
   assert.deepEqual(cp.execFileSync(executable, [descriptor], { env }), payload.subarray(1900, 6400));

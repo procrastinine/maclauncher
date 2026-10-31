@@ -18,7 +18,7 @@ test("production backend worker transports video graphics metadata without local
   assert.equal(result.runtimeId, "mpv");
   assert.equal(result.graphicsInputs.nativeVideo, true);
   assert.equal(result.graphicsInputs.sourceResolution, false);
-  assert.ok(result.graphicsInputs.nativeSpatialMethods.includes("libplacebo:hermite"));
+  assert.deepEqual(result.graphicsInputs.nativeSpatialMethods, ["nearest", "bilinear", "bicubic"], "Absent selected runtime metadata exposes only known standard filters");
   assert.equal(result.graphicsInputs.nativeSpatialMethods.filter(value => value === "bilinear").length, 1);
   assert.equal(Object.hasOwn(result, "prepareEffectsEntry"), false);
   assert.equal(Object.hasOwn(result, "withGraphicsUpdate"), false);
@@ -36,14 +36,14 @@ test("local graphics preparation retains module callbacks outside the worker tra
 test("actual App optional graphics inspection failure preserves module runtime metadata", async t => {
   const f = fixture(t), status = Video.actions.runtimeStatus(f.entry, {}, {userDataDir: f.userDataDir, settings: {}});
   const source = fs.readFileSync(path.join(__dirname, "../src/renderer/src/ui/App.tsx"), "utf8");
-  const start = source.indexOf("      const [status, graphics] = await Promise.all(["), end = source.indexOf("\n    }).then", start);
+  const start = source.indexOf("      const [status, graphics, runtimeRecommendation] = await Promise.all(["), end = source.indexOf("\n    }).then", start);
   assert.ok(start >= 0 && end > start, "actual App inspection callback is present");
-  const inspect = new Function("api", "gamePath", "action", "inspectGraphics", `return (async () => {${source.slice(start, end)}\n})();`);
+  const inspect = new Function("api", "gamePath", "action", "inspectGraphics", "recommend", `return (async () => {${source.slice(start, end)}\n})();`);
   const calls = [], api = {moduleAction: async (_path, action) => {
     calls.push(action);if (action === "runtimeStatus") return status;
     throw Error("optional graphics query failed");
   }};
-  const result = await inspect(api, f.entry.gamePath, "runtimeStatus", true);
+  const result = await inspect(api, f.entry.gamePath, "runtimeStatus", true, false);
   assert.deepEqual(calls, ["runtimeStatus", "graphicsInputs"]);
   assert.deepEqual(result.graphicsInputs, status.graphicsInputs);
   assert.equal(result.graphicsInputs.sourceResolution, false);

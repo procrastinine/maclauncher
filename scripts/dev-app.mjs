@@ -32,6 +32,7 @@ export function pruneDevelopmentApps(cacheRoot,current,{processes=generationProc
 export async function prepareDevelopmentApp({ electronBinary, platform = process.platform,
   cacheRoot = path.join(os.homedir(), "Library", "Caches", "maclauncher", "development"),
   iconPath = path.join(projectRoot, "build", "icon.icns"),
+  rasterIconPath = path.join(projectRoot, "src", "resources", "maclauncher.png"),
   entitlementsPath = path.join(projectRoot, "build", "entitlements.mac.plist"),
   run = execFileSync } = {}) {
   if (platform !== "darwin" || process.env.MACLAUNCHER_ELECTRON_PATH) return electronBinary;
@@ -42,8 +43,8 @@ export async function prepareDevelopmentApp({ electronBinary, platform = process
   const infoPath = path.join(source, "Contents", "Info.plist");
   const info = await parsePlistFile(infoPath);
   const documentTypes = applicationDocumentTypes(Modules.listSupportedInputExtensions());
-  const digest = crypto.createHash("sha256").update("maclauncher-development-v2-media");
-  for (const file of [infoPath, iconPath, entitlementsPath, path.join(source, "Contents", "_CodeSignature", "CodeResources")]) {
+  const digest = crypto.createHash("sha256").update("maclauncher-development-v3-raster");
+  for (const file of [infoPath, iconPath, rasterIconPath, entitlementsPath, path.join(source, "Contents", "_CodeSignature", "CodeResources")]) {
     if (fs.existsSync(file)) digest.update(fs.readFileSync(file));
   }
   digest.update(JSON.stringify(documentTypes));
@@ -96,6 +97,7 @@ export async function prepareDevelopmentApp({ electronBinary, platform = process
     info.NSMicrophoneUsageDescription = "Selected games can record audio from the input chosen in game Settings.";
     info.NSCameraUsageDescription = "Selected games can receive video from the camera chosen in game Settings.";
     fs.copyFileSync(iconPath, path.join(contents, "Resources", "icon.icns"));
+    fs.copyFileSync(rasterIconPath, path.join(contents, "Resources", "maclauncher.png"));
     await savePlistFile(path.join(contents, "Info.plist"), info);
     run("/usr/bin/codesign", ["--force", "--deep", "--sign", "-", "--entitlements", entitlementsPath, stagedApp], { stdio: "pipe", timeout: 120000 });
     run("/usr/bin/codesign", ["--verify", "--deep", "--strict", stagedApp], { stdio: "pipe", timeout: 60000 });

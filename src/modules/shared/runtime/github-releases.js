@@ -22,148 +22,6 @@ function parseLinkHeader(value) {
   return links;
 }
 
-function normalizeSemver(input) {
-  const raw = String(input || "").trim().replace(/^v/i, "");
-  if (!raw) return null;
-  const m = raw.match(/(\d+\.\d+\.\d+)/);
-  return m ? m[1] : null;
-}
-
-function parseOnsyuriVersion(input) {
-  const raw = String(input || "").trim();
-  if (!raw) return null;
-  const m = raw.match(
-    /(\d+)\.(\d+)\.(\d+)(?:[-_. ]?(alpha|beta|b|rc)(?:[-_. ]?(\d+))?)?/i
-  );
-  if (!m) return null;
-  const major = Number(m[1]);
-  const minor = Number(m[2]);
-  const patch = Number(m[3]);
-  const prereleaseRaw = m[4] ? String(m[4]).toLowerCase() : null;
-  let prereleaseType = prereleaseRaw;
-  if (prereleaseType === "b") prereleaseType = "beta";
-  const prereleaseNum = m[5] ? Number(m[5]) : null;
-  if (![major, minor, patch].every(n => Number.isFinite(n))) return null;
-  const base = `${major}.${minor}.${patch}`;
-  const suffix = prereleaseType
-    ? `${prereleaseType}${Number.isFinite(prereleaseNum) ? prereleaseNum : ""}`
-    : "";
-  return {
-    major,
-    minor,
-    patch,
-    prereleaseType: prereleaseType || null,
-    prereleaseNum: Number.isFinite(prereleaseNum) ? prereleaseNum : null,
-    normalized: `${base}${suffix}`
-  };
-}
-
-function normalizeOnsyuriVersion(input) {
-  const parsed = parseOnsyuriVersion(input);
-  return parsed ? parsed.normalized : null;
-}
-
-function parseOnsyuriMacVersion(input) {
-  const raw = String(input || "").trim().replace(/^v(?=\d)/i, "");
-  const match = /^(\d+\.\d+\.\d+(?:(?:alpha|beta|rc)\d*)?)-(?:macos-v|MCLv)([1-9]\d*)$/.exec(raw);
-  if (match) {
-    const upstream = parseOnsyuriVersion(match[1]), macRevision = Number(match[2]);
-    if (!upstream || upstream.normalized !== match[1] || !Number.isSafeInteger(macRevision)) return null;
-    return { ...upstream, upstreamVersion: upstream.normalized, normalized: raw, macRevision };
-  }
-  if (/-macos-|-MCL/i.test(raw)) return null;
-  const upstream = parseOnsyuriVersion(input);
-  return upstream ? { ...upstream, upstreamVersion: upstream.normalized, macRevision: 0 } : null;
-}
-
-function normalizeOnsyuriMacVersion(input) {
-  return parseOnsyuriMacVersion(input)?.normalized || null;
-}
-
-function compareOnsyuriMacVersionsDesc(a, b) {
-  const left = parseOnsyuriMacVersion(a), right = parseOnsyuriMacVersion(b);
-  if (!left || !right) return String(b || "").localeCompare(String(a || ""));
-  const upstream = compareOnsyuriVersionsDesc(left.upstreamVersion, right.upstreamVersion);
-  return upstream || right.macRevision - left.macRevision;
-}
-
-function compareOnsyuriMacVersions(a, b) {
-  return compareOnsyuriMacVersionsDesc(b, a);
-}
-
-function parseSemver(v) {
-  const m = String(v || "").trim().match(/^(\d+)\.(\d+)\.(\d+)$/);
-  if (!m) return null;
-  return [Number(m[1]), Number(m[2]), Number(m[3])];
-}
-
-function compareSemverDesc(a, b) {
-  const pa = parseSemver(a);
-  const pb = parseSemver(b);
-  if (!pa || !pb) return String(b || "").localeCompare(String(a || ""));
-  for (let i = 0; i < 3; i++) {
-    const d = pb[i] - pa[i];
-    if (d !== 0) return d;
-  }
-  return 0;
-}
-
-function prereleaseRank(type) {
-  if (!type) return 3;
-  if (type === "rc") return 2;
-  if (type === "beta") return 1;
-  if (type === "alpha") return 0;
-  return 0;
-}
-
-function compareOnsyuriVersionsDesc(a, b) {
-  const pa = parseOnsyuriVersion(a);
-  const pb = parseOnsyuriVersion(b);
-  if (!pa || !pb) return String(b || "").localeCompare(String(a || ""));
-  if (pa.major !== pb.major) return pb.major - pa.major;
-  if (pa.minor !== pb.minor) return pb.minor - pa.minor;
-  if (pa.patch !== pb.patch) return pb.patch - pa.patch;
-  const ra = prereleaseRank(pa.prereleaseType);
-  const rb = prereleaseRank(pb.prereleaseType);
-  if (ra !== rb) return rb - ra;
-  const na = Number.isFinite(pa.prereleaseNum) ? pa.prereleaseNum : 0;
-  const nb = Number.isFinite(pb.prereleaseNum) ? pb.prereleaseNum : 0;
-  if (na !== nb) return nb - na;
-  return 0;
-}
-
-function compareOnsyuriVersions(a, b) {
-  return compareOnsyuriVersionsDesc(b, a);
-}
-
-function sortReleases(releases) {
-  const list = Array.isArray(releases) ? releases.slice() : [];
-  list.sort((a, b) => {
-    const va = normalizeSemver(a?.tag_name || a?.name || "");
-    const vb = normalizeSemver(b?.tag_name || b?.name || "");
-    if (va && vb && va !== vb) return compareSemverDesc(va, vb);
-    const da = Date.parse(a?.published_at || a?.created_at || "") || 0;
-    const db = Date.parse(b?.published_at || b?.created_at || "") || 0;
-    return db - da;
-  });
-  return list;
-}
-
-function sortReleasesByOnsyuriVersion(releases) {
-  const list = Array.isArray(releases) ? releases.slice() : [];
-  list.sort((a, b) => {
-    const va = normalizeOnsyuriVersion(a?.tag_name || a?.name || "");
-    const vb = normalizeOnsyuriVersion(b?.tag_name || b?.name || "");
-    if (va && vb && va !== vb) return compareOnsyuriVersionsDesc(va, vb);
-    if (va && !vb) return -1;
-    if (!va && vb) return 1;
-    const da = Date.parse(a?.published_at || a?.created_at || "") || 0;
-    const db = Date.parse(b?.published_at || b?.created_at || "") || 0;
-    return db - da;
-  });
-  return list;
-}
-
 async function fetchGithubReleases({
   owner,
   repo,
@@ -275,10 +133,11 @@ async function fetchGithubTags({ owner, repo, signal, request = fetchUrlBuffer, 
   return tags;
 }
 
-async function fetchGithubCommits({ owner, repo, signal, request = fetchUrlBuffer, limit = 20 } = {}) {
+// The newest commits of a branch, or of the default branch.
+async function fetchGithubCommits({ owner, repo, branch, signal, request = fetchUrlBuffer, limit = 20 } = {}) {
   if (!/^[A-Za-z0-9_.-]+$/.test(owner || "") || !/^[A-Za-z0-9_.-]+$/.test(repo || "")) throw new Error("Invalid GitHub commit repository.");
   const bounded = Math.max(1, Math.min(100, Math.floor(Number(limit)) || 20));
-  const response = await request(`https://api.github.com/repos/${owner}/${repo}/commits?per_page=${bounded}`, {
+  const response = await request(`https://api.github.com/repos/${owner}/${repo}/commits?per_page=${bounded}${branch ? `&sha=${encodeURIComponent(branch)}` : ""}`, {
     headers: { "User-Agent": "maclauncher", "Accept": "application/vnd.github+json" }, signal });
   if (response.status !== 200) throw new Error(`GitHub source builds fetch failed (${response.status}).`);
   const entries = parseJsonResponse(response);
@@ -286,99 +145,26 @@ async function fetchGithubCommits({ owner, repo, signal, request = fetchUrlBuffe
   return entries.filter(entry => /^[a-f0-9]{40}$/i.test(entry?.sha || "")).slice(0, bounded);
 }
 
-function normalizeArch(input) {
-  const value = String(input || "").toLowerCase();
-  if (value === "arm64" || value === "aarch64") return "aarch64";
-  if (value === "x64" || value === "x86_64" || value === "x86-64") return "x86-64";
-  return value || "";
-}
-
-function isDarwinAsset(name) {
-  const lower = String(name || "").toLowerCase();
-  return lower.includes("osx") || lower.includes("darwin") || lower.includes("mac");
-}
-
-function findGreenworksAsset(release, nwVersion) {
-  const nw = normalizeSemver(nwVersion);
-  if (!nw || !release?.assets) return null;
-  const needle = new RegExp(`nw-v?${nw.replace(/\./g, "\\.")}`, "i");
-  return release.assets.find(asset => {
-    const name = String(asset?.name || "");
-    return needle.test(name) && isDarwinAsset(name);
-  }) || null;
-}
-
-function collectGreenworksNwVersions(releases) {
-  const found = new Set();
-  for (const rel of releases || []) {
-    for (const asset of rel?.assets || []) {
-      const name = String(asset?.name || "");
-      if (!isDarwinAsset(name)) continue;
-      const m = name.match(/nw-v?(\d+\.\d+\.\d+)/i);
-      if (m?.[1]) found.add(m[1]);
-    }
+// A repository's license notice at an exact revision. A license file named
+// other than LICENSE, or moved, is found through GitHub's license lookup.
+async function fetchGithubLicense({ owner, repo, revision, destination, signal, label = repo, request = fetchUrlBuffer, download } = {}) {
+  if (!/^[A-Za-z0-9_.-]+$/.test(owner || "") || !/^[A-Za-z0-9_.-]+$/.test(repo || "") || !/^[A-Za-z0-9_.-]+$/.test(revision || ""))
+    throw new Error("Invalid GitHub license lookup.");
+  const url = `https://raw.githubusercontent.com/${owner}/${repo}/${revision}/LICENSE`;
+  let source = url;
+  try { await (download || require("./upstream-transport").downloadToFile)(url, destination, { signal }); }
+  catch (error) {
+    if (signal?.aborted) throw error;
+    const response = await request(`https://api.github.com/repos/${owner}/${repo}/license?ref=${encodeURIComponent(revision)}`,
+      { headers: { "User-Agent": "maclauncher", "Accept": "application/vnd.github+json" }, signal });
+    const data = response.status === 200 ? parseJsonResponse(response) : null;
+    if (data?.encoding !== "base64" || typeof data.content !== "string") throw new Error(`${label} publishes no license notice.`);
+    require("node:fs").writeFileSync(destination, Buffer.from(data.content, "base64"));
+    source = typeof data.download_url === "string" ? data.download_url : source;
   }
-  return Array.from(found).sort(compareSemverDesc);
-}
-
-function selectGreenworksAsset(releases, { nwVersion } = {}) {
-  const sorted = sortReleases(releases || []);
-  for (const rel of sorted) {
-    const asset = findGreenworksAsset(rel, nwVersion);
-    if (asset) {
-      return {
-        release: rel,
-        asset,
-        nwVersion: normalizeSemver(nwVersion),
-        version: normalizeSemver(rel?.tag_name || rel?.name || "") || null
-      };
-    }
-  }
-  return null;
-}
-
-function matchesOnsyuriAsset(name, { arch, variant }) {
-  const lower = String(name || "").toLowerCase();
-  if (variant === "web") {
-    return lower.includes("web") && (lower.endsWith(".7z") || lower.endsWith(".zip"));
-  }
-  if (!isDarwinAsset(name)) return false;
-  if (arch) {
-    const normalized = normalizeArch(arch);
-    return lower.includes(normalized);
-  }
-  return lower.includes("darwin");
-}
-
-function collectOnsyuriVersions(releases, { arch, variant } = {}) {
-  const versions = [];
-  for (const rel of releases || []) {
-    const assets = rel?.assets || [];
-    const hasMatch = assets.some(asset =>
-      matchesOnsyuriAsset(asset?.name || "", { arch, variant })
-    );
-    if (!hasMatch) continue;
-    const v = normalizeOnsyuriVersion(rel?.tag_name || rel?.name || "");
-    if (v) versions.push(v);
-  }
-  return Array.from(new Set(versions)).sort(compareOnsyuriVersionsDesc);
-}
-
-function selectOnsyuriAsset(releases, { arch, variant } = {}) {
-  const sorted = sortReleasesByOnsyuriVersion(releases || []);
-  for (const rel of sorted) {
-    const asset =
-      rel?.assets?.find(item => matchesOnsyuriAsset(item?.name || "", { arch, variant })) ||
-      null;
-    if (asset) {
-      return {
-        release: rel,
-        asset,
-        version: normalizeOnsyuriVersion(rel?.tag_name || rel?.name || "") || null
-      };
-    }
-  }
-  return null;
+  const bytes = require("node:fs").readFileSync(destination);
+  if (!bytes.length || bytes.length > 1024 * 1024 || bytes.includes(0)) throw new Error(`${label} license notice is invalid.`);
+  return { licenseUrl: source, licenseSha256: require("node:crypto").createHash("sha256").update(bytes).digest("hex") };
 }
 
 module.exports = {
@@ -386,22 +172,5 @@ module.exports = {
   resolveGithubTagCommit,
   fetchGithubTags,
   fetchGithubCommits,
-  selectGreenworksAsset,
-  collectGreenworksNwVersions,
-  selectOnsyuriAsset,
-  collectOnsyuriVersions,
-  parseSemver,
-  compareSemverDesc,
-  parseOnsyuriVersion,
-  normalizeOnsyuriVersion,
-  parseOnsyuriMacVersion,
-  normalizeOnsyuriMacVersion,
-  compareOnsyuriMacVersionsDesc,
-  compareOnsyuriMacVersions,
-  compareOnsyuriVersionsDesc,
-  compareOnsyuriVersions,
-  sortReleases,
-  sortReleasesByOnsyuriVersion,
-  normalizeArch,
-  normalizeSemver
+  fetchGithubLicense
 };

@@ -41,16 +41,16 @@ module.exports = async function afterPack(context, { dependencies = {} } = {}) {
       requiredOnly: true,
       architectures: architecture === "universal" ? ["arm64", "x64"] : [architecture] });
   }
+  const arch = typeof context.arch === 'string' ? context.arch : Arch[context.arch];
   require('./python-resources.cjs').projectPackagedPython({
-    sourceRoot: path.join(projectDir, 'src/resources/python'), resourceRoot: path.join(resourcesPath, 'python')
+    sourceRoot: path.join(projectDir, 'src/resources/python'), resourceRoot: path.join(resourcesPath, 'python'), arch
   });
   const check = require('./check-packaging.cjs');
-  check.assertRuntimeBoundary(appPath);
+  check.assertRuntimeBoundary(appPath, { arch });
   check.inspectAsar(path.join(resourcesPath, 'app.asar'), {
     product: 'MacLauncher', version: context.packager.appInfo.version
   });
-  const inputs = require('./app-inputs.cjs'), arch = typeof context.arch === 'string' ? context.arch : Arch[context.arch],
-    selected = inputs.pending.get(context.packager)?.get(arch);
+  const inputs = require('./app-inputs.cjs'), selected = inputs.pending.get(context.packager)?.get(arch);
   if (dependencies.verifyAppInputs) await dependencies.verifyAppInputs({ selected, archive: path.join(resourcesPath, 'app.asar'), resources: resourcesPath, appPath });
   else {
     if (!selected) throw new Error('Application packaging requires the source, supplier and Builds input map from beforePack.');

@@ -1,3 +1,5 @@
+// Required first: it replaces the network functions before modules load.
+const Harness=require('./helpers/future-upstream.cjs');
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),crypto=require('node:crypto');
 const Checkpoint=require('../src/modules/shared/reshade/neural/torch-checkpoint'),R=require('../src/modules/shared/reshade/neural/restoration-models'),Source=require('../src/modules/shared/reshade/neural/checkpoint-source');
 const {writeZipArchive}=require('./helpers/zip-fixture');
@@ -35,13 +37,21 @@ test('legacy and ZIP Torch storage convert every convolution and transposed conv
 });
 test('pinned checkpoint archive acquisition extracts only the exact bounded model entry',async t=>{
  const f=fixture(t),archive=path.join(f.root,'source.zip');writeZipArchive(archive,[{name:'weights/model.pth',data:fs.readFileSync(f.file),deflate:true},{name:'unrelated.exe',data:'never copied or executed'}]);const original=fs.readFileSync(archive),row={transport:'zip-entry',url:'https://models.invalid/source.zip',file:'model.pth',bytes:fs.statSync(f.file).size,archive:{entry:'weights/model.pth',bytes:original.length,sha256:sha(original)}},target=path.join(f.root,'selected.pth');let requests=0;
- await Source.downloadEntry(row,target,{}, {downloadToFile:async(_url,dest,{onProgress})=>{requests++;fs.writeFileSync(dest,original,{flag:'wx'});onProgress({downloaded:original.length,total:original.length});}});assert.equal(requests,1);assert.deepEqual(fs.readFileSync(target),fs.readFileSync(f.file));assert.equal(fs.readdirSync(f.root).some(n=>n.startsWith('selected.pth.archive-')),false);assert.equal(fs.existsSync(path.join(f.root,'unrelated.exe')),false);
- await assert.rejects(Source.downloadEntry({...row,archive:{...row.archive,sha256:'0'.repeat(64)}},path.join(f.root,'bad.pth'),{}, {downloadToFile:async(_url,dest)=>fs.writeFileSync(dest,original)}),/checksum/);assert.equal(fs.existsSync(path.join(f.root,'bad.pth')),false);
+ Harness.network.routes={[row.url]:()=>{requests++;return original;}};t.after(()=>{Harness.network.routes=null;});
+ await Source.downloadEntry(row,target);assert.equal(requests,1);assert.deepEqual(fs.readFileSync(target),fs.readFileSync(f.file));assert.equal(fs.readdirSync(f.root).some(n=>n.startsWith('selected.pth.archive-')),false);assert.equal(fs.existsSync(path.join(f.root,'unrelated.exe')),false);
+ // A republished archive whose declared entry keeps its size still provides it;
+ // the model's identity checksum is verified after extraction. An archive
+ // without that entry installs nothing.
+ await Source.downloadEntry({...row,archive:{...row.archive,sha256:'0'.repeat(64)}},path.join(f.root,'republished.pth'));assert.deepEqual(fs.readFileSync(path.join(f.root,'republished.pth')),fs.readFileSync(f.file));
+ await assert.rejects(Source.downloadEntry({...row,bytes:row.bytes+1},path.join(f.root,'bad.pth')),/no matching regular model entry/);assert.equal(fs.existsSync(path.join(f.root,'bad.pth')),false);
 });
 test('bounded source ranges retry only interrupted chunks and verify the complete model before publication',async t=>{
  const f=fixture(t),bytes=Buffer.alloc((8<<20)+31);for(let n=0;n<bytes.length;n++)bytes[n]=n%251;const row={transport:'bounded-ranges',url:'https://models.invalid/model.pth',bytes:bytes.length,sha256:sha(bytes)},target=path.join(f.root,'range-model.pth');let first=true;const ranges=[];
- const fetchUrlBuffer=async(_url,{headers,maxBytes})=>{const range=/^bytes=(\d+)-(\d+)$/.exec(headers.Range),begin=Number(range[1]),end=Number(range[2]);ranges.push([begin,end]);assert.ok(maxBytes<=4<<20);if(begin===0&&first){first=false;throw Error('interrupted response');}return {status:206,headers:{'content-range':`bytes ${begin}-${end}/${bytes.length}`},body:bytes.subarray(begin,end+1)};};
- await Source.downloadFile(row,target,{}, {fetchUrlBuffer});assert.deepEqual(fs.readFileSync(target),bytes);assert.equal(ranges.length,4);assert.equal(ranges.filter(r=>r[0]===0).length,2);
- const previous=Buffer.from('existing model');fs.writeFileSync(target,previous);await assert.rejects(Source.downloadFile(row,target,{}, {fetchUrlBuffer}),{code:'EEXIST'});assert.deepEqual(fs.readFileSync(target),previous);
- await assert.rejects(Source.downloadFile(row,path.join(f.root,'invalid.pth'),{}, {fetchUrlBuffer:async()=>({status:200,headers:{},body:bytes})}),/byte range/);assert.equal(fs.existsSync(path.join(f.root,'invalid.pth')),false);assert.equal(fs.readdirSync(f.root).some(n=>n.includes('.ranges-')),false);
+ // The publisher answers byte ranges; the first request is interrupted once.
+ const partial=(_url,{headers,maxBytes})=>{const range=/^bytes=(\d+)-(\d+)$/.exec(headers.Range),begin=Number(range[1]),end=Number(range[2]);ranges.push([begin,end]);assert.ok(maxBytes<=4<<20);if(begin===0&&first){first=false;throw Error('interrupted response');}return {status:206,headers:{'content-range':`bytes ${begin}-${end}/${bytes.length}`},body:bytes.subarray(begin,end+1)};};
+ Harness.network.routes={[row.url]:partial};t.after(()=>{Harness.network.routes=null;});
+ await Source.downloadFile(row,target);assert.deepEqual(fs.readFileSync(target),bytes);assert.equal(ranges.length,4);assert.equal(ranges.filter(r=>r[0]===0).length,2);
+ const previous=Buffer.from('existing model');fs.writeFileSync(target,previous);await assert.rejects(Source.downloadFile(row,target),{code:'EEXIST'});assert.deepEqual(fs.readFileSync(target),previous);
+ Harness.network.routes={[row.url]:()=>({status:200,headers:{},body:bytes})};
+ await assert.rejects(Source.downloadFile(row,path.join(f.root,'invalid.pth')),/could not be read in parts from its publisher/);assert.equal(fs.existsSync(path.join(f.root,'invalid.pth')),false);assert.equal(fs.readdirSync(f.root).some(n=>n.includes('.ranges-')),false);
 });

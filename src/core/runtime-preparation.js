@@ -136,7 +136,7 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
     });
     // Consent covers discovery and acquisition before either occurs.
     for (const { manager, plan, requiresDownload, versionLabel } of installations) {
-      const key = JSON.stringify([manager.id, plan.installOptions?.sectionId, plan.installOptions?.variant]);
+      const key = JSON.stringify([manager.id, Object.entries(plan.installOptions || {}).sort(([a], [b]) => a.localeCompare(b))]);
       if ((requiresDownload || !plan.version || plan.discoveryRequired) && !approved.has(key)) {
         if (!await downloadApproved(context, { ...plan, ...(versionLabel ? { versionLabel } : {}),
           label: plan.label || manager.label || manager.id, requiresDownload })) return false;

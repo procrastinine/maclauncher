@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -96,22 +98,24 @@ test("core picks the preferred macOS asset from a stable release", () => {
   assert.equal(asset.name, "love-11.5-macos.zip");
 });
 
-test("core lists GitHub Actions nightlies through the shared HTTP transport", async () => {
-  const request = async value => {
-    const url = new URL(value);
-    let body;
-    if (url.pathname.includes("/actions/workflows/")) body = { workflow_runs: [{ id: 42, head_branch: "main", conclusion: "success",
-      head_sha: "7d41f3ad30f4a171140f8b2ff53e534add018bb4", run_started_at: "2026-03-01T15:25:27Z" }] };
-    else if (url.pathname.includes("/actions/runs/42/artifacts")) body = { artifacts: [{ id: 77, name: "love-macos", expired: false }] };
-    else if (url.pathname.endsWith("/contents/src/common/version.h")) body = { content: Buffer.from('#define LOVE_VERSION_STRING "12.0"\n').toString("base64") };
-    else assert.fail(`Unexpected HTTP request: ${value}`);
-    return { status: 200, body: Buffer.from(JSON.stringify(body)), headers: {} };
-  };
-  const result = await Manager.core.listNightlyBuilds({ latestOnly: true, request });
-  assert.deepEqual(result.versions, ["2026-03-01T15-25-27Z_7d41f3ad30f4a171140f8b2ff53e534add018bb4"]);
+test("core lists GitHub Actions nightlies with GitHub's artifact digest and the source version", async t => {
+  const sha = "7d41f3ad30f4a171140f8b2ff53e534add018bb4", api = "https://api.github.com/repos/love2d/love/";
+  const run = { id: 42, status: "completed", head_branch: "main", conclusion: "success", event: "push", path: ".github/workflows/main.yml",
+    repository: { full_name: "love2d/love" }, head_repository: { full_name: "love2d/love" }, head_sha: sha,
+    created_at: "2026-03-01T15:25:27Z", run_started_at: "2026-03-01T15:25:27Z" };
+  const artifact = name => ({ id: name === "love-macos" ? 77 : 78, name, expired: false, size_in_bytes: 4096, digest: "sha256:" + "a".repeat(64),
+    expires_at: "2999-01-01T00:00:00Z", workflow_run: { id: 42, head_sha: sha, head_branch: "main" } });
+  t.after(() => { Harness.network.routes = null; });
+  Harness.network.routes = { [api + "actions/workflows/main.yml/runs"]: { workflow_runs: [run] },
+    [api + "actions/runs/42/artifacts"]: { artifacts: [artifact("love-linux"), artifact("love-macos")] },
+    [`https://raw.githubusercontent.com/love2d/love/${sha}/src/common/version.h`]: '#define LOVE_VERSION_STRING "12.0"\n' };
+  const result = await Manager.core.listNightlyBuilds({ latestOnly: true });
+  assert.deepEqual(result.versions, [`2026-03-01T15-25-27Z_${sha}`]);
   assert.equal(result.entries[0].artifactId, 77);
-  assert.equal(result.entries[0].headSha, "7d41f3ad30f4a171140f8b2ff53e534add018bb4");
+  assert.equal(result.entries[0].headSha, sha);
   assert.equal(result.entries[0].sourceVersion, "12.0");
+  assert.equal(result.entries[0].file.url, "https://nightly.link/love2d/love/actions/artifacts/77.zip");
+  assert.deepEqual(result.entries[0].file.digest, { algorithm: "sha256", value: "a".repeat(64) });
   assert.match(result.entries[0].label, /12\.0.*7d41f3a/);
   assert.doesNotMatch(result.entries[0].label, /main/);
 });
@@ -255,4 +259,29 @@ test("damaged stable and nightly LÖVE bundles cannot satisfy runtime selection"
   assert.equal(Manager.core.resolveInstalled({userDataDir, channel:"nightly", version:"not-a-build"}), null);
   const state = Manager.getState({ userDataDir, settings: {} });
   assert.deepEqual(state.sections.slice(0, 2).map(section => section.installed.filter(row => row.ready !== false).map(row => row.version)), [["11.4"], []]);
+});
+
+test("LÖVE excludes old 32-bit releases and checks the actual downloaded CPU before installation", async t => {
+  const root = makeTempDir("love-cpu-");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const releases = ["0.6.2", "0.8.0", "11.5"].map(version => Harness.githubRelease("love2d/love", version, [`love-${version}-macosx-ub.zip`]));
+  t.after(() => { Harness.network.routes = null; });
+  Harness.network.routes = Harness.githubRoutes("love2d/love", releases);
+  const catalog = await Manager.core.fetchAvailableVersions();
+  assert.deepEqual(catalog.versions, ["11.5", "0.8.0"]);
+  await assert.rejects(Manager.core.installStableVersion({ userDataDir: root, version: "0.6.2" }), /no 64-bit macOS download/);
+  const app = path.join(root, "love.app"), executable = path.join(app, "Contents/MacOS/love");
+  fs.mkdirSync(path.dirname(executable), { recursive: true });
+  function binary(cpu, wide) {
+    const data = Buffer.alloc(wide ? 32 : 28);
+    data.writeUInt32LE(wide ? 0xfeedfacf : 0xfeedface, 0);data.writeUInt32LE(cpu, 4);data.writeUInt32LE(2, 12);
+    fs.writeFileSync(executable, data, { mode: 0o755 });
+  }
+  binary(7, false);
+  assert.throws(() => Manager.core.__test.validateDownloadedBundle(app, { arch: "arm64" }), /no supported 64-bit executable/);
+  binary(0x01000007, true);
+  assert.deepEqual(Manager.core.__test.validateDownloadedBundle(app, { arch: "x64" }), ["x86_64"]);
+  assert.deepEqual(Manager.core.__test.validateDownloadedBundle(app, { arch: "arm64" }), ["x86_64"]);
+  binary(0x0100000c, true);
+  assert.throws(() => Manager.core.__test.validateDownloadedBundle(app, { arch: "x64" }), /no supported 64-bit executable/);
 });

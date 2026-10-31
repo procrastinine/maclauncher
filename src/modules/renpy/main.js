@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const Custom = require("../shared/runtime/custom-runtime");
+const Architecture = require("../shared/runtime/architecture");
 const { selectRuntimeVersion } = require("../shared/runtime/version-choices");
 const { getUiServices } = require("../shared/ui-services");
 const manifest = require("./manifest.json");
@@ -123,7 +124,8 @@ const resolveEntrySdkVersion = Custom.createSelector(SdkRuntimeManager, function
   return selectRuntimeVersion({ manual: normalizeSdkVersion(entry?.runtimeData?.sdk?.version ?? ""),
     recommended: recommendedSdkVersion(entry),
     defaultVersion: normalizeSdkVersion(cfg[major === 7 ? "v7" : "v8"]?.defaultVersion),
-    fallback: SdkRuntimeManager.getState({ settings: settings?.runtimes?.sdk, userDataDir }).sections?.find(section => section.id === (major === 7 ? "v7" : "v8"))?.defaultVersion }).version;
+    // Installed SDKs live in the launcher data directory; without it only saved choices apply.
+    fallback: userDataDir ? SdkRuntimeManager.getState({ settings: settings?.runtimes?.sdk, userDataDir }).sections?.find(section => section.id === (major === 7 ? "v7" : "v8"))?.defaultVersion : null }).version;
 }, { context: ([entry, settings, userDataDir]) => ({ entry: userDataDir ? entry : null, settings: userDataDir ? settings : null, userDataDir,
   options: { recommended: () => userDataDir ? recommendedSdkVersion(entry) : null } }), required: true,
   result: selection => selection.version });
@@ -714,7 +716,7 @@ async function launchPatched(entry, context) {
   if (!fs.existsSync(shPath)) throw new Error("Launcher script not found.");
 
   const platform = status.platform || null;
-  const needsRosetta = process.arch === "arm64" && isX64Platform(platform);
+  const needsRosetta = isX64Platform(platform) && Architecture.requiresRosetta("x64");
   let env = platform ? { ...process.env, RENPY_PLATFORM: platform } : process.env;
 
   await ensureTranslation({ dir: path.join(contentRootDir, "lib", status.macLibDir), platform }, context, baseName);
@@ -773,7 +775,7 @@ async function launchSdk(entry, context) {
   if (!fs.existsSync(renpySh)) throw new Error("Ren'Py SDK missing launcher script.");
 
   const platform = RuntimeSdk.detectSdkPlatform(sdkInstall.installDir, major);
-  const needsRosetta = process.arch === "arm64" && isX64Platform(platform);
+  const needsRosetta = isX64Platform(platform) && Architecture.requiresRosetta("x64");
   let env = platform ? { ...process.env, RENPY_PLATFORM: platform } : process.env;
 
   const libInfo = RuntimePatcher.findMacLibDir(sdkInstall.installDir, major);
@@ -969,7 +971,7 @@ module.exports = {
       }
 
       const platform = RuntimeSdk.detectSdkPlatform(sdkInstall.installDir, major);
-      const needsRosetta = process.arch === "arm64" && isX64Platform(platform);
+      const needsRosetta = isX64Platform(platform) && Architecture.requiresRosetta("x64");
       await ensureTranslation(RuntimePatcher.findMacLibDir(sdkInstall.installDir, major), context);
 
       const res = await RuntimeSdk.buildMacApp({

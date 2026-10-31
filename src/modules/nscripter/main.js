@@ -727,7 +727,7 @@ async function launchRuntime(runtimeId, entry, context) {
       args.push("--font", fontPath);
     }
 
-    const needsRosetta = process.arch === "arm64" && install.variant === "x64";
+    const needsRosetta = require("../shared/runtime/architecture").requiresRosetta(install.variant);
     const directory = path.join(NativeTools.moduleRoot(entry, context), "yuri");
     NativeTools.prepareConfig(gameRootDir, directory);
     args.push(...(context.gameArguments || []));

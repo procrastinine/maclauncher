@@ -152,6 +152,18 @@ function capabilities(root, host, options = {}) {
         result.temporalMethods = TEMPORAL_METHODS.filter(method => result.temporalMethods.includes(method) ||
           result.cameraTemporalMethods.includes(method));
       }
+      const Hardware = require("./hardware-support");
+      const operationReason = operation => Hardware.operationReason(hardware, operation, options);
+      const temporalAllowed = method => !["metalfx", "metalfx-denoised"].includes(method) ||
+        !operationReason(method === "metalfx-denoised" ? "denoised" : "temporal");
+      result.spatialMethods = result.spatialMethods.filter(method => method !== "metalfx" || !operationReason("spatial"));
+      result.temporalMethods = result.temporalMethods.filter(temporalAllowed);
+      result.providerTemporalMethods = result.providerTemporalMethods.filter(temporalAllowed);
+      result.frameGenerationMethods = result.frameGenerationMethods.filter(method => method !== "metalfx" || !operationReason("interpolation"));
+      result.providerGenerationMethods = result.providerGenerationMethods.filter(method => method !== "metalfx" || !operationReason("interpolation"));
+      const inputReason = Hardware.metalFX27InputsReason(graphics, {...options, macOSVersion: options.macOSVersion || hardware.macOSVersion}) || operationReason("temporal");
+      result.metalFX27Inputs = !inputReason;
+      if (inputReason) result.metalFX27InputsReason = inputReason;
       return result;
     };
     const result = normalize(graphics?.presentation, host);

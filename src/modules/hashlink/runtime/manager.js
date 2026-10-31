@@ -11,13 +11,10 @@ const Custom = require("../../shared/runtime/custom-runtime");
 const intelBundle = createBundledNativeRuntime({ managerId: "hashlink", arch: "x64" });
 const bundledRuntime = { ...intelBundle, resolve: options => intelBundle.resolve({ ...options, arch: "x64" }) };
 
-const discoverCatalog = Catalog.createDiscovery();
-
-function createManager(dependencies = {}) { const base = createPinnedNativeManager({ id: "hashlink", label: "HashLink", discoverCatalog: Catalog.createDiscovery(dependencies), legacyInstalledRuntime: bundledRuntime,
+function createManager(dependencies = {}) { const base = createPinnedNativeManager({ id: "hashlink", label: "HashLink", upstream: Catalog.source, legacyInstalledRuntime: bundledRuntime,
   projectBuilds: { projectId: "hashlink", repository: "procrastinine/maclauncher-builds", upstreamMacDownloads: true },
   distributionRequired: false, importLocal: true,
   sourceUrl: "https://github.com/HaxeFoundation/hashlink/releases",
-  catalog: [],
   resolveExecutable: Download.resolveExecutable,
   prepareInstall: options => Download.prepareInstall(options, dependencies), dependencies });
   const family = version => /^1\.9(?:[.-]|$)/.test(version) ? "1.9" : /^1\.12(?:[.-]|$)/.test(version) ? "1.12" : "current";
@@ -26,14 +23,21 @@ function createManager(dependencies = {}) { const base = createPinnedNativeManag
     const sections = [{ id: "current", label: "Upstream", description: "Game bytecode and native libraries must match the selected HashLink version. Apple Silicon requires Rosetta." },
       { id: "1.9", label: "HashLink 1.9", description: "Mac runtime with graphics and audio support for HashLink 1.9 games. Apple Silicon requires Rosetta." },
       { id: "1.12", label: "HashLink 1.12", description: "Mac runtime with graphics and audio support for HashLink 1.12 games. Apple Silicon requires Rosetta." }].map(section => {
-      const versions = state.catalog.versions.filter(version => family(version) === section.id);
-      const catalog = sourceCatalog(state.catalog, { id: section.id, label: section.label, source: state.catalog.source, versions });
-      catalog.sources = (state.catalog.sources || []).filter(source => section.id === "current" ? source.id === "upstream" : source.id === "builds").map(source => sourceCatalog(source, { ...source,
-        versions: source.versions.filter(version => family(version) === section.id) }));
-      catalog.sourceLinks = section.id === "current" ? [] : [{ label: "upstream code", url: "https://github.com/HaxeFoundation/hashlink" }];
-      if (section.id !== "current") for (const source of catalog.sources) source.source = source.sourceUrl =
-        `https://procrastinine.github.io/maclauncher-builds/#hashlink-${section.id.replace(".", "-")}`;
-      catalog.source = catalog.sources[0]?.source || state.catalog.source;
+      const view = parent => {
+        const versions = parent.versions.filter(version => family(version) === section.id);
+        const catalog = sourceCatalog(parent, { id: section.id, label: section.label, source: parent.source, versions });
+        catalog.sources = (parent.sources || []).filter(source => section.id === "current" ? source.id === "upstream" : source.id === "builds").map(source => sourceCatalog(source, { ...source,
+          versions: source.versions.filter(version => family(version) === section.id) }));
+        catalog.sourceLinks = section.id === "current" ? [] : [{ label: "upstream code", url: "https://github.com/HaxeFoundation/hashlink" }];
+        if (section.id !== "current") for (const source of catalog.sources) source.source = source.sourceUrl =
+          `https://procrastinine.github.io/maclauncher-builds/#hashlink-${section.id.replace(".", "-")}`;
+        catalog.source = catalog.sources[0]?.source || parent.source;
+        return catalog;
+      };
+      // Each CPU's download list is split into the same version families.
+      const catalog = view(state.catalog);
+      if (state.catalog.architectureCatalogs) catalog.architectureCatalogs = Object.fromEntries(Object.entries(state.catalog.architectureCatalogs)
+        .map(([architecture, parent]) => [architecture, view(parent)]));
       return { ...state, ...section, sections: undefined, catalog, installed: state.installed.filter(row => family(row.version) === section.id) };
     });
     return { ...state, sections };
@@ -72,5 +76,4 @@ Custom.configure(manager, { inspect(runtimePath, options = {}) {
 } });
 // Stock and adapted ABI profiles install as managed versioned downloads.
 manager.createManager = createManager;
-manager.discoverCatalog = discoverCatalog;
 module.exports = manager;

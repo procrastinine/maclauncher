@@ -4,6 +4,7 @@ const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
 const { readBytecode } = require("./bytecode");
 const Native = require("../shared/runtime/local-native");
+const Architecture = require("../shared/runtime/architecture");
 const manager = require("./runtime/manager");
 const GameData = require("../shared/game-data");
 const Download = require("./runtime/download");
@@ -35,7 +36,7 @@ function runtimeCompatible(pin, bytecode) {
   return !pin.customPrimitiveProfile && !Profiles.hasProfile(pin.primitiveProfileId) || Boolean(pinPrimitives(pin, bytecode)?.ready);
 }
 
-function automaticRuntime(catalog, bytecode, { hostVersion, hostArchitecture = process.arch } = {}) {
+function automaticRuntime(catalog, bytecode, { hostVersion, hostArchitecture = Architecture.selectedArchitecture() } = {}) {
   if (bytecode.nativeAbi.sdlEventLoop === "unknown" && !bytecode.natives?.length) return null;
   const compatible = catalog.filter(pin => !pin.deprecated && pin.architecture === "x86_64" &&
     (!pin.hostArchitectures || pin.hostArchitectures.includes(hostArchitecture)) && pin.minimumMacOS &&
@@ -214,7 +215,7 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     const env = { ...process.env, DYLD_LIBRARY_PATH: status.directories.join(path.delimiter) };
     // Thin Intel Mach-O binaries enter Rosetta through exec itself. A protected
     // /usr/bin/arch wrapper strips DYLD_* needed for HashLink native modules.
-    const forceIntelSlice = process.arch === "arm64" && status.install.architectures.includes("arm64");
+    const forceIntelSlice = Architecture.requiresRosetta("x64") && status.install.architectures.includes("arm64");
     return context.spawnDetachedChecked(status.install.executablePath, args,
       { cwd: launch.wrapper, env }, forceIntelSlice);
   },

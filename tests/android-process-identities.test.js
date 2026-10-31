@@ -22,9 +22,12 @@ test('Command discovery reads the existing live profile leases and retires renam
  const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-process-commands-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
  const directory=path.join(temporary,'ids');fs.mkdirSync(directory,{mode:0o700});
  const native=path.resolve(__dirname,'../src/modules/android/native'),binary=path.join(temporary,'commands');
- const run=(command,args)=>{const result=spawnSync(command,args,{encoding:'utf8',timeout:20000,env:{...process.env,ANDROID_PROCESS_QUERY_HELPER:path.join(temporary,'supervisor')}});assert.equal(result.error,undefined);assert.equal(result.status,0,result.stdout+result.stderr);return result.stdout;};
+ const run=(command,args,timeout=20000)=>{const result=spawnSync(command,args,{encoding:'utf8',timeout,env:{...process.env,ANDROID_PROCESS_QUERY_HELPER:path.join(temporary,'supervisor')}});assert.equal(result.error,undefined,[result.error?.message,result.stdout,result.stderr].filter(Boolean).join('\n'));assert.equal(result.status,0,result.stdout+result.stderr);if(result.stderr.trim())t.diagnostic(result.stderr.trim());return result.stdout;};
  run('clang',['-std=gnu11','-O2','-Wall','-Wextra','-Werror','-DSUPERVISOR_SENDER',native+'/supervisor-channel.c','-o',path.join(temporary,'supervisor')]);
  run('clang',['-std=gnu11','-O2','-Wall','-Wextra','-Werror','-I'+native,'-DPROCESS_IDS_SOURCE="'+native+'/process-ids.c"',path.join(__dirname,'fixtures/android-native/process-commands.c'),'-o',binary]);
  assert.match(run(binary,['--deadline']),/PASS partial process-query frames share one absolute deadline/);
- const output=run(binary,[directory]);t.diagnostic(output.trim());assert.match(output,/PASS command queries retain live logical leases and retire old names:4096 historical records,\d+ opens before\/after/);
+ // The native kernel snapshots are sequential; this fixture makes 21 queries
+ // across its three brokers. Keep the whole probe within Node's 60-second
+ // test bound without confusing host contention with its per-query deadline.
+ const output=run(binary,[directory],45000);t.diagnostic(output.trim());assert.match(output,/PASS command queries retain live logical leases and retire old names:4096 historical records,\d+ opens before\/after/);
 });

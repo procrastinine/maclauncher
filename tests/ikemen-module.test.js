@@ -127,7 +127,7 @@ test("Ikemen resource repair leaves ambiguous assets and traversal references un
 test("Ikemen Play preflights version requirements before installing", t => {
   const root = temporary(t), entry = game(root), context = { userDataDir: path.join(root, "data"), settings: {} };
   const request = Module.ensureRuntime(entry, context);
-  assert.equal(request.managerId, "ikemen"); assert.equal(request.version, null);assert.equal(request.discoveryRequired, true);assert.equal(request.selectionRequired, true); assert.deepEqual(request.installOptions, {});
+  assert.equal(request.managerId, "ikemen"); assert.equal(request.version, null);assert.equal(request.discoveryRequired, true);assert.equal(request.selectionRequired, undefined); assert.deepEqual(request.installOptions, {});
   fs.writeFileSync(path.join(root, "data", "system.def"), "[Info]\nmugenversion=2.0\n[Files]\nselect=select.def\n");
   assert.throws(() => Module.ensureRuntime(entry, context), /newer MUGEN/);
 });
@@ -146,4 +146,20 @@ test("Ikemen aliases 3D resources and shrinks only untouched old copies", t => {
   fs.rmSync(model); fs.writeFileSync(model, "custom player model");
   Module.__test.minimizeLegacyResources(source, managed);
   assert.equal(fs.readFileSync(model, "utf8"), "custom player model");
+});
+
+test("Ikemen discovery declares the CPU before any runtime download and leaves the macOS floor to the executable", async t => {
+  const Github = require("../src/modules/shared/runtime/github-releases");
+  const manager = require("../src/modules/ikemen/runtime/manager");
+  const userDataDir = temporary(t);
+  t.mock.method(Github, "fetchGithubReleases", async () => ["1.0.0", "0.99.0"].map(version => ({ tag_name: `v${version}`,
+    assets: [{ name: `Ikemen_GO_v${version}-macos.zip`, browser_download_url: `https://github.com/ikemen-engine/Ikemen-GO/releases/download/v${version}/Ikemen_GO_v${version}-macos.zip`, digest: `sha256:${"a".repeat(64)}` }] })));
+  t.mock.method(Github, "fetchGithubTags", async () => ["1.0.0", "0.99.0"].map(version => ({ name: `v${version}`, commit: { sha: "b".repeat(40) } })));
+  await manager.refreshCatalog({ userDataDir, force: true });
+  const pins = manager.core.listCatalog({ userDataDir });
+  assert.equal(pins.find(pin => pin.version === "1.0.0").minimumMacOS, undefined);
+  assert.equal(pins.find(pin => pin.version === "1.0.0").architecture, "arm64");
+  await manager.refreshCatalog({ userDataDir, force: true, architecture: "x64" });
+  const intelPins = require("../src/modules/shared/runtime/architecture").withArchitecture("x64", () => manager.core.listCatalog({ userDataDir }));
+  assert.equal(intelPins.find(pin => pin.version === "0.99.0").architecture, "x64");
 });

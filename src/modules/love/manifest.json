@@ -84,13 +84,13 @@
         "graphicsHost": "window"
       },
       "native": {
-        "label": "Native app",
+        "label": "Game's macOS app",
         "graphicsHost": "window"
       }
     },
     "labels": {
       "love": "LÖVE",
-      "native": "Native app"
+      "native": "Game's macOS app"
     },
     "manager": {
       "love": "love"
@@ -99,7 +99,7 @@
       "love": { "exclude": ["luasteam"] }
     },
     "managerSectionBy": {
-      "love": "resolvedChannel"
+      "love": "resolvedSection"
     },
     "managerSectionOverrideKey": {
       "love": "channel"

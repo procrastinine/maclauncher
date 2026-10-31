@@ -1,0 +1,59 @@
+---
+// Graphics features by the earliest macOS version that supports them, read at
+// build time from the generated tables in docs/runtimes/SYSTEM_REQUIREMENTS.md.
+import { COLUMNS, featureGroups } from "../requirements";
+const groups = featureGroups();
+const cell = (items: string[]) => items.join(", ") || "None";
+---
+
+<table class="macFeatures">
+  <thead>
+    <tr>{COLUMNS.map(column => <th scope="col">{column}</th>)}</tr>
+  </thead>
+  <tbody>
+    {groups.map(group => (
+      <tr>
+        <th scope="row">{group.macOS}</th>
+        <td data-label={COLUMNS[1]}>{cell(group.everyMac)}</td>
+        <td data-label={COLUMNS[2]}>{cell(group.supportedGpu)}</td>
+        <td data-label={COLUMNS[3]}>{cell(group.appleSilicon)}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+<style>
+  /* Four columns of feature lists don't fit a phone, so each macOS version
+     becomes its own block, with the column name before each list. */
+  @media (max-width: 40rem) {
+    .macFeatures,
+    .macFeatures tbody,
+    .macFeatures tr,
+    .macFeatures th,
+    .macFeatures td {
+      display: block;
+      width: auto;
+    }
+    .macFeatures thead {
+      display: none;
+    }
+    .macFeatures tr {
+      padding-block: 0.5rem;
+      border-bottom: 1px solid var(--sl-color-gray-5);
+    }
+    .macFeatures th,
+    .macFeatures td {
+      margin: 0;
+      padding: 0.2rem 0;
+      border: 0;
+    }
+    .macFeatures tbody th::before {
+      content: "macOS ";
+    }
+    .macFeatures td::before {
+      content: attr(data-label) ": ";
+      font-weight: 600;
+      color: var(--sl-color-white);
+    }
+  }
+</style>

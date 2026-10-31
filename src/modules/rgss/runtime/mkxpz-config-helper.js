@@ -8,7 +8,6 @@ const declarations = require("./distribution-supplementals.json");
 const run = promisify(execFile);
 const HELPER_VERSION = declarations.find(item => item.id === "mkxpz-config-helper")?.version;
 const signatureCache = new Map();
-let hostVersion;
 
 function declaration(version = HELPER_VERSION) {
   const item = declarations.find(item => item.id === "mkxpz-config-helper" && item.version === version);
@@ -29,7 +28,7 @@ async function resolveConfigHelper({ resourcesRoot, helperVersion = HELPER_VERSI
       record.scope !== (pin.version === "1.0.0" || pin.version.startsWith("config-identity-v7-") ? "selected-executable-config-and-display-identity" : "selected-executable-bundle-config-chdir") || record.build?.signing !== "ad-hoc" ||
       record.build?.installName !== "@rpath/mkxpz-config.dylib" ||
       JSON.stringify(record.architectures) !== JSON.stringify(library.architectures)) throw new Error("The MKXP-Z config helper build identity changed.");
-  const systemVersion = dependencies.systemVersion ? await dependencies.systemVersion() : hostVersion ||= (await run("/usr/bin/sw_vers", ["-productVersion"], { timeout: 10000 })).stdout.trim();
+  const systemVersion = dependencies.systemVersion ? await dependencies.systemVersion() : Bundled.systemVersionSync();
   if (!Bundled.versionAtLeast(systemVersion, pin.minimumMacOS)) throw new Error(`MKXP-Z config isolation requires macOS ${pin.minimumMacOS}.`);
   const signatureKey = Bundled.fileIdentity(dylibPath);
   if (signatureCache.get(dylibPath) !== signatureKey) {

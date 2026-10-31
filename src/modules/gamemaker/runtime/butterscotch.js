@@ -5,12 +5,11 @@ const Downloads = require("./butterscotch-downloads");
 function supportsGameArguments(pin) {
   return (pin?.capabilities?.gameArguments || pin?.gameArguments || pin?.projectPackage?.capabilities?.gameArguments) === "repeat-game-arg-v1";
 }
-const discoverCatalog = Downloads.createDownloadDiscovery();
 function createManager(dependencies = {}) {
-  const runtime = createPinnedNativeManager({ id: "butterscotch", label: "Butterscotch", catalog: [],
+  const runtime = createPinnedNativeManager({ id: "butterscotch", label: "Butterscotch",
     projectBuilds: { projectId: "butterscotch", repository: "procrastinine/maclauncher-builds", upstreamMacDownloads: true },
     distributionRequired: false, importLocal: true,
-    discoverCatalog: Downloads.createDownloadDiscovery({ dependencies }),
+    upstream: Downloads.source,
     legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "butterscotch" }),
     sourceUrl: "https://github.com/ButterscotchRunner/Butterscotch/actions/workflows/build.yml",
     resolveExecutable: Downloads.resolveExecutable, prepareInstall: options => Downloads.prepareInstall(options, dependencies), dependencies });
@@ -50,4 +49,4 @@ function createManager(dependencies = {}) {
   return runtime;
 }
 const manager = createManager();
-module.exports = { manager, createManager, discoverCatalog };
+module.exports = { manager, createManager };

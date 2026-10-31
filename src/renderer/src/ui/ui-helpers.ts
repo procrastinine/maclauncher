@@ -31,10 +31,30 @@ export function withAvailability(label: string, state?: Availability | null): st
   return state ? `${label} · ${AVAILABILITY_LABELS[state]}` : label;
 }
 
+// A transport failure (no connection, a refused proxy tunnel, an unresolved or
+// unreachable host) reads as the service that could not be reached. The stored
+// error and the log keep the full transport detail.
+const CONNECTION_FAILURE = /\b(?:Failed to establish tunnel|getaddrinfo|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EHOSTUNREACH|ENETUNREACH|ENETDOWN|socket hang up|net::ERR_(?:INTERNET_DISCONNECTED|NAME_NOT_RESOLVED|NAME_RESOLUTION_FAILED|CONNECTION_\w+|PROXY_\w+|TUNNEL_CONNECTION_FAILED|TIMED_OUT|NETWORK_CHANGED|ADDRESS_UNREACHABLE))\b|(?:^|:\s)fetch failed\b/;
+function connectionFailure(message: string) {
+  if (!CONNECTION_FAILURE.test(message)) return null;
+  const named = /(?:tunnel to|getaddrinfo [A-Z_]+|request to [a-z]+:\/\/)\s*([a-z0-9-]+(?:\.[a-z0-9-]+)+)/i.exec(message)?.[1]
+    || [...message.matchAll(/[a-z]+:\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,})/gi)].map(match => match[1]).find(host => !/^localhost$/i.test(host));
+  const host = named?.toLowerCase();
+  // A refused connection to a local helper is not an internet problem.
+  if (!host && /\b(?:127\.0\.0\.1|localhost|::1)\b/i.test(message)) return null;
+  const service = !host ? "the server" : /(?:^|\.)(?:github\.com|githubusercontent\.com|githubassets\.com)$/.test(host) ? "GitHub" : host;
+  return `Could not connect to ${service}. Check the internet connection and try again.`;
+}
+
 export function formatUserError(error: unknown): string {
   let message = error instanceof Error ? String(error)
     : error && typeof error === "object" && "message" in error && typeof error.message === "string"
       ? error.message : String(error);
+  // A proxy or download URL in a network error can carry a user name and
+  // password; the address stays and the credentials are never shown.
+  message = message.replace(/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#@]+@/gi, "$1");
+  const offline = connectionFailure(message);
+  if (offline) return offline;
   // Only unwrap the standard Error/Electron IPC prefixes at the start.
   // Keep the original error state, classes, paths and multiline details intact.
   while (true) {
@@ -42,6 +62,11 @@ export function formatUserError(error: unknown): string {
     if (!prefix || prefix[0].length === message.length) return message;
     message = message.slice(prefix[0].length);
   }
+}
+
+/** Why a game's files cannot be used right now, or undefined when they can. */
+export function filesUnavailableReason(game: Pick<RecentGame, "availability"> | null | undefined) {
+  return game?.availability ? `Files unavailable. ${game.availability.message}` : undefined;
 }
 
 export function formatModuleBadge(
@@ -88,11 +113,18 @@ export function formatRuntimeLabel(runtimeId: RuntimeId, moduleInfo?: ModuleMani
   if (entryLabel) return entryLabel;
   const label = moduleInfo?.runtime?.labels?.[runtimeId];
   if (label) return label;
-  if (runtimeId === "native") return "Native app";
+  if (runtimeId === "native") return "Game's macOS app";
   if (typeof runtimeId === "string" && runtimeId) {
     return runtimeId.charAt(0).toUpperCase() + runtimeId.slice(1);
   }
   return "Runtime";
+}
+
+/** Runtimes a game type offers as its default. A mode that cannot play, such
+ * as inspection, is offered only when it is the type's own default. */
+export function defaultRuntimeChoices(moduleInfo: ModuleManifest | null | undefined): RuntimeId[] {
+  const supported = Array.isArray(moduleInfo?.runtime?.supported) ? moduleInfo!.runtime!.supported as RuntimeId[] : [];
+  return supported.filter(id => (resolveRuntimeEntry(moduleInfo, id) as Record<string, unknown> | null)?.launch !== false || id === moduleInfo?.runtime?.default);
 }
 
 export function formatRuntimeOption(runtimeId: RuntimeId, moduleInfo?: ModuleManifest | null) {
@@ -105,16 +137,47 @@ export function resolveRuntimeVersionLabel(
 ) {
   if (!version) return "";
   const labels = runtimeSection?.versionLabels || runtimeSection?.catalog?.versionLabels;
-  if (labels && typeof labels === "object") {
-    const mapped = (labels as Record<string, string | null | undefined>)[version];
-    if (mapped && mapped !== version) return String(mapped);
+  const mapped = labels && typeof labels === "object" ? (labels as Record<string, string | null | undefined>)[version] : null;
+  const label = readableVersion(mapped ? String(mapped) : String(version));
+  // A catalog pre-release whose name does not already say so is marked.
+  const prerelease = runtimeSection?.catalog?.versionRequirements?.[version]?.prerelease === true;
+  return prerelease && !PRERELEASE_WORD.test(label) ? `${label} (pre-release)` : label;
+}
+
+const PRERELEASE_WORD = /(?:^|[^a-z])(?:alpha|beta|rc|pre-?release|preview|dev|development|nightly)\d*(?![a-z])/i;
+/** Whether a listed version is a pre-release, by its catalog flag or its name. */
+export function isPrereleaseVersion(version: string, runtimeSection: Record<string, any> | null | undefined) {
+  return runtimeSection?.catalog?.versionRequirements?.[version]?.prerelease === true ||
+    PRERELEASE_WORD.test(version.replace(/[._-]/g, " ")) || PRERELEASE_WORD.test(resolveRuntimeVersionLabel(version, runtimeSection));
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** A version reads as the upstream version people know. Commit hashes,
+ * MacLauncher package revisions, workflow timestamps and app-bundle suffixes
+ * stay in the exact version value and its tooltip. */
+function readableVersion(raw: string) {
+  // A package of an upstream with only commits is named MCLvN-MMDD after the
+  // upstream commit date, sometimes followed by a build number or profile
+  // ("-17", "-kag3-1").
+  const build = raw.match(/^MCLv\d+(?:-(\d{2})(\d{2}))?(?:-[a-z0-9][\w.-]*)?$/i);
+  if (build) {
+    const month = MONTHS[Number(build[1]) - 1], day = Number(build[2]);
+    return month && day ? `Development build (${month} ${day})` : "Development build";
   }
-  const raw = String(version);
-  const build = raw.match(/^MCLv(\d+)(?:-(.+))?$/i);
-  if (build) return `MacLauncher build ${build[1]}${build[2] ? `-${build[2]}` : ""}`;
-  // Package adaptation suffixes remain exact option values and tooltips.
-  const upstream = raw.replace(/-MCLv[\w.-]+$/i, "").replace(/^v(?=\d)/i, "");
-  return upstream.replace(/(\d)(alpha|beta|rc)(?=\d|$)/i, "$1 $2");
+  // A workflow build named by its time and commit reads as its date.
+  const snapshot = raw.match(/^(\d{4}-\d{2}-\d{2})T\d{2}-\d{2}-\d{2}Z[_-][0-9a-f]{7,40}$/i);
+  if (snapshot) return snapshot[1];
+  const label = raw.replace(/-MCLv[\w.-]+$/i, "")
+    .replace(/(?:\s*·\s*|[-._+@])?(?<![0-9A-Za-z])(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{7,40}(?![0-9A-Za-z])/g, "")
+    .replace(/\.app\b/g, "").replace(/\s*\(\s*\)/g, "").replace(/\s{2,}/g, " ").trim()
+    .replace(/^v(?=\d)/i, "").replace(/(\d)(alpha|beta|rc)(?=\d|$)/i, "$1 $2");
+  return label || "Development build";
+}
+
+// The MacLauncher package revision of a version, when it has one.
+function packageRevision(version: string) {
+  const match = /(?:^|-)MCLv(\d+)/i.exec(version);
+  return match ? Number(match[1]) : null;
 }
 
 export function formatRuntimeVersionTag(
@@ -123,6 +186,60 @@ export function formatRuntimeVersionTag(
 ) {
   const label = resolveRuntimeVersionLabel(version, runtimeSection);
   return /^\d+(?:\.\d+)+/.test(label) && !/^\d+(?:\.\d+)+\s(?:alpha|beta|rc)/i.test(label) ? `v${label}` : label;
+}
+
+/** Version labels for everything one runtime section lists. When two versions
+ * read the same, a MacLauncher Builds package beside the publisher's own file
+ * names its source, older package revisions of one upstream version read as
+ * earlier builds, and other ties are numbered in list order. The exact version
+ * remains the option value and tooltip. */
+export function runtimeVersionTagger(
+  runtimeSection: Record<string, any> | null | undefined,
+  extra: Array<string | null | undefined> = []
+): (version: string) => string {
+  const versions = new Set<string>();
+  const add = (value: unknown) => { if (typeof value === "string" && value.trim()) versions.add(value); };
+  const addCatalog = (catalog: any) => {
+    if (!catalog || typeof catalog !== "object") return;
+    (Array.isArray(catalog.versions) ? catalog.versions : []).forEach(add);
+    (Array.isArray(catalog.sources) ? catalog.sources : []).forEach(addCatalog);
+  };
+  extra.forEach(add);
+  add(runtimeSection?.defaultVersion);
+  (Array.isArray(runtimeSection?.installed) ? runtimeSection.installed : []).forEach((item: any) => add(item?.version));
+  addCatalog(runtimeSection?.catalog);
+  // Labels that differ only in separators ("1.0.0 · preview", "1.0.0-preview")
+  // name the same release and share the first one's wording.
+  const groups = new Map<string, { label: string; members: string[] }>();
+  for (const version of versions) {
+    const label = formatRuntimeVersionTag(version, runtimeSection);
+    const key = label.toLowerCase().replace(/^v(?=\d)/, "").replace(/[\s·._-]+/g, " ").trim();
+    const group = groups.get(key) || { label, members: [] };
+    group.members.push(version);
+    groups.set(key, group);
+  }
+  const labels = new Map<string, string>();
+  for (const { label, members } of groups.values()) {
+    const packaged = members.filter(version => packageRevision(version) !== null)
+      .sort((a, b) => (packageRevision(b) as number) - (packageRevision(a) as number));
+    const other = members.filter(version => packageRevision(version) === null);
+    other.forEach((version, index) => labels.set(version, index ? `${label} (${index + 1})` : label));
+    packaged.forEach((version, index) => labels.set(version, [label, other.length ? "MacLauncher Builds" : "", index ? "earlier build" : ""]
+      .filter(Boolean).join(" · ") + (index > 1 ? ` (${index})` : "")));
+  }
+  return version => labels.get(version) ?? formatRuntimeVersionTag(version, runtimeSection);
+}
+
+/** Version choices from a runtime manager read like the inspector's Version
+ * menu; a fixed choice such as Default keeps its own label. */
+export function runtimeVersionOptions<T extends { value: string; label: string }>(options: T[]): T[] {
+  const tag = runtimeVersionTagger(null, options.map(option => option.value));
+  return options.map(option => option.value && option.label === option.value ? { ...option, label: tag(option.value) } : option);
+}
+
+/** Display name of a runtime build's CPU. */
+export function architectureLabel(architecture: string | null | undefined) {
+  return architecture === "x64" || architecture === "x86_64" ? "Intel" : architecture === "universal" ? "Universal" : "Apple Silicon";
 }
 
 export function formatDownloadPercent(task: { downloaded: number; total: number | null }) {
@@ -367,6 +484,15 @@ export function formatSettingLabel(key: string) {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
+// A runtime provider without a game type of its own (32-bit Mac, Prosper) is
+// configured in the runtime tabs of the game types it serves, not twice.
+export function settingsSectionModules(modules: ModuleManifest[]) {
+  const all = Array.isArray(modules) ? modules : [];
+  const served = new Set(all.filter(mod => mod.detection).flatMap(mod => mod.runtime?.supported || []));
+  return sortModulesForSettings(all.filter(mod => mod.detection || !(mod.runtime?.supported || []).length ||
+    !(mod.runtime?.supported || []).every(id => served.has(id))));
+}
+
 export function sortModulesForSettings(modules: ModuleManifest[]) {
   const list = Array.isArray(modules) ? modules.slice() : [];
   list.sort((a, b) => {
@@ -456,7 +582,20 @@ export function resolveRuntimeSection(
   const sections = resolveRuntimeSections(managerState);
   if (!sections.length) return null;
   if (!sectionId) return sections[0] || null;
-  return sections.find(section => section.id === sectionId) || sections[0] || null;
+  const exact = sections.find(section => section.id === sectionId) || managerState?.selectionSections?.[sectionId];
+  if (exact) return exact;
+  const template = managerState?.selectionSectionTemplate;
+  const source = template?.versionSectionBy === "major" && /^\d+$/.test(sectionId)
+    ? sections.find(section => section.id === template.sectionId) : null;
+  if (source) {
+    const matches = (version: string) => /^v?(\d+)(?:[.+-]|$)/i.exec(version)?.[1] === sectionId;
+    const installed = (source.installed || []).filter((item: any) => matches(item.version));
+    const versions = (source.catalog?.versions || []).filter(matches);
+    const defaultVersion = matches(source.defaultVersion || "") ? source.defaultVersion : versions[0] || installed[0]?.version || null;
+    return { ...source, id: sectionId, label: template.label.replace("{section}", sectionId), installed, defaultVersion,
+      catalog: { ...source.catalog, versions, installableVersions: (source.catalog?.installableVersions || []).filter(matches) } };
+  }
+  return sections[0] || null;
 }
 
 export function resolveRuntimeNotice(section: Record<string, any> | null): RuntimeNotice | null {
@@ -495,7 +634,9 @@ export function resolveRuntimeVersionForSection(
   value: unknown,
   sectionId: string | null
 ) {
-  const version = typeof value === "string" ? value.trim() : "";
+  // "auto", saved by the per-game runtime settings, is the default choice, as in version-choices.js.
+  const raw = typeof value === "string" ? value.trim() : "";
+  const version = raw === "auto" ? "" : raw;
   if (!version || moduleInfo?.runtime?.managerVersionSectionBy?.[runtimeId] !== "major") return version;
   const major = /^v?(\d+)(?:[.+-]|$)/i.exec(version);
   const section = sectionId ? Number(sectionId) : NaN;
@@ -533,6 +674,15 @@ export function resolveRuntimeSectionId(
     if (overrideSectionId) return overrideSectionId;
   }
 
+  // A version chosen from the combined inspector list belongs to the section
+  // that lists it, before the module's status records that section again.
+  const pin = getByPath(entry, `runtimeData.${runtimeId}.version`);
+  if (moduleInfo?.runtime?.inspectorSections?.[runtimeId] && !overrideSectionId && typeof pin === "string" && pin) {
+    const listing = resolveRuntimeSections(options.managerState || null).find(section =>
+      (section?.installed || []).some((item: any) => item?.version === pin) || (section?.catalog?.versions || []).includes(pin));
+    if (listing?.id) return String(listing.id);
+  }
+
   const key = moduleInfo?.runtime?.managerSectionBy?.[runtimeId];
   if (!key) return null;
   const direct = getByPath(entry, key);
@@ -547,7 +697,7 @@ export function resolveRuntimeSectionId(
     // A version pin may sit below the automatic section when the module
     // records a separate compatibility minimum.
     const floor = (automatic.minimumKey && mapToSectionId(getByPath(entry, `moduleData.${automatic.minimumKey}`))) || detected;
-    if (pinned && (!Object.keys(map).length || Object.hasOwn(map, major![1])) &&
+    if (pinned && (!Object.keys(map).length || Object.hasOwn(map, major![1]) || options.managerState?.selectionSectionTemplate?.versionSectionBy === "major") &&
         (!automatic.minimum || !floor || Number(pinned) >= Number(floor))) return pinned;
   }
   // The section the game's own data recommends precedes the Runtimes default.

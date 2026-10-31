@@ -117,7 +117,7 @@ test("a selected graphics failure still reaches the ordinary owned CPU child wit
     return child;
   });
   t.after(() => {if (child?.pid && child.exitCode == null && child.signalCode == null) child.kill();});
-  const entry = await f.launcher.resolveEntry(f.root);entry.reshade = {enabled: true, preset: "crt"};
+  const entry = await f.launcher.resolveEntry(f.root);entry.effects = {schema: 2, mode: "advanced", enabled: true, video: [{id: "crt", kind: "shader", enabled: true, shader: {preset: "crt"}}]};
   const saved = structuredClone(entry);
   const launched = await f.launcher.launchEntry(entry, {autoInstallRuntime: false,
     processAdapter: (command, args, options, translation, launch) => {
@@ -139,7 +139,7 @@ test("Stop during selected graphics preparation cancels before the actual spawn 
   t.mock.method(ReShade, "prepare", async (_entry, options) => {controller.abort();options.signal.throwIfAborted();});
   const f = processFixture(t, async (_runtime, _entry, context) =>
     context.spawnOwnedChecked(process.execPath, ["-e", "process.exit(98)"], {env: {PATH: process.env.PATH}}));
-  const entry = await f.launcher.resolveEntry(f.root);entry.graphics = {frameGeneration: "lsfg"};
+  const entry = await f.launcher.resolveEntry(f.root);entry.effects = {schema: 2, mode: "advanced", enabled: true, video: [{id: "crt", kind: "shader", enabled: true, shader: {preset: "crt"}}]};
   const result = await f.launcher.launchEntry(entry, {autoInstallRuntime: false, signal: controller.signal,
     processAdapter: () => {reachedSpawn = true;assert.fail("Stop cannot become original-rendering fallback");}});
   assert.equal(result.kind, "cancelled");assert.equal(reachedSpawn, false);assert.deepEqual(f.warnings, []);

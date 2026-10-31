@@ -171,7 +171,8 @@ test("plain and patched NW launches use the shared game context for effects and 
   const game = wrapper(t), userDataDir = path.join(game, "profile"), prepared = [], spawned = [];
   const steamEnvironment = { PATH: process.env.PATH, SteamAppId: "123", DYLD_INSERT_LIBRARIES: "/steam/overlay.dylib" };
   t.mock.method(Manager.core, "resolveBestInstalled", options => {
-    assert.equal(options.version, "0.103.1", "The fixture explicitly selects the verified Greenworks-compatible host");
+    if (options.version) assert.equal(options.version, "0.103.1", "The fixture explicitly selects the verified Greenworks-compatible host");
+    else assert.equal(options.variant, "sdk", "Installed fallback discovery uses the same SDK variant");
     return { version: "0.103.1", variant: "sdk", platformKey: "osx-arm64", executablePath: "/runtime/nwjs" };
   });
   t.mock.method(Greenworks, "resolveGreenworksRequirement", () => ({ needsGreenworks: true, greenworksVersion: "0.103.1", targets: [] }));

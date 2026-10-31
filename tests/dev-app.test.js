@@ -33,15 +33,18 @@ test("development branding preserves the original installation and caches a matc
   fs.symlinkSync("library", path.join(contents, "Frameworks", "alias"));
   const iconPath = path.join(root, "icon.icns"), entitlementsPath = path.join(root, "entitlements.plist");
   fs.writeFileSync(iconPath, "owned icon");
+  const rasterIconPath = path.join(root, 'maclauncher.png');
+  fs.writeFileSync(rasterIconPath, 'owned raster icon');
   fs.writeFileSync(entitlementsPath, "fixture entitlements");
   const { prepareDevelopmentApp } = await import(pathToFileURL(path.resolve(__dirname, "../scripts/dev-app.mjs")));
-  const calls = [], options = { electronBinary: binary, platform: "darwin", cacheRoot: path.join(root, "cache"), iconPath, entitlementsPath,
+  const calls = [], options = { electronBinary: binary, platform: "darwin", cacheRoot: path.join(root, "cache"), iconPath, rasterIconPath, entitlementsPath,
     run: (command, args) => { calls.push({ command, args }); } };
   const prepared = await prepareDevelopmentApp(options), app = prepared.slice(0, prepared.lastIndexOf("/Contents/MacOS/"));
   assert.equal(path.basename(prepared), "MacLauncher");
   assert.equal(fs.readFileSync(binary, "utf8"), "fixture executable");
   assert.deepEqual(await parsePlistFile(path.join(contents, "Info.plist")), original);
   assert.equal(fs.readFileSync(path.join(app, "Contents", "MacOS", "MacLauncher"), "utf8"), "fixture executable");
+  assert.equal(fs.readFileSync(path.join(app, 'Contents/Resources/maclauncher.png'), 'utf8'), 'owned raster icon');
   const renamedHelper = path.join(app, "Contents", "Frameworks", "MacLauncher Helper (Renderer).app", "Contents");
   assert.equal((await parsePlistFile(path.join(renamedHelper, "Info.plist"))).CFBundleExecutable, "MacLauncher Helper (Renderer)");
   assert.equal(fs.readFileSync(path.join(renamedHelper, "MacOS", "MacLauncher Helper (Renderer)"), "utf8"), "fixture helper");
@@ -91,7 +94,7 @@ test("packaged Finder file associations are written before signing without losin
   const custom = { CFBundleTypeName: "Custom document", CFBundleTypeExtensions: ["custom"] };
   await savePlistFile(infoPath, { CFBundleName: "MacLauncher", CFBundleIconFile: "icon.icns", CFBundleDocumentTypes: [custom] });
   const afterPack = require("../scripts/after-pack");
-  const Python = require('../scripts/python-resources.cjs'), pythonProfile = require('../src/modules/shared/runtime/embedded-python.json');
+  const Python = require('../scripts/python-resources.cjs'), pythonProfile = require('../src/modules/shared/runtime/python').embeddedPythonProfile('arm64');
   const pythonSource = path.join(root, 'src/resources/python'), pythonResources = path.join(contents, 'Resources/python');
   for (const file of [...Python.requiredFiles, 'bin/python3', ...Object.keys(Python.configuration().aliases)]) {
     const target = path.join(pythonSource, file); fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -118,7 +121,7 @@ test("packaged Finder file associations are written before signing without losin
   await afterPack(context, { dependencies });
   assert.equal(checked, 2);
   assert.deepEqual(Python.verifySourcePython({ sourceRoot: pythonSource }), pythonBefore);
-  assert.equal(Python.assertPackagedPython({ resourceRoot: pythonResources }).version, pythonProfile.version);
+  assert.equal(Python.assertPackagedPython({ resourceRoot: pythonResources, arch: 'arm64' }).version, pythonProfile.version);
   for (const [alias, target] of Object.entries(Python.configuration().aliases)) {
     assert.equal(fs.lstatSync(path.join(pythonSource, alias)).isFile(), true, 'Projection preserves the producer interpreter copies');
     assert.equal(fs.readlinkSync(path.join(pythonResources, alias)), target);

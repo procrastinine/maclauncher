@@ -7,7 +7,8 @@ const path = require("node:path");
 const { PassThrough, Readable } = require("node:stream");
 const test = require("node:test");
 const zlib = require("node:zlib");
-const { downloadToFile, fetchUrlBuffer, isAbortError, decodeResponseBody } = require("../src/modules/shared/runtime/download-utils");
+const { downloadToFile, fetchUrlBuffer } = require("../src/modules/shared/runtime/upstream-transport");
+const { isAbortError, decodeResponseBody } = require("../src/modules/shared/runtime/download-utils");
 const { DownloadManager } = require("../src/modules/shared/runtime/download-manager");
 const Releases = require("../src/modules/shared/runtime/github-releases");
 

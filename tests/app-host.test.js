@@ -19,7 +19,7 @@ test('Node resolves the installed upstream Electron without loading its download
   process.env.MACLAUNCHER_ELECTRON_PATH = ' /explicit/Electron ';
   assert.equal(Binary.resolveElectronBinary(), '/explicit/Electron');
   delete process.env.MACLAUNCHER_ELECTRON_PATH;
-  Object.defineProperty(process.versions, 'electron', { value: '44.9.3', configurable: true });
+  Object.defineProperty(process.versions, 'electron', { value: '45.0.0', configurable: true });
   assert.equal(Binary.resolveElectronBinary(), process.execPath);
 });
 

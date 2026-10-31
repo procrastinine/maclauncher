@@ -1,15 +1,17 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const zlib = require("node:zlib");
+const crypto = require("node:crypto");
 const Catalog = require("../src/modules/shared/runtime/ilspy-catalog");
 const Manager = require("../src/modules/shared/runtime/ilspy-manager");
 // Exercise the module's gate directly; shared service instrumentation also has
 // an installed-tool shortcut, with host preparation deferred to Decompile.
 const installIlSpy = Manager.installRuntime;
-const { entries: TOOL_FIXTURES } = require("./helpers/ilspy-catalog-fixture.cjs");
+const { entries: TOOL_FIXTURES, metadata, BASE, content, nuget } = require("./helpers/ilspy-catalog-fixture.cjs");
 const TOOL_VERSION = "9.1.0.7988";
 const Tool = require("../src/modules/shared/runtime/managed-decompiler");
 const FnaTool = require("../src/modules/fna/decompiler");
@@ -23,20 +25,27 @@ const { runRuntimeManagerAction } = require("../src/core/runtime-manager-service
 const { managedAssembly, writeAssembly } = require("./helpers/fna-assembly");
 const { writeZipArchive } = require("./helpers/zip-fixture");
 
-const json = data => ({ status: 200, headers: {}, body: Buffer.from(JSON.stringify(data)) });
 function directory(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-ilspy-version-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root;
 }
-function metadata(version, framework = "net10.0") {
-  const prefix = "tools/" + framework + "/any/";
-  return { id: "ilspycmd", version, packageHashAlgorithm: "SHA512", packageHash: Buffer.alloc(64, 1).toString("base64"),
-    packageSize: 1024, repository: { type: "git", url: "https://github.com/icsharpcode/ILSpy", commit: TOOL_FIXTURES["11.1.0.9782"].sourceRevision },
-    packageEntries: ["ilspycmd.dll", "ilspycmd.deps.json", "ilspycmd.runtimeconfig.json", "ICSharpCode.Decompiler.dll"].map(name => ({ fullName: prefix + name })) };
+async function discover(routes, options) {
+  Harness.network.routes = routes;
+  try { return await Catalog.discover(options); } finally { Harness.network.routes = null; }
 }
+// Reload ILSpy while NuGet lists these catalog leaves.
+async function refresh(userDataDir, documents) {
+  Harness.network.routes = nuget(documents);
+  try { return await Manager.refreshCatalog({ userDataDir, force: true }); } finally { Harness.network.routes = null; }
+}
+// A cached row as discovery writes it from metadata().
 function pin(version, framework = "net10.0") {
-  return Catalog.metadataEntry(metadata(version, framework), version, "https://api.nuget.org/v3/catalog0/data/1/ilspycmd." + version + ".json");
+  const revision = TOOL_FIXTURES["11.1.0.9782"].sourceRevision;
+  return { version, framework, sourceRevision: revision, upstreamRevision: revision, sourceUrl: Catalog.SOURCE + "/" + version,
+    publishedAt: null, license: null, url: Catalog.packageUrl(version), sha512: Buffer.alloc(64, 1).toString("hex"), bytes: 1024 };
 }
+// The package bytes served for a catalog row whose SHA-256 is theirs.
+const PACKAGE = "package fixture", packageSha256 = crypto.createHash("sha256").update(PACKAGE).digest("hex");
 function cachedTool(userDataDir, selected = TOOL_FIXTURES[TOOL_VERSION]) {
   const root = Tool.installRoot(userDataDir, selected.version), files = path.join(root, "files"); fs.mkdirSync(files, { recursive: true });
   for (const name of ["ilspycmd.dll", "ilspycmd.deps.json", "ilspycmd.runtimeconfig.json", "ICSharpCode.Decompiler.dll"])
@@ -70,20 +79,19 @@ function managedFna(t) {
   return { root, payload, directoryPath, userDataDir };
 }
 
-test("NuGet content metadata supplies the actual framework, digest and Git revision", () => {
-  const row = pin("12.0.0.9000", "net8.0");
-  assert.equal(row.framework, "net8.0"); assert.equal(row.sha512.length, 128);
-  assert.equal(row.sourceRevision, TOOL_FIXTURES["11.1.0.9782"].sourceRevision);
+test("NuGet content metadata supplies the actual framework, digest and Git revision", async () => {
   const noRepository = metadata("12.0.0.9001"); delete noRepository.repository;
-  const without = Catalog.metadataEntry(noRepository, noRepository.version, "https://api.nuget.org/v3/catalog0/data/1/ilspycmd.json");
+  const rows = await discover(nuget([metadata("12.0.0.9000", "net8.0"), noRepository, { ...metadata("11.1.0.9782"), packageHash: "bad" }]));
+  assert.deepEqual(rows.find(row => row.version === "12.0.0.9000"), pin("12.0.0.9000", "net8.0"));
+  const without = rows.find(row => row.version === "12.0.0.9001");
   assert.equal(without.sourceRevision, null); assert.equal(without.upstreamRevision, "nuget:ilspycmd@12.0.0.9001");
-  assert.throws(() => Catalog.metadataEntry({ ...metadata("11.1.0.9782"), packageHash: "bad" }, "11.1.0.9782",
-    "https://api.nuget.org/v3/catalog0/data/1/ilspycmd.json"), /incomplete|digest/);
-  assert.throws(() => Catalog.trustedUrl("https://other.test/v3/catalog0/data/1.json", "/v3/catalog0/data/"), /source/);
+  const unreadable = rows.find(row => row.version === "11.1.0.9782");
+  assert.equal(unreadable.sha512, undefined, "A package without a readable digest records its own SHA-256 at installation");
+  assert.equal(Catalog.validEntry(unreadable), true);
 });
-test("an unsupported older package layout stays visible with an explicit reason", () => {
+test("an unsupported older package layout stays visible with an explicit reason", async () => {
   const old = metadata("7.0.0.1000"); old.packageEntries = [];
-  const row = Catalog.metadataEntry(old, old.version, "https://api.nuget.org/v3/catalog0/data/1/ilspycmd.json");
+  const [row] = await discover(nuget([old]));
   assert.equal(row.framework, null); assert.match(row.installReason, /layout/); assert.equal(Catalog.validEntry(row), true);
 });
 test("the registry exposes one shared ILSpy manager in Tools alongside managed FNA", () => {
@@ -96,57 +104,74 @@ test("the registry exposes one shared ILSpy manager in Tools alongside managed F
   assert.equal(managers[0].getState({}).sections[0].id, "decompiler");
   assert.equal(Registry.getRuntimeManagerUi("fna").management, "managed");
 });
-test("full NuGet discovery deduplicates listed versions and bounds parallel metadata work", async () => {
-  const versions = ["12.0.0.9000", "11.1.0.9782", "10.1.1.8388", "10.0.0.8282", "9.1.0.7988", "9.0.0.7889"];
-  const base = "https://api.nuget.org/v3/registration5-gz-semver2/", paths = new Map();
-  const leaves = versions.map(version => {
-    const url = "https://api.nuget.org/v3/catalog0/data/1/ilspycmd." + version + ".json"; paths.set(url, metadata(version));
-    return { packageContent: Catalog.packageUrl(version), catalogEntry: { "@id": url, id: "ilspycmd", version, listed: true } };
-  });
-  let active = 0, maximum = 0, packages = 0;
-  const rows = await Catalog.discover({ request: async url => {
-    if (url.endsWith(".nupkg")) packages++;
-    if (url === "https://api.nuget.org/v3/index.json") return json({ resources: [{ "@type": "RegistrationsBaseUrl/3.6.0", "@id": base }] });
-    if (url === base + "ilspycmd/index.json") return json({ items: [{ items: [...leaves, leaves[0], { catalogEntry: { id: "ilspycmd", version: "1.0.0.0", listed: false } }] }] });
-    assert.ok(paths.has(url)); active++; maximum = Math.max(maximum, active);
-    await new Promise(resolve => setTimeout(resolve, 2)); active--;
-    return { status: 200, headers: { "content-encoding": "gzip" }, body: zlib.gzipSync(Buffer.from(JSON.stringify(paths.get(url)))) };
-  } });
-  assert.deepEqual(rows.map(row => row.version), versions); assert.equal(maximum, 4); assert.equal(packages, 0);
+test("a version published per runtime identifier installs NuGet's framework-dependent package", async () => {
+  const pointer = { ...metadata("12.0.0.9000"), packageEntries: [{ fullName: "tools/any/any/DotnetToolSettings.xml" }] };
+  const rows = await discover({ ...nuget([pointer, metadata("11.1.0.9782")]), ...nuget([{ ...metadata("12.0.0.9000"), id: "ilspycmd.any" }], [], "ilspycmd.any") });
+  assert.deepEqual(rows.map(row => [row.version, row.url, row.framework, row.installReason]), [
+    ["12.0.0.9000", content("12.0.0.9000", "ilspycmd.any"), "net10.0", undefined], ["11.1.0.9782", Catalog.packageUrl("11.1.0.9782"), "net10.0", undefined]]);
+  const [pointerOnly] = await discover(nuget([pointer]));
+  assert.match(pointerOnly.installReason, /layout/, "Without the runtime package the version stays listed with its reason");
 });
-test("NuGet refresh rejects an unexpected artifact source and cancels bounded discovery", async () => {
-  const base = "https://api.nuget.org/v3/registration5-gz-semver2/";
-  const request = async url => json(url.endsWith("/v3/index.json")
-    ? { resources: [{ "@type": "RegistrationsBaseUrl/3.6.0", "@id": base }] }
-    : { items: [{ items: [{ packageContent: "https://other.test/tool.nupkg", catalogEntry: {
-      "@id": "https://api.nuget.org/v3/catalog0/data/1/ilspycmd.json", id: "ilspycmd", version: "11.1.0.9782" } }] }] });
-  await assert.rejects(Catalog.discover({ request }), /package URL/);
+test("full NuGet discovery lists each listed version once without fetching packages", async () => {
+  const versions = ["12.0.0.9000", "11.1.0.9782", "10.1.1.8388", "10.0.0.8282", "9.1.0.7988", "9.0.0.7889"], documents = versions.map(version => metadata(version));
+  const routes = nuget(documents), registration = routes[BASE + "ilspycmd/index.json"].items[0].items;
+  registration.push(registration[0], { packageContent: Catalog.packageUrl("1.0.0.0"), catalogEntry: { id: "ilspycmd", version: "1.0.0.0", listed: false } });
+  const requests = Harness.network.requests.length, rows = await discover(routes);
+  assert.deepEqual(rows.map(row => row.version), versions);
+  assert.equal(Harness.network.requests.slice(requests).some(url => url.endsWith(".nupkg")), false);
+});
+test("NuGet discovery leaves out a package hosted elsewhere and stops when cancelled", async () => {
+  const routes = nuget([metadata("11.1.0.9782"), metadata("12.0.0.9000")]);
+  routes[BASE + "ilspycmd/index.json"].items[0].items[0].packageContent = "https://other.test/tool.nupkg";
+  assert.deepEqual((await discover(routes)).map(row => row.version), ["12.0.0.9000"]);
   const abort = new AbortController(); abort.abort();
-  await assert.rejects(Catalog.discover({ request, signal: abort.signal }), { code: "ABORT_ERR" });
+  await assert.rejects(discover(routes, { signal: abort.signal }), { code: "ABORT_ERR" });
 });
 test("ILSpy starts offline without factory release rows and refresh replaces obsolete results", async t => {
-  const userDataDir = directory(t);
-  t.mock.method(Catalog, "discover", () => assert.fail("State inspection cannot use the network"));
+  const userDataDir = directory(t), requests = Harness.network.requests.length;
   const initial = Manager.getState({ userDataDir });
+  assert.equal(Harness.network.requests.length, requests, "State inspection cannot use the network");
   assert.equal(initial.defaultVersion, null);
   assert.equal(Manager.normalizeSettings({ defaultVersion: null }).defaultVersion, null);
   assert.equal(initial.catalog.supportsLatestOnly, false);
   assert.deepEqual(initial.catalog.versions, []);
   assert.equal(initial.catalog.status, "idle");
   assert.equal(initial.defaultSource, "manager");
-  await Manager.refreshCatalog({ userDataDir, force: true }, { discover: async () => [pin("12.0.0.9000"), pin("10.0.0.8000", "net6.0")] });
+  await refresh(userDataDir, [metadata("12.0.0.9000"), metadata("10.0.0.8000", "net6.0")]);
   assert.ok(Manager.getState({ userDataDir }).catalog.versions.includes("12.0.0.9000"));
-  await Manager.refreshCatalog({ userDataDir, force: true }, { discover: async () => [pin("12.0.0.9001")] });
+  await refresh(userDataDir, [metadata("12.0.0.9001")]);
   const state = Manager.getState({ userDataDir });
   assert.equal(state.catalog.versions.includes("12.0.0.9000"), false);
   assert.deepEqual(state.catalog.versions, ["12.0.0.9001"]);
-  assert.equal(Catalog.pinFor(TOOL_VERSION, userDataDir).sha256, TOOL_FIXTURES[TOOL_VERSION].sha256);
+  assert.throws(() => Catalog.pinFor(TOOL_VERSION, userDataDir), /Unsupported ILSpy version/, "Only listed or installed versions are known");
   assert.equal(Catalog.cachedCatalog(userDataDir).entries.length, 1);
   assert.equal(Manager.updateSettingsAfterInstall({}, { version: "12.0.0.9001" }).defaultVersion, "12.0.0.9001");
 });
+test("a first decompile with an empty cache discovers after consent and installs the newest compatible release", async t => {
+  const userDataDir = directory(t), events = [];
+  const context = { userDataDir, settings: {}, confirmRuntimeInstall: async () => { events.push("consent"); return true; } };
+  const url = Catalog.packageUrl("12.0.0.9001"), listing = nuget([metadata("13.0.0.1", "net6.0"), metadata("12.0.0.9001"), metadata("12.0.0.9000")]);
+  const registration = listing[BASE + "ilspycmd/index.json"];
+  Harness.network.routes = { ...listing, [BASE + "ilspycmd/index.json"]: () => { events.push("discover"); return registration; },
+    [url]: () => { events.push(url); throw new Error("download stopped"); } };
+  t.after(() => { Harness.network.routes = null; });
+  await assert.rejects(Tool.ensureTool(context, undefined), /download stopped/);
+  assert.deepEqual(events, ["consent", "discover", Catalog.packageUrl("12.0.0.9001")]);
+});
+test("an installed tool from an earlier app version stays usable offline without a catalog", t => {
+  const userDataDir = directory(t), earlier = { version: "9.1.0.7988", framework: "net8.0", minimumRuntime: "8.0.0",
+    sourceRevision: "03b7444943e720b3134d296c0c8dd3876f8ea4ce", url: Catalog.packageUrl("9.1.0.7988"), sourceUrl: Catalog.SOURCE + "/9.1.0.7988",
+    sha256: "2b5058f5ccc164c33b7aabf1a5eb0cf3d3a6af6c145aaf58efd3ed891443af7c" };
+  t.mock.method(Catalog, "discover", () => assert.fail("Installed tools stay offline"));
+  cachedTool(userDataDir, earlier);
+  assert.equal(Catalog.pinFor(earlier.version, userDataDir).sha256, earlier.sha256);
+  assert.deepEqual(Manager.getState({ userDataDir }).installed.map(row => row.version), [earlier.version]);
+  assert.equal(Tool.selectedVersion({ userDataDir, settings: {} }), earlier.version, "The installed tool is the manager default");
+  assert.equal(Tool.selectedVersion({ userDataDir, settings: { runtimes: { ilspy: { defaultVersion: earlier.version } } } }), earlier.version);
+});
 test("retired installed tools retain exact identities after refresh and cache reload", async t => {
   const userDataDir = directory(t), selected = pin("12.0.0.9000"); Catalog.saveCatalog(userDataDir, [selected]); cachedTool(userDataDir, selected);
-  await Manager.refreshCatalog({ userDataDir, force: true }, { discover: async () => [pin("12.0.0.9001")] });
+  await refresh(userDataDir, [metadata("12.0.0.9001")]);
   assert.equal(Catalog.cachedCatalog(userDataDir).retainedEntries[0].version, selected.version);
   assert.equal(Catalog.pinFor(selected.version, userDataDir).sha512, selected.sha512);
   assert.equal(Manager.getState({ userDataDir }).installed[0].version, selected.version);
@@ -202,12 +227,15 @@ test("unsupported framework versions fail before tool acquisition", async t => {
   assert.equal(state.catalog.versions.includes(row.version), true);
   assert.equal(state.catalog.installableVersions.includes(row.version), false);
   assert.match(state.catalog.versionRequirements[row.version].installReason, /unsupported/);
-  await assert.rejects(Tool.ensureTool({ userDataDir }, row.version, { downloadToFile: () => assert.fail("Unsupported hosts cannot download") }), /unsupported .NET/);
+  const requests = Harness.network.requests.length;
+  await assert.rejects(Tool.ensureTool({ userDataDir }, row.version), /unsupported .NET/);
+  assert.equal(Harness.network.requests.length, requests, "Unsupported hosts download nothing");
 });
-test("macOS 13 uses the ready managed CLR8 floor once per state and preserves strict installation", async t => {
+test("macOS 13 uses the ready managed CLR8 floor once per state and installs with it", async t => {
   const { userDataDir } = managedFna(t);
   const rows = Array.from({ length: 12 }, (_, index) => pin("9.2.0." + (8000 + index), "net8.0"));
-  Catalog.saveCatalog(userDataDir, [...rows, ...Object.values(TOOL_FIXTURES)]);
+  const selectedPin = { ...TOOL_FIXTURES[TOOL_VERSION], sha256: packageSha256 };
+  Catalog.saveCatalog(userDataDir, [...rows, ...Object.values(TOOL_FIXTURES).map(row => row.version === TOOL_VERSION ? selectedPin : row)]);
   const resolveHost = Tool.resolveHost, lookups = t.mock.method(Tool, "resolveHost", (...args) => resolveHost(...args));
   const verifyRuntime = FnaProfile.verifyRuntime, verified = t.mock.method(FnaProfile, "verifyRuntime", (...args) => verifyRuntime(...args));
   const hostInstall = t.mock.method(Host, "ensure", () => assert.fail("An installed managed CLR must not download another host"));
@@ -220,16 +248,16 @@ test("macOS 13 uses the ready managed CLR8 floor once per state and preserves st
   assert.equal(state.catalog.versionRequirements[TOOL_VERSION].minimumMacOS, "13.0");
   assert.equal(state.catalog.versionRequirements[TOOL_VERSION].installReason, null);
   assert.equal(state.catalog.installableVersions.includes(TOOL_VERSION), true);
-  assert.equal(state.catalog.versionRequirements["11.1.0.9782"].minimumMacOS, "14.0");
-  assert.equal(state.catalog.installableVersions.includes("11.1.0.9782"), false);
+  assert.equal(state.catalog.versionRequirements["11.1.0.9782"].minimumMacOS, null, "A host that is not installed states no macOS floor yet");
+  assert.equal(state.catalog.installableVersions.includes("11.1.0.9782"), true);
   const hashes = t.mock.method(Native, "hashFile", Native.hashFile);
   for (let index = 0; index < 10; index++) Manager.getState({ userDataDir });
   assert.equal(lookups.mock.callCount(), 11); assert.equal(verified.mock.callCount(), 1);
   assert.equal(hashes.mock.callCount(), 0, "unchanged status must not rehash the managed host");
-  const events = [], selectedPin = TOOL_FIXTURES[TOOL_VERSION], hashFile = Native.hashFile;
-  t.mock.method(Native, "hashFile", file => path.basename(file) === "ilspy.nupkg" ? selectedPin.sha256 : hashFile(file));
+  const events = [];
+  Harness.network.routes = { [selectedPin.url]: () => { events.push("download"); return PACKAGE; } };
+  t.after(() => { Harness.network.routes = null; });
   const managed = { ...Manager, installRuntime: context => installIlSpy(context, { tool: {
-    downloadToFile: async (_url, archive) => { events.push("download"); fs.writeFileSync(archive, "package fixture"); },
     extractPackage: (_archive, files) => {
       for (const name of ["ilspycmd.dll", "ilspycmd.deps.json", "ilspycmd.runtimeconfig.json", "ICSharpCode.Decompiler.dll"])
         fs.writeFileSync(path.join(files, name), "package fixture " + name);
@@ -243,32 +271,37 @@ test("macOS 13 uses the ready managed CLR8 floor once per state and preserves st
   assert.equal(installed.version, TOOL_VERSION); assert.equal(installed.ready, true);
   assert.equal(verified.mock.callCount(), 2, "execution preparation still verifies the actual host");
   assert.equal(hostInstall.mock.callCount(), 0);
-  const acquireTool = t.mock.method(Tool, "ensureTool", () => assert.fail("An unavailable host must stop before acquisition"));
-  await assert.rejects(installIlSpy({ userDataDir, version: "11.1.0.9782" }), /macOS 14/);
-  assert.equal(acquireTool.mock.callCount(), 0);
 });
-test("macOS 13 rejects missing or damaged managed CLR8 before tool acquisition", async t => {
+test("a missing or damaged managed CLR8 leaves the tool installable with a separate host", async t => {
   const { userDataDir, payload, directoryPath } = managedFna(t);
   Catalog.saveCatalog(userDataDir, Object.values(TOOL_FIXTURES));
   assert.equal(Manager.getState({ userDataDir }).catalog.installableVersions.includes(TOOL_VERSION), true);
   const file = path.join(payload, "FNA.dll"), original = fs.readFileSync(file); original[0] ^= 1; fs.writeFileSync(file, original);
-  const acquireTool = t.mock.method(Tool, "ensureTool", () => assert.fail("An unavailable host must stop before acquisition"));
+  const tool = { version: TOOL_VERSION, root: "/tool", entryPath: "/tool/ilspycmd.dll", framework: "net8.0", minimumRuntime: "8.0.0" };
+  const acquireTool = t.mock.method(Tool, "ensureTool", async () => tool);
+  const hostInstall = t.mock.method(Host, "ensure", async (_context, requirement) => {
+    assert.deepEqual(requirement, { framework: "net8.0", minimumVersion: "8.0.0" }); return { ready: true };
+  });
   for (const missing of [false, true]) {
     if (missing) fs.rmSync(directoryPath, { recursive: true });
     const state = Manager.getState({ userDataDir }), requirement = state.catalog.versionRequirements[TOOL_VERSION];
-    assert.equal(requirement.minimumMacOS, "14.0"); assert.match(requirement.installReason, /macOS 14/);
-    assert.equal(state.catalog.installableVersions.includes(TOOL_VERSION), false);
-    await assert.rejects(installIlSpy({ userDataDir, version: TOOL_VERSION }), /macOS 14/);
+    assert.equal(requirement.minimumMacOS, null); assert.equal(requirement.installReason, null);
+    assert.equal(state.catalog.installableVersions.includes(TOOL_VERSION), true);
+    assert.equal((await installIlSpy({ userDataDir, version: TOOL_VERSION })).version, TOOL_VERSION);
   }
-  assert.equal(acquireTool.mock.callCount(), 0);
+  assert.equal(acquireTool.mock.callCount(), 2); assert.equal(hostInstall.mock.callCount(), 2);
 });
-test("an installed tool's newer CLR minimum cannot reuse an older managed host on macOS 13", async t => {
+test("an installed tool's newer CLR minimum acquires a matching host instead of an older managed one", async t => {
   const { userDataDir } = managedFna(t), selected = pin("9.2.0.8100", "net8.0"); Catalog.saveCatalog(userDataDir, [selected]);
   const { root } = cachedTool(userDataDir, selected), recordPath = path.join(root, "tool.json");
   const record = JSON.parse(fs.readFileSync(recordPath, "utf8")); record.minimumRuntime = "8.0.33";
   fs.writeFileSync(recordPath, JSON.stringify(record));
   const state = Manager.getState({ userDataDir });
-  assert.equal(state.catalog.versionRequirements[selected.version].minimumMacOS, "14.0");
-  assert.equal(state.catalog.installableVersions.includes(selected.version), false);
-  await assert.rejects(installIlSpy({ userDataDir, version: selected.version }), /macOS 14/);
+  assert.equal(state.catalog.versionRequirements[selected.version].minimumMacOS, null, "The older managed host's floor does not apply");
+  assert.equal(state.catalog.installableVersions.includes(selected.version), true);
+  const hostInstall = t.mock.method(Host, "ensure", async (_context, requirement) => {
+    assert.deepEqual(requirement, { framework: "net8.0", minimumVersion: "8.0.33" }); return { ready: true };
+  });
+  assert.equal((await installIlSpy({ userDataDir, version: selected.version })).version, selected.version);
+  assert.equal(hostInstall.mock.callCount(), 1);
 });

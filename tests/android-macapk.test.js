@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -8,7 +10,6 @@ const { promisify } = require("node:util");
 const execute = promisify(require("node:child_process").execFile);
 const Provider = require("../src/modules/android/providers/macapk");
 const Manager = Provider.manager;
-const { createCatalogDiscovery } = require("../src/modules/android/providers/macapk/catalog");
 const crypto = require("node:crypto");
 
 function directory(t) { const root = fs.mkdtempSync(path.join(os.tmpdir(), "macapk-test-")); t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root; }
@@ -19,46 +20,36 @@ function releaseFixture(version, hash = "a".repeat(64)) {
     browser_download_url: "https://github.com/kksimp/Mac.apk/releases/download/v" + version + "/macapk.dmg" }] };
 }
 
+const repository = "kksimp/Mac.apk", releasesUrl = `https://api.github.com/repos/${repository}/releases`;
+const queries = () => Harness.network.requests.filter(url => url.startsWith(releasesUrl)).length;
+
 test("Mac.apk has no seeded release and keeps missing explicit choices offline", t => {
-  const root = directory(t), managed = Manager.createManager({ catalogDependencies: {
-    fetchGithubReleases: async () => assert.fail("Status and selection cannot discover releases"),
-    fetchGithubTags: async () => assert.fail("Status and selection cannot resolve tags")
-  } });
+  const root = directory(t), managed = Manager.createManager(), before = Harness.network.requests.length;
   assert.deepEqual(managed.getState({ userDataDir: root }).catalog.versions, []);
   const automatic = managed.resolveSelection({}, {}, root);
   assert.equal(automatic.version, null); assert.equal(automatic.discoveryRequired, true);
   const explicit = managed.resolveSelection({ runtimeData: { macapk: { version: "7.8.9" } } }, {}, root);
   assert.equal(explicit.version, "7.8.9"); assert.equal(explicit.ready, false);
+  assert.equal(Harness.network.requests.length, before, "Status and selection stay offline");
 });
 
 test("Mac.apk discovery retains publisher identities and caches choices without source seeds", async t => {
   const release = releaseFixture("8.1.0"), future = releaseFixture("9.2.0", "b".repeat(64));
-  let requests = 0;
-  const dependencies = {
-    fetchGithubReleases: async () => { requests++; return [future, release,
-      { ...releaseFixture("10.0.0"), assets: [{ ...release.assets[0], digest: null }] }]; },
-    fetchGithubTags: async () => [{ name: release.tag_name, commit: { sha: "c".repeat(40) } },
-      { name: future.tag_name, commit: { sha: "d".repeat(40) } }]
-  };
-  const discover = createCatalogDiscovery(dependencies);
-  assert.equal(requests, 0);
-  const entries = await discover();
-  assert.equal(requests, 1); assert.equal(entries.length, 2);
-  const current = entries.find(item => item.version === "8.1.0");
-  assert.equal(current.asset.sha256, "a".repeat(64));
-  assert.equal(current.upstreamRevision, "c".repeat(40)); assert.equal(current.minimumMacOS, "26.4");
-  assert.equal(entries.find(item => item.version === "9.2.0").upstreamRevision, "d".repeat(40));
-  const root = directory(t), managed = Manager.createManager({ catalogDependencies: dependencies });
+  const undigested = { ...releaseFixture("10.0.0"), assets: [{ ...release.assets[0], digest: null }] };
+  const root = directory(t), managed = Manager.createManager(), start = queries();
   assert.equal(managed.resolveSelection({}, {}, root).discoveryRequired, true);
-  assert.equal(requests, 1);
-  await managed.refreshCatalog({ userDataDir: root });
-  assert.equal(requests, 2);
-  const cached = Manager.createManager({ catalogDependencies: {
-    fetchGithubReleases: async () => assert.fail("Cached choices stay offline"),
-    fetchGithubTags: async () => assert.fail("Cached choices stay offline")
-  } });
-  assert.deepEqual(cached.getState({ userDataDir: root }).catalog.versions, ["9.2.0", "8.1.0"]);
+  assert.equal(queries(), start);
+  Harness.network.routes = Harness.githubRoutes(repository, [undigested, future, release]);
+  try { await managed.refreshCatalog({ userDataDir: root }); } finally { Harness.network.routes = null; }
+  assert.equal(queries(), start + 1);
+  const entries = managed.core.listDiscoveredCatalog({ userDataDir: root }), row = version => entries.find(item => item.version === version);
+  assert.equal(row("8.1.0").asset.sha256, "a".repeat(64));
+  assert.match(row("8.1.0").upstreamRevision, /^[a-f0-9]{40}$/); assert.equal(row("8.1.0").minimumMacOS, undefined, "The application states its requirement");
+  assert.equal(row("10.0.0").asset.integrity, "recorded-local", "A download without a publisher digest records its own");
+  const cached = Manager.createManager(), before = Harness.network.requests.length;
+  assert.deepEqual(cached.getState({ userDataDir: root }).catalog.versions, ["10.0.0", "9.2.0", "8.1.0"]);
   assert.equal(cached.resolveSelection({ runtimeData: { macapk: { version: "8.1.0" } } }, {}, root).version, "8.1.0");
+  assert.equal(Harness.network.requests.length, before, "Cached choices stay offline");
 });
 
 test("Mac.apk restores an unlisted installed version from its receipt and rejects changed bytes", t => {
@@ -72,14 +63,15 @@ test("Mac.apk restores an unlisted installed version from its receipt and reject
     asset: { filename: "macapk.dmg", url: releaseFixture(version).assets[0].browser_download_url, sha256: archiveSha256 } };
   fs.writeFileSync(path.join(installDir, "runtime.json"), JSON.stringify({ version, upstreamRevision, catalogEntry,
     source: "download", executableRelative, archiveSha256, binarySha256: crypto.createHash("sha256").update(bytes).digest("hex") }));
-  const options = { catalogDependencies: { fetchGithubReleases: async () => assert.fail("Receipt reuse stays offline") } };
-  const managed = Manager.createManager(options), entry = { runtimeData: { macapk: { version } } };
+  const before = Harness.network.requests.length;
+  const managed = Manager.createManager(), entry = { runtimeData: { macapk: { version } } };
   const selected = managed.resolveSelection(entry, {}, root);
   assert.equal(selected.ready, true); assert.equal(selected.version, version); assert.equal(selected.install.executablePath, executable);
   assert.ok(managed.getState({ userDataDir: root }).installed.some(row => row.version === version));
   fs.appendFileSync(executable, "changed");
-  const rejected = Manager.createManager(options).resolveSelection(entry, {}, root);
+  const rejected = Manager.createManager().resolveSelection(entry, {}, root);
   assert.equal(rejected.ready, false); assert.equal(rejected.version, version);
+  assert.equal(Harness.network.requests.length, before, "Receipt reuse stays offline");
 });
 
 test("Play requests the selected managed download and launches with private policy and data", async t => {

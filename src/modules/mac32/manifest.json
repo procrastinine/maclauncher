@@ -57,7 +57,7 @@
             }
           ]
         },
-        "requirements": "macOS 26 or later · Rosetta on Apple Silicon"
+        "requirements": "macOS version stated by each release · Rosetta on Apple Silicon"
       }
     }
   },

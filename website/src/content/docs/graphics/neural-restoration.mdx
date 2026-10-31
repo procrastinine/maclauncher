@@ -24,13 +24,13 @@ import denoised from "../../../assets/graphics/neural-denoised.webp";
 import blurry from "../../../assets/graphics/neural-blurry.webp";
 import deblurred from "../../../assets/graphics/neural-deblurred.webp";
 
-Ordinary upscalers follow fixed rules about how to fill in new pixels. Neural models have *learned* what images tend to look like: how a line in an anime drawing should continue, what grass looks like up close, what's noise and what's detail. Given a small or damaged image, they redraw it with that knowledge.
+Ordinary upscalers fill in new pixels by fixed rules. A neural model is trained on many images and learns what images tend to look like, such as how a line in an anime drawing continues, what grass looks like up close, or which fine patterns are noise rather than detail. Given a small or damaged image, the model redraws it from what it learned.
 
-MacLauncher runs these models on your Mac's GPU through [MLX](https://github.com/ml-explore/mlx) and [Metal](https://developer.apple.com/metal/), inside the same graphics chain as everything else. They need an Apple Silicon Mac with macOS 14 or later. Intel games running under [Rosetta](https://support.apple.com/en-us/102527) or [CrossOver](https://www.codeweavers.com/crossover/) can use them too: a small Apple Silicon helper runs the model while the game runs translated.
+MacLauncher runs these models on your Mac's GPU through [MLX](https://github.com/ml-explore/mlx) and [Metal](https://developer.apple.com/metal/), inside the same graphics chain as every other effect. They need an Apple Silicon Mac with macOS 14 or later. Intel games running translated under [Rosetta](https://support.apple.com/en-us/102527) or [CrossOver](https://www.codeweavers.com/crossover/) can use them as well, because a small Apple Silicon helper runs the model on their behalf.
 
 ## Upscaling drawn art
 
-Visual novels and anime-style games are where neural upscalers shine. Here's a scene from [CLANNAD](https://store.steampowered.com/app/324160/CLANNAD/), reduced to 640×480 and doubled:
+Neural upscalers do especially well on visual novels and anime-style games. This scene from [CLANNAD](https://store.steampowered.com/app/324160/CLANNAD/) was reduced to 640×480 and then doubled:
 
 <Compare
   before={vnBilinear}
@@ -58,7 +58,7 @@ The lighter shader upscalers from the [shader collections](/maclauncher/graphics
   </TabItem>
 </Tabs>
 
-At 4× the difference gets dramatic. This is the same scene from only 320×240:
+At 4× the differences grow. This is the same scene, starting from only 320×240:
 
 <Tabs>
   <TabItem label="Real-ESRGAN Anime">
@@ -85,7 +85,7 @@ At 4× the difference gets dramatic. This is the same scene from only 320×240:
   caption="Geralt in The Witcher 3: Wild Hunt, reduced to 480×270 and enlarged 4×. Real-ESRGAN rebuilds hair, beard and chain mail where bilinear filtering only blurs them."
 />
 
-On pixel art, the same model makes very different choices. It treats the pixels as detail to smooth over and redraws the scene with soft, outlined shapes, which is why pixel-art games usually stay with Nearest or a [pixel-art scaler](/maclauncher/graphics/upscaling/):
+On pixel art, the same model behaves very differently. It treats the pixels as detail to smooth over and redraws the scene with soft, outlined shapes, which is why pixel-art games usually stay with Nearest or a [pixel-art scaler](/maclauncher/graphics/upscaling/):
 
 <Compare
   before={pixelNearest}
@@ -122,28 +122,28 @@ Not every model changes the size. [NAFNet](https://github.com/megvii-research/NA
 
 | Model | What it does | Output size |
 | --- | --- | --- |
-| <span id="real-esrgan"></span>Real-ESRGAN | Anime and General upscalers. General comes with a paired denoising model, and a **Denoise strength** control blends between them. | 4× |
+| <span id="real-esrgan"></span>Real-ESRGAN | Anime and General upscalers. General has a paired denoising model, and when both are installed, the **Denoising** control blends between them. | 4× |
 | <span id="real-cugan"></span>[Real-CUGAN](https://github.com/bilibili/ailab/tree/main/Real-CUGAN) | Upscaler trained on anime, in Conservative, No denoising and Denoise variants. | 2×, 3× or 4× |
 | <span id="rtx-video-super-resolution"></span>RTX Video Super Resolution | NVIDIA's video upscaler, through [MLX-DLSS](https://github.com/iamwavecut/MLX-DLSS). | 2× |
 | <span id="dlss-neural-rendering"></span>DLSS neural rendering | The DLSS 5 neural rendering model through MLX-DLSS. It redraws the image toward a photoreal look, blended in with **Intensity**, and can keep image history with **Temporal reconstruction**. | Same size |
 | <span id="dlss-sr-image"></span>DLSS SR (image) | DLSS super resolution working from a sequence of finished images. | 2× |
 | <span id="nafnet"></span>NAFNet | SIDD (denoising) and GoPro (deblurring) restoration models. | Same size |
 
-The neural family also includes [RIFE](https://github.com/hzwer/Practical-RIFE) and MLX interpolation for [frame generation](/maclauncher/graphics/frame-generation/), and [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2), which guesses depth from a flat image for the [estimated depth fog](/maclauncher/graphics/color-and-light/) effect.
+MacLauncher's other neural models are [RIFE](https://github.com/hzwer/Practical-RIFE) and MLX interpolation for [frame generation](/maclauncher/graphics/frame-generation/), and [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2), which estimates depth from a flat image for the [estimated depth fog](/maclauncher/graphics/color-and-light/#depth-without-a-depth-buffer) effect.
 
 Real-ESRGAN and NAFNet build on the existing [Real-ESRGAN MLX](https://github.com/xocialize/mlx-realesrgan-swift) and [NAFNet MLX](https://github.com/xocialize/mlx-nafnet-swift) ports; Real-CUGAN runs its original models on MLX.
 
 ## Getting models
 
-Models aren't bundled with the app. In **Runtimes → Graphics → Neural models** you can **Install** any of the supported downloads after agreeing to it, or import a model you already have. Once installed, a model works offline and is shared by every game.
+MacLauncher doesn't include model files. **Runtimes → Graphics → Neural models** lists the supported downloads: **Install** downloads one, and **Import model…** adds a model you already have. Installed models work offline and are shared by every game.
 
-Each neural row in the chain has a **Model** menu. **Automatic** picks a sensible installed model for that operation, and you can choose a specific one per row or set a default per operation. If a row's model is missing, the rest of the chain keeps running and the row says **Model needed**.
+Each neural row in the chain has a **Model** menu. **Automatic** chooses an installed model for that row's operation, starting with the default you set for the operation in **Neural models**. You can also pick a specific model for one row. If a row's model is missing, the row shows **Model needed** and the rest of the chain keeps running.
 
 ## Keeping it fast
 
-Neural models are heavy, and their cost grows with the number of pixels they process. The usual trick is to give them a smaller image: a **Downsample** row before the model (or a lower **Game resolution**), then a fast upscaler such as [MetalFX](https://developer.apple.com/documentation/metalfx) afterward to fill the window. [Building a chain](/maclauncher/graphics/composing-effects/) shows how that looks, and frame generation can smooth things out if the model still can't keep up with the game.
+A neural model's cost grows with the number of pixels it processes, so the usual approach is to give it a smaller image. Put a **Downsample** row before the model, or lower the **Game resolution**, and fill the window afterward with a fast upscaler such as [MetalFX](https://developer.apple.com/documentation/metalfx). [Building a chain](/maclauncher/graphics/composing-effects/) shows a complete example. If the model still can't keep up with the game, frame generation can fill in the missing frames.
 
-The [neural models section](https://github.com/procrastinine/maclauncher/blob/master/docs/GRAPHICS.md#neural-models) of the graphics guide and the [restoration reference](https://github.com/procrastinine/maclauncher/blob/master/docs/NEURAL_RESTORATION.md) list every download, import format and setting.
+The graphics guide's [neural models section](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#neural-models) lists every download and setting, and [Neural models and packages](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/NEURAL_RESTORATION.md) describes the model architectures and import formats.
 
 ## Further reading
 

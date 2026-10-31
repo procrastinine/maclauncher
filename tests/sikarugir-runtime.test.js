@@ -1,3 +1,5 @@
+// Required first: it replaces the network functions before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -21,6 +23,10 @@ function asset(name, digest = "a".repeat(64), repo = "Engines", bytes = 42) {
     browser_download_url: `https://github.com/Sikarugir-App/${repo}/releases/download/v1.0/${name}` };
 }
 function release(assets) { return { tag_name: "v1.0", assets }; }
+// Archive downloads answer from these routes; each fixture pin serves its
+// engine and support archive bytes.
+const served = {};
+Harness.network.routes = served;
 function command(kind, value) {
   const size = Math.ceil((24 + Buffer.byteLength(value) + 1) / 8) * 8, bytes = Buffer.alloc(size);
   bytes.writeUInt32LE(kind); bytes.writeUInt32LE(size, 4); bytes.writeUInt32LE(24, 8); bytes.write(value, 24); return bytes;
@@ -49,39 +55,130 @@ function stage({ destinationRoot }, options = {}) {
   // This renderer is deliberately newer than the base runtime and must not
   // increase the minimum macOS version for ordinary Wine.
   write(path.join(destinationRoot, "Frameworks", "renderer", "d3dmetal", "new.dylib"), macho(6, { minimum: 26 }));
-  const metadata = { relativePaths: { frameworks: "Frameworks" }, minimumBaseMacOS: "14.0.0",
+  const metadata = { relativePaths: { frameworks: "Frameworks", templateRenderers: "SharedSupport/renderer" }, minimumBaseMacOS: "14.0.0",
     componentVersions: { d3dmetal: "4.0" }, graphicsCapabilities: { d3dmetal: true, minimumMacOS: { d3dmetal: "26.4.0" } } };
   write(path.join(destinationRoot, "graphics.json"), JSON.stringify(metadata)); return metadata;
 }
-function fixturePin(engineVersion = "11.0_1", engineBytes = Buffer.from("engine archive"), templateBytes = Buffer.from("support archive")) {
-  const template = { version: "1.0.21", minimumMacOS: "14.0", asset: {
-    filename: "Template-1.0.21.tar.xz", url: "https://github.com/Sikarugir-App/Template/releases/download/v1.0/Template-1.0.21.tar.xz",
+function fixturePin(engineVersion = "11.0_1", engineBytes = Buffer.from("engine archive"), templateBytes = Buffer.from("support archive"), templateVersion = "1.0.21") {
+  const template = { version: templateVersion, minimumMacOS: "14.0", asset: {
+    filename: `Template-${templateVersion}.tar.xz`, url: `https://github.com/Sikarugir-App/Template/releases/download/v1.0/Template-${templateVersion}.tar.xz`,
     sha256: sha(templateBytes), bytes: templateBytes.length } };
-  return Catalog.entryFor(Catalog.parseEngineName(`WS12WineSikarugir${engineVersion}.tar.xz`),
+  const pin = Catalog.entryFor(Catalog.parseEngineName(`WS12WineSikarugir${engineVersion}.tar.xz`),
     { filename: `WS12WineSikarugir${engineVersion}.tar.xz`,
       url: `https://github.com/Sikarugir-App/Engines/releases/download/v1.0/WS12WineSikarugir${engineVersion}.tar.xz`,
       sha256: sha(engineBytes), bytes: engineBytes.length }, template);
+  served[pin.asset.url] = engineBytes; served[template.asset.url] = templateBytes;
+  return pin;
 }
 function fixtureManager({ rows, dependencies = {}, discoverCatalog } = {}) {
-  const engineBytes = Buffer.from("engine archive"), templateBytes = Buffer.from("support archive");
   return createManager({ discoverCatalog: discoverCatalog || (async () => rows || [fixturePin()]), dependencies: {
-    systemVersionSync: () => "14.0", downloadToFile: async (url, destination, { onProgress } = {}) => {
-      const bytes = url.includes("/Template/") ? templateBytes : engineBytes;
-      fs.writeFileSync(destination, bytes); onProgress?.({ downloaded: bytes.length, total: bytes.length });
-    }, extractArchive: async (archive, root) => { if (path.basename(archive).startsWith("Template-")) fs.mkdirSync(path.join(root, "Template-1.0.21.app", "Contents"), { recursive: true }); else engine(root); },
+    systemVersionSync: () => "14.0", extractArchive: async (archive, root) => { if (path.basename(archive).startsWith("Template-")) fs.mkdirSync(path.join(root, "Template-1.0.21.app", "Contents"), { recursive: true }); else engine(root); },
     stageTemplateClosure: async options => stage(options), ...dependencies
   } });
 }
+// Reproduce a complete registration written before renderer discovery covered
+// SharedSupport. Its inventory is valid for the incomplete files it selected.
+function omitLegacyRenderers(install) {
+  const recordFile = path.join(install.installDir, "runtime.json"), record = JSON.parse(fs.readFileSync(recordFile));
+  fs.rmSync(path.join(install.installDir, "support", "Frameworks", "renderer"), { recursive: true });
+  delete record.installationMetadata.graphics.relativePaths.templateRenderers;
+  record.installationMetadata.graphics.graphicsCapabilities.d3dmetal = false;
+  write(path.join(install.installDir, "support", "graphics.json"), JSON.stringify(record.installationMetadata.graphics));
+  const files = Payload.walk(install.installDir);
+  for (const row of files) if (row.kind === "file") row.sha256 = sha(fs.readFileSync(path.join(install.installDir, row.relative)));
+  const bytes = Buffer.from(JSON.stringify({ schemaVersion: 1, files }));
+  write(path.join(install.installDir, Payload.INVENTORY), bytes);
+  record.installationMetadata.inventory = { relativePath: Payload.INVENTORY, sha256: sha(bytes), bytes: bytes.length, count: files.length };
+  write(recordFile, JSON.stringify(record));
+}
 
-test("Sikarugir discovers all compatible engine assets and identifies both archives", async () => {
+test("Sikarugir Install replaces an incomplete Template registration and keeps valid copies unchanged", async t => {
+  const root = temporary(t), pin = fixturePin("11.0_1", undefined, undefined, "1.0.24");
+  for (const method of ["installRuntime", "core"]) {
+    const userDataDir = path.join(root, method), manager = fixtureManager({ rows: [pin] });
+    await manager.refreshCatalog({ userDataDir, force: true });
+    const install = await manager.core.installVersion({ userDataDir, version: pin.version });
+    omitLegacyRenderers(install);
+    assert.equal(manager.getState({ userDataDir }).installed[0].status, "damaged");
+    assert.match(manager.resolveSelection({}, {}, userDataDir, { version: pin.version }).reason, /restore its renderers/);
+    const repaired = await (method === "core" ? manager.core.installVersion : manager.installRuntime)({ userDataDir, version: pin.version });
+    assert.equal(repaired.version, pin.version);
+    assert.equal(repaired.graphicsMetadata.relativePaths.templateRenderers, "SharedSupport/renderer");
+    assert.equal(repaired.graphicsCapabilities.d3dmetal, true);
+    assert.equal(manager.getState({ userDataDir }).installed[0].ready, true);
+    const record = fs.readFileSync(path.join(repaired.installDir, "runtime.json"));
+    await manager.installRuntime({ userDataDir, version: pin.version });
+    assert.deepEqual(fs.readFileSync(path.join(repaired.installDir, "runtime.json")), record, "valid installations are reused");
+    assert.deepEqual(fs.readdirSync(path.dirname(repaired.installDir)).filter(name => name.startsWith(".install-")), []);
+  }
+});
+
+test("Sikarugir failed and canceled renderer repairs preserve the previous registration", async t => {
+  const root = temporary(t), pin = fixturePin("11.0_1", undefined, undefined, "1.0.24");
+  let failure = null;
+  served[pin.asset.url] = () => { if (failure === "cancel") controller.abort(); return Buffer.from("engine archive"); };
+  served[pin.template.asset.url] = () => Buffer.from(failure === "checksum" ? "broken support!" : "support archive");
+  const manager = fixtureManager({ rows: [pin] });
+  await manager.refreshCatalog({ userDataDir: root, force: true });
+  const install = await manager.core.installVersion({ userDataDir: root, version: pin.version });
+  omitLegacyRenderers(install);
+  const recordFile = path.join(install.installDir, "runtime.json"), before = fs.readFileSync(recordFile);
+  failure = "checksum";
+  await assert.rejects(manager.installRuntime({ userDataDir: root, version: pin.version }), /Template-1\.0\.24\.tar\.xz does not match the checksum its publisher lists/);
+  assert.deepEqual(fs.readFileSync(recordFile), before);
+  failure = "cancel";
+  const controller = new AbortController();
+  await assert.rejects(manager.installRuntime({ userDataDir: root, version: pin.version, signal: controller.signal }), { name: "AbortError" });
+  assert.deepEqual(fs.readFileSync(recordFile), before);
+  assert.deepEqual(fs.readdirSync(path.dirname(install.installDir)).filter(name => name.startsWith(".install-")), []);
+});
+
+test("Sikarugir Play repairs incomplete renderers through the existing consent flow", async t => {
+  const root = temporary(t), pin = fixturePin("11.0_1", undefined, undefined, "1.0.24"), manager = fixtureManager({ rows: [pin] });
+  await manager.refreshCatalog({ userDataDir: root, force: true });
+  const install = await manager.core.installVersion({ userDataDir: root, version: pin.version });
+  omitLegacyRenderers(install);
+  const recordFile = path.join(install.installDir, "runtime.json"), before = fs.readFileSync(recordFile);
+  const gameRoot = path.join(root, "games", "game"), save = write(path.join(gameRoot, "save.dat"), "saved game");
+  const entry = { gameId: "game", gamePath: gameRoot, runtimeId: "sikarugir", runtimeData: {
+    crossover: { windowsExecutablePath: path.join(gameRoot, "Game.exe"), executableArchitecture: "x86_64", sourceRoot: gameRoot }, sikarugir: { version: pin.version } } };
+  const provider = require("../src/modules/crossover/sikarugir/provider").createProvider({ manager });
+  const mod = { runtimeManagers: [manager], getRuntimeProvider: () => provider };
+  const info = { runtime: { manager: { sikarugir: "sikarugir" } } };
+  const registry = { listModuleIds: () => ["crossover"], getModule: () => mod };
+  const prompts = [];
+  let approved = false, installs = 0;
+  const context = { userDataDir: root, runtimeId: "sikarugir", settings: { runtimes: {} },
+    confirmRuntimeInstall: plan => { prompts.push(plan); return approved; } };
+  const prepare = () => require("../src/core/runtime-preparation").prepareForLaunch({ entry, mod, info, context, registry,
+    install: async (_manager, options) => { installs++; await manager.installRuntime({ ...options, userDataDir: root }); } });
+  assert.equal(await prepare(), false);
+  assert.equal(installs, 0);
+  assert.deepEqual(fs.readFileSync(recordFile), before);
+  assert.equal(prompts.length, 1);
+  assert.match(prompts[0].detail, /Reinstalls/);
+  approved = true;
+  assert.equal(await prepare(), true);
+  assert.equal(installs, 1);
+  assert.equal(prompts.length, 2, "each Play asks once before downloading");
+  assert.ok(manager.core.resolveInstalled({ userDataDir: root, version: pin.version }));
+  assert.equal(fs.readFileSync(save, "utf8"), "saved game");
+  assert.equal(await prepare(), true);
+  assert.equal(prompts.length, 2, "a repaired installation is reused offline without another prompt");
+});
+
+// The publisher's Engines and Template release lists.
+async function discover(t, { Engines, Template }) {
+  const previous = Harness.network.routes;
+  Harness.network.routes = { ...Harness.githubRoutes("Sikarugir-App/Engines", Engines), ...Harness.githubRoutes("Sikarugir-App/Template", Template) };
+  try { return await Catalog.discover(); } finally { Harness.network.routes = previous; }
+}
+test("Sikarugir discovers all compatible engine assets and identifies both archives", async t => {
   const engineAssets = [asset("WS12WineSikarugir10.0_8.tar.xz"), asset("WS12WineSikarugir11.0_1.tar.xz", "b".repeat(64)),
     asset("WS12WineSikarugir11.0_2.tar.xz", "c".repeat(64)), asset("WS12WineCX24.0.7_7.tar.xz"),
-    asset("WS11WineSikarugir11.0_1.tar.xz"), asset("WS12WineSikarugir10.0_7.tar.xz"),
-    asset("WS12WineSikarugir11.0_3.tar.xz", "d".repeat(64), "Elsewhere")];
+    asset("WS11WineSikarugir11.0_1.tar.xz"), asset("WS12WineSikarugir10.0_7.tar.xz")];
   const support = [asset("Template-1.0.19.tar.xz", "e".repeat(64), "Template"), asset("Template-1.0.21.tar.xz", "f".repeat(64), "Template")];
-  const rows = await Catalog.createDiscovery({ fetchGithubReleases: async ({ repo, maxPages }) => {
-    assert.equal(maxPages, 5); return [release(repo === "Engines" ? engineAssets : support)];
-  } })();
+  const rows = await discover(t, { Engines: [release(engineAssets)], Template: [release(support)] });
   assert.deepEqual(rows.map(row => row.engineVersion), ["11.0_2", "11.0_1", "10.0_8"]);
   assert.ok(rows.every(row => row.template.version === "1.0.21"));
   assert.match(rows[0].version, /^11\.0_2-template-1\.0\.21-[a-f0-9]{24}$/);
@@ -93,36 +190,46 @@ test("Sikarugir discovers all compatible engine assets and identifies both archi
   const updatedSupport = { version: "1.0.21", asset: { sha256: "1".repeat(64) } };
   assert.notEqual(rows[0].version, Catalog.snapshotVersion("11.0_2", "c".repeat(64), updatedSupport));
   assert.notEqual(rows[0].version, Catalog.snapshotVersion("11.0_2", "d".repeat(64), rows[0].template));
-  assert.throws(() => Catalog.snapshotVersion("../engine", "c".repeat(64), updatedSupport), /identified/);
+  // Published versions keep the folder names earlier installations use.
+  const earlier = (engine, id, support) => `${engine}-template-${support.version}-` + crypto.createHash("sha256")
+    .update(JSON.stringify([engine, id, support.version, support.asset.sha256])).digest("hex").slice(0, 24);
+  assert.equal(Catalog.snapshotVersion("11.0_2", "c".repeat(64), updatedSupport), earlier("11.0_2", "c".repeat(64), updatedSupport));
+  // Any other version text becomes one safe folder name instead of an error.
+  const encoded = Catalog.snapshotVersion("../engine/11:0", "c".repeat(64), { version: "1.0 beta/2", asset: {} });
+  assert.match(encoded, /^engine-11-0-template-1\.0-beta-2-[a-f0-9]{24}$/);
+  assert.equal(path.basename(encoded), encoded);
+  assert.notEqual(encoded, Catalog.snapshotVersion("../engine/11-0", "c".repeat(64), { version: "1.0 beta/2", asset: {} }));
 });
 
-test("Sikarugir rejects missing support identities, invalid assets and oversized catalogs", async () => {
-  const discover = releases => Catalog.createDiscovery({ fetchGithubReleases: async ({ repo }) => releases[repo] });
-  await assert.rejects(discover({ Engines: [release([asset("WS12WineSikarugir11.0_1.tar.xz")])], Template: [] })(), /No compatible/);
-  const invalid = asset("WS12WineSikarugir11.0_1.tar.xz"); invalid.digest = null;
-  assert.deepEqual(await discover({ Engines: [release([invalid])], Template: [release([asset("Template-1.0.21.tar.xz", "b".repeat(64), "Template")])] })(), []);
-  const many = Array.from({ length: 6 }, () => release(Array.from({ length: 500 }, () => asset("unrelated.zip"))));
-  await assert.rejects(discover({ Engines: many, Template: [release([asset("Template-1.0.21.tar.xz", "b".repeat(64), "Template")])] })(), /supported size/);
+test("Sikarugir needs a support archive and lists an engine without a publisher digest by its listed identity", async t => {
+  await assert.rejects(discover(t, { Engines: [release([asset("WS12WineSikarugir11.0_1.tar.xz")])], Template: [] }), /No compatible/);
+  const undigested = asset("WS12WineSikarugir11.0_1.tar.xz"); undigested.digest = null;
+  const [row, ...others] = await discover(t, { Engines: [release([undigested, asset("unrelated.zip")])],
+    Template: [release([asset("Template-1.0.21.tar.xz", "b".repeat(64), "Template")])] });
+  assert.deepEqual(others, []);
+  assert.equal(row.engineVersion, "11.0_1"); assert.equal(row.asset.sha256, undefined); assert.equal(row.asset.integrity, "recorded-local");
+  assert.equal(row.asset.bytes, 42); assert.ok(Catalog.validateEntry(row));
+  assert.match(row.upstreamRevision, /^WS12WineSikarugir11\.0_1:/);
 });
 
 test("Sikarugir selection stays offline and failed Refresh preserves exact choices", async t => {
   const root = temporary(t); let calls = 0;
   const manager = fixtureManager({discoverCatalog:async()=>{calls++;throw new Error("GitHub releases fetch failed (403)");}});
   assert.deepEqual(manager.getState({userDataDir:root}).catalog.versions,[]);
-  assert.equal(manager.resolveSelection({}, {}, root).version,require("../src/modules/crossover/sikarugir/runtime/manager").DEFAULT_VERSION);
-  assert.equal(calls,0);
-  await assert.rejects(manager.resolveForPlay({}, {userDataDir:root,settings:{}}),/403/);
-  assert.equal(calls,1,"Play refreshes a missing committed default, while status stays offline");
+  const unselected = manager.resolveSelection({}, {}, root);
+  assert.equal(unselected.version,null);assert.equal(unselected.discoveryRequired,true,"no fixed version stands in for the upstream list");
+  assert.equal((await manager.resolveForPlay({}, {userDataDir:root,settings:{}})).discoveryRequired,true);
+  assert.equal(calls,0,"status and an unselected Play stay offline until the consented preparation discovers versions");
   const pin=fixturePin("10.0_8");manager.core.rememberResolvedVersion({userDataDir:root,entry:pin});
   const entry={runtimeData:{sikarugir:{version:pin.version}}};
   const exact=await manager.resolveForPlay(entry,{userDataDir:root,settings:{}});
   assert.equal(exact.version,pin.version);assert.equal(exact.artifacts.length,2);
-  assert.match(exact.detail,/engine.*support libraries/);assert.equal(calls,2);
+  assert.match(exact.detail,/engine.*support libraries/);assert.equal(calls,1);
   await assert.rejects(manager.refreshCatalog({userDataDir:root,force:true}),/403/);
   assert.equal(manager.getState({userDataDir:root}).catalog.status,"error");
   assert.equal(manager.resolveSelection(entry,{},root).version,pin.version);
   assert.equal(fixtureManager().resolveSelection(entry,{},root).version,pin.version, "A new manager reads the retained exact identity offline");
-  assert.equal(calls,3);assert.equal(manager.ui.management,"managed");
+  assert.equal(calls,2);assert.equal(manager.ui.management,"managed");
   const controller=new AbortController();controller.abort();
   await assert.rejects(manager.resolveForPlay({}, {userDataDir:root,settings:{},signal:controller.signal}),{name:"AbortError"});
 });
@@ -133,8 +240,7 @@ test("Sikarugir lists published choices and preserves committed defaults and sel
   const state=manager.getState({userDataDir:root});
   assert.deepEqual(new Set(state.catalog.versions),new Set([latest.version,previous.version]));
   const unselected = manager.resolveSelection({}, {}, root);
-  assert.equal(unselected.version,require("../src/modules/crossover/sikarugir/runtime/manager").DEFAULT_VERSION);
-  assert.equal(unselected.discoveryRequired,true,"the initial default does not seed an archive into the catalog");
+  assert.equal(unselected.version,latest.version,"the manager default is the newest listed engine");
   const settings={runtimes:{sikarugir:{defaultVersion:latest.version}}};
   assert.equal(manager.resolveSelection({},settings,root).version,latest.version);
   assert.equal(manager.resolveSelection({runtimeData:{sikarugir:{version:previous.version}}},settings,root).version,previous.version);
@@ -143,23 +249,22 @@ test("Sikarugir lists published choices and preserves committed defaults and sel
     "an actual game/API recommendation precedes the saved global");
   assert.equal(manager.resolveSelection({runtimeData:{sikarugir:{version:latest.version}}},settings,root,
     {recommendedVersion:previous.version}).version,latest.version,"the game's manual choice precedes its recommendation");
-  assert.equal(manager.resolveSelection({}, {runtimes:{sikarugir:{defaultVersion:null}}}, root).version,null);
+  assert.equal(manager.resolveSelection({}, {runtimes:{sikarugir:{defaultVersion:null}}}, root).version,latest.version);
+  assert.equal(manager.resolveSelection({}, {runtimes:{sikarugir:{defaultVersion:"10.0_8-template-1.0.21-removed"}}}, root).version,latest.version,
+    "a saved default that left the list and is not installed gives way to the newest listed engine");
 });
 
 test("Sikarugir installs paired archives atomically with one progress total and preserves old selections", async t => {
   const root = temporary(t), old = fixturePin(), newer = fixturePin("11.0_2"); let rows = [old], downloads = 0, discoveries = 0;
-  const manager = fixtureManager({ discoverCatalog: async () => { discoveries++; return rows; }, dependencies: {
-    downloadToFile: async (url, file, { onProgress } = {}) => {
-      downloads++; const bytes = Buffer.from(url.includes("/Template/") ? "support archive" : "engine archive");
-      fs.writeFileSync(file, bytes); onProgress?.({ downloaded: bytes.length, total: bytes.length });
-    } } });
+  for (const url of [old.asset.url, old.template.asset.url]) { const bytes = served[url]; served[url] = () => { downloads++; return bytes; }; }
+  const manager = fixtureManager({ discoverCatalog: async () => { discoveries++; return rows; } });
   await manager.refreshCatalog({ userDataDir: root, force: true });
   const progress = [], installed = await manager.core.installVersion({ userDataDir: root, version: old.version, onProgress: row => progress.push(row) });
   assert.equal(downloads, 2); assert.ok(progress.every(row => row.total === old.downloadBytes));
   assert.equal(progress.at(-1).downloaded, old.downloadBytes);
   assert.ok(progress.every((row, index) => index === 0 || row.downloaded >= progress[index - 1].downloaded));
   assert.ok(progress.some(row => row.detail?.endsWith("Extracting Wine engine…")));
-  for (const step of ["Verifying support archive…", "Extracting support libraries…", "Preparing graphics libraries…", "Checking installed files…"]) {
+  for (const step of ["Extracting support libraries…", "Preparing graphics libraries…", "Checking installed files…"]) {
     const row = progress.find(item => item.detail?.endsWith(step));
     assert.equal(row?.downloaded, old.downloadBytes); assert.equal(row?.total, old.downloadBytes);
   }
@@ -193,16 +298,41 @@ test("Sikarugir download tasks display readable version labels while retaining t
 });
 
 test("Sikarugir rejects support checksum mismatch and cancellation without publishing partial installs", async t => {
-  const root = temporary(t), row = fixturePin(), manager = fixtureManager({ rows: [row], dependencies: {
-    downloadToFile: async (url, file) => fs.writeFileSync(file, Buffer.from(url.includes("/Template/") ? "broken support!" : "engine archive")) } });
+  const root = temporary(t), row = fixturePin(), manager = fixtureManager({ rows: [row] });
+  const runtimeRoot = path.join(root, "runtimes", "sikarugir");
+  const readCatalogs = () => {
+    const names = ["catalog-arm64.json", "catalog-x64.json"];
+    if (fs.existsSync(path.join(runtimeRoot, "catalog.json"))) names.push("catalog.json");
+    return new Map(names.map(name => [name, fs.readFileSync(path.join(runtimeRoot, name))]));
+  };
+  const assertNoPartialInstalls = catalogs => {
+    const entries = fs.readdirSync(runtimeRoot, { withFileTypes: true });
+    assert.deepEqual(entries.filter(entry => entry.isFile()).map(entry => entry.name).sort(), [...catalogs.keys()].sort());
+    for (const entry of entries) {
+      const file = path.join(runtimeRoot, entry.name);
+      if (catalogs.has(entry.name)) {
+        assert.ok(entry.isFile(), `${entry.name} remains a regular catalog file`);
+        assert.deepEqual(fs.readFileSync(file), catalogs.get(entry.name), "failed installation preserves release metadata");
+      } else {
+        assert.ok(["arm64", "x64"].includes(entry.name) && entry.isDirectory(), `unexpected installation output: ${entry.name}`);
+        assert.deepEqual(fs.readdirSync(file), [], `${entry.name} contains neither installed versions nor partial staging`);
+      }
+    }
+  };
   await manager.refreshCatalog({ userDataDir: root, force: true });
-  await assert.rejects(manager.core.installVersion({ userDataDir: root, version: row.version }), /support archive.*checksum/);
-  assert.deepEqual(fs.readdirSync(path.join(root, "runtimes", "sikarugir")).filter(name => name !== "catalog.json"), []);
-  const controller = new AbortController();
-  const cancelling = fixtureManager({ rows: [row], dependencies: { stageTemplateClosure: async options => { stage(options); controller.abort(); return {}; } } });
-  await cancelling.refreshCatalog({ userDataDir: root, force: true });
-  await assert.rejects(cancelling.core.installVersion({ userDataDir: root, version: row.version, signal: controller.signal }), { name: "AbortError" });
-  assert.deepEqual(fs.readdirSync(path.join(root, "runtimes", "sikarugir")).filter(name => name !== "catalog.json"), []);
+  for (const architecture of ["arm64", "x64"]) {
+    const catalogs = readCatalogs();
+    served[row.template.asset.url] = Buffer.from("broken support!");
+    await assert.rejects(manager.core.installVersion({ userDataDir: root, version: row.version, architecture }), /Template-1\.0\.21\.tar\.xz does not match the checksum its publisher lists/);
+    served[row.template.asset.url] = Buffer.from("support archive");
+    assertNoPartialInstalls(catalogs);
+    const controller = new AbortController();
+    const cancelling = fixtureManager({ rows: [row], dependencies: { stageTemplateClosure: async options => { stage(options); controller.abort(); return {}; } } });
+    await cancelling.refreshCatalog({ userDataDir: root, force: true });
+    const refreshedCatalogs = readCatalogs();
+    await assert.rejects(cancelling.core.installVersion({ userDataDir: root, version: row.version, architecture, signal: controller.signal }), { name: "AbortError" });
+    assertNoPartialInstalls(refreshedCatalogs);
+  }
 });
 
 test("Sikarugir full preparation detects native, resource and added-file changes", async t => {

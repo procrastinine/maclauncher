@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -64,16 +66,21 @@ test("IL2CPP recovery exports all game assemblies for ILSpy and preserves origin
   assert.equal(fs.readFileSync(path.join(result.assemblyRoot, "Domain.dll"), "utf8"), "Domain.dll");
 });
 
-test("upstream Actions mapper selects only self-contained ARM64 tools with immutable artifact identities", () => {
-  const options = { run: { created_at: "2026-09-12T12:00:00Z", head_sha: "a".repeat(40) }, sourceUrl: "https://github.com/SamboyCoding/Cpp2IL/commit/" + "a".repeat(40),
-    githubAssetDigest: () => "b".repeat(64), nightlyArtifactUrl: () => "https://nightly.link/artifact.zip" };
-  const artifact = { name: "Cpp2IL-net9-osx-arm64", id: 123, size_in_bytes: 100, expires_at: "2027-01-01T00:00:00Z" };
-  const result = Manager.__test.mapArtifact(artifact, options);
-  assert.equal(result.upstreamRevision, options.run.head_sha);
-  assert.equal(result.asset.sha256, "b".repeat(64));
-  assert.equal(result.asset.bytes, 100);
-  assert.equal(Manager.__test.mapArtifact({ ...artifact, name: "Cpp2IL-net9-win-arm64" }, options), null);
+test("upstream Actions artifacts list each Mac CPU tool with its run commit and the publisher's digest", async t => {
+  const repository = "SamboyCoding/Cpp2IL", api = `https://api.github.com/repos/${repository}/actions`, sha = "a".repeat(40);
+  const run = { id: 7, status: "completed", conclusion: "success", head_branch: "development", event: "push", path: ".github/workflows/dotnet-core.yml",
+    head_sha: sha, created_at: "2026-09-12T12:00:00Z", repository: { full_name: repository }, head_repository: { full_name: repository } };
+  const artifact = (id, name) => ({ id, name, size_in_bytes: 100, expired: false, digest: "sha256:" + "b".repeat(64),
+    expires_at: "2099-01-01T00:00:00Z", workflow_run: { id: 7, head_sha: sha, head_branch: "development" } });
+  Harness.network.routes = { [`${api}/workflows/dotnet-core.yml/runs`]: { workflow_runs: [run] }, [`${api}/runs/7/artifacts`]: { artifacts: [
+    artifact(123, "Cpp2IL-net9-osx-arm64"), artifact(124, "Cpp2IL-net9-win-arm64"), artifact(125, "Cpp2IL-net9-osx-arm64-debug")] } };
+  t.after(() => { Harness.network.routes = null; });
+  const rows = await Manager.__test.upstream.discover({});
+  assert.deepEqual(rows.map(row => [row.version, row.revision, row.architecture]), [["2026-09-12-aaaaaaaaaaaa-123", sha, "arm64"]]);
+  assert.equal(rows[0].files[0].bytes, 100);
+  assert.deepEqual(rows[0].files[0].digest, { algorithm: "sha256", value: "b".repeat(64) });
 });
+
 
 test("batch C# export retains successful assemblies and reports failures from malformed recovered code", async t => {
   const { root, entry, context } = fixture(t);
@@ -83,7 +90,7 @@ test("batch C# export retains successful assemblies and reports failures from ma
   const result = await require("../src/modules/shared/runtime/managed-decompiler").decompileAssembly({
     entry, context, moduleId: "unity", assemblyPath: paths[0], assemblyPaths: paths
   }, {
-    ensureTool: async () => ({ entryPath: path.join(root, "ilspycmd.dll") }),
+    ensureTool: async () => ({ version: "fixture-ilspy", entryPath: path.join(root, "ilspycmd.dll") }),
     ensureHost: async () => ({ install: { executablePath: path.join(root, "dotnet") }, profile: { root, dotnetVersion: "8.0.32" } }),
     runCommand: async (_file, args) => {
       if (args.at(-1) === paths[1]) throw Object.assign(new Error("invalid recovered code"), { exitCode: 70 });

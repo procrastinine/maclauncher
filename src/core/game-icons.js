@@ -1,8 +1,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const Icons = require("./icon-utils");
+const { executableRole } = require("../modules/shared/executable-candidates");
 
-const EXCLUDED_EXE = /(?:^|[\s_.-])(?:unins\d*|uninstall(?:er)?|setup|installer|vcredist|dxsetup|redist)(?:$|[\s_.-])|^(?:dotnetfx|ndp\d|vc_redist)/i;
 function existing(value, kind) {
   if (typeof value !== "string" || !value || !path.isAbsolute(value)) return false;
   try { const stat = fs.statSync(value); return kind === "directory" ? stat.isDirectory() : stat.isFile(); } catch { return false; }
@@ -22,17 +22,20 @@ function resolveIconCandidates(entry) {
   // Directory fields can be the containing Downloads folder for a file import.
   // Only folder imports may discover artwork from neighboring executables/apps.
   const fileImport = existing(entry?.importPath || entry?.gamePath, "file");
-  const add = (value, source) => {
+  const add = (value, source, selected = false) => {
     if (results.length >= 32 || !value || seen.has(value)) return;
     if (!existing(value, source === "app" ? "directory" : "file")) return;
-    if (source === "exe" && EXCLUDED_EXE.test(path.basename(value, path.extname(value)))) return;
+    if (source === "exe" && !selected && executableRole(value) === "support") return;
     seen.add(value); results.push({ path: value, source });
   };
   for (const value of [entry?.importPath, entry?.gamePath, entry?.nativeAppPath, entry?.contentRootDir]) {
     if (typeof value !== "string" || !path.isAbsolute(value)) continue;
     const app = appRoot(value);
     if (app) add(app, "app");
-    if (path.extname(value).toLowerCase() === ".exe") add(value, "exe");
+    // A recognized game can itself be an executable package. Its recorded
+    // path supplies artwork even when its name resembles a support program;
+    // the shared role rule excludes those programs from folder searches.
+    if (path.extname(value).toLowerCase() === ".exe") add(value, "exe", true);
     if (!app && !fileImport) {
       if (existing(value, "directory")) directories.add(value);
     }
@@ -53,7 +56,7 @@ function resolveIconCandidates(entry) {
       names = fs.readdirSync(directory, { withFileTypes: true });
       if (names.length > 4096) continue;
     } catch { continue; }
-    const executableNames = names.filter(item => item.isFile() && /\.exe$/i.test(item.name) && !EXCLUDED_EXE.test(path.basename(item.name, ".exe")))
+    const executableNames = names.filter(item => item.isFile() && /\.exe$/i.test(item.name) && executableRole(item.name) !== "support")
       .sort((a, b) => Icons.scoreExeCandidate(path.basename(b.name, path.extname(b.name)), entry?.name, path.basename(directory)) -
         Icons.scoreExeCandidate(path.basename(a.name, path.extname(a.name)), entry?.name, path.basename(directory)) || a.name.localeCompare(b.name));
     for (const item of executableNames.slice(0, 16)) add(path.join(directory, item.name), "exe");

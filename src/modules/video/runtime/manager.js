@@ -5,6 +5,7 @@ const { versionAtLeast, systemVersionSync } = require("../../shared/runtime/bund
 const { throwIfAborted } = require("../../shared/runtime/download-utils");
 const warn = require("../../shared/graphics-warning");
 const Catalog = require("./catalog");
+const Archive = require("../../shared/runtime/archive");
 const execute = promisify(execFile);
 async function inspectScaleFilters(executable, { signal, logger } = {}, dependencies = {}) {
   const env = { ...process.env };
@@ -18,13 +19,18 @@ async function inspectScaleFilters(executable, { signal, logger } = {}, dependen
   }
 }
 async function prepareInstall({ unpacked, pin, signal, logger }, dependencies = {}) {
-  const archive = path.join(unpacked, "mpv.tar.gz");
-  if (fs.existsSync(archive)) {
-    await (dependencies.execute || execute)("/usr/bin/tar", ["-xzf", archive, "-C", unpacked], { signal, timeout: 60000 });
-    fs.unlinkSync(archive);
+  // The publisher's ZIP wraps a tar archive that keeps the app's links.
+  for (const name of fs.readdirSync(unpacked).filter(name => Archive.archiveKind(name) === "tar")) {
+    await (dependencies.execute || execute)("/usr/bin/tar", ["-xf", path.join(unpacked, name), "-C", unpacked], { signal, timeout: 60000 });
+    fs.unlinkSync(path.join(unpacked, name));
   }
+  // An app that moved into a folder is used from the installation's root.
   const app = path.join(unpacked, "mpv.app"), executableDir = path.join(app, "Contents/MacOS");
+  const found = Archive.findEntry(unpacked, (file, item) => item.isDirectory() && item.name.endsWith(".app") && fs.existsSync(path.join(file, "Contents/MacOS/mpv")));
+  if (found && found !== app) fs.renameSync(found, app);
   const pending = [app], images = [];
+  const architecture = pin.architecture || (pin.hostArchitectures?.length === 1 ? pin.hostArchitectures[0] : require("../../shared/runtime/architecture").selectedArchitecture());
+  const nativeArchitecture = architecture === "x64" ? "x86_64" : architecture;
   let minimumMacOS = pin.minimumMacOS;
   while (pending.length) {
     throwIfAborted(signal);
@@ -36,7 +42,7 @@ async function prepareInstall({ unpacked, pin, signal, logger }, dependencies = 
         const target = fs.realpathSync(file);if (target !== app && !target.startsWith(app + path.sep)) throw new Error("The mpv archive contains a link outside its app.");
       } else if (item.isFile() && (item.name.endsWith(".dylib") || file === path.join(executableDir, "mpv"))) {
         const info = readMachOLoadCommands(file, { signal });
-        if (!info.architectures.includes("arm64")) throw new Error("The mpv download requires native Apple Silicon images.");
+        if (!info.architectures.includes(nativeArchitecture)) throw new Error("The mpv download does not contain native images for its listed CPU.");
         for (const slice of info.slices) {
           if (slice.platform !== 1 || !slice.minimumMacOS) throw new Error("An mpv component has no supported macOS deployment version.");
           if (!versionAtLeast(minimumMacOS, slice.minimumMacOS)) minimumMacOS = slice.minimumMacOS;
@@ -62,11 +68,11 @@ async function prepareInstall({ unpacked, pin, signal, logger }, dependencies = 
     ...(host?{decodedFrameAPI:host.decodedFrameAPI,libraryVersion:host.libraryVersion}:{}) };
 }
 function createManager(dependencies = {}) {
-  const manager = createPinnedNativeManager({ id: "mpv", label: "mpv", supportsDefault: true, catalog: [], projectBuilds:{projectId:"mpv",repository:"procrastinine/maclauncher-builds",upstreamMacDownloads:true,
+  const manager = createPinnedNativeManager({ id: "mpv", label: "mpv", supportsDefault: true, projectBuilds:{projectId:"mpv",repository:"procrastinine/maclauncher-builds",upstreamMacDownloads:true,
       validateManifest(manifest,pin){if(pin.decodedFrameAPI===1&&(
         manifest.executableRelative!=="mpv.app/Contents/MacOS/mpv"||manifest.runtimeFiles?.decodedFrameManifest!=="video-runtime.json"||
         !manifest.files.some(file=>file.path==="video-runtime.json")))throw Error("The managed decoded-video package is missing its GPU host contract.");}},
-    sourceUrl: Catalog.SOURCE_URL, discoverCatalog: Catalog.createDiscovery(dependencies),
+    sourceUrl: Catalog.SOURCE_URL, upstream: Catalog.source,
     resolveExecutable: root => path.join(root, "mpv.app/Contents/MacOS/mpv"),
     prepareInstall: options => prepareInstall(options, dependencies), importLocal:true, dependencies });
   manager.resolveForPlay = (entry, context) => {

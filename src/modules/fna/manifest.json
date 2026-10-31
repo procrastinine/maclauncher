@@ -100,7 +100,7 @@
         }
       },
       "native": {
-        "label": "Author's macOS app",
+        "label": "Game's macOS app",
         "graphicsHost": "window"
       }
     }

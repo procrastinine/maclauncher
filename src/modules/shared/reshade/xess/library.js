@@ -1,6 +1,6 @@
 // Copyright (c) MacLauncher contributors. MIT license.
 const fs=require("node:fs"),path=require("node:path"),crypto=require("node:crypto");
-const Source=require("./source.json"),Writable=require("../../writable-input"),Download=require("../../runtime/download-utils");
+const Source=require("./source.json"),Writable=require("../../writable-input"),Upstream=require("../../runtime/upstream");
 const Components=require("./components.json");
 const {withRuntimeMutation}=require("../../../../core/coordinated-runtime-managers"),{runDownloadTask}=require("../../runtime/download-manager"),{downloadApproved}=require("../../runtime/tool-install");
 const cache=new Map();
@@ -29,6 +29,8 @@ async function inspect(file,signal,spec=Source){
   const identity=fileIdentity(stat),key=library+":"+spec.sha256;if(cache.get(key)!==identity){const hash=crypto.createHash("sha256");for await(const bytes of fs.createReadStream(library,{flags:fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW,signal}))hash.update(bytes);if(hash.digest("hex")!==spec.sha256)throw Error("The XeSS runtime does not match the supported Intel release.");if(fileIdentity(fs.lstatSync(library))!==identity)throw Error("The XeSS runtime changed while being read.");if(cache.size>=32)cache.delete(cache.keys().next().value);cache.set(key,identity);}
   return library;
 }
+// A downloaded file must be Intel's file at the declared commit.
+async function downloaded(file,signal,spec=Source){try{return await inspect(file,signal,spec);}catch(error){signal?.throwIfAborted();throw Error(`The downloaded ${spec.file} is not the declared Intel XeSS file: its size or checksum differs.`,{cause:error});}}
 async function resolve(userDataDir,context={}){assertVersion(context);const {signal,useRuntime,operation}=context;const record=operation==="interpolate"?readComponents(userDataDir):read(userDataDir);if(!record)throw Object.assign(new Error("Install or import the Intel XeSS runtime in Graphics."),{code:"GRAPHICS_XESS_RUNTIME_MISSING",managerId:Source.managerId});if(operation==="interpolate"){for(const spec of Components.files)record.libraries[spec.id]=await inspect(record.libraries[spec.id],signal,spec);record.library=record.sourcePath=record.runtimePath=record.libraries.frameGeneration;for(const sourcePath of Object.values(record.libraries))await useRuntime?.({managerId:Source.managerId,sectionId:"interpolation",version:record.version,sourcePath});}else{record.library=await inspect(record.library,signal);await useRuntime?.({managerId:Source.managerId,sectionId:"default",version:record.version,sourcePath:record.library});}return record;}
 function receipt(userDataDir,file,external){const root=directory(userDataDir);Writable.assertOwnDirectory(userDataDir,root);const license=fs.readFileSync(path.join(__dirname,Source.licenseFile));if(crypto.createHash("sha256").update(license).digest("hex")!==Source.licenseSha256)throw Error("The XeSS runtime notice changed.");Writable.atomicWrite(path.join(root,Source.licenseFile),license,{root:userDataDir});Writable.atomicWrite(path.join(root,"runtime.json"),JSON.stringify({schema:1,version:Source.version,sha256:Source.sha256,file:external?file:Source.file,external,sourceUrl:Source.sourceUrl}),{root:userDataDir});return read(userDataDir);}
 async function importRuntime(context={}){if(context.operation==="interpolate"||fs.statSync(context.runtimePath).isDirectory()||path.basename(context.runtimePath).toLowerCase()==="libxess_fg.dll")return importComponents(context);const file=await inspect(context.runtimePath,context.signal);return withRuntimeMutation({managerId:Source.managerId,sectionId:"default",version:Source.version,sourcePath:file},()=>{
@@ -49,8 +51,8 @@ async function install(context={}){
       const existing=read(context.userDataDir);if(existing){await inspect(existing.library,signal);return existing;}
       const root=directory(context.userDataDir);Writable.assertOwnDirectory(context.userDataDir,root);const temporary=path.join(root,".download-"+crypto.randomUUID()),limit=new AbortController(),bounded=signal?AbortSignal.any([signal,limit.signal]):limit.signal;let oversized=false;
       try{
-        await Download.downloadToFile(Source.url,temporary,{signal:bounded,onProgress:progress=>{if(progress.downloaded>Source.bytes||progress.total>Source.bytes){oversized=true;limit.abort();}task.onProgress?.(progress);}});
-        await inspect(temporary,bounded);await fs.promises.rename(temporary,path.join(root,Source.file));return receipt(context.userDataDir,path.join(root,Source.file),false);
+        await Upstream.download(Upstream.listedFile({filename:Source.file,url:Source.url}),temporary,{signal:bounded,onProgress:progress=>{if(progress.downloaded>Source.bytes||progress.total>Source.bytes){oversized=true;limit.abort();}task.onProgress?.(progress);}});
+        await downloaded(temporary,bounded);await fs.promises.rename(temporary,path.join(root,Source.file));return receipt(context.userDataDir,path.join(root,Source.file),false);
       }catch(error){if(oversized&&!signal?.aborted)throw Error("The XeSS runtime download exceeds the supported release size.");throw error;}finally{await fs.promises.rm(temporary,{force:true});}
     },{userDataDir:context.userDataDir});
   },{onProgress:context.onProgress});
@@ -93,7 +95,7 @@ async function installComponents(context={}){
         signal?.throwIfAborted();const destination=path.join(root,spec.file);
         try{files[spec.id]=await inspect(destination,signal,spec);completed+=spec.bytes;continue;}catch{signal?.throwIfAborted();}
         const temporary=path.join(root,".download-"+crypto.randomUUID()),limit=new AbortController(),bounded=signal?AbortSignal.any([signal,limit.signal]):limit.signal;let oversized=false;
-        try{await Download.downloadToFile("https://raw.githubusercontent.com/intel/xess/"+Components.commit+"/bin/"+spec.file,temporary,{signal:bounded,onProgress:progress=>{if(progress.downloaded>spec.bytes||progress.total>spec.bytes){oversized=true;limit.abort();}task.onProgress?.({downloaded:completed+progress.downloaded,total:bytes});}});await inspect(temporary,bounded,spec);await fs.promises.rename(temporary,destination);files[spec.id]=destination;completed+=spec.bytes;}
+        try{await Upstream.download(Upstream.listedFile({filename:spec.file,url:"https://raw.githubusercontent.com/intel/xess/"+Components.commit+"/bin/"+spec.file}),temporary,{signal:bounded,onProgress:progress=>{if(progress.downloaded>spec.bytes||progress.total>spec.bytes){oversized=true;limit.abort();}task.onProgress?.({downloaded:completed+progress.downloaded,total:bytes});}});await downloaded(temporary,bounded,spec);await fs.promises.rename(temporary,destination);files[spec.id]=destination;completed+=spec.bytes;}
         catch(error){if(oversized&&!signal?.aborted)throw Error("The XeSS download exceeds the supported release size.");throw error;}
         finally{await fs.promises.rm(temporary,{force:true});}
       }

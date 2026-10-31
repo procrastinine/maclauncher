@@ -108,14 +108,14 @@
       },
       "native": {
         "graphicsHost": "window",
-        "label": "Native app"
+        "label": "Game's macOS app"
       }
     },
     "labels": {
       "electron": "Electron",
       "nwjs": "NW.js",
       "nwjs-patched": "NW.js (Patched)",
-      "native": "Native app"
+      "native": "Game's macOS app"
     },
     "hosted": {
       "id": "electron",
@@ -220,7 +220,7 @@
       },
       {
         "id": "removeDecryption",
-        "label": "Remove Extracted",
+        "label": "Remove extracted files",
         "kind": "danger",
         "confirm": "Remove extracted RPG Maker files?",
         "hiddenWhen": [

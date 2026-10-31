@@ -1,21 +1,14 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { spawn } = require("node:child_process");
-const {
-  attachAbortSignal,
-  createAbortError,
-  downloadToFile,
-  throwIfAborted
-} = require("../../runtime/download-utils");
-
-const Releases = require("../../runtime/github-releases");
+const { throwIfAborted } = require("../../runtime/download-utils");
+const Archive = require("../../runtime/archive");
+const ReleaseFiles = require("../../runtime/release-files");
+const Upstream = require("../../runtime/upstream");
 const Native = require("../../runtime/local-native");
 const Custom = require("../../runtime/custom-runtime");
 const { inspectNativeSteamConsumer } = require("../../runtime/steamworks/native-consumer-probe");
 
-const REPO_OWNER = "greenheartgames";
-const REPO_NAME = "greenworks";
 const INSTALL_META_FILE = ".maclauncher-greenworks.json";
 const checksumCache = new Map();
 
@@ -36,6 +29,24 @@ function normalizeNwVersion(input) {
   }
   return v;
 }
+
+function compareSemverDesc(a, b) {
+  const pa = String(a || "").split(".").map(Number), pb = String(b || "").split(".").map(Number);
+  for (let i = 0; i < 3; i++) if ((pb[i] || 0) !== (pa[i] || 0)) return (pb[i] || 0) - (pa[i] || 0);
+  return 0;
+}
+
+// Greenworks publishes one Mac bridge per NW.js version; the archive name
+// states that NW.js version. The newest Greenworks release serving a version wins.
+const source = Upstream.github({ repository: "greenheartgames/greenworks", recognize: release => {
+  const greenworksVersion = /\d+\.\d+\.\d+/.exec(release.tag_name || release.name || "")?.[0] || null, rows = new Map();
+  for (const asset of release.assets || []) {
+    const name = String(asset?.name || ""), nwVersion = /nw-v?(\d+\.\d+\.\d+)/i.exec(name)?.[1];
+    if (nwVersion && /osx|darwin|mac/i.test(name) && !rows.has(nwVersion))
+      rows.set(nwVersion, { version: nwVersion, details: { greenworksVersion }, assets: [asset] });
+  }
+  return [...rows.values()];
+} });
 
 function installRootDir(userDataDir) {
   return path.join(userDataDir, "runtimes", "greenworks");
@@ -114,20 +125,10 @@ function bridgeStatus(installDir, { nwVersion } = {}) {
   }
 }
 
+// The shallowest folder with the bridge files, wherever the archive places it.
 function findGreenworksRoot(extractedDir) {
   if (looksLikeGreenworks(extractedDir)) return extractedDir;
-  let entries = [];
-  try {
-    entries = fs.readdirSync(extractedDir, { withFileTypes: true });
-  } catch {
-    return extractedDir;
-  }
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const candidate = path.join(extractedDir, entry.name);
-    if (looksLikeGreenworks(candidate)) return candidate;
-  }
-  return extractedDir;
+  return Archive.findEntry(extractedDir, (file, item) => item.isDirectory() && looksLikeGreenworks(file), { maxDepth: 3 }) || extractedDir;
 }
 
 function listInstalled(userDataDir) {
@@ -156,56 +157,19 @@ function listInstalled(userDataDir) {
     });
   }
 
-  out.sort((a, b) => Releases.compareSemverDesc(a.version, b.version));
+  out.sort((a, b) => compareSemverDesc(a.version, b.version));
   return out;
 }
 
-function runCommand(cmd, args, options) {
-  const { signal, ...spawnOptions } = options || {};
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { ...spawnOptions, stdio: ["ignore", "pipe", "pipe"] });
-    let stderr = "";
-    const removeAbort = attachAbortSignal(signal, () => {
-      try {
-        child.kill("SIGTERM");
-      } catch {}
-    });
-    child.stderr.on("data", b => {
-      stderr += b.toString("utf8");
-    });
-    child.on("error", err => {
-      removeAbort();
-      reject(err);
-    });
-    child.on("close", code => {
-      removeAbort();
-      if (signal?.aborted) return reject(createAbortError());
-      if (code === 0) return resolve(true);
-      const err = new Error(`${cmd} failed (${code})`);
-      err.stderr = stderr;
-      reject(err);
-    });
-  });
-}
-
-async function extractZipDarwin(zipPath, destDir, signal) {
-  const ditto = "/usr/bin/ditto";
-  await runCommand(ditto, ["-x", "-k", zipPath, destDir], { signal });
-}
-
+// One row per NW.js version, from the newest Greenworks release that serves it.
 async function fetchAvailableVersions({ logger, signal } = {}) {
-  const releases = await Releases.fetchGithubReleases({
-    owner: REPO_OWNER,
-    repo: REPO_NAME,
-    logger,
-    signal
-  });
-  const versions = Releases.collectGreenworksNwVersions(releases);
-  return {
-    versions,
-    source: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases`,
-    releases
-  };
+  const rows = [], seen = new Set();
+  for (const row of (await source.discover({ logger, signal })).slice()
+    .sort((a, b) => compareSemverDesc(a.details?.greenworksVersion, b.details?.greenworksVersion))) {
+    if (!seen.has(row.version) && row.files.length) { seen.add(row.version); rows.push(row); }
+  }
+  rows.sort((a, b) => compareSemverDesc(a.version, b.version));
+  return { versions: rows.map(row => row.version), source: "https://github.com/greenheartgames/greenworks/releases", rows };
 }
 
 async function installVersion({
@@ -213,39 +177,32 @@ async function installVersion({
   nwVersion,
   logger,
   onProgress,
-  releases,
+  rows,
   signal,
   dependencies = {}
 } = {}) {
   const v = normalizeNwVersion(nwVersion);
   const existing = listInstalled(userDataDir).find(item => item.version === v && item.ready !== false);
   if (existing) return existing;
-  const fetchReleases = dependencies.fetchReleases || Releases.fetchGithubReleases;
-  const download = dependencies.download || downloadToFile;
-  const extract = dependencies.extract || extractZipDarwin;
-  const releaseList = Array.isArray(releases) && releases.length
-    ? releases
-    : await fetchReleases({ owner: REPO_OWNER, repo: REPO_NAME, logger, signal });
-  const match = Releases.selectGreenworksAsset(releaseList, { nwVersion: v });
-  if (!match?.asset?.browser_download_url) {
-    throw new Error(`No Greenworks asset found for NW.js v${v}`);
-  }
+  // The archive is read by its published name: ZIP, tar or disk image.
+  const extract = dependencies.extract || ReleaseFiles.extractArchive;
+  const listed = (Array.isArray(rows) && rows.some(row => row.version === v) ? rows : (await fetchAvailableVersions({ logger, signal })).rows)
+    .find(row => row.version === v);
+  const file = listed?.files?.[0];
+  if (!file) throw new Error(`No Greenworks asset found for NW.js v${v}`);
 
-  const downloadUrl = match.asset.browser_download_url;
+  const downloadUrl = file.url;
   const installRoot = installRootDir(userDataDir);
   ensureDir(installRoot);
   const tmpDir = fs.mkdtempSync(path.join(installRoot, ".install-"));
-  const zipName = path.basename(match.asset.name || `greenworks-nw-v${v}-osx.zip`);
-  const zipPath = path.join(tmpDir, zipName);
+  const zipPath = path.join(tmpDir, file.name);
   const extractDir = path.join(tmpDir, "extract");
   const installDir = getInstallDir({ userDataDir, nwVersion: v });
 
   try {
     logger?.info?.(`[greenworks] downloading ${downloadUrl}`);
-    await download(downloadUrl, zipPath, { onProgress, signal });
+    const { sha256: archiveSha256, integrity } = await source.download(file, zipPath, { onProgress, signal });
     throwIfAborted(signal);
-    const archiveSha256 = checksum(zipPath);
-    if (match.asset.digest && match.asset.digest !== `sha256:${archiveSha256}`) throw new Error("Greenworks archive does not match its release checksum.");
     logger?.info?.(`[greenworks] extracting ${path.basename(zipPath)}`);
     ensureDir(extractDir);
     await extract(zipPath, extractDir, signal);
@@ -253,8 +210,8 @@ async function installVersion({
     const root = findGreenworksRoot(extractDir);
     const status = bridgeStatus(root, { nwVersion: v });
     if (!status.ready) throw new Error(status.reason);
-    writeInstallMeta(root, { nwVersion: v, greenworksVersion: match.version || null,
-      assetName: match.asset?.name || null, downloadUrl, archiveSha256,
+    writeInstallMeta(root, { nwVersion: v, greenworksVersion: listed.details?.greenworksVersion || null,
+      assetName: file.name, downloadUrl, archiveSha256, integrity,
       files: status.files, installedAt: Date.now() });
     if (!readInstallMeta(root)) throw new Error("Greenworks install metadata could not be saved.");
     const backup = path.join(tmpDir, "previous");
@@ -296,5 +253,6 @@ module.exports = {
   fetchAvailableVersions,
   installVersion,
   uninstallVersion,
-  normalizeNwVersion
+  normalizeNwVersion,
+  source
 };

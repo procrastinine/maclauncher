@@ -2,7 +2,7 @@ const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const Custom = require("../shared/runtime/custom-runtime");
-const { selectRuntimeVersion, managerDefaultVersion } = require("../shared/runtime/version-choices");
+const { selectRuntimeVersion, managerDefaultVersion, savedDefaultVersion, usableDefaultVersion } = require("../shared/runtime/version-choices");
 const { getUiServices } = require("../shared/ui-services");
 
 const manifest = require("./manifest.json");
@@ -431,10 +431,19 @@ function resolveDetectedInfo(entry) {
   };
 }
 
+// A saved version that its Godot family neither lists nor has installed gives way.
+function usableSavedVersion(settings, userDataDir, version) {
+  const major = version && parseMajor(version);
+  if (!Number.isFinite(major)) return version;
+  const section = GodotRuntimeManager.getState({ settings: settings?.runtimes?.godot || settings, userDataDir }).sections?.find(item => item.id === String(major));
+  return section ? savedDefaultVersion(version, { listed: section.catalog?.versions || [], installed: (section.installed || []).map(row => row.version) }) : version;
+}
+
 function resolveLatestVersionForMajor(settings, userDataDir, major, variant) {
   if (!Number.isFinite(major)) return null;
   const state = GodotRuntimeManager.getState({ settings: { ...(settings?.runtimes?.godot || settings), ...(variant ? {defaultVariant:variant} : {}) }, userDataDir });
-  return selectRuntimeVersion({ defaultVersion: state.sections?.find(section => section.id === String(major))?.defaultVersion }).version;
+  const section = state.sections?.find(item => item.id === String(major));
+  return selectRuntimeVersion({ defaultVersion: section && usableDefaultVersion(section) }).version;
 }
 
 function resolveAvailableVersion(settings, userDataDir, version, major, options = {}) {
@@ -444,31 +453,32 @@ function resolveAvailableVersion(settings, userDataDir, version, major, options 
   return selectAvailableVersion({ version, major, catalog, installed, ...options });
 }
 
-function resolveDetectedRuntime(entry, { settings, userDataDir } = {}) {
+function resolveDetectedRuntime(entry, { settings, userDataDir, variant: requestedVariant } = {}) {
   const detected = resolveDetectedInfo(entry);
   if (detected.detectedVersion) {
     return { version: detected.detectedVersion, major: detected.detectedMajor };
   }
   if (Number.isFinite(detected.detectedMajor)) {
-    const variant = resolveRuntimeVariant(settings, entry?.runtimeData?.godot, entry, userDataDir);
+    const variant = requestedVariant || resolveRuntimeVariant(settings, entry?.runtimeData?.godot, entry, userDataDir);
     const version = resolveLatestVersionForMajor(settings, userDataDir, detected.detectedMajor, variant);
     return { version, major: detected.detectedMajor };
   }
   return { version: null, major: null };
 }
 
-const resolveRequiredRuntime = Custom.createSelector(GodotRuntimeManager, function managedRequiredRuntime(entry, { settings, userDataDir, ignoreRuntimeOverride } = {}) {
+// A given variant computes the version Play would use with that build.
+function managedRequiredRuntime(entry, { settings, userDataDir, ignoreRuntimeOverride, variant } = {}) {
   const runtimeData =
     entry?.runtimeData && typeof entry.runtimeData === "object" ? entry.runtimeData.godot : null;
   const cfg = GodotRuntimeManager.normalizeSettings(settings?.runtimes?.godot);
-  const detected = resolveDetectedRuntime(entry, { settings, userDataDir });
+  const detected = resolveDetectedRuntime(entry, { settings, userDataDir, variant });
   const { version, source } = selectRuntimeVersion({
     manual: ignoreRuntimeOverride ? null : normalizeRuntimeVersion(runtimeData?.version),
     recommended: detected.version,
-    defaultVersion: ignoreRuntimeOverride ? null : normalizeRuntimeVersion(cfg.defaultVersions?.[detected.major] ||
-      (!Number.isFinite(detected.major) || parseMajor(cfg.defaultVersion) === detected.major ? cfg.defaultVersion : null)),
+    defaultVersion: ignoreRuntimeOverride ? null : usableSavedVersion(settings, userDataDir, normalizeRuntimeVersion(cfg.defaultVersions?.[detected.major] ||
+      (!Number.isFinite(detected.major) || parseMajor(cfg.defaultVersion) === detected.major ? cfg.defaultVersion : null))),
     fallback: !Number.isFinite(detected.major) ? GodotRuntimeManager.getState({ settings: { ...settings?.runtimes?.godot,
-      defaultVariant: resolveRuntimeVariant(settings, runtimeData, entry, userDataDir) }, userDataDir }).defaultVersion : null });
+      defaultVariant: variant || resolveRuntimeVariant(settings, runtimeData, entry, userDataDir) }, userDataDir }).defaultVersion : null });
   if (version) return { version, major: source === "recommended" ? detected.major : parseMajor(version),
     source: { manual: "runtime-override", recommended: "detected", default: "global-choice" }[source] };
   if (Number.isFinite(detected.major)) {
@@ -476,24 +486,43 @@ const resolveRequiredRuntime = Custom.createSelector(GodotRuntimeManager, functi
   }
 
   return { version: null, major: null, source: "automatic" };
-}, { context: ([entry, context = {}]) => ({ entry: context.ignoreRuntimeOverride ? null : entry,
+}
+
+const resolveRequiredRuntime = Custom.createSelector(GodotRuntimeManager, managedRequiredRuntime, {
+  context: ([entry, context = {}]) => ({ entry: context.ignoreRuntimeOverride ? null : entry,
     settings: context.ignoreRuntimeOverride ? null : context.settings, userDataDir: context.userDataDir,
     options: context.ignoreRuntimeOverride ? {} : { variant: resolveRuntimeVariant(context.settings, entry?.runtimeData?.godot, entry, context.userDataDir),
       recommended: () => resolveDetectedInfo(entry).detectedVersion } }),
   result: selection => ({ version: selection.version, major: selection.install ? Number(selection.install.engineFamily) : null,
     source: "selected", reason: selection.reason }) });
 
+// The game decides its build. .NET builds exist from Godot 3 onward, and a game
+// uses one when its pack or project declares C# or Mono, or when a data_* folder
+// beside its pack holds .NET assemblies. Every other game uses Standard.
+function gameVariant(entry) {
+  const data = entry?.moduleData || {}, major = resolveDetectedInfo(entry).detectedMajor;
+  if (Number.isFinite(major) && major < 3) return "standard";
+  if (data.packPath && !data.projectRoot) return Pack.scripting(data.packPath,
+    {offset: data.packOffset ?? 0, ...(data.packSize ? {size: data.packSize} : {})}) === "mono" ? "mono" : "standard";
+  return typeof data.projectRoot === "string" && data.projectRoot && Pack.managedFolder(data.projectRoot) ? "mono" : "standard";
+}
+
+// A game that needs .NET always uses it. Other games use the variant chosen for
+// the game, then a selected custom runtime's own build, then the build already
+// installed for the version Play uses, Standard before .NET, and otherwise
+// Standard, which Play downloads.
 function managedRuntimeVariant(settings, runtimeData, entry, userDataDir, selectedVariant) {
-  const cfg = GodotRuntimeManager.normalizeSettings(settings?.runtimes?.godot);
+  if (gameVariant(entry) === "mono") return "mono";
   const override = typeof runtimeData?.variant === "string" ? runtimeData.variant.trim() : "";
   const selected = GodotCore.normalizeVariant(override);
   if (selected) return selected;
-  const data = entry?.moduleData;
-  if (data?.packPath && !data.projectRoot) {
-    const scripting = Pack.scripting(data.packPath, {offset: data.packOffset ?? 0, ...(data.packSize ? {size: data.packSize} : {})});
-    if (scripting === "mono") return "mono";
-  }
-  return selectedVariant || cfg.defaultVariant || GodotCore.DEFAULT_VARIANT;
+  if (selectedVariant) return selectedVariant;
+  if (!userDataDir) return "standard";
+  const subject = { ...entry, runtimeData: { ...entry?.runtimeData, godot: runtimeData || {} } };
+  return ["standard", "mono"].find(variant => {
+    const required = managedRequiredRuntime(subject, { settings, userDataDir, variant });
+    return resolveGodotInstall(userDataDir, required.version, variant, required.major)?.appPath;
+  }) || "standard";
 }
 
 const resolveRuntimeVariant = Custom.createSelector(GodotRuntimeManager, managedRuntimeVariant, {
@@ -912,6 +941,10 @@ async function ensureRuntime(entry, context) {
   let required = resolveRequiredRuntime(entry, context);
   if (resolveGodotInstall(context.userDataDir, required.version, variant, required.major)?.appPath) return null;
   if (required.reason) throw new Error(required.reason);
+  // A saved default that is not installed is checked against a list read this
+  // session, so one that upstream removed gives way on the first Play.
+  if (required.source === "global-choice" && !GodotRuntimeManager.getState({ settings: context.settings?.runtimes?.godot, userDataDir: context.userDataDir }).catalog?.fetchedAt)
+    return { managerId: GodotRuntimeManager.id, version: null, discoveryRequired: true, installOptions: { sectionId: "default", variant } };
 
   const selectVersion = () => {
     if (required.version || Number.isFinite(required.major)) {
@@ -919,7 +952,7 @@ async function ensureRuntime(entry, context) {
         { allowMajorFallback: !required.version, variant });
     }
     const state = GodotRuntimeManager.getState({ settings: context.settings?.runtimes?.godot, userDataDir: context.userDataDir });
-    return selectRuntimeVersion({ defaultVersion: state.defaultVersion }).version;
+    return selectRuntimeVersion({ defaultVersion: usableDefaultVersion(state) }).version;
   };
   let version = selectVersion();
   if (!version && required.version && ["runtime-override", "global-choice"].includes(required.source)) version = required.version;
@@ -1133,21 +1166,30 @@ module.exports = {
   mergeEntry,
   cleanupGameData,
   ensureRuntime,
-  // The exact engine version in the game's data, spelled as the catalog lists it.
+  // The exact engine version in the game's data, spelled as the catalog lists it,
+  // the variant Play uses when the game has no variant override, and the .NET
+  // variant that a game with C# content uses whatever variant is chosen.
   runtimeRecommendation: (entry, context) => {
     const detected = resolveDetectedInfo(entry);
-    return detected.detectedVersion ? { version: resolveAvailableVersion(context.settings, context.userDataDir,
-      detected.detectedVersion, detected.detectedMajor) || detected.detectedVersion } : null;
+    const variant = resolveRuntimeVariant(context.settings, { ...entry?.runtimeData?.godot, variant: null }, entry, context.userDataDir);
+    // A pack with a renamed magic or a fork's own pack version is readable only
+    // by that build's own engine; no stock Godot release can run it.
+    if (entry?.moduleData?.packCustomMagic) return { variant };
+    return { ...(detected.detectedVersion ? { version: resolveAvailableVersion(context.settings, context.userDataDir,
+      detected.detectedVersion, detected.detectedMajor) || detected.detectedVersion } : {}), variant,
+      ...(gameVariant(entry) === "mono" ? { requiredVariant: "mono", requiredVariantReason: "This game uses C#, so it needs the .NET build." } : {}) };
   },
   filterRuntimeSupport: (entry, supported) => {
     const nativePath = typeof entry?.gamePath === "string" && entry.gamePath.toLowerCase().endsWith(".app");
-    if (!nativePath) return supported.filter(rt => rt !== "native");
-    return supported;
+    let next = nativePath ? supported : supported.filter(rt => rt !== "native");
+    if (entry?.moduleData?.packCustomMagic) next = next.filter(rt => rt !== "godot");
+    return next;
   },
   canLaunchRuntime: (runtimeId, entry) => {
     if (runtimeId === "native") {
       return typeof entry?.gamePath === "string" && entry.gamePath.toLowerCase().endsWith(".app");
     }
+    if (runtimeId === "godot" && entry?.moduleData?.packCustomMagic) return false;
     return true;
   },
   launchRuntime,

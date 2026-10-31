@@ -1,15 +1,8 @@
 const fs = require("node:fs"), path = require("node:path");
 const Source = require("./source.json"), Native = require("../../runtime/bundled-native");
+const Requirements = require("../../runtime/feature-requirements");
 const DEFAULTS = Object.freeze({ modelPath: null, temporal: false, intensity: 1 });
-let physicalArchitecture;
-function hostArchitecture() {
-  if(physicalArchitecture)return physicalArchitecture;
-  physicalArchitecture=process.arch;
-  if(process.platform==="darwin"&&process.arch==="x64")try{
-    if(require("node:child_process").execFileSync("/usr/sbin/sysctl",["-n","hw.optional.arm64"],{encoding:"utf8",stdio:["ignore","pipe","ignore"]}).trim()==="1")physicalArchitecture="arm64";
-  }catch{}
-  return physicalArchitecture;
-}
+const hostArchitecture = () => require("../../runtime/host-capabilities").getHostCapabilities().hardwareArch;
 function settings(value = {}) {
   if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some(key => !Object.hasOwn(DEFAULTS, key)))
     throw new Error("Choose supported neural rendering settings.");
@@ -62,8 +55,13 @@ function libraryPath(root, {platform = process.platform, graphicsArchitecture = 
   return platform === "darwin" && (physicalHost==null||physicalHost==="arm64") && ["arm64","x64","x86_64"].includes(graphicsArchitecture) && path.isAbsolute(root || "") ?
     path.join(root, "neural", Source.library) : null;
 }
+function hostSupported({ platform = process.platform, macOSVersion, hostArchitecture: physicalHost } = {}) {
+  if (platform !== "darwin") return false;
+  return Requirements.requirementSupport(Requirements.NEURAL, {platform, hardwareArch: physicalHost || hostArchitecture(),
+    macOSVersion: macOSVersion || Native.systemVersionSync()}).supported === true;
+}
 function resolve(root, { platform = process.platform, macOSVersion, graphicsArchitecture = process.arch,hostArchitecture:physicalHost } = {}) {
-  if (platform !== "darwin" || (physicalHost||hostArchitecture())!=="arm64" || !["arm64","x64","x86_64"].includes(graphicsArchitecture) || !Native.versionAtLeast(macOSVersion || Native.systemVersionSync(), Source.minimumMacOS)) return null;
+  if (!hostSupported({platform, macOSVersion, hostArchitecture: physicalHost}) || !["arm64","x64","x86_64"].includes(graphicsArchitecture)) return null;
   try {
     const directory = fs.realpathSync(path.join(root, "neural")), descriptor = JSON.parse(fs.readFileSync(path.join(directory, "provider.json"), "utf8"));
     if (descriptor.providerABI !== Source.providerABI || descriptor.commit !== Source.commit || descriptor.library !== Source.library ||
@@ -102,6 +100,6 @@ function prepare(value, { root, ...options }) {
   return { settings: { ...selected, modelPath: inspected.canonical }, intrinsicScale,
     environment: { RESHADE_NEURAL_LIBRARY: installed.library, RESHADE_NEURAL_ROOT: installed.directory },execution:installed.execution };
 }
-module.exports = { DEFAULTS, settings,settingsForMethod,prepareMethod,OPERATIONS, model, modelScale,libraryPath, resolve, prepare,
+module.exports = { hostSupported, DEFAULTS, settings,settingsForMethod,prepareMethod,OPERATIONS, model, modelScale,libraryPath, resolve, prepare,
   listModels: userDataDir => require("./models").listInstalled(userDataDir),
   modelIdentity: (userDataDir, modelPath) => require("./models").identityForPath(userDataDir, modelPath) };

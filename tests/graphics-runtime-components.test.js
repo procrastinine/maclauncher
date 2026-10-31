@@ -26,7 +26,7 @@ function fixture(t) {
 }
 test("Graphics overview separates installed components, system requirements and purchased models without network", t => {
   t.mock.method(globalThis, "fetch", () => assert.fail("Opening Runtimes must stay offline"));
-  const root = fixture(t), options = { root, platform: "darwin", macOSVersion: "27.0" };
+  const root = fixture(t), options = { root, platform: "darwin", macOSVersion: "27.0", hardwareArch: "arm64" };
   const rows = Object.fromEntries(Components.getComponents(options).map(row => [row.id, row]));
   assert.equal(rows.metalfx.status, "Provided by macOS");
   assert.equal(rows.fsr1.status, "Included");
@@ -50,4 +50,31 @@ test("Graphics overview separates installed components, system requirements and 
   assert.equal(Components.getComponents(options).find(row => row.id === "fsr4").status, "Included");
   fs.rmSync(path.join(root, "temporal/fsr/libmaclauncher-fsr3.dylib"));
   assert.equal(Components.getComponents(options).find(row => row.id === "fsr3").status, "Not included");
+});
+test("component presence stays visible across CPU, unknown-host and per-method deployment requirements", t => {
+  const root = fixture(t), options = { root, platform: "darwin", macOSVersion: "15.4.1", hardwareArch: "arm64" };
+  const provider = path.join(root, "temporal/fsr4/provider.json");
+  fs.writeFileSync(provider, JSON.stringify({ ...JSON.parse(fs.readFileSync(provider)), minimumMacOS: "15.4.2" }));
+  const fsr2 = path.join(root, "temporal/fsr/fsr2-build.json");
+  fs.writeFileSync(fsr2, JSON.stringify({ ...JSON.parse(fs.readFileSync(fsr2)), minimumMacOS: "15.4.2" }));
+  const rows = Object.fromEntries(Components.getComponents(options).map(row => [row.id, row]));
+  for (const method of ["fsr2", "fsr4"]) {
+    assert.equal(rows[method].status, "Requires macOS 15.4.2");
+    assert.equal(rows[method].available, false);
+    assert.ok(rows[method].version, "included payload identity remains visible");
+  }
+  assert.equal(rows.fsr3.available, true, "a higher FSR2 requirement does not remove FSR3");
+  const runtime = require("../src/modules/shared/reshade/temporal/fsr");
+  assert.deepEqual(runtime.resolve(root, options).methods, ["fsr3"]);
+  assert.equal(runtime.resolve(root, options).minimumMacOS, FSR.minimumMacOS);
+  assert.deepEqual(runtime.resolve(root, { ...options, macOSVersion: "15.4.2" }).methods, ["fsr2", "fsr3"]);
+  assert.equal(runtime.resolve(root, { ...options, macOSVersion: "15.4.2" }).minimumMacOS, "15.4.2");
+  const intel = Components.getComponents({ ...options, macOSVersion: "27.0", hardwareArch: "x64" });
+  assert.match(intel.find(row => row.id === "fsr4").status, /Apple Silicon/);
+  assert.equal(intel.find(row => row.id === "fsr4").available, false);
+  assert.equal(intel.find(row => row.id === "fsr3").available, true);
+  const unknownRows = Components.getComponents({ ...options, macOSVersion: null, hardwareArch: null });
+  const unknown = unknownRows.find(row => row.id === "fsr4");
+  assert.equal(unknown.status, "Included");assert.equal(unknown.available, true);
+  assert.equal(unknownRows.find(row => row.id === "metalfx").version, null);
 });

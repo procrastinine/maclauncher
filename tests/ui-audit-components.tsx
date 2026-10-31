@@ -1,7 +1,7 @@
 export { ModuleTools } from "../src/renderer/src/ui/components/ModuleTools";
 export { collectAcknowledgments } from "../src/renderer/src/ui/acknowledgments-model";
 export { CreditsView } from "../src/renderer/src/ui/components/CreditsView";
-export { formatUserError } from "../src/renderer/src/ui/ui-helpers";
+export { defaultRuntimeChoices, formatUserError, resolveRuntimeSectionId, runtimeVersionTagger, runtimeVersionOptions, resolveRuntimeVersionLabel, settingsSectionModules } from "../src/renderer/src/ui/ui-helpers";
 export { PlayButton, GameActions } from "../src/renderer/src/ui/components/GameActions";
 export { SaveToolsModal } from "../src/renderer/src/ui/components/modals/SaveToolsModal";
 export { positionHelpTip } from "../src/renderer/src/ui/components/help-tip-model";

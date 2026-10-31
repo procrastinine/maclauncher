@@ -5,6 +5,7 @@ const { execFile, execFileSync } = require("node:child_process");
 const { promisify } = require("node:util");
 const Native = require("./local-native");
 const PE = require("./pe-exports");
+const { versionAtLeast } = require("./host-capabilities");
 const run = promisify(execFile);
 
 const LIMITS = Object.freeze({ manifestBytes: 8 * 1024 * 1024, files: 20000, fileBytes: 256 * 1024 * 1024, bytes: 1024 * 1024 * 1024 });
@@ -14,7 +15,6 @@ const SHA = /^[a-f0-9]{64}$/;
 // Full install/launch verification always rereads every payload byte.
 const manifestCache = new Map();
 const MANIFEST_CACHE_LIMIT = 128;
-let hostSystemVersion;
 
 function fileIdentity(file, { maximum = LIMITS.fileBytes } = {}) {
   if (!realDirectory(path.dirname(file))) throw new Error("Bundled runtime directory is missing.");
@@ -98,16 +98,16 @@ function readRegular(file, maximum) {
   } finally { fs.closeSync(fd); }
 }
 
-function validateManifest(manifest, { managerId, version, upstreamRevision, arch } = {}) {
+function validateManifest(manifest, { managerId, version, upstreamRevision, arch, checkSourceIdentity = true } = {}) {
   if (manifest?.schemaVersion !== 1 || !/^[a-z0-9-]+$/.test(manifest.managerId || "") ||
-      !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(manifest.version || "") || !/^[a-f0-9]{40}$/.test(manifest.upstreamRevision || "") ||
+      !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(manifest.version || "") || checkSourceIdentity && !/^[a-f0-9]{40}$/.test(manifest.upstreamRevision || "") ||
       manifest.platform !== "darwin" || !["arm64", "x64", "universal"].includes(manifest.arch) ||
       !/^\d+\.\d+(?:\.\d+)?$/.test(manifest.minimumMacOS || "") ||
       !Array.isArray(manifest.files) || !manifest.files.length || manifest.files.length > LIMITS.files ||
-      !Array.isArray(manifest.notices) || !manifest.notices.length ||
-      manifest.provenance?.sourceRevision !== manifest.upstreamRevision || !Array.isArray(manifest.dependencies)) throw new Error("Invalid bundled runtime manifest.");
+      checkSourceIdentity && (!Array.isArray(manifest.notices) || !manifest.notices.length) ||
+      checkSourceIdentity && manifest.provenance?.sourceRevision !== manifest.upstreamRevision || !Array.isArray(manifest.dependencies)) throw new Error("Invalid bundled runtime manifest.");
   if (managerId && manifest.managerId !== managerId || version && manifest.version !== version ||
-      upstreamRevision && manifest.upstreamRevision !== upstreamRevision || arch && manifest.arch !== arch) throw new Error("Bundled runtime version, source pin or architecture differs from the selected catalog entry.");
+      checkSourceIdentity && upstreamRevision && manifest.upstreamRevision !== upstreamRevision || arch && manifest.arch !== arch) throw new Error("Bundled runtime version, source pin or architecture differs from the selected catalog entry.");
   relativeFile(manifest.executableRelative);
   const names = new Set(), filesByPath = new Map(), directories = new Set();
   let total = 0;
@@ -127,7 +127,7 @@ function validateManifest(manifest, { managerId, version, upstreamRevision, arch
   const executable = filesByPath.get(manifest.executableRelative);
   const requiredArchitectures = manifest.arch === "universal" ? ["arm64", "x86_64"] : [manifest.arch === "x64" ? "x86_64" : "arm64"];
   if (!executable || !(executable.mode & 0o111) || !requiredArchitectures.every(architecture => executable.architectures?.includes(architecture))) throw new Error("Bundled runtime has no matching executable.");
-  for (const notice of manifest.notices) {
+  for (const notice of checkSourceIdentity ? manifest.notices : []) {
     if (!notice || typeof notice.name !== "string" || !notice.name || typeof notice.license !== "string" || !notice.license ||
         !/^https:\/\//.test(notice.sourceUrl || "") || !filesByPath.has(relativeFile(notice.path))) throw new Error("Bundled runtime license notice is missing.");
   }
@@ -148,6 +148,12 @@ function validateManifest(manifest, { managerId, version, upstreamRevision, arch
     if (!/^[A-Za-z][A-Za-z0-9]{0,50}$/.test(key) || !filesByPath.has(relativeFile(value))) throw new Error("Bundled runtime asset file is invalid.");
   }
   return manifest;
+}
+
+// Runtime use records source bookkeeping; publication keeps validateManifest's
+// exact source checks. Executable layout and payload integrity remain shared.
+function validateRuntimeManifest(manifest, options = {}) {
+  return validateManifest(manifest, {...options, checkSourceIdentity: false});
 }
 
 function fileInventory(root) {
@@ -214,14 +220,6 @@ function verifyInstalled({ installDir, record, pin, managerId, verification = "f
   } catch { return false; }
 }
 
-function versionAtLeast(actual, required) {
-  const left = String(actual).split(".").map(Number), right = String(required).split(".").map(Number);
-  if (left.some(Number.isNaN) || right.some(Number.isNaN)) return false;
-  for (let index = 0; index < Math.max(left.length, right.length); index++) {
-    if ((left[index] || 0) !== (right[index] || 0)) return (left[index] || 0) > (right[index] || 0);
-  }
-  return true;
-}
 
 async function verifySignatures(root, manifest, { signal } = {}) {
   for (const file of manifest.files.filter(file => file.architectures && file.format !== "pe")) {
@@ -236,8 +234,7 @@ function verifySignaturesSync(root, manifest) {
 }
 
 function systemVersionSync() {
-  if (!hostSystemVersion) hostSystemVersion = execFileSync("/usr/bin/sw_vers", ["-productVersion"], { timeout: 10000, encoding: "utf8" }).trim();
-  return hostSystemVersion;
+  return require("./host-capabilities").getHostCapabilities().macOSVersion || "0";
 }
 
 function createBundledNativeRuntime({ managerId, resourceRoot, platform = process.platform, arch = process.arch, dependencies = {} } = {}) {
@@ -275,9 +272,10 @@ function createBundledNativeRuntime({ managerId, resourceRoot, platform = proces
     const hostVersion = (dependencies.systemVersionSync || systemVersionSync)();
     if (!versionAtLeast(hostVersion, manifest.minimumMacOS)) throw new Error(`${managerId} ${version} requires macOS ${manifest.minimumMacOS}; this Mac uses ${hostVersion}.`);
     const executable = manifest.files.find(file => file.path === manifest.executableRelative);
-    const runtimePath = path.join(payload, executable.path), nativeArch = (dependencies.hostArch || process.arch) === "x64" ? "x86_64" : dependencies.hostArch || process.arch;
+    const hardwareArch = dependencies.hostArch || require("./host-capabilities").getHostCapabilities().hardwareArch;
+    const runtimePath = path.join(payload, executable.path), nativeArch = hardwareArch === "x64" ? "x86_64" : hardwareArch;
     const architectures = executable.architectures;
-    const needsRosetta = nativeArch === "arm64" && !architectures.includes("arm64") && architectures.includes("x86_64");
+    const needsRosetta = require("./architecture").imageRequiresRosetta(architectures, { platform: "darwin", hardwareArch });
     if (!architectures.includes(nativeArch) && !needsRosetta) throw new Error(`Runtime does not support this Mac's ${nativeArch} CPU.`);
     if (verification === "full") {
       verifyPayload(payload, manifest);
@@ -313,7 +311,7 @@ function createBundledNativeRuntime({ managerId, resourceRoot, platform = proces
     const bundle = resolve({ version, upstreamRevision: pin.upstreamRevision, verification: "full" });
     if (!bundle) return null;
     signal?.throwIfAborted();
-    const hostVersion = dependencies.systemVersion ? await dependencies.systemVersion() : (await run("/usr/bin/sw_vers", ["-productVersion"], { ...(signal ? { signal } : {}), timeout: 10000 })).stdout.trim();
+    const hostVersion = dependencies.systemVersion ? await dependencies.systemVersion() : systemVersionSync();
     if (!versionAtLeast(hostVersion, bundle.manifest.minimumMacOS)) throw new Error(`${managerId} ${version} requires macOS ${bundle.manifest.minimumMacOS}; this Mac uses ${hostVersion}.`);
     verifyPayload(path.join(bundle.directory, "files"), bundle.manifest);
     const destination = manager.core.getInstallDir({ userDataDir, version });
@@ -397,5 +395,5 @@ function resolveInstalledAsset(install, name) {
   return file;
 }
 
-module.exports = { LIMITS, digest, relativeFile, realDirectory, readRegular, fileIdentity, clearManifestCache, validateManifest, verifyPayload, verifySignatures,
+module.exports = { LIMITS, digest, relativeFile, realDirectory, readRegular, fileIdentity, clearManifestCache, validateManifest, validateRuntimeManifest, verifyPayload, verifySignatures,
   fileInventory, verifyInstalled, bundledManifestPath, versionAtLeast, systemVersionSync, createBundledNativeRuntime, resolveInstalledEnvironment, resolveInstalledAsset };

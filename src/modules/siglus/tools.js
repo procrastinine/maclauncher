@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { createManagedPythonTool } = require("../shared/runtime/managed-python-tool");
+const { createManagedPythonTool, pythonWheel } = require("../shared/runtime/managed-python-tool");
+const Upstream = require("../shared/runtime/upstream");
 const { assertOwnDirectory } = require("../shared/writable-input");
 const { throwIfAborted } = require("../shared/runtime/download-utils");
 const { getUiServices } = require("../shared/ui-services");
@@ -9,7 +10,7 @@ const Launch = require("./launch");
 const RealLive = require("./rldev-tools");
 
 const manager = createManagedPythonTool({ id: "siglus-ssu", label: "Siglus SceneScript Utility",
-  packageName: "siglus-ssu", moduleName: "siglus_ssu", minimumVersion: "0.5.0", order: 265,
+  upstream: Upstream.pypi({ project: "siglus-ssu", recognize: pythonWheel }), moduleName: "siglus_ssu", minimumVersion: "0.5.0", order: 265,
   // test.py implements the upstream CLI's public round-trip compiler command;
   // it is application functionality rather than a fixture or test suite.
   requiredFiles: ["siglus_ssu/__main__.py", "siglus_ssu/const.py", "siglus_ssu/decompiler.py", "siglus_ssu/test.py"],

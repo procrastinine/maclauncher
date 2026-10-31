@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -14,37 +16,16 @@ test("gdsdecomp normalizes semver versions", () => {
   assert.equal(Runtime.normalizeVersion("v2.4.0"), "2.4.0");
 });
 
-test("gdsdecomp collects versions from mac assets", () => {
-  const releases = [
-    {
-      tag_name: "v2.4.0",
-      assets: [
-        { name: "GDRE_tools-v2.4.0-macos.zip" },
-        { name: "GDRE_tools-v2.4.0-win.zip" }
-      ]
-    },
-    {
-      tag_name: "v2.3.1",
-      assets: [{ name: "GDRE_tools-v2.3.1-macos.zip" }]
-    }
-  ];
-  const versions = Runtime.__test.collectVersions(releases);
+test("gdsdecomp lists one version per Mac release with GitHub's digest", async t => {
+  const repository = "GDRETools/gdsdecomp";
+  const releases = [Harness.githubRelease(repository, "v2.4.0", ["GDRE_tools-v2.4.0-win.zip", "GDRE_tools-v2.4.0-macos.zip"]),
+    Harness.githubRelease(repository, "v2.3.1", ["GDRE_tools-v2.3.1-macos.tar.xz"]), Harness.githubRelease(repository, "v2.3.0", ["GDRE_tools-v2.3.0-linux.zip"])];
+  t.after(() => { Harness.network.routes = null; });
+  Harness.network.routes = Harness.githubRoutes(repository, releases);
+  const { versions, rows } = await Runtime.fetchAvailableVersions();
   assert.deepEqual(versions, ["2.4.0", "2.3.1"]);
-});
-
-test("gdsdecomp selects mac asset by version", () => {
-  const releases = [
-    {
-      tag_name: "v2.4.0",
-      assets: [
-        { name: "GDRE_tools-v2.4.0-win.zip" },
-        { name: "GDRE_tools-v2.4.0-macos.zip", browser_download_url: "https://ex" }
-      ]
-    }
-  ];
-  const selected = Runtime.__test.selectReleaseAsset(releases, "2.4.0");
-  assert.ok(selected);
-  assert.equal(selected.asset.name, "GDRE_tools-v2.4.0-macos.zip");
+  assert.equal(rows[0].files[0].name, "GDRE_tools-v2.4.0-macos.zip");
+  assert.equal(rows[0].files[0].digest.value, releases[0].assets[1].digest.slice(7));
 });
 
 test("gdsdecomp finds CLI binary in app bundle", () => {

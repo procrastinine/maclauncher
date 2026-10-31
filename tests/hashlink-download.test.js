@@ -54,20 +54,22 @@ test("HashLink validates the native dependency closure and returns exact ABI and
   assert.throws(() => Download.verifyInstalled({ source: "download", installDir: root, installationMetadata: metadata }), /changed/);
 });
 
-test("HashLink rejects missing, foreign or higher-floor native dependencies before signing", async t => {
-  for (const replacement of [macho({ architecture: "arm64" }), macho({ floor: 0x0e0000 }),
+test("HashLink rejects missing or foreign native dependencies before signing and reads its macOS floor from the package", async t => {
+  for (const replacement of [macho({ architecture: "arm64" }),
     macho({ dependencies: ["/opt/homebrew/lib/libSDL2.dylib"] }), macho({ dependencies: ["@rpath/missing.dylib"], runPaths: ["@loader_path"] }),
     macho({ runPaths: ["@loader_path/../../../external"] })]) {
     const { root, payload, pin } = fixture(t); fs.writeFileSync(path.join(payload, "sdl.hdll"), replacement);
     await assert.rejects(Download.prepareInstall({ unpacked: root, pin }, { run: () => assert.fail("Invalid package must not be signed") }), /Intel|platform|library|search path/);
   }
+  const { root, payload, pin } = fixture(t); fs.writeFileSync(path.join(payload, "sdl.hdll"), macho({ floor: 0x0e0000, dependencies: ["@rpath/libhl.2.dylib"], runPaths: ["@loader_path"] }));
+  assert.equal(Download.inspectPackage(root, pin).minimumMacOS, "14.0.0", "A module's higher floor is the package's macOS requirement");
 });
 
 test("HashLink source headers, aliases and primitive symbols are validated without executing the VM", async t => {
   const { root, payload, pin } = fixture(t);
   await assert.rejects(Download.prepareInstall({ unpacked: root, pin }, { inspectMachOExports: async () => [], run: () => assert.fail("Missing symbols must block signing") }), /symbols/);
   fs.writeFileSync(path.join(payload, "include", "hl.h"), "different commit");
-  assert.throws(() => Download.inspectPackage(root, pin), /header differs/);
+  assert.equal(Download.inspectPackage(root, pin).header, path.join(fs.realpathSync(payload), "include", "hl.h"), "A header that differs from the source commit is recorded");
   const second = fixture(t); fs.unlinkSync(path.join(second.payload, "libhl.2.dylib"));
   fs.symlinkSync("/usr/lib/libSystem.B.dylib", path.join(second.payload, "libhl.2.dylib"));
   assert.throws(() => Download.inspectPackage(second.root, second.pin), /package|ENOENT/);

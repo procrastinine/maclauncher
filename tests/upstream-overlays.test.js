@@ -57,6 +57,8 @@ test("an explicitly reviewed checkout mirror preserves independent declared-orig
   assert.throws(() => Check.validateInventory(current.inventory), /recorded origin reason/);
   project.checkoutOriginReason = "Reviewed public mirror of the same pinned commit; canonical module metadata remains unchanged.";
   assert.equal((await Check.checkInventory(current)).passed, true);
+  git(current.source, "config", "remote.origin.url", project.repository + ".git");
+  assert.equal((await Check.checkInventory(current)).passed, true, "The declared primary origin stays valid when a mirror is configured");
   write(current.root, ".gitmodules", '[submodule "fixture"]\n path = src/external/fixture\n url = https://mirror.example.invalid/fixture.git\n');
   assert.ok((await Check.checkInventory(current)).errors.some(issue => issue.code === "declared-origin-drift"));
   git(current.source, "config", "remote.origin.url", "https://another.example.invalid/fixture.git");
@@ -182,13 +184,17 @@ test("offline source guards read exact nested Gitlink blobs and reject hash or o
   const revision = git(current.source, "rev-parse", "HEAD");
   current.inventory.projects[0].revision = revision;
   current.inventory.projects.push({ id: "fixture-child", parent: "fixture", path: "src/external/fixture/vendor/child",
-    repository: "https://example.invalid/child", revision: childRevision });
+    repository: "https://example.invalid/child", revision: childRevision,
+    checkoutOrigin: "https://mirror.example.invalid/child", checkoutOriginReason: "Reviewed public mirror of the same exact source." });
   git(current.root, "update-index", "--add", "--cacheinfo", `160000,${revision},src/external/fixture`);
   write(current.root, "scripts/pin.json", JSON.stringify({ revision }));
   const guard = current.inventory.recipes[0].guards[0];
   guard.files["vendor/child/selected.c"] = sha("nested guarded source\n");
   const report = await Check.checkInventory(current);
   assert.equal(report.passed, true, JSON.stringify(report.errors));
+  git(child, "config", "remote.origin.url", "https://mirror.example.invalid/child.git");
+  assert.equal((await Check.checkInventory(current)).passed, true, "The nested guard accepts its exact declared mirror too");
+  git(child, "config", "remote.origin.url", "https://example.invalid/child.git");
   guard.files["vendor/child/selected.c"] = "0".repeat(64);
   assert.ok((await Check.checkInventory(current)).errors.some(issue => issue.code === "original-source-evidence-drift"));
   git(child, "config", "remote.origin.url", "https://other.example.invalid/child.git");
@@ -370,10 +376,13 @@ test("checked-in inventory covers every top-level Git source and owned overlay",
   for (const source of await Check.submodules(Check.ROOT)) assert.ok(projects.has(source.path), source.path);
   const declared = new Set(inventory.recipes.flatMap(recipe => recipe.ownedFiles.map(file => file.path)));
   for (const file of Check.ownedAdaptationFiles(Check.ROOT, projects)) assert.ok(declared.has(file), file);
-  for (const id of ["ramen", "udon", "libjpeg-turbo-license"]) {
+  for (const id of ["reshade-sweetfx", "reshade-retroarch", "mkxp-z"]) {
     const project = inventory.projects.find(project => project.id === id);
-    assert.ok(project?.path?.startsWith("src/external/"), id);
+    assert.ok(project, id);
+    assert.equal(project.path, undefined, id + " uses copied source or an exact source archive");
     assert.match(project.revision, /^[a-f0-9]{40}$/, id);
+    assert.ok(project.pinRefs?.length, id + " retains exact source provenance");
+    for (const ref of project.pinRefs) assert.equal(Check.sourceRef(Check.ROOT, ref), project.revision, id);
   }
   assert.ok(inventory.archiveInputs.some(input => input.id === "ffmpeg-7.1.2"));
 });

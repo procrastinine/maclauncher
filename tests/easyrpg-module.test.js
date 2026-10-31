@@ -63,7 +63,7 @@ test("EasyRPG Play plans a managed runtime without requiring advanced setup", t 
   const context = { userDataDir: path.join(root, "data"), settings: {} };
   const requirement = Module.ensureRuntime(entry, context);
   assert.equal(requirement.managerId, "easyrpg");assert.equal(requirement.version, null);
-  assert.equal(requirement.discoveryRequired, true);assert.equal(requirement.selectionRequired, true);
+  assert.equal(requirement.discoveryRequired, true);assert.equal(requirement.selectionRequired, undefined);
   const selected = { ...entry, runtimeData: { easyrpg: { version: "0.8.1" } } };
   assert.equal(Module.ensureRuntime(selected, context).version, "0.8.1");
   fs.rmSync(path.join(game, "RPG_RT.ldb"));

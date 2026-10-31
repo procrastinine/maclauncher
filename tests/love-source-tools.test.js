@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), os = require("node:os"), path = require("node:path");
 const { writeZipArchive } = require("./helpers/zip-fixture");
 const Source = require("../src/modules/love/tools/source");
@@ -55,30 +57,27 @@ test("unluac discovers official RSS artifacts without a launcher version table",
   const bytes = fs.statSync(jar).size;
   assert.deepEqual(Unluac.getState(context).catalog.versions, []);
   assert.equal(Unluac.core.resolve({ userDataDir: context.userDataDir, version: "2030.03.04" }), null);
-  let queries = 0;
-  await Unluac.refreshCatalog({ ...context, force: true }, { fetchUrlBuffer: async url => {
-    queries++; assert.equal(url, "https://sourceforge.net/projects/unluac/rss?path=/Unstable");
-    return { status: 200, body: Buffer.from(`<rss><channel><item><title>Unstable/unluac_2030_03_04.jar</title>
+  let queries = 0, downloads = 0;
+  const download = "https://downloads.sourceforge.net/project/unluac/Unstable/unluac_2030_03_04.jar";
+  Harness.network.routes = { "https://sourceforge.net/projects/unluac/rss": () => { queries++;
+    return `<rss><channel><item><title>Unstable/unluac_2030_03_04.jar</title>
       <enclosure url="https://sourceforge.net/projects/unluac/files/Unstable/unluac_2030_03_04.jar/download" length="${bytes}" /></item>
       <item><title>unluac_2029_01_02.jar</title><media:content fileSize="123" />
-      <media:hash algo="sha256">${"b".repeat(64)}</media:hash></item></channel></rss>`) };
-  } });
+      <media:hash algo="sha256">${"b".repeat(64)}</media:hash></item></channel></rss>`; },
+  [download]: () => { downloads++; return fs.readFileSync(jar); } };
+  t.after(() => { Harness.network.routes = null; });
+  await Unluac.refreshCatalog({ ...context, force: true });
   const catalogFile = path.join(context.userDataDir, "runtimes/unluac/catalog.json");
   const pin = JSON.parse(fs.readFileSync(catalogFile)).entries[0];
-  assert.equal(Unluac.__test.validRow(pin), true); assert.equal(pin.sha256, undefined);
-  assert.equal(Unluac.__test.validRow({ ...pin, url: pin.url.replace("downloads.sourceforge.net", "example.com") }), false);
+  assert.equal(Unluac.__test.validRow(pin), true); assert.equal(pin.sha256, undefined); assert.equal(pin.url, download);
   assert.equal(Unluac.__test.validRow({ ...pin, sha256: "malformed" }), false);
   assert.deepEqual(Unluac.getState(context).catalog.versions, ["2030.03.04", "2029.01.02"]);
-  let downloads = 0;
-  const install = await Unluac.installRuntime({ ...context, version: pin.version, confirmRuntimeInstall: () => true }, {
-    downloadToFile: async (url, target) => { downloads++; assert.equal(url, pin.url); fs.copyFileSync(jar, target); }
-  });
+  const install = await Unluac.installRuntime({ ...context, version: pin.version, confirmRuntimeInstall: () => true });
   assert.equal(downloads, 1); assert.equal(queries, 1);
   assert.match(install.archiveSha256, /^[a-f0-9]{64}$/); assert.deepEqual(fs.readFileSync(install.jarPath), fs.readFileSync(jar));
   fs.rmSync(catalogFile);
-  const reused = await Unluac.installRuntime({ ...context, version: pin.version, confirmRuntimeInstall: () => assert.fail("offline reuse prompted") }, {
-    downloadToFile: () => assert.fail("offline reuse downloaded") });
-  assert.equal(reused.jarPath, install.jarPath);
+  const reused = await Unluac.installRuntime({ ...context, version: pin.version, confirmRuntimeInstall: () => assert.fail("offline reuse prompted") });
+  assert.equal(reused.jarPath, install.jarPath); assert.equal(downloads, 1);
   fs.appendFileSync(install.jarPath, "tampered");
   assert.equal(Unluac.core.resolve({ userDataDir: context.userDataDir, version: pin.version }), null);
 });
@@ -87,10 +86,9 @@ test("LJD refresh discovers exact supplier commits and preserves an explicit sou
   const { context } = setup(t), Ljd = require("../src/modules/love/tools/ljd-manager");
   assert.deepEqual(Ljd.getState(context).catalog.versions, []);
   const revisions = ["c".repeat(40), "d".repeat(40)];
-  await Ljd.refreshCatalog(context, { fetchGithubCommits: async request => {
-    assert.equal(request.owner, "dol"); assert.equal(request.repo, "luajit-decompiler");
-    return revisions.map((sha, index) => ({ sha, commit: { message: `Source ${index}`, committer: { date: `2030-01-0${2-index}T00:00:00Z` } } }));
-  } });
+  Harness.network.routes = { "https://api.github.com/repos/dol/luajit-decompiler/commits":
+    revisions.map((sha, index) => ({ sha, commit: { message: `Source ${index}`, committer: { date: `2030-01-0${2-index}T00:00:00Z` } } })) };
+  try { await Ljd.refreshCatalog(context); } finally { Harness.network.routes = null; }
   assert.deepEqual(Ljd.getState(context).catalog.versions, revisions.map(revision => "git-" + revision));
   assert.equal(Ljd.normalizeSettings({ defaultVersion: "git-" + revisions[1] }).defaultVersion, "git-" + revisions[1]);
 });

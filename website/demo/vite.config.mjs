@@ -19,6 +19,9 @@ export default defineConfig({
     target: "es2022",
     outDir: path.resolve(demoRoot, "../public/demo"),
     emptyOutDir: true,
-    rollupOptions: { input: { index: path.resolve(demoRoot, "index.html"), launcher: path.resolve(demoRoot, "launcher.html") } }
+    rollupOptions: {
+      input: { index: path.resolve(demoRoot, "index.html"), launcher: path.resolve(demoRoot, "launcher.html") },
+      output: { codeSplitting: { groups: [{ name: "react", test: /node_modules\/(?:react|react-dom|scheduler)\// }] } }
+    }
   }
 });

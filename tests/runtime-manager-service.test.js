@@ -17,7 +17,7 @@ test("fresh headless workers retain cached Play defaults and hydrate an explicit
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
   writeRuntimeCatalog({ userDataDir, managerId: "cached-default", entries: ["2.5.0", "2.6.0"].map(version =>
     ({ version, upstreamRevision: "a".repeat(40), localBuild: false })) });
-  const make = () => createPinnedNativeManager({ id: "cached-default", label: "Cached tool", supportsDefault: true, catalog: [],
+  const make = () => createPinnedNativeManager({ id: "cached-default", label: "Cached tool", supportsDefault: true,
     discoverCatalog: () => assert.fail("Cached settings and Play selection must stay offline") });
   let settings = { defaultVersion: "2.5.0" };
   const beforeState = make();

@@ -25,9 +25,9 @@ function hasLibraries(directory) {
 }
 
 function checkSelection(settings, { backend, dxmt = false, d3dmetal = false,
-  arch = process.arch, macOSVersion, executableArchitecture } = {}) {
+  hardwareArch = require("../shared/runtime/host-capabilities").getHostCapabilities().hardwareArch, macOSVersion, executableArchitecture } = {}) {
   if (settings.dlss !== true) return { enabled: false, dxmt: false, d3dmetal: false };
-  if (arch !== "arm64") throw new Error("MetalFX Temporal requires Apple Silicon.");
+  if (hardwareArch !== "arm64") throw new Error("MetalFX Temporal requires Apple Silicon.");
   if (executableArchitecture && executableArchitecture !== "x86_64") throw new Error("MetalFX Temporal requires a 64-bit Windows executable.");
   if (!["auto", "dxmt", "d3dmetal"].includes(backend)) throw new Error("MetalFX Temporal requires DXMT or D3DMetal. Change Graphics or disable MetalFX Temporal.");
   macOSVersion ||= systemVersionSync();

@@ -38,6 +38,24 @@ test("Windows metadata registers a managed Wine choice without changing the game
   assert.equal(crossover.vulkanBackend, undefined);
 });
 
+test("Wine settings and choices that need Apple Silicon or a newer macOS are not listed on a Mac that cannot use them", () => {
+  const { withHostSettings } = require("../src/modules/shared/runtime/host-settings");
+  const fields = (info, id) => info.runtime.entries[id].settings.fields;
+  const values = (info, id, key) => fields(info, id).find(field => field.key === key).options.map(option => option.value);
+  const intel = withHostSettings(manifest, { platform: "darwin", hardwareArch: "x64", macOSVersion: "13.6" });
+  for (const id of ["crossover", "sikarugir"]) {
+    assert.equal(fields(intel, id).some(field => ["dlss", "graphicsBridgeVersion"].includes(field.key)), false);
+    assert.deepEqual(values(intel, id, "graphicsBackend"), ["auto", "dxvk", "wined3d"]);
+  }
+  assert.deepEqual(values(intel, "sikarugir", "vulkanBackend"), ["auto", "moltenvk"]);
+  const sonoma = withHostSettings(manifest, { platform: "darwin", hardwareArch: "arm64", macOSVersion: "14.5" });
+  assert.deepEqual(values(sonoma, "sikarugir", "graphicsBackend"), ["auto", "dxmt", "dxvk", "wined3d"]);
+  assert.deepEqual(values(sonoma, "crossover", "graphicsBackend"), ["auto", "d3dmetal", "dxmt", "dxvk", "wined3d"]);
+  assert.ok(fields(sonoma, "sikarugir").some(field => field.key === "dlss"));
+  for (const host of [{ platform: "darwin", hardwareArch: "arm64", macOSVersion: "26.4" }, { platform: "darwin" }, { platform: "linux", hardwareArch: "x64" }])
+    assert.deepEqual(withHostSettings(manifest, host).runtime.entries, manifest.runtime.entries);
+});
+
 test("managed Wine defaults survive storage and combine with per-engine and per-game overrides", t => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "windows-runtime-settings-"));
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
@@ -62,7 +80,13 @@ test("managed Wine defaults survive storage and combine with per-engine and per-
   } }, { modules: { rgss: { runtimeSettings: { sikarugir: { synchronization: "off" } } } } }, info, "sikarugir");
   assert.equal(selected.graphicsBackend, "wined3d");
   assert.equal(selected.synchronization, "off");
-  assert.equal(selected.bepInExWinhttp, false);
+  // The BepInEx override loads a Unity mod loader, so an RPG Maker XP/VX host neither lists nor applies it.
+  assert.equal(selected.bepInExWinhttp, undefined);
+  assert.equal(info.runtime.entries.sikarugir.settings.fields.some(field => field.key === "bepInExWinhttp"), false);
+  const unity = composeRuntimeProviders({ id: "unity", manifest: { id: "unity", runtime: { default: "unity", supported: ["unity"],
+    capabilities: ["bepinex", "temporal-integration"] } } },
+    [{ runtimeId: "sikarugir", managerId: "sikarugir", runtime: manifest.runtime.entries.sikarugir, supportsEntry: () => true, launchRuntime: () => {} }]).manifest;
+  assert.deepEqual(unity.runtime.entries.sikarugir.settings.fields.map(field => field.key), manifest.runtime.entries.sikarugir.settings.fields.map(field => field.key));
   assert.equal(selected.cncDdraw, true);
   assert.equal(selected.locale, "ja_JP.UTF-8");
   assert.equal(selected.windowsVersion, "win7");

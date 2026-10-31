@@ -132,11 +132,11 @@ async function launchOfficial(entry, context, selection, dependencies = {}) {
   if (mode !== "disabled") {
     const graphics = require("./opengl-fallback");
     const selectedHelper = graphics.selection(entry, context);
-    const reviewed = graphics.supportsRunner(selectedHelper.install, runtimeVersion, selection.install.binarySha256);
-    if (reviewed || mode === "enabled") {
+    const applies = graphics.drawsWithOpenGL(selection.install.executablePath);
+    if (applies || mode === "enabled") {
       const fallback = graphics.resolveFallback({ userDataDir: context.userDataDir, runnerVersion: runtimeVersion,
-        runnerSha256: selection.install.binarySha256, helperVersion: selectedHelper.version, entry, settings: context.settings });
-      if (!fallback.ready && (reviewed || mode === "enabled")) throw new Error(fallback.reason || "No compatible graphics helper is available for this runner.");
+        helperVersion: selectedHelper.version, entry, settings: context.settings });
+      if (!fallback.ready) throw new Error(fallback.reason || "No compatible graphics helper is available for this runner.");
       if (fallback.ready && fallback.environment) {
         graphicsHelper = fallback;
         context.recordRuntimeUse?.({ managerId: graphics.manager.id, version: selectedHelper.version, sourcePath: fallback.installDir });

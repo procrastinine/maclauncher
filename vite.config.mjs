@@ -15,7 +15,10 @@ export default defineConfig({
   base: "./",
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/renderer"),
-    emptyOutDir: true
+    emptyOutDir: true,
+    rolldownOptions: { output: { codeSplitting: { groups: [
+      { name: "react", test: /[\\/]node_modules[\\/](?:react|react-dom|scheduler)[\\/]/ }
+    ] } } }
   },
   server: {
     host: devHost,

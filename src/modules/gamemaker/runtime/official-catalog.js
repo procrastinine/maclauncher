@@ -1,6 +1,6 @@
 const crypto = require("node:crypto");
 const path = require("node:path");
-const { fetchUrlBuffer, throwIfAborted } = require("../../shared/runtime/download-utils");
+const Upstream = require("../../shared/runtime/upstream");
 const { readRuntimeCatalog, writeRuntimeCatalog } = require("../../shared/runtime/runtime-catalog");
 
 const ID = "gamemaker-official";
@@ -14,6 +14,9 @@ const FEEDS = Object.freeze([
 const states = new Map();
 const refreshing = new Map();
 const digest = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
+// Mac modules Igor installs: the core enclosure, the runner, YYC and a native
+// base module per CPU, which may later be universal.
+const MAC_MODULE = name => ["core", "mac", "macYYC"].includes(name) || /^base-module-osx-[A-Za-z0-9_-]{1,40}$/.test(name || "");
 
 function versionCompare(a, b) {
   const x = a.split(".").map(Number), y = b.split(".").map(Number);
@@ -39,8 +42,8 @@ function attributes(tag) {
 }
 function officialPackage(value) {
   const url = new URL(value);
-  if (!["https:", "http:"].includes(url.protocol) || url.hostname !== "gms.yoyogames.com" || url.port || url.username || url.password || url.search || url.hash ||
-    !/^\/[A-Za-z0-9._-]{1,150}\.zip$/.test(url.pathname)) throw new Error("Runtime feed package is not a public official GameMaker ZIP.");
+  if (!["https:", "http:"].includes(url.protocol) || !/(?:^|\.)yoyogames\.com$/.test(url.hostname) || url.port || url.username || url.password || url.search || url.hash ||
+    !/^(?:\/[A-Za-z0-9._-]{1,150}){1,8}$/.test(url.pathname) || !url.pathname.endsWith(".zip")) throw new Error("Runtime feed package is not a public official GameMaker ZIP.");
   url.protocol = "https:";
   return url.toString();
 }
@@ -61,48 +64,63 @@ function packageFromTag(tag, module, version, legacy = false) {
   return { module, url, filename: path.posix.basename(new URL(url).pathname), bytes, signature,
     ...(legacy ? { publishedUrl: attr.url } : {}) };
 }
-function parseFeed(body, feed) {
-  if (!FEEDS.some(item => item.url === feed?.url) || body.length > 8 * 1024 ** 2) throw new Error("Invalid official runtime feed source or size.");
+function parseItem(item, feed, feedSha256) {
+  const enclosure = /<enclosure\b([^>]*)>([\s\S]*?)<\/enclosure>/.exec(item);
+  if (!enclosure) return null;
+  const attr = attributes(enclosure[1]), version = attr["sparkle:version"] || attr["ns0:version"];
+  const legacy = feed.family === "studio-1.4";
+  const macTags = legacy ? [...enclosure[2].matchAll(/<module\b([^>]*?)\/?\s*>/g)].filter(tag => attributes(tag[1]).name === "Mac") : [];
+  if (legacy && !macTags.length) return null;
+  if (legacy ? !/^1\.4\.\d{1,5}$/.test(version || "") : !/^\d{1,4}\.\d{1,5}\.\d{1,5}\.\d{1,6}$/.test(version || "")) throw new Error("Runtime feed release lacks an exact four-part version or legacy Studio 1.4 build.");
+  if (legacy && macTags.length !== 1) throw new Error("Runtime feed contains duplicate Mac modules.");
+  const packages = legacy ? [packageFromTag(macTags[0][1], "mac", version, true)] : [packageFromTag(enclosure[1], "core", version)];
+  const release = { version, upstreamRevision: `vendor-runtime:${version}`, backend: "official-studio-vm", ...(legacy ? { family: "studio-1.4" } : {}), channel: feed.channel,
+    source: feed.url, sourceUrl: feed.url, feedSha256, publishedAt: /<pubDate>([^<]*)<\/pubDate>/.exec(item)?.[1] || null,
+    packages, gameplayQualified: false, provenance: "official-https-feed", vendorSignatureVerified: false };
+  if (legacy) return release;
+  const names = new Set(["core"]);
+  for (const moduleTag of enclosure[2].matchAll(/<module\b([^>]*?)\/?\s*>/g)) {
+    const module = attributes(moduleTag[1]).name;
+    if (!MAC_MODULE(module) || packages.length >= 16) continue;
+    if (names.has(module)) throw new Error("Runtime feed contains duplicate Mac modules.");
+    names.add(module); packages.push(packageFromTag(moduleTag[1], module, version));
+  }
+  return names.has("mac") ? release : null;
+}
+// A release the launcher cannot read is left out with its reason; the other
+// releases stay listed. Only a feed without any readable Mac release fails.
+function parseFeed(body, feed, logger) {
+  if (!FEEDS.some(item => item.url === feed?.url) || body.length > 32 * 1024 ** 2) throw new Error("Invalid official runtime feed source or size.");
   const xml = body.toString("utf8");
   if (/<!DOCTYPE|<!ENTITY/i.test(xml) || !/<rss\b/.test(xml)) throw new Error("Runtime feed must be bounded RSS without external entities.");
   const entries = [], feedSha256 = digest(body);
+  let failure = null;
   for (const match of xml.matchAll(/<item(?:\s[^>]*)?>([\s\S]*?)<\/item>/g)) {
-    if (entries.length >= 500) throw new Error("Runtime feed has too many releases.");
-    const item = match[1], enclosure = /<enclosure\b([^>]*)>([\s\S]*?)<\/enclosure>/.exec(item);
-    if (!enclosure) continue;
-    const attr = attributes(enclosure[1]), version = attr["sparkle:version"] || attr["ns0:version"];
-    const legacy = feed.family === "studio-1.4";
-    const macTags = legacy ? [...enclosure[2].matchAll(/<module\b([^>]*?)\/?\s*>/g)].filter(tag => attributes(tag[1]).name === "Mac") : [];
-    if (legacy && !macTags.length) continue;
-    if (legacy ? !/^1\.4\.\d{1,5}$/.test(version || "") : !/^\d{1,4}\.\d{1,5}\.\d{1,5}\.\d{1,6}$/.test(version || "")) throw new Error("Runtime feed release lacks an exact four-part version or legacy Studio 1.4 build.");
-    if (legacy && macTags.length !== 1) throw new Error("Runtime feed contains duplicate Mac modules.");
-    const packages = legacy ? [packageFromTag(macTags[0][1], "mac", version, true)] : [packageFromTag(enclosure[1], "core", version)];
-    if (legacy) {
-      entries.push({ version, upstreamRevision: `vendor-runtime:${version}`, backend: "official-studio-vm", family: "studio-1.4", channel: feed.channel,
-        source: feed.url, sourceUrl: feed.url, feedSha256, publishedAt: /<pubDate>([^<]*)<\/pubDate>/.exec(item)?.[1] || null,
-        packages, gameplayQualified: false, provenance: "official-https-feed", vendorSignatureVerified: false });
-      continue;
-    }
-    const names = new Set(["core"]);
-    for (const moduleTag of enclosure[2].matchAll(/<module\b([^>]*?)\/?\s*>/g)) {
-      const module = attributes(moduleTag[1]).name;
-      if (!["mac", "macYYC", "base-module-osx-arm64", "base-module-osx-x64"].includes(module)) continue;
-      if (names.has(module)) throw new Error("Runtime feed contains duplicate Mac modules.");
-      names.add(module); packages.push(packageFromTag(moduleTag[1], module, version));
-    }
-    if (!names.has("mac")) continue;
-    entries.push({ version, upstreamRevision: `vendor-runtime:${version}`, backend: "official-studio-vm", channel: feed.channel,
-      source: feed.url, sourceUrl: feed.url, feedSha256, publishedAt: /<pubDate>([^<]*)<\/pubDate>/.exec(item)?.[1] || null,
-      packages, gameplayQualified: false, provenance: "official-https-feed", vendorSignatureVerified: false });
+    try { const entry = parseItem(match[1], feed, feedSha256); if (entry) entries.push(entry); }
+    catch (error) { failure ||= error; logger?.warn?.(`[gamemaker] skipped a ${feed.channel} feed release: ${error.message}`); }
   }
-  if (!entries.length) throw new Error("Official feed contained no Mac runtime releases.");
-  return entries;
+  if (!entries.length) throw failure || new Error("Official feed contained no Mac runtime releases.");
+  // The newest releases stay listed when a feed grows past the catalog bound.
+  return entries.sort((left, right) => versionCompare(left.version, right.version)).slice(0, 500);
+}
+// One source per feed, so each channel refreshes and fails on its own. Each
+// package is a listed file whose URL and size come from the feed; the
+// Sparkle signature and the feed's own fields travel with the release.
+const SOURCES = Object.freeze(FEEDS.map(feed => Upstream.index({ locations: [feed.url], hosts: ["yoyogames.com"],
+  parse: ([document], { logger }) => parseFeed(Buffer.from(document.text, "utf8"), feed, logger).map(({ packages, ...entry }) => ({
+    version: entry.version, channel: feed.channel, sourceUrl: feed.url, publishedAt: entry.publishedAt,
+    details: { ...entry, packages: packages.map(({ module, signature, publishedUrl }) => ({ module, signature, ...(publishedUrl ? { publishedUrl } : {}) })) },
+    files: packages.map(item => ({ name: item.filename, url: item.url, bytes: item.bytes, id: item.module })) })) })));
+function entryFromRow(row) {
+  const packages = row.files.map(file => ({ ...row.details.packages.find(item => item.module === file.id), url: file.url, filename: file.name, bytes: file.bytes }));
+  return { ...row.details, packages: packages.map(({ module, url, filename, bytes, signature, publishedUrl }) =>
+    ({ module, url, filename, bytes, signature, ...(publishedUrl ? { publishedUrl } : {}) })) };
 }
 function validateEntry(entry) {
   try {
     if (!VERSION.test(entry.version || "") || entry.upstreamRevision !== `vendor-runtime:${entry.version}` ||
       !FEEDS.some(feed => feed.url === entry.source) || !/^[a-f0-9]{64}$/.test(entry.feedSha256 || "") ||
-      !Array.isArray(entry.packages) || entry.packages.length < 1 || entry.packages.length > 5) return false;
+      !Array.isArray(entry.packages) || entry.packages.length < 1 || entry.packages.length > 16) return false;
     const channels = entry.channels || [entry.channel];
     if (!Array.isArray(channels) || !channels.length || channels.length > FEEDS.length || new Set(channels).size !== channels.length ||
       channels.some(channel => !FEEDS.some(feed => feed.channel === channel))) return false;
@@ -115,7 +133,7 @@ function validateEntry(entry) {
     if (legacy && (!/^1\.4\.\d{1,5}$/.test(entry.version) || entry.source !== FEEDS.find(feed => feed.family === "studio-1.4").url)) return false;
     const modules = entry.packages.map(item => item.module);
     if ((!legacy && !modules.includes("core")) || !modules.includes("mac") || (legacy && modules.length !== 1) || new Set(modules).size !== modules.length ||
-      modules.some(module => !["core", "mac", "macYYC", "base-module-osx-arm64", "base-module-osx-x64"].includes(module))) return false;
+      modules.some(module => !MAC_MODULE(module))) return false;
     if (!legacy && entry.source === FEEDS.find(feed => feed.family === "studio-1.4").url) return false;
     return entry.packages.every(item => (legacy ? legacyPackage(item.url) === item.url && legacyPackage(item.publishedUrl) === item.url : officialPackage(item.url) === item.url) && path.posix.basename(new URL(item.url).pathname) === item.filename &&
       Number.isSafeInteger(item.bytes) && item.bytes > 0 && item.bytes <= 1024 ** 3 && /^[A-Za-z0-9+/=]{20,512}$/.test(item.signature || ""));
@@ -163,18 +181,15 @@ function setState(userDataDir, sourceId, value) {
   if (!states.has(userDataDir)) states.set(userDataDir, new Map());
   states.get(userDataDir).set(sourceId, value);
 }
-function refreshFeed(feed, { userDataDir, signal, logger, onProgress, fetch }) {
+function refreshFeed(feed, { userDataDir, signal, logger, onProgress }) {
   const sourceId = feedId(feed), key = JSON.stringify([userDataDir, sourceId]);
   if (refreshing.has(key)) return refreshing.get(key);
   const previous = stateFor(userDataDir, sourceId);
   const refresh = (async () => {
     setState(userDataDir, sourceId, { ...previous, status: "loading", error: null });
     try {
-      const timedSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000);
-      const response = await fetch(feed.url, { signal: timedSignal, maxRedirects: 0, headers: { "User-Agent": "MacLauncher/1.0" } });
-      if (response.status !== 200) throw new Error(feed.channel + " runtime feed returned HTTP " + response.status + ".");
-      throwIfAborted(signal);
-      const incoming = parseFeed(response.body, feed), fetchedAt = Date.now();
+      const incoming = (await SOURCES[FEEDS.indexOf(feed)].discover({ signal, logger })).map(entryFromRow).filter(validateEntry), fetchedAt = Date.now();
+      if (!incoming.length) throw new Error(`The ${feed.channel} feed lists no Mac runtime release.`);
       // Merge against the latest committed cache so independent feed requests
       // finishing in either order cannot discard another channel's update.
       const cached = cachedCatalog(userDataDir), prior = new Map((cached?.entries || []).map(entry => [entry.version, entry]));
@@ -185,8 +200,9 @@ function refreshFeed(feed, { userDataDir, signal, logger, onProgress, fetch }) {
       }
       for (const entry of incoming) {
         const old = prior.get(entry.version), duplicate = merged.get(entry.version);
-        if (old && packageIdentity(old) !== packageIdentity(entry)) throw new Error("Official " + entry.version + " artifact identity changed since the last refresh; existing selection was preserved.");
-        if (duplicate && packageIdentity(duplicate) !== packageIdentity(entry)) throw new Error("Official feeds disagree on " + entry.version + " package identities.");
+        // YoYo Games may replace a package behind the same URL. Its feed then
+        // publishes the new size and signature, and the latest feed answer wins.
+        if (old && packageIdentity(old) !== packageIdentity(entry)) logger?.info?.("[gamemaker] " + entry.version + " packages changed upstream");
         const snapshots = duplicate ? snapshotsFor(duplicate, cached.fetchedAt) : [];
         snapshots.push({ channel: feed.channel, source: feed.url, feedSha256: entry.feedSha256,
           publishedAt: entry.publishedAt || null, fetchedAt });
@@ -208,12 +224,13 @@ function refreshFeed(feed, { userDataDir, signal, logger, onProgress, fetch }) {
   refreshing.set(key, refresh);
   return refresh;
 }
-async function refreshCatalog({ userDataDir, sourceId, signal, logger, onProgress, fetch = fetchUrlBuffer } = {}) {
+async function refreshCatalog({ userDataDir, sourceId, signal, logger, onProgress } = {}) {
   if (typeof userDataDir !== "string" || !path.isAbsolute(userDataDir) || userDataDir.includes("\0")) throw new Error("Runtime Refresh needs the launcher's absolute data directory.");
   const feeds = sourceId === undefined ? FEEDS : [resolveFeed(sourceId)];
-  const results = await Promise.allSettled(feeds.map(feed => refreshFeed(feed, { userDataDir, signal, logger, onProgress, fetch })));
-  const failure = results.find(result => result.status === "rejected");
-  if (failure) throw failure.reason;
+  const results = await Promise.allSettled(feeds.map(feed => refreshFeed(feed, { userDataDir, signal, logger, onProgress })));
+  // Each feed keeps its own state and error. A retired or failing channel does
+  // not block the releases the other channels returned.
+  if (results.every(result => result.status === "rejected")) throw results[0].reason;
   return cachedCatalog(userDataDir);
 }
 function selectPackages(release, arch = process.arch) {
@@ -221,9 +238,9 @@ function selectPackages(release, arch = process.arch) {
   if (release.family === "studio-1.4") return require("./official-legacy").resolveBuild(release.version, release).packages;
   const byName = new Map(release.packages.map(item => [item.module, item]));
   const baseModules = release.packages.filter(item => item.module.startsWith("base-module-osx-"));
-  const base = byName.get(`base-module-osx-${arch}`);
+  const base = byName.get(`base-module-osx-${arch}`) || baseModules.find(item => /universal/i.test(item.module));
   if (baseModules.length && !base) throw new Error(`Official ${release.version} does not offer a ${arch} native base module.`);
   if (!byName.has("core") || !byName.has("mac") || !byName.has("macYYC")) throw new Error(`Official ${release.version} is missing the Mac modules required by Igor.`);
   return [byName.get("core"), ...(base ? [base] : []), byName.get("mac"), byName.get("macYYC")];
 }
-module.exports = { FEEDS, VERSION, versionCompare, parseFeed, validateEntry, cachedCatalog, stateFor, refreshCatalog, selectPackages, packageIdentity };
+module.exports = { FEEDS, SOURCES, VERSION, versionCompare, parseFeed, validateEntry, cachedCatalog, stateFor, refreshCatalog, selectPackages, packageIdentity };

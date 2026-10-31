@@ -2,7 +2,7 @@
 // over it, and the articles for the latest action on the right. Every
 // launcher view on the page shares one in-memory state.
 import "./shell.css";
-import demoData from "../data/state.json";
+import { demoData } from "./data";
 import type { LauncherState } from "../../../src/renderer/src/ui/types";
 import { ARTICLES, articlesFor, type Article } from "./articles";
 import { createStore, type DemoTopic, type DemoWindow } from "./mock/store";
@@ -64,6 +64,10 @@ const LEADS: Record<string, string> = {
   "section:external": "External finds games already on this Mac and downloads the ones you own, with a tab for each store.",
   "runtime-action": "In MacLauncher, this would download, remove or select a runtime version.",
   settings: "In MacLauncher, this setting would be saved straight away.",
+  "settings:checkForUpdatesAtLaunch": "In MacLauncher, this setting would be saved straight away. While it is on, each start asks GitHub for a newer release.",
+  "action:appUpdate": "In MacLauncher, Check for Updates asks GitHub for the newest release and offers to download and install a newer one. The demo contacts nothing and reports this version as current.",
+  "action:locateGame": "In MacLauncher, Locate… asks for the game's new location, checks that the same kind of game is there and points the library entry at it, keeping its saves and settings.",
+  "action:findMissingGames": "MacLauncher checks each game's saved location without reading its folder, then counts or selects the games whose files are missing.",
   store: "In MacLauncher, this would use your own store account.",
   "store:scan": "MacLauncher looks through the stores' install folders on this Mac for games you already have. Nothing is downloaded.",
   "store:download": "In MacLauncher, this would download the game with your own store account. Finished copies are listed under Downloaded, ready to import.",

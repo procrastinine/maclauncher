@@ -235,11 +235,19 @@ test("the production menu opens native utility windows from any focused view and
   const menu = source.slice(source.indexOf("function setupAppMenu()"), source.indexOf("\nfunction upsertGame", source.indexOf("function setupAppMenu()")));
   let template;
   const opened = [];
+  const library = {};
   vm.runInNewContext(menu + "\nsetupAppMenu();", { process: { platform: "darwin" }, app: { name: "MacLauncher" },
     devtoolsEnabled: false, sendToolsMenuEvent() {}, openGamesFromMenu() {}, openUtilityFromMenu: view => opened.push(view),
-    ensureLauncherWindow: () => { opened.push("library"); return Promise.resolve(); },
+    ensureLauncherWindow: () => { opened.push("library"); return Promise.resolve(); }, isChildGame: false,
+    launcherWindows: new Set([library]), logger: { error() {} },
+    appUpdater: { choose: owner => { opened.push(owner === library ? "update:library" : "update"); return Promise.resolve(); } },
     Menu: { buildFromTemplate: value => { template = value; return value; }, setApplicationMenu() {} } });
   const appMenu = template[0].submenu;
+  // Check for Updates… follows About, as in other Mac apps.
+  assert.deepEqual(Array.from(appMenu.slice(0, 3), item => item.role || item.label), ["about", "Check for Updates…", "Credits"]);
+  appMenu[1].click({}, library);
+  appMenu[1].click({}, { gameWindow: true });
+  assert.deepEqual(opened.splice(0), ["update:library", "update"]);
   const settings = appMenu.find(item => item.label === "Settings…");
   assert.equal(settings.accelerator, "CmdOrCtrl+,");
   settings.click();
@@ -279,7 +287,7 @@ test("fullscreen keeps the Mac shortcut hidden beside the native command and ret
   function templateFor(platform) {
     let template;
     vm.runInNewContext(menu + "\nsetupAppMenu();", { process: { platform }, app: { name: "MacLauncher" },
-      devtoolsEnabled: false, sendToolsMenuEvent() {}, openGamesFromMenu() {}, openUtilityFromMenu() {},
+      devtoolsEnabled: false, sendToolsMenuEvent() {}, openGamesFromMenu() {}, openUtilityFromMenu() {}, isChildGame: false,
       Menu: { buildFromTemplate: value => { template = value; return value; }, setApplicationMenu() {} } });
     return template;
   }
@@ -452,9 +460,17 @@ test("background Steam imports persist and broadcast library edits without focus
   const order = [], entry = { gamePath: "/steam/Example Game/Example.app", gameId: "game" };
   const settings = { launcher: {} };
   const context = { loadGamesHydrated: () => [], assertGameNotRemoving() {},
-    backendService: { request: async () => { order.push("detect"); return { ...entry }; } }, loadSettings: () => settings,
+    backendService: { request: async (_lane, method, _entry, _settings, options) => {
+      if (method === "libraryEntry") {
+        assert.equal(options.availability.available, true);
+        order.push("checks"); return { checks: { runtimeId: "native", runtimeSupport: ["native"] } };
+      }
+      assert.equal(method, "importEntry"); order.push("detect"); return { ...entry };
+    } }, loadSettings: () => settings,
     findGameByPath: () => null, GameData: { createGameId: () => "game" },
-    upsertGame: (_games, detected) => ({ entry: detected, games: [detected] }),
+    upsertGame: (_games, detected, _settings, checks) => {
+      assert.equal(checks.runtimeId, "native"); return { entry: detected, games: [detected] };
+    },
     persistGames: games => { assert.equal(games[0].importPath, "/steam/Example Game"); order.push("persist"); },
     saveSettings: () => order.push("settings"), buildState: (_settings, games) => ({ recents: games }), cachedState: null,
     broadcastState: () => order.push("broadcast"),
@@ -467,7 +483,7 @@ test("background Steam imports persist and broadcast library edits without focus
   const imported = await queue.import("/steam/Example Game", { background: true });
   assert.equal(imported.gamePath, entry.gamePath); assert.equal(imported.importPath, "/steam/Example Game");
   assert.equal(context.cachedState.recents[0], imported);
-  assert.deepEqual(order, ["detect", "persist", "settings", "broadcast"]);
+  assert.deepEqual(order, ["detect", "checks", "persist", "settings", "broadcast"]);
 });
 
 test("runtime import and download sheets follow the focused registered window and never attach to a game", async () => {

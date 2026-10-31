@@ -28,7 +28,8 @@ function hasDeveloperIdIdentity(env) {
   return /Developer ID Application:/i.test(output);
 }
 
-const env = { ...process.env, FORCE_COLOR: "1" };
+const env = { ...process.env };
+if (!Object.hasOwn(env, "NO_COLOR") && !Object.hasOwn(env, "FORCE_COLOR")) env.FORCE_COLOR = "1";
 const incomingArgs = process.argv.slice(2);
 const extraArgs = [];
 const nativeOptions = {};
@@ -41,9 +42,12 @@ for (let index = 0; index < incomingArgs.length; index += 1) {
     nativeOptions[argument] = value;
   } else extraArgs.push(argument);
 }
-const architectures = extraArgs.includes("--universal") ? ["arm64", "x64"] :
-  [...new Set([extraArgs.includes("--arm64") && "arm64", extraArgs.includes("--x64") && "x64"].filter(Boolean))];
-if (!architectures.length) architectures.push(process.arch);
+// Apple Silicon and Intel are separate apps, each with the included packages
+// and embedded Python for its own processor, so one run builds one of them.
+if (extraArgs.includes("--universal")) throw new Error("MacLauncher ships separate Apple Silicon and Intel apps. Package --arm64 or --x64.");
+const architectures = [extraArgs.includes("--arm64") && "arm64", extraArgs.includes("--x64") && "x64"].filter(Boolean);
+if (architectures.length > 1) throw new Error("Package one architecture per run: --arm64 or --x64.");
+if (!architectures.length) { architectures.push(process.arch); extraArgs.push("--" + process.arch); }
 if (nativeOptions["--runtime-only"]) throw new Error("A MacLauncher app build requires the complete runtime distribution plan.");
 const signedBuild = hasDeveloperIdIdentity(env);
 const maximumMacOS = nativeOptions["--runtime-maximum-macos"] ||

@@ -99,7 +99,7 @@ export function PluginLibrary({ manager, sections, state, api, ui, downloads, on
             onClick={() => void updatePlugin(choice.sectionId)}>{updating ? "Updating…" : "Update"}</button>}
           {otherInstall && <button type="button" className="btn" disabled={busy}
             aria-label={`Remove unused ${section.label || choice.label} copy`} onClick={() => void onUninstall(manager.id, choice.sectionId, otherInstall)}>Remove unused copy</button>}
-          {(!ready || installed?.removable !== false) && <button type="button" className={`btn${ready || plugin.custom ? "" : " primary"}`} disabled={busy || !version}
+          {(!ready || installed?.removable !== false) && <button type="button" className={`btn${ready || plugin.custom ? "" : " primary"}`} disabled={busy}
             onClick={() => void performAction()}
             aria-label={`${ready || plugin.custom ? "Remove" : installed ? "Repair" : "Install"} ${section.label || choice.label}`}>
             {ready || plugin.custom ? "Remove" : installed ? "Repair" : "Install"}

@@ -8,7 +8,7 @@ const { createBundledNativeRuntime } = require("../shared/runtime/bundled-native
 const { getUiServices } = require("../shared/ui-services");
 const GameData = require("../shared/game-data");
 const { runtimeVersionChoices } = require("../shared/runtime/version-choices");
-const { createCatalogDiscovery, prepareReleaseInstall } = require("./catalog");
+const { source, prepareReleaseInstall, releaseExecutable } = require("./catalog");
 const Preparation = require("./prepare");
 const { prepareGame } = Preparation;
 const MsgTool = require("../shared/runtime/msg-tool");
@@ -26,9 +26,9 @@ const runtimeManager = createPinnedNativeManager({
   projectBuilds: { projectId: "krkrsdl2", repository: "procrastinine/maclauncher-builds", upstreamMacDownloads: true },
   sourceUrl: "https://github.com/krkrsdl2/krkrsdl2",
   legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "krkrsdl2" }),
-  discoverCatalog: createCatalogDiscovery(), prepareInstall: prepareReleaseInstall,
-  resolveExecutable: (root, pin) => path.join(root, pin.executableRelative || "krkrsdl2"),
-  catalog: [], dependencies
+  upstream: source, prepareInstall: prepareReleaseInstall,
+  resolveExecutable: releaseExecutable,
+  dependencies
 });
 const installRuntime = runtimeManager.installRuntime.bind(runtimeManager);
 runtimeManager.installRuntime = async ({ kag3Resources, ...options } = {}) => {

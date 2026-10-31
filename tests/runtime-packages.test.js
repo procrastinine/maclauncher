@@ -13,6 +13,16 @@ const clone = value => JSON.parse(JSON.stringify(value));
 const bytesEntry = (name, bytes, mode = 0o644) => ({ name, bytes, size: bytes.length, sha256: B.digest(bytes), mode });
 const repository = 'example/runtime-builds';
 
+test('the app lock selects a native build instead of Universal for the same version', () => {
+  const universal = { id: 'graphics', version: '1.0', arch: 'universal', launcherArchitectures: ['arm64', 'x64'] };
+  const intel = { ...universal, arch: 'x64', launcherArchitectures: ['x64'] };
+  const legacy = { ...intel, version: '0.9', launcherArchitectures: ['arm64', 'x64'] };
+  const lock = { architectures: ['arm64', 'x64'], packages: [universal, intel, legacy] };
+  assert.deepEqual(R.selectArchitecture(lock, 'arm64').packages, [universal, legacy]);
+  assert.deepEqual(R.selectArchitecture(lock, 'x64').packages, [intel, legacy]);
+  assert.deepEqual(lock.packages, [universal, intel, legacy]);
+});
+
 async function fixture(t) {
   const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'runtime-packages-test-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -49,7 +59,8 @@ async function fixture(t) {
     updatePolicy: 'manual', tag, asset: { filename: path.basename(f.archive), url: url + path.basename(f.archive),
       sha256: await P.checksum(f.archive), bytes: fs.statSync(f.archive).size },
     sourceAsset: { filename: sourceName, url: url + sourceName, sha256: sourceArtifact.sha256, bytes: source.length } };
-  f.lock = { schemaVersion: 1, repository, arch: f.arch, maximumMacOS: f.maximumMacOS, packages: [f.record] };
+  f.lock = { schemaVersion: 2, repository, architectures: [f.arch], maximumMacOS: f.maximumMacOS, packages: [f.record] };
+  f.selection = R.selectArchitecture(f.lock, f.arch);
   f.plan = Model.createPlan({ arch: f.arch, maximumMacOS: f.maximumMacOS, dependencies });
   return f;
 }
@@ -87,12 +98,45 @@ test('application locks select only complete compatible packages and matching so
   }
 });
 
+test('one lock covers each app architecture with exactly the packages its plan includes', () => {
+  // Two included runtimes: one published for Apple Silicon launchers only,
+  // one published per CPU. Each app selects the records for its own CPU.
+  const manager = (id, distributionArchitectures) => ({ id, distributionRequired: true, distributionVersions: ['1.0'],
+    ...(distributionArchitectures ? { distributionArchitectures } : {}),
+    core: { catalog: [{ version: '1.0', upstreamRevision: 'a'.repeat(40) }] } });
+  const managers = [manager('silicon-only', { arm64: ['arm64'], x64: [] }), manager('per-cpu')];
+  const dependencies = { managers: () => new Map(managers.map(item => [item.id, item])), supplementals: () => [] };
+  const record = (id, arch) => {
+    const tag = `${id}/v1.0/${arch}`, filename = `${id}-1.0-${arch}.tar.gz`;
+    return { schemaVersion: 2, id, version: '1.0', arch, launcherArchitectures: [arch], minimumMacOS: '13.0',
+      manifestRelative: 'manifest.json', manifestSha256: 'd'.repeat(64), sourceSha256: 'e'.repeat(64), updatePolicy: 'manual', tag,
+      asset: { filename, url: `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}/${filename}`, sha256: 'f'.repeat(64), bytes: 1 } };
+  };
+  const lock = { schemaVersion: 2, repository, architectures: ['arm64', 'x64'], maximumMacOS: '13.0',
+    packages: [record('per-cpu', 'arm64'), record('per-cpu', 'x64'), record('silicon-only', 'arm64')] };
+  assert.equal(R.validateLock(lock, { dependencies }).packages.length, 3);
+  const ids = arch => R.validateSelection(R.selectArchitecture(lock, arch), { dependencies }).packages.map(item => `${item.id}/${item.arch}`).sort();
+  assert.deepEqual(ids('arm64'), ['per-cpu/arm64', 'silicon-only/arm64']);
+  assert.deepEqual(ids('x64'), ['per-cpu/x64']);
+  for (const mutate of [
+    value => { value.architectures = ['x64', 'arm64']; },
+    value => { value.architectures = ['arm64', 'arm64']; },
+    value => { value.packages.pop(); },
+    value => { value.packages.push(record('unused', 'x64')); },
+    value => { value.packages[1].launcherArchitectures = ['arm64']; }
+  ]) {
+    const changed = clone(lock); mutate(changed);
+    assert.throws(() => R.validateLock(changed, { dependencies }), /package lock|runtime/i);
+  }
+  assert.throws(() => R.selectArchitecture({ ...lock, architectures: ['arm64'] }, 'x64'), /does not cover/);
+});
+
 test('catalog lock creation requires the selected version and reads only declared catalogs', async t => {
   const f = await fixture(t), catalogs = path.join(f.root, 'catalogs'); fs.mkdirSync(catalogs);
   const file = path.join(catalogs, f.manager.id + '.json');
   const catalog = { schemaVersion: 2, projectId: f.manager.id, updatePolicy: 'manual', packages: [f.record] };
   fs.writeFileSync(file, JSON.stringify(catalog));
-  const options = { catalogs, arch: f.arch, maximumMacOS: f.maximumMacOS, repository, dependencies: f.dependencies };
+  const options = { catalogs, architectures: [f.arch], maximumMacOS: f.maximumMacOS, repository, dependencies: f.dependencies };
   assert.deepEqual(R.createLock(options), R.validateLock(f.lock, { dependencies: f.dependencies }));
   catalog.packages = []; fs.writeFileSync(file, JSON.stringify(catalog));
   assert.throws(() => R.createLock(options), /Missing published package/);
@@ -180,25 +224,45 @@ test('explicit package fetch reuses immutable resources and retains correspondin
   const dependencies = { model: f.dependencies, download: async (url, output) => {
     requested.push(url); assert.equal(url, f.record.asset.url); fs.copyFileSync(f.archive, output);
   } };
-  const first = await R.fetchPackages({ lock: f.lock, repoRoot, dependencies });
+  const first = await R.fetchPackages({ lock: f.selection, repoRoot, dependencies });
   assert.equal(first.packages, 1);
   assert.equal(first.inventory.packageRepository, repository);
-  assert.deepEqual(first.inventory.projectPackages, R.validateLock(f.lock, { dependencies: f.dependencies }).packages);
+  assert.deepEqual(first.inventory.projectPackages, R.validateSelection(f.selection, { dependencies: f.dependencies }).packages);
   assert.deepEqual(first.inventory.sourceArtifacts, f.plan.sourceArtifacts);
   const runtime = path.join(repoRoot, 'src/resources/native-runtimes/runtime-fixture/1.0/arm64');
   assert.equal(B.verifyPayload(runtime, f.declaration), true);
-  await R.fetchPackages({ lock: f.lock, repoRoot, dependencies });
+  await R.fetchPackages({ lock: f.selection, repoRoot, dependencies });
   assert.deepEqual(requested, [f.record.asset.url]);
   const runner = path.join(runtime, 'files/bin/runner'); fs.chmodSync(runner, 0o644);
-  await assert.rejects(R.fetchPackages({ lock: f.lock, repoRoot, dependencies }), /checksum|permissions/);
+  await assert.rejects(R.fetchPackages({ lock: f.selection, repoRoot, dependencies }), /checksum|permissions/);
   assert.equal(fs.statSync(runner).mode & 0o777, 0o644, 'an existing installed resource is preserved');
   assert.ok(fs.readdirSync(path.dirname(runtime)).every(name => !name.startsWith('.install-')));
+});
+
+test('stage cleanup retries shared-volume directory-not-empty races without failing the fetch', async t => {
+  const f = await fixture(t), repoRoot = path.join(f.root, 'app');
+  const dependencies = { model: f.dependencies, download: async (_url, output) => fs.copyFileSync(f.archive, output) };
+  const original = fs.rmSync.bind(fs);
+  let failures = 0;
+  const simulated = t.mock.method(fs, 'rmSync', (target, options) => {
+    if (typeof target === 'string' && options?.recursive &&
+        path.basename(target).startsWith('.install-') && failures < 2) {
+      failures += 1;
+      throw Object.assign(new Error('Directory not empty'), { code: 'ENOTEMPTY' });
+    }
+    return original(target, options);
+  });
+  const result = await R.fetchPackages({ lock: f.selection, repoRoot, dependencies });
+  assert.equal(result.packages, 1);
+  assert.ok(simulated.mock.calls.length >= 3, 'the staged removal is retried before giving up');
+  const parent = path.join(repoRoot, 'src/resources/native-runtimes/runtime-fixture/1.0');
+  assert.ok(fs.readdirSync(parent).every(name => !name.startsWith('.install-')));
 });
 
 test('corrupt downloaded archives do not publish resources or leave extraction stages', async t => {
   const f = await fixture(t), repoRoot = path.join(f.root, 'app');
   const dependencies = { model: f.dependencies, download: async (_url, output) => fs.writeFileSync(output, 'changed download') };
-  await assert.rejects(R.fetchPackages({ lock: f.lock, repoRoot, dependencies }), /checksum|size/);
+  await assert.rejects(R.fetchPackages({ lock: f.selection, repoRoot, dependencies }), /checksum|size/);
   const parent = path.join(repoRoot, 'src/resources/native-runtimes/runtime-fixture/1.0');
   assert.ok(fs.readdirSync(parent).every(name => !name.startsWith('.install-') && name !== 'arm64'));
 });
@@ -208,7 +272,7 @@ test('failed member verification retires partially extracted stages without publ
   const files = f.files.map(entry => entry.name === 'files/bin/runner'
     ? bytesEntry(entry.name, Buffer.alloc(entry.size, 1), entry.mode) : entry);
   const archive = await writePackage(f, f.declaration, files);
-  const lock = { ...f.lock, packages: [await archiveRecord(f, archive)] };
+  const lock = { ...f.selection, packages: [await archiveRecord(f, archive)] };
   const dependencies = { model: f.dependencies, download: async (_url, output) => fs.copyFileSync(archive, output) };
   await assert.rejects(R.fetchPackages({ lock, repoRoot, dependencies }), /checksum/);
   const parent = path.join(repoRoot, 'src/resources/native-runtimes/runtime-fixture/1.0');

@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const Metadata = require("./metadata");
+const Pack = require("./pack");
 
 const PACK_MAGIC = Buffer.from("GDPC", "ascii");
 const PACK_HEADER_SIZE = 20;
@@ -78,6 +79,57 @@ function readUInt64LE(buf, offset) {
   return num;
 }
 
+// A customized engine can rename the pack magic, and number its own pack
+// format, while keeping one of Godot's directory layouts. Versions 0 and 1 list
+// the directory after 64 reserved bytes, with offsets from the file start;
+// version 2 adds flags and a file base before the reserved bytes; version 3
+// names the directory's offset after the file base. Every layout is tried,
+// whatever version the header names.
+const PACK_FIELDS_SIZE = 40; // Through the version 3 directory offset.
+const PACK_LAYOUTS = Object.freeze([
+  { header: 84, directory: 84, fileBase: false, rowFlags: false },
+  { header: 96, directory: 96, fileBase: true, rowFlags: true },
+  { header: PACK_FIELDS_SIZE, directory: null, fileBase: true, rowFlags: true }
+]);
+const PACK_RELATIVE_FILE_BASE = 2;
+const PACK_ROW_FIELDS = 32; // Offset, size and MD5 sum.
+
+// Such a pack counts as Godot only when one of those layouts reads it: a
+// plausible engine version, a readable directory, and a first row whose
+// resource path is valid and whose data lies inside the pack, past the header
+// and clear of the row itself. Only the customized engine can run the pack.
+function readCustomPackHeader(fd, offset, packSize) {
+  const header = readBuffer(fd, offset, Math.min(packSize, PACK_FIELDS_SIZE));
+  if (!header || header.length < PACK_FIELDS_SIZE || header.subarray(0, 4).equals(PACK_MAGIC)) return null;
+  const packVersion = header.readUInt32LE(4);
+  const engineMajor = header.readUInt32LE(8);
+  const engineMinor = header.readUInt32LE(12);
+  const enginePatch = header.readUInt32LE(16);
+  if (packVersion > 255 || !(engineMajor >= 1 && engineMajor <= 9 && engineMinor <= 99 && enginePatch <= 9999)) return null;
+  const flags = header.readUInt32LE(20);
+  const readable = PACK_LAYOUTS.some(layout => {
+    // An encrypted directory or an unknown flag leaves no directory to read.
+    if (layout.fileBase && flags & ~PACK_RELATIVE_FILE_BASE) return false;
+    const directory = layout.directory ?? readUInt64LE(header, 32);
+    if (!Number.isSafeInteger(directory) || directory < layout.header || directory > packSize - 8) return false;
+    const row = readBuffer(fd, offset + directory, Math.min(packSize - directory, 8 + Pack.MAX_PATH + PACK_ROW_FIELDS + 4));
+    if (!row || row.length < 8) return false;
+    const count = row.readUInt32LE(0), pathLength = row.readUInt32LE(4);
+    const rowEnd = 8 + pathLength + PACK_ROW_FIELDS + (layout.rowFlags ? 4 : 0);
+    if (!count || count > Pack.MAX_ENTRIES || !pathLength || pathLength > Pack.MAX_PATH || row.length < rowEnd) return false;
+    if (!Pack.resourcePath(row.subarray(8, 8 + pathLength))) return false;
+    const base = layout.fileBase ? readUInt64LE(header, 24) : 0;
+    const dataOffset = readUInt64LE(row, 8 + pathLength), dataSize = readUInt64LE(row, 16 + pathLength);
+    if (base === null || dataOffset === null || dataSize === null) return false;
+    // Version 3 and relative version 2 offsets count from the pack start.
+    const relative = layout.directory === null || (layout.fileBase && flags & PACK_RELATIVE_FILE_BASE);
+    const start = base + dataOffset - (relative ? 0 : offset), end = start + dataSize;
+    return Number.isSafeInteger(end) && start >= layout.header && end <= packSize &&
+      (end <= directory || start >= directory + rowEnd);
+  });
+  return readable ? { packVersion, engineMajor, engineMinor, enginePatch, customMagic: true } : null;
+}
+
 function parsePckHeader(buffer) {
   if (!buffer || buffer.length < PACK_HEADER_SIZE) return null;
   if (!buffer.subarray(0, 4).equals(PACK_MAGIC)) return null;
@@ -91,12 +143,15 @@ function parsePckHeader(buffer) {
   return { packVersion, engineMajor, engineMinor, enginePatch };
 }
 
-function readPckHeader(filePath, offset = 0) {
+// packSize counts the pack's bytes from offset; without it, the pack runs to
+// the end of the file.
+function readPckHeader(filePath, offset = 0, packSize) {
   let fd = null;
   try {
     fd = fs.openSync(filePath, "r");
     const buf = readBuffer(fd, offset, PACK_HEADER_SIZE);
-    return parsePckHeader(buf);
+    if (buf?.subarray(0, 4).equals(PACK_MAGIC)) return parsePckHeader(buf);
+    return readCustomPackHeader(fd, offset, Number.isFinite(packSize) ? packSize : fs.fstatSync(fd).size - offset);
   } catch {
     return null;
   } finally {
@@ -133,8 +188,8 @@ function normalizeDetectedVersion(value) {
   return { major, minor, patch };
 }
 
-function detectVersionFromHeader(filePath, offset) {
-  const header = readPckHeader(filePath, offset);
+function detectVersionFromHeader(filePath, offset, packSize) {
+  const header = readPckHeader(filePath, offset, packSize);
   if (!header) return null;
   const detectedVersion = formatDetectedVersion(
     header.engineMajor,
@@ -145,13 +200,22 @@ function detectVersionFromHeader(filePath, offset) {
     detectedVersion,
     detectedMajor: header.engineMajor,
     detectedMinor: header.engineMinor,
-    detectedSource: "PCK header"
+    detectedSource: header.customMagic ? "custom engine pack header" : "PCK header",
+    ...(header.customMagic ? { packCustomMagic: true } : {})
   };
 }
 
 function detectPackVersion(filePath, offset = 0) {
   if (!filePath) return null;
-  return detectVersionFromHeader(filePath, offset);
+  let packSize;
+  try {
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile()) return null;
+    packSize = Math.max(stat.size - Math.max(offset, 0), 0);
+  } catch {
+    packSize = null;
+  }
+  return detectVersionFromHeader(filePath, offset, Number.isFinite(packSize) ? packSize : null);
 }
 
 function findMagicInRange(fd, start, size, maxScan = 64) {
@@ -432,7 +496,7 @@ function detectAppBundle(rootDir) {
   }
 
   for (const candidate of candidates) {
-    const version = detectVersionFromHeader(candidate, 0);
+    const version = detectVersionFromHeader(candidate, 0, safeStat(candidate)?.size || null);
     if (!version) continue;
     return {
       packPath: candidate,
@@ -446,7 +510,7 @@ function detectAppBundle(rootDir) {
 function detectFileInput(inputPath, rootDir, stat) {
   const ext = path.extname(String(inputPath || "")).toLowerCase();
   if (ext === ".pck") {
-    const version = detectVersionFromHeader(inputPath, 0);
+    const version = detectVersionFromHeader(inputPath, 0, stat?.size || null);
     if (!version) return null;
     return {
       packagedType: "pck",
@@ -464,7 +528,7 @@ function detectFileInput(inputPath, rootDir, stat) {
   if (isExecutable) {
     const embedded = findEmbeddedPck(inputPath);
     if (embedded) {
-      const version = detectVersionFromHeader(inputPath, embedded.offset);
+      const version = detectVersionFromHeader(inputPath, embedded.offset, embedded.size);
       if (!version) return null;
       return {
         packagedType: isElf ? "elf-embedded" : "exe-embedded",
@@ -479,14 +543,15 @@ function detectFileInput(inputPath, rootDir, stat) {
     const baseName = path.basename(inputPath, path.extname(inputPath));
     const sibling = path.join(rootDir, `${baseName}.pck`);
     if (existsFile(sibling)) {
-      const version = detectVersionFromHeader(sibling, 0);
+      const siblingSize = safeStat(sibling)?.size || null;
+      const version = detectVersionFromHeader(sibling, 0, siblingSize);
       if (version) {
         return {
           packagedType: isElf ? "elf-sibling-pck" : "exe-sibling-pck",
           packagedPath: inputPath,
           packPath: sibling,
           packOffset: 0,
-          packSize: safeStat(sibling)?.size || null,
+          packSize: siblingSize,
           ...version
         };
       }
@@ -502,28 +567,46 @@ function matchesRootName(filePath, rootDir) {
   return Boolean(fileBase && rootBase && fileBase === rootBase);
 }
 
+// A release folder keeps its export beside a small launcher, often inside a
+// `game` subfolder with the pack and the platform executables together.
+// App bundles are skipped; their own import path handles them.
+const SUBFOLDER_SCAN = Object.freeze({ entries: 256, depth: 1 });
+
 function detectDirectoryPackagedLauncher(rootDir) {
-  let entries = [];
-  try {
-    entries = fs.readdirSync(rootDir, { withFileTypes: true });
-  } catch {
-    return null;
-  }
-
   const matches = [];
-  for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    const candidatePath = path.join(rootDir, entry.name);
-    const stat = safeStat(candidatePath);
-    if (!stat?.isFile()) continue;
-    const info = detectFileInput(candidatePath, rootDir, stat);
-    if (info) matches.push(info);
-  }
-
-  if (matches.length === 1) return matches[0];
+  const visit = (directory, depth) => {
+    let entries = [];
+    try { entries = fs.readdirSync(directory, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries.slice(0, SUBFOLDER_SCAN.entries)) {
+      if (!entry.name || entry.name.startsWith(".")) continue;
+      const candidatePath = path.join(directory, entry.name);
+      let stat;
+      try { stat = safeStat(candidatePath); } catch { continue; }
+      if (stat?.isDirectory()) {
+        if (depth < SUBFOLDER_SCAN.depth && !/\.app$/i.test(entry.name)) visit(candidatePath, depth + 1);
+      } else if (stat?.isFile()) {
+        const info = detectFileInput(candidatePath, directory, stat);
+        if (info) matches.push(info);
+      }
+    }
+  };
+  visit(rootDir, 0);
+  if (!matches.length) return null;
   const exact = matches.filter(match => matchesRootName(match.packagedPath, rootDir));
   if (exact.length === 1) return exact[0];
-  return null;
+  // One export's executables share its pack; the Windows export represents
+  // the release, and a lone pair stays itself. Different packs stay ambiguous.
+  const groups = new Map();
+  for (const match of matches) {
+    const key = match.packPath || match.packagedPath;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(match);
+  }
+  if (groups.size !== 1) return null;
+  const group = [...groups.values()][0];
+  if (group.length === 1) return group[0];
+  return group.find(match => /\.exe$/i.test(String(match.packagedPath || "")) ||
+    looksLikePeBinary(match.packagedPath)) || group[0];
 }
 
 function detectDirectory(rootDir) {
@@ -549,9 +632,9 @@ function detectDirectory(rootDir) {
   const pcks = listRootPcks(rootDir);
   if (pcks.length === 1) {
     const candidate = pcks[0];
-    const version = detectVersionFromHeader(candidate, 0);
+    const stat = safeStat(candidate);
+    const version = detectVersionFromHeader(candidate, 0, stat?.size || null);
     if (version) {
-      const stat = safeStat(candidate);
       return {
         packagedType: "pck",
         packagedPath: candidate,
@@ -585,6 +668,7 @@ function buildDetection({ name, gamePath, contentRootDir, versionInfo, moduleDat
   if (Number.isFinite(info.detectedMajor)) data.detectedMajor = info.detectedMajor;
   if (Number.isFinite(info.detectedMinor)) data.detectedMinor = info.detectedMinor;
   if (info.detectedSource) data.detectedSource = info.detectedSource;
+  if (info.packCustomMagic) data.packCustomMagic = true;
   if (metadata?.name) data.projectName = metadata.name;
 
   return {

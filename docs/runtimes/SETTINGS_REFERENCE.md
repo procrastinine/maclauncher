@@ -10,42 +10,42 @@ This reference lists, for each game type, its playback backends, every runtime s
 | [Android](#android) | MacLauncher Android | MacLauncher Android, Mac.apk, AIM |
 | [BGI / Ethornell](#bgi--ethornell) | Program tools | Program tools, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [CatSystem2](#catsystem2) | Archive and script tools | Archive and script tools, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
-| [Construct](#construct) | Electron | Electron, NW.js, NW.js (Patched), Native app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
+| [Construct](#construct) | Electron | Electron, NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [DOS](#dos) | DOSBox Staging | DOSBox Staging, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [FAVORITE / FVP](#favorite--fvp) | RFVP | RFVP, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [Flash](#flash) | Adobe Flash Player | Adobe Flash Player, Ruffle |
-| [FNA / XNA 4](#fna--xna-4) | FNA | FNA, Author's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
+| [FNA / XNA 4](#fna--xna-4) | FNA | FNA, Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [GameMaker](#gamemaker) | Butterscotch | OpenGMK, Butterscotch, Official GameMaker, Game's macOS app, Inspect only, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
-| [GameMaker HTML5](#gamemaker-html5) | Electron | Electron, NW.js, Native app |
-| [Godot](#godot) | Godot | Godot, Native app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
+| [GameMaker HTML5](#gamemaker-html5) | Electron | Electron, NW.js, Game's macOS app |
+| [Godot](#godot) | Godot | Godot, Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [HashLink (Haxe bytecode)](#hashlink-haxe-bytecode) | HashLink (Intel Mac; Rosetta on Apple Silicon) | HashLink (Intel Mac; Rosetta on Apple Silicon), CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [Haxe native build](#haxe-native-build) | Native build inspection | Native build inspection, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [Infinity Engine (GemRB)](#infinity-engine-gemrb) | GemRB | GemRB, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
-| [iOS / iPadOS](#ios--ipados) | PlayCover (Apple Silicon) | PlayCover (Apple Silicon) |
+| [iOS / iPadOS](#ios--ipados) | PlayCover | PlayCover |
 | [Java](#java) | Java | Java |
 | [KiriKiri](#kirikiri) | KiriKiri SDL2 | KiriKiri SDL2, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
-| [LÖVE](#löve) | LÖVE | LÖVE, Native app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
+| [LÖVE](#löve) | LÖVE | LÖVE, Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [macOS Game](#macos-game) | Native macOS | Native macOS, 32-bit Mac *(provider)* |
 | [MAGES.](#mages) | Impacto Windows HD | Impacto Windows HD, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [Minori](#minori) | ReMinori | ReMinori, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
-| [MUGEN / Ikemen GO](#mugen--ikemen-go) | Ikemen GO (Apple Silicon) | Ikemen GO (Apple Silicon), CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
-| [Nintendo Switch](#nintendo-switch) | Switch (nxnative) | Switch (nxnative), Inspection |
+| [MUGEN / Ikemen GO](#mugen--ikemen-go) | Ikemen GO | Ikemen GO, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
+| [Nintendo Switch](#nintendo-switch) | Switch (nxnative) | Switch (nxnative), Inspect only |
 | [Nitroplus](#nitroplus) | Nitroplus | Nitroplus, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [NScripter](#nscripter) | ONScripter-Yuri | ONScripter-Yuri, ONScripter-EN, ONScripter-Yuri Web, External runtime, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
-| [PlayStation 5](#playstation-5) | PS5 (AnyPS5) | PS5 (AnyPS5), Inspection, Prosper *(provider)* |
+| [PlayStation 5](#playstation-5) | PS5 (AnyPS5) | PS5 (AnyPS5), Inspect only, Prosper *(provider)* |
 | [Prosper](#prosper) | Prosper | Prosper |
-| [Ren'Py](#renpy) | Ren'Py SDK | Ren'Py Patch, Ren'Py SDK, Native app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
+| [Ren'Py](#renpy) | Ren'Py SDK | Ren'Py Patch, Ren'Py SDK, Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [RPG Maker 2000/2003](#rpg-maker-20002003) | EasyRPG Player | EasyRPG Player, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
-| [RPG Maker MV](#rpg-maker-mv) | Electron | Electron, NW.js, NW.js (Patched), Native app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
-| [RPG Maker MZ](#rpg-maker-mz) | Electron | Electron, NW.js, NW.js (Patched), Native app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
+| [RPG Maker MV](#rpg-maker-mv) | Electron | Electron, NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
+| [RPG Maker MZ](#rpg-maker-mz) | Electron | Electron, NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [RPG Maker XP/VX/VX Ace](#rpg-maker-xpvxvx-ace) | MKXP-Z | MKXP-Z, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [ScummVM](#scummvm) | ScummVM | ScummVM, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [Siglus / RealLive](#siglus--reallive) | Siglus | Siglus, RealLive (RLVM), CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
-| [Tyrano](#tyrano) | Electron | Electron, NW.js, NW.js (Patched), Native app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
-| [Unity](#unity) | Unity Mono player | Unity Mono player, Author’s macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
+| [Tyrano](#tyrano) | Electron | Electron, NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
+| [Unity](#unity) | Unity Mono player | Unity Mono player, Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [Video](#video) | mpv player | mpv player |
 | [VNDS](#vnds) | VNDS-LOVE | VNDS-LOVE, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
-| [Web](#web) | Electron | Electron, NW.js, NW.js (Patched), Native app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
+| [Web](#web) | Electron | Electron, NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [Windows Game](#windows-game) | Sikarugir (Wine) | Sikarugir (Wine), CrossOver |
 | [WOLF RPG Editor](#wolf-rpg-editor) | Browser Woditor | Browser Woditor, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 
@@ -55,7 +55,7 @@ Module `mac32`.
 
 | Backend | Description and requirements |
 | --- | --- |
-| 32-bit Mac (default) | 32-bit Intel macOS applications · macOS 26 or later · Rosetta on Apple Silicon |
+| 32-bit Mac (default) | 32-bit Intel macOS applications · macOS version stated by each release · Rosetta on Apple Silicon |
 
 Runtimes tabs: 32-bit Mac (managed).
 
@@ -66,6 +66,10 @@ Runtimes tabs: 32-bit Mac (managed).
 | Application arguments | List |  | One argument per line. |
 | Additional library directory | Text |  | An optional folder containing compatible 32-bit Mac libraries. |
 | Game compatibility patches | On/Off | Off | Allow mac32 to apply its compatibility fixes in game memory. Fixes apply only to matching game-library versions; original files remain unchanged. |
+
+| Action group | Actions |
+| --- | --- |
+| Actions | Inspect binary |
 
 ## AI5WIN
 
@@ -101,7 +105,7 @@ Runtimes tabs: AliceSoft → Alice tools (managed); AliceSoft → System 1–3 (
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Version to register | Current selection; installed or detected options | Current selection |  |
+| Version | Default; installed or detected options | Default |  |
 | Font override | Text |  | Optional local TTF/OTF. Bundled runtimes provide a default font automatically. |
 | Game ID override | Text |  | Use the upstream game ID for translated or modified games. |
 | Text capture | Off; Console; Clipboard | Off |  |
@@ -111,7 +115,7 @@ Runtimes tabs: AliceSoft → Alice tools (managed); AliceSoft → System 1–3 (
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Version to register | Current selection; installed or detected options | Current selection |  |
+| Version | Default; installed or detected options | Default |  |
 | Font override | Text |  | Optional local TTF/OTF for both text styles. Bundled runtimes provide gothic and mincho fonts automatically. |
 | Game ID override | Text |  | Use the upstream game ID for translated or modified games. |
 | Text capture | Off; Console; Clipboard | Off |  |
@@ -121,7 +125,7 @@ Runtimes tabs: AliceSoft → Alice tools (managed); AliceSoft → System 1–3 (
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Version to register | Current selection; installed or detected options | Current selection |  |
+| Version | Default; installed or detected options | Default |  |
 | Font override | Text |  | Optional local TTF/OTF for both text styles. Bundled runtimes provide gothic and mincho fonts automatically. |
 | Text capture | Off; Console | Off |  |
 
@@ -139,7 +143,7 @@ Module `android`.
 | Backend | Description and requirements |
 | --- | --- |
 | MacLauncher Android (default) | Android 16 · ARM64 / ARM32 · optional microG · Apple Silicon · macOS 13.0 or later |
-| Mac.apk | ARM64 Android runtime with optional Google sign-in. · Apple Silicon · macOS 26.4 or later |
+| Mac.apk | ARM64 Android runtime with optional Google sign-in. · Apple Silicon · macOS version stated by each release |
 | AIM | Original Android 16 with a Pixel Tablet display: 2560 × 1600 at 320 dpi. · Apple Silicon · macOS 26.0 or later · 1.95 GB system image |
 
 Runtimes tabs: Tools → Apktool (managed); Tools → JADX (managed); MacLauncher Android → JVM (managed); MacLauncher Android → ART (managed); Mac.apk (managed); AIM (managed).
@@ -163,7 +167,6 @@ Runtimes tabs: Tools → Apktool (managed); Tools → JADX (managed); MacLaunche
 | microG account *(per game)* | Text |  | Use microG anonymously or with a shared account from Settings → Android. Restart to apply. |
 | Audio input *(per game)* | Text |  |  |
 | OBS camera *(per game)* | Text |  |  |
-| Network access | On/Off | On | Allow Internet and local-network connections. Restart to apply. |
 
 ### Mac.apk settings
 
@@ -174,13 +177,6 @@ Runtimes tabs: Tools → Apktool (managed); Tools → JADX (managed); MacLaunche
 | Graphics backend | Automatic; Metal; Vulkan (MoltenVK) | Automatic |  |
 | Google integration *(per game)* | On/Off | Off | Enable Google account access for this application. Restart to apply. |
 | Google account *(per game)* | Text |  | Use Google services anonymously or with an account from Settings → Android. Restart to apply. |
-| Network access | On/Off | On | Allow Internet and local-network connections. Restart to apply. |
-
-### AIM settings
-
-| Setting | Values | Default | Description |
-| --- | --- | --- | --- |
-| Network access | On/Off | On | Network access is disabled for this runtime. |
 
 | Action group | Actions |
 | --- | --- |
@@ -219,25 +215,25 @@ Inspector details: Archive format, Native requirements, Support.
 
 Module `construct`.
 
-Backends: Electron (default), NW.js, NW.js (Patched), Native app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
+Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
 
 ### Electron settings
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Enable protections | On/Off | On |  |
+| Block child processes | On/Off | On | Prevent game scripts from starting other programs. Applies on the next launch. |
 
 ### NW.js settings
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Enable protections | On/Off | On |  |
+| Block child processes | On/Off | On | Prevent game scripts from starting other programs. Applies on the next launch. |
 
 ### NW.js (Patched) settings
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Enable protections | On/Off | On |  |
+| Block child processes | On/Off | On | Prevent game scripts from starting other programs. Applies on the next launch. |
 | Enable case-insensitive assets | On/Off | Off |  |
 | Enable user scripts | On/Off | Off |  |
 
@@ -308,7 +304,7 @@ Runtimes tabs: Flash → Flash Player (managed); Flash → Ruffle (managed); Fla
 
 Module `fna`.
 
-Backends: FNA (default), Author's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
+Backends: FNA (default), Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
 
 Runtimes tabs: FNA (managed).
 
@@ -355,19 +351,19 @@ Inspector details: GameMaker family, Execution format, Header version (GMS2 may 
 
 Module `gamemaker-html5`.
 
-Backends: Electron (default), NW.js, Native app.
+Backends: Electron (default), NW.js, Game's macOS app.
 
 ### Electron settings
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Enable protections | On/Off | On |  |
+| Block child processes | On/Off | On | Prevent game scripts from starting other programs. Applies on the next launch. |
 
 ### NW.js settings
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Enable protections | On/Off | On |  |
+| Block child processes | On/Off | On | Prevent game scripts from starting other programs. Applies on the next launch. |
 
 Inspector details: Asset compiler version, Version evidence, Game app version, Detection reference.
 
@@ -375,7 +371,7 @@ Inspector details: Asset compiler version, Version evidence, Game app version, D
 
 Module `godot`.
 
-Backends: Godot (default), Native app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
+Backends: Godot (default), Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
 
 Runtimes tabs: Godot (managed).
 
@@ -387,7 +383,7 @@ Runtimes tabs: Godot (managed).
 
 | Action group | Actions |
 | --- | --- |
-| Project | Recover project; Recover project again…; Reveal; Refresh status; Detect version; List packed files; Remove Extracted |
+| Project | Recover project; Recover project again…; Reveal; Refresh status; Detect version; List packed files; Remove extracted files |
 | Resources | Decompile GDScript…; Convert resources to text…; Convert resources to binary… |
 
 ## HashLink (Haxe bytecode)
@@ -419,6 +415,10 @@ Backends: Native build inspection (default), CrossOver *(provider)*, Sikarugir (
 
 Inspector details: Target, CPU, Support.
 
+| Action group | Actions |
+| --- | --- |
+| Actions | Inspect binary |
+
 ## Infinity Engine (GemRB)
 
 Module `gemrb`.
@@ -431,7 +431,7 @@ Runtimes tabs: GemRB (managed); GemRB → Near Infinity (managed).
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Local runtime version | Automatic; installed or detected options | Automatic |  |
+| Version | Default; installed or detected options | Default |  |
 | Game type | Auto-detect; Baldur's Gate; Baldur's Gate II; Icewind Dale; Icewind Dale II; Planescape: Torment; GemRB demo | Auto-detect |  |
 | Custom game profile (optional) | Text |  | For standalone games: the author's profile name and GUI script/data paths. |
 | Width | Number | `800` |  |
@@ -453,11 +453,11 @@ Inspector details: Game type, GAME format version, Indexed resources.
 
 Module `ios`.
 
-Backends: PlayCover (Apple Silicon) (default).
+Backends: PlayCover (default).
 
 Runtimes tabs: PlayCover (managed).
 
-### PlayCover (Apple Silicon) settings
+### PlayCover settings
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
@@ -476,6 +476,7 @@ Inspector details: Application identifier, Version, Architecture, Compatibility.
 | Action group | Actions |
 | --- | --- |
 | Tools | Inspect IPA; Extract IPA contents; Reveal extracted contents |
+| Other | Inspect binary |
 
 ## Java
 
@@ -509,7 +510,7 @@ Runtimes tabs: Tools → msg-tool (managed); KiriKiri (managed).
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Version | Runtime default; installed or detected options | Runtime default |  |
+| Version | Default; installed or detected options | Default |  |
 | Extra runtime options | List |  | One option per line. |
 
 Inspector details: Detected engine/script version, Engine family, Version confidence, Version evidence, Compatibility, Source, KAG save routing.
@@ -522,7 +523,7 @@ Inspector details: Detected engine/script version, Engine family, Version confid
 
 Module `love`.
 
-Backends: LÖVE (default), Native app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
+Backends: LÖVE (default), Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
 
 Runtimes tabs: LÖVE → LJD (managed); LÖVE → unluac (managed); LÖVE (managed).
 
@@ -543,6 +544,7 @@ Inspector details: App version, Bundle ID, Executable.
 | Action group | Actions |
 | --- | --- |
 | Script | Make executable |
+| Other | Inspect binary |
 
 ## MAGES.
 
@@ -577,11 +579,11 @@ Inspector details: Data format, Original executable version.
 
 Module `ikemen`.
 
-Backends: Ikemen GO (Apple Silicon) (default), CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
+Backends: Ikemen GO (default), CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
 
 Runtimes tabs: Ikemen GO (managed); Ikemen GO → SFF Tools (managed).
 
-### Ikemen GO (Apple Silicon) settings
+### Ikemen GO settings
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
@@ -598,7 +600,7 @@ Inspector details: Source format, Motif, Declared content requirement, Version s
 
 Module `nxnative`.
 
-Backends: Switch (nxnative) (default), Inspection.
+Backends: Switch (nxnative) (default), Inspect only.
 
 Runtimes tabs: Switch (nxnative) (managed); Switch (nxnative) → Native tools (managed).
 
@@ -666,7 +668,11 @@ Runtimes tabs: NScripter → ONScripter-Yuri (managed); NScripter → ONScripter
 
 Module `anyps5`.
 
-Backends: PS5 (AnyPS5) (default), Inspection, Prosper *(provider)*.
+| Backend | Description and requirements |
+| --- | --- |
+| PS5 (AnyPS5) (default) | macOS 26 · Rosetta on Apple Silicon · Vulkan with Intel support |
+| Inspect only |  |
+| Prosper *(provider)* |  |
 
 Runtimes tabs: PS5 (AnyPS5) (managed).
 
@@ -721,7 +727,7 @@ Module `prosper`.
 
 | Backend | Description and requirements |
 | --- | --- |
-| Prosper (default) | Local macOS build · Rosetta on Apple Silicon · Vulkan 1.4 |
+| Prosper (default) | macOS 26 · Rosetta on Apple Silicon · Vulkan 1.4 |
 
 Runtimes tabs: Prosper (managed).
 
@@ -736,7 +742,7 @@ Runtimes tabs: Prosper (managed).
 
 Module `renpy`.
 
-Backends: Ren'Py Patch, Ren'Py SDK (default), Native app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
+Backends: Ren'Py Patch, Ren'Py SDK (default), Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
 
 Runtimes tabs: Ren'Py (managed).
 
@@ -745,9 +751,9 @@ Inspector details: Runtime version.
 | Action group | Actions |
 | --- | --- |
 | Save metadata | Inspect save metadata; Reveal metadata report |
-| Ren'Py Patching | Refresh Ren'Py patch status; Patch; Remove Ren'Py patch |
+| Ren'Py patch | Refresh Ren'Py patch status; Patch; Remove Ren'Py patch |
 | Builds | Reload; Reveal; Build app bundle; Remove app bundle |
-| Extract | Reload; Reveal; Extract; Remove Extracted |
+| Extract | Reload; Reveal; Extract; Remove extracted files |
 | Libraries | Live2D status; Install Live2D library; Remove Live2D library |
 | Other | Enable Ren'Py console (Shift+O); Remove Ren'Py console patch; Refresh Ren'Py cheats; Patch Universal Ren'Py Walkthrough System; Remove Universal Ren'Py Walkthrough System; Add Universal Ren'Py Mod; Remove Universal Ren'Py Mod |
 
@@ -785,7 +791,7 @@ Inspector details: Game format, Maps, Declared text encoding, DynRPG plug-ins.
 
 Module `mv`.
 
-Backends: Electron (default), NW.js, NW.js (Patched), Native app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
+Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
 
 Runtimes tabs: NW.js (managed).
 
@@ -793,19 +799,19 @@ Runtimes tabs: NW.js (managed).
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Enable protections | On/Off | On |  |
+| Block child processes | On/Off | On | Prevent game scripts from starting other programs. Applies on the next launch. |
 
 ### NW.js settings
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Enable protections | On/Off | On |  |
+| Block child processes | On/Off | On | Prevent game scripts from starting other programs. Applies on the next launch. |
 
 ### NW.js (Patched) settings
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Enable protections | On/Off | On |  |
+| Block child processes | On/Off | On | Prevent game scripts from starting other programs. Applies on the next launch. |
 | Enable case-insensitive assets | On/Off | Off |  |
 | Enable user scripts | On/Off | Off |  |
 | Enable decrypted assets | On/Off | Off |  |
@@ -815,31 +821,31 @@ Runtimes tabs: NW.js (managed).
 | Action group | Actions |
 | --- | --- |
 | Plugins | Reload; Install text hooker; Uninstall text hooker; Install 500 save slots; Uninstall 500 save slots |
-| Extract | Reload; Reveal; Extract; Remove Extracted |
+| Extract | Reload; Reveal; Extract; Remove extracted files |
 
 ## RPG Maker MZ
 
 Module `mz`.
 
-Backends: Electron (default), NW.js, NW.js (Patched), Native app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
+Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
 
 ### Electron settings
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Enable protections | On/Off | On |  |
+| Block child processes | On/Off | On | Prevent game scripts from starting other programs. Applies on the next launch. |
 
 ### NW.js settings
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Enable protections | On/Off | On |  |
+| Block child processes | On/Off | On | Prevent game scripts from starting other programs. Applies on the next launch. |
 
 ### NW.js (Patched) settings
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Enable protections | On/Off | On |  |
+| Block child processes | On/Off | On | Prevent game scripts from starting other programs. Applies on the next launch. |
 | Enable case-insensitive assets | On/Off | Off |  |
 | Enable user scripts | On/Off | Off |  |
 | Enable decrypted assets | On/Off | Off |  |
@@ -849,7 +855,7 @@ Backends: Electron (default), NW.js, NW.js (Patched), Native app, CrossOver *(pr
 | Action group | Actions |
 | --- | --- |
 | Plugins | Reload; Install text hooker; Uninstall text hooker; Install 500 save slots; Uninstall 500 save slots |
-| Extract | Reload; Reveal; Extract; Remove Extracted |
+| Extract | Reload; Reveal; Extract; Remove extracted files |
 
 ## RPG Maker XP/VX/VX Ace
 
@@ -936,7 +942,7 @@ Runtimes tabs: MKXP-Z (managed).
 | Ruby scripts | Reload tools; Export Ruby scripts; Reveal scripts; Repack edited scripts |
 | Saves and databases | Find portable saves; Inspect save or database |
 | Assets | Reload; Reveal; Extract runtime assets; Remove runtime assets |
-| Extract | Reload; Reveal; Extract; Remove Extracted |
+| Extract | Reload; Reveal; Extract; Remove extracted files |
 
 ## ScummVM
 
@@ -994,25 +1000,25 @@ Inspector details: Format, Script compiler.
 
 Module `tyrano`.
 
-Backends: Electron (default), NW.js, NW.js (Patched), Native app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
+Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
 
 ### Electron settings
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Enable protections | On/Off | On |  |
+| Block child processes | On/Off | On | Prevent game scripts from starting other programs. Applies on the next launch. |
 
 ### NW.js settings
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Enable protections | On/Off | On |  |
+| Block child processes | On/Off | On | Prevent game scripts from starting other programs. Applies on the next launch. |
 
 ### NW.js (Patched) settings
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Enable protections | On/Off | On |  |
+| Block child processes | On/Off | On | Prevent game scripts from starting other programs. Applies on the next launch. |
 | Enable case-insensitive assets | On/Off | Off |  |
 | Enable user scripts | On/Off | Off |  |
 
@@ -1020,13 +1026,13 @@ Inspector details: Tyrano version.
 
 | Action group | Actions |
 | --- | --- |
-| Extract | Reload; Reveal; Extract; Remove Extracted |
+| Extract | Reload; Reveal; Extract; Remove extracted files |
 
 ## Unity
 
 Module `unity`.
 
-Backends: Unity Mono player (default), Author’s macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
+Backends: Unity Mono player (default), Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
 
 Runtimes tabs: Unity (managed); Unity → AssetRipper (managed); Unity → Cpp2IL (managed).
 
@@ -1093,25 +1099,25 @@ Runtimes tabs: VNDS → VNDS-LOVE (managed).
 
 Module `web`.
 
-Backends: Electron (default), NW.js, NW.js (Patched), Native app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
+Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
 
 ### Electron settings
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Enable protections | On/Off | On |  |
+| Block child processes | On/Off | On | Prevent game scripts from starting other programs. Applies on the next launch. |
 
 ### NW.js settings
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Enable protections | On/Off | On |  |
+| Block child processes | On/Off | On | Prevent game scripts from starting other programs. Applies on the next launch. |
 
 ### NW.js (Patched) settings
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Enable protections | On/Off | On |  |
+| Block child processes | On/Off | On | Prevent game scripts from starting other programs. Applies on the next launch. |
 | Enable case-insensitive assets | On/Off | Off |  |
 | Enable user scripts | On/Off | Off |  |
 
@@ -1121,14 +1127,14 @@ Module `crossover`.
 
 Backends: Sikarugir (Wine) (default), CrossOver.
 
-Runtimes tabs: CrossOver (managed); Sikarugir (managed); CrossOver → DXMT support (managed); Sikarugir → DXMT support (managed).
+Runtimes tabs: CrossOver (managed); Sikarugir (managed); Graphics → DXMT support (managed).
 
 ### Sikarugir (Wine) settings
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
 | Graphics | Automatic; D3DMetal; DXMT; DXVK; WineD3D | Automatic | Availability depends on the selected Wine version, Mac and macOS version. |
-| Game temporal integration | On/Off | Off | Expose the game's DLSS option through MetalFX Temporal. A shared temporal upscaler also enables this integration automatically. Requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later, with matching NVAPI/NGX libraries. DLSS must be enabled in the game settings. Changes apply on the next launch. |
+| Game temporal integration | On/Off | Off | Expose the game's DLSS option through MetalFX Temporal. A shared temporal upscaler also enables this integration automatically. Requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26.4 or later, with matching NVAPI/NGX libraries. DLSS must be enabled in the game settings. Changes apply on the next launch. |
 | DXMT support | Automatic | Automatic | Matching DXMT libraries for temporal upscaling. Automatic uses the Runtimes default. |
 | Vulkan driver | Automatic; MoltenVK; KosmicKrisp | Automatic | Applies to Vulkan graphics. KosmicKrisp requires a compatible runtime, Apple Silicon and macOS 26 or later. |
 | DirectDraw compatibility | On/Off | Off | Use CNC-DDraw for 32-bit games with a software DirectDraw renderer. Direct3D settings remain separate. |
@@ -1146,7 +1152,7 @@ Runtimes tabs: CrossOver (managed); Sikarugir (managed); CrossOver → DXMT supp
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Graphics | Automatic; D3DMetal; DXMT; DXVK; WineD3D | Automatic | Availability depends on the selected CrossOver version, Mac and macOS version. |
+| Graphics | Automatic; D3DMetal; DXMT; DXVK; WineD3D; installed or detected options | Automatic | Only renderers compatible with the selected CrossOver version, Mac and macOS version are offered. |
 | Game temporal integration | On/Off | Off | Expose the game's DLSS option through MetalFX Temporal. A shared temporal upscaler also enables this integration automatically. Requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later, with matching NVAPI/NGX libraries. DLSS must be enabled in the game settings. Changes apply on the next launch. |
 | DXMT support | Automatic | Automatic | Matching DXMT libraries for temporal upscaling. Automatic uses the Runtimes default. |
 | Synchronization | Automatic; MSync; ESync (older CrossOver versions); Off | Automatic |  |
@@ -1164,6 +1170,7 @@ Inspector details: Windows CPU, Executable, CrossOver application.
 | Action group | Actions |
 | --- | --- |
 | Windows | Open Windows files |
+| Other | Inspect binary |
 
 ## WOLF RPG Editor
 
@@ -1179,7 +1186,7 @@ Runtimes tabs: WOLF RPG → WolfTL (managed); WOLF RPG → UberWolf (managed); W
 | --- | --- | --- | --- |
 | Hide touch controls | On/Off | On |  |
 | Frame rate | 60 FPS; 30 FPS | 60 FPS |  |
-| Offline protections | On/Off | On | Restrict the game to local content. |
+| Block child processes | On/Off | On | Prevent game scripts from starting other programs. Applies on the next launch. |
 
 Inspector details: Game data.
 

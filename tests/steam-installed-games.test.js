@@ -93,6 +93,43 @@ test("discovery rejects mismatched IDs, traversal, missing installs and escaping
   assert.deepEqual((await discoverInstalledSteamGames(f)).map(row => row.appId), ["480"]);
 });
 
+// Steam's binary app cache (v41, interned keys), holding each app's common name and type.
+function appInfoCache(apps) {
+  const keys = ["appinfo", "common", "name", "type"];
+  const u32 = value => { const buffer = Buffer.alloc(4); buffer.writeUInt32LE(value); return buffer; };
+  const prop = (key, value) => Buffer.concat([Buffer.from([1]), u32(keys.indexOf(key)), Buffer.from(value + "\0")]);
+  const dict = (key, values) => Buffer.concat([Buffer.from([0]), u32(keys.indexOf(key)), ...values, Buffer.from([8])]);
+  const records = apps.map(([appId, common]) => {
+    const data = Buffer.concat([dict("appinfo", [dict("common", Object.entries(common).map(([key, value]) => prop(key, value)))]), Buffer.from([8])]);
+    return Buffer.concat([u32(appId), u32(60 + data.length), Buffer.alloc(60), data]);
+  });
+  const body = Buffer.concat([...records, u32(0)]), header = Buffer.alloc(16);
+  header.writeUInt32LE(0x07564429); header.writeUInt32LE(1, 4); header.writeBigUInt64LE(BigInt(16 + body.length), 8);
+  return Buffer.concat([header, body, u32(keys.length), ...keys.map(key => Buffer.from(key + "\0"))]);
+}
+
+test("Steam's local app types keep tools and shared redistributables out of installed games", async t => {
+  const f = fixture(t);
+  t.mock.method(globalThis, "fetch", () => assert.fail("Steam app types come from the local app cache"));
+  const client = path.join(f.homeDir, "Library/Application Support/CrossOver/Bottles/Steam/drive_c/Program Files (x86)/Steam");
+  installed(client, "228980", "Steamworks Common Redistributables", { installDir: "Steamworks Shared", magic: "4d5a0000", filename: "_CommonRedist.exe" });
+  installed(client, "490", "Windows Game", { magic: "4d5a0000" });
+  installed(client, "491", "Windows Utility", { magic: "4d5a0000" });
+  installed(client, "492", "Dedicated Server", { magic: "4d5a0000" });
+  installed(client, "493", "Uncached Game", { magic: "4d5a0000" });
+  installed(f.native, "494", "Mac Game", { app: true });
+  installed(f.native, "495", "Mac Runtime", { app: true });
+  write(path.join(client, "appcache/appinfo.vdf"), appInfoCache([[228980, { name: "Steamworks Common Redistributables", type: "Tool" }],
+    [490, { name: "Windows Game", type: "Game" }], [491, { name: "Windows Utility", type: "Application" }]]));
+  // The Mac client's cache fills a gap in the bottle's cache.
+  write(path.join(f.native, "appcache/appinfo.vdf"), appInfoCache([[492, { name: "Dedicated Server", type: "Tool" }],
+    [494, { name: "Mac Game", type: "game" }], [495, { name: "Mac Runtime", type: "Config" }]]));
+  assert.deepEqual((await discoverInstalledSteamGames(f)).map(row => row.appId).sort(), ["490", "491", "493", "494"]);
+  fs.writeFileSync(path.join(client, "appcache/appinfo.vdf"), "not an app cache");
+  assert.deepEqual((await discoverInstalledSteamGames(f)).map(row => row.appId).sort(), ["228980", "490", "491", "493", "494"],
+    "an unreadable cache keeps its client's apps listed");
+});
+
 test("platform overrides and ELF or Mach-O evidence distinguish downloads in a native library", async t => {
   const f = fixture(t);
   installed(f.native, "480", "Windows Override", { app: true, extra: '"UserConfig" { "platform_override_dest" "windows" }' });

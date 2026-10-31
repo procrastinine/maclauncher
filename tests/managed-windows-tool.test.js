@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os"), crypto = require("node:crypto");
 const { createManagedWindowsTool, inspectWindowsTool, windowsPath, ensureWine } = require("../src/modules/shared/runtime/managed-windows-tool");
@@ -12,26 +14,22 @@ function manager(dependencies = {}) { return createManagedWindowsTool({ id: "fix
   executableName: "tool.exe", assetPattern: /^tool\.exe$/, dependencies }); }
 
 test("managed PE tools discover only on an explicit action and cancellation downloads nothing", async t => {
-  const userDataDir = path.join(temporary(t), "profile"); let requests = 0;
-  const tool = manager({ fetchGithubReleases: async () => { requests++; return []; } });
+  const userDataDir = path.join(temporary(t), "profile"), requests = Harness.network.requests.length, tool = manager();
   assert.deepEqual(tool.getState({ userDataDir }).catalog.versions, []);
-  tool.resolveSelection({}, {}, userDataDir); assert.equal(requests, 0);
+  tool.resolveSelection({}, {}, userDataDir); assert.equal(Harness.network.requests.length, requests);
   await assert.rejects(tool.ensure({}, {}, { userDataDir, settings: {}, confirmRuntimeInstall: async () => false }), { code: "ABORT_ERR" });
-  assert.equal(requests, 0); assert.equal(fs.existsSync(userDataDir), false);
+  assert.equal(Harness.network.requests.length, requests); assert.equal(fs.existsSync(userDataDir), false);
 });
 
 test("upstream PE download retains its pinned notice and checksum and rejects later changes", async t => {
   const userDataDir = path.join(temporary(t), "profile"), bytes = pe();
-  const sha256 = crypto.createHash("sha256").update(bytes).digest("hex"), revision = "a".repeat(40);
-  const tool = manager({
-    fetchGithubReleases: async () => [{ tag_name: "v1.0", html_url: "https://github.com/publisher/tool/releases/tag/v1.0",
-      assets: [{ name: "tool.exe", size: bytes.length, id: 123, digest: "sha256:" + sha256, browser_download_url: "https://github.com/publisher/tool/releases/download/v1.0/tool.exe" }] }],
-    fetchGithubTags: async () => [{ name: "v1.0", commit: { sha: revision } }],
-    downloadToFile: async (url, file) => {
-      if (url.endsWith("/LICENSE")) { assert.equal(url, `https://raw.githubusercontent.com/publisher/tool/${revision}/LICENSE`); fs.writeFileSync(file, "MIT License"); }
-      else fs.writeFileSync(file, bytes);
-    }
-  });
+  const sha256 = crypto.createHash("sha256").update(bytes).digest("hex"), tool = manager();
+  const release = Harness.githubRelease("publisher/tool", "v1.0", ["tool.exe"]);
+  release.assets[0] = { ...release.assets[0], size: bytes.length, digest: "sha256:" + sha256 };
+  const routes = Harness.githubRoutes("publisher/tool", [release]), revision = routes["https://api.github.com/repos/publisher/tool/tags"][0].commit.sha;
+  Harness.network.routes = { ...routes, [release.assets[0].browser_download_url]: bytes,
+    [`https://raw.githubusercontent.com/publisher/tool/${revision}/LICENSE`]: "MIT License" };
+  t.after(() => { Harness.network.routes = null; });
   const context = { userDataDir, settings: {}, confirmRuntimeInstall: async () => true };
   const install = await tool.ensure({}, {}, context);
   assert.equal(install.version, "1.0"); assert.equal(install.upstreamRevision, revision);

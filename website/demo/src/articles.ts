@@ -33,6 +33,7 @@ export const ARTICLES = {
   favorites: launcher("Favorites and order", "favorites-and-order"),
   selecting: launcher("Selecting several games", "selecting-several-games"),
   rows: launcher("Each row", "each-row"),
+  externalDrive: launcher("Games on an external drive", "games-on-an-external-drive"),
   inspector: launcher("The inspector", "the-inspector"),
   files: launcher("Files", "files"),
   launch: launcher("Launch", "launch"),
@@ -42,6 +43,8 @@ export const ARTICLES = {
   windows: launcher("Windows and menus", "windows-and-menus"),
 
   runtimesWindow: versions("Runtimes: one place for every version", "runtimes-one-place-for-every-version"),
+  processorBuilds: versions("Processor builds", "processor-builds"),
+  pickingBuilds: page("How MacLauncher picks a build", "macs-and-macos/#how-maclauncher-picks-a-build"),
   refresh: versions("Refreshing the version list", "refresh"),
   install: versions("Installing a version", "install"),
   remove: versions("Removing a version", "remove"),
@@ -72,7 +75,9 @@ export const ARTICLES = {
   decompilers: page("Decompilers and extractors", "tools/decompilers-and-extractors/"),
   installers: page("Installers and packed games", "tools/decompilers-and-extractors/#installers-and-packed-games"),
   credits: page("Credits and licenses", "about/credits/"),
+  updates: page("How MacLauncher is updated", "help/faq/#how-is-maclauncher-updated"),
   windowsGames: page("Windows games through WINE", "games/windows/"),
+  windowsGraphics: page("Graphics effects in WINE games", "games/windows/#graphics-effects"),
   games: page("Games and runtimes", "games/"),
 
   graphics: page("Graphics and effects", "graphics/"),
@@ -116,19 +121,17 @@ export const ARTICLES = {
 } satisfies Record<string, Article>;
 
 const desktop = (title: string, anchor: string) => page(title, `games/desktop-engines/#${anchor}`);
-const webGames = desktop("Web games: RPG Maker MV/MZ, Construct and friends", "web-games-rpg-maker-mvmz-construct-tyranobuilder-and-friends");
-const novels = page("Visual novel engines", "games/visual-novels/#the-engines");
+const webGames = desktop("Web games", "web-games");
+const novels = page("Visual novel engines", "games/visual-novels/#game-types-and-runtimes");
 const mobile = (title: string, anchor: string) => page(title, `games/mobile-and-consoles/#${anchor}`);
 const more = (title: string, anchor: string) => page(title, `games/more/#${anchor}`);
-const otherEngines = more("Infinity Engine, MUGEN and HashLink", "infinity-engine-mugen-and-hashlink");
 
 // Each registered game type's page. A type missing here falls back to the
 // overview, and the website build reports it.
 export const MODULE_ARTICLES: Record<string, Article> = {
   mv: webGames, mz: webGames, construct: webGames, tyrano: webGames, "gamemaker-html5": webGames, web: webGames,
   rgss: desktop("RPG Maker XP, VX and VX Ace", "rpg-maker-xp-vx-and-vx-ace"),
-  easyrpg: desktop("RPG Maker 2000/2003 and WOLF RPG Editor", "rpg-maker-20002003-and-wolf-rpg-editor"),
-  wolfrpg: desktop("RPG Maker 2000/2003 and WOLF RPG Editor", "rpg-maker-20002003-and-wolf-rpg-editor"),
+  easyrpg: desktop("RPG Maker 2000/2003", "rpg-maker-20002003"), wolfrpg: desktop("WOLF RPG Editor", "wolf-rpg-editor"),
   renpy: desktop("Ren'Py", "renpy"), godot: desktop("Godot", "godot"), gamemaker: desktop("GameMaker", "gamemaker"),
   unity: desktop("Unity", "unity"), fna: desktop("XNA and FNA", "xna-and-fna"), love: desktop("LÖVE", "löve"),
   java: desktop("Java", "java"), flash: desktop("Flash", "flash"),
@@ -140,13 +143,14 @@ export const MODULE_ARTICLES: Record<string, Article> = {
   nxnative: mobile("Nintendo Switch", "nintendo-switch"),
   "generic-app": more("Mac apps and scripts", "mac-apps-and-scripts"), mac32: more("32-bit Mac apps", "32-bit-mac-apps"),
   dosbox: more("DOS games", "dos-games"), scummvm: more("Classic adventure games", "classic-adventure-games"),
-  gemrb: otherEngines, ikemen: otherEngines, hashlink: otherEngines, haxe: otherEngines,
+  gemrb: more("Infinity Engine", "infinity-engine"), ikemen: more("MUGEN and Ikemen GO", "mugen-and-ikemen-go"),
+  hashlink: more("HashLink and Haxe", "hashlink-and-haxe"), haxe: more("HashLink and Haxe", "hashlink-and-haxe"),
   video: more("Videos", "videos")
 };
 
 // Runtimes with their own anchor (`runtime-<id>`) on their game type's page.
 export const RUNTIME_ANCHORS: Record<string, string[]> = {
-  "games/desktop-engines/": ["electron", "nwjs", "nwjs-patched", "sdk", "butterscotch", "official-studio", "opengmk", "projector", "ruffle"],
+  "games/desktop-engines/": ["electron", "nwjs", "nwjs-patched", "sdk", "patched", "butterscotch", "official-studio", "opengmk", "projector", "ruffle"],
   "games/visual-novels/": ["krkrsdl2", "siglus", "rlvm", "onsyuri_mac", "onscripter_en", "system3", "xsystem35", "xsystem4", "impacto",
     "npengine", "reminori", "rfvp", "ai5", "vnds_love", "bgi-tools", "catsystem2-tools"],
   "games/mobile-and-consoles/": ["prosper"],
@@ -155,11 +159,11 @@ export const RUNTIME_ANCHORS: Record<string, string[]> = {
 const choice = (title: string, anchor: string) => page(title, `background/choosing-a-runtime/#${anchor}`);
 // Runtimes shared by many game types, with a section of their own.
 const SHARED_RUNTIMES: Record<string, Article[]> = {
-  crossover: [choice("CrossOver", "3-crossover-if-you-have-it"), page("CrossOver: bring your own", "games/windows/#crossover-bring-your-own")],
-  sikarugir: [choice("Sikarugir (WINE)", "2-sikarugir-wine-managed-for-you"), page("Sikarugir: free, and managed for you", "games/windows/#sikarugir-free-and-managed-for-you")],
+  crossover: [choice("When to use CrossOver", "crossover"), page("CrossOver", "games/windows/#crossover")],
+  sikarugir: [choice("When to use Sikarugir", "sikarugir"), page("Sikarugir (WINE)", "games/windows/#sikarugir")],
   native: [desktop("When a game ships its own Mac build", "when-a-game-ships-its-own-mac-build")],
   mac32: [more("32-bit Mac apps", "32-bit-mac-apps")],
-  klepton: [choice("MacLauncher Android", "maclauncher-android-the-default")],
+  klepton: [choice("MacLauncher Android", "maclauncher-android")],
   macapk: [choice("Mac.apk", "macapk")],
   aim: [choice("AIM", "aim")]
 };
@@ -269,7 +273,8 @@ function effectArticles(id: string, detail: unknown): Article[] {
 
 // Bridge methods the demo answers with a topic of their own name.
 export const ACTION_ARTICLES: Record<string, Article[]> = {
-  createGameCommand: [ARTICLES.shortcuts], revealInFinder: [ARTICLES.files],
+  createGameCommand: [ARTICLES.shortcuts], revealInFinder: [ARTICLES.files], locateGame: [ARTICLES.externalDrive, ARTICLES.files],
+  findMissingGames: [ARTICLES.externalDrive, ARTICLES.selecting], appUpdate: [ARTICLES.updates, ARTICLES.settings],
   cancelImport: [ARTICLES.addGame], setLibrarySort: [ARTICLES.search], moveGame: [ARTICLES.favorites], reorderGame: [ARTICLES.favorites],
   forgetGames: [ARTICLES.selecting], deleteGames: [ARTICLES.selecting], deleteGame: [ARTICLES.selecting],
   setGameSteamClientStart: [ARTICLES.steamClient],
@@ -289,7 +294,7 @@ export const ACTION_ARTICLES: Record<string, Article[]> = {
 // Launcher settings by key.
 const SETTINGS_ARTICLES: Record<string, Article[]> = {
   networkAccess: [ARTICLES.networkAccess], startSteamClient: [ARTICLES.steamClient],
-  library: [ARTICLES.search, ARTICLES.favorites]
+  library: [ARTICLES.search, ARTICLES.favorites], checkForUpdatesAtLaunch: [ARTICLES.updates]
 };
 // Runtime manager actions.
 const RUNTIME_ACTION_ARTICLES: Record<string, Article[]> = {
@@ -312,7 +317,8 @@ const CHEAT_MODULES: Record<string, Article> = { mv: ARTICLES.rpgMakerCheats, mz
 const MANAGER_ARTICLES: Record<string, Article[]> = {
   "graphics-presets": [ARTICLES.presets], "graphics-shader": [ARTICLES.shaderLibrary, ARTICLES.shaders],
   "graphics-models": [ARTICLES.losslessFiles], "graphics-neural-models": [ARTICLES.gettingModels, ARTICLES.neuralModels],
-  "graphics-xess": [upscaling("Intel XeSS", "xess")], innoextract: [ARTICLES.installers]
+  "graphics-xess": [upscaling("Intel XeSS", "xess")], innoextract: [ARTICLES.installers],
+  "sikarugir-graphics-bridge": [ARTICLES.windowsGraphics]
 };
 // Runtimes sidebar groups that gather many game types' managers.
 const GROUP_ARTICLES: Record<string, Article[]> = { graphics: [ARTICLES.graphics], tools: [ARTICLES.decompilers] };
@@ -335,7 +341,7 @@ function windowArticles(topic: DemoTopic): Article[] {
     }
     case "settings":
       if (topic.moduleId) return [...(value ? runtimeArticles(value, topic.moduleId) : [engine(topic.moduleId)]), ARTICLES.runtimeSettings, ARTICLES.settings];
-      if (value === "launcher") return [ARTICLES.settings, ARTICLES.networkAccess, ARTICLES.steamClient];
+      if (value === "launcher") return [ARTICLES.settings, ARTICLES.networkAccess, ARTICLES.steamClient, ARTICLES.updates];
       return [ARTICLES.settings, ARTICLES.perGame];
     case "external":
       if (value) return [...(EXTERNAL_TABS[value] || [ARTICLES.downloads, ARTICLES.accounts]), ARTICLES.external];
@@ -368,7 +374,8 @@ export function articlesFor(topic: DemoTopic): Article[] {
       case "effect": return effectArticles(topic.id, topic.detail);
       case "window": case "section": return windowArticles(topic);
       case "settings": return [...topic.id.split(",").flatMap(key => SETTINGS_ARTICLES[key] || []), ARTICLES.settings];
-      case "runtime-action": return [...(RUNTIME_ACTION_ARTICLES[topic.id] || []), ARTICLES.runtimesWindow];
+      case "runtime-action": return [...(detail === "build" ? [ARTICLES.processorBuilds, ARTICLES.pickingBuilds] : []),
+        ...(RUNTIME_ACTION_ARTICLES[topic.id] || []), ARTICLES.runtimesWindow];
       case "store":
         if (topic.id === "scan" || topic.id === "import") return [ARTICLES.installedGames, ARTICLES.external];
         if (topic.id === "account") return [ARTICLES.accounts, ARTICLES.external];

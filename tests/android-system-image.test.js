@@ -3,6 +3,7 @@ const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),cryp
 const Image=require('../src/modules/android/system-image');
 const RuntimeImage=require('../src/modules/android/runtime-image');
 const {DownloadManager}=require('../src/modules/shared/runtime/download-manager');
+const Transport=require('../src/modules/shared/runtime/upstream-transport');
 const sha=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 
 async function fixture(t){
@@ -16,7 +17,6 @@ async function fixture(t){
   const context={userDataDir},events=[],mounts=new Map();let downloads=0,held=false;
   const deps={legacyLocations:()=>[],acquireLock:async()=>{if(held)return null;held=true;return async()=>{held=false;};},
     confirm:async()=>events.push('consent'),
-    downloadToFile:async(_url,file)=>{downloads++;events.push('download');fs.writeFileSync(file,archive);},
     command:async(file,args,options={})=>{
       const op=path.basename(file);events.push(op+':'+args[0]);
       if(op==='plutil')return options.input;
@@ -34,8 +34,11 @@ async function fixture(t){
       if(op==='extractor'){fs.cpSync(volume,args[1]===path.join(path.dirname(args[1]),'root')?path.dirname(args[1]):args[1],{recursive:true,verbatimSymlinks:true});return '';}
       throw Error('Unexpected command '+file+' '+args[0]);
     }};
+  // The image arrives through the shared transport, which this fixture answers.
+  const network={transfer:async(_url,file)=>{downloads++;events.push('download');fs.writeFileSync(file,archive);}};
+  t.mock.method(Transport,'downloadToFile',(...args)=>network.transfer(...args));
   const options={context,image,expected,extractor:'/owned/extractor'};
-  return {root,userDataDir,volume,image,expected,context,events,mounts,deps,options,get downloads(){return downloads;}};
+  return {root,userDataDir,volume,image,expected,context,events,mounts,deps,network,options,get downloads(){return downloads;}};
 }
 
 function runtimeFixture(f){
@@ -54,7 +57,7 @@ function runtimeFixture(f){
 test('verified JVM image requirements use shared consent/downloads and preserve cached older profiles',async t=>{
   const f=await fixture(t),runtime=runtimeFixture(f),history=[],downloads=new DownloadManager({progressThrottleMs:0,onChange:()=>history.push(downloads.list())});
   f.context.downloads=downloads;
-  const original=f.deps.downloadToFile;f.deps.downloadToFile=async(url,file,options)=>{assert.equal(downloads.list()[0].managerId,'android-system-image');await original(url,file,options);options.onProgress({downloaded:f.image.bytes,total:f.image.bytes});};
+  const original=f.network.transfer;f.network.transfer=async(url,file,options)=>{assert.equal(downloads.list()[0].managerId,'android-system-image');await original(url,file,options);options.onProgress({downloaded:f.image.bytes,total:f.image.bytes});};
   const image=await RuntimeImage.prepare({payload:runtime.payload,context:f.context},{imageDependencies:f.deps});
   assert.equal(image.archiveSha256,f.image.sha256);assert.equal(f.downloads,1);assert.equal(f.events[0],'consent');
   assert.ok(f.events.some(value=>value.startsWith('extractor:')));
@@ -108,8 +111,8 @@ test('one immutable base is atomically shared by concurrent preparations and reu
 test('system image acquisition remains in shared downloads through verification/import and reuses its completed base',async t=>{
   const f=await fixture(t),history=[],downloads=new DownloadManager({progressThrottleMs:0,onChange:()=>history.push(downloads.list())});
   f.context.downloads=downloads;
-  const transfer=f.deps.downloadToFile,run=f.deps.command;
-  f.deps.downloadToFile=async(url,file,options)=>{assert.equal(downloads.list()[0].sectionId,'default');await transfer(url,file,options);options.onProgress({downloaded:f.image.bytes,total:f.image.bytes});};
+  const transfer=f.network.transfer,run=f.deps.command;
+  f.network.transfer=async(url,file,options)=>{assert.equal(downloads.list()[0].sectionId,'default');await transfer(url,file,options);options.onProgress({downloaded:f.image.bytes,total:f.image.bytes});};
   f.deps.command=async(file,args,options)=>{
     if(file==='/owned/extractor'){const task=downloads.list()[0];assert.equal(task.detail,'Preparing…');assert.equal(task.downloaded,f.image.bytes);}
     return run(file,args,options);
@@ -139,11 +142,11 @@ test('shared image task cancellation preserves launch cancellation and cleans it
 });
 
 test('archive mismatch and cancellation after writable attachment leave no completed image or mounted stage',async t=>{
-  const f=await fixture(t);f.deps.downloadToFile=async(_url,file)=>fs.writeFileSync(file,'wrong archive');
-  await assert.rejects(Image.prepare(f.options,f.deps),/checksum/);
+  const f=await fixture(t);f.network.transfer=async(_url,file)=>fs.writeFileSync(file,'wrong archive');
+  await assert.rejects(Image.prepare(f.options,f.deps),/does not match the (?:size|checksum) its publisher lists/);
   assert.deepEqual(fs.readdirSync(path.join(f.userDataDir,'android/system-images')).filter(name=>!name.startsWith('.'+f.image.sha256)),[]);
   const controller=new AbortController();f.context.signal=controller.signal;
-  f.deps.downloadToFile=async(_url,file)=>fs.writeFileSync(file,'original archive');
+  f.network.transfer=async(_url,file)=>fs.writeFileSync(file,'original archive');
   const run=f.deps.command;f.deps.command=async(file,args,options)=>{const result=await run(file,args,options);if(file==='/owned/extractor')controller.abort();return result;};
   await assert.rejects(Image.prepare(f.options,f.deps),{name:'AbortError'});
   assert.equal(f.mounts.size,0);assert.ok(!fs.existsSync(path.join(f.userDataDir,'android/system-images',f.image.sha256)));
@@ -168,7 +171,7 @@ test('matching original AIM bases share storage without mutating writable legacy
   const f=await fixture(t),legacy=path.join(f.userDataDir,'android/runtimes/aim/old');fs.mkdirSync(path.join(legacy,'system'),{recursive:true});
   fs.cpSync(f.volume,path.join(legacy,'system'),{recursive:true,verbatimSymlinks:true});fs.writeFileSync(path.join(legacy,'system.dmg'),'immutable DMG',{mode:0o600});
   f.mounts.set(path.join(legacy,'system'),{'image-path':path.join(legacy,'system.dmg'),writeable:false});
-  f.deps.legacyLocations=()=>[legacy];f.deps.downloadToFile=()=>assert.fail('Compatible original image needs no download');
+  f.deps.legacyLocations=()=>[legacy];f.network.transfer=()=>assert.fail('Compatible original image needs no download');
   const shared=await Image.prepare(f.options,f.deps);
   assert.equal(fs.statSync(path.join(legacy,'system.dmg')).mode&0o777,0o600);
   assert.equal(fs.statSync(shared.base).mode&0o777,0o400);
@@ -178,7 +181,7 @@ test('matching original AIM bases share storage without mutating writable legacy
 
 test('AIM setup adopts the shared original through an isolated inode without another download or consent',async t=>{
   const f=await fixture(t),original=await Image.prepare(f.options,f.deps);
-  f.events.length=0;f.deps.confirm=()=>assert.fail('An acquired original needs no new consent');f.deps.downloadToFile=()=>assert.fail('An acquired original needs no download');
+  f.events.length=0;f.deps.confirm=()=>assert.fail('An acquired original needs no new consent');f.network.transfer=()=>assert.fail('An acquired original needs no download');
   const destination=path.join(f.userDataDir,'android/runtimes/aim/new/system.dmg');
   assert.equal(await Image.adoptBase({context:f.context,image:f.image,destination},f.deps),true);
   assert.notEqual(fs.statSync(original.base).ino,fs.statSync(destination).ino,'AIM and ART retain independent image attach/detach owners');

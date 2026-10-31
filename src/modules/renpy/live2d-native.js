@@ -3,13 +3,16 @@ const Native = require("../shared/runtime/local-native");
 
 const BASE_SYMBOLS = ["csmGetVersion", "csmGetLatestMocVersion", "csmGetMocVersion", "csmGetLogFunction", "csmSetLogFunction", "csmReviveMocInPlace", "csmGetSizeofModel", "csmInitializeModelInPlace", "csmUpdateModel", "csmReadCanvasInfo", "csmGetParameterCount", "csmGetParameterIds", "csmGetParameterMinimumValues", "csmGetParameterMaximumValues", "csmGetParameterDefaultValues", "csmGetParameterValues", "csmGetPartCount", "csmGetPartIds", "csmGetPartOpacities", "csmGetPartParentPartIndices", "csmGetDrawableCount", "csmGetDrawableIds", "csmGetDrawableConstantFlags", "csmGetDrawableDynamicFlags", "csmGetDrawableTextureIndices", "csmGetDrawableDrawOrders", "csmGetDrawableOpacities", "csmGetDrawableMaskCounts", "csmGetDrawableMasks", "csmGetDrawableVertexCounts", "csmGetDrawableVertexPositions", "csmGetDrawableVertexUvs", "csmGetDrawableIndexCounts", "csmGetDrawableIndices", "csmGetDrawableMultiplyColors", "csmGetDrawableScreenColors", "csmResetDrawableDynamicFlags"];
 const SOURCE = "https://github.com/renpy/renpy/blob/39895c1e017f0b36ffea2447d97eccd69d76ee1c/renpy/gl2/live2dcsm.pxi";
+// Ren'Py 8.5.3 and later read the Cubism 5.3 Core API; earlier releases read
+// the 4.2–5.2 API. `newerCompatible` says on which side of the recommended SDK
+// another release of the same API lies.
 function requirements(version) {
-  const match = String(version || "").match(/^(7|8)\.(\d+)\.(\d+)$/);
-  if (!match) throw new Error("An explicit Ren'Py 7/8 SDK version is required for Live2D.");
+  const match = String(version || "").match(/^(\d+)\.(\d+)\.(\d+)$/);
+  if (!match || Number(match[1]) < 7) throw new Error("An explicit Ren'Py SDK version of 7 or later is required for Live2D.");
   const [major, minor, patch] = match.slice(1).map(Number);
-  const modern = major === 8 && (minor > 5 || minor === 5 && patch >= 3);
+  const modern = major > 8 || major === 8 && (minor > 5 || minor === 5 && patch >= 3);
   return { renpyVersion: version, major, apiProfile: modern ? "Cubism 5.3" : "Cubism 4.2–5.2", recommendedVersion: modern ? "5-r.5" : "5-r.4.1",
-    source: SOURCE, symbols: [...BASE_SYMBOLS, modern ? "csmGetRenderOrders" : "csmGetDrawableRenderOrders"] };
+    newerCompatible: modern, source: SOURCE, symbols: [...BASE_SYMBOLS, modern ? "csmGetRenderOrders" : "csmGetDrawableRenderOrders"] };
 }
 
 function exportsByArchitecture(file) {

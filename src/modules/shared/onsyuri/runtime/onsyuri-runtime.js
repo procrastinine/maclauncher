@@ -5,18 +5,34 @@ const { spawn } = require("node:child_process");
 const {
   attachAbortSignal,
   createAbortError,
-  downloadToFile,
   throwIfAborted
 } = require("../../runtime/download-utils");
 
-const Releases = require("../../runtime/github-releases");
-const { createOnsyuriBundled, RECOMMENDED_VERSION, PREVIOUS_DEFAULT_VERSION } = require("./onsyuri-bundled");
+const Upstream = require("../../runtime/upstream");
+const Release = require("../../runtime/release-files");
+const Versions = require("./onsyuri-versions");
+const { createOnsyuriBundled, RECOMMENDED_VERSION } = require("./onsyuri-bundled");
 const Bundled = createOnsyuriBundled();
 const Hosted = require("./onsyuri-hosted").manager;
 
-const REPO_OWNER = "YuriSizuku";
-const REPO_NAME = "OnscripterYuri";
+const SOURCE_URL = "https://github.com/YuriSizuku/OnscripterYuri/releases";
 const INSTALL_META_FILE = ".maclauncher-onsyuri.json";
+
+// Stable releases and prereleases: one row per Mac CPU (section "mac") and one
+// for the Web build (section "web"), with GitHub's size and digest.
+const source = Upstream.github({ repository: "YuriSizuku/OnscripterYuri", prerelease: true, allArchitectures: true,
+  recognize: release => Versions.recognizeRelease(release) });
+// Rows from releases in GitHub's shape, as earlier catalog caches hold them.
+function rowsFromReleases(releases) {
+  return (Array.isArray(releases) ? releases : []).flatMap(release => Versions.recognizeRelease(release).map(row => ({
+    version: row.version, details: row.details, ...(row.architecture ? { architecture: row.architecture } : {}),
+    files: row.assets.map(asset => Upstream.listedFile({ filename: asset.name, url: asset.browser_download_url, bytes: asset.size,
+      assetId: asset.id, digest: Upstream.githubDigest(asset) })).filter(Boolean) })));
+}
+const sectionRows = (rows, section) => (rows || []).filter(row => row?.details?.section === section && row.files?.length);
+function versionsOf(rows, section) {
+  return [...new Set(sectionRows(rows, section).map(row => row.version))].sort(Versions.compareOnsyuriVersionsDesc);
+}
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
@@ -29,7 +45,7 @@ function safeRm(p) {
 }
 
 function normalizeVersion(input) {
-  const v = Releases.normalizeOnsyuriVersion(input);
+  const v = Versions.normalizeOnsyuriVersion(input);
   if (!v) {
     throw new Error(`Invalid onsyuri version: ${String(input ?? "")}`);
   }
@@ -37,7 +53,7 @@ function normalizeVersion(input) {
 }
 
 function normalizeMacVersion(input) {
-  const version = Releases.normalizeOnsyuriMacVersion(input);
+  const version = Versions.normalizeOnsyuriMacVersion(input);
   if (!version) throw new Error(`Invalid Onsyuri Mac version: ${String(input ?? "")}`);
   return version;
 }
@@ -100,7 +116,7 @@ function listInstalledMac(userDataDir, { verification = "full" } = {}) {
   for (const versionDir of versions) {
     if (!versionDir.isDirectory()) continue;
     const versionRaw = versionDir.name;
-    const version = Releases.normalizeOnsyuriMacVersion(versionRaw);
+    const version = Versions.normalizeOnsyuriMacVersion(versionRaw);
     if (!version) continue;
     let archEntries = [];
     try {
@@ -122,7 +138,10 @@ function listInstalledMac(userDataDir, { verification = "full" } = {}) {
       }
       const meta = readInstallMeta(installDir);
       if (!meta && !fs.existsSync(path.join(installDir, "onsyuri"))) continue;
-      out.push({ version, variant, installDir });
+      // The executable recorded at install, wherever the release placed it.
+      const recorded = typeof meta?.binaryPath === "string" && !path.isAbsolute(meta.binaryPath) && !meta.binaryPath.split(/[\\/]/).includes("..")
+        ? path.join(installDir, meta.binaryPath) : null;
+      out.push({ version, variant, installDir, ...(recorded && fs.existsSync(recorded) ? { executablePath: recorded } : {}) });
     }
   }
 
@@ -137,7 +156,7 @@ function listInstalledMac(userDataDir, { verification = "full" } = {}) {
   }
 
 
-  out.sort((a, b) => Releases.compareOnsyuriMacVersionsDesc(a.version, b.version));
+  out.sort((a, b) => Versions.compareOnsyuriMacVersionsDesc(a.version, b.version));
   return out;
 }
 
@@ -154,7 +173,7 @@ function listInstalledWeb(userDataDir) {
   for (const versionDir of versions) {
     if (!versionDir.isDirectory()) continue;
     const versionRaw = versionDir.name;
-    const version = Releases.normalizeOnsyuriVersion(versionRaw);
+    const version = Versions.normalizeOnsyuriVersion(versionRaw);
     if (!version) continue;
     const installDir = path.join(root, versionRaw);
     const meta = readInstallMeta(installDir);
@@ -162,7 +181,7 @@ function listInstalledWeb(userDataDir) {
     out.push({ version, installDir });
   }
 
-  out.sort((a, b) => Releases.compareOnsyuriVersionsDesc(a.version, b.version));
+  out.sort((a, b) => Versions.compareOnsyuriVersionsDesc(a.version, b.version));
   return out;
 }
 
@@ -199,80 +218,46 @@ async function extractZip(zipPath, destDir, signal) {
   await runCommand(ditto, ["-x", "-k", zipPath, destDir], { signal });
 }
 
-async function extractTar(tarPath, destDir, signal) {
-  await runCommand("/usr/bin/tar", ["-xzf", tarPath, "-C", destDir], { signal });
-}
-
 async function extract7z(archivePath, destDir, signal) {
   await runCommand("/usr/bin/bsdtar", ["-xf", archivePath, "-C", destDir], { signal });
 }
 
+// The executable may sit in a folder or app bundle, or carry the release name.
 function findOnsyuriBinary(root) {
-  const direct = path.join(root, "onsyuri");
-  if (fs.existsSync(direct)) return direct;
-  let entries = [];
-  try {
-    entries = fs.readdirSync(root, { withFileTypes: true });
-  } catch {
-    return null;
-  }
-  for (const entry of entries) {
-    const full = path.join(root, entry.name);
-    if (entry.isFile() && entry.name.toLowerCase().startsWith("onsyuri")) {
-      return full;
-    }
-    if (entry.isDirectory()) {
-      const nested = path.join(full, "onsyuri");
-      if (fs.existsSync(nested)) return nested;
-    }
-  }
-  return null;
+  return Release.locatePackaged(root, ["onsyuri", "onsyuri.app/Contents/MacOS/onsyuri", /^onsyuri(?:$|[_-])/i], { files: true });
 }
 
 function getWebArchiveType(name) {
   const lower = String(name || "").toLowerCase();
   if (lower.endsWith(".zip")) return "zip";
   if (lower.endsWith(".7z")) return "7z";
+  if (/\.(?:tar\.gz|tgz|tar\.xz|txz|tar\.bz2|tbz2)$/.test(lower)) return "tar";
   return null;
 }
 
-function filterReleaseByVersion(releases, version) {
-  const target = Releases.normalizeOnsyuriVersion(version);
-  if (!target) return null;
-  return (releases || []).find(rel => {
-    const v = Releases.normalizeOnsyuriVersion(rel?.tag_name || rel?.name || "");
-    return v === target;
-  });
+// The listed row for a version, section and CPU. The release list is read
+// again when the caller's list is empty or lacks the version.
+async function listedRow({ rows, version, section, arch, logger, signal }) {
+  const find = list => sectionRows(list, section).find(row => row.version === version && (!arch || row.architecture === arch)) || null;
+  return (Array.isArray(rows) && find(rows)) || find(await source.discover({ logger, signal }));
 }
 
 async function fetchAvailableVersions({ logger, userDataDir, signal, sourceId } = {}) {
   if (sourceId != null && !["builds", "upstream"].includes(sourceId)) throw new Error("The ONScripter-Yuri download source is unavailable.");
   if (sourceId === "builds") {
     await Hosted.refreshCatalog({ userDataDir, logger, signal, force: true, sourceId: "builds" });
-    return { releases: [], macVersions: [], webVersions: [], source: "https://github.com/procrastinine/maclauncher-builds" };
+    return { rows: [], macVersions: [], webVersions: [], source: "https://github.com/procrastinine/maclauncher-builds" };
   }
   if (sourceId === "upstream") {
-    const releases = await Releases.fetchGithubReleases({ owner: REPO_OWNER, repo: REPO_NAME, logger, includePrerelease: true, signal });
-    return { releases, macVersions: Releases.collectOnsyuriVersions(releases), webVersions: Releases.collectOnsyuriVersions(releases, { variant: "web" }),
-      source: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases` };
+    const rows = await source.discover({ logger, signal });
+    return { rows, macVersions: versionsOf(rows, "mac"), webVersions: versionsOf(rows, "web"), source: SOURCE_URL };
   }
-  const [upstream, hosted] = await Promise.allSettled([Releases.fetchGithubReleases({
-    owner: REPO_OWNER,
-    repo: REPO_NAME,
-    logger,
-    includePrerelease: true, signal
-  }), Hosted.refreshCatalog({ userDataDir, logger, signal, force: true })]);
+  const [upstream, hosted] = await Promise.allSettled([source.discover({ logger, signal }),
+    Hosted.refreshCatalog({ userDataDir, logger, signal, force: true })]);
   if (hosted.status === "rejected") throw hosted.reason;
-  const releases = upstream.status === "fulfilled" ? upstream.value : [];
-  const macVersions = Releases.collectOnsyuriVersions(releases);
-  const webVersions = Releases.collectOnsyuriVersions(releases, { variant: "web" });
-  return {
-    releases,
-    macVersions,
-    webVersions,
-    source: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases`,
-    upstreamError: upstream.status === "rejected" ? upstream.reason.message || String(upstream.reason) : null
-  };
+  const rows = upstream.status === "fulfilled" ? upstream.value : [];
+  return { rows, macVersions: versionsOf(rows, "mac"), webVersions: versionsOf(rows, "web"), source: SOURCE_URL,
+    upstreamError: upstream.status === "rejected" ? upstream.reason.message || String(upstream.reason) : null };
 }
 
 async function installMacVersion({
@@ -281,7 +266,7 @@ async function installMacVersion({
   variant,
   logger,
   onProgress,
-  releases,
+  rows,
   signal
 } = {}) {
   const v = normalizeMacVersion(version);
@@ -297,43 +282,29 @@ async function installMacVersion({
     const installed = await Hosted.installRuntime({ userDataDir, version: v, logger, signal, onProgress });
     return { ...installed, variant: arch };
   }
-  const releaseList = Array.isArray(releases)
-    ? releases
-    : await Releases.fetchGithubReleases({ owner: REPO_OWNER, repo: REPO_NAME, logger });
-  const release = filterReleaseByVersion(releaseList, v);
-  if (!release) throw new Error(`Onsyuri release v${v} not found`);
-  const match = Releases.selectOnsyuriAsset([release], { arch });
-  if (!match?.asset?.browser_download_url) {
-    throw new Error(`No onsyuri mac asset found for v${v} (${arch})`);
-  }
-
-  const downloadUrl = match.asset.browser_download_url;
+  const row = await listedRow({ rows, version: v, section: "mac", arch, logger, signal });
+  if (!row) throw new Error(`ONScripter-Yuri ${v} has no Mac download for this architecture.`);
+  const file = row.files[0], downloadUrl = file.url;
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-onsyuri-"));
-  const name = match.asset.name || `onsyuri-${v}-${arch}`;
+  const name = file.name;
   const assetPath = path.join(tmpDir, name);
   const extractDir = path.join(tmpDir, "extract");
   const installDir = getMacInstallDir({ userDataDir, version: v, variant: arch });
-  const lower = name.toLowerCase();
-  let binaryPath = null;
+  let binaryPath = null, downloaded = null;
 
   try {
     logger?.info?.(`[onsyuri] downloading ${downloadUrl}`);
-    await downloadToFile(downloadUrl, assetPath, { onProgress, signal });
+    downloaded = await source.download(file, assetPath, { onProgress, signal });
     throwIfAborted(signal);
-    if (lower.endsWith(".zip")) {
+    if (Release.archiveFormat(name)) {
       ensureDir(extractDir);
-      await extractZip(assetPath, extractDir, signal);
-      binaryPath = findOnsyuriBinary(extractDir);
+      await Release.extractArchive(assetPath, extractDir, signal);
+      const found = findOnsyuriBinary(extractDir);
+      if (!found) throw new Error(`The ONScripter-Yuri ${v} download contains no Mac executable.`);
       safeRm(installDir);
       ensureDir(path.dirname(installDir));
       fs.cpSync(extractDir, installDir, { recursive: true, verbatimSymlinks: true });
-    } else if (lower.endsWith(".tar.gz") || lower.endsWith(".tgz")) {
-      ensureDir(extractDir);
-      await extractTar(assetPath, extractDir, signal);
-      binaryPath = findOnsyuriBinary(extractDir);
-      safeRm(installDir);
-      ensureDir(path.dirname(installDir));
-      fs.cpSync(extractDir, installDir, { recursive: true, verbatimSymlinks: true });
+      binaryPath = path.join(installDir, path.relative(extractDir, found));
     } else {
       safeRm(installDir);
       ensureDir(installDir);
@@ -354,8 +325,10 @@ async function installMacVersion({
   writeInstallMeta(installDir, {
     version: v,
     variant: arch,
-    assetName: match.asset?.name || null,
+    assetName: name,
     downloadUrl,
+    sha256: downloaded.sha256,
+    integrity: downloaded.integrity,
     binaryPath: binaryPath ? path.relative(installDir, binaryPath) : null,
     installedAt: Date.now()
   });
@@ -372,36 +345,29 @@ async function installWebVersion({
   version,
   logger,
   onProgress,
-  releases,
+  rows,
   signal
 } = {}) {
   const v = normalizeVersion(version);
-  const releaseList = Array.isArray(releases)
-    ? releases
-    : await Releases.fetchGithubReleases({ owner: REPO_OWNER, repo: REPO_NAME, logger });
-  const release = filterReleaseByVersion(releaseList, v);
-  if (!release) throw new Error(`Onsyuri release v${v} not found`);
-  const match = Releases.selectOnsyuriAsset([release], { variant: "web" });
-  if (!match?.asset?.browser_download_url) {
-    throw new Error(`No onsyuri web asset found for v${v}`);
-  }
-
-  const downloadUrl = match.asset.browser_download_url;
+  const row = await listedRow({ rows, version: v, section: "web", logger, signal });
+  if (!row) throw new Error(`ONScripter-Yuri ${v} has no Web download.`);
+  const file = row.files[0], downloadUrl = file.url;
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-onsyuri-web-"));
-  const name = match.asset.name || `onsyuri-web-${v}`;
+  const name = file.name;
   const assetPath = path.join(tmpDir, name);
   const installDir = getWebInstallDir({ userDataDir, version: v });
   const archiveType = getWebArchiveType(name);
+  let downloaded = null;
 
   try {
     logger?.info?.(`[onsyuri] downloading ${downloadUrl}`);
-    await downloadToFile(downloadUrl, assetPath, { onProgress, signal });
+    downloaded = await source.download(file, assetPath, { onProgress, signal });
     throwIfAborted(signal);
     safeRm(installDir);
     ensureDir(installDir);
     if (archiveType === "zip") {
       await extractZip(assetPath, installDir, signal);
-    } else if (archiveType === "7z") {
+    } else if (archiveType) {
       await extract7z(assetPath, installDir, signal);
     } else {
       const dest = path.join(installDir, "onsyuri-web.7z");
@@ -413,8 +379,10 @@ async function installWebVersion({
 
   writeInstallMeta(installDir, {
     version: v,
-    assetName: match.asset?.name || null,
+    assetName: name,
     downloadUrl,
+    sha256: downloaded.sha256,
+    integrity: downloaded.integrity,
     installedAt: Date.now()
   });
 
@@ -441,8 +409,11 @@ function uninstallWebVersion({ userDataDir, version, installDir } = {}) {
 }
 
 module.exports = {
+  source,
+  sourceUrl: SOURCE_URL,
+  rowsFromReleases,
+  versionsOf,
   recommendedVersion: RECOMMENDED_VERSION,
-  previousDefaultVersion: PREVIOUS_DEFAULT_VERSION,
   bundled: Bundled,
   hosted: Hosted,
   installRootDir,

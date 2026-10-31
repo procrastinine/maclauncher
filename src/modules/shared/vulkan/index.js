@@ -4,6 +4,7 @@ const { hashFile } = require("../runtime/pinned-native-manager");
 const { readMachOLoadCommands } = require("../runtime/macho-load-commands");
 const managed = require("./managed");
 const Custom = require("../runtime/custom-runtime");
+const Architecture = require("../runtime/architecture");
 
 function installed(context, dependencies = {}) {
   const result = [];
@@ -65,7 +66,7 @@ function requirements(context, dependencies = {}) {
       context.recordRuntimeUse?.({ managerId: selected.projectId || "vulkan-" + selected.backend, version: selected.version, sectionId: "default", sourcePath: path.dirname(selected.library) });
       return [];
     }
-    const architecture = dependencies.architecture || process.arch;
+    const architecture = dependencies.architecture || Architecture.selectedArchitecture();
     for (const manager of dependencies.managers || managers) {
       const name = manager.backend + ":";
       if (request !== "auto" && !request.startsWith(name)) continue;
@@ -75,9 +76,11 @@ function requirements(context, dependencies = {}) {
       const selected = manager.resolveSelection(null, context.settings, context.userDataDir,
         { version: explicit || undefined, verification: "status" });
       const versions = [selected.version].filter(value => value && value !== "auto");
+      // Nothing listed or installed yet: consented preparation discovers versions.
+      if (!versions.length && selected.discoveryRequired) return [{ managerId: manager.id, version: null, discoveryRequired: true, requiresDownload: true, installOptions: {} }];
       for (const version of versions) {
         const pin = entries.find(item => item.version === version);
-        if (pin?.deprecated || pin?.hostArchitectures && !pin.hostArchitectures.includes(architecture) || !pin && architecture !== process.arch) continue;
+        if (pin?.deprecated || (pin ? !Architecture.matchesArchitecture(pin, architecture) : architecture !== Architecture.selectedArchitecture())) continue;
         if (state.catalog.versionRequirements?.[version]?.installReason) continue;
         const selection = manager.resolveSelection(null, context.settings, context.userDataDir, { version, verification: "status" });
         if (selection.ready) throw new Error("The selected Vulkan runtime has no compatible " + architecture + " library. Install a compatible version in Runtimes.");
@@ -92,7 +95,7 @@ function requirements(context, dependencies = {}) {
   if (!selection.version) throw new Error(selection.reason || "A compatible " + manager.label + " package is unavailable.");
   if (dependencies.architecture && !selection.ready) {
     const pin = manager.core.listCatalog({ userDataDir: context.userDataDir }).find(item => item.version === selection.version);
-    if (pin?.hostArchitectures && !pin.hostArchitectures.includes(dependencies.architecture) || !pin && dependencies.architecture !== process.arch)
+    if (pin ? !Architecture.matchesArchitecture(pin, dependencies.architecture) : dependencies.architecture !== Architecture.selectedArchitecture())
       throw new Error("The selected " + manager.label + " runtime has no compatible " + dependencies.architecture + " library.");
   }
   if (selection.ready) {

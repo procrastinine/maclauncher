@@ -8,9 +8,8 @@ const SHA = /^[a-f0-9]{64}$/;
 function validateManifest(manifest) {
   if (manifest.managerId !== "gamemaker-opengl-helper" || manifest.helperABI !== 1 || manifest.arch !== "universal" ||
       !SHA.test(manifest.source?.sourceSha256 || "") || !manifest.files.some(file => file.path === "helper.json") ||
-      !manifest.runnerChecksums || typeof manifest.runnerChecksums !== "object" || Array.isArray(manifest.runnerChecksums) ||
-      !Object.keys(manifest.runnerChecksums).length || Object.entries(manifest.runnerChecksums).some(([version, hash]) => !/^\d+(?:\.\d+){2,3}$/.test(version) || !SHA.test(hash)) ||
-      !Array.isArray(manifest.legacyLogicalRunnerVersions) || manifest.legacyLogicalRunnerVersions.some(version => !Object.hasOwn(manifest.runnerChecksums, version)))
+      !Array.isArray(manifest.legacyLogicalRunnerVersions) || manifest.legacyLogicalRunnerVersions.some(version =>
+        typeof version !== "string" || !/^\d+(?:\.\d+){2,3}$/.test(version)))
     throw new Error("The GameMaker graphics helper uses an unsupported integration profile.");
 }
 function verifyInstall(install) {
@@ -19,9 +18,7 @@ function verifyInstall(install) {
   const record = JSON.parse(Bundled.readRegular(path.join(install.payloadRoot, "helper.json"), Bundled.LIMITS.manifestBytes).bytes);
   const file = path.join(install.payloadRoot, "software-opengl.dylib");
   const primary = install.manifest.files.find(item => item.path === "software-opengl.dylib");
-  if (record.sourceSha256 !== install.manifest.source.sourceSha256 || record.binarySha256 !== primary?.sha256 || record.architecture !== "universal" ||
-      !Array.isArray(record.supportedRunnerVersions) || record.supportedRunnerVersions.length !== Object.keys(install.manifest.runnerChecksums).length ||
-      record.supportedRunnerVersions.some(version => !Object.hasOwn(install.manifest.runnerChecksums, version)))
+  if (record.sourceSha256 !== install.manifest.source.sourceSha256 || record.binarySha256 !== primary?.sha256 || record.architecture !== "universal")
     throw new Error("The GameMaker graphics helper record differs from its managed package.");
   const image = MachO.assertSystemLibraryClosure(MachO.readMachOLoadCommands(file), {
     fileType: 6, installName: "@rpath/software-opengl.dylib", maximumMacOS: install.declaration.minimumMacOS });

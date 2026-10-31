@@ -5,7 +5,7 @@ test('Native-created threads resolve classes through the actual calling image ow
  const home=process.env.JAVA_HOME||spawnSync('/usr/libexec/java_home',['-v','21'],{encoding:'utf8'}).stdout?.trim();
  if(!home||!fs.existsSync(path.join(home,'bin/javac')))return t.skip('Requires Java21');
  const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'android-native-class-owner-'));t.after(()=>fs.rmSync(tmp,{recursive:true,force:true}));
- const source=path.resolve(__dirname,'../src/modules/android/native'),fixture=path.resolve(__dirname,'fixtures/android-native');
+ const source=path.resolve(__dirname,'../src/external/maclauncher-android/src/modules/android/native'),fixture=path.resolve(__dirname,'fixtures/android-native');
  const run=(cmd,args)=>{const r=spawnSync(cmd,args,{encoding:'utf8',timeout:20000});assert.equal(r.error,undefined,r.error?.message);assert.equal(r.status,0,r.stdout+r.stderr);return r;};
  const includes=['-I'+path.join(home,'include'),'-I'+path.join(home,'include/darwin')];
  const library=path.join(tmp,'owner.dylib'),guests=['a','b','c'].map(n=>path.join(tmp,n+'.dylib'));

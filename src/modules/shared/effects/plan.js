@@ -176,7 +176,7 @@ function catalog({ reshadeState = {}, graphicsCapabilities = {}, graphicsInputs 
           ...(kind === "downsample" ? {extent: {relativeTo: "input", factor: .5}} : {}) },
         available: !reason, ...(kind==="frame-generation"?{acceptsSynthetic:!scene}:{}), preservesCoordinates: resize && support.depthTransforms === true || kind === "temporal" && support.depthTransforms === true,
         coordinateTransform: resize || kind === "temporal" ? "scale" : "unknown", preservesSceneInputs:(resize||kind==="temporal")&&support.sceneGuideTransforms===true,
-        ...(pendingInputs.length?{pendingInputs,availableWithoutInputs:!!supported&&!hardwareReason,inputReason:"This row waits for matching "+pendingInputs.map(sceneInputLabel).join(", ")+" inputs from the frame source."}:{}),
+        ...(pendingInputs.length?{pendingInputs,availableWithoutInputs:!reason,inputReason:"This row waits for matching "+pendingInputs.map(sceneInputLabel).join(", ")+" inputs from the frame source."}:{}),
         ...(requiredModel ? {availableWithoutModel: !runtimeReason} : {}), ...(reason ? { reason } : {}), requirements });
     }
   }

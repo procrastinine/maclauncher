@@ -43,7 +43,7 @@
           ] }
         ]
       } },
-      "inspection": { "label": "Inspection", "launch": false }
+      "inspection": { "label": "Inspect only", "launch": false }
     }
   },
   "settingsDefaults": { "defaultRuntime": "nxnative" },

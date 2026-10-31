@@ -369,12 +369,12 @@ test("FNA validates its runtime files and rejects wrong versions or tampering", 
   assert.equal(Profile.verifyRuntime({ executablePath: path.join(root, "dotnet"), upstreamRevision: FNA_REVISION }).dotnetVersion, DOTNET_VERSION);
   fs.writeFileSync(metadata, JSON.stringify({ ...record, profile: "fixture-another-host" }));
   assert.equal(Profile.verifyRuntime({ executablePath: path.join(root, "dotnet"), upstreamRevision: FNA_REVISION }).dotnetVersion, DOTNET_VERSION);
-  assert.throws(() => Profile.verifyRuntime({ executablePath: path.join(root, "dotnet"), upstreamRevision: "d".repeat(40) }), /metadata/);
+  assert.equal(Profile.verifyRuntime({ executablePath: path.join(root, "dotnet"), upstreamRevision: "d".repeat(40) }).sourceIdentity.receiptRevision, "d".repeat(40));
   fs.writeFileSync(path.join(root, "FNA.dll"), "modified"); assert.throws(() => Profile.verifyRuntime({ executablePath: path.join(root, "dotnet"), upstreamRevision: FNA_REVISION }), /integrity/);
   record.frameworkVersion = "invalid-framework"; fs.writeFileSync(metadata, JSON.stringify(record)); assert.throws(() => Profile.verifyRuntime({ executablePath: path.join(root, "dotnet"), upstreamRevision: FNA_REVISION }), /metadata/);
 });
 
-test("FNA retains exact retired selections and requires a choice without usable installations", t => {
+test("FNA retains exact retired selections and discovers a default without usable installations", t => {
   const manager = Manager.createManager(), root = fixture(t);
   const entry = { runtimeData: { fna: { version: "fixture-retired-host" } } };
   const result = manager.resolveSelection(entry, {}, root);
@@ -384,7 +384,7 @@ test("FNA retains exact retired selections and requires a choice without usable 
   assert.equal(manager.getState({ userDataDir: root, settings: { defaultVersion: "fixture-retired-host" } }).defaultVersion, "fixture-retired-host");
   assert.equal(manager.resolveSelection({}, { runtimes: { fna: { defaultVersion: "fixture-retired-host" } } }, root).version, "fixture-retired-host");
   assert.equal(manager.resolveSelection({}, {}, root).version, null);
-  assert.equal(manager.resolveSelection({}, {}, root).selectionRequired, true);
+  assert.equal(manager.resolveSelection({}, {}, root).discoveryRequired, true);
   assert.deepEqual(manager.core.catalog, [], "retired choices are not bundled catalog seeds");
 });
 
@@ -460,6 +460,17 @@ test("FNA downloaded packages bind relocated files to their sealed manifest", t 
   const install = { source: "download", version: FNA_VERSION, upstreamRevision: FNA_REVISION, installDir: root, executablePath: path.join(payload, "dotnet"),
     catalogEntry: { projectPackage: { id: "fna", version: FNA_VERSION, manifestRelative: "manifest.json", manifestSha256: B.digest(bytes) } } };
   assert.equal(Profile.verifyRuntime(install).files["FNA.dll"], Native.hashFile(path.join(payload, "FNA.dll")));
+  assert.equal(Profile.verifyRuntime({...install, upstreamRevision: undefined}).sourceIdentity.receiptRevision, null);
+  const project = install.catalogEntry.projectPackage;
+  install.upstreamRevision = "d".repeat(40);
+  project.source = {repository: "procrastinine/maclauncher-builds", revision: install.upstreamRevision};
+  assert.equal(Profile.verifyRuntime(install).upstreamRevision, FNA_REVISION, "The sealed FNA profile retains its primary upstream, separately from the producer receipt");
+  project.source.repository = "FNA-XNA/FNA";
+  assert.equal(Profile.verifyRuntime(install).upstreamRevision, FNA_REVISION);
+  project.source.repository = "procrastinine/maclauncher-builds";
+  install.upstreamRevision = "e".repeat(40);
+  assert.equal(Profile.verifyRuntime(install).sourceIdentity.receiptRevision, "e".repeat(40));
+  install.upstreamRevision = project.source.revision;
   fs.appendFileSync(metadata, " "); assert.throws(() => Profile.verifyRuntime(install), /manifest changed/); fs.writeFileSync(metadata, bytes);
   fs.writeFileSync(path.join(payload, "native/lib/libSDL3.0.dylib"), "modified"); assert.throws(() => Profile.verifyRuntime(install), /checksum|permissions/i);
 });

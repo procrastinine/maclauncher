@@ -300,7 +300,12 @@ test("Register Runtime uses injected file dialog and cancels cleanly", { skip: p
   assert.deepEqual(await Kiri.actions.registerRuntime(entry, {}, ctx), { canceled: true });
   ctx.ui.dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [runtimePath] });
   assert.equal((await Kiri.actions.registerRuntime(entry, {}, ctx)).ready, true);
-  await assert.rejects(() => Kiri.actions.registerRuntime(entry, { version: "latest", runtimePath }, ctx), /Unsupported/);
+  const unlisted = await Kiri.actions.registerRuntime(entry, { version: "latest", runtimePath }, ctx);
+  assert.equal(unlisted.ready, true); assert.equal(unlisted.version, "latest");
+  const selected = Kiri.actions.runtimeStatus(entry, {}, ctx);
+  assert.equal(selected.version, "latest"); assert.equal(selected.ready, true);
+  const installed = Kiri.runtimeManagers[0].core.resolveInstalled({ userDataDir, version: "latest" });
+  assert.equal(installed.source, "local"); assert.equal(installed.provenanceVerified, false);
 });
 
 test("AliceSoft registration resolves automatic tool versions from the current runtime selection", { skip: process.platform !== "darwin" }, async t => {

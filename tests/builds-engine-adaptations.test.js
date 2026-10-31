@@ -31,7 +31,7 @@ for (const [id, modulePath, entry] of [
   assert.equal(manager.getState({ userDataDir }).catalog.versions.length, 0);
   assert.equal(fetches, 0);
   assert.equal(manager.resolveSelection(null, {}, userDataDir).version, null);
-  assert.equal(manager.resolveSelection(null, {}, userDataDir).selectionRequired, true);
+  assert.equal(manager.resolveSelection(null, {}, userDataDir).discoveryRequired, true);
   assert.equal(fetches, 0);
   await manager.installRuntime({ userDataDir, version: record.version });
   assert.equal(downloads, 1); assert.equal(fetches, 1);

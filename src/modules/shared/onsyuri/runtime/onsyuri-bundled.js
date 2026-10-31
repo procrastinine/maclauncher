@@ -3,9 +3,8 @@ const path = require("node:path");
 const B = require("../../runtime/bundled-native");
 const Native = require("../../runtime/local-native");
 const { isDeepStrictEqual } = require("node:util");
-// Existing initial choice and its verified pre-rename installation identity.
+// Existing initial choice.
 const RECOMMENDED_VERSION = "0.7.7beta-MCLv1";
-const PREVIOUS_DEFAULT_VERSION = "0.7.7beta-macos-v3";
 
 function validateVersionProvenance(manifest, record) {
   if (manifest.upstreamRevision !== record.upstreamRevision ||
@@ -57,4 +56,4 @@ function createOnsyuriBundled({ resourceRoot, platform = process.platform, depen
     clearCache: () => { failedChecks.clear(); for (const bundle of providers.values()) bundle.clearCache(); } };
 }
 
-module.exports = { RECOMMENDED_VERSION, PREVIOUS_DEFAULT_VERSION, validateVersionProvenance, createOnsyuriBundled };
+module.exports = { RECOMMENDED_VERSION, validateVersionProvenance, createOnsyuriBundled };

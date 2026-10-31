@@ -1,9 +1,9 @@
 const fs = require("node:fs"), path = require("node:path");
 const {execFile} = require("node:child_process"), {promisify} = require("node:util");
 const Native = require("../runtime/bundled-native");
+const Requirements = require("../runtime/feature-requirements");
 const execute = promisify(execFile), queries = new Map();
-const OPERATIONS = Object.freeze(["spatial", "temporal", "denoised", "interpolation"]);
-const MINIMUM_MACOS = Object.freeze({spatial:"13.0",temporal:"13.0",denoised:"26.0",interpolation:"26.0"});
+const OPERATIONS = Object.freeze(Object.keys(Requirements.METALFX));
 const clean = value => typeof value === "string" ? value.replace(/[\x00-\x1f\x7f]/g, " ").slice(0, 256) : undefined;
 const unknown = (reason,macOSVersion) => ({state: "unknown", ...(reason ? {reason} : {}),...(macOSVersion?{macOSVersion}:{})});
 function systemVersion(options={}){
@@ -83,7 +83,8 @@ function operationReason(hardware, name, {macOSVersion, deviceRegistryID} = {}) 
   // SDK API floors are known independently of a device query. A missing or
   // failed helper must not hide them or invent a negative GPU capability.
   const system = macOSVersion || hardware?.macOSVersion;
-  if(system&&!Native.versionAtLeast(system,MINIMUM_MACOS[name]))return `Requires macOS ${MINIMUM_MACOS[name]} or later.`;
+  const support = Requirements.requirementSupport(Requirements.METALFX[name], {platform: "darwin", macOSVersion: system});
+  if (support.supported === false) return support.reason;
   if (hardware?.state !== "ready") return null;
   const chosen = deviceRegistryID && hardware.devices.find(row => row.registryID === String(deviceRegistryID));
   const candidates = chosen ? [chosen] : hardware.devices;
@@ -95,4 +96,12 @@ function operationReason(hardware, name, {macOSVersion, deviceRegistryID} = {}) 
   if (candidates.some(row => row.metalfx[name].reason)) return null;
   return chosen ? `Not supported by ${chosen.name}.` : "Not supported by the detected GPUs.";
 }
-module.exports = {inspect, snapshot, operationReason, validate, OPERATIONS};
+function metalFX27InputsReason(graphics, options = {}) {
+  if (graphics?.metalFX27InputsAPI !== 1) return "This graphics build does not include MetalFX motion-vector and subregion inputs.";
+  const declared = graphics.requirements?.metalFX27Inputs?.minimumMacOS;
+  const base = Requirements.METALFX_EXTRA_INPUTS.minimumMacOS;
+  const minimum = /^\d+\.\d+(?:\.\d+)?$/.test(declared || "") && Native.versionAtLeast(declared, base) ? declared : base;
+  const actual = (options.platform || process.platform) === "darwin" ? systemVersion(options) : null;
+  return !actual || !Native.versionAtLeast(actual, minimum) ? `Requires macOS ${minimum} or later.` : null;
+}
+module.exports = {inspect, snapshot, operationReason, metalFX27InputsReason, validate, OPERATIONS};

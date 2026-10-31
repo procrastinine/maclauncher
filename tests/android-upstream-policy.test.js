@@ -6,12 +6,12 @@ const os=require('node:os');
 const {spawnSync}=require('node:child_process');
 const {frameworkArguments}=require('./helpers/android-java');
 
-const source=path.resolve(__dirname,'../src/modules/android/native');
+const source=path.resolve(__dirname,'../src/external/maclauncher-android/src/modules/android/native');
 const fixtures=path.join(__dirname,'fixtures/android-framework-policy');
 const javaHome=process.env.JAVA_HOME||(process.platform==='darwin'
   ?spawnSync('/usr/libexec/java_home',['-v','21'],{encoding:'utf8'}).stdout.trim():null);
 const asm=JSON.parse(fs.readFileSync(path.join(source,'asm-binary.json'),'utf8')).files
-  .map(file=>path.join(source,'tools',file.path)).join(path.delimiter);
+  .map(file=>path.join(require('./helpers/android-java').toolInputsRoot,file.path)).join(path.delimiter);
 
 function environment(){
  const env={...process.env};
@@ -34,11 +34,15 @@ test('Owned Android production sources contain no test fixtures or test-only ent
  assert.equal(fs.existsSync(path.join(source,'test')),false,'Native fixtures belong under tests/fixtures');
  for(const file of files.filter(file=>file.endsWith('.java'))){
   assert.doesNotMatch(path.basename(file),/(?:Test|Probe|Audit)\.java$/,'Test class in production source: '+file);
-  assert.doesNotMatch(fs.readFileSync(file,'utf8'),/\b\w+ForTest(?:ing)?\s*\(/,'Test-only entrypoint in production source: '+file);
+  // Audit owned method declarations. Calls into complete upstream APIs can
+  // carry historical test names while performing real service retirement.
+  assert.doesNotMatch(fs.readFileSync(file,'utf8'),/\b(?:public|protected|private)\s+(?:(?:static|final|synchronized|native|abstract)\s+)*(?:[\w.$<>?,\[\]]+\s+)+\w+ForTest(?:ing)?\s*\(/,'Test-only entrypoint in production source: '+file);
  }
  for(const file of files.filter(file=>/\.(?:c|cc|cpp|h|hpp|m|mm)$/.test(file))){
   const text=fs.readFileSync(file,'utf8');
-  assert.doesNotMatch(text,/^\s*#\s*(?:if|ifdef|ifndef|define)\b[^\n]*\b\w*(?:_TEST|_TESTING|TEST_)\w*/m,
+  // Constants such as GL_DEPTH_TEST are complete upstream API declarations,
+  // not switches selecting a test implementation.
+  assert.doesNotMatch(text,/^\s*#\s*(?:if|ifdef|ifndef)\b[^\n]*\b\w*(?:_TEST|_TESTING|TEST_)\w*/m,
    'Native test switches belong under tests/fixtures: '+file);
   assert.doesNotMatch(text,/\bJava_\w*(?:Probe|Test|Audit)_\w+\b/,
    'Native test entrypoints belong under tests/fixtures: '+file);
@@ -47,6 +51,7 @@ test('Owned Android production sources contain no test fixtures or test-only ent
 
 test('Host artifact defines no classes owned by the upstream framework',t=>{
  if(!javaHome)return t.skip('Java 21 is required');
+ if(!require('./helpers/android-java').runtimeRoot())return t.skip('Requires an Android runtime via KLEPTON_NATIVE_RUNTIME or MACLAUNCHER_TEST_USER_DATA');
  const framework=frameworkArguments('javac',[])[1];
  const host=path.join(path.dirname(framework),'android-host.jar');
  const upstream=new Set(run('jar',['--list','--file',framework]).split('\n')
@@ -66,6 +71,7 @@ test('Host artifact defines no classes owned by the upstream framework',t=>{
 
 test('Every owned JNI declaration retains its exported or registered native implementation',t=>{
  if(!javaHome||process.platform!=='darwin')return t.skip('Java 21 and macOS are required');
+ if(!require('./helpers/android-java').runtimeRoot())return t.skip('Requires an Android runtime via KLEPTON_NATIVE_RUNTIME or MACLAUNCHER_TEST_USER_DATA');
  const framework=frameworkArguments('javac',[])[1],runtime=path.dirname(framework),directory=temporary(t);
  const libraries=fs.readdirSync(path.join(runtime,'native')).filter(name=>name.endsWith('.dylib')).map(name=>path.join(runtime,'native',name));
  assert.ok(libraries.length>0,'Runtime native libraries are required');
@@ -78,7 +84,7 @@ test('Every owned JNI declaration retains its exported or registered native impl
  assert.equal(compiled.error,undefined);assert.equal(compiled.status,0,compiled.stderr);
  const classpath=[directory,asm,path.join(runtime,'android-host.jar'),framework].join(path.delimiter);
  run('javac',['--release','21','-cp',classpath,'-d',directory,path.join(fixtures,'OwnedNativeSymbols.java')]);
- const output=run('java',[...require('../src/modules/android/jvm-options').frameworkJvmOptions,'-agentpath:'+agent+'='+registered,'-cp',classpath,'OwnedNativeSymbols',path.join(runtime,'android-host.jar'),file,path.resolve(__dirname,'../src/modules/android/native/loader-entry.c'),runtime,registered]);
+ const output=run('java',[...require('../src/modules/android/jvm-options').frameworkJvmOptions,'-agentpath:'+agent+'='+registered,'-cp',classpath,'OwnedNativeSymbols',path.join(runtime,'android-host.jar'),file,path.resolve(__dirname,'../src/external/maclauncher-android/src/modules/android/native/loader-entry.c'),runtime,registered]);
  assert.match(output,/PASS \d+ owned native declarations/);t.diagnostic(output.trim());
 });
 
@@ -88,7 +94,7 @@ test('Native catalog reads actual registry entries without spelling or package e
  const result=spawnSync('clang++',['-std=c++20','-g','-O0','-dynamiclib',
   path.join(fixtures,'native-catalog/HostRuntime.cpp'),path.join(fixtures,'native-catalog/LayoutlibLoader.cpp'),'-o',library],{encoding:'utf8',timeout:30000});
  assert.equal(result.error,undefined);assert.equal(result.status,0,result.stderr);
- const {frameworkNativeCatalog}=await import('../src/modules/android/native/framework-native-catalog.mjs');
+ const {frameworkNativeCatalog}=await import('../src/external/maclauncher-android/src/modules/android/native/framework-native-catalog.mjs');
  // Independent source fixture has short, slash, dot and foreign-package keys.
  // None depends on the producer's symbol/string discovery implementation.
  assert.deepEqual(frameworkNativeCatalog(library),{
@@ -107,7 +113,7 @@ test('Registration selection follows final class bytes across the complete publi
  run('java',['-cp',directory+path.delimiter+asm,'NativeCatalogDeclarationsProbe',directory]);
  const declarations=path.join(directory,'declarations.tsv'),file=path.join(directory,'native-families.properties');
  run('java',['-cp',directory+path.delimiter+asm,'FrameworkNativeDeclarations',path.join(directory,'original.jar'),path.join(directory,'adapted.jar'),declarations]);
- const {writeFrameworkNativeCatalog}=await import('../src/modules/android/native/framework-native-catalog.mjs');
+ const {writeFrameworkNativeCatalog}=await import('../src/external/maclauncher-android/src/modules/android/native/framework-native-catalog.mjs');
  writeFrameworkNativeCatalog(library,file,declarations);
  // Expected values come from the independent C++ registry and class fixtures.
  // An outer Java adapter must not suppress its nested remaining native entry;
@@ -121,12 +127,13 @@ test('Publisher bootstrap retains its complete native object families',async t=>
  if(!javaHome||process.platform!=='darwin')return t.skip('Java 21 and macOS publisher binary are required');
  const publisher=process.env.KLEPTON_AOSP_FRAMEWORK;
  if(!publisher)return t.skip('KLEPTON_AOSP_FRAMEWORK is required for the publisher comparison');
+ if(!require('./helpers/android-java').runtimeRoot())return t.skip('Requires an Android runtime via KLEPTON_NATIVE_RUNTIME or MACLAUNCHER_TEST_USER_DATA');
  const framework=frameworkArguments('javac',[])[1],runtime=path.dirname(framework),directory=temporary(t);
  const library=path.join(runtime,'native/libandroid_runtime.dylib');
  const declarations=path.join(directory,'declarations.tsv');
  run('javac',['--release','21','-cp',asm,'-d',directory,path.join(source,'framework/FrameworkNativeDeclarations.java')]);
  run('java',['-cp',directory+path.delimiter+asm,'FrameworkNativeDeclarations',publisher,framework,declarations]);
- const {writeFrameworkNativeCatalog}=await import('../src/modules/android/native/framework-native-catalog.mjs');
+ const {writeFrameworkNativeCatalog}=await import('../src/external/maclauncher-android/src/modules/android/native/framework-native-catalog.mjs');
  const file=path.join(directory,'native-families.properties');const catalog=writeFrameworkNativeCatalog(library,file,declarations);
  const supplied=new Set(Object.values(catalog).flat());
  const entries=Object.fromEntries(fs.readFileSync(file,'utf8').trim().split('\n').map(line=>{const at=line.indexOf('=');return [line.slice(0,at),line.slice(at+1).split(',')];}));
@@ -154,6 +161,7 @@ test('Normalized archive preserves every upstream class and callable method',t=>
  if(!javaHome)return t.skip('Java 21 is required');
  const publisher=process.env.KLEPTON_AOSP_FRAMEWORK;
  if(!publisher)return t.skip('KLEPTON_AOSP_FRAMEWORK is required for the publisher comparison');
+ if(!require('./helpers/android-java').runtimeRoot())return t.skip('Requires an Android runtime via KLEPTON_NATIVE_RUNTIME or MACLAUNCHER_TEST_USER_DATA');
  const directory=temporary(t),framework=frameworkArguments('javac',[])[1];
  run('javac',['--release','21','-cp',asm,'-d',directory,path.join(fixtures,'FrameworkArchiveAudit.java')]);
  assert.match(run('java',['-cp',directory+path.delimiter+asm,'FrameworkArchiveAudit',publisher,framework]),/PASS publisher archive preserved/);
@@ -171,6 +179,7 @@ test('Normalized archive retains every publisher Java implementation through exa
  if(!javaHome)return t.skip('Java 21 is required');
  const publisher=process.env.KLEPTON_AOSP_FRAMEWORK;
  if(!publisher)return t.skip('KLEPTON_AOSP_FRAMEWORK is required for the publisher comparison');
+ if(!require('./helpers/android-java').runtimeRoot())return t.skip('Requires an Android runtime via KLEPTON_NATIVE_RUNTIME or MACLAUNCHER_TEST_USER_DATA');
  const directory=temporary(t),framework=frameworkArguments('javac',[])[1];
  run('javac',['--release','21','-cp',asm,'-d',directory,path.join(fixtures,'FrameworkImplementationAudit.java')]);
  const output=run('java',['-Xmx2g','-cp',directory+path.delimiter+asm,'FrameworkImplementationAudit',publisher,framework]);
@@ -181,6 +190,7 @@ test('Storage adapters retain complete upstream Java bodies and only bind the ac
  if(!javaHome)return t.skip('Java 21 is required');
  const publisher=process.env.KLEPTON_AOSP_FRAMEWORK;
  if(!publisher)return t.skip('KLEPTON_AOSP_FRAMEWORK is required for the publisher comparison');
+ if(!require('./helpers/android-java').runtimeRoot())return t.skip('Requires an Android runtime via KLEPTON_NATIVE_RUNTIME or MACLAUNCHER_TEST_USER_DATA');
  const directory=temporary(t),framework=frameworkArguments('javac',[])[1],host=path.join(path.dirname(framework),'android-host.jar');
  assert.equal(fs.existsSync(path.join(source,'framework/PackagePortability.java')),false,'Original ApplicationPackageManager must retain its ContextImpl owner');
  assert.equal(fs.existsSync(path.join(source,'java/maclauncher/android/framework/HostContentResolver.java')),false,'Original ApplicationContentResolver must own provider access');
@@ -200,6 +210,7 @@ test('Native adapters bind only exact compiled implementations and preserve ever
 
 test('Native initialization derives new owners without hand-selected class lists',t=>{
  if(!javaHome)return t.skip('Java 21 is required');
+ if(!require('./helpers/android-java').runtimeRoot())return t.skip('Requires an Android runtime via KLEPTON_NATIVE_RUNTIME or MACLAUNCHER_TEST_USER_DATA');
  const directory=temporary(t),framework=frameworkArguments('javac',[])[1];
  run('javac',['--release','21','-cp',asm+path.delimiter+framework,'-d',directory,
   path.join(source,'framework/GraphicsPortability.java'),path.join(source,'java-jvm/maclauncher/android/framework/JvmNativeMemory.java'),path.join(source,'java/maclauncher/android/framework/HostCrypto.java'),
@@ -228,6 +239,7 @@ test('Upstream surface checker detects missing and inherited APIs without filter
 
 test('Portable framework families execute directly from AOSP without duplicate source classes',t=>{
  if(!javaHome)return t.skip('Java 21 is required');
+ if(!require('./helpers/android-java').runtimeRoot())return t.skip('Requires an Android runtime via KLEPTON_NATIVE_RUNTIME or MACLAUNCHER_TEST_USER_DATA');
  const directory=temporary(t),framework=frameworkArguments('javac',[])[1],host=path.join(path.dirname(framework),'android-host.jar');
  run('javac',['--release','21','-cp',[host,framework].join(path.delimiter),'-d',directory,path.join(fixtures,'PortableFamilyProbe.java')]);
  assert.match(run('java',[...require('../src/modules/android/jvm-options').frameworkJvmOptions,'-Xverify:all','-cp',[directory,host,framework].join(path.delimiter),'PortableFamilyProbe',path.dirname(framework)]),/PASS raw AOSP collections, codecs, value types, JSON and XML interface/);
@@ -241,6 +253,7 @@ test('Portable framework families execute directly from AOSP without duplicate s
 
 test('Built host preserves the complete upstream public and protected API',t=>{
  if(!javaHome)return t.skip('Java 21 is required');
+ if(!require('./helpers/android-java').runtimeRoot())return t.skip('Requires an Android runtime via KLEPTON_NATIVE_RUNTIME or MACLAUNCHER_TEST_USER_DATA');
  const directory=temporary(t),framework=frameworkArguments('javac',[])[1],host=path.join(path.dirname(framework),'android-host.jar');
  const classes=path.join(directory,'host');fs.mkdirSync(classes);
  const extracted=spawnSync('/usr/bin/unzip',['-q',host,'-d',classes],{encoding:'utf8',timeout:30000});
@@ -288,6 +301,7 @@ test('Media adaptations bind exact native methods and retain every upstream Java
  if(!javaHome)return t.skip('Java 21 is required');
  const publisher=process.env.KLEPTON_AOSP_FRAMEWORK;
  if(!publisher)return t.skip('KLEPTON_AOSP_FRAMEWORK is required for publisher descriptors');
+ if(!require('./helpers/android-java').runtimeRoot())return t.skip('Requires an Android runtime via KLEPTON_NATIVE_RUNTIME or MACLAUNCHER_TEST_USER_DATA');
  const directory=temporary(t),framework=frameworkArguments('javac',[])[1];
  const host=path.join(path.dirname(framework),'android-host.jar');
  run('javac',['--release','21','-cp',asm,'-d',directory,path.join(source,'framework/NativeBindings.java'),path.join(fixtures,'MediaBoundaryProbe.java')]);
@@ -307,6 +321,7 @@ test('Host subclasses preserve concrete upstream Java implementations',t=>{
  if(!javaHome)return t.skip('Java 21 is required');
  const publisher=process.env.KLEPTON_AOSP_FRAMEWORK;
  if(!publisher)return t.skip('KLEPTON_AOSP_FRAMEWORK is required for the publisher comparison');
+ if(!require('./helpers/android-java').runtimeRoot())return t.skip('Requires an Android runtime via KLEPTON_NATIVE_RUNTIME or MACLAUNCHER_TEST_USER_DATA');
  const directory=temporary(t),framework=frameworkArguments('javac',[])[1];
  const host=path.join(path.dirname(framework),'android-host.jar'),classes=path.join(directory,'host');fs.mkdirSync(classes);
  const extracted=spawnSync('/usr/bin/unzip',['-q',host,'-d',classes],{encoding:'utf8',timeout:30000});

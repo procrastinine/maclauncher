@@ -5,7 +5,7 @@ const crypto = require("node:crypto");
 const { promisify } = require("node:util");
 const execute = promisify(require("node:child_process").execFile);
 const { createPinnedNativeManager } = require("../../../shared/runtime/pinned-native-manager");
-const { SOURCE_URL, createCatalogDiscovery } = require("./catalog");
+const Catalog = require("./catalog");
 const { readZipEntryBuffer } = require("../../../shared/runtime/zip");
 
 const POLICY_VERSION = 1;
@@ -21,7 +21,6 @@ function materializePolicy(userDataDir) {
   } else Writable.atomicWrite(file, bytes, { root: directory });
   return file;
 }
-const resources = root => path.join(root, "Mac.apk.app/Contents/Resources");
 function bundleRoot(install) { return path.dirname(path.dirname(install.executablePath)); }
 function runtimePaths(install) {
   const contents = bundleRoot(install);
@@ -29,18 +28,17 @@ function runtimePaths(install) {
     java: path.join(contents, "Resources/jre/bin/java"), framework: path.join(contents, "lib/android-framework.jar"),
     loader: path.join(contents, "lib/macapk-loader.jar") };
 }
-async function extractArchive(file, destination, signal) {
-  const mount = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-macapk-")); let mounted = false;
-  try {
-    await execute("/usr/bin/hdiutil", ["attach", "-readonly", "-nobrowse", "-mountpoint", mount, file], { signal, timeout: 60000, maxBuffer: 1024 * 1024 });
-    mounted = true;
-    const app = path.join(mount, "Mac.apk.app");
-    if (!fs.statSync(app).isDirectory()) throw new Error("The Mac.apk download does not contain its application bundle.");
-    await execute("/usr/bin/ditto", [app, path.join(destination, "Mac.apk.app")], { signal, timeout: 120000 });
-  } finally {
-    if (mounted) await execute("/usr/bin/hdiutil", ["detach", mount], { timeout: 30000 });
-    fs.rmSync(mount, { recursive: true, force: true });
-  }
+// Releases may move the application into a folder; the known path wins.
+const RUNTIME = "Mac.apk.app/Contents/Resources/macapk-runtime";
+function resolveExecutable(root) {
+  const executable = require("../../../shared/runtime/release-files").locatePackaged(root, RUNTIME);
+  if (!executable) throw new Error("The Mac.apk download does not contain its application bundle.");
+  return executable;
+}
+// The application's own minimum system version is its macOS requirement.
+function applicationRequirement(app) {
+  const value = String(require("../../../shared/runtime/app-bundle").readInfoPlist(app)?.LSMinimumSystemVersion || "");
+  return /^\d{1,3}(?:\.\d{1,3}){0,2}$/.test(value) ? (value.includes(".") ? value : value + ".0") : undefined;
 }
 async function verifyPolicy(contents, { signal, run = execute } = {}) {
   const java = path.join(contents, "Resources/jre/bin/java"), lib = path.join(contents, "lib");
@@ -68,13 +66,16 @@ async function verifyPolicy(contents, { signal, run = execute } = {}) {
     return { privacyVersion: POLICY_VERSION };
   } finally { fs.rmSync(privateHome, { recursive: true, force: true }); }
 }
-function createManager({ dependencies = {}, catalogDependencies = {} } = {}) {
+function createManager({ dependencies = {} } = {}) {
   return createPinnedNativeManager({ id: "macapk", label: "Mac.apk",
-    sourceUrl: SOURCE_URL, discoverCatalog: createCatalogDiscovery(catalogDependencies),
-    resolveExecutable: root => path.join(resources(root), "macapk-runtime"),
-    dependencies: { extractArchive, ...dependencies },
-    prepareInstall: async ({ unpacked, signal }) => verifyPolicy(path.join(unpacked, "Mac.apk.app/Contents"), { signal, run: dependencies.execute || execute }) });
+    sourceUrl: Catalog.SOURCE_URL, upstream: Catalog.source,
+    resolveExecutable, dependencies,
+    prepareInstall: async ({ unpacked, signal }) => {
+      const contents = path.dirname(path.dirname(resolveExecutable(unpacked)));
+      const minimumMacOS = applicationRequirement(path.dirname(contents));
+      return { ...await verifyPolicy(contents, { signal, run: dependencies.execute || execute }), ...(minimumMacOS ? { minimumMacOS } : {}) };
+    } });
 }
 module.exports = createManager();
-Object.assign(module.exports, { createManager, runtimePaths, bundleRoot, verifyPolicy, materializePolicy, POLICY_VERSION, extractArchive });
+Object.assign(module.exports, { createManager, runtimePaths, bundleRoot, verifyPolicy, materializePolicy, POLICY_VERSION, resolveExecutable });
 Object.defineProperty(module.exports, "policyJar", { get: () => require("../../included-files").file("providers/macapk/resources/privacy.jar") });

@@ -33,6 +33,16 @@ function providerAppliesToModule(provider, manifest) {
     input.webContent && (detection.webContent || detection.webRoots?.length));
 }
 
+// A provider setting that only some games can use, such as a Unity mod loader
+// override, names the capability it needs. A game type declares the
+// capabilities its games have in runtime.capabilities; other types never list it.
+function hostSettings(runtime = {}, capabilities = []) {
+  const fields = runtime.settings?.fields;
+  if (!Array.isArray(fields) || !fields.some(field => typeof field?.capability === "string")) return runtime;
+  return { ...runtime, settings: { ...runtime.settings,
+    fields: fields.filter(field => typeof field?.capability !== "string" || capabilities.includes(field.capability)) } };
+}
+
 function composeRuntimeProviders(mod, providers) {
   const allowed = mod.manifest?.runtime?.providers;
   if (Array.isArray(allowed)) providers = providers.filter(provider => allowed.includes(provider.runtimeId));
@@ -47,7 +57,7 @@ function composeRuntimeProviders(mod, providers) {
     entries: { ...runtime.entries }, labels: { ...runtime.labels }, manager: { ...runtime.manager }
   } };
   for (const provider of providers) {
-    manifest.runtime.entries[provider.runtimeId] = { ...provider.runtime,
+    manifest.runtime.entries[provider.runtimeId] = { ...hostSettings(provider.runtime, Array.isArray(runtime.capabilities) ? runtime.capabilities : []),
       ...(provider.supports ? { supports: provider.supports } : {}), runtimeProvider: true };
     manifest.runtime.labels[provider.runtimeId] = provider.runtime?.label || provider.runtimeId;
     if (provider.managerId) manifest.runtime.manager[provider.runtimeId] = provider.managerId;
@@ -115,9 +125,14 @@ function composeRuntimeProviders(mod, providers) {
   return composed;
 }
 
-function decorateRuntimeEntry(entry, providers) {
+// Detection context, such as the imported path, lets a provider tell a folder
+// import from a single-file import before the library entry exists. Providers
+// that share one decorator run it once.
+function decorateRuntimeEntry(entry, providers, context = {}) {
   let decorated = entry;
-  for (const provider of providers) if (typeof provider.decorateEntry === "function") decorated = provider.decorateEntry(decorated) || decorated;
+  for (const decorate of new Set(providers.map(provider => provider.decorateEntry))) {
+    if (typeof decorate === "function") decorated = decorate(decorated, context) || decorated;
+  }
   return decorated;
 }
 

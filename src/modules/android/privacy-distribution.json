@@ -1,7 +1,7 @@
 [
   {
     "id": "android-privacy",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "arch": "arm64",
     "launcherArchitectures": [
       "arm64"
@@ -9,30 +9,30 @@
     "minimumMacOS": "13.0",
     "sourceRelative": null,
     "sourceSha256": "a95dfc40811e331ffde87ccca5e52e9bc1683bd3c90b09734bf1fcd46a3969ff",
-    "directoryRelative": "android-privacy/1.0.0/arm64",
+    "directoryRelative": "android-privacy/1.1.0/arm64",
     "manifestRelative": "helper.json",
-    "manifestSha256": "b9f90f42cb2853394455fd97a3f62eb9b8d88e10446ba3ac10db0750e479c4ee",
+    "manifestSha256": "82a83e8a9336fe9e862c3cf2a7cb795b2b5920edfaec09e42c9eec064b8f76bf",
     "files": [
       {
         "path": "clipboard-helper",
         "size": 80384,
+        "sha256": "d6ce23fcf4f894094c1d64d506019c1ea40a59e1ec2ce1661d364532009f35bd",
         "mode": 493,
-        "sha256": "bcebf1460e4bcc2b8cd8c45fade951f1e21e53018ba320b56401de5737ee1314",
         "architectures": [
           "arm64"
         ]
       },
       {
         "path": "helper.json",
-        "size": 174,
-        "mode": 420,
-        "sha256": "b9f90f42cb2853394455fd97a3f62eb9b8d88e10446ba3ac10db0750e479c4ee"
+        "size": 813,
+        "sha256": "82a83e8a9336fe9e862c3cf2a7cb795b2b5920edfaec09e42c9eec064b8f76bf",
+        "mode": 420
       },
       {
         "path": "license.txt",
         "size": 1081,
-        "mode": 420,
-        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7"
+        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
+        "mode": 420
       }
     ],
     "notices": [

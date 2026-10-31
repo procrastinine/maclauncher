@@ -86,13 +86,13 @@
         }
       },
       "native": {
-        "label": "Native app",
+        "label": "Game's macOS app",
         "graphicsHost": "window"
       }
     },
     "labels": {
       "godot": "Godot",
-      "native": "Native app"
+      "native": "Game's macOS app"
     },
     "manager": {
       "godot": "godot"
@@ -202,7 +202,7 @@
       },
       {
         "id": "removeExtraction",
-        "label": "Remove Extracted",
+        "label": "Remove extracted files",
         "kind": "danger",
         "confirm": "Remove extracted Godot files?",
         "hiddenWhen": [

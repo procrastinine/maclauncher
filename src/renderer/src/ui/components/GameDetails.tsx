@@ -5,8 +5,8 @@ import type {
   ModuleUiAction, RecentGame, RuntimeId, RuntimeStatusEntry
 } from "../types";
 import {
-  defaultSaveDirForGame, formatRuntimeLabel,
-  formatRuntimeOption, formatRuntimeVersionTag,
+  defaultSaveDirForGame, filesUnavailableReason, formatRuntimeLabel,
+  formatRuntimeOption, runtimeVersionTagger,
   formatSettingLabel, getByPath, matchesAnyCondition, resolveRuntimeManagerId,
   resolveRuntimeSection, resolveRuntimeSectionId, resolveRuntimeSections,
   resolveRuntimeSettingsSchema, resolveRuntimeVersionForSection, resolveRuntimeVersionOverride,
@@ -24,7 +24,8 @@ import { ModuleEntrySelectors } from "./ModuleEntrySelectors";
 import { moduleToolGroups, presentModuleFields } from "./module-tools-model";
 import { isRuntimeManageable } from "./runtime-tabs-model";
 import { RuntimeDescription } from "./RuntimeDescription";
-import { resolveInspectorRuntimeSection, runtimeInspectorVersions, runtimeInspectorVersionPatch } from "./runtime-inspector-model";
+import { resolveInspectorRuntimeSection, runtimeInspectorInstall, runtimeInspectorRepair, runtimeInspectorVersions,
+  runtimeInspectorVersionPatch } from "./runtime-inspector-model";
 import { EffectsControls } from "./EffectsControls";
 import { ErrorText } from "./ErrorText";
 import { StatusBadge } from "./StatusBadge";
@@ -73,6 +74,7 @@ type ToggleActionButtonProps = {
   disableLabel: string;
   enableDisabled?: boolean;
   disableDisabled?: boolean;
+  title?: string;
 };
 
 function ToggleActionButton({
@@ -82,18 +84,19 @@ function ToggleActionButton({
   enableLabel,
   disableLabel,
   enableDisabled,
-  disableDisabled
+  disableDisabled,
+  title
 }: ToggleActionButtonProps) {
   if (active) {
     return (
-      <button className="btn small danger" disabled={disableDisabled} onClick={onDisable}>
+      <button className="btn small danger" disabled={disableDisabled} onClick={onDisable} title={title}>
         {disableLabel}
       </button>
     );
   }
 
   return (
-    <button className="btn small" disabled={enableDisabled} onClick={onEnable}>
+    <button className="btn small" disabled={enableDisabled} onClick={onEnable} title={title}>
       {enableLabel}
     </button>
   );
@@ -179,6 +182,8 @@ export const GameDetails = memo(function GameDetails({
   const hasAppBundle = canLaunchNative || Boolean(g.importPath?.toLowerCase().endsWith(".app"));
   const canEditSaves = g.moduleSupports?.saveEditing !== false || hasSaveLocation;
   const canPatchCheats = g.moduleSupports?.cheatsPatcher === true;
+  // Patches and tools read or change the game's files, so they wait for the drive.
+  const filesUnavailable = filesUnavailableReason(g);
   const cheatsPatched = Boolean(cheatsStatus?.patched || cheatsStatus?.partial);
   const runtimeSupport: RuntimeId[] =
     Array.isArray(g.moduleRuntimeSupport)
@@ -217,6 +222,12 @@ export const GameDetails = memo(function GameDetails({
   if (runtimeManagerState && runtimeSectionOverrideKey) {
     const mappedEntries = Object.entries(runtimeSectionMap);
     if (mappedEntries.length > 0) {
+      for (const sectionId of Object.keys(runtimeManagerState.selectionSections || {})) {
+        if (!mappedEntries.some(([value]) => value === sectionId)) mappedEntries.push([sectionId, sectionId]);
+      }
+      if (runtimeSectionId && !mappedEntries.some(([value]) => value === runtimeSectionId) && runtimeManagerState.selectionSectionTemplate) {
+        mappedEntries.push([runtimeSectionId, runtimeSectionId]);
+      }
       for (const [value, sectionId] of mappedEntries) {
         if (!value) continue;
         const section = resolveRuntimeSection(runtimeManagerState, String(sectionId));
@@ -236,8 +247,12 @@ export const GameDetails = memo(function GameDetails({
       }
     }
   }
-  const runtimeAutoSection = resolveRuntimeSection(runtimeManagerState,
-    resolveRuntimeSectionId(moduleInfo, g.runtimeId, g, { ignoreOverride: true, managerState: runtimeManagerState }));
+  const runtimeAutoSectionId = resolveRuntimeSectionId(moduleInfo, g.runtimeId, g, { ignoreOverride: true, managerState: runtimeManagerState });
+  const runtimeAutoMatch = resolveRuntimeSection(runtimeManagerState, runtimeAutoSectionId);
+  // A section that is not listed yet, such as a release line before its
+  // versions load, reads as plain Automatic rather than naming another line.
+  const runtimeAutoSection = runtimeAutoSectionId && runtimeAutoMatch?.id !== runtimeAutoSectionId &&
+    !runtimeManagerState?.selectionSections?.[runtimeAutoSectionId] ? null : runtimeAutoMatch;
   const runtimeSectionAutoLabel = runtimeAutoSection?.label
     ? `Automatic (${runtimeAutoSection.label})`
     : "Automatic";
@@ -250,8 +265,16 @@ export const GameDetails = memo(function GameDetails({
   const runtimeVersionChoices = runtimeInspectorVersions(runtimeSection, runtimeVersionOverride);
   const runtimeDefaultVersion = runtimeSection?.defaultVersion || "";
   const runtimeLabel = formatRuntimeLabel(g.runtimeId, moduleInfo);
-  const runtimeVersionLabelText = runtimeLabel
-    ? `${runtimeLabel} version`
+  // The Version menu is named after the Runtimes tab or section that lists its
+  // versions, unless the runtime's own name already includes that name
+  // (VNDS-LOVE runs on versions from the LÖVE tab).
+  const runtimeVersionSources = [runtimeManagerState?.ui?.sectionLabel, runtimeManagerState?.ui?.tabLabel]
+    .map(value => typeof value === "string" ? value.trim() : "").filter(Boolean);
+  const runtimeVersionOwner = runtimeVersionSources.length && !runtimeVersionSources.some(value => String(runtimeLabel || "").includes(value))
+    ? runtimeVersionSources[0]
+    : runtimeLabel;
+  const runtimeVersionLabelText = runtimeVersionOwner
+    ? `${runtimeVersionOwner} version`
     : "Runtime version";
   const runtimeStatusDefaultCandidate =
     !runtimeVersionOverride &&
@@ -270,16 +293,25 @@ export const GameDetails = memo(function GameDetails({
   const runtimeStatusDefaultVersion = resolveRuntimeVersionForSection(
     moduleInfo, g.runtimeId, runtimeStatusDefaultCandidate, runtimeSectionId);
   // The game's own recommendation precedes the Runtimes default; the inspector
-  // offers to install it when it is missing.
-  const runtimeRecommendation = (runtimeStatus as any)?.runtimeRecommendation?.managerId === runtimeManagerId
-    ? (runtimeStatus as any).runtimeRecommendation as { version: string; sectionId?: string } : null;
+  // offers to install it when it is missing. A recommended variant is the one
+  // Play uses when the game has no variant override. A variant the game requires
+  // applies whatever is chosen: the menu shows it, and a saved choice that Play
+  // does not use stays saved without being shown as the selection.
+  const runtimeRecommended = (runtimeStatus as any)?.runtimeRecommendation?.managerId === runtimeManagerId
+    ? (runtimeStatus as any).runtimeRecommendation as { version?: string; sectionId?: string; variant?: string;
+      requiredVariant?: string; requiredVariantReason?: string } : null;
+  const runtimeRecommendation = runtimeRecommended?.version ? runtimeRecommended as { version: string; sectionId?: string } : null;
+  const runtimeRequiredVariant = runtimeRecommended?.requiredVariant || "";
+  const runtimeEffectiveVariantOverride = runtimeRequiredVariant && runtimeVariantOverride !== runtimeRequiredVariant ? "" : runtimeVariantOverride;
+  const runtimeDefaultVariant = runtimeRequiredVariant || runtimeRecommended?.variant || runtimeSection?.defaultVariant || "";
+  const runtimeRecommendedVariant = runtimeEffectiveVariantOverride || runtimeRequiredVariant || runtimeRecommended?.variant || "";
   const runtimeRecommendationInstalled = Boolean(runtimeRecommendation && (runtimeSection?.installed || [])
-    .some((item: any) => item?.version === runtimeRecommendation.version && item.ready !== false));
+    .some((item: any) => item?.version === runtimeRecommendation.version && item.ready !== false &&
+      (!runtimeRecommendedVariant || item.variant === runtimeRecommendedVariant)));
+  const runtimeVersionTag = runtimeVersionTagger(runtimeSection,
+    [...runtimeVersionChoices, runtimeRecommendation?.version, runtimeStatusDefaultVersion]);
   const runtimeDefaultLabel = runtimeRecommendation || runtimeDefaultVersion || runtimeStatusDefaultVersion
-    ? formatRuntimeVersionTag(
-        runtimeRecommendation?.version || runtimeDefaultVersion || runtimeStatusDefaultVersion,
-        runtimeSection
-      )
+    ? runtimeVersionTag(runtimeRecommendation?.version || runtimeDefaultVersion || runtimeStatusDefaultVersion)
     : "";
   const runtimeAutomaticLabel = runtimeRecommendation ? "Recommended" : "Default";
   const runtimeVariantOptions = (Array.isArray(runtimeSection?.variants)
@@ -289,11 +321,21 @@ export const GameDetails = memo(function GameDetails({
   const runtimeDefaultVariantLabel = runtimeHasMultipleVariants
     ? runtimeVariantOptions.find(
         (opt: { id?: string; label?: string }) =>
-          opt.id === runtimeSection?.defaultVariant
+          opt.id === runtimeDefaultVariant
       )?.label ||
-      runtimeSection?.defaultVariant ||
-      ""
+      runtimeDefaultVariant
     : "";
+  // Damaged or incomplete installations stay in the menu marked Needs repair.
+  // When the version Play uses (the game's choice, otherwise the one the
+  // Automatic entry names) is one of them, Repair installs it again through the
+  // same install action as Reinstall in Runtimes.
+  const runtimeVariantInUse = runtimeHasMultipleVariants ? runtimeEffectiveVariantOverride || runtimeDefaultVariant : "";
+  const runtimeVersionAvailability = (version: string) => {
+    const { availability } = runtimeInspectorInstall(runtimeSection, version, runtimeVariantInUse);
+    return availability === "installed" ? null : availability;
+  };
+  const runtimeRepair = runtimeInspectorRepair(runtimeSection,
+    runtimeVersionOverride || runtimeRecommendation?.version || runtimeDefaultVersion || runtimeStatusDefaultVersion, runtimeVariantInUse);
   const libsDependencies = (moduleState?.libs?.dependencies || []) as Array<{
     id: string;
     label: string;
@@ -312,7 +354,7 @@ export const GameDetails = memo(function GameDetails({
   const runtimeSchema = resolveRuntimeSettingsSchema(moduleInfo, g.runtimeId);
   const actionError = (actionId: string) => moduleActionError?.actionId === actionId ? moduleActionError.message : null;
   const toolActionIds = new Set(visibleModuleActionGroups.flatMap(group => group.actions));
-  const otherActionError = moduleActionError && !["explainDetection", "removeAppQuarantine"].includes(moduleActionError.actionId) &&
+  const otherActionError = moduleActionError && !["explainDetection", "removeAppQuarantine", "locateGame"].includes(moduleActionError.actionId) &&
     !toolActionIds.has(moduleActionError.actionId) ? moduleActionError.message : null;
   const networkConfigurable = moduleInfo?.runtime?.entries?.[g.runtimeId]?.networkAccess !== false;
   const defaultNetworkAccess = state.launcherSettings?.networkAccess === true;
@@ -339,6 +381,12 @@ export const GameDetails = memo(function GameDetails({
         {onClose && <button className="btn small iconOnly" onClick={onClose} title="Close details" aria-label="Close details"><XIcon /></button>}
       </div>
       <GameActions g={g} isRunning={Boolean(state.running?.[g.gamePath])} preparation={state.preparing?.[g.gamePath]} actions={actions} inspector />
+      {g.availability && <div className="gameUnavailableNotice">
+        <div className="detailMeta gameUnavailableMessage" role="status">Files unavailable. {g.availability.message}</div>
+        <button className="btn small" disabled={Boolean(moduleActionBusy.locateGame)} onClick={() => actions.onLocateGame(g.gamePath)}
+          title="Choose the game's new location">Locate…</button>
+        <ErrorText error={actionError("locateGame")} inline />
+      </div>}
       {g.launchNotices?.map((notice, index) => <div className="detailMeta gameLaunchNotice" role="status" key={index}>{notice}</div>)}
       <div className="gameDetails" tabIndex={0} aria-label={`${g.name} details`}>
         <div className="detailGrid">
@@ -352,7 +400,8 @@ export const GameDetails = memo(function GameDetails({
               <button
                 className="btn small iconOnly"
                 onClick={() => onReveal(g.gamePath)}
-                title="Reveal in Finder"
+                disabled={Boolean(filesUnavailable)}
+                title={filesUnavailable || "Reveal in Finder"}
                 aria-label="Reveal in Finder"
               >
                 <FolderIcon />
@@ -406,8 +455,8 @@ export const GameDetails = memo(function GameDetails({
                 <ErrorText error={actionError("removeAppQuarantine")} inline />
               </div>
               <div className="detailActions">
-                <button className="btn small" disabled={Boolean(moduleActionBusy.removeAppQuarantine)}
-                  onClick={() => onModuleAction(g.gamePath, "removeAppQuarantine")}>
+                <button className="btn small" disabled={Boolean(moduleActionBusy.removeAppQuarantine) || Boolean(filesUnavailable)}
+                  title={filesUnavailable} onClick={() => onModuleAction(g.gamePath, "removeAppQuarantine")}>
                   Remove quarantine
                 </button>
               </div>
@@ -439,9 +488,9 @@ export const GameDetails = memo(function GameDetails({
               </div>)}
             </> : <div className="detailMeta">{moduleActionBusy.explainDetection ? "Checking local game files…" : "No detailed report available."}</div>}
             <ErrorText error={actionError("explainDetection")} inline />
-            <button className="btn small iconOnly" disabled={Boolean(moduleActionBusy.explainDetection)}
+            <button className="btn small iconOnly" disabled={Boolean(moduleActionBusy.explainDetection) || Boolean(filesUnavailable)}
               onClick={() => onModuleAction(g.gamePath, "explainDetection")}
-              title="Refresh detection diagnostics" aria-label="Refresh detection diagnostics"><RefreshIcon /></button>
+              title={filesUnavailable || "Refresh detection diagnostics"} aria-label="Refresh detection diagnostics"><RefreshIcon /></button>
           </details>
 
           <h3 className="detailSectionHeading">{canLaunch ? "Launch" : "Runtime"}</h3>
@@ -552,17 +601,27 @@ export const GameDetails = memo(function GameDetails({
                     <option value="" title={runtimeRecommendation?.version || runtimeStatusDefaultVersion || runtimeDefaultVersion || undefined}>{runtimeDefaultLabel ? `${runtimeAutomaticLabel} (${runtimeDefaultLabel})` : runtimeAutomaticLabel}</option>
                     {runtimeVersionChoices.map(v => (
                       <option key={v} value={v}>
-                        {formatRuntimeVersionTag(v, runtimeSection)}
+                        {withAvailability(runtimeVersionTag(v), runtimeVersionAvailability(v))}
                       </option>
                     ))}
                   </Select>
-                  {/* The menu already names the recommended version; a missing one installs from here. */}
-                  {runtimeRecommendation && !runtimeRecommendationInstalled && runtimeManagerId && onInstallRuntime && <button
+                  {runtimeRepair && runtimeManagerId && onInstallRuntime && <button
                     className="btn small"
-                    title={`Install recommended version ${formatRuntimeVersionTag(runtimeRecommendation.version, runtimeSection)}`}
+                    title={`Reinstall ${runtimeVersionTag(runtimeRepair.version)}`}
+                    aria-label="Repair runtime version"
+                    onClick={() => void onInstallRuntime(runtimeManagerId, runtimeRepair.sectionId, runtimeRepair.version,
+                      runtimeRepair.variant, runtimeRepair.architecture)}
+                  >
+                    Repair
+                  </button>}
+                  {/* The menu already names the recommended version; a missing one installs from here. */}
+                  {runtimeRecommendation && !runtimeRecommendationInstalled && runtimeRepair?.version !== runtimeRecommendation.version &&
+                    runtimeManagerId && onInstallRuntime && <button
+                    className="btn small"
+                    title={`Install recommended version ${runtimeVersionTag(runtimeRecommendation.version)}`}
                     aria-label="Install recommended version"
                     onClick={() => void onInstallRuntime(runtimeManagerId, runtimeRecommendation.sectionId || runtimeSection?.id || runtimeSectionId || "default",
-                      runtimeRecommendation.version, runtimeVariantOverride || runtimeSection?.defaultVariant || undefined)}
+                      runtimeRecommendation.version, runtimeEffectiveVariantOverride || runtimeDefaultVariant || undefined)}
                   >
                     Install
                   </button>}
@@ -580,7 +639,7 @@ export const GameDetails = memo(function GameDetails({
                   <div className="detailActions">
                     <Select aria-label="Runtime variant"
                       className="input"
-                      value={runtimeVariantOverride || ""}
+                      value={runtimeEffectiveVariantOverride || ""}
                       onChange={e =>
                         onSetRuntimeData(g.gamePath, g.runtimeId, {
                           variant: e.target.value || null
@@ -592,13 +651,17 @@ export const GameDetails = memo(function GameDetails({
                       </option>
                       {runtimeVariantOptions.map(
                         (variant: { id?: string; label?: string }) => (
-                          <option key={variant.id} value={variant.id}>
+                          <option key={variant.id} value={variant.id}
+                            disabled={Boolean(runtimeRequiredVariant && variant.id !== runtimeRequiredVariant)}
+                            title={runtimeRequiredVariant && variant.id !== runtimeRequiredVariant ? runtimeRecommended?.requiredVariantReason : undefined}>
                             {variant.label || variant.id}
                           </option>
                         )
                       )}
                     </Select>
                   </div>
+                  {runtimeRequiredVariant && runtimeRecommended?.requiredVariantReason &&
+                    <div className="detailMeta">{runtimeRecommended.requiredVariantReason}</div>}
                 </div>
               )}
             </>
@@ -616,9 +679,9 @@ export const GameDetails = memo(function GameDetails({
               <div className="detailActions">
                 <button
                   className="btn small iconOnly"
-                  disabled={libsPatchBusy}
+                  disabled={libsPatchBusy || Boolean(filesUnavailable)}
                   onClick={() => refreshLibsPatchStatus(g.gamePath)}
-                  title="Reload"
+                  title={filesUnavailable || "Reload"}
                   aria-label="Reload"
                 >
                   <RefreshIcon />
@@ -628,9 +691,10 @@ export const GameDetails = memo(function GameDetails({
                   enableLabel="Patch"
                   disableLabel="Unpatch"
                   enableDisabled={
-                    libsPatchBusy || !libsAvailable
+                    libsPatchBusy || !libsAvailable || Boolean(filesUnavailable)
                   }
-                  disableDisabled={libsPatchBusy}
+                  disableDisabled={libsPatchBusy || Boolean(filesUnavailable)}
+                  title={filesUnavailable}
                   onEnable={() => onPatchLibs(g.gamePath)}
                   onDisable={() => onUnpatchLibs(g.gamePath)}
                 />
@@ -694,9 +758,9 @@ export const GameDetails = memo(function GameDetails({
               <div className="detailActions">
                 <button
                   className="btn small iconOnly"
-                  disabled={cheatsPatchBusy}
+                  disabled={cheatsPatchBusy || Boolean(filesUnavailable)}
                   onClick={() => refreshCheatsPatchStatus(g.gamePath)}
-                  title="Reload"
+                  title={filesUnavailable || "Reload"}
                   aria-label="Reload"
                 >
                   <RefreshIcon />
@@ -705,8 +769,9 @@ export const GameDetails = memo(function GameDetails({
                   active={cheatsPatched}
                   enableLabel="Patch"
                   disableLabel="Unpatch"
-                  enableDisabled={cheatsPatchBusy}
-                  disableDisabled={cheatsPatchBusy}
+                  enableDisabled={cheatsPatchBusy || Boolean(filesUnavailable)}
+                  disableDisabled={cheatsPatchBusy || Boolean(filesUnavailable)}
+                  title={filesUnavailable}
                   onEnable={() => onPatchCheatsIntoGame(g.gamePath)}
                   onDisable={() => onUnpatchCheatsFromGame(g.gamePath)}
                 />
@@ -718,7 +783,8 @@ export const GameDetails = memo(function GameDetails({
           <ModuleTools game={g} groups={visibleModuleActionGroups} actions={moduleActions}
             results={moduleActionResults} busy={moduleActionBusy} cancelling={moduleActionCancelling}
             error={moduleActionError && toolActionIds.has(moduleActionError.actionId) ? moduleActionError : null}
-            onAction={onModuleAction} onCancel={onCancelModuleAction} onRevealPath={onRevealToolPath} />
+            onAction={onModuleAction} onCancel={onCancelModuleAction} onRevealPath={onRevealToolPath}
+            unavailable={filesUnavailable} />
           <ErrorText error={otherActionError} inline />
 
           {canLaunch && <EffectsControls key={`effects:${g.gamePath}`} game={g} running={gameRunning}

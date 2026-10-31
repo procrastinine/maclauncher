@@ -1,0 +1,227 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
+const Architecture = require("../src/modules/shared/runtime/architecture");
+const {createPinnedNativeManager} = require("../src/modules/shared/runtime/pinned-native-manager");
+const {listedManager} = require("./helpers/listed-rows.cjs");
+function executable(architecture) {
+  const data = Buffer.alloc(32); data.writeUInt32LE(0xfeedfacf); data.writeUInt32LE(architecture === "arm64" ? 0x0100000c : 0x01000007, 4); data.writeUInt32LE(2, 12); return data;
+}
+test("same-version CPU builds coexist, survive both launcher defaults, and remove independently", {skip: process.platform !== "darwin"}, async t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-architectures-"));
+  t.after(() => fs.rmSync(directory, {recursive: true, force: true}));
+  const catalog = ["arm64", "x64"].map(arch => ({version: "1.0", upstreamRevision: arch, architecture: arch === "x64" ? "x86_64" : arch, hostArchitectures: [arch]}));
+  const create = architecture => Architecture.withArchitecture(architecture, () => createPinnedNativeManager({id: "cpu-fixture", label: "CPU fixture", discoverCatalog: async () => catalog, importLocal: true}));
+  const apple = create("arm64");
+  await apple.refreshCatalog({userDataDir: directory, force: true});
+  const intel = create("x64");
+  for (const arch of ["arm64", "x64"]) {
+    const file = path.join(directory, arch); fs.writeFileSync(file, executable(arch), {mode: 0o755});
+    await apple.importRuntime({userDataDir: directory, architecture: arch, version: "1.0", runtimePath: file});
+  }
+  for (const manager of [apple, intel]) {
+    const rows = manager.getState({userDataDir: directory}).installed;
+    assert.deepEqual(rows.map(row => row.architecture).sort(), ["arm64", "x64"]);
+    assert.equal(new Set(rows.map(row => row.installDir)).size, 2);
+    assert.equal(manager.resolveSelection({}, {}, directory, {version: "1.0", architecture: "arm64"}).install.upstreamRevision, "arm64");
+    assert.equal(manager.resolveSelection({}, {}, directory, {version: "1.0", architecture: "x64"}).install.upstreamRevision, "x64");
+  }
+  const saved = apple.applySettingsUpdate("setDefault", {version: "1.0", architecture: "x64"}, {});
+  assert.equal(saved.defaultArchitecture, "x64");
+  assert.equal(intel.normalizeSettings(saved).defaultArchitecture, "x64");
+  await intel.uninstallRuntime({userDataDir: directory, version: "1.0", architecture: "x64"});
+  assert.deepEqual(apple.getState({userDataDir: directory}).installed.map(row => row.architecture), ["arm64"]);
+});
+test("architecture context is asynchronous and defaults to the launcher process", async () => {
+  assert.equal(Architecture.defaultArchitecture(), process.arch);
+  const other = process.arch === "arm64" ? "x64" : "arm64";
+  assert.equal(await Architecture.withArchitecture(other, async () => {await Promise.resolve(); return Architecture.selectedArchitecture();}), other);
+  assert.equal(Architecture.selectedArchitecture(), process.arch);
+  const manager = await listedManager({id: "target-fixture", label: "Target fixture"}, [
+    {version: "1.0", architecture: "universal", upstreamRevision: "universal-source"},
+    {version: "1.0", architecture: process.arch, upstreamRevision: "native-source"}]);
+  assert.equal(manager.core.catalog[0].upstreamRevision, "native-source");
+  assert.equal(manager.normalizeSettings({defaultArchitecture: "universal"}).defaultArchitecture, undefined);
+  assert.equal(manager.resolveSelection({}, {runtimes: {"target-fixture": {defaultArchitecture: "universal"}}}).architecture, process.arch);
+});
+test("CPU-specific discovery keeps both architecture catalogs without reusing mapped rows", async t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-architecture-catalog-"));
+  t.after(() => fs.rmSync(directory, {recursive: true, force: true}));
+  const calls = [];
+  const manager = createPinnedNativeManager({id: "cpu-catalog", label: "CPU catalog", discoverCatalog: async ({arch}) => {
+    calls.push(arch);
+    return [{version: "1.0", architecture: arch, upstreamRevision: arch, localBuild: false,
+      asset: {url: `https://example.test/${arch}.zip`, filename: `${arch}.zip`, sha256: "a".repeat(64)}}];
+  }});
+  await manager.refreshCatalog({userDataDir: directory});
+  assert.deepEqual(calls.sort(), ["arm64", "x64"]);
+  const catalogs = manager.getState({userDataDir: directory}).catalog.architectureCatalogs;
+  for (const arch of ["arm64", "x64"]) assert.equal(catalogs[arch].versionRequirements["1.0"].architecture, arch);
+});
+test("Automatic and default lists prefer the launcher CPU across distinct publisher version IDs", async t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-architecture-default-"));
+  t.after(() => fs.rmSync(directory, {recursive: true, force: true}));
+  const rows = ["x64", "arm64"].map(architecture => ({version: `0.9.2-${architecture === "x64" ? "x86_64" : "arm64"}`, architecture,
+    upstreamRevision: architecture, asset: {url: `https://example.test/${architecture}.zip`, filename: `${architecture}.zip`, sha256: "a".repeat(64)}}));
+  for (const architecture of ["arm64", "x64"]) {
+    const manager = Architecture.withArchitecture(architecture, () => createPinnedNativeManager({id: "publisher-cpus", label: "Publisher CPUs", discoverCatalog: async () => rows}));
+    await manager.refreshCatalog({userDataDir: directory, force: true});
+    const expected = rows.find(row => row.architecture === architecture).version;
+    assert.equal(manager.resolveSelection({}, {}, directory).version, expected);
+    const state = manager.getState({userDataDir: directory});
+    assert.deepEqual(state.catalog.versions, [expected]);
+    const other = architecture === "arm64" ? "x64" : "arm64";
+    assert.deepEqual(state.catalog.architectureCatalogs[other].versions, [rows.find(row => row.architecture === other).version]);
+  }
+});
+test("an Intel default does not label an Apple Silicon-only package as Intel", async t => {
+  // The Intel app on Apple Silicon uses the Apple Silicon build automatically;
+  // an Intel Mac lists nothing it could run.
+  for (const hardwareArch of ["arm64", "x64"]) {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-architecture-arm-only-"));
+    t.after(() => fs.rmSync(directory, {recursive: true, force: true}));
+    const manager = Architecture.withArchitecture("x64", () => createPinnedNativeManager({id: "arm-only", label: "Arm only", discoverCatalog: async () => [{
+      version: "1.0", upstreamRevision: "arm64", hostArchitectures: ["arm64"],
+      asset: {url: "https://example.test/arm64.zip", filename: "arm64.zip", sha256: "a".repeat(64)} }],
+      dependencies: {hostCapabilities: {platform: "darwin", hardwareArch, rosettaAvailable: hardwareArch === "arm64"}}}));
+    await manager.refreshCatalog({userDataDir: directory});
+    const state = manager.getState({userDataDir: directory});
+    assert.deepEqual(state.catalog.architectureCatalogs.arm64.versions, ["1.0"]);
+    assert.deepEqual(state.catalog.architectureCatalogs.x64.versions, []);
+    assert.equal(state.automaticArchitecture, hardwareArch === "arm64" ? "arm64" : "x64");
+    assert.deepEqual(state.catalog.versions, hardwareArch === "arm64" ? ["1.0"] : []);
+    const selected = manager.resolveSelection({}, {}, directory);
+    assert.equal(selected.version, hardwareArch === "arm64" ? "1.0" : null);
+    assert.equal(selected.architecture, hardwareArch === "arm64" ? "arm64" : "x64");
+  }
+});
+test("Universal installs and legacy sibling directories are reused by both app CPUs without acquisition", {skip: process.platform !== "darwin"}, async t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-architecture-universal-"));
+  t.after(() => fs.rmSync(directory, {recursive: true, force: true}));
+  const bytes = Buffer.alloc(112); bytes.writeUInt32BE(0xcafebabe); bytes.writeUInt32BE(2, 4);
+  for (const [index, architecture] of ["arm64", "x64"].entries()) {
+    const start = 8 + index * 20, offset = 48 + index * 32;
+    bytes.writeUInt32BE(architecture === "arm64" ? 0x0100000c : 0x01000007, start);
+    bytes.writeUInt32BE(offset, start + 8); bytes.writeUInt32BE(32, start + 12);
+    executable(architecture).copy(bytes, offset);
+  }
+  const file = path.join(directory, "universal-tool"); fs.writeFileSync(file, bytes, {mode: 0o755});
+  for (const declared of [true, false]) {
+    const id = declared ? "declared-universal" : "inspected-universal";
+    const config = {id, label: "Universal", importLocal: true};
+    const rows = [{version: "1.0", upstreamRevision: "universal-source", ...(declared ? {architecture: "universal"} : {})}];
+    const apple = Architecture.withArchitecture("arm64", () => createPinnedNativeManager({...config, discoverCatalog: async () => rows}));
+    await apple.refreshCatalog({userDataDir: directory, force: true});
+    const intel = Architecture.withArchitecture("x64", () => createPinnedNativeManager({...config,
+      discoverCatalog: () => assert.fail("An installed Universal build must stay offline")}));
+    const imported = await apple.importRuntime({userDataDir: directory, architecture: "arm64", version: "1.0", runtimePath: file});
+    assert.equal(imported.architecture, "universal");
+    const reused = await intel.installRuntime({userDataDir: directory, architecture: "x64", version: "1.0"});
+    assert.equal(reused.installDir, imported.installDir);
+    assert.equal(intel.getState({userDataDir: directory}).installed.length, 1);
+    const legacy = path.join(directory, "runtimes", id, "1.0");
+    fs.renameSync(imported.installDir, legacy);
+    assert.equal(intel.resolveSelection({}, {}, directory, {version: "1.0", architecture: "x64"}).install.installDir, legacy);
+    assert.equal(apple.resolveSelection({}, {}, directory, {version: "1.0", architecture: "arm64"}).install.installDir, legacy);
+  }
+});
+test("a Builds record published later for the other CPU appears in the catalog with no code change", async t => {
+  const {createProjectBuildManager} = require("../src/modules/shared/runtime/project-build-manager");
+  const projectId = "later-cpu", repository = "ExampleOwner/runtime-builds", version = "1.0.0-MCLv1";
+  const record = arch => {
+    const tag = `${projectId}/v${version}/${arch}`, filename = `${projectId}-${version}-${arch}.tar.gz`;
+    return {schemaVersion: 2, id: projectId, version, arch, launcherArchitectures: [arch], minimumMacOS: "13.0",
+      manifestRelative: "runtime.json", manifestSha256: "a".repeat(64), sourceSha256: "b".repeat(64), updatePolicy: "manual", tag,
+      asset: {filename, bytes: 1, sha256: (arch === "x64" ? "c" : "d").repeat(64),
+        url: `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}/${filename}`}};
+  };
+  let packages;
+  const fetchUrlBuffer = async () => ({status: 200, body: Buffer.from(JSON.stringify({schemaVersion: 2, projectId, updatePolicy: "manual", packages}))});
+  const recordCPU = catalog => Architecture.normalizeArchitecture(catalog?.versionRequirements?.[version]?.architecture);
+  for (const launcher of ["arm64", "x64"]) {
+    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), `runtime-architecture-later-${launcher}-`));
+    t.after(() => fs.rmSync(userDataDir, {recursive: true, force: true}));
+    const other = launcher === "arm64" ? "x64" : "arm64";
+    const manager = Architecture.withArchitecture(launcher, () => createProjectBuildManager({projectId, label: "Later CPU", repository,
+      manifestRelative: "runtime.json", sourceRelative: null, executableRelative: "native", validateManifest: () => {}, verifyPayload: () => {},
+      dependencies: {systemVersionSync: () => "26.0", fetchUrlBuffer, hostCapabilities: {platform: "darwin", hardwareArch: "arm64", rosettaAvailable: true}}}));
+    // The project first publishes only the other CPU's build.
+    packages = [record(other)];
+    await manager.refreshCatalog({userDataDir, force: true});
+    let state = manager.getState({userDataDir});
+    // Apple Silicon offers an Intel-only build through Rosetta; the Intel app on
+    // Apple Silicon uses an Apple Silicon-only build automatically.
+    assert.deepEqual(state.catalog.versions, [version], `${launcher}: only the other CPU's build is published`);
+    assert.equal(recordCPU(state.catalog), other);
+    assert.deepEqual(state.catalog.architectureCatalogs[other].versions, [version]);
+    // A later publication adds this launcher's CPU. The same release reads it.
+    packages = [record(other), record(launcher)];
+    await manager.refreshCatalog({userDataDir, force: true});
+    state = manager.getState({userDataDir});
+    assert.deepEqual(state.catalog.versions, [version], `${launcher}: the new record is listed by default`);
+    assert.equal(recordCPU(state.catalog), launcher, `${launcher}: the launcher's own CPU replaces the Rosetta build`);
+    assert.equal(state.defaultVersion, version);
+    assert.equal(manager.resolveSelection(null, {}, userDataDir).version, version);
+    assert.equal(recordCPU(state.catalog.architectureCatalogs[other]), other, `${launcher}: the earlier CPU stays in the other-CPU list`);
+    // A record for a CPU this launcher does not know is listed with its reason, not dropped or misread.
+    packages = [record(other), record(launcher), {...record(launcher), version: "2.0.0-MCLv1", arch: "riscv64", launcherArchitectures: ["riscv64"]}];
+    await manager.refreshCatalog({userDataDir, force: true});
+    state = manager.getState({userDataDir});
+    assert.deepEqual(state.catalog.versions.filter(item => !state.catalog.versionRequirements[item]?.installReason), [version]);
+  }
+});
+test("one build resolver serves Play, Install, Set default and the automatic list", async () => {
+  const {createArchitectureManager} = require("../src/modules/shared/runtime/architecture-manager");
+  const appleSilicon = {platform: "darwin", hardwareArch: "arm64", rosettaAvailable: true};
+  const intelMac = {platform: "darwin", hardwareArch: "x64", rosettaAvailable: false};
+  // The resolver itself: an explicit request stays; a saved or automatic
+  // choice without a build gives way to a CPU this Mac runs that has one.
+  const only = cpus => architecture => cpus.includes(architecture);
+  assert.equal(Architecture.chooseArchitecture({launcher: "x64", offers: only(["arm64"]), host: appleSilicon}), "arm64");
+  assert.equal(Architecture.chooseArchitecture({launcher: "x64", offers: only(["arm64", "x64"]), host: appleSilicon}), "x64");
+  assert.equal(Architecture.chooseArchitecture({launcher: "x64", offers: only(["arm64"]), host: intelMac}), "x64");
+  assert.equal(Architecture.chooseArchitecture({launcher: "arm64", saved: "x64", offers: only(["arm64"]), host: appleSilicon}), "arm64");
+  assert.equal(Architecture.chooseArchitecture({launcher: "arm64", saved: "x64", offers: only(["arm64", "x64"]), host: appleSilicon}), "x64");
+  assert.equal(Architecture.chooseArchitecture({request: {architecture: "x64"}, launcher: "arm64", offers: only(["arm64"]), host: appleSilicon}), "x64");
+  assert.equal(Architecture.chooseArchitecture({launcher: "x64", offers: only([]), host: appleSilicon}), "x64");
+  // A manager whose Intel list is empty, in the Intel app on Apple Silicon.
+  const calls = [];
+  const manager = Architecture.withArchitecture("x64", () => createArchitectureManager({id: "fallback", dependencies: {hostCapabilities: appleSilicon}},
+    ({installationArchitecture: cpu}) => ({
+      core: {},
+      offersBuild: () => cpu === "arm64",
+      getState: () => ({catalog: {versions: cpu === "arm64" ? ["1.0"] : []}, installed: [], defaultVersion: cpu === "arm64" ? "1.0" : null}),
+      resolveSelection: () => ({version: cpu === "arm64" ? "1.0" : null, install: null, ready: false}),
+      installRuntime: payload => { calls.push([cpu, payload.architecture]); return {version: payload.version}; },
+      applySettingsUpdate: (action, payload, settings) => ({...settings, defaultVersion: payload.version}),
+      normalizeSettings: settings => settings || {}
+    })));
+  const state = manager.getState({userDataDir: "/fixture"});
+  assert.equal(state.automaticArchitecture, "arm64");
+  assert.equal(state.launcherArchitecture, "x64");
+  assert.deepEqual(state.catalog.versions, ["1.0"]);
+  assert.equal(state.defaultVersion, "1.0");
+  assert.equal(manager.resolveSelection({}, {}, "/fixture").architecture, "arm64");
+  await manager.installRuntime({userDataDir: "/fixture", version: "1.0"});
+  await manager.installRuntime({userDataDir: "/fixture", version: "1.0", architecture: "x64"});
+  assert.deepEqual(calls, [["arm64", "arm64"], ["x64", "x64"]]);
+  assert.equal(manager.applySettingsUpdate("setDefault", {version: "1.0"}, {}, {userDataDir: "/fixture"}).defaultArchitecture, undefined);
+  assert.equal(manager.applySettingsUpdate("setDefault", {version: "1.0", architecture: "x64"}, {}, {userDataDir: "/fixture"}).defaultArchitecture, "x64");
+});
+test("an Apple Silicon installation in the shared legacy folder is automatic in the Intel app on Apple Silicon", {skip: process.platform !== "darwin"}, async t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-architecture-legacy-cpu-"));
+  t.after(() => fs.rmSync(directory, {recursive: true, force: true}));
+  const config = {id: "legacy-cpu", label: "Legacy CPU", importLocal: true, discoverCatalog: async () => [{version: "1.0", upstreamRevision: "arm64"}],
+    dependencies: {hostCapabilities: {platform: "darwin", hardwareArch: "arm64", rosettaAvailable: true}}};
+  const apple = Architecture.withArchitecture("arm64", () => createPinnedNativeManager(config));
+  await apple.refreshCatalog({userDataDir: directory, force: true});
+  const file = path.join(directory, "arm64-tool"); fs.writeFileSync(file, executable("arm64"), {mode: 0o755});
+  const imported = await apple.importRuntime({userDataDir: directory, architecture: "arm64", version: "1.0", runtimePath: file});
+  fs.renameSync(imported.installDir, path.join(directory, "runtimes", "legacy-cpu", "1.0"));
+  // Both CPUs read the legacy folder; only Apple Silicon can use this executable.
+  const intelApp = Architecture.withArchitecture("x64", () => createPinnedNativeManager({...config, discoverCatalog: async () => []}));
+  assert.equal(intelApp.offersBuild({userDataDir: directory, architecture: "x64"}), false);
+  assert.equal(intelApp.offersBuild({userDataDir: directory, architecture: "arm64"}), true);
+  assert.equal(intelApp.getState({userDataDir: directory}).automaticArchitecture, "arm64");
+  assert.equal(intelApp.resolveSelection({}, {}, directory).architecture, "arm64");
+});

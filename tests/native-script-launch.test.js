@@ -106,6 +106,8 @@ int main(int argc, char **argv) {
   const profile = path.join(root, "profile"), published = [];
   const launcher = createLauncher({ userDataDir: profile, onGameProcessSpawn: (_entry, child) => published.push(child) });
   const entry = await launcher.resolveEntry(executable, { runtimeId: "native" });
+  entry.effects = { schema: 2, mode: "advanced", enabled: true, video: [{ id: "grayscale", kind: "shader", enabled: true,
+    shader: { enabled: true, preset: "grayscale" } }] };
   entry.launchArguments = '--windowed "A B" "" \'$(touch forbidden)\'';
   launcher.persistEntry(entry);
   assert.equal(entry.moduleId, "generic-app");

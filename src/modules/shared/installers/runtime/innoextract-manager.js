@@ -17,7 +17,6 @@ function createManager(dependencies = {}) {
   manager.payloadPolicy = require("./innoextract-payload-policy.json");
   manager.distributionRequired = false;
   manager.ensure = async (entry = {}, payload = {}, context = {}) => {
-    if (process.arch !== "arm64") throw installerError("The installer reader is unavailable for this Mac.", "INSTALLER_TOOL_MISSING");
     if (!context.userDataDir) throw installerError("The installer reader requires the launcher profile directory.", "INSTALLER_TOOL_MISSING");
     let selected = manager.resolveSelection(entry, context.settings, context.userDataDir, { version: payload.toolVersion });
     if (selected.ready) return selected.install;

@@ -109,6 +109,17 @@ test("a damaged installed host is prepared again and does not count as ready", a
   assert.deepEqual(f.calls, [["consent", "nwjs", "0.117.0"], ["install", "nwjs", "0.117.0", "default", "sdk"], ["launch"]]);
 });
 
+test("Play's consented install removes the damaged host it replaces only after consent", async t => {
+  const f = fixture(t, { webReady: true, hostDamaged: true });
+  f.managers[1].uninstallRuntime = async payload => { f.calls.push(["uninstall", "nwjs", payload.version, payload.sectionId, payload.variant]); return true; };
+  await f.launcher.launchEntry(f.entry);
+  assert.deepEqual(f.calls, [["consent", "nwjs", "0.117.0"], ["uninstall", "nwjs", "0.117.0", "default", "sdk"],
+    ["install", "nwjs", "0.117.0", "default", "sdk"], ["launch"]]);
+  const declined = fixture(t, { webReady: true, hostDamaged: true, decline: "nwjs" });
+  declined.managers[1].uninstallRuntime = async () => assert.fail("Declining the download keeps the damaged copy");
+  assert.equal((await declined.launcher.launchEntry(declined.entry)).kind, "cancelled");
+});
+
 test("module rejection precedes prerequisite lookups or consent", async t => {
   const f = fixture(t);
   f.mod.ensureRuntime = () => { throw new Error("Unsupported original export"); };

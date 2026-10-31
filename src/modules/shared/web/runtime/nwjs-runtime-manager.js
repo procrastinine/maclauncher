@@ -1,16 +1,14 @@
 const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
-const { spawn } = require("node:child_process");
 const AppBundle = require("../../runtime/app-bundle");
-const {
-  attachAbortSignal,
-  createAbortError,
-  fetchUrlBuffer,
-  decodeResponseBody: decodeBody,
-  downloadToFile,
-  throwIfAborted
-} = require("../../runtime/download-utils");
+const Host = require("../../runtime/host-capabilities");
+const Archive = require("../../runtime/archive");
+const ReleaseFiles = require("../../runtime/release-files");
+const Upstream = require("../../runtime/upstream");
+const { throwIfAborted } = require("../../runtime/download-utils");
+
+// Mac platform folders of an NW.js release and the CPU each one serves.
+const PLATFORMS = { "osx-arm64": "arm64", "osx-universal": "universal", "osx-x64": "x64" };
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
@@ -37,15 +35,10 @@ function normalizeVariant(input) {
   throw new Error(`Invalid NW.js variant: ${String(input ?? "")}`);
 }
 
+// The Mac's own CPU, then a universal build, then Intel through Rosetta.
 function getDarwinPlatformKeys(arch) {
-  if (arch === "arm64") return ["osx-arm64", "osx-x64"];
-  return ["osx-x64"];
-}
-
-function getDownloadUrl(version, platformKey, variant) {
-  const v = normalizeVersion(version);
-  const pkg = variant === "sdk" ? "nwjs-sdk" : "nwjs";
-  return `https://dl.nwjs.io/v${v}/${pkg}-v${v}-${platformKey}.zip`;
+  if (arch === "arm64") return ["osx-arm64", "osx-universal", "osx-x64"];
+  return ["osx-x64", "osx-universal"];
 }
 
 function installRootDir(userDataDir) {
@@ -73,19 +66,37 @@ function getExecutablePathForInstallDir(platformKey, installDir) {
 }
 
 function findNwjsAppRoot(extractedDir) {
-  const direct = path.join(extractedDir, "nwjs.app");
-  if (fs.existsSync(direct)) return extractedDir;
+  const app = Archive.findEntry(extractedDir, (file, item) => item.isDirectory() && item.name === "nwjs.app");
+  if (!app) throw new Error("NW.js extract did not contain nwjs.app");
+  return path.dirname(app);
+}
 
-  try {
-    const entries = fs.readdirSync(extractedDir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const candidate = path.join(extractedDir, entry.name, "nwjs.app");
-      if (fs.existsSync(candidate)) return path.join(extractedDir, entry.name);
+// The highest macOS floor of the app's own executable and libraries, read
+// from their Mach-O load commands: a later NW.js can need a later macOS than
+// its Info.plist states.
+function packageMinimumMacOS(appPath, arch) {
+  let floor = null;
+  const machine = arch === "x64" ? "x86_64" : arch;
+  const files = [path.join(appPath, "Contents", "MacOS", "nwjs")];
+  const queue = [[path.join(appPath, "Contents", "Frameworks"), 0]];
+  while (queue.length && files.length < 64) {
+    const [directory, depth] = queue.shift();
+    let items = [];
+    try { items = fs.readdirSync(directory, { withFileTypes: true }); } catch { continue; }
+    for (const item of items) {
+      const file = path.join(directory, item.name);
+      if (item.isDirectory() && depth < 6 && item.name !== "Resources") queue.push([file, depth + 1]);
+      else if (item.isFile() && (item.name.endsWith(".dylib") || item.name === "nwjs Framework")) files.push(file);
     }
-  } catch {}
-
-  throw new Error("NW.js extract did not contain nwjs.app");
+  }
+  for (const file of files) {
+    try {
+      const slices = require("../../runtime/macho-load-commands").readMachOLoadCommands(file).slices;
+      const minimum = (slices.find(slice => slice.architecture === machine) || slices[0])?.minimumMacOS;
+      if (minimum && (!floor || !Host.versionAtLeast(floor, minimum))) floor = minimum;
+    } catch {}
+  }
+  return floor;
 }
 
 function parseSemver(v) {
@@ -105,153 +116,81 @@ function compareSemverDesc(a, b) {
   return 0;
 }
 
-function extractVersionsFromJson(parsed) {
-  const out = [];
+// Release records of a version index: a list, or an object holding one.
+function indexRecords(parsed) {
+  const list = Array.isArray(parsed) ? parsed : parsed?.versions || parsed?.data || parsed?.items;
+  return (Array.isArray(list) ? list : []).map(item => typeof item === "string" ? { version: item } : item && typeof item === "object" ? item : null)
+    .map(item => item && { ...item, version: String(item.version || item.name || item.tag_name || "").trim().replace(/^v/i, "") })
+    .filter(item => item && /^\d+\.\d+\.\d+$/.test(item.version));
+}
 
-  function add(val) {
-    const v = String(val || "").trim().replace(/^v/i, "");
-    if (/^\d+\.\d+\.\d+$/.test(v)) out.push(v);
-  }
-
-  if (Array.isArray(parsed)) {
-    for (const item of parsed) {
-      if (typeof item === "string") add(item);
-      else if (item && typeof item === "object") {
-        add(item.version);
-        add(item.name);
-        add(item.tag_name);
-      }
+// NW.js lists every release in its version index, with the platforms and
+// flavors each one publishes; the download listing answers when the index
+// moves. A release's SDK archives live in its version folder.
+const source = Upstream.index({ locations: ["https://nwjs.io/versions.json", "https://dl.nwjs.io/versions.json", "https://dl.nwjs.io/index.json", "https://dl.nwjs.io/"],
+  hosts: ["nwjs.io"], parse: documents => {
+    for (const document of documents) {
+      let records;
+      try { records = indexRecords(JSON.parse(document.text)); }
+      catch { records = [...document.text.matchAll(/href=["']v?(\d+\.\d+\.\d+)\/["']/g)].map(match => ({ version: match[1] })); }
+      const byVersion = new Map();
+      for (const record of records) if (!byVersion.has(record.version)) byVersion.set(record.version, record);
+      if (!byVersion.size) continue;
+      return [...byVersion.values()].sort((a, b) => compareSemverDesc(a.version, b.version)).slice(0, 500).map(record => {
+        const known = Array.isArray(record.files), keys = Object.keys(PLATFORMS).filter(key => !known || record.files.includes(key));
+        const sdk = !Array.isArray(record.flavors) || record.flavors.includes("sdk"), v = record.version;
+        return { version: v, sourceUrl: `https://dl.nwjs.io/v${v}/`, ...(known ? { details: { platforms: keys } } : {}),
+          ...(sdk ? {} : { installReason: "This NW.js release publishes no SDK build." }),
+          files: sdk ? keys.map(key => ({ name: `nwjs-sdk-v${v}-${key}.zip`, url: `https://dl.nwjs.io/v${v}/nwjs-sdk-v${v}-${key}.zip`, architecture: PLATFORMS[key] })) : [] };
+      });
     }
-    return out;
-  }
+    return [];
+  } });
 
-  if (parsed && typeof parsed === "object") {
-    const maybeList = parsed.versions || parsed.data || parsed.items;
-    if (Array.isArray(maybeList)) {
-      out.push(...extractVersionsFromJson(maybeList));
-    }
-  }
-
-  return out;
+// How a listed release serves one CPU. A listing without platform details
+// leaves it to the download.
+function availability(row, arch) {
+  if (!row.details?.platforms) return {};
+  const has = architecture => row.files.some(file => file.architecture === architecture);
+  const nativeAvailable = has(arch === "arm64" ? "arm64" : "x64") || has("universal");
+  const rosettaFallback = arch === "arm64" && !nativeAvailable && has("x64");
+  const unavailable = !nativeAvailable && !rosettaFallback;
+  return { nativeAvailable, rosettaFallback, unavailable, mode: unavailable ? "unavailable" : rosettaFallback ? "rosetta" : "native" };
 }
 
-function extractVersionsFromHtml(html) {
-  const out = [];
-  const re = /href=["']v?(\d+\.\d+\.\d+)\/["']/g;
-  let m = null;
-  while ((m = re.exec(String(html || "")))) {
-    if (m[1]) out.push(m[1]);
-  }
-  return out;
+async function fetchAvailableVersions({ logger, latestOnly, signal, arch = process.arch } = {}) {
+  logger?.info?.("[nwjs] fetching versions");
+  const rows = (await source.discover({ logger, signal })).slice(0, latestOnly === true ? 1 : 500);
+  if (!rows.length) throw new Error("No NW.js versions found");
+  const versions = rows.map(row => row.version);
+  const listedAvailability = architecture => Object.fromEntries(rows.map(row => [row.version,
+    row.installReason ? { unavailable: true, mode: "unavailable" } : availability(row, architecture)]));
+  const availabilityByVersion = listedAvailability(arch);
+  const versionRequirements = Object.fromEntries(rows.filter(row => row.installReason).map(row => [row.version, { installReason: row.installReason }]));
+  const architectureCatalogs = Object.fromEntries(["arm64", "x64"].map(architecture => {
+    const byVersion = listedAvailability(architecture), exactVersions = versions.filter(version => byVersion[version]?.nativeAvailable === true);
+    return [architecture, { versions: exactVersions, source: "https://dl.nwjs.io/", availabilityByVersion: byVersion,
+      versionRequirements: {}, installableVersions: exactVersions }];
+  }));
+  return { versions, rows, source: "https://dl.nwjs.io/", mode: latestOnly === true ? "latest" : "all", availabilityByVersion,
+    versionRequirements, architectureCatalogs, installableVersions: versions.filter(version => availabilityByVersion[version]?.unavailable !== true) };
 }
 
-function extractAvailabilityFromJson(parsed, versions, arch) {
-  const records = Array.isArray(parsed) ? parsed : parsed?.versions || parsed?.data || parsed?.items;
-  const availability = {};
-  for (const item of Array.isArray(records) ? records : []) {
-    if (!item || typeof item !== "object") continue;
-    const version = String(item.version || item.name || item.tag_name || "").replace(/^v/i, "");
-    if (!versions.includes(version) || !Array.isArray(item.files)) continue;
-    const nativeKey = arch === "arm64" ? "osx-arm64" : "osx-x64";
-    const nativeAvailable = item.files.includes(nativeKey);
-    const rosettaFallback = arch === "arm64" && !nativeAvailable && item.files.includes("osx-x64");
-    const sdkAvailable = !Array.isArray(item.flavors) || item.flavors.includes("sdk");
-    const unavailable = !sdkAvailable || (!nativeAvailable && !rosettaFallback);
-    availability[version] = {
-      nativeAvailable: nativeAvailable && sdkAvailable,
-      rosettaFallback: rosettaFallback && sdkAvailable,
-      unavailable,
-      mode: unavailable ? "unavailable" : rosettaFallback ? "rosetta" : "native"
-    };
-  }
-  return availability;
-}
-
-async function fetchAvailableVersions({ logger, latestOnly, signal, arch = process.arch, fetcher = fetchUrlBuffer } = {}) {
-  const sources = [
-    "https://nwjs.io/versions.json",
-    "https://dl.nwjs.io/versions.json",
-    "https://dl.nwjs.io/index.json",
-    "https://dl.nwjs.io/"
-  ];
-
-  let lastErr = null;
-
-  for (const url of sources) {
-    try {
-      logger?.info?.(`[nwjs] fetching versions from ${url}`);
-      const res = await fetcher(url, { signal });
-      if (res.status !== 200) throw new Error(`Fetch failed (${res.status})`);
-
-      const decoded = decodeBody(res.body, res.headers);
-      const text = decoded.toString("utf8");
-
-      const isJson = url.endsWith(".json") || String(res.headers?.["content-type"] || "").includes("json");
-      const parsed = isJson ? JSON.parse(text) : null;
-      const versions = isJson
-        ? extractVersionsFromJson(parsed)
-        : extractVersionsFromHtml(text);
-
-      const unique = Array.from(new Set(versions)).filter(v => /^\d+\.\d+\.\d+$/.test(v));
-      unique.sort(compareSemverDesc);
-      if (unique.length === 0) throw new Error("No versions found");
-      const visible = unique.slice(0, latestOnly === true ? 1 : 500);
-      const availabilityByVersion = extractAvailabilityFromJson(parsed, visible, arch);
-      return {
-        versions: visible,
-        source: url,
-        mode: latestOnly === true ? "latest" : "all",
-        availabilityByVersion,
-        installableVersions: visible.filter(version => availabilityByVersion[version]?.unavailable !== true)
-      };
-    } catch (e) {
-      throwIfAborted(signal);
-      lastErr = e;
-      logger?.warn?.(`[nwjs] version fetch failed for ${url}: ${String(e?.message || e)}`);
-    }
-  }
-
-  throw lastErr || new Error("Failed to fetch NW.js versions");
-}
-
-function runCommand(cmd, args, options) {
-  const { signal, ...spawnOptions } = options || {};
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { ...spawnOptions, stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    const removeAbort = attachAbortSignal(signal, () => {
-      try {
-        child.kill("SIGTERM");
-      } catch {}
-    });
-    child.stdout.on("data", b => {
-      stdout += b.toString("utf8");
-    });
-    child.stderr.on("data", b => {
-      stderr += b.toString("utf8");
-    });
-    child.on("error", err => {
-      removeAbort();
-      reject(err);
-    });
-    child.on("close", code => {
-      removeAbort();
-      if (signal?.aborted) return reject(createAbortError());
-      if (code === 0) return resolve({ stdout, stderr });
-      const err = new Error(`${cmd} failed (exit ${code})`);
-      err.code = code;
-      err.stdout = stdout;
-      err.stderr = stderr;
-      reject(err);
-    });
-  });
-}
-
-async function extractZipDarwin(zipPath, destDir, signal) {
-  ensureDir(destDir);
-  // `ditto` is available on macOS and preserves app bundles correctly.
-  await runCommand("/usr/bin/ditto", ["-x", "-k", zipPath, destDir], { signal });
+// The version folder's SHASUMS256.txt names each published archive with its
+// SHA-256, in its current format. Without it the listed file installs and its
+// hash is recorded.
+async function publishedFile(listed, { version, key, signal, logger }) {
+  const prefix = `nwjs-sdk-v${version}-${key}.`;
+  const checksums = Upstream.index({ locations: [new URL("SHASUMS256.txt", listed.url).href], parse: ([document]) => [{ version,
+    files: document.text.split(/\r?\n/).map(line => /^([a-f0-9]{64})\s+\*?(\S+)$/i.exec(line.trim())).filter(Boolean)
+      .map(([, digest, name]) => ({ name: path.posix.basename(name), url: new URL(path.posix.basename(name), listed.url).href, digest })) }] });
+  try {
+    const [row] = await checksums.discover({ signal, logger });
+    const files = (row?.files || []).filter(file => file.name.startsWith(prefix) && ["zip", "tar"].includes(Archive.archiveKind(file.name)))
+      .sort((a, b) => Number(!a.name.endsWith(".zip")) - Number(!b.name.endsWith(".zip")));
+    if (files[0]) return files[0];
+  } catch { throwIfAborted(signal); }
+  return listed;
 }
 
 function listInstalled(userDataDir) {
@@ -313,12 +252,17 @@ function listInstalled(userDataDir) {
   return out;
 }
 
+// Installs a listed release: this Mac's own CPU, then a universal build, then
+// Intel through Rosetta. `files` are the release's listed SDK archives; the
+// release list is read when the caller has none.
 async function installVersion({
   userDataDir,
   version,
   variant,
   platform,
   arch,
+  macOSVersion,
+  files,
   logger,
   onProgress,
   signal
@@ -347,25 +291,32 @@ async function installVersion({
       return { version: v, platformKey, variant: kind, installDir, executablePath: exePath, ready: true, reason: null };
     }
 
-    const url = getDownloadUrl(v, platformKey, kind);
+    files ??= (await source.discover({ logger, signal })).find(row => row.version === v)?.files || [];
+    const listed = files.find(file => file.architecture === PLATFORMS[platformKey]);
+    if (!listed) continue;
+    const file = await publishedFile(listed, { version: v, key: platformKey, signal, logger });
     // Publication must stay on the user's data volume (external/shared volumes
     // cannot rename an extraction from macOS's system temporary directory).
     const tmpDir = fs.mkdtempSync(path.join(root, ".install-"));
-    const zipPath = path.join(tmpDir, `nwjs-v${v}-${platformKey}-${kind}.zip`);
+    const zipPath = path.join(tmpDir, file.name);
     const extractDir = path.join(tmpDir, "extract");
 
     try {
-      logger?.info?.(`[nwjs] downloading ${url}`);
-      await downloadToFile(url, zipPath, { onProgress, signal });
+      logger?.info?.(`[nwjs] downloading ${file.url}`);
+      await source.download(file, zipPath, { onProgress, signal });
       throwIfAborted(signal);
 
       logger?.info?.(`[nwjs] extracting ${path.basename(zipPath)}`);
-      await extractZipDarwin(zipPath, extractDir, signal);
+      await ReleaseFiles.extractArchive(zipPath, extractDir, signal);
 
       const appRoot = findNwjsAppRoot(extractDir);
       AppBundle.validateAppBundle(path.join(appRoot, "nwjs.app"), {
         executablePath: path.join(appRoot, "nwjs.app", "Contents", "MacOS", "nwjs")
       });
+      // The app's executable and libraries state the macOS they load on.
+      const floor = packageMinimumMacOS(path.join(appRoot, "nwjs.app"), platformKey === "osx-x64" ? "x64" : resolvedArch);
+      const hostMacOS = macOSVersion || Host.getHostCapabilities().macOSVersion;
+      if (floor && hostMacOS && !Host.versionAtLeast(hostMacOS, floor)) throw new Error(`NW.js ${v} requires macOS ${floor} or later.`);
 
       safeRm(installDir);
       ensureDir(path.dirname(installDir));
@@ -382,7 +333,7 @@ async function installVersion({
       lastErr = e;
       const statusCode = Number(e?.statusCode || 0);
       if (statusCode === 404) {
-        logger?.warn?.(`[nwjs] ${url} not found (404), trying next arch…`);
+        logger?.warn?.(`[nwjs] ${file.url} not found (404), trying next arch…`);
       } else {
         logger?.error?.("[nwjs] install failed", String(e?.stack || e));
         throw e;
@@ -392,7 +343,7 @@ async function installVersion({
     }
   }
 
-  throw lastErr || new Error("Failed to install NW.js");
+  throw lastErr || new Error(`NW.js ${v} offers no SDK download for this Mac.`);
 }
 
 function uninstallVersion({ userDataDir, version, platformKey, variant, installDir }) {
@@ -451,5 +402,7 @@ module.exports = {
   fetchAvailableVersions,
   installVersion,
   uninstallVersion,
-  resolveBestInstalled
+  resolveBestInstalled,
+  source,
+  __test: { publishedFile }
 };

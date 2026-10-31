@@ -1,21 +1,20 @@
-const { createGithubReleaseDiscovery } = require("../../shared/runtime/github-runtime-catalog");
+const Upstream = require("../../shared/runtime/upstream");
+const { macDownloads } = require("../../shared/runtime/release-files");
 
 const SOURCE_URL = "https://github.com/PlayCover/PlayCover/releases";
-const VERSION = /^v?\d+\.\d+\.\d+(?:-[A-Za-z0-9][A-Za-z0-9.-]*)?$/;
-const catalog = [];
 
-function createCatalogDiscovery(dependencies = {}) {
-  return createGithubReleaseDiscovery({ owner: "PlayCover", repo: "PlayCover", includePrerelease: true, dependencies,
-    mapRelease: async (release, { resolveRevision, githubAssetDigest, sourceUrl }) => {
-      if (!VERSION.test(release.tag_name || "")) return null;
-      const version = release.tag_name.replace(/^v/, ""), prerelease = release.prerelease === true || version.includes("-");
-      const asset = release.assets?.find(item => /^PlayCover.*\.dmg$/i.test(item.name));
-      return { version, upstreamRevision: await resolveRevision(release), sourceUrl, prerelease,
-        versionLabel: prerelease ? `${version} · Pre-release` : version,
-        hostArchitectures: ["arm64"], minimumMacOS: "12.0", localBuild: false,
-        ...(asset ? { asset: { filename: asset.name, url: asset.browser_download_url, sha256: githubAssetDigest(asset), assetId: asset.id,
-          integrity: githubAssetDigest(asset) ? "publisher-sha256" : "recorded-local" } }
-          : { installReason: "This release has no PlayCover disk image." }) };
-    } });
-}
-module.exports = { catalog, SOURCE_URL, createCatalogDiscovery };
+// Stable releases and prereleases. The current disk image name wins; a renamed
+// or reformatted Mac download is followed. A name without a CPU word is the
+// publisher's Apple Silicon build. PlayTools states its macOS requirement.
+const source = Upstream.github({ repository: "PlayCover/PlayCover", prerelease: true, allArchitectures: true,
+  recognize: release => {
+    const version = /^v?(\d+(?:\.\d+)+(?:-[A-Za-z0-9][A-Za-z0-9.-]*)?)$/.exec(release.tag_name || "")?.[1];
+    if (!version) return null;
+    const prerelease = release.prerelease === true || version.includes("-");
+    const row = { version, prerelease, architecture: "arm64", ...(prerelease ? { label: `${version} · Pre-release` } : {}) };
+    const current = (release.assets || []).map(item => String(item?.name || "")).filter(name => /^PlayCover.*\.dmg$/i.test(name));
+    const asset = macDownloads(release.assets, { preferred: current, platformWord: false }).find(item => item.architecture !== "x64")?.asset;
+    return asset ? { ...row, assets: [asset] } : { ...row, installReason: "This release has no PlayCover download for Apple Silicon." };
+  } });
+
+module.exports = { SOURCE_URL, source };

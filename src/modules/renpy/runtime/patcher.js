@@ -3,6 +3,9 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 const GameData = require("../../shared/game-data");
+const { readMachOArchitectures } = require("../../shared/runtime/local-native");
+const Architecture = require("../../shared/runtime/architecture");
+const SDK_LAYOUT_FILE = ".maclauncher-sdk.json";
 const MAC_LIB_NAMES = {
   py2: ["py2-mac-universal", "py2-mac-x86_64", "py2-mac-x86-64", "mac-x86_64"],
   py3: ["py3-mac-universal", "py3-mac-x86_64", "py3-mac-x86-64", "mac-x86_64"]
@@ -55,17 +58,56 @@ function platformFromLibDirName(name) {
   return stripped || null;
 }
 
-function findMacLibDir(rootDir, renpyMajor) {
-  const tag = guessPythonTag(renpyMajor);
+function findMacLibDir(rootDir, renpyMajor, {version, baseName} = {}) {
+  const tag = guessPythonTag(String(renpyMajor).split(".")[0]);
   const libDir = path.join(rootDir, "lib");
-  const names = MAC_LIB_NAMES[tag] || MAC_LIB_NAMES.py3;
+  const result = name => ({name, dir: path.join(libDir, name), platform: platformFromLibDirName(name)});
+  const hasProgram = name => existsFile(path.join(libDir, name, "renpy")) ||
+    Boolean(baseName && existsFile(path.join(libDir, name, baseName)));
+  try {
+    const file = path.join(rootDir, SDK_LAYOUT_FILE);
+    const saved = fs.statSync(file).size <= 65536 ? JSON.parse(fs.readFileSync(file, "utf8")) : null;
+    const name = saved?.macLibDirName;
+    if (typeof name === "string" && name.length <= 1024 && !path.isAbsolute(name) && !name.split(/[\\/]/).includes("..") && hasProgram(name)) return result(name);
+  } catch {}
+  const rootName = path.basename(rootDir);
+  const hint = version || (/^\d+\.\d+\.\d+$|^renpy-\d+\.\d+\.\d+-sdk$/.test(rootName) ? rootName : "");
+  const release = String(hint).match(/(\d+)\.(\d+)\./);
+  const legacy = release && (Number(release[1]) < 7 || Number(release[1]) === 7 && Number(release[2]) < 4);
+  const oldNames = ["darwin-x86_64", "mac-x86_64", "mac-universal"];
+  const newNames = [...MAC_LIB_NAMES[tag], `${tag}-mac-arm64`, "mac-arm64", "darwin-arm64", "darwin-universal"];
+  const names = [...new Set(legacy ? [...oldNames, ...newNames] : [...newNames, ...oldNames])];
   for (const name of names) {
-    const candidate = path.join(libDir, name);
-    if (existsDir(candidate)) {
-      return { name, dir: candidate, platform: platformFromLibDirName(name) };
+    if (hasProgram(name)) return result(name);
+  }
+  // New publisher names are recognized by Mac Python and launcher contents.
+  // Bound breadth, depth and entries; directory symlinks are not traversed.
+  const queue = [{name: "", depth: 0}], matches = [];
+  const target = Architecture.selectedArchitecture() === "x64" ? "x86_64" : "arm64";
+  let visited = 0, entriesRead = 0;
+  while (queue.length && visited++ < 256 && entriesRead < 4096) {
+    const current = queue.shift(), directory = path.join(libDir, current.name);
+    let entries;
+    try { entries = fs.readdirSync(directory, {withFileTypes: true}).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 4096 - entriesRead); }
+    catch { continue; }
+    entriesRead += entries.length;
+    const python = entries.find(item => /^(?:python(?:[23](?:\.\d+)*)?|pythonw)$/.test(item.name));
+    const program = entries.find(item => item.name === "renpy" || baseName && item.name === baseName);
+    if (current.name && python && program) {
+      try {
+        readMachOArchitectures(path.join(directory, python.name));
+        const architectures = readMachOArchitectures(path.join(directory, program.name));
+        const family = path.basename(current.name).match(/^py([23])/);
+        matches.push({...current, cpuRank: architectures.includes(target) ? 0 : 1,
+          familyRank: family ? `py${family[1]}` === tag ? 0 : 2 : 1});
+      } catch {}
+    }
+    if (current.depth < 3) for (const item of entries) {
+      if (item.isDirectory() && queue.length < 256) queue.push({name: path.join(current.name, item.name), depth: current.depth + 1});
     }
   }
-  return null;
+  matches.sort((a, b) => a.familyRank - b.familyRank || a.cpuRank - b.cpuRank || a.depth - b.depth || a.name.localeCompare(b.name));
+  return matches.length ? result(matches[0].name) : null;
 }
 
 function ensureExecutable(filePath) {
@@ -125,7 +167,7 @@ function buildPatchStatus({ userDataDir, gameId, gamePath, contentRootDir, renpy
         dir: path.join(contentRootDir, "lib", meta.macLibDirName),
         platform: meta.platform || platformFromLibDirName(meta.macLibDirName)
       }
-    : findMacLibDir(contentRootDir, renpyMajor);
+    : findMacLibDir(contentRootDir, renpyMajor, {baseName: renpyBaseName});
   const libDir = libInfo?.dir || null;
   const baseName = renpyBaseName || null;
   const baseBinary = baseName && libDir ? path.join(libDir, baseName) : null;
@@ -182,7 +224,7 @@ function patchGame({
     throw new Error("Missing Ren'Py executable name.");
   }
 
-  const sdkLib = findMacLibDir(sdkInstallDir, renpyMajor);
+  const sdkLib = findMacLibDir(sdkInstallDir, renpyMajor, {version: sdkVersion});
   if (!sdkLib) {
     throw new Error("Ren'Py SDK is missing macOS libraries.");
   }
@@ -277,5 +319,6 @@ module.exports = {
   patchGame,
   unpatchGame,
   readPatchMeta,
+  SDK_LAYOUT_FILE,
   findMacLibDir
 };

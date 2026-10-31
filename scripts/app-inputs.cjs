@@ -85,8 +85,9 @@ function dependencySources(repoRoot, packageConfig, lock) {
   return suppliers;
 }
 function buildsSources({ repoRoot, plan, packageLock }) {
-  packageLock ||= JSON.parse(fs.readFileSync(path.join(repoRoot, 'build/runtime-packages.json')));
-  require('./runtime-packages.cjs').validateLock(packageLock, { plan });
+  const Lock = require('./runtime-packages.cjs');
+  packageLock ||= Lock.selectArchitecture(JSON.parse(fs.readFileSync(path.join(repoRoot, Lock.LOCK))), plan.launcherArch);
+  Lock.validateSelection(packageLock, { plan });
   if (plan.packages.length) throw new Error('Application engine payloads must use managed delivery.');
   const files = new Map();
   for (const item of plan.supplementals) {
@@ -277,9 +278,7 @@ function expectedSelections({ repoRoot = ROOT, plan, packageConfig = require('..
       throw new Error(`A bundled upstream supplier identity is invalid: ${kind}.`);
     sources.set(metadata, { ...regular(metadata), source: metadata, owner: 'supplier-metadata' });
     if (kind === 'python') {
-      const profile = JSON.parse(fs.readFileSync(path.join(repoRoot, 'src/modules/shared/runtime/embedded-python.json')));
-      for (const key of ['version','abi','architecture','publisher','release','url','sha256','packages'])
-        if (JSON.stringify(identity[key]) !== JSON.stringify(profile[key])) throw new Error('Bundled Python differs from its upstream supplier profile.');
+      require('./python-resources.cjs').assertProfile(identity, plan.launcherArch);
       require('./python-resources.cjs').verifySourcePython({ sourceRoot: path.dirname(metadata) });
     }
     const record = { name: kind, ...identity };
@@ -348,6 +347,7 @@ function expectedSelections({ repoRoot = ROOT, plan, packageConfig = require('..
 async function prepare(options) {
   const selected = expectedSelections(options);
   selected.host = hostSources(selected.repoRoot, selected.packageConfig, { required: options.requireHost !== false, arch: selected.plan.launcherArch });
+  if (options.requireHost !== false) selected.provenance = require('./published-inputs.cjs').verifyProductionInputs(selected);
   for (const supplier of selected.suppliers.values()) for (const record of supplier.files.values()) selected.sources.set(record.source, record);
   const transform = require('app-builder-lib/out/fileTransformer').createTransformer(selected.repoRoot, selected.packageConfig.build, selected.packageConfig.build.extraMetadata);
   for (const record of [...selected.asar.values(), ...[...selected.suppliers.values()].flatMap(item => [...item.files.values()])]) {
@@ -415,6 +415,7 @@ function checkMember(selected, relative, bytes, { resource = false, read } = {})
   return record.owner;
 }
 function verifyContents(selected, { archive, resources, appPath, requireHost = true }) {
+  if (requireHost && !selected.provenance) throw new Error('Application verification requires published native input provenance.');
   assertUnchanged(selected);
   resources = fs.realpathSync(resources);
   if (appPath) appPath = fs.realpathSync(appPath);

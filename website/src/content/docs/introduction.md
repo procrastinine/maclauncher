@@ -3,7 +3,9 @@ title: What is MacLauncher?
 description: A native runtime system, a graphics and effects layer, and a tinker tool for playing games on macOS.
 ---
 
-MacLauncher is three things at once: a **native runtime system**, a **graphics and effects layer**, and a **tinker tool** for playing games on macOS. You can use any one of them on its own, but they're designed to work together.
+MacLauncher plays games on macOS. It has three parts: a native runtime system, a graphics and effects layer, and a set of tools for tinkering with your games. Each part works on its own, and they are designed to work together.
+
+Everything MacLauncher builds itself is built in the open. The app and the compiled packages from [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds) are built on GitHub's own machines from public source code, and GitHub signs a record of exactly which source produced each file, so anyone can confirm that nothing was added along the way. A few older package versions predate this setup and are marked as built locally. Components taken unchanged from their publishers, such as Python and Electron, are checked against the publishers' own checksums and signatures. [How can I be sure nothing was added?](/maclauncher/help/faq/#how-can-i-be-sure-nothing-was-added-to-maclauncher) explains what these records prove, and [Verifying MacLauncher](https://github.com/procrastinine/maclauncher/blob/master/docs/development/VERIFYING.md) shows how to check them.
 
 ![The MacLauncher library with a game selected, its inspector showing runtime and graphics settings](../../assets/launcher-flow.png)
 
@@ -11,47 +13,44 @@ MacLauncher is three things at once: a **native runtime system**, a **graphics a
 
 ## A native runtime system
 
-Here's a fact that surprises a lot of people: many games packaged for Windows don't actually need Windows. They are built on engines like [Ren'Py](https://www.renpy.org/), [RPG Maker](https://www.rpgmakerweb.com/), [Godot](https://github.com/godotengine/godot) or [GameMaker](https://gamemaker.io/), and those engines, or faithful open-source reimplementations of them, run natively on macOS. Point the Mac engine at the game's data and it just plays, with no [WINE](https://www.winehq.org/) and no emulation.
+Many games packaged for Windows don't need Windows at all. They are built on engines such as [Ren'Py](https://www.renpy.org/), [RPG Maker](https://www.rpgmakerweb.com/), [Godot](https://github.com/godotengine/godot) or [GameMaker](https://gamemaker.io/), and those engines, or faithful open-source reimplementations of them, run natively on macOS. The Mac version of the engine can read the game's data directly, so the game runs without [WINE](https://www.winehq.org/) and without emulation.
 
-Doing that by hand means identifying the engine, finding the right build, matching the exact version, and configuring it. MacLauncher does all of it automatically. Drag in a game folder or `.exe`, and it detects the engine and version, picks the runtime most likely to work, downloads it when you press Play (after asking), and launches the game. You can always pick a different runtime or version yourself.
+Doing that by hand means identifying the engine, finding a build of the exact version the game needs and configuring it. MacLauncher does all of this for you. Drag in a game folder or `.exe` and MacLauncher detects the engine and its version, picks the runtime most likely to work, downloads it when you press Play, and launches the game. You can always choose a different runtime or version yourself.
 
-Why bother, when [CrossOver](https://www.codeweavers.com/crossover/) exists?
+Even if you have [CrossOver](https://www.codeweavers.com/crossover/), a native runtime is usually the better way to play. No translation layer sits between the game and your Mac, so it runs faster and uses less power. Windows, fullscreen, mouse input and audio behave the way macOS expects, without the occasional oddities of WINE. A game whose own Mac build fails to open because of signing or packaging problems can often still be played, because a working runtime reads the same game data.
 
-- **Speed and efficiency.** No translation layer between the game and your Mac.
-- **It behaves like a Mac app.** Windows, fullscreen, mouse and audio work the way macOS expects, instead of the occasional weirdness of WINE.
-- **Broken Mac builds become playable.** Some games ship a Mac app that fails on signing or packaging. A working runtime pointed at the same data side-steps that.
+Runtimes aren't limited to Windows games. Android and iOS apps, PlayStation 5 and Nintendo Switch games, DOS games, 32-bit Mac apps, Flash, Java and dozens of visual-novel engines have them too. For Windows games with no native option, MacLauncher manages [Sikarugir](https://github.com/Sikarugir-App/Sikarugir), a free distribution of WINE, and can also use your own copy of CrossOver.
 
-And it doesn't stop at Windows games. Android and iOS apps, PlayStation 5 and Nintendo Switch games, DOS games, 32-bit Mac apps, Flash, Java and dozens of visual-novel engines all have runtimes too. Where no native runtime exists, MacLauncher manages [Sikarugir](https://github.com/Sikarugir-App/Sikarugir) (free WINE) and your own CrossOver as a fallback.
-
-→ [How games run on a Mac](/maclauncher/background/how-games-run/) explains the ideas, and [Games and runtimes](/maclauncher/games/) shows what's supported.
+[How games run on a Mac](/maclauncher/background/how-games-run/) explains the ideas behind these runtimes, and [Games and runtimes](/maclauncher/games/) shows what's supported.
 
 ## A graphics and effects layer
 
-MacLauncher has its own graphics pipeline, running natively on [Metal](https://developer.apple.com/metal/), that works with **every** runtime: native engines, WINE games, Android apps, consoles, videos, even ordinary Mac apps. You can stack effects in any order and change them live while the game runs:
+MacLauncher has its own graphics pipeline, built natively on [Metal](https://developer.apple.com/metal/), and it works with every runtime: native engines, WINE games, Android apps, consoles, videos and even ordinary Mac apps. You can stack effects in any order and change them while the game runs. The effects include:
 
-- spatial and temporal upscalers, from [MetalFX](https://developer.apple.com/documentation/metalfx) and [AMD FSR](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK) to neural upscalers like [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN);
-- frame generation, including a macOS port of [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/)'s (using your own copy of the app);
+- spatial and temporal upscalers, from [MetalFX](https://developer.apple.com/documentation/metalfx) and [AMD FSR](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK) to neural upscalers such as [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN);
+- frame generation, including a macOS port of [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/)'s, which uses your own copy of the app;
 - neural reconstruction and restoration;
-- and any [ReShade](https://reshade.me/), [RetroArch](https://www.retroarch.com/), [mpv](https://mpv.io/)/[libplacebo](https://libplacebo.org/), [Magpie](https://github.com/Blinue/Magpie) or [ISF](https://isf.video/) shader you care to import: CRT effects, color grading, anti-aliasing, depth effects and more.
+- any [ReShade](https://reshade.me/), [RetroArch](https://www.retroarch.com/), [mpv](https://mpv.io/)/[libplacebo](https://libplacebo.org/), [Magpie](https://github.com/Blinue/Magpie) or [ISF](https://isf.video/) shader you import, such as CRT effects, color grading, anti-aliasing and depth effects.
 
-Want to run a game at 720p, push it through a neural model, upscale it to 4K, add frame generation and finish with a CRT filter? That's one chain of effects, edited live.
+A single chain can render a game at 720p, pass it through a neural model, upscale it to 4K, add frame generation and finish with a CRT filter, and you can edit every step while you play.
 
-→ [Graphics and effects](/maclauncher/graphics/) shows what's possible, with examples.
+[Graphics and effects](/maclauncher/graphics/) has examples of each kind of effect.
 
 ## A tinker tool
 
-These are *your* games, on *your* disk, and MacLauncher is built to give you as much control as possible:
+Your games are files on your own disk, and MacLauncher gives you as much control over them as it can:
 
-- **Versions for everything.** Keep several versions of any runtime and pick per game.
-- **Stores without limits.** Download the games you own from [Steam](https://store.steampowered.com/), [Epic](https://store.epicgames.com/), [GOG](https://www.gog.com/), [itch.io](https://itch.io/) and [Google Play](https://play.google.com/store/games), in the platform and version you choose, such as the Windows build of a Steam game, or an older release.
-- **Tools.** Save snapshots and editors, cheats for RPG Maker and Ren'Py, and decompilers and extractors for most engines.
-- **Fine-grained settings.** Every runtime option, custom launch arguments, and a per-game network switch.
-- **No background network traffic.** Every request comes from something you did. MacLauncher doesn't phone home.
+- Keep several versions of any runtime and choose one for each game.
+- Download the games you own from [Steam](https://store.steampowered.com/), [Epic](https://store.epicgames.com/), [GOG](https://www.gog.com/), [itch.io](https://itch.io/) and [Google Play](https://play.google.com/store/games) in the platform and version you choose, such as the Windows build of a Steam game or an older release.
+- Use save snapshots and editors, cheats for RPG Maker and Ren'Py, and decompilers and extractors for most game types.
+- Change any runtime option, add your own launch arguments, and turn network access on or off for each game.
 
-→ [Tinker tools](/maclauncher/tools/) has the tour.
+MacLauncher doesn't phone home or make requests in the background; every network request comes from something you did. The one exception is opt-in: turn on **Check for updates at launch** in Settings and it looks for a new version each time it starts. That setting is off by default.
+
+[Tinker tools](/maclauncher/tools/) describes all of these.
 
 ## Open source
 
-MacLauncher is open source under the [MIT license](https://github.com/procrastinine/maclauncher/blob/master/LICENSE), and it stands on the shoulders of a lot of other open-source projects, credited in the [attributions](https://github.com/procrastinine/maclauncher/blob/master/docs/ATTRIBUTIONS.md). Runtime builds that need adapting for macOS live in the companion project [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds).
+MacLauncher is open source under the [MIT license](https://github.com/procrastinine/maclauncher/blob/master/LICENSE), and it builds on many other open-source projects, which are credited in the [attributions](https://github.com/procrastinine/maclauncher/blob/master/docs/ATTRIBUTIONS.md). Runtime builds that need adapting for macOS live in the companion project [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds).
 
-Ready? [Get started](/maclauncher/getting-started/).
+To install MacLauncher and play your first game, see [Getting started](/maclauncher/getting-started/).

@@ -78,7 +78,15 @@ function compatibilityMetadata(record) {
 
 function validatePublicMetadata(value) {
   if (typeof value === "string") {
-    if (/\/(?:Users|home|Volumes|tmp|var\/folders|private\/(?:tmp|var))\/|(?:^|[\s"'=\\/])\.local[\\/]|[A-Za-z]:[\\/]Users[\\/]|file:\/\//i.test(value))
+    const locations = value.replace(/\bhttps?:\/\/[^\s"'<>]+/g, reference => {
+      try {
+        const address = new URL(reference);
+        // Credential-bearing references retain the existing privacy checks.
+        if (address.username || address.password) return reference;
+        return address.search + address.hash;
+      } catch { return reference; }
+    });
+    if (/file:\/\//i.test(value) || /\/(?:Users|home|Volumes|tmp|var\/folders|private\/(?:tmp|var))\/|(?:^|[\s"'=\\/])\.local[\\/]|[A-Za-z]:[\\/]Users[\\/]|file:\/\//i.test(locations))
       throw new Error("Package metadata contains private filesystem paths.");
   } else if (Array.isArray(value)) {
     for (const item of value) validatePublicMetadata(item);

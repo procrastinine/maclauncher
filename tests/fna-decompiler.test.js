@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -13,6 +15,14 @@ const FNA_VERSION = "fixture-fna", FNA_DOTNET = "8.0.32";
 const HostManager = require("../src/modules/fna/runtime/manager");
 const { DownloadManager } = require("../src/modules/shared/runtime/download-manager");
 
+// NuGet serves the package bytes for the catalog row, whose digest is theirs.
+const PACKAGE = "package fixture";
+function serve(t, context, served = () => PACKAGE) {
+  const pin = { ...TOOL_FIXTURES[TOOL_VERSION], sha256: require("node:crypto").createHash("sha256").update(PACKAGE).digest("hex") };
+  require("../src/modules/shared/runtime/ilspy-catalog").saveCatalog(context.userDataDir, [pin]);
+  Harness.network.routes = { [pin.url]: served }; t.after(() => { Harness.network.routes = null; });
+  return pin;
+}
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-fna-decompiler-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -30,7 +40,7 @@ test("FNA decompiler reuses verified tool files offline and rejects tool tamperi
   for (const name of ["ilspycmd.dll", "ilspycmd.deps.json", "ilspycmd.runtimeconfig.json", "ICSharpCode.Decompiler.dll"]) fs.writeFileSync(path.join(files, name), "reviewed fixture " + name);
   fs.writeFileSync(path.join(root, "tool.json"), JSON.stringify({ version: pin.version, archiveSha256: pin.sha256,
     sourceRevision: pin.sourceRevision, files: Tool.__test.inventory(files), root: "/untrusted", entryPath: "/untrusted.exe" }));
-  const installed = await Tool.ensureTool(context, pin.version, { downloadToFile() { throw Error("Unexpected network"); } });
+  const installed = await Tool.ensureTool(context, pin.version);
   assert.equal(installed.entryPath, path.join(files, "ilspycmd.dll")); assert.equal(installed.root, root);
   fs.writeFileSync(path.join(files, "ICSharpCode.Decompiler.dll"), "modified");
   assert.equal(Tool.resolveTool({ userDataDir: context.userDataDir, version: TOOL_VERSION }), null);
@@ -39,34 +49,28 @@ test("FNA decompiler reuses verified tool files offline and rejects tool tamperi
 test("FNA decompiler checks package identity before extraction and publishes nothing on failure", async t => {
   const { context } = fixture(t); let extracted = false;
   context.confirmRuntimeInstall = async () => true;
-  await assert.rejects(Tool.ensureTool(context, TOOL_VERSION, { downloadToFile: async (_url, file) => { fs.writeFileSync(file, "different package"); },
-    extractPackage() { extracted = true; } }), /checksum/);
+  serve(t, context, () => "different package");
+  await assert.rejects(Tool.ensureTool(context, TOOL_VERSION, { extractPackage() { extracted = true; } }), /checksum/);
   assert.equal(extracted, false);
   const parent = path.join(context.userDataDir, "runtimes", "fna-tools", "ilspy");
   assert.deepEqual(fs.readdirSync(parent), []);
 });
 
 test("ILSpy download consent precedes installation and cancellation leaves no tool files", async t => {
-  const { context } = fixture(t), plans = [];
-  await assert.rejects(Tool.ensureTool(context, TOOL_VERSION, {
-    downloadToFile: () => assert.fail("A context without consent cannot download")
-  }), { code: "ABORT_ERR" });
+  const { context } = fixture(t), plans = [], requests = Harness.network.requests.length;
+  await assert.rejects(Tool.ensureTool(context, TOOL_VERSION), { code: "ABORT_ERR" });
   context.confirmRuntimeInstall = async plan => { plans.push(plan); return { approved: false }; };
-  await assert.rejects(Tool.ensureTool(context, TOOL_VERSION, {
-    downloadToFile: () => assert.fail("A declined tool cannot download")
-  }), { code: "ABORT_ERR" });
+  await assert.rejects(Tool.ensureTool(context, TOOL_VERSION), { code: "ABORT_ERR" });
+  assert.equal(Harness.network.requests.length, requests, "Without consent nothing is downloaded");
   assert.equal(plans.length, 1); assert.equal(plans[0].label, "ILSpy"); assert.equal(plans[0].version, TOOL_VERSION);
   assert.equal(plans[0].confirmLabel, "Download and Continue");
   assert.equal(fs.existsSync(path.join(context.userDataDir, "runtimes", "fna-tools")), false);
 });
 
 test("C# decompilation resumes after a managed ILSpy install and reuses it offline", async t => {
-  const { root, entry, context } = fixture(t), pin = TOOL_FIXTURES[TOOL_VERSION], events = [];
-  const hashFile = Native.hashFile;
-  t.mock.method(Native, "hashFile", file => path.basename(file) === "ilspy.nupkg" ? pin.sha256 : hashFile(file));
+  const { root, entry, context } = fixture(t), events = [], pin = serve(t, context, () => { events.push("download"); return PACKAGE; });
   context.confirmRuntimeInstall = async plan => { events.push("consent"); assert.equal(plan.version, pin.version); return true; };
   const toolDependencies = {
-    downloadToFile: async (_url, archive) => { events.push("download"); fs.writeFileSync(archive, "package fixture"); },
     extractPackage: (_archive, files) => {
       for (const name of ["ilspycmd.dll", "ilspycmd.deps.json", "ilspycmd.runtimeconfig.json", "ICSharpCode.Decompiler.dll"]) {
         fs.writeFileSync(path.join(files, name), "package fixture " + name);
@@ -85,9 +89,8 @@ test("C# decompilation resumes after a managed ILSpy install and reuses it offli
   assert.deepEqual(events, ["consent", "download", "decompile"]);
   assert.equal(result.toolVersion, pin.version); assert.equal(fs.readFileSync(path.join(result.outputRoot, "Game.cs"), "utf8"), "source");
   context.confirmRuntimeInstall = () => assert.fail("Installed ILSpy cannot prompt");
-  toolDependencies.downloadToFile = () => assert.fail("Installed ILSpy cannot download");
   await Tool.decompile(entry, {}, context, dependencies);
-  assert.equal(events.at(-1), "decompile");
+  assert.deepEqual(events, ["consent", "download", "decompile", "decompile"], "Installed ILSpy is not downloaded again");
 });
 
 test("ILSpy reuses FNA's host and acquires only a CLR when FNA is absent", async t => {
@@ -111,13 +114,12 @@ test("ILSpy reuses FNA's host and acquires only a CLR when FNA is absent", async
 });
 
 test("concurrent game actions with separate download managers share one ILSpy installation", async t => {
-  const { context } = fixture(t), pin = TOOL_FIXTURES[TOOL_VERSION], hashFile = Native.hashFile;
-  t.mock.method(Native, "hashFile", file => path.basename(file) === "ilspy.nupkg" ? pin.sha256 : hashFile(file));
+  const { context } = fixture(t);
   let prompts = 0, downloads = 0;
+  const pin = serve(t, context, () => { downloads++; return PACKAGE; });
   const firstContext = { ...context, downloads: new DownloadManager(), confirmRuntimeInstall: async () => { prompts++; return true; } };
   const secondContext = { ...firstContext, downloads: new DownloadManager() };
   const dependencies = {
-    downloadToFile: async (_url, archive) => { downloads++; await new Promise(resolve => setImmediate(resolve)); fs.writeFileSync(archive, "package fixture"); },
     extractPackage: (_archive, files) => {
       for (const name of ["ilspycmd.dll", "ilspycmd.deps.json", "ilspycmd.runtimeconfig.json", "ICSharpCode.Decompiler.dll"]) fs.writeFileSync(path.join(files, name), name);
     }

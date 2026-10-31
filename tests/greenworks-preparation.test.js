@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -291,20 +293,19 @@ test("incomplete, mismatched or changed bridge payloads remain visible and canno
   assert.throws(() => Preparation.ensureGreenworksInstalled({ userDataDir, version: "0.103.1" }), error => error.code === "GREENWORKS_UNAVAILABLE");
 });
 
-test("a fresh exact bridge install fetches an empty release cache and publishes qualified files on the data volume", async t => {
+test("a fresh exact bridge install reads the release list and publishes qualified files on the data volume", async t => {
   const root = temporary(t), userDataDir = path.join(root, "data"), events = [], archive = Buffer.from("fixture archive");
-  const archiveHash = crypto.createHash("sha256").update(archive).digest("hex");
-  const dependencies = {
-    fetchReleases: async options => { events.push("lookup"); assert.equal(options.repo, "greenworks"); return [{ tag_name: "v0.22.0", assets: [
-      { name: "greenworks-v0.22.0-nw-v0.103.1-osx.zip", browser_download_url: "https://github.com/greenheartgames/greenworks/releases/download/v0.22.0/fixture.zip", digest: "sha256:" + archiveHash }
-    ] }]; },
-    download: async (_url, destination) => { events.push("download"); assert.equal(destination.startsWith(Runtime.installRootDir(userDataDir) + path.sep), true); write(destination, archive); },
-    extract: async (_file, destination) => { events.push("extract"); bridge(destination); }
-  };
-  const install = await Runtime.installVersion({ userDataDir, nwVersion: "0.103.1", releases: [], dependencies });
-  assert.deepEqual(events, ["lookup", "download", "extract"]); assert.equal(install.ready, true); assert.equal(install.greenworksVersion, "0.22.0");
+  const archiveHash = crypto.createHash("sha256").update(archive).digest("hex"), repository = "greenheartgames/greenworks";
+  const release = Harness.githubRelease(repository, "v0.22.0", ["greenworks-v0.22.0-nw-v0.103.1-osx.zip"]);
+  Object.assign(release.assets[0], { digest: "sha256:" + archiveHash, size: archive.length });
+  t.after(() => { Harness.network.routes = null; });
+  Harness.network.routes = { ...Harness.githubRoutes(repository, [release]), [release.assets[0].browser_download_url]: archive };
+  const dependencies = { extract: async (file, destination) => {
+    events.push("extract"); assert.equal(file.startsWith(Runtime.installRootDir(userDataDir) + path.sep), true); bridge(destination); } };
+  const install = await Runtime.installVersion({ userDataDir, nwVersion: "0.103.1", rows: [], dependencies });
+  assert.deepEqual(events, ["extract"]); assert.equal(install.ready, true); assert.equal(install.greenworksVersion, "0.22.0");
   assert.equal(install.archiveSha256, archiveHash); assert.equal(install.version, "0.103.1");
-  events.length = 0;
+  events.length = 0; Harness.network.routes = null;
   assert.equal((await Runtime.installVersion({ userDataDir, nwVersion: "0.103.1", dependencies })).ready, true);
   assert.deepEqual(events, []); assert.deepEqual(fs.readdirSync(Runtime.installRootDir(userDataDir)), ["0.103.1"]);
 });
@@ -312,12 +313,12 @@ test("a fresh exact bridge install fetches an empty release cache and publishes 
 test("failed bridge downloads and invalid candidate payloads preserve the existing selected installation", async t => {
   const root = temporary(t), userDataDir = path.join(root, "data"), directory = Runtime.getInstallDir({ userDataDir, nwVersion: "0.103.1" });
   const original = write(path.join(directory, "greenworks.js"), "existing incomplete installation"), before = digest(original);
-  const releases = [{ tag_name: "v0.22.0", assets: [{ name: "greenworks-v0.22.0-nw-v0.103.1-osx.zip", browser_download_url: "https://example.com/file.zip" }] }];
-  await assert.rejects(Runtime.installVersion({ userDataDir, nwVersion: "0.103.1", releases, dependencies: {
-    download: async () => { throw Error("Download failed"); }
-  } }), /Download failed/);
-  await assert.rejects(Runtime.installVersion({ userDataDir, nwVersion: "0.103.1", releases, dependencies: {
-    download: async (_url, destination) => write(destination, "fixture"),
+  const url = "https://github.com/greenheartgames/greenworks/releases/download/v0.22.0/greenworks-v0.22.0-nw-v0.103.1-osx.zip";
+  const rows = [{ version: "0.103.1", details: { greenworksVersion: "0.22.0" }, files: [{ name: path.basename(url), url }] }];
+  t.after(() => { Harness.network.routes = null; });
+  await assert.rejects(Runtime.installVersion({ userDataDir, nwVersion: "0.103.1", rows }), /Offline test request/);
+  Harness.network.routes = { [url]: "fixture" };
+  await assert.rejects(Runtime.installVersion({ userDataDir, nwVersion: "0.103.1", rows, dependencies: {
     extract: async (_file, destination) => write(path.join(destination, "greenworks.js"), "no native payload")
   } }), /native macOS bridge is missing/);
   assert.equal(digest(original), before); assert.deepEqual(fs.readdirSync(Runtime.installRootDir(userDataDir)), ["0.103.1"]);

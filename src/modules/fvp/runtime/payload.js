@@ -5,18 +5,26 @@ const MachO = require("../../shared/runtime/macho-load-commands");
 const { inspectMachOExports } = require("../../shared/runtime/macho-exports");
 const Host = require("../../shared/runtime/bundled-native");
 const { throwIfAborted } = require("../../shared/runtime/download-utils");
+const { locatePackaged } = require("../../shared/runtime/release-files");
+const Architecture = require("../../shared/runtime/architecture");
 
 const LIBRARY_RELATIVE = "RFVP.app/Contents/Frameworks/librfvp.dylib";
 const REQUIRED_EXPORTS = Object.freeze(["rfvp_run_entry", "rfvp_set_text_hidpi_enabled"]);
 
-function libraryPath(root) {
-  if (!path.isAbsolute(root) || fs.lstatSync(root).isSymbolicLink())
+// A release may place the app in a folder; the found path is recorded.
+const appPath = root => locatePackaged(root, "RFVP.app") || path.join(root, "RFVP.app");
+const libraryRelative = root => path.relative(root, path.join(path.dirname(appPath(root)), LIBRARY_RELATIVE)).split(path.sep).join("/");
+const recordedRelative = value => typeof value === "string" && (value === LIBRARY_RELATIVE || value.endsWith("/" + LIBRARY_RELATIVE)) &&
+  !value.split("/").some(part => !part || part === "." || part === "..");
+
+function libraryPath(root, relative = LIBRARY_RELATIVE) {
+  if (!path.isAbsolute(root) || fs.lstatSync(root).isSymbolicLink() || !recordedRelative(relative))
     throw new Error("RFVP requires its managed installation folder.");
-  const target = path.join(root, LIBRARY_RELATIVE);
+  const target = path.join(root, relative);
   // The selected payload must remain inside its managed installation, including
   // the directories between its root and the actual shared library.
   let current = root;
-  for (const segment of LIBRARY_RELATIVE.split("/")) {
+  for (const segment of relative.split("/")) {
     current = path.join(current, segment);
     const stat = fs.lstatSync(current);
     if (stat.isSymbolicLink()) throw new Error("RFVP library files cannot be symbolic links.");
@@ -25,11 +33,11 @@ function libraryPath(root) {
   return target;
 }
 
-function inspectLibrary(target, { signal, maximumMacOS } = {}) {
+function inspectLibrary(target, { signal, maximumMacOS, architecture } = {}) {
   const info = MachO.readMachOLoadCommands(target, { signal });
   MachO.assertSystemLibraryClosure(info, { fileType: 6, installName: "@rpath/librfvp.dylib", maximumMacOS });
-  if (!info.architectures.includes("arm64") || !info.architectures.includes("x86_64"))
-    throw new Error("RFVP requires a universal Apple Silicon and Intel shared library.");
+  if (architecture && !info.architectures.includes(architecture === "x64" ? "x86_64" : architecture))
+    throw new Error(`This RFVP download has no shared library for this Mac's ${architecture === "x64" ? "Intel" : "Apple Silicon"} CPU.`);
   const minimumMacOS = info.slices.map(slice => slice.minimumMacOS)
     .sort((a, b) => Host.versionAtLeast(a, b) ? -1 : 1)[0];
   return { architectures: info.architectures, minimumMacOS };
@@ -37,7 +45,8 @@ function inspectLibrary(target, { signal, maximumMacOS } = {}) {
 
 async function preparePayload({ unpacked, signal }, { inspectExports = inspectMachOExports, systemVersionSync = Host.systemVersionSync } = {}) {
   throwIfAborted(signal);
-  const target = libraryPath(unpacked), info = inspectLibrary(target, { signal, maximumMacOS: systemVersionSync() });
+  const relativePath = libraryRelative(unpacked), target = libraryPath(unpacked, relativePath);
+  const info = inspectLibrary(target, { signal, maximumMacOS: systemVersionSync(), architecture: Architecture.selectedArchitecture() });
   for (const arch of info.architectures) {
     throwIfAborted(signal);
     const exports = await inspectExports(target, { arch });
@@ -47,7 +56,7 @@ async function preparePayload({ unpacked, signal }, { inspectExports = inspectMa
   throwIfAborted(signal);
   const stat = fs.statSync(target);
   return { schemaVersion: 1, hostInterface: "rfvp-run-entry-v1", library: {
-    relativePath: LIBRARY_RELATIVE, bytes: stat.size, sha256: Native.hashFile(target),
+    relativePath, bytes: stat.size, sha256: Native.hashFile(target),
     ...info, requiredExports: [...REQUIRED_EXPORTS]
   } };
 }
@@ -61,11 +70,11 @@ function createPayloadResolver({ systemVersionSync = Host.systemVersionSync } = 
       const evidence = install.installationMetadata;
       const library = evidence?.library;
       if (evidence?.schemaVersion !== 1 || evidence.hostInterface !== "rfvp-run-entry-v1" ||
-        library?.relativePath !== LIBRARY_RELATIVE || !/^[a-f0-9]{64}$/.test(library.sha256 || "") ||
+        !recordedRelative(library?.relativePath) || !/^[a-f0-9]{64}$/.test(library.sha256 || "") ||
         !Number.isSafeInteger(library.bytes) || library.bytes < 32 ||
         JSON.stringify(library.requiredExports) !== JSON.stringify(REQUIRED_EXPORTS))
         throw new Error("RFVP library registration is incomplete. Remove and install this version again.");
-      const target = libraryPath(install.installDir), stat = fs.statSync(target);
+      const target = libraryPath(install.installDir, library.relativePath), stat = fs.statSync(target);
       if (stat.size !== library.bytes) throw new Error("RFVP library files changed. Remove and install this version again.");
       key = JSON.stringify([target, stat.dev, stat.ino, stat.mode, stat.size, stat.mtimeMs, stat.ctimeMs,
         library.sha256, library.minimumMacOS]);
@@ -83,7 +92,7 @@ function createPayloadResolver({ systemVersionSync = Host.systemVersionSync } = 
       }
       if (!Host.versionAtLeast(systemVersionSync(), info.minimumMacOS))
         return { install: null, minimumMacOS: info.minimumMacOS, reason: `This RFVP build requires macOS ${info.minimumMacOS}.` };
-      return { install: { ...install, dylibPath: target, appPath: path.join(install.installDir, "RFVP.app"),
+      return { install: { ...install, dylibPath: target, appPath: path.resolve(target, "../../.."),
         minimumMacOS: info.minimumMacOS, librarySha256: library.sha256 }, reason: null, minimumMacOS: info.minimumMacOS };
     } catch (error) {
       if (key) {
@@ -95,4 +104,4 @@ function createPayloadResolver({ systemVersionSync = Host.systemVersionSync } = 
   };
 }
 
-module.exports = { LIBRARY_RELATIVE, REQUIRED_EXPORTS, libraryPath, inspectLibrary, preparePayload, createPayloadResolver };
+module.exports = { LIBRARY_RELATIVE, REQUIRED_EXPORTS, appPath, libraryPath, inspectLibrary, preparePayload, createPayloadResolver };

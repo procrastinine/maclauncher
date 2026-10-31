@@ -1,23 +1,22 @@
 [
   {
     "id": "web-renderer-network",
-    "version": "1.0.1",
-    "arch": "universal",
+    "version": "1.1.0",
+    "arch": "arm64",
     "launcherArchitectures": [
-      "arm64",
-      "x64"
+      "arm64"
     ],
     "minimumMacOS": "11.0",
     "sourceRelative": null,
     "sourceSha256": "9d1a5fb91b8ea207ec117aaabb62a1b7925637cec958bd0b443b03f9eaa0631c",
-    "directoryRelative": "web-renderer-network/1.0.1/universal",
+    "directoryRelative": "web-renderer-network/1.1.0/arm64",
     "manifestRelative": "helper.json",
-    "manifestSha256": "c40db636ae0a4dc37ad8419320e9a634f654e6a9d25dbeaefbff0a75d7cb2154",
+    "manifestSha256": "01c7495c2080eb0e213455533c16385f8233d105d444a8e5e1dab2c448e4b98d",
     "files": [
       {
         "path": "helper.json",
-        "size": 795,
-        "sha256": "c40db636ae0a4dc37ad8419320e9a634f654e6a9d25dbeaefbff0a75d7cb2154",
+        "size": 769,
+        "sha256": "01c7495c2080eb0e213455533c16385f8233d105d444a8e5e1dab2c448e4b98d",
         "mode": 420
       },
       {
@@ -28,11 +27,54 @@
       },
       {
         "path": "renderer-network.node",
-        "size": 83680,
-        "sha256": "ac89774040ac05662f7a78f7d2933d8514926bfdf306ff6717c36f4c51b45abb",
+        "size": 50912,
+        "sha256": "87c33bf5154db50d97ceeefec650c102d85695f641e919a5b49acfdf83a57602",
         "mode": 493,
         "architectures": [
-          "arm64",
+          "arm64"
+        ]
+      }
+    ],
+    "notices": [
+      {
+        "name": "MacLauncher browser network helper",
+        "license": "MIT",
+        "path": "license.txt"
+      }
+    ]
+  },
+  {
+    "id": "web-renderer-network",
+    "version": "1.1.0",
+    "arch": "x64",
+    "launcherArchitectures": [
+      "x64"
+    ],
+    "minimumMacOS": "11.0",
+    "sourceRelative": null,
+    "sourceSha256": "9d1a5fb91b8ea207ec117aaabb62a1b7925637cec958bd0b443b03f9eaa0631c",
+    "directoryRelative": "web-renderer-network/1.1.0/x64",
+    "manifestRelative": "helper.json",
+    "manifestSha256": "858f2dee94f13c60171e6ffd5341826c9a51bd8d2a79e0f2369bca143dea479a",
+    "files": [
+      {
+        "path": "helper.json",
+        "size": 771,
+        "sha256": "858f2dee94f13c60171e6ffd5341826c9a51bd8d2a79e0f2369bca143dea479a",
+        "mode": 420
+      },
+      {
+        "path": "license.txt",
+        "size": 1081,
+        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
+        "mode": 420
+      },
+      {
+        "path": "renderer-network.node",
+        "size": 32032,
+        "sha256": "1510ebe85acaf1af90e8682ff2dfdaa744bacda7b02899b86c23983d97fff2bf",
+        "mode": 493,
+        "architectures": [
           "x86_64"
         ]
       }

@@ -7,6 +7,76 @@ const { prepareForLaunch } = require("../src/core/runtime-preparation");
 const Bundled = require("../src/modules/shared/runtime/bundled-native");
 const sha = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 
+test("project manager accepts a checksum-bound manifest source pointer with a distinct producer revision", {skip: process.platform !== "darwin"}, async t => {
+  const Catalog = require("../src/modules/shared/runtime/maclauncher-builds");
+  const {nativeTool, packageFor} = require("./helpers/managed-tool-fixture.cjs");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "project-manifest-source-"));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const binary = nativeTool(path.join(root, "native"), "", {architecture: process.arch}).binary;
+  const projectId = "sample-source-layout", repository = "procrastinine/maclauncher-builds";
+  const upstreamRevision = "a".repeat(40), producerRevision = "b".repeat(40);
+  for (const [name, sourceRelative, sourceDigest, expectedError, sourceRepository = repository, damageManifest = false] of [
+    ["legacy", null],
+    ["manifest", "manifest.json"],
+    ["wrong-digest", "manifest.json", "c".repeat(64)],
+    ["other-file", "files/LICENSE", sha(Buffer.from("fixture license\n"))],
+    ["unsafe-path", "../manifest.json"],
+    ["wrong-upstream", "manifest.json", undefined, undefined, "ExampleOwner/upstream"],
+    ["changed-manifest", "manifest.json", undefined, /manifest changed/, repository, true]
+  ]) await t.test(name, async () => {
+    const directory = path.join(root, name);
+    const fixture = packageFor(directory, {id: projectId, version: "1.0-" + name, architecture: process.arch, filesPrefix: "files/",
+      manifest: {managerId: projectId, platform: "darwin", upstreamRevision, provenance: {sourceRevision: upstreamRevision},
+        executableRelative: "bin/host", dependencies: [],
+        notices: [{name: "Fixture", license: "MIT", sourceUrl: "https://example.com/source", path: "LICENSE"}]},
+      entries: [{path: "bin/host", bytes: binary, mode: 0o755, architectures: [process.arch === "x64" ? "x86_64" : "arm64"]},
+        {path: "LICENSE", bytes: Buffer.from("fixture license\n"), mode: 0o644}]});
+    const {record} = fixture, container = path.join(directory, "archive-input");
+    const wrapperPath = path.join(container, "runtime-package.json"), wrapper = JSON.parse(fs.readFileSync(wrapperPath));
+    record.source = {repository: sourceRepository, revision: producerRevision};
+    record.sourceSha256 = sourceDigest || (sourceRelative ? record.manifestSha256 : record.sourceSha256);
+    Object.assign(wrapper, {sourceRelative, sourceSha256: record.sourceSha256});
+    fs.writeFileSync(wrapperPath, JSON.stringify(wrapper));
+    if (damageManifest) fs.appendFileSync(path.join(container, "files/manifest.json"), " ");
+    execFileSync("/usr/bin/tar", ["-czf", fixture.archive, "-C", container, "runtime-package.json", "files"]);
+    const archive = fs.readFileSync(fixture.archive);
+    Object.assign(record.asset, {sha256: sha(archive), bytes: archive.length});
+    let offline = false, requests = 0;
+    const options = {projectId, label: "Fixture layout", repository, manifestRelative: "manifest.json", sourceRelative: null,
+      filesPrefix: "files/", executableRelative: "bin/host",
+      validateManifest(manifest, selected) {
+        Bundled.validateRuntimeManifest(manifest, {managerId: projectId, version: selected.version, arch: selected.arch});
+      },
+      verifyPayload(selected) {
+        Bundled.verifyPayload(selected.root, selected.declaration);
+        execFileSync("/usr/bin/codesign", ["--verify", "--strict", selected.executablePath], {stdio: "pipe"});
+      },
+      dependencies: {systemVersionSync: () => "27.0", fetchUrlBuffer: async () => {
+        assert.equal(offline, false); requests++;
+        return {status: 200, body: Buffer.from(JSON.stringify(fixture.catalog))};
+      }, downloadToFile: async (_url, destination) => {assert.equal(offline, false); requests++; fs.copyFileSync(fixture.archive, destination);}}};
+    const manager = createProjectBuildManager(options), userDataDir = path.join(directory, "profile");
+    await manager.refreshCatalog({userDataDir, force: true});
+    if (expectedError) {
+      await assert.rejects(manager.installRuntime({userDataDir, version: record.version}), expectedError);
+      return;
+    }
+    const installed = await manager.installRuntime({userDataDir, version: record.version});
+    assert.equal(installed.version, record.version);
+    assert.equal(installed.installationMetadata.sourceIdentity.sourceRelative, sourceRelative);
+    assert.equal(installed.installationMetadata.sourceIdentity.declaredSourceSha256, record.sourceSha256);
+    assert.equal(installed.installationMetadata.sourceIdentity.upstreamRevision, upstreamRevision);
+    const selected = manager.resolveSelection({}, {}, userDataDir);
+    assert.equal(selected.ready, true);
+    assert.equal(selected.install.manifest.upstreamRevision, upstreamRevision);
+    assert.equal(selected.install.declaration.source.revision, producerRevision);
+    assert.notEqual(upstreamRevision, producerRevision);
+    offline = true; const count = requests;
+    assert.equal(createProjectBuildManager(options).resolveSelection({}, {}, userDataDir).ready, true);
+    assert.equal(requests, count);
+  });
+});
+
 test("module-selected paths reuse flat packages and separately delivered source without copies", t => {
   const { inspectPackage } = require("../src/modules/shared/runtime/project-build-manager");
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "project-executable-layout-"));
@@ -29,16 +99,15 @@ test("module-selected paths reuse flat packages and separately delivered source 
     const expectedSource = prefix ? sha(Buffer.from("separately published source")) : files[1].sha256;
     const record = { id: "sample", version: "1.0", minimumMacOS: "11.0", arch: "universal",
       manifestRelative: "manifest.json", manifestSha256: sha(bytes), sourceSha256: expectedSource };
-    let validated = false, calls = 0;
+    let validated = false, calls = 0, expectedRecord = record;
     const format = { projectId: "sample", manifestRelative: "manifest.json",
       sourceRelative: prefix ? () => { assert.equal(validated, true); return null; } : "source.tar.gz",
       filesPrefix: prefix ? () => { assert.equal(validated, true); return prefix; } : "",
       validateManifest(value, selected) {
         assert.equal(value.version, record.version);
-        if (selected.sourceSha256 !== expectedSource) throw new Error("The module's selected source identity changed.");
         validated = true;
       },
-      executableRelative(value, selected) { assert.equal(validated, true); assert.equal(selected, record); calls++; return value.executableRelative; } };
+      executableRelative(value, selected) { assert.equal(validated, true); assert.equal(selected, expectedRecord); calls++; return value.executableRelative; } };
     const selected = inspectPackage(directory, record, format);
     assert.equal(selected.executablePath, target);
     assert.equal(selected.payloadRoot, path.join(directory, prefix));
@@ -48,7 +117,19 @@ test("module-selected paths reuse flat packages and separately delivered source 
     assert.throws(() => inspectPackage(directory, record, format), /manifest changed/);
     assert.equal(calls, 1, "Untrusted metadata never reaches the executable selector");
     fs.writeFileSync(file, bytes);
-    assert.throws(() => inspectPackage(directory, { ...record, sourceSha256: "0".repeat(64) }, format), /selected source identity changed/);
+    expectedRecord = { ...record, sourceSha256: "0".repeat(64) };
+    const changedSourceMetadata = inspectPackage(directory, expectedRecord, format);
+    assert.equal(changedSourceMetadata.sourceIdentity.declaredSourceSha256, "0".repeat(64));
+    assert.equal(changedSourceMetadata.executablePath, target);
+    assert.equal(changedSourceMetadata.payloadRoot, selected.payloadRoot);
+    assert.equal(record.sourceSha256, expectedSource, 'Recording different source metadata does not mutate the original catalog row');
+    assert.equal(Bundled.verifyPayload(directory, changedSourceMetadata.declaration), true,
+      'A different source pointer does not invalidate intact executable and payload bytes');
+    const executableBytes = fs.readFileSync(target);
+    fs.writeFileSync(target, Buffer.alloc(executableBytes.length, 1));
+    assert.throws(() => Bundled.verifyPayload(directory, changedSourceMetadata.declaration), /checksum|permissions/);
+    fs.writeFileSync(target, executableBytes);
+    expectedRecord = record;
     assert.throws(() => inspectPackage(directory, record, { ...format, executableRelative: () => "../outside" }), /relative|unsafe|invalid/i);
     assert.throws(() => inspectPackage(directory, record, { ...format, filesPrefix: () => "../" }), /relative|unsafe|invalid/i);
   }

@@ -4,17 +4,18 @@ const os = require("node:os");
 const http = require("node:http");
 const crypto = require("node:crypto");
 const Native = require("../../shared/runtime/local-native");
-const { downloadToFile, throwIfAborted } = require("../../shared/runtime/download-utils");
+const { throwIfAborted } = require("../../shared/runtime/download-utils");
+const Upstream = require("../../shared/runtime/upstream");
+const { extractDmg } = require("../../shared/runtime/dmg");
 const { runTool, createToolRunner } = require("../tools");
 const { hashFile } = require("../inspect");
 
-// The vendor bootstrap URL is mutable. Build version and artifact digest are
-// independent; a changed upstream archive requires an explicit new artifact pin.
-const BOOTSTRAP = Object.freeze({ version: "2024.0.0.32", filename: "igor_osx-arm64.zip", url: "https://gms.yoyogames.com/igor_osx-arm64.zip",
-  bytes: 30832009, sha256: "850260ede5f591000533d760a2c0379bd753e5a6ebb0db30e1003c7957ca1599" });
-const BOOTSTRAPS = Object.freeze({ arm64: BOOTSTRAP, x64: Object.freeze({ version: "2024.0.0.32", filename: "igor_osx-x64.zip",
-  url: "https://gms.yoyogames.com/igor_osx-x64.zip", bytes: 32324796,
-  sha256: "1a5cadc5e0f2eac5eaf3d1aede08bd220b445bcbc54e19aae32642b3a88d2c18" }) });
+// The vendor replaces these downloads in place. A download is accepted by its
+// Igor files and YoYo Games' Developer ID signature; its version is read from
+// Igor.dll, and each installation is keyed by the archive's SHA-256.
+const BOOTSTRAPS = Object.freeze(Object.fromEntries(["arm64", "x64"].map(arch => [arch,
+  Upstream.vendor({ location: `https://gms.yoyogames.com/igor_osx-${arch}.zip`, teamIdentifier: "C9E7J7HL3D" })])));
+const HEADERS = { "User-Agent": "MacLauncher/1.0" };
 
 function ownedDirectory(userDataDir, relative) {
   if (typeof userDataDir !== "string" || !path.isAbsolute(userDataDir)) throw new Error("An absolute launcher data directory is required.");
@@ -47,113 +48,161 @@ function resolveBuild({ userDataDir, version, arch = process.arch }) {
   const release = discovered.family === "studio-1.4" ? require("./official-legacy").resolveBuild(version, discovered) : discovered;
   return { ...release, packages: Catalog.selectPackages(release, arch), hostArchitecture: arch };
 }
-function toolFiles(root, arch) {
-  const base = path.join("osx", arch);
-  for (const parent of [path.join(root, "osx"), path.join(root, base)]) {
-    const stat = fs.lstatSync(parent);
-    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("Igor tool directory is not an owned regular directory.");
+const isToolDirectory = directory => ["Igor", "Igor.dll"].every(name => fs.lstatSync(path.join(directory, name), { throwIfNoEntry: false })?.isFile());
+// The archive holds osx/<arch>/Igor and Igor.dll. A later archive may place
+// them deeper or elsewhere, so a bounded search follows the known path.
+function toolDirectory(root, arch) {
+  const known = path.join("osx", arch);
+  if (isToolDirectory(path.join(root, known))) return known;
+  const found = [];
+  (function search(relative, depth) {
+    if (depth > 4 || found.length > 8) return;
+    for (const item of fs.readdirSync(path.join(root, relative), { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      if (!item.isDirectory() || item.name === "__MACOSX" || item.name.startsWith(".")) continue;
+      const child = path.join(relative, item.name);
+      if (isToolDirectory(path.join(root, child))) found.push(child); else search(child, depth + 1);
+    }
+  })("", 0);
+  const selected = found.find(relative => relative.split(path.sep).includes(arch)) || (found.length === 1 ? found[0] : null);
+  if (!selected) throw new Error("The Igor download has no Igor tool for this Mac.");
+  return selected;
+}
+// Every file the vendor ships with Igor is recorded by size and SHA-256.
+function toolFiles(root, relativeDirectory) {
+  let current = root;
+  for (const part of relativeDirectory.split(path.sep)) {
+    current = path.join(current, part);
+    const stat = fs.lstatSync(current, { throwIfNoEntry: false });
+    if (!stat?.isDirectory() || stat.isSymbolicLink()) throw new Error("Igor tool directory is missing or not an owned regular directory.");
   }
-  const names = ["Igor", "Igor.dll", "Igor.pdb", "Igor.dll.config"];
-  if (JSON.stringify(fs.readdirSync(path.join(root, base)).sort()) !== JSON.stringify([...names].sort())) throw new Error("Igor installation contains unexpected tool files.");
-  return names.map(name => {
-    const relative = path.join(base, name), file = path.join(root, relative), stat = fs.lstatSync(file);
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 128 * 1024 ** 2) throw new Error("Igor tool files are not a bounded native installation.");
-    return { relative, bytes: stat.size, sha256: hashFile(file) };
+  const files = []; let bytes = 0;
+  (function walk(relative, depth) {
+    for (const name of fs.readdirSync(path.join(root, relative)).sort()) {
+      const child = path.join(relative, name), stat = fs.lstatSync(path.join(root, child));
+      if (stat.isDirectory() && !stat.isSymbolicLink() && depth < 8) { walk(child, depth + 1); continue; }
+      bytes += stat.size;
+      if (!stat.isFile() || stat.size > 128 * 1024 ** 2 || bytes > 1024 ** 3 || files.length >= 3000) throw new Error("Igor tool files are not a bounded native installation.");
+      files.push({ relative: child, bytes: stat.size, sha256: hashFile(path.join(root, child)) });
+    }
+  })(relativeDirectory, 0);
+  return files;
+}
+const sortedFiles = files => [...(files || [])].sort((a, b) => a.relative < b.relative ? -1 : a.relative > b.relative ? 1 : 0);
+// Public Igor installations live in tools/<archive-sha256>/. Their records
+// carry the version read from Igor.dll, so earlier installations keep resolving.
+function bootstrapStatus(directory, arch) {
+  if (fs.lstatSync(directory).isSymbolicLink()) throw new Error("Igor installation path is a symlink.");
+  const record = JSON.parse(fs.readFileSync(path.join(directory, "tool.json"), "utf8"));
+  const relative = record.toolDirectory || path.join("osx", arch);
+  if (path.isAbsolute(relative) || relative.split(path.sep).includes("..")) throw new Error("Igor tool directory escapes its installation.");
+  const build = require("./official-tool-version").readIgorVersion(path.join(directory, relative, "Igor.dll"));
+  if (record.version !== build.version || record.archiveSha256 !== path.basename(directory) || record.architecture !== arch ||
+    JSON.stringify(sortedFiles(record.files)) !== JSON.stringify(toolFiles(directory, relative))) throw new Error("Igor tool identity or files changed.");
+  const native = Native.resolveLocalRuntime({ runtimePath: path.join(directory, relative, "Igor"), runtimeVersion: record.version,
+    upstreamRevision: record.archiveSha256, expectedSha256: record.binarySha256, arch });
+  return { ...record, ready: true, installed: true, status: "ready", toolPath: native.executablePath, installDir: directory };
+}
+function listBootstrapIgors({ userDataDir, arch = process.arch } = {}) {
+  if (!path.isAbsolute(userDataDir || "")) return [];
+  const root = path.join(userDataDir, "runtimes", "gamemaker-official", "tools"), sourceUrl = bootstrapForArch(arch).location;
+  let names = [];
+  try { names = fs.readdirSync(root).filter(name => /^[a-f0-9]{64}$/.test(name)).sort().slice(0, 64); } catch {}
+  return names.flatMap(name => {
+    const directory = path.join(root, name);
+    let record = null;
+    try { record = JSON.parse(fs.readFileSync(path.join(directory, "tool.json"), "utf8")); } catch {}
+    if (record && record.architecture !== arch) return [];
+    try { return [{ sourceUrl, ...bootstrapStatus(directory, arch) }]; } catch (error) {
+      return [{ version: typeof record?.version === "string" ? record.version : null, architecture: arch, ready: false, installed: false,
+        status: "damaged", sourceUrl, archiveSha256: name, reason: error.message }];
+    }
   });
 }
 function getIgorStatus({ userDataDir, arch = process.arch, toolVersion } = {}) {
-  const pin = bootstrapForArch(arch), Tools = require("./official-tools");
-  toolVersion = toolVersion || Tools.getSelectedIgorVersion({ userDataDir }) || pin.version;
-  if (toolVersion !== pin.version) return Tools.getLocalIgorStatus({ userDataDir, arch, toolVersion });
-  const version = pin.version;
-  const directory = path.join(userDataDir || "", "runtimes", "gamemaker-official", "tools", pin.sha256);
-  try {
-    if (!userDataDir || !path.isAbsolute(userDataDir) || fs.lstatSync(directory).isSymbolicLink()) throw new Error("Choose an absolute launcher data directory.");
-    const record = JSON.parse(fs.readFileSync(path.join(directory, "tool.json"), "utf8"));
-    const build = require("./official-tool-version").readIgorVersion(path.join(directory, "osx", arch, "Igor.dll"));
-    if (record.version !== version || build.version !== version || record.archiveSha256 !== pin.sha256 || record.architecture !== arch ||
-      JSON.stringify(record.files) !== JSON.stringify(toolFiles(directory, arch))) throw new Error("Igor tool identity or files changed.");
-    const native = Native.resolveLocalRuntime({ runtimePath: path.join(directory, "osx", arch, "Igor"), runtimeVersion: version,
-      upstreamRevision: pin.sha256, expectedSha256: record.binarySha256, arch });
-    return { ...record, ready: true, installed: true, status: "ready", toolPath: native.executablePath, installDir: directory, sourceUrl: pin.url };
-  } catch (error) { return { version, ready: false, installed: false, status: fs.existsSync(directory) ? "damaged" : "missing",
-    architecture: arch, sourceUrl: pin.url, archiveSha256: pin.sha256, reason: error.message }; }
+  const bootstrap = bootstrapForArch(arch), Tools = require("./official-tools");
+  const installs = listBootstrapIgors({ userDataDir, arch });
+  const version = toolVersion || Tools.getSelectedIgorVersion({ userDataDir });
+  if (version) {
+    const match = installs.find(item => item.version === version && item.ready) || installs.find(item => item.version === version);
+    if (match) return match;
+    const local = Tools.getLocalIgorStatus({ userDataDir, arch, toolVersion: version });
+    // A saved choice with no installation left falls back to the public download.
+    if (toolVersion || local.status !== "missing") return local;
+  }
+  const { versionCompare } = require("./official-catalog");
+  return installs.filter(item => item.ready).sort((a, b) => versionCompare(b.version, a.version))[0] ||
+    { version: null, architecture: arch, ready: false, installed: false, status: "missing", sourceUrl: bootstrap.location, reason: "Igor is not installed." };
 }
-async function ensureIgor({ userDataDir, arch = process.arch, toolVersion, signal, onProgress, download = downloadToFile, runProcess,
+async function ensureIgor({ userDataDir, arch = process.arch, toolVersion, signal, onProgress, runProcess,
   prerequisiteContext, confirmRuntimeInstall, logger } = {}) {
   if (process.platform !== "darwin") throw new Error("Official native Igor requires macOS.");
   runProcess ||= createToolRunner({ prerequisiteContext: { confirmRuntimeInstall, logger, signal, onProgress, ...prerequisiteContext } });
-  const pin = bootstrapForArch(arch);
+  const bootstrap = bootstrapForArch(arch);
   const Tools = require("./official-tools");
-  toolVersion = toolVersion || Tools.getSelectedIgorVersion({ userDataDir }) || pin.version;
-  if (toolVersion !== pin.version) return Tools.installLocalIgor({ userDataDir, arch, toolVersion, runProcess, signal });
   const existing = getIgorStatus({ userDataDir, arch, toolVersion });
-  if (existing.ready) { Tools.selectIgorVersion(userDataDir, toolVersion); return existing; }
-  const archiveRoot = ownedDirectory(userDataDir, path.join("runtimes", "gamemaker-official", "tool-artifacts", pin.sha256));
-  const archive = path.join(archiveRoot, pin.filename);
-  if (!fs.existsSync(archive)) {
-    const temporary = path.join(archiveRoot, `.download-${crypto.randomUUID()}.zip`);
-    try {
-      await download(pin.url, temporary, { signal, onProgress, headers: { "User-Agent": "MacLauncher/1.0" } });
-      checkArtifact(temporary, pin); fs.renameSync(temporary, archive);
-    } finally { fs.rmSync(temporary, { force: true }); }
-  }
-  checkArtifact(archive, pin);
+  if (existing.ready) { Tools.selectIgorVersion(userDataDir, existing.version); return existing; }
+  if (existing.version && !existing.archiveSha256) return Tools.installLocalIgor({ userDataDir, arch, toolVersion: existing.version, runProcess, signal });
   const tools = ownedDirectory(userDataDir, path.join("runtimes", "gamemaker-official", "tools"));
-  const destination = path.join(tools, pin.sha256), staging = fs.mkdtempSync(path.join(tools, ".igor-"));
+  const staging = fs.mkdtempSync(path.join(tools, ".igor-")), archive = `${staging}.zip`;
   try {
+    const [listed] = (await bootstrap.discover({ signal }))[0]?.files || [];
+    const { sha256: archiveSha256 } = await bootstrap.download(listed, archive, { signal, onProgress, headers: HEADERS });
     await runProcess("/usr/bin/ditto", ["-x", "-k", archive, staging], { timeout: 60000, ...(signal ? { signal } : {}) });
-    const executable = path.join(staging, "osx", arch, "Igor"); fs.chmodSync(executable, 0o755);
-    const build = require("./official-tool-version").readIgorVersion(path.join(staging, "osx", arch, "Igor.dll"));
-    if (build.version !== pin.version) throw new Error("Igor DLL build differs from the selected tool version.");
-    const native = Native.resolveLocalRuntime({ runtimePath: executable, runtimeVersion: existing.version, upstreamRevision: pin.sha256, arch });
-    const record = { ...build, version: pin.version, architecture: arch, archiveSha256: pin.sha256,
-      binarySha256: native.sha256, sourceUrl: pin.url, files: toolFiles(staging, arch), installedAt: new Date().toISOString() };
+    const relative = toolDirectory(staging, arch), executable = path.join(staging, relative, "Igor");
+    fs.chmodSync(executable, 0o755);
+    const files = toolFiles(staging, relative);
+    const build = require("./official-tool-version").readIgorVersion(path.join(staging, relative, "Igor.dll"));
+    const native = Native.resolveLocalRuntime({ runtimePath: executable, runtimeVersion: build.version, upstreamRevision: archiveSha256, arch });
+    await bootstrap.verifySigner(executable, { execute: runProcess, signal });
+    const record = { ...build, architecture: arch, archiveSha256, binarySha256: native.sha256, sourceUrl: bootstrap.location,
+      teamIdentifier: bootstrap.teamIdentifier, toolDirectory: relative, files, installedAt: new Date().toISOString() };
     fs.writeFileSync(path.join(staging, "tool.json"), JSON.stringify(record, null, 2) + "\n", { flag: "wx" });
     throwIfAborted(signal);
+    const destination = path.join(tools, archiveSha256);
     if (fs.existsSync(destination)) {
       if (fs.lstatSync(destination).isSymbolicLink()) throw new Error("Igor installation path is a symlink.");
       fs.rmSync(destination, { recursive: true, force: true });
     }
     fs.renameSync(staging, destination);
-    const status = getIgorStatus({ userDataDir, arch, toolVersion });
+    const status = getIgorStatus({ userDataDir, arch, toolVersion: build.version });
     if (!status.ready) throw new Error(status.reason);
-    Tools.selectIgorVersion(userDataDir, toolVersion);
+    Tools.selectIgorVersion(userDataDir, build.version);
     return status;
-  } finally { fs.rmSync(staging, { recursive: true, force: true }); }
+  } finally { fs.rmSync(staging, { recursive: true, force: true }); fs.rmSync(archive, { force: true }); }
 }
-async function cacheArtifacts({ userDataDir, build, arch = process.arch, signal, onProgress, download = downloadToFile }) {
+// Feed packages download once per feed identity (URL, size and signature). The
+// first download's SHA-256 is recorded, and a package YoYo Games replaced
+// downloads again.
+async function cacheArtifacts({ userDataDir, build, arch = process.arch, signal, onProgress }) {
   const root = ownedDirectory(userDataDir, path.join("runtimes", "gamemaker-official", "artifacts", build.version));
   const pins = build.packages;
   const observedPath = path.join(root, `observed-${arch}.json`);
   let observations = {};
   if (fs.existsSync(observedPath)) observations = JSON.parse(fs.readFileSync(observedPath, "utf8"));
   const total = pins.reduce((sum, item) => sum + item.bytes, 0);
+  const current = pin => observations[pin.filename]?.url === pin.url && observations[pin.filename].bytes === pin.bytes &&
+    observations[pin.filename].signature === pin.signature && fs.existsSync(path.join(root, pin.filename));
   let completed = 0;
   for (const pin of pins) {
     throwIfAborted(signal);
     const target = path.join(root, pin.filename);
-    if (!fs.existsSync(target)) {
+    if (!current(pin)) {
+      fs.rmSync(target, { force: true }); delete observations[pin.filename];
       const temporary = path.join(root, `.artifact-${crypto.randomUUID()}.zip`);
       try {
-        await download(pin.url, temporary, { signal, headers: { "User-Agent": "MacLauncher/1.0" },
+        const { sha256 } = await Upstream.download(Upstream.listedFile({ filename: pin.filename, url: pin.url, bytes: pin.bytes }), temporary, { signal, headers: HEADERS,
           onProgress: progress => onProgress?.({ downloaded: completed + progress.downloaded, total }) });
-        const stat = fs.lstatSync(temporary), sha256 = hashFile(temporary);
-        if (!stat.isFile() || stat.size !== pin.bytes || ((pin.sha256 || observations[pin.filename]?.sha256) && sha256 !== (pin.sha256 || observations[pin.filename].sha256))) throw new Error("Official package size or SHA-256 differs from its recorded artifact identity.");
         fs.renameSync(temporary, target);
-        observations[pin.filename] = { url: pin.url, bytes: pin.bytes, signature: pin.signature, sha256,
-          integrity: pin.sha256 ? "reviewed-sha256" : "official-https-observed-sha256" };
+        observations[pin.filename] = { url: pin.url, bytes: pin.bytes, signature: pin.signature, sha256, integrity: "official-https-observed-sha256" };
         const metadata = observedPath + "." + crypto.randomUUID();
         fs.writeFileSync(metadata, JSON.stringify(observations, null, 2) + "\n", { flag: "wx" }); fs.renameSync(metadata, observedPath);
       } finally { fs.rmSync(temporary, { force: true }); }
     }
-    if (!pin.sha256 && (!observations[pin.filename] || observations[pin.filename].url !== pin.url || observations[pin.filename].signature !== pin.signature)) throw new Error("Unpinned cached package has no matching official download provenance. Remove the incomplete cache before retrying.");
-    checkArtifact(target, { ...pin, sha256: pin.sha256 || observations[pin.filename].sha256 });
+    checkArtifact(target, { ...pin, sha256: observations[pin.filename].sha256 });
     completed += pin.bytes;
     onProgress?.({ downloaded: completed, total });
   }
-  return { root, packages: pins.map(pin => ({ ...pin, sha256: pin.sha256 || observations[pin.filename].sha256,
-    integrity: pin.sha256 ? "reviewed-sha256" : "official-https-observed-sha256" })) };
+  return { root, packages: pins.map(pin => ({ ...pin, sha256: observations[pin.filename].sha256, integrity: "official-https-observed-sha256" })) };
 }
 
 function pinnedFeed(baseUrl, build) {
@@ -183,21 +232,34 @@ async function servePinnedArtifacts(artifactsRoot, build) {
   return { url: `${url}/runtime.rss`, close: () => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }) };
 }
 
+// The runner app is "YoYo Runner.app"; a renamed or nested app is found by
+// its Mac_Runner executable.
+function runnerAppIn(root) {
+  const known = path.join(root, "YoYo Runner.app"), found = [];
+  const runner = app => { const stat = fs.lstatSync(path.join(app, "Contents", "MacOS", "Mac_Runner"), { throwIfNoEntry: false }); return stat?.isFile() && !fs.lstatSync(app).isSymbolicLink(); };
+  if (fs.existsSync(known) && runner(known)) return known;
+  (function search(directory, depth) {
+    for (const item of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (!item.isDirectory() || item.name === "__MACOSX" || item.name.startsWith(".")) continue;
+      const child = path.join(directory, item.name);
+      if (item.name.endsWith(".app")) { if (runner(child)) found.push(child); } else if (depth < 2) search(child, depth + 1);
+    }
+  })(root, 0);
+  if (found.length !== 1) throw new Error("Official disk image has no YoYo Runner app.");
+  return found[0];
+}
+// The shared extractor mounts the image, copies its visible files and detaches.
 async function extractRunnerApp(diskImage, destination, { runProcess = runTool, version } = {}) {
-  const mount = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-official-dmg-"));
-  let attached = false;
+  const volume = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-official-dmg-"));
   try {
-    await runProcess("/usr/bin/hdiutil", ["attach", "-readonly", "-nobrowse", "-mountpoint", mount, diskImage], { timeout: 60000 });
-    attached = true;
-    const app = path.join(mount, "YoYo Runner.app");
-    if (!fs.lstatSync(app).isDirectory() || fs.lstatSync(app).isSymbolicLink()) throw new Error("Official disk image has no YoYo Runner app.");
+    await extractDmg(diskImage, volume, undefined, { project: "GameMaker runtime" });
+    const app = runnerAppIn(volume);
     await runProcess("/usr/bin/ditto", [app, destination], { timeout: 60000 });
     const executable = path.join(destination, "Contents", "MacOS", "Mac_Runner");
     Native.resolveLocalRuntime({ runtimePath: executable, runtimeVersion: version, upstreamRevision: `vendor-runtime:${version}` });
     return executable;
   } finally {
-    if (attached) await runProcess("/usr/bin/hdiutil", ["detach", mount], { timeout: 60000 });
-    fs.rmSync(mount, { recursive: true, force: true });
+    fs.rmSync(volume, { recursive: true, force: true });
   }
 }
 
@@ -215,8 +277,8 @@ async function installOfficialVersion({ userDataDir, version, signal, onProgress
   if (build.family === "studio-1.4") return require("./official-legacy").installLegacyVersion({
     userDataDir, version, signal, onProgress, dependencies, runProcess
   });
-  const identity = await ensureIgor({ userDataDir, signal, onProgress, download: dependencies.downloadToFile, runProcess });
-  const artifacts = await cacheArtifacts({ userDataDir, build, signal, onProgress, download: dependencies.downloadToFile });
+  const identity = await ensureIgor({ userDataDir, signal, onProgress, runProcess });
+  const artifacts = await cacheArtifacts({ userDataDir, build, signal, onProgress });
   const selected = { ...build, packages: artifacts.packages };
   const staging = fs.mkdtempSync(path.join(root, ".install-"));
   let server;
@@ -227,13 +289,12 @@ async function installOfficialVersion({ userDataDir, version, signal, onProgress
       { cwd: identity.installDir, timeout: 10 * 60 * 1000, ...(signal ? { signal } : {}) });
     throwIfAborted(signal);
     const installedRoot = path.join(vendorRoot, `runtime-${version}`);
-    const diskImage = path.join(installedRoot, "mac", "Mac-YoYoRunner-Release.dmg");
+    const diskImage = require("./official").runnerDiskImage(installedRoot);
+    if (!diskImage) throw new Error("The installed official runtime has no Mac runner disk image.");
     const diskImageSha256 = hashFile(diskImage);
-    if (build.diskImageSha256 && diskImageSha256 !== build.diskImageSha256) throw new Error("Official runner disk image checksum changed.");
     const runner = path.join(staging, "YoYo Runner.app");
     const binary = await (dependencies.extractRunnerApp || extractRunnerApp)(diskImage, runner, { runProcess, version });
     const binarySha256 = hashFile(binary);
-    if (build.binarySha256 && binarySha256 !== build.binarySha256) throw new Error("Official runner executable checksum changed.");
     const inspection = require("./official").inspectOfficialRuntime(installedRoot);
     const record = { ...inspection, runtimeRoot: path.join(destination, "vendor", `runtime-${version}`),
       diskImages: inspection.diskImages.map(item => ({ ...item, path: path.join(destination, "vendor", `runtime-${version}`, path.relative(installedRoot, item.path)) })),
@@ -246,8 +307,7 @@ async function installOfficialVersion({ userDataDir, version, signal, onProgress
         executableSha256: identity.binarySha256, toolPath: identity.toolPath },
       packages: artifacts.packages.map(({ signature, ...item }) => item), source: "vendor-native-install",
       releaseSource: build.source, releaseFeedSha256: build.feedSha256 || null, channel: build.channel || null,
-      artifactsPinned: artifacts.packages.every(item => item.integrity === "reviewed-sha256"),
-      artifactIntegrity: artifacts.packages.every(item => item.integrity === "reviewed-sha256") ? "reviewed-sha256" : "official-https-feed-and-recorded-sha256",
+      artifactsPinned: false, artifactIntegrity: "official-https-feed-and-recorded-sha256",
       vendorSignatureVerified: false, vendorIntegrityVerified: false, runtimeReady: true, launchReady: true, gameplayQualified: false,
       qualification: "Runs compatible GameMaker Studio VM data. Software OpenGL is available for matching runner versions.",
       installedAt: new Date().toISOString() };
@@ -262,5 +322,5 @@ async function installOfficialVersion({ userDataDir, version, signal, onProgress
   }
 }
 
-module.exports = { BOOTSTRAP, BOOTSTRAPS, ownedDirectory, checkArtifact, cacheArtifacts, pinnedFeed,
-  servePinnedArtifacts, extractRunnerApp, installOfficialVersion, bootstrapForArch, resolveBuild, getIgorStatus, ensureIgor };
+module.exports = { BOOTSTRAPS, ownedDirectory, checkArtifact, cacheArtifacts, pinnedFeed, servePinnedArtifacts, extractRunnerApp, runnerAppIn, toolDirectory,
+  installOfficialVersion, bootstrapForArch, resolveBuild, listBootstrapIgors, getIgorStatus, ensureIgor };

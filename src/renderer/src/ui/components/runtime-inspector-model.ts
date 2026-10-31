@@ -1,5 +1,6 @@
 import type { ModuleManifest, RuntimeManagerState } from "../types";
 import { compareSemver, resolveRuntimeSection, resolveRuntimeSections } from "../ui-helpers";
+import { installedRuntimeAvailability } from "../../../../core/runtime-install-availability.mjs";
 
 function inspectorSections(moduleInfo: ModuleManifest | null, runtimeId: string, manager: RuntimeManagerState | null) {
   const policy = moduleInfo?.runtime?.inspectorSections?.[runtimeId];
@@ -21,7 +22,9 @@ export function resolveInspectorRuntimeSection(moduleInfo: ModuleManifest | null
   if (!moduleInfo?.runtime?.inspectorSections?.[runtimeId]) return fallback;
   const sections = inspectorSections(moduleInfo, runtimeId, manager);
   if (!sections.length) return fallback;
-  const installed = sections.flatMap(section => Array.isArray(section.installed) ? section.installed : []);
+  // Each installation keeps its own section, which Repair installs into.
+  const installed = sections.flatMap(section => (Array.isArray(section.installed) ? section.installed : [])
+    .map((row: any) => row && typeof row === "object" && !row.sectionId ? { ...row, sectionId: section.id } : row));
   const versions = [...new Set(sections.flatMap(section => catalogChoices(section.catalog)))];
   const labels = Object.assign({}, ...sections.map(section => ({ ...section.catalog?.versionLabels, ...section.versionLabels })));
   const versionRequirements = Object.assign({}, ...sections.map(section => section.catalog?.versionRequirements || {}));
@@ -30,11 +33,43 @@ export function resolveInspectorRuntimeSection(moduleInfo: ModuleManifest | null
       versionLabels: labels, versionRequirements } };
 }
 
+// Selectable versions are the locally installed ones plus an explicit saved
+// choice; acquiring other versions happens in the Runtimes window, never from
+// the inspector's per-game menu. A damaged installation stays listed so it can
+// be repaired; one this Mac cannot run is listed only as the saved choice.
 export function runtimeInspectorVersions(section: Record<string, any> | null, selectedVersion = ""): string[] {
   if (!section) return selectedVersion ? [selectedVersion] : [];
-  return [...new Set([...catalogChoices(section.catalog),
-    ...(section.installed || []).map((item: any) => typeof item?.version === "string" ? item.version : ""), selectedVersion])]
+  const installed = (Array.isArray(section.installed) ? section.installed : [])
+    .filter((item: any) => installedRuntimeAvailability(item) !== "unavailable")
+    .map((item: any) => typeof item?.version === "string" ? item.version : "")
+    .filter(Boolean);
+  return [...new Set([...installed, selectedVersion])]
     .filter(Boolean).sort((left, right) => compareSemver(right, left));
+}
+
+/** The installation of one version, of the given variant when one is given: a
+ * usable one first, then one that needs repair, then one this Mac cannot run. */
+export function runtimeInspectorInstall(section: Record<string, any> | null, version: string, variant = "") {
+  const rows = (Array.isArray(section?.installed) ? section.installed : [])
+    .filter((row: any) => version && row?.version === version && (!variant || row.variant === variant));
+  for (const availability of ["installed", "needsRepair", "unavailable"] as const) {
+    const install = rows.find((row: any) => installedRuntimeAvailability(row) === availability);
+    if (install) return { availability, install: install as Record<string, any> };
+  }
+  return { availability: null, install: null };
+}
+
+/** What Repair installs again for a damaged or incomplete installation: the
+ * same version, section, variant and build. A build named by an architecture
+ * variant carries its architecture in that variant. */
+export function runtimeInspectorRepair(section: Record<string, any> | null, version: string, variant = "") {
+  const { availability, install } = runtimeInspectorInstall(section, version, variant);
+  if (availability !== "needsRepair" || !install) return null;
+  const architectureVariant = typeof install.variant === "string" && install.variant.startsWith("architecture:");
+  const architecture = !architectureVariant && typeof install.architecture === "string" && install.architecture !== "universal"
+    ? install.architecture : undefined;
+  return { sectionId: String(install.sectionId || section?.id || "default"), version: String(install.version),
+    variant: typeof install.variant === "string" && install.variant ? install.variant : undefined, architecture };
 }
 
 export function runtimeInspectorVersionPatch(moduleInfo: ModuleManifest | null, runtimeId: string,
@@ -46,6 +81,9 @@ export function runtimeInspectorVersionPatch(moduleInfo: ModuleManifest | null, 
     (section.installed || []).some((item: any) => item.version === version) || catalogChoices(section.catalog).includes(version));
   const id = section?.selectionSectionId || section?.id;
   const value = Object.entries(moduleInfo.runtime?.managerSectionMap?.[runtimeId] || {}).find(([, sectionId]) => sectionId === id)?.[0];
+  // A version from a section without a choice of its own clears an earlier
+  // choice, so the automatic section follows that version.
   if (value) patch[key] = value;
+  else if (section) patch[key] = null;
   return patch;
 }

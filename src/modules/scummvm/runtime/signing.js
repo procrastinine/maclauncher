@@ -62,7 +62,9 @@ function signatureFlags(stderr) {
 async function prepareInstall({ unpacked, pin, signal }, { run = execute } = {}) {
   throwIfAborted(signal);
   const app = path.join(unpacked,'ScummVM.app');
-  if (readAppBundleVersion(app) !== pin.version) throw new Error('ScummVM app version does not match the selected release.');
+  // The app's own version is recorded; a build that names itself differently
+  // from the release list still installs.
+  const appVersion = readAppBundleVersion(app) || pin.version;
   const before = inventory(app,{inspectNative:true}), arch = process.arch === 'x64' ? 'x86_64' : process.arch;
   let minimumMacOS = '0.0';
   for (const image of before.natives) {
@@ -101,7 +103,7 @@ async function prepareInstall({ unpacked, pin, signal }, { run = execute } = {})
   if (after.files.some(file=>!originalPaths.has(file.path) && !file.path.includes('/_CodeSignature/')))
     throw new Error('ScummVM signing added a non-signature file.');
   throwIfAborted(signal);
-  return { appVersion:pin.version, architectures:before.natives.find(image=>image.path==='Contents/MacOS/scummvm').architectures,
+  return { appVersion, architectures:before.natives.find(image=>image.path==='Contents/MacOS/scummvm').architectures,
     minimumMacOS, publisherTreeSha256:before.sha256, signedTreeSha256:after.sha256,
     signing:{policy:POLICY,identity:'-',hardenedRuntime:false,nativeFiles} };
 }
@@ -117,7 +119,7 @@ async function repairLegacyInstallation(install, { signal, pin: selectedPin, pre
   const publisherUrl = require('./catalog').SOURCE_URL + record.version + '/' + filename;
   if (record.source !== 'download' || record.provenanceVerified !== true || record.integritySource !== 'publisher-sha256' ||
       record.version !== install.version || pin?.version !== record.version || selectedPin?.version !== record.version ||
-      selectedPin.upstreamRevision !== record.upstreamRevision || selectedPin.asset?.sha256 !== record.archiveSha256 ||
+      selectedPin.asset?.sha256 !== record.archiveSha256 ||
       record.upstreamRevision !== pin.upstreamRevision || pin.asset?.filename !== filename || pin.asset?.url !== publisherUrl ||
       record.assetUrl !== publisherUrl || !/^[a-f0-9]{64}$/.test(record.archiveSha256 || '') || record.archiveSha256 !== pin.asset.sha256 ||
       !/^[a-f0-9]{64}$/.test(record.binarySha256 || '') || Native.hashFile(install.executablePath) !== record.binarySha256)

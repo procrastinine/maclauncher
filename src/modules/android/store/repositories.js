@@ -1,7 +1,7 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
 const { Worker } = require("node:worker_threads");
-const HTTP = require("undici");
-const { Readable, Transform } = require("node:stream"), { pipeline } = require("node:stream/promises");
+const Upstream = require("../../shared/runtime/upstream");
+const { decodeResponseBody } = require("../../shared/runtime/download-utils");
 const { packageName, versionCode, ARCHITECTURES, ANDROID_SDKS } = require("./protocol");
 const { readApkIdentity } = require("./apk-identity");
 const { readJsonDocument, writeJsonAtomic } = require("../../../core/json-files");
@@ -15,7 +15,6 @@ const publicError = message => Object.assign(new Error(message), { playPublic: t
 const readJson = (file, fallback = null) => { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; } };
 const localText = (value, language = "en-US") => typeof value === "string" ? value : value?.[language] || value?.["en-US"] || value?.en || Object.values(value || {})[0] || "";
 const plainText = html => String(html || "").replace(/<[^>]*>/g, " ").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#(\d+);/g, (_, value) => String.fromCodePoint(Math.min(Number(value), 0x10ffff))).replace(/\s+/g, " ").trim();
-function sourceAppId(source, value) { if (!SOURCES[source]) throw publicError("Choose an Android repository."); return `${source}:${packageName(String(value).replace(new RegExp(`^${source}:`), ""))}`; }
 function parseSourceQuery(input) {
   const value = String(input || "").trim(), match = /^(fdroid|izzy):(.+)$/i.exec(value);
   if (match) return { source: match[1].toLowerCase(), packageName: packageName(match[2]), query: value };
@@ -35,21 +34,33 @@ function repoUrl(source, filename) {
   if (!relative || /[\\\x00-\x1f]/.test(relative) || relative.split("/").some(part => part === ".." || part === ".")) throw publicError("The repository supplied an invalid file path.");
   const url = new URL(relative, base); if (!url.href.startsWith(base)) throw publicError("The repository supplied an unsupported file address."); return url.href;
 }
-async function response(url, { signal, method = "GET", body, headers = {}, redirects = 0, timeout = 120000 } = {}) {
-  signal?.throwIfAborted(); const endpoint = new URL(url);
+// F-Droid and IzzyOnDroid. Each repository's entry.json names its index with
+// the index's size and SHA-256, and the index names every APK with its own.
+const REPOSITORIES = Upstream.service({ hosts: ["f-droid.org", "apt.izzysoft.de"] });
+function repositoryAddress(url) {
+  const endpoint = new URL(url);
   if (endpoint.protocol !== "https:" || !["f-droid.org", "search.f-droid.org", "apt.izzysoft.de"].includes(endpoint.hostname)) throw publicError("The Android repository address is unsupported.");
-  const result = await HTTP.fetch(endpoint, { method, body, headers, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout), redirect: "manual" });
-  if ([301, 302, 303, 307, 308].includes(result.status)) {
-    await result.body?.cancel(); const location = result.headers.get("location"); if (!location || redirects >= 5) throw publicError("The Android repository returned an invalid redirect.");
-    return response(new URL(location, endpoint).href, { signal, method: result.status === 303 ? "GET" : method, body: result.status === 303 ? undefined : body, headers, redirects: redirects + 1, timeout });
-  }
-  if (!result.ok) { await result.body?.cancel(); throw publicError(`The Android repository request failed (HTTP ${result.status}).`); }
-  return result;
+  return endpoint;
 }
-async function fetchData(url, options = {}) {
-  const result = await response(url, options), parts = []; let received = 0;
-  for await (const chunk of result.body) { received += chunk.length; if (received > (options.maxBytes || 4 * 1024 * 1024)) throw publicError("The Android repository response is too large."); parts.push(chunk); }
-  return Buffer.concat(parts, received);
+async function fetchData(url, { signal, method = "GET", body, headers = {}, maxBytes = 4 * 1024 * 1024 } = {}) {
+  signal?.throwIfAborted(); const endpoint = repositoryAddress(url);
+  let result;
+  try { result = await REPOSITORIES.request(endpoint.href, { signal, method, headers, maxBytes, ...(body === undefined ? {} : { body }) }); }
+  catch (error) { if (signal?.aborted) throw error; throw /byte limit/.test(error?.message || "") ? publicError("The Android repository response is too large.") : error; }
+  if (result.status < 200 || result.status >= 300) throw publicError(`The Android repository request failed (HTTP ${result.status}).`);
+  try { return decodeResponseBody(result.body, result.headers, { maxBytes }); }
+  catch (error) { throw /limit|large/i.test(error?.message || "") ? publicError("The Android repository response is too large.") : error; }
+}
+// Downloads a repository file checked against the size and SHA-256 the
+// repository lists; `failure` names an integrity mismatch.
+async function downloadListed({ url, name, bytes, sha256 }, output, { signal, onProgress, failure }) {
+  const listed = REPOSITORIES.file({ name, url: repositoryAddress(url).href, bytes, digest: { algorithm: "sha256", value: String(sha256).toLowerCase() } });
+  if (!listed) throw publicError("The Android repository address is unsupported.");
+  try { return await REPOSITORIES.download(listed, output, { signal, onProgress }); }
+  catch (error) {
+    if (signal?.aborted) throw error;
+    throw /its publisher lists/.test(error?.message || "") ? publicError(failure) : error?.statusCode ? publicError(`The Android repository request failed (HTTP ${error.statusCode}).`) : error;
+  }
 }
 function parseIndexPackage(file, packageId, { signal } = {}) {
   signal?.throwIfAborted();
@@ -100,7 +111,6 @@ function createRepositoryDownloads(options = {}) {
   if (!SOURCES[options.source] || !path.isAbsolute(options.userDataDir || "")) throw Error("An Android repository and launcher profile are required.");
   const source = options.source, descriptor = SOURCES[source], defaultDirectory = path.join(options.userDataDir, "external/downloads", source), cacheRoot = path.join(options.userDataDir, "external/catalogs", source);
   const state = { downloads: [], defaultDirectory }, emit = () => { if (!disposed) options.onChange?.(clone(state)); }, jobs = new Map(), catalogs = new Map(); let disposed = false, indexTask;
-  const request = options.fetchData || fetchData;
   function retireIndexes(current) {
     for (const name of fs.existsSync(cacheRoot) ? fs.readdirSync(cacheRoot) : []) {
       const file = path.join(cacheRoot, name);
@@ -112,13 +122,16 @@ function createRepositoryDownloads(options = {}) {
     if (!refresh && cachedFile && Date.now() - cached.fetchedAt < 24 * 60 * 60 * 1000 && fs.existsSync(cachedFile)) return cachedFile;
     if (indexTask) return indexTask;
     indexTask = (async () => {
-      const entry = JSON.parse((await request(`${descriptor.repo}entry.json`, { signal, maxBytes: 2 * 1024 * 1024 })).toString("utf8")), pin = entry.index;
+      const entry = JSON.parse((await fetchData(`${descriptor.repo}entry.json`, { signal, maxBytes: 2 * 1024 * 1024 })).toString("utf8")), pin = entry.index;
       if (!pin || !/^[a-f0-9]{64}$/i.test(pin.sha256) || !Number.isSafeInteger(pin.size) || pin.size < 1 || pin.size > 160 * 1024 * 1024) throw publicError("The repository supplied an invalid index reference.");
       fs.mkdirSync(cacheRoot, { recursive: true, mode: 0o700 }); const target = path.join(cacheRoot, `index-${pin.sha256}.json`);
       if (!fs.existsSync(target)) {
-        const body = await request(repoUrl(source, pin.name), { signal, maxBytes: pin.size });
-        if (body.length !== pin.size || crypto.createHash("sha256").update(body).digest("hex") !== pin.sha256.toLowerCase()) throw publicError("The Android repository index failed its integrity check.");
-        const temporary = `${target}.${crypto.randomUUID()}.tmp`; try { fs.writeFileSync(temporary, body, { mode: 0o600, flag: "wx" }); fs.renameSync(temporary, target); } finally { fs.rmSync(temporary, { force: true }); }
+        const temporary = `${target}.${crypto.randomUUID()}.tmp`;
+        try {
+          await downloadListed({ url: repoUrl(source, pin.name), name: path.basename(target), bytes: pin.size, sha256: pin.sha256 }, temporary,
+            { signal, failure: "The Android repository index failed its integrity check." });
+          fs.chmodSync(temporary, 0o600); fs.renameSync(temporary, target);
+        } finally { fs.rmSync(temporary, { force: true }); }
       }
       writeJsonAtomic(metadataFile, { entry, fetchedAt: Date.now() }); retireIndexes(target); return target;
     })(); try { return await indexTask; } finally { indexTask = null; }
@@ -136,10 +149,10 @@ function createRepositoryDownloads(options = {}) {
     const parsed = parseSourceQuery(query);
     if (parsed.packageName) { const { id, item } = await packageDetails(parsed.packageName, { signal }); return [normalizeRepositoryPackage(source, id, item).app]; }
     if (source === "fdroid") {
-      const body = JSON.parse((await request(`https://search.f-droid.org/api/search_apps?q=${encodeURIComponent(parsed.query)}`, { signal, maxBytes: 4 * 1024 * 1024 })).toString("utf8"));
+      const body = JSON.parse((await fetchData(`https://search.f-droid.org/api/search_apps?q=${encodeURIComponent(parsed.query)}`, { signal, maxBytes: 4 * 1024 * 1024 })).toString("utf8"));
       return (body.apps || []).flatMap(value => { try { const parsed = parseSourceQuery(value.url); if (parsed.source !== source || !parsed.packageName) return []; return [{ appId: `${source}:${parsed.packageName}`, packageName: parsed.packageName, name: value.name || parsed.packageName, summary: value.summary || "", iconUrl: value.icon || null, source, sourceLabel: descriptor.label, platforms: ["android"], owned: false, canAddToLibrary: false }]; } catch { return []; } }).slice(0, 100);
     }
-    const body = await request("https://apt.izzysoft.de/fdroid/index.php", { signal, method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ searchterm: parsed.query, limit: "100", doFilter: "1" }).toString(), maxBytes: 4 * 1024 * 1024 });
+    const body = await fetchData("https://apt.izzysoft.de/fdroid/index.php", { signal, method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ searchterm: parsed.query, limit: "100", doFilter: "1" }).toString(), maxBytes: 4 * 1024 * 1024 });
     return parseIzzySearch(body.toString("utf8"));
   }
   async function getVersions(value, opts = {}) {
@@ -150,10 +163,11 @@ function createRepositoryDownloads(options = {}) {
     const { item } = await packageDetails(id, opts), result = normalizeRepositoryPackage(source, id, item, { ...opts, architecture, androidSdk, defaultDirectory }); catalogs.set(key, result); return clone(result);
   }
   async function transfer(item, output, { signal, onBytes }) {
-    const result = await response(item.url, { signal }), hash = crypto.createHash("sha256"); let bytes = 0;
-    const meter = new Transform({ transform(chunk, _encoding, callback) { bytes += chunk.length; if (bytes > item.downloadSize) return callback(publicError("The APK exceeded its declared size.")); hash.update(chunk); onBytes?.(chunk.length); callback(null, chunk); } });
-    await pipeline(Readable.fromWeb(result.body), meter, fs.createWriteStream(output, { flags: "wx", mode: 0o600 }), { signal });
-    const sha256 = hash.digest("hex"); if (bytes !== item.downloadSize || sha256 !== item.sha256) throw publicError("The downloaded APK failed its integrity check."); return { size: bytes, sha256 };
+    let counted = 0;
+    const result = await downloadListed({ url: item.url, name: path.basename(output), bytes: item.downloadSize, sha256: item.sha256 }, output, { signal,
+      failure: "The downloaded APK failed its integrity check.", onProgress: ({ downloaded }) => { if (downloaded > counted) onBytes?.(downloaded - counted); counted = downloaded; } });
+    fs.chmodSync(output, 0o600);
+    return { size: result.bytes, sha256: result.sha256 };
   }
   function download(selection = {}) {
     const id = packageName(String(selection.appId || "").replace(new RegExp(`^${source}:`), "")), architecture = selection.architecture || "arm64", androidSdk = Number(selection.androidSdk ?? selection.sdk ?? 34);
@@ -172,7 +186,7 @@ function createRepositoryDownloads(options = {}) {
         record.downloadIdentity = createDownloadIdentity(duplicateRequest); const existing = await checkExistingDownload(duplicateRequest); signal.throwIfAborted(); if (existing) return await reuseCompletedDownload(record, existing, { signal, onChange: emit, onDownloaded: options.onDownloaded });
         const parent = path.resolve(selection.destination || path.join(defaultDirectory, id)), finalPath = path.join(parent, `${chosen.versionCode}-${record.id}`); fs.mkdirSync(parent, { recursive: true, mode: 0o700 }); stage = fs.mkdtempSync(path.join(fs.realpathSync(parent), ".android-repository-")); record.path = finalPath; record.importPath = path.join(finalPath, "base.apk"); record.total = chosen.downloadSize; record.status = "downloading"; emit();
         let lastEmit = 0;
-        const output = path.join(stage, "base.apk"), verified = await (options.downloadFile || transfer)(chosen, output, { signal, onBytes: count => { record.downloaded += count; if (Date.now() - lastEmit > 150) { lastEmit = Date.now(); emit(); } } });
+        const output = path.join(stage, "base.apk"), verified = await transfer(chosen, output, { signal, onBytes: count => { record.downloaded += count; if (Date.now() - lastEmit > 150) { lastEmit = Date.now(); emit(); } } });
         const identity = (options.readApkIdentity || readApkIdentity)(output); if (identity.packageName !== id || identity.versionCode !== chosen.versionCode || identity.split) throw publicError("The APK does not match its selected package and exact version code.");
         signal.throwIfAborted(); const metadata = { schema: 1, store: source, source, appId: id, packageName: id, name: record.name, platform: "android", architecture, androidSdk, buildId: chosen.versionCode, versionCode: chosen.versionCode, version: chosen.name, versionName: chosen.name, versionId: record.versionId, downloadIdentity: record.downloadIdentity,
           sha256: chosen.sha256, path: finalPath, importPath: record.importPath, complete: true, createdAt: record.createdAt, files: [{ filename: "base.apk", sha256: verified.sha256, size: verified.size }] };
@@ -190,4 +204,4 @@ function createRepositoryDownloads(options = {}) {
   async function dispose() { disposed = true; for (const value of jobs.values()) value.controller.abort(); await Promise.allSettled([...jobs.values()].map(value => value.promise)); }
   return { snapshot: () => clone(state), search, getVersions, download, cancel, markImported, dispose };
 }
-module.exports = { createRepositoryDownloads, normalizeRepositoryPackage, parseSourceQuery, parseIzzySearch, parseIndexPackage, sourceAppId, repoUrl, fetchData, SOURCES };
+module.exports = { createRepositoryDownloads, normalizeRepositoryPackage, parseSourceQuery, parseIzzySearch, parseIndexPackage, repoUrl, fetchData, SOURCES };

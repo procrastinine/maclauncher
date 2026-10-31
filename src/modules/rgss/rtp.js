@@ -8,7 +8,7 @@ const { probeInno } = require("../shared/installers/inno-header");
 const { runHelper } = require("../shared/installers/process");
 const SevenZip = require("../shared/runtime/sevenzip");
 const Bundled = require("../shared/runtime/bundled-native");
-const { downloadToFile } = require("../shared/runtime/download-utils");
+const Upstream = require("../shared/runtime/upstream");
 const { writeJsonAtomic } = require("../../core/json-files");
 const CATALOG = require("./rtp-catalog.json");
 
@@ -23,8 +23,9 @@ function immutable(value) {
   return value;
 }
 
-function validFiles(files, pack) {
-  if (!Array.isArray(files) || files.length !== pack.files) return false;
+// `identity` holds the recorded file count, bytes and dataset digest.
+function validFiles(files, identity) {
+  if (!Array.isArray(files) || files.length !== identity.files) return false;
   const names = new Set(); let bytes = 0;
   try {
     for (const file of files) {
@@ -34,8 +35,29 @@ function validFiles(files, pack) {
       if (names.has(name)) return false;
       names.add(name); bytes += file.size;
     }
-    return bytes === pack.bytes && dataset(files) === pack.datasetSha256;
+    return bytes === identity.bytes && dataset(files) === identity.datasetSha256;
   } catch { return false; }
+}
+
+// The publisher's downloads page links each RTP. A link is recognized by the
+// RPG Maker generation in its name; the catalog location serves when the page
+// names none.
+const DOWNLOADS = "https://www.rpgmakerweb.com/downloads";
+const GENERATIONS = Object.freeze({ Standard: /(?:^|[^a-z])xp(?:[^a-z]|$)/i, RPGVX: /(?:^|[^a-z])vx(?!\s*-?\s*ace)(?:[^a-z]|$)/i, RPGVXAce: /vx[\s_-]*ace/i });
+const source = Upstream.index({ locations: [DOWNLOADS], hosts: ["rpgmakerweb.com"], parse: ([page]) => {
+  const rows = [];
+  for (const match of page.text.matchAll(/https:\/\/[^"'\s<>]+?\/([^"'\s<>/]*rtp[^"'\s<>/]*\.(?:exe|zip))/gi)) {
+    const id = Object.keys(GENERATIONS).find(key => GENERATIONS[key].test(match[1]) && (key !== "RPGVX" || !GENERATIONS.RPGVXAce.test(match[1])));
+    if (id && !rows.some(row => row.version === id)) rows.push({ version: id, sourceUrl: DOWNLOADS, files: [{ name: match[1], url: match[0] }] });
+  }
+  return rows;
+} });
+async function packDownload(pack, signal) {
+  try {
+    const listed = (await source.discover({ signal })).find(row => row.version === pack.id)?.files[0];
+    if (listed) return listed;
+  } catch (error) { if (signal?.aborted) throw error; }
+  return Upstream.listedFile({ filename: pack.archive.file, url: pack.sourceUrl });
 }
 
 function validateCatalog(catalog) {
@@ -72,7 +94,7 @@ function readPointer(file) {
   catch (error) { if (["ENOENT", "ENOTDIR"].includes(error.code) || error instanceof SyntaxError) return null; throw error; }
 }
 
-function createRtpStore({ catalog = CATALOG, download = downloadToFile, execute = runHelper, resolveHelper = Inno.ensureHelper } = {}) {
+function createRtpStore({ catalog = CATALOG, download = (file, destination, options) => source.download(file, destination, options), execute = runHelper, resolveHelper = Inno.ensureHelper } = {}) {
   catalog = immutable(validateCatalog(structuredClone(catalog)));
   const packs = new Map(catalog.packs.map(pack => [pack.id, pack])), pending = new Map();
   function packFor(id) { const pack = packs.get(id); if (!pack) throw new Error("This RTP pack has no official download in MacLauncher."); return pack; }
@@ -84,19 +106,21 @@ function createRtpStore({ catalog = CATALOG, download = downloadToFile, execute 
     signal?.throwIfAborted();
     const pack = packFor(id), root = directory(userDataDir, pack);
     if (root) {
+      // Installed data is checked against the identity recorded at installation.
       const pointer = readPointer(path.join(root, "current.json"));
-      if (pointer?.schemaVersion === 1 && pointer.id === pack.id && pointer.version === pack.version && pointer.archiveSha256 === pack.archive.sha256 &&
-          pointer.datasetSha256 === pack.datasetSha256 && GENERATION.test(pointer.generation || "") && pointer.generation.startsWith(pack.datasetSha256 + "-") &&
-          validFiles(pointer.files, pack)) {
+      if (pointer?.schemaVersion === 1 && pointer.id === pack.id && pointer.version === pack.version && SHA256.test(pointer.archiveSha256 || "") &&
+          SHA256.test(pointer.datasetSha256 || "") && GENERATION.test(pointer.generation || "") && pointer.generation.startsWith(pointer.datasetSha256 + "-") &&
+          Array.isArray(pointer.files) && validFiles(pointer.files, { files: pointer.files.length, datasetSha256: pointer.datasetSha256,
+            bytes: pointer.files.reduce((sum, file) => sum + (Number(file?.size) || 0), 0) })) {
         const filesRoot = path.join(root, pointer.generation, "files");
         if (Bundled.realDirectory(filesRoot)) {
           try {
             const expected = pointer.files.map(file => ({ path: file.relative, size: file.size, sha256: file.sha256, identity: force ? null : file.identity }));
             const checked = await Inno.validateOutput(filesRoot, expected, { signal, cached: true });
             const files = checked.map(({ path: relative, ...file }) => ({ relative, ...file })).sort(ordered);
-            if (dataset(files) !== pack.datasetSha256 || files.reduce((sum, file) => sum + file.size, 0) !== pack.bytes) throw new Error("RTP data checksum changed.");
+            if (dataset(files) !== pointer.datasetSha256) throw new Error("RTP data checksum changed.");
             if (!readOnly && JSON.stringify(files) !== JSON.stringify(pointer.files)) writeJsonAtomic(path.join(root, "current.json"), { ...pointer, files });
-            return { id, version: pack.version, installVersion: pack.installVersion, path: filesRoot, datasetSha256: pack.datasetSha256, source: "official" };
+            return { id, version: pack.version, installVersion: pack.installVersion, path: filesRoot, datasetSha256: pointer.datasetSha256, source: "official" };
           } catch (error) { if (signal?.aborted || error.name === "AbortError") throw error; }
         }
       }
@@ -110,46 +134,46 @@ function createRtpStore({ catalog = CATALOG, download = downloadToFile, execute 
     return null;
   }
 
-  async function verifyFile(file, expected, signal) {
-    const checked = await Inno.hashFile(file, { signal });
-    if (checked.size !== expected.size || checked.sha256 !== expected.sha256) throw new Error("The RTP download checksum does not match its selected version.");
-    return checked;
-  }
-
+  // A ZIP download holds the installer: at its usual path, or wherever the
+  // publisher moves it, found by its Inno Setup header.
   async function unpackArchive(archive, target, pack, signal) {
-    if (pack.archive.kind === "inno") return archive;
+    if (!/\.zip$/i.test(archive)) return archive;
     const binary = SevenZip.resolveSevenZipBinary();
     if (!binary) throw new Error("The included archive reader is unavailable.");
     const listed = await execute(binary, ["l", "-ba", "-slt", archive], { signal, timeout: 15000, maximum: 1024 ** 2 });
-    const entries = SevenZip.parseSevenZipList(listed.stdout, archive), expected = new Map(pack.outerFiles.map(file => [file.path, file]));
-    const names = new Set();
+    const entries = SevenZip.parseSevenZipList(listed.stdout, archive), names = new Set();
+    if (entries.length > 64) throw new Error("The RTP archive contains too many files.");
     for (const entry of entries) {
       Inno.relative(entry.path);
-      const known = expected.get(entry.path), key = entry.path.normalize("NFC").toLowerCase();
-      if (!known || known.isDirectory !== entry.isDirectory || entry.isLink || names.has(key)) throw new Error("The RTP archive contains an unexpected file.");
+      const key = entry.path.normalize("NFC").toLowerCase();
+      if (entry.isLink || names.has(key)) throw new Error("The RTP archive contains an unexpected file.");
       names.add(key);
     }
-    if (pack.outerFiles.some(file => !file.isDirectory && !names.has(file.path.normalize("NFC").toLowerCase()))) throw new Error("The RTP archive is incomplete.");
     fs.mkdirSync(target, { mode: 0o700 });
     await execute(binary, ["x", "-y", `-o${target}`, archive], { signal, timeout: 60000, maximum: 1024 ** 2 });
-    const checked = await Inno.validateOutput(target, pack.outerFiles.filter(file => !file.isDirectory).map(file => ({ path: file.path, size: file.size })), { signal });
-    for (const file of checked) if (file.sha256 !== expected.get(file.path).sha256) throw new Error("The RTP installer checksum changed during extraction.");
-    return path.join(target, pack.setup);
+    const installers = entries.filter(entry => !entry.isDirectory && /\.exe$/i.test(entry.path)).sort((a, b) => Number(b.path === pack.setup) - Number(a.path === pack.setup))
+      .map(entry => path.join(target, entry.path));
+    const found = installers.find(file => { try { Inno.identity(file); return Boolean(probeInno(file)); } catch { return false; } });
+    if (!found) throw new Error("The RTP download does not contain the expected installer.");
+    return found;
   }
 
-  async function inspect(setup, pack, signal, helper) {
+  // A download that matches the catalog's checksum also matches its recorded
+  // installer file list; another download is read from its own installer.
+  async function inspect(setup, pack, signal, helper, known) {
     const probe = probeInno(setup);
     if (!probe) throw new Error("The RTP download does not contain the expected installer.");
     const sourceIdentity = Inno.identity(setup);
     const result = await execute(helper.inspector, ["--inspect-json", setup], { signal, timeout: 15000, maximum: 4 * 1024 ** 2 });
     if (Inno.identity(setup) !== sourceIdentity) throw new Error("The RTP installer changed during inspection.");
     const metadata = JSON.parse(result.stdout);
-    if (metadata.formatVersion !== pack.installerVersion || metadata.productVersion !== pack.version || digest(JSON.stringify(metadata.files)) !== pack.metadataSha256) throw new Error("The RTP installer file list does not match its selected version.");
+    if (known && (metadata.formatVersion !== pack.installerVersion || metadata.productVersion !== pack.version || digest(JSON.stringify(metadata.files)) !== pack.metadataSha256))
+      throw new Error("The RTP installer file list does not match its selected version.");
     const files = [], seen = new Map();
     for (const file of metadata.files) {
       const first = seen.get(file.path);
       if (first !== undefined && pack.collision?.path === file.path && files[first].size === pack.collision.sizes[0] && file.size === pack.collision.sizes[1]) {
-        // Only the pinned official XP installer permits this one duplicate.
+        // Only the XP installer's declared duplicate is permitted.
         // Inno's overwrite/version rules select the later image; the complete
         // app-files digest below also authenticates the resulting bytes.
         files[first] = file;
@@ -181,39 +205,43 @@ function createRtpStore({ catalog = CATALOG, download = downloadToFile, execute 
       const timer = setTimeout(() => controller.abort(new Error("The RTP download timed out.")), 10 * 60 * 1000); timer.unref();
       let tooLarge = false, unpublished;
       try {
-        const archive = path.join(stage, pack.archive.file);
-        await download(pack.sourceUrl, archive, { signal: controller.signal, onProgress: progress => {
-          if (progress.downloaded > pack.archive.size || progress.total != null && progress.total !== pack.archive.size) { tooLarge = true; controller.abort(); }
+        const file = await packDownload(pack, controller.signal), archive = path.join(stage, file.name);
+        await download(file, archive, { signal: controller.signal, onProgress: progress => {
+          if (progress.downloaded > LIMITS.bytes || progress.total != null && progress.total > LIMITS.bytes) { tooLarge = true; controller.abort(); }
           onProgress?.({ ...progress, phase: "downloading", label: pack.label });
         } });
-        if (tooLarge) throw new Error("The RTP download size does not match its selected version.");
-        await verifyFile(archive, pack.archive, controller.signal);
+        if (tooLarge) throw new Error("The RTP download exceeds its size limit.");
+        // The catalog's checksum identifies the known installer; a replaced
+        // installer is read from its own file list and its hash is recorded.
+        const archiveSha256 = (await Inno.hashFile(archive, { signal: controller.signal })).sha256, known = archiveSha256 === pack.archive.sha256;
         onProgress?.({ phase: "extracting", label: pack.label });
         const setup = await unpackArchive(archive, path.join(stage, "installer"), pack, controller.signal);
-        const { info } = await inspect(setup, pack, controller.signal, helper), output = path.join(stage, "output");
+        const { info } = await inspect(setup, pack, controller.signal, helper, known), output = path.join(stage, "output");
         fs.mkdirSync(output, { mode: 0o700 });
         await execute(helper.executable, ["--extract", "--silent", "--progress=false", "--color=false", `--collisions=${pack.collision ? "overwrite" : "error"}`, "--exclude-temp", "--output-dir", output, setup], { signal: controller.signal, timeout: 120000, maximum: 1024 ** 2 });
         await Inno.validateOutput(output, info.files, { signal: controller.signal });
         const filesRoot = path.join(stage, "files"); fs.renameSync(path.join(output, "app"), filesRoot);
         const appFiles = info.files.filter(file => file.path.startsWith("app/")).map(file => ({ path: file.path.slice(4), size: file.size }));
         let files = (await Inno.validateOutput(filesRoot, appFiles, { signal: controller.signal })).map(({ path: relative, ...file }) => ({ relative, ...file })).sort(ordered);
-        if (files.length !== pack.files || files.reduce((sum, file) => sum + file.size, 0) !== pack.bytes || dataset(files) !== pack.datasetSha256) throw new Error("Extracted RTP data does not match its selected version.");
+        const datasetSha256 = dataset(files);
+        if (!files.length || known && (files.length !== pack.files || files.reduce((sum, file) => sum + file.size, 0) !== pack.bytes || datasetSha256 !== pack.datasetSha256))
+          throw new Error("Extracted RTP data does not match its selected version.");
         function freeze(directory) {
           for (const name of fs.readdirSync(directory)) { const file = path.join(directory, name), stat = fs.lstatSync(file); if (stat.isDirectory()) freeze(file); else fs.chmodSync(file, 0o444); }
           fs.chmodSync(directory, 0o555);
         }
-        const generation = pack.datasetSha256 + "-" + crypto.randomUUID(), destination = path.join(root, generation);
+        const generation = datasetSha256 + "-" + crypto.randomUUID(), destination = path.join(root, generation);
         controller.signal.throwIfAborted();
         fs.mkdirSync(destination, { mode: 0o700 }); unpublished = destination;
         fs.renameSync(filesRoot, path.join(destination, "files"));
         freeze(path.join(destination, "files"));
         files = files.map(file => ({ ...file, identity: Inno.identity(path.join(destination, "files", file.relative)) }));
         fs.chmodSync(destination, 0o555);
-        writeJsonAtomic(path.join(root, "current.json"), { schemaVersion: 1, id, version: pack.version, archiveSha256: pack.archive.sha256,
-          datasetSha256: pack.datasetSha256, dataProfile: pack.dataProfile, sourceUrl: pack.sourceUrl, termsUrl: pack.termsUrl, generation, files });
+        writeJsonAtomic(path.join(root, "current.json"), { schemaVersion: 1, id, version: pack.version, archiveSha256, integrity: known ? "catalog-sha256" : "recorded-local",
+          datasetSha256, dataProfile: pack.dataProfile, sourceUrl: file.url, termsUrl: pack.termsUrl, generation, files });
         unpublished = null;
         onProgress?.({ phase: "ready", label: pack.label });
-        return { id, version: pack.version, installVersion: pack.installVersion, path: path.join(destination, "files"), datasetSha256: pack.datasetSha256, source: "official" };
+        return { id, version: pack.version, installVersion: pack.installVersion, path: path.join(destination, "files"), datasetSha256, source: "official" };
       } finally {
         clearTimeout(timer); signal?.removeEventListener("abort", abort); removeTemporary(stage); if (unpublished) removeTemporary(unpublished);
       }
@@ -254,4 +282,4 @@ function createRtpStore({ catalog = CATALOG, download = downloadToFile, execute 
   return { catalog, packFor, resolvePack, resolveForEntry, installPack, getRuntimeRequirements };
 }
 
-module.exports = { ...createRtpStore(), createRtpStore, dataset, validateCatalog, LIMITS };
+module.exports = { ...createRtpStore(), createRtpStore, dataset, validateCatalog, LIMITS, source };

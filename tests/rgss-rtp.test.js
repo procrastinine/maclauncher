@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -43,9 +45,9 @@ function fixture(t) {
       bytes: files.reduce((sum, file) => sum + file.value.length, 0) };
   });
   const helper = { version: "fixture-v1", sourceRevision: "a".repeat(40), executable: "fixture-reader", inspector: "fixture-inspector" };
-  const download = async (url, dest, { signal, onProgress }) => {
-    signal?.throwIfAborted(); calls.push(["download", url]);
-    fs.writeFileSync(dest, mode === "bad-download" ? Buffer.alloc(source.length) : source);
+  const download = async (file, dest, { signal, onProgress }) => {
+    signal?.throwIfAborted(); calls.push(["download", file.url]);
+    fs.writeFileSync(dest, mode === "bad-download" ? Buffer.alloc(source.length) : mode === "replaced" ? Buffer.concat([source, Buffer.from("reissued")]) : source);
     onProgress?.({ downloaded: source.length, total: source.length });
   };
   const execute = async (exe, args, { signal }) => {
@@ -195,6 +197,22 @@ for (const mode of ["bad-download", "metadata", "bad-data", "link"]) test(`inval
   assert.equal(await f.store.resolvePack({ userDataDir: f.userDataDir, id: "Standard" }), null);
 });
 
+test("a replaced RTP installer installs from its own file list and records its hashes", async t => {
+  const f = fixture(t); f.setMode("replaced");
+  const installed = await f.store.installPack({ userDataDir: f.userDataDir, id: "Standard" });
+  const pointer = JSON.parse(fs.readFileSync(path.join(path.dirname(path.dirname(installed.path)), "current.json")));
+  assert.equal(pointer.integrity, "recorded-local"); assert.notEqual(pointer.archiveSha256, f.packs[0].archive.sha256);
+  assert.equal((await f.store.resolvePack({ userDataDir: f.userDataDir, id: "Standard" })).path, installed.path);
+});
+
+test("RTP downloads follow the links on the publisher's downloads page", async t => {
+  t.after(() => { Harness.network.routes = null; });
+  Harness.network.routes = { "https://www.rpgmakerweb.com/downloads": ["RPGVXAce_RTP.zip", "vx_rtp102e.zip", "xp_rtp105e.exe", "rpg2003_rtp_installer.zip"]
+    .map(name => `<a href="https://assets.rpgmakerweb.com/${name}">RTP</a>`).join("") };
+  const rows = await Rtp.source.discover();
+  assert.deepEqual(rows.map(row => [row.version, row.files[0].name]), [["RPGVXAce", "RPGVXAce_RTP.zip"], ["RPGVX", "vx_rtp102e.zip"], ["Standard", "xp_rtp105e.exe"]]);
+});
+
 test("cancellation during extraction leaves no installed pointer or temporary tree", async t => {
   const f = fixture(t), controller = new AbortController(); f.setMode("wait");
   const pending = f.store.installPack({ userDataDir: f.userDataDir, id: "Standard", signal: controller.signal });
@@ -241,10 +259,10 @@ test("automatic config respects declared RTP order while manual and extra paths 
   assert.deepEqual(manual.RTP, [extra, one.path]);
 });
 
-test("existing MKXP-Z adapter installs RTP with a pack label without consulting gh or changing host selection", async t => {
+test("existing MKXP-Z adapter installs RTP with a pack label without querying GitHub or changing host selection", async t => {
   const f = fixture(t), events = [];
   t.mock.method(Rtp, "installPack", async input => { events.push(input); return { ready: true }; });
-  t.mock.method(MkxpzManager.core, "canUseGh", () => assert.fail("RTP acquisition cannot query GitHub"));
+  for (const method of ["fetchAvailableVersions", "fetchLatestAvailableVersions"]) t.mock.method(MkxpzManager.core, method, () => assert.fail("RTP acquisition cannot query GitHub"));
   const downloads = { runTask: (meta, runner) => { assert.equal(meta.label, "RPG Maker XP RTP"); assert.equal(meta.kind, "asset"); return runner({}); } };
   await MkxpzManager.installRuntime({ userDataDir: f.userDataDir, version: "rtp-standard-1.04", rtpPack: "Standard", downloads });
   assert.deepEqual([events[0].id, events[0].version], ["Standard", "rtp-standard-1.04"]);
@@ -267,8 +285,9 @@ test("shared installation service leaves MKXP-Z settings untouched after a numer
     payload: { rtpPack: "Standard", version: "rtp-standard-1.04" }, userDataDir: f.userDataDir,
     readSettings: () => stored, saveSettings: next => { commits++; stored = next; } });
   assert.equal(result.version, "1.04"); assert.equal(result.rtpPack, "Standard");
-  // MKXP-Z keeps no global default version, so installing an RTP pack writes no settings.
+  // Asset acquisition leaves an existing or unset runtime default unchanged.
   assert.deepEqual(stored, settings); assert.equal(commits, 0);
   assert.equal(MkxpzManager.updateSettingsAfterInstall(settings, result), undefined);
+  assert.equal(MkxpzManager.updateSettingsAfterInstall({}, result), undefined);
   assert.equal(MkxpzManager.updateSettingsAfterInstall(settings, { version: "1.04" }, { rtpPack: "Standard" }), undefined);
 });

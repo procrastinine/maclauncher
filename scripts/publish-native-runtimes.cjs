@@ -4,6 +4,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const B = require("../src/modules/shared/runtime/bundled-native");
 const { verifyPackages } = require("./verify-native-runtimes.cjs");
+const { preferredIncludedBuilds } = require("../src/modules/shared/runtime/included-helpers");
 
 function publishPackages({ sourceRoot, resourceRoot, supplementals, ...options }) {
   if (options.managerIds?.length && (typeof resourceRoot !== "string" || !resourceRoot.trim()))
@@ -15,11 +16,13 @@ function publishPackages({ sourceRoot, resourceRoot, supplementals, ...options }
   const architectures = options.architectures || [process.arch], maximumMacOS = options.maximumMacOS || "13.0";
   const supplementalOnly = Array.isArray(options.managerIds) && options.managerIds.length === 0;
   if (supplementalOnly && (!Array.isArray(supplementals) || !supplementals.length)) throw new Error("Supplemental publication needs an explicit nonempty resource list.");
-  const selectedSupplementals = supplementals || (!options.managerIds ? [...new Map(architectures.flatMap(arch =>
+  const supplementalCandidates = supplementals || (!options.managerIds ? [...new Map(architectures.flatMap(arch =>
     S.requirements({ arch, maximumMacOS }, options.dependencies)).map(item => [item.directoryRelative, item])).values()] : []);
-  if (selectedSupplementals.some(item => !architectures.some(arch => item.launcherArchitectures.includes(arch)))) throw new Error("Supplemental native resources do not cover a requested release CPU.");
+  if (supplementalCandidates.some(item => !architectures.some(arch => item.launcherArchitectures.includes(arch)))) throw new Error("Supplemental native resources do not cover a requested release CPU.");
+  const selectedSupplementals = [...new Map(architectures.flatMap(arch => preferredIncludedBuilds(supplementalCandidates, arch))
+    .map(item => [item.directoryRelative, item])).values()];
   const verifySupplementals = resourceRoot => architectures.forEach(arch => S.verifySupplementals({ resourceRoot, arch, maximumMacOS,
-    items: selectedSupplementals.filter(item => item.launcherArchitectures.includes(arch)), dependencies: options.dependencies }));
+    items: preferredIncludedBuilds(selectedSupplementals, arch), dependencies: options.dependencies }));
   const reviewed = supplementalOnly ? [] : verifyPackages({ ...options, resourceRoot: source });
   verifySupplementals(source);
   const prepared = [], committed = [];

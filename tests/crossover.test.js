@@ -10,6 +10,7 @@ const Detection = require("../src/modules/crossover/detect");
 const Module = require("../src/modules/crossover/main");
 const Manager = require("../src/modules/crossover/runtime/manager");
 const Launch = require("../src/modules/crossover/runtime/launch");
+const Sikarugir = require("../src/modules/crossover/sikarugir/provider");
 
 function fixture(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-crossover-test-"));
@@ -83,7 +84,8 @@ test("CrossOver finds nested game executables, respects deliberate selections an
   pe(path.join(bundle, "Contents", "Resources", "helper.exe"));
   assert.equal(Detection.findWindowsExecutable({ gamePath: bundle }), null);
   assert.equal(Detection.findWindowsExecutable({ gamePath: directory }).windowsExecutablePath, nested);
-  assert.equal(Detection.detectGame({ rootDir: game, inputPath: game, stat: fs.statSync(game) }).moduleData.executablePath, helper);
+  assert.equal(Detection.detectGame({ rootDir: game, inputPath: game, stat: fs.statSync(game) }), null, "an uninstaller never identifies a Windows game");
+  assert.equal(Detection.detectGame({ rootDir: game, inputPath: helper, stat: fs.statSync(helper) }).moduleData.executablePath, helper);
   const selected = pe(path.join(game, "Quest.exe"));
   assert.equal(Detection.detectGame({ rootDir: game, inputPath: game, stat: fs.statSync(game) }).moduleData.executablePath, selected);
   assert.equal(Detection.detectGame({ rootDir: game, inputPath: nested, stat: fs.statSync(nested) }).moduleData.executablePath, nested);
@@ -115,8 +117,123 @@ test("CrossOver excludes native app imports even beside unrelated Windows execut
   const entry = { gamePath, importPath: gamePath, contentRootDir: directory, moduleId: "generic-app" };
   assert.equal(Detection.findWindowsExecutable(entry), null);
   assert.equal(Detection.decorateEntry(entry).runtimeData.crossover.windowsExecutablePath, null);
-  assert.equal(Module.__test.hasWindowsExecutable({ ...entry,
-    runtimeData: { crossover: { windowsExecutablePath: unrelated, detectionComplete: true } } }), false);
+  assert.equal(Detection.supportsWindowsRuntimes({ ...entry,
+    runtimeData: { crossover: { windowsExecutablePath: unrelated, executableArchitecture: "x86", sourceRoot: directory, detectionComplete: true } } }), false);
+});
+
+test("Windows runtimes follow the recorded game location, not app bundles beside a Windows build", t => {
+  const directory = fixture(t);
+  // A Mac-only release keeps its content inside the app bundle, so it runs as that app.
+  const autorun = path.join(directory, "Novel-mac", "Novel.app", "Contents", "Resources", "autorun");
+  const bundled = pe(path.join(autorun, "Novel.exe"));
+  const macOnly = { name: "Novel", gamePath: path.dirname(path.dirname(path.dirname(autorun))), contentRootDir: autorun };
+  assert.equal(Detection.decorateEntry(macOnly, { inputPath: macOnly.gamePath }).runtimeData.crossover.windowsExecutablePath, null);
+  const forged = { ...macOnly, runtimeData: { crossover: { detectionComplete: true, windowsExecutablePath: bundled, executableArchitecture: "x86", sourceRoot: autorun } } };
+  assert.equal(Detection.cachedWindowsExecutable(forged), null, "a recorded location inside an app bundle never offers Windows runtimes");
+  assert.equal(Sikarugir.supportsEntry(forged), false);
+  // A PC release ships a Windows executable, a Linux script and a Mac app side by side.
+  const release = path.join(directory, "Novel-1.0-pc"), launcher = pe(path.join(release, "Novel.exe"));
+  fs.writeFileSync(path.join(release, "Novel.sh"), "#!/bin/sh\n");
+  pe(path.join(release, "Novel.app", "Contents", "Resources", "Novel.exe"));
+  for (const importPath of [release, path.join(release, "Novel.sh"), launcher]) {
+    const entry = Detection.decorateEntry({ name: "Novel", gamePath: release, contentRootDir: release }, { inputPath: importPath });
+    assert.equal(entry.runtimeData.crossover.windowsExecutablePath, launcher, importPath);
+    assert.equal(Sikarugir.supportsEntry(entry), true, importPath);
+  }
+  // An executable inside the app bundle does not count, even when selected.
+  const inBundle = path.join(release, "Novel.app", "Contents", "Resources", "Novel.exe");
+  assert.equal(Detection.findWindowsExecutable({ gamePath: release }, { selectedPath: inBundle })?.windowsExecutablePath, launcher);
+});
+
+test("Windows evidence searches the game's own folder and skips support programs", t => {
+  const directory = fixture(t), find = entry => Detection.findWindowsExecutable(entry)?.windowsExecutablePath || null;
+  // A data folder chosen as content root does not hide the launcher beside it.
+  const quest = path.join(directory, "Quest"), launcher = pe(path.join(quest, "Quest.exe"));
+  pe(path.join(quest, "data", "engine.exe")); pe(path.join(quest, "data", "UNINST.exe")); pe(path.join(quest, "Quest_v11_update.exe"));
+  const evidence = Detection.findWindowsExecutable({ name: "Quest", gamePath: quest, contentRootDir: path.join(quest, "data") });
+  assert.equal(evidence.windowsExecutablePath, launcher);
+  assert.equal(evidence.sourceRoot, quest);
+  // Uninstallers, crash handlers, redistributables and bundled interpreters are never the game.
+  const helpers = path.join(directory, "Helpers");
+  for (const name of ["unins000.exe", "UnityCrashHandler64.exe", "vcredist_x64.exe", "dotNetFx40_Full_setup.exe",
+    "lib/py3-windows-x86_64/pythonw.exe", "lib/py3-windows-x86_64/zsync.exe", "_CommonRedist/Game.exe", "jre/bin/javaw.exe"]) pe(path.join(helpers, name));
+  assert.equal(find({ gamePath: helpers }), null);
+  // A setup package that detection unpacks as the game is not the game's executable.
+  const packaged = path.join(directory, "Packaged"), setup = pe(path.join(packaged, "NovelSetup.exe"));
+  assert.equal(find({ gamePath: setup, contentRootDir: packaged, importPath: packaged }), null);
+  assert.equal(find({ gamePath: setup, contentRootDir: packaged, importPath: setup }), setup, "an imported file is a deliberate choice");
+  // Configuration tools and console wrappers stay eligible but rank below the game.
+  const configuration = pe(path.join(helpers, "Config.exe"));
+  assert.equal(find({ gamePath: helpers }), configuration);
+  pe(path.join(helpers, "Quest.console.exe"), { subsystem: 3 });
+  const game = pe(path.join(helpers, "Quest.exe"));
+  assert.equal(find({ name: "Quest", gamePath: helpers }), game);
+  assert.equal(Detection.findWindowsExecutable({ gamePath: helpers, importPath: configuration }).windowsExecutablePath, configuration,
+    "a deliberate selection still uses a helper");
+});
+
+test("Windows evidence for single-file games stays beside the file", t => {
+  const directory = fixture(t), find = entry => Detection.findWindowsExecutable(entry)?.windowsExecutablePath || null;
+  // A package file in a shared folder does not adopt unrelated programs.
+  const shared = path.join(directory, "Downloads"), packageFile = path.join(shared, "com.example.crossy.ipa");
+  fs.mkdirSync(shared); fs.writeFileSync(packageFile, "package");
+  pe(path.join(shared, "Other Game", "Game.exe")); pe(path.join(shared, "Unrelated.exe"));
+  const entry = { name: "Crossy Road", gamePath: packageFile, importPath: packageFile, contentRootDir: shared };
+  assert.equal(find(entry), null);
+  assert.equal(Detection.decorateEntry(entry, { inputPath: packageFile }).runtimeData.crossover.windowsExecutablePath, null);
+  // A Windows build of the same game beside it counts.
+  const build = pe(path.join(shared, "Crossy Road.exe"));
+  assert.equal(find(entry), build);
+  // A data file imported through its folder belongs to that folder, subfolders included.
+  const folder = path.join(directory, "Runner"), data = path.join(folder, "data.win");
+  const runner = pe(path.join(folder, "bin", "Runner.exe")); fs.writeFileSync(data, "FORM");
+  assert.equal(find({ name: "Something Else", gamePath: data, importPath: folder, contentRootDir: folder }), runner);
+  assert.equal(Detection.decorateEntry({ name: "Something Else", gamePath: data, contentRootDir: folder }, { inputPath: folder })
+    .runtimeData.crossover.windowsExecutablePath, runner, "detection passes the imported folder");
+  assert.equal(find({ name: "Something Else", gamePath: data, importPath: data, contentRootDir: folder }), null);
+});
+
+test("Windows runtimes follow the game's identity rather than the launcher file chosen for import", t => {
+  const directory = fixture(t), root = path.join(directory, "Visual Novel");
+  const executable = pe(path.join(root, "VisualNovel.exe"));
+  fs.writeFileSync(path.join(root, "VisualNovel.sh"), "#!/bin/sh\n");
+  const linux = path.join(root, "VisualNovel.x86_64"); fs.writeFileSync(linux, Buffer.from([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0]));
+  const script = Detection.decorateEntry({ gamePath: root, contentRootDir: root, importPath: path.join(root, "VisualNovel.sh") });
+  assert.equal(script.runtimeData.crossover.windowsExecutablePath, executable);
+  assert.equal(Detection.supportsWindowsRuntimes(script), true);
+  assert.equal(Sikarugir.supportsEntry(script), true);
+  // A native build that is itself the game keeps its native identity.
+  const native = { gamePath: linux, contentRootDir: root, importPath: linux };
+  assert.equal(Detection.isNativeImport(native), true);
+  assert.equal(Detection.decorateEntry(native).runtimeData.crossover.windowsExecutablePath, null);
+  // Imported as a folder, the same build shares that folder with its Windows build.
+  const folder = Detection.decorateEntry({ ...native, importPath: root });
+  assert.equal(folder.runtimeData.crossover.windowsExecutablePath, executable);
+  assert.equal(Sikarugir.supportsEntry(folder), true);
+});
+
+test("Windows runtime support reads only the recorded evidence, and Play finds renamed executables", t => {
+  const directory = fixture(t), root = path.join(directory, "Game"), executable = pe(path.join(root, "Game.exe"));
+  const entry = Detection.decorateEntry({ gamePath: root, contentRootDir: root, importPath: root });
+  const touched = [];
+  for (const name of ["statSync", "lstatSync", "readdirSync", "realpathSync", "openSync", "existsSync", "accessSync", "readFileSync"]) {
+    const original = fs[name];
+    t.mock.method(fs, name, function (file, ...rest) { if (String(file).startsWith(directory)) touched.push(name + " " + file); return original.call(this, file, ...rest); });
+  }
+  fs.renameSync(root, root + "-offline");
+  assert.equal(Detection.cachedWindowsExecutable(entry)?.windowsExecutablePath, executable, "a disconnected drive keeps the recorded executable");
+  assert.equal(Sikarugir.supportsEntry(entry), true);
+  // An entry saved before Windows evidence existed waits for its next refresh instead of searching.
+  const legacy = { gamePath: root, contentRootDir: root, importPath: root, runtimeData: {} };
+  assert.equal(Detection.cachedWindowsExecutable(legacy), null);
+  assert.equal(Sikarugir.supportsEntry({ ...entry, gamePath: undefined, contentRootDir: undefined,
+    runtimeData: { crossover: { ...entry.runtimeData.crossover, sourceRoot: undefined } } }), false, "evidence outside any recorded folder never counts");
+  assert.deepEqual(touched, [], "runtime support never reads the game's files");
+  t.mock.restoreAll();
+  fs.renameSync(root + "-offline", root);
+  const renamed = path.join(root, "Game 1.1.exe"); fs.renameSync(executable, renamed);
+  assert.equal(Detection.findWindowsExecutable(entry)?.windowsExecutablePath, renamed, "Play searches again when the recorded executable is gone");
+  assert.equal(Detection.decorateEntry(legacy).runtimeData.crossover.windowsExecutablePath, renamed, "refreshing records the current executable");
 });
 
 test("CrossOver records negative Windows evidence and does not inspect Linux trees when resolving support", t => {
@@ -126,7 +243,7 @@ test("CrossOver records negative Windows evidence and does not inspect Linux tre
   assert.equal(entry.runtimeData.crossover.windowsExecutablePath, null);
   fs.renameSync(directory, directory + "-moved");
   t.after(() => fs.rmSync(directory + "-moved", { recursive: true, force: true }));
-  assert.equal(Module.__test.hasWindowsExecutable(entry), false);
+  assert.equal(Detection.supportsWindowsRuntimes(entry), false);
 });
 
 test("CrossOver registers multiple local application paths and removal leaves each application installed", t => {
@@ -173,6 +290,64 @@ test("CrossOver automatic discovery is read-only and application updates retain 
   const wine = path.join(runtimePath, "Contents", "SharedSupport", "CrossOver", "bin", "wine");
   fs.rmSync(wine); fs.symlinkSync("/usr/bin/perl", wine);
   assert.throws(() => Manager.core.inspectApplication(runtimePath), /inside the selected application/);
+});
+
+test("CrossOver renderer floors follow installed libraries without rejecting ordinary Wine", t => {
+  const root = fixture(t), installation = { crossoverRoot: root };
+  const backend = require("../src/modules/crossover/runtime/backend-support");
+  const file = path.join(root, "lib64/apple_gptk/external/D3DMetal.framework/Versions/B/Resources/libdxccontainer.dylib");
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const bytes = Buffer.alloc(56);
+  bytes.writeUInt32LE(0xfeedfacf); bytes.writeUInt32LE(0x01000007, 4); bytes.writeUInt32LE(6, 12);
+  bytes.writeUInt32LE(1, 16); bytes.writeUInt32LE(24, 20);
+  bytes.writeUInt32LE(0x32, 32); bytes.writeUInt32LE(24, 36); bytes.writeUInt32LE(1, 40);
+  bytes.writeUInt32LE((15 << 16) | (4 << 8), 44);
+  fs.writeFileSync(file, bytes);
+  assert.equal(backend.minimumMacOS(installation, "d3dmetal"), "15.4.0");
+  const host = { hardwareArch: "arm64", macOSVersion: "15.3" };
+  assert.throws(() => Launch.buildEnvironment({ graphicsBackend: "d3dmetal" }, installation, root, root, { host }), /macOS 15\.4/);
+  assert.doesNotThrow(() => Launch.buildEnvironment({ graphicsBackend: "wined3d" }, installation, root, root, { host }));
+  assert.doesNotThrow(() => Launch.buildEnvironment({ graphicsBackend: "auto" }, installation, root, root, { host }));
+  assert.match(backend.reason(installation, "d3dmetal", { hardwareArch: "x64", macOSVersion: "27.0" }), /Apple Silicon/);
+  assert.equal(backend.reason(installation, "dxmt", { hardwareArch: "x64", macOSVersion: "14.0" }), null);
+  bytes.writeUInt32LE((15 << 16) | (4 << 8) | 2, 44);fs.writeFileSync(file, bytes);
+  assert.match(backend.reason(installation, "d3dmetal", { hardwareArch: "arm64", macOSVersion: "15.4.1" }), /macOS 15\.4\.2/);
+  assert.equal(backend.reason(installation, "d3dmetal", { hardwareArch: "arm64", macOSVersion: "15.4.2" }), null);
+  assert.equal(backend.reason(installation, "d3dmetal", { hardwareArch: null, macOSVersion: null }), null,
+    "unmeasured host facts do not become a negative compatibility result");
+});
+
+test("CrossOver graphics choices use the selected application's renderer requirements in game and global settings", t => {
+  const root = fixture(t), userDataDir = path.join(root, "profile"), appPath = app(path.join(root, "CrossOver.app"));
+  Manager.__test.writeRegistry(userDataDir, { applications: [], ignoredPaths: Manager.__test.AUTOMATIC_PATHS });
+  const install = Manager.importRuntime({ userDataDir, runtimePath: appPath });
+  const file = path.join(install.crossoverRoot, "lib64/apple_gptk/external/D3DMetal.framework/Versions/A/Resources/libdxccontainer.dylib");
+  const bytes = Buffer.alloc(56);
+  bytes.writeUInt32LE(0xfeedfacf); bytes.writeUInt32LE(0x01000007, 4); bytes.writeUInt32LE(6, 12);
+  bytes.writeUInt32LE(1, 16); bytes.writeUInt32LE(24, 20);
+  bytes.writeUInt32LE(0x32, 32); bytes.writeUInt32LE(24, 36); bytes.writeUInt32LE(1, 40);
+  bytes.writeUInt32LE((15 << 16) | (4 << 8), 44);
+  fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes);
+  const entry = { runtimeId: "crossover", runtimeData: { crossover: { version: install.version } } };
+  const context = { userDataDir, settings: { runtimes: { crossover: { defaultVersion: install.version } } } };
+  const values = host => Module.__test.graphicsBackendOptions(entry, context, { host }).graphicsBackends.map(row => row.value);
+  assert.deepEqual(values({ hardwareArch: "arm64", macOSVersion: "13.6" }), ["auto", "dxvk", "wined3d"]);
+  assert.deepEqual(values({ hardwareArch: "arm64", macOSVersion: "15.3" }), ["auto", "dxmt", "dxvk", "wined3d"]);
+  assert.deepEqual(values({ hardwareArch: "arm64", macOSVersion: "15.4" }), ["auto", "d3dmetal", "dxmt", "dxvk", "wined3d"]);
+  assert.deepEqual(values({ hardwareArch: "x64", macOSVersion: "27.0" }), ["auto", "dxmt", "dxvk", "wined3d"]);
+  // Make the requirement greater than this host to exercise the actual action
+  // dispatch without replacing the machine's capability query.
+  bytes.writeUInt32LE(99 << 16, 44); fs.writeFileSync(file, bytes);
+  const field = Module.manifest.runtime.entries.crossover.settings.fields.find(row => row.key === "graphicsBackend");
+  assert.equal(field.optionsAction, "listGraphicsBackends");
+  const provider = Module.runtimeProviders.find(row => row.runtimeId === "crossover");
+  for (const groups of [Module.actions[field.optionsAction](entry, {}, context),
+    provider.actions[field.optionsAction](entry, {}, context), Module.settingsActions[field.optionsAction]({}, context),
+    provider.settingsActions[field.optionsAction]({}, context)]) {
+    assert.equal(groups[field.optionsKey].some(row => row.value === "d3dmetal"), false);
+    assert.ok(groups[field.optionsKey].some(row => row.value === "auto"));
+    assert.ok(groups[field.optionsKey].some(row => row.value === "wined3d"));
+  }
 });
 
 test("CrossOver environment settings are launch-scoped, quoted as data and keep bottle paths owned", () => {
@@ -396,7 +571,7 @@ test("CrossOver transports trusted game effects through its vendor environment a
   for (const name of ["nvapi64", "nvngx"]) fs.writeFileSync(path.join(libraryRoot, name + ".dll"), Buffer.alloc(256));
   const installed = Manager.importRuntime({ userDataDir, runtimePath: application });
   const DLSS = require("../src/modules/crossover/dlss"), checkSelection = DLSS.checkSelection;
-  t.mock.method(DLSS, "checkSelection", (settings, options) => checkSelection(settings, { ...options, arch: "arm64", macOSVersion: "26.0" }));
+  t.mock.method(DLSS, "checkSelection", (settings, options) => checkSelection(settings, { ...options, hardwareArch: "arm64", macOSVersion: "26.0" }));
   const entry = Detection.decorateEntry({ gameId: "effects", gamePath: game, moduleId: "rgss" });
   const preparation = [];
   const run = async (_command, args, options) => {

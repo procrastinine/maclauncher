@@ -24,7 +24,8 @@ async function graphicsHardware(host = {}, { signal, read = readDisplays, now = 
   signal?.throwIfAborted();
   if (typeof host.physicalAppleGPU === "boolean") return { physicalAppleGPU: host.physicalAppleGPU, source: "provided" };
   if (host.gpuInfo) return { physicalAppleGPU: physicalAppleGpu(host.gpuInfo), source: "gpu-info" };
-  if (host.arch !== "arm64" || host.platform && host.platform !== "darwin") return { physicalAppleGPU: false, source: "host" };
+  const architecture = host.hardwareArch || require("../../../shared/runtime/host-capabilities").getHostCapabilities().hardwareArch;
+  if (architecture !== "arm64" || host.platform && host.platform !== "darwin") return { physicalAppleGPU: false, source: "host" };
   if (!cached || now() - cached.at >= CACHE_MS) {
     pending ||= Promise.resolve().then(read).catch(() => ({ physicalAppleGPU: false, source: "unavailable" }))
       .then(value => { cached = { value, at: now() }; return value; }).finally(() => { pending = null; });

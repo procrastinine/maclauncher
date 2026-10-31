@@ -2,7 +2,8 @@ const fs = require('node:fs'), path = require('node:path'), crypto = require('no
 const {spawn} = require('node:child_process'), {once} = require('node:events');
 const Writable = require('../shared/writable-input');
 const {confirmToolInstall} = require('../shared/runtime/tool-install');
-const {downloadToFile, createAbortError} = require('../shared/runtime/download-utils');
+const {createAbortError} = require('../shared/runtime/download-utils');
+const Upstream = require('../shared/runtime/upstream');
 const {runDownloadTask} = require('../shared/runtime/download-manager');
 const {environment} = require('../shared/runtime/macos-sandbox');
 const {acquireCatalogLock} = require('./catalog-lock');
@@ -151,10 +152,10 @@ async function prepare({context,image,expected,extractor,existingOnly=false},dep
       }
       if(!reused){
         const archive=path.join(staging,'system.zip');
-        await (dependencies.downloadToFile||downloadToFile)(image.url,archive,{signal,onProgress});
-        onProgress?.({detail:'Verifying…'});
-        const stat=await regular(archive);if(Number(stat.size)!==(image.bytes||image.size)||await hash(archive,signal)!==image.sha256)throw Error('The Android system image checksum did not match.');
-        context.signal?.throwIfAborted();
+        // The runtime payload names this exact original image; the download is
+        // checked against its size and SHA-256.
+        await Upstream.download(Upstream.listedFile({filename:path.basename(new URL(image.url).pathname),url:image.url,bytes:image.bytes||image.size,sha256:image.sha256}),archive,{signal,onProgress});
+        await regular(archive);context.signal?.throwIfAborted();
         onProgress?.({detail:'Preparing…'});
         const sparse=path.join(staging,'build.sparseimage'),building=path.join(staging,'build');
         await run('/usr/bin/hdiutil',['create','-size','16g','-type','SPARSE','-fs','Case-sensitive APFS','-volname','Android System','-o',sparse],{context,timeout:120000});

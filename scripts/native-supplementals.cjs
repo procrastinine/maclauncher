@@ -64,7 +64,7 @@ function declarations(dependencies) {
   return items;
 }
 function requirements(config, dependencies) {
-  return declarations(dependencies).filter(item => item.launcherArchitectures.includes(config.arch))
+  return require('../src/modules/shared/runtime/included-helpers').preferredIncludedBuilds(declarations(dependencies), config.arch)
     .sort((a, b) => a.directoryRelative.localeCompare(b.directoryRelative));
 }
 function validateInventory(items, config, dependencies) {

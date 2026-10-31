@@ -1,6 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { createPinnedNativeManager } = require("../../shared/runtime/pinned-native-manager");
+const { createPinnedNativeManager, upstreamPins } = require("../../shared/runtime/pinned-native-manager");
 const { runDownloadTask } = require("../../shared/runtime/download-manager");
 const { buildRuntimeDownloadMeta } = require("../../shared/runtime/runtime-downloads");
 const Catalog = require("./catalog");
@@ -10,8 +10,8 @@ const Custom = require("../../shared/runtime/custom-runtime");
 
 function createManager({ dependencies = {} } = {}) {
   // A game runs only on its exact player version, so there is no default.
-  const core = createPinnedNativeManager({ id: "unity", label: "Unity Mono", catalog: [], supportsDefault: false,
-    discoverCatalog: args => Catalog.discoverCatalog({ ...args, ...(dependencies.fetch ? { fetch: dependencies.fetch } : {}) }), sourceUrl: Catalog.SOURCE,
+  const core = createPinnedNativeManager({ id: "unity", label: "Unity Mono", supportsDefault: false,
+    upstream: Catalog.source, sourceUrl: Catalog.SOURCE,
     verifyArtifact: args => Package.verifyArtifact(args, dependencies), prepareInstall: args => Package.prepareInstall(args, dependencies),
     resolveExecutable: root => path.join(root, "player", "UnityPlayer.app", "Contents", "MacOS", "UnityPlayer"),
     dependencies: { ...dependencies, extractArchive: dependencies.extractArchive || Package.extractPackage } });
@@ -54,16 +54,24 @@ function createManager({ dependencies = {} } = {}) {
     core.getState({ userDataDir });
     const known = core.core.catalog.find(pin => pin.version === version);
     if (known) return known;
-    const verified = Catalog.REVIEWED.find(pin => pin.version === version);
-    if (verified) return core.core.rememberResolvedVersion({ userDataDir, entry: verified });
-    const pin = await Catalog.discoverVersion(version, { signal, logger, ...(dependencies.fetch ? { fetch: dependencies.fetch } : {}) });
+    const [pin] = upstreamPins([await Catalog.discoverVersion(version, { signal, logger })]);
     return core.core.rememberResolvedVersion({ userDataDir, entry: pin });
   }
   async function installRuntime(options = {}) {
-    await ensureCatalogVersion(options);
-    const install = await core.installRuntime(options), profile = readProfile(install);
-    if (!profile) throw new Error("Installed Unity component failed its native engine and Mono payload integrity check.");
-    statusCache.delete(install.installDir); return { ...install, profile };
+    // The exact release lookup runs inside the registered download task, so
+    // its progress is visible from the start instead of delaying the task row.
+    const runInstall = async ({ signal = options.signal, onProgress } = {}) => {
+      onProgress?.({ downloaded: 0, total: null, detail: "Looking up the exact release…" });
+      await ensureCatalogVersion({ ...options, signal });
+      const install = await core.installRuntime({ ...options, downloads: null, signal, onProgress }), profile = readProfile(install);
+      if (!profile) throw new Error("Installed Unity component failed its native engine and Mono payload integrity check.");
+      statusCache.delete(install.installDir);
+      return { ...install, profile };
+    };
+    if (!options.downloads || typeof options.downloads.runTask !== "function") return runInstall();
+    return runDownloadTask(options.downloads, buildRuntimeDownloadMeta({ label: "Unity Mono", managerId: "unity", sectionId: "default", version: options.version, kind: "runtime" }),
+      task => runInstall({ signal: task.signal && options.signal ? AbortSignal.any([task.signal, options.signal]) : task.signal || options.signal,
+        onProgress: progress => { task.onProgress?.(progress); options.onProgress?.(progress); } }));
   }
   async function importRuntime(options = {}) {
     const source = options.runtimePath || options.runtimeRoot;

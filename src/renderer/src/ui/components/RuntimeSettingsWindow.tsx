@@ -13,7 +13,8 @@ import {
   normalizeRuntimeSettings,
   resolveModuleRuntimeSettings,
   resolveRuntimeSettingsSchema,
-  runtimeSettingsEqual
+  runtimeSettingsEqual,
+  runtimeVersionOptions
 } from "../ui-helpers";
 
 import { HelpTip } from "./HelpTip";
@@ -286,6 +287,7 @@ export function RuntimeSettingsWindow({
           </div>
         </div>}
         <div className={inline ? "runtimeSettingsInlineBody" : "runtimeSettingsBody"}>
+          {inline && showDescription && <RuntimeDescription moduleInfo={moduleInfo} runtimeId={context.runtimeId} text />}
           <ErrorText error={error} />
           <ErrorText error={saveError} />
           <ErrorText error={choiceError} />
@@ -295,6 +297,7 @@ export function RuntimeSettingsWindow({
             </div>
           )}
           {api && !state && <div className="empty">Loading runtime settings…</div>}
+          {api && state && !schema && <div className="dim">{runtimeLabel} has no settings.</div>}
           {api && state && schema && displaySettings && (
             <div className="settingsStack">
               <SettingFieldRows rows={visibleFields.map(field => {
@@ -312,7 +315,8 @@ export function RuntimeSettingsWindow({
                   request={fileRequest} onChange={value => onFieldChange(field.key, value)} />;
                 if (field.optionsAction) {
                   const selected = String((displaySettings as any)[field.key] || "");
-                  const options = choices[field.optionsAction]?.[field.optionsKey || field.key] || field.options || [];
+                  const listed = choices[field.optionsAction]?.[field.optionsKey || field.key] || field.options || [];
+                  const options = field.optionsAction === "listRuntimeVersions" ? runtimeVersionOptions(listed) : listed;
                   const loading = choiceLoading[field.optionsAction] === true;
                   const disabled = fieldsDisabled || (field.gameOnly === true && !isGameScope) || (loading && !choices[field.optionsAction]);
                   return <div className="settingsRow" key={field.key}>
@@ -430,7 +434,6 @@ export function RuntimeSettingsWindow({
             key={JSON.stringify([context.moduleId, context.runtimeId, context.gamePath])}
             api={api} state={state} context={context} provider={schema.provider}
             revision={JSON.stringify([gameEntry?.runtimeData, gameEntry?.moduleData])} />}
-          {inline && showDescription && <RuntimeDescription moduleInfo={moduleInfo} runtimeId={context.runtimeId} />}
         </div>
       </div>
     </section>

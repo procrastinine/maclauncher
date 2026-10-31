@@ -30,7 +30,7 @@ let gdsdecompCatalog = {
   source: null,
   error: null
 };
-let gdsdecompReleases = [];
+let gdsdecompRows = [];
 
 const DEFAULT_VARIANT = Core.DEFAULT_VARIANT;
 const VARIANTS = Core.VARIANTS;
@@ -119,6 +119,7 @@ async function refreshGodotCatalog({ logger, force, latestOnly } = {}) {
       godotCatalog = {
         status: "success",
         versions: res.versions || [],
+        rows: res.rows || [],
         fetchedAt: Date.now(),
         source: res.source || null,
         error: null,
@@ -154,7 +155,7 @@ async function refreshGdsdecompCatalog({ logger, force } = {}) {
   gdsdecompCatalogPromise = (async () => {
     try {
       const res = await Gdsdecomp.fetchAvailableVersions({ logger });
-      gdsdecompReleases = res.releases || [];
+      gdsdecompRows = res.rows || [];
       gdsdecompCatalog = {
         status: "success",
         versions: res.versions || [],
@@ -322,6 +323,7 @@ async function installGodotRuntime({
         userDataDir,
         version: v,
         variant: resolvedVariant,
+        sourceUrl: godotCatalog.rows?.find(row => row.version === v)?.sourceUrl,
         logger,
         onProgress: taskProgress,
         signal: taskSignal || signal
@@ -353,7 +355,7 @@ async function installGdsdecompRuntime({
         userDataDir,
         version: v,
         logger,
-        releases: gdsdecompReleases.length ? gdsdecompReleases : undefined,
+        rows: gdsdecompRows,
         onProgress: taskProgress,
         signal: taskSignal || signal
       }),
@@ -425,6 +427,7 @@ module.exports = Custom.configure({
   uninstallRuntime,
   updateSettingsAfterInstall,
   updateSettingsAfterUninstall,
+  upstream: [Core.source, Gdsdecomp.source],
   core: Core
 }, { inspect: require("./custom-runtime").inspect,
   defaultsPath: sectionId => sectionId === "gdsdecomp" ? ["gdsdecomp", "defaultVersion"] : ["defaultVersions", sectionId],

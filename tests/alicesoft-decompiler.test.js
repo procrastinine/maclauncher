@@ -8,7 +8,6 @@ const Input = require('../src/modules/alicesoft/decompiler-input');
 const Tools = require('../src/modules/alicesoft/decompiler');
 const { managers, tools } = require('../src/modules/alicesoft/decompiler-managers');
 const { inspectRoot } = require('../src/modules/alicesoft/detect');
-const { createCatalogDiscovery } = require('../src/modules/alicesoft/catalog');
 
 function dri() {
   const bytes = Buffer.alloc(768);
@@ -49,22 +48,6 @@ function registerFake(f, managerId = 'sys3-decompiler', version = 'fixture-manag
   const directory = managers[managerId].core.getInstallDir({ userDataDir: f.context.userDataDir, version }); fs.mkdirSync(directory, { recursive: true });
   fs.writeFileSync(path.join(directory, 'runtime.json'), JSON.stringify({ version, upstreamRevision, toolVersion, source: 'local', runtimePath: executable, binarySha256: crypto.createHash('sha256').update(bytes).digest('hex'), catalogEntry: { version, upstreamRevision, toolVersion, localBuild: false } }));
 }
-
-for (const profile of tools) test(`${profile.repo} catalog retains complete release identities and excludes non-release tags`, async () => {
-  const upstream = ["2.1.0", "2.0.0", "1.9.1"].map((version, index) => ({ version, upstreamTag: "v" + version, upstreamRevision: String(index + 1).repeat(40) }));
-  const releases = upstream.map(release => ({ tag_name: release.upstreamTag }));
-  const tags = upstream.map(release => ({ name: release.upstreamTag, commit: { sha: release.upstreamRevision } }));
-  let calls = 0;
-  const discovered = await createCatalogDiscovery(profile.repo, {
-    fetchGithubReleases: async () => { calls++; return [...releases, { tag_name: 'nightly' }]; },
-    fetchGithubTags: async () => { calls++; return tags; },
-    resolveGithubTagCommit: () => { throw Error('Unnecessary commit request'); }
-  })();
-  assert.equal(calls, 2); assert.equal(discovered.length, upstream.length);
-  assert.equal(discovered[0].upstreamRevision, upstream[0].upstreamRevision);
-  assert.equal(new Set(discovered.map(row => row.version)).size, discovered.length);
-  assert.ok(discovered.every(row => row.localBuild === false && !row.asset));
-});
 
 test('scenario preflight validates native first-page index and rejects escaping tables and unsafe AIN library names', () => {
   assert.equal(Input.validateDri(dri(), 'ADISK.DAT'), 1);

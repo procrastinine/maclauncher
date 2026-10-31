@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -333,7 +335,13 @@ test("decompilation uses the pinned CLI dump command and rejects traversal/YYC i
   writeForm(root, { name: "../escape" });
   await assert.rejects(Tools.decompileStudio(game, context, selection, { runProcess }), /unsafe/);
   writeForm(root);
-  await assert.rejects(Tools.decompileStudio(game, context, selection, { runProcess: async () => ({ stdout: "wrong-version", stderr: "" }) }), /pinned/);
+  // Any release whose CLI starts is usable: a three-part version with other
+  // version text and no recorded source revision.
+  const release = { version: "0.10.1", install: { executablePath: "/test/UndertaleModCli" } };
+  const other = await Tools.decompileStudio(game, context, release, { runProcess: async (command, args) =>
+    args[0] === "--version" ? { stdout: "UndertaleModCli 0.10.1-beta\n", stderr: "" } : runProcess(command, args) });
+  assert.equal(other.version, "0.10.1");
+  await assert.rejects(Tools.decompileStudio(game, context, selection, { runProcess: async () => { throw new Error("cannot start"); } }), /cannot start/);
 });
 
 test("a tool that claims success without producing GML leaves no successful export", async t => {
@@ -496,7 +504,7 @@ test("game version evidence separates GEN8 tuple, WAD generation and structural 
 test("audio-group path evidence bounds official runner selection across the 2024.14 layout change", t => {
   const root = temporary(t);
   const legacy = audioArchive(root, "legacy.win", false), old = Inspect.inspectStudio(legacy);
-  assert.equal(old.detectedVersion, "2024.13–<2024.14");
+  assert.equal(old.detectedVersion, "2024.13+ (before 2024.14)");
   assert.equal(old.maximumOfficialRuntimeExclusive, "2024.14");
   assert.equal(old.exactEngineVersion, null);
   assert.ok(old.versionEvidence.some(item => item.source === "AGRP audio-group path field"));
@@ -559,10 +567,7 @@ test("explicit Play prepares exact runtimes and rejects unsupported formats befo
     const version = "2024.13.1.242", signature = "ABCDEFGHIJKLMNOPQRSTUVWX==";
     const attributes = file => `url="https://gms.yoyogames.com/${file}.zip" sparkle:version="${version}" length="3" sparkle:dsaSignature="${signature}"`;
     const body = Buffer.from(`<rss><channel><item><enclosure ${attributes("core")}><module name="mac" ${attributes("mac")}/><module name="macYYC" ${attributes("yyc")}/></enclosure></item></channel></rss>`);
-    return Catalog.refreshCatalog({ ...options, fetch: async url => {
-      const legacy = OfficialFixture.legacyFeed("1.4.9999");
-      return { status: 200, body: url.includes("update-studio.rss") ? legacy : body };
-    } });
+    return OfficialFixture.refresh(options, url => ({ status: 200, body: url.includes("update-studio.rss") ? OfficialFixture.legacyFeed("1.4.9999") : body }));
   });
   const context = { userDataDir, settings: {}, runtimeSettings: { softwareOpenGLFallback: "disabled" }, runtimeId: "official-studio" };
   const earlier = entry(path.join(root, "earlier"), { wad: 16 });
@@ -673,17 +678,13 @@ test("official inventory rejects conflicting build IDs, missing receipts/manifes
 
 test("public official downloads require a discovered exact version and reject changed package bytes", async t => {
   const root = temporary(t);
-  let requests = 0;
-  const download = async (url, destination) => {
-    requests += 1;
-    assert.equal(new URL(url).hostname, "gms.yoyogames.com");
-    fs.writeFileSync(destination, "wrong-package");
-  };
-  await assert.rejects(OfficialPackages.downloadPublicPackages({ userDataDir: root, version: "latest", download }), /catalog/);
-  assert.equal(requests, 0);
+  const before = Harness.network.requests.length, requests = () => Harness.network.requests.slice(before).filter(url => url.endsWith(".zip"));
+  const wrong = { "https://gms.yoyogames.com/core.zip": Buffer.from("wrong-package"), "https://gms.yoyogames.com/mac.zip": Buffer.from("wrong-package") };
+  await assert.rejects(OfficialPackages.downloadPublicPackages({ userDataDir: root, version: "latest" }), /catalog/);
+  assert.equal(requests().length, 0);
   const version = "2027.2.0.4"; await OfficialFixture.discover(root, { modern: version });
-  await assert.rejects(OfficialPackages.downloadPublicPackages({ userDataDir: root, version, download }), /SHA-256/);
-  assert.equal(requests, 1);
+  await assert.rejects(OfficialFixture.withFiles(wrong, () => OfficialPackages.downloadPublicPackages({ userDataDir: root, version })), /size/);
+  assert.deepEqual(requests().map(url => new URL(url).hostname), ["gms.yoyogames.com"]);
   assert.equal(OfficialPackages.cachedPackages(root, version), null);
   assert.deepEqual(fs.readdirSync(path.join(root, "runtimes/gamemaker-official/artifacts", version)), []);
   const build = OfficialPackages.getCatalogVersion(version, root);
@@ -692,15 +693,15 @@ test("public official downloads require a discovered exact version and reject ch
   assert.deepEqual(build.packages.map(item => item.module), ["core", "mac"]);
 });
 
-test("official native installer refuses unpinned bootstrap bytes before any native tool executes", async t => {
+test("official native installer refuses a bootstrap download without Igor files before any downloaded tool executes", async t => {
   const root = temporary(t);
-  let downloads = 0, executions = 0;
+  const executions = [], location = OfficialInstaller.bootstrapForArch().location;
   const version = "2027.2.0.4"; await OfficialFixture.discover(root, { modern: version });
-  await assert.rejects(OfficialInstaller.installOfficialVersion({ userDataDir: root, version, dependencies: {
-    downloadToFile: async (url, output) => { downloads++; assert.equal(url, OfficialInstaller.BOOTSTRAP.url); fs.writeFileSync(output, "changed mutable vendor bootstrap"); },
-    runProcess: async () => { executions++; }
-  } }), /SHA-256/);
-  assert.equal(downloads, 1); assert.equal(executions, 0);
+  const before = Harness.network.requests.length;
+  await assert.rejects(OfficialFixture.withFiles({ [location]: Buffer.from("changed mutable vendor bootstrap") }, () => OfficialInstaller.installOfficialVersion({ userDataDir: root, version, dependencies: {
+    runProcess: async executable => { executions.push(executable); }
+  } })), /no Igor tool for this Mac/);
+  assert.deepEqual(Harness.network.requests.slice(before), [location]); assert.deepEqual(executions, ["/usr/bin/ditto"]);
   assert.equal(fs.existsSync(path.join(root, "runtimes/gamemaker-official", version)), false);
   const build = OfficialInstaller.resolveBuild({ userDataDir: root, version });
   const feed = OfficialInstaller.pinnedFeed("http://127.0.0.1:12345", build);
@@ -750,11 +751,15 @@ test("official runner selection keeps compatible explicit builds and gates VM ge
   writeForm(root, { wad: 17 });
   context.runtimeSettings.softwareOpenGLFallback = "enabled";
   const graphics = require("../src/modules/gamemaker/runtime/opengl-fallback");
-  const helper = { ready: true, version: "fixture-graphics-helper", runnerChecksums: { "2026.0.0.23": "b".repeat(64) }, legacyLogicalRunnerVersions: [] };
+  const helper = { ready: true, version: "fixture-graphics-helper", dylibPath: "/fixture/software-opengl.dylib", legacyLogicalRunnerVersions: [] };
   t.mock.method(graphics.manager, "resolveSelection", () => ({ ready: true, version: helper.version, install: helper }));
   t.mock.method(graphics.manager, "verifyInstall", selected => selected);
+  const uses = [];
+  context.recordRuntimeUse = use => uses.push(use.managerId);
+  // An enabled helper applies to a runner whose checksum it has never seen; staging then needs the runner itself.
   await assert.rejects(OfficialLaunch.launchOfficial(game, context, { version: "2026.0.0.23", install: { launchReady: true,
-    binarySha256: "0".repeat(64) } }), /checksum/);
+    binarySha256: "0".repeat(64) } }), error => !/checksum|graphics helper/i.test(error.message));
+  assert.deepEqual(uses, [graphics.manager.id]);
 });
 
 test("GameMaker inspector exposes only game exports while Play retains exact runtime selection", async t => {

@@ -86,12 +86,11 @@ Modules with compatible upstream macOS downloads also declare
 `upstreamMacDownloads: true` and query that publisher independently. Modules whose
 upstream releases do not provide compatible Mac packages link to upstream code
 without listing its other-platform releases. Every valid hosted record is
-listed and installable. Its `source.revision` identifies its source; a record
-without `source` uses the revision of the module's build recipe for the same
-version, and an installed record keeps the revision recorded at installation. A
-record with no source revision is listed with that reason and cannot be
-installed. The record's `capabilities` become fields of its catalog entry, after
-any same-version recipe facts and before the entry's identity fields, so modules
+listed and installable. Its `source.revision` identifies its source, and an
+installed record keeps the revision recorded at installation. A record with no
+source revision is listed with that reason and cannot be installed. The record's
+`capabilities` become fields of its catalog entry, before the entry's identity
+fields, so modules
 read the same names from hosted and upstream entries. The sealed manifest must
 name the same source revision, and the module's manifest validation receives
 that catalog entry at installation. The hosted archive replaces the download for

@@ -2,6 +2,7 @@ const fs = require("node:fs"), path = require("node:path"), os = require("node:o
 const { setTimeout: delay } = require("node:timers/promises");
 const { reuseCompletedDownload } = require("./external-download-reuse");
 const { readJsonDocument } = require("./json-files");
+const { steamAppListed } = require("./steam-client-library");
 const { ARCHITECTURES, STEAM_PLATFORMS: PLATFORMS, steamPlatforms: platforms, architectureConfig, matchesSteamArchitecture, steamArchitectureCatalog, steamLibraryArchitectures } = require("./steam-architectures");
 
 const HISTORY_NOTE = "Steam lists current publisher branches. Earlier manifests appear after they have been observed; a known depot and manifest ID can also be entered. Steam may restrict access to older or shared content.";
@@ -370,8 +371,8 @@ function createSteamDownloads(options = {}) {
           if (client !== current) throw publicError("The Steam account changed.");
           const { apps } = await current.getProductInfo(ids.slice(offset, offset + 100), [], true);
           for (const appId of ids.slice(offset, offset + 100)) {
-            const info = apps?.[appId]?.appinfo, family = sharedMap.get(appId), type = String(info?.common?.type || "game").toLowerCase();
-            if (!family && !["game", "application", "demo", "mod", "music", "beta"].includes(type)) continue;
+            const info = apps?.[appId]?.appinfo, family = sharedMap.get(appId);
+            if (!family && !steamAppListed(info)) continue;
             const icon = info?.common?.icon || family?.iconHash;
             rows.push({ appId, name: info?.common?.name || family?.name || `App ${appId}`, platforms: platforms(info?.common?.oslist), ...steamLibraryArchitectures(info),
               shared: !ownOnly.has(appId), iconUrl: /^[a-f0-9]{40}$/i.test(icon || "") ? `https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/${appId}/${icon}.jpg` : null });

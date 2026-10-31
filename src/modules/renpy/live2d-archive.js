@@ -50,7 +50,7 @@ function readCubismArchive(archivePath) {
     }
     const candidates = entries.filter(entry => /\/Core\/dll\/macos\/libLive2DCubismCore\.dylib$/i.test(entry.name));
     if (candidates.length !== 1) throw new Error("Choose a Cubism SDK for Native ZIP with exactly one macOS Core dylib.");
-    const selected = candidates[0], version = selected.name.split("/")[0].match(/^CubismSdkForNative-([45]-r\.\d+(?:[.-][A-Za-z0-9]+)*)$/)?.[1];
+    const selected = candidates[0], version = selected.name.split("/")[0].match(/^CubismSdkForNative-(\d+-r\.\d+(?:[.-][A-Za-z0-9]+)*)$/)?.[1];
     if (!version) throw new Error("Cubism ZIP does not declare an explicit supported Native SDK version.");
     const license = entries.find(entry => entry.name === `${selected.name.split("/")[0]}/Core/LICENSE.md`);
     if (!license) throw new Error("Cubism Native ZIP is missing its Core license notice.");

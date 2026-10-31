@@ -1,9 +1,8 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
 const Catalog = require("./managed-shader-packs.json"), Traits = require("./shader-traits"), Providers = require("./shader-providers");
 const Writable = require("../writable-input"), Native = require("../runtime/local-native"), Items = require("../item-results");
-const Zip = require("../runtime/zip"), Releases = require("../runtime/github-releases");
-const GitHub = require("../runtime/github-transport");
-const Downloads = require("../runtime/download-utils"), { runDownloadTask } = require("../runtime/download-manager");
+const Zip = require("../runtime/zip"), Upstream = require("../runtime/upstream"), Release = require("../runtime/release-files");
+const Downloads = { throwIfAborted: require("../runtime/download-utils").throwIfAborted }, { runDownloadTask } = require("../runtime/download-manager");
 const { confirmToolInstall } = require("../runtime/tool-install");
 const { withRuntimeMutation } = require("../../../core/coordinated-runtime-managers");
 const customCollections = new Map();
@@ -52,7 +51,7 @@ function validRow(pack, row) {
     const url = new URL(row.archive.url);
     return typeof row.tag === "string" && row.tag.length < 100 && url.protocol === "https:" && url.hostname === "github.com" &&
       url.pathname.startsWith(`/${pack.repository}/releases/download/`) && !url.search && !url.hash &&
-      new RegExp(pack.assetPattern, "i").test(path.posix.basename(url.pathname)) &&
+      new RegExp(pack.assetPattern, "i").test(path.posix.basename(url.pathname)) && Release.archiveFormat(path.posix.basename(url.pathname)) &&
       Number.isSafeInteger(row.archive.bytes) && row.archive.bytes > 0 && row.archive.bytes <= LIMITS.archive &&
       (!row.archive.sha256 || /^[a-f0-9]{64}$/.test(row.archive.sha256));
   } catch { return false; }
@@ -221,13 +220,38 @@ function collectionPaths(root,pack,file){
   });
   return {includePaths:[...new Set([path.dirname(file),root,...paths(pack.includePaths||[])])],texturePaths:[...new Set([root,path.dirname(file),...paths(pack.texturePaths||[])])]};
 }
-async function json(url, signal, dependencies) {
-  const response = await (dependencies.fetchUrlBuffer || GitHub.request)(url, { signal, maxBytes: 8 << 20,
-    headers: { "User-Agent": "maclauncher", Accept: "application/vnd.github+json" } });
-  if (response.status !== 200) throw new Error(`Shader version information could not be downloaded (${response.status}).`);
-  return JSON.parse(Downloads.decodeResponseBody(response.body, response.headers, { maxBytes: 8 << 20 }).toString("utf8"));
+// Release collections list each release's shader archive, in any format the
+// shared extractor reads; the publisher's current name and the zip form come
+// first. Source collections follow the newest commit of the default branch.
+const sources = new Map(Catalog.packs.map(pack => [pack.id, pack.delivery === "release-zip"
+  ? Upstream.github({ repository: pack.repository, recognize: release => {
+    const assets = (release.assets || []).filter(item => new RegExp(pack.assetPattern, "i").test(item?.name || "") && Release.archiveFormat(item.name) &&
+      !/(?:^|[-_.])(?:debug|symbols?)(?:[-_.]|$)/i.test(item.name));
+    const rank = item => Release.ARCHIVE_FORMATS.indexOf(Release.archiveFormat(item.name));
+    const asset = assets.sort((a, b) => rank(a) - rank(b))[0];
+    return asset ? { version: String(release.tag_name).replace(/^v(?=\d)/, ""), details: { tag: release.tag_name }, assets: [asset] } : null;
+  } })
+  : Upstream.githubCommits({ repository: pack.repository, limit: 1 })]));
+const tree = (pack, commit, signal) => Upstream.githubTree({ repository: pack.repository, revision: commit, signal });
+const raw = (pack, ref, relative) => Upstream.listedFile({ filename: path.posix.basename(relative),
+  url: `https://raw.githubusercontent.com/${pack.repository}/${ref}/${relative.split("/").map(encodeURIComponent).join("/")}` });
+// The files one revision provides for installation, or the reason it cannot
+// be installed: a declared recipe input or the license notice is missing, no
+// supported shader remains (a recipe writes its own), or the selection
+// exceeds the library limits.
+function selectTree(pack, tree, recipe) {
+  if (tree?.truncated || !Array.isArray(tree?.tree) || tree.tree.length > 20000) return { reason: "The shader source listing is too large." };
+  const blobs = tree.tree.filter(item => item?.type === "blob" && safe(item.path)), inputs = new Set(recipe?.sourceFiles || []);
+  const files = pack.delivery !== "tree" ? blobs.filter(item => keep(item.path)) : blobs.filter(item => inputs.has(item.path) || keep(item.path) &&
+    (pack.prefixes.some(prefix => item.path.startsWith(prefix)) || item.path === pack.licenseFile || /^README/i.test(item.path)));
+  const missing = [...inputs, pack.licenseFile].find(file => !blobs.some(item => item.path === file));
+  if (missing) return { reason: `This revision does not contain ${missing}.` };
+  if (!recipe && !files.some(item => formats[path.extname(item.path).toLowerCase()])) return { reason: "This revision contains no supported shader files." };
+  if (pack.delivery === "tree" && (files.length > LIMITS.entries || files.some(item => item.size > LIMITS.file) ||
+    files.reduce((sum, item) => sum + item.size, 0) > LIMITS.expanded)) return { reason: "This revision exceeds the shader library size limits." };
+  return { files };
 }
-async function refreshCatalog(context = {}, dependencies = {}) {
+async function refreshCatalog(context = {}) {
   const packs = context.sectionId ? [packFor(context.sectionId)] : Catalog.packs;
   await Promise.all(packs.map(async pack => {
     const key = directory(context.userDataDir, pack.id), previous = cached(context.userDataDir, pack.id);
@@ -236,22 +260,28 @@ async function refreshCatalog(context = {}, dependencies = {}) {
       states.set(key, { status: "loading", error: null });
       try {
         let entries;
+        const listed = await sources.get(pack.id).discover({ signal: context.signal, logger: context.logger });
         if (pack.delivery === "release-zip") {
-          const [owner, repo] = pack.repository.split("/");
-          const releases = await (dependencies.fetchReleases || Releases.fetchGithubReleases)({ owner, repo, signal: context.signal, maxPages: 3,
-            assetFilter: asset => new RegExp(pack.assetPattern, "i").test(asset.name) });
-          entries = releases.filter(row => !row.draft && !row.prerelease).flatMap(release => {
-            const asset = release.assets?.find(item => new RegExp(pack.assetPattern, "i").test(item.name));
-            return asset ? [{ version: String(release.tag_name).replace(/^v(?=\d)/, ""), tag: release.tag_name,
-              date: release.published_at, archive: { url: asset.browser_download_url, bytes: asset.size,
-                sha256: /^sha256:[a-f0-9]{64}$/.test(asset.digest || "") ? asset.digest.slice(7) : null } }] : [];
-          }).filter(row => validRow(pack, row));
+          entries = listed.filter(row => row.files[0]).map(row => ({ version: row.version, tag: row.details?.tag || row.version, date: row.publishedAt,
+            archive: { url: row.files[0].url, bytes: row.files[0].bytes, sha256: row.files[0].digest?.algorithm === "sha256" ? row.files[0].digest.value : null } }))
+            .filter(row => validRow(pack, row));
         } else {
-          const commit = await json(`https://api.github.com/repos/${pack.repository}/commits/${pack.branch}`, context.signal, dependencies);
-          entries = [{ version: sourceVersion(pack,commit.sha), commit: commit.sha, date: commit.commit?.committer?.date,
-            ...(pack.sourceOverlay?{adaptationVersion:pack.sourceOverlay.version}:{}) }];
+          const head = listed[0];
+          if (!head) throw new Error("The shader collection lists no commit.");
+          const row = { version: sourceVersion(pack,head.revision), commit: head.revision, date: head.publishedAt,
+            ...(pack.sourceOverlay?{adaptationVersion:pack.sourceOverlay.version}:{}) };
+          // Each listed commit is immutable. A new one that lacks declared files
+          // stays listed with its reason; earlier commits remain installable.
+          const known = previous?.entries.find(item => item.version === row.version);
+          if (known) row.reason = known.reason;
+          else if (validRow(pack, row)) try {
+            row.reason = selectTree(pack, await tree(pack, row.commit, context.signal), sourceOverlayFor(pack, row)).reason;
+          } catch (error) { Downloads.throwIfAborted(context.signal); }
+          if (!row.reason) delete row.reason;
+          entries = [row];
         }
-        const rows = new Map([...available(context.userDataDir, pack.id), ...entries].map(row => [row.version, row]));
+        // A release list is the publisher's own; commit heads accumulate.
+        const rows = new Map([...(pack.delivery === "release-zip" ? [] : available(context.userDataDir, pack.id)), ...entries].map(row => [row.version, row]));
         const record = { repository: pack.repository, fetchedAt: Date.now(), entries: [...rows.values()].filter(row => validRow(pack, row)).slice(-LIMITS.versions) };
         if (!record.entries.length) throw new Error("No compatible shader pack versions were found.");
         Downloads.throwIfAborted(context.signal);
@@ -292,15 +322,42 @@ function extract(archive, destination) {
     const file = path.join(destination, target); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes, { flag: "wx" });
   }
 }
-async function download(url, file, context, dependencies, maxBytes = LIMITS.archive) {
+// A listed file, verified by the publisher's size and digest when given; a
+// transfer larger than the library limit stops.
+async function download(listed, file, context, maxBytes = LIMITS.archive) {
   const limit = new AbortController(), signal = context.signal ? AbortSignal.any([context.signal, limit.signal]) : limit.signal;
   try {
-    await (dependencies.downloadToFile || Downloads.downloadToFile)(url, file, { signal, onProgress: progress => {
+    await Upstream.download(listed, file, { signal, onProgress: progress => {
       if (progress.downloaded > maxBytes || progress.total > maxBytes) limit.abort();
       context.onProgress?.(progress);
     } });
     if (fs.statSync(file).size > maxBytes) throw new Error("The shader download is too large.");
   } catch (error) { if (limit.signal.aborted && !context.signal?.aborted) throw new Error("The shader download is too large."); throw error; }
+}
+// Zip archives are read entry by entry; other formats are unpacked by the
+// shared extractor first. Both keep only shader, resource and notice files
+// below a single top folder.
+async function unpack(archive, destination, signal) {
+  if (Release.archiveFormat(archive) === ".zip") return extract(archive, destination);
+  const staging = fs.mkdtempSync(destination + "-unpacked-");
+  try {
+    await Release.extractArchive(archive, staging, signal);
+    const top = fs.readdirSync(staging).filter(name => name !== "__MACOSX" && !name.startsWith("."));
+    const root = top.length === 1 && fs.lstatSync(path.join(staging, top[0])).isDirectory() ? path.join(staging, top[0]) : staging;
+    let count = 0, expanded = 0;
+    (function visit(directory, prefix) {
+      for (const item of fs.readdirSync(directory, { withFileTypes: true })) {
+        const relative = prefix + item.name, source = path.join(directory, item.name);
+        if (item.name === "__MACOSX" || item.name === ".DS_Store") continue;
+        if (!safe(relative) || item.isSymbolicLink()) throw new Error("The shader archive contains an unsafe or oversized entry.");
+        if (item.isDirectory()) { visit(source, relative + "/"); continue; }
+        if (!item.isFile() || !keep(relative)) continue;
+        const size = fs.statSync(source).size;
+        if (++count > LIMITS.entries || size > LIMITS.file || (expanded += size) > LIMITS.expanded) throw new Error("The shader archive contains an unsafe or oversized entry.");
+        const target = path.join(destination, relative); fs.mkdirSync(path.dirname(target), { recursive: true }); fs.copyFileSync(source, target, fs.constants.COPYFILE_EXCL);
+      }
+    })(root, "");
+  } finally { fs.rmSync(staging, { recursive: true, force: true }); }
 }
 function discover(files, pack, { ignoreMetadata = false, curated = true } = {}) {
   const inventory = {}, effects = [], seen = new Set(); let count = 0, total = 0;
@@ -363,10 +420,10 @@ function inspectCustom(runtimePath, { sectionId } = {}) {
   if (!effects.length) throw new Error("This runtime list requires a compatible "+({isf:"ISF",magpie:"MagpieFX",reshade:"ReShade FX",libretro:"Slang"}[pack.family]||"mpv")+" shader collection.");
   return { ...collection, effects, root: runtimePath, installDir: runtimePath, filesRoot, packId: sectionId, ready: true };
 }
-async function installRuntime(context = {}, dependencies = {}) {
+async function installRuntime(context = {}) {
   const pack = packFor(context.sectionId), rows = available(context.userDataDir, pack.id);
   if (!context.version && !rows.length) throw new Error("Refresh the shader pack version list before installing this version.");
-  const selected = version(context.version || rows[0].version);
+  const selected = version(context.version || (rows.find(row => !row.reason) || rows[0]).version);
   const current = installed(context.userDataDir, pack.id, selected, true); if (current) return current;
   const row = rows.find(item => item.version === selected);
   if (!row) throw new Error("Refresh the shader pack version list before installing this version.");
@@ -382,25 +439,17 @@ async function installRuntime(context = {}, dependencies = {}) {
       const temporary = fs.mkdtempSync(path.join(root, ".install-")), files = path.join(temporary, "files"); fs.mkdirSync(files);
       let backup, published = false;
       try {
-        const downloadContext = { signal, onProgress: task.onProgress || context.onProgress },sourceRecipe=sourceOverlayFor(pack,row),
-          sourceInputs=new Set(sourceRecipe?.sourceFiles||[]);
+        const downloadContext = { signal, onProgress: task.onProgress || context.onProgress },sourceRecipe=sourceOverlayFor(pack,row);
         if (pack.delivery === "tree") {
-          const tree = await json(`https://api.github.com/repos/${pack.repository}/git/trees/${row.commit}?recursive=1`, signal, dependencies);
-          if (tree.truncated || !Array.isArray(tree.tree) || tree.tree.length > 20000) throw new Error("The shader source listing is too large.");
-          const selectedFiles = tree.tree.filter(item => item.type === "blob" && safe(item.path) && (sourceInputs.has(item.path)||keep(item.path)&&
-            (pack.prefixes.some(prefix => item.path.startsWith(prefix)) || item.path === pack.licenseFile || /^README/i.test(item.path))));
-          if([...sourceInputs].some(file=>!selectedFiles.some(row=>row.path===file)))throw Error("A declared shader recipe source input is missing.");
-          if (!selectedFiles.length || selectedFiles.length > LIMITS.entries || selectedFiles.some(item => item.size > LIMITS.file) ||
-            selectedFiles.reduce((sum, item) => sum + item.size, 0) > LIMITS.expanded)
-            throw new Error("The shader source listing is incomplete or oversized.");
+          const { files: selectedFiles, reason } = selectTree(pack, await tree(pack, row.commit, signal), sourceRecipe);
+          if (reason) throw new Error(reason);
           let next = 0;
           const cancellation = new AbortController(), workerSignal = signal ? AbortSignal.any([signal, cancellation.signal]) : cancellation.signal;
           const completed = await Promise.allSettled(Array.from({ length: Math.min(4, selectedFiles.length) }, async () => {
             try { while (next < selectedFiles.length) {
               Downloads.throwIfAborted(workerSignal);
               const item = selectedFiles[next++], target = path.join(files, item.path); fs.mkdirSync(path.dirname(target), { recursive: true });
-              await download(`https://raw.githubusercontent.com/${pack.repository}/${row.commit}/${item.path.split("/").map(encodeURIComponent).join("/")}`, target,
-                { ...downloadContext, signal: workerSignal }, dependencies, LIMITS.file);
+              await download(raw(pack, row.commit, item.path), target, { ...downloadContext, signal: workerSignal }, LIMITS.file);
               const bytes = fs.readFileSync(target);
               if (bytes.length !== item.size || crypto.createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex") !== item.sha)
                 throw new Error("A shader source file does not match its selected Git revision.");
@@ -409,16 +458,16 @@ async function installRuntime(context = {}, dependencies = {}) {
           const failure = completed.find(row => row.status === "rejected");
           if (failure) throw failure.reason;
         } else {
-          const archive = path.join(temporary, "download.zip"), url = row.archive?.url || `https://codeload.github.com/${pack.repository}/zip/${row.commit}`;
-          await download(url, archive, downloadContext, dependencies);
-          const size = fs.statSync(archive).size;
-          if (row.archive?.bytes && size !== row.archive.bytes || row.archive?.sha256 && Native.hashFile(archive) !== row.archive.sha256)
-            throw new Error("The shader download does not match its selected version.");
-          (dependencies.extract || extract)(archive, files); fs.rmSync(archive);
-          if (!fs.existsSync(path.join(files, pack.licenseFile))) {
-            const ref = row.commit || row.tag;
-            await download(`https://raw.githubusercontent.com/${pack.repository}/${ref}/${pack.licenseFile}`, path.join(files, pack.licenseFile), downloadContext, dependencies, 1 << 20);
-          }
+          // A release archive carries the publisher's size and digest; a source
+          // archive at an exact commit is recorded as downloaded.
+          const listed = row.archive ? Upstream.listedFile({ filename: path.posix.basename(new URL(row.archive.url).pathname), url: row.archive.url,
+            bytes: row.archive.bytes, ...(row.archive.sha256 ? { sha256: row.archive.sha256 } : {}) })
+            : Upstream.listedFile({ filename: `${pack.repository.split("/")[1]}-${row.commit}.zip`, url: `https://codeload.github.com/${pack.repository}/zip/${row.commit}` });
+          const archive = path.join(temporary, listed.name);
+          await download(listed, archive, downloadContext);
+          await unpack(archive, files, signal); fs.rmSync(archive);
+          if (!fs.existsSync(path.join(files, pack.licenseFile)))
+            await download(raw(pack, row.commit || row.tag, pack.licenseFile), path.join(files, pack.licenseFile), downloadContext, 1 << 20);
         }
         for(const relative of pack.bundledNotices||[]){
           if(!safe(relative))throw Error("The shader collection notice path is invalid.");
@@ -463,6 +512,6 @@ async function uninstallRuntime({ userDataDir, sectionId, version: selected, ins
     fs.rmSync(target, { recursive: true, force: true }); verified.delete(target); return true;
   }, { userDataDir });
 }
-module.exports = { ID, Catalog, LIMITS, isId, listEffects, resolveEffect, directory, installRoot, installed, normalizeVersion: version,
+module.exports = { ID, Catalog, LIMITS, sources, isId, listEffects, resolveEffect, directory, installRoot, installed, normalizeVersion: version,
   listInstalled, cached, available, refreshCatalog, installRuntime, uninstallRuntime, states, inspectCustom,
-  __test: { discover, extract, validRow, safe } };
+  __test: { discover, extract, validRow, safe, selectTree } };

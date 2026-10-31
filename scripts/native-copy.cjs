@@ -5,6 +5,7 @@ const B = require('../src/modules/shared/runtime/bundled-native');
 const S = require('./native-supplementals.cjs');
 const { distributionArchitectures } = require('./verify-native-runtimes.cjs');
 const Model = require('./distribution-model.cjs');
+const { preferredIncludedBuilds } = require('../src/modules/shared/runtime/included-helpers');
 
 function restoreCopiedNativePayload({ sourceRoot, resourceRoot, architectures = [process.arch], requiredOnly = false, dependencies = {} } = {}) {
   if (!Array.isArray(architectures) || !architectures.length || architectures.some(arch => !['arm64', 'x64'].includes(arch))) throw new Error('Choose explicit native copy architectures.');
@@ -43,7 +44,7 @@ function restoreCopiedNativePayload({ sourceRoot, resourceRoot, architectures = 
     for (const file of item.files) add(`${item.directoryRelative}/${file.path}`, file);
   }
   for (const arch of architectures) S.verifySupplementals({ resourceRoot: source, arch, maximumMacOS,
-    items: supplementals.filter(item => item.launcherArchitectures.includes(arch)), dependencies });
+    items: preferredIncludedBuilds(supplementals, arch), dependencies });
   if (!expected.size) throw new Error('There are no sealed native files to copy.');
   function inspect(root, allowMissing) {
     const seen = new Set();

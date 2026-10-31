@@ -7,8 +7,14 @@ const test = require('node:test');
 const { image } = require('./fixtures/macho-image');
 
 test('ART packages omit external images and Cargo products, materialize in-tree aliases and reject escaped aliases', async t => {
-  const { packageArtAdapter } = await import('../src/modules/android/art/package.mjs');
-  const { imageContentIdentity } = await import('../src/modules/android/art/build.mjs');
+  const { packageArtAdapter: packageOwnedAdapter } = await import('../src/external/maclauncher-android/src/modules/android/art/package.mjs');
+  const Bundled = require('../src/modules/shared/runtime/bundled-native');
+  const Supplementals = require('../scripts/native-supplementals.cjs');
+  const metadata = { fileInventory: Bundled.fileInventory, readMachOLoadCommands: require('../src/modules/shared/runtime/macho-load-commands').readMachOLoadCommands,
+    versionAtLeast: Bundled.versionAtLeast, validatePublicMetadata: Supplementals.validatePublicMetadata,
+    validateDeclaration: Supplementals.validateDeclaration, verifyPayload: Bundled.verifyPayload };
+  const packageArtAdapter = options => packageOwnedAdapter(options, metadata);
+  const { imageContentIdentity } = await import('../src/external/maclauncher-android/src/modules/android/art/build.mjs');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'android-art-package-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const supplierRoot = path.join(root, 'supplier'), commonRoot = path.join(root, 'common');
@@ -50,8 +56,13 @@ test('ART packages omit external images and Cargo products, materialize in-tree 
   const extractor = write('extractor/android-image-extract', image({ fileType: 2, installName: null }), 0o755);
   const sourceArchive = write('source/source.tar.gz', 'Corresponding fixture source archive');
   const originalImage = { archiveSha256, content: imageContentIdentity(path.join(root, 'outside-image')) };
-  const options = { supplierRoot, commonRoot, extractor, sourceArchive, originalImage };
+  const version = '1.2.3';
+  const options = { supplierRoot, commonRoot, extractor, sourceArchive, originalImage, version };
   const invalidOutput = path.join(root, 'invalid-parent/adapter');
+  for (const invalid of [undefined, null, '', '../escape', 'one..two']) {
+    assert.throws(() => packageArtAdapter({ ...options, version: invalid, output: invalidOutput }), /explicit package version/);
+    assert.equal(fs.existsSync(path.dirname(invalidOutput)), false, 'Invalid package versions must fail before creating a stage');
+  }
   for (const invalid of [undefined, null, {}, { ...originalImage, archiveSha256: '0'.repeat(64) },
     { ...originalImage, content: { ...originalImage.content, sha256: 'invalid' } },
     { ...originalImage, content: { ...originalImage.content, records: 0 } },
@@ -60,6 +71,8 @@ test('ART packages omit external images and Cargo products, materialize in-tree 
     assert.equal(fs.existsSync(path.dirname(invalidOutput)), false, 'Invalid original identity must fail before creating a stage');
   }
   const output = path.join(root, 'adapter'), result = packageArtAdapter({ ...options, output });
+  assert.equal(result.declaration.version, version);
+  assert.equal(result.declaration.directoryRelative, 'android-art/' + version + '/arm64');
   const files = result.declaration.files.map(file => file.path);
   assert.deepEqual(files.filter(file => file.startsWith('art/hal/')).sort(), halNames.map(name => 'art/hal/' + name).sort());
   assert.ok(!files.some(file => /(?:^|\/)(?:image|deps|build|incremental)(?:\/|$)|Cargo\.lock|\.cargo-lock/.test(file)));
@@ -76,6 +89,7 @@ test('ART packages omit external images and Cargo products, materialize in-tree 
   assert.equal(fs.lstatSync(path.join(output, 'native/SDL3.framework/Resources')).isDirectory(), true);
   assert.equal(require('../src/modules/shared/runtime/bundled-native').verifyPayload(output, result.declaration), true);
   const manifest = JSON.parse(fs.readFileSync(path.join(output, 'runtime.json')));
+  assert.equal(manifest.version, version);
   assert.match(manifest.minimumMacOS, /^13\.0(?:\.0)?$/);
   assert.deepEqual(manifest.dependencies.find(item => item.file === 'art/host/linux-run').links,
     ['@rpath/SDL3.framework/Versions/A/SDL3']);
@@ -105,7 +119,7 @@ test('ART packages omit external images and Cargo products, materialize in-tree 
     directoryRelative:'android/fixture-common/arm64',manifestSha256:hash(path.join(commonRoot,'runtime.json')),
     sourceSha256:hash(path.join(commonRoot,'source.tar.gz')),files:inventory,notices:noticeRecords};
   const explicitOutput = path.join(root, 'explicit-notices');
-  assert.throws(() => packageArtAdapter({...options,output:explicitOutput}), /matching common runtime declaration/,
+  assert.throws(() => packageArtAdapter({...options,output:explicitOutput}), /common runtime notice declaration/,
     'An unrelated selected runtime cannot supply notice ownership');
   const explicit = packageArtAdapter({...options,commonDeclaration,output:explicitOutput});
   assert.deepEqual(explicit.declaration.notices, [...noticeRecords,packagedSupplierNotice], 'Common and ART notices retain their exact producer ownership');

@@ -33,6 +33,7 @@ function subscribeActivity(callback) {
 contextBridge.exposeInMainWorld("MacLauncher", {
   launcher: {
     getState: () => ipcRenderer.invoke("launcher:getState"),
+    prioritizeGame: gamePath => ipcRenderer.invoke("launcher:prioritizeGame", gamePath),
     openUtilityWindow: request => ipcRenderer.invoke("launcher:openUtilityWindow", request),
     steamState: () => ipcRenderer.invoke("launcher:steamState"),
     steamScan: () => ipcRenderer.invoke("launcher:steamScan"),
@@ -96,6 +97,7 @@ contextBridge.exposeInMainWorld("MacLauncher", {
     cancelImport: inputPath => ipcRenderer.invoke("launcher:cancelImport", inputPath),
     forgetGame: gamePath => ipcRenderer.invoke("launcher:forgetGame", gamePath),
     findMissingGames: gamePaths => ipcRenderer.invoke("launcher:findMissingGames", gamePaths),
+    locateGame: gamePath => ipcRenderer.invoke("launcher:locateGame", gamePath),
     forgetGames: gamePaths => ipcRenderer.invoke("launcher:forgetGames", gamePaths),
     deleteGames: gamePaths => ipcRenderer.invoke("launcher:deleteGames", gamePaths),
     setGameFavorite: (gamePath, favorite) => ipcRenderer.invoke("launcher:setGameFavorite", gamePath, favorite),
@@ -162,6 +164,7 @@ contextBridge.exposeInMainWorld("MacLauncher", {
       ipcRenderer.invoke("launcher:setModuleSettings", moduleId, patch),
     setLauncherSettings: patch =>
       ipcRenderer.invoke("launcher:setLauncherSettings", patch),
+    appUpdate: action => ipcRenderer.invoke("launcher:appUpdate", action),
     setModuleRuntimeSettings: (moduleId, runtimeId, settings) =>
       ipcRenderer.invoke("launcher:setModuleRuntimeSettings", moduleId, runtimeId, settings),
     setGameModuleData: (gamePath, patch) =>

@@ -43,7 +43,7 @@ function validateInventory(value, config, dependencies) {
   if (Object.keys(value).some(key => !['schemaVersion', 'launcherArch', 'maximumMacOS', 'packages', 'supplementals', 'sourceArtifacts', 'sourceDownload', 'projectPackages', 'packageRepository'].includes(key))) throw new Error('Unknown native inventory metadata.');
   if (value.projectPackages !== undefined || value.packageRepository !== undefined) {
     if (value.sourceDownload) throw new Error('Choose project packages or a combined native payload.');
-    require('./runtime-packages.cjs').validateLock({ schemaVersion: 1, repository: value.packageRepository,
+    require('./runtime-packages.cjs').validateSelection({ repository: value.packageRepository,
       arch: value.launcherArch, maximumMacOS: value.maximumMacOS, packages: value.projectPackages }, { dependencies });
   }
   if (value.sourceDownload) {

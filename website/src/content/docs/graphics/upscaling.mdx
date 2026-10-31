@@ -25,9 +25,9 @@ import ciriNearest from "../../../assets/graphics/upscaling-ciri-nearest.png";
 import ciriXbrz from "../../../assets/graphics/upscaling-ciri-xbrz.webp";
 import ciriSabr from "../../../assets/graphics/upscaling-ciri-sabr.webp";
 
-Games often draw fewer pixels than your display has. A pixel-art game might render at 320×180, an older 3D game at 720p, and a demanding one at whatever resolution keeps it running smoothly. Something has to stretch that image to fill a Retina screen, and the choice of *how* makes a bigger difference than you might expect.
+Games often draw fewer pixels than your display has. A pixel-art game might render at 320×180, an older 3D game at 720p, and a demanding one at whatever resolution keeps it running smoothly. Something has to enlarge that image to fill a Retina screen, and the method used changes the result considerably.
 
-An **Upscale** row in the chain does that stretching. By default it fills the window or the fullscreen surface, and you can also give it a fixed size or a multiple of its input. Here are two very different images, enlarged 4× by each method and cropped so you can see individual pixels: a frame of [Celeste](https://store.steampowered.com/app/504230/Celeste/), which draws its pixel art at 320×180, and a frame of Ciri from [The Witcher 3: Wild Hunt](https://store.steampowered.com/app/292030/The_Witcher_3_Wild_Hunt/), reduced to 480×270. Pick a game, then a method; the method stays selected when you switch games.
+An **Upscale** row in the effect chain does the enlarging. By default it fills the window or the fullscreen surface; it can also use a fixed size or a multiple of its input. The samples below enlarge two very different images 4× with each method, cropped so individual pixels are visible: a frame of [Celeste](https://store.steampowered.com/app/504230/Celeste/), which draws its pixel art at 320×180, and a frame of Ciri from [The Witcher 3: Wild Hunt](https://store.steampowered.com/app/292030/The_Witcher_3_Wild_Hunt/), reduced to 480×270. Choose a game, then a method; the method stays selected when you switch games.
 
 <Tabs syncKey="upscaling-game">
   <TabItem label="Celeste">
@@ -88,7 +88,7 @@ An **Upscale** row in the chain does that stretching. By default it fills the wi
   </TabItem>
 </Tabs>
 
-There's no single best answer. Pixel art usually wants **Nearest**, ideally at a whole-number scale so every pixel stays the same size. Smooth, detailed images such as 3D games, painted visual novel backgrounds and video benefit from a reconstruction filter instead:
+No method is best for everything. Pixel art usually looks right with **Nearest**, ideally at a whole-number scale so every pixel stays the same size. Smooth, detailed images such as 3D games, painted visual novel backgrounds and video benefit from a reconstruction filter instead:
 
 <Compare
   before={ciriBilinear}
@@ -101,47 +101,48 @@ There's no single best answer. Pixel art usually wants **Nearest**, ideally at a
 
 ## Spatial upscalers
 
-These work from a single finished image, so they work with every game.
+These use a single finished image, so they work with every game.
 
-- <span id="classic-filters"></span>**Nearest**, **Bilinear** and **Bicubic** are the classic filters. Nearest copies pixels, bilinear blends neighbors, bicubic blends a wider neighborhood for a little more sharpness.
-- <span id="libplacebo-filters"></span>**[libplacebo](https://libplacebo.org/) filters** add the kernels video players are known for, such as Lanczos, EWA Lanczos, Spline36, Mitchell and Catmull-Rom (macOS 15 or later).
-- <span id="metalfx-spatial"></span>**[MetalFX Spatial](https://developer.apple.com/documentation/metalfx)** is Apple's own upscaler. On a Mac that supports it, it's the suggested default.
-- <span id="fsr-1"></span>**[AMD FSR 1](https://github.com/GPUOpen-Effects/FidelityFX-FSR)** is AMD's edge-adaptive upscaler with its RCAS sharpening pass, ported to [Metal](https://developer.apple.com/metal/).
-- <span id="mako"></span>**[MAKO](https://github.com/eugeniosegala/MAKO)** spatial scaling, a separate reconstruction and sharpening filter.
-- <span id="lossless-scaling-ls1"></span>**[Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) LS1** is the upscaler from Lossless Scaling. It uses the model files from your own purchased copy, which you can import or download through [Steam](https://store.steampowered.com/) in **Runtimes → Graphics → Upscaling**.
+- <span id="classic-filters"></span>**Nearest**, **Bilinear** and **Bicubic** are the classic filters. Nearest copies pixels, bilinear blends neighboring pixels, and bicubic blends a wider neighborhood for a little more sharpness.
+- <span id="libplacebo-filters"></span>**[libplacebo](https://libplacebo.org/) filters** add the kernels used by video players, such as Lanczos, EWA Lanczos, Spline36, Mitchell and Catmull-Rom. Their macOS requirement comes from the selected graphics package; the [requirements reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/SYSTEM_REQUIREMENTS.md#graphics) lists it.
+- <span id="metalfx-spatial"></span>**[MetalFX Spatial](https://developer.apple.com/documentation/metalfx)** is Apple's upscaler, built into macOS 13 and later and available on Macs whose GPU supports it.
+- <span id="fsr-1"></span>**[AMD FSR 1](https://github.com/GPUOpen-Effects/FidelityFX-FSR)** is AMD's edge-adaptive upscaler with its RCAS sharpening pass, ported to [Metal](https://developer.apple.com/metal/). Its **Sharpness** control runs from 0 to 1.
+- <span id="mako"></span>**[MAKO](https://github.com/eugeniosegala/MAKO)** spatial scaling is another reconstruction filter, with sharpening built in.
+- <span id="lossless-scaling-ls1"></span>**[Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) LS1** is the upscaler from Lossless Scaling. It uses the model files from your own purchased copy, which **Runtimes → Graphics → Upscaling** can import or download through [Steam](https://store.steampowered.com/). [Getting Lossless Scaling files](/maclauncher/graphics/frame-generation/#getting-lossless-scaling-files) describes the options.
 
 ## Shader upscalers
 
-Shader collections bring a whole family of upscalers written for video players and emulators. Many of them are designed for a particular kind of image:
+Shader collections add many upscalers written for video players and emulators, and most of them are tuned for one kind of image:
 
-- **For anime and line art:** [Anime4K](https://github.com/bloc97/Anime4K), [ArtCNN](https://github.com/Artoriuz/ArtCNN), [CuNNy](https://github.com/funnyplanter/CuNNy) and [ACNet/ARNet](https://github.com/TianZerL/ACNetGLSL). These are small neural networks that run as ordinary GPU shaders, and they're often a great match for visual novels.
-- **For general video:** [FSRCNNX](https://github.com/iwalton3/default-shader-pack), [RAVU and NNEDI3](https://github.com/bjin/mpv-prescalers), and the included SSimSuperRes refinement pass.
-- **For pixel art:** [xBRZ](https://github.com/libretro/slang-shaders/tree/master/edge-smoothing/xbrz), [SABR](https://github.com/libretro/slang-shaders/tree/master/edge-smoothing/sabr) and the other pixel-art scalers in the [libretro Slang collection](https://github.com/libretro/slang-shaders), which smooth diagonal edges while keeping the hand-drawn look.
+- [Anime4K](https://github.com/bloc97/Anime4K), [ArtCNN](https://github.com/Artoriuz/ArtCNN), [CuNNy](https://github.com/funnyplanter/CuNNy) and [ACNet/ARNet](https://github.com/TianZerL/ACNetGLSL) are made for anime and line art. They are small neural networks that run as ordinary GPU shaders, and they often suit visual novels well.
+- [FSRCNNX](https://github.com/iwalton3/default-shader-pack), [RAVU and NNEDI3](https://github.com/bjin/mpv-prescalers) are made for general video, as is the included SSimSuperRes pass, which refines an upscaled image against its lower-resolution source.
+- [xBRZ](https://github.com/libretro/slang-shaders/tree/master/edge-smoothing/xbrz), [SABR](https://github.com/libretro/slang-shaders/tree/master/edge-smoothing/sabr) and the other pixel-art scalers in the [libretro Slang collection](https://github.com/libretro/slang-shaders) smooth diagonal edges while keeping the hand-drawn look of pixel art.
 
-A shader that always doubles its input shows up as an Upscale with its 2× scale; a later resize row can fit the result to the window. See [Shader collections and imports](/maclauncher/graphics/shaders/) for installing collections, and [Neural upscaling and restoration](/maclauncher/graphics/neural-restoration/) for the heavier model-based upscalers.
+A shader that always doubles its input appears as an Upscale with its 2× scale, and a later resize row can fit the result to the window. [Shader collections and imports](/maclauncher/graphics/shaders/) covers installing collections, and [Neural upscaling and restoration](/maclauncher/graphics/neural-restoration/) covers the heavier model-based upscalers.
 
 ## Temporal upscalers
 
-Temporal upscalers are a different breed. Instead of guessing detail from one image, they gather it across several frames: the game renders each frame with a tiny sub-pixel offset (jitter), and the upscaler uses the game's **depth** and **motion vectors** to line those frames up and rebuild a sharper picture. This is how modern games render at a fraction of the pixels and still look sharp.
+A spatial upscaler has one image to work from, while a temporal upscaler gathers detail across several frames. The game renders each frame with a tiny sub-pixel offset called jitter, and the upscaler uses the game's depth buffer and motion vectors to line those frames up and rebuild a sharper picture. Modern games use this technique to render a fraction of the pixels and still look sharp.
 
-MacLauncher includes:
+MacLauncher includes these temporal upscalers:
 
-- <span id="metalfx-temporal"></span>**[MetalFX Temporal](https://developer.apple.com/documentation/metalfx)**, plus its [denoised variant](https://developer.apple.com/documentation/metalfx/mtlfxtemporaldenoisedscaler) on macOS 26 or later;
-- <span id="fsr-temporal"></span>**AMD [FSR 2.2](https://github.com/GPUOpen-Effects/FidelityFX-FSR2)**, **[FSR 3.1](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK)** and **[FSR 4.1](https://github.com/UzenUPoZiTiV4ik/fsr4-native-macos)**, the last with Exact Fast, Lite and Lite 2 profiles on Apple Silicon with macOS 15 or later;
-- <span id="arm-asr-and-snapdragon-gsr-2"></span>**[Arm ASR](https://github.com/arm/accuracy-super-resolution-generic-library)** and **[Snapdragon GSR 2](https://github.com/SnapdragonGameStudios/snapdragon-gsr)**;
-- <span id="xess"></span>**[Intel XeSS](https://github.com/intel/xess)**;
-- <span id="dlss-sr"></span>**DLSS SR** for scenes, through [MLX-DLSS](https://github.com/iamwavecut/MLX-DLSS).
+- <span id="metalfx-temporal"></span>**[MetalFX Temporal](https://developer.apple.com/documentation/metalfx)**, plus its [denoised variant](https://developer.apple.com/documentation/metalfx/mtlfxtemporaldenoisedscaler) on macOS 26 or later
+- <span id="fsr-temporal"></span>**AMD [FSR 2.2](https://github.com/GPUOpen-Effects/FidelityFX-FSR2)**, **[FSR 3.1](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK)** and **[FSR 4.1](https://github.com/UzenUPoZiTiV4ik/fsr4-native-macos)**; FSR 4.1 has Exact Fast, Lite and Lite 2 profiles and needs Apple Silicon with macOS 15 or later
+- <span id="arm-asr-and-snapdragon-gsr-2"></span>**[Arm ASR](https://github.com/arm/accuracy-super-resolution-generic-library)** and **[Snapdragon GSR 2](https://github.com/SnapdragonGameStudios/snapdragon-gsr)**
+- <span id="xess"></span>**[Intel XeSS](https://github.com/intel/xess)**, which runs through D3DMetal or KosmicKrisp on Apple Silicon
+- <span id="dlss-sr"></span>**DLSS SR** for scenes, through [MLX-DLSS](https://github.com/iamwavecut/MLX-DLSS)
 
-The catch is that they need those depth, motion and camera inputs from the game itself. A finished picture alone isn't enough, so temporal upscalers are available only for games whose runtime hands MacLauncher that data. For everything else, the spatial and neural upscalers above are the way to go.
+All of them need depth, motion and camera data from the game itself, which a finished picture cannot supply. They run only in games whose runtime passes that data to MacLauncher; for other games, the spatial and neural upscalers are the options.
 
 ## Render size versus window size
 
-Upscaling pairs naturally with rendering less. Two separate controls are involved:
+Upscaling pairs well with rendering fewer pixels in the first place. Two separate controls reduce the size.
 
-- <span id="game-resolution"></span>**Game resolution** asks the game itself to render at a smaller size, which saves the game real work. It's available where the runtime supports it.
-- <span id="downsample"></span>**Downsample** shrinks an image that has already been rendered. The game doesn't get faster, but every effect after it has fewer pixels to process, which matters a lot for neural models.
+<span id="game-resolution"></span>**Game resolution** asks the game itself to render at a smaller size, which saves the game real work. When the game's renderer can't change its size, MacLauncher uses a virtual window if one is available, and otherwise shrinks the finished image before the effects run. That fallback saves work in the effects but not in the game's own rendering.
 
-Either way, the window stays the same size; only the processing resolution changes. [Building a chain](/maclauncher/graphics/composing-effects/) has more on sizes, and the [graphics guide](https://github.com/procrastinine/maclauncher/blob/master/docs/GRAPHICS.md#rendering-processing-and-output-size) and [provider reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/PROVIDERS.md#spatial-resizing) have every option and requirement.
+<span id="downsample"></span>A **Downsample** row shrinks an image that has already been rendered. The game doesn't get faster, but every effect after the row has fewer pixels to process, which matters most for neural models.
+
+In both cases the window keeps its size, and only the processing resolution changes. [Building a chain](/maclauncher/graphics/composing-effects/) has more on sizes. The graphics guide's [size section](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#rendering-processing-and-output-size) describes every size option, and the algorithm reference lists the requirements of each [spatial](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/PROVIDERS.md#spatial-resizing) and [temporal](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/PROVIDERS.md#scene-temporal-upscaling) upscaler.
 
 ## Further reading
 

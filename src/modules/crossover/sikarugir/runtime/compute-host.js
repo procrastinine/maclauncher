@@ -1,23 +1,13 @@
 // Copyright (c) MacLauncher contributors. MIT license.
 const fs=require("node:fs"),path=require("node:path"),crypto=require("node:crypto");
-const {spawnSync}=require("node:child_process");
 const Manager=require("./manager"),Launch=require("../launch"),Graphics=require("../graphics");
 const Writable=require("../../../shared/writable-input"),Rosetta=require("../../../shared/runtime/rosetta");
 const Catalog=require("./catalog"),{versionAtLeast,systemVersionSync}=require("../../../shared/runtime/bundled-native");
 const {confirmToolInstall}=require("../../../shared/runtime/tool-install"),{withRuntimeMutation}=require("../../../../core/coordinated-runtime-managers");
-let physicalArchitecture;
-function architecture(){
-  if(physicalArchitecture)return physicalArchitecture;
-  physicalArchitecture=process.arch;
-  if(process.platform==="darwin"&&process.arch==="x64"){
-    const result=spawnSync("/usr/sbin/sysctl",["-n","hw.optional.arm64"],{encoding:"utf8",timeout:1000});
-    if(!result.error&&result.status===0&&result.stdout.trim()==="1")physicalArchitecture="arm64";
-  }
-  return physicalArchitecture;
-}
+const architecture=()=>require("../../../shared/runtime/host-capabilities").getHostCapabilities().hardwareArch;
 const digest=value=>crypto.createHash("sha256").update(value).digest("hex");
 function capabilities(install){
-  try{return Graphics.capabilitiesFor(install,install.templateRoot||install.supportRoot||path.join(install.installDir,"support"),{arch:architecture()});}
+  try{return Graphics.capabilitiesFor(install,install.templateRoot||install.supportRoot||path.join(install.installDir,"support"),{hardwareArch:architecture()});}
   catch{return {};}
 }
 function state({userDataDir,settings}={}){
@@ -29,7 +19,7 @@ function state({userDataDir,settings}={}){
   if(process.platform==="darwin"&&architecture()==="arm64"){
     const candidates=Manager.core.listCatalog({userDataDir}).filter(pin=>Catalog.validateEntry(pin)&&(runtime.catalog?.installableVersions||[]).includes(pin.version));
     for(const backend of ["d3d12","vulkan"]){
-      if(installs[backend]||!versionAtLeast(systemVersionSync(),backend==="vulkan"?"26.0":"14.0"))continue;
+      if(installs[backend]||!versionAtLeast(systemVersionSync(),Graphics.MINIMUM_MACOS[backend==="vulkan"?"kosmickrisp":"d3dmetal"]))continue;
       const pin=backend==="d3d12"?candidates.find(row=>Number(row.engineVersion.split(".")[0])>=11):candidates.find(row=>row.version===selected.version)||candidates[0];
       if(pin)plans[backend]={managerId:"sikarugir",version:pin.version,label:"Sikarugir GPU helper",requiresDownload:true,
         installOptions:{sectionId:"default"},detail:"Required for the selected XeSS GPU backend. GPU support is checked after installation."};
@@ -68,7 +58,7 @@ async function prepare(request,context={}){
   const helperLibraries=(request.helperLibraries||[]).map(item=>({name:item.name,windows:regular(item.windows),unix:regular(item.unix)}));
   const viewIdentity=digest(JSON.stringify([hostPath,helperLibraries.map(item=>[item.name,digest(fs.readFileSync(item.windows)),digest(fs.readFileSync(item.unix))])])).slice(0,24);
   const settings={graphicsBackend:request.backend==="d3d12"?"d3dmetal":"wined3d",vulkanBackend:request.backend==="vulkan"?"kosmickrisp":"auto",synchronization:"auto",dlss:false,environment:[],windowsVersion:"win10"};
-  const graphics=await Graphics.prepareGraphicsView({install,settings,prefixPath:prefix,viewRoot:path.join(directory,"views",viewIdentity),host:{arch:architecture()},executableArchitecture:"x64",helperLibraries,signal});
+  const graphics=await Graphics.prepareGraphicsView({install,settings,prefixPath:prefix,viewRoot:path.join(directory,"views",viewIdentity),host:{hardwareArch:architecture()},executableArchitecture:"x64",helperLibraries,signal});
   if(!request.prefixDirectory)await Launch.ensurePrefix(install,prefix,directory,settings,graphics,context);
   const {environment}=Launch.buildEnvironment(settings,install,directory,prefix,graphics,{baseEnvironment:require("../../../shared/runtime/macos-sandbox").environment(context.environment||process.env)});
   signal?.throwIfAborted();await context.useRuntime?.({managerId:"sikarugir",sectionId:"default",version:install.version,sourcePath:install.installDir});

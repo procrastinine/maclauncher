@@ -475,3 +475,59 @@ test("LÖVE preserves an explicit ready global release and version-only override
   entry.runtimeData.love.version = "11.3";
   assert.equal(LoveModule.actions.runtimeStatus(entry, {}, context).ready, false);
 });
+
+test("LÖVE release lines: Automatic names the detected line and a chosen channel limits the recommendation", async t => {
+  const root = makeTempDir("maclauncher-love-lines-");
+  t.after(() => { LoveManager.__test.resetState(); fs.rmSync(root, { recursive: true, force: true }); });
+  const userDataDir = path.join(root, "data"), context = { settings: {}, userDataDir };
+  t.mock.method(LoveManager.core, "fetchAvailableVersions", async () => ({ versions: ["11.5", "11.4", "0.10.2", "0.9.2"], entriesByVersion: {}, source: "test" }));
+  await LoveManager.refreshCatalog({ force: true, sectionId: "stable" });
+  const game = runtimeData => ({ gameId: "game-love-lines", gamePath: path.join(root, "Game.love"), runtimeId: "love",
+    moduleData: { sourceKind: "love-archive", detectedVersion: "0.10.2" }, runtimeData: runtimeData ? { love: runtimeData } : {} });
+  const label = id => LoveManager.getState({ settings: {}, userDataDir }).sections.find(section => section.id === id)?.label;
+
+  // A listed 0.10 release stays in the release channel and names its own line.
+  const automatic = game(), status = LoveModule.actions.runtimeStatus(automatic, {}, context);
+  assert.equal(status.resolvedChannel, "stable");
+  assert.equal(status.resolvedVersion, "0.10.2");
+  assert.equal(label(automatic.moduleData.resolvedSection), "LÖVE 0.10");
+  assert.deepEqual(LoveModule.runtimeRecommendation(automatic, context), { version: "0.10.2", sectionId: "stable" });
+  assert.deepEqual(await LoveModule.ensureRuntime(game(), { ...context, runtimeId: "love" }),
+    { managerId: "love", version: "0.10.2", installOptions: { sectionId: "stable" } });
+
+  // The LÖVE 11 channel keeps to its line, while Automatic still names the detected line.
+  const chosen = game({ channel: "stable" });
+  assert.equal(LoveModule.actions.runtimeStatus(chosen, {}, context).resolvedVersion, "11.5");
+  assert.equal(label("stable"), "LÖVE 11");
+  assert.equal(LoveModule.runtimeRecommendation(chosen, context), null);
+  assert.equal(chosen.moduleData.resolvedSection, "stable-0-10");
+  assert.equal(LoveModule.runtimeRecommendation(game({ channel: "nightly" }), context), null);
+
+  // A version from another line leaves Automatic naming that line.
+  const pinned = game({ version: "0.9.2" });
+  LoveModule.actions.runtimeStatus(pinned, {}, context);
+  assert.equal(label(pinned.moduleData.resolvedSection), "LÖVE 0.9");
+});
+
+test("choosing a LÖVE version in the inspector selects the channel of its line", async t => {
+  const { build } = require("vite");
+  const Module = require("node:module");
+  const bundle = await build({ configFile: false, logLevel: "silent", build: { write: false,
+    ssr: path.join(__dirname, "../src/renderer/src/ui/components/runtime-inspector-model.ts"),
+    rollupOptions: { output: { format: "cjs", codeSplitting: false } } } });
+  const compiled = new Module(path.join(__dirname, "runtime-inspector-model.cjs"), module);
+  compiled.paths = module.paths;
+  compiled._compile(bundle.output.find(chunk => chunk.type === "chunk").code, compiled.id);
+  const root = makeTempDir("maclauncher-love-inspector-");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const userDataDir = path.join(root, "data"), buildKey = "2026-03-01T15-25-27Z_7d41f3ad30f4a171140f8b2ff53e534add018bb4";
+  createRuntimeInstall(userDataDir, "stable", "11.5");
+  createRuntimeInstall(userDataDir, "stable", "0.10.2");
+  createRuntimeInstall(userDataDir, "nightly", buildKey, { bundleVersion: "12.0" });
+  const state = LoveManager.getState({ settings: {}, userDataDir });
+  const patch = version => compiled.exports.runtimeInspectorVersionPatch(LoveModule.manifest, "love", state, version);
+  assert.deepEqual(patch("11.5"), { version: "11.5", channel: "stable" });
+  assert.deepEqual(patch(buildKey), { version: buildKey, channel: "nightly" });
+  // LÖVE 0.10 has no channel of its own, so an earlier LÖVE 11 or nightly choice is cleared.
+  assert.deepEqual(patch("0.10.2"), { version: "0.10.2", channel: null });
+});

@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const { execFile: nodeExecFile, spawnSync: nodeSpawnSync } = require("node:child_process");
 const { readMachOArchitectures } = require("./local-native");
+const Host = require("./host-capabilities");
 const { createAbortError, isAbortError, throwIfAborted } = require("./download-utils");
 
 const PACKAGE_ID = "com.apple.pkg.RosettaUpdateAuto";
@@ -80,11 +81,11 @@ function createAppleInstaller({ execFile = nodeExecFile } = {}) {
   };
 }
 
-function createRosettaService({ platform = process.platform, arch = process.arch, fileSystem = fs,
+function createRosettaService({ platform = process.platform, arch, fileSystem = fs,
   spawnSync = nodeSpawnSync, readArchitectures = readMachOArchitectures, runInstaller = createAppleInstaller(),
   now = Date.now } = {}) {
   let cached = null, checkedAt = 0, pending = null;
-  const required = platform === "darwin" && arch === "arm64";
+  const required = () => platform === "darwin" && (arch || Host.getHostCapabilities().hardwareArch) === "arm64";
   function readSystem() {
     try {
       const content = fileSystem.readFileSync(SYSTEM_VERSION_PATH);
@@ -92,7 +93,7 @@ function createRosettaService({ platform = process.platform, arch = process.arch
     } catch { return { systemVersion: null, systemBuild: null }; }
   }
   function getStatus({ force = false, includeVersion = true, verify = false } = {}) {
-    if (!required) return { required: false, available: true, installed: false, version: null, packageId: null,
+    if (!required()) return { required: false, available: true, installed: false, version: null, packageId: null,
       installedAt: null, systemVersion: null, systemBuild: null, source: "not-required", installLocation: INSTALL_LOCATION };
     if (!force && !verify && cached && (cached.available || now() - checkedAt < 2000) && (!includeVersion || cached.versionChecked)) return { ...cached };
     if (!force && !verify && cached?.available) {
@@ -131,7 +132,7 @@ function createRosettaService({ platform = process.platform, arch = process.arch
   }
   function isAvailable(options = {}) { return getStatus({ ...options, includeVersion: false }).available; }
   function requiresForExecutable(executable, { forceIntel = false } = {}) {
-    if (!required) return false;
+    if (!required()) return false;
     if (forceIntel) return true;
     try { const architectures = readArchitectures(executable); return architectures.includes("x86_64") && !architectures.includes("arm64"); }
     catch { return false; }

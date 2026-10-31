@@ -23,6 +23,10 @@ function normalizedOrigin(value) {
   url.username = ""; url.password = ""; url.search = ""; url.hash = "";
   return url.href.replace(/\/$/, "");
 }
+function checkoutOriginMatches(project, origin) {
+  const actual = normalizedOrigin(origin);
+  return [project.repository, project.checkoutOrigin].filter(Boolean).some(value => normalizedOrigin(value) === actual);
+}
 function gitEnvironment() {
   const env = { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0", GIT_NO_LAZY_FETCH: "1" };
   for (const key of ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_PREFIX"]) delete env[key];
@@ -207,8 +211,8 @@ async function sourceGuardBlob({ root, project, revision, file, projects, depth 
       throw Error("Nested source guard differs from its inventoried Gitlink or origin.");
     }
     const child = path.join(root, nested.path);
-    if (!fs.existsSync(path.join(child, ".git")) || normalizedOrigin(await git(child, ["remote", "get-url", "origin"])) !==
-        normalizedOrigin(nested.checkoutOrigin || nested.repository)) throw Error("Nested source guard checkout is unavailable or has a different origin.");
+    if (!fs.existsSync(path.join(child, ".git")) || !checkoutOriginMatches(nested, await git(child, ["remote", "get-url", "origin"])))
+      throw Error("Nested source guard checkout is unavailable or has a different origin.");
     return sourceGuardBlob({ root, project: nested, revision: commit, file: file.slice(name.length + 1), projects, depth: depth + 1 });
   }
 }
@@ -246,7 +250,7 @@ async function checkInventory({ root = ROOT, inventory = JSON.parse(fs.readFileS
       const head = (await git(directory, ["rev-parse", "HEAD"])).trim();
       if (head !== project.revision) errors.push({ code: "checkout-pin-drift", id: project.id, expected: project.revision, actual: head });
       const origin = (await git(directory, ["config", "--get", "remote.origin.url"])).trim();
-      if (normalizedOrigin(origin) !== normalizedOrigin(project.checkoutOrigin || project.repository)) errors.push({ code: "checkout-origin-drift", id: project.id });
+      if (!checkoutOriginMatches(project, origin)) errors.push({ code: "checkout-origin-drift", id: project.id });
       const dirty = (await git(directory, ["status", "--porcelain=v1", "--untracked-files=no", "--ignore-submodules=all"])).trim();
       if (dirty) errors.push({ code: "tracked-source-modified", id: project.id });
       const nested = await submodules(directory, project.revision, project.repository), nestedPins = await treeLinks(directory, project.revision);

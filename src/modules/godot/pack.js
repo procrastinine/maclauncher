@@ -1,7 +1,14 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
 const Writable = require("../shared/writable-input");
-const MAGIC = Buffer.from("GDPC"), MAX_DIRECTORY = 8 * 1024 * 1024, MAX_ENTRIES = 65536;
+const MAGIC = Buffer.from("GDPC"), MAX_DIRECTORY = 8 * 1024 * 1024, MAX_ENTRIES = 65536, MAX_PATH = 4096;
 const utf8 = bytes => new TextDecoder("utf-8", {fatal: true}).decode(bytes);
+// A directory path names a project resource: NUL-padded UTF-8 with an optional
+// res:// prefix, relative, without control characters, backslashes or empty,
+// "." or ".." segments. Any other path gives null.
+function resourcePath(bytes) {
+  let name;try {name = utf8(bytes).replace(/\0+$/, "").replace(/^res:\/\//, "");} catch {return null;}
+  return !name || /[\x00-\x1f\x7f\\]/.test(name) || name.startsWith("/") || name.split("/").some(part => !part || part === "." || part === "..") ? null : name;
+}
 function integer(value) {const result = Number(value);if (!Number.isSafeInteger(result) || result < 0) throw Error("Invalid Godot pack offset.");return result;}
 function exact(fd, position, length) {
   const bytes = Buffer.alloc(length);let done = 0;
@@ -48,9 +55,9 @@ function directory(fd, options) {
   const entries = new Map();
   for (let i = 0; i < count; i++) {
     const directoryPosition = position;
-    const length = u32();if (!length || length > 4096) throw Error("Invalid Godot resource path.");
-    const name = utf8(take(length)).replace(/\0+$/, "").replace(/^res:\/\//, "");
-    if (!name || /[\x00-\x1f\x7f\\]/.test(name) || name.startsWith("/") || name.split("/").some(part => !part || part === "." || part === "..") || entries.has(name)) throw Error("Invalid Godot resource path.");
+    const length = u32();if (!length || length > MAX_PATH) throw Error("Invalid Godot resource path.");
+    const name = resourcePath(take(length));
+    if (!name || entries.has(name)) throw Error("Invalid Godot resource path.");
     const offsetPosition = position - offset, start = u64() + base, lengthBytes = u64(), md5 = Buffer.from(take(16)), flags = version >= 2 ? u32() : 0;
     if (!Number.isSafeInteger(start) || start < offset || start > offset + size - lengthBytes) throw Error("Godot resource lies outside its pack.");
     entries.set(name, {name, offset: start, size: lengthBytes, flags, md5, offsetPosition, directoryPosition, directoryLength: position - directoryPosition});
@@ -109,15 +116,34 @@ function withoutEntries(file, target, options, omit, root) {
     fs.renameSync(temporary, target);return target;
   } finally {fs.rmSync(temporary, {force: true});}
 }
+// .NET exports keep their assemblies in a data_* folder beside the pack, and C#
+// projects keep .csproj or .sln files and the .mono build folder at their root.
+// Loose DLLs, such as GDExtension or Steam libraries, are not .NET evidence.
+function managedFolder(directory) {
+  let rows;try {rows = fs.readdirSync(directory, {withFileTypes: true});} catch {return false;}
+  if (rows.some(item => /^(?:\.mono|GodotSharp)$|\.(?:csproj|sln)$/i.test(item.name))) return true;
+  return rows.some(item => item.isDirectory() && /^data_./i.test(item.name) && assemblies(path.join(directory, item.name)));
+}
+function assemblies(root) {
+  const queue = [[root, 0]];let count = 0;
+  while (queue.length) {
+    const [directory, depth] = queue.shift();let rows;
+    try {rows = fs.readdirSync(directory, {withFileTypes: true});} catch {continue;}
+    for (const item of rows) {
+      if (++count > 16384) return false;
+      if (item.isDirectory()) {if (depth < 4) queue.push([path.join(directory, item.name), depth + 1]);}
+      else if (/\.dll$/i.test(item.name)) return true;
+    }
+  }
+  return false;
+}
+// "mono" when a Godot 3 or later pack or its folder declares C# or Mono content,
+// "gdscript" when the pack holds only GDScript, and null otherwise.
 function scripting(file, options) {
+  let major = null, declared = null;
   try {
-    return open(file, options, (fd, pack) => {
-      if (pack.engineMajor !== 3) return null;
-      // Managed exports can carry assemblies beside the PCK rather than inside
-      // it. Treat their conventional containers and all ambiguous cases as Mono.
-      const adjacent = fs.readdirSync(path.dirname(file), {withFileTypes: true});
-      if (adjacent.length > 256) return null;
-      if (adjacent.some(item => /^(?:\.mono|GodotSharp|data_.+)$|\.(?:csproj|sln|dll)$/i.test(item.name))) return "mono";
+    declared = open(file, options, (fd, pack) => {
+      major = pack.engineMajor;
       const names = [...pack.entries.keys()];
       if (names.some(name => /(?:^|\/)\.mono(?:\/|$)|\.(?:cs|cs\.remap|csproj|sln|dll)$/i.test(name))) return "mono";
       const config = readEntry(fd, pack.entries.get("project.binary"), 1024 * 1024);
@@ -134,6 +160,8 @@ function scripting(file, options) {
       if (/(?:mono\/|dotnet|csharp|C#)/i.test(config.toString("utf8"))) return "mono";
       return names.some(name => /\.(?:gd|gdc|gde)$/i.test(name)) ? "gdscript" : null;
     });
-  } catch {return null;}
+  } catch { /* An unreadable pack declares nothing; its folder still can. */ }
+  if (major !== null && major < 3) return null;
+  return declared === "mono" || managedFolder(path.dirname(file)) ? "mono" : declared;
 }
-module.exports = {hasTrailer, open, readEntry, project, scripting, withoutEntries};
+module.exports = {MAX_ENTRIES, MAX_PATH, hasTrailer, managedFolder, open, readEntry, project, resourcePath, scripting, withoutEntries};

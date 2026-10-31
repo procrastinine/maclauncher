@@ -23,7 +23,7 @@ function playbackArguments(entry, filters = Scaling.filtersFor(), logger, option
     "--keep-open=yes", "--force-window=yes", "--sub-auto=exact", "--sub-file-paths=subs:subtitles:Subs:Subtitles", "--", entry.gamePath];
 }
 module.exports = {
-  id: manifest.id, manifest, detectGame, runtimeManagers: [manager, Plugins.manager], normalizeRuntimeId: () => "mpv",
+  id: manifest.id, manifest, detectGame, runtimeManagers: [manager, Plugins.manager, require("./runtime/uosc-helper-manager")], normalizeRuntimeId: () => "mpv",
   settingsActions: require("./settings").settingsActions,
   mergeEntry: Scaling.mergeEntry,
   upgradeLegacyGraphics: Scaling.legacyGraphics,
@@ -48,7 +48,7 @@ module.exports = {
     const requirements = Configuration.required(context.runtimeSettings, context.userDataDir).flatMap(pkg => {
       const install = Plugins.status(context.userDataDir, pkg.id);
       if (install) {
-        context.recordRuntimeUse?.({ managerId: Plugins.manager.id, sectionId: pkg.id, version: pkg.version, sourcePath: install.installDir });
+        context.recordRuntimeUse?.({ managerId: Plugins.manager.id, sectionId: pkg.id, version: install.version, sourcePath: install.installDir });
         return [];
       }
       return [];

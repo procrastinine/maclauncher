@@ -23,7 +23,7 @@ test("Impacto starts without Mac package rows and identifies its Builds catalog"
   const manager = Managers.createManager({ resourceRoot: path.join(root, "bundles"), dependencies: { github: {
     fetchGithubReleases: unavailable, fetchGithubTags: unavailable, resolveGithubTagCommit: unavailable } } });
   const state = manager.getState({ userDataDir: path.join(root, "user") });
-  assert.equal(state.catalog.recommendedVersion, null);
+  assert.equal(state.defaultVersion, null);
   assert.deepEqual(state.catalog.versions, []);
   assert.deepEqual(state.catalog.includedVersions, []);
   assert.deepEqual(state.catalog.installableVersions, []);
@@ -80,17 +80,17 @@ test("a sealed app resource does not replace the managed Impacto Windows V9 down
     assert.equal(queries, 0); assert.equal(initial.catalog.status, "idle");
     assert.deepEqual(initial.catalog.versions, []);
     assert.deepEqual(initial.catalog.includedVersions, []);
-    assert.equal(initial.catalog.recommendedVersion, null);
+    assert.equal(initial.defaultVersion, null);
     assert.deepEqual(initial.installed, []);
     assert.equal(fs.existsSync(userDataDir), false);
     await manager.refreshCatalog({ userDataDir, force: true });
     const refreshed = manager.getState({ userDataDir }), selected = manager.resolveSelection({}, {}, userDataDir);
     assert.deepEqual(refreshed.catalog.versions, []);
     assert.deepEqual(refreshed.catalog.includedVersions, []);
-    assert.equal(refreshed.catalog.recommendedVersion, null); assert.equal(queries, 0);
+    assert.equal(refreshed.defaultVersion, null); assert.equal(queries, 0);
     assert.deepEqual(refreshed.catalog.installableVersions, []);
     assert.equal(selected.version, null); assert.equal(selected.ready, false);
-    assert.equal(selected.selectionRequired, true);
+    assert.equal(selected.selectionRequired, undefined); assert.equal(selected.discoveryRequired, true);
     assert.equal(selected.install, null);
     assert.deepEqual(fs.readFileSync(manifestPath), bytes);
     assert.deepEqual(fs.readFileSync(path.join(payload, executableRelative)), executable);

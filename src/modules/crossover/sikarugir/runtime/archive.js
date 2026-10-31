@@ -4,11 +4,13 @@ const { spawn } = require("node:child_process");
 const Python = require("../../../shared/runtime/python");
 const { throwIfAborted } = require("../../../shared/runtime/download-utils");
 
-// The included interpreter handles xz without Homebrew. Validate every member
-// before writing, then publish links last so archive aliases cannot redirect
-// subsequent extraction outside the empty installation staging directory.
+// The included interpreter reads tar (xz, gzip, bzip2) and zip archives
+// without Homebrew. Validate every member before writing, then publish links
+// last so archive aliases cannot redirect subsequent extraction outside the
+// empty installation staging directory.
+const ARCHIVE = /\.(?:tar\.(?:xz|gz|bz2)|t[gx]z|tar|zip)$/i;
 const EXTRACT_SCRIPT = String.raw`
-import os, sys, tarfile, posixpath, shutil
+import os, sys, stat, tarfile, zipfile, posixpath, shutil
 archive, destination = sys.argv[1:]
 root = os.path.realpath(destination)
 if os.path.islink(destination) or os.listdir(destination):
@@ -21,56 +23,66 @@ def safe_name(value):
     if not value or value.startswith("/") or any(p in ("", ".", "..") for p in value.split("/")):
         raise ValueError("Runtime archive path escapes its installation.")
     return value
-with tarfile.open(archive, "r:xz") as source:
+# Tar and zip members as (name, kind, size, mode, link, member).
+def members_of(source):
+    if isinstance(source, zipfile.ZipFile):
+        for info in source.infolist():
+            mode = info.external_attr >> 16
+            kind = "dir" if info.is_dir() else "sym" if stat.S_ISLNK(mode) else "file" if not stat.S_IFMT(mode) or stat.S_ISREG(mode) else "other"
+            link = source.read(info).decode("utf-8") if kind == "sym" and info.file_size <= 4096 else None
+            yield info.filename, kind, info.file_size, (mode & 0o777) or 0o644, link, info
+    else:
+        for member in source:
+            kind = "dir" if member.isdir() else "file" if member.isfile() else "sym" if member.issym() else "hard" if member.islnk() else "other"
+            yield member.name, kind, member.size, member.mode & 0o777, member.linkname if kind in ("sym", "hard") else None, member
+with (zipfile.ZipFile(archive) if zipfile.is_zipfile(archive) else tarfile.open(archive, "r:*")) as source:
     members, seen, aliases, total = [], set(), set(), 0
-    for member in source:
+    for name, kind, size, mode, link, member in members_of(source):
         if len(members) >= 50000: raise ValueError("Runtime archive contains too many files.")
-        name = safe_name(member.name)
+        name = safe_name(name)
         if name in seen: raise ValueError("Runtime archive contains duplicate paths.")
         seen.add(name)
-        if not (member.isfile() or member.isdir() or member.issym() or member.islnk()):
-            raise ValueError("Runtime archive contains an unsupported file type.")
-        if member.size < 0 or member.size > 1024*1024*1024: raise ValueError("Runtime archive file exceeds its size limit.")
-        total += member.size
+        if kind == "other": raise ValueError("Runtime archive contains an unsupported file type.")
+        if size < 0 or size > 1024*1024*1024: raise ValueError("Runtime archive file exceeds its size limit.")
+        total += size
         if total > 3*1024*1024*1024: raise ValueError("Runtime archive exceeds its unpacked size limit.")
         target = None
-        if member.issym() or member.islnk():
-            link = member.linkname
+        if kind in ("sym", "hard"):
             if not link or len(link) > 4096 or link.startswith("/") or "\\" in link or any(ord(c) < 32 or ord(c) == 127 for c in link):
                 raise ValueError("Runtime archive link escapes its installation.")
-            target = posixpath.normpath(posixpath.join(posixpath.dirname(name), link)) if member.issym() else safe_name(link)
+            target = posixpath.normpath(posixpath.join(posixpath.dirname(name), link)) if kind == "sym" else safe_name(link)
             if target == ".." or target.startswith("../") or target.startswith("/"):
                 raise ValueError("Runtime archive link escapes its installation.")
             aliases.add(name)
-        members.append((member, name, target))
-    for member, name, target in members:
+        members.append((name, kind, mode, link, target, member))
+    for name, kind, mode, link, target, member in members:
         parts = name.split("/")
         if any("/".join(parts[:i]) in aliases for i in range(1, len(parts))):
             raise ValueError("Runtime archive writes through a symbolic link.")
-        if member.islnk() and target not in seen:
+        if kind == "hard" and target not in seen:
             raise ValueError("Runtime archive contains a missing hard-link target.")
-        if member.islnk() and target in aliases:
+        if kind == "hard" and target in aliases:
             raise ValueError("Runtime archive hard links cannot target another link.")
-    for member, name, target in members:
+    for name, kind, mode, link, target, member in members:
         output = os.path.join(root, name)
-        if member.isdir(): os.makedirs(output, exist_ok=True)
-        elif member.isfile():
+        if kind == "dir": os.makedirs(output, exist_ok=True)
+        elif kind == "file":
             os.makedirs(os.path.dirname(output), exist_ok=True)
-            with source.extractfile(member) as data, open(output, "xb") as result:
+            with (source.open(member) if isinstance(source, zipfile.ZipFile) else source.extractfile(member)) as data, open(output, "xb") as result:
                 shutil.copyfileobj(data, result, 1024*1024)
-            os.chmod(output, member.mode & 0o777)
-    for member, name, target in members:
+            os.chmod(output, mode)
+    for name, kind, mode, link, target, member in members:
         output = os.path.join(root, name)
-        if member.issym() or member.islnk():
+        if kind in ("sym", "hard"):
             os.makedirs(os.path.dirname(output), exist_ok=True)
-            if member.issym(): os.symlink(member.linkname, output)
+            if kind == "sym": os.symlink(link, output)
             else: os.link(os.path.join(root, target), output)
 `;
 
 async function extractArchive(archivePath, destination, signal, { spawn: start = spawn,
   resolvePython = () => Python.resolveEmbeddedPythonBinary(Python.resolveEmbeddedPythonRoot()) } = {}) {
   throwIfAborted(signal);
-  if (!path.isAbsolute(archivePath) || !archivePath.endsWith(".tar.xz") || !path.isAbsolute(destination) ||
+  if (!path.isAbsolute(archivePath) || !ARCHIVE.test(archivePath) || !path.isAbsolute(destination) ||
     !fs.lstatSync(archivePath).isFile() || fs.lstatSync(archivePath).isSymbolicLink() ||
     fs.lstatSync(destination).isSymbolicLink() || fs.readdirSync(destination).length)
     throw new Error("Sikarugir extraction requires a runtime archive and an empty installation folder.");
@@ -88,4 +100,4 @@ async function extractArchive(archivePath, destination, signal, { spawn: start =
   throwIfAborted(signal);
 }
 
-module.exports = { extractArchive, EXTRACT_SCRIPT };
+module.exports = { ARCHIVE, extractArchive, EXTRACT_SCRIPT };

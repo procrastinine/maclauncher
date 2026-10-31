@@ -1,32 +1,46 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
-const Releases = require("./github-releases");
+const Upstream = require("./upstream");
 const Native = require("./local-native");
 const JavaHost = require("./java-tool-host");
 const { readZipEntries, readZipEntryBuffer } = require("./zip");
 const { inspectJar } = require("../../java/detect");
-const { downloadToFile, throwIfAborted } = require("./download-utils");
+const { throwIfAborted } = require("./download-utils");
 const { runDownloadTask } = require("./download-manager");
 const { confirmToolInstall } = require("./tool-install");
 const { withRuntimeMutation, withRuntimeUse } = require("../../../core/coordinated-runtime-managers");
 const { runToolCommand } = require("./tool-command");
 const Custom = require("./custom-runtime");
-const { selectRuntimeVersion, managerDefaultVersion } = require("./version-choices");
+const { selectRuntimeVersion, managerDefaultVersion, savedDefaultVersion } = require("./version-choices");
 
-const LIMITS = { versions: 500, entries: 2000, archive: 128 * 1024 * 1024, expanded: 256 * 1024 * 1024 };
+const LIMITS = { versions: 500, entries: 2000, archive: 1024 * 1024 * 1024, expanded: 2 * 1024 * 1024 * 1024 };
 const safeRelative = name => typeof name === "string" && name && !name.includes("\\") && !/[\x00-\x1f]/.test(name) &&
   !path.posix.isAbsolute(name) && name.split("/").every(part => part && part !== "." && part !== "..");
+// Files beside a Java tool's portable download: graphical or runtime-bundled
+// builds, other systems, installers, sources and libraries.
+const OTHER_FILES = /(?:^|[^a-z0-9])(?:gui|jre|jdk|win|win32|win64|windows|linux|mac|macos|macosx|osx|darwin|setup|installer|src|source|sources|javadoc|debug|symbols|lib)(?=[^a-z]|$)/i;
+// A release's portable download: the publisher's current file name wins, then
+// the shortest file of the tool's own name in a supported format.
+function releaseAsset(release, { names = [], pattern, extensions = [".zip"] }) {
+  const assets = Array.isArray(release?.assets) ? release.assets : [];
+  return assets.find(asset => names.includes(asset?.name)) || assets.filter(asset => {
+    const name = String(asset?.name || "");
+    return pattern.test(name) && extensions.some(extension => name.toLowerCase().endsWith(extension)) && !OTHER_FILES.test(name);
+  }).sort((a, b) => a.name.length - b.name.length)[0] || null;
+}
 
+// A Java tool listed by an upstream source: each release's first file is its
+// portable download, a JAR or an archive holding one.
 function createManagedJavaTool(config) {
-  const { id, label, owner, repo, jarName: configuredJarName, pins = [], order = 250 } = config;
+  const { id, label, upstream, jarName: configuredJarName, order = 250 } = config;
   function applicationJar(version) {
     const relative = typeof configuredJarName === "function" ? configuredJarName(normalizeVersion(version)) : configuredJarName;
     if (!safeRelative(relative) || !/\.jar$/i.test(relative)) throw new Error(`${label} Java application path is invalid.`);
     return relative;
   }
-  const source = config.sourceUrl || `https://github.com/${owner}/${repo}/releases`;
-  const repositoryId = config.discoverCatalog ? source : `${owner}/${repo}`;
+  const source = config.sourceUrl || `https://github.com/${upstream.repository}/releases`;
+  const repositoryId = upstream.repository || source;
   const states = new Map(), pending = new Map(), verified = new Map();
   function normalizeVersion(value) {
     const version = String(value || "").replace(/^v(?=\d)/, "");
@@ -39,42 +53,40 @@ function createManagedJavaTool(config) {
   }
   let installRoot = (userDataDir, version) => path.join(directory(userDataDir), normalizeVersion(version));
   const compare = (a, b) => String(b).localeCompare(String(a), "en", { numeric: true });
+  // Cached rows keep the shape earlier versions wrote; the size and digests
+  // are the publisher's when it listed them.
   function validRow(row) {
     try {
-      if (normalizeVersion(row.version) !== row.version || !row.tag || typeof row.tag !== "string") return false;
-      if (config.validateArtifactRow) return Number.isSafeInteger(row.bytes) && row.bytes > 0 && row.bytes <= LIMITS.archive &&
-        (!row.sha256 || /^[a-f0-9]{64}$/.test(row.sha256)) && config.validateArtifactRow(row) === true;
-      const url = new URL(row.url), expected = `/${owner}/${repo}/releases/download/${row.tag}/`;
-      const selected = config.releaseArtifact({ tag_name: row.tag,
-        assets: [{ name: path.posix.basename(url.pathname), browser_download_url: row.url, size: row.bytes }] });
-      if (!selected || selected.version !== row.version) return false;
-      return url.protocol === "https:" && url.hostname === "github.com" && url.pathname.startsWith(expected) &&
-        !url.search && !url.hash && Number.isSafeInteger(row.bytes) && row.bytes > 0 && row.bytes <= LIMITS.archive &&
-        (!row.sha256 || /^[a-f0-9]{64}$/.test(row.sha256));
+      const url = new URL(row.url);
+      return normalizeVersion(row.version) === row.version && url.protocol === "https:" && !url.username && !url.password &&
+        (row.bytes == null || Number.isSafeInteger(row.bytes) && row.bytes > 0) && (!row.sha256 || /^[a-f0-9]{64}$/.test(row.sha256));
     } catch { return false; }
   }
+  const listedFile = row => Upstream.listedFile({ url: row.url, bytes: row.bytes ?? undefined, sha256: row.sha256,
+    digest: row.digest || (row.md5 ? { algorithm: "md5", value: row.md5 } : undefined) });
   function cached(userDataDir) {
     try {
       const file = path.join(directory(userDataDir), "catalog.json"), stat = fs.lstatSync(file);
       if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 2 * 1024 * 1024) return null;
+      // Rows this launcher cannot read are left out; the others stay listed.
       const record = JSON.parse(fs.readFileSync(file, "utf8"));
-      if (record.repo !== repositoryId || !Array.isArray(record.entries) || record.entries.length > LIMITS.versions ||
-        record.entries.some(row => !validRow(row))) return null;
-      return record;
+      if (record.repo !== repositoryId || !Array.isArray(record.entries)) return null;
+      return { ...record, entries: record.entries.filter(validRow).slice(0, LIMITS.versions) };
     } catch { return null; }
   }
   function rowFor(userDataDir, version) {
     version = normalizeVersion(version);
-    const row = cached(userDataDir)?.entries.find(row => row.version === version) || pins.find(row => row.version === version);
+    const row = cached(userDataDir)?.entries.find(row => row.version === version);
     if (!row || !validRow(row)) throw new Error(`Refresh the ${label} version list before installing this version.`);
     return row;
   }
   function resolve({ userDataDir, version, verification = "full" }) {
     try {
-      const jarName = applicationJar(version);
       const root = installRoot(userDataDir, version), metaPath = path.join(root, "tool.json"), stat = fs.lstatSync(metaPath);
       if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1024 * 1024) return null;
       const record = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+      const jarName = record.jarRelative === undefined ? applicationJar(version) : record.jarRelative;
+      if (!safeRelative(jarName) || !/\.jar$/i.test(jarName)) return null;
       if (record.id !== id || record.version !== normalizeVersion(version) || !validRow(record.artifact) ||
         record.artifact.version !== record.version || !/^[a-f0-9]{64}$/.test(record.archiveSha256) ||
         (record.artifact.sha256 && record.archiveSha256 !== record.artifact.sha256) ||
@@ -112,7 +124,8 @@ function createManagedJavaTool(config) {
     const rows = new Map((record?.entries || []).map(row => [row.version, row]));
     const versions = [...rows.keys()].sort(compare), previous = states.get(userDataDir) || {
       status: record ? "success" : "idle", fetchedAt: record?.fetchedAt || null, error: null };
-    const base = { supportsDefault: true, defaultVersion: cfg.defaultVersion || managerDefaultVersion({ listed: versions, installed: installed.map(row => row.version) }), defaultSource: cfg.defaultVersion ? "saved" : "manager", installed, installing: null, variants: [],
+    const saved = savedDefaultVersion(cfg.defaultVersion, { listed: versions, installed: installed.map(row => row.version) });
+    const base = { supportsDefault: true, defaultVersion: saved || managerDefaultVersion({ listed: versions, installed: installed.map(row => row.version) }), defaultSource: saved ? "saved" : "manager", installed, installing: null, variants: [],
       catalog: { ...previous, source, sourceUrl: source, mode: "all", versions, installable: versions.length > 0,
         installableVersions: versions, includedVersions: [], buildableVersions: [], supportsLatestOnly: false,
          latestAvailableVersion: versions[0] || null,
@@ -130,22 +143,15 @@ function createManagedJavaTool(config) {
     states.set(userDataDir, { status: "loading", fetchedAt: previous?.fetchedAt || null, error: null });
     const task = (async () => {
       try {
-        const supplied = config.discoverCatalog ? await config.discoverCatalog({ userDataDir, logger, signal }, dependencies) : null;
-        if (config.discoverCatalog && (!Array.isArray(supplied) || supplied.length > LIMITS.versions || supplied.some(row => !validRow(row))))
-          throw new Error(`${label} catalog has invalid artifact identities.`);
-        const releases = supplied ? [] : await (dependencies.fetchReleases || Releases.fetchGithubReleases)({ owner, repo, logger, signal,
-          includePrerelease: false, maxPages: 5,
-          assetFilter: (asset, release) => config.releaseArtifact(release)?.asset === asset });
-        const rows = new Map((supplied || []).map(row => [row.version, row]));
-        for (const release of releases) {
-          if (release.draft || release.prerelease) continue;
-          const selected = config.releaseArtifact(release);
-          if (!selected) continue;
-          const { asset, version } = selected;
-          const row = { version: normalizeVersion(version), tag: release.tag_name, url: asset.browser_download_url,
-            bytes: asset.size, sha256: /^sha256:[a-f0-9]{64}$/.test(asset.digest || "") ? asset.digest.slice(7) : null,
-            sourceUrl: release.html_url || `${source}/tag/${release.tag_name}` };
-          if (validRow(row) && !rows.has(row.version)) rows.set(row.version, row);
+        // Rows this launcher cannot read are left out.
+        const rows = new Map();
+        for (const row of await upstream.discover({ signal, logger })) {
+          const [listed] = row.files;
+          if (!listed || rows.has(row.version)) continue;
+          const entry = { version: row.version, url: listed.url, ...(listed.bytes ? { bytes: listed.bytes } : {}),
+            ...(listed.digest?.algorithm === "sha256" ? { sha256: listed.digest.value } : listed.digest ? { digest: listed.digest } : {}),
+            sourceUrl: row.sourceUrl || source };
+          if (validRow(entry)) rows.set(entry.version, entry);
           if (rows.size >= LIMITS.versions) break;
         }
         if (!rows.size) throw new Error(`No compatible ${label} downloads were found.`);
@@ -163,13 +169,33 @@ function createManagedJavaTool(config) {
     })();
     pending.set(userDataDir, task); return task;
   }
+  // A publisher may move or rename its application JAR: the known path wins,
+  // then the same file name in a folder, then the JAR holding the entry point.
+  function locateJar(files, version) {
+    const known = applicationJar(version), jars = [];
+    if (fs.existsSync(path.join(files, known))) return known;
+    (function walk(directory, prefix, depth) {
+      if (depth > 4) return;
+      for (const item of fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 512)) {
+        if (item.name === "__MACOSX" || item.name.startsWith(".")) continue;
+        if (item.isDirectory()) walk(path.join(directory, item.name), prefix + item.name + "/", depth + 1);
+        else if (item.isFile() && /\.jar$/i.test(item.name)) jars.push(prefix + item.name);
+      }
+    })(files, "", 0);
+    jars.sort((a, b) => a.split("/").length - b.split("/").length);
+    const entryPoint = relative => { try {
+      return config.mainClass ? Boolean(readZipEntryBuffer(path.join(files, relative), config.mainClass.replace(/\./g, "/") + ".class"))
+        : Boolean(inspectJar(path.join(files, relative)).mainClass);
+    } catch { return false; } };
+    return jars.find(relative => path.posix.basename(relative) === path.posix.basename(known)) || jars.find(entryPoint) || null;
+  }
   function extract(archive, destination, version) {
     const jarName = applicationJar(version);
     if (config.standaloneJar === true) {
       const target = path.join(destination, jarName);
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.copyFileSync(archive, target);
-      return;
+      return jarName;
     }
     const zip = readZipEntries(archive);
     if (!zip?.entries?.length || zip.entries.length > LIMITS.entries || zip.entries.length !== zip.info.entries)
@@ -186,7 +212,9 @@ function createManagedJavaTool(config) {
       if (!buffer || buffer.length !== item.uncompressedSize) throw new Error(`${label} archive extraction failed.`);
       const file = path.join(destination, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, buffer);
     }
-    if (!fs.existsSync(path.join(destination, jarName))) throw new Error(`${label} archive is missing its Java application.`);
+    const located = locateJar(destination, version);
+    if (!located) throw new Error(`${label} archive is missing its Java application.`);
+    return located;
   }
   function validateDependencies(files, version, customJarName) {
     const jarName = customJarName || applicationJar(version), mainJar = path.join(files, jarName);
@@ -218,7 +246,6 @@ function createManagedJavaTool(config) {
       installOptions: { sectionId: "default" }, detail: `Required to use ${label} for this game.` });
     if (!version) version = await latestVersion(context, dependencies);
     version = normalizeVersion(version);
-    const jarName = applicationJar(version);
     let artifact;
     try { artifact = rowFor(context.userDataDir, version); }
     catch { await refreshCatalog({ ...context, force: true }, dependencies); artifact = rowFor(context.userDataDir, version); }
@@ -232,13 +259,11 @@ function createManagedJavaTool(config) {
         let backup;
         try {
           const archive = path.join(temporary, "download.zip"), files = path.join(temporary, "files"); fs.mkdirSync(files);
-          await (dependencies.downloadToFile || downloadToFile)(artifact.url, archive, { signal, onProgress: task.onProgress });
+          const listed = listedFile(artifact);
+          if (!listed) throw new Error(`Refresh the ${label} version list before installing this version.`);
+          const { sha256: archiveSha256 } = await Upstream.download(listed, archive, { signal, onProgress: task.onProgress });
           throwIfAborted(signal);
-          const stat = fs.statSync(archive), archiveSha256 = Native.hashFile(archive);
-          if (stat.size !== artifact.bytes || stat.size > LIMITS.archive || (artifact.sha256 && artifact.sha256 !== archiveSha256) ||
-              (artifact.md5 && require("./pinned-native-manager").hashFile(archive, "md5") !== artifact.md5))
-            throw new Error(`${label} download does not match the selected version.`);
-          (dependencies.extract || extract)(archive, files, version);
+          const jarName = (dependencies.extract || extract)(archive, files, version) || applicationJar(version);
           const inventory = {};
           function walk(root, prefix = "") {
             for (const item of fs.readdirSync(root, { withFileTypes: true })) {
@@ -249,13 +274,13 @@ function createManagedJavaTool(config) {
             }
           }
           walk(files);
-          validateDependencies(files, version);
+          validateDependencies(files, version, jarName);
           if (config.mainClass && !readZipEntryBuffer(path.join(files, jarName), config.mainClass.replace(/\./g, "/") + ".class"))
             throw new Error(`${label} Java entry point is missing.`);
           const jar = (dependencies.inspectJar || inspectJar)(path.join(files, jarName));
           if (!inventory[jarName] || !jar.mainClass) throw new Error(`${label} Java application is incomplete.`);
           const record = { id, version, artifact, archiveSha256, requiredJava: Math.max(17, jar.requiredJava || 17),
-            installedAt: new Date().toISOString(), files: inventory };
+            ...(jarName === applicationJar(version) ? {} : { jarRelative: jarName }), installedAt: new Date().toISOString(), files: inventory };
           fs.writeFileSync(path.join(temporary, "tool.json"), JSON.stringify(record, null, 2)); fs.rmSync(archive);
           throwIfAborted(signal);
           if (fs.existsSync(target)) { backup = target + ".previous-" + Date.now(); fs.renameSync(target, backup); }
@@ -272,8 +297,10 @@ function createManagedJavaTool(config) {
     }, { userDataDir: context.userDataDir });
   }
   async function ensure(context, payload = {}, dependencies = {}) {
+    // A registered tool path is passed on; a saved version applies as the
+    // default, so one that left the list gives way to the manager's default.
     const cfg = manager.normalizeSettings(context.settings?.runtimes?.[id]);
-    const version = payload.version || cfg.defaultVersion;
+    const version = payload.version || (Custom.isPath(cfg.defaultVersion) ? cfg.defaultVersion : null);
     const tool = await installRuntime({ ...context, version }, dependencies);
     const host = await (dependencies.ensureHost || JavaHost.ensure)(context, tool.requiredJava);
     return { tool, host };
@@ -300,7 +327,7 @@ function createManagedJavaTool(config) {
       return { toolVersion: tool.version, archiveSha256: tool.archiveSha256 };
     }, { userDataDir: context.userDataDir });
   }
-  const manager = { id, label, distributionRequired: false, delivery: { included: "none", catalog: "remote", sourceBuild: false },
+  const manager = { id, label, upstream, distributionRequired: false, delivery: { included: "none", catalog: "remote", sourceBuild: false },
     ui: { groupId: "tools", tabLabel: "Tools", sectionLabel: label, order, memberOrder: order, management: "managed" },
     normalizeVersion, normalizeSettings, getState, refreshCatalog, installRuntime,
     uninstallRuntime: async ({ userDataDir, version, installDir } = {}) => {
@@ -314,7 +341,7 @@ function createManagedJavaTool(config) {
     updateSettingsAfterInstall: (settings, installed) => normalizeSettings(settings).defaultVersion ? settings : { ...settings, defaultVersion: installed.version },
     updateSettingsAfterUninstall: (settings, payload) => normalizeSettings(settings).defaultVersion === payload.version
       ? { defaultVersion: null } : normalizeSettings(settings),
-    core: { ensure, run, resolve, listInstalled, installRoot, rowFor, extract, normalizeVersion }, __test: { validRow, cached, LIMITS } };
+    core: { ensure, run, resolve, listInstalled, installRoot, rowFor, extract, locateJar, normalizeVersion }, __test: { validRow, cached, LIMITS } };
   Custom.configure(manager, { defaultsPath: () => ["defaultVersion"],
     providers: [{ core: manager.core, lists: { listInstalled: "default" }, resolves: { resolve: "default" },
       versions: ["normalizeVersion"], directories: ["installRoot"] }], inspect(runtimePath) {
@@ -341,4 +368,4 @@ function createManagedJavaTool(config) {
   return manager;
 }
 
-module.exports = { createManagedJavaTool };
+module.exports = { createManagedJavaTool, releaseAsset };

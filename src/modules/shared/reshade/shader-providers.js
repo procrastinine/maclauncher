@@ -87,11 +87,14 @@ function availability(format, { features = {}, graphicsArchitecture = process.ar
   const provider = providers.find(row => row.format === format);
   if (!provider || !features.formats?.includes(format)) return `The ${provider?.label || format} provider is unavailable in this application build.`;
   const specification = features.providers?.[format], architecture = graphicsArchitecture === "x64" ? "x86_64" : graphicsArchitecture;
-  if (specification?.architectures && !specification.architectures.includes(architecture)) return `The ${provider.label} provider requires ${specification.architectures.join(" or ")} game processes.`;
-  if (specification?.minimumMacOS && !Native.versionAtLeast(macOSVersion || Native.systemVersionSync(), specification.minimumMacOS))
+  const {requirementSupport} = require("../runtime/feature-requirements");
+  if (requirementSupport({executionArchitectures: specification?.architectures}, {executionArch: architecture}).supported === false)
+    return `The ${provider.label} provider requires ${specification.architectures.join(" or ")} game processes.`;
+  const system = macOSVersion || Native.systemVersionSync();
+  if (requirementSupport({minimumMacOS: specification?.minimumMacOS}, {macOSVersion: system}).supported === false)
     return `The ${provider.label} provider requires macOS ${specification.minimumMacOS} or later.`;
   const compilerISA=compilerArchitecture==="x64"?"x86_64":compilerArchitecture,compilerMinimum=specification?.compilerMinimumMacOSByArchitecture?.[compilerISA];
-  if(compilerMinimum&&!Native.versionAtLeast(macOSVersion||Native.systemVersionSync(),compilerMinimum))return `The ${provider.label} shader compiler requires macOS ${compilerMinimum} or later on this Mac.`;
+  if(requirementSupport({minimumMacOS:compilerMinimum},{macOSVersion:system}).supported===false)return `The ${provider.label} shader compiler requires macOS ${compilerMinimum} or later on this Mac.`;
   return null;
 }
 function requireAvailable(provider, options) {

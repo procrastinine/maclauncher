@@ -3,18 +3,17 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const Rosetta = require("../../shared/runtime/rosetta");
-
-const {
-  attachAbortSignal,
-  createAbortError,
-  downloadToFile,
-  fetchUrlBuffer,
-  decodeResponseBody: decodeBody,
-  throwIfAborted
-} = require("../../shared/runtime/download-utils");
+const Architecture = require("../../shared/runtime/architecture");
+const Host = require("../../shared/runtime/host-capabilities");
+const Archive = require("../../shared/runtime/archive");
+const ReleaseFiles = require("../../shared/runtime/release-files");
+const Upstream = require("../../shared/runtime/upstream");
+const { attachAbortSignal, createAbortError, throwIfAborted } = require("../../shared/runtime/download-utils");
 
 const ADOPTIUM_API_BASE = "https://api.adoptium.net/v3";
 const INSTALL_META_FILE = ".maclauncher-java.json";
+// Each long-term-support line has its own section; every other feature
+// release Adoptium publishes, a future one included, is listed together.
 const LTS_LINES = [8, 11, 17, 21, 25];
 // Adoptium clamps larger page_size values to 20, even with a successful response.
 const CATALOG_PAGE_SIZE = 20;
@@ -38,12 +37,17 @@ function isEmptyCatalogStatus(status) {
   return status === 404 || status === 204;
 }
 
+// A Java feature release: an LTS line or any other major version.
 function normalizeLine(input) {
   const line = Number(input);
-  if (!Number.isFinite(line) || !LTS_LINES.includes(line)) {
-    throw new Error(`Unsupported Java line: ${String(input ?? "")}`);
+  if (!Number.isInteger(line) || line < 1 || line > 999) {
+    throw new Error(`Invalid Java line: ${String(input ?? "")}`);
   }
   return line;
+}
+
+function isLtsLine(line) {
+  return LTS_LINES.includes(Number(line));
 }
 
 function normalizeVariant(input) {
@@ -54,10 +58,6 @@ function normalizeVariant(input) {
   return "";
 }
 
-function variantToArch(variant) {
-  return normalizeVariant(variant) === "arm64" ? "aarch64" : "x64";
-}
-
 function archToVariant(arch) {
   const value = String(arch || "").trim().toLowerCase();
   if (value === "aarch64" || value === "arm64") return "arm64";
@@ -66,7 +66,7 @@ function archToVariant(arch) {
 }
 
 function defaultVariantForHost() {
-  return process.arch === "arm64" ? "arm64" : "x64";
+  return Architecture.selectedArchitecture();
 }
 
 function normalizeVersion(input) {
@@ -245,7 +245,10 @@ function listInstalled(userDataDir, line) {
   const root = installRootDir(userDataDir);
   const out = [];
 
-  const targetLines = line != null ? [normalizeLine(line)] : LTS_LINES;
+  let targetLines = line != null ? [normalizeLine(line)] : [];
+  if (line == null) {
+    try { targetLines = fs.readdirSync(root).filter(name => /^\d{1,3}$/.test(name)).map(Number).filter(value => value > 0); } catch {}
+  }
   for (const runtimeLine of targetLines) {
     const lineDir = path.join(root, String(runtimeLine));
     let versions = [];
@@ -286,7 +289,7 @@ function listInstalled(userDataDir, line) {
           javaPath,
           source: meta?.source || null,
           downloadUrl: meta?.downloadUrl || null,
-          requiresRosetta: process.arch === "arm64" && variant === "x64"
+          requiresRosetta: Architecture.requiresRosetta(variant)
         });
       }
     }
@@ -336,13 +339,11 @@ function runCommand(cmd, args, options) {
   });
 }
 
+// The package is read by its published name; tar detects the compression of
+// a package without a known archive extension.
 async function extractArchive(archivePath, destDir, signal) {
-  const lower = String(archivePath || "").toLowerCase();
-  if (lower.endsWith(".zip")) {
-    await runCommand("/usr/bin/ditto", ["-x", "-k", archivePath, destDir], { signal });
-    return;
-  }
-  await runCommand("/usr/bin/tar", ["-xzf", archivePath, "-C", destDir], { signal });
+  if (Archive.archiveKind(archivePath)) return ReleaseFiles.extractArchive(archivePath, destDir, signal);
+  await runCommand("/usr/bin/tar", ["-xf", archivePath, "-C", destDir], { signal });
 }
 
 function buildLineCatalogUrl({ line, arch, page, pageSize }) {
@@ -433,98 +434,90 @@ function extractAssetFromRelease(release, expectedLine, expectedVariant) {
     variant,
     url,
     fileName: name,
-    checksum: pkg?.checksum || null,
+    // Adoptium publishes each package's SHA-256 next to its link.
+    checksum: /^[a-f0-9]{64}$/i.test(String(pkg?.checksum || "")) ? String(pkg.checksum).toLowerCase() : null,
     size: Number.isFinite(Number(pkg?.size)) ? Number(pkg.size) : null,
     publishedAt
   };
 }
 
-async function fetchLineAssets({
-  line, variant, logger, signal, pageSize = CATALOG_PAGE_SIZE,
-  maxPages = CATALOG_MAX_PAGES, fetcher = fetchUrlBuffer
-} = {}) {
-  const runtimeLine = normalizeLine(line);
-  const runtimeVariant = normalizeVariant(variant) || defaultVariantForHost();
-  const arch = variantToArch(runtimeVariant);
+// The feature releases Adoptium publishes, with its long-term-support lines.
+const releasesSource = Upstream.index({ locations: [`${ADOPTIUM_API_BASE}/info/available_releases`], parse: ([document]) => {
+  const info = JSON.parse(document.text), lts = new Set((info?.available_lts_releases || []).map(Number));
+  return [...new Set((info?.available_releases || []).map(Number))].filter(line => Number.isInteger(line) && line > 0 && line <= 999)
+    .sort((a, b) => b - a).map(line => ({ version: String(line), details: { lts: lts.has(line) || isLtsLine(line) } }));
+} });
 
-  const headers = {
-    "User-Agent": "MacLauncher",
-    "Accept": "application/json"
-  };
+async function fetchAvailableLines({ logger, signal } = {}) {
+  const rows = await releasesSource.discover({ logger, signal });
+  return { lines: rows.map(row => Number(row.version)), lts: rows.filter(row => row.details?.lts).map(row => Number(row.version)) };
+}
 
-  const assets = [];
+// One line's GA releases for both Mac CPUs, newest first, paged 20 at a
+// time. Each package, on Adoptium's or GitHub's hosts, carries the SHA-256
+// and size Adoptium publishes.
+function lineSource(line, { pageSize = CATALOG_PAGE_SIZE, maxPages = CATALOG_MAX_PAGES } = {}) {
   const size = Math.min(CATALOG_PAGE_SIZE, Math.max(1, Math.floor(Number(pageSize) || CATALOG_PAGE_SIZE)));
   const pages = Math.min(10, Math.max(1, Math.floor(Number(maxPages) || CATALOG_MAX_PAGES)));
-  for (let page = 0; page < pages; page += 1) {
-    const url = buildLineCatalogUrl({ line: runtimeLine, arch, page, pageSize: size });
-    logger?.info?.(`[java] fetching Adoptium catalog ${url}`);
-    const res = await fetcher(url, { headers, signal });
-    if (isEmptyCatalogStatus(res.status)) {
-      logger?.info?.(
-        `[java] no Adoptium assets for line ${runtimeLine} (${runtimeVariant})`
-      );
-      break;
+  const url = (arch, page) => buildLineCatalogUrl({ line, arch, page, pageSize: size });
+  return Upstream.index({ locations: ["aarch64", "x64"].map(arch => url(arch, 0)), hosts: ["adoptium.net", "github.com"], parse: async (documents, { fetch: readPage, logger }) => {
+    const rows = [];
+    for (const first of documents) {
+      const arch = new URL(first.url).searchParams.get("architecture"), variant = archToVariant(arch);
+      for (let page = 0, document = first; document && page < pages; page += 1) {
+        if (isEmptyCatalogStatus(document.status)) break;
+        if (document.status !== 200) throw new Error(`Java catalog fetch failed (${document.status})`);
+        const parsed = JSON.parse(document.text);
+        if (!Array.isArray(parsed)) throw new Error("Java catalog response must be an array");
+        for (const release of parsed.slice(0, size)) {
+          // A release that cannot be read is skipped; the others stay listed.
+          try {
+            const asset = extractAssetFromRelease(release, line, variant);
+            if (asset) rows.push({ version: asset.version, architecture: variant, details: asset, files: [{ name: asset.fileName, url: asset.url,
+              bytes: asset.size, ...(asset.checksum ? { digest: asset.checksum, algorithm: "sha256" } : {}), architecture: variant }] });
+          } catch (error) {
+            logger?.warn?.(`[java] skipped an unreadable Adoptium release: ${String(error?.message || error)}`);
+          }
+        }
+        if (parsed.length < size) break;
+        document = page + 1 < pages ? await readPage(url(arch, page + 1)) : null;
+      }
     }
-    if (res.status !== 200) {
-      throw new Error(`Java catalog fetch failed (${res.status})`);
-    }
-    const body = decodeBody(res.body, res.headers);
-    let parsed = null;
-    try {
-      parsed = JSON.parse(body.toString("utf8"));
-    } catch (err) {
-      throw new Error(`Failed to parse Java catalog response: ${String(err?.message || err)}`);
-    }
+    return rows;
+  } });
+}
 
-    if (!Array.isArray(parsed)) throw new Error("Java catalog response must be an array");
-    const list = parsed.slice(0, size);
-    for (const release of list) {
-      const asset = extractAssetFromRelease(release, runtimeLine, runtimeVariant);
-      if (asset) assets.push(asset);
-    }
-
-    if (list.length < size) break;
-  }
-
+async function fetchLineAssets({ line, variant, logger, signal, pageSize, maxPages } = {}) {
+  const runtimeLine = normalizeLine(line), runtimeVariant = normalizeVariant(variant) || defaultVariantForHost();
   const byVersion = new Map();
-  for (const asset of assets) {
-    const current = byVersion.get(asset.version);
-    if (!current || asset.publishedAt > current.publishedAt) {
-      byVersion.set(asset.version, asset);
-    }
+  for (const row of await lineSource(runtimeLine, { pageSize, maxPages }).discover({ logger, signal })) {
+    if (row.architecture !== runtimeVariant || !row.files[0]) continue;
+    const asset = { ...row.details, file: row.files[0] }, current = byVersion.get(asset.version);
+    if (!current || asset.publishedAt > current.publishedAt) byVersion.set(asset.version, asset);
   }
-
   return Array.from(byVersion.values()).sort((a, b) => compareVersionsDesc(a.version, b.version));
 }
 
-async function fetchAvailableVersionsForLine({ line, logger, signal, latestOnly, fetcher = fetchUrlBuffer } = {}) {
+async function fetchAvailableVersionsForLine({ line, logger, signal, latestOnly } = {}) {
   const runtimeLine = normalizeLine(line);
   const source = `${ADOPTIUM_API_BASE}/assets/feature_releases/${runtimeLine}/ga`;
+  logger?.info?.(`[java] fetching Adoptium catalog for Java ${runtimeLine}`);
+  const rows = await lineSource(runtimeLine, latestOnly === true ? { pageSize: 1, maxPages: 1 } : {}).discover({ logger, signal });
 
   const byVersion = new Map();
   const versionAliases = new Map();
-  for (const variant of ["arm64", "x64"]) {
-    const assets = await fetchLineAssets({
-      line: runtimeLine, variant, logger, signal, fetcher,
-      ...(latestOnly === true ? { pageSize: 1, maxPages: 1 } : {})
-    });
-    for (const asset of assets) {
-      if (asset.semverVersion && asset.semverVersion !== asset.version) {
-        versionAliases.set(asset.semverVersion, asset.version);
-      }
-      const current =
-        byVersion.get(asset.version) ||
-        {
-          version: asset.version,
-          line: runtimeLine,
-          assets: { arm64: null, x64: null }
-        };
-      current.assets[variant] = asset;
-      byVersion.set(asset.version, current);
-    }
+  for (const row of rows) {
+    if (!row.files[0]) continue;
+    const variant = row.architecture, asset = { ...row.details, file: row.files[0] };
+    if (asset.semverVersion && asset.semverVersion !== asset.version) versionAliases.set(asset.semverVersion, asset.version);
+    const current = byVersion.get(asset.version) || { version: asset.version, line: runtimeLine, assets: { arm64: null, x64: null } };
+    if (!current.assets[variant] || asset.publishedAt > current.assets[variant].publishedAt) current.assets[variant] = asset;
+    byVersion.set(asset.version, current);
   }
 
   const sorted = Array.from(byVersion.values()).sort((a, b) => compareVersionsDesc(a.version, b.version));
+  // An answer without any Mac build keeps the cached list.
+  if (!sorted.length) throw new Error(`Adoptium lists no Mac build for Java ${runtimeLine}.`);
   const entries = latestOnly === true ? sorted.slice(0, 1) : sorted;
   const entriesByVersion = Object.fromEntries(entries.map(entry => [entry.version, entry.assets]));
   for (const [alias, canonical] of versionAliases) {
@@ -548,36 +541,20 @@ function availableVariantsForVersion(entryAssets) {
   return set;
 }
 
-function chooseVariantForHost({ availableVariants, preferredVariant, hostArch = process.arch }) {
-  const preferred = normalizeVariant(preferredVariant);
-  const hasArm64 = availableVariants.has("arm64");
-  const hasX64 = availableVariants.has("x64");
-
-  if (hostArch === "arm64") {
-    if (preferred === "arm64") {
-      if (hasArm64) return { variant: "arm64", requiresRosetta: false, mode: "native" };
-      if (hasX64) return { variant: "x64", requiresRosetta: true, mode: "rosetta" };
-      return null;
-    }
-    if (preferred === "x64") {
-      if (hasX64) return { variant: "x64", requiresRosetta: true, mode: "rosetta" };
-      if (hasArm64) return { variant: "arm64", requiresRosetta: false, mode: "native" };
-      return null;
-    }
-    if (hasArm64) return { variant: "arm64", requiresRosetta: false, mode: "native" };
-    if (hasX64) return { variant: "x64", requiresRosetta: true, mode: "rosetta" };
-    return null;
-  }
-
-  if (preferred === "arm64") {
-    if (hasX64) return { variant: "x64", requiresRosetta: false, mode: "native" };
-    return null;
-  }
-  if (hasX64) return { variant: "x64", requiresRosetta: false, mode: "native" };
-  return null;
+// The shared build resolver picks the variant: a build choice made for this
+// call's CPU stays as given, a preferred variant comes next, then the launcher's
+// CPU, then another CPU this Mac runs. Rosetta is needed for an Intel build in
+// the Apple Silicon app.
+function chooseVariantForHost({ availableVariants, preferredVariant, hostArch = Architecture.selectedArchitecture() }) {
+  const offers = architecture => availableVariants.has(architecture);
+  const variant = Architecture.chooseArchitecture({ request: hostArch !== Architecture.defaultArchitecture() ? { architecture: hostArch } : null,
+    saved: normalizeVariant(preferredVariant), launcher: hostArch, offers });
+  if (!offers(variant)) return null;
+  const requiresRosetta = variant === "x64" && hostArch === "arm64";
+  return { variant, requiresRosetta, mode: requiresRosetta ? "rosetta" : "native" };
 }
 
-function selectCatalogAsset({ lineCatalog, version, variant, hostArch = process.arch, strictVariant = false } = {}) {
+function selectCatalogAsset({ lineCatalog, version, variant, hostArch = Architecture.selectedArchitecture(), strictVariant = false } = {}) {
   const catalog = lineCatalog && typeof lineCatalog === "object" ? lineCatalog : {};
   const entriesByVersion =
     catalog.entriesByVersion && typeof catalog.entriesByVersion === "object"
@@ -615,7 +592,7 @@ function selectCatalogAsset({ lineCatalog, version, variant, hostArch = process.
   return null;
 }
 
-function resolveBestInstalled({ userDataDir, line, version, variant, hostArch = process.arch, strictVariant = false } = {}) {
+function resolveBestInstalled({ userDataDir, line, version, variant, hostArch = Architecture.selectedArchitecture(), strictVariant = false } = {}) {
   const runtimeLine = normalizeLine(line);
   const installed = listInstalled(userDataDir, runtimeLine);
   const requestedVersion = version ? normalizeVersion(version) : null;
@@ -663,6 +640,7 @@ async function installVersion({
   onProgress,
   signal,
   lineCatalog,
+  hostArch = Architecture.selectedArchitecture(),
   strictVariant = false
 } = {}) {
   const runtimeLine = normalizeLine(line);
@@ -670,7 +648,7 @@ async function installVersion({
     lineCatalog,
     version,
     variant,
-    hostArch: process.arch,
+    hostArch,
     strictVariant
   });
   if (!selection?.asset?.url) {
@@ -688,18 +666,18 @@ async function installVersion({
   });
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-java-"));
-  const fileName = selection.asset.fileName || `java-${runtimeLine}-${runtimeVersion}-${runtimeVariant}.tar.gz`;
+  const fileName = path.basename(String(selection.asset.fileName || "")) || `java-${runtimeLine}-${runtimeVersion}-${runtimeVariant}.tar.gz`;
   const archivePath = path.join(tmpDir, fileName);
   const extractDir = path.join(tmpDir, "extract");
 
   try {
     ensureDir(extractDir);
     logger?.info?.(`[java] downloading ${selection.asset.url}`);
-    await downloadToFile(selection.asset.url, archivePath, {
-      headers: { "User-Agent": "MacLauncher" },
-      onProgress,
-      signal
-    });
+    // Adoptium's published SHA-256 and size verify the package.
+    const file = selection.asset.file || Upstream.listedFile({ filename: fileName, url: selection.asset.url,
+      sha256: selection.asset.checksum || undefined, bytes: selection.asset.size || undefined });
+    if (!file) throw new Error(`The Java ${runtimeVersion} package has no HTTPS download.`);
+    const { sha256, integrity } = await releasesSource.download(file, archivePath, { onProgress, signal });
     throwIfAborted(signal);
 
     await extractArchive(archivePath, extractDir, signal);
@@ -736,8 +714,10 @@ async function installVersion({
       variant: runtimeVariant,
       source: "Adoptium",
       downloadUrl: selection.asset.url,
+      archiveSha256: sha256,
+      integrity,
       javaRelativePath: path.relative(installDir, installedJavaPath),
-      requiresRosetta: process.arch === "arm64" && runtimeVariant === "x64",
+      requiresRosetta: Architecture.requiresRosetta(runtimeVariant),
       installedAt: Date.now()
     });
 
@@ -747,7 +727,7 @@ async function installVersion({
       variant: runtimeVariant,
       installDir,
       javaPath: installedJavaPath,
-      requiresRosetta: process.arch === "arm64" && runtimeVariant === "x64"
+      requiresRosetta: Architecture.requiresRosetta(runtimeVariant)
     };
   } finally {
     safeRm(tmpDir);
@@ -766,9 +746,9 @@ module.exports = {
   LTS_LINES,
   VARIANTS,
   normalizeLine,
+  isLtsLine,
   normalizeVersion,
   normalizeVariant,
-  variantToArch,
   archToVariant,
   defaultVariantForHost,
   compareVersions,
@@ -777,12 +757,14 @@ module.exports = {
   installRootDir,
   getInstallDir,
   listInstalled,
+  fetchAvailableLines,
   fetchAvailableVersionsForLine,
   selectCatalogAsset,
   resolveBestInstalled,
   installVersion,
   uninstallVersion,
   isRosettaAvailable,
+  upstream: releasesSource,
   __test: {
     chooseVariantForHost,
     compareVersions,

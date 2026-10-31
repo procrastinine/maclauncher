@@ -1,3 +1,5 @@
+// Required first: it replaces the network functions before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path"), crypto = require("node:crypto");
 const { zip } = require("./helpers/android-packages");
@@ -13,13 +15,24 @@ function fixture(t) {
 }
 // Play passes the UI consent adapter and Install approves itself; direct calls supply one.
 const approved = async () => true;
-// Install selects from the refreshed version list, which starts empty.
-async function refresh(userDataDir, sectionId, sha = "a".repeat(40), date = "2026-10-21T00:00:00Z") {
-  await Shaders.refreshCatalog({userDataDir, sectionId}, {fetchUrlBuffer: async () => ({status: 200, headers: {},
-    body: Buffer.from(JSON.stringify({sha, commit: {committer: {date}}}))})});
+const API = "https://api.github.com/repos/";
+const repository = sectionId => Shaders.Catalog.packs.find(pack => pack.id === sectionId).repository;
+const blob = (name, bytes) => ({ type: "blob", path: name, size: bytes.length,
+  sha: crypto.createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex") });
+// Install selects from the refreshed version list, which starts empty. Refresh
+// reads the default branch's newest commit and, when routed, its file tree.
+async function refresh(userDataDir, sectionId, sha = "a".repeat(40), date = "2026-10-21T00:00:00Z", tree) {
+  Harness.network.routes = { [`${API}${repository(sectionId)}/commits`]: [{ sha, commit: { committer: { date } } }],
+    ...(tree ? { [`${API}${repository(sectionId)}/git/trees/${sha}`]: tree } : {}) };
+  try { await Shaders.refreshCatalog({ userDataDir, sectionId }); } finally { Harness.network.routes = null; }
 }
-function archiveDependencies(archive) {
-  return { downloadToFile: async (_url, destination) => { fs.writeFileSync(destination, archive); } };
+async function install(context, routes = {}) {
+  Harness.network.routes = routes;
+  try { return await Shaders.installRuntime(context); } finally { Harness.network.routes = null; }
+}
+// A source collection downloads GitHub's archive of the selected commit.
+function archiveRoutes(sectionId, archive, commits = ["a".repeat(40), "b".repeat(40)]) {
+  return Object.fromEntries(commits.map(commit => [`https://codeload.github.com/${repository(sectionId)}/zip/${commit}`, archive]));
 }
 function packArchive() { return zip([["collection/LICENSE", Buffer.from("MIT license fixture")],
   ["collection/RGB.glsl", rgb], ["collection/CfL.hook", chroma], ["collection/Plane.glsl", boundPlane],
@@ -85,9 +98,9 @@ test("shader library state stays local and derived planes require a capable proc
   assert.ok(Manager.getState({ userDataDir }).sections.every(section => ["mpv","isf","magpie","reshade","libretro"].includes(section.shaderFamily)));
   assert.deepEqual(Manager.getState({ userDataDir }).sections.map(section=>section.id), ["anime4k","artcnn","cfl-prediction","mpv-default","cunny","acnet","mpv-prescalers","vidvox-isf","slang-shaders","magpie","cshade","prod80","fxshaders","ssrt3","niceguy","quint"]);
   assert.deepEqual(fs.readdirSync(userDataDir), [], "status does not create storage or contact a server");
-  await assert.rejects(Shaders.installRuntime({ userDataDir, sectionId: "cfl-prediction", confirmRuntimeInstall: approved }, archiveDependencies(packArchive())), /Refresh/);
+  await assert.rejects(install({ userDataDir, sectionId: "cfl-prediction", confirmRuntimeInstall: approved }), /Refresh/);
   await refresh(userDataDir, "cfl-prediction");
-  const result = await Shaders.installRuntime({ userDataDir, sectionId: "cfl-prediction", confirmRuntimeInstall: approved }, archiveDependencies(packArchive()));
+  const result = await install({ userDataDir, sectionId: "cfl-prediction", confirmRuntimeInstall: approved }, archiveRoutes("cfl-prediction", packArchive()));
   assert.equal(result.effects.length, 3);
   const listed = Shaders.listEffects(userDataDir, features, options), color = listed.find(row => !row.nativeVideo), video = listed.find(row => row.nativeVideo);
   assert.ok(Shaders.isId(color.id)); assert.equal(color.available, true); assert.equal(video.available, false);
@@ -124,11 +137,11 @@ test("managed FX collections retain their include and texture directories throug
   ["Shaders/shared.fxh",Buffer.from("// shader include\n")],
   ["Textures/lookup.png",Buffer.from("source texture fixture")]
  ]);
- const tree=[...contents].map(([file,bytes])=>({path:file,type:"blob",size:bytes.length,sha:crypto.createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex")}));
+ const tree=[...contents].map(([file,bytes])=>blob(file,bytes)),commit="a".repeat(40),repo=repository("prod80");
  await refresh(userDataDir,"prod80");
- const installed=await Shaders.installRuntime({userDataDir,sectionId:"prod80",confirmRuntimeInstall:approved},{
-  fetchUrlBuffer:async url=>{assert.match(url,/prod80\/prod80-ReShade-Repository\/git\/trees\/a{40}/);return {status:200,headers:{},body:Buffer.from(JSON.stringify({tree,truncated:false}))};},
-  downloadToFile:async(url,target)=>{const file=new URL(url).pathname.split("/").slice(4).join("/");assert.ok(contents.has(file));fs.writeFileSync(target,contents.get(file));}
+ const installed=await install({userDataDir,sectionId:"prod80",confirmRuntimeInstall:approved},{
+  [`${API}${repo}/git/trees/${commit}`]:{tree,truncated:false},
+  ...Object.fromEntries([...contents].map(([file,bytes])=>[`https://raw.githubusercontent.com/${repo}/${commit}/${file}`,bytes]))
  });
  const effects=Shaders.listEffects(userDataDir,{formats:["fx"]},options);assert.equal(effects.length,1);assert.equal(effects[0].available,true);
  const resolved=Shaders.resolveEffect(userDataDir,effects[0].id,{formats:["fx"]},"window",options),root=path.join(installed.root,"files");
@@ -140,7 +153,7 @@ test("older managed shader traits refresh locally without changing immutable pac
   const userDataDir = fixture(t), conditional = Buffer.from("//!DESC Example CNN x2\n//!HOOK MAIN\n//!WIDTH HOOKED.w 2 *\n//!HEIGHT HOOKED.h 2 *\n//!WHEN OUTPUT.w HOOKED.w >\nvec4 hook(){return vec4(1);}");
   const archive = zip([["collection/LICENSE", Buffer.from("MIT fixture")], ["collection/Network.glsl", conditional]]);
   await refresh(userDataDir, "cfl-prediction");
-  const result = await Shaders.installRuntime({ userDataDir, sectionId: "cfl-prediction", confirmRuntimeInstall: approved }, archiveDependencies(archive));
+  const result = await install({ userDataDir, sectionId: "cfl-prediction", confirmRuntimeInstall: approved }, archiveRoutes("cfl-prediction", archive));
   assert.equal(result.effects[0].traitsVersion, require("../src/modules/shared/reshade/shader-traits").VERSION);
   const metadata = path.join(result.installDir, "pack.json"), saved = JSON.parse(fs.readFileSync(metadata, "utf8"));
   for (const effect of saved.effects) { delete effect.traitsVersion;effect.traits = { category: "effects", neural: true, outputScale: { x: 2, y: 2 } }; }
@@ -157,11 +170,10 @@ test("older managed shader traits refresh locally without changing immutable pac
 test("shader pack defaults select matching copies and their leases without changing stable IDs or explicit versions", async t => {
   const userDataDir = fixture(t), sectionId = "cfl-prediction";
   await refresh(userDataDir, sectionId);
-  const older = await Shaders.installRuntime({userDataDir, sectionId, confirmRuntimeInstall: approved}, archiveDependencies(packArchive()));
-  await Shaders.refreshCatalog({userDataDir, sectionId}, {fetchUrlBuffer: async () => ({status: 200, headers: {},
-    body: Buffer.from(JSON.stringify({sha: "b".repeat(40), commit: {committer: {date: "2026-10-22T00:00:00Z"}}}))})});
-  const newer = await Shaders.installRuntime({userDataDir, sectionId, version: "git-" + "b".repeat(40), confirmRuntimeInstall: approved},
-    archiveDependencies(zip([["collection/LICENSE", Buffer.from("MIT fixture")], ["collection/preferred/RGB.glsl", rgb],
+  const older = await install({userDataDir, sectionId, confirmRuntimeInstall: approved}, archiveRoutes(sectionId, packArchive()));
+  await refresh(userDataDir, sectionId, "b".repeat(40), "2026-10-22T00:00:00Z");
+  const newer = await install({userDataDir, sectionId, version: "git-" + "b".repeat(40), confirmRuntimeInstall: approved},
+    archiveRoutes(sectionId, zip([["collection/LICENSE", Buffer.from("MIT fixture")], ["collection/preferred/RGB.glsl", rgb],
       ["collection/includes/common.fxh", Buffer.from("// changed include")]])));
   const id = Shaders.listEffects(userDataDir, features, options).find(row => row.traits.outputScale)?.id;
   assert.equal(Shaders.resolveEffect(userDataDir, id, features, "window", options).runtimeIdentity.version, newer.version);
@@ -206,17 +218,12 @@ test("ArtCNN installation downloads only selected shader source paths and verifi
   const userDataDir = fixture(t), downloads = [];
   const files = new Map([["GLSL/model.glsl", rgb], ["GLSL/Experiments/YCbCr.glsl", Buffer.from("//!HOOK NATIVE\n//!DESC YCbCr\nvec4 hook(){return vec4(0);}")],
     ["LICENSE", Buffer.from("MIT fixture")], ["README.md", Buffer.from("shader documentation")]]);
-  const blob = (name, bytes) => ({ type: "blob", path: name, size: bytes.length,
-    sha: crypto.createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex") });
-  const tree = [...files].map(([name, bytes]) => blob(name, bytes));
+  const tree = [...files].map(([name, bytes]) => blob(name, bytes)), commit = "a".repeat(40), repo = repository("artcnn");
   tree.push({ type: "blob", path: "ONNX/large.onnx", size: 1e9, sha: "a".repeat(40) });
   await refresh(userDataDir, "artcnn");
-  await Shaders.installRuntime({ userDataDir, sectionId: "artcnn", confirmRuntimeInstall: approved }, {
-    fetchUrlBuffer: async url => { assert.match(url, /\/git\/trees\//); return { status: 200, headers: {}, body: Buffer.from(JSON.stringify({ tree, truncated: false })) }; },
-    downloadToFile: async (url, destination) => {
-      downloads.push(url); const name = new URL(url).pathname.split("/").slice(4).map(decodeURIComponent).join("/");
-      fs.writeFileSync(destination, files.get(name));
-    },
+  await install({ userDataDir, sectionId: "artcnn", confirmRuntimeInstall: approved }, {
+    [`${API}${repo}/git/trees/${commit}`]: { tree, truncated: false },
+    ...Object.fromEntries([...files].map(([name, bytes]) => [`https://raw.githubusercontent.com/${repo}/${commit}/${name}`, url => { downloads.push(url); return bytes; }]))
   });
   assert.equal(downloads.length, 4); assert.ok(downloads.every(url => !url.includes("ONNX")));
   const rows = Shaders.listEffects(userDataDir, features, options);
@@ -227,11 +234,12 @@ test("ArtCNN installation downloads only selected shader source paths and verifi
 });
 
 test("explicit shader version refresh persists cached snapshots without shader downloads", async t => {
-  const userDataDir = fixture(t); let requests = 0;
-  await Shaders.refreshCatalog({ userDataDir, sectionId: "cfl-prediction" }, {
-    fetchUrlBuffer: async () => { requests++; return { status: 200, headers: {}, body: Buffer.from(JSON.stringify({ sha: "a".repeat(40), commit: { committer: { date: "2026-10-21T00:00:00Z" } } })) }; },
-  });
-  assert.equal(requests, 1);
+  const userDataDir = fixture(t), before = Harness.network.requests.length;
+  // Refresh reads the default branch's newest commit and that commit's file listing only.
+  const tree = { truncated: false, tree: ["LICENSE", "CfL_Prediction.glsl"].map(path => ({ path, type: "blob", size: 64 })) };
+  await refresh(userDataDir, "cfl-prediction", undefined, undefined, tree);
+  const requests = Harness.network.requests.slice(before).map(url => new URL(url).pathname.replace(/^.*\/(commits|git\/trees)(?:\/.*)?$/, "$1"));
+  assert.deepEqual(requests, ["commits", "git/trees"]);
   const state = Manager.getState({ userDataDir }).sections.find(row => row.id === "cfl-prediction");
   assert.equal(state.catalog.status, "success"); assert.deepEqual(state.catalog.versions, ["git-" + "a".repeat(40)]);
   assert.equal(Shaders.listInstalled(userDataDir).length, 0);
@@ -264,14 +272,11 @@ test("shader archives bound inflation when central metadata understates the expa
 test("cancelled shader downloads leave no partial installation", async t => {
   const userDataDir = fixture(t), controller = new AbortController();
   await refresh(userDataDir, "cfl-prediction");
-  await assert.rejects(Shaders.installRuntime({ userDataDir, sectionId: "cfl-prediction" },
-    { downloadToFile: () => assert.fail("A context without consent cannot download") }), { name: "AbortError" });
-  await assert.rejects(Shaders.installRuntime({ userDataDir, sectionId: "cfl-prediction", signal: controller.signal, confirmRuntimeInstall: approved }, {
-    downloadToFile: async (_url, destination) => {
-      fs.writeFileSync(destination, "partial"); controller.abort();
-      const error = new Error("Cancelled"); error.name = "AbortError"; throw error;
-    },
-  }), { name: "AbortError" });
+  const before = Harness.network.requests.length;
+  await assert.rejects(install({ userDataDir, sectionId: "cfl-prediction" }), { name: "AbortError" });
+  assert.equal(Harness.network.requests.length, before, "A context without consent cannot download");
+  await assert.rejects(install({ userDataDir, sectionId: "cfl-prediction", signal: controller.signal, confirmRuntimeInstall: approved },
+    archiveRoutes("cfl-prediction", () => { controller.abort(); return Buffer.from("partial"); })), { name: "AbortError" });
   assert.deepEqual(Shaders.listInstalled(userDataDir), []);
   assert.ok(fs.readdirSync(Shaders.directory(userDataDir, "cfl-prediction")).every(name => !name.startsWith(".install-")));
 });

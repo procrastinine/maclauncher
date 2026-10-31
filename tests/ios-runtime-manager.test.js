@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -9,10 +11,7 @@ const PlayCover = require("../src/modules/ios/runtime/manager");
 test("PlayCover has no package-wide setup version and explicit installation preserves selections", async t => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "playcover-first-use-"));
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
-  const runtime = PlayCover.createManager({ dependencies: { systemVersionSync: () => "27.0" }, catalogDependencies: {
-    fetchGithubTags: async () => { throw new Error("Unexpected catalog request"); },
-    fetchGithubReleases: async () => { throw new Error("Unexpected catalog request"); }
-  } });
+  const runtime = PlayCover.createManager({ dependencies: { systemVersionSync: () => "27.0" } }), before = Harness.network.requests.length;
   const state = runtime.getState({ userDataDir });
   assert.deepEqual(state.catalog.versions, [], "recommended setup is separate from the remote release list");
   assert.equal(state.catalog.installReason, null, "first use must not suggest unsupported manual imports");
@@ -21,6 +20,7 @@ test("PlayCover has no package-wide setup version and explicit installation pres
   assert.equal(state.catalog.sourceUrl, "https://github.com/PlayCover/PlayCover/releases");
   assert.deepEqual(state.sections[0].setupActions, []);
   assert.equal(runtime.resolveSelection({}, {}, userDataDir).version, null);
+  assert.equal(Harness.network.requests.length, before, "No catalog request");
   let installs = 0;
   runtime.installRuntime = async options => {
     installs++; if (options.version != null) assert.equal(options.version, "4.0.0-prerelease"); assert.equal(options.userDataDir, userDataDir);
@@ -61,33 +61,23 @@ test("declining the first PlayCover download leaves the game and runtime untouch
 test("PlayCover discovers labeled prereleases on explicit refresh and preserves stable selections", async t => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "playcover-catalog-"));
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
-  let requests = 0;
+  const repository = "PlayCover/PlayCover", releasesUrl = `https://api.github.com/repos/${repository}/releases`;
+  const requests = () => Harness.network.requests.filter(url => url.startsWith(releasesUrl)).length, start = requests();
   const tags = ["v4.0.0-prerelease", "v3.1.0", "v4.0.0-rc.2", "v2.0.0", "nightly"];
-  const runtime = PlayCover.createManager({ dependencies: { systemVersionSync: () => "27.0" }, catalogDependencies: {
-    fetchGithubTags: async ({ repo }) => {
-      assert.equal(repo, "PlayCover");
-      return tags.map(name => ({ name, commit: { sha: PlayCover.core.catalog.find(pin => pin.version === name.replace(/^v/, ""))?.upstreamRevision || "a".repeat(40) } }));
-    },
-    fetchGithubReleases: async ({ repo, includePrerelease }) => {
-      requests++; assert.equal(includePrerelease, true); assert.equal(repo, "PlayCover");
-      return tags.map(tag_name => ({ tag_name, prerelease: tag_name.includes("-"),
-        assets: tag_name === "v2.0.0" ? [] : [{ id: 42, name: `PlayCover_${tag_name}.dmg`,
-          browser_download_url: `https://github.com/PlayCover/PlayCover/releases/download/${tag_name}/PlayCover_${tag_name}.dmg`,
-          digest: `sha256:${"b".repeat(64)}` }] }));
-    },
-    fetchUrlBuffer: async () => assert.fail("PlayCover releases do not require PlayTools version matching"),
-  } });
+  const runtime = PlayCover.createManager({ dependencies: { systemVersionSync: () => "27.0" } });
+  const releases = tags.map(tag => Harness.githubRelease(repository, tag, tag === "v2.0.0" ? [] : [`PlayCover_${tag}.dmg`], { prerelease: tag.includes("-") }));
   runtime.getState({ userDataDir });
   assert.equal(runtime.resolveSelection({}, {}, userDataDir).version, null);
-  assert.equal(requests, 0, "reading Settings and missing selections must stay offline");
+  assert.equal(requests(), start, "reading Settings and missing selections must stay offline");
   const settings = runtime.applySettingsUpdate("setDefault", { version: "3.1.0" }, {});
-  await runtime.refreshCatalog({ userDataDir });
+  Harness.network.routes = Harness.githubRoutes(repository, releases);
+  try { await runtime.refreshCatalog({ userDataDir }); } finally { Harness.network.routes = null; }
   const state = runtime.getState({ userDataDir, settings });
   assert.deepEqual(state.catalog.versions, ["4.0.0-prerelease", "3.1.0", "4.0.0-rc.2", "2.0.0"]);
-  assert.equal(requests, 1);
+  assert.equal(requests(), start + 1);
   assert.ok(state.catalog.installableVersions.includes("4.0.0-rc.2"), "published PlayCover disk images are directly installable");
   assert.ok(!state.catalog.installableVersions.includes("2.0.0"));
-  assert.match(state.catalog.versionRequirements["2.0.0"].installReason, /no PlayCover disk image/);
+  assert.match(state.catalog.versionRequirements["2.0.0"].installReason, /no PlayCover download/);
   assert.match(state.versionLabels["4.0.0-prerelease"], /Pre-release/);
   assert.match(state.versionLabels["4.0.0-rc.2"], /Pre-release/);
   assert.equal(state.versionLabels["3.1.0"], "3.1.0");

@@ -1,7 +1,5 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { execFile } = require("node:child_process");
-const { promisify } = require("node:util");
 const Observations = require("../../../../core/file-observations");
 const Nwjs = require("./nwjs-manager");
 const Greenworks = require("./greenworks-runtime");
@@ -14,14 +12,12 @@ const Ticket = require("../../runtime/steamworks/ticket");
 const SteamCatalog = require("../../runtime/steamworks/versions.json");
 const ProfileCatalog = require("../../runtime/steamworks/profiles.json");
 const Native = require("../../runtime/local-native");
-const { versionAtLeast } = require("../../runtime/bundled-native");
+const { versionAtLeast, systemVersionSync } = require("../../runtime/bundled-native");
 const Contracts = require("./greenworks-contracts.json");
 
 const targetCache = new Map();
 const SKIP_DIRECTORIES = new Set(["audio", "img", "images", "movies", "movie", "video", "videos", "fonts"]);
 const LIMITS = { directories: 512, entries: 32768, depth: 8 };
-const run = promisify(execFile);
-let hostVersionPromise;
 
 function failure(message, code) { return Object.assign(new Error(message), { code }); }
 function contained(root, candidate) {
@@ -107,18 +103,17 @@ function selectedContract(version, install) {
   return contract;
 }
 
-function selectedHost(context, version) {
-  const host = Nwjs.core.resolveBestInstalled({ userDataDir: context.userDataDir, version, variant: "sdk", platform: process.platform, arch: process.arch });
-  return { host, architecture: host ? host.platformKey === "osx-x64" ? "x86_64" : "arm64" : process.arch === "x64" ? "x86_64" : process.arch };
+function selectedHost(context, version, entry, requestedArchitecture) {
+  const Architecture = require("../../runtime/architecture");
+  const arch = Architecture.chooseArchitecture({ request: { architecture: requestedArchitecture },
+    saved: entry?.runtimeData?.[context.runtimeId || "nwjs"]?.architecture, settings: context.settings, managerId: "nwjs" });
+  const host = Nwjs.core.resolveBestInstalled({ userDataDir: context.userDataDir, version, variant: "sdk", platform: process.platform, arch });
+  return { host, architecture: host ? host.platformKey === "osx-x64" ? "x86_64" : "arm64" : arch === "x64" ? "x86_64" : arch };
 }
 
 async function assertHostFloor(contract, { platform = process.platform, systemVersion } = {}) {
   if (platform !== "darwin") return;
-  if (systemVersion === undefined) {
-    if (!hostVersionPromise) hostVersionPromise = run("/usr/bin/sw_vers", ["-productVersion"], { timeout: 10000, maxBuffer: 1024 })
-      .then(result => result.stdout.trim()).catch(error => { hostVersionPromise = null; throw error; });
-    systemVersion = await hostVersionPromise;
-  }
+  if (systemVersion === undefined) systemVersion = systemVersionSync();
   if (!/^\d+\.\d+(?:\.\d+)?$/.test(systemVersion || "")) throw failure("The macOS version could not be checked.", "GREENWORKS_OS_UNKNOWN");
   if (!versionAtLeast(systemVersion, contract.minimumMacOS)) throw failure(`Greenworks ${contract.greenworksVersion} requires macOS ${contract.minimumMacOS} or newer.`, "GREENWORKS_OS_UNSUPPORTED");
 }
@@ -154,7 +149,7 @@ function resolveApiRoute({ contract, sdk, getNativeSdk, context, architecture, h
 
 function nativePrerequisites(entry, context, requirement, install, sourceRoot, selectedArchitecture) {
   const contract = selectedContract(requirement.greenworksVersion, install);
-  const selected = selectedHost(context, requirement.hostRuntimeId || contract.nwVersion);
+  const selected = selectedHost(context, requirement.hostRuntimeId || contract.nwVersion, entry, selectedArchitecture);
   if (selectedArchitecture) selected.architecture = selectedArchitecture;
   const apiRoute = resolveApiRoute({ contract, context, ...selected, getNativeSdk: () => {
     const sdk = Sdk.resolveQualifiedTicket({ userDataDir: context.userDataDir,

@@ -4,13 +4,13 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
-const { createPinnedNativeManager } = require("../src/modules/shared/runtime/pinned-native-manager");
+const { listedManager } = require("./helpers/listed-rows.cjs");
 const Source = require("../src/modules/shared/runtime/pinned-native-build");
 const { resolveStagingPin, validateCandidateSource, validateAdditionalSources, verifyAdditionalSources, additionalSourceIdentities } = require("../scripts/stage-native-runtimes.cjs");
 
-function fixture() {
+async function fixture() {
   const revision = "a".repeat(40), sourceTreeSha256 = "b".repeat(64);
-  const existing = createPinnedNativeManager({ id: "fixture", label: "Fixture", catalog: [{ version: "1.0.0", upstreamRevision: revision }] });
+  const existing = await listedManager({ id: "fixture", label: "Fixture" }, [{ version: "1.0.0", upstreamRevision: revision }]);
   const managerCatalog = new Map([[existing.id, existing]]);
   const input = { managerId: "fixture", version: "1.0.0-macos-v2" };
   const pin = { version: input.version, upstreamRevision: revision, sourceTreeSha256, minimumMacOS: "13.0", hostArchitectures: ["arm64"] };
@@ -18,8 +18,8 @@ function fixture() {
   return { existing, managerCatalog, input, pin, stagingCatalog };
 }
 
-test("explicit source candidate staging validates a separate catalog without changing canonical pins", () => {
-  const f = fixture(), before = structuredClone(f.existing.core.catalog);
+test("explicit source candidate staging validates a separate catalog without changing canonical pins", async () => {
+  const f = await fixture(), before = structuredClone(f.existing.core.catalog);
   const selected = resolveStagingPin(f.input, { arch: "arm64", managerCatalog: f.managerCatalog, stagingCatalog: f.stagingCatalog });
   assert.equal(selected.candidate, true); assert.equal(selected.manager, f.existing);
   assert.deepEqual(selected.pin, f.pin); assert.notEqual(selected.pin, f.pin);
@@ -29,7 +29,7 @@ test("explicit source candidate staging validates a separate catalog without cha
   assert.equal(original.candidate, false); assert.equal(original.pin.version, "1.0.0");
 });
 
-test("candidate staging rejects incomplete, ambiguous and unsafe source identities", () => {
+test("candidate staging rejects incomplete, ambiguous and unsafe source identities", async () => {
   for (const change of [
     p => { delete p.upstreamRevision; }, p => { p.upstreamRevision = "short"; },
     p => { delete p.sourceTreeSha256; }, p => { p.sourceTreeSha256 = "c".repeat(40); },
@@ -39,15 +39,15 @@ test("candidate staging rejects incomplete, ambiguous and unsafe source identiti
     p => { p.hostArchitectures = ["x64"]; }, p => { p.asset = { url: "https://example.invalid/runtime.tar.gz", sha256: "d".repeat(64), filename: "runtime.tar.gz" }; },
     p => { p.localBuild = false; }, p => { p.publishedBinary = {}; }, p => { p.overlaySha256 = "short"; }
   ]) {
-    const f = fixture(); change(f.pin);
+    const f = await fixture(); change(f.pin);
     assert.throws(() => resolveStagingPin(f.input, { arch: "arm64", managerCatalog: f.managerCatalog, stagingCatalog: f.stagingCatalog }));
   }
-  const f = fixture(); f.stagingCatalog.managers[0].catalog.push({ ...f.pin });
+  const f = await fixture(); f.stagingCatalog.managers[0].catalog.push({ ...f.pin });
   assert.throws(() => resolveStagingPin(f.input, { arch: "arm64", managerCatalog: f.managerCatalog, stagingCatalog: f.stagingCatalog }), /unique safe/);
 });
 
-test("candidate staging cannot shadow canonical versions or omit a requested architecture", () => {
-  const f = fixture();
+test("candidate staging cannot shadow canonical versions or omit a requested architecture", async () => {
+  const f = await fixture();
   const resolve = catalog => resolveStagingPin(f.input, { arch: "arm64", managerCatalog: f.managerCatalog, stagingCatalog: catalog });
   const canonical = structuredClone(f.stagingCatalog); canonical.managers[0].catalog[0].version = "1.0.0";
   assert.throws(() => resolve(canonical), /cannot override/);
@@ -67,11 +67,11 @@ test("candidate staging cannot shadow canonical versions or omit a requested arc
   assert.throws(() => resolve(privatePath), /private filesystem/);
 });
 
-test("candidate source checks bind the exact clean-source digest and optional overlay", t => {
+test("candidate source checks bind the exact clean-source digest and optional overlay", async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-staging-source-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.writeFileSync(path.join(root, "source.c"), "int value(void) { return 7; }\n");
-  const files = ["source.c"], f = fixture(); f.pin.sourceTreeSha256 = Source.hashPinnedFiles(root, files);
+  const files = ["source.c"], f = await fixture(); f.pin.sourceTreeSha256 = Source.hashPinnedFiles(root, files);
   const input = { provenance: { verifiedBuild: true, sourceRevision: f.pin.upstreamRevision, sourceTreeSha256: f.pin.sourceTreeSha256 } };
   assert.doesNotThrow(() => validateCandidateSource(input, root, { files }, f.pin));
   for (const provenance of [undefined, { ...input.provenance, verifiedBuild: false },

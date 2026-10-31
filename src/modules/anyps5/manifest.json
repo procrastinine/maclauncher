@@ -69,6 +69,7 @@
         "label": "PS5 (AnyPS5)",
         "graphicsHost": "window",
         "graphicsArchitecture": "x86_64",
+        "requirements": "macOS 26 · Rosetta on Apple Silicon · Vulkan with Intel support",
         "settings": {
           "defaults": {
             "vulkanRuntime": "auto",
@@ -298,7 +299,7 @@
         }
       },
       "inspection": {
-        "label": "Inspection",
+        "label": "Inspect only",
         "launch": false
       }
     }

@@ -2,14 +2,22 @@ const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os"), crypto = require("node:crypto");
 const { field: f, message: m, fields, parseApp, parseApps, parseDelivery, createPlayProtocol, packageName, profile } = require("../src/modules/android/store/protocol");
 const { createGooglePlayDownloads } = require("../src/modules/android/store/downloads");
+const Transport = require("../src/modules/shared/runtime/upstream-transport");
 const { parseManifestIdentity, readApkIdentity } = require("../src/modules/android/store/apk-identity");
 const bytes = Buffer.from("APK transport fixture"), sha256 = crypto.createHash("sha256").update(bytes).digest("hex"), appId = "org.example.game";
 const wrapped = (id, data) => m(f(1, m(f(id, data))));
 const app = { appId, name: "Example game", platforms: ["android"], versionCode: "41", versionName: "1.4.1", priceMicros: "0", offerType: 1, splits: ["config.arm64_v8a"] };
 function delivered(code = "41") { return { appId, versionCode: code, files: [{ filename: "base.apk", type: "base", url: "https://play.googleapis.com/base.apk", size: bytes.length, sha256 }, { filename: "split_config.arm64_v8a.apk", type: "split", url: "https://play.googleapis.com/split.apk", size: bytes.length, sha256 }, { filename: `Android/obb/${appId}/main.${code}.${appId}.obb`, type: "obb", url: "https://play.googleapis.com/game.obb", size: bytes.length, sha256 }] }; }
 async function until(check) { for (let index = 0; index < 300; index++) { const value = check(); if (value) return value; await new Promise(resolve => setTimeout(resolve, 5)); } throw Error("Timed out waiting for Google Play state"); }
-function fixture(t, extra = {}) {
+// Delivered files arrive through the shared transport; `transfer` replaces the
+// default answer, which serves the fixture bytes and records the file name.
+function fixture(t, { transfer, ...extra } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "google-play-test-")), calls = [], saves = [], copies = [];
+  const names = Object.fromEntries(delivered().files.map(file => [file.url, file.filename]));
+  t.mock.method(Transport, "downloadToFile", transfer || (async (url, output, { onProgress, headers }) => {
+    copies.push(names[url]); fs.writeFileSync(output, bytes); onProgress?.({ downloaded: bytes.length, total: bytes.length });
+    return { downloaded: bytes.length, total: bytes.length, headers };
+  }));
   const protocol = {
     async prepareDevice(args) { calls.push(["checkin", args.architecture, args.androidSdk ?? 34]); return { androidId: "abcdef0123456789", device: { architecture: args.architecture, locale: args.locale, sdk: args.androidSdk ?? 34 } }; },
     async authorize(session, registration) { calls.push(["authorize", session.email]); return { ...registration, authToken: "private-scoped-fixture", expiresAt: Date.now() + 1000000 }; },
@@ -20,11 +28,12 @@ function fixture(t, extra = {}) {
   };
   const service = createGooglePlayDownloads({ userDataDir: root, protocol, browserLogin: async ({ androidId }) => ({ email: "example@example.test", aasToken: "private-aas-fixture", androidId }),
     saveSession: async value => saves.push(structuredClone(value)), readApkIdentity: file => ({ packageName: appId, versionCode: "31", split: path.basename(file) === "base.apk" ? null : "config.arm64_v8a" }),
-    downloadFile: async (item, output, { onBytes }) => { copies.push(item.filename); fs.mkdirSync(path.dirname(output), { recursive: true }); fs.writeFileSync(output, bytes); onBytes?.(bytes.length); return { size: bytes.length, sha256 }; }, ...extra, protocol });
+    ...extra, protocol });
   t.after(async () => { await service.dispose(); fs.rmSync(root, { recursive: true, force: true }); }); return { root, service, calls, saves, copies };
 }
 test("Google Play remains offline until explicit connection and search does not invent account ownership", async t => {
   const { service, calls, saves } = fixture(t); await new Promise(resolve => setImmediate(resolve)); assert.deepEqual(calls, []);
+  assert.equal(service.snapshot().ownedLibraryRequirement, "Connect a Google account to list its purchases.", "the owned library states its requirement before a connection");
   assert.equal(service.snapshot().connection.status, "disconnected"); await service.connect({ mode: "browser", remember: true });
   assert.equal(service.snapshot().connection.status, "connected"); assert.equal(service.snapshot().library[0].owned, true);
   const found = await service.search("free game"); assert.equal(found[0].owned, false); assert.equal(service.snapshot().library.length, 1);
@@ -140,7 +149,7 @@ test("Play duplicate reuse skips all delivery bytes and device preparation while
 });
 test("Google Play cancellation removes partial data before publishing cancelled", async t => {
   let started = false;
-  const { service } = fixture(t, { downloadFile: async (_item, output, { signal }) => { fs.writeFileSync(output, "partial"); started = true; await new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true })); } });
+  const { service } = fixture(t, { transfer: async (_url, output, { signal }) => { fs.writeFileSync(output, "partial"); started = true; await new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true })); } });
   await service.connect({ mode: "browser" }); const job = service.download({ appId, versionCode: "31" }); await until(() => started); service.cancel(job.id);
   const result = await until(() => service.snapshot().downloads.find(row => row.id === job.id && row.status === "cancelled")); assert.equal(fs.existsSync(result.path), false); assert.deepEqual(fs.readdirSync(path.dirname(result.path)), []);
 });
@@ -149,6 +158,13 @@ test("an APK with a different actual version code never becomes a completed pinn
   await service.connect({ mode: "browser" }); const job = service.download({ appId, versionCode: "31", autoImport: false });
   const result = await until(() => service.snapshot().downloads.find(row => row.id === job.id && row.status === "error"));
   assert.match(result.error, /exact version code/); assert.equal(fs.existsSync(result.path), false); assert.deepEqual(fs.readdirSync(path.dirname(result.path)), []);
+});
+test("a delivered file whose bytes differ from the hash Google lists never completes", async t => {
+  const sent = [];
+  const { service } = fixture(t, { transfer: async (url, output, { headers }) => { sent.push([url, headers?.Cookie]); fs.writeFileSync(output, "changed APK bytes!!!!"); } });
+  await service.connect({ mode: "browser" }); const job = service.download({ appId, versionCode: "41", autoImport: false });
+  const result = await until(() => service.snapshot().downloads.find(row => row.id === job.id && row.status === "error"));
+  assert.match(result.error, /integrity/); assert.equal(fs.existsSync(result.path), false); assert.deepEqual(sent, [["https://play.googleapis.com/base.apk", undefined]]);
 });
 test("a supplied provider scope authorizes device metadata directly without an AAS exchange", async () => {
   const routes = [], protocol = createPlayProtocol({ request: async (url, args) => { routes.push(new URL(url).pathname); assert.equal(args.headers.Authorization, "Bearer fixture-provider-token"); return { status: 200, body: wrapped(28, m(f(1, "fixture-device-config"))) }; } });

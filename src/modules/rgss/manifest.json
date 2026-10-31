@@ -1011,7 +1011,7 @@
       },
       {
         "id": "removeDecryption",
-        "label": "Remove Extracted",
+        "label": "Remove extracted files",
         "kind": "danger",
         "confirm": "Remove extracted RGSS files?",
         "hiddenWhen": [

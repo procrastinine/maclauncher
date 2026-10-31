@@ -1,12 +1,12 @@
 [
   {
-    "version": "4.0.2-MCLv1",
+    "version": "4.0.2-MCLv2",
     "upstreamVersion": "4.0.2",
     "sourceRevision": "fbb72bd22c0c526f4276800024967323acd9d10d",
-    "librarySha256": "1f388109f5fd18534a025287cb29df68499179f41b973411533fee41318567ef",
+    "librarySha256": "d9c0bb486e268d79dfcb2b7641159badcb016c5504f5eb3d9b6d859a7623e81a",
     "abiProfile": "luasteam-4.0.2-sdk1.63-ml1",
     "helperAbiProfile": "luasteam-4.0.2-sdk1.63-ml1-offline-abi0.5.0",
-    "helperVersion": "0.5.0",
+    "helperVersion": "0.5.1",
     "interfaces": [
       "STEAMAPPS_INTERFACE_VERSION008",
       "STEAMHTMLSURFACE_INTERFACE_VERSION_005",

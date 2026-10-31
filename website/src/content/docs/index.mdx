@@ -11,19 +11,34 @@ hero:
       link: /maclauncher/getting-started/
       icon: right-arrow
     - text: Download
-      link: https://github.com/procrastinine/maclauncher/releases
-      icon: external
+      link: https://github.com/procrastinine/maclauncher/releases/latest/download/MacLauncher.app.zip
+      icon: download
       variant: minimal
+      attrs:
+        download: MacLauncher.app.zip
+        title: MacLauncher for Apple Silicon Macs
+        data-mac-build: detected
+    - text: Intel version
+      link: https://github.com/procrastinine/maclauncher/releases/latest/download/MacLauncher-Intel.app.zip
+      variant: minimal
+      attrs:
+        class: otherBuild
+        download: MacLauncher-Intel.app.zip
+        title: MacLauncher for Intel Macs
+        data-mac-build: other
+        data-label-arm64: Apple Silicon version
+        data-label-x64: Intel version
     - text: Whole site as Markdown
       link: /maclauncher/llms-full.txt
-      icon: document
       variant: minimal
+      attrs:
+        class: markdownPill
 ---
 
 import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
 import DemoEmbed from "../../components/DemoEmbed.astro";
 
-To get a feel for it, try the launcher's interface right here, with a library of example games. Every button shows what it would do, along with the article that explains it.
+The demo below runs the launcher's interface in your browser, with a library of example games. Each button shows what it would do, along with the article that explains it.
 
 <DemoEmbed />
 
@@ -57,6 +72,12 @@ To get a feel for it, try the launcher's interface right here, with a library of
   </a>
 </CardGrid>
 
+## Built in the open
+
+Everything MacLauncher builds itself, the app and every package compiled for it in [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds), is built on GitHub's own machines from public source code and public recipes. GitHub signs a record of exactly which source and recipe produced each file, so nothing can be slipped into a download that isn't in the public source, and anyone can read that source, check a download against its record or rebuild it. Components taken unchanged from their publishers, such as Python, Electron and Adobe's Flash Player projector, keep the publisher's version and are checked against the publisher's own files, checksums or signatures. MacLauncher sends no telemetry, and its diagnostics stay in a log file on the Mac.
+
+[How can I be sure nothing was added?](/maclauncher/help/faq/#how-can-i-be-sure-nothing-was-added-to-maclauncher) explains what the records prove, [How do I check a download myself?](/maclauncher/help/faq/#how-do-i-check-a-download-myself) shows the one-command check, and the [package verification table](https://procrastinine.github.io/maclauncher-builds/verification.html) lists every package's record, including the few older versions built locally before this setup.
+
 <div class="homeShot">
 
 ![The MacLauncher library with a game selected, its inspector showing runtime and graphics settings](../../assets/launcher-flow.png)
@@ -68,6 +89,6 @@ To get a feel for it, try the launcher's interface right here, with a library of
 <CardGrid>
   <LinkCard title="What is MacLauncher?" href="/maclauncher/introduction/" description="The longer introduction." />
   <LinkCard title="How games run on a Mac" href="/maclauncher/background/how-games-run/" description="VMs, emulators, WINE and native runtimes, explained." />
-  <LinkCard title="Games and runtimes" href="/maclauncher/games/" description="Everything MacLauncher can play, family by family." />
+  <LinkCard title="Games and runtimes" href="/maclauncher/games/" description="Everything MacLauncher can play, by game type, and the runtimes that play it." />
   <LinkCard title="Graphics and effects" href="/maclauncher/graphics/" description="Shaders, upscaling and frame generation, with examples." />
 </CardGrid>

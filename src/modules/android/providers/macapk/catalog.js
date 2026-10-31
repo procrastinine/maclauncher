@@ -1,17 +1,18 @@
-const { createGithubReleaseDiscovery } = require("../../../shared/runtime/github-runtime-catalog");
+const Upstream = require("../../../shared/runtime/upstream");
+const { macDownloads } = require("../../../shared/runtime/release-files");
 
 const SOURCE_URL = "https://github.com/kksimp/Mac.apk/releases";
 
-function createCatalogDiscovery(dependencies = {}) {
-  return createGithubReleaseDiscovery({ owner: "kksimp", repo: "Mac.apk", dependencies,
-    mapRelease: async (release, { resolveRevision, githubAssetDigest, sourceUrl }) => {
-      if (!/^v?\d+\.\d+\.\d+$/.test(release.tag_name || "")) return null;
-      const asset = release.assets?.find(item => item.name === "macapk.dmg");
-      if (!asset || !githubAssetDigest(asset)) return null;
-      return { version: release.tag_name.replace(/^v/, ""), upstreamRevision: await resolveRevision(release),
-        sourceUrl, hostArchitectures: ["arm64"], minimumMacOS: "26.4", localBuild: false,
-        asset: { filename: asset.name, url: asset.browser_download_url, sha256: githubAssetDigest(asset),
-          bytes: asset.size, assetId: asset.id, integrity: "publisher-sha256" } };
-    } });
-}
-module.exports = { SOURCE_URL, createCatalogDiscovery };
+// The current file name wins; a renamed or reformatted download is followed.
+// A name without a CPU word is the publisher's Apple Silicon build. The
+// application states its macOS requirement, which is read after download.
+const source = Upstream.github({ repository: "kksimp/Mac.apk", allArchitectures: true,
+  recognize: release => {
+    const version = /^v?(\d+(?:\.\d+)+)$/.exec(release.tag_name || "")?.[1];
+    if (!version) return null;
+    const downloads = macDownloads(release.assets, { preferred: "macapk.dmg", platformWord: false });
+    return downloads.length ? downloads.map(({ asset, architecture }) => ({ version, architecture: architecture || "arm64", assets: [asset] }))
+      : { version, architecture: "arm64", installReason: "This release has no Mac download." };
+  } });
+
+module.exports = { SOURCE_URL, source };

@@ -45,6 +45,8 @@ export type ModuleUiGroup = {
   infoFields?: ModuleUiField[];
   hideEmptyValue?: boolean;
   collapsed?: boolean;
+  /** Holds actions no declared group lists. */
+  generated?: boolean;
   inlineActions?: boolean;
   hiddenWhen?: ModuleUiCondition[];
 };
@@ -188,6 +190,8 @@ export type ModuleManifest = {
 
 export type ModuleSupports = {
   launch?: boolean;
+  /** The Mac this game type needs when this one cannot play it, such as "Requires a Mac with Apple Silicon." */
+  launchRequirement?: string | null;
   cheats: boolean;
   cheatsPatcher: boolean;
   saveEditing: boolean;
@@ -202,6 +206,7 @@ export type LauncherSettings = {
   showIcons: boolean;
   showNonDefaultTags: boolean;
   networkAccess?: boolean;
+  checkForUpdatesAtLaunch?: boolean;
   library?: {
     version: number;
     order: string[];
@@ -406,6 +411,15 @@ export type RecentGame = {
   iconSource: string | null;
   iconUrl: string | null;
   lastPlayedAt: number | null;
+  /** Present while the game's original files cannot be reached, such as on a disconnected drive. */
+  availability?: GameFilesAvailability;
+};
+
+export type GameFilesAvailability = {
+  available: false;
+  reason: "missing" | "unresponsive" | "unreadable";
+  /** A sentence that names the cause, such as files not found at their saved location. */
+  message: string;
 };
 
 export type RuntimeRefreshOptions = { sourceId?: string; latestOnly?: boolean };
@@ -502,11 +516,32 @@ export type LauncherState = {
   preparing?: Record<string, GamePreparation>;
   importing?: ImportProgress[];
   downloads: DownloadTask[];
+  appUpdate?: AppUpdateState;
   debug: boolean;
   logPath: string;
 };
 
-export type LauncherActivity = Partial<Pick<LauncherState, "running" | "preparing" | "importing" | "downloads">>;
+/** Check for Updates, from src/main/app-update.js. */
+export type AppUpdateState = {
+  currentVersion: string;
+  phase: "idle" | "checking" | "downloading" | "ready";
+  /** The version being downloaded or ready to install. */
+  version: string | null;
+  /** Download fraction from 0 to 1. */
+  progress: number | null;
+  /** Why the last download could not be installed. */
+  error: string | null;
+  lastCheck: {
+    checkedAt: number;
+    currentVersion: string;
+    outcome: "current" | "available" | "error";
+    version?: string;
+    releaseUrl?: string;
+    message?: string;
+  } | null;
+};
+
+export type LauncherActivity = Partial<Pick<LauncherState, "running" | "preparing" | "importing" | "downloads" | "appUpdate">>;
 
 export type RuntimeSettingsContext = {
   scope: "module" | "game";
@@ -578,6 +613,7 @@ export type RuntimeUiState = Record<
     remoteOpen: Record<string, boolean>;
     installVersion: Record<string, string>;
     installVariant: Record<string, string>;
+    installArchitecture?: Record<string, string>;
     installedSort: Record<string, "default" | "newest" | "oldest" | "path">;
     error: string | null;
     sourceErrors?: Record<string, string | null>;
@@ -594,6 +630,7 @@ declare global {
     MacLauncher?: {
       launcher: {
         getState(): Promise<LauncherState>;
+        prioritizeGame?(gamePath: string): Promise<boolean>;
         openUtilityWindow(request: UtilityWindowRequest): Promise<boolean>;
         steamState: import("./components/SteamView").SteamApi["steamState"];
         steamScan: import("./components/SteamView").SteamApi["steamScan"];
@@ -638,6 +675,7 @@ declare global {
         cancelImport(inputPath: string): Promise<boolean>;
         forgetGame(gamePath: string): Promise<boolean>;
         findMissingGames(gamePaths: string[]): Promise<string[]>;
+        locateGame(gamePath: string): Promise<string | null>;
         forgetGames(gamePaths: string[]): Promise<LibraryBulkResult>;
         deleteGames(gamePaths: string[]): Promise<LibraryBulkResult>;
         setGameFavorite(gamePath: string, favorite: boolean): Promise<boolean>;
@@ -686,6 +724,8 @@ declare global {
         ): Promise<boolean>;
         setModuleSettings(moduleId: ModuleId, patch: Record<string, any>): Promise<boolean>;
         setLauncherSettings(patch: Record<string, any>): Promise<boolean>;
+        /** "check" runs Check for Updates with its native dialogs. */
+        appUpdate(action: "check" | "cancel" | "restart"): Promise<boolean>;
         setModuleRuntimeSettings(
           moduleId: ModuleId,
           runtimeId: RuntimeId,

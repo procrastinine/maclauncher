@@ -433,8 +433,8 @@ export function SteamView({ api }: { api: SteamApi }) {
     <section hidden id={`steam-${browsingDownloads ? "installed" : "downloaded"}-panel`} role="tabpanel" aria-labelledby={`steam-${browsingDownloads ? "installed" : "downloaded"}-tab`} />
     <section className="steamPanel" hidden={tab !== "download"} id="steam-download-panel" role="tabpanel" aria-labelledby="steam-download-tab">
       {showLogin && <div className="steamLogin">
-        <div className="steamLoginIntro"><SteamMark size={42} /><h2>Connect Steam</h2><HelpTip label="About Steam downloads">
-          <p>Download Mac, Windows and Linux game files, including older Mac builds. Choose a branch, language and depot before downloading.</p><p>Connect to load owned and shared games. Library and version results are cached.</p></HelpTip>
+        <div className="steamLoginIntro"><SteamMark size={42} /><h2 className="externalControlHelp">Connect Steam <HelpTip label="About Steam downloads">
+          <p>Download Mac, Windows and Linux game files, including older Mac builds. Choose a branch, language and depot before downloading.</p><p>Connect to load owned and shared games. Library and version results are cached.</p></HelpTip></h2>
         </div>
         <form className="steamLoginForm" onSubmit={connect}>
           <fieldset className="steamSignInModes" disabled={connecting || guarding || authBusy}><legend>Connection <HelpTip label="About Steam sign-in"><p>Reuse the account signed in to the Steam app for Mac. Keep Steam open while loading the library and downloading game files.</p><p>Manual sign-in supports Steam Guard email, authenticator and mobile approval. Passwords are used for sign-in and are not saved.</p></HelpTip></legend>

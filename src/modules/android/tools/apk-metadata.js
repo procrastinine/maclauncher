@@ -29,8 +29,7 @@ function createReader({ declaration, resourceRoot, spawnProcess = spawn } = {}) 
   }
   function resolve() {
     const pin = definition();
-    const root = Included.resolveIncluded([pin], { id: pin.id, version: pin.version, resourcesRoot: resourceRoot })?.directory;
-    if (!root) throw new Error("The included APK metadata reader is unavailable. Reinstall MacLauncher.");
+    const root = Included.requireIncluded([pin], { id: pin.id, version: pin.version, resourcesRoot: resourceRoot }).directory;
     const metadata = Bundled.readRegular(path.join(root, pin.manifestRelative), Bundled.LIMITS.manifestBytes);
     if (metadata.sha256 !== pin.manifestSha256) throw new Error("The included APK metadata reader changed. Reinstall MacLauncher.");
     const manifest = JSON.parse(metadata.bytes), executableRelative = Bundled.relativeFile(manifest.executableRelative);

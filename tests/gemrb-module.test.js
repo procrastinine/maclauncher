@@ -98,18 +98,6 @@ test("GemRB supports an explicit custom game profile without accepting config in
   }
 });
 
-test("GemRB published catalogs distinguish the reviewed CLI adapter from unqualified older releases", async () => {
-  const { mapRelease } = require("../src/modules/gemrb/runtime/catalog");
-  const revision = "b".repeat(40), metadata = { resolveRevision: async () => revision, sourceUrl: "https://github.com/gemrb/gemrb/releases/tag/v0.9.5" };
-  const latest = await mapRelease({ tag_name: "v0.9.5" }, metadata);
-  assert.equal(latest.version, "0.9.5-cli-v2"); assert.equal(latest.publishedVersion, "0.9.5");
-  assert.equal(latest.upstreamTag, "v0.9.5"); assert.equal(latest.upstreamRevision, revision); assert.equal(latest.localBuild, true);
-  const previous = await mapRelease({ tag_name: "v0.9.4" }, metadata);
-  assert.equal(previous.version, "0.9.4"); assert.equal(previous.localBuild, false); assert.equal(previous.asset, undefined);
-  assert.match(previous.installReason, /No compatible Mac CLI runtime/);
-  assert.equal(await mapRelease({ tag_name: "latest" }, metadata), null);
-});
-
 test("GemRB imports standalone game folders and prepares their unique bundled profile automatically", t => {
   const root = temporary(t), source = path.join(root, "original"), gameRoot = path.join(source, "game"); game(gameRoot);
   const scripts = path.join(source, "GUIScripts", "example"); fs.mkdirSync(scripts, { recursive: true });
@@ -121,8 +109,9 @@ test("GemRB imports standalone game folders and prepares their unique bundled pr
   assert.equal(detected.contentRootDir, gameRoot); assert.equal(detected.moduleData.bundledGameProfile, "example");
   const entry = { ...detected, gameId: "standalone" }, context = { userDataDir: path.join(root, "data"), settings: {} };
   const requirement = Module.ensureRuntime(entry, context), selected = Module.runtimeManagers[0].resolveSelection(entry, context.settings, context.userDataDir);
-  assert.equal(selected.version, null, "With nothing installed, Play asks for a version");
-  assert.equal(requirement.managerId, "gemrb"); assert.equal(requirement.selectionRequired, true);
+  assert.equal(selected.version, null, "An empty offline catalog defers version discovery to consented Play");
+  assert.equal(requirement.managerId, "gemrb"); assert.equal(requirement.selectionRequired, undefined);
+  assert.equal(requirement.discoveryRequired, true);
   assert.equal(fs.existsSync(path.join(context.userDataDir, "runtimes")), false);
   const explicitPrevious = { ...entry, runtimeData: { gemrb: { version: "0.9.5-cli-v4" } } };
   assert.equal(Module.runtimeManagers[0].resolveSelection(explicitPrevious, context.settings, context.userDataDir).version, "0.9.5-cli-v4");

@@ -3,7 +3,7 @@
 //   every game type and each of its runtimes;
 // - the demo data has one example game per registered game type, and each
 //   type has an article;
-// - the demo uses the app's React release;
+// - the demo uses the app's React release, and its data the app's version;
 // - the mock's explicit handlers still exist in the launcher's bridge, and the
 //   bridge methods it leaves to the generic fallback are listed.
 import fs from "node:fs";
@@ -48,6 +48,9 @@ for (const name of ["react", "react-dom"]) {
   const site = sitePackage.dependencies?.[name];
   if (app !== site) failures.push(`The website uses ${name} ${site}; the app uses ${app}.`);
 }
+// Check for Updates in the demo names the app's version.
+const shownVersion = demoData.state.appUpdate?.currentVersion;
+if (shownVersion !== appPackage.version) failures.push(`The demo data names MacLauncher ${shownVersion}; the app is ${appPackage.version}. Run pnpm run demo:data.`);
 
 const bridgeSource = fs.readFileSync(path.join(repoRoot, "src/modules/shared/web/preload/launcher.js"), "utf8");
 const bridge = new Set([...bridgeSource.matchAll(/^ {4}([A-Za-z]+):/gm)].map(match => match[1]));

@@ -22,11 +22,42 @@ function launcherArch(arch = process.arch) {
   if (!["arm64", "x64"].includes(arch)) throw new Error("Included helpers support Apple Silicon and Intel Macs.");
   return arch;
 }
+// A version can offer both a Universal in-process package and a smaller native
+// package. Include one compatible build per version, preferring the app's CPU.
+function preferredIncludedBuilds(declarations, arch = process.arch) {
+  if (!Array.isArray(declarations)) throw new Error("Included helper declarations are invalid.");
+  const host = launcherArch(arch), selected = new Map();
+  const rank = item => item.arch === host ? 0 : item.arch === "universal" ? 1 : 2;
+  for (const item of declarations) {
+    if (!Array.isArray(item?.launcherArchitectures) || !item.launcherArchitectures.includes(host)) continue;
+    const key = JSON.stringify([item.id || item.managerId, item.version]), previous = selected.get(key);
+    if (!previous || rank(item) < rank(previous)) selected.set(key, item);
+  }
+  return [...selected.values()];
+}
 function declared(declarations, { id, version, arch = process.arch } = {}) {
   if (!Array.isArray(declarations)) throw new Error("Included helper declarations are invalid.");
   const host = launcherArch(arch);
-  return declarations.find(item => item?.id === id && (version === undefined || item.version === version) &&
-    Array.isArray(item.launcherArchitectures) && item.launcherArchitectures.includes(host)) || null;
+  return preferredIncludedBuilds(declarations, host).find(item => item.id === id &&
+    (version === undefined || item.version === version)) || null;
+}
+const MAC_NAMES = Object.freeze({ arm64: "a Mac with Apple Silicon", x64: "an Intel Mac" });
+// Helpers are published for specific launcher CPUs, and each app includes the
+// builds for its own CPU. When a declared helper has no build for this Mac, the
+// features that need it report the Mac they require instead of a missing file.
+function hostRequirement(declarations, { id, arch = process.arch } = {}) {
+  if (!Array.isArray(declarations)) throw new Error("Included helper declarations are invalid.");
+  const host = launcherArch(arch), byId = new Map();
+  for (const item of declarations) {
+    if (!item || id !== undefined && item.id !== id) continue;
+    const architectures = Array.isArray(item.launcherArchitectures) ? item.launcherArchitectures : [];
+    byId.set(item.id, [...(byId.get(item.id) || []), ...architectures]);
+  }
+  const missing = [...byId].filter(([, architectures]) => !architectures.includes(host));
+  if (!missing.length) return null;
+  const supported = ["arm64", "x64"].filter(value => missing.every(([, architectures]) => architectures.includes(value)));
+  const message = supported.length ? `Requires ${supported.map(value => MAC_NAMES[value]).join(" or ")}.` : "Unavailable on this Mac.";
+  return { ids: missing.map(([name]) => name), architectures: supported, message };
 }
 /** The declared directory and sealed manifest; "full" also verifies every declared file. */
 function resolveIncluded(declarations, { id, version, arch, resourcesRoot: root, verification = "status" } = {}) {
@@ -41,5 +72,13 @@ function resolveIncluded(declarations, { id, version, arch, resourcesRoot: root,
   if (verification === "full") B.verifyPayload(directory, item);
   return { item, directory, manifestPath: path.join(directory, item.manifestRelative), manifest: stored };
 }
+/** resolveIncluded for a helper a feature cannot work without. */
+function requireIncluded(declarations, options = {}) {
+  const included = resolveIncluded(declarations, options);
+  if (included) return included;
+  const requirement = hostRequirement(declarations, options);
+  if (requirement) throw Object.assign(new Error(requirement.message), { code: "HOST_ARCHITECTURE_UNSUPPORTED" });
+  throw new Error(`The included ${options.id} is missing. Reinstall MacLauncher.`);
+}
 
-module.exports = { SOURCE_RESOURCES, isPackaged, resourcesRoot, nativeRoot, declared, resolveIncluded };
+module.exports = { SOURCE_RESOURCES, isPackaged, resourcesRoot, nativeRoot, preferredIncludedBuilds, declared, hostRequirement, resolveIncluded, requireIncluded };

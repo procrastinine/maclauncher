@@ -456,3 +456,39 @@ test("launch preparation cancels and a spawned process is published before modul
   assert.equal(events.some(e => e.event === "gameProcess"), false, "failed spawn does not publish an invalid PID");
   assert.equal(operations.cancelLaunch(entry), false);
 });
+
+test("library checks report each game separately and check a game with missing files from its record", async t => {
+  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "maclauncher-entry-checks-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const present = path.join(root, "Present"), missing = path.join(root, "Missing"), userDataDir = path.join(root, "data");
+  fs.mkdirSync(present);
+  const info = { id: "fixture", label: "Fixture", gameType: "native", supports: {},
+    runtime: { default: "runner", supported: ["runner", "other"], entries: { runner: {}, other: {} } } };
+  const seen = [];
+  const mod = { id: info.id, manifest: info,
+    filterRuntimeSupport: (entry, supported) => { seen.push([entry.gameId, entry.availability?.reason]); return entry.availability ? ["runner"] : supported; },
+    canLaunchRuntime: (_runtimeId, entry) => !entry.availability };
+  const registry = { listModuleIds: () => [info.id], listModules: () => [info],
+    getModule: () => mod, getModuleInfo: () => info, getModuleDir: () => root,
+    listSharedRuntimeManagers: () => [], getRuntimeManagerUi: () => null };
+  const events = [], operations = createBackendOperations({ userDataDir, registry, emit: (event, payload) => events.push({ event, payload }) });
+  t.after(() => operations.beginShutdown());
+  const entry = (gameId, gamePath) => ({ gameId, gamePath, moduleId: info.id, runtimeId: "runner", saveDirOverride: path.join(userDataDir, "saves", gameId) });
+  const known = { available: false, reason: "unresponsive", path: present, message: "The game's location is not responding." };
+  let probes = 0;
+  const originalStat = fs.promises.stat;
+  fs.promises.stat = (...args) => { if ([present, missing].includes(args[0])) probes++; return originalStat(...args); };
+  t.after(() => { fs.promises.stat = originalStat; });
+  const results = Object.fromEntries(await Promise.all([
+    ["present", present, { available: true }],
+    ["missing", missing, { available: false, reason: "missing", path: missing, message: "Missing files" }],
+    ["known", present, known]
+  ].map(async ([id, file, availability]) => [id, await operations.libraryEntry(entry(id, file), {}, { availability, refreshMetadata: id !== "present" })])));
+  assert.equal(probes, 0, "both positive and negative results from main are reused without another availability probe");
+  assert.deepEqual(results.present.checks, { runtimeId: "runner", runtimeSupport: ["runner", "other"], launch: true, launchRequirement: null, managedSaveDir: true });
+  assert.deepEqual([results.missing.checks.runtimeSupport, results.missing.checks.launch], [["runner"], false]);
+  assert.equal(results.known.checks.launch, false, "a result the launcher already has is used without checking again");
+  assert.ok(seen.some(([id, reason]) => id === "missing" && reason === "missing"));
+  assert.ok(seen.some(([id, reason]) => id === "known" && reason === "unresponsive"));
+  assert.ok(seen.filter(([id]) => id === "present").every(([, reason]) => reason === undefined));
+});

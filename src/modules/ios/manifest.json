@@ -33,6 +33,7 @@
     },
     "managerUi": {
       "playcover": {
+        "hostFeature": "APPLE_SILICON",
         "tabLabel": "PlayCover",
         "order": 125,
         "management": "managed",
@@ -41,7 +42,8 @@
     },
     "entries": {
       "playcover": {
-        "label": "PlayCover (Apple Silicon)",
+        "label": "PlayCover",
+        "hostFeature": "APPLE_SILICON",
         "settings": {
           "defaults": {
             "networkIsolation": true,

@@ -2,7 +2,9 @@
 // Explicit-action acquisition of declared original NVIDIA wheel entries. The
 // wheel is data; unrelated runtimes are neither installed nor executed.
 const fs = require('node:fs');
+const path = require('node:path');
 const crypto = require('node:crypto');
+const Upstream = require('../../runtime/upstream');
 const zlib = require('node:zlib');
 const {Readable, Transform} = require('node:stream');
 const {pipeline} = require('node:stream/promises');
@@ -22,44 +24,37 @@ function declaration(row) {
   return {archive, url: url.href};
 }
 
-async function range(url, offset, bytes, total, signal) {
-  signal?.throwIfAborted();
-  if (!Number.isSafeInteger(offset) || offset < 0 || bytes < 1 || offset > total - bytes)
-    throw new Error('The original model archive range is invalid.');
-  const response = await fetch(url, {headers: {Range: `bytes=${offset}-${offset + bytes - 1}`, 'Accept-Encoding': 'identity'},
-    redirect: 'error', signal});
-  if (response.status !== 206 || response.headers.get('content-range') !== `bytes ${offset}-${offset + bytes - 1}/${total}` ||
-      Number(response.headers.get('content-length')) !== bytes || !response.body) {
-    await response.body?.cancel();
-    throw new Error('The original model server did not supply the declared bounded archive range.');
-  }
-  return response;
-}
-async function bytes(response, size) {
-  const chunks = [];let length = 0;
-  for await (const chunk of Readable.fromWeb(response.body)) {
-    length += chunk.length;
-    if (length > size) throw new Error('The original model archive header exceeds its declaration.');
-    chunks.push(chunk);
-  }
-  if (length !== size) throw new Error('The original model archive header is incomplete.');
-  return Buffer.concat(chunks);
+// Bounded parts of the publisher's wheel, read through the shared upstream
+// layer. The declared offsets belong to that exact wheel.
+function reader(url, archive, signal) {
+  const listed = Upstream.listedFile({filename: path.posix.basename(new URL(url).pathname), url});
+  return async (offset, length) => {
+    signal?.throwIfAborted();
+    if (!Number.isSafeInteger(offset) || offset < 0 || length < 1 || offset > archive.bytes - length)
+      throw new Error('The original model archive range is invalid.');
+    const part = await Upstream.range(listed, offset, length, {signal});
+    if (part.total !== archive.bytes) throw new Error('The original NVIDIA package changed; its declared model entry cannot be read.');
+    return part.bytes;
+  };
 }
 
 async function downloadEntry(row, target, {signal, onProgress} = {}) {
-  const {archive, url} = declaration(row);
-  const header = await bytes(await range(url, archive.offset, 30, archive.bytes, signal), 30);
+  const {archive, url} = declaration(row), read = reader(url, archive, signal);
+  const header = await read(archive.offset, 30);
   const flags = header.readUInt16LE(6), method = header.readUInt16LE(8), nameLength = header.readUInt16LE(26), extraLength = header.readUInt16LE(28);
   if (header.readUInt32LE(0) !== 0x04034b50 || flags & 1 || method !== archive.method || !nameLength || nameLength > 4096 || extraLength > 16384 ||
       !(flags & 8) && (header.readUInt32LE(18) !== archive.compressedBytes || header.readUInt32LE(22) !== row.bytes))
     throw new Error('The original model archive entry differs from its declared local header.');
-  const name = await bytes(await range(url, archive.offset + 30, nameLength, archive.bytes, signal), nameLength);
+  const name = await read(archive.offset + 30, nameLength);
   if (name.toString('utf8') !== archive.entry) throw new Error('The original model archive names a different entry.');
   const dataOffset = archive.offset + 30 + nameLength + extraLength;
-  const response = await range(url, dataOffset, archive.compressedBytes, archive.bytes, signal);
-  let handle;
-  try { handle = await fs.promises.open(target, 'wx'); }
-  catch (error) { await response.body.cancel(); throw error; }
+  async function* parts() {
+    for (let done = 0; done < archive.compressedBytes;) {
+      const length = Math.min(4 << 20, archive.compressedBytes - done);
+      yield await read(dataOffset + done, length);done += length;
+    }
+  }
+  const handle = await fs.promises.open(target, 'wx');
   let downloaded = 0, expanded = 0, lastProgress = 0;
   const hash = crypto.createHash('sha256');
   const compressed = new Transform({transform(chunk, encoding, next) {
@@ -79,9 +74,9 @@ async function downloadEntry(row, target, {signal, onProgress} = {}) {
   }});
   try {
     const decode = method === 8 ? zlib.createInflateRaw() : new Transform({transform(chunk, encoding, next) { next(null, chunk); }});
-    await pipeline(Readable.fromWeb(response.body), compressed, decode, output, handle.createWriteStream(), {signal});
+    await pipeline(Readable.from(parts()), compressed, decode, output, handle.createWriteStream(), {signal});
     if (downloaded !== archive.compressedBytes || expanded !== row.bytes || hash.digest('hex') !== row.sha256)
-      throw new Error('The original model entry differs from its declared size or checksum.');
+      throw new Error(`The downloaded NVIDIA model entry ${archive.entry} is not the selected model: its size or checksum differs.`);
     signal?.throwIfAborted();onProgress?.({downloaded: row.bytes, total: row.bytes, transferBytes: downloaded, transferTotal: archive.compressedBytes});
     return {file: target, sha256: row.sha256, bytes: expanded, sourceUrl: url, archiveEntry: archive.entry,
       archiveDeclaredSHA256: archive.sha256};

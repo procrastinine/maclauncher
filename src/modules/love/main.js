@@ -5,7 +5,7 @@ const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
 const LoveRuntimeManager = require("./runtime/love-runtime-manager");
 const RuntimeRegistration = require("../shared/runtime/custom-runtime");
-const { selectRuntimeVersion } = require("../shared/runtime/version-choices");
+const { selectRuntimeVersion, savedDefaultVersion, usableDefaultVersion } = require("../shared/runtime/version-choices");
 const LuaSteam = require("./runtime/luasteam-runtime");
 const LuaSteamConsumer = require("./runtime/luasteam-consumer");
 const GameData = require("../shared/game-data");
@@ -150,20 +150,26 @@ function resolveDetectedVersionNormalized(entry) {
   return normalizeLoveVersion(moduleData.detectedVersionNormalized || moduleData.detectedVersion);
 }
 
+// Runtimes lists each LÖVE release line in its own section. The release channel
+// spans all of them, so a detected 0.10 release is a release, not a reason to
+// use a nightly build.
 function resolveManagerSections(settings, userDataDir) {
   const state = LoveRuntimeManager.getState({
     settings: settings?.runtimes?.love,
     userDataDir
   });
   const sections = Array.isArray(state?.sections) ? state.sections : [];
+  const lines = sections.filter(section => LoveRuntimeManager.sectionChannel(section.id) === CHANNEL_STABLE);
+  const line = lines.find(section => section.id === CHANNEL_STABLE);
   return {
     state,
-    stable:
-      sections.find(section => section.id === CHANNEL_STABLE) || {
-        id: CHANNEL_STABLE,
-        installed: [],
-        catalog: { versions: [] }
-      },
+    lines,
+    stable: {
+      id: CHANNEL_STABLE,
+      installed: lines.flatMap(section => section.installed || []),
+      catalog: { ...line?.catalog, versions: [...new Set(lines.flatMap(section => section.catalog?.versions || []))]
+        .sort((left, right) => LoveCore.compareVersions(right, left)) }
+    },
     nightly:
       sections.find(section => section.id === CHANNEL_NIGHTLY) || {
         id: CHANNEL_NIGHTLY,
@@ -191,6 +197,20 @@ function resolveChannelHint(entry, sections) {
   return CHANNEL_STABLE;
 }
 
+// A channel chosen for the game names a line, LÖVE 11 releases or nightly
+// builds, and the detected version applies only when it belongs to that line.
+function resolveRecommendedRelease(entry) {
+  const detected = resolveDetectedVersionNormalized(entry), line = normalizeChannel(resolveRuntimeData(entry).channel);
+  return detected && (!line || LoveRuntimeManager.sectionIdForVersion(CHANNEL_STABLE, detected) === line) ? detected : null;
+}
+
+// The channel choice that names a release's line. Only the LÖVE 11 line has
+// one; a release from another line is kept as a version, and Automatic names
+// its line.
+function releaseChannelChoice(version) {
+  return LoveRuntimeManager.sectionIdForVersion(CHANNEL_STABLE, version) === CHANNEL_STABLE ? CHANNEL_STABLE : null;
+}
+
 function resolveManagedRuntimeSelection(entry, { settings, userDataDir } = {}) {
   const sections = resolveManagerSections(settings, userDataDir);
   const original = resolveRuntimeData(entry), cfg = LoveRuntimeManager.normalizeSettings(settings?.runtimes?.love);
@@ -199,26 +219,47 @@ function resolveManagedRuntimeSelection(entry, { settings, userDataDir } = {}) {
     ? LoveCore.findNightlyByBundleVersion({ userDataDir, version: detected }) : null;
   const channel = gameChannel || (nightlyMatch ? CHANNEL_NIGHTLY : null) || (detected ? resolveChannelHint(entry, sections) :
     cfg.stable.defaultVersion && !cfg.nightly.defaultVersion ? CHANNEL_STABLE : cfg.nightly.defaultVersion && !cfg.stable.defaultVersion ? CHANNEL_NIGHTLY : resolveChannelHint(entry, sections));
+  // A chosen line limits the defaults to its own versions; otherwise the channel spans all of its lines.
+  const line = normalizeChannel(original.channel);
+  const inLine = version => !line || String(version).startsWith("/") || LoveRuntimeManager.sectionIdForVersion(channel, version) === line;
+  const lineSection = line ? (sections.state?.sections || []).find(section => section.id === line) : null;
+  // A saved version that the channel neither lists nor has installed gives way to the channel's default.
+  const channelSections = line ? [lineSection].filter(Boolean) : channel === CHANNEL_STABLE ? sections.lines : [sections.nightly];
+  const savedVersion = cfg[channel]?.defaultVersion;
+  const saved = savedVersion && inLine(savedVersion) ? savedDefaultVersion(savedVersion, { listed: channelSections.flatMap(section => section.catalog?.versions || []),
+    installed: channelSections.flatMap(section => (section.installed || []).flatMap(row => [row.version, row.buildKey])).filter(Boolean) }) : null;
+  const fallbackSection = line ? lineSection : sections[channel];
   const layer = selectRuntimeVersion({ manual: trimString(original.version),
-    recommended: nightlyMatch?.version || (channel === CHANNEL_NIGHTLY ? null : detected),
-    defaultVersion: cfg[channel]?.defaultVersion, fallback: sections[channel]?.defaultVersion });
+    recommended: nightlyMatch?.version || (channel === CHANNEL_NIGHTLY ? null : resolveRecommendedRelease(entry)),
+    defaultVersion: saved, fallback: fallbackSection && usableDefaultVersion(fallbackSection) });
   const version = layer.version;
   const install = version ? LoveCore.resolveInstalled({ userDataDir, channel, version }) : null;
   const source = layer.source === "manual" ? install ? "explicit-version" : "explicit-missing"
     : layer.source === "recommended" ? install ? "detected-version" : "missing" : "default";
   return { ready: Boolean(install), installed: Boolean(install), source, channel, resolvedChannel: channel,
+    resolvedSection: LoveRuntimeManager.sectionIdForVersion(channel, version),
+    recommendedVersion: layer.source === "recommended" ? version : null,
     resolvedVersion: version, install, installChannel: channel, installVersion: version,
     requiredVersion: version, promptKey: buildPromptKey(channel, version) };
 }
 
 const resolveRuntimeSelection = RuntimeRegistration.createSelector(LoveRuntimeManager, resolveManagedRuntimeSelection, {
   context: ([entry, context = {}]) => ({ entry, ...context,
-    options: { ...context.options, recommended: () => resolveDetectedVersionNormalized(entry) } }),
+    options: { ...context.options, recommended: () => resolveRecommendedRelease(entry) } }),
   result: selected => ({ ...selected, installed: selected.ready, channel: selected.sectionId,
-    resolvedChannel: selected.sectionId, resolvedVersion: selected.version, requiredVersion: selected.version,
+    resolvedChannel: selected.sectionId, resolvedSection: selected.sectionId, resolvedVersion: selected.version, requiredVersion: selected.version,
     installChannel: selected.sectionId, installVersion: selected.version,
     promptKey: buildPromptKey(selected.sectionId, selected.version) })
 });
+
+// The section that Automatic selects: the line of the version Play uses
+// without a channel or version chosen for the game.
+function resolveAutomaticSection(entry, context, status) {
+  const runtimeData = resolveRuntimeData(entry);
+  if (!trimString(runtimeData.channel)) return status.resolvedSection || null;
+  const automatic = { ...entry, runtimeData: { ...entry.runtimeData, [RUNTIME_ID]: { ...runtimeData, channel: null, version: null } } };
+  return resolveRuntimeSelection(automatic, context).resolvedSection || null;
+}
 
 async function ensureRuntime(entry, context) {
   if (normalizeRuntimeId(context.runtimeId || entry.runtimeId || manifest.runtime.default) !== RUNTIME_ID) return null;
@@ -411,10 +452,12 @@ module.exports = {
   },
   cleanupGameData,
   ensureRuntime,
-  // The stable release the game's configuration names.
-  runtimeRecommendation: entry => {
-    const version = resolveDetectedVersionNormalized(entry);
-    return version ? { version, sectionId: CHANNEL_STABLE } : null;
+  // The release the game's configuration names, or an installed nightly build
+  // with that bundle version, when the selected line's automatic version uses it.
+  runtimeRecommendation: (entry, context = {}) => {
+    const automaticVersion = { ...entry, runtimeData: { ...entry.runtimeData, [RUNTIME_ID]: { ...resolveRuntimeData(entry), version: null } } };
+    const selection = resolveManagedRuntimeSelection(automaticVersion, { settings: context.settings, userDataDir: context.userDataDir });
+    return selection.recommendedVersion ? { version: selection.recommendedVersion, sectionId: selection.installChannel } : null;
   },
   getRuntimeRequirements: (entry, context) => {
     if (normalizeRuntimeId(context.runtimeId || entry.runtimeId || manifest.runtime.default) !== RUNTIME_ID) return [];
@@ -456,7 +499,8 @@ module.exports = {
         status.promptKey && trimString(moduleData.runtimePromptSuppressedFor) === status.promptKey
       );
       updateModuleData(entry, {
-        resolvedChannel: status.resolvedChannel || status.installChannel || null
+        resolvedChannel: status.resolvedChannel || status.installChannel || null,
+        resolvedSection: resolveAutomaticSection(entry, { settings: context.settings, userDataDir: context.userDataDir }, status)
       });
       return {
         ready: status.ready || suppressed,
@@ -491,6 +535,8 @@ module.exports = {
       const explicitChannel = resolveExplicitChannel(currentRuntimeData);
       const explicitVersion = trimString(currentRuntimeData.version);
       const persistVersion = Boolean(trimString(payload?.version) || explicitVersion);
+      const selectionContext = { settings: context.settings, userDataDir: context.userDataDir };
+      const resolvedSection = () => resolveAutomaticSection(entry, selectionContext, resolveRuntimeSelection(entry, selectionContext));
       let installChannel = normalizeChannel(payload?.channel || status.installChannel || status.resolvedChannel);
       if (!installChannel) installChannel = CHANNEL_STABLE;
       let installVersion = trimString(payload?.version || status.installVersion);
@@ -530,11 +576,12 @@ module.exports = {
           });
           if (existing?.appPath) {
             if (persistVersion) updateRuntimeData(entry, RUNTIME_ID, {
-              channel: CHANNEL_STABLE,
+              channel: releaseChannelChoice(existing.version),
               version: existing.version
             });
             updateModuleData(entry, {
               resolvedChannel: CHANNEL_STABLE,
+              resolvedSection: resolvedSection(),
               runtimePromptSuppressedFor: null
             });
             return {
@@ -568,11 +615,12 @@ module.exports = {
               sectionId: CHANNEL_STABLE
             });
             if (persistVersion) updateRuntimeData(entry, RUNTIME_ID, {
-              channel: CHANNEL_STABLE,
+              channel: releaseChannelChoice(installed.version),
               version: installed.version
             });
             updateModuleData(entry, {
               resolvedChannel: CHANNEL_STABLE,
+              resolvedSection: resolvedSection(),
               runtimePromptSuppressedFor: null
             });
             return {
@@ -633,6 +681,7 @@ module.exports = {
       });
       updateModuleData(entry, {
         resolvedChannel: CHANNEL_NIGHTLY,
+        resolvedSection: resolvedSection(),
         runtimePromptSuppressedFor: null
       });
       return {

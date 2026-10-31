@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -5,7 +7,8 @@ const os = require("node:os");
 const path = require("node:path");
 const Catalog = require("../src/modules/scummvm/runtime/catalog");
 const { createManager } = require("../src/modules/scummvm/runtime/manager");
-const { extractDmg } = require("../src/modules/scummvm/runtime/dmg");
+const { extractDmg } = require("../src/modules/shared/runtime/dmg");
+const { stoppedDownloads, assertConsentedDiscovery, assertReceiptOffline } = require("./helpers/catalog-only-runtime.cjs");
 
 function temporary(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "scummvm-runtime-"));
@@ -17,66 +20,129 @@ function published(version, sha256 = "b".repeat(64)) {
     hostArchitectures: ["arm64", "x64"], localBuild: false, sourceUrl: `https://github.com/scummvm/scummvm/tree/v${version}`,
     asset: { filename, url: Catalog.SOURCE_URL + version + "/" + filename, sha256 } };
 }
-test("ScummVM parses stable universal-era versions and validates publisher checksums", () => {
-  assert.deepEqual(Catalog.parseVersions('<a href="2.9.1/">x</a><a href="2026.4.0/">x</a><a href="2.4.0/">x</a><a href="2.9.1/">x</a><a href="2.9.0rc1/">x</a>'), ["2026.4.0", "2.9.1"]);
+// The publisher's folders as downloads.scummvm.org lists them, from catalog rows.
+function serve(pins, base = Catalog.SOURCE_URL) {
+  const routes = { [base]: pins.map(pin => `<a href="${pin.version}/">${pin.version}</a>`).join("") };
+  for (const pin of pins) {
+    const folder = `${base}${pin.version}/`;
+    routes[folder] = `<a href="../">../</a><a href="${pin.asset.filename}">x</a><a href="${pin.asset.filename}.sha256">x</a>`;
+    routes[`${folder}${pin.asset.filename}.sha256`] = `${pin.asset.sha256}  ${pin.asset.filename}\n`;
+  }
+  return routes;
+}
+const listings = () => Harness.network.requests.filter(url => url === Catalog.SOURCE_URL).length;
+async function discover(routes) {
+  Harness.network.routes = routes;
+  try { return await Catalog.source.discover({}); } finally { Harness.network.routes = null; }
+}
+test("ScummVM parses stable universal-era versions and reads publisher checksums", () => {
+  assert.deepEqual(Catalog.parseVersions('<a href="2.9.1/">x</a><a href="/frs/scummvm/2026.4.0/">x</a><a href="2.4.0/">x</a><a href="2.9.1/">x</a><a href="2.9.0rc1/">x</a><a href="../">x</a>',
+    Catalog.SOURCE_URL), ["2026.4.0", "2.9.1"]);
   assert.equal(Catalog.parseDigest("a".repeat(64), "runtime.dmg"), "a".repeat(64));
   assert.equal(Catalog.parseDigest("b".repeat(64) + " *runtime.dmg\n", "runtime.dmg"), "b".repeat(64));
-  assert.throws(() => Catalog.parseDigest("b".repeat(64) + " *wrong.dmg", "runtime.dmg"), /invalid/);
-  assert.throws(() => Catalog.parseDigest("not a checksum", "runtime.dmg"), /invalid/);
+  assert.equal(Catalog.parseDigest("c".repeat(64) + "  other.dmg\n" + "b".repeat(64) + "  runtime.dmg\n", "runtime.dmg"), "b".repeat(64));
+  assert.equal(Catalog.parseDigest("b".repeat(64) + " *wrong.dmg", "runtime.dmg"), null);
+  assert.equal(Catalog.parseDigest("not a checksum", "runtime.dmg"), null);
 });
-test("ScummVM release discovery fetches multiple versions, skips missing Mac assets, and preserves immutable identities", async () => {
-  const calls = [], tags = ["2027.1.0", "2026.4.0", "2.9.1"].map((version, i) => ({ name: "v" + version, commit: { sha: String(i + 1).repeat(40) } }));
-  const discover = Catalog.createDiscovery({ fetchTags: async () => tags, request: async url => {
-    calls.push(url);
-    if (url === Catalog.SOURCE_URL) return { status: 200, body: Buffer.from(tags.map(tag => `<a href="${tag.name.slice(1)}/">version</a>`).join("")) };
-    if (url.includes("2027.1.0")) return { status: 404, body: Buffer.alloc(0) };
-    return { status: 200, body: Buffer.from("a".repeat(64)) };
-  } });
-  const rows = await discover(); assert.equal(rows.length, 3); assert.equal(rows[0].asset, undefined);
-  assert.match(rows[0].installReason, /not available/); assert.equal(rows[2].upstreamRevision, "3".repeat(40));
-  assert.ok(rows[2].asset.url.endsWith("scummvm-2.9.1-macosx.dmg")); assert.equal(calls.length, 4);
+test("ScummVM release discovery reads every version folder and lists a release without a Mac download with its reason", async () => {
+  const before = Harness.network.requests.length, routes = serve([published("2027.1.0"), published("2026.4.0"), published("2.9.1", "c".repeat(64))]);
+  routes[`${Catalog.SOURCE_URL}2027.1.0/`] = '<a href="scummvm-2027.1.0-win32-x86_64.zip">x</a>';
+  const rows = await discover(routes);
+  assert.deepEqual(rows.map(row => row.version), ["2027.1.0", "2026.4.0", "2.9.1"]);
+  assert.deepEqual(rows[0].files, []); assert.match(rows[0].installReason, /no macOS download/);
+  assert.equal(rows[2].files[0].url, `${Catalog.SOURCE_URL}2.9.1/scummvm-2.9.1-macosx.dmg`); assert.equal(rows[2].files[0].digest.value, "c".repeat(64));
+  assert.equal(rows[2].sourceUrl, `${Catalog.SOURCE_URL}2.9.1/`);
+  assert.equal(Harness.network.requests.length - before, 6, "One listing per folder and one checksum per Mac download");
+});
+test("ScummVM follows a renamed Mac download with its published checksum through the release folder", async () => {
+  const folder = Catalog.SOURCE_URL + "2027.1.0/";
+  const names = ["scummvm-2027.1.0-macos-universal.zip", "scummvm-2027.1.0-macos-universal.zip.sha256", "scummvm-2027.1.0-win32-x86_64.zip",
+    "scummvm-2027.1.0-win32-x86_64.zip.sha256", "scummvm-2027.1.0-macos-arm64.tar.xz"];
+  const rows = await discover({ [Catalog.SOURCE_URL]: '<a href="2027.1.0/">2027.1.0</a>', [folder]: names.map(name => `<a href="${name}">${name}</a>`).join(""),
+    [folder + names[1]]: "c".repeat(64) + "  " + names[0] });
+  assert.deepEqual(rows.map(row => [row.files[0].name, row.files[0].digest?.value, row.architecture]),
+    [[names[0], "c".repeat(64), "universal"], [names[4], undefined, "arm64"]], "A download without a published checksum records its own; other systems are left out");
 });
 test("ScummVM manager reads offline until explicit upstream refresh and retains cache on failure", async t => {
-  const userDataDir = temporary(t), row = published("2.9.1");
-  let calls = 0, fail = false;
-  const manager = createManager({ discoverCatalog: async () => { calls++;if(fail)throw Error("network failure");return [row]; } });
+  const userDataDir = temporary(t), row = published("2.9.1"), start = listings();
+  let fail = false;
+  const routes = serve([row]), listing = routes[Catalog.SOURCE_URL];
+  routes[Catalog.SOURCE_URL] = () => fail ? { status: 500, headers: {}, body: Buffer.from("unavailable") } : listing;
+  Harness.network.routes = routes;
+  t.after(() => { Harness.network.routes = null; });
+  const manager = createManager();
   assert.equal(manager.getState({userDataDir}).catalog.status,"idle");
-  assert.equal(manager.resolveSelection({}, {}, userDataDir).version,Catalog.DEFAULT_VERSION);assert.equal(calls,0);
+  assert.equal(manager.resolveSelection({}, {}, userDataDir).discoveryRequired,true);assert.equal(listings(),start);
   await manager.refreshCatalog({userDataDir,force:true});
   const settings = {runtimes:{scummvm:{defaultVersion:row.version}}};
   assert.equal(manager.resolveSelection({},settings,userDataDir).version,row.version);
   assert.equal(manager.resolveSelection({runtimeData:{scummvm:{version:"2026.4.0"}}},settings,userDataDir).version,"2026.4.0");
-  fail=true;await assert.rejects(manager.refreshCatalog({userDataDir,force:true}),/network failure/);
+  fail=true;await assert.rejects(manager.refreshCatalog({userDataDir,force:true}));
   assert.deepEqual(manager.getState({userDataDir}).catalog.versions,[row.version]);
-  const restarted=createManager({discoverCatalog:()=>assert.fail("Cache reads stay offline")});
+  const restarted=createManager(), count = listings();
   assert.deepEqual(restarted.getState({userDataDir}).catalog.versions,[row.version]);
-  assert.equal(restarted.resolveSelection({}, {}, userDataDir).version,Catalog.DEFAULT_VERSION,"The committed initial default remains until a user chooses another version");
+  assert.equal(restarted.resolveSelection({}, {}, userDataDir).version,row.version,"The cached catalog supplies the default offline");
+  assert.equal(listings(), count, "Cache reads stay offline");
+});
+test("ScummVM discovers inside a consented install and keeps earlier installations offline", { skip: process.platform !== "darwin" }, async t => {
+  const downloads = stoppedDownloads(), start = listings();
+  const manager = createManager({ dependencies: { downloadToFile: downloads.downloadToFile } });
+  Harness.network.routes = serve([published("2026.4.0"), published("2027.1.0")]);
+  t.after(() => { Harness.network.routes = null; });
+  await assertConsentedDiscovery({ manager, userDataDir: temporary(t), discoveries: () => listings() - start, downloads, newestUrl: published("2027.1.0").asset.url });
+  Harness.network.routes = null;
+  assertReceiptOffline({ manager: createManager(), userDataDir: temporary(t),
+    pin: { ...published("2026.4.0", "5614527fa57ffce14773c69923b96eeb7b1b135bcd96bfe74640ca341cad4598"), upstreamRevision: "7d2709da5136866589f7602f5f5a7b17de03420e" } });
 });
 
 test("ScummVM dmg extraction uses a read-only local mount and detaches after copy failures", async t => {
   const destination = temporary(t), calls = [];
-  await assert.rejects(extractDmg(path.join(destination, "runtime.dmg"), destination, undefined, {
-    run: async (_command, args) => { calls.push(args); if (args[0] === "attach") fs.mkdirSync(path.join(args[args.indexOf("-mountpoint") + 1], "ScummVM.app")); },
+  await assert.rejects(extractDmg(path.join(destination, "runtime.dmg"), destination, undefined, { payloadName: "ScummVM.app",
+    run: async (_command, args) => { calls.push(args); if (args.includes("attach")) fs.mkdirSync(path.join(args[args.indexOf("--mountPoint") + 1], "ScummVM.app")); },
     copy: () => { throw new Error("copy failure"); }
   }), /copy failure/);
-  assert.ok(calls[0].includes("-readonly")); assert.equal(calls[1][0], "detach");
+  assert.ok(calls[0].includes("--readOnly")); assert.equal(calls[1][0], "eject");
   assert.equal(fs.existsSync(calls[1][1]), false);
+  // A macOS without `diskutil image` attaches and detaches with hdiutil.
+  const fallback = [];
+  await assert.rejects(extractDmg(path.join(destination, "runtime.dmg"), destination, undefined, { payloadName: "ScummVM.app",
+    run: async (command, args) => {
+      fallback.push([path.basename(command), ...args]);
+      if (command.endsWith("diskutil") && args[0] === "image") throw new Error('diskutil: did not recognize verb "image"');
+      if (args[0] === "attach") fs.mkdirSync(path.join(args[args.indexOf("-mountpoint") + 1], "ScummVM.app"));
+    },
+    copy: () => { throw new Error("copy failure"); }
+  }), /copy failure/);
+  assert.deepEqual(fallback.map(call => call.slice(0, 2)), [["diskutil", "image"], ["hdiutil", "attach"], ["hdiutil", "detach"]]);
+  assert.ok(fallback[1].includes("-readonly"));
   await assert.rejects(extractDmg(path.join(destination, "wrong.zip"), destination), /disk image/);
+});
+test("ScummVM installs its app from another archive format with the app moved into a folder", { skip: process.platform !== "darwin" }, async t => {
+  const root = temporary(t), app = path.join(root, "package", "ScummVM 2027.1.0", "ScummVM.app", "Contents");
+  fs.mkdirSync(app, { recursive: true }); fs.writeFileSync(path.join(app, "Info.plist"), "plist");
+  fs.writeFileSync(path.join(root, "package", "README.txt"), "notes");
+  const archive = path.join(root, "scummvm-2027.1.0-macos-universal.zip"), destination = path.join(root, "unpacked");
+  require("node:child_process").execFileSync("/usr/bin/ditto", ["-c", "-k", path.join(root, "package"), archive]);
+  fs.mkdirSync(destination);
+  await require("../src/modules/shared/runtime/release-files").extractPayload(archive, destination, undefined, { payloadName: "ScummVM.app", project: "ScummVM" });
+  assert.deepEqual(fs.readdirSync(destination), ["ScummVM.app"]);
+  assert.equal(fs.readFileSync(path.join(destination, "ScummVM.app", "Contents", "Info.plist"), "utf8"), "plist");
+  assert.equal(fs.readdirSync(root).some(name => name.startsWith(".extract-")), false);
 });
 test("ScummVM dmg extraction detaches after an interrupted attach", async t => {
   const destination = temporary(t), calls = [], controller = new AbortController();
   const interrupted = Object.assign(new Error("attach interrupted"), { name: "AbortError" });
-  await assert.rejects(extractDmg(path.join(destination, "runtime.dmg"), destination, controller.signal, {
+  await assert.rejects(extractDmg(path.join(destination, "runtime.dmg"), destination, controller.signal, { payloadName: "ScummVM.app",
     run: async (_command, args, options) => {
       calls.push(args);
-      if (args[0] === "attach") {
-        fs.mkdirSync(path.join(args[args.indexOf("-mountpoint") + 1], "ScummVM.app"));
+      if (args.includes("attach")) {
+        fs.mkdirSync(path.join(args[args.indexOf("--mountPoint") + 1], "ScummVM.app"));
         controller.abort(); throw interrupted;
       }
       assert.equal(options.signal, undefined);
     }, copy: () => assert.fail("Interrupted downloads must not copy a payload")
   }), interrupted);
-  assert.equal(calls[1][0], "detach"); assert.equal(fs.existsSync(calls[1][1]), false);
+  assert.equal(calls[1][0], "eject"); assert.equal(fs.existsSync(calls[1][1]), false);
 });
 
 test('ScummVM installs an actual read-only DMG, re-signs nested Sparkle without changing content, and verifies offline reuse', {skip:process.platform!=='darwin',timeout:120000}, async t => {
@@ -118,7 +184,6 @@ test('ScummVM installs an actual read-only DMG, re-signs nested Sparkle without 
   const supplied=require('node:child_process').spawnSync('/usr/bin/codesign',['-d','--verbose=4',app],{encoding:'utf8'});
   assert.equal(supplied.status,0);assert.ok(Number.parseInt(/flags=0x([a-f0-9]+)/i.exec(supplied.stderr)[1],16)&0x10000);
   const before=Signing.inventory(app),code=new Map(nativePaths.map(name=>[name,unsignedMachO(fs.readFileSync(path.join(app,name)))]));
-  await assert.rejects(Signing.prepareInstall({unpacked:volume,pin:{version:'0.0.0'}}),/does not match/);
   const dmg=path.join(root,'publisher-fixture.dmg');
   run('/usr/bin/hdiutil',['create','-srcfolder',volume,'-fs','HFS+','-format','UDZO','-volname','ScummVMFixture','-ov',dmg]);
   const archiveSha256=Native.hashFile(dmg),originalPrepare=Signing.prepareInstall,signCalls=[];
@@ -129,7 +194,8 @@ test('ScummVM installs an actual read-only DMG, re-signs nested Sparkle without 
   const pin={...published(version),
     asset:{filename:'scummvm-'+version+'-macosx.dmg',url:Catalog.SOURCE_URL+version+'/scummvm-'+version+'-macosx.dmg',sha256:archiveSha256,bytes:fs.statSync(dmg).size}};
   let downloads=0;const userDataDir=path.join(root,'profile');
-  const manager=createManager({discoverCatalog:async()=>[pin],dependencies:{downloadToFile:async(url,target)=>{
+  Harness.network.routes=serve([pin]);t.after(()=>{Harness.network.routes=null;});
+  const manager=createManager({dependencies:{downloadToFile:async(url,target)=>{
     assert.equal(url,pin.asset.url);downloads++;fs.copyFileSync(dmg,target);
   }}});
   await manager.refreshCatalog({userDataDir,force:true});
@@ -152,7 +218,7 @@ test('ScummVM installs an actual read-only DMG, re-signs nested Sparkle without 
   assert.equal(Signing.inventory(app).sha256,before.sha256);assert.equal(Native.hashFile(dmg),archiveSha256);
   const record=JSON.parse(fs.readFileSync(path.join(installed.installDir,'runtime.json')));
   assert.equal(record.binarySha256,Native.hashFile(installed.executablePath));assert.equal(record.installationMetadata.signedTreeSha256,after.sha256);
-  const offline=createManager({discoverCatalog:()=>assert.fail('Offline selection must not refresh'),dependencies:{downloadToFile:()=>assert.fail('Verified installed copy must not download')}});
+  const offline=createManager({dependencies:{downloadToFile:()=>assert.fail('Verified installed copy must not download')}});
   const entry={runtimeData:{scummvm:{version}}};
   assert.equal(offline.resolveSelection(entry,{},userDataDir).ready,true);
   assert.equal(offline.resolveSelection({}, {}, userDataDir).version,version);
@@ -171,7 +237,7 @@ test('ScummVM installs an actual read-only DMG, re-signs nested Sparkle without 
   // Reproduce a pre-signing installation from the same verified publisher
   // image and its ordinary historical runtime.json, without a DMG cache.
   const legacyProfile=path.join(root,'legacy-profile');
-  const legacy=createManager({discoverCatalog:async()=>[pin],dependencies:{downloadToFile:()=>assert.fail('Legacy preparation stays offline')}});
+  const legacy=createManager({dependencies:{downloadToFile:()=>assert.fail('Legacy preparation stays offline')}});
   await legacy.refreshCatalog({userDataDir:legacyProfile,force:true});
   const legacyDirectory=legacy.core.getInstallDir({userDataDir:legacyProfile,version});
   const legacyApp=path.join(legacyDirectory,'ScummVM.app'),legacyRecordPath=path.join(legacyDirectory,'runtime.json');

@@ -3,12 +3,23 @@ const path = require("node:path");
 const Native = require("../../shared/runtime/local-native");
 const MachO = require("../../shared/runtime/macho-load-commands");
 const Host = require("../../shared/runtime/bundled-native");
+const { locatePackaged } = require("../../shared/runtime/release-files");
 
 const GUEST_LIBRARIES = Object.freeze(["libmac32rt.dylib", "libmac32cxx.dylib", "libmac32cxx2.dylib", "libmac32ios.dylib"]);
-const executableRelative = version => `mac32-${version}/Mac32.app/Contents/MacOS/mac32`;
-const requiredFiles = version => [executableRelative(version),
-  ...GUEST_LIBRARIES.map(name => `mac32-${version}/Mac32.app/Contents/MacOS/guest/${name}`),
-  `mac32-${version}/COPYING`, `mac32-${version}/NOTICE`];
+const HOST = "Mac32.app/Contents/MacOS/mac32";
+const LICENSE = /^(?:COPYING|NOTICE|LICEN[CS]E)(?:[._-][^/]*)?$/i;
+const guestFiles = executable => GUEST_LIBRARIES.map(name => path.posix.join(path.posix.dirname(executable), "guest", name));
+
+// Releases may move the app into another folder. The host found at
+// installation is recorded with its guest libraries and license files.
+function packageFiles(root) {
+  const executable = locatePackaged(root, HOST);
+  if (!executable) throw new Error("The mac32 download does not contain Mac32.app.");
+  const relative = path.relative(root, executable).split(path.sep).join("/"), folder = path.join(root, relative.slice(0, -HOST.length));
+  const licenses = fs.readdirSync(folder).filter(name => LICENSE.test(name)).sort();
+  if (!licenses.length) throw new Error("The mac32 download does not contain its license files.");
+  return [relative, ...guestFiles(relative), ...licenses.map(name => path.posix.join(relative.slice(0, -HOST.length), name))];
+}
 
 function payloadPath(root, relative) {
   if (!path.isAbsolute(root || "") || path.isAbsolute(relative) || relative.split("/").includes(".."))
@@ -23,14 +34,14 @@ function payloadPath(root, relative) {
   return current;
 }
 
-function inspectPayload(root, version, { signal } = {}) {
-  const executable = payloadPath(root, executableRelative(version));
+function inspectPayload(root, files, { signal } = {}) {
+  const executable = payloadPath(root, files[0]);
   const host = MachO.readMachOLoadCommands(executable, { signal });
   MachO.assertSystemLibraryClosure(host, { fileType: 2 });
   if (!host.architectures.includes("x86_64")) throw new Error("mac32 requires its 64-bit Intel Mac executable.");
   const minimumMacOS = host.slices.map(slice => slice.minimumMacOS).sort((a, b) => Host.versionAtLeast(a, b) ? -1 : 1)[0];
-  for (const name of GUEST_LIBRARIES) {
-    const file = payloadPath(root, `mac32-${version}/Mac32.app/Contents/MacOS/guest/${name}`);
+  for (const relative of guestFiles(files[0])) {
+    const file = payloadPath(root, relative);
     const guest = MachO.readMachOLoadCommands(file, { signal, architecture: "i386" });
     if (guest.slices.some(slice => slice.wordSize !== 32 || slice.fileType !== 6))
       throw new Error("mac32 requires its matching 32-bit guest libraries.");
@@ -39,9 +50,9 @@ function inspectPayload(root, version, { signal } = {}) {
 }
 
 function preparePayload({ unpacked, pin, signal }, { systemVersionSync = Host.systemVersionSync } = {}) {
-  const info = inspectPayload(unpacked, pin.version, { signal });
+  const required = packageFiles(unpacked), info = inspectPayload(unpacked, required, { signal });
   if (!Host.versionAtLeast(systemVersionSync(), info.minimumMacOS)) throw new Error(`mac32 ${pin.version} requires macOS ${info.minimumMacOS}.`);
-  const files = requiredFiles(pin.version).map(relativePath => {
+  const files = required.map(relativePath => {
     signal?.throwIfAborted();
     const target = payloadPath(unpacked, relativePath), stat = fs.statSync(target);
     return { relativePath, bytes: stat.size, sha256: Native.hashFile(target) };
@@ -55,9 +66,12 @@ function createPayloadResolver({ systemVersionSync = Host.systemVersionSync } = 
     if (!install) return { install: null, reason: "mac32 is not installed." };
     let key;
     try {
-      const metadata = install.installationMetadata, required = requiredFiles(install.version);
-      if (metadata?.schemaVersion !== 1 || metadata.interface !== "mac32-app-v1" || !Array.isArray(metadata.files) ||
-        JSON.stringify(metadata.files.map(file => file.relativePath)) !== JSON.stringify(required) ||
+      const metadata = install.installationMetadata, recorded = Array.isArray(metadata?.files) ? metadata.files.map(file => file?.relativePath) : [];
+      if (metadata?.schemaVersion !== 1 || metadata.interface !== "mac32-app-v1" || recorded.length < 6 || typeof recorded[0] !== "string" ||
+        !(recorded[0] === HOST || recorded[0].endsWith("/" + HOST)) || path.resolve(install.installDir, recorded[0]) !== path.resolve(install.executablePath || "") ||
+        JSON.stringify(recorded.slice(1, 5)) !== JSON.stringify(guestFiles(recorded[0])) ||
+        recorded.slice(5).some(file => typeof file !== "string" || !LICENSE.test(path.posix.basename(file)) ||
+          file !== recorded[0].slice(0, -HOST.length) + path.posix.basename(file)) ||
         metadata.files.some(file => !/^[a-f0-9]{64}$/.test(file.sha256 || "") || !Number.isSafeInteger(file.bytes) || file.bytes < 1))
         throw new Error("mac32 runtime registration is incomplete. Remove and install this version again.");
       const files = metadata.files.map(file => {
@@ -69,7 +83,7 @@ function createPayloadResolver({ systemVersionSync = Host.systemVersionSync } = 
       let info = verification === "status" ? cache.get(key) : null;
       if (info?.error) throw new Error(info.error);
       if (!info) {
-        info = inspectPayload(install.installDir, install.version);
+        info = inspectPayload(install.installDir, recorded);
         if (info.minimumMacOS !== metadata.minimumMacOS || JSON.stringify(info.architectures) !== JSON.stringify(metadata.architectures))
           throw new Error("mac32 runtime metadata no longer matches the installed files.");
         for (const file of files) if (Native.hashFile(file.target) !== file.sha256)
@@ -88,4 +102,4 @@ function createPayloadResolver({ systemVersionSync = Host.systemVersionSync } = 
   };
 }
 
-module.exports = { GUEST_LIBRARIES, executableRelative, requiredFiles, payloadPath, inspectPayload, preparePayload, createPayloadResolver };
+module.exports = { GUEST_LIBRARIES, HOST, packageFiles, payloadPath, inspectPayload, preparePayload, createPayloadResolver };

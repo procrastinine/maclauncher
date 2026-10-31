@@ -3,6 +3,7 @@ const path = require("node:path");
 const { isDeepStrictEqual } = require("node:util");
 const Modules = require("../modules/registry");
 const GameStore = require("./game-store");
+const GameAvailability = require("./game-availability");
 const { createLauncher, resolveModuleId } = require("./launcher");
 const { createProcessLauncher } = require("./processes");
 const { runRuntimeManagerAction } = require("./runtime-manager-service");
@@ -183,6 +184,8 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
   const metadata = require("./game-metadata").createGameMetadataService({ userDataDir, registry, app, ui, logger, runtimeCoordinator, downloads,
     confirmRuntimeInstall: plan => callHost("confirmRuntimeInstall", plan),
     onRuntimeStateChange: change => emit("runtimeChanged", change || {}) });
+  const relocation = require("./game-relocation").createGameRelocation({ userDataDir, registry, metadata,
+    choose: descriptor => callHost("chooseImportPath", descriptor) });
   const removeGameData = require("./game-removal").createGameRemoval({ userDataDir, registry, lifecycle: gameLifecycle,
     listRuntimeManagers: () => managers, isGameRunning: isRunning, logger, resolveModuleId,
     readSettings: () => launcher.loadSettings(), trashItem: file => ui.shell.trashItem(file) });
@@ -367,11 +370,34 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
         } });
     },
     async refreshEntry(entry, settings, options) { return metadata.refreshEntry(currentEntry(entry), settings, options); },
-    refreshSaveLocations(entry, settings) {
-      const hydrated = hydrateGameSaveLocations(currentEntry(entry), registry, { settings, userDataDir });
+    // Main owns availability. Refresh and runtime checks share this per-game
+    // worker job, including the same positive or negative availability result.
+    async libraryEntry(entry, settings, { availability, refreshMetadata = false } = {}) {
+      if (typeof availability?.available !== "boolean") throw new Error("Library work requires an availability result.");
+      let fresh = entry, metadataError = null;
+      if (refreshMetadata && availability.available) {
+        try { fresh = await metadata.refreshEntry(currentEntry(entry), settings, { availability }); }
+        catch (error) { metadataError = error.message; }
+      }
+      if (shuttingDown) return null;
+      const checks = launcher.resolveEntryChecks(fresh, settings, { availability: availability.available ? null : availability });
+      return { entry: fresh, checks, metadataError };
+    },
+    async refreshSaveLocations(entry, settings) {
+      const current = currentEntry(entry);
+      // Engines read save locations from game files. Without them the stored
+      // locations stay, rather than ones resolved from absent configuration.
+      if (!(await GameAvailability.checkGameAvailability(current, { userDataDir })).available) return current;
+      const hydrated = hydrateGameSaveLocations(current, registry, { settings, userDataDir });
       GameStore.writeGameRecord(userDataDir, hydrated);
       emit("entryChanged", { gameId: hydrated.gameId, gamePath: hydrated.gamePath });
       return hydrated;
+    },
+    // Main applies the result: it moves its own state for the game's path and
+    // checks availability before the library updates.
+    async relocateEntry(entry, settings) {
+      if (shuttingDown) throw createAbortError("Launcher is closing.");
+      return relocation.relocate(entry, settings || launcher.loadSettings());
     },
     async importEntry(inputPath, settings) {
       const key = path.resolve(inputPath), controller = new AbortController();
@@ -385,19 +411,31 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     },
     async cancelImport(inputPath) { const controller = pendingImports.get(path.resolve(inputPath)); if (!controller) return false; controller.abort(); await controller.finished; return true; },
     async saveInfo(entry, settings) {
-      entry = await refreshedEntry(entry, settings);
-      emit("entryChanged", { gameId: entry.gameId, gamePath: entry.gamePath });
+      let availability = { available: true };
+      try {
+        entry = await refreshedEntry(entry, settings);
+        emit("entryChanged", { gameId: entry.gameId, gamePath: entry.gamePath });
+      } catch (error) {
+        if (error.code !== GameAvailability.CODE) throw error;
+        // Saves kept outside the game's files stay usable from the stored record.
+        entry = currentEntry(entry); availability = error.availability;
+      }
       const moduleId = resolveModuleId(entry), info = registry.getModuleInfo(moduleId);
       if (registry.getModule(moduleId)?.getRuntimeProvider?.(entry.runtimeId)?.supports?.saveLocation === false) throw new Error("Save tools are unavailable for this runtime.");
-      await registry.getModule(moduleId)?.prepareSaveLocation?.(entry, { userDataDir });
+      if (availability.available) await registry.getModule(moduleId)?.prepareSaveLocation?.(entry, { userDataDir });
       const saveDir = saveDirectoryForEntry(entry, registry);
       if (!saveDir) throw new Error(`Save directory is not available for ${info.label}.`);
+      // Creating a save folder inside the missing location would recreate an
+      // empty copy of the game folder in its place.
+      if (GameAvailability.affectsPath(availability, saveDir)) throw GameAvailability.unavailableError(availability, "This game's saves are unavailable.");
       fs.mkdirSync(saveDir, { recursive: true });
       return { saveDir, directoryChoices: entry.saveLocations || [], moduleId,
         moduleLabel: info.label, moduleShortLabel: info.shortLabel, name: entry.name,
         canEditJson: info.supports?.saveEditing === true, structuredActions: registry.getModule(moduleId)?.save?.structured || null };
     },
-    selectSaveLocation(entry, directory, settings) {
+    async selectSaveLocation(entry, directory, settings) {
+      // Detected save locations come from the game's files.
+      await GameAvailability.assertGameAvailable(currentEntry(entry), { userDataDir });
       const selected = selectKnownSaveLocation(currentEntry(entry), directory, registry, { settings, userDataDir });
       GameStore.writeGameRecord(userDataDir, selected); emit("entryChanged", { gameId: entry.gameId, gamePath: entry.gamePath });
       return true;

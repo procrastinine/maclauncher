@@ -1,28 +1,54 @@
 # Steam API support
 
-Native Mac apps imported from an installed `steamapps/common` game use the matching Steam application manifest and the game's original Steam libraries. Detected native apps keep the publisher's runtime unless another runtime has been selected. Play supplies the application ID without changing game files. Games that require Steam need its client running under the same macOS user and signed in to an account that owns the game; games with optional Steam support can retain their offline behavior. Steam and the game retain responsibility for authentication and DRM checks. Per-game ReShade settings remain available. Publisher launchers and additional DRM retain their Steam launch requirements.
+Games that use the Steam API either load their own Steam library, which talks to a running Steam client, or use MacLauncher's included offline Steam API helper, which supplies local Steam state without a client. This page describes both, and when Play starts the Steam client.
 
-Only the game's own Steam API connects to the Steam client. The included helper supplies local Steam state without it. Play can start the Mac Steam client, when it is not running, only for a game that an application manifest in a `steamapps` library identifies, in either of these cases:
+## Native Mac games from a Steam library
 
-- A native Mac app whose installation ships the macOS Steam API (`libsteam_api.dylib` or a `steam_api.bundle`). Native apps always run their original library.
-- An engine runtime for which the shared Steam API preparation selects the game's own library.
+A native Mac app imported from an installed `steamapps/common` game uses the matching Steam application manifest and the game's original Steam libraries. A detected native app keeps the publisher's runtime unless another runtime is selected. Play supplies the application ID without changing game files, and per-game ReShade settings remain available.
 
-When the preparation selects the included helper, Steam is not started. This applies to every engine and runtime. Steam starts through Launch Services as a separate application, hidden and without activation where Steam allows, so it is outside the game's process tree and network setting. Steam can still show or activate its window while starting. Play then waits up to 60 seconds for the client process and a completed sign-in in Steam's connection log. After a timeout or a failed start, the game starts anyway, and the game's details show a notice. Cancelling Play stops the wait. A Steam client that is already running is used as it is. Detection, status, library scans, runtime selection and other actions never start Steam. A DRM-free copy outside a Steam library does not start Steam, including one that bundles Steamworks. Windows games that ship only `steam_api.dll` or `steam_api64.dll` run in private CrossOver or Sikarugir environments, which a Steam client outside them cannot serve, so Play does not start Steam for them.
+A game that requires Steam needs the Steam client running under the same macOS user and signed in to an account that owns the game. A game with optional Steam support can keep its offline behavior. Steam and the game handle authentication and DRM checks themselves, and publisher launchers and additional DRM keep their own Steam launch requirements.
 
-"Steam client on Play" offers Ask (the default), Start automatically and Don't start in Settings, with a per-game override in the inspector. When Steam is not running, Ask offers Start Steam or Launch without Steam before startup, because the Steam client connects to the Internet. Declining launches the game without starting or waiting for Steam. Don't start has the same behavior without a prompt. Start automatically grants startup consent for subsequent Plays. Earlier On settings become Ask. The game retains its own Steam API with every choice. When Steam's process state cannot be checked, Play neither asks nor starts Steam, and the game's details show a notice. The command line asks on a terminal, and `--yes` grants consent; without a terminal and `--yes`, the game launches without starting Steam.
+## Starting the Steam client
 
-With network access off, the game's own Steam API still reaches a running Steam client through the client's local endpoints, whatever the startup choice; [network isolation](NETWORK_ISOLATION.md) lists them. The game's other network and loopback connections remain blocked, and the Steam client keeps its own connection.
+Only the game's own Steam API connects to the Steam client. Play can start the Mac Steam client when it is not running, but only for a game that an application manifest in a `steamapps` library identifies, and only in one of these cases:
 
-The native Mac Steam client does not provide a Windows Steam client inside Wine. Windows games that require Steam need a compatible Windows Steam installation and publisher-supported launch path; installing Mac Steam alone is insufficient.
+- The game is a native Mac app whose installation ships the macOS Steam API (`libsteam_api.dylib` or a `steam_api.bundle`). Native apps always run their original library.
+- The game uses an engine runtime, and the shared Steam API preparation selects the game's own library.
 
-Play detects compatible native consumers and supplies the included offline API automatically. Games retain their original files and receive separate local state. A matching native game library takes priority. Games without a Steam dependency perform no Steam setup.
+When the preparation selects the included helper instead, Steam is not started, whatever the engine or runtime. A DRM-free copy outside a Steam library never starts Steam, even when it bundles Steamworks. Detection, status, library scans, runtime selection and other actions never start Steam.
 
-The included MIT helper is `0.5.0`, for Apple Silicon and Intel on macOS 13 or later. It supplies local application identity, language, achievements, statistics, opaque file storage and bounded native/manual callbacks. The helper implements the declared offline interface versions; native game libraries supply their own online Steam services. Interface selection checks the original consumer’s exported and virtual-call contracts.
+Steam starts through Launch Services as a separate application, hidden and without activation where Steam allows it. It therefore runs outside the game's process tree and outside the game's network setting. Steam can still show or activate its window while it starts. Play then waits up to 60 seconds for the client process and for a completed sign-in in Steam's connection log. After a timeout or a failed start, the game starts anyway and its details show a notice. Cancelling Play stops the wait. A Steam client that is already running is used as it is.
 
-[LuaSteam](https://github.com/uspgamedev/luasteam), [steamworks4j](https://github.com/code-disaster/steamworks4j), [Greenworks](https://github.com/greenheartgames/greenworks), legacy GameMaker and managed wrappers use distinct compatibility profiles. Each profile pins the consumer version, CPU, interfaces and helper source/binary checksums. Managed profiles also require exact assembly bytes and import tables; other assemblies retain complete native export checks.
+### Steam client on Play
 
-Greenworks Automatic mode uses the separate included `0.1.0` loader. It supplies the required library exports while rejecting ticket checks and decryption. Native mode uses imported SDK libraries. Neither included helper requires an SDK, compiler, download or installation step.
+The **Steam client on Play** setting in **Settings** has three values, and the inspector has a per-game override:
 
-Exact versions and contracts are listed in the [API catalog](../../src/modules/shared/runtime/steamworks/versions.json), [consumer profiles](../../src/modules/shared/runtime/steamworks/profiles.json) and [ticket catalog](../../src/modules/shared/runtime/steamworks/ticket-versions.json). Earlier profile IDs retain their original helper identities; selecting one never substitutes a newer API.
+- **Ask**, the default, offers **Start Steam** or **Launch without Steam** before startup when Steam is not running, because the Steam client connects to the Internet. Declining launches the game without starting Steam or waiting for it.
+- **Don't start** behaves like declining, without a prompt.
+- **Start automatically** gives consent to start Steam for later Plays.
 
-The standalone [API source and builder](../../src/modules/shared/runtime/steamworks/native/offline-0.5.0) and [ticket source and builder](../../src/modules/shared/runtime/steamworks/native/ticket-0.1.0) include fixed-width ABI contracts and MIT notices. Each builder sets both deployment targets explicitly and records source/native checksums. [Development](../DEVELOPMENT.md) covers rebuilding included helpers.
+Earlier **On** settings become **Ask**. With every value, the game keeps its own Steam API. When Steam's process state cannot be checked, Play neither asks nor starts Steam, and the game's details show a notice. On the command line, Play asks on a terminal, and `--yes` gives consent; without a terminal and without `--yes`, the game launches without starting Steam.
+
+### Network isolation
+
+With network access off, the game's own Steam API can still reach a running Steam client through the client's local endpoints, whatever the startup setting. [Network isolation](NETWORK_ISOLATION.md) lists the endpoints. The game's other network and loopback connections stay blocked, and the Steam client keeps its own connection.
+
+### Windows games
+
+The native Mac Steam client does not provide a Windows Steam client inside Wine. Windows games that ship only `steam_api.dll` or `steam_api64.dll` run in private CrossOver or Sikarugir environments, which a Steam client outside them cannot serve, so Play does not start Steam for them. A Windows game that requires Steam needs a compatible Windows Steam installation and a launch path that its publisher supports; installing Mac Steam is not enough.
+
+## Offline Steam API helper
+
+Play detects compatible native code that calls the Steam API, called a Steam consumer here, and supplies the included offline API automatically. The game's own files are not replaced, and each game gets separate local state. A matching native library from the game takes priority, and games without a Steam dependency get no Steam setup.
+
+The included helper is version `0.5.0`, under the MIT license, for Apple silicon and Intel on macOS 13 or later. It supplies local application identity, language, achievements, statistics, opaque file storage, and native and manual callbacks within fixed limits. It implements the declared offline interface versions, while a game's native libraries supply their own online Steam services. Interface selection checks the exported functions and virtual-call contracts of the original consumer.
+
+[LuaSteam](https://github.com/uspgamedev/luasteam), [steamworks4j](https://github.com/code-disaster/steamworks4j), [Greenworks](https://github.com/greenheartgames/greenworks), legacy GameMaker and .NET (managed) wrappers use separate compatibility profiles. Each profile fixes the consumer version, the CPU and the interfaces, and records the helper's source and binary checksums. Profiles for .NET wrappers also require exact assembly bytes and import tables, and other assemblies keep the full check of their native exports.
+
+Greenworks **Automatic** mode uses the separate included `0.1.0` ticket loader, which supplies the required library exports and rejects ticket checks and decryption. **Native** mode uses imported SDK libraries. Neither included helper needs an SDK, a compiler, a download or an installation step.
+
+## Catalogs and source
+
+The [API catalog](../../src/modules/shared/runtime/steamworks/versions.json), [consumer profiles](../../src/modules/shared/runtime/steamworks/profiles.json) and [ticket catalog](../../src/modules/shared/runtime/steamworks/ticket-versions.json) list the exact versions and contracts. Earlier profile IDs keep their original helper version, and selecting one never substitutes a newer API.
+
+The standalone [API source and builder](../../src/modules/shared/runtime/steamworks/native/offline-0.5.0) and [ticket source and builder](../../src/modules/shared/runtime/steamworks/native/ticket-0.1.0) include fixed-width ABI contracts and MIT notices. Each builder sets both deployment targets explicitly and records the source and native checksums. [Development](../development/DEVELOPMENT.md) covers rebuilding the included helpers.

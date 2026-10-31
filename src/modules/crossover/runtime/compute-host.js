@@ -3,10 +3,10 @@ const fs=require("node:fs"),path=require("node:path"),crypto=require("node:crypt
 const Manager=require("./manager"),Launch=require("./launch"),Loader=require("./graphics-loader");
 const Writable=require("../../shared/writable-input"),Rosetta=require("../../shared/runtime/rosetta");
 const digest=value=>crypto.createHash("sha256").update(value).digest("hex");
-function supports(install){return Boolean(install?.ready&&fs.existsSync(path.join(install.crossoverRoot,"lib64/apple_gptk/wine/x86_64-windows/d3d12.dll")));}
-function state({userDataDir,settings}={}){
+function supports(install,host){return Boolean(install?.ready&&!require("./backend-support").reason(install,"d3dmetal",host)&&fs.existsSync(path.join(install.crossoverRoot,"lib64/apple_gptk/wine/x86_64-windows/d3d12.dll")));}
+function state({userDataDir,settings,host}={}){
   const selected=Manager.resolveSelection(null,settings,userDataDir,{version:null});
-  const candidates=Manager.core.listInstalled(userDataDir),install=supports(selected.install)?selected.install:candidates.find(supports);
+  const candidates=Manager.core.listInstalled(userDataDir),install=supports(selected.install,host)?selected.install:candidates.find(candidate=>supports(candidate,host));
   return {id:"crossover-d3d12",label:"D3D12",backends:["d3d12"],available:Boolean(install),install:install||null,
     ...(install?{}:{reason:"A compatible Windows GPU host is required."})};
 }

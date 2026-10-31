@@ -95,6 +95,8 @@ test('actual Electron Builder filters include only the selected native set and e
 test('beforePack applies explicit architecture selection and rejects local-only native resources', async t => {
   const f = fixture(t);
   fs.writeFileSync(path.join(f.root, 'package.json'), JSON.stringify(packageConfig));
+  // Raw Builder stdout can interleave with Node's binary test event stream.
+  t.mock.method(require('builder-util').log, 'info', (...args) => t.diagnostic(args.map(value => typeof value === 'string' ? value : JSON.stringify(value)).join(' ')));
   const config = await require('app-builder-lib/out/util/config/config').getConfig(f.root);
   assert.equal(config.extraResources[0].to, undefined);
   const context = { electronPlatformName: 'darwin', arch: require('builder-util').Arch.arm64,

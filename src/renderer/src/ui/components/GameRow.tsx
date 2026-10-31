@@ -13,6 +13,7 @@ import {
 import { GameActions } from "./GameActions";
 import { StatusBadge } from "./StatusBadge";
 import { GameIcon } from "./GameIcon";
+import { PathDisplay } from "./PathDisplay";
 import { StarIcon } from "../icons";
 import type { LibraryActions } from "./library-actions";
 import { gameRowSelectionAction } from "./game-row-selection-model";
@@ -69,7 +70,7 @@ export const GameRow = memo(function GameRow({
   }
 
   return (
-    <li className={["gameItem", selected ? "selected" : "", dragging ? "dragging" : ""].filter(Boolean).join(" ")}
+    <li className={["gameItem", selected ? "selected" : "", dragging ? "dragging" : "", g.availability ? "unavailable" : ""].filter(Boolean).join(" ")}
       onClick={event => {
         // Child controls keep their own behavior; padding and open row space
         // share the identity button's selection behavior.
@@ -137,8 +138,9 @@ export const GameRow = memo(function GameRow({
                 {g.lastPlayedAt ? `Played ${new Date(g.lastPlayedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}` : "Not played"}
               </span>
               <span className="dot" aria-hidden="true">·</span>
-              {missing && <span className="missingLabel">Missing</span>}
-              <span className="mono ellipsis" title={g.gamePath}>{g.gamePath}</span>
+              {g.availability ? <span className="missingLabel" title={g.availability.message}>Unavailable</span>
+                : missing && <span className="missingLabel">Missing</span>}
+              <span className="mono gameRowPath"><PathDisplay path={g.gamePath} /></span>
             </span>
           </span>
         </button>

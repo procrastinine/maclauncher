@@ -1,3 +1,5 @@
+// Offline publisher metadata must be installed before runtime modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -17,58 +19,48 @@ function fixture(t) {
     context: { userDataDir: path.join(root, "userData"), settings: {}, runtimeSettings: {} } };
 }
 
-test("ONScripter-EN preserves offline source profiles while explicit refresh replaces Builds rows without upstream downloads", async t => {
-  // Upstream releases publish Linux and Windows executables only; Mac packages come from MacLauncher Builds.
-  let upstreamFetches = 0, catalogFetches = 0;
-  const discovery = {
-    fetchGithubReleases: async () => { upstreamFetches++; return [{ tag_name: "2025-06-08" }]; },
-    fetchGithubTags: async () => { upstreamFetches++; return [{ name: "2025-06-08", commit: { sha: Manager.REVISION } }]; }
-  };
-  const repository = "procrastinine/maclauncher-builds";
-  const record = (version, sourceSha256) => {
+test("ONScripter-EN discovers Builds versions explicitly and replaces remote rows without querying upstream", async t => {
+  const { context } = fixture(t);
+  let catalogFetches = 0;
+  const record = version => {
     const tag = `onscripter-en/v${version}/${process.arch}`, filename = `onscripter-en-${version}-${process.arch}.tar.gz`;
     return { schemaVersion: 2, id: "onscripter-en", version, arch: process.arch, launcherArchitectures: [process.arch], minimumMacOS: "13.0",
-      manifestRelative: "manifest.json", manifestSha256: "1".repeat(64), sourceSha256, updatePolicy: "manual", tag,
-      asset: { filename, bytes: 1, sha256: "2".repeat(64), url: `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}/${filename}` } };
+      source: { repository: "Galladite27/ONScripter-EN", revision: "a".repeat(40) },
+      manifestRelative: "manifest.json", manifestSha256: "1".repeat(64), sourceSha256: "3".repeat(64), updatePolicy: "manual", tag,
+      asset: { filename, bytes: 1, sha256: "2".repeat(64), url: `https://github.com/procrastinine/maclauncher-builds/releases/download/${encodeURIComponent(tag)}/${filename}` } };
   };
-  let packages = [];
-  const manager = Manager.createManager({ dependencies: { discovery, manager: { projectBuilds: {
-    fetchUrlBuffer: async () => { catalogFetches++; return { status: 200, body: Buffer.from(JSON.stringify({
-      schemaVersion: 2, projectId: "onscripter-en", updatePolicy: "manual", packages
-    })) }; }
-  } } } });
-  assert.deepEqual(manager.getState().catalog.versions, []);
-  assert.equal(manager.core.catalog.length, 11); assert.equal(catalogFetches, 0);
-  const snapshot = manager.core.catalog.find(pin => pin.version === Manager.SNAPSHOT);
-  assert.equal(snapshot.upstreamRevision, Manager.SNAPSHOT_REVISION);
-  assert.equal(snapshot.upstreamTag, undefined);
-  assert.deepEqual(snapshot.sourceScope, { kind: "primary-tree", omittedSubmodules: ["test/googletest"] });
-  const profileSource = manager.core.catalog.find(pin => pin.version === Manager.PROFILE).sourceArtifact.sha256;
-  packages = [record(Manager.SNAPSHOT, "3".repeat(64)), record(Manager.PROFILE, profileSource)];
-  await manager.refreshCatalog({ force: true });
-  assert.deepEqual([...manager.getState().catalog.versions].sort(), [Manager.PROFILE, Manager.SNAPSHOT].sort());
-  packages = [record(Manager.SNAPSHOT, "3".repeat(64))];
-  await manager.refreshCatalog({ force: true });
-  assert.deepEqual(manager.getState().catalog.versions, [Manager.SNAPSHOT]);
-  assert.equal(catalogFetches, 2); assert.equal(upstreamFetches, 0);
-  assert.equal(manager.core.catalog.find(pin => pin.version === "2023-06-28-mac-v1").localBuild, false);
-  assert.equal(manager.core.catalog.find(pin => pin.version === Manager.PROFILE).upstreamRevision, Manager.REVISION);
-  assert.equal(manager.core.catalog.find(pin => pin.version === Manager.LEGACY_PROFILE).upstreamRevision, Manager.REVISION);
-  assert.equal(manager.core.catalog.find(pin => pin.version === Manager.LEGACY_PROFILE).deprecated, true);
-  const missing = manager.resolveSelection({ runtimeData: { onscripter_en: { version: "unknown" } } }, {});
+  const previous = "2025-06-08-MCLv1", current = "2026-10-31-MCLv2";
+  let packages = [record(current), record(previous)];
+  const url = "https://raw.githubusercontent.com/procrastinine/maclauncher-builds/main/catalogs/onscripter-en.json";
+  Harness.network.routes = { [url]: () => { catalogFetches++; return { schemaVersion: 2, projectId: "onscripter-en", updatePolicy: "manual", packages }; } };
+  t.after(() => { Harness.network.routes = null; });
+  const beforeRequests = Harness.network.requests.length, manager = Manager.createManager();
+  assert.deepEqual(manager.getState({ userDataDir: context.userDataDir }).catalog.versions, []);
+  assert.deepEqual(manager.core.catalog, []); assert.equal(catalogFetches, 0);
+  await manager.refreshCatalog({ userDataDir: context.userDataDir, force: true });
+  assert.deepEqual(manager.getState({ userDataDir: context.userDataDir }).catalog.versions, [current, previous]);
+  assert.equal(manager.resolveSelection({}, {}, context.userDataDir).version, current);
+  packages = [record(current)];
+  await manager.refreshCatalog({ userDataDir: context.userDataDir, force: true });
+  assert.deepEqual(manager.getState({ userDataDir: context.userDataDir }).catalog.versions, [current]);
+  assert.equal(catalogFetches, 2);
+  assert.deepEqual(Harness.network.requests.slice(beforeRequests), [url, url]);
+  assert.equal(manager.core.catalog.find(pin => pin.version === current).upstreamRevision, "a".repeat(40));
+  const missing = manager.resolveSelection({ runtimeData: { onscripter_en: { version: "unknown" } } }, {}, context.userDataDir);
   assert.equal(missing.version, "unknown"); assert.equal(missing.ready, false);
 });
 
-test("ONScripter-EN requires a version choice and preserves explicit older v1 and v2 selections", t => {
+test("ONScripter-EN plans consented discovery and preserves explicit older selections", t => {
   const { entry, context } = fixture(t);
-  assert.equal(Manager.resolveSelection(entry, {}, context.userDataDir).version, null);
-  assert.equal(Manager.resolveSelection(entry, {}, context.userDataDir).selectionRequired, true);
-  entry.runtimeData = { onscripter_en: { version: Manager.LEGACY_PROFILE } };
-  assert.equal(Manager.resolveSelection(entry, {}, context.userDataDir).version, Manager.LEGACY_PROFILE);
+  const selection = Manager.resolveSelection(entry, {}, context.userDataDir);
+  assert.equal(selection.version, null); assert.equal(selection.discoveryRequired, true);
+  assert.equal(selection.selectionRequired, undefined);
+  for (const version of ["2025-06-08-MCLv1", "2026-10-31-MCLv2"]) {
+    entry.runtimeData = { onscripter_en: { version } };
+    assert.equal(Manager.resolveSelection(entry, {}, context.userDataDir).version, version);
+  }
   assert.deepEqual(Manager.distributionVersions, []);
   assert.equal(Manager.delivery.included, "none");
-  entry.runtimeData = { onscripter_en: { version: Manager.PROFILE } };
-  assert.equal(Manager.resolveSelection(entry, {}, context.userDataDir).version, Manager.PROFILE);
 });
 
 test("native saves import only known saves and leave originals and edited managed saves intact", t => {

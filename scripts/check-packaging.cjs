@@ -191,7 +191,7 @@ function inspectSourceArchive(file) {
   }
   return { entries: entries.length };
 }
-function assertRuntimeBoundary(appPath, { packageConfig = require('../package.json') } = {}) {
+function assertRuntimeBoundary(appPath, { arch, packageConfig = require('../package.json') } = {}) {
   const { FileMatcher } = require('app-builder-lib/out/fileMatcher');
   const root = path.resolve(__dirname, '..'), build = Content.applyBuildPolicy(packageConfig.build);
   const rules = build.extraResources.filter(rule => typeof rule === 'object' && rule.from === 'src/external')
@@ -214,7 +214,7 @@ function assertRuntimeBoundary(appPath, { packageConfig = require('../package.js
     version: packageConfig.version, product: packageConfig.build.productName
   }, { packageConfig });
   const pythonPayload = require('./python-resources.cjs').assertPackagedPython({
-    resourceRoot: path.join(appPath, 'Contents/Resources/python')
+    resourceRoot: path.join(appPath, 'Contents/Resources/python'), arch
   });
   return { files: tree.files.length, ...archive, pythonPayload };
 }
@@ -224,7 +224,7 @@ function verifyApp({ appPath, arch, maximumMacOS, inventory, packageConfig = req
   const app = path.resolve(appPath), stat = fs.lstatSync(app);
   if (!stat.isDirectory() || stat.isSymbolicLink() || path.basename(app) !== `${plan.product}.app`) throw new Error('Choose the real MacLauncher.app bundle.');
   const tree = appTree(app), resources = path.join(app, 'Contents/Resources');
-  assertRuntimeBoundary(app, { packageConfig });
+  assertRuntimeBoundary(app, { arch, packageConfig });
   for (const file of tree.files) if (/^Contents\/Resources\/(?:native-runtime-sources|Z-universal\.app|external\/.+\/\.git)(?:\/|$)|^Contents\/Resources\/app\.asar\.unpacked\/src\/modules\/rgss\/resources\/mkxpz(?:\/|$)/.test(file)) {
     throw new Error(`Application contains an unlisted source archive or duplicate runtime tree: ${file}.`);
   }

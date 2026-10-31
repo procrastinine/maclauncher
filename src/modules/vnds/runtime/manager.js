@@ -1,15 +1,15 @@
 const path = require("node:path");
 const Bundled = require("../../shared/runtime/bundled-native");
 const { createProjectBuildManager } = require("../../shared/runtime/project-build-manager");
+const repository = "procrastinine/maclauncher-builds";
 
 function createManager(dependencies = {}) {
   return createProjectBuildManager({ projectId: "vnds-love", label: "VNDS-LOVE",
-    repository: "procrastinine/maclauncher-builds", upstreamUrl: "https://github.com/ajusa/VNDS-LOVE",
+    repository, upstreamUrl: "https://github.com/ajusa/VNDS-LOVE",
     manifestRelative: "manifest.json", sourceRelative: "manifest.json",
     executableRelative: "engine/main.lua", dataOnly: true, supportsDefault: true,
     validateManifest(manifest, record) {
-      if (manifest.kind !== "data" || !/^[a-f0-9]{40}$/.test(manifest.sourceRevision || "") ||
-          record.source && manifest.sourceRevision !== record.source.revision || manifest.loveVersion !== "11.5" ||
+      if (manifest.kind !== "data" || manifest.loveVersion !== "11.5" ||
           !manifest.files.some(file => file.path === "engine/conf.lua") || !manifest.files.some(file => file.path === "engine/LICENSE"))
         throw new Error("The VNDS-LOVE package has an unsupported interpreter profile.");
     },

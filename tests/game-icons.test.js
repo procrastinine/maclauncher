@@ -30,6 +30,27 @@ test("folder imports use data-file siblings, explicit executable paths and bound
   assert.equal(Icons.resolveIconCandidates({ importPath: root, gamePath: root, contentRootDir: root }).some(item => item.path.endsWith("OtherGame.exe")), false);
 });
 
+test("icon discovery uses the shared executable roles for folders and explicit paths", async t => {
+  const f = fixture(t), root = path.dirname(f.game);
+  const files = ["Game.exe", "TitleLauncher.exe", "TitleServer.exe", "CrashReporter.exe", "pythonw.exe", "QtWebEngineProcess.exe", "Title-Updater.exe", "vcredist_x64.exe"];
+  for (const name of files) write(path.join(root, name), "exe");
+  const candidates = Icons.resolveIconCandidates({ importPath: root, gamePath: root, name: "TitleLauncher" });
+  assert.deepEqual(candidates.map(item => path.basename(item.path)), ["Game.exe", "TitleLauncher.exe", "TitleServer.exe"]);
+  for (const name of files.slice(3)) {
+    const file = path.join(root, name);
+    assert.deepEqual(Icons.resolveIconCandidates({ importPath: file, gamePath: file }), [{ path: file, source: "exe" }],
+      `a recorded executable can supply artwork without making ${name} an automatic game candidate`);
+  }
+  const launcher = path.join(root, "TitleLauncher.exe");
+  assert.deepEqual(Icons.resolveIconCandidates({ importPath: launcher, gamePath: launcher }), [{ path: launcher, source: "exe" }]);
+  const icon = write(path.join(f.root, "launcher.png"), png()), attempts = [];
+  const selected = await Icons.selectIconForEntry({ entry: { importPath: root, gamePath: root, name: "TitleLauncher" },
+    canRenderPath: file => file === icon,
+    extractCandidate: candidate => { attempts.push(candidate.path); return candidate.path === launcher ? icon : null; } });
+  assert.deepEqual(attempts, [path.join(root, "Game.exe"), launcher]);
+  assert.deepEqual(selected, { path: icon, source: "exe" });
+});
+
 test("single-file imports ignore sibling app and executable artwork, including cached selections", async t => {
   const f = fixture(t), root = path.dirname(f.game);
   const siblingApp = path.join(root, "Other.app"); fs.mkdirSync(siblingApp);

@@ -188,29 +188,24 @@ test('included shaders do not register a runtime manager or shader-pack navigati
   const markup = render([manager('other', { tabLabel: 'Other' })]);
   assert.doesNotMatch(markup, /ReShade ·|Shader packs|runtime-panel-reshade-shaders/);
 });
-test('each Wine engine manages graphics bridge downloads and defaults inside its own runtime tab', () => {
+test('CrossOver and Sikarugir manage one shared DXMT support download and default under Graphics', () => {
   const registry = require('../src/modules/registry');
-  const sources = require('../src/modules/crossover/temporal/support-manager').managers;
+  const source = require('../src/modules/crossover/temporal/support-manager');
   const engineSources = [require('../src/modules/crossover/runtime/manager'),
     require('../src/modules/crossover/sikarugir/runtime/manager')];
-  const engines = engineSources.map(source => ({ ...manager(source.id, registry.getRuntimeManagerUi(source.id) || source.ui), label: source.label }));
-  const bridges = [sources.crossover, sources.sikarugir].map(source => {
-    const state = source.getState();
-    const version = state.catalog.versions[0] || 'cached-bridge-release';
-    const install = { version, ready: true };
-    return { ...state, id: source.id, label: source.label, ui: registry.getRuntimeManagerUi(source.id) || source.ui,
-      sections: state.sections.map(section => ({ ...section, catalog: { ...section.catalog, versions: [version] }, installed: [install], defaultVersion: null })) };
-  });
-  for (const bridge of bridges) {
-    const markup = render([...engines, ...bridges], bridge.id);
-    assert.match(markup, /class="launcherSidebarItem[^>]*>CrossOver<\/button>/);
-    assert.match(markup, /class="launcherSidebarItem[^>]*>Sikarugir<\/button>/);
-    assert.match(markup, /role="tab"[^>]*aria-selected="true"[^>]*>DXMT support<\/button>/);
-    assert.match(markup, new RegExp(`id="runtime-group-panel-${bridge.ui.groupId}"`));
-    assert.match(markup, />Installed<\/button>/);
-    assert.match(markup, /Set default/);
-    assert.doesNotMatch(markup, />Windows graphics<\/button>|>Graphics<\/button>/);
-  }
+  const engines = engineSources.map(engine => ({ ...manager(engine.id, registry.getRuntimeManagerUi(engine.id) || engine.ui), label: engine.label }));
+  const state = source.getState(), version = state.catalog.versions[0] || '1.0.21', install = { version, ready: true };
+  const bridge = { ...state, id: source.id, label: source.label, ui: registry.getRuntimeManagerUi(source.id) || source.ui,
+    sections: state.sections.map(section => ({ ...section, catalog: { ...section.catalog, versions: [version] }, installed: [install], defaultVersion: null })) };
+  const markup = render([...engines, bridge], bridge.id);
+  for (const label of ['CrossOver', 'Sikarugir', 'Graphics']) assert.match(markup, new RegExp(`class="launcherSidebarItem[^>]*>${label}</button>`));
+  assert.match(markup, /role="tab"[^>]*aria-selected="true"[^>]*>DXMT support<\/button>/);
+  assert.match(markup, /id="runtime-group-panel-graphics"/);
+  assert.match(markup, />Installed<\/button>/);
+  assert.match(markup, /Set default/);
+  assert.equal(markup.match(/>DXMT support<\/button>/g).length, 1);
+  assert.doesNotMatch(markup, /DXMT · support/);
+  for (const engine of engines) assert.doesNotMatch(render([...engines, bridge], engine.id), />DXMT support<\/button>/, `${engine.id}: no separate copy`);
 });
 test('inactive scene adapters stay internally managed without Graphics tabs or phantom Presets', () => {
   const registry = require('../src/modules/registry');
@@ -422,8 +417,8 @@ test('local application versions show paths and independent defaults without dow
   assert.match(markup, /runtimeSectionTitle">Applications/);
   assert.match(markup, /2 applications/);
   assert.match(markup, /Registered applications/);
-  assert.match(markup, /26.0 · Player\.app/);
-  assert.match(markup, /26.0 · Player Beta\.app<span class="badge badgeAccent">Default/);
+  assert.match(markup, /26.0 · Player</);
+  assert.match(markup, /26.0 · Player Beta<span class="badge badgeAccent">Default/);
   assert.match(markup, /\/Applications\/Player Beta\.app/);
   assert.match(markup, /aria-label="Find installed applications"/);
   assert.match(markup, />Add application…<\/button>/);
@@ -457,8 +452,8 @@ test('per-game backend choices honor filtered eligibility and local application 
     moduleRuntimeSupport: ['managed', 'local'], runtimeData: { local: { version: 'copy-b' } } };
   const eligible = renderGame(game);
   assert.match(eligible, /<option value="local" selected="">Local player<\/option>/);
-  assert.match(eligible, /<option value="copy-a">v26.0 · Player\.app<\/option>/);
-  assert.match(eligible, /<option value="copy-b" selected="">v26.0 · Player Beta\.app<\/option>/);
+  assert.match(eligible, /<option value="copy-a">v26.0 · Player<\/option>/);
+  assert.match(eligible, /<option value="copy-b" selected="">v26.0 · Player Beta<\/option>/);
   assert.match(eligible, /aria-label="Runtime settings"/);
   const ineligible = renderGame({ ...game, runtimeId: 'managed', moduleRuntimeSupport: [] });
   const emptyChoices = ineligible.match(/<select aria-label="Runtime"[^>]*>(.*?)<\/select>/)[1];
@@ -551,6 +546,99 @@ test('switching architecture never hides installation behind another architectur
   assert.match(markup, /class="btn primary" disabled="" title="This release has no Intel package\."/);
   assert.doesNotMatch(markup, /v1.2.3 · Included/);
 });
+test('the Build override defaults to the launcher CPU and lists only CPUs with their own builds', () => {
+  const builds = (key, architecture) => ({ versions: ['1.0'], versionRequirements: { '1.0': { architecture } } });
+  const section = architectureCatalogs => ({ ...manager('cpu', {}, { versions: ['1.0'], architecture: 'arm64', architectureCatalogs }),
+    launcherArchitecture: 'arm64' });
+  const both = render([section({ arm64: builds('arm64', 'arm64'), x64: builds('x64', 'x64') })], 'cpu');
+  const select = /<select[^>]*aria-label="Build architecture"[^>]*>(.*?)<\/select>/.exec(both)?.[1] || '';
+  assert.deepEqual([...select.matchAll(/<option[^>]*>([^<]*)<\/option>/g)].map(match => match[1]), ['Automatic (Apple Silicon)', 'Intel (Rosetta)']);
+  assert.match(select, /<option value="" selected="">/);
+  // Intel-only builds listed for Apple Silicon offer no Apple Silicon choice.
+  const intelOnly = render([section({ arm64: builds('arm64', 'x64'), x64: builds('x64', 'x64') })], 'cpu');
+  assert.doesNotMatch(intelOnly, /aria-label="Build architecture"/);
+  // A download that names no CPU, such as one publisher DMG for every Mac, is in both lists and needs no choice.
+  assert.doesNotMatch(render([section({ arm64: { versions: ['1.0'] }, x64: { versions: ['1.0'] } })], 'cpu'), /aria-label="Build architecture"/);
+  // Universal builds appear in both lists and need no choice.
+  assert.doesNotMatch(render([section({ arm64: builds('arm64', 'universal'), x64: builds('x64', 'universal') })], 'cpu'), /aria-label="Build architecture"/);
+  // The Intel app on Apple Silicon offers an Apple-Silicon-only runtime's builds
+  // even though its automatic Intel list is empty.
+  const appleOnly = { ...manager('cpu', {}, { status: 'success', versions: [], architecture: 'x64',
+    architectureCatalogs: { arm64: builds('arm64', 'arm64'), x64: { versions: [] } } }), launcherArchitecture: 'x64' };
+  const intelApp = render([appleOnly], 'cpu');
+  const options = /<select[^>]*aria-label="Build architecture"[^>]*>(.*?)<\/select>/.exec(intelApp)?.[1] || '';
+  assert.deepEqual([...options.matchAll(/<option[^>]*>([^<]*)<\/option>/g)].map(match => match[1]), ['Automatic (Intel)', 'Apple Silicon']);
+  const picked = render([appleOnly], 'cpu', { runtimeUi: { cpu: { remoteOpen: {}, installVersion: {}, installVariant: {},
+    installArchitecture: { default: 'arm64' }, installedSort: {} } } });
+  assert.match(picked, /<option value="arm64" selected="">Apple Silicon<\/option>/);
+  assert.match(picked, /<option[^>]*value="1\.0"/);
+  // A remembered choice that is no longer offered falls back to the automatic list.
+  const older = { versions: ['1.0', '0.9'], versionRequirements: { '1.0': { architecture: 'x64' }, '0.9': { architecture: 'x64' } } };
+  const stale = render([section({ arm64: builds('arm64', 'x64'), x64: older })], 'cpu', { runtimeUi: { cpu: { remoteOpen: {},
+    installVersion: {}, installVariant: {}, installArchitecture: { default: 'x64' }, installedSort: {} } } });
+  assert.doesNotMatch(stale, /aria-label="Build architecture"/);
+  assert.doesNotMatch(stale, /<option[^>]*value="0\.9"/);
+});
+test('an Intel-only build installed on Apple Silicon is installed and can be the default', () => {
+  const runtime = { ...manager('intel-only', {}, { versions: ['1.0'], installableVersions: ['1.0'], architecture: 'arm64',
+    versionRequirements: { '1.0': { architecture: 'x64', installLabel: 'Install' } } },
+    [{ version: '1.0', architecture: 'x64', ready: true, removable: true }]), launcherArchitecture: 'arm64', defaultVersion: '1.0' };
+  const markup = render([runtime], runtime.id);
+  assert.match(markup, /<span class="badge badgeAccent"[^>]*>Default<\/span>/);
+  assert.doesNotMatch(markup, /<button[^>]*class="btn primary"[^>]*>Install<\/button>/);
+});
+test('installed builds are tagged by the CPU they were published for, and a missing default is stated', () => {
+  // Both build choices hold x86_64 Wine; only the other build choice is tagged, and the Apple Silicon build is the default.
+  const slots = { ...manager('slots', {}, { versions: ['1.0'] }, [
+    { version: '1.0', architecture: 'x64', variant: 'architecture:arm64', ready: true },
+    { version: '1.0', architecture: 'x64', variant: 'architecture:x64', ready: true }]), launcherArchitecture: 'arm64', defaultVersion: '1.0' };
+  const rows = render([slots], slots.id).split('class="saveRow"').slice(1);
+  assert.equal(rows.length, 2);
+  assert.ok(rows.some(row => /badgeAccent/.test(row) && !/class="badge">(?:Apple Silicon|Intel)/.test(row)));
+  assert.ok(rows.some(row => !/badgeAccent/.test(row) && /class="badge">Intel<\/span>/.test(row)));
+  assert.doesNotMatch(render([slots], slots.id), / build<\/span>/);
+  // In the Intel app the same rows are tagged the other way round.
+  const intelApp = render([{ ...slots, launcherArchitecture: 'x64' }], slots.id).split('class="saveRow"').slice(1);
+  assert.ok(intelApp.some(row => /class="badge">Apple Silicon<\/span>/.test(row)) && intelApp.some(row => !/class="badge">(?:Apple Silicon|Intel)/.test(row)));
+  // An Intel-only binary installed for the Apple Silicon build choice stays tagged Intel.
+  const single = { ...manager('single', {}, { versions: ['1.0'] }, [{ version: '1.0', architecture: 'x64', variant: 'architecture:arm64', ready: true }]),
+    launcherArchitecture: 'arm64', defaultVersion: '1.0' };
+  assert.match(render([single], single.id), /class="badge">Intel<\/span>/);
+  // A library loaded by x86_64 Wine whose package targets Apple Silicon is not tagged Intel.
+  const library = { ...manager('library', {}, { versions: ['1.0'], versionRequirements: { '1.0': { architecture: 'arm64' } } },
+    [{ version: '1.0', architecture: 'x64', ready: true }]), launcherArchitecture: 'arm64', defaultVersion: '1.0' };
+  assert.doesNotMatch(render([library], library.id), /class="badge">Intel</);
+  assert.doesNotMatch(render([library], library.id), /<button[^>]*class="btn primary"[^>]*>Install<\/button>/);
+  // Declared host CPUs win over file inspection: Apple-Silicon-only packages and
+  // packages for every Mac carry no tag; a declared Intel build keeps its tag.
+  const tagged = (requirement, architecture = 'x64') => {
+    const runtime = { ...manager('declared', {}, { versions: ['1.0'], versionRequirements: { '1.0': requirement } },
+      [{ version: '1.0', architecture, ready: true }]), launcherArchitecture: 'arm64', defaultVersion: '1.0' };
+    return /class="badge">Intel</.test(render([runtime], runtime.id));
+  };
+  assert.equal(tagged({ hostArchitectures: ['arm64'] }), false);
+  assert.equal(tagged({ hostArchitectures: ['arm64', 'x64'] }), false);
+  assert.equal(tagged({ architecture: 'x64', hostArchitectures: ['arm64', 'x64'] }), true);
+  assert.equal(tagged({}), true);
+  const missing = { ...manager('missing', {}, { versions: ['2.0', '1.0'] }, [{ version: '1.0', ready: true }]), defaultVersion: '2.0' };
+  assert.match(render([missing], missing.id), /The default version, v2\.0, is not installed\. MacLauncher asks before downloading it when a game needs it\./);
+  assert.doesNotMatch(render([library], library.id), /is not installed/);
+  // A default shared by two sections and installed in the other one is installed.
+  const line = (id, version, installed) => ({ id, label: id, defaultVersion: '1.12', catalog: { status: 'idle', versions: [version] }, installed });
+  const lineState = newer => ({ id: 'lines', label: 'Backend lines', ui: {},
+    sections: [line('old', '1.9', [{ version: '1.9', ready: true }]), line('new', '1.12', newer)] });
+  assert.doesNotMatch(render([lineState([{ version: '1.12', ready: true }])], 'lines', { runtimeSectionId: 'old' }), /is not installed/);
+  assert.match(render([lineState([])], 'lines', { runtimeSectionId: 'old' }), /The default version, v1\.12, is not installed/);
+});
+test('a runtime whose packages another runtime installs names that runtime instead of an empty download list', () => {
+  const art = manager('art', {}, { status: 'success', versions: [], source: 'https://example.org/builds',
+    packagesFrom: { managerId: 'android', label: 'MacLauncher Android' } }, [{ version: '0.1.0', ready: true }]);
+  const android = manager('android', {}, { versions: ['0.2.0'] });
+  const markup = render([art, android], 'art');
+  assert.match(markup, /MacLauncher Android installs these versions/);
+  assert.match(markup, />Open MacLauncher Android<\/button>/);
+  assert.doesNotMatch(markup, /No downloadable versions|Load versions|runtimeSources/);
+});
 test('cached source build choices display compact source/help links and explicit installed states', () => {
   const runtime = manager('source', { tabLabel: 'Source runtime' }, { versions: ['1.2.3'],
     installable: true, installLabel: 'Build', source: 'https://github.com/example/runtime/tree/revision',
@@ -589,13 +677,14 @@ test('the discovered ILSpy tool exposes versions and defaults through the shared
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'maclauncher-tool-controls-'));
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
   // A previously retrieved release remains selectable without a render-time fetch.
-  catalog.saveCatalog(userDataDir, [catalog.PINS['9.1.0.7988']]);
-  const pin = tool.TOOLS['11.1.0.9782'], root = tool.installRoot(userDataDir, pin.version), files = path.join(root, 'files');
+  const { entries: fixtures } = require('./helpers/ilspy-catalog-fixture.cjs');
+  catalog.saveCatalog(userDataDir, [fixtures['9.1.0.7988']]);
+  const pin = fixtures['11.1.0.9782'], root = tool.installRoot(userDataDir, pin.version), files = path.join(root, 'files');
   fs.mkdirSync(files, { recursive: true });
   for (const name of ['ilspycmd.dll', 'ilspycmd.deps.json', 'ilspycmd.runtimeconfig.json', 'ICSharpCode.Decompiler.dll'])
     fs.writeFileSync(path.join(files, name), 'tool fixture');
   fs.writeFileSync(path.join(root, 'tool.json'), JSON.stringify({ version: pin.version, archiveSha256: pin.sha256,
-    archiveSha512: pin.sha512, sourceRevision: pin.sourceRevision, framework: pin.framework, files: tool.__test.inventory(files) }));
+    archiveSha512: pin.sha512, sourceRevision: pin.sourceRevision, framework: pin.framework, catalogEntry: pin, files: tool.__test.inventory(files) }));
   const state = manager.getState({ userDataDir });
   const model = { id: manager.id, label: manager.label, ui: registry.getRuntimeManagerUi(manager.id), ...state };
   const fixed = { id: 'fna', label: 'FNA', ui: registry.getRuntimeManagerUi('fna'), catalog: { versions: ['fixed-fna'] } };
@@ -686,6 +775,7 @@ test('imported graphics model files expose import and removal without download o
 
 test('Graphics has its own sidebar section with component information and model actions without shader-pack management', t => {
   const models = require('../src/modules/shared/reshade/runtime/models-manager');
+  t.mock.method(require('../src/modules/shared/reshade/models'), 'inspectionAvailable', () => true);
   const fs = require('node:fs');
   const userDataDir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'graphics-runtime-view-'));
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));

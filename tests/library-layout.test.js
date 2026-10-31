@@ -99,7 +99,7 @@ test('Android choices describe automatic Play and preserve each runtime capabili
       assert.match(network,/disabled=""/);assert.doesNotMatch(network,/checked=""/);
       assert.doesNotMatch(markup,/>Add to Google Play library</);
     }
-    if(runtimeId==='macapk')assert.match(markup,/macOS 26\.4 or later/);
+    if(runtimeId==='macapk')assert.match(markup,/macOS version stated by each release/);
   }
 });
 
@@ -222,6 +222,12 @@ test('library-layout: built-in management hiding preserves inspector runtime, ve
   const builtIn = renderDetails(state);
   assert.doesNotMatch(builtIn, />Runtimes…<\/button>/);
   assert.match(builtIn, /aria-label="Managed runtime version"/);
+  // Versions listed by another Runtimes tab are named after that tab, unless the runtime's name includes it.
+  manager.ui = { management: 'built-in', tabLabel: 'Host engine' };
+  assert.match(renderDetails(state), /aria-label="Host engine version"/);
+  manager.ui = { management: 'built-in', tabLabel: 'Managed' };
+  assert.match(renderDetails(state), /aria-label="Managed runtime version"/);
+  manager.ui = { management: 'built-in' };
   assert.match(builtIn, /<option value="2.0">/);
   assert.match(builtIn, /aria-label="Runtime"/);
   assert.match(builtIn, /aria-label="Runtime settings"/);

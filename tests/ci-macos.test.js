@@ -6,12 +6,12 @@ const os = require('node:os');
 const { createHash } = require('node:crypto');
 const test = require('node:test');
 const { load: parse } = require('js-yaml');
-const { verifyTagVersion, readConfiguration, verifyRunner, verifyAppVersion, releaseNotes, assertCopiedPayload } = require('../scripts/ci-macos.cjs');
+const { verifyTagVersion, readConfiguration, verifyRunner, verifyAppVersion, releaseNotes, assertCopiedPayload, preparePython } = require('../scripts/ci-macos.cjs');
 
-const environment = {};
+const environment = { MACLAUNCHER_APP_ARCH: 'arm64' };
 // The committed lock is checked against the current application plan by its
-// own test below. Tests of other CI steps read this fixed lock instead.
-const fixtureLock = Object.freeze({ schemaVersion: 1, repository: 'owner/runtime-builds', arch: 'arm64', maximumMacOS: '13.0', packages: [] });
+// own test below. Tests of other CI steps read this fixed selection instead.
+const fixtureLock = Object.freeze({ repository: 'owner/runtime-builds', arch: 'arm64', maximumMacOS: '13.0', packages: [] });
 test('finalize CLI exposes payload verification during its synchronous packaging callback', async t => {
   const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ci-cli-payload-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -50,26 +50,38 @@ test('release notes lead with the app download and use version-specific highligh
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.mkdirSync(path.join(root, 'docs/releases'), { recursive: true });
   fs.writeFileSync(path.join(root, 'docs/releases/0.3.0.md'), 'New native backends and game tools.');
-  const options = { repoRoot: root, version: '0.3.0', arch: 'arm64', minimumMacOS: '13.0', repository: 'owner/project',
+  const options = { repoRoot: root, version: '0.3.0', minimumMacOS: '13.0', repository: 'owner/project',
     packageRepository: 'owner/runtime-builds' };
   const notes = releaseNotes(options);
-  assert.ok(notes.startsWith('**[Download MacLauncher.app.zip]'));
-  assert.match(notes, /releases\/download\/v0.3.0\/MacLauncher.app.zip/);
+  assert.ok(notes.startsWith('**[Download for Apple Silicon]'));
+  assert.match(notes, /\[Download for Apple Silicon\]\(https:\/\/github.com\/owner\/project\/releases\/download\/v0.3.0\/MacLauncher.app.zip\)/);
+  assert.match(notes, /\[Download for Intel\]\(https:\/\/github.com\/owner\/project\/releases\/download\/v0.3.0\/MacLauncher-Intel.app.zip\)/);
+  assert.match(notes, /About This Mac/);
   assert.match(notes, /New native backends and game tools/);
   assert.match(notes, /https:\/\/github.com\/owner\/runtime-builds/);
   assert.match(notes, /release tags identify the matching source commits/);
   assert.doesNotMatch(notes, /distribution-plan|build-manifest|source pins|built from/);
   const later = releaseNotes({ ...options, version: '0.4.0' });
-  assert.match(later, /v0.4.0\/MacLauncher.app.zip/);
+  assert.match(later, /v0.4.0\/MacLauncher.app.zip/); assert.match(later, /v0.4.0\/MacLauncher-Intel.app.zip/);
   assert.doesNotMatch(later, /New native backends/);
 });
-test('CI configuration uses the committed package lock without repository variables', () => {
-  const config = readConfiguration({});
+test('CI configuration builds each named architecture from the committed package lock', () => {
   const lock = require('../build/runtime-packages.json');
-  assert.equal(config.arch, lock.arch); assert.equal(config.maximumMacOS, lock.maximumMacOS);
-  assert.equal(config.lock.packages.length, lock.packages.length);
-  assert.doesNotThrow(() => verifyRunner(config, { platform: 'darwin', arch: 'arm64' }));
-  assert.throws(() => verifyRunner(config, { platform: 'darwin', arch: 'x64' }), /runner CPU/);
+  assert.deepEqual(lock.architectures, ['arm64', 'x64']);
+  for (const arch of lock.architectures) {
+    const config = readConfiguration({ MACLAUNCHER_APP_ARCH: arch });
+    assert.equal(config.arch, arch); assert.equal(config.maximumMacOS, lock.maximumMacOS);
+    // A compatible fallback record is not also included when this CPU has its
+    // own build. CI must use the same selected view as installation.
+    const selected = require('../scripts/runtime-packages.cjs').selectArchitecture(lock, arch);
+    assert.deepEqual(config.lock.packages.map(record => `${record.id}/${record.version}/${record.arch}`).sort(),
+      selected.packages.map(record => `${record.id}/${record.version}/${record.arch}`).sort());
+    assert.doesNotThrow(() => verifyRunner(config, { platform: 'darwin', arch }));
+    assert.throws(() => verifyRunner(config, { platform: 'darwin', arch: arch === 'arm64' ? 'x64' : 'arm64' }), /runner CPU/);
+  }
+  assert.ok(readConfiguration({ MACLAUNCHER_APP_ARCH: 'arm64' }).lock.packages.length > readConfiguration({ MACLAUNCHER_APP_ARCH: 'x64' }).lock.packages.length);
+  assert.equal(readConfiguration({}).arch, process.arch);
+  for (const value of ['', 'universal', 'x86_64']) assert.throws(() => readConfiguration({ MACLAUNCHER_APP_ARCH: value }), /MACLAUNCHER_APP_ARCH/);
 });
 test('tag builds require the exact app version, preserving stable and prerelease identities', t => {
   t.mock.method(require('../scripts/runtime-packages.cjs'), 'readLock', () => fixtureLock);
@@ -114,12 +126,27 @@ test('version, manual and tag app workflow pins actions, installs locked depende
   assert.match(commands, /ci-macos\.cjs finalize/);
   assert.doesNotMatch(commands, /pnpm test|pnpm run typecheck|package:check/);
   const upload = steps.find(step => step.uses?.startsWith('actions/upload-artifact@'));
+  assert.deepEqual(workflow.jobs.build.permissions, { contents: 'read', 'id-token': 'write', attestations: 'write' });
+  const attestIndex = steps.findIndex(step => step.uses?.startsWith('actions/attest-build-provenance@'));
+  assert.ok(attestIndex > steps.findIndex(step => step.run === 'node scripts/ci-macos.cjs finalize'));
+  assert.ok(attestIndex < steps.findIndex(step => step === upload));
+  assert.equal(steps[attestIndex].with['subject-path'],
+    'dist/ci/${{ env.MACLAUNCHER_APP_ASSET }}\ndist/ci/${{ env.MACLAUNCHER_APP_MANIFEST }}\n');
+  assert.match(upload.with.path, /MACLAUNCHER_APP_MANIFEST/);
   assert.doesNotMatch(upload.with.path, /\*/);
   assert.doesNotMatch(upload.with.path, /native-payload-inventory|source-pins|MacLauncher-source|MacLauncher-runtime-sources/);
-  assert.match(upload.with.path, /MacLauncher\.app\.zip/);
+  // configure names the architecture's app archive from release.cjs.
+  assert.match(upload.with.path, /dist\/ci\/\$\{\{ env\.MACLAUNCHER_APP_ASSET \}\}/);
+  assert.equal(upload.with.name, 'MacLauncher-macOS-${{ matrix.arch }}');
   assert.equal(upload.with['include-hidden-files'], false);
-  assert.equal(workflow.jobs.build['runs-on'], 'macos-26');
-  assert.doesNotMatch(JSON.stringify(workflow), /native_payload_url|native_payload_sha256|vars\.MACLAUNCHER_NATIVE|macos-26-intel/);
+  // Each app builds on a runner with its own CPU, and the runner check confirms it.
+  assert.equal(workflow.jobs.build['runs-on'], '${{ matrix.runner }}');
+  assert.deepEqual(workflow.jobs.build.strategy.matrix.include, [{ arch: 'arm64', runner: 'macos-26' }, { arch: 'x64', runner: 'macos-26-intel' }]);
+  assert.equal(workflow.jobs.build.strategy['fail-fast'], false);
+  assert.equal(workflow.jobs.build.env.MACLAUNCHER_APP_ARCH, '${{ matrix.arch }}');
+  assert.deepEqual(workflow.jobs.release.steps.filter(step => step.uses?.startsWith('actions/download-artifact@')).map(step => step.with),
+    [{ name: 'MacLauncher-macOS-arm64', path: 'release-assets/arm64' }, { name: 'MacLauncher-macOS-x64', path: 'release-assets/x64' }]);
+  assert.doesNotMatch(JSON.stringify(workflow), /native_payload_url|native_payload_sha256|vars\.MACLAUNCHER_NATIVE/);
   assert.deepEqual(workflow.jobs.release.needs, ['plan', 'build']); assert.deepEqual(workflow.jobs.release.permissions, { contents: 'write' });
   assert.equal(workflow.jobs.build.needs, 'plan');
   assert.equal(workflow.jobs.build.if, "needs.plan.outputs.build == 'true'");
@@ -150,4 +177,18 @@ test('app payload comparison requires exact reviewed versions and rejects extra 
   assert.throws(() => assertCopiedPayload(root, inventory, [record]), /outside its sealed payload/);
   fs.rmSync(extra); fs.rmSync(path.join(packageRoot, 'files/bin/runtime'));
   assert.throws(() => assertCopiedPayload(root, inventory, [record]), /missing sealed native payload files/);
+});
+test('the fetch step installs the publisher Python build for the app architecture when the checkout holds another', async t => {
+  const repoRoot = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ci-python-'));
+  t.after(() => fs.rmSync(repoRoot, { recursive: true, force: true }));
+  const { embeddedPythonProfile } = require('../src/modules/shared/runtime/python');
+  const root = path.join(repoRoot, 'src/resources/python'), metadata = path.join(root, 'runtime.json');
+  fs.mkdirSync(root, { recursive: true }); fs.writeFileSync(metadata, JSON.stringify(embeddedPythonProfile('arm64')));
+  const calls = [], install = profile => async args => { calls.push(args); fs.writeFileSync(metadata, JSON.stringify(profile)); };
+  assert.deepEqual(await preparePython({ arch: 'arm64', repoRoot, install: install(null) }), { python: 'arm64', installed: false });
+  assert.deepEqual(calls, []);
+  assert.deepEqual(await preparePython({ arch: 'x64', repoRoot, install: install(embeddedPythonProfile('x64')) }), { python: 'x86_64', installed: true });
+  assert.deepEqual(calls, [['--arch', 'x64', '--dest', root]]);
+  fs.writeFileSync(metadata, JSON.stringify(embeddedPythonProfile('arm64')));
+  await assert.rejects(preparePython({ arch: 'x64', repoRoot, install: install(embeddedPythonProfile('arm64')) }), /not the x64 build/);
 });

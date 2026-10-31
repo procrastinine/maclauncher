@@ -2,6 +2,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 const Native = require("../../shared/runtime/local-native");
 const Bundled = require("../../shared/runtime/bundled-native");
+const Catalog = require("../../shared/runtime/maclauncher-builds");
+const { imageRequiresRosetta } = require("../../shared/runtime/architecture");
+const { architectureSupport } = require("../../shared/runtime/host-capabilities");
 const HOST = require("./host-profile.json");
 const PROFILE = "siglus-rs-published-library-direct-host-v1";
 const hash = Native.hashFile;
@@ -22,11 +25,12 @@ function resolveProfile(install, { verification = "full" } = {}) {
   const installation = install.installationMetadata || install.record?.installationMetadata;
   const hostIdentity = [HOST, ...(HOST.compatibleHosts || [])].find(host =>
     host.sourceSha256 === profile.hostSourceSha256 && host.sha256 === profile.files?.["bin/siglus-host"]);
-  if (profile.schema !== 1 || profile.profile !== PROFILE || profile.version !== install.version || profile.upstreamRevision !== install.upstreamRevision ||
+  if (profile.schema !== 1 || profile.profile !== PROFILE || profile.version !== install.version ||
     (install.source === "download" && !project && profile.archiveSha256 !== install.archiveSha256) ||
     (project ? !/^[a-f0-9]{64}$/.test(profile.hostSourceSha256 || "") : !hostIdentity) ||
     (installation?.profileSha256 && hash(profilePath) !== installation.profileSha256)) throw new Error("The installed Siglus profile has changed.");
   let files = Object.entries(profile.files || {});
+  let observedManifest = profile;
   if (files.length !== 3 || !["bin/siglus-host", "lib/libsiglus.dylib", "LICENSE-siglus_rs.txt"].every(file => Object.hasOwn(profile.files, file))) throw new Error("The installed Siglus payload is incomplete.");
   if (project) {
     // The selected Builds record binds this host revision and its profile.
@@ -34,9 +38,10 @@ function resolveProfile(install, { verification = "full" } = {}) {
     if (project.id !== "siglus" || nativeApi !== "game_run_entry-v1") throw new Error("The Siglus package uses an unsupported native API.");
     const stored = Bundled.readRegular(manifestPath, Bundled.LIMITS.manifestBytes);
     if (stored.sha256 !== project.manifestSha256 || stored.mode !== 0o644) throw new Error("The installed Siglus package manifest has changed.");
-    const manifest = Bundled.validateManifest(JSON.parse(stored.bytes), {
-      managerId: "siglus", version: install.version, upstreamRevision: install.upstreamRevision, arch: project.arch
+    const manifest = Bundled.validateRuntimeManifest(JSON.parse(stored.bytes), {
+      managerId: "siglus", version: install.version, arch: project.arch
     });
+    observedManifest = manifest;
     if (root !== path.join(install.installDir, "project-payload/files") || manifest.executableRelative !== "bin/siglus-host" ||
         manifest.runtimeFiles?.siglusProfile !== "siglus-profile.json" || manifest.runtimeFiles?.siglusLibrary !== "lib/libsiglus.dylib")
       throw new Error("The Siglus package uses an unsupported native layout.");
@@ -60,11 +65,11 @@ function resolveProfile(install, { verification = "full" } = {}) {
     const file = path.join(root, relative);
     if (!fs.realpathSync(file).startsWith(fs.realpathSync(root) + path.sep) || !/^[a-f0-9]{64}$/.test(expected) || hash(file) !== expected) throw new Error("The installed Siglus payload has changed. Reinstall this version.");
   }
-  const architecture = process.arch === "x64" ? "x86_64" : process.arch;
   const libraryArchitectures = Native.readMachOArchitectures(library, { allowLibrary: true });
-  const needsRosetta = architecture === "arm64" && !libraryArchitectures.includes("arm64") && libraryArchitectures.includes("x86_64");
-  if (!libraryArchitectures.includes(architecture) && !needsRosetta) throw new Error("The Siglus library does not support this Mac's CPU. Reinstall this version.");
-  const value = { ...install, needsRosetta, libraryArchitectures, libraryPath: library, profile, profileSha256: hash(profilePath) };
+  const needsRosetta = imageRequiresRosetta(libraryArchitectures);
+  if (!libraryArchitectures.some(cpu => architectureSupport(cpu).supported)) throw new Error("The Siglus library does not support this Mac's CPU. Reinstall this version.");
+  const value = { ...install, needsRosetta, libraryArchitectures, libraryPath: library, profile, profileSha256: hash(profilePath),
+    sourceIdentity: Catalog.sourceIdentity(project, {manifest: observedManifest, receiptRevision: install.upstreamRevision}) };
   if (verified.size >= 32) verified.delete(verified.keys().next().value);
   verified.set(root, { key, value });
   return value;

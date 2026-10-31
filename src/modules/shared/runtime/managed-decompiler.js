@@ -1,6 +1,5 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const crypto = require("node:crypto");
 const Native = require("./local-native");
 const Custom = require("./custom-runtime");
 const { selectRuntimeVersion } = require("./version-choices");
@@ -8,7 +7,8 @@ const GameData = require("../game-data");
 const Catalog = require("./ilspy-catalog");
 const ToolHost = require("./dotnet-tool-host");
 const { readZipEntries, readZipEntryBuffer } = require("./zip");
-const { downloadToFile, throwIfAborted } = require("./download-utils");
+const Upstream = require("./upstream");
+const { throwIfAborted } = require("./download-utils");
 const { runDownloadTask } = require("./download-manager");
 const { confirmToolInstall } = require("./tool-install");
 const { withRuntimeMutation, withRuntimeUse } = require("../../../core/coordinated-runtime-managers");
@@ -16,7 +16,6 @@ const { runToolCommand } = require("./tool-command");
 const { inspectManagedAssembly } = require("./managed-assembly");
 const Manager = require("../../fna/runtime/manager");
 
-const TOOLS = Catalog.PINS;
 const REQUIRED = ["ilspycmd.dll", "ilspycmd.deps.json", "ilspycmd.runtimeconfig.json", "ICSharpCode.Decompiler.dll"];
 const SAFE_RELATIVE = value => typeof value === "string" && value && !value.includes("\\") && !/[\x00-\x1f]/.test(value) &&
   !path.posix.isAbsolute(value) && value.split("/").every(part => part && part !== "." && part !== "..");
@@ -62,11 +61,11 @@ function resolveTool({ userDataDir, version, verification = "full" }) {
     const pin = pinFor(version, userDataDir), root = installRoot(userDataDir, pin.version);
     const file = path.join(root, "tool.json"), stat = fs.lstatSync(file);
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 256 * 1024) return null;
-    const record = JSON.parse(fs.readFileSync(file, "utf8"));
-    const minimumRuntime = record.minimumRuntime || pin.minimumRuntime || pin.framework.slice(3) + ".0";
+    const record = JSON.parse(fs.readFileSync(file, "utf8")), framework = record.framework || pin.framework;
+    const minimumRuntime = record.minimumRuntime || pin.minimumRuntime || framework.slice(3) + ".0";
     if (record.version !== pin.version || (pin.sha256 && record.archiveSha256 !== pin.sha256) ||
       (pin.sha512 && record.archiveSha512 !== pin.sha512) || record.sourceRevision !== pin.sourceRevision ||
-      (record.framework && record.framework !== pin.framework) || !ToolHost.matchingVersion(pin.framework, minimumRuntime) ||
+      (record.framework && pin.framework && record.framework !== pin.framework) || !ToolHost.matchingVersion(framework, minimumRuntime) ||
       !record.files || Object.keys(record.files).length > 500 || REQUIRED.some(name => !record.files[name])) return null;
     const identities = [];
     for (const [relative, checksum] of Object.entries(record.files)) {
@@ -82,13 +81,19 @@ function resolveTool({ userDataDir, version, verification = "full" }) {
       if (verified.size >= 64) verified.delete(verified.keys().next().value);
       verified.set(root, identity);
     }
-    return { ...record, framework: pin.framework, minimumRuntime,
+    return { ...record, framework, minimumRuntime,
       root, entryPath: path.join(root, "files", "ilspycmd.dll") };
   } catch { return null; }
 }
+// The tool's folder is found in the package, so it may move below
+// tools/<framework>/; the package's own runtime configuration names its .NET.
 function extractPackage(archive, destination, pin) {
-  const entries = readZipEntries(archive)?.entries, prefix = "tools/" + pin.framework + "/any/";
-  if (!Array.isArray(entries) || !entries.length || entries.length > 1000) throw new Error("ILSpy package inventory is invalid.");
+  const entries = readZipEntries(archive)?.entries;
+  if (!Array.isArray(entries) || !entries.length || entries.length > 4000) throw new Error("ILSpy package inventory is invalid.");
+  const located = Catalog.toolDirectories(entries.map(entry => entry.name)).find(item => !pin.framework || item.framework === pin.framework);
+  if (!located) throw new Error("ILSpy package does not contain its command-line tool.");
+  const { prefix, framework } = located;
+  if (!ToolHost.supported(framework)) throw new Error("This ILSpy version requires an unsupported .NET tool host.");
   const names = new Set(); let bytes = 0;
   for (const entry of entries) {
     if (entry.name.endsWith("/")) continue;
@@ -104,25 +109,27 @@ function extractPackage(archive, destination, pin) {
   }
   const tool = inspectManagedAssembly(path.join(destination, "ilspycmd.dll"));
   const engine = inspectManagedAssembly(path.join(destination, "ICSharpCode.Decompiler.dll"));
-  const assemblyVersion = pin.version.split("-")[0], frameworkVersion = pin.framework.slice(3);
-  if (tool.assemblyName !== "ilspycmd" || tool.assemblyVersion !== assemblyVersion ||
-    tool.targetFramework !== ".NETCoreApp,Version=v" + frameworkVersion ||
-    engine.assemblyName !== "ICSharpCode.Decompiler" || engine.assemblyVersion !== assemblyVersion)
-    throw new Error("ILSpy package versions do not match the selected tool.");
+  const frameworkVersion = framework.slice(3);
+  if (tool.assemblyName !== "ilspycmd" || engine.assemblyName !== "ICSharpCode.Decompiler")
+    throw new Error("ILSpy package does not contain its command-line tool.");
   const configPath = path.join(destination, "ilspycmd.runtimeconfig.json"), config = JSON.parse(fs.readFileSync(configPath, "utf8"));
   const options = config.runtimeOptions;
-  if (options?.tfm !== pin.framework || options.framework?.name !== "Microsoft.NETCore.App" ||
-    !/^\d+\.\d+\.\d+$/.test(options.framework.version || "") ||
-    options.framework.version.split(".").slice(0, 2).join(".") !== frameworkVersion)
+  const runtime = options?.framework || (Array.isArray(options?.frameworks) ? options.frameworks.find(item => item?.name === "Microsoft.NETCore.App") : null);
+  if ((options?.tfm && options.tfm !== framework) || runtime?.name !== "Microsoft.NETCore.App" ||
+    !/^\d+\.\d+\.\d+$/.test(runtime.version || "") ||
+    runtime.version.split(".").slice(0, 2).join(".") !== frameworkVersion)
     throw new Error("ILSpy package requires a different .NET framework.");
-  return { framework: pin.framework, minimumRuntime: options.framework.version };
+  return { framework, minimumRuntime: runtime.version };
 }
 function supportedPin(pin) {
   if (pin.installReason) throw new Error(pin.installReason);
-  if (!ToolHost.supported(pin.framework)) throw new Error("This ILSpy version requires an unsupported .NET tool host.");
+  if (pin.framework && !ToolHost.supported(pin.framework)) throw new Error("This ILSpy version requires an unsupported .NET tool host.");
 }
 async function ensureTool(context, version, dependencies = {}) {
-  const requested = [version, Custom.defaultVersion(context.settings, "ilspy", "decompiler")]
+  // A registered tool path is passed on; a saved version applies as the
+  // default, so one that left the list gives way to the manager's default.
+  const saved = Custom.defaultVersion(context.settings, "ilspy", "decompiler");
+  const requested = [version, Custom.isPath(saved) ? saved : null]
     .find(value => typeof value === "string" && value.trim() && value.trim() !== "auto") || null;
   let selected = selectedVersion(context, { version: requested });
   let pin;
@@ -136,7 +143,7 @@ async function ensureTool(context, version, dependencies = {}) {
     await confirmToolInstall(context, { managerId: "ilspy", label: "ILSpy", version: selected, requiresDownload: true,
       installOptions: { sectionId: "decompiler" }, detail: "Required for C# decompilation." });
     if (!pin) {
-      await require("./ilspy-manager").refreshCatalog({ ...context, force: true }, dependencies.catalog || {});
+      await require("./ilspy-manager").refreshCatalog({ ...context, force: true });
       selected = selectedVersion(context, { version: requested });
       if (!selected) throw new Error("No ILSpy versions are available to download.");
       pin = pinFor(selected, context.userDataDir);
@@ -157,16 +164,15 @@ async function installTool(context, pin, dependencies) {
     fs.mkdirSync(parent, { recursive: true }); const temporary = fs.mkdtempSync(path.join(parent, ".ilspy-"));
     try {
       const archive = path.join(temporary, "ilspy.nupkg"), files = path.join(temporary, "files"); fs.mkdirSync(files);
-      await (dependencies.downloadToFile || downloadToFile)(pin.url, archive, { signal, onProgress: task.onProgress });
+      // The package is checked against the size and digest NuGet lists.
+      const listed = Upstream.listedFile({ filename: "ilspycmd." + version + ".nupkg", url: pin.url, bytes: pin.bytes ?? undefined, sha256: pin.sha256,
+        digest: pin.sha512 ? { algorithm: "sha512", value: pin.sha512 } : undefined });
+      if (!listed) throw new Error("Refresh ILSpy versions before installing this version.");
+      const { sha256: archiveSha256 } = await Catalog.source.download(listed, archive, { signal, onProgress: task.onProgress });
       throwIfAborted(signal);
-      if (fs.statSync(archive).size > Catalog.LIMITS.packageBytes || (pin.bytes && fs.statSync(archive).size !== pin.bytes))
-        throw new Error("ILSpy package checksum does not match the selected version.");
-      const archiveSha256 = Native.hashFile(archive), archiveSha512 = pin.sha512
-        ? crypto.createHash("sha512").update(fs.readFileSync(archive)).digest("hex") : null;
-      if ((pin.sha256 && archiveSha256 !== pin.sha256) || (pin.sha512 && archiveSha512 !== pin.sha512))
-        throw new Error("ILSpy package checksum does not match the selected version.");
+      const archiveSha512 = pin.sha512 || null;
       const requirement = (dependencies.extractPackage || extractPackage)(archive, files, pin) ||
-        { framework: pin.framework, minimumRuntime: pin.minimumRuntime || pin.framework.slice(3) + ".0" };
+        { framework: pin.framework, minimumRuntime: pin.minimumRuntime || pin.framework?.slice(3) + ".0" };
       const records = inventory(files);
       if (REQUIRED.some(name => !records[name])) throw new Error("ILSpy package is incomplete.");
       fs.writeFileSync(path.join(temporary, "tool.json"), JSON.stringify({ version, archiveSha256, ...(archiveSha512 ? { archiveSha512 } : {}),
@@ -337,5 +343,5 @@ function revealSource({ entry, context, moduleId }) {
   if (!root || !path.resolve(root).startsWith(parent + path.sep) || !fs.existsSync(path.join(root, "decompile.json"))) throw new Error("Decompile this game first.");
   context.ui?.shell?.showItemInFolder?.(root); return { outputRoot: root };
 }
-module.exports = { TOOLS, selectedVersion, installRoot, resolveTool, listInstalled, ensureTool, resolveHost, ensureHost, inspectCustomTool,
+module.exports = { selectedVersion, installRoot, resolveTool, listInstalled, ensureTool, resolveHost, ensureHost, inspectCustomTool,
   decompileAssembly, revealSource, __test: { pinFor, extractPackage, inventory, supportedPin } };

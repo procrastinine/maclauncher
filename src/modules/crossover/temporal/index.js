@@ -5,7 +5,9 @@ function libraryAdapter(library) {
   if (library?.adapter === "fidelityfx" || name === require("./catalog").FIDELITYFX_PROFILE.library) return FidelityFX;
   return library?.adapter === "xess" || name === "libxess_dx11.dll" ? XeSS : Streamline;
 }
-const { versionAtLeast, systemVersionSync } = require("../../shared/runtime/bundled-native");
+const { systemVersionSync } = require("../../shared/runtime/bundled-native");
+const Host = require("../../shared/runtime/host-capabilities");
+const Requirements = require("../../shared/runtime/feature-requirements");
 const { isAbortError } = require("../../shared/runtime/download-utils");
 const warnGraphics = require("../../shared/graphics-warning");
 const FILES = Object.freeze(["x86_64-windows/d3d11.dll", "x86_64-windows/dxgi.dll", "x86_64-windows/nvngx.dll", "x86_64-unix/winemetal.so"]);
@@ -20,7 +22,8 @@ function digest(file, verify) {
 function adapter(root, { verify = false, macOSVersion = systemVersionSync() } = {}) {
   try {
     const directory = path.join(root, "temporal/dxmt"), record = JSON.parse(fs.readFileSync(path.join(directory, "camera-bridge.json"), "utf8"));
-    if (record.schema !== 1 || record.id !== "dxmt-camera1" || record.architecture !== "x86_64" || record.tableCount !== 146 || !versionAtLeast(macOSVersion, record.minimumMacOS) ||
+    if (record.schema !== 1 || record.id !== "dxmt-camera1" || record.architecture !== "x86_64" || record.tableCount !== 146 ||
+      Requirements.requirementSupport({ minimumMacOS: record.minimumMacOS }, { macOSVersion }).supported === false ||
       !/^[a-f0-9]{64}$/.test(record.base?.nativeSha256 || "") || !/^[a-f0-9]{64}$/.test(record.base?.thunkSha256 || "") ||
       FILES.some(file => !/^[a-f0-9]{64}$/.test(record.files?.[file]) || digest(path.join(directory, file), verify) !== record.files[file])) return null;
     return { directory, id: record.id, tableCount: record.tableCount, base: record.base, identity: crypto.createHash("sha256").update(JSON.stringify(record)).digest("hex"), files: record.files };
@@ -67,10 +70,9 @@ function matchingSupport(context, root, { entry, runtimeId = context.runtimeId |
   const { support, selected: standalone } = supportSelection(entry, context, runtimeId, supportManager, verify, available), wine = wineManager || require("../sikarugir/runtime/manager");
   const pin = support.core.catalog.find(row => row.version === standalone.version);if (!pin) return null;
   if (!standalone.ready && context.userDataDir && support.core.resolveInstalled({ userDataDir: context.userDataDir, version: pin.version, verification: verify ? "full" : "status" })) return null;
-  const other = require("./support-manager").forRuntime(runtimeId === "crossover" ? "sikarugir" : "crossover");
-  const reused = context.userDataDir ? other.core.listInstalled(context.userDataDir).filter(install => install.version === pin.version) : [];
+  // CrossOver and Sikarugir share one support package, then fall back to the
+  // DXMT libraries of an installed Sikarugir engine.
   const choices = [...(standalone.ready ? [{ install: standalone.install, managerId: support.id, baseRoot: standalone.install.baseRoot }] : []),
-    ...reused.map(install => ({ install, managerId: other.id, baseRoot: install.baseRoot })),
     ...(context.userDataDir ? wine.getState({ userDataDir: context.userDataDir }).installed.filter(row => row.ready !== false).map(install => ({ install, managerId: wine.id,
       baseRoot: path.join(install.supportRoot || install.templateRoot || path.join(install.installDir, "support"), "Frameworks/renderer/dxmt/wine") })) : [])];
   for (const choice of choices) {
@@ -82,7 +84,8 @@ function matchingSupport(context, root, { entry, runtimeId = context.runtimeId |
 }
 function resolvePlan(entry, context = {}, { install, runtimeId = context.runtimeId || entry?.runtimeId || "crossover", settings = context.runtimeSettings || {}, host = {}, root, verify = false, allowDownload = false, automatic = false } = {}) {
   try {
-    if ((host.platform || process.platform) !== "darwin" || (host.arch || process.arch) !== "arm64" || !install || !["auto", "dxmt"].includes(settings.graphicsBackend || "auto")) return null;
+    if (Requirements.requirementSupport(Requirements.WINE_TEMPORAL, { ...Host.getHostCapabilities(), ...host }).supported === false ||
+      !install || !["auto", "dxmt"].includes(settings.graphicsBackend || "auto")) return null;
     if ((settings.dllOverrides || []).some(rule => {
       const [names, order] = String(rule).split("=");
       return order?.trim().toLowerCase() !== "b" && order?.trim().toLowerCase() !== "builtin" && names.split(",").some(name => /^(?:\*|d3d10core|d3d11|dxgi|winemetal|nvapi64|nvngx)(?:\.dll)?$/i.test(name.trim()));

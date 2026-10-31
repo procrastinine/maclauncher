@@ -4,7 +4,8 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { toggleLibrarySelection } = require('../src/core/library-selection.mjs');
-const { selectLibraryEntries, findMissingGames, trashLibraryGames } = require('../src/core/library-maintenance');
+const { selectLibraryEntries, missingGamePaths, trashLibraryGames } = require('../src/core/library-maintenance');
+const { checkGameAvailability } = require('../src/core/game-availability');
 
 test('selection toggles individual games and Shift selects ranges in visible sort order', () => {
   const visible = ['c', 'a', 'd', 'b'];
@@ -25,16 +26,22 @@ test('batch requests dedupe selected library paths and reject paths outside the 
   assert.throws(() => selectLibraryEntries(games, [null]), /list of game paths/);
 });
 
-test('missing checks honor selected scope and distinguish inaccessible paths from missing files', t => {
+test('missing checks honor selected scope and distinguish inaccessible paths from missing files', async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maclauncher-library-missing-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const present = path.join(root, 'present');
   const missing = path.join(root, 'missing');
   fs.mkdirSync(present);
   const games = [{ gamePath: present }, { gamePath: missing }];
-  assert.deepEqual(findMissingGames(games, [present]), []);
-  assert.deepEqual(findMissingGames(games, [present, missing]), [missing]);
-  assert.throws(() => findMissingGames(games, [present], () => { throw Object.assign(new Error('Permission denied'), { code: 'EACCES' }); }), /Permission denied/);
+  const check = async (paths, options) => {
+    const entries = selectLibraryEntries(games, paths);
+    return missingGamePaths(entries, await Promise.all(entries.map(entry => checkGameAvailability(entry, options))));
+  };
+  assert.deepEqual(await check([present]), []);
+  assert.deepEqual(await check([present, missing]), [missing]);
+  // Unreadable files are unavailable, but they are not missing.
+  assert.deepEqual(await check([present, missing], { stat: async () => { throw Object.assign(new Error('Permission denied'), { code: 'EACCES' }); } }), []);
+  assert.deepEqual(missingGamePaths(games, [{ reason: 'missing' }, { reason: 'unresponsive' }]), [present]);
 });
 
 test('batch trash reports partial failures, skips missing files, and keeps failed games for retry', async () => {

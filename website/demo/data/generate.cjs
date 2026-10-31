@@ -1,7 +1,9 @@
 // Writes the demo's starting launcher state (state.json) from the launcher's
 // own code: the module registry supplies every game type and its runtime
 // choices, the Node backend each runtime manager's state for an empty profile,
-// and the graphics modules the effect catalog. Run `pnpm run demo:data` in
+// and the graphics modules the effect catalog. A few examples add what an
+// empty profile lacks: a game on a disconnected drive and installed runtime
+// versions, one of them damaged. Run `pnpm run demo:data` in
 // a prepared checkout (one whose included helpers are built) after module,
 // runtime or effect changes; the website build reports stale data.
 "use strict";
@@ -17,6 +19,18 @@ const LIBRARY = "/Users/Shared/Games";
 
 const Modules = require(path.join(repoRoot, "src/modules/registry"));
 const { createBackendOperations, listRuntimeManagers } = require(path.join(repoRoot, "src/core/backend-operations"));
+const GameAvailability = require(path.join(repoRoot, "src/core/game-availability"));
+const { createAppUpdater } = require(path.join(repoRoot, "src/main/app-update"));
+
+// An example game kept on an external drive that is not connected, so the
+// library shows its unavailable state and Locate….
+const EXTERNAL_DRIVE = { moduleId: "unity", folder: "/Volumes/Games" };
+// Example installations of one manager: an older version that is ready, and
+// the default version with damaged files, which Runtimes marks Needs repair
+// and the example game's inspector offers to repair. The demo's Refresh lists
+// the same versions.
+const EXAMPLE_INSTALLS = { managerId: "scummvm", defaultVersion: "2.9.1", installs: [
+  { version: "2.9.1", ready: false, status: "damaged" }, { version: "2.9.0", ready: true, status: "ready" }] };
 
 // Paths from this checkout become the packaged app's; anything else that is
 // not inside the temporary profile describes the build machine and is dropped.
@@ -150,6 +164,23 @@ async function main() {
       catch (error) { gameActions[entry.gamePath] = { ...gameActions[entry.gamePath], [selector.optionsAction]: { error: String(error?.message || error) } }; }
     }
   }
+  // The launcher's own availability check reports the example's files missing
+  // at their saved location.
+  const away = recents.find(entry => entry.moduleId === EXTERNAL_DRIVE.moduleId);
+  if (!away) throw new Error(`The external drive example needs the ${EXTERNAL_DRIVE.moduleId} game type.`);
+  away.gamePath = away.importPath = away.contentRootDir = `${EXTERNAL_DRIVE.folder}/${path.basename(away.gamePath)}`;
+  const { available, reason, message } = GameAvailability.checkGameAvailabilitySync(away, { userDataDir: profile });
+  away.availability = { available, reason, message };
+  const owner = runtimeManagers[EXAMPLE_INSTALLS.managerId];
+  if (!owner) throw new Error(`The example installations need the ${EXAMPLE_INSTALLS.managerId} runtime manager.`);
+  // A manager with a list per CPU names each installation's build, as its
+  // architecture manager does.
+  const cpu = section => section.catalog?.architectureCatalogs && section.automaticArchitecture;
+  const installs = section => EXAMPLE_INSTALLS.installs.map(install => ({ ...install,
+    installDir: path.join(profile, "runtimes", owner.id, install.version), source: "download",
+    ...(cpu(section) ? { architecture: cpu(section), variant: `architecture:${cpu(section)}` } : {}) }));
+  const install = section => ({ ...section, defaultVersion: EXAMPLE_INSTALLS.defaultVersion, installed: installs(section) });
+  runtimeManagers[owner.id] = { ...install(owner), ...(Array.isArray(owner.sections) ? { sections: owner.sections.map(install) } : {}) };
   for (const entry of recents) {
     const info = modules.find(item => item.id === entry.moduleId);
     const graphicsHost = info?.runtime?.entries?.[entry.runtimeId]?.graphicsHost;
@@ -184,6 +215,9 @@ async function main() {
       if (descriptor?.stateAction) await record(info.id, descriptor.stateAction, { refresh: false });
     }
   }
+  // Check for Updates as a new profile shows it: this version, not checked yet.
+  const updater = createAppUpdater({ userDataDir: profile, currentVersion: require(path.join(repoRoot, "package.json")).version,
+    packaged: true, appPath: "/Applications/MacLauncher.app", source: { discover: async () => [] } });
   const state = {
     recents,
     modules,
@@ -194,6 +228,7 @@ async function main() {
     launcherSettings: {},
     running: {},
     downloads: [],
+    appUpdate: updater.snapshot(),
     debug: false,
     logPath: "/Users/Shared/MacLauncher Demo/logs/maclauncher.log"
   };

@@ -6,23 +6,38 @@ const Custom = require("../../shared/runtime/custom-runtime");
 const VineflowerCore = require("./vineflower-runtime");
 const { runDownloadTask } = require("../../shared/runtime/download-manager");
 const { buildRuntimeDownloadMeta } = require("../../shared/runtime/runtime-downloads");
+const Architecture = require("../../shared/runtime/architecture");
 
 const DEFAULT_LINE = 21;
 const SECTION_VINEFLOWER = "vineflower";
-const LINE_SECTIONS = JavaCore.LTS_LINES.map(String);
+// Every Java feature release outside the LTS lines, including future ones.
+const SECTION_OTHER = "other";
+const LINE_SECTIONS = [...JavaCore.LTS_LINES.map(String), SECTION_OTHER];
+const IDLE = Object.freeze({ status: "idle", versions: [], entriesByVersion: {}, fetchedAt: null, source: null, error: null });
 
 const lineCatalogPromises = new Map();
 const lineCatalogPromiseModes = new Map();
 const lineCatalogStates = new Map();
-for (const line of JavaCore.LTS_LINES) {
-  lineCatalogStates.set(line, {
-    status: "idle",
-    versions: [],
-    entriesByVersion: {},
-    fetchedAt: null,
-    source: null,
-    error: null
-  });
+for (const line of JavaCore.LTS_LINES) lineCatalogStates.set(line, { ...IDLE });
+// The other feature releases Adoptium lists, from its release index.
+let otherCatalog = { status: "idle", lines: [], fetchedAt: null, error: null };
+let otherCatalogPromise = null;
+
+function sectionIdForLine(line) {
+  return JavaCore.isLtsLine(line) ? String(Number(line)) : SECTION_OTHER;
+}
+function otherLines(userDataDir) {
+  const installed = userDataDir ? JavaCore.listInstalled(userDataDir).map(row => row.line) : [];
+  return [...new Set([...otherCatalog.lines, ...lineCatalogStates.keys(), ...installed])].filter(line => !JavaCore.isLtsLine(line)).sort((a, b) => b - a);
+}
+// The Other section's catalog: every non-LTS line read this session.
+function otherCatalogState() {
+  const states = [...lineCatalogStates].filter(([line]) => !JavaCore.isLtsLine(line)).map(([, state]) => state);
+  const versions = states.flatMap(state => state.versions || []).sort(JavaCore.compareVersionsDesc);
+  const fetched = states.map(state => state.fetchedAt).filter(Number.isFinite);
+  return { status: otherCatalog.status !== "idle" ? otherCatalog.status : states.some(state => state.status === "success") ? "success" : "idle",
+    versions, entriesByVersion: Object.assign({}, ...states.map(state => state.entriesByVersion || {})),
+    fetchedAt: otherCatalog.fetchedAt || (fetched.length ? Math.max(...fetched) : null), source: null, error: otherCatalog.error, mode: "all" };
 }
 
 let vineflowerCatalogPromise = null;
@@ -37,14 +52,14 @@ let vineflowerCatalogState = {
 
 function normalizeLineInput(input, fallback = DEFAULT_LINE) {
   const value = Number(input);
-  if (Number.isFinite(value) && JavaCore.LTS_LINES.includes(value)) return value;
+  if (Number.isInteger(value) && value > 0 && value <= 999) return value;
   return fallback;
 }
 
 function normalizeSettings(input) {
   const src = input && typeof input === "object" ? input : {};
-  const defaultLine = src.defaultLine != null && JavaCore.LTS_LINES.includes(Number(src.defaultLine)) ? Number(src.defaultLine) : null;
-  const lines = Object.fromEntries(JavaCore.LTS_LINES.map(line => [line, {
+  const defaultLine = src.defaultLine != null && normalizeLineInput(src.defaultLine, null) ? Number(src.defaultLine) : null;
+  const lines = Object.fromEntries([...JavaCore.LTS_LINES, SECTION_OTHER].map(line => [line, {
     defaultVersion: typeof src.lines?.[line]?.defaultVersion === "string" && src.lines?.[line]?.defaultVersion.trim() !== "auto" ? src.lines?.[line]?.defaultVersion.trim() || null : null,
     defaultVariant: src.lines?.[line]?.defaultVariant ? JavaCore.normalizeVariant(src.lines[line].defaultVariant) : JavaCore.defaultVariantForHost()
   }]));
@@ -74,14 +89,14 @@ function normalizeSettings(input) {
 
 function resolveSectionId(sectionId) {
   const section = String(sectionId || "").trim().toLowerCase();
-  if (section === SECTION_VINEFLOWER) return SECTION_VINEFLOWER;
-  if (LINE_SECTIONS.includes(section)) return section;
+  if (section === SECTION_VINEFLOWER || section === SECTION_OTHER) return section;
+  if (normalizeLineInput(section, null)) return sectionIdForLine(section);
   return String(DEFAULT_LINE);
 }
 
 function sectionLine(sectionId) {
   const resolved = resolveSectionId(sectionId);
-  if (resolved === SECTION_VINEFLOWER) return null;
+  if (resolved === SECTION_VINEFLOWER || resolved === SECTION_OTHER) return null;
   return Number(resolved);
 }
 
@@ -92,14 +107,7 @@ function ttlValid(fetchedAt, ttlMs) {
 
 async function refreshLineCatalog({ line, logger, force, latestOnly } = {}) {
   const runtimeLine = normalizeLineInput(line, DEFAULT_LINE);
-  const existing = lineCatalogStates.get(runtimeLine) || {
-    status: "idle",
-    versions: [],
-    entriesByVersion: {},
-    fetchedAt: null,
-    source: null,
-    error: null
-  };
+  const existing = lineCatalogStates.get(runtimeLine) || { ...IDLE };
   const ttlMs = 1000 * 60 * 60 * 6;
   const mode = latestOnly === true ? "latest" : "all";
   if (!force && existing.status === "success" && existing.mode === mode &&
@@ -194,12 +202,39 @@ async function refreshVineflowerCatalog({ logger, force } = {}) {
   return vineflowerCatalogPromise;
 }
 
-async function refreshCatalog({ logger, force, sectionId, latestOnly } = {}) {
-  const section = resolveSectionId(sectionId);
+// Other lists every non-LTS feature release in Adoptium's release index.
+async function refreshOtherCatalog({ logger, force } = {}) {
+  if (otherCatalogPromise) return otherCatalogPromise;
+  const previous = otherCatalog;
+  otherCatalog = { ...otherCatalog, status: "loading", error: null };
+  otherCatalogPromise = (async () => {
+    try {
+      const { lines } = await JavaCore.fetchAvailableLines({ logger });
+      const other = lines.filter(line => !JavaCore.isLtsLine(line));
+      const results = await Promise.allSettled(other.map(line => refreshLineCatalog({ line, logger, force })));
+      const failure = results.find(result => result.status === "rejected");
+      if (failure && results.every(result => result.status === "rejected")) throw failure.reason;
+      otherCatalog = { status: "success", lines: other, fetchedAt: Date.now(), error: null };
+      return otherCatalogState();
+    } catch (error) {
+      otherCatalog = { ...previous, status: "error", error: String(error?.message || error) };
+      throw error;
+    } finally {
+      otherCatalogPromise = null;
+    }
+  })();
+  return otherCatalogPromise;
+}
+
+async function refreshCatalog({ logger, force, sectionId, line, latestOnly } = {}) {
+  const section = String(sectionId || "").trim().toLowerCase();
   if (section === SECTION_VINEFLOWER) {
     return refreshVineflowerCatalog({ logger, force });
   }
-  return refreshLineCatalog({ line: Number(section), logger, force, latestOnly });
+  // Play refreshes only the line it needs; the Other section's Reload reads them all.
+  if (section === SECTION_OTHER) return line ? refreshLineCatalog({ line: normalizeLineInput(line, DEFAULT_LINE), logger, force })
+    : refreshOtherCatalog({ logger, force });
+  return refreshLineCatalog({ line: normalizeLineInput(section, DEFAULT_LINE), logger, force, latestOnly });
 }
 
 function newestInstalled(installed, compareDesc) {
@@ -213,14 +248,14 @@ function newestInstalled(installed, compareDesc) {
 }
 
 function buildLineNotice(line, hostAvailability) {
-  if (process.arch !== "arm64") return null;
+  if (require("../../shared/runtime/host-capabilities").getHostCapabilities().hardwareArch !== "arm64") return null;
   if (Number(line) === 8) {
     if (hostAvailability?.mode === "rosetta") {
       return {
         title: "Java 8 on Apple Silicon",
         lines: [
           { text: "Java 8 installs use Intel (x64) builds and require Rosetta." },
-          { text: "Install Rosetta if launch fails: softwareupdate --install-rosetta", mono: true }
+          { text: "Rosetta installation is offered when this build starts." }
         ]
       };
     }
@@ -241,7 +276,7 @@ function summarizeHostAvailability(entryAssets) {
   const choice = JavaCore.__test.chooseVariantForHost({
     availableVariants: available,
     preferredVariant: null,
-    hostArch: process.arch
+    hostArch: Architecture.selectedArchitecture()
   });
   if (!choice) {
     return {
@@ -292,7 +327,7 @@ function resolveDefaultVariantForLine(variants, preferredVariant) {
   const choice = JavaCore.__test.chooseVariantForHost({
     availableVariants: variants,
     preferredVariant,
-    hostArch: process.arch
+    hostArch: Architecture.selectedArchitecture()
   });
   if (choice?.variant) return choice.variant;
   const ordered = orderLineVariants(variants);
@@ -300,21 +335,17 @@ function resolveDefaultVariantForLine(variants, preferredVariant) {
   return JavaCore.defaultVariantForHost();
 }
 
+// One line's state, or with `line` "other" the Other section's.
 function buildLineState(cfg, userDataDir, line) {
-  const runtimeLine = normalizeLineInput(line, DEFAULT_LINE);
-  const lineCfg = cfg.lines[runtimeLine] || {
+  const other = line === SECTION_OTHER;
+  const runtimeLine = other ? SECTION_OTHER : normalizeLineInput(line, DEFAULT_LINE);
+  const lineCfg = cfg.lines[sectionIdForLine(runtimeLine)] || cfg.lines[runtimeLine] || {
     defaultVersion: null,
     defaultVariant: JavaCore.defaultVariantForHost()
   };
-  const installed = JavaCore.listInstalled(userDataDir, runtimeLine);
-  const catalogState = lineCatalogStates.get(runtimeLine) || {
-    status: "idle",
-    versions: [],
-    entriesByVersion: {},
-    fetchedAt: null,
-    source: null,
-    error: null
-  };
+  const installed = (other ? otherLines(userDataDir) : [runtimeLine]).flatMap(item => JavaCore.listInstalled(userDataDir, item))
+    .map(row => Architecture.tagInstall(row, row.variant));
+  const catalogState = other ? otherCatalogState() : lineCatalogStates.get(runtimeLine) || { ...IDLE };
   const latestInstalled = newestInstalled(installed, JavaCore.compareVersionsDesc);
   const latestAvailable = Array.isArray(catalogState.versions)
     ? catalogState.versions[0] || null
@@ -355,8 +386,11 @@ function buildLineState(cfg, userDataDir, line) {
           mode: "unknown"
         };
 
-  return {
+  const state = {
     line: runtimeLine,
+    launcherArchitecture: Architecture.defaultArchitecture(),
+    defaultArchitecture: resolvedDefaultVariant,
+    architectureVariants: true,
     supportsDefault: true,
     defaultVersion: selectRuntimeVersion({ defaultVersion: lineCfg.defaultVersion, fallback: managerDefaultVersion({
       listed: (catalogState.versions || []).filter(version => availabilityByVersion[version]?.unavailable !== true),
@@ -373,7 +407,7 @@ function buildLineState(cfg, userDataDir, line) {
       status: catalogState.status,
       versions: catalogState.versions,
       fetchedAt: catalogState.fetchedAt,
-      source: `https://github.com/adoptium/temurin${runtimeLine}-binaries/releases`,
+      source: other ? "https://adoptium.net/temurin/releases/" : `https://github.com/adoptium/temurin${runtimeLine}-binaries/releases`,
       error: catalogState.error,
       mode: catalogState.mode || null,
       supportsLatestOnly: false,
@@ -388,6 +422,14 @@ function buildLineState(cfg, userDataDir, line) {
           : false
     }
   };
+  state.catalog.architecture = Architecture.defaultArchitecture();
+  state.catalog.architectureCatalogs = Object.fromEntries(["arm64", "x64"].map(architecture => {
+    // Each CPU's list declares the CPU of its builds, as every runtime catalog does.
+    const versions = (catalogState.versions || []).filter(version => catalogState.entriesByVersion?.[version]?.[architecture]);
+    return [architecture, {...state.catalog, architecture, versions, installableVersions: versions,
+      versionRequirements: Object.fromEntries(versions.map(version => [version, {architecture}]))}];
+  }));
+  return state;
 }
 
 function buildVineflowerState(cfg, userDataDir) {
@@ -427,17 +469,23 @@ function buildVineflowerState(cfg, userDataDir) {
 
 function getState({ settings, userDataDir }) {
   const cfg = normalizeSettings(settings);
-  const lineStates = JavaCore.LTS_LINES.map(line => ({
+  const lineStates = [...JavaCore.LTS_LINES, SECTION_OTHER].map(line => ({
     id: String(line),
-    label: `Java ${line}`,
+    label: line === SECTION_OTHER ? "Other" : `Java ${line}`,
     ...buildLineState(cfg, userDataDir, line)
   }));
 
   const vineflower = buildVineflowerState(cfg, userDataDir);
+  const selectionLines = [...new Set([...otherLines(userDataDir), cfg.defaultLine, ...Object.keys(cfg.lines).map(Number)])]
+    .filter(line => Number.isInteger(line) && line > 0 && !JavaCore.isLtsLine(line));
 
   return {
     defaultLine: cfg.defaultLine,
     lines: Object.fromEntries(lineStates.map(state => [state.line, state])),
+    selectionSections: Object.fromEntries(selectionLines.map(line => [String(line), {
+      id: String(line), label: `Java ${line}`, ...buildLineState(cfg, userDataDir, line)
+    }])),
+    selectionSectionTemplate: { sectionId: SECTION_OTHER, versionSectionBy: "major", label: "Java {section}" },
     vineflower,
     sections: [...lineStates, { id: SECTION_VINEFLOWER, label: "Vineflower", ...vineflower }]
   };
@@ -458,6 +506,7 @@ async function installLineRuntime({
   line,
   version,
   variant,
+  architecture,
   logger,
   onProgress,
   downloads,
@@ -481,8 +530,8 @@ async function installLineRuntime({
   const selected = JavaCore.selectCatalogAsset({
     lineCatalog: lineCatalogStates.get(runtimeLine),
     version: requestedVersion,
-    variant: requestedVariant,
-    hostArch: process.arch,
+    variant: architecture || requestedVariant,
+    hostArch: architecture || Architecture.selectedArchitecture(),
     strictVariant
   });
   if (!selected?.version) {
@@ -506,6 +555,7 @@ async function installLineRuntime({
         line: runtimeLine,
         version: selected.version,
         variant: selected.variant,
+        hostArch: architecture || Architecture.selectedArchitecture(),
         logger,
         onProgress: taskProgress,
         signal: taskSignal && signal ? AbortSignal.any([taskSignal, signal]) : taskSignal || signal,
@@ -567,6 +617,7 @@ async function installRuntime({
   userDataDir,
   version,
   variant,
+  architecture,
   logger,
   onProgress,
   sectionId,
@@ -587,12 +638,21 @@ async function installRuntime({
     });
   }
 
-  const runtimeLine = normalizeLineInput(line || section, DEFAULT_LINE);
+  // An Other version installs into its own major line.
+  let runtimeLine = normalizeLineInput(line, null) || normalizeLineInput(sectionId, null) ||
+    (section === SECTION_OTHER && version ? JavaCore.versionMajor(version) : null);
+  if (!runtimeLine && section === SECTION_OTHER) {
+    await refreshOtherCatalog({ logger, force: true });
+    runtimeLine = JavaCore.versionMajor(otherCatalogState().versions[0] || "") || null;
+    if (!runtimeLine) throw new Error("Adoptium lists no other Java versions for this Mac.");
+  }
+  runtimeLine ||= normalizeLineInput(section, DEFAULT_LINE);
   return installLineRuntime({
     userDataDir,
     line: runtimeLine,
     version,
     variant,
+    architecture,
     strictVariant,
     logger,
     onProgress,
@@ -606,7 +666,8 @@ function uninstallRuntime({ userDataDir, version, variant, installDir, sectionId
   if (section === SECTION_VINEFLOWER) {
     return VineflowerCore.uninstallVersion({ userDataDir, version, installDir });
   }
-  const runtimeLine = normalizeLineInput(line || section, DEFAULT_LINE);
+  const runtimeLine = normalizeLineInput(line, null) || normalizeLineInput(sectionId, null) ||
+    (section === SECTION_OTHER && version ? JavaCore.versionMajor(version) : null) || normalizeLineInput(section, DEFAULT_LINE);
   return JavaCore.uninstallVersion({
     userDataDir,
     line: runtimeLine,
@@ -638,11 +699,11 @@ function updateSettingsAfterInstall(settings, installed, payload) {
     return next;
   }
 
-  const line = sectionLine(section);
-  if (line && installed.version && !normalized.lines[line]?.defaultVersion) {
-    next.lines = { ...next.lines, [line]: { ...normalized.lines[line], defaultVersion: installed.version,
-      defaultVariant: installed.variant || normalized.lines[line].defaultVariant } };
-    if (!normalized.defaultLine) next.defaultLine = line;
+  const line = sectionLine(section), key = line || (section === SECTION_OTHER ? SECTION_OTHER : null);
+  if (key && installed.version && !normalized.lines[key]?.defaultVersion) {
+    next.lines = { ...next.lines, [key]: { ...normalized.lines[key], defaultVersion: installed.version,
+      defaultVariant: installed.variant || normalized.lines[key].defaultVariant } };
+    if (line && !normalized.defaultLine) next.defaultLine = line;
     return next;
   }
   return settings;
@@ -692,9 +753,9 @@ module.exports = {
       return next;
     }
 
-    const line = normalizeLineInput(section, null);
-    if (!line) throw new Error("Choose a Java runtime line.");
+    const line = section === SECTION_OTHER ? SECTION_OTHER : normalizeLineInput(section, DEFAULT_LINE);
     return { ...next, lines: { ...next.lines, [line]: { ...next.lines?.[line],
+      ...(payload?.architecture || payload?.variant ? {defaultVariant: JavaCore.normalizeVariant(payload.architecture || payload.variant)} : {}),
       defaultVersion: payload?.version && payload.version !== "auto" ? JavaCore.normalizeVersion(payload.version) : null } } };
   },
   refreshCatalog,
@@ -704,6 +765,10 @@ module.exports = {
   uninstallRuntime,
   updateSettingsAfterInstall,
   updateSettingsAfterUninstall,
+  sectionIdForLine,
+  // One line's state; an Other line's lists only its own versions.
+  lineState: ({ settings, userDataDir, line }) => buildLineState(normalizeSettings(settings), userDataDir, line),
+  upstream: [JavaCore.upstream, VineflowerCore.source],
   core: {
     java: JavaCore,
     vineflower: VineflowerCore
@@ -721,13 +786,13 @@ Custom.configure(module.exports, {
   defaultsPath: sectionId => sectionId === SECTION_VINEFLOWER ? ["vineflower", "defaultVersion"] : ["lines", sectionId, "defaultVersion"],
   providers: [
     { core: JavaCore, versions: ["normalizeVersion"], directories: ["getInstallDir"],
-      lists: { listInstalled: ({ args }) => args[1] == null ? LINE_SECTIONS : String(JavaCore.normalizeLine(args[1])) },
-      resolves: { resolveBestInstalled: ({ query }) => String(JavaCore.normalizeLine(query.line)) },
+      lists: { listInstalled: ({ args }) => args[1] == null ? LINE_SECTIONS : sectionIdForLine(JavaCore.normalizeLine(args[1])) },
+      resolves: { resolveBestInstalled: ({ query }) => sectionIdForLine(JavaCore.normalizeLine(query.line)) },
       compatible: (install, { query }) => !query.strictVariant || !query.variant || install.variant === JavaCore.normalizeVariant(query.variant) },
     { core: VineflowerCore, versions: ["normalizeVersion"], directories: ["getInstallDir"], lists: { listInstalled: SECTION_VINEFLOWER } }
   ],
-  sectionForEntry: entry => String(entry?.runtimeData?.java?.line || entry?.moduleData?.runtimeLine ||
-    JavaCore.LTS_LINES.find(line => line >= Number(entry?.moduleData?.requiredJava || DEFAULT_LINE)) || DEFAULT_LINE),
+  sectionForEntry: entry => sectionIdForLine(entry?.runtimeData?.java?.line || entry?.moduleData?.runtimeLine ||
+    JavaCore.LTS_LINES.find(line => line >= Number(entry?.moduleData?.requiredJava || DEFAULT_LINE)) || entry?.moduleData?.requiredJava || DEFAULT_LINE),
   selection(install, { entry }) {
     const required = require("./steamworks/runtime").requiredVariant(entry, {
       explicitVariant: JavaCore.normalizeVariant(entry?.runtimeData?.java?.variant), preferredVariant: install.variant
@@ -753,9 +818,9 @@ Custom.configure(module.exports, {
         runtimeVersion = /^JAVA_VERSION="([^"]+)"/m.exec(fs.readFileSync(release, "utf8"))?.[1] || null;
     } catch {}
     const declaredLine = runtimeVersion?.startsWith("1.8.") ? 8 : Number.parseInt(runtimeVersion, 10);
-    const line = sectionLine(sectionId);
-    if (!line || Number.isFinite(declaredLine) && declaredLine !== line)
-      throw new Error(`The selected Java runtime does not belong in the Java ${line || sectionId} list.`);
+    const other = resolveSectionId(sectionId) === SECTION_OTHER, line = other ? declaredLine : sectionLine(sectionId);
+    if (!Number.isFinite(line) || other && JavaCore.isLtsLine(line) || !other && Number.isFinite(declaredLine) && declaredLine !== line)
+      throw new Error(`The selected Java runtime does not belong in the ${other ? "Other" : `Java ${line || sectionId}`} list.`);
     return { ...native, javaPath: native.executablePath, javaHome: home, line,
       variant: native.architecture === "x64" ? "x64" : "arm64", runtimeVersion };
   }

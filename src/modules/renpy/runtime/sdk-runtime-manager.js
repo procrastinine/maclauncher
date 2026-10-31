@@ -236,7 +236,8 @@ module.exports = Custom.configure({
   performInstalledAction,
   updateSettingsAfterInstall,
   updateSettingsAfterUninstall,
-  core: Core
+  core: Core,
+  upstream: [Core.source, Live2D.source]
 }, { inspect: require("./custom-sdk").inspect,
   defaultsPath: sectionId => [sectionId, "defaultVersion"],
   providers: [{ core: Core, lists: { listInstalled: ({ args }) => Number(args[1]) === 7 ? "v7" : "v8" },

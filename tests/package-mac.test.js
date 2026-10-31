@@ -63,3 +63,13 @@ test('package command rejects an inventory flag without a value before running c
   assert.match(result.stderr, /--runtime-inventory requires a value/);
   assert.deepEqual(f.commands(), []);
 });
+
+test('package command builds one app architecture per run', t => {
+  const f = fixture(t);
+  for (const extra of [['--x64'], ['--universal']]) {
+    const result = f.run(extra);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /one architecture per run|separate Apple Silicon and Intel apps/);
+  }
+  assert.deepEqual(f.commands(), []);
+});

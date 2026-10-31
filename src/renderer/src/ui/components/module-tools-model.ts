@@ -11,7 +11,7 @@ export function moduleToolGroups(actions: ModuleUiAction[], groups?: ModuleUiGro
   if (!ungrouped.length) return declared;
   let id = "other-tools";
   for (let index = 2; declared.some(group => group.id === id); index++) id = `other-tools-${index}`;
-  return [...declared, { id, label: "More tools", collapsed: true, actions: ungrouped.map(action => action.id) }];
+  return [...declared, { id, label: "More tools", collapsed: true, generated: true, actions: ungrouped.map(action => action.id) }];
 }
 
 export function hasDisplayValue(value: unknown): boolean {

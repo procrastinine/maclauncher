@@ -5,24 +5,14 @@ const { promisify } = require("node:util");
 const run = promisify(execFile);
 const { createPinnedNativeManager } = require("../../shared/runtime/pinned-native-manager");
 const { createBundledNativeRuntime } = require("../../shared/runtime/bundled-native");
-const { createGithubReleaseDiscovery } = require("../../shared/runtime/github-runtime-catalog");
 const Native = require("../../shared/runtime/local-native");
 const { inspectClassic } = require("../inspect");
 
-async function mapRelease(release, { resolveRevision, sourceUrl }) {
-  const version = release.tag_name.replace(/^v(?=\d)/, "");
-  if (!/^\d+\.\d+\.\d+$/.test(version)) return null;
-  return { version, upstreamVersion: version, upstreamTag: release.tag_name,
-    upstreamRevision: await resolveRevision(release), sourceKind: "release", sourceUrl,
-    publishedAt: release.published_at, backend: "upstream", license: "GPL-2.0-only",
-    localBuild: false, evidence: "historical-windows-release", installReason: "Windows binaries only. A separate Mac runtime is available from MacLauncher Builds." };
-}
-const discoverCatalog = createGithubReleaseDiscovery({ owner: "OpenGMK", repo: "OpenGMK", mapRelease, includePrerelease: true });
 const bundledRuntime = createBundledNativeRuntime({ managerId: "opengmk" });
-const manager = createPinnedNativeManager({ id: "opengmk", label: "OpenGMK", catalog: [],
+// The publisher's releases hold Windows binaries only; Mac builds come from MacLauncher Builds.
+const manager = createPinnedNativeManager({ id: "opengmk", label: "OpenGMK",
   projectBuilds: { projectId: "opengmk", repository: "procrastinine/maclauncher-builds" },
-  distributionRequired: false,
-  discoverCatalog, legacyInstalledRuntime: bundledRuntime,
+  distributionRequired: false, legacyInstalledRuntime: bundledRuntime,
   sourceUrl: "https://github.com/OpenGMK/OpenGMK/releases" });
 
 function inspectSource(dataPath) {
@@ -110,5 +100,5 @@ async function preflight(dataPath, selection, { signal, execute = run } = {}) {
   return { ...inspected, parserAvailable: true, sourceSha256: before };
 }
 
-module.exports = { manager, bundledRuntime, mapRelease, discoverCatalog,
+module.exports = { manager, bundledRuntime,
   inspectSource, parserRuntime, validateReport, preflight };

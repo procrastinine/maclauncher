@@ -3,14 +3,11 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const AppBundle = require("../../shared/runtime/app-bundle");
-const {
-  attachAbortSignal,
-  createAbortError,
-  fetchUrlBuffer,
-  decodeResponseBody: decodeBody,
-  downloadToFile,
-  throwIfAborted
-} = require("../../shared/runtime/download-utils");
+const { readMachOLoadCommands } = require("../../shared/runtime/macho-load-commands");
+const Archive = require("../../shared/runtime/archive");
+const ReleaseFiles = require("../../shared/runtime/release-files");
+const Upstream = require("../../shared/runtime/upstream");
+const { attachAbortSignal, createAbortError, throwIfAborted } = require("../../shared/runtime/download-utils");
 
 const ARCHIVE_URL = "https://godotengine.org/download/archive/";
 const MAX_CATALOG_VERSIONS = 500;
@@ -337,16 +334,18 @@ function archiveSlugFromHref(href) {
   return match?.[1] || "";
 }
 
-function extractArchiveAnchors(html) {
+// Version links of the archive page. Without the archive-version class, as
+// after a site redesign, any link to a version's archive page counts.
+function extractArchiveAnchors(html, { anyClass = false } = {}) {
   const out = [];
   const seen = new Set();
   const text = String(html || "");
   const re = /<a\b[^>]*>/gi;
   let m = null;
   while ((m = re.exec(text))) {
-    if (!tagHasClass(m[0], "archive-version")) continue;
+    if (!anyClass && !tagHasClass(m[0], "archive-version")) continue;
     const slug = archiveSlugFromHref(getTagAttribute(m[0], "href"));
-    if (!slug || seen.has(slug)) continue;
+    if (!slug || seen.has(slug) || anyClass && !parseVersionParts(slug)) continue;
     out.push(slug);
     seen.add(slug);
   }
@@ -407,7 +406,8 @@ function extractArchiveVersions(html, latestOnly) {
       .filter(Boolean);
   }
 
-  const versions = extractArchiveAnchors(html);
+  let versions = extractArchiveAnchors(html);
+  if (!versions.length) versions = extractArchiveAnchors(html, { anyClass: true });
   if (!wantsLatest) return versions;
 
   const seen = new Set();
@@ -421,37 +421,43 @@ function extractArchiveVersions(html, latestOnly) {
   return latest;
 }
 
-async function fetchAvailableVersions({ latestOnly, logger, signal, fetcher = fetchUrlBuffer } = {}) {
+// Godot lists every release on its archive page, grouped by version; each
+// release's own page links its downloads.
+const source = Upstream.index({ locations: [ARCHIVE_URL], parse: ([document], { latestOnly }) =>
+  Array.from(new Set(extractArchiveVersions(document.text, latestOnly === true))).filter(has64BitMacRelease).sort(compareVersionsDesc)
+    .slice(0, MAX_CATALOG_VERSIONS).map(version => ({ version, sourceUrl: new URL(`${version}/`, ARCHIVE_URL).toString() })) });
+
+async function fetchAvailableVersions({ latestOnly, logger, signal } = {}) {
   const wantsLatest = latestOnly === true;
   logger?.info?.(`[godot] fetching archive list from ${ARCHIVE_URL}`);
-  const res = await fetcher(ARCHIVE_URL, { signal });
-  if (res.status !== 200) throw new Error(`Godot archive fetch failed (${res.status})`);
-  const decoded = decodeBody(res.body, res.headers);
-  const html = decoded.toString("utf8");
-  const versions = Array.from(new Set(extractArchiveVersions(html, wantsLatest)))
-    .sort(compareVersionsDesc)
-    .slice(0, MAX_CATALOG_VERSIONS);
-  if (!versions.length) throw new Error("No Godot versions found in archive");
-  return { versions, source: ARCHIVE_URL, mode: wantsLatest ? "latest" : "all" };
+  const rows = await source.discover({ logger, signal, latestOnly: wantsLatest });
+  if (!rows.length) throw new Error("No Godot versions found in archive");
+  return { versions: rows.map(row => row.version), rows, source: ARCHIVE_URL, mode: wantsLatest ? "latest" : "all" };
 }
 
 function normalizeDownloadUrl(raw) {
   return String(raw || "").replace(/&amp;/g, "&");
 }
 
+// Download links: the publisher's download service with its slug and
+// platform, or a direct HTTPS link to an archive file.
 function extractDownloadLinks(html) {
   const out = [];
   const text = String(html || "");
-  const re = /href=["'](https:\/\/downloads\.godotengine\.org\/\?[^"']+)["']/gi;
+  const re = /href=["'](https:\/\/[^"'\s]+)["']/gi;
   let m = null;
   while ((m = re.exec(text))) {
-    if (m[1]) out.push(normalizeDownloadUrl(m[1]));
+    const link = normalizeDownloadUrl(m[1]);
+    if (/^https:\/\/downloads\.godotengine\.org\/\?/.test(link) || Archive.archiveKind(link.split(/[?#]/)[0])) out.push(link);
   }
   return out;
 }
 
+// The Mac editor archive of the selected variant. ZIP comes first, then tar
+// and disk images, so a publisher's change of format is still followed.
 function selectMacDownload(links, variant = DEFAULT_VARIANT) {
   const list = Array.isArray(links) ? links : [];
+  const candidates = [];
   for (const raw of list) {
     let url = null;
     try {
@@ -459,37 +465,60 @@ function selectMacDownload(links, variant = DEFAULT_VARIANT) {
     } catch {
       continue;
     }
-    const slug = url.searchParams.get("slug") || "";
-    const platform = url.searchParams.get("platform") || "";
+    const service = url.hostname === "downloads.godotengine.org";
+    const slug = service ? url.searchParams.get("slug") || "" : path.posix.basename(url.pathname);
+    const platform = service ? url.searchParams.get("platform") || "" : Archive.isMacName(slug.replace(/\./g, "_")) ? "macos" : "";
     if (!slug || !platform) continue;
     const slugLower = slug.toLowerCase();
     const platformLower = platform.toLowerCase();
     const isMac = platformLower.includes("macos") || platformLower.includes("osx");
-    const isZip = slugLower.endsWith(".zip");
+    const kind = Archive.archiveKind(slugLower);
     const isDotNet = slugLower.includes("mono") || slugLower.includes("dotnet");
-    if (!isMac || !isZip || isDotNet !== (resolveVariant(variant) === "mono")) continue;
-    return { url: url.toString(), slug, platform };
+    if (!isMac || !kind || /export_templates|debug_symbols|\.sha|checksum/.test(slugLower) ||
+      isDotNet !== (resolveVariant(variant) === "mono") || /(?:^|\.)32(?:\.|$)/.test(platformLower)) continue;
+    // Godot 2.1 publishes one Intel fat archive; its archive page still names
+    // separate 32/64-bit files that the publisher does not distribute.
+    const releaseVersion = url.searchParams.get("version") || "";
+    if (service && /^2\.1(?:\.|$)/.test(releaseVersion) && /^osx\.(?:32|64)\.zip$/i.test(slug)) {
+      url.searchParams.set("slug", "osx.fat.zip");
+      return { url: url.toString(), slug: "osx.fat.zip", platform };
+    }
+    candidates.push({ url: url.toString(), slug, platform, rank: ["zip", "tar", "dmg"].indexOf(kind) });
   }
-  return null;
+  const [selected] = candidates.sort((a, b) => a.rank - b.rank);
+  return selected ? { url: selected.url, slug: selected.slug, platform: selected.platform } : null;
 }
 
 function selectMacDotNetDownload(links) {return selectMacDownload(links, "mono");}
 
-async function resolveDownloadUrl({ version, variant, logger, signal } = {}) {
+function has64BitMacRelease(version) {
+  const [major = 0, minor = 0, patch = 0] = parseVersionParts(version)?.base || [];
+  return major > 2 || major === 2 && (minor > 0 || patch > 0);
+}
+
+// The Mac editor download of a listed release, read from its release page.
+// Godot 2.0 releases remain in the original publisher repository, whose
+// archive pages name absent files, so their exact release assets are read.
+async function resolveDownloadUrl({ version, variant, sourceUrl, logger, signal } = {}) {
   const v = normalizeVersion(version);
-  const pageUrl = new URL(`${v}/`, ARCHIVE_URL).toString();
-  logger?.info?.(`[godot] fetching downloads page ${pageUrl}`);
-  const res = await fetchUrlBuffer(pageUrl, {
-    headers: { "User-Agent": "MacLauncher" },
-    signal
-  });
-  if (res.status !== 200) throw new Error(`Godot downloads fetch failed (${res.status})`);
-  const decoded = decodeBody(res.body, res.headers);
-  const html = decoded.toString("utf8");
-  const links = extractDownloadLinks(html);
-  const selected = selectMacDownload(links, variant);
-  if (!selected) throw new Error(`macOS ${resolveVariant(variant) === "mono" ? ".NET" : "Standard"} download not found`);
-  return selected;
+  if (!has64BitMacRelease(v)) throw new Error("Godot 1.x and 2.0 have no 64-bit macOS download.");
+  const [major, minor] = parseVersionParts(v).base, wanted = resolveVariant(variant);
+  const early = major === 2 && minor === 0;
+  const page = Upstream.index({ locations: [early ? `https://api.github.com/repos/godotengine/godot/releases/tags/${encodeURIComponent(v)}`
+    : sourceUrl || new URL(`${v}/`, ARCHIVE_URL).toString()], hosts: ["godotengine.org", "github.com"], parse: ([document]) => {
+    if (early) {
+      const release = JSON.parse(document.text);
+      const asset = wanted === "standard" && release.tag_name === v && release.assets?.find(item => /osx(?:\.|_)(?:fat|64)\.zip$/i.test(item.name || ""));
+      return [{ version: v, files: asset ? [{ name: asset.name, url: asset.browser_download_url, bytes: asset.size, digest: asset.digest }] : [] }];
+    }
+    const selected = selectMacDownload(extractDownloadLinks(document.text), wanted);
+    return [{ version: v, files: selected ? [{ name: selected.slug, url: selected.url }] : [] }];
+  } });
+  logger?.info?.(`[godot] reading the ${v} downloads`);
+  const [file] = (await page.discover({ logger, signal }))[0]?.files || [];
+  if (!file) throw new Error(early ? "This Godot release has no supported 64-bit macOS download."
+    : `macOS ${wanted === "mono" ? ".NET" : "Standard"} download not found`);
+  return file;
 }
 
 function runCommand(cmd, args, options) {
@@ -526,9 +555,8 @@ function runCommand(cmd, args, options) {
   });
 }
 
-async function extractZip(zipPath, destDir, signal) {
-  const ditto = fs.existsSync("/usr/bin/ditto") ? "/usr/bin/ditto" : "ditto";
-  await runCommand(ditto, ["-x", "-k", zipPath, destDir], { signal });
+function extractZip(zipPath, destDir, signal) {
+  return ReleaseFiles.extractArchive(zipPath, destDir, signal);
 }
 
 async function copyBundle(src, dest, signal) {
@@ -536,28 +564,33 @@ async function copyBundle(src, dest, signal) {
   await runCommand(ditto, [src, dest], { signal });
 }
 
-async function installVersion({ userDataDir, version, variant, logger, onProgress, signal } = {}) {
+async function installVersion({ userDataDir, version, variant, sourceUrl, logger, onProgress, signal } = {}) {
   const v = normalizeVersion(version);
   const resolvedVariant = resolveVariant(variant);
   const installDir = getInstallDir({ userDataDir, version: v, variant: resolvedVariant });
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-godot-"));
-  const zipPath = path.join(tmpDir, `godot-${v}-${resolvedVariant}.zip`);
+  let zipPath = path.join(tmpDir, `godot-${v}-${resolvedVariant}.zip`);
   const extractDir = path.join(tmpDir, "extract");
   ensureDir(extractDir);
 
   try {
-    const download = await resolveDownloadUrl({ version: v, variant: resolvedVariant, logger, signal });
+    const download = await resolveDownloadUrl({ version: v, variant: resolvedVariant, sourceUrl, logger, signal });
+    // The archive keeps the published file's format.
+    zipPath = path.join(tmpDir, `godot-${v}-${resolvedVariant}${ReleaseFiles.archiveFormat(download.name) || ".zip"}`);
     logger?.info?.(`[godot] downloading ${download.url}`);
-    await downloadToFile(download.url, zipPath, {
-      headers: { "User-Agent": "MacLauncher" },
-      onProgress,
-      signal
-    });
+    const { sha256, integrity } = await source.download(download, zipPath, { onProgress, signal });
     throwIfAborted(signal);
     await extractZip(zipPath, extractDir, signal);
 
     const appPath = findAppBundle(extractDir, resolvedVariant);
     if (!appPath) throw new Error("Godot app bundle not found in zip");
+    const executable = AppBundle.resolveAppBundleExecutablePath(appPath);
+    const architectures = readMachOLoadCommands(executable).architectures;
+    const selected = require("../../shared/runtime/architecture").selectedArchitecture();
+    const nativeArch = selected === "x64" ? "x86_64" : selected;
+    if (!architectures.includes(nativeArch) && !(nativeArch === "arm64" && architectures.includes("x86_64"))) {
+      throw new Error("The Godot download has no supported 64-bit executable for this Mac.");
+    }
 
     safeRm(installDir);
     ensureDir(installDir);
@@ -567,9 +600,12 @@ async function installVersion({ userDataDir, version, variant, logger, onProgres
     writeInstallMeta(installDir, {
       version: v,
       variant: resolvedVariant,
+      architectures,
       appName: path.basename(destAppPath),
       source: "godotengine.org",
       downloadUrl: download.url,
+      archiveSha256: sha256,
+      integrity,
       installedAt: new Date().toISOString()
     });
 
@@ -610,7 +646,9 @@ module.exports = {
   resolveDownloadUrl,
   installVersion,
   uninstallVersion,
+  source,
   __test: {
+    findAppBundle,
     parseArchiveSections,
     extractArchiveVersions,
     extractDownloadLinks,

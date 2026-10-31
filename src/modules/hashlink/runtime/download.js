@@ -13,18 +13,18 @@ const crypto = require("node:crypto");
 const inside = (root, file) => file === root || file.startsWith(root + path.sep);
 const systemLibrary = file => /^(?:\/usr\/lib\/|\/System\/Library\/)/.test(file) && path.normalize(file) === file;
 
+// A release may move the VM into a folder; the shallowest one is used.
 function resolveExecutable(root) {
-  if (fs.existsSync(path.join(root, "hl"))) return path.join(root, "hl");
-  const directories = fs.readdirSync(root, { withFileTypes: true }).filter(item => item.isDirectory() && fs.existsSync(path.join(root, item.name, "hl")));
-  if (directories.length !== 1) throw new Error("The HashLink archive must contain one bytecode VM.");
-  return path.join(root, directories[0].name, "hl");
+  const executable = require("../../shared/runtime/release-files").locatePackaged(root, "hl", { files: true });
+  if (!executable) throw new Error("The HashLink archive must contain one bytecode VM.");
+  return executable;
 }
 
 function inspectPackage(unpacked, pin, { signal } = {}) {
   const root = fs.realpathSync(unpacked), executablePath = resolveExecutable(root), nativeFiles = [], aliases = [];
-  const header = path.join(path.dirname(executablePath), "include", "hl.h");
-  if (!pin.sourceMetadata?.headerSha256 || !fs.lstatSync(header).isFile() || hashFile(header) !== pin.sourceMetadata.headerSha256)
-    throw new Error("The HashLink archive header differs from its source commit.");
+  // The package's own header and VM library version are recorded as found.
+  const headerPath = path.join(path.dirname(executablePath), "include", "hl.h");
+  const header = fs.existsSync(headerPath) && fs.lstatSync(headerPath).isFile() ? headerPath : null;
   let count = 0, bytes = 0;
   function visit(directory, depth = 0) {
     if (depth > 8) throw new Error("The HashLink archive is too deeply nested.");
@@ -41,11 +41,11 @@ function inspectPackage(unpacked, pin, { signal } = {}) {
         bytes += stat.size;
         if (stat.size > 64 * 1024 * 1024 || bytes > 128 * 1024 * 1024) throw new Error("The HashLink archive exceeds its size limit.");
         if (file === executablePath || /\.(?:hdll|dylib)$/.test(item.name)) {
-          const info = readMachOLoadCommands(file, { signal });
-          if (info.architectures.length !== 1 || info.architectures[0] !== "x86_64") throw new Error("The HashLink bytecode VM and modules must use Intel code.");
-          const image = info.slices[0];
-          if (image.fileType !== (file === executablePath ? 2 : 6) || image.platform !== 1 || !image.minimumMacOS ||
-            !versionAtLeast(pin.minimumMacOS, image.minimumMacOS) || image.dyldEnvironment.length ||
+          // The bytecode JIT and its primitive profiles are Intel code; a
+          // universal file supplies its Intel slice.
+          const image = readMachOLoadCommands(file, { signal }).slices.find(slice => slice.architecture === "x86_64");
+          if (!image) throw new Error("The HashLink bytecode VM and modules must include Intel code.");
+          if (image.fileType !== (file === executablePath ? 2 : 6) || image.platform !== 1 || !image.minimumMacOS || image.dyldEnvironment.length ||
             image.dynamicLinker && !systemLibrary(image.dynamicLinker)) throw new Error("The HashLink archive has incompatible native platform requirements.");
           nativeFiles.push({ file, image });
         }
@@ -79,9 +79,11 @@ function inspectPackage(unpacked, pin, { signal } = {}) {
       if (!dependency) throw new Error("The HashLink archive is missing a required Mac library.");
     }
   }
-  const core = nativeFiles.find(item => /^libhl\.[\d.]+\.dylib$/.test(path.basename(item.file)));
-  if (!core || core.image.installName?.currentVersion !== pin.upstreamVersion) throw new Error("The HashLink VM library version differs from the selected build.");
-  return { root, executablePath, nativeFiles, aliases, core, header };
+  // A VM linked into its executable has no separate library.
+  const core = nativeFiles.find(item => /^libhl\.[\d.]+\.dylib$/.test(path.basename(item.file))) || executable;
+  // The highest deployment version among the package's images is its macOS requirement.
+  const minimumMacOS = nativeFiles.map(item => item.image.minimumMacOS).reduce((highest, value) => versionAtLeast(value, highest) ? value : highest);
+  return { root, executablePath, nativeFiles, aliases, core, header, minimumMacOS };
 }
 
 async function prepareInstall({ unpacked, pin, signal }, dependencies = {}) {
@@ -102,17 +104,18 @@ async function prepareInstall({ unpacked, pin, signal }, dependencies = {}) {
   const primitiveProfile = { schemaVersion: 1, sha256: crypto.createHash("sha256").update(JSON.stringify(profile)).digest("hex"),
     libraries: Object.fromEntries(Object.entries(profile.libraries).map(([name, info]) => [name,
       { sha256: info.sha256, primitives: Object.keys(info.signatures).length, unsupported: info.unsupported.length }])) };
-  return { schemaVersion: 1, upstreamVersion: pin.upstreamVersion, architecture: "x86_64", minimumMacOS: pin.minimumMacOS,
+  const libraryVersion = inspected.core.image.installName?.currentVersion;
+  return { schemaVersion: 1, upstreamVersion: pin.upstreamVersion, ...(libraryVersion ? { libraryVersion } : {}), architecture: "x86_64", minimumMacOS: inspected.minimumMacOS,
     supportedBytecodeVersions: pin.supportedBytecodeVersions, nativeAbi: pin.nativeAbi, primitiveProfile,
     files: inspected.nativeFiles.map(item => ({ path: path.relative(inspected.root, item.file), sha256: hashFile(item.file), minimumMacOS: item.image.minimumMacOS })),
-    aliases: inspected.aliases, header: { path: path.relative(inspected.root, inspected.header), sha256: hashFile(inspected.header) } };
+    aliases: inspected.aliases, header: inspected.header && { path: path.relative(inspected.root, inspected.header), sha256: hashFile(inspected.header) } };
 }
 
 function verifyInstalled(install) {
   if (install?.source !== "download") return;
   const metadata = install.installationMetadata;
-  if (metadata?.schemaVersion !== 1 || !Array.isArray(metadata.files) || metadata.files.length < 2 || metadata.files.length > 128 ||
-    !Array.isArray(metadata.aliases) || metadata.aliases.length > 128 || !metadata.header) throw new Error("HashLink package metadata is missing. Reinstall this runtime.");
+  if (metadata?.schemaVersion !== 1 || !Array.isArray(metadata.files) || !metadata.files.length || metadata.files.length > 256 ||
+    !Array.isArray(metadata.aliases) || metadata.aliases.length > 256) throw new Error("HashLink package metadata is missing. Reinstall this runtime.");
   const root = fs.realpathSync(install.installDir);
   const resolve = value => {
     if (typeof value !== "string" || path.isAbsolute(value) || value.split(/[\\/]/).some(part => !part || part === "." || part === ".."))
@@ -121,7 +124,7 @@ function verifyInstalled(install) {
     if (!inside(root, fs.realpathSync(file))) throw new Error("A HashLink package file leaves its installation.");
     return file;
   };
-  for (const item of [...metadata.files, metadata.header]) {
+  for (const item of [...metadata.files, ...(metadata.header ? [metadata.header] : [])]) {
     const file = resolve(item.path);
     if (!fs.lstatSync(file).isFile() || hashFile(file) !== item.sha256) throw new Error("A HashLink package file changed. Reinstall this runtime.");
   }

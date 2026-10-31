@@ -30,9 +30,9 @@ function updateModuleData(entry, patch) {
 function formatBundleLabel(packagedType) {
   const raw = String(packagedType || "").trim();
   if (!raw) return null;
-  if (raw === "zip-exe") return "zip exe";
-  if (raw === "package.nw") return "package.nw";
-  if (raw === "asar") return "asar";
+  if (raw === "zip-exe") return "Inside the game executable";
+  if (raw === "package.nw") return "package.nw archive";
+  if (raw === "asar") return "ASAR archive";
   return raw.replace(/[-_]+/g, " ");
 }
 

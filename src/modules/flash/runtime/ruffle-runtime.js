@@ -6,11 +6,12 @@ const { spawn } = require("node:child_process");
 const {
   attachAbortSignal,
   createAbortError,
-  downloadToFile,
   throwIfAborted
 } = require("../../shared/runtime/download-utils");
 
-const Releases = require("../../shared/runtime/github-releases");
+const Archive = require("../../shared/runtime/archive");
+const ReleaseFiles = require("../../shared/runtime/release-files");
+const Upstream = require("../../shared/runtime/upstream");
 
 const REPO_OWNER = "ruffle-rs";
 const REPO_NAME = "ruffle";
@@ -43,9 +44,18 @@ function parseNightlyStamp(version) {
   return Number.isFinite(stamp) ? stamp : null;
 }
 
+// The `x.y.z` in a release tag, if it has one.
+function normalizeSemver(input) {
+  return /(\d+\.\d+\.\d+)/.exec(String(input || "").trim().replace(/^v/i, ""))?.[1] || null;
+}
+function parseSemver(value) {
+  const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(value || "").trim());
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+
 function compareSemver(a, b) {
-  const pa = Releases.parseSemver(a);
-  const pb = Releases.parseSemver(b);
+  const pa = parseSemver(a);
+  const pb = parseSemver(b);
   if (!pa || !pb) return null;
   for (let i = 0; i < 3; i += 1) {
     if (pa[i] !== pb[i]) return pa[i] - pb[i];
@@ -141,24 +151,6 @@ function runCommand(cmd, args, options) {
   });
 }
 
-async function extractArchive(archivePath, destDir, signal) {
-  const lower = String(archivePath || "").toLowerCase();
-  if (lower.endsWith(".zip")) {
-    const ditto = fs.existsSync("/usr/bin/ditto") ? "/usr/bin/ditto" : "ditto";
-    await runCommand(ditto, ["-x", "-k", archivePath, destDir], { signal });
-    return;
-  }
-  if (lower.endsWith(".tar.gz") || lower.endsWith(".tgz")) {
-    await runCommand("/usr/bin/tar", ["-xzf", archivePath, "-C", destDir], { signal });
-    return;
-  }
-  if (lower.endsWith(".tar")) {
-    await runCommand("/usr/bin/tar", ["-xf", archivePath, "-C", destDir], { signal });
-    return;
-  }
-  throw new Error(`Unsupported Ruffle archive format: ${path.basename(archivePath)}`);
-}
-
 async function copyBundle(src, dest, signal) {
   const ditto = fs.existsSync("/usr/bin/ditto") ? "/usr/bin/ditto" : "ditto";
   await runCommand(ditto, [src, dest], { signal });
@@ -221,21 +213,12 @@ function findAppBundle(rootDir, preferredName = "Ruffle.app") {
   return scored[0]?.path || null;
 }
 
+// Any archive format the publisher switches to; source, debug and checksum
+// files are not the desktop application.
 function isMacArchiveAsset(name) {
   const lower = String(name || "").toLowerCase();
-  if (lower.includes("source") || lower.includes("reproducible")) return false;
-  const isMac =
-    lower.includes("macos") ||
-    lower.includes("darwin") ||
-    lower.includes("osx") ||
-    lower.includes("mac");
-  if (!isMac) return false;
-  return (
-    lower.endsWith(".tar.gz") ||
-    lower.endsWith(".tgz") ||
-    lower.endsWith(".zip") ||
-    lower.endsWith(".tar")
-  );
+  if (/source|reproducible|debug|symbols/.test(lower) || !Archive.archiveKind(lower)) return false;
+  return lower.includes("macos") || lower.includes("darwin") || lower.includes("osx") || lower.includes("mac");
 }
 
 function scoreMacArchiveAsset(name) {
@@ -275,7 +258,7 @@ function normalizeReleaseVersion(release) {
   const raw = String(release?.tag_name || release?.name || "").trim();
   if (!raw) return null;
 
-  const semver = Releases.normalizeSemver(raw);
+  const semver = normalizeSemver(raw);
   if (semver) {
     try {
       return normalizeVersion(semver);
@@ -292,76 +275,25 @@ function normalizeReleaseVersion(release) {
   }
 }
 
-function collectCatalog(releases) {
-  const sorted = Releases.sortReleases(releases || []);
-  const versions = [];
+// Ruffle publishes dated nightlies and occasional tagged releases, each with
+// one desktop archive for macOS.
+const source = Upstream.github({ repository: "ruffle-rs/ruffle", prerelease: true, recognize: release => {
+  const version = normalizeReleaseVersion(release), asset = selectReleaseAsset(release);
+  return version && asset ? { version, details: { releaseTag: String(release?.tag_name || release?.name || "") || null }, assets: [asset] } : [];
+} });
+
+// Versions newest first, each with the listed file to download.
+async function fetchAvailableVersions({ logger, latestOnly, limit, signal } = {}) {
   const releasesByVersion = {};
-
-  for (const release of sorted) {
-    const version = normalizeReleaseVersion(release);
-    if (!version) continue;
-    if (releasesByVersion[version]) continue;
-
-    const asset = selectReleaseAsset(release);
-    if (!asset) continue;
-
-    releasesByVersion[version] = {
-      version,
-      releaseTag: String(release?.tag_name || release?.name || "") || null,
-      publishedAt: release?.published_at || release?.created_at || null,
-      assetName: String(asset.name || "") || null,
-      downloadUrl: String(asset.browser_download_url || "") || null
-    };
-    versions.push(version);
+  for (const row of await source.discover({ logger, signal })) {
+    if (releasesByVersion[row.version] || !row.files.length) continue;
+    releasesByVersion[row.version] = { version: row.version, releaseTag: row.details?.releaseTag || null,
+      publishedAt: row.publishedAt || null, file: row.files[0] };
   }
-
-  versions.sort(compareVersionsDesc);
-
-  return {
-    versions,
-    releasesByVersion
-  };
-}
-
-async function fetchAvailableVersions({
-  logger,
-  latestOnly,
-  maxPages,
-  limit
-} = {}) {
-  const wantsLatest = latestOnly === true;
-  const pageCap = Number.isFinite(Number(maxPages)) ? Math.max(1, Number(maxPages)) : wantsLatest ? 1 : 5;
-
-  const releases = await Releases.fetchGithubReleases({
-    owner: REPO_OWNER,
-    repo: REPO_NAME,
-    logger,
-    includePrerelease: true,
-    maxPages: pageCap
-  });
-
-  const catalog = collectCatalog(releases);
-  if (!catalog.versions.length) {
-    throw new Error("No macOS Ruffle releases were found.");
-  }
-
-  let versions = catalog.versions;
-  if (wantsLatest) {
-    const cap = Number.isFinite(Number(limit)) ? Math.max(1, Number(limit)) : 1;
-    versions = versions.slice(0, cap);
-  }
-
-  const releasesByVersion = {};
-  for (const version of versions) {
-    const record = catalog.releasesByVersion[version];
-    if (record) releasesByVersion[version] = { ...record };
-  }
-
-  return {
-    versions,
-    releasesByVersion,
-    source: SOURCE_LABEL
-  };
+  let versions = Object.keys(releasesByVersion).sort(compareVersionsDesc);
+  if (!versions.length) throw new Error("No macOS Ruffle releases were found.");
+  if (latestOnly === true) versions = versions.slice(0, Number.isFinite(Number(limit)) ? Math.max(1, Number(limit)) : 1);
+  return { versions, releasesByVersion: Object.fromEntries(versions.map(version => [version, releasesByVersion[version]])), source: SOURCE_LABEL };
 }
 
 function listInstalled(userDataDir) {
@@ -457,12 +389,12 @@ async function installVersion({
       ? releasesByVersion[v] || null
       : null;
 
-  if (!selected?.downloadUrl) {
-    const fetched = await fetchAvailableVersions({ logger, latestOnly: false, maxPages: 20 });
+  if (!selected?.file) {
+    const fetched = await fetchAvailableVersions({ logger, latestOnly: false, signal });
     selected = fetched.releasesByVersion?.[v] || null;
   }
 
-  if (!selected?.downloadUrl) {
+  if (!selected?.file) {
     throw new Error(`Ruffle version ${v} was not found in the remote catalog.`);
   }
 
@@ -480,21 +412,17 @@ async function installVersion({
   }
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-ruffle-"));
-  const archiveName = selected.assetName || `ruffle-${v}-macos.tar.gz`;
+  const archiveName = selected.file.name;
   const archivePath = path.join(tmpDir, archiveName);
   const extractDir = path.join(tmpDir, "extract");
   ensureDir(extractDir);
 
   try {
-    logger?.info?.(`[ruffle] downloading ${selected.downloadUrl}`);
-    await downloadToFile(selected.downloadUrl, archivePath, {
-      headers: { "User-Agent": "MacLauncher" },
-      onProgress,
-      signal
-    });
-
+    logger?.info?.(`[ruffle] downloading ${selected.file.url}`);
+    // Checked against the digest GitHub publishes, or recorded when it lists none.
+    const { sha256: archiveSha256, integrity } = await source.download(selected.file, archivePath, { onProgress, signal });
     throwIfAborted(signal);
-    await extractArchive(archivePath, extractDir, signal);
+    await ReleaseFiles.extractArchive(archivePath, extractDir, signal);
 
     const appPath = findAppBundle(extractDir, "Ruffle.app");
     if (!appPath) {
@@ -512,8 +440,10 @@ async function installVersion({
       version: v,
       source: SOURCE_LABEL,
       releaseTag: selected.releaseTag || null,
-      assetName: selected.assetName || archiveName,
-      downloadUrl: selected.downloadUrl,
+      assetName: archiveName,
+      downloadUrl: selected.file.url,
+      archiveSha256,
+      integrity,
       appName: path.basename(destAppPath),
       installedAt: new Date().toISOString()
     });
@@ -550,12 +480,12 @@ module.exports = {
   resolveInstalled,
   installVersion,
   uninstallVersion,
+  source,
   __test: {
     parseNightlyStamp,
     isMacArchiveAsset,
     scoreMacArchiveAsset,
     selectReleaseAsset,
-    collectCatalog,
     findAppBundle,
     compareVersions
   }

@@ -189,7 +189,7 @@ test("Unity Steam preparation preserves shaders/backend limits and incomplete AP
   const root = temporary(t), source = path.join(root, "original"); fs.mkdirSync(source);
   const game = unityGame(source, { nativeImports: [{ library: "steam_api", name: "SteamAPI_Init" }], apis: [2, 18] });
   const entry = { moduleData: { dataRoot: game.data } };
-  assert.throws(() => UnityLaunch.preflight(entry), /Direct3D shaders/);
+  assert.throws(() => UnityLaunch.preflight(entry), /shaders only for Direct3D 11 and Direct3D 12/);
   const info = UnityDetect.inspectData(game.data); info.managedDependencyInspection = { complete: false, issues: [{ reason: "unknown metadata" }] };
   await assert.rejects(UnitySteam.prepareLaunch({ info, entry, context: {}, selection: {}, baseEnvironment: {} }), /inspected completely/);
 });

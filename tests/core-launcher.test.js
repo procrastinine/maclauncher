@@ -443,7 +443,8 @@ test("Play prepares a compatible runtime once without changing global defaults o
   } });
   const entry = await launcher.resolveEntry(gamePath);
   const first = launcher.launchEntry(entry), second = launcher.launchEntry(entry);
-  await new Promise(resolve => setImmediate(resolve));
+  // Play first confirms the game's files are reachable, then prepares once.
+  for (let attempt = 0; attempt < 200 && !installs; attempt++) await new Promise(resolve => setTimeout(resolve, 5));
   assert.equal(installs, 1);
   GameStore.setGameNotes(userDataDir, entry.gameId, "Notes edited while installing");
   release();

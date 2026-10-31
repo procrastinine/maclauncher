@@ -4,16 +4,6 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 
-export function developmentContentEnvironment(environment, root) {
-  const guard = path.join(root, 'scripts', 'runtime-content-register.cjs');
-  return { ...environment,
-    NODE_OPTIONS: [environment.NODE_OPTIONS, '--require=' + JSON.stringify(guard)].filter(Boolean).join(' '),
-    MACLAUNCHER_DEV_CONTENT_GUARD: '1',
-    MACLAUNCHER_DEV_ORIGINAL_NODE_OPTIONS_PRESENT: Object.hasOwn(environment, 'NODE_OPTIONS') ? '1' : '0',
-    MACLAUNCHER_DEV_ORIGINAL_NODE_OPTIONS: environment.NODE_OPTIONS || ''
-  };
-}
-
 // Vite's lockfile hash cannot notice a replaced dependency tree with the same
 // lockfile. A cache for the actual installed layout also avoids stale React
 // resolutions after moving a local node_modules link. No package is installed.
@@ -97,11 +87,18 @@ export async function startLauncherDevServer({ root, host = "127.0.0.1", port = 
   const createServer = createViteServer || (await import("vite")).createServer;
   const server = await createServer({
     configFile: path.join(root, "vite.config.mjs"),
+    plugins: [{ name: "development-script-policy", transformIndexHtml() {
+      return [{ tag: "meta", attrs: { "http-equiv": "Content-Security-Policy",
+        content: "script-src 'self' 'unsafe-inline'" }, injectTo: "head-prepend" }];
+    } }],
     cacheDir: path.join(os.homedir(), "Library", "Caches", "maclauncher", "vite",
       createHash("sha256").update(path.resolve(root)).digest("hex").slice(0, 16), dependencyLayoutKey(root)),
     // Vite selects another port when occupied. The existing process stays alone,
     // and Electron always receives this owned server's actual bound port.
-    server: { host, port, strictPort: false }
+    server: { host, port, strictPort: false,
+      // React's dev preamble is inline; the renderer does not need eval.
+      headers: { "Content-Security-Policy": "script-src 'self' 'unsafe-inline'" }
+    }
   });
   const controller = new AbortController();
   let timer;

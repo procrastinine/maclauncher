@@ -1,37 +1,24 @@
-# Intel runtime prerequisite
+# Rosetta
 
-`src/modules/shared/runtime/rosetta.js` is a UI-independent Node service for Apple's
-Intel translation component. No probe, download, or installation runs when it is imported.
-It is relevant on an Apple Silicon macOS host; Intel and non-macOS hosts skip it.
+Rosetta is Apple's translation component that runs Intel (x86_64) programs on Apple silicon. MacLauncher runtimes that exist only as Intel builds need it, and on Intel Macs and hosts other than macOS the check is skipped.
 
-Play can request installation when an Intel runtime needs it. The shared consent adapter
-receives a prerequisite plan with `licenseRequired`, Apple's license URL, and the
-**Agree and Install** label. Ordinary download approval does not accept the license:
-the adapter must return `{ approved: true, licenseAccepted: true }`. Declining cancels
-the launch. Concurrent launches share one consent and installation request.
+## Installation during Play
 
-After consent, the backend invokes `/usr/sbin/softwareupdate --install-rosetta
---agree-to-license`. If administrator authorization is required, macOS displays its
-own authorization dialog; launcher code never receives or stores a password. Only
-Apple's system installer is used. Its location and the manual fallback are documented
-in [Apple's installation guide](https://support.apple.com/en-us/102527).
+When an Intel runtime needs Rosetta and it is missing, Play asks to install it. The prompt includes Apple's license and an **Agree and Install** button; approving an ordinary download does not accept the license. Declining cancels the launch. Concurrent launches share one prompt and one installation.
 
-Rosetta lives under `/Library/Apple/`, rather than the launcher data directory. The
-read-only status exposes the actual `com.apple.pkg.RosettaUpdateAuto` receipt version,
-installation date, macOS product version/build, and evidence source. A macOS version
-is never reported as a Rosetta package version. Apple supplies the compatible system
-component; this is not an independent launcher release catalog. Installed availability
-uses a cached local check, and package evidence is read lazily. Missing availability is
-briefly cached so another app's installation can be detected. After installation, an
-Intel system executable is probed before the pending game resumes.
+After consent, MacLauncher runs `/usr/sbin/softwareupdate --install-rosetta --agree-to-license`, Apple's own installer. If administrator authorization is needed, macOS shows its own authorization dialog; the launcher never receives or stores a password. After the installation, MacLauncher runs an Intel system executable to confirm that Rosetta works before the game starts. An installer exit code alone does not count as a working installation. [Apple's installation guide](https://support.apple.com/en-us/102527) describes where Rosetta is installed and how to install it manually.
 
-If installation cannot finish, the error provides the exact fallback: open Terminal
-from Applications → Utilities (`/System/Applications/Utilities/Terminal.app`), run
-`/usr/sbin/softwareupdate --install-rosetta`, and follow Apple's license/authorization
-prompts. System installation is verified; an installer exit code alone does not count
-as a working prerequisite.
+If the installation cannot finish, the error gives the manual steps: open Terminal from Applications → Utilities (`/System/Applications/Utilities/Terminal.app`), run `/usr/sbin/softwareupdate --install-rosetta`, and follow Apple's license and authorization prompts.
 
-## Core and manager integration
+## Status
+
+Rosetta is a system component installed under `/Library/Apple/`, outside the launcher's data directory. Apple supplies the compatible version, and MacLauncher has no release catalog for it. The read-only status reports the version from the installed `com.apple.pkg.RosettaUpdateAuto` package receipt, the installation date, the macOS product version and build, and where the evidence came from. A macOS version is never reported as a Rosetta version.
+
+Availability is a cached local check, and the package receipt is read only when needed. A missing result is cached briefly, so an installation made by another app is noticed.
+
+## Implementation
+
+`src/modules/shared/runtime/rosetta.js` is a Node service that does not depend on the UI. Importing it runs no probe, download or installation.
 
 ```js
 const Rosetta = require("./src/modules/shared/runtime/rosetta");
@@ -46,28 +33,22 @@ await Rosetta.ensure(prerequisiteContext);
 await Rosetta.ensureForExecutable(toolPath, prerequisiteContext);
 ```
 
-The core checked spawner accepts this context as its optional fifth argument:
+The shared consent adapter receives a prerequisite plan with `licenseRequired`, Apple's license URL and the **Agree and Install** label. To accept, the adapter must return `{ approved: true, licenseAccepted: true }`.
+
+The core checked spawner accepts the same context as its optional fifth argument:
 
 ```js
 await processes.spawnDetachedChecked(executable, args, options, needsRosetta, prerequisiteContext);
 ```
 
-It also detects thin Intel Mach-O executables when a caller omitted `needsRosetta`.
-Installed launches retain their immediate spawn behavior and their existing direct
-thin-Intel/DYLD handling. Synchronous unchecked spawning cannot display an asynchronous
-installer and reports an actionable missing prerequisite instead.
+It also detects thin Intel Mach-O executables when the caller leaves out `needsRosetta`. When Rosetta is installed, launches start immediately and keep their existing direct handling of thin Intel executables and `DYLD`. The synchronous unchecked spawner cannot show an asynchronous installer, so it reports the missing prerequisite with an error that says what to do.
 
-Per-game contexts bind the consent adapter to that game. Runtime-manager action
-contexts inject the same consent/progress services. GameMaker's Node tool runner
-checks the selected Igor or decompiler executable with `ensureForExecutable` before
-execution. Official runtime installation captures the manager's consent and progress
-context in that runner; tool-file copying and validation do not execute Igor or request
-translation. `createToolRunner({ prerequisiteContext })` binds a tool runner to an action,
-and individual calls can pass `options.prerequisiteContext`. This context is removed
-before calling Node's process API. A shell script must check the actual Intel executable it
-will invoke, or pass `{ forceIntel: true }`; the script itself has no Mach-O CPU header.
-Java's installed Intel runtime and decompiler paths await `context.ensureRosetta`
-when needed. Java and LÖVE share this availability cache, so a completed installation
-does not leave stale per-engine missing status.
+### Callers
+
+- Per-game contexts bind the consent adapter to that game, and runtime-manager action contexts inject the same consent and progress services.
+- GameMaker's Node tool runner checks the selected Igor or decompiler executable with `ensureForExecutable` before running it. Official runtime installation passes the manager's consent and progress context to that runner. Copying and validating tool files neither runs Igor nor asks for translation.
+- `createToolRunner({ prerequisiteContext })` binds a tool runner to an action, and individual calls can pass `options.prerequisiteContext`. The context is removed before Node's process API is called.
+- A shell script has no Mach-O CPU header, so its caller must check the actual Intel executable that the script runs, or pass `{ forceIntel: true }`.
+- Java's installed Intel runtime and decompiler paths await `context.ensureRosetta` when needed. Java and LÖVE share the availability cache, so a completed installation does not leave either engine reporting Rosetta as missing.
 
 `createRosettaService` and `createAppleInstaller` accept injected filesystem, process and installer dependencies.

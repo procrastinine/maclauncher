@@ -9,7 +9,7 @@ const Decrypt = require('../src/modules/rgss/decrypt');
 const Mv = require('../src/modules/shared/mvmz/decrypt');
 const { nativeTool, packageFor } = require('./helpers/managed-tool-fixture.cjs');
 
-function packageFixture(root) {
+function packageFixture(root, architecture = 'arm64') {
   const tool = nativeTool(path.join(root, 'native'), String.raw`
 const fs = require('node:fs'), path = require('node:path'), args = process.argv.slice(2), input = args[0];
 if (fs.statSync(input).isFile()) {
@@ -37,10 +37,11 @@ if (fs.statSync(input).isFile()) {
   for (let index = 0; index < Math.min(16, bytes.length); index++) bytes[index] ^= key[index];
   fs.writeFileSync(path.join(www, 'img/sample.png'), bytes);
 }
-`);
+`, {architecture});
   return packageFor(path.join(root, 'package'), { id: 'rpgmaker-decrypter', version: 'fixture-v1',
-    manifest: { managerId: 'rpgmaker-decrypter', toolABI: 1, executableRelative: 'files/bin/RPGMakerDecrypter-cli' },
-    entries: [{ path: 'files/bin/RPGMakerDecrypter-cli', bytes: tool.binary, mode: 0o755, architectures: ['arm64'] },
+    architecture, manifest: { managerId: 'rpgmaker-decrypter', arch: architecture, toolABI: 1, executableRelative: 'files/bin/RPGMakerDecrypter-cli' },
+    entries: [{ path: 'files/bin/RPGMakerDecrypter-cli', bytes: tool.binary, mode: 0o755,
+      architectures: architecture === 'universal' ? ['arm64', 'x86_64'] : [architecture === 'x64' ? 'x86_64' : architecture] },
       { path: 'files/bin/fixture.cjs', bytes: tool.script, mode: 0o644 }] });
 }
 
@@ -111,4 +112,95 @@ test('managed RPGMakerDecrypter fixture: action cancellation, exact install, RGS
   const executable = selected.install.executablePath;
   const fd = fs.openSync(executable, 'r+'); const original = Buffer.alloc(1); fs.readSync(fd, original, 0, 1, 4096); original[0] ^= 1; fs.writeSync(fd, original, 0, 1, 4096); fs.closeSync(fd);
   assert.equal(restarted.resolveSelection(entry, context.settings, context.userDataDir).ready, false);
+});
+
+test('RPGMakerDecrypter CPU builds coexist, select natively, and prepare Intel execution through shared Rosetta', {skip: process.platform !== 'darwin'}, async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rpg-managed-cpus-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const builds = Object.fromEntries(['arm64', 'x64'].map(architecture => [architecture, packageFixture(path.join(root, architecture), architecture)]));
+  const catalog = {...builds.arm64.catalog, packages: [builds.x64.record, builds.arm64.record]};
+  let refreshes = 0, downloads = 0, offline = false;
+  const manager = Manager.createManager({
+    fetchUrlBuffer: async () => {
+      assert.equal(offline, false, 'Installed selection must not refresh'); refreshes++;
+      return {status: 200, body: Buffer.from(JSON.stringify(catalog))};
+    },
+    downloadToFile: async (url, destination) => {
+      assert.equal(offline, false, 'Installed selection must not download'); downloads++;
+      const fixture = Object.values(builds).find(item => item.record.asset.url === url);
+      assert.ok(fixture); fs.copyFileSync(fixture.archive, destination);
+    }
+  });
+  const userDataDir = path.join(root, 'profile');
+  await manager.refreshCatalog({userDataDir, force: true});
+  assert.equal(refreshes, 1);
+  for (const architecture of ['arm64', 'x64']) {
+    const installed = await manager.installRuntime({userDataDir, version: 'fixture-v1', architecture});
+    assert.equal(installed.architecture, architecture);
+    assert.match(installed.installDir, new RegExp(`rpgmaker-decrypter/${architecture}/fixture-v1$`));
+  }
+  assert.equal(downloads, 2);
+  offline = true;
+  const context = {userDataDir, settings: {}, confirmRuntimeInstall: () => assert.fail('Installed tool needs no download consent')};
+  assert.equal((await manager.ensure({}, {}, context)).architecture, process.arch);
+  const intel = await manager.ensure({}, {}, {...context, settings: {runtimes: {[manager.id]: {defaultArchitecture: 'x64'}}}});
+  assert.equal(intel.architecture, 'x64');
+  assert.equal(manager.getState({userDataDir}).installed.length, 2);
+  const Rosetta = require('../src/modules/shared/runtime/rosetta');
+  let prerequisites = 0;
+  t.mock.method(Rosetta, 'ensure', async received => {assert.equal(received, prerequisiteContext); prerequisites++; return {available: true};});
+  const prerequisiteContext = {...context, host: {platform: 'darwin', launcherArch: 'arm64', hardwareArch: 'arm64', rosettaAvailable: false}};
+  assert.equal((await manager.ensure({}, {architecture: 'x64'}, prerequisiteContext)).architecture, 'x64');
+  assert.equal(prerequisites, 1, 'Intel execution uses the shared Rosetta prerequisite');
+  const canceled = Object.assign(new Error('Rosetta installation canceled.'), {code: 'ABORT_ERR'});
+  t.mock.method(Rosetta, 'ensure', async () => {throw canceled;});
+  await assert.rejects(manager.ensure({}, {architecture: 'x64'}, prerequisiteContext), {code: 'ABORT_ERR'});
+  const gamePath = path.join(root, 'canceled-game'); fs.mkdirSync(gamePath);
+  fs.writeFileSync(path.join(gamePath, 'Game.rgssad'), archive('Data\\sample.txt', Buffer.from('preserved input')));
+  const entry = {gameId: 'canceled-intel-extraction', gamePath, contentRootDir: gamePath};
+  const output = Decrypt.resolveExtractionRoot({entry, userDataDir});
+  fs.mkdirSync(output, {recursive: true}); fs.writeFileSync(path.join(output, 'preserved'), 'keep');
+  t.mock.method(Manager, 'ensure', manager.ensure);
+  await assert.rejects(Rgss.actions.decryptGame(entry, {architecture: 'x64'}, prerequisiteContext), {code: 'ABORT_ERR'});
+  assert.equal(fs.readFileSync(path.join(output, 'preserved'), 'utf8'), 'keep', 'Rosetta cancellation precedes removal of an existing extraction');
+  assert.equal(downloads, 2); assert.equal(refreshes, 1);
+  await manager.uninstallRuntime({userDataDir, version: 'fixture-v1', architecture: 'x64'});
+  assert.equal(manager.getState({userDataDir}).installed.length, 1);
+  assert.equal(fs.existsSync(path.join(userDataDir, 'runtimes/rpgmaker-decrypter/arm64/fixture-v1')), true);
+});
+
+test('RPGMakerDecrypter future Universal package verifies both declared native slices and reuses one offline install', {skip: process.platform !== 'darwin'}, async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rpg-managed-universal-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const fixture = packageFixture(path.join(root, 'universal'), 'universal');
+  let downloads = 0;
+  const manager = Manager.createManager({
+    fetchUrlBuffer: async () => ({status: 200, body: Buffer.from(JSON.stringify(fixture.catalog))}),
+    downloadToFile: async (_url, destination) => {downloads++; fs.copyFileSync(fixture.archive, destination);}
+  });
+  const userDataDir = path.join(root, 'profile');
+  await manager.refreshCatalog({userDataDir, force: true});
+  const installed = await manager.installRuntime({userDataDir, version: fixture.record.version, architecture: 'arm64'});
+  assert.equal(installed.architecture, 'universal');
+  for (const architecture of ['arm64', 'x64']) {
+    const selected = await manager.ensure({}, {architecture}, {userDataDir, settings: {},
+      confirmRuntimeInstall: () => assert.fail('Universal reuse needs no download consent')});
+    assert.equal(selected.installDir, installed.installDir);
+  }
+  assert.equal(downloads, 1);
+  assert.equal(manager.getState({userDataDir}).installed.length, 1);
+
+  // Keep a valid checksum/inventory for a thin ARM binary while claiming a
+  // Universal executable. Native inspection must still reject the missing slice.
+  const thin = nativeTool(path.join(root, 'thin'), '', {architecture: 'arm64'});
+  const wrong = packageFor(path.join(root, 'wrong'), {id: manager.id, version: 'fixture-wrong', architecture: 'universal',
+    manifest: {managerId: manager.id, toolABI: 1, executableRelative: 'files/bin/RPGMakerDecrypter-cli'},
+    entries: [{path: 'files/bin/RPGMakerDecrypter-cli', bytes: thin.binary, mode: 0o755, architectures: ['arm64', 'x86_64']}]});
+  const invalid = Manager.createManager({
+    fetchUrlBuffer: async () => ({status: 200, body: Buffer.from(JSON.stringify(wrong.catalog))}),
+    downloadToFile: async (_url, destination) => fs.copyFileSync(wrong.archive, destination)
+  });
+  const invalidProfile = path.join(root, 'invalid-profile');
+  await invalid.refreshCatalog({userDataDir: invalidProfile, force: true});
+  await assert.rejects(invalid.installRuntime({userDataDir: invalidProfile, version: wrong.record.version, architecture: 'arm64'}), /architecture/i);
 });

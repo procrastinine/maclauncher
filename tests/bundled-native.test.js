@@ -5,6 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 const B = require("../src/modules/shared/runtime/bundled-native");
 const { createPinnedNativeManager } = require("../src/modules/shared/runtime/pinned-native-manager");
+const { listedManager } = require("./helpers/listed-rows.cjs");
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "bundled-native-test-"));
@@ -48,10 +49,10 @@ function directBundle(f, dependencies = {}) {
   return { bundle, signatures: () => signatures };
 }
 
+// The included version is listed in memory, so no user data is written.
 function directManager(f, bundle, options = {}) {
-  return createPinnedNativeManager({ id: "test-native", label: "Fixture", recommendedVersion: f.version,
-    catalog: [{ version: f.version, upstreamRevision: f.revision, nativeAbi: { event: "typed" } }],
-    bundledRuntime: bundle, bundledExecution: "direct", ...options });
+  return listedManager({ id: "test-native", label: "Fixture", bundledRuntime: bundle, bundledExecution: "direct", ...options },
+    [{ version: f.version, upstreamRevision: f.revision, nativeAbi: { event: "typed" } }]);
 }
 
 test("mixed native packages verify declared PE CPU formats without weakening Mach-O checks", t => {
@@ -87,25 +88,6 @@ test("mixed native packages verify declared PE CPU formats without weakening Mac
   const changed = fs.readFileSync(path.join(f.payload, dll.path)); changed[changed.length - 1] ^= 1;
   fs.writeFileSync(path.join(f.payload, dll.path), changed);
   assert.throws(() => B.verifyPayload(f.payload, f.manifest), /checksum|permissions/);
-});
-
-test("remote release display retains the actual included identity without seeding unused factory pins", async t => {
-  const f = fixture(t), { bundle } = directBundle(f);
-  const before = fs.readFileSync(path.join(f.directory, "manifest.json"));
-  let fetches = 0;
-  const runtime = directManager(f, bundle, {
-    catalog: [{ version: f.version, upstreamRevision: f.revision }, { version: "unused", upstreamRevision: "c".repeat(40) }],
-    discoverCatalog: async () => { fetches++; return [{ version: "2.0.0", upstreamRevision: "b".repeat(40) }]; }
-  });
-  const initial = runtime.getState({ userDataDir: f.userDataDir });
-  assert.deepEqual(initial.catalog.versions, [], 'download lists start empty and are not seeded by included or factory pins');
-  assert.deepEqual(initial.catalog.includedVersions, [f.version]);
-  assert.equal(initial.installed[0].upstreamRevision, f.revision); assert.equal(fetches, 0);
-  assert.deepEqual((await runtime.refreshCatalog({ userDataDir: f.userDataDir })).versions, ["2.0.0"]);
-  assert.equal(runtime.resolveSelection({}, {}, f.userDataDir).install.upstreamRevision, f.revision);
-  assert.equal(runtime.core.catalog.find(pin => pin.version === "unused").upstreamRevision, "c".repeat(40));
-  assert.deepEqual(fs.readFileSync(path.join(f.directory, "manifest.json")), before);
-  assert.equal(fs.existsSync(runtime.core.getInstallDir({ userDataDir: f.userDataDir, version: f.version })), false);
 });
 
 test("direct included resources preserve exact seals, assets and environment without runtime copies", t => {
@@ -165,7 +147,7 @@ test("included resources enforce actual macOS floors and retain genuine Intel/Ro
 });
 
 test("shared direct managers expose Included versions, require no install and protect resource removal", { skip: process.platform !== "darwin" }, async t => {
-  const f = fixture(t), { bundle } = directBundle(f), manager = directManager(f, bundle);
+  const f = fixture(t), { bundle } = directBundle(f), manager = await directManager(f, bundle);
   const before = B.fileInventory(f.payload), selected = manager.resolveSelection({}, {}, f.userDataDir);
   assert.equal(selected.ready, true); assert.equal(selected.install.bundledExecution, "direct");
   const state = manager.getState({ userDataDir: f.userDataDir });
@@ -178,11 +160,11 @@ test("shared direct managers expose Included versions, require no install and pr
   assert.equal(installed.runtimePath, selected.install.runtimePath); assert.equal(fs.existsSync(f.installDir), false);
   assert.throws(() => manager.uninstallRuntime({ userDataDir: f.userDataDir, version: f.version }), /included in the app/);
   assert.deepEqual(B.fileInventory(f.payload), before); assert.ok(bundle.verifyInstalled({ installDir: f.directory, record: installed, pin: { upstreamRevision: f.revision } }));
-  assert.throws(() => createPinnedNativeManager({ id: "bad-direct", catalog: [{ version: "1", upstreamRevision: "a" }], bundledExecution: "direct" }), /included runtime cannot be resolved/);
+  assert.throws(() => createPinnedNativeManager({ id: "bad-direct", discoverCatalog: async () => [], bundledExecution: "direct" }), /included runtime cannot be resolved/);
 });
 
-test("registered exact versions win over Included resources, including damaged registrations", { skip: process.platform !== "darwin" }, t => {
-  const f = fixture(t), { bundle } = directBundle(f), manager = directManager(f, bundle);
+test("registered exact versions win over Included resources, including damaged registrations", { skip: process.platform !== "darwin" }, async t => {
+  const f = fixture(t), { bundle } = directBundle(f), manager = await directManager(f, bundle);
   const local = path.join(f.root, "registered-runner"); fs.copyFileSync(path.join(f.payload, "bin/runner"), local); fs.chmodSync(local, 0o755);
   manager.core.registerLocal({ userDataDir: f.userDataDir, version: f.version, runtimePath: local });
   let selection = manager.resolveSelection({}, {}, f.userDataDir);
@@ -197,7 +179,7 @@ test("registered exact versions win over Included resources, including damaged r
 });
 
 test("direct display stays inexpensive and preserves full-verification failures until explicit Reload", { skip: process.platform !== "darwin" }, async t => {
-  const f = fixture(t), { bundle, signatures } = directBundle(f), manager = directManager(f, bundle);
+  const f = fixture(t), { bundle, signatures } = directBundle(f), manager = await directManager(f, bundle);
   const notice = path.join(f.payload, "licenses/LICENSE"), originalOpen = fs.openSync; let reads = 0;
   fs.openSync = (file, ...args) => { if (file === notice) reads++; return originalOpen(file, ...args); };
   t.after(() => { fs.openSync = originalOpen; });

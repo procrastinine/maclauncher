@@ -58,7 +58,7 @@ test("shared selection layers preserve manager defaults, game recommendations an
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
   const hash = file => require("node:crypto").createHash("sha256").update(fs.readFileSync(file)).digest("hex");
   const manager = createPinnedNativeManager({ id: "layered", label: "Layered runtime",
-    catalog: ["2.0", "1.0"].map(version => ({ version, upstreamRevision: version, localBuild: false })),
+    discoverCatalog: () => assert.fail("The cached release list keeps selection offline"),
     inspectRuntime: ({ runtimePath, expectedSha256 }) => {
       if (expectedSha256 && hash(runtimePath) !== expectedSha256) throw Error("The runtime executable changed.");
       return { executablePath: runtimePath, architectures: ["arm64", "x86_64"], ready: true };
@@ -99,4 +99,23 @@ test("manager defaults prefer the published list, use ready installed order only
   assert.equal(managerDefaultVersion({}), null);
   for (const defaultVersion of [undefined, null, "", "auto"]) assert.deepEqual(selectRuntimeVersion({ defaultVersion,
     fallback: managerDefaultVersion({listed:["2.0"]}) }), {version:"2.0",source:"default"});
+});
+
+test("a registered runtime that was moved or deleted reads as not found instead of a file-system error", t => {
+  const Custom = require("../src/modules/shared/runtime/custom-runtime");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "custom-moved-")), folder = path.join(root, "Stage Player", "payload");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const manager = { id: "moved-fixture", getState: () => ({ installed: [], catalog: { versions: [] } }),
+    customRuntime: { inspect: runtimePath => { fs.statSync(path.join(runtimePath, "runtime.json")); return { version: "custom", installDir: runtimePath }; } } };
+  Custom.instrumentManagers([manager]);
+  fs.mkdirSync(path.join(root, "runtimes", manager.id), { recursive: true });
+  fs.writeFileSync(path.join(root, "runtimes", manager.id, "custom-runtimes.json"), JSON.stringify({ runtimes: [{ path: folder, sectionId: "default" }] }));
+  const [moved] = Custom.list({ managerId: manager.id, userDataDir: root });
+  assert.equal(moved.ready, false);
+  assert.equal(moved.reason, "The registered runtime was not found at its saved location.");
+  assert.equal(moved.versionLabel, "Stage Player", "A generic container folder is named after the folder that holds it");
+  assert.equal(moved.error, moved.reason, "Runtimes shows the same plain text");
+  fs.mkdirSync(folder, { recursive: true });
+  const [incomplete] = Custom.list({ managerId: manager.id, userDataDir: root });
+  assert.match(incomplete.reason, /ENOENT.*runtime\.json/, "a missing file inside an existing folder keeps its detail");
 });

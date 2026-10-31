@@ -2,8 +2,8 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const Releases = require("../../shared/runtime/github-releases");
-const { downloadToFile, throwIfAborted } = require("../../shared/runtime/download-utils");
+const Upstream = require("../../shared/runtime/upstream");
+const { throwIfAborted } = require("../../shared/runtime/download-utils");
 
 const REPO_OWNER = "Vineflower";
 const REPO_NAME = "vineflower";
@@ -164,77 +164,43 @@ function selectJarAsset(release) {
     if (name.includes("-slim") || name.includes("-sources") || name.includes("-javadoc")) {
       return false;
     }
-    return Boolean(asset?.browser_download_url);
+    return true;
   });
   if (exact) return exact;
 
   return (
     assets.find(asset => {
       const name = String(asset?.name || "").toLowerCase();
-      return name.endsWith(".jar") && Boolean(asset?.browser_download_url);
+      return name.endsWith(".jar");
     }) || null
   );
 }
 
-async function fetchAvailableVersions({ logger } = {}) {
-  const releases = await Releases.fetchGithubReleases({
-    owner: REPO_OWNER,
-    repo: REPO_NAME,
-    logger,
-    includePrerelease: true
-  });
+// Vineflower publishes its decompiler JAR with each release, prereleases
+// included; slim, source and documentation JARs are not the decompiler.
+const source = Upstream.github({ repository: `${REPO_OWNER}/${REPO_NAME}`, prerelease: true, allArchitectures: true, recognize: release => {
+  const version = normalizeReleaseVersion(release), asset = selectJarAsset(release);
+  return version && asset ? { version, assets: [asset] } : null;
+} });
 
+// One row per version, from its newest release.
+async function fetchAvailableVersions({ logger, signal } = {}) {
   const byVersion = new Map();
-  for (const release of releases) {
-    const version = normalizeReleaseVersion(release);
-    if (!version) continue;
-    const asset = selectJarAsset(release);
-    if (!asset) continue;
-    if (!byVersion.has(version)) {
-      byVersion.set(version, {
-        version,
-        release,
-        asset,
-        publishedAt: Date.parse(String(release?.published_at || release?.created_at || "")) || 0
-      });
-      continue;
-    }
-    const current = byVersion.get(version);
-    const publishedAt = Date.parse(String(release?.published_at || release?.created_at || "")) || 0;
-    if (publishedAt > (current?.publishedAt || 0)) {
-      byVersion.set(version, { version, release, asset, publishedAt });
-    }
+  for (const row of await source.discover({ logger, signal })) {
+    const current = byVersion.get(row.version), publishedAt = Date.parse(String(row.publishedAt || "")) || 0;
+    if (row.files[0] && (!current || publishedAt > current.publishedAt)) byVersion.set(row.version, { version: row.version, file: row.files[0], publishedAt });
   }
-
   const selected = Array.from(byVersion.values()).sort((a, b) => compareVersionsDesc(a.version, b.version));
   return {
     source: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases`,
     versions: selected.map(item => item.version),
-    releasesByVersion: Object.fromEntries(
-      selected.map(item => [
-        item.version,
-        {
-          release: item.release,
-          asset: item.asset
-        }
-      ])
-    )
+    releasesByVersion: Object.fromEntries(selected.map(item => [item.version, { file: item.file }]))
   };
 }
 
 function resolveVersionEntry(version, releasesByVersion) {
-  const requested = normalizeVersion(version);
-  if (releasesByVersion && typeof releasesByVersion === "object") {
-    const direct = releasesByVersion[requested];
-    if (direct?.asset?.browser_download_url) {
-      return {
-        version: requested,
-        release: direct.release,
-        asset: direct.asset
-      };
-    }
-  }
-  return null;
+  const requested = normalizeVersion(version), direct = releasesByVersion?.[requested];
+  return direct?.file ? { version: requested, file: direct.file } : null;
 }
 
 async function installVersion({
@@ -251,7 +217,7 @@ async function installVersion({
     const fetched = await fetchAvailableVersions({ logger });
     resolved = resolveVersionEntry(requestedVersion, fetched.releasesByVersion);
   }
-  if (!resolved?.asset?.browser_download_url) {
+  if (!resolved?.file) {
     throw new Error(`Vineflower release ${requestedVersion} not found.`);
   }
 
@@ -261,13 +227,19 @@ async function installVersion({
   const tmpJar = path.join(tmpDir, "vineflower.jar");
 
   try {
-    logger?.info?.(`[java] downloading Vineflower ${resolved.asset.browser_download_url}`);
-    await downloadToFile(resolved.asset.browser_download_url, tmpJar, {
-      headers: { "User-Agent": "MacLauncher" },
-      onProgress,
-      signal
-    });
+    logger?.info?.(`[java] downloading Vineflower ${resolved.file.url}`);
+    // The JAR matches the SHA-256 GitHub publishes. A file replaced since the
+    // list was read is checked against the release's current digest.
+    let downloaded;
+    try { downloaded = await source.download(resolved.file, tmpJar, { onProgress, signal }); }
+    catch (error) {
+      throwIfAborted(signal);
+      const current = resolveVersionEntry(requestedVersion, (await fetchAvailableVersions({ logger, signal })).releasesByVersion);
+      if (!current?.file || current.file.digest?.value === resolved.file.digest?.value) throw error;
+      downloaded = await source.download(current.file, tmpJar, { onProgress, signal });
+    }
     throwIfAborted(signal);
+    const { sha256, integrity } = downloaded;
 
     safeRm(installDir);
     ensureDir(installDir);
@@ -276,8 +248,10 @@ async function installVersion({
     writeInstallMeta(installDir, {
       version: requestedVersion,
       source: "GitHub",
-      downloadUrl: resolved.asset.browser_download_url,
-      assetName: resolved.asset.name || null,
+      downloadUrl: resolved.file.url,
+      assetName: resolved.file.name,
+      sha256,
+      integrity,
       installedAt: Date.now()
     });
 
@@ -309,5 +283,6 @@ module.exports = {
   listInstalled,
   fetchAvailableVersions,
   installVersion,
-  uninstallVersion
+  uninstallVersion,
+  source
 };

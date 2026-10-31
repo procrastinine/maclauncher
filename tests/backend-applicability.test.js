@@ -83,3 +83,18 @@ test('Settings shows a saved incompatible default and compatible alternatives', 
   assert.match(html, /<option value="nxnative">Switch \(nxnative\)<\/option>/);
   assert.doesNotMatch(html, /settings-runtime-tab-nxnative-(?:mac32|prosper|sikarugir|crossover)/);
 });
+
+test('library checks give runtime eligibility the launcher inventory', () => {
+  const snapshot = { installed: [{ version: 'same-version-copy', ready: true }] }, contexts = [];
+  const info = { id: 'engine', label: 'Engine', runtime: { default: 'runner', supported: ['runner'], entries: { runner: {} } }, supports: {} };
+  const mod = { filterRuntimeSupport: (_entry, supported, _settings, context) => { contexts.push(context); return supported; } };
+  const launcher = createLauncher({ userDataDir: '/state', registry: { getModule: () => mod, getModuleInfo: () => info },
+    getRuntimeManagerState: id => id === 'local' ? snapshot : { installed: [] } });
+  const settings = { runtimes: { local: { defaultVersion: 'app-copy' } } };
+  const checks = launcher.resolveEntryChecks({ gameId: 'game', gamePath: '/game/player.exe', moduleId: 'engine' }, settings);
+  assert.deepEqual(checks, { runtimeId: 'runner', runtimeSupport: ['runner'], launch: true, launchRequirement: null, managedSaveDir: false });
+  const supplied = contexts.find(context => context.getRuntimeManagerState);
+  assert.equal(supplied.settings, settings);
+  assert.equal(supplied.userDataDir, '/state');
+  assert.equal(supplied.getRuntimeManagerState('local'), snapshot);
+});

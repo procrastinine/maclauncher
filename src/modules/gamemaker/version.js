@@ -49,7 +49,7 @@ function detectStudioVersion({ wadVersion, rawVersion, gen8Offset, chunks, compa
       if (!minimum || compareVersions(minimum, "2024.13") < 0) minimum = "2024.13";
     }
   }
-  return { gen8VersionTuple, detectedVersion: minimum ? maximumOfficialRuntimeExclusive ? `${minimum}–<${maximumOfficialRuntimeExclusive}` : `${minimum}+` : null,
+  return { gen8VersionTuple, detectedVersion: minimum ? maximumOfficialRuntimeExclusive ? `${minimum}+ (before ${maximumOfficialRuntimeExclusive})` : `${minimum}+` : null,
     detectedVersionSource: "WAD and structural chunk evidence", detectedVersionConfidence: maximumOfficialRuntimeExclusive ? "format-range" : minimum ? "format-minimum" : "unknown",
     minimumEngineVersion: minimum, maximumOfficialRuntimeExclusive, exactEngineVersion: null, versionEvidence: evidence };
 }

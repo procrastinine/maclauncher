@@ -122,6 +122,8 @@ function buildEnvironment(settings, installation, directory, bottlePath, { baseE
   const overrides = {};
   const backend = settings.graphicsBackend || "auto";
   if (!["auto", "d3dmetal", "dxmt", "dxvk", "wined3d"].includes(backend)) throw new Error("Unsupported CrossOver graphics backend.");
+  const backendReason = require("./backend-support").reason(installation, backend, host);
+  if (backendReason) throw new Error(backendReason);
   const dlss = DLSS.checkSelection(settings, { ...host, executableArchitecture, backend,
     dxmt: settings.dlss === true && (Boolean(cameraBridge) || DLSS.hasLibraries(path.join(installation.crossoverRoot, "lib", "dxmt", "x86_64-windows"))),
     d3dmetal: settings.dlss === true && DLSS.hasLibraries(path.join(installation.crossoverRoot, "lib64", "apple_gptk", "wine", "x86_64-windows")) });

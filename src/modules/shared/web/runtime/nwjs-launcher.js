@@ -209,6 +209,7 @@ async function ensureRuntimeInstalled({
   userDataDir,
   version,
   variant,
+  architecture,
   logger,
   onState,
   allowInstall = false,
@@ -219,7 +220,7 @@ async function ensureRuntimeInstalled({
     version,
     variant,
     platform: process.platform,
-    arch: process.arch
+    arch: architecture || require("../../runtime/architecture").selectedArchitecture()
   });
   if (resolved) return resolved;
   if (!allowInstall) {
@@ -233,6 +234,7 @@ async function ensureRuntimeInstalled({
     userDataDir,
     version,
     variant,
+    architecture,
     logger,
     downloads
   });
@@ -491,7 +493,7 @@ async function launchRuntime({
   const runtimeData = entry?.runtimeData?.nwjs || {};
   const managerSettings = settings?.runtimes?.nwjs || {};
   const sourceRoot = entry?.contentRootDir || entry?.gamePath;
-  const { version, variant } = resolveRuntimeConfig(managerSettings, runtimeData, { userDataDir, sourceRoot });
+  const { version, variant, architecture } = resolveRuntimeConfig(managerSettings, runtimeData, { userDataDir, sourceRoot });
   const greenworks = Greenworks.resolveGreenworksRequirement({ managerSettings, runtimeData, sourceRoot, userDataDir });
   const greenworksInstall = greenworks.needsGreenworks
     ? Greenworks.ensureGreenworksInstalled({ userDataDir, version }) : null;
@@ -507,10 +509,12 @@ async function launchRuntime({
     userDataDir,
     version,
     variant,
+    architecture,
     logger,
     onState: onRuntimeStateChange,
     allowInstall: false
   });
+  await require("../../runtime/architecture").ensureArchitecture(installed.platformKey === "osx-x64" ? "x64" : "arm64", context || {});
   const steam = greenworksInstall ? await Greenworks.prepareLaunchEnvironment({ entry,
     context: context || { userDataDir, settings, runtimeId: "nwjs" }, install: greenworksInstall, sourceRoot,
     runtimeVersion: version, architecture: installed.platformKey === "osx-x64" ? "x86_64" : "arm64" }) : null;
@@ -547,7 +551,7 @@ async function launchRuntime({
 
   logger?.info?.(`[nwjs] launch ${cmd} ${args.join(" ")}`);
 
-  const needsRosetta = process.arch === "arm64" && installed.platformKey === "osx-x64";
+  const needsRosetta = installed.platformKey === "osx-x64" && require("../../runtime/architecture").requiresRosetta("x64");
   return launchNwjsProcess({ executable: cmd, args, wrapperDir, readinessFrame, needsRosetta, logger,
     context, spawn: context?.spawnDetachedChecked, ...(steam ? { env: steam.environment } : {}) });
 }

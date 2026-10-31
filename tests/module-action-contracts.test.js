@@ -55,6 +55,26 @@ test("every registered module settings and inspector action has a handler for it
   }
 });
 
+test("every host-dependent runtime setting names a known feature requirement and a capability some game type declares", () => {
+  const { featureRequirement } = require("../src/modules/shared/runtime/host-settings");
+  const manifests = registry.listModuleIds().map(id => [id, JSON.parse(fs.readFileSync(path.join(registry.getModuleDir(id), "manifest.json"), "utf8"))]);
+  const declared = new Set(manifests.flatMap(([, manifest]) => manifest.runtime?.capabilities || []));
+  const needed = new Set();
+  const visit = (value, where) => {
+    if (Array.isArray(value)) return value.forEach((item, index) => visit(item, `${where}[${index}]`));
+    if (!value || typeof value !== "object") return;
+    if ("hostFeature" in value) assert.ok(featureRequirement(value.hostFeature), `${where}: unknown hostFeature ${value.hostFeature}`);
+    assert.ok(!("hostModules" in value), `${where}: a setting names the capability it needs, not a list of modules`);
+    if (typeof value.capability === "string") {
+      assert.ok(declared.has(value.capability), `${where}: no game type declares capability ${value.capability}`);
+      needed.add(value.capability);
+    }
+    for (const [key, item] of Object.entries(value)) visit(item, `${where}.${key}`);
+  };
+  for (const [id, manifest] of manifests) visit(manifest, id);
+  for (const capability of declared) assert.ok(needed.has(capability), `capability ${capability} is declared but no setting needs it`);
+});
+
 test("PS5 Vulkan choices resolve through Settings and inspector backend dispatch offline", async t => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "module-action-contracts-"));
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));

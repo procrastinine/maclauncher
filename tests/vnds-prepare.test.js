@@ -11,7 +11,7 @@ function inventory(root) {
     return item.isDirectory() ? inventory(file).map(([name, hash]) => [item.name + "/" + name, hash]) : [[item.name, sha256(fs.readFileSync(file))]];
   }).sort(([a], [b]) => a.localeCompare(b));
 }
-async function fixture(t, { version, revision, catalogRevision } = {}) {
+async function fixture(t, { version, revision, catalogRevision, sourceRepository = "ajusa/VNDS-LOVE" } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-vnds-")));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const { stageData } = await import(pathToFileURL(path.resolve(__dirname, "../../maclauncher-builds/producers/engine-adaptations/stage.mjs")));
@@ -27,7 +27,7 @@ async function fixture(t, { version, revision, catalogRevision } = {}) {
   const archive = path.join(root, `vnds-love-${declaration.version}-universal.tar.gz`);
   const record = await pack({ project: "vnds-love", input, declaration, output: archive,
     ...(revision ? { metadata: { source: { repository: "ajusa/VNDS-LOVE", revision } } } : {}) });
-  if (catalogRevision) record.source = { repository: "ajusa/VNDS-LOVE", revision: catalogRevision };
+  if (catalogRevision) record.source = { repository: sourceRepository, revision: catalogRevision };
   const selectedCatalog = catalog([record], { project: "vnds-love", repository: "procrastinine/maclauncher-builds" });
   const userDataDir = path.join(root, "data");
   const manager = Runtime.createManager({ systemVersionSync: () => "26.0", fetchUrlBuffer: async () => ({ status: 200, body: Buffer.from(JSON.stringify(selectedCatalog)) }),
@@ -43,16 +43,24 @@ test("VNDS verifies its managed interpreter without app resources or source fall
   assert.equal(selected.profile.sourceRevision, f.sourceRevision);
   assert.equal(selected.profile.loveVersion, "11.5");
   assert.ok(!f.engine.includes("app.asar"));
-  assert.throws(() => Preparation.verifyEngine({ userDataDir: path.join(f.root, "missing"), settings: f.context.settings, resourcesRoot: path.resolve(__dirname, "../src") }), /not installed|Install|Refresh|missing/i);
+  assert.throws(() => Preparation.verifyEngine({ userDataDir: path.join(f.root, "missing"), settings: f.context.settings, resourcesRoot: path.resolve(__dirname, "../src") }), /not installed|not available|Install|Refresh|missing/i);
 });
-test("VNDS accepts a later compatible sealed catalog revision and rejects a mismatched source identity", async t => {
+test("VNDS accepts later compatible packages and records differing source identities", async t => {
   const f = await fixture(t, { version: "0.0.14-fixture-MCLv1", revision: "b".repeat(40) });
   const selected = Preparation.verifyEngine(f.context);
   assert.equal(selected.profile.version, f.version);
   assert.equal(selected.profile.sourceRevision, "b".repeat(40));
   assert.equal(selected.profile.loveVersion, "11.5");
   assert.equal(Runtime.resolveSelection({}, {}, f.userDataDir).version, f.version);
-  await assert.rejects(fixture(t, { version: "0.0.14-mismatch-MCLv1", revision: "b".repeat(40), catalogRevision: "c".repeat(40) }), /unsupported interpreter profile/);
+  const mismatch = await fixture(t, { version: "0.0.14-mismatch-MCLv1", revision: "b".repeat(40), catalogRevision: "c".repeat(40) });
+  assert.equal(Preparation.verifyEngine(mismatch.context).profile.sourceRevision, "b".repeat(40));
+});
+test("VNDS producer source identifies its build tree while the sealed interpreter retains its upstream", async t => {
+  const f = await fixture(t, {version: "0.0.14-producer-MCLv1", revision: "b".repeat(40),
+    catalogRevision: "c".repeat(40), sourceRepository: "procrastinine/maclauncher-builds"});
+  const selected = Preparation.verifyEngine(f.context);
+  assert.equal(selected.profile.sourceRevision, "b".repeat(40));
+  assert.equal(selected.profile.loveVersion, "11.5");
 });
 for (const name of ["lib/json.lua", "main.lua", "conf.lua"]) test(`VNDS rejects changed managed adapter content: ${name}`, async t => {
   const f = await fixture(t), file = path.join(f.engine, name), changed = fs.readFileSync(file); changed[0] ^= 1; fs.writeFileSync(file, changed);

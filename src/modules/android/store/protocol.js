@@ -1,5 +1,5 @@
-const https = require("node:https");
 const crypto = require("node:crypto");
+const Upstream = require("../../shared/runtime/upstream");
 const { decodeResponseBody } = require("../../shared/runtime/download-utils");
 
 // Wire field identities are interoperable protocol declarations. References:
@@ -86,17 +86,19 @@ function headers(auth) {
     "X-DFE-Device-Id": auth.androidId, "Accept-Language": device.locale, "X-DFE-Client-Id": "am-android-google", "X-DFE-Network-Type": "4", "X-DFE-No-Prefetch": "true", "X-DFE-UserLanguages": device.locale,
     "X-DFE-Device-Checkin-Consistency-Token": auth.consistencyToken || "", "X-DFE-Device-Config-Token": auth.deviceConfigToken || "", "X-DFE-Cookie": auth.dfeCookie || "", "Content-Type": "application/x-protobuf", Accept: "application/x-protobuf" };
 }
+// Google Play's device, account and catalog service. A request with a body is
+// sent once; download links in its answers name their own hosts.
+const PLAY = Upstream.service({ hosts: ["android.clients.google.com"] });
 async function request(url, { method = "GET", headers: extra = {}, body, signal, maxBytes = 32 * 1024 * 1024 } = {}) {
   signal?.throwIfAborted(); const endpoint = new URL(url);
   if (endpoint.protocol !== "https:" || endpoint.hostname !== "android.clients.google.com") throw publicError("Google Play returned an unsupported service address.");
-  return new Promise((resolve, reject) => {
-    const req = https.request(endpoint, { method, headers: { "Accept-Encoding": "gzip", ...extra, ...(body ? { "Content-Length": String(body.length) } : {}) }, signal, timeout: 30000 }, response => {
-      const chunks = []; let received = 0;
-      response.on("data", bytes => { received += bytes.length; if (received > maxBytes) response.destroy(publicError("Google Play returned too much data.")); else chunks.push(bytes); });
-      response.on("error", reject); response.on("end", () => { try { resolve({ status: response.statusCode, headers: response.headers, body: decodeResponseBody(Buffer.concat(chunks), response.headers, { maxBytes }) }); } catch (error) { reject(error); } });
-    });
-    req.on("timeout", () => req.destroy(publicError("Google Play timed out. Try the action again."))); req.on("error", reject); req.end(body);
-  });
+  let response;
+  try { response = await PLAY.request(endpoint.href, { method, headers: { "Accept-Encoding": "gzip", ...extra }, ...(body === undefined ? {} : { body }), signal, maxBytes }); }
+  catch (error) {
+    if (signal?.aborted) throw error;
+    throw /byte limit/.test(error?.message || "") ? publicError("Google Play returned too much data.") : error?.code === "DOWNLOAD_STALLED" ? publicError("Google Play timed out. Try the action again.") : error;
+  }
+  return { status: response.status, headers: response.headers, body: decodeResponseBody(response.body, response.headers, { maxBytes }) };
 }
 function parseApp(item, owned = false) {
   const appId = text(item, 1); if (!PACKAGE.test(appId)) return null;
@@ -130,14 +132,15 @@ function parseDelivery(body, appId, requestedCode) {
   const make = (source, filename, type, urlField, sizeField, sha1Field, sha256Field) => ({ filename, type, url: text(source, urlField), size: Number(text(source, sizeField)) || null, sha1: hash(text(source, sha1Field), 20), sha256: hash(text(source, sha256Field), 32) });
   const base = make(data, "base.apk", "base", 3, 1, 2, 19), files = [base];
   base.cookies = all(data, 5).map(cookie => ({ name: text(cookie, 1), value: text(cookie, 2) }));
-  for (const split of all(data, 15)) {
-    const name = text(split, 1); if (!/^[a-zA-Z0-9_.-]{1,240}$/.test(name)) throw publicError("Google Play supplied an invalid split name.");
+  // Split names become file names; characters a later naming scheme adds are
+  // replaced, and the split stays part of the install.
+  for (const [index, split] of all(data, 15).entries()) {
+    const name = text(split, 1).replace(/[^a-zA-Z0-9_.-]/g, "_").replace(/^\.+/, "").slice(0, 240) || `split${index + 1}`;
     files.push(make(split, `split_${name}.apk`, "split", 5, 2, 4, 9));
   }
   for (const extra of all(data, 4)) {
-    const type = Number(text(extra, 1)), code = text(extra, 2) || requestedCode;
+    const type = Number(text(extra, 1)), code = /^[1-9]\d{0,18}$/.test(text(extra, 2)) ? text(extra, 2) : requestedCode;
     if (![0, 1, 2].includes(type) || !text(extra, 4)) continue;
-    versionCode(code);
     files.push(make(extra, type === 2 ? `asset_${files.length}.apk` : `Android/obb/${appId}/${type === 0 ? "main" : "patch"}.${code}.${appId}.obb`, type === 2 ? "asset" : "obb", 4, 3, 8, 0));
   }
   if (files.length > 1024 || new Set(files.map(file => file.filename)).size !== files.length) throw publicError("Google Play supplied conflicting package files.");

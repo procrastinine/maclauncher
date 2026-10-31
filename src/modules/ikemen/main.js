@@ -18,8 +18,8 @@ function gameDirectory(entry, context) {
 function existsDirectory(directory) {
   try { return fs.statSync(directory).isDirectory(); } catch { return false; }
 }
+// The engine's assets sit beside its executable or app, wherever a release places them.
 function distributionRoot(install) {
-  if (install.source === "download") return install.installDir;
   const macos = path.dirname(install.executablePath);
   const app = path.resolve(macos, "..", "..");
   return app.toLowerCase().endsWith(".app") ? path.dirname(app) : macos;

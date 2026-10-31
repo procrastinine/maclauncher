@@ -6,7 +6,6 @@ const path = require("node:path");
 const { image: nativeImage } = require("./fixtures/macho-image");
 const Detect = require("../src/modules/siglus/detect");
 const Launch = require("../src/modules/siglus/launch");
-const Catalog = require("../src/modules/siglus/runtime/catalog");
 const Profile = require("../src/modules/siglus/runtime/profile");
 const Native = require("../src/modules/shared/runtime/local-native");
 
@@ -94,20 +93,6 @@ test("RealLive reads the original in place and directs saves through the upstrea
   assert.deepEqual(prepared.args, ["--run", "/native/libsiglus.dylib", game, "auto"]);
   assert.equal(fs.existsSync(path.join(game, "savedata_rs")), false);
 });
-test("shared GitHub discovery preserves all releases and immutable preview revisions", async () => {
-  const revision = "a".repeat(40), filename = "siglus-macos-arm64.app.tar.gz", digest = "b".repeat(64);
-  const revisions = { "1.0.0": revision, "pre-release": revision, "0.2.0": "c".repeat(40) };
-  const releases = [{ tag_name: "1.0.0", assets: [] }, { tag_name: "pre-release", prerelease: true,
-    body: `Version: v1.0.0\nCommit: ${revision}`, assets: [{ name: filename, id: 621421334,
-      browser_download_url: `${Catalog.RELEASES}/download/pre-release/${filename}`, digest: `sha256:${digest}` }] }, { tag_name: "0.2.0", assets: [] }];
-  const dependencies = { fetchGithubReleases: async options => { assert.equal(options.includePrerelease, true); assert.equal(options.maxPages, 5); return releases; },
-    fetchGithubTags: async () => Object.entries(revisions).map(([name, sha]) => ({ name, commit: { sha } })) };
-  const catalog = await Catalog.createDiscovery({ arch: "arm64", dependencies })({});
-  assert.deepEqual(catalog.map(item => item.version), ["1.0.0", "1.0.0-preview." + revision.slice(0, 12), "0.2.0"]);
-  assert.equal(catalog[1].asset.sha256, digest); assert.equal(catalog[1].upstreamTag, "pre-release");
-  releases[1].body = `Version: v1.0.0\nCommit: ${"f".repeat(40)}`;
-  await assert.rejects(Catalog.createDiscovery({ arch: "arm64", dependencies })({}), /does not match its tag/);
-});
 test("the launcher keeps only the exact host identity and installs no resource copy", () => {
   assert.equal(Profile.hostResource, undefined);
   assert.equal(Profile.prepareInstall, undefined);
@@ -141,6 +126,28 @@ test("native installation retains the verified library and rejects changed auxil
   const installed = Profile.resolveProfile(install);
   assert.equal(installed.libraryPath, path.join(unpacked, "lib", "libsiglus.dylib"));
   assert.equal(Profile.resolveProfile(install, { verification: "status" }).profileSha256, installed.profileSha256);
+  project.source = {repository: "procrastinine/maclauncher-builds", revision: "d".repeat(40)};
+  const producerInstall = {...install, upstreamRevision: project.source.revision};
+  const fromProducer = Profile.resolveProfile(producerInstall);
+  assert.equal(fromProducer.sourceIdentity.revision, project.source.revision);
+  assert.equal(fromProducer.sourceIdentity.receiptRevision, project.source.revision);
+  assert.equal(fromProducer.sourceIdentity.upstreamRevision, pin.upstreamRevision);
+  assert.equal(fromProducer.profile.upstreamRevision, pin.upstreamRevision);
+  assert.equal(Profile.resolveProfile(producerInstall, {verification: "status"}).libraryPath, installed.libraryPath);
+  manifest.provenance.sourceRevision = project.source.revision;
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+  project.manifestSha256 = Native.hashFile(manifestPath);
+  const sourceLabels = Profile.resolveProfile(producerInstall);
+  assert.equal(sourceLabels.sourceIdentity.upstreamRevision, pin.upstreamRevision);
+  assert.equal(sourceLabels.sourceIdentity.provenanceRevision, project.source.revision);
+  const manifestBytes = fs.readFileSync(manifestPath);
+  fs.appendFileSync(manifestPath, " ");
+  assert.throws(() => Profile.resolveProfile(producerInstall), /manifest has changed/);
+  fs.writeFileSync(manifestPath, manifestBytes);
+  const profilePath = path.join(unpacked, "siglus-profile.json"), profileBytes = fs.readFileSync(profilePath);
+  fs.appendFileSync(profilePath, " ");
+  assert.throws(() => Profile.resolveProfile(producerInstall), /profile has changed/);
+  fs.writeFileSync(profilePath, profileBytes);
   const stat = fs.statSync(installed.libraryPath), fd = fs.openSync(installed.libraryPath, "r+");
   fs.writeSync(fd, Buffer.from([99]), 0, 1, 900); fs.closeSync(fd); fs.utimesSync(installed.libraryPath, stat.atime, stat.mtime);
   assert.throws(() => Profile.resolveProfile(install, { verification: "status" }), /payload has changed/);

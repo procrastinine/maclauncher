@@ -1,3 +1,5 @@
+// Required first: it replaces the network functions before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os"), crypto = require("node:crypto");
 const Streamline = require("../src/modules/crossover/temporal/streamline"), PE = require("../src/modules/crossover/temporal/streamline/pe-exports");
@@ -19,6 +21,13 @@ function supportPin(version = "9.7.3") {
     upstreamRevision: `Template-${version}:sha256:${sha(version)}`, asset: { filename: `Template-${version}.tar.xz`, bytes: 42,
       url: `https://github.com/Sikarugir-App/Template/releases/download/v1.0/Template-${version}.tar.xz`, sha256: sha(version) } };
 }
+// The Template release list publishing these support archives.
+function templateRoutes(assets, onList = () => {}) {
+  const routes = Harness.githubRoutes("Sikarugir-App/Template", [{ tag_name: "v1.0", assets }]), list = routes["https://api.github.com/repos/Sikarugir-App/Template/releases"];
+  routes["https://api.github.com/repos/Sikarugir-App/Template/releases"] = () => { onList(); return list; };
+  return routes;
+}
+const templateAsset = row => ({ name: row.asset.filename, browser_download_url: row.asset.url, digest: `sha256:${row.asset.sha256}`, size: row.asset.bytes });
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "streamline-camera-"));t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const sourcePath = path.join(root, "supplied.dll"), providerRoot = path.join(root, "provider"), gameRoot = path.join(root, "game"), relativePath = "plugins/sl.interposer.dll";
@@ -82,7 +91,7 @@ test("camera rollback attempts every owned DLL and blocks fallback only when res
   assert.equal(fs.readFileSync(path.join(f.gameRoot, relatives[0]), "utf8"), "separately modified DLL", "a changed mod is never replaced by an owned backup");
   assert.deepEqual(fs.readFileSync(f.sourcePath), pe());await new Promise(setImmediate);
 });
-test("camera capability requires matched DXMT, a supported Streamline interface, x64, and the selected renderer", async t => {
+test("camera capability follows the automatic default after consent and requires matched DXMT, x64 and the selected renderer", async t => {
   const f = fixture(t), Temporal = require("../src/modules/crossover/temporal"), graphicsRoot = path.join(f.root, "graphics");
   const support = path.join(f.root, "support"), engine = path.join(f.root, "engine"), base = path.join(support, "Frameworks/renderer/dxmt/wine");
   function put(file, bytes) { fs.mkdirSync(path.dirname(file), { recursive: true });fs.writeFileSync(file, bytes); }
@@ -97,12 +106,21 @@ test("camera capability requires matched DXMT, a supported Streamline interface,
   const entry = { gamePath: f.gameRoot, runtimeData: { crossover: { sourceRoot: f.gameRoot, windowsExecutablePath: exe, executableArchitecture: "x86_64", detectionComplete: true } } };
   // Keep the interposer inside the imported game rather than an external alias.
   fs.unlinkSync(f.target);fs.writeFileSync(f.target, pe());
-  const options = { install: { templateRoot: support, engineRoot: engine }, runtimeId: "sikarugir", root: graphicsRoot, host: { platform: "darwin", arch: "arm64", macOSVersion: "26.0" } };
+  const options = { install: { templateRoot: support, engineRoot: engine }, runtimeId: "sikarugir", root: graphicsRoot, host: { platform: "darwin", hardwareArch: "arm64", macOSVersion: "26.0" } };
   const plan = Temporal.resolvePlan(entry, {}, options);const streamline = {depth: true, motionVectors: true, jitter: true, exposure: true, cameraProjection: true};
   assert.deepEqual(plan.inputs, {...streamline, source: "streamline", methods: ["fsr2", "fsr3"], routes: [{...streamline, source: "streamline", methods: ["fsr2", "fsr3"]}]});
   assert.equal(plan.libraries[0].relativePath, "plugins/sl.interposer.dll");
   for (const settings of [{ graphicsBackend: "wined3d" }, { graphicsBackend: "d3dmetal" }, { graphicsBackend: "dxvk" }]) assert.equal(Temporal.resolvePlan(entry, {}, { ...options, settings }), null);
   assert.equal(Temporal.resolvePlan(entry, {}, { ...options, host: { ...options.host, macOSVersion: "13.6" } }), null);
+  assert.equal(Temporal.resolvePlan(entry, {}, { ...options, host: { ...options.host, hardwareArch: "x64" } }), null);
+  assert.ok(Temporal.resolvePlan(entry, {}, { ...options, host: { ...options.host, hardwareArch: null, macOSVersion: null } }),
+    "unknown host requirements do not disable an otherwise matched bridge");
+  const descriptor = path.join(dllRoot, "camera-bridge.json"), camera = JSON.parse(fs.readFileSync(descriptor));
+  put(descriptor, JSON.stringify({ ...camera, minimumMacOS: "14.4.2" }));
+  assert.equal(Temporal.adapter(graphicsRoot, { macOSVersion: "14.4.1" }), null);
+  assert.ok(Temporal.adapter(graphicsRoot, { macOSVersion: "14.4.2" }));
+  assert.ok(Temporal.adapter(graphicsRoot, { macOSVersion: null }));
+  put(descriptor, JSON.stringify(camera));
   fs.writeFileSync(f.target, pe([...names, "slFutureAPI"]));assert.equal(Temporal.resolvePlan(entry, {}, options), null);fs.writeFileSync(f.target, pe());
   fs.writeFileSync(path.join(base, "x86_64-unix/winemetal.so"), "different renderer");assert.equal(Temporal.resolvePlan(entry, {}, options), null);
   put(path.join(base, "x86_64-unix/winemetal.so"), "native base");fs.unlinkSync(f.target);assert.equal(Temporal.resolvePlan(entry, {}, options), null);
@@ -110,14 +128,14 @@ test("camera capability requires matched DXMT, a supported Streamline interface,
   const Support = require("../src/modules/crossover/temporal/support-manager"), vendor = path.join(f.root, "CrossOver");
   put(path.join(vendor, "lib/wine/x86_64-unix/wine"), "vendor loader");
   const pin = supportPin(), context = { userDataDir: path.join(f.root, "profile"), runtimeId: "crossover", runtimeSettings: { graphicsBackend: "dxmt", graphicsBridgeVersion: pin.version } };
-  for (const runtimeId of ["crossover", "sikarugir"]) Support.forRuntime(runtimeId).core.rememberResolvedVersion({ userDataDir: context.userDataDir, entry: pin });
+  Support.core.rememberResolvedVersion({ userDataDir: context.userDataDir, entry: pin });
   const crossover = { ...options, install: { crossoverRoot: vendor }, runtimeId: "crossover", settings: context.runtimeSettings };
   assert.equal(Temporal.resolvePlan(entry, context, crossover), null);
   assert.equal(Temporal.resolvePlan(entry, context, { ...crossover, allowDownload: true }).inputs.requiresDownload, true);
   const dependency = { root: graphicsRoot, manager: { resolveSelection: () => ({ ready: true, install: crossover.install }) } };
   entry.effects = null;assert.deepEqual(Temporal.requirements(entry, context, dependency), []);
   entry.effects = { schema: 2, mode: "advanced", enabled: true, video: [{ id: "scene", kind: "temporal", enabled: true, method: "fsr2", settings: {} }] };
-  assert.equal(Temporal.requirements(entry, context, dependency)[0]?.managerId, "crossover-graphics-bridge");
+  assert.equal(Temporal.requirements(entry, context, dependency)[0]?.managerId, "sikarugir-graphics-bridge", "CrossOver downloads the shared DXMT support package");
   const sikarugirContext = { ...context, runtimeId: "sikarugir", runtimeSettings: { graphicsBackend: "auto", graphicsBridgeVersion: pin.version } };
   assert.equal(Temporal.resolvePlan(entry, sikarugirContext, { ...options, allowDownload: true }).download.managerId, "sikarugir-graphics-bridge");
   assert.equal(Temporal.requirements(entry, sikarugirContext, { ...dependency, manager: { resolveSelection: () => ({ ready: true, install: options.install }) } })[0]?.managerId, "sikarugir-graphics-bridge");
@@ -131,12 +149,11 @@ test("camera capability requires matched DXMT, a supported Streamline interface,
     return { executablePath: runtimePath, architectures: ["x86_64"], sha256 };
   });
   const older = supportPin("9.7.3"), newer = supportPin("9.7.4"), future = supportPin("12.3.8"), pins = [newer, older, future], userDataDir = path.join(f.root, "abi-profile");
-  const abiManager = Support.createManager({ catalog: pins, dependencies: {
-    systemVersionSync: () => "14.0", fetchGithubTags: async () => [],
-    fetchGithubReleases: async () => [{ tag_name: "v1.0", assets: pins.map(row => ({ name: row.asset.filename, browser_download_url: row.asset.url,
-      digest: `sha256:${row.asset.sha256}`, size: row.asset.bytes })) }]
-  } });
-  function installed(row, nativeBytes, thunkBytes) {
+  const abiManager = Support.createManager({ dependencies: { systemVersionSync: () => "14.0" } });
+  Harness.network.routes = templateRoutes(pins.map(templateAsset));
+  try { await abiManager.refreshCatalog({ userDataDir, force: true }); } finally { Harness.network.routes = null; }
+  function installed(listed, nativeBytes, thunkBytes) {
+    const row = abiManager.core.catalog.find(pin => pin.version === listed.version);
     const directory = abiManager.core.getInstallDir({ userDataDir, version: row.version }), files = {};
     for (const name of Support.FILES) {
       const bytes = name === "wine/x86_64-unix/winemetal.so" ? nativeBytes : name === "wine/x86_64-windows/winemetal.dll" ? thunkBytes : name;
@@ -147,12 +164,19 @@ test("camera capability requires matched DXMT, a supported Streamline interface,
       installationMetadata: { schema: 1, files } }));
   }
   installed(older, "native base", "thunk base");installed(newer, "different native", "different thunk");
-  await abiManager.refreshCatalog({ userDataDir, force: true });
-  assert.equal(abiManager.resolveSelection({}, {}, userDataDir).version, null, "Installed versions remain choices until one is selected");
+  const automatic = abiManager.resolveSelection({}, {}, userDataDir);
+  assert.equal(automatic.version, future.version, "Automatic follows the newest compatible published release");
+  assert.equal(automatic.selectionSource, "default");
+  assert.equal(automatic.ready, false);assert.equal(automatic.requiresDownload, true);
+  assert.equal(automatic.discoveryRequired, false, "the existing catalog already supplies the automatic version");
   const originalForRuntime = Support.forRuntime;
   t.mock.method(Support, "forRuntime", id => id === "crossover" ? abiManager : originalForRuntime(id));
   const abiContext = { userDataDir, runtimeId: "crossover", runtimeSettings: { graphicsBackend: "dxmt", graphicsBridgeVersion: "auto" } };
-  assert.equal(Temporal.resolvePlan(entry, abiContext, { ...crossover, settings: abiContext.runtimeSettings, allowDownload: true }), null);
+  const automaticOptions = { ...crossover, settings: abiContext.runtimeSettings };
+  assert.equal(Temporal.resolvePlan(entry, abiContext, automaticOptions), null, "Automatic cannot acquire missing support without consent");
+  const automaticDownload = Temporal.resolvePlan(entry, abiContext, { ...automaticOptions, allowDownload: true });
+  assert.equal(automaticDownload.requiresDownload, true);
+  assert.deepEqual(automaticDownload.download, { managerId: abiManager.id, version: future.version });
   const explicitPlan = version => Temporal.resolvePlan(entry, abiContext, { ...crossover, settings: { ...abiContext.runtimeSettings, graphicsBridgeVersion: version }, allowDownload: true });
   assert.equal(explicitPlan(older.version).dependency.version, older.version);
   assert.equal(explicitPlan(newer.version), null, "An installed incompatible explicit package is neither replaced nor requested again");
@@ -161,50 +185,103 @@ test("camera capability requires matched DXMT, a supported Streamline interface,
   assert.equal(explicitPlan(future.version).download.version, future.version, "An uninstalled publisher release still receives actual inspection after consent");
   installed(future, "native base", "thunk base");
   assert.equal(explicitPlan(future.version).dependency.version, future.version, "Actual matching bytes admit a future release without a version whitelist");
+  const automaticReady = Temporal.resolvePlan(entry, abiContext, automaticOptions);
+  assert.equal(automaticReady.dependency.version, future.version, "Automatic resumes with the installed release after its actual renderer bytes match");
+  assert.equal(automaticReady.requiresDownload, undefined);
 });
-test("graphics bridge catalogs discover publisher versions and preserve offline explicit choices", async t => {
+test("the DXMT support catalog discovers publisher versions and preserves offline explicit choices", async t => {
   const f = fixture(t), Support = require("../src/modules/crossover/temporal/support-manager"), pin = supportPin(), extra = supportPin("11.4.2");
   let calls = 0;
-  for (const runtimeId of ["crossover", "sikarugir"]) {
-    const manager = Support.createManager({ runtimeId, dependencies: {
-      fetchGithubReleases: async () => {
-        calls++;const assets = [pin, extra].map(row => ({ name: row.asset.filename,
-          browser_download_url: row.asset.url, digest: `sha256:${row.asset.sha256}`, size: row.asset.bytes }));
-        return [{ tag_name: "v1.0", assets: [...assets, { ...assets[0], digest: null },
-          { ...assets[0], browser_download_url: assets[0].browser_download_url.replace("Sikarugir-App", "Elsewhere") }] }];
-      },
-      fetchGithubTags: async () => []
-    } }), userDataDir = path.join(f.root, runtimeId), settings = { runtimes: { [manager.id]: { defaultVersion: extra.version } } };
-    assert.equal(manager.id, runtimeId + "-graphics-bridge");assert.equal(manager.ui.groupId, runtimeId);
-    assert.deepEqual(manager.core.catalog, []);assert.equal(calls, runtimeId === "crossover" ? 0 : 1);
-    await manager.refreshCatalog({ userDataDir, force: true });
-    assert.deepEqual(manager.core.catalog.map(row => row.version), [pin.version, extra.version]);
-    assert.equal(manager.resolveSelection({}, settings, userDataDir).version, extra.version);
-    assert.equal(manager.resolveSelection({ runtimeData: { [manager.id]: { version: pin.version } } }, settings, userDataDir).version, pin.version);
-    assert.equal(manager.resolveSelection({}, settings, userDataDir, { version: "missing" }).version, "missing");
-    assert.equal(manager.resolveSelection({}, settings, userDataDir, { version: "missing" }).ready, false);
-    const offline = Support.createManager({ runtimeId });
-    assert.equal(offline.resolveSelection({ runtimeData: { [manager.id]: { version: pin.version } } }, {}, userDataDir).version, pin.version);
-  }
-  assert.equal(calls, 2);
+  const assets = [pin, extra].map(templateAsset), userDataDir = path.join(f.root, "profile");
+  t.after(() => { Harness.network.routes = null; });
+  const manager = Support.createManager(), settings = { runtimes: { [manager.id]: { defaultVersion: extra.version } } };
+  assert.deepEqual(manager.core.catalog, []);
+  // A second listing of the same archive without a digest is not another version.
+  Harness.network.routes = templateRoutes([...assets, { ...assets[0], digest: null }], () => calls++);
+  await manager.refreshCatalog({ userDataDir, force: true });
+  Harness.network.routes = null;
+  assert.equal(calls, 1);
+  assert.deepEqual(manager.core.catalog.map(row => row.version), [pin.version, extra.version]);
+  assert.equal(manager.resolveSelection({}, settings, userDataDir).version, extra.version);
+  assert.equal(manager.resolveSelection({ runtimeData: { [manager.id]: { version: pin.version } } }, settings, userDataDir).version, pin.version);
+  assert.equal(manager.resolveSelection({}, settings, userDataDir, { version: "missing" }).version, "missing");
+  assert.equal(manager.resolveSelection({}, settings, userDataDir, { version: "missing" }).ready, false);
+  const offline = Support.createManager();
+  assert.equal(offline.resolveSelection({ runtimeData: { [manager.id]: { version: pin.version } } }, {}, userDataDir).version, pin.version);
+});
+test("CrossOver and Sikarugir show one DXMT support package with the same versions and plain version labels", t => {
+  const f = fixture(t), Support = require("../src/modules/crossover/temporal/support-manager"), registry = require("../src/modules/registry");
+  const pin = supportPin(), extra = supportPin("11.4.2"), userDataDir = path.join(f.root, "profile");
+  // One manager serves both hosts and appears once in Runtimes, under Graphics.
+  assert.equal(Support.forRuntime("crossover"), Support.forRuntime("sikarugir"));
+  assert.equal(Support.forRuntime("unrelated"), null);
+  const registered = [...new Set(registry.listModules().flatMap(info => registry.getModule(info.id).runtimeManagers || [])
+    .filter(source => /dxmt support/i.test(source.label || "") || /graphics-bridge/.test(source.id)))];
+  assert.deepEqual(registered.map(source => source.id), [Support.id]);
+  assert.deepEqual(registry.getRuntimeManagerUi(Support.id), Support.ui);
+  assert.deepEqual([Support.ui.groupId, Support.ui.tabLabel, Support.ui.sectionLabel], ["graphics", "Graphics", "DXMT support"]);
+  // A catalog saved by an earlier launcher still carries composed labels.
+  require("../src/modules/shared/runtime/runtime-catalog").writeRuntimeCatalog({ userDataDir, managerId: Support.id,
+    entries: [pin, extra].map(row => ({ ...row, catalogSourceId: "upstream", upstreamTag: row.version })), source: "https://github.com/Sikarugir-App/Template/releases",
+    sourceStates: { upstream: { status: "success", fetchedAt: Date.now(), error: null, mode: "all" } } });
+  const state = Support.getState({ userDataDir });
+  assert.equal(Support.core.catalog.find(row => row.version === pin.version)?.versionLabel, `DXMT · support ${pin.version}`);
+  assert.deepEqual(state.catalog.versions, [pin.version, extra.version]);
+  assert.doesNotMatch(JSON.stringify(state), /DXMT · support/);
   const mod = require("../src/modules/crossover/main"), manifest = mod.manifest;
   const { resolveRuntimeSettingsSchema, normalizeRuntimeSettings } = require("../src/core/runtime-settings");
+  const expected = [{ value: "auto", label: "Automatic" }, { value: pin.version, label: pin.version }, { value: extra.version, label: extra.version }];
   for (const runtimeId of ["crossover", "sikarugir"]) {
     const schema = resolveRuntimeSettingsSchema(manifest, runtimeId), field = schema.fields.find(field => field.key === "graphicsBridgeVersion");
     assert.deepEqual(field.options, [{ value: "auto", label: "Automatic" }]);
     assert.equal(field.optionsAction, "listGraphicsBridgeVersions");assert.equal(field.optionsKey, "graphicsBridgeVersions");
-    const context = { userDataDir: path.join(f.root, runtimeId), runtimeId };
-    const expected = ["auto", pin.version, extra.version];
-    assert.deepEqual(mod.settingsActions.listGraphicsBridgeVersions({ runtimeId }, context).graphicsBridgeVersions.map(row => row.value), expected);
-    assert.deepEqual(mod.actions.listGraphicsBridgeVersions({ runtimeId }, {}, context).graphicsBridgeVersions.map(row => row.value), expected);
+    const context = { userDataDir, runtimeId };
+    assert.deepEqual(mod.settingsActions.listGraphicsBridgeVersions({ runtimeId }, context).graphicsBridgeVersions, expected);
+    assert.deepEqual(mod.actions.listGraphicsBridgeVersions({ runtimeId }, {}, context).graphicsBridgeVersions, expected);
     for (const moduleId of ["fna", "unity"]) {
-      const engine = require("../src/modules/registry").getModule(moduleId);
-      assert.deepEqual(engine.settingsActions.listGraphicsBridgeVersions({ runtimeId }, context).graphicsBridgeVersions.map(row => row.value), expected);
-      assert.deepEqual(engine.actions.listGraphicsBridgeVersions({ runtimeId: "unrelated" }, {}, context).graphicsBridgeVersions.map(row => row.value), expected);
+      const engine = registry.getModule(moduleId);
+      assert.deepEqual(engine.settingsActions.listGraphicsBridgeVersions({ runtimeId }, context).graphicsBridgeVersions, expected);
+      assert.deepEqual(engine.actions.listGraphicsBridgeVersions({ runtimeId: "unrelated" }, {}, context).graphicsBridgeVersions, expected);
     }
     for (const selected of [pin.version, "unavailable-saved-version"])
       assert.equal(normalizeRuntimeSettings(schema, { graphicsBridgeVersion: selected }).graphicsBridgeVersion, selected);
   }
+});
+test("DXMT support installed by earlier launchers in either host's folder is used in place on Apple Silicon without another download",
+  { skip: require("../src/modules/shared/runtime/host-capabilities").getHostCapabilities().hardwareArch !== "arm64" && "DXMT support runs on Apple Silicon" }, t => {
+  const f = fixture(t), Support = require("../src/modules/crossover/temporal/support-manager"), userDataDir = path.join(f.root, "profile");
+  // DXMT's Wine-side libraries are x86_64 files; the release declares Apple Silicon Macs as its hosts.
+  const library = Buffer.alloc(64);library.writeUInt32LE(0xfeedfacf, 0);library.writeUInt32LE(0x01000007, 4);library.writeUInt32LE(3, 8);library.writeUInt32LE(6, 12);
+  // Earlier launchers kept one folder per host and no CPU subfolder, and recorded no build CPU.
+  function earlierInstall(folder, pin) {
+    const directory = path.join(userDataDir, "runtimes", folder, pin.version), files = {};
+    for (const name of Support.FILES) {
+      const bytes = name === "wine/x86_64-unix/winemetal.so" ? library : Buffer.from(name), file = path.join(directory, "dxmt", name);
+      fs.mkdirSync(path.dirname(file), { recursive: true });fs.writeFileSync(file, bytes, { mode: 0o755 });files[name] = sha(bytes);
+    }
+    fs.writeFileSync(path.join(directory, "runtime.json"), JSON.stringify({ version: pin.version, upstreamRevision: pin.upstreamRevision, catalogEntry: pin,
+      binarySha256: files["wine/x86_64-unix/winemetal.so"], executableRelative: "dxmt/wine/x86_64-unix/winemetal.so", archiveSha256: pin.asset.sha256,
+      installationMetadata: { schema: 1, files }, assetUrl: pin.asset.url, source: "download", installedAt: "2026-10-24T15:22:40.761Z" }));
+    return directory;
+  }
+  const crossover = supportPin("9.7.3"), sikarugir = supportPin("9.7.4");
+  const directories = { [crossover.version]: earlierInstall("crossover-graphics-bridge", crossover), [sikarugir.version]: earlierInstall("sikarugir-graphics-bridge", sikarugir) };
+  const state = Support.getState({ userDataDir });
+  assert.deepEqual(state.installed.map(row => [row.version, row.ready, row.architecture, row.installDir]).sort(),
+    Object.entries(directories).map(([version, directory]) => [version, true, "arm64", directory]), "each install is listed once, for Apple Silicon");
+  for (const version of Object.keys(directories)) assert.equal(state.catalog.versionRequirements[version]?.available, true, `${version}: no Install offered beside it`);
+  for (const runtimeId of ["crossover", "sikarugir"]) {
+    for (const [version, directory] of Object.entries(directories)) {
+      const selected = Support.forRuntime(runtimeId).resolveSelection({}, {}, userDataDir, { version, verification: "full" });
+      assert.equal(selected.ready, true, `${runtimeId} ${version}`);assert.ok(!selected.requiresDownload, `${runtimeId} ${version}: no download`);
+      assert.equal(selected.install.installDir, directory);assert.equal(selected.install.baseRoot, path.join(directory, "dxmt/wine"));
+    }
+    const choices = require("../src/modules/crossover/main").settingsActions.listGraphicsBridgeVersions({ runtimeId }, { userDataDir, runtimeId }).graphicsBridgeVersions;
+    assert.deepEqual(choices.map(row => row.value).sort(), ["auto", ...Object.keys(directories)].sort());
+  }
+  // Nothing is moved or copied.
+  for (const directory of Object.values(directories)) assert.ok(fs.existsSync(path.join(directory, "runtime.json")));
+  assert.equal(fs.existsSync(path.join(userDataDir, "runtimes/sikarugir-graphics-bridge/arm64")), false);
 });
 test("owned DXMT transport survives both shared graphics environment merges and cannot be supplied through runtime settings", () => {
   const ReShade = require("../src/modules/shared/reshade"), Temporal = require("../src/modules/crossover/temporal");
@@ -214,9 +291,9 @@ test("owned DXMT transport survives both shared graphics environment merges and 
   for (const module of ["../src/modules/crossover/runtime/launch", "../src/modules/crossover/sikarugir/launch"])
     assert.throws(() => require(module).parseEnvironment(["MACLAUNCHER_DXMT_BASE_LIBRARY=/unrelated.so"]), /Environment/);
 });
-test("DXMT camera support keeps only the matched renderer files from the shared Template archive", async t => {
+for (const layout of ["Frameworks", "SharedSupport"]) test(`DXMT camera support keeps only the matched renderer files from the shared Template archive (${layout}/renderer)`, async t => {
   const f = fixture(t), Support = require("../src/modules/crossover/temporal/support-manager"), pin = supportPin(), unpacked = path.join(f.root, "unpacked"), app = path.join(unpacked, `Template-${pin.version}.app`);
-  const renderer = path.join(app, "Contents/Frameworks/renderer/dxmt");
+  const renderer = path.join(app, "Contents", layout, "renderer/dxmt");fs.mkdirSync(path.join(app, "Contents/Frameworks"), { recursive: true });
   for (const name of Support.FILES) { const file = path.join(renderer, name);fs.mkdirSync(path.dirname(file), { recursive: true });fs.writeFileSync(file, name); }
   const unrelated = path.join(app, "Contents/MacOS/launcher");fs.mkdirSync(path.dirname(unrelated), { recursive: true });fs.writeFileSync(unrelated, "unused launcher");
   const metadata = await Support.prepareInstall({ unpacked, pin });

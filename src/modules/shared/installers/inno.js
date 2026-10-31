@@ -69,9 +69,9 @@ function helperFromInstall(install) {
   return { version, packageVersion: install.version, sourceRevision: install.upstreamRevision, executable: install.runtimePath,
     inspector: path.join(install.installDir, install.runtimeFiles.inspector), identity: manifestSha256 };
 }
-// Status and read-only callers inspect managed installs without discovery.
-function resolveHelper({ userDataDir, settings, entry, version, arch = process.arch } = {}) {
-  if (arch !== "arm64") throw installerError("The installer reader is unavailable for this Mac.", "INSTALLER_TOOL_MISSING");
+// Status and read-only callers inspect managed installs without discovery. The
+// reader's catalog records state which Macs each build supports.
+function resolveHelper({ userDataDir, settings, entry, version } = {}) {
   const selected = userDataDir && Manager.resolveSelection(entry, settings, userDataDir, { version });
   if (!selected?.ready) throw installerError(selected?.reason || "Install an Installer reader version in Runtimes.", "INSTALLER_TOOL_MISSING");
   return helperFromInstall(selected.install);

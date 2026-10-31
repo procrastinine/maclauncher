@@ -59,7 +59,8 @@ test("revisions of one upstream version install side by side, keep a user defaul
     "Installing a newer revision leaves the earlier one installed");
   assert.equal(runtimeSettings.defaultVersion, first.version, "The committed first-install default is retained");
   assert.equal(select(null).version, first.version, "A later install does not silently change the default");
-  assert.equal(manager.resolveSelection(null, { runtimes: { [projectId]: { defaultVersion: null } } }, userDataDir).selectionRequired, true);
+  assert.equal(manager.resolveSelection(null, { runtimes: { [projectId]: { defaultVersion: null } } }, userDataDir).version, tenth.version,
+    "Without a saved default the manager default is the newest published revision, never a forced choice");
   assert.equal(manager.resolveSelection(null, { runtimes: { [projectId]: runtimeSettings } }, userDataDir,
     { recommended: () => second.version }).version, second.version, "A game recommendation precedes the global default");
   assert.equal(manager.resolveSelection({ runtimeData: { [runtimeId]: { version: first.version } } },
@@ -85,13 +86,13 @@ test("revisions of one upstream version install side by side, keep a user defaul
   assert.equal(fetches, 2, "Only explicit Refresh reads the catalog");
 });
 
-test("module-pinned Builds revisions are listed together and offer a user default", async t => {
+test("Builds revisions of one upstream revision are listed together and offer a user default", async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "builds-multi-version-pinned-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const revision = "1".repeat(40), versions = ["MCLv1-1028-kag3-1", "MCLv1-1001"];
+  const source = { repository: "ExampleOwner/runtime-source", revision };
   const manager = createPinnedNativeManager({ id: projectId, label: "Sample engine", projectBuilds: { projectId, repository },
-    catalog: versions.map(version => ({ version, upstreamRevision: revision, localBuild: false })),
-    dependencies: { systemVersionSync: () => "26.0", projectBuilds: { fetchUrlBuffer: async () => catalogResponse(versions.map(version => hostedRecord(version))) } } });
+    dependencies: { systemVersionSync: () => "26.0", projectBuilds: { fetchUrlBuffer: async () => catalogResponse(versions.map(version => ({ ...hostedRecord(version), source }))) } } });
   const userDataDir = path.join(root, "data");
   assert.equal(manager.getState({ userDataDir }).sections[0].supportsDefault, true);
   await manager.refreshCatalog({ userDataDir, force: true });
@@ -110,11 +111,17 @@ test("version lists order revisions by their numbers", async () => {
   const compiled = new Module(path.join(__dirname, "runtime-inspector-model.cjs"), module);
   compiled.paths = module.paths;
   compiled._compile(bundle.output.find(chunk => chunk.type === "chunk").code, compiled.id);
-  const { runtimeInspectorVersions } = compiled.exports, list = versions => runtimeInspectorVersions({ catalog: { versions }, installed: [] });
+  const { runtimeInspectorVersions } = compiled.exports;
+  const list = versions => runtimeInspectorVersions({ catalog: { versions }, installed: versions.map(version => ({ version, ready: true })) });
   assert.deepEqual(list(["0.41.0-MCLv2", "0.41.0-MCLv10", "0.41.0-MCLv1"]), ["0.41.0-MCLv10", "0.41.0-MCLv2", "0.41.0-MCLv1"]);
   assert.deepEqual(list(["1.9-MCLv1", "1.12-MCLv1"]), ["1.12-MCLv1", "1.9-MCLv1"]);
   assert.deepEqual(list(["MCLv1-1001", "MCLv1-1028-kag3-1"]), ["MCLv1-1028-kag3-1", "MCLv1-1001"]);
   assert.deepEqual(list(["4.2.2", "4.10.0", "4.3.0"]), ["4.10.0", "4.3.0", "4.2.2"]);
+  // The menu lists installed versions and the game's saved choice, never
+  // versions that are only available to download.
+  const section = { catalog: { versions: ["4.10.0", "4.3.0", "4.2.2"] }, installed: [{ version: "4.3.0", ready: true }] };
+  assert.deepEqual(runtimeInspectorVersions(section), ["4.3.0"]);
+  assert.deepEqual(runtimeInspectorVersions(section, "4.2.2"), ["4.3.0", "4.2.2"]);
 });
 
 test("every named catalog record is listed; records this launcher cannot use show their reason", async t => {
@@ -135,12 +142,11 @@ test("every named catalog record is listed; records this launcher cannot use sho
   const project = createProjectBuildManager({ projectId, runtimeId, label: "Sample runtime", repository, manifestRelative: "runtime.json",
     sourceRelative: "source.tar.gz", executableRelative: "native", validateManifest: () => {}, verifyPayload: () => {},
     dependencies: { systemVersionSync: () => "26.0", fetchUrlBuffer } });
-  // Only the older records without `source` use a launcher entry, and only for
-  // their source revision. A later record describes itself.
+  // A native record names its own source revision; one without `source` is
+  // listed with its reason.
+  const sourced = row => ["0.41.0-MCLv1", "0.41.0-MCLv2"].includes(row?.version) ? { ...row, source: { repository: "ExampleOwner/runtime-source", revision } } : row;
   const native = createPinnedNativeManager({ id: projectId, label: "Sample engine", projectBuilds: { projectId, repository },
-    catalog: [{ version: "0.41.0-MCLv1", upstreamRevision: revision, localBuild: false },
-      { version: "0.41.0-MCLv2", upstreamRevision: revision, localBuild: false, sourceArtifact: { sha256: "c".repeat(64) } }],
-    dependencies: { systemVersionSync: () => "26.0", projectBuilds: { fetchUrlBuffer: async () => catalogResponse([...rows,
+    dependencies: { systemVersionSync: () => "26.0", projectBuilds: { fetchUrlBuffer: async () => catalogResponse([...rows.map(sourced),
       { ...hostedRecord("0.41.0-MCLv6"), source: { repository: "ExampleOwner/runtime-source", revision: "3".repeat(40) },
         capabilities: { decodedFrameAPI: 1, nativeAbi: { sdlEventLoop: "dynamic" } } }, hostedRecord("0.41.0-MCLv7")]) } } });
   const nativeReasons = { ...reasons, "0.41.0-MCLv7": "This version does not identify its source revision." };

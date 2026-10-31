@@ -63,6 +63,29 @@ test("normalizeSettings sets default mac variant", () => {
   assert.equal(normalized.web.defaultVersion, null);
 });
 
+test("Onsyuri later Universal catalog records remain selectable for both native variants", t => {
+  const userDataDir = makeTempDir("maclauncher-onsyuri-future-universal-");
+  t.after(() => fs.rmSync(userDataDir, {recursive: true, force: true}));
+  const version = "99.0.1-MCLv1";
+  t.mock.method(Runtime, "listInstalledMac", () => []);
+  t.mock.method(Runtime, "listInstalledWeb", () => []);
+  t.mock.method(Runtime.hosted, "getState", () => ({catalog: {versions: [version], installableVersions: [version]}}));
+  t.mock.method(Runtime.hosted.core, "listCatalog", () => [{version, minimumMacOS: "13.0",
+    hostArchitectures: ["arm64", "x64"], projectPackage: {arch: "universal"}}]);
+  for (const variant of ["arm64", "x64"]) {
+    const cfg = {mac: {defaultVariant: variant}};
+    const state = Manager.getState({userDataDir, settings: cfg});
+    assert.equal(state.mac.defaultVersion, version);
+    assert.ok(state.mac.catalog.installableVersions.includes(version));
+    const requirement = state.mac.catalog.versionRequirements[version].variants[variant];
+    assert.equal(requirement.installable, true);
+    assert.equal(requirement.installReason, "");
+    const selected = Manager.resolveInstalledSelection({runtimeId: "onsyuri_mac"}, {runtimes: {onsyuri: cfg}}, userDataDir);
+    assert.equal(selected.version, version);
+    assert.equal(selected.installOptions.variant, variant);
+  }
+});
+
 test("Onsyuri preserves its committed Apple Silicon default and explicit global choices", () => {
   assert.equal(Manager.normalizeSettings({ mac: { defaultVariant: "arm64" } }).mac.defaultVersion, null);
   assert.equal(Manager.normalizeSettings({ mac: { defaultVariant: "arm64", defaultVersion: null } }).mac.defaultVersion, null, "a cleared preference stays cleared");
@@ -147,7 +170,7 @@ test("refreshed native options separate hosted and stock versions with exact flo
   t.mock.method(Runtime, "listInstalledMac", () => []);
   t.mock.method(Runtime.hosted, "getState", () => ({ catalog: { versions: [FIXTURE_NATIVE_VERSION], installableVersions: [FIXTURE_NATIVE_VERSION] } }));
   t.mock.method(Runtime.hosted.core, "listCatalog", () => [HOSTED_ENTRY]);
-  t.mock.method(Runtime, "fetchAvailableVersions", async () => ({ macVersions: ["0.7.7beta"], webVersions: [], releases: [], source: "https://github.com/YuriSizuku/OnscripterYuri/releases" }));
+  t.mock.method(Runtime, "fetchAvailableVersions", async () => ({ macVersions: ["0.7.7beta"], webVersions: [], rows: [], source: "https://github.com/YuriSizuku/OnscripterYuri/releases" }));
   await Manager.refreshCatalog({ userDataDir, sourceId: "upstream", force: true });
   const state = Manager.getState({ settings: { mac: { defaultVariant: "arm64" } }, userDataDir });
   const versions = state.mac.catalog.versions;
@@ -201,9 +224,9 @@ test("explicit Onsyuri Refresh retains existing stock Mac download variants alon
   const userDataDir = makeTempDir("maclauncher-onsyuri-stock-catalog-");
   t.after(() => fs.rmSync(userDataDir,{recursive:true,force:true}));
   const version = "0.7.6";
-  t.mock.method(Runtime,"fetchAvailableVersions",async () => ({macVersions:[version],webVersions:[],releases:[{
+  t.mock.method(Runtime,"fetchAvailableVersions",async () => ({macVersions:[version],webVersions:[],rows:Runtime.rowsFromReleases([{
     tag_name:"v"+version,assets:[{name:"onsyuri_aarch64_darwin",browser_download_url:"https://example.invalid/native-arm"},
-      {name:"onsyuri_x86-64_darwin",browser_download_url:"https://example.invalid/native-intel"}]}]}));
+      {name:"onsyuri_x86-64_darwin",browser_download_url:"https://example.invalid/native-intel"}]}])}));
   await Manager.refreshCatalog({userDataDir,sectionId:"mac",sourceId:"upstream",force:true});
   const state = Manager.getState({userDataDir,settings:{}});
   const variants = state.mac.catalog.versionRequirements[version].variants;
@@ -222,7 +245,7 @@ test('Onsyuri default reuses ready installed versions when nothing is listed', a
   t.mock.method(Runtime,'listInstalledMac',()=>[{version:previous,variant:'arm64',ready:true}]);
   t.mock.method(Runtime.hosted,'getState',()=>({catalog:{versions:[],installableVersions:[]}}));
   t.mock.method(Runtime.hosted.core,'listCatalog',()=>[]);
-  t.mock.method(Runtime,'fetchAvailableVersions',async()=>({releases:[],macVersions:[],webVersions:[]}));
+  t.mock.method(Runtime,'fetchAvailableVersions',async()=>({rows:[],macVersions:[],webVersions:[]}));
   await Manager.refreshCatalog({userDataDir:userDataDir,sourceId:'upstream',force:true});
   const unset=Manager.resolveInstalledSelection({}, {}, userDataDir);
   assert.equal(unset.ready,true);assert.equal(unset.version,previous);
@@ -233,4 +256,34 @@ test('Onsyuri default reuses ready installed versions when nothing is listed', a
   assert.equal(selected.ready,true);assert.equal(selected.version,previous);
   const exact=Manager.resolveInstalledSelection({runtimeData:{onsyuri:{version:FIXTURE_NATIVE_VERSION}}},{},userDataDir);
   assert.equal(exact.ready,false);assert.equal(exact.version,FIXTURE_NATIVE_VERSION);
+});
+
+test("Onsyuri lists any version-like tag and Play falls back from a saved default upstream removed", async t => {
+  const userDataDir = makeTempDir("onsyuri-saved-default-");
+  t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
+  t.mock.method(Runtime, "listInstalledMac", () => []);
+  t.mock.method(Runtime, "listInstalledWeb", () => []);
+  t.mock.method(Runtime.hosted, "getState", () => ({ catalog: { versions: [], installableVersions: [] } }));
+  t.mock.method(Runtime.hosted.core, "listCatalog", () => []);
+  const release = (tag, version) => ({ tag_name: tag, assets: [
+    { name: `onsyuri_v${version}_aarch64_darwin`, browser_download_url: `https://example.invalid/${version}/arm` },
+    { name: `onsyuri_v${version}_web.7z`, browser_download_url: `https://example.invalid/${version}/web.7z` }] });
+  const rows = Runtime.rowsFromReleases([release("v0.9", "0.9"), release("v0.8.2.1", "0.8.2.1"), release("v0.8.2", "0.8.2")]);
+  t.mock.method(Runtime, "fetchAvailableVersions", async () => ({ rows, macVersions: Runtime.versionsOf(rows, "mac"), webVersions: Runtime.versionsOf(rows, "web") }));
+  await Manager.refreshCatalog({ userDataDir, sectionId: "mac", sourceId: "upstream", force: true });
+  const settings = { mac: { defaultVersion: "0.7.1", defaultVariant: "arm64" }, web: { defaultVersion: "0.7.1" } };
+  const state = Manager.getState({ userDataDir, settings });
+  assert.deepEqual(state.web.catalog.versions, ["0.9", "0.8.2.1", "0.8.2"]);
+  assert.equal(state.mac.catalog.versionRequirements["0.8.2.1"].variants.arm64.installable, true);
+  assert.equal(state.mac.catalog.versionRequirements["0.9"].variants.x64.installable, false);
+  // Runtimes shows the saved choice; Play uses the newest listed version for it.
+  assert.equal(state.mac.defaultVersion, "0.7.1"); assert.equal(state.mac.defaultSource, "saved");
+  assert.equal(state.web.defaultVersion, "0.7.1");
+  const mac = Manager.resolveInstalledSelection({ runtimeId: "onsyuri_mac" }, { runtimes: { onsyuri: settings } }, userDataDir);
+  assert.equal(mac.version, "0.9"); assert.equal(mac.ready, false);
+  assert.equal(Manager.resolveInstalledSelection({ runtimeId: "onsyuri_web" }, { runtimes: { onsyuri: settings } }, userDataDir).version, "0.9");
+  // The catalog cache keeps one listed download per version, section and CPU.
+  const cached = JSON.parse(fs.readFileSync(path.join(userDataDir, "runtimes", "onsyuri", "catalog-upstream.json"), "utf8"));
+  assert.deepEqual(cached.entries.map(entry => [entry.version, entry.section, entry.architecture || null]),
+    [["0.9", "mac", "arm64"], ["0.9", "web", null], ["0.8.2.1", "mac", "arm64"], ["0.8.2.1", "web", null], ["0.8.2", "mac", "arm64"], ["0.8.2", "web", null]]);
 });

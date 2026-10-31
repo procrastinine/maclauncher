@@ -206,6 +206,8 @@
 .externalModeSegments label { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; color: var(--muted); border-radius: var(--radius-sm); font-size: var(--font-sm); cursor: pointer; }
 .externalModeSegments label[data-selected="true"] { color: var(--text); background: var(--surface-3); box-shadow: 0 1px 3px #0003; }
 .externalModeSegments input { width: 12px; height: 12px; margin: 0; accent-color: var(--accent); }
+.externalModeSegments label:has(input:disabled) { cursor: default; opacity: .6; }
+.externalModeReason { color: var(--muted); font-size: var(--font-xs); }
 .externalPublicGameForm { display: flex; flex-wrap: wrap; align-items: end; gap: 9px; padding: 11px 18px 12px; flex-shrink: 0; }
 .externalPublicGameForm .steamField { flex: 1; min-width: 180px; max-width: 600px; }
 .externalPublicStatus { color: var(--text-accent2); font-size: var(--font-xs); align-self: center; }

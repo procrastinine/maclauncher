@@ -4,19 +4,11 @@ const Detection = require("../detect");
 const Launch = require("./launch");
 const Writable = require("../../shared/writable-input");
 
-// The CrossOver evidence decorator has already checked the Windows executable.
-// Provider selection consumes those cached facts; opening a runtime picker never
-// repeats a directory scan or depends on whether Wine is already installed.
-function supportsEntry(entry) {
-  if (!entry || Detection.isNativeImport(entry)) return false;
-  const evidence = Detection.cachedWindowsExecutable(entry);
-  if (!evidence?.windowsExecutablePath || !["x86", "x86_64"].includes(evidence.executableArchitecture)) return false;
-  if (!path.isAbsolute(evidence.sourceRoot || "") || !Detection.inside(evidence.sourceRoot, evidence.windowsExecutablePath)) return false;
-  const explicitInput = entry.importPath;
-  if (typeof explicitInput === "string" && /\.(?:appimage|sh|elf|x86_64|x86)$/i.test(explicitInput)) return false;
-  try { return fs.statSync(evidence.windowsExecutablePath).isFile(); } catch { return false; }
-}
-function decorateEntry(entry) { return entry?.runtimeData?.crossover?.detectionComplete ? entry : Detection.decorateEntry(entry); }
+// Both Windows runtimes share the executable evidence that detection records.
+// The runtime picker reads that record and does not depend on whether Wine is
+// already installed.
+const supportsEntry = entry => Detection.supportsWindowsRuntimes(entry);
+const decorateEntry = Detection.decorateEntry;
 function resolveSaveLocations(entry, context) {
   const directory = Launch.runtimeDirectory(entry, context), gameRoot = path.join(directory, "game");
   const directories = [{ directory: gameRoot, role: "primary", source: "Private Windows game files", confidence: "exact" }];

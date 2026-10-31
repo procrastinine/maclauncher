@@ -1,17 +1,13 @@
-const path = require("node:path");
 const { createPinnedNativeManager } = require("../../shared/runtime/pinned-native-manager");
 const Catalog = require("./catalog");
 const Payload = require("./payload");
 const { throwIfAborted } = require("../../shared/runtime/download-utils");
-const { extractDmg } = require("./dmg");
 
-function createManager({ discoverCatalog = Catalog.createDiscovery(), dependencies = {} } = {}) {
+function createManager({ dependencies = {} } = {}) {
   const base = createPinnedNativeManager({
     id: "rfvp", label: "RFVP", sourceUrl: Catalog.SOURCE_URL,
-    catalog: [Catalog.DEFAULT_ENTRY], discoverCatalog,
-    resolveExecutable: root => path.join(root, "RFVP.app"),
-    prepareInstall: options => Payload.preparePayload(options, dependencies),
-    dependencies: { extractArchive: extractDmg, ...dependencies }
+    upstream: Catalog.source, resolveExecutable: Payload.appPath,
+    prepareInstall: options => Payload.preparePayload(options, dependencies), dependencies
   });
   const resolvePayload = Payload.createPayloadResolver(dependencies);
   const resolveInstalled = options => resolvePayload(base.core.resolveInstalled(options), options).install;
@@ -87,4 +83,3 @@ function createManager({ discoverCatalog = Catalog.createDiscovery(), dependenci
 
 module.exports = createManager();
 module.exports.createManager = createManager;
-module.exports.DEFAULT_VERSION = Catalog.DEFAULT_VERSION;

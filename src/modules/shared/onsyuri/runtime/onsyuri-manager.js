@@ -1,12 +1,14 @@
 const Runtime = require("./onsyuri-runtime");
-const Releases = require("../../runtime/github-releases");
+const Versions = require("./onsyuri-versions");
+const Upstream = require("../../runtime/upstream");
 const { runDownloadTask } = require("../../runtime/download-manager");
 const { buildRuntimeDownloadMeta } = require("../../runtime/runtime-downloads");
 const { sourceCatalog } = require("../../runtime/runtime-sources");
 const { readRuntimeCatalog, writeRuntimeCatalog } = require("../../runtime/runtime-catalog");
 const UPSTREAM_SOURCE = "https://github.com/YuriSizuku/OnscripterYuri/releases";
 const Custom = require("../../runtime/custom-runtime");
-const { selectRuntimeVersion, managerDefaultVersion } = require("../../runtime/version-choices");
+const Architecture = require("../../runtime/architecture");
+const { selectRuntimeVersion, managerDefaultVersion, usableDefaultVersion } = require("../../runtime/version-choices");
 const fs = require("node:fs"), path = require("node:path");
 const loadedUpstream = new Set();
 
@@ -27,7 +29,7 @@ const MAC_NOTICE = {
 
 let catalogPromise = null;
 let catalogFetchedAt = null;
-let catalogReleases = [];
+let upstreamRows = [];
 let macCatalog = {
   status: "idle",
   versions: [],
@@ -47,10 +49,10 @@ function normalizeSettings(input) {
   const variant = typeof input?.mac?.defaultVariant === "string" && input.mac.defaultVariant.trim()
     ? input.mac.defaultVariant.trim() : defaultArchVariant();
   return { mac: { defaultVersion: input?.mac?.defaultVersion && input.mac.defaultVersion !== "auto"
-    ? Releases.normalizeOnsyuriMacVersion(input.mac.defaultVersion)
+    ? Versions.normalizeOnsyuriMacVersion(input.mac.defaultVersion)
     : null, defaultVariant: variant },
     web: { defaultVersion: input?.web?.defaultVersion && input.web.defaultVersion !== "auto"
-      ? Releases.normalizeOnsyuriVersion(input.web.defaultVersion) : null, defaultVariant: null } };
+      ? Versions.normalizeOnsyuriVersion(input.web.defaultVersion) : null, defaultVariant: null } };
 }
 
 function resolveInstalledSelection(entry, settings, userDataDir) {
@@ -61,7 +63,9 @@ function resolveInstalledSelection(entry, settings, userDataDir) {
     ? data.version.trim().replace(/^v/i, "") : null;
   const variant = web ? null : data.variant || cfg.mac.defaultVariant;
   const section = getState({ userDataDir, settings: { ...cfg, mac: { ...cfg.mac, defaultVariant: variant } } })[web ? "web" : "mac"];
-  const version = selectRuntimeVersion({ manual: selected, defaultVersion: section.defaultVersion }).version;
+  // The saved default while it is listed or installed for this CPU; otherwise the newest one.
+  const version = selectRuntimeVersion({ manual: selected, defaultVersion: usableDefaultVersion({ ...section,
+    installed: section.installed.filter(row => !variant || row.variant === variant) }) }).version;
   const installed = (web ? Runtime.listInstalledWeb(userDataDir) : Runtime.listInstalledMac(userDataDir))
     .filter(row => row.ready !== false && (!variant || row.variant === variant));
   const install = installed.find(row => row.version === version);
@@ -75,7 +79,7 @@ async function resolveSelection(entry, settings, userDataDir) {
 }
 
 function defaultArchVariant() {
-  return process.arch === "arm64" ? "arm64" : "x64";
+  return Architecture.selectedArchitecture() === "arm64" ? "arm64" : "x64";
 }
 
 function resolveSectionId(sectionId) {
@@ -83,16 +87,23 @@ function resolveSectionId(sectionId) {
 }
 
 function applyUpstream(result, state) {
-  catalogReleases = result.releases || [];
+  upstreamRows = result.rows || [];
   catalogFetchedAt = state.fetchedAt;
-  macCatalog = { ...state, versions: result.macVersions || Releases.collectOnsyuriVersions(catalogReleases), source: result.source || UPSTREAM_SOURCE };
-  webCatalog = { ...state, versions: result.webVersions || Releases.collectOnsyuriVersions(catalogReleases, { variant: "web" }), source: result.source || UPSTREAM_SOURCE };
+  macCatalog = { ...state, versions: result.macVersions || Runtime.versionsOf(upstreamRows, SECTION_MAC), source: result.source || UPSTREAM_SOURCE };
+  webCatalog = { ...state, versions: result.webVersions || Runtime.versionsOf(upstreamRows, SECTION_WEB), source: result.source || UPSTREAM_SOURCE };
+}
+// Cached rows: one listed download per version, section and CPU. Earlier
+// caches hold GitHub's release objects, which are read the same way.
+function cachedRows(entry) {
+  if (entry?.release) return Runtime.rowsFromReleases([entry.release]);
+  const file = Upstream.listedFile(entry?.asset);
+  return file && [SECTION_MAC, SECTION_WEB].includes(entry.section) && Versions.normalizeOnsyuriVersion(entry.version) === entry.version
+    ? [{ version: entry.version, details: { section: entry.section }, ...(entry.architecture ? { architecture: entry.architecture } : {}), files: [file] }] : [];
 }
 function loadUpstream(userDataDir) {
   if (!userDataDir || loadedUpstream.has(userDataDir)) return;
-  const cached = readRuntimeCatalog({ userDataDir, managerId: "onsyuri", sourceId: "upstream", validateEntry: row =>
-    row?.release && typeof row.release === "object" && typeof row.release.tag_name === "string" && Array.isArray(row.release.assets) });
-  if (cached?.source === UPSTREAM_SOURCE) applyUpstream({ releases: cached.entries.map(row => row.release) },
+  const cached = readRuntimeCatalog({ userDataDir, managerId: "onsyuri", sourceId: "upstream", validateEntry: row => cachedRows(row).length > 0 });
+  if (cached?.source === UPSTREAM_SOURCE) applyUpstream({ rows: cached.entries.flatMap(cachedRows) },
     { status: cached.sourceStates?.upstream?.status === "error" ? "error" : "success", fetchedAt: cached.sourceStates?.upstream ? cached.sourceStates.upstream.fetchedAt : cached.fetchedAt,
       error: cached.sourceStates?.upstream?.error || null });
   loadedUpstream.add(userDataDir);
@@ -101,7 +112,8 @@ function saveUpstream(userDataDir) {
   if (!userDataDir) return;
   writeRuntimeCatalog({ userDataDir, managerId: "onsyuri", sourceId: "upstream", source: UPSTREAM_SOURCE,
     fetchedAt: catalogFetchedAt, sourceStates: { upstream: { status: macCatalog.status, fetchedAt: catalogFetchedAt, error: macCatalog.error } },
-    entries: catalogReleases.map((release, index) => ({ version: Releases.normalizeOnsyuriVersion(release.tag_name) || String(index), release })) });
+    entries: upstreamRows.filter(row => row.files?.length).map(row => ({ version: row.version, section: row.details?.section,
+      ...(row.architecture ? { architecture: row.architecture } : {}), asset: Upstream.asset(row.files[0]) })) });
 }
 async function refreshCatalog({ logger, force, sectionId, userDataDir, signal, sourceId } = {}) {
   const section = resolveSectionId(sectionId);
@@ -147,7 +159,7 @@ function getState({ settings, userDataDir } = {}) {
   const webInstalled = Runtime.listInstalledWeb(userDataDir);
   const hosted = Runtime.hosted.getState({ userDataDir });
   const hostedPins = Runtime.hosted.core.listCatalog({ userDataDir });
-  const versions = [...new Set([...hosted.catalog.versions, ...macCatalog.versions])].sort(Releases.compareOnsyuriMacVersionsDesc);
+  const versions = [...new Set([...hosted.catalog.versions, ...macCatalog.versions])].sort(Versions.compareOnsyuriMacVersionsDesc);
   const latestMacInstalled = macInstalled.find(row => row.ready !== false)?.version || null;
   const latestWebInstalled = webInstalled.find(row => row.ready !== false)?.version || null;
   let installReason = null;
@@ -156,16 +168,16 @@ function getState({ settings, userDataDir } = {}) {
     const variants = Object.fromEntries(ARCH_VARIANTS.map(({ id: variant }) => {
       const row = macInstalled.find(row => row.version === version && row.variant === variant);
       const available = row?.ready === true;
-      const release = !/(?:-macos-v|-MCLv)\d+$/.test(version) && Releases.selectOnsyuriAsset(catalogReleases.filter(item =>
-        Releases.normalizeOnsyuriVersion(item.tag_name || item.name) === version), { arch: variant });
-      const downloadable = hostedPins.some(pin => pin.version === version && pin.projectPackage?.arch === variant && hosted.catalog.installableVersions.includes(version)) ||
-        Boolean(release?.asset?.browser_download_url);
+      const listed = !/(?:-macos-v|-MCLv)\d+$/.test(version) && upstreamRows.some(item =>
+        item.details?.section === SECTION_MAC && item.version === version && item.architecture === variant && item.files?.length);
+      const downloadable = hostedPins.some(pin => pin.version === version && Architecture.matchesArchitecture(pin, variant) && hosted.catalog.installableVersions.includes(version)) ||
+        listed;
       return [variant, { included: false, available,
         installable: Boolean(downloadable) && !available, requiresDownload: !available, installLabel: "Install",
         minimumMacOS: row?.minimumMacOS || pin?.minimumMacOS || null,
-        installReason: row?.error || (pin?.hostArchitectures && !pin.hostArchitectures.includes(variant)
-          ? "This Mac runtime supports Apple Silicon."
-          : !available && !downloadable ? "No native package is available for this version and architecture." : "") }];
+        installReason: row?.error || (available || downloadable ? "" : pin && !Architecture.matchesArchitecture(pin, variant)
+          ? `This Mac runtime supports ${Architecture.architectureLabel(variant === "arm64" ? "x64" : "arm64")}.`
+          : "No native package is available for this version and architecture.") }];
     }));
     return [version, { ...variants[cfg.mac.defaultVariant || defaultArchVariant()], variants }];
   }));
@@ -198,7 +210,7 @@ function getState({ settings, userDataDir } = {}) {
       error: macCatalog.error,
       latestAvailableVersion: versions[0] || null,
       latestInstalledVersion: latestMacInstalled,
-      updateAvailable: Boolean(versions[0] && cfg.mac.defaultVersion && Releases.compareOnsyuriMacVersions(versions[0], cfg.mac.defaultVersion) > 0)
+      updateAvailable: Boolean(versions[0] && cfg.mac.defaultVersion && Versions.compareOnsyuriMacVersions(versions[0], cfg.mac.defaultVersion) > 0)
     }
   };
   macState.catalog.versionLabels = macState.versionLabels;
@@ -224,7 +236,7 @@ function getState({ settings, userDataDir } = {}) {
       error: webCatalog.error,
       latestAvailableVersion: webCatalog.versions[0] || null,
       latestInstalledVersion: latestWebInstalled,
-      updateAvailable: Boolean(webCatalog.versions[0] && cfg.web.defaultVersion && Releases.compareOnsyuriVersions(webCatalog.versions[0], cfg.web.defaultVersion) > 0)
+      updateAvailable: Boolean(webCatalog.versions[0] && cfg.web.defaultVersion && Versions.compareOnsyuriVersions(webCatalog.versions[0], cfg.web.defaultVersion) > 0)
     }
   };
 
@@ -267,7 +279,8 @@ async function installMac({
   if (!version || version === "auto") {
     await refreshCatalog({ userDataDir, logger, signal: callerSignal, sectionId: SECTION_MAC, force: true });
     const arch = Runtime.normalizeVariant(variant) || defaultArchVariant();
-    version = getState({ userDataDir, settings: { mac: { defaultVariant: arch } } }).mac.defaultVersion;
+    const state = getState({ userDataDir, settings: { mac: { defaultVariant: arch } } }).mac;
+    version = usableDefaultVersion({ ...state, installed: state.installed.filter(row => row.variant === arch) });
     if (!version) throw new Error("No ONScripter-Yuri version is available.");
   }
   const v = Runtime.normalizeMacVersion(version);
@@ -288,7 +301,7 @@ async function installMac({
         version: v,
         variant: arch,
         logger,
-        releases: catalogReleases,
+        rows: upstreamRows,
         onProgress: taskProgress,
         signal: callerSignal && taskSignal ? AbortSignal.any([callerSignal, taskSignal]) : callerSignal || taskSignal || undefined
       }),
@@ -299,7 +312,7 @@ async function installMac({
 async function installWeb({ userDataDir, version, logger, onProgress, downloads, signal: callerSignal }) {
   if (!version || version === "auto") {
     await refreshCatalog({ userDataDir, logger, signal: callerSignal, sectionId: SECTION_WEB, force: true });
-    version = getState({ userDataDir }).web.defaultVersion;
+    version = usableDefaultVersion(getState({ userDataDir }).web);
     if (!version) throw new Error("No ONScripter-Yuri Web version is available.");
   }
   const v = Runtime.normalizeVersion(version);
@@ -317,7 +330,7 @@ async function installWeb({ userDataDir, version, logger, onProgress, downloads,
         userDataDir,
         version: v,
         logger,
-        releases: catalogReleases,
+        rows: upstreamRows,
         onProgress: taskProgress,
         signal: callerSignal && taskSignal ? AbortSignal.any([callerSignal, taskSignal]) : callerSignal || taskSignal || undefined
       }),
@@ -363,12 +376,13 @@ module.exports = {
   uninstallRuntime,
   updateSettingsAfterInstall,
   updateSettingsAfterUninstall,
+  upstream: Runtime.source,
   core: Runtime
 };
 Custom.configure(module.exports, { sectionForEntry: entry => entry?.runtimeId === "onsyuri_web" ? SECTION_WEB : SECTION_MAC,
   defaultsPath: sectionId => [sectionId, "defaultVersion"],
   providers: [{ core: Runtime, lists: { listInstalledMac: SECTION_MAC, listInstalledWeb: SECTION_WEB } },
-    { core: Releases, comparators: { compareOnsyuriVersions: 1, compareOnsyuriVersionsDesc: -1,
+    { core: Versions, comparators: { compareOnsyuriVersions: 1, compareOnsyuriVersionsDesc: -1,
       compareOnsyuriMacVersions: 1, compareOnsyuriMacVersionsDesc: -1 } }],
   inspect(runtimePath, { sectionId }) {
     if (sectionId === SECTION_WEB) {
@@ -379,7 +393,7 @@ Custom.configure(module.exports, { sectionForEntry: entry => entry?.runtimeId ==
       return { installDir: root, root, ready: true };
     }
     const install = Custom.inspectExecutable(runtimePath, { candidates: ["onsyuri", "bin/onsyuri", "onscripter", "onsyuri.app/Contents/MacOS/onsyuri"] });
-    return { ...install, variant: install.needsRosetta ? "x64" : process.arch };
+    return { ...install, variant: install.architecture };
   }
 });
 module.exports.resolveInstalledSelection = Custom.createSelector(module.exports, resolveInstalledSelection, {

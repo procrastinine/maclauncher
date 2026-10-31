@@ -21,6 +21,7 @@ function javaHome() {
 test('Android codecs stream bounded data and text paint preserves real font state', async t => {
   const home = javaHome();
   if (!home) return t.skip('Requires Java 21 development tools');
+  if (!require('./helpers/android-java').runtimeRoot()) return t.skip('Requires an Android runtime via KLEPTON_NATIVE_RUNTIME or MACLAUNCHER_TEST_USER_DATA');
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'android-framework-codecs-'));
   t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
   const env = { ...process.env };
@@ -36,8 +37,8 @@ test('Android codecs stream bounded data and text paint preserves real font stat
   const classes = path.join(temporary, 'classes');
   fs.mkdirSync(classes);
   run(path.join(home, 'bin/javac'), ['--release', '21', '-d', classes,
-    ...javaFiles(path.resolve(__dirname, '../src/modules/android/native/java')),
-    ...javaFiles(path.resolve(__dirname, '../src/modules/android/native/java-jvm')),
+    ...javaFiles(path.resolve(__dirname, '../src/external/maclauncher-android/src/modules/android/native/java')),
+    ...javaFiles(path.resolve(__dirname, '../src/external/maclauncher-android/src/modules/android/native/java-jvm')),
     ...javaFiles(path.join(__dirname, 'fixtures/android-framework-codecs')).filter(file => path.basename(file) !== 'TextPaintProbe.java')]);
   for (const [name, main] of [
     ['Base64 alphabets, fragmented streams, bounded scratch and close failures', 'Base64Probe'],
@@ -45,7 +46,7 @@ test('Android codecs stream bounded data and text paint preserves real font stat
   ]) {
     await t.test(name, () => {
       if(main==='TextPaintProbe'){
-        const runtime=process.env.KLEPTON_NATIVE_RUNTIME;
+        const runtime=require('./helpers/android-java').runtimeRoot();
         assert.ok(runtime,'TextPaint requires the same full native framework runtime used by production');
         const nativeClasses=path.join(temporary,'native-classes');fs.mkdirSync(nativeClasses);
         const jars=['android-host.jar','android-framework.jar'].map(file=>path.resolve(runtime,file)),classpath=[nativeClasses,...jars].join(path.delimiter);

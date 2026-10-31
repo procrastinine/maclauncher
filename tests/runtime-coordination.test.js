@@ -414,13 +414,13 @@ test('a fresh action worker installs an exact cached remote version before any s
   const bytes = fs.readFileSync(archive), sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
   const id = 'cold-action', version = 'cached-2.0', userDataDir = path.join(root, 'data');
   const entry = { version, upstreamRevision: 'a'.repeat(40), asset: { filename: 'runtime.tar.gz', url: 'https://example.test/runtime.tar.gz', bytes: bytes.length, sha256 } };
-  const manager = createPinnedNativeManager({ id, label: 'Cold action', catalog: [{version:'factory-1.0',upstreamRevision:'b'.repeat(40)}], discoverCatalog: async () => [entry] });
+  const manager = createPinnedNativeManager({ id, label: 'Cold action', discoverCatalog: async () => [entry] });
   await manager.refreshCatalog({ userDataDir, force: true });
   const worker = new Worker(`
     const fs=require('node:fs'),path=require('node:path'),{parentPort,workerData:d}=require('node:worker_threads');
     const {createPinnedNativeManager}=require(path.join(d.workspace,'src/modules/shared/runtime/pinned-native-manager'));
     const {runRuntimeManagerAction}=require(path.join(d.workspace,'src/core/runtime-manager-service'));
-    const manager=createPinnedNativeManager({id:d.id,label:'Cold action',catalog:[{version:'factory-1.0',upstreamRevision:'b'.repeat(40)}],
+    const manager=createPinnedNativeManager({id:d.id,label:'Cold action',
       discoverCatalog:async()=>{throw Error('No network during cached install');},resolveExecutable:root=>path.join(root,'native'),
       dependencies:{downloadToFile:async(url,file)=>{if(url!=='https://example.test/runtime.tar.gz')throw Error('Unexpected source');fs.copyFileSync(d.archive,file);}}});
     runRuntimeManagerAction({manager,action:'install',payload:{version:d.version},userDataDir:d.userDataDir}).then(

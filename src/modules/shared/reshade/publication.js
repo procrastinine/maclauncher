@@ -1,6 +1,7 @@
 const fs = require("node:fs"), path = require("node:path");
 const Native = require("../runtime/bundled-native");
 const warnGraphics = require("../graphics-warning");
+const Included = require("../runtime/included-helpers");
 const rawFs = (() => {
   try { return require("original-fs"); }
   catch (error) { if (error.code !== "MODULE_NOT_FOUND") throw error; return fs; }
@@ -22,7 +23,7 @@ function checkedManifest(value) {
   Object.freeze(manifest.files);return Object.freeze(manifest);
 }
 
-function createReader(file = path.join(__dirname, "distribution-supplementals.json"), logger = console, trustedResourceRoots = []) {
+function createReader(file = path.join(__dirname, "distribution-supplementals.json"), logger = console, trustedResourceRoots = [], {arch = process.arch} = {}) {
   let accepted, warnedIdentity;
   const roots = new Map(), admitted = new Set(), resourceBases = new Set();
   const rootIdentity = root => {
@@ -60,8 +61,10 @@ function createReader(file = path.join(__dirname, "distribution-supplementals.js
     try {
       stamp = identity();
       if (accepted?.identity === stamp) return accepted.manifest;
-      const rows = JSON.parse(fs.readFileSync(file, "utf8")), manifest = rows?.[0];
-      if (!Array.isArray(rows) || rows.length !== 1 || manifest?.id !== "reshade" ||
+      const rows = JSON.parse(fs.readFileSync(file, "utf8"));
+      const manifest = Array.isArray(rows) && (rows.length === 1 && !rows[0]?.launcherArchitectures
+        ? rows[0] : Included.declared(rows, {id: "reshade", arch}));
+      if (!Array.isArray(rows) || manifest?.id !== "reshade" ||
           typeof manifest.version !== "string" || !manifest.version ||
           !/^[a-f0-9]{64}$/.test(manifest.manifestSha256 || "") ||
           !Array.isArray(manifest.files) || !manifest.files.length || manifest.files.length > 20000)

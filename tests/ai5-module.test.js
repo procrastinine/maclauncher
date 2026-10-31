@@ -176,7 +176,8 @@ test("AI5 Play preflights data and supported profiles before requesting an insta
     assert.equal(fs.existsSync(path.join(context.userDataDir, "runtimes")), false);
   } else {
     assert.equal(requirement.managerId, "ai5");assert.equal(requirement.version, null);
-    assert.equal(requirement.discoveryRequired, true);assert.equal(requirement.selectionRequired, true);
+    assert.equal(requirement.discoveryRequired, true);
+    assert.equal(entry.moduleData.gameProfile, "yuno-eng");
   }
   require("../src/modules/shared/runtime/runtime-catalog").writeRuntimeCatalog({ userDataDir: context.userDataDir, managerId: "ai5", source: "https://github.com/nunuhara/ai5-sdl2/releases",
     entries: [{ version: "fixture-source", upstreamRevision: "a".repeat(40), localBuild: false, installReason: "Source release only" }] });
@@ -211,13 +212,13 @@ test("AI5 original-disc compatibility follows installed adapter markers and pres
   const manager = Module.runtimeManagers[0];
   t.mock.method(manager, "resolveSelection", (value, settings) => {
     const version = value?.runtimeData?.ai5?.version || settings?.runtimes?.ai5?.defaultVersion;
-    return version === legacy.version ? { version, ready: true, install: legacy } : { version: null, ready: false, selectionRequired: true };
+    return version === legacy.version ? { version, ready: true, install: legacy } : { version: null, ready: false, discoveryRequired: true };
   });
   assert.throws(() => Module.ensureRuntime(entry, context), /original disc layout needs an interpreter/);
   assert.equal(context.settings.runtimes.ai5.defaultVersion, "fixture-without-disc");
   context.settings.runtimes.ai5.defaultVersion = "auto";
   const requirement = Module.ensureRuntime(entry, context);
-  assert.equal(requirement.version, null); assert.equal(requirement.selectionRequired, true);
+  assert.equal(requirement.version, null); assert.equal(requirement.discoveryRequired, true);
   assert.deepEqual(entry.runtimeData, {});
   entry.runtimeData.ai5 = { version: "fixture-without-disc" };
   assert.throws(() => Module.ensureRuntime(entry, context), /original disc layout needs an interpreter/);

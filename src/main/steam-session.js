@@ -21,11 +21,12 @@ function createSteamSessionStorage({ userDataDir, safeStorage, namespace = 'stea
   async function read(mutating = false) {
     try {
       const encrypted = await fs.readFile(file);
-      if (!safeStorage?.isEncryptionAvailable()) {
+      if (!await safeStorage?.isAsyncEncryptionAvailable()) {
         if (mutating) throw new Error('Saving sign-in requires access to the macOS Keychain.');
         return {};
       }
-      const data = JSON.parse(safeStorage.decryptString(encrypted));
+      const { result } = await safeStorage.decryptStringAsync(encrypted);
+      const data = JSON.parse(result);
       const sessions = data?.refreshToken ? { [key(data.accountName)]: data } : data?.sessions || {};
       await index(sessions).catch(() => {});
       return sessions;
@@ -38,8 +39,8 @@ function createSteamSessionStorage({ userDataDir, safeStorage, namespace = 'stea
     if (!Object.keys(sessions).length) {
       await fs.rm(file, { force: true }); await fs.rm(accountIndex, { force: true }); return;
     }
-    if (!safeStorage?.isEncryptionAvailable()) throw new Error('Saving sign-in requires access to the macOS Keychain.');
-    const encrypted = safeStorage.encryptString(JSON.stringify({ sessions }));
+    if (!await safeStorage?.isAsyncEncryptionAvailable()) throw new Error('Saving sign-in requires access to the macOS Keychain.');
+    const encrypted = await safeStorage.encryptStringAsync(JSON.stringify({ sessions }));
     await writePrivate(file, encrypted);
     await index(sessions);
   }

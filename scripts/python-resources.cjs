@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const profile = require('../src/modules/shared/runtime/embedded-python.json');
+const { embeddedPythonProfile } = require('../src/modules/shared/runtime/python');
 
 const policy = profile.appPayload;
 function relative(value) {
@@ -53,14 +54,20 @@ function verifySourcePython({ sourceRoot }) {
   }
   return { interpreter: selected.interpreter, bytes: canonical.stat.size, sha256 };
 }
-function assertPackagedPython({ resourceRoot }) {
+// The installed tree must be the publisher build for the app's CPU.
+function assertProfile(metadata, arch) {
+  const expected = embeddedPythonProfile(arch);
+  for (const key of ['version', 'abi', 'architecture', 'publisher', 'release', 'url', 'sha256', 'packages'])
+    if (JSON.stringify(metadata[key]) !== JSON.stringify(expected[key]))
+      throw new Error(`The embedded Python is not the ${arch} build of its pinned profile. Run node scripts/setup-python-runtime.mjs --arch ${arch}.`);
+  return expected;
+}
+function assertPackagedPython({ resourceRoot, arch }) {
   const root = directory(resourceRoot), selected = configuration(), canonicalPath = path.join(root, selected.interpreter);
   directory(path.join(root, 'bin'));
   const canonical = regular(canonicalPath);
   if (!(canonical.stat.mode & 0o111)) throw new Error('The embedded Python interpreter is not executable.');
-  const metadata = JSON.parse(regular(path.join(root, 'runtime.json')).bytes);
-  for (const key of ['version', 'abi', 'architecture', 'publisher', 'release', 'sha256'])
-    if (metadata[key] !== profile[key]) throw new Error('Packaged Python differs from its pinned profile.');
+  assertProfile(JSON.parse(regular(path.join(root, 'runtime.json')).bytes), arch);
   for (const [alias, target] of Object.entries(selected.aliases)) {
     const file = path.join(root, alias);
     if (!fs.lstatSync(file).isSymbolicLink() || fs.readlinkSync(file) !== target || fs.realpathSync(file) !== canonicalPath)
@@ -82,7 +89,7 @@ function assertPackagedPython({ resourceRoot }) {
   walk(root);
   return { version: profile.version, interpreter: selected.interpreter, aliases: selected.aliases, files };
 }
-function projectPackagedPython({ sourceRoot, resourceRoot }) {
+function projectPackagedPython({ sourceRoot, resourceRoot, arch }) {
   const source = directory(sourceRoot), target = directory(resourceRoot);
   if (source === target || source.startsWith(target + path.sep) || target.startsWith(source + path.sep))
     throw new Error('Python app projection must be separate from its producer files.');
@@ -107,11 +114,11 @@ function projectPackagedPython({ sourceRoot, resourceRoot }) {
     if (alias.replace) fs.unlinkSync(alias.file);
     if (!alias.present || alias.replace) fs.symlinkSync(alias.link, alias.file);
   }
-  return assertPackagedPython({ resourceRoot: target });
+  return assertPackagedPython({ resourceRoot: target, arch });
 }
 
 const requiredFiles = Object.freeze(['lib/python3.12/encodings/__init__.py', 'lib/python3.12/ctypes/__init__.py',
   'lib/python3.12/site-packages/pefile.py', 'lib/python3.12/site-packages/aplib.py',
   'lib/python3.12/site-packages/corrupy/__init__.py', 'lib/python3.12/site-packages/packaging/__init__.py']);
 
-module.exports = { configuration, excluded, resourceExclusions, requiredFiles, verifySourcePython, assertPackagedPython, projectPackagedPython };
+module.exports = { configuration, excluded, resourceExclusions, requiredFiles, assertProfile, verifySourcePython, assertPackagedPython, projectPackagedPython };

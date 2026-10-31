@@ -40,13 +40,6 @@ test("Classic and Studio select separate module runtimes without crossing format
   assert.equal(Module.canLaunchRuntime("inspection", { moduleData: { executionKind: "classic" } }), true);
 });
 
-test("OpenGMK discovers exact upstream release source without seeding a Mac package", async () => {
-  const revision="a".repeat(40),sourceUrl="https://github.com/OpenGMK/OpenGMK/releases/tag/v3.2.1";
-  const row=await OpenGMK.mapRelease({tag_name:"v3.2.1",published_at:"2026-10-01T01:00:00Z"},{resolveRevision:async()=>revision,sourceUrl});
-  assert.equal(row.version,"3.2.1");assert.equal(row.upstreamRevision,revision);assert.equal(row.sourceUrl,sourceUrl);
-  assert.equal(row.asset,undefined);assert.equal(row.localBuild,false);assert.match(row.installReason,/Windows binaries/);
-  assert.equal(OpenGMK.parserRuntime({version:row.version}),null);
-});
 test("Mac builds use selected installed receipts without launcher historical tables", () => {
   assert.deepEqual(OpenGMK.manager.core.catalog,[]);
   const install={version:"3.1.0-macos",upstreamRevision:"b".repeat(40)};
@@ -71,7 +64,7 @@ test("an explicit existing Mac installation remains selected and sole verified i
   const automatic = OpenGMK.manager.resolveSelection({}, {}, root);
   assert.equal(automatic.version, version);
   assert.equal(automatic.install?.runtimePath, executable, "The sole compatible verified installation remains usable");
-  assert.equal(OpenGMK.manager.getState({ userDataDir: root }).defaultVersion, null);
+  assert.equal(OpenGMK.manager.getState({ userDataDir: root }).defaultVersion, version);
   assert.equal(fs.readdirSync(path.join(root, "runtimes/opengmk")).length, 1, "No other version was installed");
   bytes[63] = 1; fs.writeFileSync(executable, bytes);
   const changed = OpenGMK.manager.resolveSelection({ runtimeData: { opengmk: { version } } }, {}, root);

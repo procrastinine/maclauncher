@@ -64,10 +64,10 @@ html:has(.demoEmbed) .sl-menu-button {
   inset-inline-start: var(--sl-nav-pad-x);
   inset-inline-end: auto;
 }
-html:has(.demoEmbed) .header {
+html:has(.demoEmbed) header.header {
   padding-inline-start: calc(var(--sl-nav-pad-x) + var(--sl-menu-button-size) + var(--sl-nav-gap));
 }
-html:has(.demoEmbed) [data-has-sidebar] .header {
+html:has(.demoEmbed)[data-has-sidebar] header.header {
   padding-inline-end: var(--sl-nav-pad-x);
 }
 @media (min-width: 50rem) {
@@ -122,7 +122,9 @@ html:has(.demoEmbed) .sl-markdown-content > p:first-child {
   margin-top: 0.5rem;
 }
 
-/* Links to the page and the whole site as Markdown, under the page title. */
+/* Links to the page and the whole site as Markdown, under the page title. The
+   home page has no page title, so its hero shows the same pill beside its
+   buttons. */
 .pageMarkdown {
   display: flex;
   flex-wrap: wrap;
@@ -130,14 +132,42 @@ html:has(.demoEmbed) .sl-markdown-content > p:first-child {
   margin-top: 0.75rem;
   font-size: var(--sl-text-xs);
 }
-.pageMarkdown a {
+.pageMarkdown a,
+.hero .sl-link-button.markdownPill {
   padding: 0.2rem 0.65rem;
   border: 1px solid var(--sl-color-gray-5);
   border-radius: 999px;
   color: var(--sl-color-gray-2);
   text-decoration: none;
 }
-.pageMarkdown a:hover {
+.hero .sl-link-button.markdownPill {
+  align-self: center;
+  font-size: var(--sl-text-xs);
+  line-height: inherit;
+}
+.pageMarkdown a:hover,
+.hero .sl-link-button.markdownPill:hover {
   border-color: var(--sl-color-gray-3);
   color: var(--sl-color-white);
+}
+
+/* The other processor's build, a quiet link beside the Download button. */
+.hero .sl-link-button.otherBuild {
+  align-self: center;
+  padding-inline: 0.25rem;
+  font-size: var(--sl-text-xs);
+  color: var(--sl-color-gray-2);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.hero .sl-link-button.otherBuild:hover {
+  color: var(--sl-color-white);
+}
+/* In page text, the download that matches the visitor's Mac. */
+.sl-markdown-content a.thisMac {
+  font-weight: 600;
+}
+.sl-markdown-content a.thisMac::after {
+  content: " (this Mac)";
+  font-weight: normal;
 }

@@ -1,3 +1,5 @@
+// Required first: it replaces the network functions before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path"), crypto = require("node:crypto"), vm = require("node:vm");
 const Models = require("../src/modules/shared/reshade/neural/models"), Sources = require("../src/modules/shared/reshade/neural/model-sources");
@@ -42,7 +44,9 @@ test("NVIDIA-style original provenance and complete large notices reuse a curate
   f.manifest.sourceFiles=[{file:'original.so.1.8.2',sha256:originalHash}];fs.writeFileSync(path.join(f.root,f.prefix,'manifest.json'),JSON.stringify(f.manifest));fs.writeFileSync(path.join(f.app,'Contents/Resources/NOTICE'),notice);
   const installed=await Models.importModel({userDataDir:f.userDataDir,runtimePath:f.app}),listed=Models.listInstalled(f.userDataDir)[0];
   assert.equal(listed.sourceVersion,source.version);assert.equal(listed.curatedDefault,true);assert.deepEqual(fs.readFileSync(path.join(installed.installDir,'notices/0-NOTICE')),notice);
-  const reused=await Setup.downloadModel({userDataDir:f.userDataDir,confirmRuntimeInstall:()=>assert.fail('installed original source needs no consent')},{source,downloadToFile:()=>assert.fail('installed original source stays offline')});
+  const requests=Harness.network.requests.length;
+  const reused=await Setup.downloadModel({userDataDir:f.userDataDir,confirmRuntimeInstall:()=>assert.fail('installed original source needs no consent')},{source});
+  assert.equal(Harness.network.requests.length,requests,'installed original source stays offline');
   assert.equal(reused.version,installed.version);assert.equal(Models.listInstalled(f.userDataDir).length,1);
   source.method='mlx-vsr';assert.equal(Models.listInstalled(f.userDataDir)[0].sourceVersion,undefined,'source operation must match the installed graph');source.method='mlx-dlss';
   fs.unlinkSync(path.join(installed.installDir,'notices/0-NOTICE'));assert.equal(Models.listInstalled(f.userDataDir)[0].sourceVersion,undefined,'incomplete original notices are not a complete source install');

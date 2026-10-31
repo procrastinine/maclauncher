@@ -44,10 +44,12 @@ function parseIgorVersion(bytes) {
   };
   const type = entries(0).find(entry => entry.id === 16);
   if (!type || !(type.target & 0x80000000)) throw new Error("Igor PE has no version resource.");
+  // A DLL normally has one version resource; the first entry decides when a
+  // later build adds names or languages.
   const names = entries(type.target & 0x7fffffff);
-  if (names.length !== 1 || !(names[0].target & 0x80000000)) throw new Error("Igor PE has ambiguous version resources.");
+  if (!(names[0].target & 0x80000000)) throw new Error("Igor PE has an invalid version resource.");
   const languages = entries(names[0].target & 0x7fffffff);
-  if (languages.length !== 1 || languages[0].target & 0x80000000) throw new Error("Igor PE has ambiguous version languages.");
+  if (languages[0].target & 0x80000000) throw new Error("Igor PE has an invalid version language.");
   const data = resourceOffset(languages[0].target, 16), length = u32(data + 4), start = mapRva(u32(data), length);
   if (length < 92 || length > 65536 || u16(start) > length || u16(start + 2) !== 52 || u16(start + 4) !== 0) throw new Error("Invalid Igor fixed version resource.");
   const key = Buffer.from("VS_VERSION_INFO\0", "utf16le");
@@ -55,8 +57,9 @@ function parseIgorVersion(bytes) {
   const fixed = (start + 6 + key.length + 3) & ~3;
   if (fixed + 52 > start + u16(start) || u32(fixed) !== 0xfeef04bd) throw new Error("Invalid Igor fixed file information.");
   const tuple = offset => { const ms = u32(offset), ls = u32(offset + 4); return [ms >>> 16, ms & 65535, ls >>> 16, ls & 65535].join("."); };
+  // The file version is the build unless it is a placeholder; a differing
+  // product version is recorded.
   const fileVersion = tuple(fixed + 8), productVersion = tuple(fixed + 16);
-  if (fileVersion !== productVersion) throw new Error("Igor product and file builds disagree.");
-  return { version: fileVersion, fileVersion, productVersion, evidence: "Igor.dll PE VS_FIXEDFILEINFO" };
+  return { version: /^[01]\.0\.0\.0$/.test(fileVersion) ? productVersion : fileVersion, fileVersion, productVersion, evidence: "Igor.dll PE VS_FIXEDFILEINFO" };
 }
 module.exports = { readIgorVersion, parseIgorVersion };

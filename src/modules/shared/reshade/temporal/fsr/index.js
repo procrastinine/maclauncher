@@ -1,15 +1,14 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const os = require('node:os');
+const Host = require('../../../runtime/host-capabilities');
+const Requirements = require('../../../runtime/feature-requirements');
 const source = require('./source.json');
 
-function resolve(root, { platform = process.platform, macOSVersion } = {}) {
-  if (platform !== 'darwin' || typeof root !== 'string' || !root) return null;
-  const major = macOSVersion === undefined ? Number(os.release().split('.')[0]) - 9 : Number(String(macOSVersion).split('.')[0]);
-  if (!Number.isFinite(major) || major < 13) return null;
+function inspect(root) {
+  if (typeof root !== 'string' || !root) return null;
   try {
     const directory = fs.realpathSync(path.join(root, 'temporal/fsr'));
-    const methods = [], libraries = {};
+    const methods = [], libraries = {}, minimumMacOSByMethod = {};
     for (const method of ['fsr2', 'fsr3']) {
       try {
         const metadata = JSON.parse(fs.readFileSync(path.join(directory, `${method}-build.json`), 'utf8'));
@@ -17,10 +16,23 @@ function resolve(root, { platform = process.platform, macOSVersion } = {}) {
         if (metadata.commit !== source[method].commit || metadata.providerABI !== 1 || metadata.shaderVariants !== 16 || !fs.statSync(library).isFile()) continue;
         if (!fs.statSync(path.join(directory, method)).isDirectory()) continue;
         methods.push(method); libraries[method] = library;
+        minimumMacOSByMethod[method] = metadata.minimumMacOS && Requirements.versionAtLeast(metadata.minimumMacOS, source.minimumMacOS)
+          ? metadata.minimumMacOS : source.minimumMacOS;
       } catch { /* An unavailable algorithm does not hide another installed one. */ }
     }
-    return methods.length ? { directory, methods, libraries, minimumMacOS: source.minimumMacOS } : null;
+    return methods.length ? { directory, methods, libraries, minimumMacOS: source.minimumMacOS, minimumMacOSByMethod } : null;
   } catch { return null; }
+}
+function resolve(root, { platform = process.platform, macOSVersion } = {}) {
+  const installed = inspect(root);
+  if (!installed) return null;
+  const actual = { platform, macOSVersion: macOSVersion === undefined ? Host.getHostCapabilities().macOSVersion : macOSVersion };
+  const methods = installed.methods.filter(method => Requirements.requirementSupport({ platform: 'darwin',
+    minimumMacOS: installed.minimumMacOSByMethod[method] }, actual).supported !== false);
+  if (!methods.length) return null;
+  const minimumMacOS = methods.reduce((floor, method) => Requirements.versionAtLeast(installed.minimumMacOSByMethod[method], floor)
+    ? installed.minimumMacOSByMethod[method] : floor, source.minimumMacOS);
+  return { ...installed, methods, minimumMacOS, libraries: Object.fromEntries(methods.map(method => [method, installed.libraries[method]])) };
 }
 function prepare(root, options) {
   const installed = resolve(root, options);
@@ -30,4 +42,4 @@ function prepare(root, options) {
     ...Object.fromEntries(installed.methods.map(method => [`RESHADE_${method.toUpperCase()}_LIBRARY`, installed.libraries[method]])),
   };
 }
-module.exports = { resolve, prepare };
+module.exports = { inspect, resolve, prepare };

@@ -95,56 +95,120 @@ test('a full broadcast supersedes buffered activity and a late initial response'
   activity({ downloads: [] }); state({ recents: [] });
   assert.equal(received.length, 2);
 });
-test('local application inventory updates cached backend choices immediately while catalog refreshes preserve game objects', () => {
+test('library work shares availability, runs checks off main, retains previous results and batches updates', async () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8');
   const decorateSource = source.slice(source.indexOf('const recentDecorationCache = new Map();'), source.indexOf('\nfunction resolveSaveContext('));
   const eventStart = source.indexOf('  onEvent: (event, payload, lane) => {');
   const eventSource = source.slice(eventStart + '  onEvent: '.length, source.indexOf('\n});\nasync function confirmRuntimeInstallation', eventStart)).trim();
-  const games = [{ gameId: 'windows', gamePath: '/game/player.exe', moduleId: 'engine' }];
+  const games = [{ gameId: 'windows', gamePath: '/game', iconPath: '/game/icon.png', moduleId: 'engine', runtimeId: 'local', networkAccess: false }];
   const settings = { modules: {}, runtimes: {} };
-  let normalized = 0, broadcasts = 0;
-  const context = { Map, JSON, graphicsLaunchWarnings: new Map(), gameLaunchNotices: new Map(), runtimeInventoryRevision: 0, runtimeStateSnapshots: { local: { installed: [] } },
+  const manifest = { id: 'engine', runtime: { default: 'local', supported: ['local'] }, supports: {} };
+  const requests = [], warnings = [], iconReads = [], availability = deferred();
+  let normalized = 0, scheduled = 0, rebuilds = 0, probes = 0, installed = false;
+  const monitor = require('../src/main/game-availability-monitor').createAvailabilityMonitor({
+    listGames: () => games, check: async () => { probes++; return availability.promise; },
+    onChange: () => { if (context.cachedState) context.scheduleStateRebuild(); }
+  });
+  const context = { Map, JSON, String, Array, path, require: id => require(path.resolve(__dirname, '../src/main', id)),
+    graphicsLaunchWarnings: new Map(), gameLaunchNotices: new Map(), runtimeInventoryRevision: 0,
+    runtimeStateSnapshots: { local: { installed: [] } }, gameAvailability: monitor,
+    GameAvailability: require('../src/core/game-availability'), Modules: { getModule: () => ({}), getModuleInfo: () => manifest },
     StoredPlan: require('../src/modules/shared/effects/stored-plan'), userDataDir: '/state', graphicsNotices: notices => notices,
-    moduleStateSnapshots: {}, cachedState: null, loadSettings: () => settings,
-    loadGamesHydrated: () => games, orderGames: entries => entries,
-    resolveModuleId: entry => entry.moduleId,
-    normalizeGameEntry: entry => { normalized += 1; return { ...entry, moduleRuntimeSupport:
-      context.runtimeStateSnapshots.local.installed.some(install => install.ready) ? ['local'] : [] }; },
-    iconUrlForPath: () => null,
+    moduleStateSnapshots: {}, cachedState: null, loadSettings: () => structuredClone(settings),
+    loadGamesHydrated: () => games, orderGames: entries => entries, gameRecordsCache: games,
+    resolveModuleId: entry => entry.moduleId, logger: { warn: (...args) => warnings.push(args) },
+    backendService: { request: (lane, method, entry, checkedSettings, options) => new Promise((resolve, reject) => {
+      requests.push({ lane, method, entry, checkedSettings, options, resolve, reject });
+    }) },
+    NetworkAccess: require('../src/core/network-access'),
+    SteamClientStart: { clientEligible: () => false, startPreference: value => value },
+    isChildGame: false, GAME_SCHEMA_VERSION: 1,
+    mergeRuntimeSettingsMap: (_, value) => value,
+    getModuleCheats: () => null, resolveImportPath: entry => entry.gamePath,
+    resolveModuleDefaultIconPath: () => null, canRenderIconPath: () => true,
+    normalizeIconPath: file => { iconReads.push(file); return file; },
+    ICON_SOURCES: { MODULE_DEFAULT: 'module-default' },
+    iconUrlForPath: file => file ? 'icon:' + file : null,
     buildRuntimeManagerState: () => structuredClone(context.runtimeStateSnapshots),
     launcherService: { getResolvedModuleSettings: () => settings.modules },
-    saveStateSnapshotsSoon() {}, broadcastState: () => { broadcasts += 1; },
-    buildState: () => ({ recents: games.map(entry => context.decorateRecentEntry(entry, settings)) })
+    saveStateSnapshotsSoon() {}, broadcastState() {}, scheduleStateRebuild: () => { scheduled++; },
+    buildState: () => ({ recents: games.map(entry => context.decorateRecentEntry(entry, settings)) }),
+    GameStore: { readGameRecord: () => null },
+    serializeGameEntry: entry => entry, mergeSettingsChanges: (_old, fresh) => fresh,
+    saveGameRecord: entry => { games[0] = entry; }
   };
-  vm.createContext(context);
-  vm.runInContext(decorateSource, context);
-  const onEvent = vm.runInContext('(' + eventSource + ')', context);
+  const turn = async () => { for (let i = 0; i < 3; i++) await new Promise(resolve => setImmediate(resolve)); };
+  const flush = () => { if (scheduled) { scheduled = 0; rebuilds++; context.cachedState = context.buildState(); } };
+  vm.createContext(context); vm.runInContext(decorateSource, context);
+  vm.runInContext(source.slice(source.indexOf('function normalizeGameEntry('), source.indexOf('\nfunction buildModuleLaunchContext(')), context);
+  const normalize = context.normalizeGameEntry;
+  context.normalizeGameEntry = (entry, checkedSettings, precomputed) => {
+    assert.ok(precomputed?.checks, 'no module checks run on main'); normalized++;
+    return normalize(entry, checkedSettings, precomputed);
+  };
+  const handle = vm.runInContext('(' + eventSource + ')', context);
+  const answer = async () => {
+    for (const request of requests.splice(0)) request.resolve({ entry: request.entry,
+      checks: { runtimeId: 'local', launch: true, managedSaveDir: false, runtimeSupport: installed ? ['local'] : [] }, metadataError: null });
+    await turn(); flush(); await turn();
+  };
   context.cachedState = context.buildState();
-  assert.deepEqual(Array.from(context.cachedState.recents[0].moduleRuntimeSupport), []);
-  assert.equal(normalized, 1);
-  const installed = { installed: [{ version: 'same-version-copy', ready: true, installDir: '/Applications/Player.app' }] };
-  onEvent('runtimeState', { id: 'local', state: installed });
+  assert.equal(context.cachedState.recents[0].iconUrl, null);
+  assert.deepEqual(iconReads, [], 'a hung first probe cannot trigger an icon read');
+  vm.runInContext('queueLibraryWork(gameRecordsCache[0], loadSettings(), { refreshMetadata: true })', context);
+  await turn();
+  assert.equal(requests.length, 0, 'backend work waits for the shared availability check');
+  availability.resolve({ available: true }); await turn(); flush(); await turn();
+  assert.equal(context.cachedState.recents[0].iconUrl, 'icon:/game/icon.png', 'the first result releases the icon before backend checks finish');
+  assert.deepEqual(iconReads, ['/game/icon.png']);
   assert.deepEqual(Array.from(context.cachedState.recents[0].moduleRuntimeSupport), ['local']);
-  assert.equal(normalized, 2);
-  const usable = context.cachedState.recents[0];
-  onEvent('runtimeState', { id: 'local', state: structuredClone(installed) });
-  assert.equal(broadcasts, 1);
-  onEvent('runtimeState', { id: 'local', state: { ...installed, catalog: { status: 'ready', versions: ['same-version-copy'] } } });
-  assert.equal(context.cachedState.recents[0], usable);
-  assert.equal(normalized, 2);
-  onEvent('runtimeState', { id: 'local', state: { installed: [] } });
+  assert.equal(requests.length, 1, 'startup refresh and row checks coalesce');
+  assert.match(requests[0].lane, /^library-view:/);
+  assert.equal(requests[0].method, 'libraryEntry');
+  assert.equal(requests[0].options.refreshMetadata, true);
+  assert.equal(requests[0].options.availability.available, true);
+  await answer();
   assert.deepEqual(Array.from(context.cachedState.recents[0].moduleRuntimeSupport), []);
-  assert.equal(normalized, 3);
-  settings.runtimes.local = { defaultVersion: 'another-copy' };
-  onEvent('settingsChanged', { managerId: 'local' });
-  assert.equal(normalized, 4, 'Changed local defaults are visible even when game and module settings are unchanged');
+  assert.equal(normalized, 3); assert.equal(probes, 1);
+  installed = true;
+  handle('runtimeState', { id: 'local', state: { installed: [{ version: 'copy', ready: true }] } });
+  flush(); await turn();
+  assert.equal(requests.length, 1);
+  assert.equal(normalized, 3, 'previous usable checks stay while replacement runs');
+  await answer();
+  assert.deepEqual(Array.from(context.cachedState.recents[0].moduleRuntimeSupport), ['local']);
+  assert.equal(probes, 1, 'inventory changes reuse main availability');
+  const usable = context.cachedState.recents[0];
+  handle('runtimeState', { id: 'local', state: { installed: [{ version: 'copy', ready: true }], catalog: { versions: ['remote'] } } });
+  flush(); await turn();
+  assert.equal(requests.length, 0, 'catalog-only changes do no game work');
+  assert.equal(context.cachedState.recents[0], usable);
+  const before = rebuilds;
+  for (const id of ['a', 'b', 'c']) handle('runtimeState', { id, state: { installed: [{ version: id }] } });
+  flush(); await turn();
+  assert.equal(rebuilds, before + 1);
+  assert.equal(requests.length, 1, 'inventory burst becomes one check');
+  const stale = requests.shift();
+  settings.runtimes.local = { defaultVersion: 'new' };
+  handle('settingsChanged', {}); flush(); await turn();
+  stale.resolve({ entry: stale.entry, checks: { runtimeSupport: ['obsolete'] } });
+  await turn(); flush(); await turn();
+  assert.deepEqual(Array.from(context.cachedState.recents[0].moduleRuntimeSupport), ['local'], 'outdated replies cannot replace a usable result');
+  assert.equal(requests.length, 1);
+  requests.shift().reject(Error('worker failed')); await turn();
+  assert.ok(warnings.some(args => args.join(' ').includes('worker failed')), 'per-game failures reach warning logs');
+  context.buildState(); await turn();
+  assert.equal(requests.length, 0, 'a failed unchanged job is not repeatedly retried by state rebuilds');
+  assert.equal(probes, 1);
+  monitor.close();
 });
-test('serialized games use the selected backend capabilities and pass local runtime context to eligibility', () => {
+test('serialized games use the selected backend capabilities, and library checks that are not current are shown without being saved', () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8');
   const normalizeSource = source.slice(source.indexOf('function normalizeGameEntry('), source.indexOf('\nfunction buildModuleLaunchContext('));
   const manifest = { id: 'engine', gameType: 'engine', supports: { cheats: true, cheatsPatcher: true, saveEditing: true, saveLocation: false } };
   const provider = { supports: { cheats: false, cheatsPatcher: false, saveEditing: false, saveLocation: true } };
-  let runtimeId = 'managed', eligibilityContext;
+  let runtimeId = 'managed';
+  const checked = [];
   const mod = { getRuntimeProvider: id => id === 'local' ? provider : null };
   const context = { path, StoredPlan: require('../src/modules/shared/effects/stored-plan'),
     NetworkAccess: require('../src/core/network-access'), SteamClientStart: { clientEligible: () => false, startPreference: value => value },
@@ -153,12 +217,15 @@ test('serialized games use the selected backend capabilities and pass local runt
     GameStore: { readGameRecord: () => null, setGameNetworkAccess: () => assert.fail('A game without a stored record is not written') },
     GAME_SCHEMA_VERSION: 1, app: {}, userDataDir: '/state', runtimeStateSnapshots: { local: { installed: [] } },
     resolveModuleId: () => manifest.id, Modules: { getModule: () => mod, getModuleInfo: () => manifest },
-    mergeRuntimeSettingsMap: (_, value) => value, resolveRuntimeForEntry: () => runtimeId,
+    mergeRuntimeSettingsMap: (_, value) => value,
     getModuleCheats: () => null, resolveImportPath: entry => entry.gamePath,
     resolveModuleDefaultIconPath: () => null, normalizeIconPath: () => null,
+    gameAvailability: { get: () => null }, GameAvailability: require('../src/core/game-availability'),
     ICON_SOURCES: { MODULE_DEFAULT: 'module-default' },
-    resolveRuntimeSupportForEntry: (_mod, _info, _entry, _settings, supplied) => { eligibilityContext = supplied; return [runtimeId]; },
-    canLaunchEntry: () => true
+    launcherService: { resolveEntryChecks: (entry, settings, options) => {
+      checked.push({ entry, settings, options });
+      return { runtimeId, runtimeSupport: [runtimeId], launch: true, managedSaveDir: false };
+    } }
   };
   vm.createContext(context); vm.runInContext(normalizeSource, context);
   const entry = { gameId: 'game', gamePath: '/game/player.exe', runtimeSettings: {}, moduleData: {} };
@@ -179,9 +246,24 @@ test('serialized games use the selected backend capabilities and pass local runt
   assert.equal(local.moduleSupports.saveEditing, false);
   assert.equal(local.moduleSupports.saveLocation, true);
   assert.equal(local.moduleSupports.launch, true);
-  assert.equal(eligibilityContext.settings, settings);
-  assert.equal(eligibilityContext.userDataDir, '/state');
-  assert.equal(eligibilityContext.getRuntimeManagerState('local'), context.runtimeStateSnapshots.local);
+  assert.deepEqual(Array.from(local.moduleRuntimeSupport), ['local']);
+  assert.equal(checked.at(-1).settings, settings);
+  assert.equal(checked.at(-1).options.availability, null);
+  const count = checked.length;
+  const saved = [];
+  context.GameStore.readGameRecord = () => ({ gameId: 'game' });
+  context.GameStore.setGameNetworkAccess = (_dir, id, value) => saved.push({ id, value });
+  const pending = context.normalizeGameEntry({ ...entry, networkAccess: undefined }, settings,
+    { checks: { runtimeId: 'managed', runtimeSupport: ['managed'], launch: false, managedSaveDir: true }, current: false });
+  assert.equal(checked.length, count, 'precomputed checks replace the module checks');
+  assert.equal(pending.runtimeId, 'managed');
+  assert.equal(pending.moduleSupports.launch, false);
+  assert.equal(pending.managedSaveDir, true);
+  assert.equal(typeof pending.networkAccess, 'boolean');
+  assert.deepEqual(saved, [], 'a network setting derived from checks that are not current is not saved');
+  context.normalizeGameEntry({ ...entry, networkAccess: undefined }, settings,
+    { checks: { runtimeId: 'managed', runtimeSupport: ['managed'], launch: true, managedSaveDir: false }, current: true });
+  assert.deepEqual(saved.map(change => change.id), ['game']);
 });
 test('changing one game leaves every other game and its extracted icon stable', () => {
   const previous = createLibraryFixture();

@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -9,14 +11,27 @@ const SdkRuntimeManager = require("../src/modules/renpy/runtime/sdk-runtime-mana
 
 const { isVersionInMajorGroup } = SdkManager.__test;
 
+test("legacy Darwin SDK installations are ready and listed before any launcher startup", t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "renpy-sdk-darwin-")); t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const directory = path.join(root, "runtimes", "sdk", "7", "7.3.5");
+  fs.mkdirSync(path.join(directory, "lib", "darwin-x86_64"), {recursive: true});
+  fs.writeFileSync(path.join(directory, "renpy.sh"), "#!/bin/sh\n");
+  fs.writeFileSync(path.join(directory, "lib", "darwin-x86_64", "renpy"), "native program");
+  const installed = SdkManager.listInstalled(root, 7);
+  assert.equal(installed.length, 1);
+  assert.equal(installed[0].version, "7.3.5");
+  assert.equal(installed[0].ready, true);
+});
+
 test("sdk manager groups Ren'Py 6 and 7 under the python 2 major", () => {
   assert.equal(isVersionInMajorGroup("6.99.12", 7), true);
   assert.equal(isVersionInMajorGroup("7.4.11", 7), true);
   assert.equal(isVersionInMajorGroup("8.2.1", 7), false);
 });
 
-test("sdk manager keeps Ren'Py 8 in the python 3 major group", () => {
+test("sdk manager keeps Ren'Py 8 and later in the python 3 major group", () => {
   assert.equal(isVersionInMajorGroup("8.2.1", 8), true);
+  assert.equal(isVersionInMajorGroup("9.0.0", 8), true);
   assert.equal(isVersionInMajorGroup("7.4.11", 8), false);
   assert.equal(isVersionInMajorGroup("6.99.12", 8), false);
 });
@@ -82,6 +97,22 @@ test("sdk manager primes the launcher app on macOS after install", async () => {
   }
 });
 
+test("sdk installation restores the launcher's packed Mac programs without opening it", t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "renpy-macho-")); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const lib = path.join(root, "lib", "py3-mac-x86_64"), other = path.join(root, "lib", "py3-linux-x86_64");
+  fs.mkdirSync(lib, { recursive: true }); fs.mkdirSync(other, { recursive: true });
+  fs.writeFileSync(path.join(lib, "renpy.macho"), Buffer.concat([Buffer.from("RENPY"), Buffer.from("program")]));
+  fs.writeFileSync(path.join(lib, "zsync.macho"), "unprefixed");
+  fs.writeFileSync(path.join(other, "renpy.macho"), "linux files stay as published");
+  SdkManager.__test.restoreMacBinaries(root);
+  assert.equal(fs.readFileSync(path.join(lib, "renpy"), "utf8"), "program");
+  assert.equal(fs.readFileSync(path.join(lib, "zsync"), "utf8"), "unprefixed");
+  assert.equal(fs.statSync(path.join(lib, "renpy")).mode & 0o777, 0o755);
+  assert.deepEqual(fs.readdirSync(lib).sort(), ["renpy", "zsync"]);
+  assert.ok(fs.existsSync(path.join(other, "renpy.macho")));
+  SdkManager.__test.restoreMacBinaries(path.join(root, "missing"));
+});
+
 test("sdk manager skips app priming outside macOS or when the app is missing", async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-renpy-sdk-"));
   const launcherPath = path.join(tmpDir, "Ren'Py.app");
@@ -106,29 +137,25 @@ test("sdk manager skips app priming outside macOS or when the app is missing", a
   }
 });
 
-test("Ren'Py catalog defaults to stable history and keeps Python generations separate", async () => {
-  const index = '<a href="6.99.12/">old</a><a href="7.4.11/">7</a><a href="8.0.0/">8</a><a href="8.9.0/">future</a>';
-  const fetcher = async url => ({
-    status: 200, headers: {},
-    body: Buffer.from(url.endsWith("/dl/") ? index : url.endsWith("latest-7.html") ? "Ren'Py 7.8.7" : "Ren'Py 8.6.1")
-  });
-  const v8 = await SdkManager.fetchAvailableVersions({ major: 8, fetcher });
+test("Ren'Py catalog defaults to stable history and keeps Python generations separate", async t => {
+  t.after(() => { Harness.network.routes = null; });
+  Harness.network.routes = { "https://www.renpy.org/dl/": '<a href="6.99.12/">old</a><a href="7.4.11/">7</a><a href="8.0.0/">8</a><a href="8.9.0/">future</a>',
+    "https://renpy.org/latest-7.html": "Ren'Py 7.8.7", "https://renpy.org/latest.html": "Ren'Py 8.6.1" };
+  const v8 = await SdkManager.fetchAvailableVersions({ major: 8 });
   assert.deepEqual(v8.versions, ["8.6.1", "8.0.0"]);
   assert.equal(v8.latestStableVersion, "8.6.1");
-  const v7 = await SdkManager.fetchAvailableVersions({ major: 7, fetcher });
+  const v7 = await SdkManager.fetchAvailableVersions({ major: 7 });
   assert.deepEqual(v7.versions, ["7.8.7", "7.4.11", "6.99.12"]);
-  const latest = await SdkManager.fetchAvailableVersions({ major: 8, latestOnly: true, fetcher });
+  const latest = await SdkManager.fetchAvailableVersions({ major: 8, latestOnly: true });
   assert.deepEqual(latest.versions, ["8.6.1"]);
 });
 
-test("Ren'Py cancellation during stable metadata fetch is not treated as an optional failure", async () => {
+test("Ren'Py cancellation during stable metadata fetch is not treated as an optional failure", async t => {
   const controller = new AbortController();
-  const fetcher = async url => {
-    if (url.endsWith("/dl/")) return { status: 200, headers: {}, body: Buffer.from('<a href="8.0.0/">8</a>') };
-    controller.abort();
-    throw new Error("canceled metadata request");
-  };
-  await assert.rejects(SdkManager.fetchAvailableVersions({ major: 8, signal: controller.signal, fetcher }), { name: "AbortError" });
+  t.after(() => { Harness.network.routes = null; });
+  Harness.network.routes = { "https://www.renpy.org/dl/": '<a href="8.0.0/">8</a>',
+    "https://renpy.org/latest.html": () => { controller.abort(); throw new Error("canceled metadata request"); } };
+  await assert.rejects(SdkManager.fetchAvailableVersions({ major: 8, signal: controller.signal }), { name: "AbortError" });
 });
 
 test("Ren'Py full refresh replaces reduced cache and preserves explicit global SDK choices", async () => {

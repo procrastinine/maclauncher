@@ -70,11 +70,11 @@
             {
               "key": "version",
               "type": "select",
-              "label": "Local runtime version",
+              "label": "Version",
               "options": [
                 {
                   "value": "",
-                  "label": "Automatic"
+                  "label": "Default"
                 }
               ],
               "optionsAction": "listRuntimeVersions",

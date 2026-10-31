@@ -6,7 +6,7 @@ const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 
 // A real signed Mach-O entry exercises the production native checks. The small
 // sibling script supplies deterministic test-tool behavior after installation.
-function nativeTool(directory, script) {
+function nativeTool(directory, script, {architecture = 'arm64'} = {}) {
   fs.mkdirSync(directory, { recursive: true });
   const source = path.join(directory, 'tool.c'), binary = path.join(directory, 'tool');
   fs.writeFileSync(source, `#include <limits.h>
@@ -29,12 +29,13 @@ int main(int argc, char **argv) {
   return 126;
 }
 `);
-  execFileSync('clang', ['-arch', 'arm64', '-mmacosx-version-min=13.0', source, '-o', binary], { stdio: 'pipe' });
+  const architectures = architecture === 'universal' ? ['arm64', 'x86_64'] : [architecture === 'x64' ? 'x86_64' : architecture];
+  execFileSync('clang', [...architectures.flatMap(arch => ['-arch', arch]), '-mmacosx-version-min=13.0', source, '-o', binary], { stdio: 'pipe' });
   execFileSync('/usr/bin/codesign', ['--force', '--sign', '-', '--timestamp=none', binary], { stdio: 'pipe' });
   return { binary: fs.readFileSync(binary), script: Buffer.from(script) };
 }
 
-function packageFor(directory, { id, version, manifest, entries, filesPrefix = '' }) {
+function packageFor(directory, { id, version, manifest, entries, filesPrefix = '', architecture = manifest.arch || 'arm64' }) {
   const repository = 'procrastinine/maclauncher-builds';
   const container = path.join(directory, 'archive-input'), payload = path.join(container, 'files');
   fs.mkdirSync(payload, { recursive: true });
@@ -45,19 +46,20 @@ function packageFor(directory, { id, version, manifest, entries, filesPrefix = '
     return { path: entry.path, size: entry.bytes.length, sha256: sha(entry.bytes), mode: entry.mode,
       ...(entry.architectures ? { architectures: entry.architectures } : {}) };
   });
-  manifest = { schemaVersion: 1, version, arch: 'arm64', minimumMacOS: '13.0', ...manifest, files };
+  manifest = { schemaVersion: 1, version, arch: architecture, minimumMacOS: '13.0', ...manifest, files };
   const bytes = Buffer.from(JSON.stringify(manifest));
   fs.writeFileSync(path.join(payload, 'manifest.json'), bytes, { mode: 0o644 });
   const sourceSha256 = sha(Buffer.from('fixture source profile'));
-  const wrapper = { id, version, arch: 'arm64', launcherArchitectures: ['arm64'], minimumMacOS: manifest.minimumMacOS,
+  const launcherArchitectures = architecture === 'universal' ? ['arm64', 'x64'] : [architecture];
+  const wrapper = { id, version, arch: architecture, launcherArchitectures, minimumMacOS: manifest.minimumMacOS,
     manifestRelative: 'manifest.json', manifestSha256: sha(bytes), sourceRelative: null, sourceSha256,
     files: [...files.map(file => ({ ...file, path: filesPrefix + file.path })),
       { path: 'manifest.json', size: bytes.length, mode: 0o644, sha256: sha(bytes) }] };
   fs.writeFileSync(path.join(container, 'runtime-package.json'), JSON.stringify(wrapper));
-  const filename = `${id}-${version}-arm64.tar.gz`, archive = path.join(directory, filename);
+  const filename = `${id}-${version}-${architecture}.tar.gz`, archive = path.join(directory, filename);
   execFileSync('/usr/bin/tar', ['-czf', archive, '-C', container, 'runtime-package.json', 'files']);
-  const archiveBytes = fs.readFileSync(archive), tag = `${id}/v${version}/arm64`;
-  const record = { schemaVersion: 2, id, version, arch: 'arm64', launcherArchitectures: ['arm64'], minimumMacOS: manifest.minimumMacOS,
+  const archiveBytes = fs.readFileSync(archive), tag = `${id}/v${version}/${architecture}`;
+  const record = { schemaVersion: 2, id, version, arch: architecture, launcherArchitectures, minimumMacOS: manifest.minimumMacOS,
     manifestRelative: 'manifest.json', manifestSha256: sha(bytes), sourceSha256, updatePolicy: 'manual', tag,
     asset: { filename, bytes: archiveBytes.length, sha256: sha(archiveBytes),
       url: `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}/${filename}` } };

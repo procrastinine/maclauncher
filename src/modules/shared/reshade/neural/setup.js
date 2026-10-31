@@ -1,6 +1,6 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
 const Models = require("./models"), Catalog = require("./model-source.json");
-const Downloads = require("../../runtime/download-utils"), Writable = require("../../writable-input");
+const Downloads = require("../../runtime/download-utils"), Writable = require("../../writable-input"), Upstream = require("../../runtime/upstream");
 const { runDownloadTask } = require("../../runtime/download-manager");
 const { downloadApproved } = require("../../runtime/tool-install");
 
@@ -46,13 +46,17 @@ async function downloadModel(context={},dependencies={}){
         for(const row of source.files){
           if(typeof row.file!=='string'||path.basename(row.file)!==row.file||!Number.isSafeInteger(row.bytes)||row.bytes<1||!/^[a-f0-9]{64}$/.test(row.sha256))throw new Error('The model source declaration is invalid.');
           const target=path.join(temporary,row.file),limit=new AbortController(),combined=signal?AbortSignal.any([signal,limit.signal]):limit.signal,downloadBytes=row.downloadBytes||row.bytes;let oversized=false;
-          const download=dependencies.downloadToFile||(row.transport==='nvidia-vfx-entry'?((_url,target,options)=>require('./nvidia-vfx-source').downloadEntry(row,target,options)):row.transport==='zip-entry'?((_url,target,options)=>{const archiveCacheDirectory=path.join(root,'.source-archives');Writable.assertOwnDirectory(context.userDataDir,archiveCacheDirectory);return require('./checkpoint-source').downloadEntry(row,target,{...options,archiveCacheDirectory,userDataDir:context.userDataDir});}):row.transport==='bounded-ranges'?((_url,target,options)=>require('./checkpoint-source').downloadFile(row,target,options)):Downloads.downloadToFile);
+          // Archive and range transports bound their own transfer. A plain file
+          // at an exact revision downloads through the upstream layer. Every
+          // file must match its model identity checksum below.
+          const bounded=!row.transport;
+          const download=row.transport==='nvidia-vfx-entry'?((_url,target,options)=>require('./nvidia-vfx-source').downloadEntry(row,target,options)):row.transport==='zip-entry'?((_url,target,options)=>{const archiveCacheDirectory=path.join(root,'.source-archives');Writable.assertOwnDirectory(context.userDataDir,archiveCacheDirectory);return require('./checkpoint-source').downloadEntry(row,target,{...options,archiveCacheDirectory,userDataDir:context.userDataDir});}):row.transport==='bounded-ranges'?((_url,target,options)=>require('./checkpoint-source').downloadFile(row,target,options)):((url,target,options)=>Upstream.download(Upstream.listedFile({filename:row.file,url}),target,options));
           try{await download(row.url,target,{signal:combined,onProgress:progress=>{
-            if(progress.downloaded>downloadBytes||progress.total>downloadBytes){oversized=true;limit.abort();}
-            task.onProgress?.({...progress,downloaded:completed+progress.downloaded,total:source.bytes,label:'Downloading model…'});
+            if(bounded&&(progress.downloaded>downloadBytes||progress.total>downloadBytes)){oversized=true;limit.abort();}
+            task.onProgress?.({...progress,downloaded:completed+Math.min(progress.downloaded,downloadBytes),total:source.bytes,label:'Downloading model…'});
           }});}catch(error){if(oversized&&!signal?.aborted)throw new Error('The model asset exceeds its declared size.');throw error;}
           Downloads.throwIfAborted(combined);const stat=fs.lstatSync(target);
-          if(!stat.isFile()||stat.isSymbolicLink()||stat.size!==row.bytes||await checksum(target,combined)!==row.sha256)throw new Error('The model asset does not match its source checksum.');
+          if(!stat.isFile()||stat.isSymbolicLink()||stat.size!==row.bytes||await checksum(target,combined)!==row.sha256)throw new Error(`The downloaded ${row.file} is not the selected model file: its size or checksum differs.`);
           completed+=downloadBytes;
         }
         const imported=await Models.importModel({...operation,runtimePath:source.kind==='ncnn-rife'?temporary:path.join(temporary,source.entry),modelIdentifier:source.label,onProgress:progress=>task.onProgress?.({...progress,downloaded:completed,total:source.bytes,detail:progress.label})});
@@ -88,25 +92,29 @@ async function downloadDlssMac(context = {}, dependencies = {}) {
       const limit = new AbortController(), signal = callerSignal ? AbortSignal.any([callerSignal, limit.signal]) : limit.signal;
       let oversized = false, reported = 0;
       try {
-        await (dependencies.downloadToFile || Downloads.downloadToFile)(source.url, archive, { signal, onProgress: progress => {
-          if (progress.downloaded > source.bytes || progress.total > source.bytes) { oversized = true; limit.abort(); }
+        // A replaced release archive is verified by the publisher's current size
+        // and digest; the imported model must still match its weights and manifest.
+        const listed = await require("./checkpoint-source").releaseFile(source.url, { signal }), size = listed.bytes || source.bytes;
+        const published = await Upstream.download(listed, archive, { signal, onProgress: progress => {
+          if (listed.bytes && (progress.downloaded > listed.bytes || progress.total > listed.bytes)) { oversized = true; limit.abort(); }
           const now = Date.now();
-          if (now - reported >= 100 || progress.downloaded === source.bytes) {
+          if (now - reported >= 100 || progress.downloaded === size) {
             reported = now; task.onProgress?.({ ...progress, phase: "download", label: "Downloading neural model…" });
           }
         } });
         Downloads.throwIfAborted(signal);
-        task.onProgress?.({downloaded: source.bytes, total: source.bytes, detail: "Verifying neural model…"});
-        const stat = fs.lstatSync(archive);
-        if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== source.bytes || await checksum(archive, signal) !== source.sha256)
-          throw new Error("The neural model download does not match its release checksum. Try Download again.");
+        task.onProgress?.({downloaded: published.bytes, total: published.bytes, detail: "Verifying neural model…"});
+        const known = new Set(Models.listInstalled(context.userDataDir).map(row => row.version));
         const imported = await Models.importModel({ ...operation, signal, runtimePath: archive, onProgress: progress =>
-          task.onProgress?.({...progress, downloaded: source.bytes, total: source.bytes, detail: progress.label}) });
-        if (imported.weightsHash !== source.weightsHash || imported.manifestHash !== source.manifestHash)
-          throw new Error("The downloaded release contains a different neural model package.");
+          task.onProgress?.({...progress, downloaded: published.bytes, total: published.bytes, detail: progress.label}) });
+        if (imported.weightsHash !== source.weightsHash || imported.manifestHash !== source.manifestHash) {
+          // A replaced archive that holds another model leaves nothing installed.
+          if (!known.has(imported.version)) await Models.removeModel({ userDataDir: context.userDataDir, version: imported.version });
+          throw new Error("The downloaded release contains a different neural model package: its weights or manifest checksum differs.");
+        }
         const receipt = path.join(imported.installDir, "download-source.json");
         if (!fs.existsSync(receipt)) fs.writeFileSync(receipt, JSON.stringify({ schema: 1, version: source.version,
-          url: source.url, bytes: source.bytes, sha256: source.sha256, commit: source.commit,
+          url: source.url, bytes: published.bytes, sha256: published.sha256, commit: source.commit,
           sourceLicense: source.sourceLicense, weightTerms: source.weightTerms }, null, 2) + "\n", { flag: "wx", mode: 0o444 });
         return imported;
       } catch (error) {

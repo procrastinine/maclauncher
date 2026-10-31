@@ -13,7 +13,7 @@
       "input": {"gameTypes":["ps5"]},
         "label": "Prosper", "uiOrder": 48,
       "graphicsHost": "window", "graphicsArchitecture": "x86_64",
-      "requirements": "Local macOS build · Rosetta on Apple Silicon · Vulkan 1.4",
+      "requirements": "macOS 26 · Rosetta on Apple Silicon · Vulkan 1.4",
       "settings": {
         "defaults": {"vulkanRuntime": "auto", "showFps": false},
         "fields": [

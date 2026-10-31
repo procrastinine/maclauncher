@@ -4,6 +4,7 @@ const path = require("node:path");
 const { createHash } = require("node:crypto");
 const { pathToFileURL } = require("node:url");
 const { inspectInstalledMacArchitecture } = require("./steam-architectures");
+const { readAppInfo, steamAppListed } = require("./steam-client-library");
 
 const MAX_TEXT_BYTES = 4 * 1024 * 1024;
 const MAX_DIRECTORY_ENTRIES = 16384;
@@ -216,7 +217,26 @@ async function importedPaths(games) {
   return results;
 }
 
-async function installedRows(library, iconRoots, imports) {
+// Steam keeps manifests for its shared components, such as the Steamworks
+// Common Redistributables, next to those of games. App manifests do not record
+// an app type, but each client's local app cache does. The library's own client
+// describes an app first, and another client's cache fills a gap. Reading the
+// cache stays offline; an app that no cache describes stays listed.
+async function listedApps(homeDir, libraries) {
+  const appIds = new Set();
+  for (const library of libraries) for (const entry of await entries(library.steamapps)) {
+    const match = /^appmanifest_(\d{1,10})\.acf$/i.exec(entry.name);
+    if (entry.isFile() && match) appIds.add(Number(match[1]));
+  }
+  const caches = new Map();
+  if (appIds.size) for (const root of new Set(libraries.map(library => library.root))) {
+    try { caches.set(root, await readAppInfo(homeDir, { steamRoot: root, appIds })); } catch { /* Steam may not have written its app cache yet. */ }
+  }
+  return (library, appId) => steamAppListed(caches.get(library.root)?.get(Number(appId)) ||
+    [...caches.values()].map(cache => cache.get(Number(appId))).find(Boolean));
+}
+
+async function installedRows(library, iconRoots, imports, listed) {
   const rows = [], common = await realDirectory(path.join(library.steamapps, "common"));
   if (!common) return rows;
   for (const entry of await entries(library.steamapps)) {
@@ -227,6 +247,7 @@ async function installedRows(library, iconRoots, imports) {
     const appId = field(state, "appid"), installDir = field(state, "installdir");
     if (typeof appId !== "string" || appId !== match[1] || !APP_ID.test(appId) || Number(appId) < 1 ||
       typeof installDir !== "string" || !installDir || installDir === "." || installDir === ".." || /[\\/\0]/.test(installDir)) continue;
+    if (!listed(library, appId)) continue;
     const stateFlags = field(state, "StateFlags");
     // Steam retains manifests for queued and unfinished downloads too. Its
     // FullyInstalled bit remains set for installed games awaiting an update.
@@ -293,8 +314,8 @@ async function managedRows(userDataDir, iconRoots, imports) {
 async function discoverInstalledSteamGames({ homeDir = os.homedir(), userDataDir, games = [] } = {}) {
   const libraries = await findLibraries(homeDir);
   const iconRoots = [...new Set(libraries.map(library => library.root))];
-  const imports = await importedPaths(games), rows = [];
-  for (const library of libraries) rows.push(...await installedRows(library, iconRoots, imports));
+  const imports = await importedPaths(games), rows = [], listed = await listedApps(homeDir, libraries);
+  for (const library of libraries) rows.push(...await installedRows(library, iconRoots, imports, listed));
   const seen = new Set();
   return rows.filter(row => { if (seen.has(row.gamePath)) return false; seen.add(row.gamePath); return true; })
     .sort((a, b) => a.name.localeCompare(b.name) || a.platform.localeCompare(b.platform) || a.path.localeCompare(b.path));

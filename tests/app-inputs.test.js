@@ -17,6 +17,10 @@ function fixture(t) {
   const packageLock = { schemaVersion: 1, repository: 'procrastinine/maclauncher-builds', arch: 'arm64', maximumMacOS: '13.0', packages: [] };
   return { root, options: { repoRoot: root, packageConfig, plan, packageLock, requireRenderer: false, requireHost: false }, packageConfig, plan, packageLock };
 }
+test('full app verification cannot use a source map prepared without production provenance', t => {
+  const f = fixture(t);
+  assert.throws(() => Inputs.verifyContents({ repoRoot: f.root, sources: new Map() }, {}), /requires published native input provenance/);
+});
 test('application inputs map renamed FileSets and reject undeclared compiled source', async t => {
   const f = fixture(t); write(f.root, 'bridge/module.js', 'module.exports=true;');
   f.packageConfig.build.files.push({ from: 'bridge', to: 'src/bridge', filter: ['*.js'] });

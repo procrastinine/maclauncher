@@ -1,9 +1,10 @@
-const Github = require("../shared/runtime/github-releases");
-const Transport = require("../shared/runtime/github-transport");
-const { decodeResponseBody, throwIfAborted } = require("../shared/runtime/download-utils");
+const Upstream = require("../shared/runtime/upstream");
+const { compareVersions } = require("../shared/runtime/version-order");
+const { throwIfAborted } = require("../shared/runtime/download-utils");
 
 const UOSC_SOURCE = "https://github.com/tomasklaen/uosc/releases/latest";
 const THUMBFAST_SOURCE = "https://github.com/po5/thumbfast";
+const SAFE_VERSION = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/;
 
 function snapshotVersionLabel(commit) {
   const date = commit?.commit?.committer?.date || commit?.commit?.author?.date;
@@ -20,50 +21,69 @@ function knownSource(value) {
     return [UOSC_SOURCE, THUMBFAST_SOURCE].includes(normalized) ? normalized : null;
   } catch { return null; }
 }
-function revision(value, label) {
-  if (!/^[a-f0-9]{40}$/i.test(value || "")) throw new Error(`The ${label} source has no exact commit identity.`);
-  return value.toLowerCase();
+// The uosc ZIP or default configuration of a release: the exact current name,
+// else a renamed uosc file of the same type.
+function uoscAsset(assets, extension) {
+  const named = (assets || []).filter(asset => typeof asset?.name === "string" && asset.name.toLowerCase().endsWith(extension) &&
+    /^uosc(?:[._-]|$)/i.test(asset.name) && !/(?:^|[._-])(?:debug|symbols?|source)(?:[._-]|$)/i.test(asset.name));
+  return named.find(asset => asset.name === "uosc" + extension) || named[0] || null;
 }
-function releaseAsset(asset, tag, filename) {
-  const expected = `https://github.com/tomasklaen/uosc/releases/download/${encodeURIComponent(tag)}/${filename}`;
-  if (!asset || asset.browser_download_url !== expected || !Number.isSafeInteger(asset.size) || asset.size < 1)
-    throw new Error(`The latest uosc release has no valid ${filename} download.`);
-  const digest = typeof asset.digest === "string" ? asset.digest : "";
-  if (/^sha256:/i.test(digest) && !/^sha256:[a-f0-9]{64}$/i.test(digest)) throw new Error(`The uosc ${filename} checksum is invalid.`);
-  return { url: expected, bytes: asset.size, ...(/^sha256:[a-f0-9]{64}$/i.test(digest) ? { sha256: digest.slice(7).toLowerCase() } : {}) };
+// Stable uosc releases with both the ZIP and its default configuration. GitHub's
+// digest verifies a download when GitHub publishes one.
+const uosc = Upstream.github({ repository: "tomasklaen/uosc", recognize: release => {
+  const tag = release?.tag_name;
+  if (typeof tag !== "string" || !SAFE_VERSION.test(tag)) return [];
+  const archive = uoscAsset(release.assets, ".zip"), configuration = uoscAsset(release.assets, ".conf");
+  if (!archive || !configuration) return [];
+  return { version: tag, label: tag, sourceUrl: `https://github.com/tomasklaen/uosc/releases/tag/${encodeURIComponent(tag)}`,
+    assets: [archive, configuration] };
+} });
+// thumbfast publishes no releases. Its current commit is a source snapshot,
+// downloaded from commit-addressed URLs.
+const thumbfast = Upstream.githubCommits({ repository: "po5/thumbfast", limit: 1,
+  recognize: commit => ({ version: String(commit.sha).toLowerCase(), label: snapshotVersionLabel(commit), sourceUrl: THUMBFAST_SOURCE, paths: ["thumbfast.lua"] }) });
+
+// Catalog entries in the plugin manager's shape. Each carries its exact
+// downloads; the license notice comes from the repository at the same revision.
+function entry(row, repository, filename) {
+  return { version: row.version, versionLabel: row.label || row.version, upstreamRevision: row.revision, sourceUrl: row.sourceUrl,
+    ...(row.publishedAt ? { publishedAt: row.publishedAt } : {}), licenseRepository: repository,
+    assets: row.files.map(listed => ({ ...Upstream.asset(listed), filename: filename(listed.name) })) };
+}
+async function discoverUosc({ signal, logger } = {}) {
+  // The ZIP comes first; its configuration installs as script-opts/uosc.conf.
+  const entries = (await uosc.discover({ signal, logger })).filter(row => row.files.length === 2)
+    .map(row => entry(row, "tomasklaen/uosc", name => /\.zip$/i.test(name) ? "uosc.zip" : "script-opts/uosc.conf"));
+  throwIfAborted(signal);
+  if (!entries.length) throw new Error("No stable uosc release was found.");
+  return entries.sort((a, b) => compareVersions(b.version, a.version));
+}
+async function discoverThumbfast({ signal, logger } = {}) {
+  const entries = (await thumbfast.discover({ signal, logger })).map(row => entry(row, "po5/thumbfast", name => name));
+  throwIfAborted(signal);
+  if (!entries.length) throw new Error("The latest thumbfast source could not be resolved.");
+  return entries;
 }
 
-async function resolveKnownSource(source, { signal, logger } = {}, dependencies = {}) {
+/** Published versions of a known plugin (`uosc` or `thumbfast`), newest first. */
+async function discoverVersions(id, options = {}) {
+  throwIfAborted(options.signal);
+  if (id === "uosc") return discoverUosc(options);
+  if (id === "thumbfast") return discoverThumbfast(options);
+  throw new Error("The selected mpv plugin is unavailable.");
+}
+
+// An added plugin whose URL names uosc or thumbfast follows the newest version.
+async function resolveKnownSource(source, { signal, logger } = {}) {
   const known = knownSource(source);
   if (!known) return null;
-  throwIfAborted(signal);
-  const request = dependencies.request || Transport.request;
-  if (known === UOSC_SOURCE) {
-    const releases = await (dependencies.fetchGithubReleases || Github.fetchGithubReleases)({ owner: "tomasklaen", repo: "uosc", maxPages: 1, signal, logger,
-      assetFilter: asset => ["uosc.zip", "uosc.conf"].includes(asset.name), ...(dependencies.request ? { request } : {}) });
-    const latest = Github.sortReleases(releases).find(release => release && !release.draft && !release.prerelease);
-    const tag = latest?.tag_name;
-    if (typeof tag !== "string" || !tag || /[\0\r\n]/.test(tag)) throw new Error("No stable uosc release was found.");
-    const archive = releaseAsset(latest.assets?.find(asset => asset.name === "uosc.zip"), tag, "uosc.zip");
-    const configuration = releaseAsset(latest.assets?.find(asset => asset.name === "uosc.conf"), tag, "uosc.conf");
-    const upstreamRevision = revision(await (dependencies.resolveGithubTagCommit || Github.resolveGithubTagCommit)({ owner: "tomasklaen", repo: "uosc", tag, signal,
-      ...(dependencies.request ? { request } : {}) }), "uosc");
-    throwIfAborted(signal);
-    return { ...archive, archive: true, label: "uosc", sourceUrl: `https://github.com/tomasklaen/uosc/releases/tag/${encodeURIComponent(tag)}`,
-      updateSource: UOSC_SOURCE, upstreamRevision, versionLabel: tag,
-      extraAssets: [{ ...configuration, relative: "script-opts/uosc.conf" },
-        { url: `https://raw.githubusercontent.com/tomasklaen/uosc/${upstreamRevision}/LICENSE.LGPL`, relative: "LICENSE.LGPL" }] };
-  }
-  const response = await request("https://api.github.com/repos/po5/thumbfast/commits/HEAD", { signal,
-    headers: { "User-Agent": "MacLauncher", Accept: "application/vnd.github+json" } });
-  if (response.status !== 200) throw new Error(`The latest thumbfast source could not be resolved (${response.status}).`);
-  const commit = JSON.parse(decodeResponseBody(response.body, response.headers).toString("utf8"));
-  const upstreamRevision = revision(commit.sha, "thumbfast");
-  throwIfAborted(signal);
-  const base = `https://raw.githubusercontent.com/po5/thumbfast/${upstreamRevision}`;
-  return { url: `${base}/thumbfast.lua`, extension: ".lua", label: "thumbfast", sourceUrl: THUMBFAST_SOURCE,
-    updateSource: THUMBFAST_SOURCE, upstreamRevision, versionLabel: snapshotVersionLabel(commit),
-    extraAssets: [{ url: `${base}/LICENSE`, relative: "LICENSE" }] };
+  const [newest] = await discoverVersions(known === UOSC_SOURCE ? "uosc" : "thumbfast", { signal, logger });
+  const [main, ...extra] = newest.assets;
+  const shared = { label: known === UOSC_SOURCE ? "uosc" : "thumbfast", sourceUrl: newest.sourceUrl, updateSource: known,
+    upstreamRevision: newest.upstreamRevision, versionLabel: newest.versionLabel, licenseRepository: newest.licenseRepository,
+    extraAssets: extra.map(({ filename, ...asset }) => ({ ...asset, relative: filename })) };
+  const { filename, ...download } = main;
+  return filename.endsWith(".zip") ? { ...download, archive: true, ...shared } : { ...download, extension: ".lua", ...shared };
 }
 
-module.exports = { UOSC_SOURCE, THUMBFAST_SOURCE, resolveKnownSource, snapshotVersionLabel };
+module.exports = { UOSC_SOURCE, THUMBFAST_SOURCE, SAFE_VERSION, uosc, thumbfast, discoverVersions, resolveKnownSource, snapshotVersionLabel };

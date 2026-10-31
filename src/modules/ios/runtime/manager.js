@@ -1,31 +1,32 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const os = require("node:os");
 const { promisify } = require("node:util");
 const execFile = promisify(require("node:child_process").execFile);
 const { createPinnedNativeManager } = require("../../shared/runtime/pinned-native-manager");
-const { catalog, SOURCE_URL, createCatalogDiscovery } = require("./catalog");
+const Catalog = require("./catalog");
 const Native = require("../../shared/runtime/local-native");
+const Release = require("../../shared/runtime/release-files");
 const MachO = require("../macho");
+// Only PlayTools and its libraries are kept from the PlayCover download, in
+// whichever archive format and folder the publisher uses.
 async function extractArchive(file, destination, signal) {
-  const mount = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-playtools-")); let mounted = false;
+  const download = fs.mkdtempSync(path.join(path.dirname(destination), ".download-"));
   try {
-    await execFile("/usr/bin/hdiutil", ["attach", "-readonly", "-nobrowse", "-mountpoint", mount, file], { signal, timeout: 60000, maxBuffer: 1024 * 1024 }); mounted = true;
-    const inventory = inspectPlayTools(mount), directory = path.join(mount, "PlayCover.app/Contents/Frameworks");
+    await Release.extractArchive(file, download, signal);
+    const inventory = inspectPlayTools(download), directory = frameworks(fs.realpathSync(download));
     for (const name of ["PlayTools.framework", ...inventory.playToolsDependencies.map(item => item.name)])
       await execFile("/usr/bin/ditto", [path.join(directory, name), path.join(destination, name)], { signal, timeout: 60000 });
-  } finally {
-    if (mounted) await execFile("/usr/bin/hdiutil", ["detach", mount], { timeout: 30000 });
-    fs.rmSync(mount, { recursive: true, force: true });
-  }
+  } finally { fs.rmSync(download, { recursive: true, force: true }); }
 }
+const frameworks = root => path.dirname(Release.locatePackaged(root, ["PlayTools.framework", "PlayCover.app/Contents/Frameworks/PlayTools.framework"]) ||
+  path.join(root, "PlayTools.framework"));
 function framework(install) {
   // Existing managed PlayCover installations remain usable without redownload.
   return path.basename(install.executablePath) === "PlayTools" ? path.dirname(install.executablePath)
     : path.resolve(install.executablePath, "../../Frameworks/PlayTools.framework");
 }
 function inspectPlayTools(unpacked) {
-  const root = fs.realpathSync(unpacked), directory = fs.existsSync(path.join(root, "PlayTools.framework")) ? root : path.join(root, "PlayCover.app/Contents/Frameworks");
+  const root = fs.realpathSync(unpacked), directory = frameworks(root);
   const binary = path.join(directory, "PlayTools.framework/PlayTools"), dependencies = new Map();
   function inspect(file) {
     const actual = fs.realpathSync(file), stat = fs.statSync(actual);
@@ -54,10 +55,10 @@ function inspectPlayTools(unpacked) {
   inspect(binary);
   return { playToolsSha256: Native.hashFile(binary), playToolsDependencies: [...dependencies].map(([name, sha256]) => ({ name, sha256 })) };
 }
-function createManager({ dependencies = {}, catalogDependencies = {} } = {}) {
+function createManager({ dependencies = {} } = {}) {
   // Keep the persisted manager ID and version selections from earlier releases.
   const manager = createPinnedNativeManager({ id: "playcover", label: "PlayCover", nativeLibrary: true,
-  sourceUrl: SOURCE_URL, discoverCatalog: createCatalogDiscovery(catalogDependencies), catalog,
+  sourceUrl: Catalog.SOURCE_URL, upstream: Catalog.source,
   dependencies: { extractArchive, ...dependencies }, resolveExecutable: root => path.join(root, "PlayTools.framework/PlayTools"),
   prepareInstall: async ({ unpacked }) => inspectPlayTools(unpacked) });
   const getState = manager.getState;
@@ -79,5 +80,5 @@ function createManager({ dependencies = {}, catalogDependencies = {} } = {}) {
 module.exports = createManager();
 module.exports.framework = framework;
 module.exports.createManager = createManager;
-module.exports.createCatalogDiscovery = createCatalogDiscovery;
 module.exports.inspectPlayTools = inspectPlayTools;
+module.exports.frameworksDirectory = frameworks;

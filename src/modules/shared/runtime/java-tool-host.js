@@ -20,7 +20,11 @@ async function ensure(context, minimumJava = 17, dependencies = {}) {
   }
   if (!host) {
     const line = lines[0], variant = config.lines[line]?.defaultVariant;
+    // A saved version that left the listed catalog gives way to the newest one.
+    const listed = () => manager.getState({ userDataDir: context.userDataDir, settings: config }).sections
+      .find(section => section.id === String(line))?.catalog?.versions || [];
     let version = config.lines[line]?.defaultVersion;
+    if (version && listed().length && !listed().includes(version)) version = listed()[0];
     const installOptions = { sectionId: String(line), line, variant };
     await confirmToolInstall(context, { manager, version: version || null, installOptions, label: `Java ${line}`,
       requiresDownload: true, detail: "Required to run this game tool." });
@@ -28,8 +32,7 @@ async function ensure(context, minimumJava = 17, dependencies = {}) {
       await manager.refreshCatalog({ sectionId: String(line), force: false, latestOnly: false,
         logger: context.logger, signal: context.signal });
       context.onRuntimeStateChange?.();
-      version = manager.getState({ userDataDir: context.userDataDir, settings: config }).sections
-        .find(section => section.id === String(line))?.catalog?.versions?.[0];
+      version = listed()[0];
     }
     if (!version) throw new Error(`No Java ${line} runtime is available for this tool.`);
     await manager.installRuntime({ ...context, ...installOptions, version });

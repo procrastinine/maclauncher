@@ -11,9 +11,11 @@ import Compare from "../../../components/graphics/Compare.astro";
 import plain from "../../../assets/graphics/crt-s2-nearest.png";
 import styled from "../../../assets/graphics/overview-chain.webp";
 
-Every game you play through MacLauncher passes through the same graphics layer on its way to the screen. It runs on [Metal](https://developer.apple.com/metal/), takes the finished image from whatever runtime is drawing it, and lets you do things to that image before it reaches the window: upscale it, sharpen it, clean it up with a neural network, bend it into a CRT tube, insert generated frames, or all of the above.
+Every game you play through MacLauncher passes through the same graphics layer on its way to the screen. The layer runs on [Metal](https://developer.apple.com/metal/), takes each finished image from the runtime that drew it, and lets you process that image before it reaches the window. You can upscale it, sharpen it, clean it up with a neural network, give it the look of a CRT screen, insert generated frames between real ones, or combine several of these.
 
-That works the same way for a native Mac app, a [Godot](https://github.com/godotengine/godot) or [RPG Maker](https://www.rpgmakerweb.com/) game, a visual novel, an Android or iOS game, a browser game, a video, or a Windows game running in [CrossOver](https://www.codeweavers.com/crossover/). If MacLauncher can launch it, it can put effects on it.
+The same layer serves native Mac apps, [Godot](https://github.com/godotengine/godot) and [RPG Maker](https://www.rpgmakerweb.com/) games, visual novels, Android and iOS games, browser games, videos and Windows games running in [CrossOver](https://www.codeweavers.com/crossover/). Anything MacLauncher can launch can have effects applied to it.
+
+The graphics layer works on Intel and Apple Silicon Macs, though some effects need more: MLX models and Metal 4 features need Apple Silicon and a newer macOS, and the libplacebo and ISF shader providers follow the requirements of the selected graphics package. MetalFX support depends on your GPU, which MacLauncher checks directly. An effect your Mac can't run is switched off without affecting the others. [Macs and macOS versions](/maclauncher/macs-and-macos/#graphics-features-by-macos-version) lists which features need which macOS version, and the [requirements reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/SYSTEM_REQUIREMENTS.md#graphics) has the complete tables.
 
 <Compare
   before={plain}
@@ -27,40 +29,43 @@ That works the same way for a native Mac app, a [Godot](https://github.com/godot
 
 ## The chain
 
-Effects live in an ordered list called the **chain**. The image enters at the top, each row does one thing to it, and whatever comes out of the bottom is what you see. A chain could be a single sharpening pass, or something more ambitious:
+Effects live in an ordered list called the chain, which holds up to 32 rows. The image enters at the top, each row does one thing to it, and the image that leaves the last row is fitted to the window. A chain can be a single sharpening pass or something longer, for example:
 
-1. **Downsample** the game to 540p so the expensive parts have less to chew on.
-2. Run a **neural model** on that smaller image.
-3. **Upscale** the result to your display with [MetalFX](https://developer.apple.com/documentation/metalfx).
-4. Add **frame generation** to smooth out the frame rate.
-5. Put a **CRT** shader on top, because why not.
+1. Downsample the game's image to 540p, so the expensive steps have fewer pixels to process.
+2. Run a neural model on that smaller image.
+3. Upscale the result to the window with [MetalFX](https://developer.apple.com/documentation/metalfx).
+4. Add frame generation to raise the frame rate shown on screen.
+5. Apply a CRT shader to the final image.
 
-Order matters, and you choose it. A CRT effect looks different before and after an upscaler; a sharpening pass after a neural model is a different thing from one before it. [Building a chain](/maclauncher/graphics/composing-effects/) walks through the ideas.
+You choose the order, and the order changes the result. A CRT effect looks different before and after an upscaler, and sharpening before a neural model looks different from sharpening after it. [Building a chain](/maclauncher/graphics/composing-effects/) explains how rows interact.
 
 ## Simple and Advanced
 
-The inspector's **Graphics** section has two views of the same chain:
+The inspector's **Graphics** section shows the chain in two views. **Simple** has one dropdown for each group of methods: **Image filters**, **Resize** (Downsample and Upscale) and **Temporal** (temporal upscaling and frame generation). You pick a method in a group, and Simple chooses the working sizes for it.
 
-- **Simple** gives you a handful of dropdowns, grouped as **Image filters**, **Resize** (Downsample and Upscale) and **Temporal** (temporal upscaling and frame generation). Pick a method in each and you're done.
-- **Advanced** shows every row. **Add effect…** adds an image filter, a downsample, an upscale, a temporal upscaler or a frame generator, and you can reorder rows by dragging, change each row's size and parameters, and switch rows on and off.
+**Advanced** shows every row in order. **Add effect…** adds an image filter, a downsample, an upscale, a temporal upscaler or a frame generator. Each row can be dragged to a new position, resized, adjusted and switched on or off.
 
-Switching between the views never loses anything. The **Graphics** switch turns the whole chain off while keeping it intact for later, and **Presets** saves a chain so you can reuse it on other games.
+Both views edit the same chain, so switching between them loses nothing.
 
 To try both views, open the [interactive demo](/maclauncher/demo/), select a game and scroll its inspector to **Graphics**. Picking an effect there brings up the article about it.
 
 ## The Graphics heading
 
-The **Graphics** heading opens and closes the section, and while it's closed it sums up the active effects. Its checkbox switches the whole chain off and on without changing any of it. The **⋯** menu beside it applies a saved preset, saves the current chain with **Save as preset…**, opens **Manage presets…**, or empties the chain with **Clear effects**. After applying a preset or clearing, **Undo** brings the previous chain back until your next edit.
+Clicking the **Graphics** heading opens and closes the section. While the section is closed, the heading summarizes the active effects. Its checkbox turns the whole chain off and on without changing any of it, so a chain can be set aside and restored later.
+
+The **⋯** menu beside the heading applies a saved preset, saves the current chain with **Save as preset…**, opens **Manage presets…**, or empties the chain with **Clear effects**. Presets let you reuse a chain on other games. After you apply a preset or clear the chain, **Undo** brings back the previous chain until your next edit.
 
 ## Changes apply live
 
-You don't need to restart a game to try an effect. Edits apply while the game is running, in a window or fullscreen, and shaders compile and models load in the background while the game keeps drawing. The few settings that depend on a renderer integration set up when the game starts say so on their controls. **Output → Compare** shows the untouched source, a split view, or the difference between the source and the processed image, so you can see exactly what an effect is doing.
+Edits apply while the game runs, in a window or fullscreen, whenever the game's graphics adapter supports live changes; otherwise the inspector says they take effect at the next launch. Shaders compile and models load in the background while the game keeps drawing. A few settings depend on a renderer integration that is set up when the game starts, and their controls say so.
+
+**Output → Compare** shows the untouched source, a split view, or the difference between the source and the processed image, which makes it easy to see what an effect changes.
 
 ## Two kinds of input
 
-Most effects only need the finished picture. Color filters, spatial upscalers, neural upscalers, CRT shaders and some frame generators work on any game, because every game produces a picture.
+Most effects need only the finished picture. Color filters, spatial upscalers, neural upscalers, CRT shaders and some frame generators work on any game, because every game produces a picture.
 
-A few effects need more than that. Temporal upscalers such as MetalFX Temporal, [FSR](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK) 2 to 4 and [XeSS](https://github.com/intel/xess), scene-based frame generators, and depth effects such as ambient occlusion or depth of field also want the game's **depth buffer**, **motion vectors** or **camera data**. Those only come from runtimes that hand them over, so these effects appear for some games and not others. The menus tell you when an effect is waiting for inputs the game doesn't provide.
+Some effects need more. Temporal upscalers such as MetalFX Temporal, [FSR](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK) 2 to 4 and [XeSS](https://github.com/intel/xess), scene-based frame generators, and depth effects such as ambient occlusion and depth of field also use data from the game's renderer: its depth buffer (how far away each pixel is), its motion vectors (how each pixel moved since the previous frame) or its camera data. Only some runtimes pass that data to MacLauncher, so these effects run in some games and not others. When a game doesn't supply what an effect needs, the menus list the effect under **Needs scene inputs**.
 
 ## Where to go next
 
@@ -68,13 +73,13 @@ A few effects need more than that. Temporal upscalers such as MetalFX Temporal, 
   <LinkCard title="Upscaling" description="Nearest, bilinear, MetalFX, FSR, Lossless Scaling and shader upscalers, plus temporal upscaling." href="/maclauncher/graphics/upscaling/" />
   <LinkCard title="Neural upscaling and restoration" description="Real-ESRGAN, Real-CUGAN, RTX VSR, DLSS neural rendering and NAFNet." href="/maclauncher/graphics/neural-restoration/" />
   <LinkCard title="Frame generation" description="Lossless Scaling, RIFE, MLX interpolation, MetalFX, FSR 3 and XeSS." href="/maclauncher/graphics/frame-generation/" />
-  <LinkCard title="CRT and retro" description="CRT Royale, Lottes, Easymode and friends, and motion clarity." href="/maclauncher/graphics/crt-and-retro/" />
+  <LinkCard title="CRT and retro" description="CRT Royale, Lottes, Easymode and other CRT shaders, plus motion clarity." href="/maclauncher/graphics/crt-and-retro/" />
   <LinkCard title="Color, light and sharpening" description="Colour, CAS, local contrast, bloom, lens effects, depth fog and LUTs." href="/maclauncher/graphics/color-and-light/" />
   <LinkCard title="Building a chain" description="How effects combine, processing sizes and presets." href="/maclauncher/graphics/composing-effects/" />
   <LinkCard title="Shader collections and imports" description="ReShade, RetroArch Slang, mpv, MagpieFX and ISF shaders." href="/maclauncher/graphics/shaders/" />
 </CardGrid>
 
-The [graphics guide](https://github.com/procrastinine/maclauncher/blob/master/docs/GRAPHICS.md) in the repository is the complete reference for every control, and the [provider reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/PROVIDERS.md) lists each algorithm with its exact inputs and requirements.
+The repository's [graphics guide](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md) describes every control in full, starting with [how the chain works](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#how-the-chain-works). The [algorithm reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/PROVIDERS.md) lists each algorithm with its exact inputs and requirements.
 
 :::note[About the sample images]
 The before-and-after images in this section were made by running still images through MacLauncher's own **Export video…** pipeline, the same graphics chain games use, and saving a frame of the result. The example games and their copyright notices are listed on the [credits page](/maclauncher/about/credits/).

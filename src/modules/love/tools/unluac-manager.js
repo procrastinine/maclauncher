@@ -1,32 +1,34 @@
 const { createManagedJavaTool } = require("../../shared/runtime/managed-java-tool");
-const { fetchUrlBuffer, throwIfAborted } = require("../../shared/runtime/download-utils");
+const Upstream = require("../../shared/runtime/upstream");
 const SOURCE = "https://sourceforge.net/projects/unluac/files/";
 const FEED = "https://sourceforge.net/projects/unluac/rss?path=/Unstable";
-function artifactRow(row) {
-  const match = /^unluac_(\d{4})_(\d{2})_(\d{2})\.jar$/.exec(row.tag || "");
-  return Boolean(match && row.version === match.slice(1).join(".") &&
-    row.url === "https://downloads.sourceforge.net/project/unluac/Unstable/" + row.tag &&
-    row.sourceUrl === SOURCE + "Unstable/" + row.tag + "/" && (!row.md5 || /^[a-f0-9]{32}$/.test(row.md5)));
+const DOWNLOADS = "https://downloads.sourceforge.net/project/unluac/";
+// A JAR named by its build date, unluac_2023_12_24.jar, or by a version,
+// unluac-1.2.3.jar. Another separator or a folder in the feed is read too.
+function jarVersion(name) {
+  const dated = /^unluac[-_ ]?(\d{4})[-_.](\d{2})[-_.](\d{2})\.jar$/i.exec(name || "");
+  if (dated) return dated.slice(1).join(".");
+  return /^unluac[-_ ]?v?(\d+(?:\.\d+)+)\.jar$/i.exec(name || "")?.[1] || null;
 }
-async function discoverCatalog(context, dependencies) {
-  const response = await (dependencies.fetchUrlBuffer || fetchUrlBuffer)(FEED, { signal: context.signal, maxBytes: 4 * 1024 ** 2 });
-  throwIfAborted(context.signal);
-  if (response.status !== 200 || !Buffer.isBuffer(response.body) || response.body.length > 4 * 1024 ** 2)
-    throw new Error("The SourceForge unluac release feed is unavailable.");
+// The feed lists recent files newest first with their sizes and digests. An
+// item that cannot be read is skipped; the others stay listed.
+const upstream = Upstream.index({ locations: [FEED], parse: ([feed]) => {
   const rows = [];
-  for (const [, item] of response.body.toString("utf8").matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/g)) {
-    if (rows.length >= 500) throw new Error("The unluac release feed exceeds its limit.");
-    const match = /unluac_(\d{4})_(\d{2})_(\d{2})\.jar/.exec(item);
-    if (!match) continue;
+  for (const [, item] of feed.text.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/g)) {
+    // The item's file link names its folder; a bare name is in the feed's folder.
+    const link = /\/projects\/unluac\/files\/([^"'<>?#]+?\.jar)(?:\/download)?["'<?#]/i.exec(item)?.[1];
+    const named = /(?:^|[\s>/])(unluac[^\s<>/"']*\.jar)(?=[\s<"'/]|$)/i.exec(item)?.[1];
+    let file = null;
+    try { file = link ? decodeURIComponent(link) : named ? "Unstable/" + named : null; } catch {}
+    const name = file?.split("/").at(-1), version = jarVersion(name);
+    if (!version || rows.some(row => row.version === version)) continue;
     const bytes = Number(/<(?:media:content|enclosure)\b[^>]*\b(?:fileSize|length)=["'](\d+)["']/i.exec(item)?.[1]);
-    const sha256 = /<(?:media:)?hash\b[^>]*\b(?:algo|algorithm)=["']sha-?256["'][^>]*>\s*([a-f0-9]{64})\s*</i.exec(item)?.[1]?.toLowerCase();
-    const md5 = /<(?:media:)?hash\b[^>]*\b(?:algo|algorithm)=["']md5["'][^>]*>\s*([a-f0-9]{32})\s*</i.exec(item)?.[1]?.toLowerCase();
-    const row = { version: match.slice(1).join("."), tag: match[0], bytes, url: "https://downloads.sourceforge.net/project/unluac/Unstable/" + match[0],
-      sourceUrl: SOURCE + "Unstable/" + match[0] + "/", ...(sha256 ? { sha256 } : {}), ...(md5 ? { md5 } : {}) };
-    if (Number.isSafeInteger(bytes) && bytes > 0 && artifactRow(row)) rows.push(row);
+    const sha256 = /<(?:media:)?hash\b[^>]*\b(?:algo|algorithm)=["']sha-?256["'][^>]*>\s*([a-f0-9]{64})\s*</i.exec(item)?.[1];
+    const md5 = /<(?:media:)?hash\b[^>]*\b(?:algo|algorithm)=["']md5["'][^>]*>\s*([a-f0-9]{32})\s*</i.exec(item)?.[1];
+    rows.push({ version, sourceUrl: SOURCE + file + "/", files: [{ name, url: DOWNLOADS + file, bytes,
+      ...(sha256 ? { digest: sha256, algorithm: "sha256" } : md5 ? { digest: md5, algorithm: "md5" } : {}) }] });
   }
-  if (!rows.length) throw new Error("The SourceForge feed has no unluac JAR download metadata.");
   return rows;
-}
+} });
 module.exports = createManagedJavaTool({ id: "unluac", label: "unluac", jarName: "unluac.jar", order: 275,
-  standaloneJar: true, sourceUrl: SOURCE, validateArtifactRow: artifactRow, discoverCatalog });
+  standaloneJar: true, sourceUrl: SOURCE, upstream });

@@ -32,7 +32,7 @@ async function installLegacyVersion({ userDataDir, version, signal, onProgress, 
   const root = Installer.ownedDirectory(userDataDir, path.join("runtimes", "gamemaker-official"));
   const destination = path.join(root, version);
   if (fs.existsSync(destination)) throw new Error("Remove the existing or incomplete official runtime registration before installing this version.");
-  const artifacts = await Installer.cacheArtifacts({ userDataDir, build, signal, onProgress, download: dependencies.downloadToFile });
+  const artifacts = await Installer.cacheArtifacts({ userDataDir, build, signal, onProgress });
   const staging = fs.mkdtempSync(path.join(root, ".legacy-install-"));
   try {
     throwIfAborted(signal);
@@ -51,7 +51,7 @@ async function installLegacyVersion({ userDataDir, version, signal, onProgress, 
       runnerAppPath: path.join(destination, "YoYo Runner.app"), executablePath: path.join(destination, "YoYo Runner.app", "Contents", "MacOS", "Mac_Runner"),
       architectures: native.architectures, binarySha256: native.sha256, runnerTreeSha256,
       diskImagePath: path.join(destination, "vendor", "Mac-YoYoRunner.dmg"), diskImageSha256,
-      artifactIntegrity: artifacts.packages.every(item => item.integrity === "reviewed-sha256") ? "reviewed-sha256" : "official-https-feed-and-recorded-sha256", artifactsPinned: artifacts.packages.every(item => item.integrity === "reviewed-sha256"), vendorSignatureVerified: false,
+      artifactIntegrity: "official-https-feed-and-recorded-sha256", artifactsPinned: false, vendorSignatureVerified: false,
       runtimeReady: true, launchReady: true, gameplayQualified: false, installedAt: new Date().toISOString() };
     fs.writeFileSync(path.join(staging, "runtime.json"), JSON.stringify(record, null, 2) + "\n", { flag: "wx" });
     throwIfAborted(signal);

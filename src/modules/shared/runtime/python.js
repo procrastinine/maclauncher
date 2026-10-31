@@ -1,7 +1,21 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
+const EMBEDDED = require("./embedded-python.json");
+const { bundledInput } = require("./bundled-input");
+
 const isElectron = Boolean(process.versions && process.versions.electron);
+
+// The included Python is the publisher's build for the launcher's CPU. The
+// result is the identity that the installed runtime.json records.
+function embeddedPythonProfile(arch = process.arch) {
+  const build = Object.hasOwn(EMBEDDED.builds, arch) ? EMBEDDED.builds[arch] : null;
+  if (!build) throw new Error("The included Python has no build for this Mac's processor.");
+  const input = bundledInput({ name: "Python", version: EMBEDDED.version, sha256: build.sha256, bytes: build.bytes, origin: build.url });
+  return { version: input.version, abi: EMBEDDED.abi, architecture: build.architecture, publisher: EMBEDDED.publisher,
+    release: EMBEDDED.release, url: input.origin, sha256: input.sha256, bytes: input.bytes,
+    upstreamSourceUrl: EMBEDDED.upstreamSourceUrl, schemaVersion: EMBEDDED.schemaVersion, packages: EMBEDDED.packages };
+}
 const isPackaged = isElectron && !process.defaultApp;
 
 function resolvePackagedResourcePath(...segments) {
@@ -119,6 +133,7 @@ function buildEvbunpackCommand({ userDataDir } = {}) {
 }
 
 module.exports = {
+  embeddedPythonProfile,
   resolveEmbeddedPythonRoot,
   resolveEmbeddedPythonBinary,
   resolveEvbunpackRoot,

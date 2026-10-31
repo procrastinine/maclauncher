@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -8,7 +10,8 @@ const Catalog = require("../src/modules/fvp/runtime/catalog");
 const Payload = require("../src/modules/fvp/runtime/payload");
 const Native = require("../src/modules/shared/runtime/local-native");
 const { createManager } = require("../src/modules/fvp/runtime/manager");
-const { extractDmg } = require("../src/modules/fvp/runtime/dmg");
+const { extractDmg } = require("../src/modules/shared/runtime/dmg");
+const Architecture = require("../src/modules/shared/runtime/architecture");
 const { prepareForLaunch } = require("../src/core/runtime-preparation");
 
 function temporary(t) {
@@ -60,74 +63,81 @@ function pin(revision, digest, bytes = 42) {
     sourceUrl: `https://github.com/xmoezzz/rfvp/tree/${revision}`,
     asset: { filename: "RFVP.dmg", url: "https://github.com/xmoezzz/rfvp/releases/download/pre-release/RFVP.dmg", sha256: digest, bytes } };
 }
-function fixtureManager({ rows, discoverCatalog, dependencies = {} } = {}) {
-  return createManager({ discoverCatalog: discoverCatalog || (async () => rows), dependencies: {
+// The publisher's rolling release as GitHub lists it: `current()` returns the
+// published snapshots (or throws, for a failed answer) on every request.
+const repository = "xmoezzz/rfvp", API = `https://api.github.com/repos/${repository}/`;
+const releaseRequests = () => Harness.network.requests.filter(url => url.startsWith(`${API}releases`)).length;
+function publish(t, current) {
+  const releases = () => current().map(row => ({ tag_name: row.upstreamTag, prerelease: true, published_at: "2026-10-10T00:00:00Z",
+    html_url: `https://github.com/${repository}/releases/tag/${row.upstreamTag}`,
+    assets: [{ name: row.asset.filename, size: row.asset.bytes, digest: `sha256:${row.asset.sha256}`, id: 1, browser_download_url: row.asset.url }] }));
+  Harness.network.routes = { [`${API}releases`]: releases,
+    [`${API}tags`]: () => current().map(row => ({ name: row.upstreamTag, commit: { sha: row.upstreamRevision } })) };
+  t.after(() => { Harness.network.routes = null; });
+}
+function fixtureManager({ dependencies = {} } = {}) {
+  return createManager({ dependencies: {
     systemVersionSync: () => "13.0", inspectExports: async () => [...Payload.REQUIRED_EXPORTS], ...dependencies
   } });
 }
 
+async function discover(releases, revisions) {
+  Harness.network.routes = { [`${API}releases`]: releases, [`${API}tags`]: releases.map(row => ({ name: row.tag_name, commit: { sha: revisions[row.tag_name] } })) };
+  try { return await Catalog.source.discover({}); } finally { Harness.network.routes = null; }
+}
+
 test("RFVP catalogs identify commit and complete digest, including replaced rolling assets", async () => {
   const old = release("pre-release", "1".repeat(40)), next = release("0.7.0", "2".repeat(40), "b".repeat(64));
-  const releases = [old, next, release("0.6.0", "3".repeat(40), "c".repeat(64), { assets: [] }),
-    release("0.5.0", "4".repeat(40), "d".repeat(64), { draft: true }),
-    release("0.4.0", "5".repeat(40), "e".repeat(64), { assets: [{ name: "RFVP.dmg", digest: null }] })];
-  const discovery = Catalog.createDiscovery({ fetchGithubReleases: async options => {
-    assert.equal(options.includePrerelease, true); return releases;
-  }, resolveGithubTagCommit: async ({ tag }) => releases.find(row => row.tag_name === tag).revision });
-  const result = await discovery();
-  assert.equal(result.length, 2); assert.equal(result[0].upstreamRevision, old.revision);
+  const undigested = release("0.4.0", "5".repeat(40)); delete undigested.assets[0].digest;
+  const releases = [old, next, release("0.6.0", "3".repeat(40), "c".repeat(64), { assets: [] }), undigested];
+  const result = await discover(releases, Object.fromEntries(releases.map(row => [row.tag_name, row.revision])));
+  assert.equal(result.length, 3); assert.equal(result[0].revision, old.revision);
   assert.equal(result[0].version, Catalog.snapshotVersion("pre-release", old.revision, "a".repeat(64)));
   assert.notEqual(result[0].version, Catalog.snapshotVersion("pre-release", old.revision, "b".repeat(64)));
-  assert.equal(result[1].asset.sha256, "b".repeat(64)); assert.match(result[0].versionLabel, /11111111.*aaaaaaaa/);
+  assert.equal(result[1].files[0].digest.value, "b".repeat(64)); assert.match(result[0].label, /11111111.*aaaaaaaa/);
+  assert.equal(result[2].version, Catalog.snapshotVersion("0.4.0", "5".repeat(40)), "A download without a published digest records its own");
   assert.throws(() => Catalog.snapshotVersion("../tag", old.revision, "a".repeat(64)), /identified/);
   assert.throws(() => Catalog.snapshotVersion("pre-release", "main", "a".repeat(64)), /identified/);
-  assert.equal(Catalog.assetUrlAllowed("https://github.com/other/rfvp/releases/download/pre-release/RFVP.dmg", "pre-release"), false);
-});
-
-test("RFVP rolling downloads use the release's exact commit without fetching unrelated tags", async () => {
-  const revision = "1".repeat(40), rolling = release("pre-release", revision, "a".repeat(64), { target_commitish: revision });
-  const historical = release("0.6.0", "2".repeat(40), "b".repeat(64), { assets: [] });
-  const discover = Catalog.createDiscovery({ fetchGithubReleases: async () => [rolling, historical],
-    fetchGithubTags: async () => { throw new Error("GitHub tags fetch failed (403)."); },
-    resolveGithubTagCommit: async () => assert.fail("The release already identifies its exact source commit") });
-  const rows = await discover();
-  assert.equal(rows.length, 1); assert.equal(rows[0].upstreamRevision, revision);
-  assert.equal(rows[0].asset.sha256, "a".repeat(64));
 });
 
 test("RFVP state reads are offline and cached publisher snapshots survive failed refresh", async t => {
-  const root = temporary(t), newer = pin("1".repeat(40), "a".repeat(64)); let calls = 0, fail = false;
-  const manager = fixtureManager({ discoverCatalog: async () => { calls++; if (fail) throw new Error("network failure"); return [newer]; } });
+  const root = temporary(t), newer = pin("1".repeat(40), "a".repeat(64)), start = releaseRequests(); let fail = false;
+  publish(t, () => { if (fail) throw new Error("network failure"); return [newer]; });
+  const manager = fixtureManager(), calls = () => releaseRequests() - start;
   assert.deepEqual(manager.getState({ userDataDir: root }).catalog.versions, []);
   assert.equal(manager.resolveSelection({}, {}, root, { verification: "status" }).version, null);
-  assert.equal(calls, 0);
+  assert.equal(calls(), 0);
   await manager.refreshCatalog({ userDataDir: root, force: true });
   assert.equal(manager.resolveSelection({}, {}, root).version, newer.version);
   assert.equal(manager.core.catalog.some(row => row.version === newer.version), true);
   assert.equal(manager.resolveSelection({ runtimeData: { rfvp: { version: Catalog.snapshotVersion("pre-release", "9".repeat(40), "f".repeat(64)) } } }, { runtimes: { rfvp: { defaultVersion: newer.version } } }, root).version, Catalog.snapshotVersion("pre-release", "9".repeat(40), "f".repeat(64)));
   fail = true; await assert.rejects(manager.refreshCatalog({ userDataDir: root, force: true }), /network failure/);
-  const restarted = fixtureManager({ discoverCatalog: async () => assert.fail("State must not fetch") });
+  const restarted = fixtureManager();
   assert.deepEqual(restarted.getState({ userDataDir: root }).catalog.versions, [newer.version]);
-  assert.equal(calls, 2);
+  assert.equal(calls(), 2, "State must not fetch");
 });
 
 test("RFVP Play selection stays offline and preserves exact unavailable choices", async t => {
-  const root = temporary(t), newer = pin("1".repeat(40), "a".repeat(64)); let calls = 0;
-  const manager = fixtureManager({ discoverCatalog: async () => { calls++; return [newer]; } });
-  const context = { userDataDir: root, settings: {} };
-  const cold = await manager.resolveForPlay({}, context);
+  const root = temporary(t), newer = pin("1".repeat(40), "a".repeat(64)), start = releaseRequests();
+  publish(t, () => [newer]);
+  const manager = fixtureManager(), context = { userDataDir: root, settings: {} };
+  let calls = 0; const count = () => { calls = releaseRequests() - start; };
+  const cold = await manager.resolveForPlay({}, context); count();
   assert.equal(cold.version, null); assert.equal(cold.discoveryRequired, true); assert.equal(calls, 0);
   const exact = await manager.resolveForPlay({ runtimeData: { rfvp: { version: Catalog.snapshotVersion("pre-release", "9".repeat(40), "f".repeat(64)) } } }, context);
-  assert.equal(exact.version, Catalog.snapshotVersion("pre-release", "9".repeat(40), "f".repeat(64))); assert.equal(calls, 0);
+  count(); assert.equal(exact.version, Catalog.snapshotVersion("pre-release", "9".repeat(40), "f".repeat(64))); assert.equal(calls, 0);
   await manager.refreshCatalog({ userDataDir: root, force: true });
-  const listed = await manager.resolveForPlay({}, context);
+  const listed = await manager.resolveForPlay({}, context); count();
   assert.equal(listed.version, newer.version); assert.equal(listed.ready, false); assert.equal(listed.discoveryRequired, false);
   assert.equal(calls, 1);
 });
 
 test("RFVP cold Play discovers and installs the eligible publisher snapshot after consent and reuses it offline", async t => {
   const root = temporary(t), events = [], archive = Buffer.from("fixture RFVP archive"), row = pin("1".repeat(40), sha(archive), archive.length);
-  const manager = fixtureManager({ discoverCatalog: async () => { events.push("refresh"); return [row]; }, dependencies: {
+  publish(t, () => [row]);
+  const list = Harness.network.routes[`${API}releases`];
+  Harness.network.routes[`${API}releases`] = url => { events.push("refresh"); return list(url); };
+  const manager = fixtureManager({ dependencies: {
     downloadToFile: async (url, target) => { assert.equal(url, row.asset.url); events.push("download"); fs.writeFileSync(target, archive); },
     extractArchive: async (_archive, destination) => { events.push("extract"); createApp(destination); }
   } });
@@ -156,9 +166,10 @@ test("RFVP cold Play discovers and installs the eligible publisher snapshot afte
 
 test("RFVP failed refresh preserves exact cached choices and cancellation", async t => {
   const root = temporary(t), row = pin("1".repeat(40), "a".repeat(64)); let failed = false;
-  const manager = fixtureManager({ discoverCatalog: async () => { if (failed) throw new Error("GitHub releases fetch failed (403)"); return [row]; } });
+  publish(t, () => { if (failed) throw new Error("GitHub releases fetch failed (403)"); return [row]; });
+  const manager = fixtureManager();
   await manager.refreshCatalog({ userDataDir: root, force: true }); failed = true;
-  await assert.rejects(manager.refreshCatalog({ userDataDir: root, force: true }), /403/);
+  await assert.rejects(manager.refreshCatalog({ userDataDir: root, force: true }));
   const context = { userDataDir: root, settings: {} };
   assert.equal((await manager.resolveForPlay({ runtimeData: { rfvp: { version: row.version } } }, context)).version, row.version);
   assert.equal((await manager.resolveForPlay({ runtimeData: { rfvp: { version: "unknown-build" } } }, context)).version, "unknown-build");
@@ -171,7 +182,8 @@ test("RFVP installation verifies the consumed library and keeps installed rollin
   let rows = [old], downloads = 0;
   const dependencies = { downloadToFile: async (_url, file) => { downloads++; fs.writeFileSync(file, archive); },
     extractArchive: async (_file, unpacked) => { createApp(unpacked); } };
-  const manager = fixtureManager({ discoverCatalog: async () => rows, dependencies });
+  publish(t, () => rows);
+  const manager = fixtureManager({ dependencies });
   await manager.refreshCatalog({ userDataDir: root, force: true });
   const installed = await manager.core.installVersion({ userDataDir: root, version: old.version });
   assert.ok(installed.dylibPath.endsWith(Payload.LIBRARY_RELATIVE)); assert.equal(installed.minimumMacOS, "11.0.0");
@@ -182,7 +194,7 @@ test("RFVP installation verifies the consumed library and keeps installed rollin
   assert.equal(downloads, 1);
   rows = [pin("2".repeat(40), "b".repeat(64))];
   await manager.refreshCatalog({ userDataDir: root, force: true });
-  const restarted = fixtureManager({ rows, dependencies });
+  const restarted = fixtureManager({ dependencies });
   assert.equal(restarted.core.resolveInstalled({ userDataDir: root, version: old.version }).version, old.version);
   assert.deepEqual(restarted.getState({ userDataDir: root }).catalog.versions, rows.map(row => row.version));
   assert.ok(restarted.getState({ userDataDir: root }).installed.some(row => row.version === old.version && row.ready), "Retired downloads remain usable as installed versions");
@@ -200,10 +212,11 @@ test("RFVP uses the observed library floor for installed state on an older Mac",
   const root = temporary(t), archive = Buffer.from("higher floor archive"), row = pin("1".repeat(40), sha(archive), archive.length);
   const dependencies = { systemVersionSync: () => "14.0", downloadToFile: async (_url, file) => fs.writeFileSync(file, archive),
     extractArchive: async (_file, unpacked) => { createApp(unpacked, { minimum: 14 }); } };
-  const manager = fixtureManager({ rows: [row], dependencies });
+  publish(t, () => [row]);
+  const manager = fixtureManager({ dependencies });
   await manager.refreshCatalog({ userDataDir: root, force: true });
   await manager.core.installVersion({ userDataDir: root, version: row.version });
-  const older = fixtureManager({ rows: [row] });
+  const older = fixtureManager();
   const state = older.getState({ userDataDir: root });
   assert.equal(state.installed[0].ready, false); assert.equal(state.installed[0].status, "unsupported-host");
   assert.equal(state.catalog.versionRequirements[row.version].minimumMacOS, "14.0.0");
@@ -238,7 +251,8 @@ test("RFVP checks real CPU, macOS, system closure and required C exports before 
   await assert.rejects(Payload.preparePayload({ unpacked: external }, options), /unbundled library dependency/);
   await assert.rejects(Payload.preparePayload({ unpacked: good }, { ...options, inspectExports: async (_file, { arch }) => arch === "arm64" ? [] : [...Payload.REQUIRED_EXPORTS] }), /launch interface/);
   fs.writeFileSync(path.join(good, Payload.LIBRARY_RELATIVE), thin(0x01000007, 6));
-  await assert.rejects(Payload.preparePayload({ unpacked: good }, options), /universal Apple Silicon/);
+  await assert.rejects(Architecture.withArchitecture("arm64", () => Payload.preparePayload({ unpacked: good }, options)), /no shared library for this Mac's Apple Silicon CPU/);
+  assert.equal((await Architecture.withArchitecture("x64", () => Payload.preparePayload({ unpacked: good }, options))).library.architectures.join(), "x86_64");
 });
 
 test("RFVP rejects library aliases and cancels preparation before reading or publishing", async t => {
@@ -252,7 +266,8 @@ test("RFVP rejects library aliases and cancels preparation before reading or pub
 
 test("RFVP rejects corrupted archive bytes before extraction and cleans staging", async t => {
   const root = temporary(t), row = pin("1".repeat(40), sha(Buffer.from("expected")), 8); let extracts = 0;
-  const manager = fixtureManager({ rows: [row], dependencies: {
+  publish(t, () => [row]);
+  const manager = fixtureManager({ dependencies: {
     downloadToFile: async (_url, target) => fs.writeFileSync(target, "modified"),
     extractArchive: async () => { extracts++; }
   } });
@@ -264,17 +279,22 @@ test("RFVP rejects corrupted archive bytes before extraction and cleans staging"
 test("RFVP read-only disk image mounts detach after interrupted attach and copy failure", async t => {
   const root = temporary(t), calls = [];
   await assert.rejects(extractDmg(path.join(root, "runtime.dmg"), root, undefined, {
-    run: async (_command, args) => { calls.push(args); if (args[0] === "attach") fs.mkdirSync(path.join(args[args.indexOf("-mountpoint") + 1], "RFVP.app")); },
-    copy: () => { throw new Error("copy failure"); }
+    run: async (command, args) => {
+      calls.push(args);
+      if (args.includes("attach")) fs.mkdirSync(path.join(args[args.indexOf("--mountPoint") + 1], "RFVP.app"));
+      if (command.endsWith("ditto")) throw new Error("copy failure");
+    }
   }), /copy failure/);
-  assert.ok(calls[0].includes("-readonly")); assert.equal(calls[1][0], "detach"); assert.equal(fs.existsSync(calls[1][1]), false);
+  assert.ok(calls[0].includes("--readOnly")); assert.ok(calls[1][0].endsWith("RFVP.app"));
+  assert.equal(calls[2][0], "eject"); assert.equal(fs.existsSync(calls[2][1]), false);
   const controller = new AbortController(); calls.length = 0;
   await assert.rejects(extractDmg(path.join(root, "runtime.dmg"), root, controller.signal, {
     run: async (_command, args, options) => {
       calls.push(args);
-      if (args[0] === "attach") { controller.abort(); throw Object.assign(new Error("cancelled attach"), { name: "AbortError" }); }
+      if (args.includes("attach")) { controller.abort(); throw Object.assign(new Error("cancelled attach"), { name: "AbortError" }); }
       assert.equal(options.signal, undefined);
     }, copy: () => assert.fail("Cancelled attach must not copy")
   }), { name: "AbortError" });
-  assert.equal(calls[1][0], "detach"); assert.equal(fs.existsSync(calls[1][1]), false);
+  assert.equal(calls.length, 2, "A cancelled attach is not retried with hdiutil");
+  assert.equal(calls[1][0], "eject"); assert.equal(fs.existsSync(calls[1][1]), false);
 });

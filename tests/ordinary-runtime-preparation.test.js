@@ -175,7 +175,7 @@ function godotFixture(t, { versions = [], installed = [], refreshed = versions, 
   const manager = Godot.runtimeManagers[0], calls = [];
   let catalog = versions, catalogMode = mode;
   t.mock.method(manager.core, "listInstalled", () => installed);
-  t.mock.method(manager, "getState", ({settings}={}) => effectiveSection({ catalog: { versions: catalog, mode: catalogMode, status: "success" }, installed },settings));
+  t.mock.method(manager, "getState", ({settings}={}) => effectiveSection({ catalog: { versions: catalog, mode: catalogMode, status: "success", fetchedAt: 1 }, installed },settings));
   t.mock.method(manager, "refreshCatalog", async payload => { calls.push(payload); catalog = refreshed; catalogMode = "all"; });
   preventDownloads(t, manager);
   return { manager, calls, installed };
@@ -184,6 +184,11 @@ function javaFixture(t, { sections = [], refreshed = sections, installed = null 
   const manager = Java.runtimeManagers[0], calls = [];
   let catalog = sections;
   t.mock.method(manager, "getState", ({settings}={}) => ({ sections: catalog.map(section=>effectiveSection(section,settings?.lines?.[section.id])) }));
+  // A line listed by the fixture was read this session.
+  t.mock.method(manager, "lineState", ({ settings, line }) => {
+    const section = catalog.find(item => item.id === String(line));
+    return effectiveSection(section ? { ...section, catalog: { ...section.catalog, fetchedAt: 1 } } : { id: String(line), catalog: { versions: [] } }, settings?.lines?.[String(line)]);
+  });
   t.mock.method(manager, "refreshCatalog", async payload => { calls.push(payload); catalog = refreshed; });
   t.mock.method(manager.core.java, "resolveBestInstalled", options => typeof installed === "function" ? installed(options) : installed);
   preventDownloads(t, manager);
@@ -210,7 +215,7 @@ function loveFixture(t, { stable = [], nightly = [], status = "success", nightly
 function ruffleFixture(t, { versions = [], refreshed = versions, installed = [], resolveInstalled = () => null } = {}) {
   const manager = Flash.runtimeManagers[0], calls = [];
   let catalog = versions;
-  t.mock.method(manager, "getState", ({settings}={}) => { const section=effectiveSection({id:"default",installed,catalog:{versions:catalog}},settings);return {...section,sections:[section]}; });
+  t.mock.method(manager, "getState", ({settings}={}) => { const section=effectiveSection({id:"default",installed,catalog:{versions:catalog,...(catalog.length?{fetchedAt:1}:{})}},settings);return {...section,sections:[section]}; });
   t.mock.method(manager, "refreshCatalog", async payload => { calls.push(payload); catalog = refreshed; });
   t.mock.method(manager.core, "listInstalled", () => installed);
   t.mock.method(manager.core, "resolveInstalled", resolveInstalled);
@@ -223,7 +228,7 @@ test("Godot Play prefers the detected recommendation over the global choice, whi
   const entry = { moduleData: { detectedVersion: "3.2.0", detectedMajor: 3 } };
   const ctx = context("godot", { godot: { defaultVersion: "4.6-stable" } });
   const saved = structuredClone(ctx.settings);
-  assert.deepEqual(await Godot.ensureRuntime(entry, ctx), { managerId: "godot", version: "3.2-stable", installOptions: { sectionId: "default", variant: "mono" } });
+  assert.deepEqual(await Godot.ensureRuntime(entry, ctx), { managerId: "godot", version: "3.2-stable", installOptions: { sectionId: "default", variant: "standard", preserveDefaults: true } });
   assert.equal((await Godot.ensureRuntime(entry, context("godot"))).version, "3.2-stable");
   assert.equal((await Godot.ensureRuntime({}, ctx)).version, "4.6-stable");
   assert.deepEqual(ctx.settings, saved);
@@ -305,9 +310,10 @@ test("Java empty catalog planning discovers the detected line and uses its patch
   assert.deepEqual(f.calls.map(call => call.sectionId), ["17"]);
 });
 
-test("Java unsupported lines and missing Rosetta fail before any runtime download", async t => {
-  const f = javaFixture(t, { installed: { javaPath: "/ready/bin/java", requiresRosetta: true } });
-  await assert.rejects(Java.ensureRuntime({ moduleData: { requiredJava: 27 } }, context("java")), /requires Java 27.*up to Java 25/);
+test("Java lines after the newest LTS plan from Other, and missing Rosetta fails before any runtime download", async t => {
+  const f = javaFixture(t, { installed: options => Number(options.line) === 8 ? { javaPath: "/ready/bin/java", requiresRosetta: true } : null });
+  const later = await Java.ensureRuntime({ moduleData: { requiredJava: 27 } }, context("java"));
+  assert.deepEqual([later.installOptions.sectionId, later.installOptions.line, later.version, later.discoveryRequired], ["other", 27, null, true]);
   t.mock.method(f.manager.core.java, "isRosettaAvailable", () => false);
   await assert.rejects(Java.ensureRuntime({ moduleData: { requiredJava: 8 } }, context("java")), { code: "ROSETTA_REQUIRED" });
   assert.equal(f.calls.length, 0);

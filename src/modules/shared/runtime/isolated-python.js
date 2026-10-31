@@ -20,7 +20,7 @@ function fileIdentity(file) {
   return [stat.dev, stat.ino, stat.size, stat.mode, stat.mtimeNs, stat.ctimeNs].join(":");
 }
 async function includedPython(requirement, { signal, run = execute } = {}) {
-  if (!requirement || requirement.abi !== Embedded.abi || requirement.architecture !== Embedded.architecture || requirement.version !== includedVersion)
+  if (!requirement || requirement.abi !== Embedded.abi || requirement.architecture !== Python.embeddedPythonProfile().architecture || requirement.version !== includedVersion)
     throw new Error("This runtime requires a compatible included Python interpreter.");
   const root = Python.resolveEmbeddedPythonRoot(), selected = Python.resolveEmbeddedPythonBinary(root);
   if (!selected) throw new Error("The launcher's included Python is unavailable.");

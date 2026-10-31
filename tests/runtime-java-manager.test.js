@@ -1,12 +1,17 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
-const https = require("node:https");
-const { EventEmitter } = require("node:events");
-const { Readable } = require("node:stream");
 const { spawnSync } = require("node:child_process");
+const ADOPTIUM = "https://api.adoptium.net/v3/assets/feature_releases/21/ga";
+// Adoptium's paged answers for every query of one line.
+function adoptium(t, answer) {
+  t.after(() => { Harness.network.routes = null; });
+  Harness.network.routes = { [ADOPTIUM]: url => answer(new URL(url)) };
+}
 
 const Manager = require("../src/modules/java/runtime/java-runtime-manager");
 
@@ -50,17 +55,8 @@ test("Java archive installation preserves relative aliases after its temporary e
   const tar = spawnSync("/usr/bin/tar", ["-czf", archivePath, "-C", packageDir, "Fixture.jdk"], { encoding: "utf8" });
   assert.equal(tar.status, 0, tar.stderr);
   const archive = fs.readFileSync(archivePath);
-  t.mock.method(https, "get", (url, _options, callback) => {
-    assert.equal(url, "https://example.invalid/java.tar.gz");
-    const response = Readable.from([archive]);
-    response.statusCode = 200;
-    response.headers = { "content-length": String(archive.length) };
-    const request = new EventEmitter();
-    request.destroy = error => response.destroy(error);
-    response.once("close", () => request.emit("close"));
-    process.nextTick(() => callback(response));
-    return request;
-  });
+  t.after(() => { Harness.network.routes = null; });
+  Harness.network.routes = { "https://example.invalid/java.tar.gz": archive };
   const temporaryExtractions = [];
   const mkdtemp = fs.mkdtempSync;
   t.mock.method(fs, "mkdtempSync", (...args) => {
@@ -111,14 +107,14 @@ test("java runtime manager exposes line and vineflower sections", () => {
     assert.ok(Array.isArray(state.sections));
     assert.deepEqual(
       state.sections.map(section => section.id),
-      ["8", "11", "17", "21", "25", "vineflower"]
+      ["8", "11", "17", "21", "25", "other", "vineflower"]
     );
     assert.equal(state.sections[0].catalog.status, "idle");
-    assert.equal(state.sections[5].catalog.status, "idle");
+    assert.equal(state.sections[6].catalog.status, "idle");
     assert.ok(state.sections.every(section => section.catalog.supportsLatestOnly === false));
     assert.ok(Array.isArray(state.sections[0].variants));
-    assert.ok(state.sections.slice(0, 5).every(section => section.supportsDefault === true));
-    assert.equal(state.sections[5].supportsDefault, true);
+    assert.ok(state.sections.slice(0, 6).every(section => section.supportsDefault === true));
+    assert.equal(state.sections[6].supportsDefault, true);
   } finally {
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
@@ -268,23 +264,21 @@ function catalogRelease(patch, architecture = "x64") {
     timestamp: "2026-09-01T00:00:00Z",
     binaries: [{
       architecture, os: "mac", image_type: "jdk",
-      package: { name: "jdk.tar.gz", link: `https://example.invalid/${architecture}/${patch}.tar.gz` }
+      package: { name: "jdk.tar.gz", link: `https://github.com/adoptium/temurin21-binaries/releases/download/${architecture}/${patch}.tar.gz` }
     }]
   };
 }
 
-test("Java ordinary catalog paginates a hundred releases for each Mac architecture", async () => {
+test("Java ordinary catalog paginates a hundred releases for each Mac architecture", async t => {
   const calls = [];
-  const fetcher = async raw => {
-    const url = new URL(raw);
+  adoptium(t, url => {
     calls.push(url);
     const architecture = url.searchParams.get("architecture");
     assert.equal(url.searchParams.get("page_size"), "20");
     const page = Number(url.searchParams.get("page"));
-    const data = Array.from({ length: 20 }, (_, index) => catalogRelease(100 - page * 20 - index, architecture));
-    return { status: 200, headers: {}, body: Buffer.from(JSON.stringify(data)) };
-  };
-  const all = await Manager.core.java.fetchAvailableVersionsForLine({ line: 21, fetcher });
+    return Array.from({ length: 20 }, (_, index) => catalogRelease(100 - page * 20 - index, architecture));
+  });
+  const all = await Manager.core.java.fetchAvailableVersionsForLine({ line: 21 });
   assert.equal(calls.length, 10);
   assert.equal(all.versions.length, 100);
   assert.equal(all.versions[0], "21.0.100+7");
@@ -293,22 +287,20 @@ test("Java ordinary catalog paginates a hundred releases for each Mac architectu
   assert.ok(all.entriesByVersion["21.0.1+7"].x64);
 });
 
-test("Java empty final page retains earlier releases and explicit latest limits requests", async () => {
+test("Java empty final page retains earlier releases and explicit latest limits requests", async t => {
   const calls = [];
-  const fetcher = async raw => {
-    const url = new URL(raw);
+  adoptium(t, url => {
     calls.push(url);
     if (url.searchParams.get("page") === "1") return { status: 204, headers: {}, body: Buffer.alloc(0) };
     const architecture = url.searchParams.get("architecture");
     const count = Number(url.searchParams.get("page_size"));
-    const data = Array.from({ length: count }, (_, index) => catalogRelease(100 - index, architecture));
-    return { status: 200, headers: {}, body: Buffer.from(JSON.stringify(data)) };
-  };
-  const all = await Manager.core.java.fetchAvailableVersionsForLine({ line: 21, fetcher });
+    return Array.from({ length: count }, (_, index) => catalogRelease(100 - index, architecture));
+  });
+  const all = await Manager.core.java.fetchAvailableVersionsForLine({ line: 21 });
   assert.equal(all.versions.length, 20);
   assert.equal(calls.length, 4);
   calls.length = 0;
-  const latest = await Manager.core.java.fetchAvailableVersionsForLine({ line: 21, latestOnly: true, fetcher });
+  const latest = await Manager.core.java.fetchAvailableVersionsForLine({ line: 21, latestOnly: true });
   assert.deepEqual(latest.versions, ["21.0.100+7"]);
   assert.equal(calls.length, 2);
   assert.ok(calls.every(url => url.searchParams.get("page_size") === "1"));
@@ -320,14 +312,12 @@ test("Java extracts the matching Mac JDK from releases with multiple binaries", 
   assert.equal(Manager.core.java.__test.extractAssetFromRelease(release, 21, "arm64").variant, "arm64");
 });
 
-test("Java pager respects Adoptium's maximum page size and rejects malformed metadata", async () => {
-  await assert.rejects(Manager.core.java.__test.fetchLineAssets({
-    line: 21, variant: "x64", pageSize: 100,
-    fetcher: async raw => {
-      assert.equal(new URL(raw).searchParams.get("page_size"), "20");
-      return { status: 200, headers: {}, body: Buffer.from('{"error":"unexpected format"}') };
-    }
-  }), /must be an array/);
+test("Java pager respects Adoptium's maximum page size and rejects malformed metadata", async t => {
+  adoptium(t, url => {
+    assert.equal(url.searchParams.get("page_size"), "20");
+    return Buffer.from('{"error":"unexpected format"}');
+  });
+  await assert.rejects(Manager.core.java.__test.fetchLineAssets({ line: 21, variant: "x64", pageSize: 100 }), /must be an array/);
 });
 
 test("Java full refresh replaces reduced cache without restoring retired game defaults", async () => {
@@ -370,15 +360,14 @@ test("Java four-component versions retain their exact patch and build ordering",
   assert.throws(() => java.normalizeVersion("17.0.20.1+1/unrelated"));
 });
 
-test("Java catalog uses OpenJDK versions and preserves official legacy SemVer alias lookups", async () => {
-  const fetcher = async raw => {
-    const architecture = new URL(raw).searchParams.get("architecture");
-    const release = catalogRelease(20, architecture);
+test("Java catalog uses OpenJDK versions and preserves official legacy SemVer alias lookups", async t => {
+  adoptium(t, url => {
+    const release = catalogRelease(20, url.searchParams.get("architecture"));
     release.release_name = "jdk-21.0.20.1+1";
     release.version_data = { openjdk_version: "21.0.20.1+1-LTS", semver: "21.0.20+101.0.LTS" };
-    return { status: 200, headers: {}, body: Buffer.from(JSON.stringify([release])) };
-  };
-  const catalog = await Manager.core.java.fetchAvailableVersionsForLine({ line: 21, fetcher });
+    return [release];
+  });
+  const catalog = await Manager.core.java.fetchAvailableVersionsForLine({ line: 21 });
   assert.deepEqual(catalog.versions, ["21.0.20.1+1"]);
   const legacy = Manager.core.java.selectCatalogAsset({ lineCatalog: catalog, version: "21.0.20+101", hostArch: "arm64" });
   assert.equal(legacy.version, "21.0.20.1+1");

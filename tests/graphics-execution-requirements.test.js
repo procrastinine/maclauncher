@@ -93,3 +93,25 @@ test("new launches see atomic graphics publications while admitted roots retain 
   assert.equal(ReShade.runtimeRoot(), second);assert.equal(warnings.length, 2, "unchanged stat failures warn once");
   assert.throws(() => Publication.createReader(declaration).current(), /ENOENT/);
 });
+
+test("graphics publications select the app CPU from same-version Universal and Intel declarations", t => {
+  const Publication = require("../src/modules/shared/reshade/publication");
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "graphics-architectures-"));
+  t.after(() => fs.rmSync(temporary, {recursive: true, force: true}));
+  const declaration = path.join(temporary, "selected.json"), resources = path.join(temporary, "resources");
+  const universal = {id: "reshade", version: "1.0", arch: "universal", launcherArchitectures: ["arm64", "x64"],
+    directoryRelative: "reshade/1.0/universal", manifestRelative: "runtime.json", manifestSha256: "a".repeat(64),
+    files: [{path: "runtime.json", size: 2, sha256: "b".repeat(64)}]};
+  const intel = {...universal, arch: "x64", launcherArchitectures: ["x64"], directoryRelative: "reshade/1.0/x64"};
+  for (const record of [universal, intel]) {
+    const root = path.join(resources, "native-runtimes", record.directoryRelative);
+    fs.mkdirSync(root, {recursive: true}); fs.writeFileSync(path.join(root, "runtime.json"), "{}");
+  }
+  fs.writeFileSync(declaration, JSON.stringify([universal, intel]));
+  for (const [arch, expected] of [["arm64", universal], ["x64", intel]]) {
+    const reader = Publication.createReader(declaration, console, [resources], {arch});
+    assert.equal(reader.current().arch, expected.arch);
+    assert.equal(reader.resolveRoot([resources]), path.join(resources, "native-runtimes", expected.directoryRelative));
+    assert.equal(reader.current(), reader.current(), "Warm reads retain the selected architecture");
+  }
+});

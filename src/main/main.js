@@ -5,7 +5,6 @@ const { app, BrowserWindow, dialog, ipcMain, Menu, shell, session, nativeImage, 
 
 const Modules = require("../modules/registry");
 const GameData = require("../modules/shared/game-data");
-const IconUtils = require("./icon-utils");
 const GameStore = require("./game-store");
 const NetworkAccess = require("../core/network-access");
 const SteamClientStart = require("../modules/shared/runtime/steamworks/client-start");
@@ -14,6 +13,9 @@ const LibraryState = require("./library-state");
 const { sanitizeFileName, writeGameCommand } = require("./game-command");
 const { gameImports, configureLauncherData } = require("./file-open");
 const LibraryMaintenance = require("../core/library-maintenance");
+const GameAvailability = require("../core/game-availability");
+const GameRelocation = require("../core/game-relocation");
+const { createAvailabilityMonitor } = require("./game-availability-monitor");
 const { createLauncher, resolveModuleId, resolveHostedRuntimeInfo,
   resolveNativeLaunchPath, resolveModuleSettings, resolveRuntimeSupportForEntry, mergeSettingsChanges } = require("../core/launcher");
 const { withoutClearedDefaults } = require("../core/settings-merge");
@@ -22,7 +24,6 @@ const { launchHostedProcess } = require("../core/hosted-process");
 const { stopProcessTree } = require("../core/process-stop");
 const { requestProcessStop, afterProcessStop } = require("../core/process-lifecycle");
 const { observeGameProcess } = require("../core/game-process-events");
-const { canLaunchEntry } = require("../core/launch-capability");
 const { readJsonObject, readJsonDocument, onUnreadablePreserved, writeJsonAtomic } = require("../core/json-files");
 const { coordinatorFor } = require("../core/runtime-coordinator");
 const { createSettingsSnapshots } = require("../core/settings-snapshots");
@@ -31,14 +32,16 @@ const { runRuntimeManagerAction } = require("../core/runtime-manager-service");
 const { createBackendService } = require("../core/backend-worker-client");
 const { createModuleActionRequests } = require("./module-action-requests");
 const { loadLocalView } = require("../core/view-loading");
-const { hydrateGameSaveLocations, selectKnownSaveLocation, saveDirectoryForEntry, canOverrideSaveLocation, isManagedSaveDirectory } = require("../core/save-locations");
+const { hydrateGameSaveLocations, selectKnownSaveLocation, saveDirectoryForEntry, canOverrideSaveLocation } = require("../core/save-locations");
 const { watchFileChanges } = require("../core/watch-files");
 const { resolveRuntimeSettingsSchema, buildRuntimeSettingsDefaults, normalizeRuntimeSettings,
   mergeRuntimeSettingsMap } = require("../core/runtime-settings");
 const { createElectronGameHost } = require("../modules/shared/web/runtime/electron-host");
 const { mergeDetectedEntry } = require("./launch-utils");
 const { DownloadManager } = require("../modules/shared/runtime/download-manager");
+const { createAppUpdater } = require("./app-update");
 const { isAbortError } = require("../modules/shared/runtime/download-utils");
+const { unavailableReason, withRunnableBuilds } = require("../modules/shared/runtime/host-settings");
 const ReShade = require("../modules/shared/reshade");
 const ReShadeFilters = require("../modules/shared/reshade/filter-library");
 const GraphicsImports = require("../modules/shared/reshade/imports");
@@ -76,6 +79,7 @@ const DEFAULT_LAUNCHER_SETTINGS = {
   networkAccess: false,
   startSteamClient: "ask",
   showNonDefaultTags: true,
+  checkForUpdatesAtLaunch: false,
   library: LibraryState.DEFAULT_LIBRARY_STATE
 };
 
@@ -245,7 +249,9 @@ const backendService = createBackendService({ userDataDir,
     chooseImportPath: async descriptor => {
       const options = { title: descriptor.label, buttonLabel: descriptor.buttonLabel || "Import",
         properties: [ ...(descriptor.kinds.includes("file") ? ["openFile"] : []), ...(descriptor.kinds.includes("directory") ? ["openDirectory"] : []) ],
-        ...(descriptor.extensions.length ? { filters: [{ name: "Runtime", extensions: descriptor.extensions }] } : {}) };
+        ...(descriptor.extensions?.length ? { filters: [{ name: "Runtime", extensions: descriptor.extensions }] } : {}),
+        ...(typeof descriptor.message === "string" ? { message: descriptor.message } : {}),
+        ...(typeof descriptor.defaultPath === "string" && path.isAbsolute(descriptor.defaultPath) ? { defaultPath: descriptor.defaultPath } : {}) };
       const owner = getLauncherDialogOwner();
       const selected = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options);
       return selected.canceled ? null : selected.filePaths[0] || null;
@@ -271,15 +277,7 @@ const backendService = createBackendService({ userDataDir,
         if (JSON.stringify(inventory(snapshots[payload.id])) !== JSON.stringify(inventory(payload.state))) runtimeInventoryRevision += 1;
       }
       snapshots[payload.id] = payload.state;
-      if (cachedState) {
-        const settings = loadSettings();
-        cachedState = { ...cachedState, ...(event === "runtimeState"
-          ? { recents: orderGames(loadGamesHydrated({ persist: false }), settings?.launcher?.library).map(entry => decorateRecentEntry(entry, settings)),
-            runtimeManagers: buildRuntimeManagerState(settings),
-            moduleSettings: launcherService.getResolvedModuleSettings(settings) }
-          : { moduleStates: buildModuleState(settings) }) };
-      }
-      saveStateSnapshotsSoon(); broadcastState(); return;
+      saveStateSnapshotsSoon(); scheduleStateRebuild(); return;
     }
     if (event === "preparation") {
       if (payload.phase === "done") gamePreparations.delete(payload.gamePath);
@@ -297,8 +295,7 @@ const backendService = createBackendService({ userDataDir,
         const index = gameRecordsCache.findIndex(entry => entry.gameId === payload.gameId);
         if (index >= 0) gameRecordsCache[index] = record;
       }
-      if (cachedState) cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
-      broadcastState(); return;
+      scheduleStateRebuild(); return;
     }
     if (event === "runtimeChanged") {
       const entry = lane.startsWith("game:") && loadGamesHydrated({ persist: false }).find(game => `game:${game.gameId || game.gamePath}` === lane);
@@ -306,10 +303,7 @@ const backendService = createBackendService({ userDataDir,
       const ids = payload.managerId ? [payload.managerId] : (mod?.runtimeManagers || []).map(manager => manager.id);
       void refreshRuntimeSnapshots(ids.length ? ids : undefined); return;
     }
-    if (event === "settingsChanged") {
-      if (cachedState) cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
-      broadcastState(); return;
-    }
+    if (event === "settingsChanged") { scheduleStateRebuild(); return; }
     if (event === "downloads") {
       broadcastActivity();
       for (const progress of graphicsModelProgress) try { progress(); } catch {}
@@ -361,10 +355,7 @@ const launcherService = createLauncher({
     cachedState = buildState(loadSettings(), games);
     broadcastState();
   },
-  onRuntimeStateChange: () => {
-    cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
-    broadcastState();
-  }
+  onRuntimeStateChange: () => scheduleStateRebuild()
 });
 
 function getModuleCheats(moduleId) {
@@ -485,7 +476,7 @@ function normalizeLauncherSettings(settings) {
   const current = settings.launcher && typeof settings.launcher === "object" ? settings.launcher : {};
   const library = LibraryState.normalizeLibraryState(current.library);
   settings.launcher = { ...DEFAULT_LAUNCHER_SETTINGS, ...current, networkAccess: current.networkAccess === true,
-    startSteamClient: SteamClientStart.startPreference(current.startSteamClient),
+    checkForUpdatesAtLaunch: current.checkForUpdatesAtLaunch === true, startSteamClient: SteamClientStart.startPreference(current.startSteamClient),
     appearance: ["system", "light", "dark"].includes(current.appearance) ? current.appearance : "system", library };
 }
 
@@ -792,9 +783,8 @@ function writeCheatsFile(gameId, moduleId, cheats) {
   if (cheatsFileLastWritten.get(p) === json) return p;
   try {
     // A damaged cheats file is kept beside it; a file that cannot be read now
-    // is not replaced.
-    readJsonDocument(p);
-    writeJsonAtomic(p, normalized);
+    // is not replaced. A file that already holds these cheats stays as it is.
+    if (JSON.stringify(readJsonDocument(p), null, 2) !== json) writeJsonAtomic(p, normalized);
     cheatsFileLastWritten.set(p, json);
   } catch (error) {
     logger.error("[cheats] write failed", String(error?.message || error));
@@ -969,34 +959,6 @@ function resolveModuleDefaultIconPath(moduleId) {
   return normalizeIconPath(path.join(moduleDir, "resources", "icon.png"));
 }
 
-function resolveDefaultIconCandidate(entry) {
-  return require("../core/game-icons").resolveIconCandidates(entry)[0] || null;
-}
-
-function resolveExeFallbackName(gamePath, hintName) {
-  if (!gamePath) return null;
-  try {
-    if (!fs.existsSync(gamePath) || !fs.statSync(gamePath).isDirectory()) return null;
-  } catch {
-    return null;
-  }
-  const exePath = IconUtils.findBestExePath(gamePath, hintName);
-  if (!exePath) return null;
-  return path.basename(exePath, path.extname(exePath));
-}
-
-function resolveEntryDisplayName(entry) {
-  const gamePath = typeof entry?.gamePath === "string" ? entry.gamePath : "";
-  const folderName = gamePath ? path.basename(gamePath) : "";
-  const rawName = typeof entry?.name === "string" ? entry.name.trim() : "";
-  const shouldFallback = !rawName || (folderName && rawName === folderName);
-  if (shouldFallback) {
-    const exeName = resolveExeFallbackName(gamePath, rawName || folderName);
-    if (exeName) return exeName;
-  }
-  return rawName || folderName;
-}
-
 const iconDataUrlCache = new Map();
 
 function iconUrlForPath(iconPath) {
@@ -1021,7 +983,10 @@ function iconUrlForPath(iconPath) {
     const url = preview.toDataURL();
     if (!url || typeof url !== "string") return null;
     iconDataUrlCache.set(iconPath, { mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs, ino: stat.ino, size: stat.size, url });
-    while (iconDataUrlCache.size > 256) iconDataUrlCache.delete(iconDataUrlCache.keys().next().value);
+    // Room for every library icon, so a state rebuild in a large library never
+    // decodes and resizes all icons again.
+    const limit = Math.max(256, 2 * (gameRecordsCache?.length || 0) + 64);
+    while (iconDataUrlCache.size > limit) iconDataUrlCache.delete(iconDataUrlCache.keys().next().value);
     return url;
   } catch {
     iconDataUrlCache.delete(iconPath);
@@ -1033,11 +998,10 @@ function canRenderIconPath(iconPath) {
   return Boolean(iconUrlForPath(iconPath));
 }
 
-function normalizeGameEntry(entry, settings) {
+function normalizeGameEntry(entry, settings, precomputed = null) {
   const moduleId = resolveModuleId(entry);
   const mod = Modules.getModule(moduleId);
   const moduleInfo = Modules.getModuleInfo(moduleId);
-  const moduleSettings = settings?.modules?.[moduleId] || {};
   const moduleData =
     entry.moduleData && typeof entry.moduleData === "object" ? { ...entry.moduleData } : {};
   const runtimeData =
@@ -1047,25 +1011,17 @@ function normalizeGameEntry(entry, settings) {
       ? mergeRuntimeSettingsMap({}, entry.runtimeSettings)
       : {};
 
-  const rawRuntimeRequested =
-    typeof entry.runtimeId === "string" && entry.runtimeId.trim() ? entry.runtimeId : null;
-  const runtimeRequested =
-    rawRuntimeRequested && typeof mod?.normalizeRuntimeId === "function"
-      ? mod.normalizeRuntimeId(rawRuntimeRequested)
-      : rawRuntimeRequested;
-
-  const entryContext = { ...entry, moduleId, moduleData, runtimeData };
-  const runtimeId = resolveRuntimeForEntry(
-    runtimeRequested,
-    mod,
-    moduleInfo,
-    entryContext,
-    moduleSettings,
-    settings
-  );
+  // Module hooks receive the cached result and keep recorded facts instead of
+  // looking at the paths of a game whose files are not on disk. Library rows
+  // pass the checks a backend lane computed; until the current ones arrive,
+  // the shown value is not saved with the game.
+  const unavailable = gameAvailability.get(entry);
+  const checks = precomputed?.checks ||
+    launcherService.resolveEntryChecks(entry, settings, { availability: unavailable });
+  const runtimeId = checks.runtimeId;
   if (typeof entry.networkAccess !== "boolean") {
     entry.networkAccess = NetworkAccess.preferenceForEntry(entry, settings, runtimeId);
-    if (entry.gameId && !isChildGame) {
+    if (entry.gameId && !isChildGame && precomputed?.current !== false) {
       try {
         const stored = GameStore.readGameRecord(userDataDir, entry.gameId);
         if (typeof stored?.networkAccess === "boolean") entry.networkAccess = stored.networkAccess;
@@ -1096,7 +1052,8 @@ function normalizeGameEntry(entry, settings) {
   const importPath = resolveImportPath(entry);
   const defaultCandidate = resolveModuleDefaultIconPath(moduleId);
   const moduleDefaultIconPath = defaultCandidate && canRenderIconPath(defaultCandidate) ? defaultCandidate : null;
-  const rawCandidate = normalizeIconPath(entry.iconPath);
+  const iconWaits = GameAvailability.insideRoot(entry, entry.iconPath, { userDataDir }) && !gameAvailability.known(entry);
+  const rawCandidate = iconWaits || GameAvailability.affectsPath(unavailable, entry.iconPath) ? null : normalizeIconPath(entry.iconPath);
   const rawIconPath = rawCandidate && canRenderIconPath(rawCandidate) ? rawCandidate : null;
   let iconPath = rawIconPath;
   let iconSource =
@@ -1135,7 +1092,7 @@ function normalizeGameEntry(entry, settings) {
     indexHtml: entry.indexHtml,
     contentRootDir: entry.contentRootDir ?? entry.gamePath,
     defaultSaveDir,
-    managedSaveDir: isManagedSaveDirectory((saveLocationOverride && entry.saveDirOverride) || defaultSaveDir, userDataDir),
+    managedSaveDir: checks.managedSaveDir,
     saveLocations: entry.saveLocations || [],
     saveDirOverride: saveLocationOverride ? entry.saveDirOverride ?? null : null,
     nativeAppPath: resolvedNativeAppPath ?? null,
@@ -1151,11 +1108,10 @@ function normalizeGameEntry(entry, settings) {
     moduleFamily: moduleInfo.family,
     moduleLabel: moduleInfo.label,
     moduleShortLabel: moduleInfo.shortLabel,
-    moduleRuntimeSupport: resolveRuntimeSupportForEntry(mod, moduleInfo, entryContext, moduleSettings,
-      { app, userDataDir, settings, getRuntimeManagerState: id => runtimeStateSnapshots[id] || { installed: [] } }),
+    moduleRuntimeSupport: checks.runtimeSupport,
     moduleSupports: {
-      launch: canLaunchEntry({ mod, info: moduleInfo, entry: entryContext, runtimeId, moduleSettings,
-        context: { app, userDataDir, settings } }),
+      launch: checks.launch,
+      launchRequirement: checks.launchRequirement || null,
       cheats: supports("cheats"),
       cheatsPatcher: supports("cheatsPatcher"),
       saveEditing: supports("saveEditing"),
@@ -1243,14 +1199,103 @@ function graphicsView(entry) {
   return {...(stored.source === "invalid" ? {effects: null, graphicsPlanError: stored.error} : {effects: stored.plan}),
     ...(notices.length ? {effectsNotices: notices} : {})};
 }
+// Library rows never run the module checks that read game files in this
+// process. A backend lane checks each game (its effective runtime, the
+// runtimes that apply, whether it can launch and whether its saves are
+// launcher storage), and a game's row updates when its own result arrives.
+// Until then the row keeps its previous result, or values read from the
+// record, so a slow or unresponsive drive never holds up the library.
+const entryCheckResults = new Map();
+const entryCheckRequests = new Map();
+const libraryWork = require("./library-work-queue").createLibraryWorkQueue({ run: runLibraryWork });
+function entryCheckInputs(entry, settings, unavailable = gameAvailability.get(entry)) {
+  if (unavailable?.available) unavailable = null;
+  const availability = unavailable && { available: false, reason: unavailable.reason, message: unavailable.message };
+  return JSON.stringify([entry, settings?.modules?.[resolveModuleId(entry)], settings?.runtimes, availability]);
+}
+function provisionalEntryChecks(entry, settings) {
+  const moduleId = resolveModuleId(entry), mod = Modules.getModule(moduleId), info = Modules.getModuleInfo(moduleId) || {};
+  const stored = typeof entry.runtimeId === "string" && entry.runtimeId.trim() ? entry.runtimeId : "";
+  const runtimeId = String((stored && typeof mod?.normalizeRuntimeId === "function" ? mod.normalizeRuntimeId(stored) : stored) ||
+    settings?.modules?.[moduleId]?.defaultRuntime || info.runtime?.default || "").trim().toLowerCase() || null;
+  const saveDir = entry.saveDirOverride || entry.defaultSaveDir;
+  const relative = typeof saveDir === "string" && path.isAbsolute(saveDir) ? path.relative(userDataDir, saveDir) : null;
+  const launchRequirement = require("../core/launch-capability").hostRequirement(mod)?.message || null;
+  return { runtimeId, runtimeSupport: Array.isArray(info.runtime?.supported) ? info.runtime.supported.slice() : [],
+    launch: !launchRequirement && (info.supports?.launch !== false || info.runtime?.entries?.[runtimeId]?.runtimeProvider === true),
+    launchRequirement,
+    managedSaveDir: relative !== null && !path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(".." + path.sep) };
+}
+async function runLibraryWork(request, lane) {
+  const { id, refreshMetadata } = request;
+  const entry = gameRecordsCache?.find(game => (game.gameId || game.gamePath) === id);
+  if (!entry) return;
+  try {
+    const availability = await gameAvailability.ensure(entry);
+    if (!availability) throw new Error("The game's availability could not be checked.");
+    const settings = loadSettings(), revision = runtimeInventoryRevision;
+    const key = `${revision}:${entryCheckInputs(entry, settings)}`;
+    entryCheckRequests.set(id, key);
+    if (!refreshMetadata && entryCheckResults.get(id)?.key === key) return;
+    const result = await backendService.request(lane, "libraryEntry", entry, settings, { availability, refreshMetadata });
+    const current = gameRecordsCache?.find(game => (game.gameId || game.gamePath) === id);
+    if (!result || !current) return;
+    if (result.metadataError) logger.warn(`[library] metadata unavailable for ${entry.name || entry.gamePath}`, result.metadataError);
+    const merged = refreshMetadata ? mergeSettingsChanges(entry, result.entry, current) : current;
+    if (refreshMetadata && JSON.stringify(current) !== JSON.stringify(serializeGameEntry(merged))) saveGameRecord(merged);
+    // Metadata may change a record, but settings or inventory changes made
+    // during the worker job still need their own check.
+    const resultKey = `${revision}:${entryCheckInputs(result.entry, settings, availability)}`;
+    if (entryCheckRequests.get(id) === key) entryCheckRequests.set(id, resultKey);
+    receiveEntryChecks({ id, key: resultKey, checks: result.checks });
+    scheduleStateRebuild();
+  } catch (error) {
+    logger.warn(`[library] checks unavailable for ${entry.name || entry.gamePath}`, error.message);
+  }
+}
+function queueLibraryWork(entry, settings, { refreshMetadata = false, priority = false } = {}) {
+  const id = entry.gameId || entry.gamePath, key = `${runtimeInventoryRevision}:${entryCheckInputs(entry, settings)}`;
+  entryCheckRequests.set(id, key);
+  return libraryWork.enqueue({ id, key, refreshMetadata }, { priority });
+}
+function prioritizeLibraryEntry(entry) {
+  if (!entry) return;
+  const settings = loadSettings(), id = entry.gameId || entry.gamePath;
+  const key = `${runtimeInventoryRevision}:${entryCheckInputs(entry, settings)}`;
+  if (entryCheckResults.get(id)?.key !== key) void queueLibraryWork(entry, settings, { priority: true });
+  else libraryWork.prioritize(id);
+}
+function entryChecksFor(entry, settings, inputs) {
+  const id = entry.gameId || entry.gamePath, key = `${runtimeInventoryRevision}:${inputs}`;
+  const result = entryCheckResults.get(id);
+  if (result?.key === key) return { checks: result.checks, current: true };
+  if (entryCheckRequests.get(id) !== key) {
+    void queueLibraryWork(entry, settings);
+  }
+  return { checks: result?.checks || provisionalEntryChecks(entry, settings), current: false };
+}
+// A result for an outdated request is kept only while the game has none.
+function receiveEntryChecks({ id, key, checks } = {}) {
+  if (!id || entryCheckRequests.get(id) !== key && entryCheckResults.has(id)) return false;
+  entryCheckResults.set(id, { key, checks });
+  return true;
+}
 function decorateRecentEntry(entry, settings) {
   const graphicsWarnings = graphicsLaunchWarnings.get(entry.gamePath), launchNotices = gameLaunchNotices.get(entry.gamePath);
-  const key = JSON.stringify([entry, settings?.modules?.[resolveModuleId(entry)], settings?.runtimes, runtimeInventoryRevision, graphicsWarnings, launchNotices]);
+  const unavailable = gameAvailability.get(entry);
+  const availability = unavailable && { available: false, reason: unavailable.reason, message: unavailable.message };
+  const inputs = entryCheckInputs(entry, settings);
+  const checks = entryChecksFor(entry, settings, inputs);
+  // The first availability result releases icons waiting in normalization,
+  // even while the game's backend checks are still running.
+  const availabilityKnown = gameAvailability.known(entry);
+  // Whether the checks are current matters only to an unsaved network setting.
+  const key = JSON.stringify([graphicsWarnings, launchNotices, checks.checks, typeof entry.networkAccess !== "boolean" && checks.current, availabilityKnown]) + inputs;
   const previous = recentDecorationCache.get(entry.gameId || entry.gamePath);
   if (previous?.key === key) return previous.value;
-  const {effectsNotices: _notices, ...normalized} = normalizeGameEntry(entry, settings);
+  const {effectsNotices: _notices, ...normalized} = normalizeGameEntry(entry, settings, checks);
   const value = { ...normalized, ...graphicsView(entry), iconUrl: iconUrlForPath(normalized.iconPath), ...(graphicsWarnings?.length ? {graphicsWarnings} : {}),
-    ...(launchNotices?.length ? {launchNotices} : {}) };
+    ...(launchNotices?.length ? {launchNotices} : {}), ...(availability ? {availability} : {}) };
   recentDecorationCache.set(entry.gameId || entry.gamePath, { key, value });
   return value;
 }
@@ -1455,19 +1500,23 @@ async function ensureIconsForRecents(games, settings) {
   }
 }
 
+// Games refresh in display order on a few backend lanes, so a slow game, such
+// as one on a sleeping or unresponsive drive, delays only its own lane. Each
+// game's row updates when its own refresh finishes.
 async function refreshLibraryMetadata(games, settings) {
-  for (const entry of games) {
-    try {
-      const fresh = await backendService.request("library", "refreshEntry", entry, settings);
-      const current = gameRecordsCache?.find(game => game.gameId === entry.gameId);
-      if (!current) continue;
-      const merged = mergeSettingsChanges(entry, fresh, current);
-      if (JSON.stringify(current) === JSON.stringify(serializeGameEntry(merged))) continue;
-      saveGameRecord(merged);
-      cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
-      broadcastState();
-    } catch (error) { logger.debug(`[library] metadata unavailable for ${entry.name || entry.gamePath}`, error.message); }
-  }
+  await Promise.all(orderGames(games || [], settings?.launcher?.library)
+    .map(entry => queueLibraryWork(entry, settings, { refreshMetadata: true })));
+}
+
+const gameAvailability = createAvailabilityMonitor({ userDataDir, logger,
+  listGames: () => loadGamesHydrated({ persist: false }),
+  onChange: () => { if (cachedState) scheduleStateRebuild(); },
+  // Returning files are checked as at startup, without restarting or reimporting.
+  onRestored: games => { void refreshLibraryMetadata(games, loadSettings()); } });
+
+async function assertGameFilesAvailable(entry) {
+  const [availability] = await gameAvailability.refresh(entry);
+  if (availability && !availability.available) throw GameAvailability.unavailableError(availability);
 }
 
 async function applyGameDockIdentity(entry) {
@@ -1588,15 +1637,21 @@ function registerProcessRun(gamePath, child, runtimeId) {
       const name = entry?.name || path.basename(gamePath);
       const reason = error ? String(error.message || error) : signal || `exit ${code}`;
       const detail = diagnostics?.message ? `\n${diagnostics.message}` : "";
-      const message = `${name} stopped unexpectedly (${reason}).${detail}`;
       logger.error(`[game] ${gamePath}: ${reason}${detail}`);
       // A replacement launch owns the current UI. Retain the old error in the
       // log without presenting it as a failure of the new run or recovering it.
       if (pendingGameCompletions.get(gamePath) !== observation) return;
-      for (const win of launcherWindows) {
-        try { win.webContents.send("launcher:gameFailed", { gamePath, message }); } catch {}
-      }
-      if (signal) void maybeOfferRuntimeRecoveryAfterCrash(gamePath, runtimeId, signal);
+      void (entry ? gameAvailability.refresh(entry) : Promise.resolve([])).then(([availability]) => {
+        // A game whose drive was disconnected stops for that reason; it is
+        // not a runtime fault, so no runtime recovery is offered.
+        const lost = availability?.available === false;
+        const message = lost ? `${name} stopped because its files became unavailable. ${availability.message}`
+          : `${name} stopped unexpectedly (${reason}).${detail}`;
+        for (const win of launcherWindows) {
+          try { win.webContents.send("launcher:gameFailed", { gamePath, message }); } catch {}
+        }
+        if (signal && !lost) void maybeOfferRuntimeRecoveryAfterCrash(gamePath, runtimeId, signal);
+      });
     },
     onComplete: () => {
       if (pendingGameCompletions.get(gamePath) === observation) pendingGameCompletions.delete(gamePath);
@@ -1641,11 +1696,14 @@ function buildRuntimeManagerState(settings) {
   for (const manager of listRuntimeManagers()) {
     if (!manager || typeof manager.getState !== "function") continue;
     const state = runtimeStateSnapshots[manager.id] || { installed: [], catalog: { versions: [], loading: true } };
+    const ui = Modules.getRuntimeManagerUi(manager.id) || state.ui || manager.ui || undefined;
+    // A runtime this Mac can never run, such as an Apple-Silicon-only host on an Intel Mac, is not offered.
+    if (unavailableReason(ui?.hostFeature)) continue;
     out[manager.id] = {
       label: manager.label || manager.id,
-      ...state,
+      ...withRunnableBuilds(state),
       id: manager.id,
-      ui: Modules.getRuntimeManagerUi(manager.id) || state.ui || manager.ui || undefined
+      ui
     };
   }
   return out;
@@ -1722,6 +1780,18 @@ const downloadManager = new DownloadManager({
     if (!cachedState) return;
     broadcastActivity();
   }
+});
+// Check for Updates. GitHub is contacted only from the menu command, the
+// Settings button or the opt-in launch check.
+const appUpdater = createAppUpdater({
+  userDataDir, currentVersion: app.getVersion(), packaged: app.isPackaged, appPath: resolveAppBundlePath(process.execPath),
+  downloads: downloadManager, logger, dialogOwner: getLauncherDialogOwner,
+  showMessage: (owner, options) => owner && !owner.isDestroyed() ? dialog.showMessageBox(owner, options) : dialog.showMessageBox(options),
+  openExternal: url => shell.openExternal(url), trashItem: target => shell.trashItem(target),
+  // The Dock tile shows the download's progress.
+  setProgress: value => { for (const win of launcherWindows) if (!win.isDestroyed()) win.setProgressBar(value); },
+  runningGames: () => Object.keys(buildRunningState()).length,
+  quit: () => app.quit(), onChange: () => { if (cachedState) broadcastActivity(); }
 });
 const steamWindow = require("./steam-window-service").createSteamWindowService({
   userDataDir,
@@ -1866,7 +1936,8 @@ function getLauncherActivity() {
     running: buildRunningState(),
     preparing: { ...Object.fromEntries(gamePreparations), ...Object.fromEntries(gameRemovals) },
     importing: gameImports.list().map(job => ({ ...job, ...importProgress.get(job.inputPath) })),
-    downloads: [...downloadManager.list(), ...backendService.listDownloads()]
+    downloads: [...downloadManager.list(), ...backendService.listDownloads()],
+    appUpdate: appUpdater.snapshot()
   };
 }
 
@@ -1905,6 +1976,20 @@ function broadcastState() {
   }
   // Settings and runtime inventories reach open graphics views; no view, no build.
   graphicsCatalog.refresh();
+}
+
+// Backend inventories, per-game metadata refreshes and availability checks
+// finish in bursts. Each burst rebuilds and sends the library state once, so
+// per-game results never rebuild and resend the whole library once per game.
+const STATE_REBUILD_DELAY_MS = 50;
+let stateRebuildTimer = null;
+function scheduleStateRebuild() {
+  if (stateRebuildTimer) return;
+  stateRebuildTimer = setTimeout(() => {
+    stateRebuildTimer = null;
+    if (cachedState) cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
+    broadcastState();
+  }, STATE_REBUILD_DELAY_MS);
 }
 
 function registerLauncherWindow(win) {
@@ -2240,6 +2325,9 @@ async function launchHostedRuntimeChild(gameEntry, runtimeId, context) {
 
 async function runGameEntry(gameEntry, runtimeId, options = {}) {
   assertGameNotRemoving(gameEntry);
+  prioritizeLibraryEntry(gameEntry);
+  // Explain unavailable files before preparation starts.
+  await assertGameFilesAvailable(gameEntry);
   const hadLaunchNotices = gameLaunchNotices.delete(gameEntry.gamePath);
   if ((graphicsLaunchWarnings.delete(gameEntry.gamePath) || hadLaunchNotices) && cachedState) {
     cachedState = {...cachedState, recents: cachedState.recents.map(entry => {
@@ -2296,7 +2384,9 @@ async function runGameByPath(gamePath, options = {}) {
 function buildState(settings, games) {
   const ordered = orderGames(games || [], settings?.launcher?.library);
   const present = new Set(ordered.map(entry => entry.gameId || entry.gamePath));
-  for (const key of recentDecorationCache.keys()) if (!present.has(key)) recentDecorationCache.delete(key);
+  for (const cache of [recentDecorationCache, entryCheckResults, entryCheckRequests])
+    for (const key of cache.keys()) if (!present.has(key)) cache.delete(key);
+  libraryWork.retain(present);
   return {
     recents: ordered.map(entry => decorateRecentEntry(entry, settings)),
     modules: Modules.listModules(),
@@ -2423,6 +2513,8 @@ function setupAppMenu() {
       label: app.name,
       submenu: [
         { role: "about" },
+        ...(isChildGame ? [] : [{ label: "Check for Updates…", click: (_item, win) => void appUpdater.choose(launcherWindows.has(win) ? win : undefined)
+          .catch(error => logger.error("[update]", error.message)) }]),
         { label: "Credits", click: () => openUtilityFromMenu("credits") },
         { type: "separator" },
         {
@@ -2467,7 +2559,7 @@ function setupAppMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-function upsertGame(games, nextEntry, settings) {
+function upsertGame(games, nextEntry, settings, checks = null) {
   const { ordered, library } = LibraryState.syncLibraryStateWithGames(
     settings?.launcher?.library,
     games
@@ -2486,7 +2578,7 @@ function upsertGame(games, nextEntry, settings) {
       : now;
   merged.updatedAt = now;
 
-  const normalized = normalizeGameEntry(merged, settings);
+  const normalized = normalizeGameEntry(merged, settings, checks ? { checks, current: true } : null);
   normalized.gameId = gameId;
   normalized.createdAt = merged.createdAt;
   normalized.updatedAt = merged.updatedAt;
@@ -2552,6 +2644,11 @@ async function init() {
     const removed = CleanupUtils.cleanupOrphanedPartitions({ userDataDir });
     if (removed > 0) {
       logger.info(`[cleanup] removed ${removed} orphaned partition links`);
+    }
+    // A Locate… interrupted by a crash is finished or undone before any
+    // game's records are read.
+    for (const gameId of GameRelocation.recoverInterruptedRelocations(userDataDir)) {
+      logger.warn(`[library] An interrupted Locate… for game ${gameId} could not be undone; its backups are kept.`);
     }
   }
 
@@ -2738,12 +2835,17 @@ async function init() {
     } }), { onChange: () => broadcastActivity(), cancelImporter: inputPath => {
       const controller = graphicsImportControllers.get(inputPath);
       if (controller) { controller.abort(); return true; }
-      return backendService.request("library", "cancelImport", inputPath);
+      return backendService.request(importLanes.get(inputPath) || "library", "cancelImport", inputPath);
     } });
+  void appUpdater.launch(settings.launcher).catch(error => logger.warn("[update]", error.message));
 }
 
 ipcMain.handle("launcher:getState", event =>
   utilityWindows.stateForWindow(BrowserWindow.fromWebContents(event.sender), getLauncherState()));
+ipcMain.handle("launcher:prioritizeGame", (_event, gamePath) => {
+  prioritizeLibraryEntry(gameRecordsCache?.find(entry => entry.gamePath === gamePath));
+  return true;
+});
 ipcMain.on("launcher:activityReady", event => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (launcherWindows.has(win) && cachedState) activityDelivery.ready(win, getLauncherActivity());
@@ -2779,16 +2881,21 @@ async function showGameOpenDialog() {
 async function importGameIntoLibrary(resolved, options = {}) {
   const previous = loadGamesHydrated({ persist: false }).find(entry => [entry.gamePath, entry.importPath].includes(resolved));
   if (previous) assertGameNotRemoving(previous);
-  const detected = await backendService.request("library", "importEntry", resolved, loadSettings());
+  const lane = claimImportLane(resolved);
+  let detected;
+  try { detected = await backendService.request(lane, "importEntry", resolved, loadSettings()); }
+  finally { if (importLanes.get(resolved) === lane) importLanes.delete(resolved); }
   // Runtime/settings actions can finish during detection. Merge into their latest
   // state rather than replacing it with the snapshot captured before the worker.
+  const checkedSettings = loadSettings();
+  const { checks } = await backendService.request(lane, "libraryEntry", detected, checkedSettings, { availability: { available: true } });
   const settings = loadSettings();
   detected.importPath ||= resolved;
   const games = loadGamesHydrated({ persist: false });
   const existing = findGameByPath(games, detected.gamePath);
   assertGameNotRemoving(existing || detected);
   detected.gameId = existing?.gameId || detected.gameId || GameData.createGameId();
-  const upserted = upsertGame(games, detected, settings);
+  const upserted = upsertGame(games, detected, settings, checks);
   persistGames(upserted.games);
   saveSettings(settings);
   cachedState = buildState(settings, upserted.games);
@@ -2801,6 +2908,17 @@ async function importGameIntoLibrary(resolved, options = {}) {
     }
   }
   return upserted.entry;
+}
+
+// Concurrent imports detect on separate backend lanes, so one import's probing
+// never delays another. A finished import's lane is reused by the next one.
+const importLanes = new Map();
+function claimImportLane(inputPath) {
+  const used = new Set(importLanes.values());
+  let index = 0;
+  while (used.has(`library-import:${index}`)) index++;
+  importLanes.set(inputPath, `library-import:${index}`);
+  return importLanes.get(inputPath);
 }
 
 async function importNeuralModelFile(runtimePath) {
@@ -2901,7 +3019,32 @@ ipcMain.handle("launcher:forgetGame", async (_event, gamePath) => {
 });
 
 ipcMain.handle("launcher:findMissingGames", async (_event, gamePaths) => {
-  return LibraryMaintenance.findMissingGames(loadGamesHydrated({ persist: false }), gamePaths);
+  const entries = LibraryMaintenance.selectLibraryEntries(loadGamesHydrated({ persist: false }), gamePaths);
+  const results = await gameAvailability.refresh(entries);
+  return LibraryMaintenance.missingGamePaths(entries, results);
+});
+
+// Locate… gives a game whose files moved its new location. The backend asks
+// for the location and accepts it only for the game's own type; the record
+// keeps its game ID. Resolves to the new game path, or null when canceled.
+ipcMain.handle("launcher:locateGame", async (_event, gamePath) => {
+  const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
+  if (!entry) throw new Error("Game not found in library.");
+  assertGameRemovalAvailable(entry);
+  if (graphicsEdits.has(gamePath)) throw Object.assign(new Error("Wait for the game's graphics update to finish."), { code: "GAME_IN_USE" });
+  const result = await backendService.request(`game:${entry.gameId || gamePath}`, "relocateEntry", entry, loadSettings());
+  if (!result?.relocated) return null;
+  const record = GameStore.readGameRecord(userDataDir, entry.gameId) || result.entry;
+  const index = gameRecordsCache?.findIndex(game => game.gameId === record.gameId) ?? -1;
+  if (index >= 0) gameRecordsCache[index] = record;
+  // Launcher state kept under the game's path follows it; graphics status is
+  // read again for the new path.
+  GameRelocation.moveKeys([graphicsLaunchWarnings, gameLaunchNotices], gamePath, record.gamePath);
+  if (record.gamePath !== gamePath) graphicsStatus.forget(gamePath);
+  await gameAvailability.refresh(record);
+  cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
+  broadcastState();
+  return record.gamePath;
 });
 
 function assertGameRemovalAvailable(entry, ownRemoval = false) {
@@ -3730,6 +3873,7 @@ ipcMain.handle("launcher:createGameCommand", async (event, gamePath) => {
 
   const filePath = writeGameCommand(result.filePath, {
     gamePath: path.resolve(gamePath),
+    gameId: entry?.gameId,
     userDataDir,
     executablePath: process.execPath,
     appBundlePath: resolveAppBundlePath(process.execPath),
@@ -3947,6 +4091,15 @@ ipcMain.handle("launcher:setGameRuntimeData", async (_event, gamePath, runtimeId
   saveGameRecord(entry);
   cachedState = buildState(settings, games);
   broadcastState();
+  return true;
+});
+
+ipcMain.handle("launcher:appUpdate", (event, action) => {
+  const owner = BrowserWindow.fromWebContents(event.sender);
+  // A check or restart answers in a native dialog; the IPC call returns at once.
+  if (action === "cancel") return appUpdater.cancel();
+  if (!["check", "restart"].includes(action)) throw new Error("Unknown update action.");
+  void appUpdater.act(action, owner && launcherWindows.has(owner) ? owner : undefined).catch(error => logger.error("[update]", error.message));
   return true;
 });
 
@@ -4416,6 +4569,11 @@ app.on("activate", () => {
   if (isChildGame || isSmoke || !cachedState) return;
   void ensureLauncherWindow().catch(error => logger.error("[launcher]", error.message));
 });
+// A drive connected while the launcher was in the background is found on return.
+app.on("browser-window-focus", (_event, win) => {
+  if (!isChildGame && cachedState && launcherWindows.has(win)) gameAvailability.focus();
+});
+app.on("will-quit", () => gameAvailability.close());
 
 app.on("window-all-closed", () => {
   app.quit();

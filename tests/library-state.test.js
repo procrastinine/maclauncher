@@ -84,6 +84,11 @@ test("updating or playing existing games preserves dragged order, while new game
   assert.deepEqual(played.map(game => game.gameId), ["a", "b", "c"]);
   const added = upsertLibraryEntry(played, { gameId: "new", gamePath: "/Games/New" });
   assert.deepEqual(added.map(game => game.gameId), ["new", "a", "b", "c"]);
+  // Only the added game's record changes: the others keep their stored order,
+  // so an import never rewrites every game record.
+  assert.deepEqual(added.slice(1).map(game => game.order), entries.map(game => game.order));
+  assert.ok(added[0].order < Math.min(...entries.map(game => game.order)));
+  assert.deepEqual(buildOrderedGames(added, { order: [] }).ordered.map(game => game.gameId), ["new", "b", "c", "a"]);
 });
 
 test("Default drag indices respect favorite groups and preserve the other group's manual slots", () => {

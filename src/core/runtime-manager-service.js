@@ -87,7 +87,8 @@ async function runRuntimeManagerActionOnce({ manager, action, payload, userDataD
       if (typeof manager.performInstalledAction !== "function") throw new Error("Runtime has no installed version actions.");
       const state = manager.getState({ settings: readSettings(), runtimeSettings: context.settings?.runtimes, userDataDir });
       const section = (state.sections || [{ ...state, id: "default" }]).find(section => section.id === (data.sectionId || "default"));
-      const installed = section?.installed?.find(install => install.version === data.version);
+      const installed = section?.installed?.find(install => install.version === data.version &&
+        (!data.architecture || require("../modules/shared/runtime/architecture").normalizeArchitecture(install.architecture) === data.architecture));
       const descriptor = installed?.actions?.find(action => action.id === data.installedActionId);
       if (!descriptor || descriptor.available === false) throw new Error("This action is unavailable for the selected installed runtime.");
       let input = {};

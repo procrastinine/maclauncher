@@ -1,80 +1,70 @@
-const { fetchUrlBuffer, throwIfAborted } = require("../../shared/runtime/download-utils");
-const Github = require("../../shared/runtime/github-releases");
+const Upstream = require("../../shared/runtime/upstream");
+const { macDownloads } = require("../../shared/runtime/release-files");
 
 const SOURCE_URL = "https://downloads.scummvm.org/frs/scummvm/";
-const DEFAULT_VERSION = "2026.4.0";
-const DEFAULT_ENTRY = Object.freeze({
-  version: DEFAULT_VERSION,
-  upstreamRevision: "7d2709da5136866589f7602f5f5a7b17de03420e",
-  upstreamTag: "v2026.4.0",
-  minimumMacOS: "11.0",
-  hostArchitectures: ["arm64", "x64"],
-  localBuild: false,
-  sourceUrl: "https://github.com/scummvm/scummvm/tree/v2026.4.0",
-  asset: {
-    filename: "scummvm-2026.4.0-macosx.dmg",
-    url: `${SOURCE_URL}2026.4.0/scummvm-2026.4.0-macosx.dmg`,
-    sha256: "5614527fa57ffce14773c69923b96eeb7b1b135bcd96bfe74640ca341cad4598"
-  }
-});
 
 function compareVersions(left, right) {
-  const a = left.split(".").map(Number), b = right.split(".").map(Number);
-  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] - b[i];
+  const a = String(left).split(".").map(Number), b = String(right).split(".").map(Number);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) - (b[i] || 0);
   return 0;
 }
-function parseVersions(html, minimumVersion = "2.5.0") {
-  return [...new Set([...html.matchAll(/href=["'](\d{1,4}\.\d{1,3}\.\d{1,3})\/["']/gi)].map(match => match[1]))]
-    .filter(version => compareVersions(version, minimumVersion) >= 0)
-    .sort((a, b) => compareVersions(b, a)).slice(0, 100);
+// Entries of a directory listing directly inside `base`: folders end in "/".
+function listedFiles(html, base) {
+  const found = new Set(), root = new URL(base);
+  for (const [, href] of String(html).matchAll(/href=["']([^"'?#]+)["']/gi)) {
+    try {
+      const url = new URL(href, root), rest = url.pathname.slice(root.pathname.length);
+      if (url.origin === root.origin && url.pathname.startsWith(root.pathname) && /^[^/]+\/?$/.test(rest)) found.add(decodeURIComponent(rest));
+    } catch {}
+  }
+  return [...found];
 }
+function parseVersions(html, base, minimumVersion = "2.5.0") {
+  return listedFiles(html, base).map(name => /^(\d+(?:\.\d+)+)\/$/.exec(name)?.[1])
+    .filter(version => version && compareVersions(version, minimumVersion) >= 0).sort((a, b) => compareVersions(b, a));
+}
+// A published checksum file: the digest on the line naming the file, or a
+// lone digest. A digest stated for another file is not this file's.
 function parseDigest(text, filename) {
-  const match = /^([a-f0-9]{64})(?:\s+\*?([^\r\n]+))?\s*$/i.exec(text.trim());
-  if (!match || match[2] && match[2].trim() !== filename) throw new Error("ScummVM release checksum is invalid.");
-  return match[1].toLowerCase();
+  for (const line of String(text).split(/\r?\n/)) {
+    const match = /^\s*([a-f0-9]{64})(?:\s+\*?(.+?))?\s*$/i.exec(line);
+    if (match && (!match[2] || match[2] === filename)) return match[1].toLowerCase();
+  }
+  return null;
 }
 
-function createDiscovery({ request = fetchUrlBuffer, fetchTags = Github.fetchGithubTags,
-  sourceUrl = SOURCE_URL, repository = "scummvm", project = "ScummVM", prefix = "scummvm",
-  minimumMacOS = "11.0", unavailableReason = "A universal macOS download with a published SHA-256 is not available for this release." } = {}) {
-  return async ({ signal, logger } = {}) => {
-    const deadline = AbortSignal.timeout(30000);
-    const requestSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
-    async function text(url, { optional = false, limit = 1024 * 1024 } = {}) {
-      const response = await request(url, { signal: requestSignal });
-      throwIfAborted(requestSignal);
-      if (optional && response.status === 404) return null;
-      if (response.status !== 200) throw new Error(`${project} release information could not be loaded (${response.status}).`);
-      if (response.body.length > limit) throw new Error("ScummVM release information exceeds its size limit.");
-      return response.body.toString("utf8");
-    }
-    const [html, tags] = await Promise.all([
-      text(sourceUrl), fetchTags({ owner: "scummvm", repo: repository, signal: requestSignal, maxPages: 5 })
-    ]);
-    const versions = parseVersions(html);
-    if (!versions.length) throw new Error("No compatible ScummVM releases were found.");
-    const commits = new Map(tags.map(tag => [tag.name, tag.commit.sha]));
-    const rows = new Array(versions.length);
-    let cursor = 0;
-    await Promise.all(Array.from({ length: Math.min(3, versions.length) }, async () => {
-      while (cursor < versions.length) {
-        const index = cursor++, version = versions[index], tag = `v${version}`;
-        const revision = commits.get(tag);
-        if (!revision) continue;
-        const filename = `${prefix}-${version}-macosx.dmg`;
-        const checksum = await text(`${sourceUrl}${version}/${filename}.sha256`, { optional: true, limit: 4096 });
-        rows[index] = { version, upstreamRevision: revision, upstreamTag: tag,
-          minimumMacOS, hostArchitectures: ["arm64", "x64"], localBuild: false,
-          sourceUrl: `https://github.com/scummvm/${repository}/tree/${encodeURIComponent(tag)}`,
-          ...(checksum ? { asset: { filename, url: `${sourceUrl}${version}/${filename}`, sha256: parseDigest(checksum, filename) } }
-            : { installReason: unavailableReason }) };
+// downloads.scummvm.org lists one folder per version from 2.5.0, and each Mac
+// download has a published `.sha256` file beside it. The current disk image
+// name wins; a renamed or reformatted Mac download is followed. The
+// downloaded executables state their macOS requirement and CPUs.
+function createSource({ sourceUrl = SOURCE_URL, prefix = "scummvm", project = "ScummVM" } = {}) {
+  return Upstream.index({ locations: [sourceUrl], allArchitectures: true,
+    parse: async ([listing], { fetch: readPage, latestOnly, logger }) => {
+      const versions = parseVersions(listing.text, sourceUrl).slice(0, latestOnly ? 1 : 100), rows = new Array(versions.length);
+      let cursor = 0;
+      async function read(version) {
+        const folder = `${sourceUrl}${version}/`, document = await readPage(folder);
+        if (document?.status !== 200) throw new Error(`the release folder answered ${document?.status}`);
+        const names = listedFiles(document.text, folder).filter(name => !name.endsWith("/"));
+        const downloads = macDownloads(names.filter(name => !/\.(?:sha\d+|md5|asc|sig)$/i.test(name)).map(name => ({ name })), { preferred: `${prefix}-${version}-macosx.dmg` });
+        if (!downloads.length) return [{ version, sourceUrl: folder, installReason: `This ${project} release has no macOS download.` }];
+        return Promise.all(downloads.map(async ({ asset, architecture }) => {
+          const checksum = names.includes(`${asset.name}.sha256`) ? await readPage(`${folder}${encodeURIComponent(asset.name)}.sha256`) : null;
+          const digest = checksum?.status === 200 ? parseDigest(checksum.text, asset.name) : null;
+          return { version, sourceUrl: folder, ...(architecture ? { architecture } : {}),
+            files: [{ name: asset.name, url: `${folder}${encodeURIComponent(asset.name)}`, ...(digest ? { digest, algorithm: "sha256" } : {}) }] };
+        }));
       }
-    }));
-    const result = rows.filter(Boolean);
-    if (!result.length) throw new Error("No ScummVM releases with an identified source version were found.");
-    logger?.info?.(`[${prefix}] found ${result.length} release versions`);
-    return result;
-  };
+      await Promise.all(Array.from({ length: Math.min(3, versions.length) }, async () => {
+        while (cursor < versions.length) {
+          const index = cursor++;
+          // A version whose folder cannot be read is skipped; the others stay listed.
+          try { rows[index] = await read(versions[index]); } catch (error) { logger?.warn?.(`[${prefix}] skipped ${versions[index]}: ${error.message || error}`); }
+        }
+      }));
+      return rows.filter(Boolean).flat();
+    } });
 }
+const source = createSource();
 
-module.exports = { SOURCE_URL, DEFAULT_VERSION, DEFAULT_ENTRY, createDiscovery, parseVersions, parseDigest, compareVersions };
+module.exports = { SOURCE_URL, source, createSource, parseVersions, listedFiles, parseDigest, compareVersions };

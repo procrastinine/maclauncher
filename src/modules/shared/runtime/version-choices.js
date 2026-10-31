@@ -40,4 +40,24 @@ function managerDefaultVersion({ listed = [], installed = [] } = {}) {
     fallback: installed.find(value => selectRuntimeVersion({ manual: value }).version) }).version;
 }
 
-module.exports = { versionChoices, runtimeVersionChoices, selectRuntimeVersion, managerDefaultVersion };
+/** The saved default while it can still be used: a custom runtime path, a
+ * listed or installed version, or any version while nothing is listed yet
+ * (offline). A saved version that upstream removed and that is not installed
+ * gives way to the manager's default. */
+function savedDefaultVersion(saved, { listed = [], installed = [] } = {}) {
+  const version = selectRuntimeVersion({ manual: saved }).version;
+  return version && (String(version).startsWith("/") || !listed.length || listed.includes(version) || installed.includes(version)) ? version : null;
+}
+
+/** The default version Play uses from a manager or section state. The state
+ * shows the saved choice; Play uses it while the state lists or has installed
+ * it, and otherwise the newest listed or installed version. */
+function usableDefaultVersion(state) {
+  const listed = state?.catalog?.versions || [];
+  const installed = (state?.installed || []).filter(row => row?.ready !== false).flatMap(row => [row?.version, row?.buildKey]).filter(Boolean);
+  const requirements = state?.catalog?.versionRequirements || {};
+  return savedDefaultVersion(state?.defaultVersion, { listed, installed }) ||
+    managerDefaultVersion({ listed: listed.filter(version => !requirements[version]?.installReason), installed });
+}
+
+module.exports = { versionChoices, runtimeVersionChoices, selectRuntimeVersion, managerDefaultVersion, savedDefaultVersion, usableDefaultVersion };

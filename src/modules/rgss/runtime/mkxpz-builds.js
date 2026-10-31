@@ -47,12 +47,12 @@ function runtimeFromInstall(install) {
 
 // The shared registration owns this nested payload. A damaged exact selection
 // must never become an unverified legacy app.
-function resolveOwned({ userDataDir, version, verification = "full" }, manager = module.exports.manager) {
+function resolveOwned({ userDataDir, version, architecture, verification = "full" }, manager = module.exports.manager) {
   if (!path.isAbsolute(userDataDir || "") || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(version || "") || version === "..")
     throw new Error("The selected MKXP-Z installation identity is invalid.");
-  const directory = path.join(userDataDir, "runtimes/mkxpz", version);
+  const directory = manager.core.getInstallDir({ userDataDir, version, architecture });
   if (!fs.existsSync(path.join(directory, "runtime.json"))) return null;
-  const selected = manager.resolveSelection(null, {}, userDataDir, { version, verification });
+  const selected = manager.resolveSelection(null, {}, userDataDir, { version, architecture, verification });
   if (!selected.ready || !selected.install)
     throw new Error("The selected MKXP-Z installation is damaged. Remove it and install this version again.");
   if (verification === "full") {

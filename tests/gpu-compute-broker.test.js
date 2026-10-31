@@ -85,3 +85,25 @@ test("a live registration in another realm serves its route once while the launc
   await new Promise(resolve=>setTimeout(resolve,200));
   assert.deepEqual(launches,["/trusted/live-d3d12.exe","/trusted/launch-fg.exe"]);
 });
+
+test("queued compute requests survive a missing filesystem notification",async t=>{
+  t.mock.method(require("../src/core/watch-files"),"watchDirectory",()=>({close(){}}));
+  const id=require.resolve("../src/modules/shared/runtime/gpu-compute-broker"),cached=require.cache[id];
+  delete require.cache[id];let Quiet;
+  try{Quiet=require(id);}finally{require.cache[id]=cached;}
+  const userDataDir=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),"gpu-broker-unnotified-")));
+  const binding={...Quiet.reserve({userDataDir,launchId:"unnotified"}),namespace:"org.maclauncher.xess.quiet."};
+  t.after(()=>{Quiet.release(binding);fs.rmSync(userDataDir,{recursive:true,force:true});});
+  const script=path.join(userDataDir,"host.cjs");
+  fs.writeFileSync(script,'console.log("MACLAUNCHER_XESS_HELPER "+JSON.stringify({pid:process.pid,token:process.argv.at(-1)}));setInterval(()=>{},1000);');
+  let launches=0;
+  t.mock.method(Sandbox,"isolateComputeHost",async config=>{launches++;return {executable:config.executable,args:config.arguments,environment:{PATH:"/usr/bin:/bin"}};});
+  Quiet.register(binding,{executable:process.execPath,arguments:[script],hostPath:"/trusted/host.exe",originalLibrary:"/trusted/original.dll",environment:{}});
+  Quiet.bind(binding,process.pid);
+  // The first scan can finish before the request; no watcher callback follows.
+  await new Promise(resolve=>setTimeout(resolve,25));
+  const requestId=crypto.randomUUID();
+  Writable.atomicWrite(path.join(binding.requestRoot,requestId+".request.json"),JSON.stringify({schema:1,requestId,endpoint:binding.namespace+requestId}),{root:userDataDir});
+  const receipt=await until(()=>JSON.parse(fs.readFileSync(path.join(binding.receiptRoot,requestId+".receipt.json"))));
+  assert.equal(receipt.error,undefined);assert.equal(receipt.backend,"d3d12");assert.equal(launches,1);
+});

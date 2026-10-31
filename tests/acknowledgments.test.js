@@ -70,7 +70,7 @@ test('every registered runtime manager has a linked upstream project in Credits'
     'cpp2il': 'https://github.com/SamboyCoding/Cpp2IL',
     'mpv': 'https://mpv.io/',
     'mpv-plugins': 'https://github.com/tomasklaen/uosc',
-    'crossover-graphics-bridge': 'https://www.codeweavers.com/crossover',
+    'uosc-helper': 'https://github.com/tomasklaen/uosc',
     'sikarugir-graphics-bridge': 'https://github.com/Sikarugir-App/Engines',
     'wolftl': 'https://github.com/Sinflower/WolfTL',
     'uberwolf': 'https://github.com/Sinflower/UberWolf',

@@ -4,7 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const Python = require('../scripts/python-resources.cjs');
-const profile = require('../src/modules/shared/runtime/embedded-python.json');
+const profile = require('../src/modules/shared/runtime/python').embeddedPythonProfile('arm64');
 
 function fixture(t) {
   const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'python-resources-'));
@@ -17,7 +17,7 @@ function fixture(t) {
     }
     fs.writeFileSync(path.join(root, 'runtime.json'), JSON.stringify(profile));
   }
-  return { parent, sourceRoot, resourceRoot };
+  return { parent, sourceRoot, resourceRoot, arch: 'arm64' };
 }
 
 test('Python app aliases retain one regular interpreter and leave producer copies unchanged', t => {
@@ -65,6 +65,7 @@ test('Python post-sign validation rejects escaped aliases, wrong pins and omitte
   fs.writeFileSync(path.join(options.resourceRoot, 'runtime.json'), JSON.stringify({ ...profile, sha256: 'different' }));
   assert.throws(() => Python.assertPackagedPython(options), /pinned profile/);
   fs.writeFileSync(path.join(options.resourceRoot, 'runtime.json'), JSON.stringify(profile));
+  assert.throws(() => Python.assertPackagedPython({ ...options, arch: 'x64' }), /not the x64 build/);
   fs.unlinkSync(path.join(options.resourceRoot, Python.requiredFiles.at(-1)));
   assert.throws(() => Python.assertPackagedPython(options), /ENOENT/);
 });

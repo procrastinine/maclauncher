@@ -83,10 +83,19 @@ function withoutDefault(manager, settings, sectionId, version) {
   }
   return next;
 }
+// Without an inspected version, a registration is named after its path. Generic
+// container folders such as payload or Contents/MacOS give way to the folder
+// that holds them, and an app bundle reads without its extension.
+const CONTAINER_NAMES = new Set(["payload", "files", "bin", "contents", "macos", "resources", "app", "build", "dist", "release", "runtime"]);
+function pathName(target) {
+  let current = path.resolve(String(target));
+  while (CONTAINER_NAMES.has(path.basename(current).toLowerCase()) && path.dirname(current) !== current) current = path.dirname(current);
+  return path.basename(current).replace(/\.app$/i, "") || path.basename(String(target));
+}
 function metadata(row, install = {}) {
   return { ...install, version: row.path, runtimePath: install.runtimePath || install.executablePath || row.path, sectionId: row.sectionId,
     source: "custom", custom: true, external: true, imported: true, readOnly: false, removable: true,
-    registeredAt: row.registeredAt, versionLabel: install.versionLabel || path.basename(row.path),
+    registeredAt: row.registeredAt, versionLabel: install.versionLabel || pathName(row.path),
     removalLabel: "Remove registration", removalConfirm: "Remove this runtime from the list? The selected files remain in their original location." };
 }
 function inspect(manager, row, userDataDir, verification = "status") {
@@ -99,7 +108,11 @@ function listFor(manager, { sectionId, userDataDir } = {}) {
   if (!manager) return [];
   return records(userDataDir, manager.id).filter(row => !sectionId || row.sectionId === sectionId).map(row => {
     try { return inspect(manager, row, userDataDir); }
-    catch (error) { return metadata(row, { installDir: row.path, ready: false, status: "unavailable", reason: error.message, error: error.message }); }
+    catch (error) {
+      // A moved or deleted runtime is reported plainly instead of as a file-system error.
+      const reason = error.code === "ENOENT" && !fs.existsSync(row.path) ? "The registered runtime was not found at its saved location." : error.message;
+      return metadata(row, { installDir: row.path, ready: false, status: "unavailable", reason, error: reason });
+    }
   });
 }
 function list({ managerId, ...options } = {}) { return listFor(managers.get(managerId), options); }
@@ -131,9 +144,9 @@ function inspectNative(runtimePath, { allowLibrary = false, candidates = [], pre
     if (executableCache.size >= 128) executableCache.delete(executableCache.keys().next().value);
     executableCache.set(key, { identity, value: native });
   }
-  const root = stat.isDirectory() ? runtimePath : path.dirname(runtimePath);
+  const root = stat.isDirectory() ? runtimePath : path.dirname(runtimePath), selected = require("./architecture").selectedArchitecture();
   return { ...native, binarySha256: native.sha256, appPath: runtimePath, installDir: root, root, payloadRoot: root,
-    architecture: native.architectures.includes(process.arch === "x64" ? "x86_64" : process.arch) ? process.arch : "x64",
+    architecture: native.architectures.includes(selected === "x64" ? "x86_64" : selected) ? selected : "x64",
     requiresRosetta: native.needsRosetta };
 }
 function inspectManifest(runtimePath, { managerId, allowLibrary = false, verification = "full" } = {}) {

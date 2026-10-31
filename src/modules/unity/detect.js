@@ -94,13 +94,37 @@ function inspectData(dataRoot, context = {}) {
   const appInfo = io.read(path.join(dataRoot, "app.info"), 4096)?.toString("utf8").replace(/\r/g, "").split("\n") || [];
   const backend = il2cpp ? "il2cpp" : "mono";
   const graphics = require("./graphics").inspectGraphics(dataRoot, { detection: context.detection });
-  return { dataRoot, detectedVersion: version.version, detectedVersionSource: `${path.basename(versionSource)} ${version.format} header`, detectedVersionConfidence: "exact",
+  const info = { dataRoot, detectedVersion: version.version, detectedVersionSource: `${path.basename(versionSource)} ${version.format} header`, detectedVersionConfidence: "exact",
     unityFormat: version.format, serializedFormatVersion: version.formatVersion, versionSourcePath: versionSource,
     scriptingBackend: backend, assemblyPath: io.stat(assemblyPath)?.isFile() ? assemblyPath : null,
     companyName: appInfo[0]?.trim() || graphics.playerSettings?.companyName || null, productName: appInfo[1]?.trim() || graphics.playerSettings?.productName || null,
     managedAssemblies, nativeImports: [...nativeImports], nativeImportEvidence, managedDependencyInspection: { complete: managedInspectionIssues.length === 0, issues: managedInspectionIssues },
-    windowsApis: [...windowsApis], nativePlugins: plugins, graphics,
-    compatibility: backend === "il2cpp" ? "IL2CPP native port required" : graphics.status === "requires-shader-conversion" ? "Direct3D shader conversion required" : nativeImports.size || windowsApis.size || plugins.length ? "Native plugins need verification" : "Mono player pilot" };
+    windowsApis: [...windowsApis], nativePlugins: plugins, graphics };
+  info.compatibility = macPlayerBlocker(info, context.gamePath)?.label || (nativeImports.size || plugins.length ? "Native plugins need verification" : "Mono player pilot");
+  return info;
+}
+
+// The Mac Mono player runs Mono game code with Metal or OpenGL shaders. IL2CPP
+// machine code, shaders compiled only for other graphics APIs and Windows
+// desktop APIs need the game's own engine instead. A game with a Windows
+// executable runs it in a Windows runtime, which translates Direct3D to Metal
+// or Vulkan. Gives null when the Mac player can run the game.
+function macPlayerBlocker(info, gamePath) {
+  if (!info || typeof info !== "object") return null;
+  const windows = typeof gamePath === "string" && /\.exe$/i.test(gamePath);
+  const windowsRuntime = windows ? " Its Windows executable runs in a Windows runtime." : "";
+  if (info.scriptingBackend === "il2cpp") return { label: windows ? "Runs in a Windows runtime (IL2CPP code)" : "IL2CPP native port required",
+    reason: "IL2CPP compiled this game's code to machine code for its original platform, which the Mac Mono player cannot run." + windowsRuntime };
+  if (info.graphics?.status === "requires-shader-conversion") {
+    const labels = Array.isArray(info.graphics.graphicsLabels) ? info.graphics.graphicsLabels : [];
+    const apis = labels.length ? new Intl.ListFormat("en").format(labels) : "graphics APIs other than Metal and OpenGL";
+    const translated = windows && labels.some(label => /^Direct3D/.test(label)) ? " Its Windows executable runs in a Windows runtime, which translates Direct3D to Metal or Vulkan." : windowsRuntime;
+    return { label: windows ? `Runs in a Windows runtime (${apis} shaders)` : `Shaders only for ${apis}`,
+      reason: `This build has shaders only for ${apis}, and the Mac Mono player needs Metal or OpenGL shaders.${translated}` };
+  }
+  if (Array.isArray(info.windowsApis) && info.windowsApis.length) return { label: windows ? "Runs in a Windows runtime (Windows desktop APIs)" : "Uses Windows desktop APIs",
+    reason: "This game's Mono code uses Windows desktop APIs that the Mac Mono player does not provide." + windowsRuntime };
+  return null;
 }
 
 function detectGame(context) {
@@ -123,7 +147,7 @@ function detectGame(context) {
   for (const root of roots) {
     try {
       if (!inside(fs.realpathSync(context.rootDir), fs.realpathSync(root.dataRoot))) continue;
-      const info = inspectData(root.dataRoot, context); if (!info) continue;
+      const info = inspectData(root.dataRoot, { ...context, gamePath: root.gamePath }); if (!info) continue;
       const peVersion = /\.exe$/i.test(root.gamePath) ? readPeVersion(path.join(path.dirname(root.gamePath), "UnityPlayer.dll"), { detection: context.detection }) || readPeVersion(root.gamePath, { detection: context.detection }) : null;
       return { moduleId: "unity", engine: "unity", gameType: "scripted", runtimeId: root.nativeAppPath ? "native" : "unity",
         name: (info.productName || path.basename(root.gamePath, path.extname(root.gamePath))).replace(/^\*+|\*+$/g, ""), gamePath: root.gamePath,
@@ -134,4 +158,4 @@ function detectGame(context) {
   return null;
 }
 
-module.exports = { detectGame, inspectData, parseAssetVersion, VERSION };
+module.exports = { detectGame, inspectData, macPlayerBlocker, parseAssetVersion, VERSION };

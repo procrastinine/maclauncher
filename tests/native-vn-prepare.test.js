@@ -1,3 +1,4 @@
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -324,7 +325,7 @@ test("KAG3 resources install through consented Play from empty or stale catalogs
     } });
     runtime.core.registerLocal({ userDataDir: f.context.userDataDir, version: "MCLv1-1001", runtimePath: host });
     const manager = Kiri.runtimeManagers[0];
-    for (const method of ["resolveSelection", "getState", "installRuntime"]) t.mock.method(manager, method, runtime[method].bind(runtime));
+    for (const method of ["resolveSelection", "getState", "installRuntime", "refreshCatalog"]) t.mock.method(manager, method, runtime[method].bind(runtime));
     for (const method of ["listInstalled", "listCatalog"]) t.mock.method(manager.core, method, runtime.core[method].bind(runtime.core));
     f.entry.runtimeData = { krkrsdl2: { version: "MCLv1-1001" } };
     const settings = { runtimes: { krkrsdl2: { defaultVersion: "MCLv1-1001" } } }, savedSettings = structuredClone(settings), savedChoice = structuredClone(f.entry.runtimeData);
@@ -347,7 +348,7 @@ test("KAG3 resources install through consented Play from empty or stale catalogs
     context.confirmRuntimeInstall = async plan => { events.push("consent"); assert.equal(plan.label, "KAG3 compatibility resources"); return true; };
     events.length = 0;
     assert.equal(await prepare(), true);
-    assert.deepEqual(events, ["consent", "install", "discover", "download", "signatures", "prepare"]);
+    assert.deepEqual(events, ["consent", "discover", "install", "download", "signatures", "prepare"]);
     assert.equal(runtime.resolveSelection(f.entry, settings, context.userDataDir).version, "MCLv1-1001");
     assert.deepEqual(settings, savedSettings); assert.deepEqual(f.entry.runtimeData, savedChoice);
     const installed = runtime.core.resolveInstalled({ userDataDir: context.userDataDir, version: donor.record.version });

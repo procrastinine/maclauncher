@@ -5,7 +5,7 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const test = require('node:test');
-const { parseVersion, compareVersions, planRelease, getPlan, assetNames, verifyAssets, githubRequest, findRelease, publish } = require('../scripts/release.cjs');
+const { parseVersion, compareVersions, planRelease, getPlan, APP_ARCHITECTURES, appAsset, appManifest, assetNames, verifyAssets, verifyBuilds, githubRequest, findRelease, publish } = require('../scripts/release.cjs');
 const sha = 'a'.repeat(40);
 const push = { eventName: 'push', ref: 'refs/heads/main', event: { repository: { default_branch: 'main' } }, version: '0.3.0', previousVersion: '0.2.1' };
 
@@ -93,37 +93,70 @@ test('push comparison uses the complete before commit, including multi-commit pu
   fs.writeFileSync(eventFile, JSON.stringify({ ...event, before: sha }));
   assert.throws(() => getPlan({ env, repoRoot }), /push baseline/);
 });
+// The release job's download layout: one directory of build outputs per app architecture.
 function fixture(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'release-assets-')); t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
-  const manifest = { version: '0.3.0', releaseTag: 'v0.3.0', sourceCommit: sha, arch: 'arm64', maximumNativeMacOS: '13.0' };
-  const names = assetNames(manifest);
-  for (const name of names) fs.writeFileSync(path.join(directory, name), `Synthetic release asset: ${name}`);
-  fs.writeFileSync(path.join(directory, 'build-manifest.json'), JSON.stringify(manifest));
-  fs.writeFileSync(path.join(directory, 'SHA256SUMS.txt'), `${createHash('sha256').update(fs.readFileSync(path.join(directory, 'MacLauncher.app.zip'))).digest('hex')}  MacLauncher.app.zip\n`);
+  const manifests = {}, zips = [], downloads = [];
+  for (const arch of APP_ARCHITECTURES) {
+    const root = path.join(directory, arch), app = appAsset(arch).name; fs.mkdirSync(root);
+    manifests[arch] = { version: '0.3.0', releaseTag: 'v0.3.0', sourceCommit: sha, arch, appArchive: app, maximumNativeMacOS: '13.0' };
+    for (const name of assetNames(arch)) fs.writeFileSync(path.join(root, name), `Synthetic release asset: ${arch} ${name}`);
+    fs.writeFileSync(path.join(root, 'RELEASE_NOTES.md'), 'Release notes');
+    manifests[arch].appArchiveSha256 = createHash('sha256').update(fs.readFileSync(path.join(root, app))).digest('hex');
+    fs.writeFileSync(path.join(root, appManifest(arch)), JSON.stringify(manifests[arch]));
+    fs.writeFileSync(path.join(root, 'SHA256SUMS.txt'), `${createHash('sha256').update(fs.readFileSync(path.join(root, app))).digest('hex')}  ${app}\n`);
+    zips.push(path.join(root, app));
+    downloads.push(path.join(root, app), path.join(root, appManifest(arch)));
+  }
   const env = { RELEASE_VERSION: '0.3.0', GITHUB_SHA: sha, GITHUB_REPOSITORY: 'owner/project', GH_TOKEN: 'synthetic-token' };
-  const assets = () => names.slice(0, 1).map(name => { const bytes = fs.readFileSync(path.join(directory, name));
-    return { name, state: 'uploaded', size: bytes.length, digest: `sha256:${createHash('sha256').update(bytes).digest('hex')}` }; });
-  return { directory, env, manifest, names, assets };
+  const assets = () => downloads.map(file => { const bytes = fs.readFileSync(file);
+    return { name: path.basename(file), state: 'uploaded', size: bytes.length, digest: `sha256:${createHash('sha256').update(bytes).digest('hex')}` }; });
+  const writeManifest = arch => fs.writeFileSync(path.join(directory, arch, appManifest(arch)), JSON.stringify(manifests[arch]));
+  return { directory, env, manifests, writeManifest, zips, downloads, arm64: path.join(directory, 'arm64'), assets };
 }
+test('each app architecture has its own named download, and Apple Silicon keeps the original asset name', () => {
+  assert.deepEqual(APP_ARCHITECTURES, ['arm64', 'x64']);
+  assert.deepEqual(APP_ARCHITECTURES.map(arch => appAsset(arch).name), ['MacLauncher.app.zip', 'MacLauncher-Intel.app.zip']);
+  assert.deepEqual(APP_ARCHITECTURES.map(arch => appAsset(arch).label), ['Apple Silicon', 'Intel']);
+  assert.throws(() => appAsset('universal'), /Apple Silicon or Intel/);
+});
 test('release publication verifies downloaded archives and the exact source identity before any network write', async t => {
   const f = fixture(t);
-  assert.deepEqual(await verifyAssets(f.directory, { version: '0.3.0', sha }), f.names);
-  await assert.rejects(verifyAssets(f.directory, { version: '0.3.0', sha: 'b'.repeat(40) }), /exact source commit/);
-  fs.appendFileSync(path.join(f.directory, f.names[0]), 'corrupted');
+  assert.deepEqual(await verifyAssets(f.arm64, { version: '0.3.0', sha, arch: 'arm64' }), assetNames('arm64'));
+  assert.deepEqual((await verifyBuilds(f.directory, { version: '0.3.0', sha })).files.map(item => item.name),
+    ['MacLauncher.app.zip', 'MacLauncher-arm64.build-manifest.json', 'MacLauncher-Intel.app.zip', 'MacLauncher-x64.build-manifest.json']);
+  await assert.rejects(verifyAssets(f.arm64, { version: '0.3.0', sha: 'b'.repeat(40), arch: 'arm64' }), /exact source commit/);
+  await assert.rejects(verifyAssets(f.arm64, { version: '0.3.0', sha, arch: 'x64' }), /ENOENT/);
+  f.manifests.x64.arch = 'arm64'; f.writeManifest('x64');
+  await assert.rejects(verifyBuilds(f.directory, { version: '0.3.0', sha }), /app architecture/);
+  f.manifests.x64.arch = 'x64'; f.writeManifest('x64');
+  const archiveDigest = f.manifests.x64.appArchiveSha256;
+  f.manifests.x64.appArchiveSha256 = 'b'.repeat(64); f.writeManifest('x64');
+  await assert.rejects(verifyBuilds(f.directory, { version: '0.3.0', sha }), /manifest archive checksum/);
+  f.manifests.x64.appArchiveSha256 = archiveDigest; f.writeManifest('x64');
+  fs.writeFileSync(path.join(f.directory, 'x64', 'RELEASE_NOTES.md'), 'Different notes');
+  await assert.rejects(verifyBuilds(f.directory, { version: '0.3.0', sha }), /different release notes/);
+  fs.writeFileSync(path.join(f.directory, 'x64', 'RELEASE_NOTES.md'), 'Release notes');
+  fs.renameSync(path.join(f.directory, 'x64'), path.join(f.directory, 'intel'));
+  await assert.rejects(verifyBuilds(f.directory, { version: '0.3.0', sha }), /each app architecture/);
+  fs.renameSync(path.join(f.directory, 'intel'), path.join(f.directory, 'x64'));
+  fs.appendFileSync(f.zips[1], 'corrupted');
   let writes = 0;
   await assert.rejects(publish({ ...f, request: async () => null, tool: () => writes++ }), /checksum mismatch/);
   assert.equal(writes, 0);
 });
 test('unexpected files, links and incomplete checksum sets stop release publication', async t => {
-  const f = fixture(t), extra = path.join(f.directory, 'unexpected.txt');
+  const f = fixture(t), extra = path.join(f.arm64, 'unexpected.txt'), options = { version: '0.3.0', sha, arch: 'arm64' };
   fs.writeFileSync(extra, 'Unlisted file');
-  await assert.rejects(verifyAssets(f.directory, { version: '0.3.0', sha }), /unexpected files/);
+  await assert.rejects(verifyAssets(f.arm64, options), /unexpected files/);
   fs.unlinkSync(extra);
-  fs.unlinkSync(path.join(f.directory, 'RELEASE_NOTES.md')); fs.symlinkSync('build-manifest.json', path.join(f.directory, 'RELEASE_NOTES.md'));
-  await assert.rejects(verifyAssets(f.directory, { version: '0.3.0', sha }), /regular files/);
-  fs.unlinkSync(path.join(f.directory, 'RELEASE_NOTES.md')); fs.writeFileSync(path.join(f.directory, 'RELEASE_NOTES.md'), 'Release notes');
-  fs.writeFileSync(path.join(f.directory, 'SHA256SUMS.txt'), '');
-  await assert.rejects(verifyAssets(f.directory, { version: '0.3.0', sha }), /nonempty regular files/);
+  fs.unlinkSync(path.join(f.arm64, 'RELEASE_NOTES.md')); fs.symlinkSync(appManifest('arm64'), path.join(f.arm64, 'RELEASE_NOTES.md'));
+  await assert.rejects(verifyAssets(f.arm64, options), /regular files/);
+  fs.unlinkSync(path.join(f.arm64, 'RELEASE_NOTES.md')); fs.writeFileSync(path.join(f.arm64, 'RELEASE_NOTES.md'), 'Release notes');
+  fs.writeFileSync(path.join(f.arm64, 'SHA256SUMS.txt'), '');
+  await assert.rejects(verifyAssets(f.arm64, options), /nonempty regular files/);
+  fs.writeFileSync(path.join(f.directory, 'stray.zip'), 'Unlisted archive');
+  await assert.rejects(verifyBuilds(f.directory, { version: '0.3.0', sha }), /each app architecture/);
 });
 test('release creation targets the built commit and only publishes after all uploads succeed', async t => {
   const f = fixture(t), commands = [];
@@ -133,7 +166,8 @@ test('release creation targets the built commit and only publishes after all upl
   assert.deepEqual(commands[0].slice(0, 4), ['gh', 'release', 'create', 'v0.3.0']);
   assert.equal(commands[0][commands[0].indexOf('--target') + 1], sha);
   assert.ok(commands[0].includes('--draft'));
-  assert.equal(commands[1].filter(arg => arg.startsWith(f.directory + path.sep)).length, 1);
+  assert.deepEqual(commands[1].filter(arg => arg.startsWith(f.directory + path.sep)), f.downloads);
+  assert.equal(commands[0][commands[0].indexOf('--notes-file') + 1], path.join(f.arm64, 'RELEASE_NOTES.md'));
   assert.ok(commands[2].includes('draft=false')); assert.ok(commands[2].includes('prerelease=false')); assert.ok(commands[2].includes('make_latest=legacy'));
   const failed = [];
   await assert.rejects(publish({ ...f, request: async route => route.startsWith('releases?') ? [] : null, tool: (_, args) => { failed.push(args); if (args[1] === 'upload') throw new Error('Upload interrupted'); } }), /Upload interrupted/);
@@ -159,7 +193,10 @@ test('draft retries upload only absent or mismatched assets and verify remote ch
   const request = async route => route.startsWith('releases/') ? release : { object: { type: 'commit', sha } };
   const tool = (_, args) => { commands.push(args); if (args[1] === 'upload') release.assets = f.assets(); };
   await publish({ ...f, request, tool });
-  assert.deepEqual(commands[0].filter(arg => arg.startsWith(f.directory + path.sep)), [path.join(f.directory, 'MacLauncher.app.zip')]);
+  assert.deepEqual(commands[0].filter(arg => arg.startsWith(f.directory + path.sep)), f.downloads);
+  commands.length = 0; release.assets = f.assets().slice(0, 1);
+  await publish({ ...f, request, tool });
+  assert.deepEqual(commands[0].filter(arg => arg.startsWith(f.directory + path.sep)), f.downloads.slice(1), 'only the missing assets are uploaded');
   assert.ok(commands[1].includes('draft=false'));
   commands.length = 0; release.assets[0].digest = `sha256:${'0'.repeat(64)}`;
   await assert.rejects(publish({ ...f, request, tool: (_, args) => commands.push(args) }), /matching checksums/);
@@ -179,8 +216,8 @@ test('authenticated release listings locate drafts omitted by the published tag 
 });
 test('prereleases stay outside Latest and incomplete remote uploads stay unpublished', async t => {
   const f = fixture(t), version = '0.3.0-beta.1', commands = [];
-  f.env.RELEASE_VERSION = version; f.manifest.version = version; f.manifest.releaseTag = `v${version}`;
-  fs.writeFileSync(path.join(f.directory, 'build-manifest.json'), JSON.stringify(f.manifest));
+  f.env.RELEASE_VERSION = version;
+  for (const arch of APP_ARCHITECTURES) { f.manifests[arch].version = version; f.manifests[arch].releaseTag = `v${version}`; f.writeManifest(arch); }
   const draft = { id: 123, draft: true, target_commitish: sha, assets: f.assets() };
   const request = async route => route.startsWith('releases/') ? draft : null;
   await publish({ ...f, request, tool: (_, args) => commands.push(args) });

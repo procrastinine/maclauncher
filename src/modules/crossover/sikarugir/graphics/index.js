@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { versionAtLeast, systemVersionSync } = require("../../../shared/runtime/bundled-native");
+const Requirements = require("../../../shared/runtime/feature-requirements");
 const Closure = require("./closure");
 const Hardware = require("./hardware");
 const DLSS = require("../../dlss");
@@ -24,7 +25,7 @@ function engineRoot(install) {
   if (!path.isAbsolute(root || "")) fail("The selected Wine engine is unavailable.");
   return fs.realpathSync(root);
 }
-function capabilitiesFor(install, support, host) {
+function capabilitiesFor(install, support, host = {}) {
   let metadata = install.graphicsMetadata || install.installationMetadata?.graphics;
   if (!metadata) {
     const file = path.join(support, "graphics.json");
@@ -32,18 +33,26 @@ function capabilitiesFor(install, support, host) {
     catch { fail("The selected graphics libraries are incomplete. Reinstall this version."); }
   }
   const recorded = metadata.graphicsCapabilities || install.graphicsCapabilities || {};
-  const current = host.macOSVersion || systemVersionSync(), floors = recorded.minimumMacOS || {};
-  if (metadata.minimumBaseMacOS && !versionAtLeast(current, metadata.minimumBaseMacOS)) fail(`This graphics package requires macOS ${metadata.minimumBaseMacOS} or later.`);
-  const capable = name => recorded[name] === true && versionAtLeast(current, floors[name] || "11.0.0");
+  const current = Object.hasOwn(host, "macOSVersion") ? host.macOSVersion : systemVersionSync(), floors = recorded.minimumMacOS || {};
+  const actual = { platform: process.platform, ...host, macOSVersion: current };
+  if (Requirements.requirementSupport({ minimumMacOS: metadata.minimumBaseMacOS }, actual).supported === false)
+    fail(`This graphics package requires macOS ${metadata.minimumBaseMacOS} or later.`);
+  const capable = (name, required = Requirements.TEMPLATE_RENDERERS[name] || {}) => {
+    // An installed Template keeps its measured floor, including an earlier
+    // compatible renderer. Static defaults describe an unmeasured closure.
+    const measured = floors[name] || required.minimumMacOS;
+    const apiFloor = Requirements.WINE_BACKENDS[name]?.minimumMacOS || required.minimumMacOS;
+    const minimumMacOS = measured && apiFloor && versionAtLeast(apiFloor, measured) ? apiFloor : measured;
+    return recorded[name] === true && Requirements.requirementSupport({ ...required, minimumMacOS }, actual).supported !== false;
+  };
   const engine = engineRoot(install), modern = fs.existsSync(path.join(engine, "lib", "wine", "x86_64-unix", "ntdll.so")) &&
     !fs.existsSync(path.join(engine, "lib", "wine", "x86_32on64-unix", "ntdll.so"));
-  const appleSilicon = host.arch === "arm64";
   return { ...install.capabilities, wined3d: true, dxmt: modern && capable("dxmt"), dxvk: modern && capable("dxvk"),
-    dxvk3: modern && capable("dxvk3") && appleSilicon && versionAtLeast(current, "26.0.0"),
-    d9vk: modern && capable("d9vk") && appleSilicon && versionAtLeast(current, "26.0.0"),
-    d3dmetal: modern && capable("d3dmetal") && appleSilicon, cncDdraw: recorded.cncDdraw === true,
-    moltenvk: capable("moltenvk"), kosmickrisp: capable("kosmickrisp") && appleSilicon,
-    automaticKosmicKrisp: capable("kosmickrisp") && appleSilicon && host.physicalAppleGPU === true,
+    dxvk3: modern && capable("dxvk3", Requirements.WINE_MODERN_VULKAN),
+    d9vk: modern && capable("d9vk", Requirements.WINE_MODERN_VULKAN),
+    d3dmetal: modern && capable("d3dmetal"), cncDdraw: recorded.cncDdraw === true,
+    moltenvk: capable("moltenvk"), kosmickrisp: capable("kosmickrisp"),
+    automaticKosmicKrisp: capable("kosmickrisp") && host.physicalAppleGPU === true,
     componentVersions: metadata.componentVersions || {}, minimumMacOS: floors };
 }
 function selectGraphics(settings, capabilities, executableArchitecture) {
@@ -52,7 +61,12 @@ function selectGraphics(settings, capabilities, executableArchitecture) {
   if (!VULKAN_BACKENDS.includes(requestedVulkan)) fail("Unsupported Vulkan implementation.");
   if (backend !== "auto" && !capabilities[backend]) fail(`${backend === "d3dmetal" ? "D3DMetal" : backend.toUpperCase()} is unavailable with this engine and macOS version. Choose Automatic or WineD3D.`);
   if (backend === "d3dmetal" && executableArchitecture === "x86") fail("D3DMetal supports 64-bit Windows applications. Choose Automatic, DXMT or WineD3D for this game.");
-  if (requestedVulkan !== "auto" && !capabilities[requestedVulkan]) fail(`${requestedVulkan === "kosmickrisp" ? "KosmicKrisp requires Apple Silicon and macOS 26 or later" : "MoltenVK is unavailable in this graphics package"}. Choose Automatic or another Vulkan implementation.`);
+  if (requestedVulkan !== "auto" && !capabilities[requestedVulkan]) {
+    const required = Requirements.TEMPLATE_RENDERERS.kosmickrisp.minimumMacOS;
+    const measured = capabilities.minimumMacOS?.kosmickrisp;
+    const floor = measured && versionAtLeast(measured, required) ? measured : required;
+    fail(`${requestedVulkan === "kosmickrisp" ? `KosmicKrisp requires Apple Silicon and macOS ${floor.replace(/(?:\.0)+$/, "")} or later` : "MoltenVK is unavailable in this graphics package"}. Choose Automatic or another Vulkan implementation.`);
+  }
   const vulkan = requestedVulkan === "auto" ? capabilities.automaticKosmicKrisp ? "kosmickrisp" : capabilities.moltenvk ? "moltenvk" : null : requestedVulkan;
   const components = [];
   if (backend === "auto") {
@@ -205,7 +219,8 @@ async function registerPrefixLibraries(prefixPath, viewRoot, dllRoot, signal) {
 }
 async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoot, host = {}, signal, executableArchitecture, cameraBridge, helperLibraries = [] } = {}) {
   signal?.throwIfAborted();
-  const support = supportRoot(install), engine = engineRoot(install), hostInfo = { arch: process.arch, ...host };
+  const support = supportRoot(install), engine = engineRoot(install), hostInfo = {
+    hardwareArch: require("../../../shared/runtime/host-capabilities").getHostCapabilities().hardwareArch, ...host };
   let capabilities = capabilitiesFor(install, support, hostInfo);
   const hardware = capabilities.kosmickrisp && (!settings.vulkanBackend || settings.vulkanBackend === "auto")
     ? await Hardware.graphicsHardware(hostInfo, { signal }) : { physicalAppleGPU: hostInfo.physicalAppleGPU === true, source: "not-required" };

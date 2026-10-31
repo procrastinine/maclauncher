@@ -12,10 +12,10 @@ const GameStore = require("./game-store");
 const NetworkAccess = require("./network-access");
 const LibraryState = require("./library-state");
 const { pickRuntimeId } = require("./runtime-utils");
-const { canLaunchEntry, resolveRuntimeSupportForEntry } = require("./launch-capability");
+const { canLaunchEntry, hostRequirement, resolveRuntimeSupportForEntry } = require("./launch-capability");
 const { mergeDetectedEntry, detectedNativeRuntime } = require("./launch-utils");
-const { hydrateGameSaveLocations, saveDirectoryForEntry } = require("./save-locations");
-const { createRuntimeSettingsStore } = require("./runtime-settings");
+const { hydrateGameSaveLocations, saveDirectoryForEntry, isManagedSaveDirectory } = require("./save-locations");
+const { createRuntimeSettingsStore, resolveRuntimeSettingsSchema } = require("./runtime-settings");
 const { createProcessLauncher } = require("./processes");
 const Rosetta = require("../modules/shared/runtime/rosetta");
 const { readJsonObject, readJsonDocument, writeJsonAtomic } = require("./json-files");
@@ -32,8 +32,11 @@ const Installers = require("../modules/shared/installers");
 const { prepareModuleInput, applyInputChanges } = require("../modules/shared/writable-input");
 const { isAbortError } = require("../modules/shared/runtime/download-utils");
 const { afterProcessStop, waitForProcessStop } = require("./process-lifecycle");
+const GameAvailability = require("./game-availability");
 
 const isRecord = value => Boolean(value && typeof value === "object" && !Array.isArray(value));
+// Actions that change only the library record and never read the game's files.
+const RECORD_ACTIONS = new Set(["setGameNotes", "setGameLaunchArguments", "setGameNetworkAccess", "setGameSteamClientStart"]);
 const defaultUserDataDir = () => path.join(os.homedir(), "Library", "Application Support", "maclauncher");
 
 function resolveModuleId(entry) {
@@ -185,6 +188,36 @@ function createLauncher({
       supported: automaticSupported, defaultRuntime, nativePath,
       canLaunchRuntime: mod?.canLaunchRuntime, entry, moduleSettings, context
     });
+  }
+
+  // The checks behind a library row that may read the game's files: the
+  // effective runtime, the runtimes that apply, whether the game can launch
+  // and whether its save folder is launcher storage. The launcher process has
+  // a backend worker run them, so a slow drive never blocks the interface. A
+  // game whose files are unavailable is checked from its record.
+  // A runtime this Mac can never run, or a game type left with none, names the requirement.
+  function hostRuntimeReason(info, runtimeId) {
+    const unavailable = info?.runtime?.unavailableHere || {};
+    return unavailable[runtimeId] || (!(info?.runtime?.supported || []).length ? Object.values(unavailable)[0] : null) || null;
+  }
+
+  function resolveEntryChecks(entry, settings = loadSettings(), { availability = null, getRuntimeManagerState: states = getRuntimeManagerState } = {}) {
+    const moduleId = resolveModuleId(entry), mod = registry.getModule(moduleId), info = registry.getModuleInfo(moduleId);
+    const moduleSettings = settings?.modules?.[moduleId] || {};
+    const raw = typeof entry.runtimeId === "string" && entry.runtimeId.trim() ? entry.runtimeId : null;
+    const requested = raw && typeof mod?.normalizeRuntimeId === "function" ? mod.normalizeRuntimeId(raw) : raw;
+    const context = { ...entry, moduleId, moduleData: isRecord(entry.moduleData) ? { ...entry.moduleData } : {},
+      runtimeData: isRecord(entry.runtimeData) ? { ...entry.runtimeData } : {}, ...(availability ? { availability } : {}) };
+    const runtimeId = resolveRuntimeForEntry(requested, mod, info, context, moduleSettings, settings);
+    const supports = mod?.getRuntimeProvider?.(runtimeId)?.supports || {};
+    const saveLocationOverride = (supports.saveLocationOverride ?? info?.supports?.saveLocationOverride) !== false;
+    const defaultSaveDir = typeof entry.defaultSaveDir === "string" && entry.defaultSaveDir ? entry.defaultSaveDir : null;
+    const launch = canLaunchEntry({ mod, info, entry: context, runtimeId, moduleSettings, context: { app, userDataDir, settings } });
+    return { runtimeId,
+      runtimeSupport: resolveRuntimeSupportForEntry(mod, info, context, moduleSettings, { app, userDataDir, settings, getRuntimeManagerState: states }),
+      launch,
+      launchRequirement: hostRequirement(mod)?.message || (!launch && hostRuntimeReason(info, requested || runtimeId)) || null,
+      managedSaveDir: isManagedSaveDirectory((saveLocationOverride && entry.saveDirOverride) || defaultSaveDir, userDataDir) };
   }
 
   function getModuleCheats(moduleId) {
@@ -499,6 +532,8 @@ function createLauncher({
     const games = GameStore.loadGames(userDataDir);
     let existing = games.find(entry => [entry.importPath, entry.gamePath].some(value =>
       typeof value === "string" && path.resolve(value) === input));
+    // A library game on a missing drive keeps its record; it is not re-detected.
+    if (existing) await GameAvailability.assertGameAvailable(existing, { userDataDir });
     const sourcePath = existing?.importPath && fs.existsSync(existing.importPath) ? existing.importPath : input;
     const gameId = existing?.gameId || Installers.findCachedInputGameId(userDataDir, sourcePath) || GameData.createGameId();
     return gameLifecycle.use({ gameId, gamePath: existing?.gamePath || input }, async () => {
@@ -523,7 +558,7 @@ function createLauncher({
       entry.moduleId = resolveModuleId(entry);
       const mod = registry.getModule(entry.moduleId);
       const info = registry.getModuleInfo(entry.moduleId);
-      if (typeof mod?.mergeEntry === "function") entry = mod.mergeEntry(existing, entry, settings);
+      if (typeof mod?.mergeEntry === "function") entry = mod.mergeEntry(existing, entry, settings, { userDataDir });
       prepareModuleInput(entry, registry, { settings, userDataDir, logger, ui, app, signal, onProgress, readOnly: !persist });
       entry = hydrateGameSaveLocations(entry, registry, { settings, userDataDir });
       entry.gameType ??= info.gameType;
@@ -558,7 +593,9 @@ function createLauncher({
   async function launchEntry(entry, options = {}) {
     const key = entry.gameId || entry.gamePath;
     if (pendingLaunches.has(key)) return pendingLaunches.get(key);
-    const pending = gameLifecycle.use(entry, () => withRuntimeCoordinator(runtimeCoordinator, userDataDir, async () => {
+    // Unavailable files fail here with their reason, before any preparation.
+    const pending = GameAvailability.assertGameAvailable(entry, { userDataDir }).then(() =>
+      gameLifecycle.use(entry, () => withRuntimeCoordinator(runtimeCoordinator, userDataDir, async () => {
       try { return await launchEntryOnce(entry, options); }
       catch (error) {
         if (error.code !== "RUNTIME_CHANGED") throw error;
@@ -566,7 +603,7 @@ function createLauncher({
         // Resolve the module's actual selection afresh once, rather than launch stale files.
         return launchEntryOnce(entry, options);
       }
-    })).catch(error => {
+    }))).catch(error => {
       if (isAbortError(error)) return { kind: "cancelled", runtimeId: options.runtimeId || entry.runtimeId };
       throw error;
     });
@@ -594,7 +631,7 @@ function createLauncher({
     }
     if (!canLaunchEntry({ mod, info, entry, runtimeId,
       moduleSettings: resolveModuleSettings(settings, moduleId), context: { app, userDataDir, settings } })) {
-      throw new Error(`Runtime ${runtimeId} cannot launch this game. Inspect its format and runtime settings.`);
+      throw new Error(hostRequirement(mod)?.message || `Runtime ${runtimeId} cannot launch this game. Inspect its format and runtime settings.`);
     }
     const runtimeUseScope = createRuntimeUseScope({ coordinator: runtimeCoordinator, managers: managedRuntimes(), userDataDir, readSettings: loadSettings });
     // Notices from this Play, such as a Steam client that did not sign in in time.
@@ -735,12 +772,34 @@ function createLauncher({
 
   async function runActionOnce(entry, actionId, payload = {}, { settings = loadSettings(), signal, runtimeId } = {}) {
     signal?.throwIfAborted();
+    const moduleId = resolveModuleId(entry), mod = registry.getModule(moduleId), info = registry.getModuleInfo(moduleId);
+    const optionRuntimeId = runtimeId || entry.runtimeId;
+    const schema = resolveRuntimeSettingsSchema(info, optionRuntimeId);
+    if (schema?.fields.some(field => field.optionsAction === actionId)) {
+      const action = mod?.actions?.[actionId];
+      if (typeof action !== "function") throw new Error(`Unknown module action: ${actionId}`);
+      // Runtime setting choices inspect installed runtimes and saved state.
+      // They remain usable without the game's source and never prepare input
+      // or persist an entry merely because a settings window opened.
+      const input = structuredClone(entry);
+      const context = getLaunchContext(input, settings, { signal, runtimeId: optionRuntimeId, toolsButtonVisible: false, cheatsFilePath: "" });
+      return withRuntimeCoordinator(runtimeCoordinator, userDataDir, () => action(input, payload, context));
+    }
+    // Record settings and save tools decide for themselves what they need. Every
+    // other action reads the game's files and explains a missing drive up front.
+    const availability = RECORD_ACTIONS.has(actionId) || saveService.hasAction(actionId) ? null
+      : await GameAvailability.checkGameAvailability(entry, { userDataDir });
+    signal?.throwIfAborted();
     if (actionId === "graphicsInputs") {
       const effective = structuredClone(entry), moduleId = resolveModuleId(effective);
       const mod = registry.getModule(moduleId), info = registry.getModuleInfo(moduleId);
       const runtimeId = resolveRuntimeForEntry(effective.runtimeId, mod, info, effective,
         resolveModuleSettings(settings, moduleId), settings);
       effective.runtimeId = runtimeId;
+      // Effect settings stay editable without the game's files; only the
+      // runtime's declared inputs apply until the files return.
+      if (!availability.available) return { runtimeId, graphicsInputs: require("../modules/shared/runtime/native-graphics-inputs")
+        .withInputs({}, { runtimeId, graphicsInputs: null, declaredArchitecture: info.runtime?.entries?.[runtimeId]?.graphicsArchitecture }) };
       const context = getLaunchContext(effective, settings, { runtimeId });
       const prepared = prepareModuleInput(effective, registry, context);
       const graphicsInputs = require("../modules/shared/runtime/native-graphics-inputs").withInputs(prepared, {
@@ -752,9 +811,12 @@ function createLauncher({
           withGraphicsUpdate: (value, options, publish) => mod.withGraphicsUpdate(value, context, options, publish)
         } : {}) };
     }
+    if (availability && !availability.available) throw GameAvailability.unavailableError(availability);
     if (actionId === "runtimeRecommendation") {
-      // The version the game's own data recommends for its selected runtime.
-      // Modules supply it; installation stays an explicit Runtimes action.
+      // The version, and where variants exist the variant, that the game's own
+      // data recommends for its selected runtime, plus any variant the game
+      // requires whatever is chosen, with its reason. Modules supply them;
+      // installation stays an explicit Runtimes action.
       const effective = structuredClone(entry), moduleId = resolveModuleId(effective);
       const mod = registry.getModule(moduleId), info = registry.getModuleInfo(moduleId);
       const selectedRuntime = resolveRuntimeForEntry(effective.runtimeId, mod, info, effective,
@@ -763,8 +825,10 @@ function createLauncher({
       if (!managerId || typeof mod?.runtimeRecommendation !== "function") return null;
       effective.runtimeId = selectedRuntime;
       const recommendation = await mod.runtimeRecommendation(effective, getLaunchContext(effective, settings, { runtimeId: selectedRuntime }));
-      return typeof recommendation?.version === "string" && recommendation.version
-        ? { managerId, version: recommendation.version, ...(recommendation.sectionId ? { sectionId: recommendation.sectionId } : {}) } : null;
+      const text = key => typeof recommendation?.[key] === "string" && recommendation[key] ? { [key]: recommendation[key] } : {};
+      const recommended = { ...text("version"), ...text("variant"), ...text("requiredVariant") };
+      return Object.keys(recommended).length ? { managerId, ...recommended, ...text("sectionId"),
+        ...(recommended.requiredVariant ? text("requiredVariantReason") : {}) } : null;
     }
     if (actionId === "setGameNotes") {
       const updated = GameStore.setGameNotes(userDataDir, entry.gameId, payload.notes);
@@ -826,7 +890,7 @@ function createLauncher({
 
   return {
     userDataDir, loadSettings, resolveEntry, launchEntry, runAction, getLaunchContext, getGameLaunchContext, persistEntry,
-    resolveModuleNativeLaunchPath, resolveRuntimeForEntry, resolveRuntimeSupportForEntry,
+    resolveModuleNativeLaunchPath, resolveRuntimeForEntry, resolveRuntimeSupportForEntry, resolveEntryChecks,
     getResolvedModuleSettings,
     resolveModuleSettings, resolveToolsButtonVisible, normalizeCheatsForModule, writeCheatsFile,
     runtimeSettingsStore, saveService

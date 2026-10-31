@@ -1,13 +1,17 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
 const Zip = require("../shared/runtime/zip");
-const { downloadToFile, decodeResponseBody } = require("../shared/runtime/download-utils");
 const { runDownloadTask } = require("../shared/runtime/download-manager");
-const Transport = require("../shared/runtime/github-transport");
+const Upstream = require("../shared/runtime/upstream");
 const { snapshotVersionLabel } = require("./plugin-sources");
 const Writable = require("../shared/writable-input");
 const MAX_BYTES = 64 * 1024 * 1024;
 const validId = id => /^custom-[a-f0-9]{24}$/.test(id || "");
 const safeRelative = value => typeof value === "string" && value.length > 0 && !/[\\\0\r\n]/.test(value) && !path.isAbsolute(value) && value.split("/").every(part => part && part !== "." && part !== "..");
+
+// A plugin download with the size and SHA-256 digest its source lists, if any.
+function listed({ url, bytes, sha256 }, name) {
+  return { name, url, ...(bytes != null ? { bytes } : {}), ...(sha256 ? { digest: { algorithm: "sha256", value: sha256 } } : {}) };
+}
 
 function create({ storageRoot, inventory, hash, ...dependencies }) {
   function directory(userDataDir, id) {
@@ -52,19 +56,20 @@ function create({ storageRoot, inventory, hash, ...dependencies }) {
     if (path.isAbsolute(source)) return { local: source, label: path.basename(source).replace(/\.(lua|js|zip)$/i, ""), sourceUrl: null };
     let url;try { url = new URL(source); } catch { throw new Error("A plugin URL or absolute local path is required."); }
     if (!["https:", "http:"].includes(url.protocol) || url.username || url.password) throw new Error("Plugins require an HTTP or HTTPS URL without embedded credentials.");
-    const known = await require("./plugin-sources").resolveKnownSource(source, { signal }, dependencies);
+    const known = await require("./plugin-sources").resolveKnownSource(source, { signal });
     if (known) return known;
     const parts = url.pathname.split("/").filter(Boolean);
     if (url.hostname === "github.com" && parts.length >= 4 && parts[2] === "blob") {
       url = new URL(`https://raw.githubusercontent.com/${parts[0]}/${parts[1]}/${parts.slice(3).join("/")}`);
     } else if (url.hostname === "github.com" && (parts.length === 2 || parts.length >= 4 && parts[2] === "tree")) {
-      const owner = parts[0], repo = parts[1].replace(/\.git$/, ""), ref = parts[2] === "tree" ? parts.slice(3).join("/") : "HEAD";
-      const response = await (dependencies.request || Transport.request)(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits/${encodeURIComponent(ref)}`, { signal, headers: { Accept: "application/vnd.github+json" } });
-      if (response.status !== 200) throw new Error("The GitHub plugin revision could not be resolved. A direct script or ZIP URL can also be used.");
-      const data = JSON.parse(decodeResponseBody(response.body, response.headers).toString("utf8"));
-      const revision = data.sha;
-      if (!/^[a-f0-9]{40}$/.test(revision || "")) throw new Error("The GitHub plugin revision is invalid.");
-      return { url: `https://codeload.github.com/${owner}/${repo}/zip/${revision}`, label: repo, archive: true, sourceUrl: `https://github.com/${owner}/${repo}`, updateSource: source, upstreamRevision: revision, versionLabel: snapshotVersionLabel(data) };
+      const owner = parts[0], repo = parts[1].replace(/\.git$/, ""), branch = parts[2] === "tree" ? parts.slice(3).join("/") : null;
+      // The newest commit of the named branch, or of the default branch.
+      const commits = Upstream.githubCommits({ repository: `${owner}/${repo}`, ...(branch ? { branch } : {}), limit: 1,
+        recognize: commit => ({ label: snapshotVersionLabel(commit), archive: true }) });
+      let row;
+      try { [row] = await commits.discover({ signal }); } catch (error) { if (signal?.aborted) throw error; }
+      if (!row?.files[0]) throw new Error("The GitHub plugin revision could not be resolved. A direct script or ZIP URL can also be used.");
+      return { url: row.files[0].url, label: repo, archive: true, sourceUrl: `https://github.com/${owner}/${repo}`, updateSource: source, upstreamRevision: row.revision, versionLabel: row.label };
     }
     const extension = path.extname(url.pathname).toLowerCase();
     if (![".lua", ".js", ".zip"].includes(extension)) throw new Error("Use a Lua script, JavaScript script, ZIP download or GitHub repository URL.");
@@ -129,13 +134,12 @@ function create({ storageRoot, inventory, hash, ...dependencies }) {
           else throw new Error("Choose a Lua script, JavaScript script, ZIP package or plugin folder.");
         } else {
           const downloaded = path.join(stage, resolved.archive ? "download.zip" : `plugin${resolved.extension}`);
-          await (dependencies.downloadToFile || downloadToFile)(resolved.url, downloaded, { signal: combined, headers: { "User-Agent": "MacLauncher" }, onProgress: progress => {
+          // A published size and digest verify the download; otherwise its hash is recorded.
+          await Upstream.download(listed(resolved, path.basename(downloaded)), downloaded, { signal: combined, headers: { "User-Agent": "MacLauncher" }, onProgress: progress => {
             if (progress.downloaded > MAX_BYTES || progress.total > MAX_BYTES) limit.abort(new Error("The plugin download exceeds its size limit."));
             task.onProgress(progress);
           } });
           if (fs.statSync(downloaded).size > MAX_BYTES) throw new Error("The plugin download exceeds its size limit.");
-          if (resolved.bytes != null && fs.statSync(downloaded).size !== resolved.bytes || resolved.sha256 && hash(downloaded) !== resolved.sha256)
-            throw new Error("The plugin download failed its checksum check.");
           if (resolved.archive) await extract(downloaded, payload, combined);
           else fs.renameSync(downloaded, path.join(payload, `${resolved.label}${resolved.extension}`));
         }
@@ -146,10 +150,12 @@ function create({ storageRoot, inventory, hash, ...dependencies }) {
         for (const asset of resolved.extraAssets || []) {
           if (!safeRelative(asset.relative)) throw new Error("The plugin asset path is invalid.");
           const destination = path.join(packageRoot, asset.relative);fs.mkdirSync(path.dirname(destination), { recursive: true });
-          await (dependencies.downloadToFile || downloadToFile)(asset.url, destination, { signal: combined, headers: { "User-Agent": "MacLauncher" }, onProgress: task.onProgress });
-          if (fs.statSync(destination).size > MAX_BYTES || asset.bytes != null && fs.statSync(destination).size !== asset.bytes || asset.sha256 && hash(destination) !== asset.sha256)
-            throw new Error("The plugin resource download failed its checksum check.");
+          await Upstream.download(listed(asset, path.basename(destination)), destination, { signal: combined, headers: { "User-Agent": "MacLauncher" }, onProgress: task.onProgress });
+          if (fs.statSync(destination).size > MAX_BYTES) throw new Error("The plugin resource exceeds its size limit.");
         }
+        // A known plugin's license notice at the installed revision.
+        if (resolved.licenseRepository && !fs.existsSync(path.join(packageRoot, "LICENSE")))
+          await Upstream.githubLicense({ repository: resolved.licenseRepository, revision: resolved.upstreamRevision, destination: path.join(packageRoot, "LICENSE"), signal: combined, label: resolved.label });
         const scripts = scriptPaths(packageRoot, scriptPath), published = path.join(stage, "published");
         inventory(packageRoot);
         fs.mkdirSync(published);fs.renameSync(packageRoot, path.join(published, "content"));packageRoot = published;

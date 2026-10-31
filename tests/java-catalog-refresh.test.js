@@ -89,6 +89,9 @@ for (const config of cases) {
     await manager.refreshCatalog(options);
     assert.equal(calls, 1, "only a successful matching catalog satisfies the TTL");
     const ready = read();
+    // Each CPU's download list declares the CPU of its builds, so Runtimes offers the other CPU's builds.
+    if (config.section === "17") for (const architecture of ["arm64", "x64"])
+      assert.ok(config.versions.every(item => ready.catalog.architectureCatalogs[architecture].versionRequirements[item].architecture === architecture));
     now += 1000;
     phase = "error";
     await assert.rejects(manager.refreshCatalog({ ...options, force: true, latestOnly: true }), /Release query failed/);
@@ -203,9 +206,9 @@ test("Temurin names the managed provider without changing Java IDs or version gr
   assert.equal(manager.id, "java");
   assert.equal(manager.label, "Temurin");
   assert.equal(manifest.label, "Java");
-  assert.equal(manifest.runtime.managerUi.java.tabLabel, "Temurin");
+  assert.equal(manifest.runtime.managerUi.java.tabLabel, "Java (Temurin)");
   assert.equal(manifest.runtime.manager.java, "java");
   assert.deepEqual(manager.getState({ userDataDir, settings: {} }).sections.map(section => [section.id, section.label]), [
-    ["8", "Java 8"], ["11", "Java 11"], ["17", "Java 17"], ["21", "Java 21"], ["25", "Java 25"], ["vineflower", "Vineflower"]
+    ["8", "Java 8"], ["11", "Java 11"], ["17", "Java 17"], ["21", "Java 21"], ["25", "Java 25"], ["other", "Other"], ["vineflower", "Vineflower"]
   ]);
 });

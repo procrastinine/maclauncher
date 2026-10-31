@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -8,9 +10,9 @@ const { EventEmitter } = require("node:events");
 const { PassThrough } = require("node:stream");
 const { observeGameProcess } = require("../src/core/game-process-events");
 const Provider = require("../src/modules/mac32/provider");
-const Catalog = require("../src/modules/mac32/runtime/catalog");
 const Payload = require("../src/modules/mac32/runtime/payload");
 const { createManager } = require("../src/modules/mac32/runtime/manager");
+const { stoppedDownloads, assertConsentedDiscovery, assertReceiptOffline } = require("./helpers/catalog-only-runtime.cjs");
 
 function temporary(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "mac32-runtime-"));
@@ -37,7 +39,7 @@ function appEntry(root, architecture = "i386") {
   } } };
 }
 function writePayload(root, version = "0.1") {
-  const executable = path.join(root, Payload.executableRelative(version));
+  const executable = path.join(root, `mac32-${version}`, Payload.HOST);
   fs.mkdirSync(path.join(path.dirname(executable), "guest"), { recursive: true });
   fs.writeFileSync(executable, binary("x86_64"), { mode: 0o755 });
   for (const name of Payload.GUEST_LIBRARIES) fs.writeFileSync(path.join(path.dirname(executable), "guest", name), binary("i386", 6));
@@ -51,6 +53,18 @@ function published(version, { sha256 = "a".repeat(64), bytes = 1234 } = {}) {
     asset: { filename, url: `https://github.com/Shagulka/mac32/releases/download/v${version}/${filename}`, sha256, bytes } };
 }
 const host = { systemVersionSync: () => "26.0" };
+const repository = "Shagulka/mac32", releasesUrl = `https://api.github.com/repos/${repository}/releases`;
+function release(version, { digest = true, archive } = {}) {
+  const value = Harness.githubRelease(repository, `v${version}`, [`mac32-${version}-macos.zip`]);
+  if (!digest) delete value.assets[0].digest;
+  if (archive) Object.assign(value.assets[0], { size: archive.length, digest: "sha256:" + crypto.createHash("sha256").update(archive).digest("hex") });
+  return value;
+}
+async function refresh(manager, userDataDir, releases) {
+  Harness.network.routes = Harness.githubRoutes(repository, releases);
+  try { return await manager.refreshCatalog({ userDataDir, force: true }); } finally { Harness.network.routes = null; }
+}
+const queries = () => Harness.network.requests.filter(url => url.startsWith(releasesUrl)).length;
 
 test("mac32 support consumes positive 32-bit bundle evidence and rejects native 64-bit apps", t => {
   const root = temporary(t), entry = appEntry(root);
@@ -65,54 +79,66 @@ test("mac32 support consumes positive 32-bit bundle evidence and rejects native 
   assert.throws(() => Provider.inspectEntry(entry), /32-bit Intel/);
 });
 
-test("mac32 plans an explicit consented download offline and rejects an unsupported host", async t => {
+test("mac32 plans an explicit consented download offline and reads its macOS requirement from the download", async t => {
   const root = temporary(t), entry = appEntry(root);
   entry.runtimeData.mac32.version = "0.1";
-  let network = 0;
-  const manager = createManager({ dependencies: host, discoverCatalog: async () => { network++; return []; } });
+  const before = Harness.network.requests.length;
+  const manager = createManager({ dependencies: host });
   const provider = Provider.createProvider({ manager, platform: "darwin" });
   assert.equal(manager.getState({ userDataDir: root }).catalog.status, "idle");
   assert.deepEqual(await provider.ensureRuntime(entry, { settings: {}, userDataDir: root }), {
     managerId: "mac32", version: "0.1", discoveryRequired: true, requiresDownload: true, installOptions: {}
   });
-  assert.equal(network, 0);
-  const old = createManager({ dependencies: { systemVersionSync: () => "15.0" }, discoverCatalog: async () => assert.fail("No startup query") });
-  await assert.rejects(Provider.createProvider({ manager: old }).ensureRuntime(entry, { settings: {}, userDataDir: root }), /requires macOS 26\.0/);
+  const old = createManager({ dependencies: { systemVersionSync: () => "15.0" } });
+  assert.equal((await Provider.createProvider({ manager: old, platform: "darwin" }).ensureRuntime(entry, { settings: {}, userDataDir: root })).requiresDownload, true);
+  assert.equal(Harness.network.requests.length, before, "No startup query");
+  const archive = temporary(t); writePayload(archive);
+  assert.throws(() => Payload.preparePayload({ unpacked: archive, pin: published("0.1") }, { systemVersionSync: () => "15.0" }), /requires macOS 26\.0/);
   assert.equal(manager.resolveSelection({ runtimeData: { mac32: { version: "unknown" } } }, {}, root).ready, false);
 });
 
 test("mac32 Runtimes stays empty before an explicit refreshed catalog", async t => {
-  const root = temporary(t), next = published("0.2");
-  let queries = 0;
-  const manager = createManager({ dependencies: host, discoverCatalog: async () => { queries++; return [next]; } });
+  const root = temporary(t), start = queries();
+  const manager = createManager({ dependencies: host });
   const state = manager.getState({ userDataDir: root });
-  assert.equal(queries, 0); assert.equal(state.catalog.status, "idle"); assert.equal(state.catalog.fetchedAt, null);
+  assert.equal(queries(), start); assert.equal(state.catalog.status, "idle"); assert.equal(state.catalog.fetchedAt, null);
   assert.deepEqual(state.catalog.versions, []); assert.deepEqual(state.catalog.installableVersions, []);
-  assert.equal(state.catalog.installable, false); assert.equal(state.catalog.recommendedVersion, null);
+  assert.equal(state.catalog.installable, false); assert.equal(state.catalog.recommendedVersion, undefined, "No manager recommendation");
   assert.equal(state.versionLabels["0.1"], undefined);
   assert.equal(state.sections[0].catalog.installable, false); assert.deepEqual(state.sections[0].catalog.versions, []);
-  const refreshed = await manager.refreshCatalog({ userDataDir: root, force: true });
-  assert.equal(queries, 1); assert.equal(refreshed.status, "success"); assert.ok(refreshed.fetchedAt);
+  const refreshed = await refresh(manager, root, [release("0.2")]);
+  assert.equal(queries(), start + 1); assert.equal(refreshed.status, "success"); assert.ok(refreshed.fetchedAt);
   assert.deepEqual(refreshed.versions, ["0.2"]); assert.deepEqual(refreshed.installableVersions, ["0.2"]);
-  assert.equal(refreshed.recommendedVersion, null);
-  const old = createManager({ dependencies: { systemVersionSync: () => "15.0" }, discoverCatalog: async () => assert.fail("Offline") });
+  assert.equal(refreshed.recommendedVersion, undefined);
+  const old = createManager({ dependencies: { systemVersionSync: () => "15.0" } });
   const unavailable = old.getState({ userDataDir: temporary(t) });
   assert.deepEqual(unavailable.catalog.versions, []); assert.equal(unavailable.catalog.installable, false);
-  assert.deepEqual(unavailable.catalog.installableVersions, []); assert.match(unavailable.catalog.installReason, /requires macOS 26\.0/);
+  assert.deepEqual(unavailable.catalog.installableVersions, []); assert.match(unavailable.catalog.installReason, /No compatible mac32 download/);
 });
 
-test("mac32 discovers bounded exact release archives and requires publisher SHA-256", async () => {
-  const release = version => ({ tag_name: "v" + version, html_url: "https://github.com/Shagulka/mac32/releases/tag/v" + version,
-    assets: [{ name: `mac32-${version}-macos.zip`, browser_download_url: `https://github.com/Shagulka/mac32/releases/download/v${version}/mac32-${version}-macos.zip`,
-      digest: "sha256:" + "a".repeat(64), size: 1234, id: 12 }] });
-  const absentDigest = release("0.3"); delete absentDigest.assets[0].digest;
-  const wrongUrl = release("0.4"); wrongUrl.assets[0].browser_download_url = "https://example.com/mac32.zip";
-  const dependencies = { fetchGithubReleases: async options => { assert.equal(options.maxPages, 5); return [release("0.2"), absentDigest, wrongUrl]; },
-    fetchGithubTags: async () => [{ name: "v0.2", commit: { sha: "b".repeat(40) } }] };
-  const entries = await Catalog.createDiscovery(dependencies)();
-  assert.equal(entries.length, 1); assert.equal(entries[0].version, "0.2");
-  assert.equal(entries[0].minimumMacOS, "26.0");
-  assert.equal(entries[0].upstreamRevision, "b".repeat(40)); assert.equal(entries[0].asset.sha256, "a".repeat(64));
+test("mac32 discovers inside a consented install and keeps earlier installations offline", { skip: process.platform !== "darwin" }, async t => {
+  const downloads = stoppedDownloads(), releases = [release("0.2"), release("0.1")], start = queries();
+  const manager = createManager({ dependencies: { ...host, downloadToFile: downloads.downloadToFile } });
+  Harness.network.routes = Harness.githubRoutes(repository, releases);
+  t.after(() => { Harness.network.routes = null; });
+  await assertConsentedDiscovery({ manager, userDataDir: temporary(t), discoveries: () => queries() - start, downloads,
+    newestUrl: releases[0].assets[0].browser_download_url });
+  Harness.network.routes = null;
+  assertReceiptOffline({ manager: createManager({ dependencies: host }), userDataDir: temporary(t),
+    pin: { ...published("0.1", { sha256: "66c3205ad100d76ee4db5fb1cc69ffe910bcd5a384bb0a3cab3ebeef05af3ef2", bytes: 660386 }),
+      upstreamRevision: "dcfed5b9ad1ca1356bddd39ac6a26e564d536c28" } });
+});
+
+test("mac32 lists Intel Mac release archives with the publisher's digest, or a recorded one", async t => {
+  const userDataDir = temporary(t), manager = createManager({ dependencies: host });
+  const arm = Harness.githubRelease(repository, "v0.5", ["mac32-0.5-macos-arm64.zip"]);
+  await refresh(manager, userDataDir, [arm, release("0.4.1"), release("0.3", { digest: false }), release("0.2")]);
+  const entries = manager.core.listDiscoveredCatalog({ userDataDir }), row = version => entries.find(item => item.version === version);
+  assert.deepEqual(entries.map(item => item.version), ["0.5", "0.4.1", "0.3", "0.2"]);
+  assert.match(row("0.5").installReason, /no Intel Mac download/);
+  assert.equal(row("0.2").minimumMacOS, undefined, "The host executable states its requirement");
+  assert.match(row("0.2").upstreamRevision, /^[a-f0-9]{40}$/); assert.match(row("0.2").asset.sha256, /^[a-f0-9]{64}$/);
+  assert.equal(row("0.3").asset.integrity, "recorded-local");
 });
 
 test("mac32 payload validates the native host, four guest libraries and retained licenses", t => {
@@ -129,7 +155,9 @@ test("mac32 payload validates the native host, four guest libraries and retained
   assert.equal(resolve(install, { verification: "status" }).install, null);
   assert.equal(resolve(install).install, null);
   fs.writeFileSync(library, binary("i386", 6)); fs.rmSync(path.join(root, "mac32-0.1", "NOTICE"));
-  assert.throws(() => Payload.preparePayload({ unpacked: root, pin }, host), /ENOENT/);
+  assert.equal(Payload.preparePayload({ unpacked: root, pin }, host).files.length, 6);
+  fs.rmSync(path.join(root, "mac32-0.1", "COPYING"));
+  assert.throws(() => Payload.preparePayload({ unpacked: root, pin }, host), /license files/);
 });
 
 test("mac32 rejects guest-library aliases and non-Intel native hosts", t => {
@@ -281,11 +309,12 @@ test("mac32 refuses private app data paths redirected inside the original bundle
 
 test("mac32 managed install verifies archives, preserves versions and removes only owned runtime files", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t), archive = Buffer.from("mac32 managed test archive"), sha256 = crypto.createHash("sha256").update(archive).digest("hex");
-  const pin = published("0.1", { sha256, bytes: archive.length });
   let downloads = 0;
-  const manager = createManager({ catalog: [pin], discoverCatalog: async () => [pin], dependencies: { ...host,
+  const manager = createManager({ dependencies: { ...host,
     downloadToFile: async (_url, destination) => { downloads++; fs.writeFileSync(destination, archive); },
     extractArchive: async (_archive, destination) => writePayload(destination) } });
+  await refresh(manager, root, [release("0.1", { archive })]);
+  assert.equal(manager.core.listDiscoveredCatalog({ userDataDir: root })[0].asset.sha256, sha256);
   const installed = await manager.installRuntime({ userDataDir: root, version: "0.1" });
   assert.equal(installed.needsRosetta, process.arch === "arm64");
   assert.equal(manager.resolveSelection({}, {}, root).ready, true);

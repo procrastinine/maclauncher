@@ -15,7 +15,7 @@ test("launcher previews bound image size, preserve aspect ratio and retain small
       resize(options) { resizes += 1; assert.equal(options.quality, "best"); return image(options.width, options.height); },
       toDataURL() { encoded = [w, h]; return `data:image/png;base64,${w}x${h}`; } });
     const context = { fs: { statSync: () => ({ isFile: () => true, mtimeMs: 1, ctimeMs: 1, ino: 1, size: 100 }) },
-      nativeImage: { createFromPath: () => { loads += 1; return image(width, height); } }, iconDataUrlCache: new Map() };
+      nativeImage: { createFromPath: () => { loads += 1; return image(width, height); } }, iconDataUrlCache: new Map(), gameRecordsCache: null };
     vm.createContext(context); vm.runInContext(iconFunction, context);
     const first = context.iconUrlForPath("/original/icon.png");
     assert.deepEqual(encoded, expected);
@@ -27,7 +27,7 @@ test("launcher previews bound image size, preserve aspect ratio and retain small
 
 test("launcher icon previews release old paths and keep recently used entries", () => {
   const cache = new Map(); let missing = false;
-  const context = { iconDataUrlCache: cache,
+  const context = { iconDataUrlCache: cache, gameRecordsCache: null,
     fs: { statSync: () => { if (missing) throw Error("missing"); return { isFile: () => true, mtimeMs: 1, ctimeMs: 1, ino: 1, size: 100 }; } },
     nativeImage: { createFromPath: file => ({ isEmpty: () => false, getSize: () => ({ width: 64, height: 64 }), toDataURL: () => file }) } };
   vm.createContext(context); vm.runInContext(iconFunction, context);
@@ -37,4 +37,15 @@ test("launcher icon previews release old paths and keep recently used entries", 
   for (let i = 257; i < 1000; i++) context.iconUrlForPath("/icon/" + i);
   assert.equal(cache.size, 256);
   missing = true; assert.equal(context.iconUrlForPath("/icon/999"), null); assert.equal(cache.has("/icon/999"), false);
+});
+
+test("a large library keeps every game's icon preview between state rebuilds", () => {
+  const cache = new Map(); let loads = 0;
+  const context = { iconDataUrlCache: cache, gameRecordsCache: Array.from({ length: 600 }, (_, index) => ({ gameId: `game-${index}` })),
+    fs: { statSync: () => ({ isFile: () => true, mtimeMs: 1, ctimeMs: 1, ino: 1, size: 100 }) },
+    nativeImage: { createFromPath: file => { loads += 1; return { isEmpty: () => false, getSize: () => ({ width: 64, height: 64 }), toDataURL: () => file }; } } };
+  vm.createContext(context); vm.runInContext(iconFunction, context);
+  for (let pass = 0; pass < 2; pass++) for (let i = 0; i < 600; i++) context.iconUrlForPath("/icon/" + i);
+  assert.equal(loads, 600, "A second rebuild reuses every preview");
+  assert.equal(cache.size, 600);
 });

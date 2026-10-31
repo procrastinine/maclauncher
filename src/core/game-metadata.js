@@ -12,12 +12,15 @@ const { mergeDetectedEntry, detectedNativeRuntime } = require("./launch-utils");
 const { hydrateGameSaveLocations } = require("./save-locations");
 const { resolveModuleId, mergeSettingsChanges } = require("./launcher");
 const Installers = require("../modules/shared/installers");
+const GameAvailability = require("./game-availability");
+const Relocation = require("./game-relocation");
+const GameCommands = require("../main/game-command");
 const { prepareModuleInput, atomicWrite, assertOwnDirectory } = require("../modules/shared/writable-input");
 const { throwIfAborted, isAbortError } = require("../modules/shared/runtime/download-utils");
 
 const hash = value => crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
 function sourceRoots(entry) {
-  return [...new Set([entry.importPath, entry.gamePath, entry.contentRootDir, entry.nativeAppPath,
+  return [...new Set([entry.importPath, entry.gamePath, entry.contentRootDir, entry.releaseRootDir, entry.nativeAppPath,
     entry.containerData?.extractedRoot && path.dirname(path.dirname(entry.containerData.extractedRoot)),
     entry.moduleData?.extractedReady && entry.moduleData?.extractedRoot].filter(value =>
     typeof value === "string" && path.isAbsolute(value)).map(value => {
@@ -39,7 +42,7 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
   }
   // Source metadata changes in a development checkout invalidate old analysis.
   const sourceFiles = [__filename, require.resolve("./game-icons"), require.resolve("./icon-utils"), require.resolve("./icon-extraction"),
-    require.resolve("./save-locations"), require.resolve("./game-name"), require.resolve("../modules/registry"), require.resolve("../modules/detection"),
+    require.resolve("./save-locations"), require.resolve("./game-name"), require.resolve("../modules/registry"), require.resolve("../modules/detection"), require.resolve("../modules/shared/web/release-root"),
     require.resolve("../modules/shared/writable-input"),
     ...["index.js", "inno.js", "inno-header.js", "runtime/innoextract-manager.js"].map(name => path.join(__dirname, "../modules/shared/installers", name)),
     ...registry.listModuleIds().flatMap(id => {
@@ -89,7 +92,7 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
       }
     });
   }
-  async function refreshEntryOnce(entry, settings, { force = false, findExisting, importing = false, signal, onProgress } = {}) {
+  async function refreshEntryOnce(entry, settings, { force = false, findExisting, relocate, previous, importing = false, signal, onProgress } = {}) {
     const cache = readCache(entry), cacheKey = key(entry, settings);
     const previousName = cache?.automaticName || cache?.facts?.name || cache?.detected?.name;
     const customName = entry.name && previousName && entry.name !== previousName ? entry.name : null;
@@ -97,7 +100,7 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
       const merged = mergeDetectedEntry(entry, cache.detected, { now: entry.lastPlayedAt || 0 });
       let result = { ...merged, ...cache.facts, moduleData: { ...merged.moduleData, ...cache.moduleDataPatch } };
       const mod = registry.getModule(resolveModuleId(result));
-      if (typeof mod?.mergeEntry === "function") result = mod.mergeEntry(entry, result, settings);
+      if (typeof mod?.mergeEntry === "function") result = mod.mergeEntry(entry, result, settings, { userDataDir });
       if (customName) result.name = customName;
       prepareModuleInput(result, registry, { settings, userDataDir, logger, app, ui, readOnly: true, signal });
       return result;
@@ -119,11 +122,12 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
       const detected = await registry.detectGameAsync(detectPath, { workerMode: "inline" });
       const existing = findExisting?.(detected);
       if (existing) entry = { ...existing, importPath: existing.importPath || originalPath, containerData: entry.containerData || existing.containerData };
+      if (relocate) entry = relocate(entry, detected);
       await gameLifecycle.claim(entry);
       let merged = mergeDetectedEntry(entry, detected, { now: entry.lastPlayedAt || 0 });
       merged.moduleId = resolveModuleId(merged);
       const mod = registry.getModule(merged.moduleId);
-      if (typeof mod?.mergeEntry === "function") merged = mod.mergeEntry(existing || (importing ? null : entry), merged, settings);
+      if (typeof mod?.mergeEntry === "function") merged = mod.mergeEntry(existing || (importing ? null : entry), merged, settings, { userDataDir });
       if (importing && !existing && (merged.nativeAppPath || /\.app$/i.test(merged.gamePath || ""))) {
         const native = detectedNativeRuntime(null, detected, registry.getModuleInfo(merged.moduleId), settings?.modules?.[merged.moduleId]);
         if (native) merged.runtimeId = native;
@@ -135,7 +139,7 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
       catch (error) { throwIfAborted(signal); if (isAbortError(error)) throw error; debug("[metadata] module lookup", error); }
       if (metadata) {
         merged = { ...merged, ...metadata, moduleData: { ...merged.moduleData, ...metadata.moduleData } };
-        if (typeof mod?.mergeEntry === "function") merged = mod.mergeEntry(existing || (importing ? null : entry), merged, settings);
+        if (typeof mod?.mergeEntry === "function") merged = mod.mergeEntry(existing || (importing ? null : entry), merged, settings, { userDataDir });
       }
       merged = applyGameName(merged, { metadata: Boolean(metadata?.name) });
       const automaticName = applyGameName({ ...merged, name: metadata?.name || detected.name }, { metadata: Boolean(metadata?.name) }).name;
@@ -155,11 +159,18 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
       catch (error) { throwIfAborted(signal); if (isAbortError(error)) throw error; debug("[metadata] cache write", error); }
     }
     const current = entry.gameId && GameStore.readGameRecord(userDataDir, entry.gameId);
-    const result = current ? mergeSettingsChanges(entry, active, current) : active;
+    // A relocated game's changes are measured from the record it replaces.
+    const result = current ? mergeSettingsChanges(previous || entry, active, current) : active;
     if (current && JSON.stringify(current) !== JSON.stringify(result)) GameStore.writeGameRecord(userDataDir, result);
     return result;
   }
-  function refreshEntry(entry, settings, options) {
+  async function refreshEntry(entry, settings, options) {
+    // A library game whose drive or folder is missing keeps its stored facts.
+    // Detection never runs against the absent path, so it cannot re-detect it.
+    if (options?.importing !== true) {
+      const availability = options?.availability || await GameAvailability.checkGameAvailability(entry, { userDataDir });
+      if (!availability.available) throw GameAvailability.unavailableError(availability);
+    }
     return gameLifecycle.use(entry, () => refreshEntryOnce(entry, settings, options));
   }
   async function importEntry(inputPath, settings, options = {}) {
@@ -169,7 +180,47 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
     const entry = { gameId: Installers.findCachedInputGameId(userDataDir, inputPath) || GameData.createGameId(), gamePath: inputPath, importPath: inputPath };
     return refreshEntry(entry, settings, { ...options, importing: true, findExisting: detected => games.find(game => game.gamePath === detected.gamePath) });
   }
-  return { refreshEntry, importEntry };
+  // Locate… runs the import's detection at the chosen location. A result of
+  // the game's own type replaces its paths and detected data, while its game
+  // ID, settings and launcher data stay.
+  async function relocateEntry(entry, inputPath, settings, options = {}) {
+    const previous = entry?.gameId && GameStore.readGameRecord(userDataDir, entry.gameId);
+    if (!previous) throw Object.assign(new Error("Game not found in library."), { code: "GAME_NOT_FOUND" });
+    const target = Relocation.target(previous, inputPath, { userDataDir });
+    return gameLifecycle.use(previous, async () => {
+      let records, result, copies;
+      try {
+        let base = previous;
+        // Container readers validate source receipts before engine detection.
+        // Move those references first, then restore them if detection refuses
+        // the selected source. Byte verification remains the reader's job; a
+        // copy it unpacks for the selected source is removed on refusal.
+        if (target.field === "importPath") {
+          copies = Relocation.containerCopies(userDataDir, previous.gameId);
+          const moves = Relocation.sourceMoves(previous, target);
+          records = Relocation.rebaseStoredRecords({ userDataDir, gameId: previous.gameId, moves });
+          base = moves.reduce((value, move) => Relocation.rebaseRecord(value, move.from, move.to), previous);
+        }
+        result = await refreshEntryOnce({ ...base, ...target.paths }, settings, { ...options, force: true, previous,
+          relocate: (base, detected) => {
+            const adopted = Relocation.adopt(base, detected, { ...target, previous, registry, games: GameStore.loadGames(userDataDir) });
+            records ||= Relocation.rebaseStoredRecords({ userDataDir, gameId: previous.gameId, from: target.from, to: adopted[target.field] });
+            return GameCommands.rememberGameCommandPaths(adopted, previous);
+          } });
+      } catch (error) {
+        records?.restore();
+        if (copies) Relocation.removeAddedContainerCopies(userDataDir, previous.gameId, copies);
+        throw error;
+      }
+      if (!GameStore.readGameRecord(userDataDir, previous.gameId)) throw Object.assign(new Error("Game not found in library."), { code: "GAME_NOT_FOUND" });
+      let desktopDir;
+      try { desktopDir = app?.getPath?.("desktop"); } catch {}
+      GameCommands.relocateGameCommands({ userDataDir, gameId: previous.gameId, from: target.from, to: result[target.field], desktopDir });
+      records?.commit();
+      return result;
+    });
+  }
+  return { refreshEntry, importEntry, relocateEntry };
 }
 
 module.exports = { createGameMetadataService, sourceRoots };

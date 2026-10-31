@@ -46,9 +46,9 @@ for (const id of ["bgi", "catsystem2", "haxe"]) {
   });
 
   test(`${id} data without a Windows executable remains inspectable`, t => {
-    const { root, launcher, entry } = fixture(t), mod = Modules.getModule(id), info = mod.manifest;
+    const { root, launcher } = fixture(t), mod = Modules.getModule(id), info = mod.manifest;
     fs.rmSync(path.join(root, "Game.exe"));
-    entry.moduleId = id;
+    const entry = { ...Detection.decorateEntry({ gameId: "game", gamePath: root, contentRootDir: root }), moduleId: id };
     const context = { userDataDir: root, settings: {} };
     const selected = launcher.resolveRuntimeForEntry(info.runtime.default, mod, info, entry, {}, {});
     assert.equal(canLaunchEntry({ mod, info, entry, runtimeId: selected, context }), false);

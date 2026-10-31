@@ -2,13 +2,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createPinnedNativeManager } = require('../../shared/runtime/pinned-native-manager');
 const Native = require('../../shared/runtime/local-native');
-const { DEFAULT_ENTRY, DEFAULT_VERSION, SOURCE_URL, createDiscovery } = require('./catalog');
-const { extractDmg } = require('./dmg');
+const Catalog = require('./catalog');
+const { extractPayload } = require('../../shared/runtime/release-files');
 const Signing = require('./signing');
 
-function createManager({ discoverCatalog = createDiscovery(), dependencies = {} } = {}) {
+function createManager({ dependencies = {} } = {}) {
   const verify = Signing.createVerifier();
-  const base = createPinnedNativeManager({ id:'scummvm',label:'ScummVM',sourceUrl:SOURCE_URL,catalog:[DEFAULT_ENTRY],discoverCatalog,resolveExecutable:root=>path.join(root,'ScummVM.app'),
+  const base = createPinnedNativeManager({ id:'scummvm',label:'ScummVM',sourceUrl:Catalog.SOURCE_URL,upstream:Catalog.source,resolveExecutable:root=>path.join(root,'ScummVM.app'),
     prepareInstall:options=>Signing.prepareInstall(options),
     inspectRuntime(options) {
       const native = Native.resolveLocalRuntime(options), app = Signing.appRoot(native.executablePath);
@@ -21,7 +21,8 @@ function createManager({ discoverCatalog = createDiscovery(), dependencies = {} 
       }
       return native;
     },
-    dependencies:{extractArchive:extractDmg,...dependencies} });
+    // The app is installed at the top level whichever archive format and folder a release uses.
+    dependencies:{extractArchive:(archive,destination,signal)=>extractPayload(archive,destination,signal,{payloadName:'ScummVM.app',project:'ScummVM'}),...dependencies} });
   function checked(install, options) {
     if (!install) return null;
     try { return verify(install,options); } catch { return null; }

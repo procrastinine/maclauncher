@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -8,6 +10,7 @@ const Detect = require("../src/modules/siglus/detect");
 const RLVM = require("../src/modules/siglus/rlvm-launch");
 const Catalog = require("../src/modules/siglus/runtime/rlvm-catalog");
 const Manager = require("../src/modules/siglus/runtime/rlvm-manager");
+const { stoppedDownloads, assertConsentedDiscovery, assertReceiptOffline } = require("./helpers/catalog-only-runtime.cjs");
 
 function fixture(t, { folder = "", registry = "Publisher\\Story", compiler = 10002 } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-rlvm-"));
@@ -32,7 +35,8 @@ test("RLVM is a RealLive archive alternative and preserves the existing default"
   for (const data of [{ engineKind: "siglus" }, { engineKind: "avg32" }, { engineKind: "reallive", format: "RealLive loose scenario" }])
     assert.deepEqual(Module.filterRuntimeSupport({ moduleData: data }, supported), ["siglus"]);
   const request = Module.ensureRuntime(entry, context);
-  assert.equal(request.managerId, "rlvm"); assert.equal(request.version, Catalog.VERSION); assert.equal(request.requiresDownload, true);
+  assert.equal(request.managerId, "rlvm"); assert.equal(request.version, null); assert.equal(request.discoveryRequired, true);
+  assert.equal(request.requiresDownload, true);
   assert.equal(Module.ensureRuntime(entry, { ...context, runtimeId: "siglus" }).managerId, "siglus");
 });
 test("RLVM preserves original assets and routes per-game saves separately from siglus_rs", t => {
@@ -87,39 +91,66 @@ test("runtime switching refreshes the persisted save folder before another launc
   assert.equal(Store.readGameRecord(context.userDataDir, entry.gameId).defaultSaveDir, siglus.defaultSaveDir);
   assert(events.some(event => event.type === "entryChanged" && event.value.gameId === entry.gameId));
 });
+const repository = "eglaysher/rlvm", releasesUrl = `https://api.github.com/repos/${repository}/releases`;
+const rlvmRelease = (version, names = [`rlvm_${version}.dmg`]) => Harness.githubRelease(repository, `release-${version}`, names);
+async function discoverRlvm(releases) {
+  Harness.network.routes = Harness.githubRoutes(repository, releases);
+  try { return await Catalog.source.discover({}); } finally { Harness.network.routes = null; }
+}
 test("RLVM discovery retains older history without offering incompatible Mac downloads", async () => {
-  const releases = ["0.14", "0.13.1"].map(version => ({ tag_name: `release-${version}`, assets: [{ name: `rlvm_${version}.dmg`, id: 258884,
-    browser_download_url: `${Catalog.RELEASES}/download/release-${version}/rlvm_${version}.dmg`, digest: "sha256:" + "b".repeat(64) }] }));
-  const dependencies = { fetchGithubReleases: async () => releases,
-    fetchGithubTags: async () => releases.map(release => ({ name: release.tag_name, commit: { sha: "a".repeat(40) } })) };
-  const entries = await Catalog.createDiscovery({ dependencies })({});
-  assert.deepEqual(entries.map(entry => entry.version), ["0.14", "0.13.1"]);
-  assert.equal(entries[0].asset.sha256, Catalog.ASSET.sha256);
-  assert.equal(entries[0].asset.integritySource, "pinned-release-sha256");
-  assert.equal(entries[1].asset, undefined);
-  assert.match(entries[1].installReason, /0\.14 or later/);
-  releases[0].assets[0].browser_download_url = "https://example.com/unrelated.dmg";
-  await assert.rejects(Catalog.createDiscovery({ dependencies })({}), /unexpected source/);
+  const releases = ["0.15", "0.14", "0.13.1"].map(version => rlvmRelease(version));
+  delete releases[1].assets[0].digest;
+  const entries = await discoverRlvm(releases);
+  assert.deepEqual(entries.map(entry => entry.version), ["0.15", "0.14", "0.13.1"]);
+  assert.equal(entries[0].files[0].digest.value, releases[0].assets[0].digest.slice(7), "A publisher digest verifies a newer release");
+  assert.equal(entries[1].files[0].digest, undefined, "A release without a published digest records its own at installation");
+  assert.deepEqual(entries[2].files, []);
+  assert.match(entries[2].installReason, /0\.14 or later/);
+  releases[0] = rlvmRelease("0.15", ["rlvm-0.15-macos-universal.zip", "rlvm-0.15-linux-x86_64.tar.gz"]);
+  const renamed = (await discoverRlvm(releases))[0];
+  assert.deepEqual(renamed.files.map(file => file.name), ["rlvm-0.15-macos-universal.zip"], "A renamed Mac archive is followed");
 });
 test("RLVM manager stays offline and preserves explicit per-game version selection", () => {
-  const manager = Manager.createManager({ dependencies: { github: { fetchGithubReleases: () => { throw Error("unexpected network"); } } } });
+  const manager = Manager.createManager(), before = Harness.network.requests.length;
   assert.deepEqual(manager.getState({}).catalog.versions, []);
-  assert.equal(manager.resolveSelection({}, {}, undefined).version, Catalog.VERSION);
+  const automatic = manager.resolveSelection({}, {}, undefined);
+  assert.equal(automatic.version, null); assert.equal(automatic.discoveryRequired, true);
   assert.equal(manager.resolveSelection({ runtimeData: { rlvm: { version: "0.15" } } }, {}, undefined).version, "0.15");
+  assert.equal(Harness.network.requests.length, before);
 });
-test("RLVM disk image extraction always detaches before removing the mount directory", async t => {
+test("RLVM discovers inside a consented install and keeps earlier installations offline", { skip: process.platform !== "darwin" }, async t => {
+  const { root } = fixture(t), downloads = stoppedDownloads(), releases = ["0.15", "0.14"].map(version => rlvmRelease(version));
+  const requests = () => Harness.network.requests.filter(url => url.startsWith(releasesUrl)).length, start = requests();
+  const manager = Manager.createManager({ dependencies: { downloadToFile: downloads.downloadToFile } });
+  Harness.network.routes = Harness.githubRoutes(repository, releases);
+  t.after(() => { Harness.network.routes = null; });
+  await assertConsentedDiscovery({ manager, userDataDir: path.join(root, "consent"), discoveries: () => requests() - start, downloads,
+    newestUrl: releases[0].assets[0].browser_download_url });
+  Harness.network.routes = null;
+  assertReceiptOffline({ manager: Manager.createManager(),
+    userDataDir: path.join(root, "offline"), pin: { version: "0.14", upstreamRevision: "a85b19c2bce61f9b1328220148aeb13b62929eea", upstreamTag: "release-0.14",
+      minimumMacOS: "13.0", asset: { filename: "rlvm_0.14.dmg", assetId: 258884, size: 2024263, url: `${Catalog.RELEASES}/download/release-0.14/rlvm_0.14.dmg`,
+        sha256: "b6e206bb35a0824a60588e461d6c9334556f11ebff00eda89ed36228c925e8b4" } } });
+});
+test("RLVM disk images install the volume's files, wherever the app sits, and always detach", async t => {
   const { root } = fixture(t), destination = path.join(root, "unpacked"), calls = [];
   fs.mkdirSync(destination);
   const archive=path.join(root,"runtime.dmg");fs.writeFileSync(archive,"sealed disk image");
-  await Manager.extractDiskImage(archive, destination, undefined, async (_cmd, args) => {
-    calls.push(args[0]);
-    const mount = args[0] === "attach" ? args[4] : args[1];
-    if (args[0] === "attach") { fs.mkdirSync(path.join(mount, "rlvm.app")); fs.writeFileSync(path.join(mount, "rlvm.app", "payload"), "original"); }
-    else fs.rmSync(path.join(mount, "rlvm.app"), { recursive: true });
-  });
-  assert.deepEqual(calls, ["attach", "detach"]);
-  assert.equal(fs.readFileSync(path.join(destination, "rlvm.app", "payload"), "utf8"), "original");
-  assert(!fs.readdirSync(root).some(name => name.startsWith(".mount-")));
+  let mount;
+  await require("../src/modules/shared/runtime/dmg").extractDmg(archive, destination, undefined, { run: async (command, args) => {
+    calls.push(path.basename(command) === "ditto" ? "copy" : `${path.basename(command)} ${args.includes("attach") ? "attach" : args[0]}`);
+    if (args.includes("attach")) {
+      mount = args[args.indexOf("--mountPoint") + 1];
+      fs.mkdirSync(path.join(mount, "RLVM 0.15", "rlvm.app", "Contents", "MacOS"), { recursive: true });
+      fs.writeFileSync(path.join(mount, "RLVM 0.15", "rlvm.app", "Contents", "MacOS", "rlvm"), "original");
+      fs.symlinkSync("/Applications", path.join(mount, "Applications")); fs.writeFileSync(path.join(mount, ".DS_Store"), "layout");
+    } else if (args[0] === "eject") fs.rmSync(path.join(mount, "RLVM 0.15"), { recursive: true });
+    else fs.cpSync(args[0], args[1], { recursive: true });
+  } });
+  assert.deepEqual(calls, ["diskutil attach", "copy", "diskutil eject"]);
+  assert.deepEqual(fs.readdirSync(destination), ["RLVM 0.15"]);
+  assert.equal(fs.readFileSync(Manager.executable(destination), "utf8"), "original");
+  assert.equal(fs.existsSync(mount), false);
 });
 
 test("RLVM obtains the adapter from a selected managed package",()=>{assert.equal(Manager.adapterResource,undefined);});

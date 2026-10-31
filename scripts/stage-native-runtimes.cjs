@@ -8,7 +8,6 @@ const { isDeepStrictEqual } = require("node:util");
 const B = require("../src/modules/shared/runtime/bundled-native");
 const Native = require("../src/modules/shared/runtime/local-native");
 const { validateSourceScope, validatePinnedSource, hashPinnedFiles } = require("../src/modules/shared/runtime/pinned-native-build");
-const { createPinnedNativeManager } = require("../src/modules/shared/runtime/pinned-native-manager");
 const { requiresDistribution } = require("./distribution-model.cjs");
 
 const { macho, loadCommands, parseLinkedLibraries, links, libraryIds, thinStagedMachO, resolveLink, copyTree, formulaRoot, assertPublicMetadata, publicProvenance, sanitizeHomebrewReceipt, addDependencyNotices } = require("./native-binary-tools.cjs");
@@ -51,7 +50,10 @@ function resolveStagingPin(input, { arch = process.arch, stagingCatalog, manager
     }
     if (!targets.size) throw new Error("Staging catalog needs supported artifact architectures.");
     const existingPins = known.core.catalog || known.core.listCatalog?.() || [];
+    const candidateVersions = new Set();
     for (const pin of entry.catalog) {
+      if (candidateVersions.has(pin?.version) || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(pin?.version || "")) throw new Error("Staging source pins need unique safe versions.");
+      candidateVersions.add(pin?.version);
       additionalSourceIdentities(pin.additionalSources);
       validateSourceScope(pin.sourceScope);
       if (existingPins.some(current => current.version === pin?.version)) throw new Error("Staging catalogs cannot override an existing runtime version.");
@@ -64,10 +66,10 @@ function resolveStagingPin(input, { arch = process.arch, stagingCatalog, manager
         throw new Error("Staging source pins need exact revision, source hash, macOS minimum and supported host architectures.");
       }
     }
-    // The same safe-version, asset and duplicate validation used by installed
-    // runtime catalogs applies before any candidate source or binary is read.
-    const validated = createPinnedNativeManager({ id: entry.id, label: known.label || entry.id, catalog: entry.catalog });
-    candidates.set(entry.id, { catalog: validated.core.catalog, targets });
+    // Staging pins are inputs to included packages, not downloadable releases.
+    // The checks above cover their versions, revisions and assets before any
+    // candidate source or binary is read.
+    candidates.set(entry.id, { catalog: entry.catalog.map(pin => Object.freeze({ ...pin })), targets });
   }
   const selected = candidates.get(input.managerId);
   const pin = selected?.catalog.find(entry => entry.version === input.version);

@@ -17,6 +17,21 @@ function catalog(...packages) {
   return { schemaVersion: 2, projectId: options.projectId, updatePolicy: "manual", packages };
 }
 
+test("catalog source pointers record differing producer and upstream observations", () => {
+  const revision = "a".repeat(40);
+  const row = record();
+  assert.equal(Catalogs.sourceIdentity(row).revision, null);
+  row.source = {repository, revision};
+  assert.equal(Catalogs.sourceIdentity(row).revision, revision);
+  row.source.repository = repository.toUpperCase();
+  assert.equal(Catalogs.sourceIdentity(row).repository, repository.toUpperCase());
+  row.source.repository = "ExampleOwner/upstream";
+  const observed = Catalogs.sourceIdentity(row, {manifest: {upstreamRevision: "b".repeat(40), provenance: {sourceRevision: "c".repeat(40)}}});
+  assert.equal(observed.revision, revision);
+  assert.equal(observed.upstreamRevision, "b".repeat(40));
+  assert.equal(observed.provenanceRevision, "c".repeat(40));
+});
+
 test("project catalogs preserve publisher ordering and filter by CPU after validating each record", () => {
   const value = catalog(record("2.0", "x64"), record("1.9", "universal"), record("1.8"));
   const result = Catalogs.validateProjectCatalog(value, { ...options, architecture: "arm64" });

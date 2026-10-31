@@ -2,7 +2,7 @@
 // site follow the same order.
 export const sidebar = [
   { label: "Try the launcher", link: "/demo/" },
-  { label: "Start here", items: ["introduction", "getting-started", "launcher"] },
+  { label: "Start here", items: ["introduction", "getting-started", "macs-and-macos", "launcher"] },
   { label: "Background", items: ["background/how-games-run", "background/choosing-a-runtime"] },
   { label: "Games and runtimes", items: [{ autogenerate: { directory: "games" } }] },
   { label: "Graphics and effects", items: [{ autogenerate: { directory: "graphics" } }] },

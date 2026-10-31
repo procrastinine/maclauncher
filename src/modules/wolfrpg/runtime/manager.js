@@ -197,6 +197,7 @@ module.exports = {
   updateSettingsAfterInstall,
   updateSettingsAfterUninstall,
   core: Core,
+  upstream: Core.source,
   __test: {
     SECTION_DEFAULT
   }

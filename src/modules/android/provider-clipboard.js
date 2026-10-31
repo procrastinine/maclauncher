@@ -4,12 +4,8 @@ const Bundled = require("../shared/runtime/bundled-native");
 const Included = require("../shared/runtime/included-helpers");
 function resolveHelper() {
   const declarations = require("./privacy-distribution.json"), pin = declarations[0];
-  const included = Included.resolveIncluded(declarations, { id: pin.id, version: pin.version, verification: "full" });
-  if (included) {
-    const { directory } = included;
-    return path.join(directory, "clipboard-helper");
-  }
-  throw new Error("The included Android clipboard helper is missing. Reinstall MacLauncher.");
+  const { directory } = Included.requireIncluded(declarations, { id: pin.id, version: pin.version, verification: "full" });
+  return path.join(directory, "clipboard-helper");
 }
 async function create(context = {}) {
   // Darwin Unix-domain addresses have a short fixed maximum. Only the socket

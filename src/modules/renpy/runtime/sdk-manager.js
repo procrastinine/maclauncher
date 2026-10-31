@@ -2,15 +2,18 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
-const { findMacLibDir } = require("./patcher");
+const { findMacLibDir, SDK_LAYOUT_FILE } = require("./patcher");
+const Archive = require("../../shared/runtime/archive");
+const ReleaseFiles = require("../../shared/runtime/release-files");
+const Upstream = require("../../shared/runtime/upstream");
 const {
   attachAbortSignal,
   createAbortError,
-  fetchUrlBuffer,
-  decodeResponseBody: decodeBody,
-  downloadToFile,
   throwIfAborted
 } = require("../../shared/runtime/download-utils");
+
+const DL = "https://www.renpy.org/dl/";
+const LATEST = Object.freeze({ 8: "https://renpy.org/latest.html", 7: "https://renpy.org/latest-7.html" });
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
@@ -68,18 +71,47 @@ function compareSemver(a, b) {
   return 0;
 }
 
-function isVersionInMajorGroup(version, major) {
+// Python 2 releases (Ren'Py 7 and earlier) and Python 3 releases (Ren'Py 8
+// and later) form the two groups.
+function majorGroup(version) {
   const parsed = parseSemver(version);
-  if (!parsed) return false;
-  const m = normalizeMajor(major);
-  const vMajor = parsed[0];
-  if (m === 7) return vMajor >= 1 && vMajor <= 7;
-  return vMajor === 8;
+  return !parsed || parsed[0] < 1 ? null : parsed[0] >= 8 ? 8 : 7;
+}
+function isVersionInMajorGroup(version, major) {
+  return majorGroup(version) === normalizeMajor(major);
 }
 
-function getDownloadUrl(version) {
+// The SDK archives a version folder lists, with the SHA-256 from its
+// checksums.txt where that file lists one. Builds for other systems, such as
+// the ARM Linux sdkarm archive, are not read.
+function folderSource(version) {
+  const folder = `${DL}${version}/`, prefix = `renpy-${version}-sdk`;
+  return Upstream.index({ locations: [folder, `${folder}checksums.txt`], hosts: ["renpy.org"], parse: documents => {
+    const listing = documents.find(document => document.url === folder);
+    if (!listing) return [];
+    const sums = (documents.find(document => document.url !== folder)?.text || "").split("\n").map(line => line.trim().split(/\s+\*?/));
+    const files = [...listing.text.matchAll(/href\s*=\s*["']([^"'?#]+)["']/gi)].map(match => path.posix.basename(match[1]))
+      .filter(name => name.startsWith(prefix) && ReleaseFiles.archiveFormat(name) &&
+        /^(?:[-_.](?:mac|macos|osx|universal))?$/i.test(name.slice(prefix.length, -ReleaseFiles.archiveFormat(name).length)))
+      .map(name => ({ name, url: folder + name, digest: sums.find(([hash, listed]) => listed === name && /^[a-f0-9]{64}$/i.test(hash))?.[0] }));
+    return files.length ? [{ version, sourceUrl: folder, files }] : [];
+  } });
+}
+
+// The SDK file a version folder lists: the caller's formats first, then any
+// other archive. Null when the folder cannot be read.
+async function findListedDownload(version, { signal, formats = [".dmg", ".zip"] } = {}) {
   const v = normalizeVersion(version);
-  return `https://www.renpy.org/dl/${v}/renpy-${v}-sdk.dmg`;
+  let rows;
+  try { rows = await folderSource(v).discover({ signal }); } catch { throwIfAborted(signal); return null; }
+  const rank = name => { const index = formats.indexOf(ReleaseFiles.archiveFormat(name)); return index < 0 ? formats.length : index; };
+  return [...(rows[0]?.files || [])].sort((a, b) => rank(a.name) - rank(b.name))[0] || null;
+}
+// The listed SDK file, or the folder's usual `renpy-<version>-sdk` name in the
+// first format when the listing cannot be read.
+async function sdkDownload(version, { signal, formats = [".dmg", ".zip"] } = {}) {
+  const v = normalizeVersion(version), name = `renpy-${v}-sdk${formats[0]}`;
+  return await findListedDownload(v, { signal, formats }) || Upstream.listedFile({ filename: name, url: `${DL}${v}/${name}` });
 }
 
 function installRootDir(userDataDir) {
@@ -103,6 +135,25 @@ function isReadySdk(installDir, major) {
     return fs.statSync(path.join(installDir, "renpy.sh")).isFile() &&
       Boolean(lib && fs.statSync(path.join(lib.dir, "renpy")).isFile());
   } catch { return false; }
+}
+
+// Ren'Py's Mac SDK stores the programs in lib/py*-mac-* as `<name>.macho`
+// with a five-byte "RENPY" prefix, which its launcher strips on first start
+// (launcher/game/mac.rpy). Installation does the same, so the SDK is ready
+// without opening its launcher.
+function restoreMacBinaries(installDir) {
+  let folders = [];
+  try { folders = fs.readdirSync(path.join(installDir, "lib"), { withFileTypes: true }).filter(item => item.isDirectory() && /mac/i.test(item.name)); }
+  catch { return; }
+  for (const folder of folders) {
+    const directory = path.join(installDir, "lib", folder.name);
+    for (const name of fs.readdirSync(directory).filter(item => item.endsWith(".macho"))) {
+      const file = path.join(directory, name), target = file.slice(0, -".macho".length), data = fs.readFileSync(file);
+      fs.writeFileSync(target, data.subarray(data.subarray(0, 5).toString("latin1") === "RENPY" ? 5 : 0));
+      fs.chmodSync(target, 0o755);
+      fs.unlinkSync(file);
+    }
+  }
 }
 
 function findSdkRoot(mountDir, version) {
@@ -131,7 +182,9 @@ function findSdkRoot(mountDir, version) {
     }
   }
 
-  if (!best) throw new Error("Ren'Py SDK not found in DMG");
+  // A release that moves the SDK further down is searched breadth first.
+  best ||= Archive.findEntry(mountDir, (file, item) => item.isDirectory() && looksLikeSdkRoot(file), { maxDepth: 3 });
+  if (!best) throw new Error("Ren'Py SDK not found in the download");
   return best;
 }
 
@@ -212,7 +265,8 @@ function listInstalled(userDataDir, major) {
 
 function extractVersionsFromHtml(html) {
   const out = [];
-  const re = /href=["'](?:\/dl\/)?(\d+\.\d+\.\d+)\/?["']/g;
+  // A version folder link, relative or absolute.
+  const re = /href\s*=\s*["'](?:[^"'?#]*\/)?(\d+\.\d+\.\d+)\/?["']/gi;
   let m = null;
   while ((m = re.exec(String(html || "")))) {
     if (m[1]) out.push(m[1]);
@@ -234,63 +288,37 @@ function parseLatestVersionFromHtml(html) {
   return null;
 }
 
-async function fetchLatestStableVersion({ major, logger, signal, fetcher = fetchUrlBuffer } = {}) {
-  const m = normalizeMajor(major);
-  const url = m === 7 ? "https://renpy.org/latest-7.html" : "https://renpy.org/latest.html";
-  logger?.info?.(`[renpy] fetching latest stable from ${url}`);
-  const res = await fetcher(url, {
-    headers: { "User-Agent": "MacLauncher" },
-    signal
-  });
-  if (res.status !== 200) throw new Error(`Latest fetch failed (${res.status})`);
-  const decoded = decodeBody(res.body, res.headers);
-  const text = decoded.toString("utf8");
-  const version = parseLatestVersionFromHtml(text);
-  if (!version) throw new Error("Failed to parse latest Ren'Py version");
-  const parsed = parseSemver(version);
-  if (!parsed || parsed[0] !== m) {
-    throw new Error(`Latest Ren'Py version mismatch (${version})`);
+// The download index lists one folder per version; latest.html and
+// latest-7.html name each group's newest stable release, and a later folder
+// is a prerelease. Without a latest page the folder list stands on its own.
+const source = Upstream.index({ locations: [DL, LATEST[8], LATEST[7]], hosts: ["renpy.org"], parse: documents => {
+  const listing = documents.find(document => document.url === DL);
+  if (!listing) throw new Error("The Ren'Py download index is unavailable.");
+  const stable = {};
+  for (const major of [7, 8]) {
+    const page = documents.find(document => document.url === LATEST[major]), version = page && parseLatestVersionFromHtml(page.text);
+    if (version && majorGroup(version) === major) stable[major] = version;
   }
-  return version;
-}
+  return [...new Set([...extractVersionsFromHtml(listing.text), ...Object.values(stable)])].flatMap(version => {
+    const major = majorGroup(version);
+    if (!major || stable[major] && compareSemver(version, stable[major]) > 0) return [];
+    return [{ version, channel: `v${major}`, sourceUrl: `${DL}${version}/`, details: { major, latestStable: stable[major] || null } }];
+  });
+} });
 
-async function fetchAvailableVersions({ major, logger, signal, latestOnly, fetcher = fetchUrlBuffer } = {}) {
+async function fetchAvailableVersions({ major, logger, signal, latestOnly } = {}) {
   const m = normalizeMajor(major);
-  const url = "https://www.renpy.org/dl/";
-  logger?.info?.(`[renpy] fetching versions from ${url}`);
-  const res = await fetcher(url, {
-    headers: { "User-Agent": "MacLauncher" },
-    signal
-  });
-  if (res.status !== 200) throw new Error(`Fetch failed (${res.status})`);
-
-  const decoded = decodeBody(res.body, res.headers);
-  const text = decoded.toString("utf8");
-  const versions = extractVersionsFromHtml(text);
-  const unique = Array.from(new Set(versions)).filter(v => /^\d+\.\d+\.\d+$/.test(v));
-
-  let latestStable = null;
-  try {
-    latestStable = await fetchLatestStableVersion({ major: m, logger, signal, fetcher });
-  } catch (e) {
-    throwIfAborted(signal);
-    logger?.warn?.(`[renpy] latest stable fetch failed: ${String(e?.message || e)}`);
-  }
-
-  if (latestStable && !unique.includes(latestStable)) unique.push(latestStable);
-  const filtered = unique.filter(v => {
-    if (!isVersionInMajorGroup(v, m)) return false;
-    if (latestStable && compareSemver(v, latestStable) > 0) return false;
-    return true;
-  });
-
-  filtered.sort(compareSemverDesc);
-  if (!filtered.length) throw new Error(`No Ren'Py ${m} SDK versions found`);
+  logger?.info?.(`[renpy] fetching versions from ${DL}`);
+  let rows;
+  try { rows = (await source.discover({ logger, signal })).filter(row => row.details?.major === m); }
+  catch (error) { throwIfAborted(signal); throw error; }
+  const versions = rows.map(row => row.version).sort(compareSemverDesc);
+  if (!versions.length) throw new Error(`No Ren'Py ${m} SDK versions found`);
   return {
-    versions: filtered.slice(0, latestOnly === true ? 1 : 500),
-    source: url,
+    versions: versions.slice(0, latestOnly === true ? 1 : 500),
+    source: DL,
     mode: latestOnly === true ? "latest" : "all",
-    latestStableVersion: latestStable
+    latestStableVersion: rows[0]?.details?.latestStable || null
   };
 }
 
@@ -340,42 +368,40 @@ async function installVersion({ userDataDir, version, major, logger, onProgress,
     return { version: v, installDir, launcherPath: getLauncherPath(installDir), ready: true };
   }
 
-  const url = getDownloadUrl(v);
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-renpy-"));
-  const dmgPath = path.join(tmpDir, `renpy-${v}-sdk.dmg`);
-  const mountDir = path.join(tmpDir, "mount");
-  ensureDir(mountDir);
-
-  let mounted = false;
+  const unpackedDir = path.join(tmpDir, "unpacked");
+  ensureDir(unpackedDir);
 
   try {
-    logger?.info?.(`[renpy] downloading ${url}`);
-    await downloadToFile(url, dmgPath, { onProgress, signal });
+    // The version folder names the SDK file; a listed SHA-256 is checked.
+    const file = await sdkDownload(v, { signal, formats: [".dmg", ".zip"] });
+    const dmgPath = path.join(tmpDir, file.name);
+    logger?.info?.(`[renpy] downloading ${file.url}`);
+    await source.download(file, dmgPath, { onProgress, signal });
     throwIfAborted(signal);
 
-    logger?.info?.(`[renpy] mounting ${path.basename(dmgPath)}`);
-    await runCommand("/usr/bin/hdiutil", [
-      "attach",
-      "-nobrowse",
-      "-readonly",
-      "-mountpoint",
-      mountDir,
-      dmgPath
-    ], { signal });
-    mounted = true;
+    // A disk image is mounted, copied and detached by the shared extractor.
+    logger?.info?.(`[renpy] unpacking ${path.basename(dmgPath)}`);
+    await ReleaseFiles.extractArchive(dmgPath, unpackedDir, signal);
     throwIfAborted(signal);
 
-    const sdkRoot = findSdkRoot(mountDir, v);
+    const sdkRoot = findSdkRoot(unpackedDir, v);
 
     safeRm(installDir);
     ensureDir(path.dirname(installDir));
 
     logger?.info?.(`[renpy] copying SDK to ${installDir}`);
     await runCommand("/usr/bin/ditto", [sdkRoot, installDir], { signal });
+    restoreMacBinaries(installDir);
 
     if (!isReadySdk(installDir, m)) {
       throw new Error("Installed Ren'Py SDK missing expected files");
     }
+    const layout = findMacLibDir(installDir, m, {version: v});
+    try {
+      fs.writeFileSync(path.join(installDir, SDK_LAYOUT_FILE), JSON.stringify({version: v,
+        macLibDirName: layout.name, platform: layout.platform}, null, 2));
+    } catch (error) { logger?.warn?.(`[renpy] could not record SDK layout: ${error.message}`); }
 
     const launcherPath = getLauncherPath(installDir);
     try {
@@ -386,11 +412,6 @@ async function installVersion({ userDataDir, version, major, logger, onProgress,
 
     return { version: v, installDir, launcherPath };
   } finally {
-    if (mounted) {
-      try {
-        await runCommand("/usr/bin/hdiutil", ["detach", mountDir, "-force"]);
-      } catch {}
-    }
     safeRm(tmpDir);
   }
 }
@@ -411,8 +432,16 @@ module.exports = {
   fetchAvailableVersions,
   installVersion,
   uninstallVersion,
+  findListedDownload,
+  sdkDownload,
+  findSdkRoot,
+  source,
   __test: {
+    restoreMacBinaries,
     buildPrimeLauncherArgs,
+    extractVersionsFromHtml,
+    findListedDownload,
+    findSdkRoot,
     isVersionInMajorGroup,
     primeLauncherApp
   }

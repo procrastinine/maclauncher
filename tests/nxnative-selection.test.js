@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -6,6 +8,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { writeZipArchive } = require("./helpers/zip-fixture");
 const { createManagedPythonTool } = require("../src/modules/shared/runtime/managed-python-tool");
+const Upstream = require("../src/modules/shared/runtime/upstream");
 const { confirmToolInstall } = require("../src/modules/shared/runtime/tool-install");
 const { prepareForLaunch } = require("../src/core/runtime-preparation");
 const { createManager } = require("../src/modules/nxnative/runtime/manager");
@@ -18,9 +21,14 @@ function fixture(t) {
   writeZipArchive(archive, [{ name: "source/main.py", data: "print('fixture')\n" }, { name: "source/LICENSE", data: "Fixture license" }]);
   const row = { version: VERSION, url: "https://example.com/nxnative.zip", bytes: fs.statSync(archive).size,
     sha256: crypto.createHash("sha256").update(fs.readFileSync(archive)).digest("hex"), archivePrefix: "source" };
+  // The source list and archive the publisher serves.
+  const list = "https://example.com/nxnative/versions.json";
+  Harness.network.routes = { [list]: () => { events.push("discover"); return [{ version: row.version, files: [{ name: "nxnative.zip", url: row.url, bytes: row.bytes, digest: row.sha256 }] }]; },
+    [row.url]: () => { events.push("download-source"); return fs.readFileSync(archive); } };
+  t.after(() => { Harness.network.routes = null; });
   const source = createManagedPythonTool({ id: "nxnative", label: "nxnative", scriptName: "main.py",
     requiredFiles: ["main.py", "LICENSE"], sourceUrl: "https://github.com/seedds/nxnative",
-    discoverCatalog: async () => { events.push("discover");return [row]; } });
+    upstream: Upstream.index({ locations: [list], parse: ([document]) => JSON.parse(document.text) }) });
   let native = null, previous = null;
   const tools = { resolveSelection(_entry, settings) {
     const stored = settings?.runtimes?.["nxnative-tools"], version = stored && Object.hasOwn(stored, "defaultVersion") ? stored.defaultVersion : "tools-1";
@@ -43,8 +51,7 @@ function fixture(t) {
       return { version: version || null, install: version === previous?.version ? previous : null,
         ready: Boolean(version && version === previous?.version), reason: "Legacy runtime is not installed." };
     }, async installRuntime(options) { events.push("install-legacy:" + options.version);return { version: options.version }; } };
-  const manager = createManager({ sourceManager: source, legacyManager: legacy, toolsManager: tools,
-    downloadToFile: async (_url, target) => { events.push("download-source");fs.copyFileSync(archive, target); } });
+  const manager = createManager({ sourceManager: source, legacyManager: legacy, toolsManager: tools });
   const context = { userDataDir: path.join(root, "profile"), settings: {}, runtimeId: "nxnative",
     confirmRuntimeInstall: async plan => { events.push("consent:" + plan.managerId + ":" + (plan.version || "discovery"));return true; } };
   return { root, manager, source, context, events, row, tools,
@@ -82,7 +89,7 @@ test("nxnative cold Play consents before source discovery, installs native tools
 
 test("nxnative installed sources needing tools remain selectable and preserve the independent native-tools default", async t => {
   const f = fixture(t);
-  await f.source.installRuntime(f.context, { downloadToFile: async (_url, target) => fs.copyFileSync(path.join(f.root, "source.zip"), target) });
+  await f.source.installRuntime(f.context);
   f.events.length = 0;
   const settings = { runtimes: { "nxnative-tools": { defaultVersion: "tools-kept" } } };
   const pending = f.manager.resolveSelection({}, settings, f.context.userDataDir);

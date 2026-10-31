@@ -10,12 +10,33 @@ const { buildRuntimeDownloadMeta } = require("../../shared/runtime/runtime-downl
 
 const SECTION_STABLE = "stable";
 const SECTION_NIGHTLY = "nightly";
-const NIGHTLY_NOTICE = {
-  title: "Nightly downloads",
-  lines: [
-    { text: "Nightly downloads require GitHub CLI authentication." }
-  ]
-};
+
+// Releases are grouped by LÖVE line: 0.x releases by minor version (0.10),
+// later releases by major version (11). Each line has its own section, and the
+// LÖVE 11 line keeps the release channel's section ID.
+function releaseLine(version) {
+  const value = String(version);
+  return value.startsWith("0.") ? value.split(".").slice(0, 2).join(".") : value.split(".")[0];
+}
+
+function releaseSectionId(line) {
+  return line === "11" ? SECTION_STABLE : `${SECTION_STABLE}-${line.replace(".", "-")}`;
+}
+
+// The section that lists a release or nightly build of the given channel. A
+// registered runtime path names no release line.
+function sectionIdForVersion(channel, version) {
+  if (channel === SECTION_NIGHTLY) return SECTION_NIGHTLY;
+  const release = !Custom.isPath(version) && Core.normalizeVersion(version);
+  return release ? releaseSectionId(releaseLine(release)) : SECTION_STABLE;
+}
+
+// The download channel behind a section: every release line installs from the
+// release channel.
+function sectionChannel(sectionId) {
+  const id = String(sectionId || "");
+  return id === SECTION_NIGHTLY ? SECTION_NIGHTLY : id === SECTION_STABLE || id.startsWith(`${SECTION_STABLE}-`) ? SECTION_STABLE : null;
+}
 
 let stableCatalogPromise = null;
 let stableCatalogEntriesByVersion = {};
@@ -129,11 +150,7 @@ async function refreshNightlyCatalog({ logger, force, latestOnly } = {}) {
   nightlyCatalog = { ...nightlyCatalog, status: "loading", error: null, mode };
   nightlyCatalogPromise = (async () => {
     try {
-      const ghOk = await Core.canUseGh({ logger, required: true });
-      if (!ghOk) {
-        throw new Error("GitHub CLI (gh) is required for LÖVE nightlies.");
-      }
-      const result = await Core.listNightlyBuilds({ latestOnly: wantsLatest });
+      const result = await Core.listNightlyBuilds({ latestOnly: wantsLatest, logger });
       nightlyCatalogEntriesByVersion = result.entriesByVersion || {};
       nightlyCatalogLabels = buildNightlyLabels([], nightlyCatalogEntriesByVersion);
       nightlyCatalog = {
@@ -206,7 +223,6 @@ function getState({ settings, userDataDir, resourcesRoot }) {
         installing: null,
         versionLabels: nightlyLabels,
         variants: [],
-        notice: NIGHTLY_NOTICE,
         catalog: {
           status: nightlyCatalog.status,
           versions: nightlyCatalog.versions,
@@ -226,16 +242,19 @@ function getState({ settings, userDataDir, resourcesRoot }) {
       { ...LuaSteam.getSection({ settings: cfg.luasteam, resourcesRoot }), supportsDefault: true, defaultSource: cfg.luasteam.defaultVersion ? "saved" : "manager" }
     ]
   };
-  const family = version => String(version).startsWith("0.") ? String(version).split(".").slice(0, 2).join(".") : String(version).split(".")[0];
+  const family = releaseLine;
   const stable = state.sections[0], families = [...new Set([...stable.catalog.versions, ...stable.installed.map(row => row.version)].map(family))];
+  // A game's channel choice names the LÖVE 11 line or nightly builds; the other
+  // lines have no choice of their own, so a version from one of them leaves the
+  // automatic line to follow that version.
   const section = (selected, id) => {
     const versions = stable.catalog.versions.filter(version => family(version) === selected), installed = stable.installed.filter(row => family(row.version) === selected);
     const saved = cfg.stable.defaultVersion && family(cfg.stable.defaultVersion) === selected ? cfg.stable.defaultVersion : null;
     return { ...stable, defaultVersion: selectRuntimeVersion({ defaultVersion:saved, fallback:managerDefaultVersion({listed:versions,installed:installed.filter(row=>row.ready!==false).map(row=>row.version)}) }).version,
-      defaultSource: saved ? "saved" : "manager", id, selectionSectionId: SECTION_STABLE, label: `LÖVE ${selected}`, installed, catalog: { ...stable.catalog, versions,
+      defaultSource: saved ? "saved" : "manager", id, label: `LÖVE ${selected}`, installed, catalog: { ...stable.catalog, versions,
       latestAvailableVersion: versions[0] || null, latestInstalledVersion: installed.find(row => row.ready !== false)?.version || null } };
   };
-  state.sections = [section("11", SECTION_STABLE), ...families.filter(value => value !== "11").map(value => section(value, `stable-${value.replace(".", "-")}`)), ...state.sections.slice(1)];
+  state.sections = [section("11", SECTION_STABLE), ...families.filter(value => value !== "11").map(value => section(value, releaseSectionId(value))), ...state.sections.slice(1)];
   return state;
 }
 
@@ -275,11 +294,12 @@ async function installRuntime({
     return runDownloadTask(
       downloads,
       meta,
-      ({ signal: taskSignal }) =>
+      ({ signal: taskSignal, onProgress: taskProgress }) =>
         Core.installNightlyVersion({
           userDataDir,
           entry: nightlyCatalogEntriesByVersion[buildKey] || { buildKey, version: buildKey },
           logger,
+          onProgress: taskProgress,
           signal: callerSignal && taskSignal ? AbortSignal.any([callerSignal, taskSignal]) : callerSignal || taskSignal
         }),
       { onProgress }
@@ -372,6 +392,9 @@ module.exports = {
   uninstallRuntime,
   updateSettingsAfterInstall,
   updateSettingsAfterUninstall,
+  sectionIdForVersion,
+  sectionChannel,
+  upstream: Core.upstream,
   core: Core,
   __test: {
     SECTION_STABLE,

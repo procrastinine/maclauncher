@@ -22,8 +22,5 @@
         "bytes": 196389536
       }
     }
-  ],
-  "defaultVersions": {
-    "arm64": "MCLv1-1003"
-  }
+  ]
 }

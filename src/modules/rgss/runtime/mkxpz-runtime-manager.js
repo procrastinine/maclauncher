@@ -1,9 +1,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
-const { execFileSync } = require("node:child_process");
-const GitHubCLI = require("../../shared/runtime/github-cli");
-const GitHub = require("../../shared/runtime/github-transport");
+const Architecture = require("../../shared/runtime/architecture");
+const Upstream = require("../../shared/runtime/upstream");
 const Binary = require("./bundled-binary.json");
 const Builds = require("./mkxpz-builds");
 const {
@@ -14,19 +13,15 @@ const {
 
 const DEFAULTS = {
   repo: "mkxp-z/mkxp-z",
-  workflow: ".github/workflows/autobuild.yml",
+  workflow: "autobuild.yml",
   branch: "dev",
   artifactNeedle: "macos"
 };
-const LATEST_RUNS_PAGE_SIZE = 50;
-const LATEST_RUNS_MAX_PAGES = 4;
 
-const BUNDLED_VERSION = Binary.version;
-const BUNDLED_APP_NAME = Binary.appName;
 const Owned = require("./owned-builds.json");
 const BINARY_PINS = [Binary, ...(Binary.retained || []), ...Owned.releases];
-const DEFAULT_VERSION = Owned.defaultVersions?.[process.arch] || Binary.defaultVersion || BUNDLED_VERSION;
-if (!BINARY_PINS.some(pin => pin.version === DEFAULT_VERSION)) throw new Error("The default MKXP-Z version must identify a supported runtime.");
+// Defaults come from the shared manager choice: the saved default, else the
+// newest compatible published or installed version for this Mac.
 const BINARY_CATALOG = Object.freeze(BINARY_PINS.map(pin => Object.freeze({ version: pin.version, upstreamRevision: pin.upstreamRevision,
   sourceUrl: pin.sourceUrl, localBuild: pin.sourceKind === "owned-source-adaptation",
   ...(pin.sourceKind === "owned-source-adaptation"
@@ -88,8 +83,10 @@ function installRootDir(userDataDir) {
   return path.join(userDataDir, "runtimes", "mkxpz");
 }
 
-function getInstallDir({ userDataDir, version }) {
+function getInstallDir({ userDataDir, version, architecture }) {
   const v = normalizeVersion(version);
+  const managed = Builds.manager.core.getInstallDir({ userDataDir, version: v, architecture });
+  if (fs.existsSync(path.join(managed, "runtime.json"))) return managed;
   return path.join(installRootDir(userDataDir), v);
 }
 
@@ -170,182 +167,20 @@ function runCommand(cmd, args, options) {
   });
 }
 
-async function canUseGh({ logger, runCommand: runner, required } = {}) {
-  if (runner) return GitHubCLI.available({ logger, runCommand: runner, required });
-  const status = await GitHub.authenticationStatus();
-  const usable = status.available && status.authenticated;
-  if (!usable && required) throw new Error("Upstream MKXP-Z Actions downloads require GitHub CLI authentication. Authenticate with gh and restart MacLauncher.");
-  return usable;
-}
-
-function runGhToFile(args, outputPath, { signal } = {}) {
-  throwIfAborted(signal);
-  return new Promise((resolve, reject) => {
-    const fd = fs.openSync(outputPath, "w");
-    const child = spawn(GitHubCLI.executable(), args, { stdio: ["ignore", fd, "pipe"] });
-    let stderr = "";
-    let closed = false;
-    const removeAbort = attachAbortSignal(signal, () => {
-      try {
-        child.kill("SIGTERM");
-      } catch {}
-      reject(createAbortError());
-    });
-
-    const closeFd = () => {
-      if (closed) return;
-      closed = true;
-      try {
-        fs.closeSync(fd);
-      } catch {}
-    };
-
-    child.stderr.on("data", b => {
-      stderr += b.toString("utf8");
-    });
-    child.on("error", err => {
-      removeAbort();
-      closeFd();
-      if (err?.code === "ENOENT") {
-        reject(new Error("Error: gh CLI not found in PATH."));
-        return;
-      }
-      reject(err);
-    });
-    child.on("close", code => {
-      removeAbort();
-      closeFd();
-      if (code === 0) return resolve(true);
-      const err = new Error("gh command failed while downloading.");
-      err.code = code;
-      err.stderr = stderr;
-      reject(err);
-    });
-  });
-}
-
-function workflowRef(workflow) {
-  return encodeURIComponent(String(workflow || "").trim());
-}
-
-function getRunDate(run) {
-  const date = run.run_started_at || run.created_at || run.updated_at || "unknown-date";
-  const sortKey = new Date(date).getTime();
-  return {
-    date,
-    sortKey: Number.isNaN(sortKey) ? 0 : sortKey
-  };
-}
-
-async function fetchActionPages(opts, route, key, { paginate = false, page = 1, perPage = 100, limit } = {}) {
-  const entries = [], request = opts.request || GitHub.request;
-  for (let current = page; current < page + (paginate ? 100 : 1); current++) {
-    throwIfAborted(opts.signal);
-    const url = new URL(`https://api.github.com/repos/${opts.repo}/${route}`);
-    url.searchParams.set("per_page", String(perPage)); url.searchParams.set("page", String(current));
-    if (key === "workflow_runs") url.searchParams.set("branch", opts.branch);
-    const result = await request(url.href, { signal: opts.signal });
-    if (result.status !== 200) throw new Error(`GitHub Actions catalog request failed (HTTP ${result.status}).`);
-    const body = JSON.parse(Buffer.from(result.body).toString("utf8")), rows = body[key];
-    if (!Array.isArray(rows)) throw new Error("GitHub Actions returned an invalid catalog.");
-    entries.push(...rows);
-    if (limit && entries.length >= limit) return entries.slice(0, limit);
-    if (rows.length < perPage || Number.isFinite(body.total_count) && current * perPage >= body.total_count) return entries;
-    if (current === page + 99) throw new Error("GitHub Actions catalog exceeds its page limit.");
-  }
-  return entries;
-}
-async function fetchRuns(opts, { limit, paginate, page, perPage } = {}) {
-  return fetchActionPages(opts, `actions/workflows/${workflowRef(opts.workflow)}/runs`, "workflow_runs", {
-    limit, paginate, page: page || 1, perPage: perPage > 0 ? Math.min(perPage, 100) : limit > 0 ? Math.min(limit, 100) : 100 });
-}
-
-function sortRunsNewest(runs) {
-  return runs.sort((a, b) => {
-    const aKey = getRunDate(a).sortKey;
-    const bKey = getRunDate(b).sortKey;
-    return bKey - aKey;
-  });
-}
-
-async function fetchArtifacts(opts, runId) {
-  if (!Number.isSafeInteger(runId) || runId <= 0) throw new Error("GitHub Actions run identity is invalid.");
-  return fetchActionPages(opts, `actions/runs/${runId}/artifacts`, "artifacts", { paginate: true });
-}
-
-function selectMacosArtifact(artifacts, { artifactNeedle = DEFAULTS.artifactNeedle, arch = process.arch } = {}) {
+function selectMacosArtifact(artifacts, { artifactNeedle = DEFAULTS.artifactNeedle, arch = Architecture.selectedArchitecture() } = {}) {
   const needle = String(artifactNeedle).toLowerCase();
   const ranked = (artifacts || []).flatMap((artifact, index) => {
     const name = String(artifact.name || "").toLowerCase();
     if (artifact.expired || !name.includes(needle) || /(?:^|[._-])standalone(?:[._-]|$)/.test(name)) return [];
-    const universal = /(?:^|[._-])universal(?:[._-]|$)/.test(name);
-    const arm = /(?:^|[._-])(?:arm64|aarch64)(?:[._-]|$)/.test(name);
-    const intel = /(?:^|[._-])(?:x86_64|x64|amd64)(?:[._-]|$)/.test(name);
-    if (!universal && (arch === "arm64" && intel || arch === "x64" && arm)) return [];
+    const architecture = Architecture.assetArchitecture(name);
+    if (architecture && architecture !== "universal" && architecture !== arch) return [];
     // Older workflow names omit both packaging and CPU labels. Preserve
     // those entries after explicitly compatible app bundles from the same run.
     const app = /(?:^|[._-])app(?:[._-]|$)/.test(name);
-    return [{ artifact, rank: app && universal ? 0 : app && (arm || intel) ? 1 : 2, index }];
+    return [{ artifact, rank: app && architecture === "universal" ? 0 : app && architecture ? 1 : 2, index }];
   });
   ranked.sort((a, b) => a.rank - b.rank || a.index - b.index);
   return ranked[0]?.artifact || null;
-}
-
-async function listMacosDevAutobuilds(opts, { latestOnly } = {}) {
-  const matches = [];
-
-  if (latestOnly) {
-    for (let page = 1; page <= LATEST_RUNS_MAX_PAGES; page += 1) {
-      const runs = sortRunsNewest(
-        await fetchRuns(opts, { perPage: LATEST_RUNS_PAGE_SIZE, page })
-      );
-      if (!runs.length) break;
-      for (const run of runs) {
-        if (run.conclusion !== "success") continue;
-        const { date, sortKey } = getRunDate(run);
-        const artifacts = await fetchArtifacts(opts, run.id);
-        const artifact = selectMacosArtifact(artifacts, opts);
-        if (artifact) {
-          matches.push({
-            runId: run.id,
-            artifactId: artifact.id,
-            name: artifact.name || "unknown-artifact",
-            date,
-            sha: run.head_sha || "unknown-sha",
-            sortKey
-          });
-          break;
-        }
-      }
-      if (matches.length) break;
-    }
-  } else {
-    let runs = sortRunsNewest(
-      await fetchRuns(opts, { limit: opts.limit, paginate: !opts.limit })
-    );
-    if (opts.limit && opts.limit > 0) {
-      runs = runs.slice(0, opts.limit);
-    }
-
-    for (const run of runs) {
-      if (run.conclusion !== "success") continue;
-      const { date, sortKey } = getRunDate(run);
-      const artifacts = await fetchArtifacts(opts, run.id);
-      const artifact = selectMacosArtifact(artifacts, opts);
-      if (artifact) {
-        matches.push({
-          runId: run.id,
-          artifactId: artifact.id,
-          name: artifact.name || "unknown-artifact",
-          date,
-          sha: run.head_sha || "unknown-sha",
-          sortKey
-        });
-      }
-    }
-  }
-
-  return matches.sort((a, b) => b.sortKey - a.sortKey);
 }
 
 async function extractAppZips(targetDir, { signal } = {}) {
@@ -362,35 +197,26 @@ async function extractAppZips(targetDir, { signal } = {}) {
   }
 }
 
-async function downloadMacosAutobuild(opts, entry, { signal } = {}) {
-  if (!entry || !entry.artifactId) {
-    throw new Error("Missing artifact details for download.");
-  }
-
-  const safeDate = sanitizeSegment(entry.date);
-  const safeSha = sanitizeSegment(entry.sha);
-  const targetDir = path.join(opts.outDir, `${safeDate}_${safeSha}`);
-  ensureDir(targetDir);
-
-  const zipName = `${sanitizeSegment(entry.name || "artifact")}.zip`;
-  const zipPath = path.join(targetDir, zipName);
-
-  await runGhToFile(
-    ["api", `/repos/${opts.repo}/actions/artifacts/${entry.artifactId}/zip`],
-    zipPath,
-    { signal }
-  );
-  throwIfAborted(signal);
-  await runCommand("unzip", ["-o", "-q", zipPath, "-d", targetDir], { signal });
-  fs.unlinkSync(zipPath);
-  await extractAppZips(targetDir, { signal });
-  return targetDir;
+// The build's version names its run start and commit, as the installed
+// directories do.
+function buildVersion(date, sha) {
+  return `${sanitizeSegment(date)}_${sanitizeSegment(sha)}`;
 }
 
-async function installFromGh({ userDataDir, entry, logger, signal }) {
-  const safeDate = sanitizeSegment(entry?.date);
-  const safeSha = sanitizeSegment(entry?.sha);
-  const v = normalizeVersion(`${safeDate}_${safeSha}`);
+// Successful dev-branch autobuilds publish public artifacts with GitHub's
+// digest. Each run lists the one app artifact this Mac runs.
+const source = Upstream.githubActions({ repository: DEFAULTS.repo, workflow: DEFAULTS.workflow, branch: DEFAULTS.branch, limit: 1, maxRuns: 20,
+  recognize: (artifact, { run, artifacts, githubAssetDigest }) => {
+    const usable = artifacts.filter(item => item?.expired === false && githubAssetDigest(item));
+    if (selectMacosArtifact(usable) !== artifact) return null;
+    const date = run.run_started_at || run.created_at;
+    return { version: buildVersion(date, run.head_sha), publishedAt: date,
+      details: { runId: run.id, artifactId: artifact.id, name: artifact.name || null, date, sha: run.head_sha } };
+  } });
+
+async function installFromActions({ userDataDir, entry, logger, signal, onProgress }) {
+  if (!entry?.file?.url) throw new Error("Missing artifact details for download.");
+  const v = normalizeVersion(buildVersion(entry.date, entry.sha));
   const installDir = getInstallDir({ userDataDir, version: v });
   const existing = findAppBundle(installDir);
   if (existing) {
@@ -400,34 +226,35 @@ async function installFromGh({ userDataDir, entry, logger, signal }) {
 
   safeRm(installDir);
   ensureDir(installRootDir(userDataDir));
-
+  const stagingDir = path.join(installRootDir(userDataDir), `.install-${v}-${process.pid}-${Date.now()}`);
   try {
-    logger?.info?.(`[mkxpz] downloading ${entry?.name || "artifact"}`);
-    const targetDir = await downloadMacosAutobuild(
-      { ...DEFAULTS, outDir: installRootDir(userDataDir) },
-      entry,
-      { signal }
-    );
+    ensureDir(stagingDir);
+    logger?.info?.(`[mkxpz] downloading ${entry.name || "artifact"}`);
+    const zipPath = path.join(stagingDir, `${sanitizeSegment(entry.name || "artifact")}.zip`);
+    const { sha256, integrity } = await source.download(entry.file, zipPath, { signal, onProgress });
     throwIfAborted(signal);
-    if (targetDir !== installDir) {
-      safeRm(installDir);
-      fs.renameSync(targetDir, installDir);
-    }
+    await runCommand("unzip", ["-o", "-q", zipPath, "-d", stagingDir], { signal });
+    fs.unlinkSync(zipPath);
+    await extractAppZips(stagingDir, { signal });
+    throwIfAborted(signal);
+    if (!findAppBundle(stagingDir)) throw new Error("MKXP-Z extract missing app bundle");
+    fs.renameSync(stagingDir, installDir);
     const appPath = findAppBundle(installDir);
-    if (!appPath) throw new Error("MKXP-Z extract missing app bundle");
     writeInstallMeta(installDir, {
       version: v,
       source: "GitHub Actions",
       installedAt: new Date().toISOString(),
-      runId: entry?.runId || null,
-      artifactId: entry?.artifactId || null,
-      artifactName: entry?.name || null,
-      sha: entry?.sha || null,
-      date: entry?.date || null
+      runId: entry.runId || null,
+      artifactId: entry.artifactId || null,
+      artifactName: entry.name || null,
+      sha: entry.sha || null,
+      date: entry.date || null,
+      archiveSha256: sha256,
+      integrity
     });
     return { version: v, installDir, appPath, source: "GitHub Actions" };
   } catch (e) {
-    safeRm(installDir);
+    safeRm(stagingDir);
     throw e;
   }
 }
@@ -447,20 +274,12 @@ function uninstallVersion({ userDataDir, version, installDir }) {
 }
 
 async function fetchAvailableVersions({ logger, latestOnly, signal } = {}) {
-  const opts = { ...DEFAULTS, signal };
-  logger?.info?.(
-    `[mkxpz] fetching GitHub Actions builds${latestOnly ? " (latest)" : ""}`
-  );
-  const entries = await listMacosDevAutobuilds(opts, { latestOnly });
-  const versions = entries.map(entry => {
-    const safeDate = sanitizeSegment(entry.date);
-    const safeSha = sanitizeSegment(entry.sha);
-    const version = `${safeDate}_${safeSha}`;
-    entry.version = version;
-    return version;
-  });
+  logger?.info?.(`[mkxpz] fetching GitHub Actions builds${latestOnly ? " (latest)" : ""}`);
+  const rows = await source.discover({ logger, signal, latestOnly: Boolean(latestOnly) });
+  const entries = rows.filter(row => row.files[0]).map(row => ({ version: row.version, ...row.details, file: row.files[0],
+    sortKey: Date.parse(row.details.date) || 0 })).sort((a, b) => b.sortKey - a.sortKey);
   return {
-    versions,
+    versions: entries.map(entry => entry.version),
     entries,
     source: "GitHub Actions",
     latestOnly: Boolean(latestOnly)
@@ -474,6 +293,16 @@ async function fetchLatestAvailableVersions({ logger, signal } = {}) {
 function listInstalled(userDataDir, bundledOptions) {
   const out = [];
   const seen = new Set();
+  for (const row of Builds.manager.getState({userDataDir}).installed || []) {
+    if (!row.installDir || !fs.existsSync(path.join(row.installDir, "runtime.json"))) continue;
+    seen.add(row.installDir);
+    if (row.ready === false) { out.push({...row, source: "MacLauncher Builds", projectPackage: true}); continue; }
+    try {
+      const architecture = Architecture.requestedArchitecture(row);
+      const hosted = Builds.resolveOwned({userDataDir, version: row.version, architecture, verification: "status"});
+      if (hosted) out.push(hosted);
+    } catch (error) { out.push({...row, source: "MacLauncher Builds", status: "damaged", error: error.message}); }
+  }
   const root = installRootDir(userDataDir);
   let versions = [];
   try {
@@ -484,12 +313,15 @@ function listInstalled(userDataDir, bundledOptions) {
 
   for (const versionDir of versions) {
     const version = versionDir.name;
+    // Staging directories start with a dot and are never installations.
+    if (version.startsWith(".")) continue;
     try {
       normalizeVersion(version);
     } catch {
       continue;
     }
     const installDir = path.join(root, version);
+    if (seen.has(installDir)) continue;
     if (fs.existsSync(path.join(installDir, "runtime.json"))) {
       seen.add(version);
       try {
@@ -514,13 +346,13 @@ function listInstalled(userDataDir, bundledOptions) {
   return out;
 }
 
-function resolveOwnedRuntime({ userDataDir, version }) {
-  const installDir = getInstallDir({ userDataDir, version });
+function resolveOwnedRuntime({ userDataDir, version, architecture }) {
+  const installDir = getInstallDir({ userDataDir, version, architecture });
   let stat;
   try { stat = fs.lstatSync(installDir); }
   catch (error) { if (error.code === "ENOENT") return null; throw error; }
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("The selected MKXP-Z installation directory is damaged.");
-  const hosted = Builds.resolveOwned({ userDataDir, version });
+  const hosted = Builds.resolveOwned({ userDataDir, version, architecture });
   if (hosted) return hosted;
   const appPath = findAppBundle(installDir);
   if (!appPath) throw new Error("The selected MKXP-Z installation is missing its app bundle.");
@@ -539,21 +371,17 @@ function resolveOwnedRuntime({ userDataDir, version }) {
 
 module.exports = {
   catalog: BINARY_CATALOG,
-  BUNDLED_VERSION,
-  DEFAULT_VERSION,
-  BUNDLED_APP_NAME,
   DEFAULTS,
   normalizeVersion,
   compareVersions,
   compareVersionsDesc,
-  canUseGh,
+  source,
   selectMacosArtifact,
-  listMacosDevAutobuilds,
   fetchAvailableVersions,
   fetchLatestAvailableVersions,
   listInstalled,
   resolveOwnedRuntime,
-  installFromGh,
+  installFromActions,
   uninstallVersion,
   installRootDir,
   getInstallDir,

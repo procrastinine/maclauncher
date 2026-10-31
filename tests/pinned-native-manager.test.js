@@ -19,7 +19,13 @@ function temporary(t) {
   return directory;
 }
 const catalog = [{ version: "1.2.0", upstreamRevision: "abc123" }, { version: "1.1.0", upstreamRevision: "def456" }];
-function manager(options = {}) { return createPinnedNativeManager({ id: "fixture-native", label: "Fixture", catalog, ...options }); }
+// Rows reach the manager through discovery, as a publisher lists them.
+function manager(options = {}) { return createPinnedNativeManager({ id: "fixture-native", label: "Fixture", discoverCatalog: async () => catalog, ...options }); }
+async function listed(options = {}, userDataDir) {
+  const runtime = manager(options);
+  await runtime.refreshCatalog({ userDataDir, force: true });
+  return runtime;
+}
 
 test("existing managers observe another process's catalog and local registration offline",async t=>{
   const root=temporary(t),runtime=manager({discoverCatalog:()=>assert.fail("Local changes must not query releases")});
@@ -47,7 +53,7 @@ test("registration metadata arriving after its directory is discovered remains v
   assert.equal(runtime.resolveSelection({runtimeData:{"fixture-native":{version:pin.version}}},{},root).ready,true);
 });
 
-test("Automatic ignores constructor identities while exact game selections remain explicit", t => {
+test("Automatic without listed releases selects nothing while exact game selections remain explicit", t => {
   const root = temporary(t), runtime = manager();
   assert.deepEqual(runtime.normalizeSettings({ defaultVersion: " auto " }), { defaultVersion: null });
   assert.equal(runtime.resolveSelection({ runtimeData: { "fixture-native": { version: "auto" } } }, {}, root).version, null);
@@ -63,8 +69,10 @@ test("verified installed bytes remain available for explicit offline choices wit
   const root = temporary(t); let host = "99.0";
   const pins = ["1.1.0", "1.2.0", "1.10.0", "2.0.0", "9.0.0"].map(version => ({ version, upstreamRevision: version,
     ...(version === "9.0.0" ? { minimumMacOS: "99.0" } : {}) }));
-  const runtime = manager({ catalog: pins, dependencies: { systemVersionSync: () => host },
+  const runtime = manager({ dependencies: { systemVersionSync: () => host },
     discoverCatalog: () => assert.fail("Auto must stay offline") });
+  // Releases resolved for games are known without being listed for download.
+  for (const entry of pins) runtime.core.rememberResolvedVersion({ userDataDir: root, entry });
   const files = new Map();
   for (const version of ["1.1.0", "1.2.0", "1.10.0", "9.0.0"]) {
     const file = path.join(root, "native-" + version); fs.writeFileSync(file, binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 });
@@ -99,7 +107,7 @@ test("native downloads retain caller cancellation alongside the shared Downloads
     const root = temporary(t), caller = new AbortController(), downloads = new DownloadManager();
     let started, observedSignal;
     const ready = new Promise(resolve => { started = resolve; });
-    const runtime = manager({ catalog: [{ version: "1.2.0", upstreamRevision: "abc123", asset: {
+    const runtime = manager({ discoverCatalog: async () => [{ version: "1.2.0", upstreamRevision: "abc123", asset: {
       filename: "runtime.zip", url: "https://example.test/runtime.zip", sha256: "a".repeat(64) } }],
       dependencies: { downloadToFile: async (_url, file, { signal, onProgress }) => {
         observedSignal = signal; fs.writeFileSync(file, "partial archive"); onProgress({ downloaded: 15, total: 100 }); started();
@@ -120,11 +128,11 @@ test("native downloads retain caller cancellation alongside the shared Downloads
   });
 });
 
-test("native library managers accept frameworks without weakening executable runtime validation", { skip: process.platform !== "darwin" }, t => {
+test("native library managers accept frameworks without weakening executable runtime validation", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t), library = path.join(root, "Framework");
   const bytes = binary(process.arch === "x64" ? "x86_64" : "arm64"); bytes.writeUInt32LE(6, 12);
   fs.writeFileSync(library, bytes, { mode: 0o755 });
-  const runtime = manager({ nativeLibrary: true });
+  const runtime = await listed({ nativeLibrary: true }, root);
   runtime.core.registerLocal({ userDataDir: root, version: "1.2.0", runtimePath: library });
   assert.equal(runtime.resolveSelection({}, {}, root, { version: "1.2.0" }).ready, true);
   assert.equal(manager().resolveSelection({}, {}, root, { version: "1.2.0" }).ready, false);
@@ -133,9 +141,9 @@ test("native library managers accept frameworks without weakening executable run
 test("switching catalog publishers ignores the previous release list while preserving installations", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t), executable = path.join(root, "runtime");
   fs.writeFileSync(executable, binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 });
-  const original = manager({ sourceUrl: "https://example.test/previous", discoverCatalog: async () => [{ version: "9.0", upstreamRevision: "previous" }] });
-  original.core.registerLocal({ userDataDir: root, version: "1.2.0", runtimePath: executable });
+  const original = manager({ sourceUrl: "https://example.test/previous", discoverCatalog: async () => [{ version: "9.0", upstreamRevision: "previous" }, catalog[0]] });
   await original.refreshCatalog({ userDataDir: root });
+  original.core.registerLocal({ userDataDir: root, version: "1.2.0", runtimePath: executable });
   const updated = manager({ sourceUrl: "https://example.test/current", discoverCatalog: async () => assert.fail("Reading state stays offline") });
   assert.deepEqual(updated.getState({ userDataDir: root }).catalog.versions, []);
   assert.equal(updated.getState({ userDataDir: root }).installed[0].version, "1.2.0");
@@ -146,7 +154,7 @@ test("installed versions that differ only by build hash retain catalog order and
   const root = temporary(t), executable = path.join(root, "runtime"), hashed = "0.1.0-abcdef0";
   fs.writeFileSync(executable, binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 });
   let listed = [];
-  const runtime = manager({ catalog: [], discoverCatalog: async () => listed.map(version => ({ version, upstreamRevision: version })) });
+  const runtime = manager({ discoverCatalog: async () => listed.map(version => ({ version, upstreamRevision: version })) });
   for (const version of ["0.1.0", hashed]) {
     runtime.core.rememberResolvedVersion({ userDataDir: root, entry: { version, upstreamRevision: version } });
     runtime.core.registerLocal({ userDataDir: root, version, runtimePath: executable });
@@ -154,7 +162,7 @@ test("installed versions that differ only by build hash retain catalog order and
   assert.equal(runtime.resolveSelection({}, {}, root).selectionRequired, undefined, "Unlisted ready builds require no manual choice");
   listed = [hashed, "0.1.0"];
   await runtime.refreshCatalog({ userDataDir: root, force: true });
-  const offline = manager({ catalog: [], discoverCatalog: () => assert.fail("Selection stays offline") });
+  const offline = manager({ discoverCatalog: () => assert.fail("Selection stays offline") });
   assert.deepEqual(offline.getState({ userDataDir: root }).catalog.versions, [hashed, "0.1.0"]);
   assert.equal(offline.resolveSelection({}, {}, root).selectionRequired, undefined, "Catalog defaults require no manual choice");
   for (const version of [hashed, "0.1.0"]) assert.equal(offline.resolveSelection({}, {}, root, { version }).ready, true);
@@ -163,10 +171,10 @@ test("installed versions that differ only by build hash retain catalog order and
 test("downloaded runtime floors appear in shared state and block download or build on older hosts", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t);
   let actual = "13.6";
-  const runtime = manager({ catalog: [{ version: "26.0", upstreamRevision: "new", minimumMacOS: "26.0", asset: {
+  const rows = [{ version: "26.0", upstreamRevision: "new", minimumMacOS: "26.0", asset: {
     filename: "runtime.zip", url: "https://example.test/runtime.zip", sha256: "a".repeat(64) } },
-    { version: "13.0", upstreamRevision: "old", minimumMacOS: "13.0", localBuild: true }],
-    discoverCatalog: async () => runtime.core.catalog,
+    { version: "13.0", upstreamRevision: "old", minimumMacOS: "13.0", localBuild: true }];
+  const runtime = manager({ discoverCatalog: async () => rows,
     buildRuntime: () => assert.fail("Host floor must block compilation"),
     dependencies: { systemVersionSync: () => actual, downloadToFile: () => assert.fail("Host floor must block downloads") } });
   await runtime.refreshCatalog();
@@ -183,18 +191,19 @@ test("downloaded runtime floors appear in shared state and block download or bui
   assert.equal(fs.existsSync(path.join(root, "runtimes")), false);
 });
 
-test("native runtime floor values are explicit and validated in offline and remote catalogs", async () => {
-  for (const floor of ["main", "0.0", "26", 26, "26.0.0.1"]) assert.throws(() => manager({ catalog: [{ version: "1.0", upstreamRevision: "a", minimumMacOS: floor }] }), /SHA-256/);
-  const runtime = manager({ discoverCatalog: async () => [{ version: "2.0", upstreamRevision: "b", minimumMacOS: "unknown" }] });
-  await assert.rejects(runtime.refreshCatalog({ force: true }), /invalid version or artifact identities/);
+test("native runtime floor values are explicit and validated in discovered catalogs", async () => {
+  for (const floor of ["main", "0.0", "26", 26, "26.0.0.1", "unknown"]) {
+    const runtime = manager({ discoverCatalog: async () => [{ version: "2.0", upstreamRevision: "b", minimumMacOS: floor }] });
+    await assert.rejects(runtime.refreshCatalog({ force: true }), /no version this MacLauncher can use/);
+  }
 });
 
-test("a valid native installation is unavailable on an older host without being mislabeled as damaged", { skip: process.platform !== "darwin" }, t => {
+test("a valid native installation is unavailable on an older host without being mislabeled as damaged", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t), executable = path.join(root, "runtime");
   fs.writeFileSync(executable, binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 });
   let actual = "26.0";
-  const runtime = manager({ catalog: [{ version: "26.0", upstreamRevision: "new", minimumMacOS: "26.0" }],
-    dependencies: { systemVersionSync: () => actual } });
+  const runtime = await listed({ discoverCatalog: async () => [{ version: "26.0", upstreamRevision: "new", minimumMacOS: "26.0" }],
+    dependencies: { systemVersionSync: () => actual } }, root);
   runtime.core.registerLocal({ userDataDir: root, version: "26.0", runtimePath: executable });
   actual = "13.0";
   assert.equal(runtime.core.resolveInstalled({ userDataDir: root, version: "26.0" }), null);
@@ -206,9 +215,9 @@ test("a valid native installation is unavailable on an older host without being 
 test("expired public artifacts require refresh while exact installed copies remain usable", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t), executable = path.join(root, "runtime");
   fs.writeFileSync(executable, binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 });
-  const runtime = manager({ catalog: [{ version: "nightly", upstreamRevision: "revision", asset: { filename: "runtime.zip",
+  const runtime = await listed({ discoverCatalog: async () => [{ version: "nightly", upstreamRevision: "revision", asset: { filename: "runtime.zip",
     url: "https://example.test/runtime.zip", sha256: "a".repeat(64), expiresAt: "2026-01-01T00:00:00Z" } }],
-    dependencies: { now: () => Date.parse("2026-10-10T00:00:00Z"), downloadToFile: () => assert.fail("Expired artifacts must not download") } });
+    dependencies: { now: () => Date.parse("2026-10-10T00:00:00Z"), downloadToFile: () => assert.fail("Expired artifacts must not download") } }, root);
   assert.deepEqual(runtime.getState({ userDataDir: root }).catalog.installableVersions, []);
   assert.match(runtime.getState({ userDataDir: root }).catalog.versionRequirements.nightly.installReason, /expired.*Refresh/);
   await assert.rejects(runtime.installRuntime({ userDataDir: root, version: "nightly" }), /expired/);
@@ -218,16 +227,25 @@ test("expired public artifacts require refresh while exact installed copies rema
   assert.equal((await runtime.installRuntime({ userDataDir: root, version: "nightly" })).executablePath, executable);
 });
 
-test("pinned native catalogs are offline, finite and reject traversal/unknown versions", async () => {
+test("a manager without listed releases offers no download and rejects traversal or unsafe versions", async () => {
   const runtime = manager();
-  assert.deepEqual((await runtime.refreshCatalog()).versions, []);
   assert.equal(runtime.getState({}).catalog.installable, false);
   assert.deepEqual(runtime.getState({}).catalog.installableVersions, []);
   assert.match(runtime.getState({}).catalog.installReason, /runtime can be imported/);
   assert.throws(() => runtime.core.normalizeVersion("../escape"), /Unsupported/);
   assert.throws(() => manager({ supportsDefault: true }).applySettingsUpdate("setDefault", { version: "../escape" }, {}), /Unsupported/);
-  assert.throws(() => createPinnedNativeManager({ id: "../bad", catalog }), /id/);
-  assert.throws(() => manager({ catalog: [{ version: "../bad", upstreamRevision: "a" }] }), /safe names/);
+  assert.throws(() => createPinnedNativeManager({ id: "../bad", discoverCatalog: async () => catalog }), /id/);
+  await assert.rejects(manager({ discoverCatalog: async () => [{ version: "../bad", upstreamRevision: "a" }] }).refreshCatalog({ force: true }),
+    /no version this MacLauncher can use/);
+});
+
+test("a downloadable manager has no option that names a version", async t => {
+  const root = temporary(t), fixed = [{ version: "1.0", upstreamRevision: "a".repeat(40), localBuild: false }];
+  const runtime = manager({ catalog: fixed, discoverCatalog: async () => [] });
+  assert.deepEqual(runtime.core.catalog, [], "A fixed row passed as an option has no effect");
+  assert.deepEqual(runtime.core.listCatalog({ userDataDir: root }), []);
+  assert.equal(runtime.resolveSelection({ runtimeData: { [runtime.id]: { version: "1.0" } } }, {}, root).ready, false);
+  assert.throws(() => createPinnedNativeManager({ id: "fixed-only", label: "Fixed", catalog: fixed }), /release source/);
 });
 
 test("native refresh forwards latest/all mode and replaces rows without reusing the other mode's cache", async t => {
@@ -276,28 +294,27 @@ test("a failed latest query does not fail an independent pending All versions re
   assert.deepEqual(calls, [true, false]);
 });
 
-test("included runtime requirements remain pinned before installation and after catalog refresh", async t => {
+test("a downloadable manager declares no included package versions before or after a refresh", async t => {
   const root = temporary(t);
-  const runtime = manager({ distributionRequired: true,
-    discoverCatalog: async () => [{ version: "2.0.0", upstreamRevision: "b".repeat(40) }],
-    catalog: [{ version: "1.2.0", upstreamRevision: "a".repeat(40), localBuild: false }] });
+  const runtime = manager({ discoverCatalog: async () => [{ version: "2.0.0", upstreamRevision: "b".repeat(40) }] });
   const model = require("../scripts/distribution-model.cjs");
   const requirements = () => model.nativeRequirements({ arch: "arm64", maximumMacOS: "13.0" },
     { managers: () => new Map([[runtime.id, runtime]]) });
-  const expected = [{ managerId: runtime.id, version: "1.2.0", arch: "arm64", upstreamRevision: "a".repeat(40) }];
-  assert.equal(runtime.getState({ userDataDir: root }).catalog.recommendedVersion, undefined);
-  assert.deepEqual(requirements(), expected);
+  assert.deepEqual(runtime.distributionVersions, []);
+  assert.equal(model.requiresDistribution(runtime), false);
+  assert.deepEqual(requirements(), []);
   await runtime.refreshCatalog({ userDataDir: root, force: true });
   assert.equal(runtime.getState({ userDataDir: root }).catalog.recommendedVersion, undefined);
-  assert.deepEqual(requirements(), expected);
-  assert.equal(model.requiresDistribution(manager({ catalog: runtime.core.catalog })), false);
+  assert.deepEqual(runtime.distributionVersions, []);
+  assert.deepEqual(requirements(), []);
+  assert.equal(runtime.delivery.catalog, "remote");
   assert.throws(() => manager({ distributionRequired: "true" }), /explicit booleans/);
 });
 
-test("explicit missing runtime selection never falls back to another installed version", { skip: process.platform !== "darwin" }, t => {
+test("explicit missing runtime selection never falls back to another installed version", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t), executable = path.join(root, "runtime");
   fs.writeFileSync(executable, binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 });
-  const runtime = manager();
+  const runtime = await listed({}, root);
   const installed = runtime.core.registerLocal({ userDataDir: root, version: "1.1.0", runtimePath: executable });
   assert.equal(installed.version, "1.1.0");
   assert.equal(installed.provenanceVerified, false);
@@ -316,10 +333,10 @@ test("a runtime version option takes priority while automatic selection preserve
   assert.deepEqual(entry, before);
 });
 
-test("local registration records SHA identity, rejects replaced executables and preserves external build on uninstall", { skip: process.platform !== "darwin" }, t => {
+test("local registration records SHA identity, rejects replaced executables and preserves external build on uninstall", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t), executable = path.join(root, "runtime");
   fs.writeFileSync(executable, binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 });
-  const runtime = manager();
+  const runtime = await listed({}, root);
   const record = runtime.core.registerLocal({ userDataDir: root, version: "1.2.0", runtimePath: executable });
   assert.equal(record.binarySha256, hashFile(executable));
   assert.throws(() => runtime.core.registerLocal({ userDataDir: root, version: "1.2.0", runtimePath: executable }), /already registered/);
@@ -333,8 +350,8 @@ test("local registration records SHA identity, rejects replaced executables and 
   assert.equal(fs.existsSync(path.join(root, "runtimes", "fixture-native", "1.2.0")), false);
 });
 
-test("incomplete native build directories remain visible and removable in runtime UI state", t => {
-  const root = temporary(t), runtime = manager();
+test("incomplete native build directories remain visible and removable in runtime UI state", async t => {
+  const root = temporary(t), runtime = await listed({}, root);
   const directory = runtime.core.getInstallDir({ userDataDir: root, version: "1.2.0" });
   fs.mkdirSync(path.join(directory, "build"), { recursive: true });
   fs.writeFileSync(path.join(directory, "build", "error.log"), "native compilation failed");
@@ -347,10 +364,10 @@ test("incomplete native build directories remain visible and removable in runtim
   assert.deepEqual(runtime.getState({ userDataDir: root }).sections[0].installed, []);
 });
 
-test("verified native build records bind source and overlay evidence to the selected revision", { skip: process.platform !== "darwin" }, t => {
+test("verified native build records bind source and overlay evidence to the selected revision", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t), executable = path.join(root, "runtime");
   fs.writeFileSync(executable, binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 });
-  const runtime = manager();
+  const runtime = await listed({}, root);
   const verifiedBuild = { sourceRevision: "abc123", sourceTreeSha256: "a".repeat(64), overlaySha256: "b".repeat(64), configureOptions: ["-DFETCHCONTENT_FULLY_DISCONNECTED=ON"] };
   assert.throws(() => runtime.core.registerLocal({ userDataDir: root, version: "1.2.0", runtimePath: executable,
     verifiedBuild: { ...verifiedBuild, sourceRevision: "wrong" } }), /selected source revision/);
@@ -361,41 +378,40 @@ test("verified native build records bind source and overlay evidence to the sele
 test("pinned download digest failure blocks extraction and removes partial staging", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t);
   let extracted = false;
-  const runtime = manager({ catalog: [{ version: "1.0", upstreamRevision: "a", asset: {
+  const runtime = manager({ discoverCatalog: async () => [{ version: "1.0", upstreamRevision: "a", asset: {
     url: "https://example.test/runtime.zip", filename: "runtime.zip", sha256: "0".repeat(64) } }],
   dependencies: { downloadToFile: async (_url, output) => fs.writeFileSync(output, "wrong artifact"),
     extractArchive: async () => { extracted = true; } } });
   await assert.rejects(runtime.installRuntime({ userDataDir: root, version: "1.0" }), /SHA-256/);
   assert.equal(extracted, false);
-  assert.deepEqual(fs.readdirSync(path.join(root, "runtimes", "fixture-native")), []);
+  assert.deepEqual(fs.readdirSync(path.dirname(runtime.core.getInstallDir({userDataDir: root, version: "1.0"}))), []);
 });
 
 test("pinned download persists selected revision and validates the published executable", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t), archive = path.join(root, "archive.zip");
   fs.writeFileSync(archive, "trusted archive fixture");
-  const runtime = manager({ catalog: [{ version: "1.0", upstreamRevision: "revision-a", asset: {
+  const runtime = manager({ discoverCatalog: async () => [{ version: "1.0", upstreamRevision: "revision-a", asset: {
     url: "https://example.test/runtime.zip", filename: "runtime.zip", sha256: hashFile(archive) } }],
   resolveExecutable: directory => path.join(directory, "engine"),
   dependencies: { downloadToFile: async (_url, output) => fs.copyFileSync(archive, output),
     extractArchive: async (_input, directory) => fs.writeFileSync(path.join(directory, "engine"),
       binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 }) } });
   const record = await runtime.installRuntime({ userDataDir: root, version: "1.0" });
-  assert.equal(runtime.getState({ userDataDir: root }).catalog.installable, false);
-  assert.deepEqual(runtime.getState({ userDataDir: root }).catalog.installableVersions, []);
+  assert.deepEqual(runtime.getState({ userDataDir: root }).catalog.versions, ["1.0"], "The install discovered the release list");
   assert.equal(runtime.getState({ userDataDir: root }).installed[0].ready, true);
   assert.equal(record.upstreamRevision, "revision-a");
   assert.equal(record.provenanceVerified, true);
   assert.equal(record.source, "download");
   assert.equal(record.binarySha256, hashFile(record.executablePath));
-  assert.deepEqual(fs.readdirSync(path.join(root, "runtimes", "fixture-native")), ["1.0"]);
+  assert.deepEqual(fs.readdirSync(path.dirname(runtime.core.getInstallDir({userDataDir: root, version: "1.0"}))), ["1.0"]);
 });
 
-test("legacy publisher MD5 requires an independent signed-artifact verifier", () => {
+test("legacy publisher MD5 requires an independent signed-artifact verifier", async () => {
   const legacy = [{ version: "1.0", upstreamRevision: "revision-a", asset: {
     url: "https://publisher.test/runtime.pkg", filename: "runtime.pkg", integrity: "publisher-md5", md5: "a".repeat(32) } }];
-  assert.throws(() => manager({ catalog: legacy }), /SHA-256/);
-  assert.throws(() => manager({ catalog: legacy, verifyArtifact: true }), /verification requires a callback/);
-  assert.doesNotThrow(() => manager({ catalog: legacy, verifyArtifact: async () => ({ verified: true }) }));
+  await assert.rejects(manager({ discoverCatalog: async () => legacy }).refreshCatalog({ force: true }), /no version this MacLauncher can use/);
+  assert.throws(() => manager({ discoverCatalog: async () => legacy, verifyArtifact: true }), /verification requires a callback/);
+  assert.deepEqual((await listed({ discoverCatalog: async () => legacy, verifyArtifact: async () => ({ verified: true }) })).getState({}).catalog.versions, ["1.0"]);
 });
 
 test("an explicitly resolved old game version survives bounded catalog refresh without duplicate rows", async t => {
@@ -415,24 +431,24 @@ test("legacy publisher digest and signer failures both block extraction", { skip
   const md5 = crypto.createHash("md5").update(bytes).digest("hex");
   let verified = 0, extracted = 0;
   function fixture(digest, evidence) {
-    return manager({ catalog: [{ version: "1.0", upstreamRevision: "revision-a", asset: {
+    return listed({ discoverCatalog: async () => [{ version: "1.0", upstreamRevision: "revision-a", asset: {
       url: "https://publisher.test/runtime.pkg", filename: "runtime.pkg", integrity: "publisher-md5", md5: digest } }],
       verifyArtifact: async () => { verified++; return evidence; },
       dependencies: { downloadToFile: async (_url, output) => fs.writeFileSync(output, bytes),
-        extractArchive: async () => { extracted++; } } });
+        extractArchive: async () => { extracted++; } } }, root);
   }
-  await assert.rejects(fixture("0".repeat(32), null).installRuntime({ userDataDir: root, version: "1.0" }), /MD5/);
+  await assert.rejects((await fixture("0".repeat(32), null)).installRuntime({ userDataDir: root, version: "1.0" }), /MD5/);
   assert.equal(verified, 0);
-  await assert.rejects(fixture(md5, { verified: false }).installRuntime({ userDataDir: root, version: "1.0" }), /signed artifact identity/);
+  await assert.rejects((await fixture(md5, { verified: false })).installRuntime({ userDataDir: root, version: "1.0" }), /signed artifact identity/);
   assert.equal(verified, 1); assert.equal(extracted, 0);
-  assert.deepEqual(fs.readdirSync(path.join(root, "runtimes", "fixture-native")), []);
+  assert.deepEqual(fs.readdirSync(path.join(root, "runtimes", "fixture-native", process.arch)), []);
 });
 
 test("signed legacy downloads record SHA-256 and verified publisher identity", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t), bytes = Buffer.from("signed installer fixture");
   const archiveSha256 = crypto.createHash("sha256").update(bytes).digest("hex"), md5 = crypto.createHash("md5").update(bytes).digest("hex");
   const evidence = { verified: true, identity: "Example Publisher (TEAM1234)", archiveSha256, certificateSha256: "b".repeat(64) };
-  const runtime = manager({ catalog: [{ version: "1.0", upstreamRevision: "revision-a", asset: {
+  const runtime = manager({ discoverCatalog: async () => [{ version: "1.0", upstreamRevision: "revision-a", asset: {
     url: "https://publisher.test/runtime.pkg", filename: "runtime.pkg", integrity: "publisher-md5", md5 } }],
     verifyArtifact: async () => evidence,
     resolveExecutable: directory => path.join(directory, "engine"),
@@ -507,7 +523,7 @@ test("available bundled runtimes install before source builds and verify install
 });
 
 test("a corrupt present bundle exposes its reason and blocks source fallback", { skip: process.platform !== "darwin" }, async t => {
-  const runtime = manager({ buildRuntime: async () => assert.fail("corrupt bundles must not fall back to source"),
+  const runtime = await listed({ buildRuntime: async () => assert.fail("corrupt bundles must not fall back to source"),
     bundledRuntime: { resolve: () => { throw new Error("Bundled manifest pin mismatch"); },
       install: async () => { throw new Error("Bundled manifest pin mismatch"); }, verifyInstalled: () => false } });
   assert.equal(runtime.getState({}).catalog.installable, false);
@@ -534,8 +550,8 @@ test("runtime broadcasts reuse native display checks while selection and Reload 
   const resolve = Native.resolveLocalRuntime;
   Native.resolveLocalRuntime = (...args) => { nativeChecks++; return resolve(...args); };
   t.after(() => { Native.resolveLocalRuntime = resolve; });
-  const runtime = manager({ bundledRuntime: { resolve: () => null, install: async () => null,
-    verifyInstalled: ({ verification }) => { if (verification === "full") { fullChecks++; return !auxiliaryDamaged; } return true; } } });
+  const runtime = await listed({ bundledRuntime: { resolve: () => null, install: async () => null,
+    verifyInstalled: ({ verification }) => { if (verification === "full") { fullChecks++; return !auxiliaryDamaged; } return true; } } }, root);
   const directory = runtime.core.getInstallDir({ userDataDir: root, version: "1.2.0" }); fs.mkdirSync(directory, { recursive: true });
   const executable = path.join(directory, "runner");
   fs.writeFileSync(executable, binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 });
@@ -555,8 +571,8 @@ test("runtime broadcasts reuse native display checks while selection and Reload 
   assert.deepEqual(runtime.getState({ userDataDir: root }).installed, []);
 });
 
-test("a warmed display invalidates on a same-size executable edit with restored mtime", { skip: process.platform !== "darwin" }, t => {
-  const root = temporary(t), executable = path.join(root, "runner"), runtime = manager();
+test("a warmed display invalidates on a same-size executable edit with restored mtime", { skip: process.platform !== "darwin" }, async t => {
+  const root = temporary(t), executable = path.join(root, "runner"), runtime = await listed({}, root);
   fs.writeFileSync(executable, binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 });
   runtime.core.registerLocal({ userDataDir: root, version: "1.2.0", runtimePath: executable });
   assert.equal(runtime.getState({ userDataDir: root }).installed[0].ready, true);
@@ -571,10 +587,10 @@ test("native preparation evidence is cloned, persisted and immutable without rep
   const digest = crypto.createHash("sha256").update(archive).digest("hex");
   const evidence = { profile: "direct-host-v1", sourceRevision: "abc123", profileSha256: "a".repeat(64),
     signature: { verified: true, identity: "reviewed publisher" }, files: ["lib/engine.dylib"], version: "cannot override version" };
-  const runtime = manager({ catalog: [{ version: "1.2.0", upstreamRevision: "abc123", asset: { url: "https://example.com/native.tar.gz", filename: "native.tar.gz", sha256: digest } }],
+  const runtime = await listed({ discoverCatalog: async () => [{ version: "1.2.0", upstreamRevision: "abc123", asset: { url: "https://example.com/native.tar.gz", filename: "native.tar.gz", sha256: digest } }],
     prepareInstall: async () => evidence, resolveExecutable: destination => path.join(destination, "runner"),
     dependencies: { downloadToFile: async (_url, destination) => fs.writeFileSync(destination, archive),
-      extractArchive: async (_archive, destination) => fs.writeFileSync(path.join(destination, "runner"), binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 }) } });
+      extractArchive: async (_archive, destination) => fs.writeFileSync(path.join(destination, "runner"), binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 }) } }, root);
   const installed = await runtime.core.installVersion({ userDataDir: root, version: "1.2.0" });
   assert.equal(installed.version, "1.2.0"); assert.equal(installed.archiveSha256, digest); assert.deepEqual(installed.installationMetadata, evidence);
   assert(Object.isFrozen(installed.installationMetadata)); assert(Object.isFrozen(installed.installationMetadata.signature));
@@ -588,19 +604,19 @@ test("native preparation evidence is cloned, persisted and immutable without rep
 test("invalid preparation evidence cannot publish a native runtime", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t), archive = Buffer.from("verified archive"), digest = crypto.createHash("sha256").update(archive).digest("hex");
   for (const evidence of [{ file: () => "not serializable" }, { size: Infinity }, { text: "x".repeat(65537) }]) {
-    const runtime = manager({ catalog: [{ version: "1.2.0", upstreamRevision: "abc123", asset: { url: "https://example.com/native.tar.gz", filename: "native.tar.gz", sha256: digest } }],
+    const runtime = await listed({ discoverCatalog: async () => [{ version: "1.2.0", upstreamRevision: "abc123", asset: { url: "https://example.com/native.tar.gz", filename: "native.tar.gz", sha256: digest } }],
       prepareInstall: async () => evidence, resolveExecutable: destination => path.join(destination, "runner"),
       dependencies: { downloadToFile: async (_url, destination) => fs.writeFileSync(destination, archive),
-        extractArchive: async (_archive, destination) => fs.writeFileSync(path.join(destination, "runner"), binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 }) } });
+        extractArchive: async (_archive, destination) => fs.writeFileSync(path.join(destination, "runner"), binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 }) } }, root);
     await assert.rejects(runtime.core.installVersion({ userDataDir: root, version: "1.2.0" }), /metadata/);
     assert.equal(fs.existsSync(path.join(root, "runtimes", "fixture-native", "1.2.0", "runtime.json")), false);
   }
 });
 
 test("local imports are opt-in and do not seed download version choices", () => {
-  const fixed = manager();
-  assert.equal(fixed.importRuntime, undefined);
-  assert.equal(fixed.getState({}).catalog.importable, undefined);
+  const standard = manager();
+  assert.equal(standard.importRuntime, undefined);
+  assert.equal(standard.getState({}).catalog.importable, undefined);
   const runtime = manager({ importLocal: true, discoverCatalog: () => assert.fail("Local import stays offline") });
   const state = runtime.getState({});
   assert.deepEqual(state.catalog.versions, []);
@@ -613,7 +629,7 @@ test("local imports are opt-in and do not seed download version choices", () => 
 test("Runtimes local import validates the selected build and removal preserves external files", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t), runtimePath = path.join(root, "local-runtime");
   fs.writeFileSync(runtimePath, binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 });
-  const runtime = manager({ importLocal: true }), { runRuntimeManagerAction } = require("../src/core/runtime-manager-service");
+  const runtime = await listed({ importLocal: true }, root), { runRuntimeManagerAction } = require("../src/core/runtime-manager-service");
   let settings = {};
   const result = await runRuntimeManagerAction({ manager: runtime, action: "import", userDataDir: root,
     payload: { version: "1.1.0", runtimePath }, readSettings: () => settings, saveSettings: next => { settings = next; } });
@@ -624,7 +640,13 @@ test("Runtimes local import validates the selected build and removal preserves e
   assert.equal(runtime.resolveSelection({}, { runtimes: { [runtime.id]: settings } }, root).selectionRequired, undefined);
   assert.equal(runtime.resolveSelection(chosen, { runtimes: { [runtime.id]: settings } }, root).ready, true);
   await assert.rejects(runtime.importRuntime({ userDataDir: root, version: "1.1.0", runtimePath }), /already registered/);
-  await assert.rejects(runtime.importRuntime({ userDataDir: root, version: "unknown", runtimePath }), /Unsupported/);
+  const unlisted = await runtime.importRuntime({ userDataDir: root, version: "unknown", runtimePath });
+  assert.equal(unlisted.version, "unknown"); assert.equal(unlisted.provenanceVerified, false);
+  assert.equal(unlisted.upstreamRevision, "local");
+  assert.equal(runtime.resolveSelection({ runtimeData: { [runtime.id]: { version: "unknown" } } }, {}, root).ready, true);
+  const reopened = manager({ discoverCatalog: () => assert.fail("Local registrations reopen offline") });
+  assert.equal(reopened.resolveSelection({ runtimeData: { [runtime.id]: { version: "unknown" } } }, {}, root).ready, true);
+  assert.deepEqual(runtime.getState({ userDataDir: root }).catalog.versions, ["1.2.0", "1.1.0"], "Local registration does not invent a remote release");
   fs.appendFileSync(runtimePath, "changed");
   assert.equal(runtime.resolveSelection(chosen, { runtimes: { [runtime.id]: settings } }, root).ready, false);
   await runRuntimeManagerAction({ manager: runtime, action: "uninstall", userDataDir: root,
@@ -633,20 +655,20 @@ test("Runtimes local import validates the selected build and removal preserves e
   assert.equal(fs.existsSync(runtimePath), true);
 });
 
-test("local imports cannot label a native executable as a different selected architecture", { skip: process.platform !== "darwin" }, t => {
+test("local imports cannot label a native executable as a different selected architecture", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t), runtimePath = path.join(root, "local-runtime");
   fs.writeFileSync(runtimePath, binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 });
   const architecture = process.arch === "x64" ? "arm64" : "x86_64";
-  const runtime = manager({ importLocal: true, catalog: [{ ...catalog[0], architecture }] });
-  assert.throws(() => runtime.importRuntime({ userDataDir: root, version: "1.2.0", runtimePath }), new RegExp(`requires a ${architecture} executable`));
+  const runtime = await listed({ importLocal: true, discoverCatalog: async () => [{ ...catalog[0], architecture }] }, root);
+  assert.throws(() => runtime.importRuntime({ userDataDir: root, version: "1.2.0", runtimePath }), new RegExp(`requires a ${architecture} executable|does not support this Mac's`));
   assert.deepEqual(runtime.core.listInstalled(root), []);
 });
 
-test("download choices require explicit refresh, cache offline and retire removed seeded releases", async t => {
+test("download choices require explicit refresh, cache offline, keep the last list on an empty answer and retire removed releases", async t => {
   const root = temporary(t), asset = version => ({ version, upstreamRevision: version, asset: {
     filename: version + '.tar.gz', url: 'https://example.test/' + version + '.tar.gz', sha256: 'a'.repeat(64) } });
   let rows = [asset('2.0')], requests = 0;
-  const options = { catalog: [asset('1.0')], sourceUrl: 'https://example.test/releases',
+  const options = { sourceUrl: 'https://example.test/releases',
     discoverCatalog: async () => { requests++; return rows; } };
   const runtime = manager(options);
   assert.deepEqual(runtime.getState({ userDataDir: root }).catalog.versions, []);
@@ -656,15 +678,17 @@ test("download choices require explicit refresh, cache offline and retire remove
   assert.deepEqual(cached.getState({ userDataDir: root }).catalog.versions, ['2.0']);
   assert.equal(requests, 1, 'Loading cached choices stays offline');
   rows = [];
-  assert.deepEqual((await cached.refreshCatalog({ userDataDir: root, force: true })).versions, []);
-  assert.deepEqual(cached.getState({ userDataDir: root }).catalog.installableVersions, []);
-  assert.deepEqual(manager(options).getState({ userDataDir: root }).catalog.versions, []);
+  await assert.rejects(cached.refreshCatalog({ userDataDir: root, force: true }), /previous list is kept/);
+  assert.deepEqual(manager(options).getState({ userDataDir: root }).catalog.versions, ['2.0']);
+  rows = [asset('3.0')];
+  assert.deepEqual((await cached.refreshCatalog({ userDataDir: root, force: true })).versions, ['3.0']);
+  assert.deepEqual(manager(options).getState({ userDataDir: root }).catalog.versions, ['3.0']);
 });
 
 test("reinstall atomically repairs damaged downloaded bytes and preserves them when replacement fails", { skip: process.platform !== 'darwin' }, async t => {
   const root = temporary(t), archive = Buffer.from('verified replacement'), digest = crypto.createHash('sha256').update(archive).digest('hex');
   let invalidArchive = false, downloads = 0;
-  const runtime = manager({ catalog: [{ version: '1.2.0', upstreamRevision: 'abc123', asset: {
+  const runtime = manager({ discoverCatalog: async () => [{ version: '1.2.0', upstreamRevision: 'abc123', asset: {
     url: 'https://example.test/native.tar.gz', filename: 'native.tar.gz', sha256: digest } }],
     resolveExecutable: destination => path.join(destination, 'runner'),
     dependencies: { downloadToFile: async (_url, destination) => { downloads++; fs.writeFileSync(destination, invalidArchive ? 'incorrect' : archive); },
@@ -690,10 +714,10 @@ test("reinstall atomically repairs damaged downloaded bytes and preserves them w
     asset: { filename: "runtime.zip", url: "https://example.test/" + version + ".zip", sha256: "a".repeat(64) }, ...extra });
   const published = [row("1.2.0"), row("1.10.0"), row("2.0.0", { channel: "development" }),
     row("3.0.0", { prerelease: true }), row("4.0.0", { minimumMacOS: "99.0" }), row("5.0.0", { deprecated: true })];
-  const runtime = manager({ catalog: [], discoverCatalog: async () => published, dependencies: { systemVersionSync: () => "13.0" } });
+  const runtime = manager({ discoverCatalog: async () => published, dependencies: { systemVersionSync: () => "13.0" } });
   assert.equal(runtime.resolveSelection({}, {}, root).discoveryRequired, true);
   await runtime.refreshCatalog({ userDataDir: root });
-  const cached = manager({ catalog: [], discoverCatalog: () => assert.fail("Selection must stay offline"), dependencies: { systemVersionSync: () => "13.0" } });
+  const cached = manager({ discoverCatalog: () => assert.fail("Selection must stay offline"), dependencies: { systemVersionSync: () => "13.0" } });
   assert.equal(cached.resolveSelection({}, {}, root).version, "1.10.0");
   assert.equal(cached.resolveSelection({}, {}, root).selectionRequired, undefined);
   assert.ok(cached.getState({ userDataDir: root }).catalog.versions.includes("1.10.0"));
@@ -704,11 +728,69 @@ test("reinstall atomically repairs damaged downloaded bytes and preserves them w
 
 test("catalog selection stays with its launcher data directory", async t => {
   const root = temporary(t), first = path.join(root, "first"), second = path.join(root, "second");
-  const runtime = manager({ catalog: [], discoverCatalog: async () => [{version:"7.0",upstreamRevision:"source-seven",
+  const runtime = manager({ discoverCatalog: async () => [{version:"7.0",upstreamRevision:"source-seven",
     asset:{filename:"runtime.zip",url:"https://example.test/runtime.zip",sha256:"a".repeat(64)}}] });
   await runtime.refreshCatalog({userDataDir:first});
   assert.equal(runtime.resolveSelection({}, {}, first, { version: "7.0" }).version,"7.0");
   assert.equal(runtime.resolveSelection({}, {}, second).version,null);
   assert.deepEqual(runtime.getState({userDataDir:second}).catalog.versions,[]);
   assert.equal(runtime.resolveSelection({}, {}, first, { version: "7.0" }).version,"7.0");
+});
+
+test("a catalog-only manager discovers inside a consented install and its receipt plays offline after the release leaves the list", { skip: process.platform !== "darwin" }, async t => {
+  const root = temporary(t), archive = path.join(root, "archive.zip"); let discoveries = 0;
+  fs.writeFileSync(archive, "published archive fixture");
+  const row = version => ({ version, upstreamRevision: "source-" + version,
+    asset: { url: `https://example.test/${version}.zip`, filename: "runtime.zip", sha256: hashFile(archive) } });
+  let published = [row("1.0"), row("2.0")];
+  const options = { resolveExecutable: directory => path.join(directory, "engine"),
+    discoverCatalog: async () => { discoveries++; return published; },
+    dependencies: { downloadToFile: async (_url, output) => fs.copyFileSync(archive, output),
+      extractArchive: async (_input, directory) => fs.writeFileSync(path.join(directory, "engine"),
+        binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 }) } };
+  const runtime = manager(options);
+  assert.equal(runtime.resolveSelection({}, {}, root).discoveryRequired, true);
+  assert.equal(discoveries, 0, "Selection stays offline");
+  const installed = await runtime.installRuntime({ userDataDir: root });
+  assert.equal(discoveries, 1); assert.equal(installed.version, "2.0", "The newest discovered release installs");
+  published = [row("3.0")];
+  await runtime.refreshCatalog({ userDataDir: root, force: true });
+  const catalogs = path.join(root, "runtimes", "fixture-native");
+  for (const name of fs.readdirSync(catalogs).filter(name => /^catalog.*\.json$/.test(name))) fs.rmSync(path.join(catalogs, name));
+  const offline = manager({ ...options, discoverCatalog: () => assert.fail("Installed receipts stay offline") });
+  assert.equal(offline.resolveSelection({}, {}, root).version, "2.0");
+  assert.equal(offline.resolveSelection({}, {}, root).ready, true);
+  assert.equal(offline.resolveSelection({}, { runtimes: { "fixture-native": { defaultVersion: "2.0" } } }, root).ready, true);
+});
+
+test("a download without a publisher size or digest installs with a recorded hash and stays installed", { skip: process.platform !== "darwin" }, async t => {
+  const root = temporary(t);
+  const runtime = manager({ resolveExecutable: directory => path.join(directory, "engine"),
+    discoverCatalog: async () => [{ version: "1.0", upstreamRevision: "1.0", asset: { url: "https://example.test/1.0.zip", filename: "runtime.zip", integrity: "recorded-local" } }],
+    dependencies: { downloadToFile: async (_url, output) => fs.writeFileSync(output, "archive"),
+      extractArchive: async (_input, directory) => fs.writeFileSync(path.join(directory, "engine"),
+        binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 }) } });
+  const installed = await runtime.installRuntime({ userDataDir: root });
+  assert.equal(installed.version, "1.0");
+  assert.equal(runtime.resolveSelection({}, {}, root).ready, true);
+});
+
+test("an install from a cached list whose file the publisher removed reads the current list once and installs its newest release", { skip: process.platform !== "darwin" }, async t => {
+  const root = temporary(t), archive = path.join(root, "archive.zip"); let discoveries = 0;
+  fs.writeFileSync(archive, "published archive fixture");
+  const row = version => ({ version, upstreamRevision: "source-" + version,
+    asset: { url: `https://example.test/${version}.zip`, filename: "runtime.zip", sha256: hashFile(archive) } });
+  let published = [row("1.0")];
+  const runtime = manager({ resolveExecutable: directory => path.join(directory, "engine"),
+    discoverCatalog: async () => { discoveries++; return published; },
+    dependencies: { downloadToFile: async (url, output) => {
+      if (url.endsWith("/1.0.zip")) throw Object.assign(new Error("HTTP 404"), { statusCode: 404 });
+      fs.copyFileSync(archive, output);
+    }, extractArchive: async (_input, directory) => fs.writeFileSync(path.join(directory, "engine"),
+      binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 }) } });
+  await runtime.refreshCatalog({ userDataDir: root, force: true });
+  published = [row("2.0")];
+  const installed = await runtime.installRuntime({ userDataDir: root });
+  assert.equal(installed.version, "2.0");
+  assert.equal(discoveries, 2, "One refresh follows the missing file");
 });

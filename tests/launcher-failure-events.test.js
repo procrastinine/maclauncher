@@ -97,6 +97,7 @@ test('a replacement game run suppresses the old delayed banner and recovery with
       broadcastActivity() {}, observeGameProcess: require('../src/core/game-process-events').observeGameProcess,
       ...require('../src/core/process-lifecycle'),
       findGameByPath: () => ({ name: 'Example' }), gameRecordsCache: [], path,
+      gameAvailability: { refresh: async () => [{ available: true }] },
       logger: { error: message => logs.push(message) },
       launcherWindows: [{ webContents: { send: (_event, message) => messages.push(message) } }],
       maybeOfferRuntimeRecoveryAfterCrash: (...args) => recoveries.push(args) };
@@ -133,4 +134,25 @@ test('a replacement game run suppresses the old delayed banner and recovery with
     assert.equal(messages.length, 1, 'a current failure is still delivered once');
     assert.equal(context.pendingGameCompletions.size, 0);
   }
+});
+
+test('a game that stops after its files disappear is reported with that reason, without runtime recovery', async () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8');
+  const messages = [], recoveries = [];
+  const context = { runningGameSessions: new Map(), pendingGameCompletions: new Map(), nextRunSessionId: 1,
+    broadcastActivity() {}, observeGameProcess: require('../src/core/game-process-events').observeGameProcess,
+    ...require('../src/core/process-lifecycle'),
+    findGameByPath: () => ({ name: 'Example', gameId: 'example', gamePath: '/Volumes/Games/Example' }), gameRecordsCache: [], path,
+    gameAvailability: { refresh: async () => [{ available: false, reason: 'missing', path: '/Volumes/Games/Example', message: "The game's files were not found at their saved location." }] },
+    logger: { error() {} },
+    launcherWindows: [{ webContents: { send: (_event, message) => messages.push(message) } }],
+    maybeOfferRuntimeRecoveryAfterCrash: (...args) => recoveries.push(args) };
+  vm.runInNewContext(source.slice(source.indexOf('function registerGameRun('), source.indexOf('async function stopRunSession(')), context);
+  const child = new EventEmitter(); child.pid = 4;
+  context.registerProcessRun('/Volumes/Games/Example', child, 'runtime');
+  child.emit('exit', null, 'SIGBUS');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(context.runningGameSessions.size, 0, 'the launcher reports the exit and stays usable');
+  assert.deepEqual(messages.map(message => message.message), ["Example stopped because its files became unavailable. The game's files were not found at their saved location."]);
+  assert.deepEqual(recoveries, []);
 });

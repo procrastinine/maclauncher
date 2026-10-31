@@ -88,3 +88,55 @@ test("denoised scaling is an ordinary scene peer with actual AOV requirements an
   assert.equal(unavailable.available, false);assert.equal(unavailable.availableWithoutInputs, false);
   assert.match(unavailable.reason, /detected GPUs/);
 });
+
+function graphicsPackage(t, options = {}) {
+  const {sdkVersion = "27.0", inputMinimum = "27.0"} = options;
+  const inputsAPI = Object.hasOwn(options, "inputsAPI") ? options.inputsAPI : 1;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "graphics-feature-floors-"));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  fs.writeFileSync(path.join(root, "runtime.json"), JSON.stringify({minimumMacOS: "13.0", build: {sdkVersion},
+    features: {graphics: {spatialMethods: ["bilinear", "metalfx"], temporalMethods: ["metalfx", "metalfx-denoised"],
+      frameGenerationMethods: ["metalfx"], metalFX27InputsAPI: inputsAPI,
+      requirements: {metalFX27Inputs: {minimumMacOS: inputMinimum}},
+      presentation: {spatial: true, temporal: true, frameGeneration: true}}}}));
+  return root;
+}
+test("one SDK-27 package retains older MetalFX operations while extended inputs use their own floor", async t => {
+  const root = graphicsPackage(t);
+  for (const macOSVersion of ["13.0", "25.0", "26.0", "27.0"]) {
+    const support = Graphics.capabilities(root, "explicit", {platform: "darwin", macOSVersion, graphicsHardware: {state: "unknown", macOSVersion}});
+    assert.deepEqual(support.spatialMethods, ["bilinear", "metalfx"]);
+    assert.equal(support.temporalMethods.includes("metalfx"), true);
+    assert.equal(support.temporalMethods.includes("metalfx-denoised"), Number(macOSVersion) >= 26);
+    assert.equal(support.providerTemporalMethods.includes("metalfx-denoised"), Number(macOSVersion) >= 26);
+    assert.equal(support.frameGenerationMethods.includes("metalfx"), Number(macOSVersion) >= 26);
+    assert.equal(support.providerGenerationMethods.includes("metalfx"), Number(macOSVersion) >= 26);
+    assert.equal(support.metalFX27Inputs, Number(macOSVersion) >= 27);
+    if (Number(macOSVersion) < 27) assert.equal(support.metalFX27InputsReason, "Requires macOS 27.0 or later.");
+    if (Number(macOSVersion) < 26) await assert.rejects(Graphics.prepare({temporalMethod: "metalfx-denoised"},
+      {root, graphicsHost: "explicit", graphicsCapabilities: support}), /selected temporal scaler/);
+  }
+});
+test("SDK identity cannot enable extended inputs without the declared API and supported OS", t => {
+  const options = {platform: "darwin", macOSVersion: "27.0", graphicsHardware: {state: "unknown"}};
+  for (const sdkVersion of ["26.5", "27.0", "28.0"]) {
+    const support = Graphics.capabilities(graphicsPackage(t, {sdkVersion, inputsAPI: undefined}), "explicit", options);
+    assert.equal(support.metalFX27Inputs, false);
+    assert.equal(support.temporalMethods.includes("metalfx-denoised"), true);
+    assert.equal(support.frameGenerationMethods.includes("metalfx"), true);
+  }
+  const future = Graphics.capabilities(graphicsPackage(t, {inputMinimum: "28.0"}), "explicit", options);
+  assert.equal(future.metalFX27Inputs, false);
+  assert.equal(future.metalFX27InputsReason, "Requires macOS 28.0 or later.");
+  assert.match(Hardware.metalFX27InputsReason({metalFX27InputsAPI: 1, requirements: {metalFX27Inputs: {minimumMacOS: "13.0"}}},
+    {...options, macOSVersion: "26.0"}), /27\.0/);
+});
+test("device restrictions disable only affected MetalFX capabilities in an otherwise usable package", t => {
+  const hardware = Hardware.validate(response([device("GPU", "10", false, true)]));
+  const support = Graphics.capabilities(graphicsPackage(t), "explicit", {platform: "darwin", macOSVersion: "27.0", graphicsHardware: hardware});
+  assert.deepEqual(support.spatialMethods, ["bilinear"]);
+  assert.deepEqual(support.temporalMethods, []);
+  assert.deepEqual(support.frameGenerationMethods, []);
+  assert.equal(support.metalFX27Inputs, false);
+  assert.match(support.metalFX27InputsReason, /detected GPUs/);
+});

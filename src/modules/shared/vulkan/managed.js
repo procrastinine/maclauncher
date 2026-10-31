@@ -2,19 +2,18 @@ const path = require("node:path");
 const execute = require("node:util").promisify(require("node:child_process").execFile);
 const Bundled = require("../runtime/bundled-native");
 const { createProjectBuildManager } = require("../runtime/project-build-manager");
+const repository = "procrastinine/maclauncher-builds";
 
 const projectId = "vulkan-kosmickrisp-gles32";
 const selectionId = "kosmickrisp:maclauncher-gles32";
 
 function createManager(dependencies = {}) {
-  const manager = createProjectBuildManager({ projectId, label: "KosmicKrisp GLES 3.2", repository: "procrastinine/maclauncher-builds", upstreamUrl: "https://gitlab.freedesktop.org/mesa/mesa", nativeLibrary: true,
+  const manager = createProjectBuildManager({ projectId, label: "KosmicKrisp GLES 3.2", repository, upstreamUrl: "https://gitlab.freedesktop.org/mesa/mesa", nativeLibrary: true,
     manifestRelative: "manifest.json", sourceRelative: null, filesPrefix: "files/",
     executableRelative: manifest => manifest.executableRelative,
     validateManifest(manifest, record) {
-      Bundled.validateManifest(manifest, { managerId: projectId, version: record.version,
-        arch: record.arch, upstreamRevision: record.source?.revision });
-      if (manifest.executableRelative !== "libvulkan_kosmickrisp.dylib" || manifest.runtimeFiles?.loader !== "libvulkan.1.dylib" ||
-          manifest.provenance.verifiedBuild !== true || manifest.provenance.capabilities?.openglES !== "3.2")
+      Bundled.validateRuntimeManifest(manifest, { managerId: projectId, version: record.version, arch: record.arch });
+      if (manifest.executableRelative !== "libvulkan_kosmickrisp.dylib" || manifest.runtimeFiles?.loader !== "libvulkan.1.dylib")
         throw new Error("The KosmicKrisp package differs from its GLES 3.2 profile.");
     },
     async verifyPayload(selected, { signal } = {}) {
@@ -68,11 +67,10 @@ function sceneDescriptor(manifest) {
 }
 function createSceneManager(dependencies = {}) {
   const result = createProjectBuildManager({ projectId: sceneProjectId, label: "MoltenVK scene support",
-    repository: "procrastinine/maclauncher-builds", upstreamUrl: "https://github.com/KhronosGroup/MoltenVK", nativeLibrary: true,
+    repository, upstreamUrl: "https://github.com/KhronosGroup/MoltenVK", nativeLibrary: true,
     manifestRelative: "manifest.json", sourceRelative: null, executableRelative: manifest => manifest.executableRelative,
     validateManifest(manifest, record) {
-      Bundled.validateManifest(manifest, { managerId: sceneProjectId, version: record.version, arch: record.arch,
-        upstreamRevision: record.source?.revision });
+      Bundled.validateRuntimeManifest(manifest, { managerId: sceneProjectId, version: record.version, arch: record.arch });
       sceneDescriptor(manifest);
     },
     async verifyPayload(selected, { signal } = {}) {

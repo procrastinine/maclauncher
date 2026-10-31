@@ -11,23 +11,26 @@ function graphicsBridgeVersions(runtimeId, context) {
 }
 const graphicsBridgeActions = { listGraphicsBridgeVersions: (entry, _payload, context) => graphicsBridgeVersions(context.runtimeId || entry.runtimeId, context) };
 const graphicsBridgeSettingsActions = { listGraphicsBridgeVersions: (payload, context) => graphicsBridgeVersions(payload?.runtimeId, context) };
+function graphicsBackendOptions(entry, context, { runtimeManager = manager, host } = {}) {
+  const selected = runtimeManager.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
+  const field = manifest.runtime.entries.crossover.settings.fields.find(field => field.key === "graphicsBackend");
+  const support = require("./runtime/backend-support");
+  return { graphicsBackends: field.options.filter(option => !support.reason(selected?.install, option.value, host)) };
+}
+const crossoverActions = { ...graphicsBridgeActions,
+  listGraphicsBackends: (entry, _payload, context) => graphicsBackendOptions(entry, context) };
+const crossoverSettingsActions = { ...graphicsBridgeSettingsActions,
+  listGraphicsBackends: (_payload, context) => graphicsBackendOptions({}, context) };
 const sikarugirManager = require("./sikarugir/runtime/manager");
 const sikarugirProvider = { ...require("./sikarugir/provider"),
   runtime: manifest.runtime.entries.sikarugir, supports: manifest.runtime.entries.sikarugir.supports,
   actions: graphicsBridgeActions, settingsActions: graphicsBridgeSettingsActions };
-function hasWindowsExecutable(entry) {
-  const evidence = Detection.cachedWindowsExecutable(entry);
-  if (!evidence?.windowsExecutablePath) return false;
-  try { return fs.statSync(evidence.windowsExecutablePath).isFile(); } catch { return false; }
-}
+// CrossOver cannot be downloaded, so it is offered only while an installed copy is available.
 function supportsEntry(entry, _moduleSettings, context = {}) {
-  if (!hasWindowsExecutable(entry)) return false;
-  const architecture = Detection.cachedWindowsExecutable(entry)?.executableArchitecture;
-  return architecture !== "arm64" && manager.isAvailable(context.userDataDir);
+  return Detection.supportsWindowsRuntimes(entry) && manager.isAvailable(context.userDataDir);
 }
 function canLaunchRuntime(runtimeId, entry, moduleSettings, context) {
-  return runtimeId === "crossover" && supportsEntry(entry, moduleSettings, context) &&
-    entry?.runtimeData?.crossover?.executableArchitecture !== "arm64";
+  return runtimeId === "crossover" && supportsEntry(entry, moduleSettings, context);
 }
 function ensureRuntime(entry, context) {
   const selected = manager.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
@@ -44,7 +47,7 @@ async function launchRuntime(runtimeId, entry, context) {
 }
 const resolveSaveLocations = () => ({ primaryDirectory: null, directories: [] });
 const crossoverProvider = { runtimeId: "crossover", runtime: manifest.runtime.entries.crossover, managerId: "crossover",
-    actions: graphicsBridgeActions, settingsActions: graphicsBridgeSettingsActions,
+    actions: crossoverActions, settingsActions: crossoverSettingsActions,
     supports: manifest.supports, decorateEntry: Detection.decorateEntry,
     supportsEntry, canLaunchRuntime, ensureRuntime, launchRuntime, resolveSaveLocations,
     getRuntimeRequirements: (entry, context) => require("./temporal").requirements(entry, { ...context, runtimeId: "crossover" }),
@@ -63,6 +66,7 @@ function resolveGraphicsInputs(entry, context = {}, resolved) {
 }
 
 module.exports = { id: manifest.id, manifest, detectGame: Detection.detectGame,
+  metadataSources: ["sikarugir/provider.js", "../shared/executable-candidates.js", "../shared/runtime/providers.js"],
   graphicsComputeHosts:[require("./runtime/compute-host"),require("./sikarugir/runtime/compute-host")],
   runtimeManagers, runtimeProviders, runtimeProvider: crossoverProvider,
   resolveGraphicsInputs,
@@ -74,9 +78,9 @@ module.exports = { id: manifest.id, manifest, detectGame: Detection.detectGame,
   ensureRuntime: (entry, context) => providerForEntry(entry, context)?.ensureRuntime(entry, context),
   launchRuntime: (runtimeId, entry, context) => providerForRuntime(runtimeId)?.launchRuntime(runtimeId, entry, context) || null,
   resolveSaveLocations: (entry, context) => providerForEntry(entry, context)?.resolveSaveLocations?.(entry, context) || resolveSaveLocations(),
-  settingsActions: graphicsBridgeSettingsActions,
+  settingsActions: crossoverSettingsActions,
   actions: {
-    ...graphicsBridgeActions,
+    ...crossoverActions,
     runtimeStatus: (entry, _payload, context) => {
       const selectedManager = runtimeManagers.find(candidate => candidate.id === providerForEntry(entry, context)?.managerId) || manager;
       const selected = selectedManager.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
@@ -91,6 +95,6 @@ module.exports = { id: manifest.id, manifest, detectGame: Detection.detectGame,
       return { directory };
     }
   },
-  __test: { hasWindowsExecutable, supportsEntry } };
+  __test: { supportsEntry, graphicsBackendOptions } };
 
 module.exports = require("../shared/decompilation/native").withTools(module.exports);

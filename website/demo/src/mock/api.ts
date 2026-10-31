@@ -33,14 +33,50 @@ const DEMO_ROOT = "/Users/Shared/MacLauncher Demo";
 // something to act on. Any manager not listed here offers one example version.
 const EXAMPLE_VERSIONS: Record<string, string[]> = {
   sdk: ["8.4.1", "8.3.7", "7.8.7"], godot: ["4.5.1", "4.4.1", "3.6.1"], love: ["11.5", "11.4"],
-  mkxpz: ["2.4.2"], nwjs: ["0.104.0", "0.103.1"], unity: ["6000.2.6f2", "2022.3.62f2"]
+  mkxpz: ["2.4.2"], nwjs: ["0.104.0", "0.103.1"], unity: ["6000.2.6f2", "2022.3.62f2"], scummvm: ["2.9.1", "2.9.0", "2.8.1"]
 };
+// The processors each example version is built for. A runtime listed here
+// publishes a build for each CPU, so Runtimes offers the other CPU's builds
+// through its Build menu. Any other runtime with per-CPU lists publishes
+// builds for the launcher's CPU only.
+const EXAMPLE_BUILDS: Record<string, string[]> = { butterscotch: ["arm64", "x64"] };
 
 // Module actions that only read state. The inspector and Settings call them
 // on their own, so they get no article, and one without a recorded answer
 // fails visibly instead of leaving its view waiting.
 const STATUS_READ = /^(list|read|get)|(Status|Options|Recommendation|Inputs|Accounts)$/;
 const unavailable = () => Promise.reject(new Error("This information isn't part of the demo."));
+
+// One version list after Refresh: the list itself and each of its sources, or
+// only the source refreshed. A CPU's list declares the builds made for it.
+function listVersions(catalog: Section | undefined, versions: string[], architecture: string | null, sourceId?: string): Section {
+  const requirements = { ...catalog?.versionRequirements };
+  if (architecture) for (const version of versions) requirements[version] = { ...requirements[version], architecture };
+  const list: Section = { ...catalog, status: "success", fetchedAt: Date.now(), error: null, installable: true, installReason: null,
+    versions, installableVersions: versions, latestAvailableVersion: versions[0] || null, versionRequirements: requirements };
+  if (Array.isArray(catalog?.sources)) list.sources = catalog.sources.map((source: Section) =>
+    !sourceId || source.id === sourceId ? listVersions(source, versions, architecture) : source);
+  return list;
+}
+
+/** A section after Refresh: its version list and each CPU's list. */
+function refreshedSection(managerId: string, section: Section, sourceId?: string): Section {
+  const versions = EXAMPLE_VERSIONS[managerId] || ["1.0.0"];
+  const automatic = section.automaticArchitecture || section.launcherArchitecture || section.catalog?.architecture;
+  const builds = EXAMPLE_BUILDS[managerId] || (automatic ? [automatic] : []);
+  const build = (cpu: string) => builds.includes("universal") ? "universal" : builds.includes(cpu) ? cpu : null;
+  const perCpu: Record<string, Section> | undefined = section.catalog?.architectureCatalogs;
+  const catalog = listVersions(section.catalog, versions, perCpu && automatic ? build(automatic) : null, sourceId);
+  if (perCpu) catalog.architectureCatalogs = Object.fromEntries(Object.entries(perCpu).map(([cpu, list]) =>
+    [cpu, listVersions(list, build(cpu) ? versions : [], build(cpu), sourceId)]));
+  return { ...section, catalog };
+}
+
+// Installed rows of one build: the same version, and the same variant and CPU
+// where both name one.
+const sameBuild = (row: Section, build: Section) => row.version === build.version &&
+  (!row.variant || !build.variant || row.variant === build.variant) &&
+  (!row.architecture || !build.architecture || row.architecture === build.architecture);
 
 export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, settingsActions: DemoSettingsActions,
   gameActions: DemoGameActions): LauncherApi {
@@ -122,6 +158,7 @@ export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, sett
 
   const handlers: Handlers = {
     getState: () => resolved(store.snapshot()),
+    prioritizeGame: () => resolved(true),
     onState: callback => store.subscribe(callback),
     onActivity: unsubscribe,
     onGameImported: unsubscribe,
@@ -161,7 +198,10 @@ export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, sett
     },
     openGameDialog: () => { store.topic({ kind: "add", id: "dialog" }); return resolved([]); },
     addRecent: () => { store.topic({ kind: "add", id: "drop" }); return resolved(null); },
-    findMissingGames: () => resolved([]),
+    findMissingGames: gamePaths => {
+      store.topic({ kind: "action", id: "findMissingGames" });
+      return resolved(gamePaths.filter(gamePath => game(gamePath)?.availability));
+    },
 
     // Library and inspector.
     setGameFavorite: (gamePath, favorite) => { updateGame(gamePath, () => ({ favorite } as Partial<RecentGame>)); return resolved(true); },
@@ -246,23 +286,56 @@ export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, sett
       const sectionId = typeof payload?.sectionId === "string" ? payload.sectionId : "default";
       const version = typeof payload?.version === "string" ? payload.version : null;
       const variant = typeof payload?.variant === "string" ? payload.variant : undefined;
+      const architecture = typeof payload?.architecture === "string" ? payload.architecture : undefined;
+      // The build choice: another CPU's list, or the one an installation was made from.
+      const choice = architecture || /^architecture:(.+)$/.exec(variant || "")?.[1];
+      // A section with a list per CPU records each installation's build choice
+      // as its variant, as the launcher's architecture manager does.
+      const buildOf = (section: Section) => ({ version, ...(variant ? { variant }
+        : choice && section.catalog?.architectureCatalogs ? { variant: `architecture:${choice}` } : {}), ...(architecture ? { architecture } : {}) });
+      let otherCpu = false;
       if (action === "refreshCatalog") {
-        const versions = EXAMPLE_VERSIONS[managerId] || ["1.0.0"];
-        updateManager(managerId, sectionId, section => ({ ...section,
-          catalog: { ...section.catalog, status: "idle", versions, fetchedAt: Date.now(), error: null } }));
+        updateManager(managerId, sectionId, section =>
+          refreshedSection(managerId, section, typeof payload?.sourceId === "string" ? payload.sourceId : undefined));
       } else if (action === "install" && version) {
-        updateManager(managerId, sectionId, section => ({ ...section,
-          defaultVersion: section.defaultVersion ?? version,
-          installed: [...(section.installed || []).filter((item: Section) => item.version !== version),
-            { version, ...(variant ? { variant } : {}), installDir: `${DEMO_ROOT}/runtimes/${managerId}/${version}`, ready: true }] }));
+        // Installing again replaces the same build, which repairs a damaged one.
+        updateManager(managerId, sectionId, section => {
+          const build = buildOf(section);
+          const cpu = (choice && section.catalog?.architectureCatalogs?.[choice]?.versionRequirements?.[version]?.architecture) || choice;
+          otherCpu = Boolean(cpu && cpu !== "universal" && section.automaticArchitecture && cpu !== section.automaticArchitecture);
+          return { ...section, defaultVersion: section.defaultVersion ?? version,
+            installed: [...(section.installed || []).filter((item: Section) => !sameBuild(item, build)),
+              { ...build, ...(cpu ? { architecture: cpu } : {}), installDir: `${DEMO_ROOT}/runtimes/${managerId}/${choice ? `${choice}/` : ""}${version}`,
+                source: "download", ready: true, status: "ready" }] };
+        });
       } else if (action === "setDefault") {
-        updateManager(managerId, sectionId, section => ({ ...section, defaultVersion: version, ...(variant ? { defaultVariant: variant } : {}) }));
+        updateManager(managerId, sectionId, section => {
+          otherCpu = Boolean(choice && section.automaticArchitecture && choice !== section.automaticArchitecture);
+          return { ...section, defaultVersion: version, ...(variant && !variant.startsWith("architecture:") ? { defaultVariant: variant } : {}),
+            ...(choice ? { defaultArchitecture: choice } : {}) };
+        });
       } else if (action === "uninstall" && version) {
-        updateManager(managerId, sectionId, section => ({ ...section,
-          installed: (section.installed || []).filter((item: Section) => item.version !== version),
-          defaultVersion: section.defaultVersion === version ? null : section.defaultVersion }));
+        updateManager(managerId, sectionId, section => {
+          const installed = (section.installed || []).filter((item: Section) => !sameBuild(item, buildOf(section)));
+          return { ...section, installed, defaultVersion: section.defaultVersion === version &&
+            !installed.some((item: Section) => item.version === version) ? null : section.defaultVersion };
+        });
       }
-      store.topic({ kind: "runtime-action", id: action });
+      // A build for the other processor also names the processor builds topic.
+      store.topic({ kind: "runtime-action", id: action, ...(otherCpu ? { detail: "build" } : {}) });
+      return resolved(true);
+    },
+    // Check for Updates answers as GitHub would when this version is the
+    // newest release. Nothing is downloaded or contacted.
+    appUpdate: action => {
+      store.topic({ kind: "action", id: "appUpdate" });
+      const update = store.state.appUpdate;
+      if (action !== "check" || !update || update.phase !== "idle") return resolved(false);
+      const setUpdate = (patch: Partial<NonNullable<LauncherState["appUpdate"]>>) =>
+        store.update(state => state.appUpdate ? { ...state, appUpdate: { ...state.appUpdate, ...patch } } : state);
+      setUpdate({ phase: "checking" });
+      setTimeout(() => setUpdate({ phase: "idle", lastCheck: { checkedAt: Date.now(), currentVersion: update.currentVersion,
+        outcome: "current", version: update.currentVersion } }), 800);
       return resolved(true);
     },
     setLauncherSettings: patch => {

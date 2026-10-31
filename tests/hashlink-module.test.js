@@ -295,3 +295,24 @@ test('cold HashLink games recommend exact published SDL and primitive profiles w
   fs.writeFileSync(boot,bytecode([]));
   assert.equal(Module.ensureRuntime({moduleData:{bytecodePath:boot}},{...context,settings:{runtimes:{hashlink:{defaultVersion:typed.version}}}}).version,typed.version,'No native ABI evidence leaves the saved global fallback in place');
 });
+test('each HashLink version family keeps its own versions in every CPU download list', t => {
+  const data = temporary(t), manager = Module.runtimeManagers[0];
+  const asset = name => ({ url: `https://example.test/${name}.tar.gz`, filename: `${name}.tar.gz`, sha256: 'c'.repeat(64) });
+  const hosted = version => ({ version, upstreamRevision: 'a'.repeat(64), architecture: 'x86_64', hostArchitectures: ['arm64', 'x64'], minimumMacOS: '10.13',
+    localBuild: false, projectPackage: { id: 'hashlink', version, arch: 'x64' }, asset: asset(version) });
+  const entries = [hosted('1.9-MCLv1'), hosted('1.12-MCLv1'),
+    { version: '2.0.0-dev-0123456789ab', upstreamRevision: 'b'.repeat(40), architecture: 'x86_64', minimumMacOS: '10.13', asset: asset('upstream') }];
+  for (const sourceId of ['arm64', 'x64'])
+    require('../src/modules/shared/runtime/runtime-catalog').writeRuntimeCatalog({ userDataDir: data, managerId: 'hashlink', sourceId, entries });
+  const family = version => /^1\.9-/.test(version) ? '1.9' : /^1\.12-/.test(version) ? '1.12' : 'current';
+  const sections = manager.getState({ userDataDir: data }).sections;
+  assert.deepEqual(sections.map(section => section.id), ['current', '1.9', '1.12']);
+  for (const section of sections) {
+    const catalogs = Object.entries(section.catalog.architectureCatalogs || {});
+    assert.deepEqual(catalogs.map(([architecture]) => architecture).sort(), ['arm64', 'x64']);
+    for (const [architecture, catalog] of catalogs) {
+      assert.deepEqual(catalog.versions, section.catalog.versions, `${section.id} ${architecture}`);
+      for (const source of [catalog, ...catalog.sources]) assert.ok(source.versions.every(version => family(version) === section.id), `${section.id} ${architecture} ${source.id}`);
+    }
+  }
+});

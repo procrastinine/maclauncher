@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const GameAvailability = require("./game-availability");
 
 function selectLibraryEntries(games, gamePaths) {
   if (!Array.isArray(gamePaths) || gamePaths.some(value => typeof value !== "string")) {
@@ -10,16 +11,19 @@ function selectLibraryEntries(games, gamePaths) {
   return paths.map(gamePath => byPath.get(gamePath));
 }
 
+// Files on a disconnected drive count as missing; unreadable files do not.
 function isMissingGamePath(gamePath, stat = fs.statSync) {
-  try { stat(gamePath); return false; }
-  catch (error) {
-    if (error.code === "ENOENT" || error.code === "ENOTDIR") return true;
-    throw error;
-  }
+  const availability = GameAvailability.checkGameAvailabilitySync({ gamePath }, { statSync: stat });
+  if (availability.reason === "missing") return true;
+  if (!availability.available) throw GameAvailability.unavailableError(availability);
+  return false;
 }
 
-function findMissingGames(games, gamePaths, stat = fs.statSync) {
-  return selectLibraryEntries(games, gamePaths).filter(game => isMissingGamePath(game.gamePath, stat)).map(game => game.gamePath);
+// Games whose files are not found, including those on a disconnected drive,
+// from shared availability results in entry order. Unreadable or unresponsive
+// files are unavailable but not missing.
+function missingGamePaths(entries, results) {
+  return entries.filter((entry, index) => results[index]?.reason === "missing").map(entry => entry.gamePath);
 }
 
 async function trashLibraryGames(entries, trashItem, stat = fs.statSync) {
@@ -35,4 +39,4 @@ async function trashLibraryGames(entries, trashItem, stat = fs.statSync) {
   return { removedPaths, failures };
 }
 
-module.exports = { selectLibraryEntries, findMissingGames, trashLibraryGames };
+module.exports = { selectLibraryEntries, missingGamePaths, trashLibraryGames };

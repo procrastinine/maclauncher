@@ -81,6 +81,9 @@ test('real Vite cold startup prepares React and leaves an occupied server runnin
     assert.ok(result.modules > 20, 'The actual renderer imports are ready');
     const entry = await fetch(new URL('/src/main.tsx', result.url));
     assert.equal(entry.status, 200); assert.match(await entry.text(), /react/);
+    assert.equal(entry.headers.get('content-security-policy'), "script-src 'self' 'unsafe-inline'");
+    const document = await (await fetch(result.url)).text();
+    assert.match(document, /http-equiv="Content-Security-Policy"/);
     assert.equal(await (await fetch(`http://127.0.0.1:${occupied}/`)).text(), 'existing server');
     await result.server.close(); result = null;
     assert.equal(await (await fetch(`http://127.0.0.1:${occupied}/`)).text(), 'existing server');
@@ -95,16 +98,67 @@ test('the dev command hands a ready page to Electron and closes its server on ex
       if(!response.ok||!body.includes('id="root"'))throw Error('Page was not ready');
       const module=await fetch(new URL('/src/main.tsx',url));
       if(!module.ok)throw Error('Entry module was not ready');
-      console.log('STUB_READY:'+JSON.stringify({url,runAsNode:process.env.ELECTRON_RUN_AS_NODE||null}));
+      console.log('STUB_READY:'+JSON.stringify({url,runAsNode:process.env.ELECTRON_RUN_AS_NODE||null,
+        nodeOptions:process.env.NODE_OPTIONS,arguments:process.argv.slice(2)}));
     })().catch(error=>{console.error(error);process.exitCode=1;});
   `, { mode: 0o700 });
   try {
     const { stdout } = await promisify(execFile)(process.execPath, [path.join(root, 'scripts/dev.mjs')], {
       cwd: temporary, timeout: 25000, env: { ...process.env,
-        MACLAUNCHER_ELECTRON_PATH: stub, MACLAUNCHER_DEV_PORT: '0', ELECTRON_RUN_AS_NODE: '1' }
+        MACLAUNCHER_ELECTRON_PATH: stub, MACLAUNCHER_DEV_PORT: '0', ELECTRON_RUN_AS_NODE: '1', NODE_OPTIONS: '--stack-trace-limit=17' }
     });
     const result = JSON.parse(stdout.split('\n').find(line => line.startsWith('STUB_READY:')).slice('STUB_READY:'.length));
     assert.equal(result.runAsNode, null);
+    assert.equal(result.nodeOptions, '--stack-trace-limit=17', 'Electron receives the original options without an injected preload');
+    assert.deepEqual(result.arguments, [path.join(root, 'scripts/dev-bootstrap.cjs'), '.']);
     await assert.rejects(fetch(result.url), /fetch failed/);
   } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
+});
+
+test('branded development Electron enforces the import boundary in its actual main process', {
+  skip: process.platform !== 'darwin', timeout: 45000
+}, async t => {
+  const { prepareDevelopmentApp } = await import('../scripts/dev-app.mjs');
+  const { resolveElectronBinary } = require('../src/core/electron-binary');
+  const binary = await prepareDevelopmentApp({ electronBinary: resolveElectronBinary() });
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'dev-electron-guard-'));
+  const source = fs.mkdtempSync(path.join(root, 'src', '.dev-guard-'));
+  t.after(() => { fs.rmSync(temporary, { recursive: true, force: true }); fs.rmSync(source, { recursive: true, force: true }); });
+  const canary = path.join(source, 'fixtures', 'canary.cjs');
+  fs.mkdirSync(path.dirname(canary));
+  fs.writeFileSync(canary, 'throw Error("Excluded fixture executed");');
+  const entry = path.join(temporary, 'probe.cjs');
+  fs.writeFileSync(entry, `
+    const assert=require('node:assert/strict'), {app}=require('electron');
+    app.setPath('userData', ${JSON.stringify(temporary)});
+    app.setPath('sessionData', ${JSON.stringify(temporary)});
+    assert.equal(process.env.NODE_OPTIONS, undefined);
+    assert.equal(app.isPackaged, true, 'The branded app exercises Electron packaged-mode options');
+    assert.equal(app.getAppPath(), ${JSON.stringify(root)});
+    assert.equal(app.getVersion(), ${JSON.stringify(require('../package.json').version)});
+    assert.equal(process.argv[1], ${JSON.stringify(entry)});
+    require(${JSON.stringify(path.join(root, 'src/core/runtime-settings.js'))});
+    assert.throws(()=>require(${JSON.stringify(canary)}), /Runtime content excludes test directory or fixture/);
+    const {Worker}=require('node:worker_threads');
+    const worker=new Worker(${JSON.stringify(`
+      const assert=require('node:assert/strict');
+      assert.equal(process.env.NODE_OPTIONS,undefined);
+      assert.throws(()=>require(${JSON.stringify(canary)}),/Runtime content excludes test directory or fixture/);
+      require('node:worker_threads').parentPort.postMessage('guarded');
+    `)}, {eval:true});
+    worker.once('error',error=>{console.error(error);app.whenReady().then(()=>app.exit(1));});
+    worker.once('exit',code=>app.whenReady().then(()=>app.exit(code)));
+    worker.once('message',value=>{
+      assert.equal(value,'guarded');
+      console.log('PASS development Electron main and worker import guard without NODE_OPTIONS');
+    });
+  `);
+  const env = { ...process.env };
+  delete env.NODE_OPTIONS;
+  delete env.ELECTRON_RUN_AS_NODE;
+  const { stdout, stderr } = await promisify(execFile)(binary, [path.join(root, 'scripts/dev-bootstrap.cjs'), entry], {
+    cwd: root, env, timeout: 30000
+  });
+  assert.match(stdout, /PASS development Electron main and worker import guard without NODE_OPTIONS/);
+  assert.doesNotMatch(stderr, /NODE_OPTION|ERROR:/);
 });

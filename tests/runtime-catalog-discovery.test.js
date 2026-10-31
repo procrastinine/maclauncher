@@ -8,6 +8,7 @@ const Github = require("../src/modules/shared/runtime/github-releases");
 const { createGithubReleaseDiscovery, githubAssetDigest } = require("../src/modules/shared/runtime/github-runtime-catalog");
 const { createPinnedNativeManager } = require("../src/modules/shared/runtime/pinned-native-manager");
 const { readRuntimeCatalog } = require("../src/modules/shared/runtime/runtime-catalog");
+const { listedManager } = require("./helpers/listed-rows.cjs");
 
 const temporary = t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-catalog-"));
@@ -22,7 +23,7 @@ function binary() {
 
 test("a discoverable empty catalog stays offline and failed first queries remain retryable", async t => {
   const userDataDir = temporary(t); let calls = 0;
-  const manager = createPinnedNativeManager({ id: "empty-remote", label: "Remote", catalog: [], discoverCatalog: async () => {
+  const manager = createPinnedNativeManager({ id: "empty-remote", label: "Remote", discoverCatalog: async () => {
     if (++calls === 1) throw new Error("Offline");
     return [entry("2.0")];
   } });
@@ -35,12 +36,12 @@ test("a discoverable empty catalog stays offline and failed first queries remain
   assert.equal(failed.status, "error");
   assert.deepEqual((await manager.refreshCatalog({ userDataDir })).versions, ["2.0"]);
   assert.equal(calls, 2);
-  assert.throws(() => createPinnedNativeManager({ id: "empty-fixed", label: "Fixed", catalog: [] }), /version catalog/);
+  assert.throws(() => createPinnedNativeManager({ id: "no-source", label: "No source" }), /release source/);
 });
 
 test("failed refresh retains the exact valid cache and successful refresh replaces and deduplicates remote rows", async t => {
   const userDataDir = temporary(t); let fail = false, calls = 0;
-  const manager = createPinnedNativeManager({ id: "retained-cache", label: "Remote", catalog: [entry("factory", "f")], discoverCatalog: async () => {
+  const manager = createPinnedNativeManager({ id: "retained-cache", label: "Remote", discoverCatalog: async () => {
     calls++; if (fail) throw new Error("Offline");
     return calls === 1 ? [entry("v1.2.3"), entry("1.2.3", "b"), entry("1.2.3-macos-v7", "c"), entry("older", "d")]
       : [entry("v1.2.3"), entry("1.2.3"), entry("1.2.3-macos-v8", "e")];
@@ -59,7 +60,6 @@ test("failed refresh retains the exact valid cache and successful refresh replac
   const refreshed = await manager.refreshCatalog({ userDataDir, latestOnly: false });
   assert.deepEqual(refreshed.versions, ["1.2.3", "1.2.3-macos-v8"]);
   assert.equal(calls, 3, "a failed query cannot satisfy the success TTL");
-  assert.equal(manager.core.catalog.find(pin => pin.version === "factory").upstreamRevision, revision("f"));
 });
 
 test("ordinary GitHub releases enumerate bounded pages, canonical repository links and unique IDs", async () => {
@@ -86,7 +86,7 @@ test("explicit larger GitHub history limits paginate beyond five pages and retai
   const incoming = Array.from({ length: 657 }, (_, index) => entry(`0.0.1.${index + 1}`));
   let networkCalls = 0;
   const make = () => createPinnedNativeManager({ id: "large-history", label: "History", maxEntries: 1000,
-    catalog: [entry("reviewed")], discoverCatalog: createGithubReleaseDiscovery({ owner: "a", repo: "b", maxPages: 10, maxEntries: 1000,
+    discoverCatalog: createGithubReleaseDiscovery({ owner: "a", repo: "b", maxPages: 10, maxEntries: 1000,
       dependencies: { fetchGithubReleases: async options => { networkCalls++; assert.equal(options.maxPages, 10); return incoming.map(row => ({ tag_name: row.version })); },
         fetchGithubTags: async options => { assert.equal(options.maxPages, 10); return incoming.map(row => ({ name: row.version, commit: { sha: row.upstreamRevision } })); } },
       mapRelease: async (release, context) => ({ version: release.tag_name, upstreamRevision: await context.resolveRevision(release), localBuild: false }) }) });
@@ -97,7 +97,7 @@ test("explicit larger GitHub history limits paginate beyond five pages and retai
   assert.equal(make().getState({ userDataDir }).catalog.versions.length, 657);
   assert.equal(networkCalls, 1, "restarted state uses the large cache without querying upstream");
   assert.throws(() => createGithubReleaseDiscovery({ owner: "a", repo: "b", maxPages: 21, mapRelease: () => null }), /limits/);
-  assert.throws(() => createPinnedNativeManager({ id: "over-limit", label: "Limit", catalog: [entry("base")], maxEntries: 2001 }), /limit/);
+  assert.throws(() => createPinnedNativeManager({ id: "over-limit", label: "Limit", discoverCatalog: async () => [], maxEntries: 2001 }), /limit/);
 });
 
 test("tag resolution peels annotated tags and shared providers batch tag identities", async () => {
@@ -117,31 +117,30 @@ test("tag resolution peels annotated tags and shared providers batch tag identit
   assert.equal(githubAssetDigest({ digest: "sha512:wrong" }), null);
 });
 
-test("refresh replaces its remote list, canonicalizes numeric tags and retains a single reviewed base build", async t => {
+test("refresh replaces its remote list and canonicalizes numeric tags", async t => {
   const userDataDir = temporary(t); let calls = 0;
   const make = () => createPinnedNativeManager({ id: "catalog-test", label: "Catalog", supportsDefault: true,
-    catalog: [entry("1.8.0", "f")], discoverCatalog: async options => {
+    discoverCatalog: async options => {
       calls++; assert.equal(options.latestOnly, false);
       return calls === 1 ? [entry("v1.8.0", "a"), entry("1.7.0", "b")] : [entry("v1.8.0", "a"), entry("1.9.0", "c")];
     } });
   const manager = make();
   assert.equal(calls, 0); assert.deepEqual(manager.getState({ userDataDir }).catalog.versions, []);
   assert.equal(manager.getState({ userDataDir }).catalog.recommendedVersion, undefined);
-  assert.equal(manager.resolveSelection({}, {}, userDataDir).version, null, "A base profile is not a package-wide choice");
+  assert.equal(manager.resolveSelection({}, {}, userDataDir).version, null, "No version is chosen before a release list exists");
   await manager.refreshCatalog({ userDataDir, force: true });
   assert.deepEqual(manager.getState({ userDataDir }).catalog.versions, ["1.8.0", "1.7.0"]);
   await manager.refreshCatalog({ userDataDir, force: true });
   const catalog = manager.getState({ userDataDir }).catalog;
   assert.deepEqual(catalog.versions, ["1.8.0", "1.9.0"]);
   assert.equal(catalog.recommendedVersion, undefined);
-  assert.equal(manager.resolveSelection({}, {}, userDataDir).selectionRequired, true, "Refresh lists choices without selecting one");
+  assert.ok(catalog.versions.includes(manager.resolveSelection({}, {}, userDataDir).version), "The manager default selects a listed release");
   const settings = { runtimes: { "catalog-test": { defaultVersion: "1.8.0" } } };
   assert.equal(manager.resolveSelection({}, settings, userDataDir).version, "1.8.0", "An explicit user default stays exact");
   assert.equal(catalog.supportsLatestOnly, false);
-  const base = manager.core.catalog.find(pin => pin.version === "1.8.0");
-  assert.equal(base.upstreamRevision, revision("f"));
-  assert.equal(base.publishedRelease.upstreamRevision, revision("a"));
-  assert.equal(base.publishedRelease.upstreamTag, "v1.8.0");
+  const tagged = manager.core.catalog.find(pin => pin.version === "1.8.0");
+  assert.equal(tagged.upstreamRevision, revision("a"));
+  assert.equal(tagged.upstreamTag, "v1.8.0");
   const cached = readRuntimeCatalog({ userDataDir, managerId: "catalog-test" });
   assert.deepEqual(cached.entries.map(pin => pin.version), ["1.8.0", "1.9.0"]);
   const restarted = make();
@@ -154,7 +153,7 @@ test("removed and replaced remote builds keep installed identities across restar
   const userDataDir = temporary(t), executable = path.join(userDataDir, "native");
   fs.writeFileSync(executable, binary(), { mode: 0o755 });
   let round = 0;
-  const make = () => createPinnedNativeManager({ id: "installed-catalog", label: "Catalog", catalog: [entry("base", "f")],
+  const make = () => createPinnedNativeManager({ id: "installed-catalog", label: "Catalog",
     discoverCatalog: async () => ++round === 1 ? [entry("A", "a"), entry("B", "b")] : [entry("B", "c"), entry("C", "d")] });
   const manager = make(); await manager.refreshCatalog({ userDataDir, force: true });
   manager.core.registerLocal({ userDataDir, version: "A", runtimePath: executable });
@@ -175,7 +174,7 @@ test("removed and replaced remote builds keep installed identities across restar
 
 test("historical assets without publisher digests record local hashes without claiming verified provenance", { skip: process.platform !== "darwin" }, async t => {
   const userDataDir = temporary(t);
-  const manager = createPinnedNativeManager({ id: "legacy-digest", label: "Legacy", catalog: [{ ...entry("0.99.0"), asset: {
+  const manager = createPinnedNativeManager({ id: "legacy-digest", label: "Legacy", discoverCatalog: async () => [{ ...entry("0.99.0"), asset: {
     filename: "legacy.zip", url: "https://github.com/owner/repo/releases/download/v0.99.0/legacy.zip", assetId: 123,
     integrity: "recorded-local", sha256: null } }], resolveExecutable: root => path.join(root, "engine"), dependencies: {
     downloadToFile: async (_url, output) => fs.writeFileSync(output, "old official archive"),
@@ -188,12 +187,14 @@ test("historical assets without publisher digests record local hashes without cl
   assert.equal(installed.assetId, 123);
 });
 
-test("installed release identities remain selectable after a catalog cache is removed or the offline base changes", { skip: process.platform !== "darwin" }, t => {
+test("installed release identities remain selectable after the catalog cache is removed", { skip: process.platform !== "darwin" }, async t => {
   const userDataDir = temporary(t), executable = path.join(userDataDir, "engine");
   fs.writeFileSync(executable, binary(), { mode: 0o755 });
-  const original = createPinnedNativeManager({ id: "offline-identity", label: "Offline", catalog: [entry("older", "a")] });
+  const original = await listedManager({ id: "offline-identity", label: "Offline" }, [entry("older", "a")], userDataDir);
   original.core.registerLocal({ userDataDir, version: "older", runtimePath: executable });
-  const updated = createPinnedNativeManager({ id: "offline-identity", label: "Offline", catalog: [entry("newer", "b")] });
+  const caches = path.join(userDataDir, "runtimes", "offline-identity");
+  for (const name of fs.readdirSync(caches).filter(name => /^catalog.*\.json$/.test(name))) fs.rmSync(path.join(caches, name));
+  const updated = createPinnedNativeManager({ id: "offline-identity", label: "Offline", discoverCatalog: () => assert.fail("Installed identities stay offline") });
   assert.deepEqual(updated.getState({ userDataDir }).catalog.versions, []);
   assert.equal(updated.getState({ userDataDir }).installed[0].version, "older");
   const selection = updated.resolveSelection({ runtimeData: { "offline-identity": { version: "older" } } }, {}, userDataDir);
@@ -204,7 +205,7 @@ test("installed release identities remain selectable after a catalog cache is re
 
 test("immutable commit snapshots do not invent upstream release tags", async t => {
   const userDataDir = temporary(t);
-  const manager = createPinnedNativeManager({ id: "commit-source", label: "Commit", catalog: [entry("base")],
+  const manager = createPinnedNativeManager({ id: "commit-source", label: "Commit",
     discoverCatalog: async () => [{ ...entry("2026-10-08-abcdef-appkit"), sourceKind: "commit" }] });
   await manager.refreshCatalog({ userDataDir, force: true });
   assert.equal(manager.core.catalog.find(pin => pin.sourceKind === "commit").upstreamTag, undefined);

@@ -4,22 +4,30 @@ const Snapshots = require("../modules/shared/save-snapshots");
 const { writeSaveWithBackup } = require("../modules/shared/save-files");
 const { hydrateGameSaveLocations, saveDirectoryForEntry } = require("./save-locations");
 const { prepareModuleInput } = require("../modules/shared/writable-input");
+const GameAvailability = require("./game-availability");
 
 const ACTIONS = new Set(["createSaveSnapshot", "listSaveSnapshots", "previewSaveSnapshot", "restoreSaveSnapshot",
   "readSaveDocument", "writeSaveDocument", "importSaveFolder", "importSaveFiles"]);
 
 function createSaveService({ userDataDir, registry, isGameRunning = () => false }) {
   function options(entry) {
-    // Save operations can resolve their owned directory without allocating an
-    // entire runtime view, including direct consumers outside the launcher.
-    entry = prepareModuleInput(entry, registry, { userDataDir, runtimeId: entry.runtimeId, readOnly: true });
-    entry = hydrateGameSaveLocations(entry, registry, { userDataDir, runtimeId: entry.runtimeId });
+    // Without the game's files, the save locations stored at the last refresh
+    // apply; engines would otherwise resolve them from absent configuration.
+    const availability = GameAvailability.checkGameAvailabilitySync(entry, { userDataDir });
+    if (availability.available) {
+      // Save operations can resolve their owned directory without allocating an
+      // entire runtime view, including direct consumers outside the launcher.
+      entry = prepareModuleInput(entry, registry, { userDataDir, runtimeId: entry.runtimeId, readOnly: true });
+      entry = hydrateGameSaveLocations(entry, registry, { userDataDir, runtimeId: entry.runtimeId });
+    }
     const moduleId = entry.moduleId || entry.engine;
     const mod = registry.getModule(moduleId);
     const provider = mod?.getRuntimeProvider?.(entry.runtimeId);
     if (provider?.supports?.saveLocation === false) throw new Error("Save tools are unavailable for this runtime.");
     const saveDir = saveDirectoryForEntry(entry, registry);
     if (typeof saveDir !== "string" || !path.isAbsolute(saveDir)) throw new Error("An absolute save directory is required.");
+    // Saves kept with the missing game files stay untouched until they return.
+    if (GameAvailability.affectsPath(availability, saveDir)) throw GameAvailability.unavailableError(availability, "This game's saves are unavailable.");
     const save = provider ? provider.save : mod?.save;
     const extensions = save?.extensions;
     const names = save?.names;
@@ -100,10 +108,11 @@ function createSaveService({ userDataDir, registry, isGameRunning = () => false 
     return { imported: files.length, snapshotId: snapshot.id };
   }
   async function runAction(entry, actionId, payload = {}) {
+    // Snapshots live in launcher data, so they stay listed without the game's files.
+    if (actionId === "listSaveSnapshots") return Snapshots.listSnapshots({ userDataDir, gameId: entry.gameId });
     const opts = options(entry);
     switch (actionId) {
       case "createSaveSnapshot": return createSnapshot(entry, payload);
-      case "listSaveSnapshots": return Snapshots.listSnapshots({ userDataDir, gameId: entry.gameId });
       case "previewSaveSnapshot": return Snapshots.previewRestore({ ...opts, snapshotId: payload.snapshotId });
       case "restoreSaveSnapshot":
         assertWriteAllowed(entry);

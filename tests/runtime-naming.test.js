@@ -1,3 +1,4 @@
+const Harness = require('./helpers/future-upstream.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -51,28 +52,28 @@ test('graphics helper choices keep automatic first and descend by version withou
     new Set([1, 2, 3, 4, 5].map(n => `software-gl-v${n}-universal`)));
 });
 
-test('pinned plugin catalog displays a source date while retaining its exact installation identity', t => {
+test('discovered plugin catalog displays a source date while retaining its exact installation identity', async t => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-naming-'));
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
-  const state = Plugins.manager.getState({ userDataDir });
-  const section = state.sections.find(section => section.id === 'thumbfast');
-  const pin = Plugins.packages.thumbfast;
-  assert.equal(section.plugin.version, pin.upstreamRevision);
-  assert.equal(section.versionLabels[pin.version], '2026-06-28 snapshot');
-  assert.equal(section.plugin.versionLabel, section.versionLabels[pin.version]);
-  assert.equal(section.catalog.versionLabels[pin.version], section.versionLabels[pin.version]);
-  assert.match(pin.assets[0].url, new RegExp(pin.upstreamRevision));
+  Plugins.manager.getState({ userDataDir });
   assert.deepEqual(fs.readdirSync(userDataDir), []);
+  const sha = 'f'.repeat(40);
+  Harness.network.routes = { 'https://api.github.com/repos/po5/thumbfast/commits': [{ sha, commit: { committer: { date: '2026-06-28T12:00:00Z' } } }] };
+  t.after(() => { Harness.network.routes = null; });
+  const manager = Plugins.createManager();
+  const state = await manager.refreshCatalog({ userDataDir, sectionId: 'thumbfast' });
+  const section = state.sections.find(section => section.id === 'thumbfast');
+  assert.equal(section.plugin.version, sha);
+  assert.equal(section.versionLabels[sha], '2026-06-28 snapshot');
+  assert.equal(section.plugin.versionLabel, section.versionLabels[sha]);
+  assert.equal(section.catalog.versionLabels[sha], section.versionLabels[sha]);
 });
 
-test('new plugin snapshots use commit dates with exact download revisions and safe metadata fallback', async () => {
+test('new plugin snapshots use commit dates with exact download revisions and safe metadata fallback', async t => {
   const sha = 'a'.repeat(40), date = '2026-10-28T23:30:00Z';
-  const result = await Sources.resolveKnownSource(Sources.THUMBFAST_SOURCE, {}, {
-    request: async url => {
-      assert.equal(url, 'https://api.github.com/repos/po5/thumbfast/commits/HEAD');
-      return { status: 200, headers: {}, body: Buffer.from(JSON.stringify({ sha, commit: { committer: { date } } })) };
-    }
-  });
+  Harness.network.routes = { 'https://api.github.com/repos/po5/thumbfast/commits': [{ sha, commit: { committer: { date } } }] };
+  t.after(() => { Harness.network.routes = null; });
+  const result = await Sources.resolveKnownSource(Sources.THUMBFAST_SOURCE);
   assert.equal(result.versionLabel, '2026-10-28 snapshot');
   assert.equal(result.upstreamRevision, sha);
   assert.equal(result.url, `https://raw.githubusercontent.com/po5/thumbfast/${sha}/thumbfast.lua`);

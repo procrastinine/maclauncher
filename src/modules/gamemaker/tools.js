@@ -35,11 +35,9 @@ function validateCodeNames(inspection) {
 async function verifyUmt(selection, context, runProcess) {
   if (!selection?.install) throw new Error(`UndertaleModTool CLI ${selection?.version || ""} is not installed. Install it in Runtimes.`);
   const executable = selection.install.executablePath;
-  const version = await runProcess(executable, ["--version"], { timeout: 15000, prerequisiteContext: context });
-  const cliVersion = /^\d+\.\d+\.\d+\.\d+/.exec(selection.version || "")?.[0];
-  if (!cliVersion || !/^[a-f0-9]{40}$/.test(selection.install.upstreamRevision || "")) throw new Error("Selected UndertaleModTool has no exact release version and source revision.");
-  const expected = `${cliVersion}+${selection.install.upstreamRevision}`;
-  if (version.stdout.trim() !== expected) throw new Error("Selected UndertaleModTool CLI does not report the pinned version and revision.");
+  // The installed CLI must start. Its version text differs between releases
+  // and is not compared with the selected version.
+  await runProcess(executable, ["--version"], { timeout: 15000, prerequisiteContext: context });
   return executable;
 }
 

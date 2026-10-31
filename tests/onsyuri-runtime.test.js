@@ -10,7 +10,8 @@ test("getWebArchiveType identifies supported web archives", () => {
   assert.equal(Runtime.__test.getWebArchiveType("onsyuri_web.7z"), "7z");
   assert.equal(Runtime.__test.getWebArchiveType("onsyuri-web.zip"), "zip");
   assert.equal(Runtime.__test.getWebArchiveType("ONSYURI_WEB.ZIP"), "zip");
-  assert.equal(Runtime.__test.getWebArchiveType("onsyuri_web.tar.gz"), null);
+  assert.equal(Runtime.__test.getWebArchiveType("onsyuri_web.tar.xz"), "tar");
+  assert.equal(Runtime.__test.getWebArchiveType("onsyuri_web.html"), null);
 });
 
 test("Mac build normalization remains separate from the legacy Web release mapping", () => {
@@ -24,7 +25,7 @@ test("unavailable portable versions never fall back to a stock Mac release or mu
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
   let hostedQueries = 0;
   t.mock.method(Runtime.hosted, "refreshCatalog", async () => { hostedQueries++; });
-  await assert.rejects(Runtime.installMacVersion({ userDataDir, version: "0.7.7beta-macos-v999", variant: "arm64", releases: [{ tag_name: "v0.7.7beta", assets: [{ name: "onsyuri_v0.7.7beta_aarch64_darwin", browser_download_url: "https://example.invalid/stock" }] }] }), /unavailable for this app and architecture/);
+  await assert.rejects(Runtime.installMacVersion({ userDataDir, version: "0.7.7beta-macos-v999", variant: "arm64", rows: Runtime.rowsFromReleases([{ tag_name: "v0.7.7beta", assets: [{ name: "onsyuri_v0.7.7beta_aarch64_darwin", browser_download_url: "https://example.invalid/stock" }] }]) }), /unavailable for this app and architecture/);
   assert.equal(fs.existsSync(path.join(userDataDir, "runtimes")), false);
   assert.equal(hostedQueries, 1, "The exact portable version checks the hosted catalog before reporting it unavailable");
 });

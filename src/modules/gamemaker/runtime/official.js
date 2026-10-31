@@ -8,7 +8,7 @@ const { runDownloadTask } = require("../../shared/runtime/download-manager");
 const Catalog = require("./official-catalog");
 const Compatibility = require("./official-compatibility");
 const Custom = require("../../shared/runtime/custom-runtime");
-const { selectRuntimeVersion, managerDefaultVersion } = require("../../shared/runtime/version-choices");
+const { selectRuntimeVersion, managerDefaultVersion, savedDefaultVersion } = require("../../shared/runtime/version-choices");
 
 const ID = "gamemaker-official";
 const VERSION = Catalog.VERSION;
@@ -31,6 +31,23 @@ function receiptVersion(receipt) {
     if (typeof value === "string" && VERSION.test(value)) return value;
   }
   return null;
+}
+// Igor writes mac/Mac-YoYoRunner-Release.dmg; a renamed runner image in the
+// Mac target folder is found as well.
+function runnerDiskImage(root) {
+  const known = path.join(root, "mac", "Mac-YoYoRunner-Release.dmg");
+  if (fs.existsSync(known)) return known;
+  const found = [];
+  (function search(directory, depth) {
+    let items = [];
+    try { items = fs.readdirSync(directory, { withFileTypes: true }); } catch { return; }
+    for (const item of items) {
+      const child = path.join(directory, item.name);
+      if (item.isFile() && /runner.*\.dmg$/i.test(item.name)) found.push(child);
+      else if (item.isDirectory() && !item.name.startsWith(".") && depth < 2) search(child, depth + 1);
+    }
+  })(path.join(root, "mac"), 0);
+  return found.sort((a, b) => Number(/release/i.test(path.basename(b))) - Number(/release/i.test(path.basename(a))) || a.localeCompare(b))[0] || null;
 }
 function inspectOfficialRuntime(runtimeRoot) {
   if (typeof runtimeRoot !== "string" || !path.isAbsolute(runtimeRoot) || runtimeRoot.includes("\0")) throw new Error("Select an absolute installed GameMaker runtime directory.");
@@ -59,8 +76,8 @@ function inspectOfficialRuntime(runtimeRoot) {
     manifests.push({ name, sha256: hashFile(filePath) });
   }
   const diskImages = [];
-  const diskImage = path.join(root, "mac", "Mac-YoYoRunner-Release.dmg");
-  if (fs.existsSync(diskImage)) {
+  const diskImage = runnerDiskImage(root);
+  if (diskImage) {
     const stat = fs.lstatSync(diskImage);
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 128 * 1024 ** 2) throw new Error("Official runner disk image is invalid or exceeds the inspection limit.");
     diskImages.push({ path: diskImage, sha256: hashFile(diskImage) });
@@ -217,8 +234,11 @@ function resolveSelection(entry, settings, userDataDir) {
     catalogChoice = eligible.sort((a, b) => priority(a.version) - priority(b.version) || Catalog.versionCompare(a.version, b.version))[0] || null;
     if (gameEvidence) recommended = catalogChoice?.version || recommendations[0] || null;
   }
+  let registered = [];
+  try { registered = fs.readdirSync(path.join(userDataDir, "runtimes", ID)).filter(name => VERSION.test(name)); } catch {}
+  // A saved default upstream removed and not installed gives way to the manager default.
   const layer = selectRuntimeVersion({ manual: requested, recommended,
-    defaultVersion: preferred && VERSION.test(preferred) ? preferred : null,
+    defaultVersion: savedDefaultVersion(preferred && VERSION.test(preferred) ? preferred : null, { listed: cached.map(item => item.version), installed: registered }),
     fallback: managerDefaultVersion({ listed: catalogChoice ? [catalogChoice.version] : [], installed: installedChoice ? [installedChoice.version] : [] }) });
   let version = layer.version;
   let selectionSource = { manual: "explicit-selection", recommended: install ? "installed" : "catalog", default: "global-default" }[layer.source] || null;
@@ -252,10 +272,13 @@ function listRuntimeRows(userDataDir) {
 function catalogState(userDataDir, installed = []) {
   const cached = Catalog.cachedCatalog(userDataDir), versions = [...new Set((cached?.entries || []).map(item => item.version))];
   const state = Catalog.stateFor(userDataDir, undefined, cached), hostSupported = process.platform === "darwin" && ["arm64", "x64"].includes(process.arch);
-  const installableVersions = hostSupported ? versions.filter(version => {
-    try { require("./official-installer").resolveBuild({ userDataDir, version }); return true; } catch { return false; }
+  // A listed release this Mac cannot install, such as one without a base module
+  // for its CPU, keeps the reason next to it.
+  const versionRequirements = {}, installableVersions = hostSupported ? versions.filter(version => {
+    try { require("./official-installer").resolveBuild({ userDataDir, version }); return true; }
+    catch (error) { versionRequirements[version] = { installable: false, installReason: error.message }; return false; }
   }) : [];
-  const catalog = { ...state, versions, source: Catalog.FEEDS[0].url, sourceUrl: Catalog.FEEDS[0].url,
+  const catalog = { ...state, versions, versionRequirements, source: Catalog.FEEDS[0].url, sourceUrl: Catalog.FEEDS[0].url,
     fetchedAt: cached?.fetchedAt || null, versionDetails: versions.map(version => {
       const entry = cached?.entries.find(item => item.version === version);
       return { version, channel: entry?.channel || null, sourceUrl: entry?.source || null, publishedAt: entry?.publishedAt || null,
@@ -279,21 +302,20 @@ function catalogState(userDataDir, installed = []) {
 }
 function getState({ settings, userDataDir } = {}) {
   const installed = userDataDir ? listRuntimeRows(userDataDir) : [];
-  const tool = require("./official-installer").getIgorStatus({ userDataDir });
-  const pin = require("./official-installer").bootstrapForArch();
+  const Installer = require("./official-installer"), tool = Installer.getIgorStatus({ userDataDir });
+  const publicTools = Installer.listBootstrapIgors({ userDataDir }).filter(item => item.ready);
   const localTools = require("./official-tools").listLocalIgors({ userDataDir });
-  const toolVersions = [...new Set([pin.version, ...localTools.map(item => item.version), tool.version])];
-  const bootstrapInstalled = require("./official-installer").getIgorStatus({ userDataDir, toolVersion: pin.version }).ready;
+  const toolVersions = [...new Set([...publicTools.map(item => item.version), ...localTools.map(item => item.version), tool.version].filter(Boolean))];
   const setupActions = [{ id: "installIgor", toolLabel: "Igor", label: "Igor", buttonLabel: tool.status === "damaged" ? "Repair Igor" : "Install Igor", installed: tool.ready,
-    version: tool.version, versions: toolVersions, versionLabels: { [pin.version]: `Igor ${pin.version} (${process.arch})`,
+    version: tool.version, versions: toolVersions, versionLabels: { ...Object.fromEntries(publicTools.map(item => [item.version, `Igor ${item.version} (${process.arch})`])),
       ...Object.fromEntries(localTools.map(item => [item.version, item.versionLabel])) },
     selectedVersion: tool.version, installedVersion: tool.ready ? tool.version : null,
-    installedVersions: [...(bootstrapInstalled ? [pin.version] : []), ...localTools.filter(item => item.installed).map(item => item.version)],
+    installedVersions: [...publicTools.map(item => item.version), ...localTools.filter(item => item.installed).map(item => item.version)],
     architecture: process.arch, archiveSha256: tool.archiveSha256, binarySha256: tool.binarySha256 || null,
     description: `Igor installs automatically with Studio 2 runtimes (31–33 MB), under Launcher Data/runtimes/gamemaker-official/tools/.`, sourceUrl: tool.sourceUrl }];
   const saved = normalizeSettings(settings).defaultVersion, catalog = catalogState(userDataDir, installed);
   const listed = [...catalog.installableVersions].sort(Catalog.versionCompare);
-  const defaultVersion = selectRuntimeVersion({ defaultVersion: saved, fallback: managerDefaultVersion({ listed,
+  const defaultVersion = selectRuntimeVersion({ defaultVersion: savedDefaultVersion(saved, { listed: catalog.versions, installed: installed.map(row => row.version) }), fallback: managerDefaultVersion({ listed,
     installed: installed.filter(row => row.launchReady).map(row => row.version).sort(Catalog.versionCompare) }) }).version;
   const state = { ...normalizeSettings(settings), defaultVersion, defaultSource: saved ? "saved" : "manager", supportsDefault: true, installed, installing: null, variants: [],
     setupActions, catalog };
@@ -302,17 +324,19 @@ function getState({ settings, userDataDir } = {}) {
 const manager = {
   id: ID, label: "GameMaker", normalizeSettings, getState, resolveSelection,
   delivery: { catalog: "remote", included: "none", sourceBuild: false },
+  // The YoYo Games runtime feeds, one per channel.
+  upstream: Catalog.SOURCES,
   refreshCatalog: async options => { await Catalog.refreshCatalog(options); return catalogState(options?.userDataDir, listRuntimeRows(options?.userDataDir)); },
   importRuntime: importOfficialRuntime,
   performSetupAction: ({ setupActionId, downloads, onProgress, ...options } = {}) => {
     if (setupActionId !== "installIgor") throw new Error("Unknown official GameMaker setup action.");
-    const Installer = require("./official-installer"), pin = Installer.bootstrapForArch();
-    const version = options.toolVersion || require("./official-tools").getSelectedIgorVersion(options) || pin.version;
-    return runDownloadTask(downloads, { label: "GameMaker Igor", detail: `Igor ${version} (${process.arch})`,
-      kind: "runtime-tool", managerId: ID, sectionId: "default", version, dedupeKey: `${ID}:igor:${process.arch}:${version}` },
+    const Installer = require("./official-installer");
+    const version = options.toolVersion || require("./official-tools").getSelectedIgorVersion(options) || null;
+    return runDownloadTask(downloads, { label: "GameMaker Igor", detail: version ? `Igor ${version} (${process.arch})` : `Igor (${process.arch})`,
+      kind: "runtime-tool", managerId: ID, sectionId: "default", version, dedupeKey: `${ID}:igor:${process.arch}:${version || ""}` },
     task => Installer.ensureIgor({ userDataDir: options.userDataDir, toolVersion: options.toolVersion, signal: task.signal, onProgress: task.onProgress,
       prerequisiteContext: options.prerequisiteContext, confirmRuntimeInstall: options.confirmRuntimeInstall, logger: options.logger,
-      download: options.dependencies?.downloadToFile, runProcess: options.dependencies?.runProcess }), { onProgress });
+      runProcess: options.dependencies?.runProcess }), { onProgress });
   },
   installRuntime: async ({ downloads, onProgress, ...options } = {}) => {
     if (options.version && !VERSION.test(options.version)) throw new Error("Select an exact official runtime version.");
@@ -364,4 +388,4 @@ Custom.configure(manager, { inspect(runtimePath) {
   return { capability: result.capability, catalogReady: true, selectionSource: "custom" };
 } });
 
-module.exports = { manager, inspectOfficialRuntime, registerOfficialRuntime, importOfficialRuntime, HELP_URL };
+module.exports = { manager, inspectOfficialRuntime, registerOfficialRuntime, importOfficialRuntime, runnerDiskImage, HELP_URL };

@@ -1,16 +1,17 @@
 {
   "name": "maclauncher",
   "productName": "MacLauncher",
+  "author": "procrastinine <24549552+procrastinine@users.noreply.github.com>",
   "license": "MIT",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Mac-first Electron launcher with modular engine support",
   "main": "src/main/bootstrap.js",
   "scripts": {
     "launch": "node scripts/run-game.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:debug": "node scripts/dev.mjs --debug",
-    "test": "node --test tests/*.test.js",
+    "test": "node --test --test-concurrency=10 --test-timeout=60000 tests/*.test.js",
     "build": "vite build --config vite.config.mjs",
     "package:mac": "node scripts/package-mac.mjs",
     "package:check": "node scripts/check-packaging.cjs",
@@ -18,8 +19,9 @@
     "typecheck": "tsc --noEmit",
     "check": "pnpm typecheck && pnpm test && pnpm build",
     "electron:install": "install-electron --no",
-    "postinstall": "node node_modules/electron/install.js",
-    "deps:update": "pnpm update --latest && pnpm check && pnpm audit --audit-level high"
+    "setup:dev": "node scripts/setup-development.cjs",
+    "postinstall": "node scripts/setup-development.cjs",
+    "deps:update": "pnpm update --latest && pnpm setup:dev && pnpm check && pnpm audit --audit-level high"
   },
   "dependencies": {
     "qrcode-generator": "2.0.4",
@@ -28,17 +30,17 @@
     "rpgrt": "0.2.0",
     "steam-session": "1.9.4",
     "steam-user": "5.3.0",
-    "undici": "7.30.1"
+    "undici": "8.12.3"
   },
   "devDependencies": {
     "@electron/notarize": "^3.1.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
-    "electron": "^44.9.3",
-    "electron-builder": "^26.17.0",
+    "electron": "^45.0.0",
+    "electron-builder": "^26.18.0",
     "typescript": "^7.0.2",
-    "vite": "^8.3.4"
+    "vite": "^8.3.5"
   },
   "build": {
     "appId": "com.maclauncher.launcher",
@@ -294,6 +296,6 @@
     "afterSign": "scripts/notarize.js"
   },
   "engines": {
-    "node": "^22.12.0 || ^24.0.0 || ^26.0.0"
+    "node": "^22.19.0 || ^24.0.0 || ^26.0.0"
   }
 }

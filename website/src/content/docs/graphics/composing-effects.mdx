@@ -16,32 +16,32 @@ import doomLow from "../../../assets/graphics/doom-dlss-720.webp";
 import doomOriginalDetail from "../../../assets/graphics/doom-original-detail.webp";
 import doomLowDetail from "../../../assets/graphics/doom-dlss-720-detail.webp";
 
-The fun part of MacLauncher's graphics layer is that nothing is fixed. Any effect can go anywhere, in any order, in any combination, up to 32 rows. This page covers how a chain behaves, so you can build your own.
+An effect chain holds up to 32 rows, and effects can go in any order and any combination. This page explains how rows interact and how sizes work, and gives a few example chains to start from.
 
 ## Top to bottom
 
-The image enters at the top of the chain and passes through each enabled row in turn. Every row sees the output of the one above it. That's why order matters:
+The image enters at the top of the chain and passes through each enabled row in turn. Each row receives the output of the row above it, so the order changes the result:
 
-- **Sharpening before an upscaler** sharpens the small image, and the upscaler then enlarges the sharpened edges. **Sharpening after** works on the final pixels. Both are valid; they just look different.
-- **A CRT effect** wants to come after the image has been enlarged, so it has screen pixels to draw scanlines with.
-- **Color grading** before a CRT grades the game; after it, the grade also tints the simulated glass and glow.
-- **An expensive model** is cheapest early in the chain, at a small size, before anything enlarges the image.
+- Sharpening before an upscaler sharpens the small image, and the upscaler then enlarges the sharpened edges; sharpening after the upscaler works on the final pixels. Both are valid choices with different results.
+- A CRT effect belongs after the image has been enlarged, so it has enough screen pixels to draw scanlines with.
+- Color grading before a CRT grades the game, while a grade after the CRT also tints the simulated glass and glow.
+- An expensive model costs least early in the chain, at a small size, before anything enlarges the image.
 
-Rows come in five kinds: **Image filters** keep the size, **Downsample** and **Upscale** change it, and **Temporal upscaling** and **Frame generation** work across frames. When you add a shader, MacLauncher places it by the output size it declares, so a shader that always doubles its input shows up as an Upscale.
+Rows come in five kinds. **Image filters** keep the size, **Downsample** and **Upscale** change it, and **Temporal upscaling** and **Frame generation** work across frames. When you add a shader, MacLauncher places it by the output size it declares, so a shader that always doubles its input appears as an Upscale.
 
 ## Editing rows
 
-In **Advanced**, **Add effect…** adds a row of any kind, and a shader file dropped on a row replaces its effect. Drag a row to move it, switch it off to set it aside with its settings intact, or remove it. **Options** holds the row's parameters and size, and **Details** shows what it's actually doing while the game runs. A row that can't run as saved, for instance because its shader file is missing, stays off and shows **Needs attention** with the reason, and the rest of the chain keeps running.
+In **Advanced**, **Add effect…** adds a row of any kind, and dropping a shader file on a row replaces that row's effect. You can drag a row or move it with Option-Up and Option-Down, switch it off to set it aside with its settings intact, or remove it. **Options** holds the row's parameters and size, and **Details** shows what the row is doing while the game runs. A row that can't run as saved, for instance because its shader file is missing, stays off and shows **Needs attention** with the reason, and the rest of the chain keeps running.
 
 ## Sizes
 
-Every resize row has three ways to set its size:
+Every resize row can set its size in three ways:
 
-- a **scale of the previous image**, like 0.5× or 2×;
-- a **fraction of the window** or fullscreen surface, like 100%;
-- a **fixed resolution**, like 540p or 1920×1080.
+- a scale of the previous image, such as 0.5× or 2×
+- a fraction of the window or fullscreen surface, such as 100%
+- a fixed resolution, such as 540p or 1920×1080
 
-An Upscale fills the window by default. Fixed-scale models and shaders keep their own scale (a 4× model always outputs 4×), and a later resize row can fit the result to the window. **Options** and **Details** on each row show the actual input and output size it sees. Whatever happens inside the chain, the window stays the size you made it, and the last image is fitted to it.
+A Downsample halves its input by default, and an Upscale fills the window. Fixed-scale models and shaders keep their own scale (a 4× model always outputs 4×), and a later resize row can fit the result to the window. **Options** and **Details** on each row show the actual input and output size it sees. Whatever happens inside the chain, the window keeps the size you gave it, and the last image is fitted to it.
 
 <span id="adaptive-quality"></span>A **Downsample** row can also use **Adaptive quality**, which adjusts its working size within bounds you set to stay inside a GPU time budget.
 
@@ -52,17 +52,17 @@ An Upscale fills the window by default. Fixed-scale models and shaders keep thei
 <Steps>
 1. **Upscale**: Nearest, to the window.
 2. **CRT**: Simulated content height set to the game's original height.
-3. **Colour**, if you'd like the palette a bit punchier.
+3. **Colour**, for slightly stronger colors.
 </Steps>
 
-That's the chain on the [overview page](/maclauncher/graphics/). For console-era games such as Sonic the Hedgehog 2 or Shinobi III, try the different [CRT shaders](/maclauncher/graphics/crt-and-retro/) in step 2.
+The [overview page](/maclauncher/graphics/) shows this chain on Sonic the Hedgehog 2, and [CRT and retro](/maclauncher/graphics/crt-and-retro/) compares other CRT shaders that can take the place of step 2.
 
 ### A sharper visual novel
 
 <Steps>
-1. **Upscale**: [Real-CUGAN](https://github.com/bilibili/ailab/tree/main/Real-CUGAN) 2× (or [Anime4K](https://github.com/bloc97/Anime4K), if you'd rather save power).
+1. **Upscale**: [Real-CUGAN](https://github.com/bilibili/ailab/tree/main/Real-CUGAN) 2×, or [Anime4K](https://github.com/bloc97/Anime4K), which costs far less.
 2. **Upscale**: [MetalFX](https://developer.apple.com/documentation/metalfx) or Bilinear, to fit the result to the window.
-3. **CAS Sharpen**, lightly, to finish.
+3. **CAS Sharpen** at a low strength.
 </Steps>
 
 <Compare
@@ -74,9 +74,9 @@ That's the chain on the [overview page](/maclauncher/graphics/). For console-era
   caption="CLANNAD at 320×240, enlarged 4×: bilinear on its own, and the three-row chain above."
 />
 
-### Making a game "realistic", then making it playable
+### DLSS neural rendering at a playable frame rate
 
-[DLSS neural rendering](/maclauncher/graphics/neural-restoration/#the-models) redraws every frame with a neural model, and on a game like DOOM 3 the result can look startlingly real: weathered skin, cloth with a weave, softer and more natural light. It's also the most demanding effect here, because the model works through every pixel of every frame. Here's the same frame three ways:
+[DLSS neural rendering](/maclauncher/graphics/neural-restoration/#dlss-neural-rendering) redraws every frame with a neural model. On a game like DOOM 3 the result can look close to a photograph, with weathered skin, woven cloth and softer, more natural light. It is also the most demanding effect on this page, because the model processes every pixel of every frame. The tabs show the same frame three ways:
 
 <Tabs>
   <TabItem label="Original">
@@ -99,7 +99,7 @@ That's the chain on the [overview page](/maclauncher/graphics/). For console-era
   caption="The face at 1:1: the original frame, and the playable DLSS chain."
 />
 
-The full chain, with the step that makes it playable:
+The complete chain:
 
 <Steps>
 1. **Downsample** to 720p, so DLSS has far fewer pixels to redraw.
@@ -108,22 +108,22 @@ The full chain, with the step that makes it playable:
 4. **Frame generation** with [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) at 4×, which fills in the frames DLSS can't produce in time. See [Frame generation](/maclauncher/graphics/frame-generation/).
 </Steps>
 
-Running DLSS at 540p or 720p is what turns it into a real-time effect. The model redraws a fraction of the pixels, so the game stays playable and far more responsive than with DLSS at full resolution, and MetalFX brings back the sharpness. Frame generation then smooths the motion on top; input follows the frame rate of step 3, plus the small delay generated frames add. The **DLSS · 540p + LSFG 4×** preset sets up a version of this chain in one click.
+At 540p or 720p, the model redraws a fraction of the pixels, which makes DLSS fast enough to run in real time and keeps the game far more responsive than at full resolution. MetalFX then restores the sharpness, and frame generation smooths the motion. Input follows the frame rate after step 3, plus the small delay that generated frames add. The **DLSS · 540p + LSFG 4×** preset sets up a version of this chain in one step.
 
-### Just smoother
+### Frame generation alone
 
 A single **Frame generation** row, with [RIFE](https://github.com/hzwer/Practical-RIFE) or Lossless Scaling at 2×, is often all a 30 fps game needs. See [Frame generation](/maclauncher/graphics/frame-generation/).
 
 ## Presets
 
-**Presets** saves the current chain under a name, with every row, size and parameter. Applying a preset to another game copies it, so later edits to the preset don't change games you've already applied it to. Presets are managed in **Runtimes → Graphics → Presets**, and the shaders and models they use are shared, not copied.
+**Save as preset…**, in the **⋯** menu beside the **Graphics** heading, saves the current chain under a name, with every row, size and parameter. Applying a preset to another game copies it into that game, so later edits to the preset don't change games it was already applied to. **Manage presets…** opens the presets in **Runtimes → Graphics → Presets**. A preset refers to the shaders and models it uses, which stay in the shared libraries.
 
 ## Seeing what changed
 
-**Output → Compare** switches between the processed image, the untouched source, a split view with a movable divider, and the difference between the two. **Details** on each row shows its sizes and whether it's actually running, with a reason when it isn't.
+**Output → Compare** switches between the processed image, the untouched source, a split view with a movable divider, and the difference between the two. **Details** on each row shows its sizes and whether it's running, with a reason when it isn't.
 
 ## Videos too
 
-Videos opened in MacLauncher play through the same chain, and **Export video…** renders a video file with your saved chain applied, including neural models and image-pair frame generation. The sample images on this site were made that way.
+Videos opened in MacLauncher play through the same chain. **Export video…** renders a video file with the saved chain applied, including neural models and image-pair frame generation. The sample images on this site were made that way.
 
-The [graphics chain](https://github.com/procrastinine/maclauncher/blob/master/docs/GRAPHICS.md#the-graphics-chain) and [sizes](https://github.com/procrastinine/maclauncher/blob/master/docs/GRAPHICS.md#rendering-processing-and-output-size) sections of the graphics guide describe every control, and the [video reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/VIDEO.md#preview-and-export) covers export.
+The graphics guide describes [the graphics chain](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#the-graphics-chain), [processing sizes](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#processing-sizes) and [presets](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#presets) in full, and the [Video page](https://github.com/procrastinine/maclauncher/blob/master/docs/game-types/VIDEO.md#preview-and-export) covers export.

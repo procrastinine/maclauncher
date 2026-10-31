@@ -80,14 +80,14 @@ test("Java honors a genuine global patch choice without rewriting the game", asy
 
 test("Java inspector and Play preserve exact global and game choices", t => {
   const { userDataDir, jarPath, variant } = fixture(t, 8);
-  for (const line of [8, 17, 21, 25]) install(userDataDir, line, `${line}.0.4+1`, variant);
+  for (const line of [8, 9, 17, 21, 25]) install(userDataDir, line, `${line}.0.4+1`, variant);
   const manifest = require("../src/modules/java/manifest.json");
   const base = { gameId: "java-auto-minimum", name: "Game", moduleId: "java", runtimeId: "java", gamePath: jarPath,
     moduleRuntimeSupport: ["java"], moduleSupports: manifest.supports, moduleData: { jarPath, runtimeLine: 8, requiredJava: 8 }, runtimeData: {} };
   // The detected line precedes the global default; a manual line or patch precedes both.
   for (const [defaultLine, minimum, selected, runtimeData] of [[21, 8, 8, {}], [17, 8, 8, {}], [21, 25, 25, {}],
     [21, 8, 8, { line: 8, version: "8.0.4+1" }], [21, 8, 8, { version: "8.0.4+1" }],
-    [21, 25, 8, { version: "8.0.4+1" }], [21, 8, 8, { version: "9.0.4+1" }]]) {
+    [21, 25, 8, { version: "8.0.4+1" }], [21, 8, 9, { version: "9.0.4+1" }]]) {
     const settings = { runtimes: { java: { defaultLine } } };
     const entry = { ...base, moduleData: { ...base.moduleData, runtimeLine: minimum, requiredJava: minimum }, runtimeData: { java: runtimeData } };
     const state = { modules: [manifest], moduleStates: {}, running: {}, runtimeManagers: {
@@ -98,13 +98,47 @@ test("Java inspector and Play preserve exact global and game choices", t => {
       actions: {}, cheatsStatus: null, libsStatus: null, runtimeStatusEntry: null, cheatsPatchBusy: false, libsPatchBusy: false,
       moduleActionResults: {}, moduleActionBusy: {}, moduleActionError: null }));
     const lines = markup.match(/<select aria-label="Line"[^>]*>(.*?)<\/select>/)[1];
-    const autoLine = !runtimeData.line && runtimeData.version && JavaCore.LTS_LINES.includes(Number(runtimeData.version.split(".")[0]))
+    const autoLine = !runtimeData.line && runtimeData.version
       ? Number(runtimeData.version.split(".")[0]) : minimum;
     assert.match(lines, new RegExp(`Automatic \\(Java ${autoLine}\\)`));
-    const versions = markup.match(/<select aria-label="Java version"[^>]*>(.*?)<\/select>/)[1];
+    const versions = markup.match(/<select aria-label="Java \(Temurin\) version"[^>]*>(.*?)<\/select>/)[1];
     assert.match(versions, new RegExp(`value="${selected}\\.0\\.4\\+1"`));
-    for (const other of [8, 17, 21, 25].filter(value => value !== selected))
+    for (const other of [8, 9, 17, 21, 25].filter(value => value !== selected))
       assert.doesNotMatch(versions, new RegExp(`value="${other}\\.0\\.4\\+1"`));
+  }
+});
+
+test("Other Java lines keep separate inspector defaults and an undiscovered exact choice remains visible", async t => {
+  const { userDataDir, jarPath, variant } = fixture(t, 26);
+  install(userDataDir, 26, "26.0.2+1", variant);
+  install(userDataDir, 31, "31.0.1+1", variant);
+  const manifest = require("../src/modules/java/manifest.json");
+  const settings = { runtimes: { java: { lines: { 26: { defaultVersion: "26.0.2+1" } } } } };
+  const state = { modules: [manifest], moduleStates: {}, running: {}, runtimeManagers: {
+    java: { id: Manager.id, label: Manager.label, ...Manager.getState({ settings: settings.runtimes.java, userDataDir }) }
+  } };
+  forbidNetwork(t);
+  for (const runtimeData of [{}, { line: 31 }, { version: "77.0.8+1" }, { line: 77, version: "77.0.8+1" }]) {
+    const line = runtimeData.line || (runtimeData.version ? 77 : 26);
+    const entry = { gameId: "other-java", name: "Game", moduleId: "java", runtimeId: "java", gamePath: jarPath,
+      moduleRuntimeSupport: ["java"], moduleSupports: manifest.supports,
+      moduleData: { jarPath, runtimeLine: 26, requiredJava: 26 }, runtimeData: { java: runtimeData } };
+    const status = Java.actions.runtimeStatus(entry, {}, { userDataDir, settings });
+    assert.equal(status.requestedLine, line);
+    const markup = renderToStaticMarkup(React.createElement(GameDetails, { g: entry, state, moduleInfo: manifest,
+      actions: {}, moduleActionResults: {}, moduleActionBusy: {} }));
+    const lines = markup.match(/<select aria-label="Line"[^>]*>(.*?)<\/select>/)[1];
+    assert.match(lines, new RegExp(`<option value="${line}"`));
+    const versions = markup.match(/<select aria-label="Java \(Temurin\) version"[^>]*>(.*?)<\/select>/)[1];
+    const version = line === 26 ? "26.0.2+1" : line === 31 ? "31.0.1+1" : "77.0.8+1";
+    assert.ok(versions.includes(`value="${version}"`));
+    if (runtimeData.version) {
+      assert.match(versions, /value="77\.0\.8\+1" selected=""/);
+      const plan = await Java.ensureRuntime(entry, { userDataDir, settings });
+      assert.equal(plan.version, runtimeData.version);assert.equal(plan.installOptions.line, line);
+    }
+    for (const other of ["26.0.2+1", "31.0.1+1"].filter(value => value !== version))
+      assert.ok(!versions.includes(`value="${other}"`));
   }
 });
 
@@ -230,7 +264,7 @@ test("Automatic Java 8 bytecode in a folder with a space launches installed Java
       actions: {}, cheatsStatus: null, libsStatus: null, runtimeStatusEntry: null, cheatsPatchBusy: false, libsPatchBusy: false,
       moduleActionResults: {}, moduleActionBusy: {}, moduleActionError: null }));
     return { status, command: launches.at(-1).command, lines: markup.match(/<select aria-label="Line"[^>]*>(.*?)<\/select>/)[1],
-      versions: markup.match(/<select aria-label="Java version"[^>]*>(.*?)<\/select>/)[1] };
+      versions: markup.match(/<select aria-label="Java \(Temurin\) version"[^>]*>(.*?)<\/select>/)[1] };
   };
 
   const automatic = await play({});
@@ -321,7 +355,7 @@ test("each explicit Java line uses its own installed versions despite Java 25 de
   assert.deepEqual(fs.readFileSync(jarPath), before);
 });
 
-test("a missing preferred Java 25 patch stays exact instead of substituting another installed patch", async t => {
+test("a missing preferred Java 25 patch is checked against the catalog instead of substituting another installed patch", async t => {
   const { userDataDir, jarPath, variant } = fixture(t);
   install(userDataDir, 25, "25.0.4.1+1", variant);
   const entry = { runtimeId: "java", gamePath: jarPath, moduleData: { jarPath, runtimeLine: 25, requiredJava: 25 }, runtimeData: {} };
@@ -330,7 +364,8 @@ test("a missing preferred Java 25 patch stays exact instead of substituting anot
   } } } } };
   forbidNetwork(t);
   assert.equal(Java.actions.runtimeStatus(entry, {}, context).ready, false);
-  assert.equal((await Java.ensureRuntime(entry, context)).version, "25.0.99+1");
+  const plan = await Java.ensureRuntime(entry, context);
+  assert.deepEqual([plan.version, plan.discoveryRequired, plan.installOptions.line], [null, true, 25]);
   entry.runtimeData.java = { version: "25.0.4.1+1" };
   assert.equal(await Java.ensureRuntime(entry, context), null);
 });
@@ -417,7 +452,7 @@ test("Java inspector version options follow each explicit line even below the de
     moduleRuntimeSupport: ["java"], moduleSupports: manifest.supports, moduleData: { runtimeLine: 25, requiredJava: 25 }, runtimeData: {} };
   for (const line of JavaCore.LTS_LINES) {
     const markup = render({ ...entry, runtimeData: { java: { line: String(line), version: `${line}.0.4+1` } } });
-    const versions = markup.match(/<select aria-label="Java version"[^>]*>(.*?)<\/select>/)[1];
+    const versions = markup.match(/<select aria-label="Java \(Temurin\) version"[^>]*>(.*?)<\/select>/)[1];
     assert.match(versions, new RegExp(`<option value="${line}\\.0\\.4\\+1" selected="">`));
     const lines = markup.match(/<select aria-label="Line"[^>]*>(.*?)<\/select>/)[1];
     assert.match(lines, /<option value="">Automatic \(Java 25\)<\/option>/);
@@ -427,7 +462,7 @@ test("Java inspector version options follow each explicit line even below the de
   }
   for (const line of [17, 25]) {
     const markup = render({ ...entry, runtimeData: { java: { line: String(line), version: `${line}.0.3+1` } } });
-    const versions = markup.match(/<select aria-label="Java version"[^>]*>(.*?)<\/select>/)[1];
+    const versions = markup.match(/<select aria-label="Java \(Temurin\) version"[^>]*>(.*?)<\/select>/)[1];
     assert.match(versions, new RegExp(`<option value="${line}\\.0\\.3\\+1" selected="">`));
     assert.match(versions, new RegExp(`<option value="${line}\\.0\\.4\\+1">`));
     const other = line === 17 ? 25 : 17;
@@ -438,13 +473,13 @@ test("Java inspector version options follow each explicit line even below the de
   const lines = upgraded.match(/<select aria-label="Line"[^>]*>(.*?)<\/select>/)[1];
   assert.match(lines, /<option value="21" selected="">Java 21<\/option>/);
   for (const line of JavaCore.LTS_LINES) assert.doesNotMatch(lines, new RegExp(`<option value="${line}" disabled="">`));
-  const versions = upgraded.match(/<select aria-label="Java version"[^>]*>(.*?)<\/select>/)[1];
+  const versions = upgraded.match(/<select aria-label="Java \(Temurin\) version"[^>]*>(.*?)<\/select>/)[1];
   assert.match(versions, /<option value="21\.0\.4\+1" selected="">/);
   assert.doesNotMatch(versions, /25\.0\.4\+1/);
   const staleStatus = render({ ...entry, runtimeData: { java: { line: "17" } } }, {
     runtimeId: "java", status: { requestedLine: 25, resolvedVersion: "25.0.4.1+1", ready: true }
   });
-  const staleVersions = staleStatus.match(/<select aria-label="Java version"[^>]*>(.*?)<\/select>/)[1];
+  const staleVersions = staleStatus.match(/<select aria-label="Java \(Temurin\) version"[^>]*>(.*?)<\/select>/)[1];
   assert.match(staleVersions, /<option value="17\.0\.4\+1">/);
   assert.doesNotMatch(staleVersions, /25\.0\.4\.1\+1/);
 });
@@ -468,7 +503,7 @@ test("Java inspector keeps an exact patch while showing the detected recommendat
     const markup = renderToStaticMarkup(React.createElement(GameDetails, { g: entry, state, moduleInfo: manifest,
       actions: {}, cheatsStatus: null, libsStatus: null, runtimeStatusEntry: null, cheatsPatchBusy: false, libsPatchBusy: false,
       moduleActionResults: {}, moduleActionBusy: {}, moduleActionError: null }));
-    const versions = markup.match(/<select aria-label="Java version"[^>]*>(.*?)<\/select>/)[1];
+    const versions = markup.match(/<select aria-label="Java \(Temurin\) version"[^>]*>(.*?)<\/select>/)[1];
     assert.match(versions, /value="21\.0\.4\+1" selected/);
     assert.doesNotMatch(versions, /25\.0\.4\.1\+1/);
     entry.runtimeData.java = {};
@@ -492,8 +527,8 @@ test("Temurin Runtimes tabs keep distinct refreshed line catalogs without render
       onRuntimeUninstall: offline, onCancelDownload: offline
     }));
     assert.match(markup, new RegExp(`id="runtime-panel-java-${line}"`));
-    // The install select lists the line's own catalog and waits for a choice.
-    assert.match(markup, new RegExp(`<option value="" disabled="" selected="">Choose version</option><option value="${line}\\.0\\.4\\+1">`));
+    // The install select chooses the first available version of its own line.
+    assert.match(markup, new RegExp(`<option value="" disabled="">Choose version</option><option value="${line}\\.0\\.4\\+1" selected="">`));
     for (const other of JavaCore.LTS_LINES.filter(value => value !== line)) {
       assert.doesNotMatch(markup, new RegExp(`value="${other}\\.0\\.4\\+1"`));
     }

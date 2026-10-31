@@ -233,8 +233,7 @@ async function ensurePrefix(installation, prefixPath, directory, settings, graph
 }
 
 function executableEvidence(entry, settings = {}) {
-  if (Detection.isNativeImport(entry)) return null;
-  const evidence = Detection.cachedWindowsExecutable(entry);
+  const evidence = Detection.findWindowsExecutable(entry);
   if (!evidence?.windowsExecutablePath || !path.isAbsolute(evidence.sourceRoot || "")) return null;
   const executable = settings.executable
     ? path.resolve(evidence.sourceRoot, safeText(settings.executable, "Windows executable")) : evidence.windowsExecutablePath;
@@ -278,7 +277,8 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const selected = await manager.resolveSelection(entry, context.settings, context.userDataDir, settings);
   if (!selected.ready || !selected.install) throw new Error(selected.reason || "The selected Sikarugir version is not installed.");
   const Temporal = require("../temporal");
-  const host = dependencies.host || { platform: process.platform, arch: process.arch, macOSVersion: systemVersionSync() };
+  const capabilities = require("../../shared/runtime/host-capabilities").getHostCapabilities();
+  const host = dependencies.host || capabilities;
   let cameraBridge = Temporal.resolvePlan(entry, context, { install: selected.install, settings, host,
     runtimeId: "sikarugir", verify: true, root: dependencies.graphicsRoot, automatic: settings.dlss !== true });
   if (cameraBridge) settings = { ...settings, dlss: true };

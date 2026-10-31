@@ -2,6 +2,7 @@ const GameStore = require("./game-store");
 const Cleanup = require("./game-data-cleanup");
 const fs = require("node:fs");
 const GameData = require("../modules/shared/game-data");
+const GameAvailability = require("./game-availability");
 
 function inUseError() {
   return Object.assign(new Error("Stop the game or wait for its current action to finish."), { code: "GAME_IN_USE" });
@@ -18,12 +19,12 @@ function createGameRemoval({ userDataDir, registry, lifecycle, listRuntimeManage
       assertAvailable();
       if (trash) {
         if (typeof trashItem !== "function") throw new Error("A Trash service is required to remove original game files.");
-        let missing = false;
-        if (ignoreMissingSource) {
-          try { fs.statSync(current.gamePath); }
-          catch (error) { if (["ENOENT", "ENOTDIR"].includes(error.code)) missing = true; else throw error; }
-        }
-        if (!missing) await trashItem(current.gamePath);
+        // Files that are not on disk, such as on a disconnected drive, are never
+        // trashed; a batch removal that accepts missing files forgets them.
+        const availability = GameAvailability.checkGameAvailabilitySync({ gamePath: current.gamePath });
+        const missing = availability.reason === "missing";
+        if (!availability.available && !(missing && ignoreMissingSource)) throw GameAvailability.unavailableError(availability);
+        if (availability.available) await trashItem(current.gamePath);
       }
       assertAvailable();
       const moduleId = resolveModuleId(current);

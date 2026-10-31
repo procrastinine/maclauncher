@@ -19,9 +19,10 @@ function readRuntimeCatalog({ userDataDir, managerId, sourceId, validateEntry = 
     if (fs.statSync(file).size > 8 * 1024 * 1024) return null;
     const record = JSON.parse(fs.readFileSync(file, "utf8"));
     if (record.schemaVersion !== 1 || record.managerId !== managerId || (record.sourceId ?? null) !== (sourceId ?? null) || !Array.isArray(record.entries) ||
-      record.entries.length > limit || !record.entries.every(validateEntry) ||
-      (record.retainedEntries != null && (!Array.isArray(record.retainedEntries) || record.retainedEntries.length > limit || !record.retainedEntries.every(validateEntry)))) return null;
-    return record;
+      record.entries.length > limit || (record.retainedEntries != null && (!Array.isArray(record.retainedEntries) || record.retainedEntries.length > limit))) return null;
+    // A cached row this launcher can no longer read is left out; the others stay listed.
+    const readable = rows => rows.filter(row => { try { return validateEntry(row); } catch { return false; } });
+    return { ...record, entries: readable(record.entries), ...(record.retainedEntries != null ? { retainedEntries: readable(record.retainedEntries) } : {}) };
   } catch { return null; }
 }
 function writeRuntimeCatalog({ userDataDir, managerId, sourceId, entries, retainedEntries = [], source, sourceStates, fetchedAt = Date.now(), maxEntries = MAX_CATALOG_ENTRIES } = {}) {

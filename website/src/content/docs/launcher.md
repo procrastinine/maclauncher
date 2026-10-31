@@ -7,76 +7,92 @@ MacLauncher has one main window, the **library**, with a list of your games on t
 
 ## The library
 
+The library opens straight away with the details MacLauncher saved last time, and each game is checked again in the background. A game whose files haven't changed reuses what MacLauncher already knows about it, and a slow game doesn't hold up the list or other imports. Selecting a game moves its checks to the front of the queue, and its last known details stay on screen until the new result arrives. [Library loading](https://github.com/procrastinine/maclauncher/blob/master/docs/library/GAME_PREPARATION.md#library-loading) describes how those updates work.
+
 ### Adding games
 
-**Add game** opens a file picker for game folders and launchable files such as `.app`, `.exe`, `.jar`, `.swf` and `.love`. Dragging folders and files onto the window works too, including Android `.apk` packages and iOS `.ipa` archives. MacLauncher looks at each one, works out its engine and runtime, and adds it to the library.
+**Add game…** opens a file picker for game folders and launchable files such as `.app`, `.exe`, `.jar`, `.swf` and `.love`. You can also drag folders and files onto the window, including Android `.apk` packages and iOS `.ipa` archives. MacLauncher detects what kind of game each one is and adds it to the library.
 
-Drag in several games at once and they import as one batch, with **Adding N of M** and a progress bar. One failure doesn't stop the rest: the summary lists each item that didn't import, why, and a **Choose game file…** or **Retry** button to sort it out.
+Several games dragged in at once import as one batch, with **Adding N of M** and a progress bar. A failed item doesn't stop the rest. The summary lists each item that didn't import with the reason, a **Choose game file…** button and **Retry**.
 
-The same drop target accepts shaders (`.fx`, `.glsl`, `.hook`, `.slang`, `.slangp`) and neural models (`.dlssmodel`). Those go to the [shader library](/maclauncher/graphics/shaders/#the-shader-library) instead of the game list.
+The same drop target accepts shaders (`.fx`, `.glsl`, `.hook`, `.slang`, `.slangp`) and neural models (`.dlssmodel`). Shaders join the [shader library](/maclauncher/graphics/shaders/#the-shader-library) and models join the [model library](/maclauncher/graphics/neural-restoration/#getting-models) instead of the game list.
 
 ### Search, filters and sorting
 
-The toolbar above the list narrows it down without changing anything:
+A toolbar above the list filters and sorts it:
 
 - **Search** (Cmd+F) matches titles and paths as you type.
-- **Game types** shows or hides whole kinds of game, such as [RPG Maker](https://www.rpgmakerweb.com/) MV, [Ren'Py](https://www.renpy.org/) or Nintendo Switch.
+- **Game types** shows or hides whole kinds of game, such as [RPG Maker](https://www.rpgmakerweb.com/) MV, [Ren'Py](https://www.renpy.org/) or Nintendo Switch. A game is listed under its game type whichever runtime plays it, so Prosper games, for example, appear under PlayStation 5.
 - **Show games** picks All games, Favorites or Running.
 - **Sort** orders the list by Default, Last played, Date added, Alphabetical or Game type, with a button to reverse the direction.
 
-Your sort and favorites are remembered between launches, and neither searching nor filtering changes the order you've arranged by hand.
+Your sort and favorites are remembered between launches. Searching and filtering never change the order you've arranged by hand.
 
 ### Favorites and order
 
-The star beside a game makes it a favorite. In the **Default** sort, favorites sit together at the top, and you can drag games into any order with the handle, or move the selected game with Option–Up and Option–Down. New games arrive at the top of the list; playing a game doesn't move it.
+A star beside each game marks it as a favorite. In the **Default** sort, favorites sit together at the top, and you can drag games into any order with the handle or move the selected game with Option-Up and Option-Down. New games arrive at the top of the list, just below the favorites, and playing a game doesn't move it.
 
 ### Selecting several games
 
-**Select** turns the list into checkboxes. Shift-click selects a range, and Cmd+A selects everything visible. With a selection you can:
+**Select** turns the list into checkboxes. Shift-click selects a range, and Cmd+A selects every visible game. A selection offers these actions:
 
-- **Forget selected**: remove the games from the library and delete MacLauncher's own data for them. The game files stay where they are.
-- **Move to Trash**: move the games' files to the Trash as well.
-- **Select all missing**: check the visible games on disk and select the ones whose files are gone, ready to forget. **Detect all missing** marks them without selecting.
+- **Forget selected** removes the games from the library and deletes MacLauncher's own data for them. The game files stay where they are.
+- **Move to Trash…** also moves the games' files to the Trash.
+- **Select all missing** checks the visible games on disk and selects the ones whose files are gone, ready to forget. **Detect all missing** marks them without selecting them. Games on an unplugged drive count as missing too, so connect your drives first if you only want to clear out games you've deleted.
 
 Both removals ask once in a macOS dialog first.
 
 ### Each row
 
-Every row shows the game's name, type, last-played time and path. A **runtime** tag appears when the game uses something other than its type's usual runtime, and **Modified** when its runtime settings differ from the defaults. **Play**/**Stop**, **Shortcut** and **Forget** work straight from the row, without opening the inspector.
+Every row shows the game's name, game type, last-played time and path. A **runtime** tag appears when the game uses a runtime other than its game type's default, and **Modified** appears when that runtime's settings differ from the defaults. A save label shows whether the game uses a custom save folder. **Play**/**Stop**, **Shortcut** and **Forget** work directly from the row, without opening the inspector. When a game's files can't be found, its row says **Unavailable** and its icon is dimmed; hover over the label to see why.
+
+When looking for a Windows game's icon in a folder, MacLauncher skips installers and crash reporters and tries the game before configuration tools or launchers. A packaged game whose file name looks like an installer's can still supply its own artwork.
+
+### Games on an external drive
+
+Games are big, so many people keep them on an external drive that isn't always plugged in. When a game's files aren't on disk, because the drive is disconnected or the folder has moved, MacLauncher leaves the game exactly as it was. It stays in the library with its saves, settings, runtime versions, snapshots and effects. Nothing is detected again, rebuilt or deleted, and MacLauncher doesn't go looking through the missing folder.
+
+An icon kept in a game's folder appears once MacLauncher has checked that the files are available.
+
+While a game is unavailable, **Play** explains why it can't start, and patches and tools that need the game's files are switched off. Favorites, notes, launch arguments, runtime choices and settings, network access, effects and **Forget** still work. Saves that MacLauncher keeps in its own storage stay usable, while saves stored inside the game folder wait for the drive.
+
+When the drive comes back at the same location, the game is ready again, with no restart or new import. MacLauncher notices the next time you switch to its window, press **Play** or use **Detect all missing**, and then refreshes the game's details as it does at startup. If the drive disappears while a game is running and the game stops, MacLauncher keeps running and tells you the game's files became unavailable.
+
+If a game has moved for good, to another folder or another drive, press **Locate…** beside the **Files unavailable** notice in the game's inspector and choose the new location. MacLauncher checks that the game there is the same kind of game, then points the library entry at it. The game keeps its saves, snapshots, settings, notes, favorite, runtime choices and effects, and shortcuts you saved for it keep opening it. A location without a game of the same kind, or one that another library entry already uses, is refused with the reason, and the entry stays as it was. [Unavailable game files](https://github.com/procrastinine/maclauncher/blob/master/docs/library/GAME_PREPARATION.md#unavailable-game-files) has the full rules, including [what Locate… updates](https://github.com/procrastinine/maclauncher/blob/master/docs/library/GAME_PREPARATION.md#locating-moved-files).
 
 ## The inspector
 
-Click a game to open its inspector. Its sections always come in the same order, and a section only appears when the game has something to show in it.
+Click a game to open its inspector, and click it again to close it. The inspector's sections always come in the same order, and a section appears only when the game has something to show in it.
 
 ### Files
 
-- **Game path**, with a folder button that shows the game in Finder.
-- **What to start**, for games with more than one entry point, such as a playlist's first video.
-- **Save location**, with **Change** to point the game at another save folder and **Reset** to go back to the default. Saves kept inside MacLauncher's own storage read **Managed by MacLauncher**.
-- **Remove quarantine** for imported Mac apps that macOS refuses to open because they were downloaded.
-- **Details**: the detected format, where the version came from, how confident the detection is, and the full detection trace.
+- **Game** shows where the game is, with a folder button that reveals it in Finder.
+- Some game types add a launch choice here. Videos, for example, have **Video**, which picks the playlist entry that plays first.
+- **Saves** shows the save folder, with **Change** to point the game at another folder and **Reset** to go back to the default. Saves kept inside MacLauncher's own storage read **Managed by MacLauncher**.
+- **Remove quarantine** appears for imported Mac apps that macOS refuses to open because they were downloaded.
+- **Detection** holds the detected format, where the version came from, how confident the detection is, and the full detection trace.
 
 ### Launch
 
-The runtime, its version and settings, launch arguments, network access and, for [Steam](https://store.steampowered.com/) games, whether to start the Steam client. Each is described under [Per-game choices](/maclauncher/tools/versions-and-settings/#per-game-choices).
+This section holds the runtime, its version and settings, launch arguments, network access and, for [Steam](https://store.steampowered.com/) games, whether to start the Steam client. [Per-game choices](/maclauncher/tools/versions-and-settings/#per-game-choices) describes each one.
 
 **Play** prepares and starts the game. While it prepares, **Cancel** stops the launch, and **Stop** is available as soon as the game's process starts. If the selected runtime can only inspect a game, the inspector explains why in place of Play and keeps the inspection tools.
 
 ### Patches
 
-Some game types can be patched in place, always reversibly: RPG Maker MV games can swap in an updated graphics library, and games with cheats can have their tools injected. Each patch shows its status (Not patched, Patched or Partial) with **Patch** and **Unpatch** buttons, and asks before changing anything.
+Some game types support reversible patches to the game's files. RPG Maker MV games can swap in an updated graphics library, and games with in-game cheat tools can have those tools injected. Each patch shows its status (Not patched, Patched or Partial) with **Patch** and **Unpatch** buttons, and asks before changing anything.
 
 ### Tools
 
-The game type's own tools: extractors, decompilers, plugin installers, app builders, video export and so on. Each group's main action comes first, and results appear right below it. See [Decompilers and extractors](/maclauncher/tools/decompilers-and-extractors/) and [Saves and cheats](/maclauncher/tools/saves-and-cheats/).
+This section holds the game type's own tools, such as extractors, decompilers, plugin installers, app builders and video export. Each group shows its main action first, with related actions under **More…**, and results appear right below. See [Decompilers and extractors](/maclauncher/tools/decompilers-and-extractors/) and [Saves and cheats](/maclauncher/tools/saves-and-cheats/).
 
 ### Graphics
 
-The game's effect chain. The heading summarizes the active effects while the section is closed. See [Graphics and effects](/maclauncher/graphics/).
+This section holds the game's effect chain. While the section is closed, its heading summarizes the active effects. See [Graphics and effects](/maclauncher/graphics/).
 
 ### Notes
 
-Plain text of your own, kept with the game in the library. **Save notes** or Cmd-S saves them, and so does clicking elsewhere. Notes go away when the game is forgotten.
+Notes are plain text of your own, kept with the game in the library. **Save notes** or Cmd-S saves them, and so does clicking elsewhere. Notes are deleted when the game is forgotten.
 
 ## Windows and menus
 
@@ -85,6 +101,6 @@ Plain text of your own, kept with the game in the library. **Save notes** or Cmd
 - **External** finds games installed from stores and downloads ones you own. See [Stores and downloads](/maclauncher/tools/stores-and-downloads/).
 - **Credits** lists every project MacLauncher builds on, with links. See [Credits](/maclauncher/about/credits/).
 
-Each opens once; asking again brings the existing window forward. Closing the library leaves the other windows open, and the Dock icon or **View → Library** brings it back. **Help → Show Log in Finder** reveals MacLauncher's log for troubleshooting.
+Each window opens once, and opening it again brings the existing window forward. Closing the library leaves the other windows open, and the Dock icon or **View → Library** brings it back. **Help → Show Log in Finder** reveals MacLauncher's log for troubleshooting.
 
-The [UI guide](https://github.com/procrastinine/maclauncher/blob/master/docs/UI_GUIDE.md) describes every control in full.
+The [UI guide](https://github.com/procrastinine/maclauncher/blob/master/docs/development/UI_GUIDE.md) describes every control in full, including the [library](https://github.com/procrastinine/maclauncher/blob/master/docs/development/UI_GUIDE.md#library) and the [inspector](https://github.com/procrastinine/maclauncher/blob/master/docs/development/UI_GUIDE.md#inspector).

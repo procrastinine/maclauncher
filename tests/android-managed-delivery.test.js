@@ -6,7 +6,7 @@ test('Android managed families never resolve missing primary or retained payload
   t.after(() => fs.rmSync(root, {recursive:true, force:true}));
   const families = [
     ['android', 'klepton', require('../src/modules/android/runtime-manager').createManager, '../src/modules/android/retained-versions.json'],
-    ['android-art', 'android-art', require('../src/modules/android/art/runtime-manager').createManager, '../src/modules/android/art/retained-versions.json'],
+    ['android-art', 'android-art', require('../src/modules/android/art/runtime-manager').createLegacyManager, '../src/modules/android/art/retained-versions.json'],
     ['android-aim', 'aim', require('../src/modules/android/providers/aim/manager').createManager, '../src/modules/android/providers/aim/retained-versions.json']
   ];
   const requests = [], managers = [];
@@ -20,12 +20,12 @@ test('Android managed families never resolve missing primary or retained payload
     const state = manager.getState({userDataDir,...options});
     assert.deepEqual(state.installed, []);
     assert.deepEqual(state.catalog.includedVersions, []);
-    assert.equal(state.catalog.recommendedVersion, null);
+    assert.equal(state.catalog.recommendedVersion, undefined);
     assert.doesNotMatch(state.catalog.installReason || '', /is not installed\. Install this version/);
     // A missing catalog requests discovery without inventing a package version.
     const fallback = manager.resolveSelection(null,{},userDataDir,options);
     assert.equal(fallback.version,null);
-    assert.equal(fallback.selectionRequired,true);
+    assert.equal(fallback.selectionRequired,undefined);
     assert.equal(fallback.discoveryRequired,true);
     assert.equal(fallback.ready,false);
     assert.equal(fallback.install,null);

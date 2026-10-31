@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const Native = require("../../shared/runtime/local-native");
 const Bundled = require("../../shared/runtime/bundled-native");
+const Catalog = require("../../shared/runtime/maclauncher-builds");
 
 function requiredFiles(dotnetVersion) {
   return ["FNA.dll", "MacLauncherFnaHost.dll", "MacLauncherFnaHost.runtimeconfig.json",
@@ -14,13 +15,14 @@ function verifyRuntime(install) {
   if (!install?.executablePath) throw new Error("FNA runtime is not installed.");
   const root = path.dirname(install.executablePath);
   const record = JSON.parse(fs.readFileSync(path.join(root, "fna-runtime.json"), "utf8"));
-  if (typeof record.profile !== "string" || !record.profile || !/^[a-f0-9]{40}$/.test(record.upstreamRevision || "") ||
+  const project = install.source === "download" && install.catalogEntry?.projectPackage;
+  if (typeof record.profile !== "string" || !record.profile ||
       !/^\d+\.\d+\.\d+$/.test(record.dotnetVersion || "") || !/^\d+(?:\.\d+){1,3}$/.test(record.frameworkVersion || "") ||
-      record.architecture !== "arm64" || record.upstreamRevision !== install.upstreamRevision ||
+      !["arm64", "x64"].includes(record.architecture) ||
       !record.files || Array.isArray(record.files) || Object.keys(record.files).length > 128) throw new Error("FNA runtime profile metadata is invalid.");
   let sealedManifest, sealedPayload;
   if (install.source === "custom" && install.manifest) {
-    sealedManifest = Bundled.validateManifest(install.manifest, { managerId: "fna", upstreamRevision: record.upstreamRevision, arch: "arm64" });
+    sealedManifest = Bundled.validateRuntimeManifest(install.manifest, { managerId: "fna", arch: record.architecture });
     sealedPayload = install.payloadRoot;
     Bundled.verifyPayload(sealedPayload, sealedManifest);
   } else if (install.source === "bundled") {
@@ -33,12 +35,12 @@ function verifyRuntime(install) {
     sealedPayload = path.join(install.installDir, "files");
   } else if (install.source === "download" && install.catalogEntry?.projectPackage) {
     const selected = install.catalogEntry.projectPackage;
-    if (selected.id !== "fna" || selected.version !== install.version || selected.source?.revision && selected.source.revision !== record.upstreamRevision || selected.manifestRelative !== "manifest.json")
+    if (selected.id !== "fna" || selected.version !== install.version || selected.manifestRelative !== "manifest.json")
       throw new Error("FNA runtime package identity is invalid.");
     const directory = path.join(install.installDir, "project-payload");
     const sealed = Bundled.readRegular(path.join(directory, selected.manifestRelative), Bundled.LIMITS.manifestBytes);
-    const manifest = Bundled.validateManifest(JSON.parse(sealed.bytes), {
-      managerId: "fna", version: selected.version, upstreamRevision: record.upstreamRevision, arch: "arm64"
+    const manifest = Bundled.validateRuntimeManifest(JSON.parse(sealed.bytes), {
+      managerId: "fna", version: selected.version, arch: record.architecture
     });
     if (sealed.sha256 !== selected.manifestSha256) throw new Error("FNA runtime package manifest changed.");
     sealedPayload = path.join(directory, "files");
@@ -58,7 +60,7 @@ function verifyRuntime(install) {
     if (path.isAbsolute(relative) || relative.split(/[\\/]/).includes("..") || !/^[a-f0-9]{64}$/.test(checksum) ||
       Native.hashFile(path.join(root, relative)) !== checksum) throw new Error("FNA runtime file integrity check failed.");
   }
-  return { root, ...record };
+  return { root, ...record, sourceIdentity: Catalog.sourceIdentity(project, {manifest: sealedManifest, receiptRevision: install.upstreamRevision}) };
 }
 
 

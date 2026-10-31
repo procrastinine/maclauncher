@@ -39,10 +39,11 @@ test("Google profile snapshots contain actual identity metadata without credenti
   assert.throws(() => Profile.saveSnapshot(root, [{ type: "unrelated", name: "fixture" }]), /invalid identity/);
 });
 test("declining microG acquisition creates no package download or service", async t => {
-  const root = directory(t); let downloaded = false;
+  const root = directory(t), Transport = require("../src/modules/shared/runtime/upstream-transport"); let downloaded = false;
+  for (const name of ["fetchUrlBuffer", "downloadToFile"]) t.mock.method(Transport, name, async () => { downloaded = true; });
   await assert.rejects(Packages.ensurePackages({ userDataDir: root }, {
     confirmToolInstall: async () => { throw Object.assign(new Error("Canceled"), { name: "AbortError" }); },
-    downloadToFile: async () => { downloaded = true; }, withRuntimeMutation: () => assert.fail("No install after cancellation")
+    withRuntimeMutation: () => assert.fail("No install after cancellation")
   }), /Canceled/);
   assert.equal(downloaded, false); assert.equal(fs.existsSync(path.join(root, "android")), false);
 });
@@ -82,8 +83,22 @@ test("a guest-supplied process ID cannot replace the authenticated peer", async 
 });
 test("official microG artifacts match manifest, published digest and signer", { skip: !process.env.MACLAUNCHER_MICROG_TEST_PACKAGES }, () => {
   const { verifyPublishedApk } = require("../src/modules/android/google/apk-identity");
-  for (const pin of Packages.catalog.packages) {
-    const identity = verifyPublishedApk(path.join(process.env.MACLAUNCHER_MICROG_TEST_PACKAGES, pin.filename), pin);
-    assert.equal(identity.packageName, pin.packageName); assert.deepEqual(identity.signers, pin.signers);
+  for (const pin of Packages.catalog.legacy.packages) {
+    const identity = verifyPublishedApk(path.join(process.env.MACLAUNCHER_MICROG_TEST_PACKAGES, pin.filename), { ...pin, signers: Packages.catalog.signers });
+    assert.equal(identity.packageName, pin.packageName); assert.deepEqual(identity.signers, Packages.catalog.signers);
   }
+});
+test("microG installations resolve offline from their recorded release, including the earlier fixed one", t => {
+  const root = directory(t), verified = [], verify = (file, pin) => { verified.push(pin); return { signers: pin.signers }; };
+  const legacy = path.join(root, "android/google/packages", Packages.catalog.legacy.version);
+  fs.mkdirSync(legacy, { recursive: true });
+  for (const pin of Packages.catalog.legacy.packages) { fs.writeFileSync(path.join(legacy, pin.filename), ""); fs.truncateSync(path.join(legacy, pin.filename), pin.bytes); }
+  assert.equal(Packages.resolvePackages(root, { verify }).version, Packages.catalog.legacy.version);
+  assert.deepEqual(verified.map(pin => pin.sha256), Packages.catalog.legacy.packages.map(pin => pin.sha256));
+  const later = path.join(root, "android/google/packages/0.3.19.270000"), packages = Packages.catalog.packages.map(item => ({ ...item, versionCode: 1,
+    filename: `${item.packageName}-1.apk`, url: `https://github.com/microg/GmsCore/releases/download/v0.3.19.270000/${item.packageName}-1.apk`, bytes: 3, sha256: "c".repeat(64) }));
+  fs.mkdirSync(later); for (const pin of packages) fs.writeFileSync(path.join(later, pin.filename), "apk");
+  fs.writeFileSync(path.join(later, "release.json"), JSON.stringify({ version: "0.3.19.270000", packages }));
+  const resolved = Packages.resolvePackages(root, { verify });
+  assert.equal(resolved.version, "0.3.19.270000"); assert.deepEqual(resolved.packages.map(pin => pin.signers), [Packages.catalog.signers, Packages.catalog.signers]);
 });

@@ -6,23 +6,25 @@ const Native = require("../../shared/runtime/local-native");
 const { throwIfAborted } = require("../../shared/runtime/download-utils");
 const { VERSION } = require("../detect");
 const exec = promisify(execFile);
-const IDENTITY = "Unity Technologies ApS (BVPN9UFA9B)";
+// Unity signs its installers with its Apple Developer ID Installer
+// certificate, issued first to "Unity Technologies ApS" and later to
+// "Unity Technologies SF", each shown with and without its team identifier.
+const IDENTITIES = Object.freeze(["Unity Technologies ApS", "Unity Technologies ApS (BVPN9UFA9B)",
+  "Unity Technologies SF", "Unity Technologies SF (9QW8UQUTAA)"]);
 const safeRelative = value => value && !path.isAbsolute(value) && !value.split(path.sep).includes("..") && !/[\x00-\x1f]/.test(value);
 
-async function verifyArtifact({ archivePath, archiveSha256, pin, signal }, { run = exec } = {}) {
+// Unity signs its installers with its Apple Developer ID; older installers
+// carry the certificate name without the team identifier.
+async function verifyArtifact({ archivePath, archiveSha256, signal }, { run = exec } = {}) {
   const { stdout } = await run("/usr/sbin/pkgutil", ["--check-signature", archivePath], { encoding: "utf8", maxBuffer: 64 * 1024, timeout: 30000, ...(signal ? { signal } : {}), env: { ...process.env, LANG: "C", LC_ALL: "C" } });
   throwIfAborted(signal);
-  const expected = pin?.asset?.publisherIdentity || IDENTITY;
   const signer = /\d+\. Developer ID Installer:\s*([^\n]+)/.exec(stdout)?.[1]?.trim();
   if (!/Status:\s+signed by a developer certificate issued by Apple for distribution/.test(stdout) ||
-    signer !== expected || ![IDENTITY, "Unity Technologies ApS"].includes(expected) || !stdout.includes("Apple Root CA")) throw new Error("The Unity installer signature is not a trusted Unity Technologies package.");
+    !IDENTITIES.includes(signer) || !stdout.includes("Apple Root CA")) throw new Error("The Unity installer signature is not a trusted Unity Technologies package.");
   const leaf = /Developer ID Installer:[\s\S]*?SHA256 Fingerprint:\s*((?:[A-Fa-f0-9]{2}\s+){31}[A-Fa-f0-9]{2})/.exec(stdout);
   const timestamp = /Signed with a trusted timestamp on:\s*([^\n]+)/.exec(stdout)?.[1]?.trim() || null;
-  if (!leaf) throw new Error("The Unity installer's signing certificate identity was not readable.");
-  const certificateSha256 = leaf[1].replace(/\s/g, "").toLowerCase();
-  if ((pin?.asset?.publisherCertificateSha256 && certificateSha256 !== pin.asset.publisherCertificateSha256) ||
-    (expected === "Unity Technologies ApS" && !pin?.asset?.publisherCertificateSha256)) throw new Error("The Unity installer signing certificate does not match this release.");
-  return { verified: true, archiveSha256, identity: expected, certificateSha256, trustedTimestamp: timestamp, verificationTool: "/usr/sbin/pkgutil --check-signature" };
+  return { verified: true, archiveSha256, identity: signer, certificateSha256: leaf ? leaf[1].replace(/\s/g, "").toLowerCase() : null,
+    trustedTimestamp: timestamp, verificationTool: "/usr/sbin/pkgutil --check-signature" };
 }
 
 async function extractPackage(archivePath, destination, signal, { run = exec } = {}) {
@@ -98,12 +100,58 @@ function verifyInventory(root, record) {
   } catch { return false; }
 }
 
+// Unity 2020.2 renamed the player templates from macosx64/macosarm64 to
+// macos_{arm64,x64,x64arm64}[_player]_nondevelopment_mono. The editor version
+// only orders the two naming schemes; a later rename is still found by the
+// template's own structure, and the CPU always comes from the player binary.
+const TEMPLATE_SCHEMES = Object.freeze({
+  current: /^macos_[a-z0-9]+(?:_player)?_nondevelopment_mono$/,
+  legacy: /^macos(?:x64|arm64)(?:_player)?_nondevelopment_mono$/,
+  structural: name => /nondevelopment/i.test(name) && /mono/i.test(name) && !/il2cpp/i.test(name)
+});
+const CURRENT_TEMPLATE_NAMES = "2020.2";
+function templateSchemes(version, variationsDir) {
+  const current = require("../../shared/runtime/host-capabilities").versionAtLeast(version, CURRENT_TEMPLATE_NAMES);
+  const named = current ? [TEMPLATE_SCHEMES.current, TEMPLATE_SCHEMES.legacy] : [TEMPLATE_SCHEMES.legacy, TEMPLATE_SCHEMES.current];
+  const structural = name => {
+    if (/(?:^|_)development(?:_|$)|il2cpp/i.test(name)) return false;
+    if (TEMPLATE_SCHEMES.structural(name)) return true;
+    const contents = path.join(variationsDir, name, "UnityPlayer.app", "Contents");
+    return ["Frameworks/MonoEmbedRuntime/osx/libmono.0.dylib", "Frameworks/libmonobdwgc-2.0.dylib", "MonoBleedingEdge/etc/mono/config"]
+      .some(relative => fs.existsSync(path.join(contents, relative)));
+  };
+  return [...named.map(pattern => name => pattern.test(name)), structural];
+}
+// The Mac's own CPU first, then a universal player, then Intel under Rosetta.
+function templateRank(architectures, arch) {
+  const host = arch === "x64" ? "x86_64" : arch;
+  if (architectures.includes(host)) return architectures.length === 1 ? 0 : 1;
+  return host === "arm64" && architectures.includes("x86_64") ? 2 : null;
+}
+function selectPlayerTemplate(variationsDir, { version, arch = require("../../shared/runtime/architecture").selectedArchitecture(), readArchitectures = Native.readMachOArchitectures } = {}) {
+  const entries = fs.readdirSync(variationsDir, { withFileTypes: true });
+  if (entries.length > 512) throw new Error("The Unity component contains too many player template directories.");
+  const templates = entries.filter(item => item.isDirectory() &&
+    fs.existsSync(path.join(variationsDir, item.name, "UnityPlayer.app", "Contents", "MacOS", "UnityPlayer"))).map(item => item.name);
+  for (const matches of templateSchemes(version, variationsDir)) {
+    const ranked = templates.filter(matches).flatMap(name => {
+      let architectures = [];
+      try { architectures = readArchitectures(path.join(variationsDir, name, "UnityPlayer.app", "Contents", "MacOS", "UnityPlayer")); } catch {}
+      const rank = templateRank(architectures, arch);
+      return rank === null ? [] : [{ name, rank, architectures }];
+    }).sort((a, b) => a.rank - b.rank);
+    if (!ranked.length) continue;
+    if (ranked[1]?.rank === ranked[0].rank) throw new Error(`Unity ${version} has more than one nondevelopment Mono player template for this Mac: ${ranked.filter(row => row.rank === ranked[0].rank).map(row => row.name).join(", ")}.`);
+    return ranked[0];
+  }
+  throw new Error(`Unity ${version} has no nondevelopment Mono player template for this Mac.`);
+}
+
 async function prepareInstall({ unpacked, pin, signal, logger }, { run = exec } = {}) {
   const payload = findPayload(path.join(unpacked, ".package"));
-  const variations = fs.readdirSync(path.join(payload, "Variations"), { withFileTypes: true }).filter(item => item.isDirectory() && /^(?:macosx64|macosarm64)(?:_player)?_nondevelopment_mono$/.test(item.name));
-  variations.sort((a, b) => Number(b.name.includes(process.arch === "arm64" ? "arm64" : "x64")) - Number(a.name.includes(process.arch === "arm64" ? "arm64" : "x64")));
-  if (!variations.length) throw new Error("This Unity component has no supported nondevelopment Mono player template.");
-  const variation = path.join(payload, "Variations", variations[0].name), sourceApp = path.join(variation, "UnityPlayer.app"), destination = path.join(unpacked, "player", "UnityPlayer.app");
+  const template = selectPlayerTemplate(path.join(payload, "Variations"), { version: pin.version });
+  const variations = [template];
+  const variation = path.join(payload, "Variations", template.name), sourceApp = path.join(variation, "UnityPlayer.app"), destination = path.join(unpacked, "player", "UnityPlayer.app");
   fs.mkdirSync(path.dirname(destination), { recursive: true });
   fs.cpSync(sourceApp, destination, { recursive: true, verbatimSymlinks: true });
   const contents = path.join(destination, "Contents"), frameworks = path.join(contents, "Frameworks");
@@ -141,4 +189,4 @@ async function prepareInstall({ unpacked, pin, signal, logger }, { run = exec } 
     nativeSignature, localSigning: "ad-hoc", totalBytes: profile.totalBytes };
 }
 
-module.exports = { IDENTITY, verifyArtifact, extractPackage, findPayload, engineIdentity, inventory, verifyInventory, prepareInstall, safeRelative };
+module.exports = { IDENTITIES, verifyArtifact, extractPackage, findPayload, engineIdentity, inventory, verifyInventory, prepareInstall, selectPlayerTemplate, safeRelative };

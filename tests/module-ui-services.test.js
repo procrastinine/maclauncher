@@ -61,7 +61,7 @@ test("registry and every module load in plain Node without attempting to require
       const composed = registry.getModule(mod.id);
       assert.equal(composed.id, mod.id);
       assert.equal(composed.detectGame, mod.detectGame);
-      assert.equal(composed.actions, mod.actions);
+      for (const id of Object.keys(mod.actions || {})) assert.equal(typeof composed.actions[id], "function", mod.id + "." + id);
       assert.equal(composed.manifest.runtime.default, mod.manifest.runtime.default);
       assert.equal(typeof composed.getRuntimeProvider, "function");
     }

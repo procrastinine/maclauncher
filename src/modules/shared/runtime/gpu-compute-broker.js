@@ -105,14 +105,16 @@ async function launch(value,id,request){
   }catch(error){receipt(value,id,{error:error.message});}finally{value.pending.delete(id);}
 }
 async function scan(value){
-  if(value.scanning||!value.pid)return;value.scanning=true;
+  if(!value.pid)return;
+  if(value.scanning){value.rescan=true;return;}
+  value.scanning=true;value.rescan=false;
   try{
     for(const name of await fs.promises.readdir(value.requestRoot)){
       const match=/^(.+)\.(request|stop)\.json$/.exec(name);if(!match||!uuid.test(match[1]))continue;
       const [,id,kind]=match;
       try{const request=await readRequest(value,name);if(kind==="stop"){if(request.schema===1&&request.requestId===id)stop(value,id);}else await launch(value,id,request);}catch{}
     }
-  }finally{value.scanning=false;}
+  }finally{value.scanning=false;if(value.rescan)scan(value).catch(()=>{});}
 }
 // The request watcher and the 1 Hz liveness check run only while an enabled
 // XeSS row is prepared for the bound game, or one of its hosts still runs.
@@ -121,7 +123,7 @@ function watch(value){
   const pid=value.pid;
   // A failed request watcher is armed again and rescans; it never ends the session.
   value.watcher=watchDirectory(value.requestRoot,()=>{scan(value).catch(()=>{});},{persistent:false});
-  value.timer=setInterval(()=>{if(!alive(pid))release(value);else if(!value.demanded&&!value.children.size&&!value.pending.size)idle(value);},1000);value.timer.unref();
+  value.timer=setInterval(()=>{if(!alive(pid))release(value);else if(!value.demanded&&!value.children.size&&!value.pending.size)idle(value);else scan(value).catch(()=>{});},1000);value.timer.unref();
 }
 function idle(value){value.watcher?.close();clearInterval(value.timer);value.watcher=null;value.timer=null;}
 function bind(binding,pid){

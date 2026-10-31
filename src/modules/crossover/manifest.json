@@ -24,6 +24,7 @@
     "allowUnmarkedDirectory": true
   },
   "runtime": {
+    "capabilities": ["bepinex", "temporal-integration"],
     "default": "sikarugir",
     "supported": [
       "sikarugir",
@@ -52,21 +53,12 @@
         "order": 201,
         "category": "compatibility"
       },
-      "crossover-graphics-bridge": {
-        "groupId": "crossover",
-        "tabLabel": "CrossOver",
-        "sectionLabel": "DXMT support",
-        "memberOrder": 1,
-        "management": "managed",
-        "order": 200
-      },
       "sikarugir-graphics-bridge": {
-        "groupId": "sikarugir",
-        "tabLabel": "Sikarugir",
+        "groupId": "graphics",
+        "tabLabel": "Graphics",
         "sectionLabel": "DXMT support",
-        "memberOrder": 1,
-        "management": "managed",
-        "order": 201
+        "memberOrder": 26,
+        "management": "managed"
       }
     },
     "entries": {
@@ -94,6 +86,8 @@
               "key": "graphicsBackend",
               "type": "select",
               "label": "Graphics",
+              "optionsAction": "listGraphicsBackends",
+              "optionsKey": "graphicsBackends",
               "options": [
                 {
                   "value": "auto",
@@ -101,10 +95,12 @@
                 },
                 {
                   "value": "d3dmetal",
+                  "hostFeature": "WINE_BACKENDS.d3dmetal",
                   "label": "D3DMetal"
                 },
                 {
                   "value": "dxmt",
+                  "hostFeature": "WINE_BACKENDS.dxmt",
                   "label": "DXMT"
                 },
                 {
@@ -116,10 +112,12 @@
                   "label": "WineD3D"
                 }
               ],
-              "description": "Availability depends on the selected CrossOver version, Mac and macOS version."
+              "description": "Only renderers compatible with the selected CrossOver version, Mac and macOS version are offered."
             },
             {
               "key": "dlss",
+              "hostFeature": "WINE_TEMPORAL",
+              "capability": "temporal-integration",
               "type": "boolean",
               "label": "Game temporal integration",
               "description": "Expose the game's DLSS option through MetalFX Temporal. A shared temporal upscaler also enables this integration automatically. Requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later, with matching NVAPI/NGX libraries. DLSS must be enabled in the game settings. Changes apply on the next launch.",
@@ -136,6 +134,7 @@
             },
             {
               "key": "graphicsBridgeVersion",
+              "hostFeature": "WINE_TEMPORAL",
               "type": "select",
               "label": "DXMT support",
               "description": "Matching DXMT libraries for temporal upscaling. Automatic uses the Runtimes default.",
@@ -217,6 +216,7 @@
             },
             {
               "key": "bepInExWinhttp",
+              "capability": "bepinex",
               "type": "boolean",
               "label": "Enable BepInEx winhttp override",
               "description": "Load an existing winhttp.dll before Wine's built-in library. No mods or DLLs are installed."
@@ -291,10 +291,12 @@
                 },
                 {
                   "value": "d3dmetal",
+                  "hostFeature": "TEMPLATE_RENDERERS.d3dmetal",
                   "label": "D3DMetal"
                 },
                 {
                   "value": "dxmt",
+                  "hostFeature": "TEMPLATE_RENDERERS.dxmt",
                   "label": "DXMT"
                 },
                 {
@@ -310,9 +312,11 @@
             },
             {
               "key": "dlss",
+              "hostFeature": "WINE_TEMPORAL",
+              "capability": "temporal-integration",
               "type": "boolean",
               "label": "Game temporal integration",
-              "description": "Expose the game's DLSS option through MetalFX Temporal. A shared temporal upscaler also enables this integration automatically. Requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later, with matching NVAPI/NGX libraries. DLSS must be enabled in the game settings. Changes apply on the next launch.",
+              "description": "Expose the game's DLSS option through MetalFX Temporal. A shared temporal upscaler also enables this integration automatically. Requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26.4 or later, with matching NVAPI/NGX libraries. DLSS must be enabled in the game settings. Changes apply on the next launch.",
               "hiddenWhen": [
                 {
                   "key": "graphicsBackend",
@@ -326,6 +330,7 @@
             },
             {
               "key": "graphicsBridgeVersion",
+              "hostFeature": "WINE_TEMPORAL",
               "type": "select",
               "label": "DXMT support",
               "description": "Matching DXMT libraries for temporal upscaling. Automatic uses the Runtimes default.",
@@ -361,6 +366,7 @@
                 },
                 {
                   "value": "kosmickrisp",
+                  "hostFeature": "TEMPLATE_RENDERERS.kosmickrisp",
                   "label": "KosmicKrisp"
                 }
               ],
@@ -429,6 +435,7 @@
             },
             {
               "key": "bepInExWinhttp",
+              "capability": "bepinex",
               "type": "boolean",
               "label": "Enable BepInEx winhttp override",
               "description": "Load an existing winhttp.dll before Wine's built-in library. No mods or DLLs are installed."

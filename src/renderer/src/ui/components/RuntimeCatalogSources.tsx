@@ -1,6 +1,6 @@
 import React from "react";
 import type { DownloadTask, RuntimeRefreshOptions, RuntimeUiState } from "../types";
-import { formatRuntimeVersionTag, isRuntimeVersionInstalled, withAvailability } from "../ui-helpers";
+import { architectureLabel, isPrereleaseVersion, isRuntimeVersionInstalled, runtimeVersionTagger, withAvailability } from "../ui-helpers";
 import { ErrorText } from "./ErrorText";
 import { RefreshIcon } from "../icons";
 import { Select } from "./Select";
@@ -13,8 +13,8 @@ type Props = {
   busy: boolean;
   variant: string;
   downloads: DownloadTask[];
-  onSelect: (key: string, field: "installVersion" | "installVariant", value: string) => void;
-  onInstall: (version: string, variant?: string) => void;
+  onSelect: (key: string, field: "installVersion" | "installVariant" | "installArchitecture", value: string) => void;
+  onInstall: (version: string, variant?: string, architecture?: string) => void;
   onRefresh: (options: RuntimeRefreshOptions) => void;
   onOpenSource?: (url: string) => void;
 };
@@ -33,11 +33,40 @@ function sourceDescription(source: Record<string, any>, url: string | null) {
 }
 
 export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, downloads, onSelect, onInstall, onRefresh, onOpenSource }: Props) {
-  const sources = runtimeCatalogSources(section.catalog);
-  const installed = Array.isArray(section.installed) ? section.installed : [];
+  // The automatic CPU is the one Play uses: the launcher's own, or another CPU
+  // this Mac runs when the launcher's CPU has no build.
+  const defaultArchitecture = section.automaticArchitecture || section.launcherArchitecture || section.catalog?.architecture;
+  const architectureCatalogs = section.catalog?.architectureCatalogs || {};
+  // The Build override offers another CPU this Mac can run (the main process has
+  // already removed the others) when that CPU's list declares builds made for
+  // it. Universal builds and downloads that name no CPU serve every Mac and
+  // appear in every list.
+  const listed = (catalog: Record<string, any> | undefined) => runtimeCatalogSources(catalog).flatMap(source =>
+    source.versions.map((version: string) => source.versionRequirements?.[version]?.architecture || null));
+  // An automatic list made only of another CPU's builds, such as Intel-only
+  // builds on Apple Silicon, already shows them. An empty one, such as an
+  // Apple-Silicon-only runtime in the Intel app on Apple Silicon, offers them.
+  const ownBuilds = listed(architectureCatalogs[defaultArchitecture] || section.catalog)
+    .some(cpu => !cpu || cpu === defaultArchitecture || cpu === "universal");
+  const overrides = ownBuilds || listed(section.catalog).length === 0 ? Object.keys(architectureCatalogs).filter(key =>
+    key !== defaultArchitecture && listed(architectureCatalogs[key]).includes(key)) : [];
+  const offersBuilds = overrides.length > 0;
+  const chosenArchitecture = ui.installArchitecture?.[section.id];
+  const architecture = offersBuilds && chosenArchitecture && overrides.includes(chosenArchitecture) ? chosenArchitecture : defaultArchitecture;
+  const selectedCatalog = architecture !== defaultArchitecture ? architectureCatalogs[architecture] || section.catalog : section.catalog;
+  const sources = runtimeCatalogSources(selectedCatalog);
+  // An installed build counts for the selected CPU when it is made for it or when
+  // the selected list itself offers that build, such as an Intel-only version.
+  // With one list for every CPU, or an installation made with this build choice,
+  // the installed version is that build even when its binary is for another CPU
+  // (Wine and the libraries it loads are x86_64).
+  const installed = (Array.isArray(section.installed) ? section.installed : []).filter((item: any) =>
+    !architecture || !Object.keys(architectureCatalogs).length || item.variant === `architecture:${architecture}` ||
+    !item.architecture || item.architecture === "universal" || item.architecture === architecture ||
+    item.architecture === selectedCatalog?.versionRequirements?.[item.version]?.architecture);
   const incompleteInstalled = installed.filter((item:any)=>item.ready!==false&&Array.isArray(item.missingComponents)&&item.missingComponents.length>0);
   const readyInstalled = installed.filter((item: any) => item.ready !== false&&!incompleteInstalled.includes(item));
-  const variants = Array.isArray(section.variants) ? section.variants : [];
+  const variants = !section.architectureVariants && Array.isArray(section.variants) ? section.variants : [];
   const hasVariants = variants.length > 0;
   const selectedVariant = hasVariants ? [variant, section.defaultVariant, variants[0]?.id]
     .find(value => variants.some((item: any) => item.id === value)) || "" : "";
@@ -46,13 +75,27 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
       onClick={event => { if (onOpenSource) { event.preventDefault(); onOpenSource(url); } }}>{label}</a>;
   }
   return <div className="runtimeSources">
+    {offersBuilds && <div className="runtimeRemoteField runtimeBuildField">
+      <label className="fieldLabel" htmlFor={`runtime-architecture-${managerId}-${section.id}`}>Build</label>
+      <select id={`runtime-architecture-${managerId}-${section.id}`} className="input inputSmall"
+        value={overrides.includes(architecture) ? architecture : ""}
+        aria-label="Build architecture" onChange={event => onSelect(section.id, "installArchitecture", event.target.value)}>
+        <option value="">Automatic ({architectureLabel(defaultArchitecture)})</option>
+        {overrides.map(value => <option key={value} value={value}>
+          {architectureLabel(value)}{defaultArchitecture === "arm64" && value === "x64" ? " (Rosetta)" : ""}</option>)}
+      </select>
+    </div>}
     {sources.map(source => {
       const key = runtimeSourceUiKey(section.id, source.explicit ? source.id : undefined);
       const versions: string[] = Array.isArray(source.versions) ? source.versions : [];
       const requested = ui.installVersion[key] || ui.installVersion[section.id];
       const recommendation = source.recommendedVersion || section.catalog?.recommendedVersion;
-      const version = versions.includes(requested) ? requested : versions.includes(recommendation) ? recommendation : versions[0] || "";
       const sourceSection = { ...section, versionLabels: source.versionLabels || section.versionLabels, catalog: source };
+      const versionTag = runtimeVersionTagger(sourceSection);
+      // Without a choice or recommendation, the newest release is preselected
+      // rather than a newer alpha, beta, release candidate or nightly.
+      const stable = versions.find(value => !isPrereleaseVersion(value, sourceSection));
+      const version = versions.includes(requested) ? requested : versions.includes(recommendation) ? recommendation : stable || versions[0] || "";
       const presentation = runtimeCatalogPresentation(source, version, selectedVariant);
       const canInstallVersion = (value: string) => source.installable !== false && source.versionRequirements?.[value]?.installable !== false &&
         source.versionRequirements?.[value]?.variants?.[selectedVariant]?.installable !== false &&
@@ -83,6 +126,9 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
       const message = ui.messages?.[key];
       const refreshMessage = source.explicit || message?.startsWith("Versions updated") ? message : null;
       const error = ui.sourceErrors?.[key] || (source.status === "error" ? source.error : null);
+      // A source that loaded and lists nothing for this CPU keeps only the small
+      // reload control; Load versions is for a source not loaded yet.
+      const loaded = versions.length === 0 && source.status === "success" && !error;
       const reload = (latestOnly?: boolean) => onRefresh({ ...(source.explicit ? { sourceId: source.id } : {}),
         ...(latestOnly === undefined ? {} : { latestOnly }) });
       const fieldId = `runtime-version-${encodeURIComponent(managerId)}-${encodeURIComponent(section.id)}-${encodeURIComponent(source.id)}`;
@@ -98,7 +144,7 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
             {sourceLinks.map((item: any) => <span key={item.href} className="runtimeUpstreamCode">({link(item.href, item.label)})</span>)}
           </div>
           <div className="runtimeSourceRefreshActions">
-            {versions.length > 0 && <button type="button" className={`btn iconOnly runtimeRefresh${refreshing ? " refreshing" : ""}`}
+            {(versions.length > 0 || loaded) && <button type="button" className={`btn iconOnly runtimeRefresh${refreshing ? " refreshing" : ""}`}
               disabled={sourceBusy} aria-busy={refreshing} title={refreshLabel} aria-label={refreshLabel}
               onClick={() => reload(source.supportsLatestOnly ? true : undefined)}>
               <RefreshIcon />
@@ -110,7 +156,7 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
         </div>
         <div className="dim runtimeAvailability">{sourceDescription(source, url)}</div>
         <div className="runtimeRemote">
-          {versions.length === 0 ? <button type="button" className="btn primary" disabled={sourceBusy} aria-busy={refreshing}
+          {versions.length === 0 ? loaded ? null : <button type="button" className="btn primary" disabled={sourceBusy} aria-busy={refreshing}
             aria-label={source.explicit ? `Load ${label} versions` : "Load versions"}
             onClick={() => reload(source.supportsLatestOnly ? true : undefined)}>
             {refreshing ? "Loading versions…" : "Load versions"}
@@ -127,7 +173,7 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
                 const includedVersion = ready && installed.some((item: any) => item.version === value && isRuntimeIncluded(item) &&
                   (!hasVariants || item.variant === selectedVariant));
                 return <option key={value} value={value}>
-                  {withAvailability(formatRuntimeVersionTag(value, sourceSection), ready ? includedVersion ? "included" : "installed"
+                  {withAvailability(versionTag(value), ready ? includedVersion ? "included" : "installed"
                     : incomplete ? "downloadNeeded" : damaged ? "needsRepair" : null)}
                 </option>;
               }) : <option value="">No versions loaded</option>}
@@ -144,13 +190,13 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
             disabled={!canInstall || !version || sourceBusy || isInstalled || downloading}
             title={blocked ? reason : isInstalled ? "This version is installed." : undefined}
             aria-describedby={blocked ? `${fieldId}-reason` : undefined}
-            onClick={() => onInstall(version, selectedVariant || undefined)}>
+            onClick={() => architecture ? onInstall(version, section.architectureVariants ? architecture : selectedVariant || undefined, architecture) : onInstall(version, selectedVariant || undefined)}>
             {downloading ? "Installing…" : isInstalled ? "Installed" : needsRepair ? "Reinstall" : presentation.installLabel}
           </button>}
           {recommended && !recommendedInstalled && !recommendedPresentation?.included && <button className="btn"
             disabled={sourceBusy || !canInstallVersion(recommended) || Boolean(recommendedDownloading)}
             title={recommendedPresentation?.installReason || `Install ${recommended}`}
-            onClick={() => onInstall(recommended, selectedVariant || undefined)}>Install recommended version</button>}
+            onClick={() => architecture ? onInstall(recommended, section.architectureVariants ? architecture : selectedVariant || undefined, architecture) : onInstall(recommended, selectedVariant || undefined)}>Install recommended version</button>}
         </div>
         {versions.length === 0 && !refreshing && source.status === "success" && !error &&
           <div className="dim runtimeAvailability">No downloadable versions found at this source.</div>}

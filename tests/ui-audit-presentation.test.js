@@ -286,6 +286,20 @@ test('runtime install offers Cancel, preserves Stop, and avoids backend details 
   assert.match(stop, /title="Stop"/);
   assert.doesNotMatch(stop, /disabled=|gameLaunchSpinner|Installing/);
 });
+test('missing game files disable Shortcut and Cheats with the stated reason while Play rechecks and saves stay usable', () => {
+  const reason = "Files unavailable. The game&#x27;s files were not found at their saved location.";
+  const g = { name: 'Game', gamePath: '/game', moduleSupports: { launch: true, saveEditing: true, saveLocation: true, cheats: true },
+    availability: { available: false, reason: 'missing', message: "The game's files were not found at their saved location." } };
+  const markup = renderToStaticMarkup(React.createElement(components.GameActions, { g, isRunning: false, inspector: true, actions: {} }));
+  const button = text => [...markup.matchAll(/<button([^>]*)>([\s\S]*?)<\/button>/g)].find(match => match[2].includes(text))?.[1] || '';
+  for (const label of ['Create shortcut', 'Cheats']) {
+    assert.match(button(label), /disabled=""/, label);
+    assert.ok(button(label).includes(`title="${reason}"`), label);
+  }
+  assert.ok(button('Play').includes(`title="${reason}"`));
+  assert.doesNotMatch(button('Play'), /disabled=""/, 'Play checks again and reports the reason');
+  assert.doesNotMatch(button('Edit saves'), /disabled=""/, 'saves outside the game folder stay usable');
+});
 test('removal shows a compact busy state and prevents game actions while preserving Stop for running games', () => {
   const g = { name: 'Game', gamePath: '/game', moduleSupports: { launch: true, saveEditing: true, saveLocation: true, cheats: true } };
   const pending = renderToStaticMarkup(React.createElement(components.GameActions, {
@@ -506,6 +520,82 @@ test('error formatting leaves useful classes, paths, quoted text and multiline d
   assert.equal(formatUserError(new TypeError('Invalid runtime configuration.')), 'TypeError: Invalid runtime configuration.');
   const detail = 'TypeError: Invalid save.\n  File: /path/to/save.json\nError: another diagnostic line\n';
   assert.equal(formatUserError(`Error invoking remote method 'launcher:moduleAction': Error: ${detail}`), detail);
+});
+test('Settings lists every game type once and no runtime provider beside the game types it serves', () => {
+  const { settingsSectionModules } = components;
+  const modules = require('../src/modules/registry').listModules();
+  const sections = settingsSectionModules(modules), ids = new Set(sections.map(mod => mod.id));
+  for (const mod of modules.filter(mod => mod.detection)) assert.ok(ids.has(mod.id), `${mod.id} has a Settings section`);
+  const served = new Set(modules.filter(mod => mod.detection).flatMap(mod => mod.runtime?.supported || []));
+  for (const mod of sections.filter(mod => !mod.detection))
+    assert.ok(!(mod.runtime?.supported || []).length || (mod.runtime.supported).some(id => !served.has(id)), `${mod.id} repeats runtime tabs of other sections`);
+  assert.equal(ids.size, sections.length);
+});
+test('every game type offers its playable runtimes as the default and gives each offered runtime a settings tab', () => {
+  const { SettingsView, defaultRuntimeChoices } = components;
+  const modules = require('../src/modules/registry').listModules();
+  for (const mod of modules.filter(mod => mod.detection && (mod.runtime?.supported || []).length)) {
+    const choices = defaultRuntimeChoices(mod);
+    for (const id of choices) assert.ok(mod.runtime.entries?.[id]?.launch !== false || id === mod.runtime.default,
+      `${mod.id} offers ${id}, which cannot play, as its default`);
+    const markup = renderToStaticMarkup(React.createElement(SettingsView, {
+      state: { modules, moduleSettings: {}, runtimeDefaults: {}, recents: [] }, sectionId: `module:${mod.id}`,
+      showIcons: true, showNonDefaultTags: false, onSetLauncherSettings() {}, onSetModuleSettings() {} }));
+    const select = /<select[^>]*aria-label="Default runtime"[^>]*>([\s\S]*?)<\/select>/.exec(markup);
+    assert.equal(Boolean(select), choices.length > 1, `${mod.id} shows a Default runtime choice exactly when it has more than one`);
+    if (choices.length < 2) continue;
+    const offered = [...select[1].matchAll(/<option[^>]*value="([^"]*)"/g)].map(match => match[1]);
+    assert.deepEqual(offered, choices, `${mod.id} Default runtime options`);
+    for (const id of choices) assert.match(markup, new RegExp(`id="settings-runtime-(?:tab|heading)-${mod.id}-${id}"`),
+      `${mod.id} offers ${id} as the default without a settings tab`);
+  }
+});
+test('a version chosen from the combined inspector list names the section that lists it', () => {
+  const { resolveRuntimeSectionId } = components;
+  const moduleInfo = { runtime: { inspectorSections: { love: 'all' }, managerSectionBy: { love: 'resolvedSection' },
+    managerSectionOverrideKey: { love: 'channel' }, managerSectionMap: { love: { stable: 'stable', nightly: 'nightly' } } } };
+  const managerState = { sections: [{ id: 'stable', installed: [{ version: '11.5' }], catalog: { versions: ['11.5'] } },
+    { id: 'stable-0-10', installed: [], catalog: { versions: ['0.10.2'] } }] };
+  const game = { moduleData: { resolvedSection: 'stable' }, runtimeData: { love: { version: '0.10.2' } } };
+  assert.equal(resolveRuntimeSectionId(moduleInfo, 'love', game, { ignoreOverride: true, managerState }), 'stable-0-10');
+  assert.equal(resolveRuntimeSectionId(moduleInfo, 'love', { ...game, runtimeData: {} }, { ignoreOverride: true, managerState }), 'stable');
+  const chosen = { ...game, runtimeData: { love: { version: '0.10.2', channel: 'nightly' } } };
+  assert.equal(resolveRuntimeSectionId(moduleInfo, 'love', chosen, { managerState }), 'nightly', 'an explicit channel still wins');
+});
+test('runtime version labels stay distinct when builds share an upstream version', () => {
+  const { runtimeVersionTagger, runtimeVersionOptions, resolveRuntimeVersionLabel } = components;
+  const tag = runtimeVersionTagger({ installed: [{ version: '0.41.0-MCLv6' }, { version: '0.41.0-MCLv7' }], catalog: { versions: ['0.42.0-MCLv1', '0.42.0'] } });
+  assert.equal(tag('0.42.0'), 'v0.42.0');
+  assert.equal(tag('0.42.0-MCLv1'), 'v0.42.0 · MacLauncher Builds');
+  assert.equal(tag('0.41.0-MCLv7'), 'v0.41.0');
+  assert.equal(tag('0.41.0-MCLv6'), 'v0.41.0 · earlier build');
+  const dated = runtimeVersionTagger({ catalog: { versions: ['MCLv3-1007', 'MCLv2-1007', 'MCLv1-0921'] } });
+  assert.deepEqual(['MCLv3-1007', 'MCLv2-1007', 'MCLv1-0921'].map(dated),
+    ['Development build (Oct 7)', 'Development build (Oct 7) · earlier build', 'Development build (Sep 21)']);
+  const hashed = runtimeVersionTagger({ catalog: { versions: ['0.1.0-afa08284-7f7f8af9', '0.1.0-8da3e063-ba5d556d', '0.1.0'] } });
+  assert.deepEqual(['0.1.0-afa08284-7f7f8af9', '0.1.0-8da3e063-ba5d556d', '0.1.0'].map(hashed), ['v0.1.0', 'v0.1.0 (2)', 'v0.1.0 (3)']);
+  assert.equal(resolveRuntimeVersionLabel('2026-01-12T18-22-32Z_794d1897abe529a23f3f2f9c4f72d711a3b18391', null), '2026-01-12');
+  const options = runtimeVersionOptions([{ value: '', label: 'Default' }, { value: '1.0-MCLv1', label: '1.0-MCLv1' }, { value: '1.0-MCLv2', label: '1.0-MCLv2' }]);
+  assert.equal(options[0].label, 'Default');
+  assert.equal(new Set(options.map(option => option.label)).size, options.length);
+  assert.ok(options.slice(1).every(option => !option.label.includes('MCLv')));
+});
+test('error formatting never shows a user name or password from a proxy or download URL', () => {
+  const { formatUserError } = components;
+  assert.equal(formatUserError('Proxy rejected http://user:secret@127.0.0.1:8080 with HTTP/1.1 403'), 'Proxy rejected http://127.0.0.1:8080 with HTTP/1.1 403');
+  assert.equal(formatUserError('Download failed: https://token@example.org/file.zip'), 'Download failed: https://example.org/file.zip');
+  assert.equal(formatUserError('Contact user@example.org at https://example.org/a@b'), 'Contact user@example.org at https://example.org/a@b');
+});
+test('connection failures name the unreachable service instead of the transport detail', () => {
+  const { formatUserError } = components;
+  const github = 'Could not connect to GitHub. Check the internet connection and try again.';
+  assert.equal(formatUserError('Failed to establish tunnel to raw.githubusercontent.com:443 via http://user:secret@127.0.0.1:58350: HTTP/1.1 403'), github);
+  assert.equal(formatUserError('Error: getaddrinfo ENOTFOUND api.github.com'), github);
+  assert.equal(formatUserError("request to https://downloads.example.org/a.zip failed, reason: connect ETIMEDOUT 203.0.113.4:443"),
+    'Could not connect to downloads.example.org. Check the internet connection and try again.');
+  assert.equal(formatUserError('TypeError: fetch failed'), 'Could not connect to the server. Check the internet connection and try again.');
+  assert.equal(formatUserError('connect ECONNREFUSED 127.0.0.1:9222'), 'connect ECONNREFUSED 127.0.0.1:9222');
+  assert.equal(formatUserError('GitHub releases fetch failed (403)'), 'GitHub releases fetch failed (403)');
 });
 test('formatting a backend error record or Error instance never changes its stored message or diagnostics', () => {
   const { formatUserError } = components;

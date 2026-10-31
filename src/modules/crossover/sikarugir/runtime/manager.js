@@ -1,43 +1,35 @@
 const path = require("node:path");
-const { AsyncLocalStorage } = require("node:async_hooks");
 const { createPinnedNativeManager } = require("../../../shared/runtime/pinned-native-manager");
-const { downloadToFile, throwIfAborted } = require("../../../shared/runtime/download-utils");
+const { throwIfAborted } = require("../../../shared/runtime/download-utils");
 const Catalog = require("./catalog");
 const Payload = require("./payload");
 const { extractArchive } = require("./archive");
 const fs = require("node:fs");
 const Custom = require("../../../shared/runtime/custom-runtime");
-const DEFAULT_VERSION = "10.0_8-template-1.0.21-1c9e9a0c3b96cf9d27ca4b01";
 
-function createManager({ discoverCatalog = Catalog.createDiscovery(), dependencies = {} } = {}) {
-  let base;
-  const downloadContext = new AsyncLocalStorage();
-  const downloader = dependencies.downloadToFile || downloadToFile;
-  base = createPinnedNativeManager({
+// A paired installation reports one total for both archives and names the
+// engine steps of the shared installer.
+const ENGINE_STEPS = { "Downloading…": "Downloading Wine engine…", "Extracting files…": "Extracting Wine engine…" };
+function pairedProgress(pin, onProgress) {
+  return onProgress && (row => onProgress({ ...row, total: pin.downloadBytes,
+    detail: String(row?.detail || "").startsWith(pin.versionLabel) ? row.detail : `${pin.versionLabel} · ${ENGINE_STEPS[row?.detail || "Downloading…"] || row.detail}` }));
+}
+// A recorded archive identity matches a listed one when the publisher lists a digest.
+const sameArchive = (recorded, listed) => !listed || recorded === listed;
+
+function createManager({ discoverCatalog = Catalog.discover, dependencies = {} } = {}) {
+  const base = createPinnedNativeManager({
     id: "sikarugir", label: "Sikarugir Wine", sourceUrl: Catalog.SOURCE_URL,
     discoverCatalog, resolveExecutable: root => path.join(root, Payload.WINE_ROOT, "bin", "wine"),
     prepareInstall: options => Payload.preparePayload(options, dependencies),
-    dependencies: { ...dependencies,
-      extractArchive: async (archive, destination, signal) => {
-        const context = downloadContext.getStore(), pin = context?.pin;
-        context?.onProgress?.({ downloaded: pin.asset.bytes, total: pin.downloadBytes,
-          detail: `${pin.versionLabel} · Extracting Wine engine…` });
-        return (dependencies.extractArchive || extractArchive)(archive, destination, signal);
-      },
-      downloadToFile: async (url, destination, options = {}) => {
-        const context = downloadContext.getStore(), pin = context?.pin;
-        if (context) context.onProgress = options.onProgress;
-        return downloader(url, destination, { ...options, onProgress: progress => options.onProgress?.({ ...progress,
-          ...(pin ? { total: pin.asset.bytes + pin.template.asset.bytes,
-            detail: `${pin.versionLabel} · Downloading Wine engine…` } : {}) }) });
-      } }
+    dependencies: { ...dependencies, extractArchive: dependencies.extractArchive || extractArchive }
   });
   const inspectPayload = Payload.createPayloadResolver(dependencies);
   const resolvePayload = (install, options) => {
     if (install) {
       const pin = base.core.catalog.find(row => row.version === install.version);
-      if (!Catalog.validateEntry(pin) || install.archiveSha256 !== pin.asset.sha256 ||
-        install.installationMetadata?.template?.archiveSha256 !== pin.template.asset.sha256)
+      if (!Catalog.validateEntry(pin) || !sameArchive(install.archiveSha256, pin.asset.sha256) ||
+        !sameArchive(install.installationMetadata?.template?.archiveSha256, pin.template.asset.sha256))
         return { install: null, reason: "Sikarugir archive identities changed. Remove and install this version again." };
     }
     return inspectPayload(install, options);
@@ -47,17 +39,36 @@ function createManager({ discoverCatalog = Catalog.createDiscovery(), dependenci
     if (!pin) return selection;
     return { ...selection, versionLabel: pin.versionLabel, engineVersion: pin.engineVersion,
       downloadBytes: pin.downloadBytes, artifacts: [pin.asset, pin.template.asset],
-      detail: `Downloads the Wine engine and its matching support libraries (${Math.ceil(pin.downloadBytes / 1024 / 1024)} MB total).`,
+      detail: `${selection.repairRequired ? "Reinstalls" : "Downloads"} the Wine engine and its matching support libraries${pin.downloadBytes ? ` (${Math.ceil(pin.downloadBytes / 1024 / 1024)} MB total)` : ""}.`,
       installOptions: { sectionId: "default" } };
+  }
+  // The selected pairing; without a listed one, the publisher's current list
+  // is read first.
+  async function selectedPin(options) {
+    const settings = options.settings?.runtimes ? options.settings : { runtimes: { sikarugir: options.settings } };
+    const choose = () => {
+      base.core.listCatalog({ userDataDir: options.userDataDir });
+      const version = base.resolveSelection({}, settings, options.userDataDir, { version: options.version }).version;
+      return { version, pin: base.core.catalog.find(row => row.version === version) };
+    };
+    let choice = choose();
+    if (!Catalog.validateEntry(choice.pin)) {
+      await base.refreshCatalog({ userDataDir: options.userDataDir, signal: options.signal, logger: options.logger, force: true });
+      choice = choose();
+    }
+    if (!Catalog.validateEntry(choice.pin)) throw new Error("No Wine download is listed for this selection. Select an available version in Runtimes or the game settings.");
+    return choice;
   }
   const manager = {
     ...base,
+    upstream: [Catalog.engines, Catalog.templates],
     ui: { groupId: "sikarugir", tabLabel: "Sikarugir", sectionLabel: "Sikarugir", memberOrder: 0, management: "managed", order: 201 },
     resolveSelection(entry, settings, userDataDir, options = {}) {
       const selection = base.resolveSelection(entry, settings, userDataDir, options);
       if (!selection.install) return planned(selection);
       const resolved = resolvePayload(selection.install, options);
-      return planned({ ...selection, install: resolved.install, ready: Boolean(resolved.install), reason: resolved.reason });
+      return planned({ ...selection, install: resolved.install, ready: Boolean(resolved.install),
+        requiresDownload: !resolved.install, repairRequired: !resolved.install && !resolved.minimumMacOS, reason: resolved.reason });
     },
     async resolveForPlay(entry, context) {
       throwIfAborted(context.signal);
@@ -109,15 +120,15 @@ function createManager({ discoverCatalog = Catalog.createDiscovery(), dependenci
       return { ...output, sections: [{ ...state.sections[0], ...output, sections: undefined }] };
     },
     async installRuntime(options) {
-      base.core.listCatalog({ userDataDir: options.userDataDir });
-      const settings = options.settings?.runtimes ? options.settings : { runtimes: { sikarugir: options.settings } };
-      const version = base.resolveSelection({}, settings, options.userDataDir, { version: options.version }).version;
-      const pin = base.core.catalog.find(row => row.version === version);
-      if (!Catalog.validateEntry(pin)) throw new Error("The selected Wine download has incomplete archive information. Reload versions and select a compatible download.");
+      const { version, pin } = await selectedPin(options);
       const downloads = typeof options.downloads?.runTask === "function" ? {
-        runTask: (meta, runner) => options.downloads.runTask({ ...meta, detail: pin.versionLabel }, runner)
+        runTask: (meta, runner) => options.downloads.runTask({ ...meta, detail: pin.versionLabel },
+          task => runner({ ...task, onProgress: pairedProgress(pin, task.onProgress) }))
       } : options.downloads;
-      const result = resolvePayload(await downloadContext.run({ pin }, () => base.installRuntime({ ...options, version, downloads })), { signal: options.signal });
+      const existing = base.core.resolveInstalled({ userDataDir: options.userDataDir, version });
+      const replace = Boolean(existing && !resolvePayload(existing, { signal: options.signal }).install);
+      const result = resolvePayload(await base.installRuntime({ ...options, version, downloads, replace,
+        onProgress: pairedProgress(pin, options.onProgress) }), { signal: options.signal });
       if (!result.install) throw new Error(result.reason);
       return result.install;
     },
@@ -128,12 +139,11 @@ function createManager({ discoverCatalog = Catalog.createDiscovery(), dependenci
       resolveRegistered: options => resolvePayload(base.core.resolveRegistered(options), options).install,
       listInstalled: userDataDir => base.core.listInstalled(userDataDir).map(row => resolvePayload(row).install).filter(Boolean),
       async installVersion(options) {
-        base.core.listCatalog({ userDataDir: options.userDataDir });
-        const settings = options.settings?.runtimes ? options.settings : { runtimes: { sikarugir: options.settings } };
-        const version = base.resolveSelection({}, settings, options.userDataDir, { version: options.version }).version;
-        const pin = base.core.catalog.find(row => row.version === version);
-        if (!Catalog.validateEntry(pin)) throw new Error("The selected Wine download has incomplete archive information. Reload versions and select a compatible download.");
-        const result = resolvePayload(await downloadContext.run({ pin }, () => base.core.installVersion({ ...options, version })), { signal: options.signal });
+        const { version, pin } = await selectedPin(options);
+        const existing = base.core.resolveInstalled({ userDataDir: options.userDataDir, version });
+        const replace = Boolean(existing && !resolvePayload(existing, { signal: options.signal }).install);
+        const result = resolvePayload(await base.core.installVersion({ ...options, version, replace,
+          onProgress: pairedProgress(pin, options.onProgress) }), { signal: options.signal });
         if (!result.install) throw new Error(result.reason);
         return result.install;
       }
@@ -158,4 +168,3 @@ function createManager({ discoverCatalog = Catalog.createDiscovery(), dependenci
 
 module.exports = createManager();
 module.exports.createManager = createManager;
-module.exports.DEFAULT_VERSION = DEFAULT_VERSION;

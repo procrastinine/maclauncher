@@ -2,14 +2,9 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
-const {
-  attachAbortSignal,
-  createAbortError,
-  downloadToFile,
-  throwIfAborted
-} = require("../../shared/runtime/download-utils");
-
-const Releases = require("../../shared/runtime/github-releases");
+const { attachAbortSignal, createAbortError, throwIfAborted } = require("../../shared/runtime/download-utils");
+const Upstream = require("../../shared/runtime/upstream");
+const { macDownloads, extractArchive } = require("../../shared/runtime/release-files");
 
 const REPO_OWNER = "GDRETools";
 const REPO_NAME = "gdsdecomp";
@@ -26,8 +21,12 @@ function safeRm(p) {
   } catch {}
 }
 
+function semver(input) {
+  return /(\d+\.\d+\.\d+)/.exec(String(input || "").trim().replace(/^v/i, ""))?.[1] || null;
+}
+
 function normalizeVersion(input) {
-  const v = Releases.normalizeSemver(input);
+  const v = semver(input);
   if (!v) {
     throw new Error(`Invalid GDRE Tools version: ${String(input ?? "")}`);
   }
@@ -35,11 +34,13 @@ function normalizeVersion(input) {
 }
 
 function compareVersions(a, b) {
-  return Releases.compareSemverDesc(b, a);
+  const pa = String(semver(a) || "").split(".").map(Number), pb = String(semver(b) || "").split(".").map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
+  return 0;
 }
 
 function compareVersionsDesc(a, b) {
-  return Releases.compareSemverDesc(a, b);
+  return compareVersions(b, a);
 }
 
 function installRootDir(userDataDir) {
@@ -75,16 +76,13 @@ function writeInstallMeta(installDir, payload) {
   } catch {}
 }
 
-function matchesMacAsset(name) {
-  const lower = String(name || "").toLowerCase();
-  if (!lower.endsWith(".zip")) return false;
-  return (
-    lower.includes("macos") ||
-    lower.includes("osx") ||
-    lower.includes("darwin") ||
-    lower.includes("mac")
-  );
-}
+// GDRE Tools publishes a Mac app archive with each release; its version is
+// the release's, or the one its file name states.
+const source = Upstream.github({ repository: "GDRETools/gdsdecomp", allArchitectures: true, recognize: release => {
+  const [download] = macDownloads(release.assets);
+  const version = semver(release.tag_name || release.name) || semver(download?.asset.name);
+  return download && version ? { version, assets: [download.asset] } : null;
+} });
 
 function scoreAppName(name) {
   const lower = String(name || "").toLowerCase();
@@ -175,7 +173,7 @@ function listInstalled(userDataDir) {
 
   for (const versionDir of versions) {
     const versionRaw = versionDir.name;
-    const version = Releases.normalizeSemver(versionRaw);
+    const version = semver(versionRaw);
     if (!version) continue;
     const installDir = path.join(root, versionRaw);
     const meta = readInstallMeta(installDir);
@@ -229,95 +227,46 @@ function runCommand(cmd, args, options) {
   });
 }
 
-async function extractZip(zipPath, destDir, signal) {
-  const ditto = fs.existsSync("/usr/bin/ditto") ? "/usr/bin/ditto" : "ditto";
-  await runCommand(ditto, ["-x", "-k", zipPath, destDir], { signal });
-}
-
 async function copyBundle(src, dest, signal) {
   const ditto = fs.existsSync("/usr/bin/ditto") ? "/usr/bin/ditto" : "ditto";
   await runCommand(ditto, [src, dest], { signal });
 }
 
-function collectVersions(releases) {
-  const versions = new Set();
-  for (const rel of releases || []) {
-    const releaseVersion = Releases.normalizeSemver(rel?.tag_name || rel?.name || "");
-    for (const asset of rel?.assets || []) {
-      const assetName = String(asset?.name || "");
-      if (!matchesMacAsset(assetName)) continue;
-      const assetVersion = Releases.normalizeSemver(assetName);
-      const version = releaseVersion || assetVersion;
-      if (version) versions.add(version);
-    }
-  }
-  return Array.from(versions).sort(compareVersionsDesc);
-}
-
-function selectReleaseAsset(releases, version) {
-  const target = normalizeVersion(version);
-  const sorted = Releases.sortReleases(releases || []);
-  for (const rel of sorted) {
-    const releaseVersion = Releases.normalizeSemver(rel?.tag_name || rel?.name || "");
-    for (const asset of rel?.assets || []) {
-      const assetName = String(asset?.name || "");
-      if (!matchesMacAsset(assetName)) continue;
-      const assetVersion = Releases.normalizeSemver(assetName);
-      const candidateVersion = releaseVersion || assetVersion;
-      if (candidateVersion !== target) continue;
-      return { release: rel, asset, version: candidateVersion };
-    }
-  }
-  return null;
-}
-
-async function fetchAvailableVersions({ logger } = {}) {
-  const releases = await Releases.fetchGithubReleases({
-    owner: REPO_OWNER,
-    repo: REPO_NAME,
-    logger
-  });
-  const versions = collectVersions(releases);
-  if (!versions.length) throw new Error("No GDRE Tools releases with macOS assets found");
-  return { releases, versions, source: SOURCE_LABEL };
+// One row per version, from its newest release.
+async function fetchAvailableVersions({ logger, signal } = {}) {
+  const rows = [], seen = new Set();
+  for (const row of await source.discover({ logger, signal })) if (!seen.has(row.version) && row.files.length) { seen.add(row.version); rows.push(row); }
+  rows.sort((a, b) => compareVersionsDesc(a.version, b.version));
+  if (!rows.length) throw new Error("No GDRE Tools releases with macOS assets found");
+  return { rows, versions: rows.map(row => row.version), source: SOURCE_LABEL };
 }
 
 async function installVersion({
   userDataDir,
   version,
   logger,
-  releases,
+  rows,
   onProgress,
   signal
 } = {}) {
   const v = normalizeVersion(version);
-  let sourceReleases = Array.isArray(releases) && releases.length ? releases : null;
-  if (!sourceReleases) {
-    const fetched = await fetchAvailableVersions({ logger });
-    sourceReleases = fetched.releases || [];
-  }
-
-  const match = selectReleaseAsset(sourceReleases, v);
-  if (!match) throw new Error(`GDRE Tools release v${v} not found`);
-  const downloadUrl = match.asset?.browser_download_url;
-  if (!downloadUrl) throw new Error("GDRE Tools download URL missing");
+  const listed = (Array.isArray(rows) && rows.some(row => row.version === v) ? rows : (await fetchAvailableVersions({ logger, signal })).rows)
+    .find(row => row.version === v);
+  const file = listed?.files?.[0];
+  if (!file) throw new Error(`GDRE Tools release v${v} not found`);
+  const downloadUrl = file.url;
 
   const installDir = getInstallDir({ userDataDir, version: v });
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-gdsdecomp-"));
-  const zipName = match.asset?.name || `gdre_tools-${v}-macos.zip`;
-  const zipPath = path.join(tmpDir, zipName);
+  const zipPath = path.join(tmpDir, file.name);
   const extractDir = path.join(tmpDir, "extract");
   ensureDir(extractDir);
 
   try {
     logger?.info?.(`[gdsdecomp] downloading ${downloadUrl}`);
-    await downloadToFile(downloadUrl, zipPath, {
-      headers: { "User-Agent": "MacLauncher" },
-      onProgress,
-      signal
-    });
+    const { sha256, integrity } = await source.download(file, zipPath, { onProgress, signal });
     throwIfAborted(signal);
-    await extractZip(zipPath, extractDir, signal);
+    await extractArchive(zipPath, extractDir, signal);
 
     const appPath = findAppBundle(extractDir);
     if (!appPath) throw new Error("GDRE Tools app bundle not found in zip");
@@ -336,6 +285,8 @@ async function installVersion({
       cliName: path.basename(cliPath),
       source: SOURCE_LABEL,
       downloadUrl,
+      archiveSha256: sha256,
+      integrity,
       installedAt: new Date().toISOString()
     });
 
@@ -371,13 +322,10 @@ module.exports = {
   getInstallDir,
   listInstalled,
   fetchAvailableVersions,
-  selectReleaseAsset,
   installVersion,
   uninstallVersion,
+  source,
   __test: {
-    matchesMacAsset,
-    collectVersions,
-    selectReleaseAsset,
     findAppBundle,
     findCliBinary
   }

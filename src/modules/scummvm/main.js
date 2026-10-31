@@ -76,12 +76,7 @@ async function inspectWithRuntime(entry, context, { run = execute } = {}) {
   if (!selection.ready) {
     if (!selection.version && !selection.discoveryRequired) throw new Error(selection.reason);
     await confirmToolInstall(context, { manager, version: selection.version, detail: "Required to identify the game edition." });
-    if (!selection.version) {
-      await manager.refreshCatalog({ userDataDir: context.userDataDir, signal: context.signal, logger: context.logger, force: true });
-      context.onRuntimeStateChange?.();
-      selection = manager.resolveSelection(entry, context.settings, context.userDataDir);
-      if (!selection.version) throw new Error("No ScummVM versions are available to download.");
-    }
+    // Installation discovers the catalog first when no version is known yet.
     await withRuntimeMutation({ managerId: manager.id, version: selection.version }, () => manager.installRuntime({
       userDataDir: context.userDataDir, version: selection.version, signal: context.signal, downloads: context.downloads, logger: context.logger }), { userDataDir: context.userDataDir });
     context.onRuntimeStateChange?.();

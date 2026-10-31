@@ -1,118 +1,111 @@
-const Github = require("../../../shared/runtime/github-releases");
 const crypto = require("node:crypto");
-const { githubAssetDigest } = require("../../../shared/runtime/github-runtime-catalog");
-const { throwIfAborted } = require("../../../shared/runtime/download-utils");
+const Upstream = require("../../../shared/runtime/upstream");
+const { versionAtLeast } = require("../../../shared/runtime/bundled-native");
+const { ARCHIVE } = require("./archive");
 
 const SOURCE_URL = "https://github.com/Sikarugir-App/Engines/releases";
-const TEMPLATE_SOURCE_URL = "https://github.com/Sikarugir-App/Template/releases";
-const DIGEST = /^[a-f0-9]{64}$/i;
-const MAXIMUM_ASSET_BYTES = 512 * 1024 * 1024;
 
+// Asset names follow upstream: any WSnn wrapper generation, an optional
+// platform suffix and any archive the extractor reads. Files for other
+// platforms and debug symbols published next to them are not packages.
+const FOREIGN = /(?:^|[-_.])(?:linux|windows|win(?:32|64)|android|ios|riscv\d*|aarch64|debug|symbols?|dsym)(?:[-_.]|$)/i;
+function archiveStem(name) {
+  const value = String(name || ""), extension = ARCHIVE.exec(value);
+  return extension && !FOREIGN.test(value) ? value.slice(0, extension.index) : null;
+}
+// Support Templates from 1.0.19 on.
+function parseTemplateName(name) {
+  const match = /^Template-(\d+\.\d+\.\d+)(?:[-_.][A-Za-z][\w.-]*)?$/.exec(archiveStem(name) || "");
+  return match && versionAtLeast(match[1], "1.0.19") ? { version: match[1] } : null;
+}
+// Wine engines from 10.0_8 on, except the first 11.0 build. The WSnn number
+// names the wrapper generation the engine was built for.
 function parseEngineName(name) {
-  const match = /^WS12WineSikarugir((\d+)\.(\d+)(?:_(\d+))?)\.tar\.xz$/.exec(name || "");
+  const match = /^WS(\d+)WineSikarugir((\d+)\.(\d+)(?:_(\d+))?)(?:[-_.][A-Za-z][\w.-]*)?$/.exec(archiveStem(name) || "");
   if (!match) return null;
-  const [major, minor, revision] = [Number(match[2]), Number(match[3]), Number(match[4] || 0)];
+  const [major, minor, revision] = [Number(match[3]), Number(match[4]), Number(match[5] || 0)];
   if (![major, minor, revision].every(Number.isSafeInteger) || major < 10 || major === 10 && (minor === 0 && revision < 8) ||
     major === 11 && minor === 0 && revision < 1) return null;
-  return { version: match[1], major, minor, revision };
+  return { version: match[2], major, minor, revision, wrapper: Number(match[1]) };
 }
-function snapshotVersion(engineVersion, engineDigest, template) {
-  if (!parseEngineName(`WS12WineSikarugir${engineVersion}.tar.xz`) || !DIGEST.test(engineDigest || "") ||
-    !/^\d+\.\d+\.\d+$/.test(template?.version || "") || !DIGEST.test(template?.asset?.sha256 || ""))
-    throw new Error("Sikarugir downloads require identified engine and support archive checksums.");
+// One archive per version and release: the newest wrapper generation, then
+// a name without a variant suffix, then the publisher's current .tar.xz form.
+const preferred = (rank, other) => { const index = rank.findIndex((value, at) => value !== other[at]); return index >= 0 && rank[index] < other[index]; };
+function archives(release, parse) {
+  const found = new Map();
+  for (const asset of release.assets || []) {
+    const parsed = parse(asset?.name);
+    if (!parsed) continue;
+    const rank = [-(parsed.wrapper || 0), Number(!archiveStem(asset.name).endsWith(parsed.version)), Number(!/\.tar\.xz$/i.test(asset.name))];
+    if (!found.has(parsed.version) || preferred(rank, found.get(parsed.version).rank)) found.set(parsed.version, { parsed, asset, rank });
+  }
+  return [...found.values()].map(({ parsed, asset }) => ({ version: parsed.version, assets: [asset] }));
+}
+// Engines are assets of the Engines releases, support libraries assets of the
+// Template releases. The rolling release tag is not a Wine version.
+const engines = Upstream.github({ repository: "Sikarugir-App/Engines", prerelease: true, allArchitectures: true,
+  recognize: release => archives(release, parseEngineName) });
+const templates = Upstream.github({ repository: "Sikarugir-App/Template", prerelease: true, allArchitectures: true,
+  recognize: release => archives(release, parseTemplateName) });
+
+// A downloaded archive's identity: the publisher's SHA-256, or its listed URL,
+// asset and size when the publisher states no digest.
+const identity = asset => asset?.sha256 || (asset?.url ? [asset.digest?.value, asset.assetId, asset.url, asset.bytes].filter(Boolean).join(":") : "");
+// Both versions become part of a folder name. Characters other than letters,
+// digits, dots and underscores become hyphens; the digest of the unchanged
+// values keeps each name distinct, so the published versions keep their form.
+const folderPart = value => String(value ?? "").replace(/[^0-9A-Za-z._]/g, "-").replace(/^[.-]+/, "").slice(0, 32) || "unnamed";
+function snapshotVersion(engineVersion, engineIdentity, template) {
   // Wine also places this directory in Windows paths with MAX_PATH limits.
   // Keep the folder compact; full identities remain in the catalog and receipt.
-  const identity = crypto.createHash("sha256").update(JSON.stringify([
-    engineVersion, engineDigest.toLowerCase(), template.version, template.asset.sha256.toLowerCase()
+  const digest = crypto.createHash("sha256").update(JSON.stringify([
+    engineVersion, String(engineIdentity).toLowerCase(), template?.version, identity(template?.asset).toLowerCase()
   ])).digest("hex").slice(0, 24);
-  return `${engineVersion}-template-${template.version}-${identity}`;
+  return `${folderPart(engineVersion)}-template-${folderPart(template?.version)}-${digest}`;
 }
-function assetUrlAllowed(url, repository, tag, filename) {
-  try {
-    const value = new URL(url);
-    return value.protocol === "https:" && value.hostname === "github.com" && !value.username && !value.password &&
-      !value.search && !value.hash && value.pathname === `/Sikarugir-App/${repository}/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(filename)}`;
-  } catch { return false; }
-}
-function identifiedAsset(asset, repository, tag) {
-  const digest = githubAssetDigest(asset);
-  if (!digest || !Number.isSafeInteger(asset?.size) || asset.size < 1 || asset.size > MAXIMUM_ASSET_BYTES ||
-    !assetUrlAllowed(asset.browser_download_url, repository, tag, asset.name)) return null;
-  return { filename: asset.name, url: asset.browser_download_url, sha256: digest, bytes: asset.size,
-    ...(Number.isSafeInteger(asset.id) && asset.id > 0 ? { assetId: asset.id } : {}), integritySource: "github-published-sha256" };
-}
+const short = asset => (asset.sha256 || asset.digest?.value || "").slice(0, 8) || `#${asset.assetId || asset.bytes || "?"}`;
 function entryFor(engine, asset, template, releaseTag = "v1.0") {
   return {
-    version: snapshotVersion(engine.version, asset.sha256, template),
-    versionLabel: `${engine.major}.${engine.minor} · revision ${engine.revision} · ${asset.sha256.slice(0, 8)} · support ${template.version} (${template.asset.sha256.slice(0, 8)})`,
-    engineVersion: engine.version, engineName: asset.filename.replace(/\.tar\.xz$/, ""),
-    // A binary asset's checksum identifies the consumed engine. The release
+    version: snapshotVersion(engine.version, identity(asset), template),
+    versionLabel: `${engine.major}.${engine.minor} · revision ${engine.revision} · ${short(asset)} · support ${template.version} (${short(template.asset)})`,
+    engineVersion: engine.version, engineName: asset.filename.replace(ARCHIVE, ""),
+    // A binary asset's identity names the consumed engine. The release
     // repository is a packaging catalog and does not identify its Wine source.
-    upstreamRevision: `WS12WineSikarugir${engine.version}:sha256:${asset.sha256}`,
-    upstreamTag: releaseTag, sourceUrl: SOURCE_URL, minimumMacOS: "14.0",
-    hostArchitectures: ["arm64", "x64"], localBuild: false, asset,
+    upstreamRevision: `${asset.filename.replace(ARCHIVE, "")}:${asset.sha256 ? "sha256:" + asset.sha256 : identity(asset)}`.slice(0, 200),
+    upstreamTag: releaseTag, sourceUrl: SOURCE_URL, localBuild: false, asset,
     template: { ...template, asset: { ...template.asset } },
-    downloadBytes: asset.bytes + template.asset.bytes
+    downloadBytes: (asset.bytes || 0) + (template.asset.bytes || 0)
   };
 }
+// A catalog row or installation record names both archives and the version
+// that combines them.
 function validateEntry(pin) {
   try {
     const engine = parseEngineName(pin?.asset?.filename), template = pin?.template;
-    const templateTag = new URL(template?.asset?.url).pathname.split("/")[5];
-    return Boolean(engine && engine.version === pin.engineVersion && pin.version === snapshotVersion(engine.version, pin.asset.sha256, template) &&
-      assetUrlAllowed(pin.asset.url, "Engines", pin.upstreamTag, pin.asset.filename) &&
-      template.asset.filename === `Template-${template.version}.tar.xz` &&
-      assetUrlAllowed(template.asset.url, "Template", templateTag, template.asset.filename) &&
-      [pin.asset.bytes, template.asset.bytes].every(value => Number.isSafeInteger(value) && value > 0 && value <= MAXIMUM_ASSET_BYTES));
+    return Boolean(engine && engine.version === pin.engineVersion && parseTemplateName(template?.asset?.filename)?.version === template.version &&
+      [pin.asset.url, template.asset.url].every(url => new URL(url).protocol === "https:") &&
+      pin.version === snapshotVersion(engine.version, identity(pin.asset), template));
   } catch { return false; }
 }
 
-function createDiscovery(dependencies = {}) {
-  return async ({ signal, logger } = {}) => {
-    throwIfAborted(signal);
-    const fetch = dependencies.fetchGithubReleases || Github.fetchGithubReleases;
-    const [engines, templates] = await Promise.all([
-      fetch({ owner: "Sikarugir-App", repo: "Engines", includePrerelease: true, maxPages: 5, signal, logger,
-        assetFilter: asset => Boolean(parseEngineName(asset.name)) }),
-      fetch({ owner: "Sikarugir-App", repo: "Template", includePrerelease: true, maxPages: 5, signal, logger,
-        assetFilter: asset => /^Template-1\.0\.(\d+)\.tar\.xz$/.test(asset.name) && Number(/^Template-1\.0\.(\d+)/.exec(asset.name)[1]) >= 19 })
-    ]);
-    throwIfAborted(signal);
-    const support = [];
-    let inspected = 0;
-    for (const release of templates.slice(0, 500)) {
-      if (release.draft || typeof release.tag_name !== "string") continue;
-      for (const asset of (release.assets || []).slice(0, 500)) {
-        if (++inspected > 2500) throw new Error("Sikarugir support catalog exceeds its supported size.");
-        const match = /^Template-(\d+)\.(\d+)\.(\d+)\.tar\.xz$/.exec(asset.name || "");
-        const pin = match && identifiedAsset(asset, "Template", release.tag_name);
-        if (!pin || Number(match[1]) !== 1 || Number(match[2]) !== 0 || Number(match[3]) < 19) continue;
-        support.push({ version: match.slice(1).join("."), minimumMacOS: "14.0", asset: pin });
-      }
-    }
-    support.sort((a, b) => Number(b.version.split(".")[2]) - Number(a.version.split(".")[2]));
-    if (!support.length) throw new Error("No compatible Sikarugir support archive is available.");
-    const result = [], seen = new Set();
-    inspected = 0;
-    for (const release of engines.slice(0, 500)) {
-      throwIfAborted(signal);
-      if (release.draft || typeof release.tag_name !== "string") continue;
-      for (const asset of (release.assets || []).slice(0, 500)) {
-        if (++inspected > 2500) throw new Error("Sikarugir engine catalog exceeds its supported size.");
-        const engine = parseEngineName(asset.name), pin = engine && identifiedAsset(asset, "Engines", release.tag_name);
-        if (!pin) continue;
-        const row = entryFor(engine, pin, support[0], release.tag_name);
-        if (!seen.has(row.version)) { seen.add(row.version); result.push(row); }
-      }
-    }
-    result.sort((a, b) => {
-      const left = parseEngineName(a.asset.filename), right = parseEngineName(b.asset.filename);
-      return right.major - left.major || right.minor - left.minor || right.revision - left.revision || a.version.localeCompare(b.version);
-    });
-    if (result.length > 500) throw new Error("Sikarugir engine catalog exceeds its supported size.");
-    return result;
-  };
+// Every listed engine paired with the newest listed support archive.
+async function discover(options = {}) {
+  const [engineRows, templateRows] = await Promise.all([engines.discover(options), templates.discover(options)]);
+  const [support] = templateRows.filter(row => row.files[0]).sort((a, b) => versionAtLeast(b.version, a.version) - versionAtLeast(a.version, b.version));
+  if (!support) throw new Error("No compatible Sikarugir support archive is available.");
+  const template = { version: support.version, asset: Upstream.asset(support.files[0]) }, result = new Map();
+  for (const row of engineRows) {
+    const listed = row.files[0], engine = parseEngineName(listed?.name);
+    if (!engine) continue;
+    const pin = entryFor(engine, Upstream.asset(listed), template, row.sourceUrl ? decodeURIComponent(row.sourceUrl.split("/").pop()) : undefined);
+    if (!result.has(pin.version)) result.set(pin.version, pin);
+  }
+  return [...result.values()].sort((a, b) => {
+    const left = parseEngineName(a.asset.filename), right = parseEngineName(b.asset.filename);
+    return right.major - left.major || right.minor - left.minor || right.revision - left.revision || a.version.localeCompare(b.version);
+  });
 }
+discover.allArchitectures = true;
 
-module.exports = { SOURCE_URL, TEMPLATE_SOURCE_URL,
-  parseEngineName, snapshotVersion, assetUrlAllowed, identifiedAsset, entryFor, validateEntry, createDiscovery };
+module.exports = { SOURCE_URL, engines, templates,
+  parseEngineName, parseTemplateName, archives, snapshotVersion, entryFor, validateEntry, discover };

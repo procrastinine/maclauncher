@@ -46,9 +46,14 @@ test("cancelling icon conversion stops its child and removes temporary output", 
         "process.on('SIGTERM', () => {}); require('node:fs').writeFileSync(process.argv[1], String(process.pid)); setInterval(() => {}, 1000)", ready], options);
       const deadline = Date.now() + 5000;
       while (childPid === undefined) {
-        try { childPid = Number(await fs.readFile(ready, "utf8")); }
-        catch { if (Date.now() > deadline) { controller.abort(); await request.catch(() => {}); throw Error("Conversion child did not start"); } }
-        if (childPid === undefined) await new Promise(resolve => setTimeout(resolve, 5));
+        try {
+          const candidate = Number(await fs.readFile(ready, "utf8"));
+          if (Number.isSafeInteger(candidate) && candidate > 0) childPid = candidate;
+        } catch {}
+        if (childPid === undefined) {
+          if (Date.now() > deadline) { controller.abort(); await request.catch(() => {}); throw Error("Conversion child did not start"); }
+          await new Promise(resolve => setTimeout(resolve, 5));
+        }
       }
       await fs.writeFile(args.at(-1), "partial");
       controller.abort();

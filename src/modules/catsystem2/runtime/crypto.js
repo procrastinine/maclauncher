@@ -8,7 +8,6 @@ const Native = require("../../shared/runtime/local-native");
 const declarations = require("./distribution-supplementals.json");
 const run = promisify(execFile), signatures = new Map();
 const VERSION = "1.0.0", MAXIMUM = 64 * 1024 * 1024;
-let hostVersion;
 
 async function resolveHelper({ resourcesRoot, helperVersion = VERSION, platform = process.platform, arch = process.arch, dependencies = {} } = {}) {
   if (platform !== "darwin" || !["arm64", "x64"].includes(arch)) throw new Error("Encrypted KIF tools require an Apple Silicon or Intel Mac.");
@@ -26,7 +25,7 @@ async function resolveHelper({ resourcesRoot, helperVersion = VERSION, platform 
         JSON.stringify(record.architectures) !== JSON.stringify(executable.architectures) ||
         JSON.stringify(Native.readMachOArchitectures(executablePath).sort()) !== JSON.stringify(executable.architectures.slice().sort()))
       throw new Error("The Included KIF helper's version or source identity changed.");
-    const systemVersion = dependencies.systemVersion ? await dependencies.systemVersion() : hostVersion ||= (await run("/usr/bin/sw_vers", ["-productVersion"], { timeout: 10000 })).stdout.trim();
+    const systemVersion = dependencies.systemVersion ? await dependencies.systemVersion() : B.systemVersionSync();
     if (!B.versionAtLeast(systemVersion, pin.minimumMacOS)) throw new Error(`Encrypted KIF tools require macOS ${pin.minimumMacOS}.`);
     const signatureKey = B.fileIdentity(executablePath);
     if (signatures.get(executablePath) !== signatureKey) {

@@ -71,7 +71,7 @@ function file(t, bytes) {
 test("legacy sprite sequence headers reject incompatible official runners before execution or installation", async t => {
   const bytes = archive([32]), target = file(t, bytes), inspection = Inspect.inspectStudio(target);
   assert.equal(inspection.spriteSequenceLayout, "legacy-32");
-  assert.equal(inspection.detectedVersion, "2.3–<2024.13");
+  assert.equal(inspection.detectedVersion, "2.3+ (before 2024.13)");
   assert.equal(inspection.exactEngineVersion, null);
   assert.throws(() => OfficialLaunch.preflight(target, "2024.13.1.242"), /sequence Width\/Height/);
   assert.doesNotThrow(() => OfficialLaunch.preflight(target, "2024.11.0.227"));
@@ -133,7 +133,7 @@ test("fresh Play defers discovery until consent and cached selection retains the
   const moduleData = Inspect.inspectStudio(target);
   const entry = { gamePath: target, moduleData: { ...moduleData, dataPath: target }, runtimeData: {} };
   const missing = Official.manager.resolveSelection(entry, {}, userDataDir);
-  assert.equal(missing.version, null);
+  assert.equal(missing.version, "2.3.7.476");
   assert.equal(missing.discoveryRequired, true);
   let refreshes = 0;
   const refresh = Official.manager.refreshCatalog;
@@ -147,7 +147,7 @@ test("fresh Play defers discovery until consent and cached selection retains the
     writeRuntimeCatalog({ userDataDir, managerId: "gamemaker-official", source: Catalog.FEEDS[0].url, entries });
   };
   const plan = await Module.ensureRuntime(entry, { runtimeId: "official-studio", settings: {}, userDataDir });
-  assert.equal(plan.version, null); assert.equal(plan.discoveryRequired, true); assert.equal(refreshes, 0);
+  assert.equal(plan.version, "2.3.7.476"); assert.equal(plan.discoveryRequired, true); assert.equal(refreshes, 0);
   await Official.manager.refreshCatalog({ userDataDir });
   assert.deepEqual(await Module.ensureRuntime(entry, { runtimeId: "official-studio", settings: {}, userDataDir }),
     { managerId: "gamemaker-official", version: "2.3.7.476", installOptions: {} });

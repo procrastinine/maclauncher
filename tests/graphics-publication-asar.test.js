@@ -9,7 +9,7 @@ for (const unpacked of [false, true]) test(`Electron ${unpacked ? "unpacked" : "
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "graphics-publication-asar-"));
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
   const source = path.join(root, "source"), shared = "src/modules/shared/";
-  for (const relative of ["reshade/publication.js", "graphics-warning.js", "runtime/bundled-native.js", "runtime/local-native.js", "runtime/app-bundle.js"]) {
+  for (const relative of ["reshade/publication.js", "graphics-warning.js", "runtime/included-helpers.js", "runtime/bundled-native.js", "runtime/host-capabilities.js", "runtime/feature-requirements.js", "reshade/neural/source.json", "reshade/temporal/fsr4/source.json", "runtime/local-native.js", "runtime/pe-exports.js", "runtime/app-bundle.js"]) {
     const target = path.join(source, shared, relative); fs.mkdirSync(path.dirname(target), {recursive: true});
     fs.copyFileSync(path.join(__dirname, "..", shared, relative), target);
   }

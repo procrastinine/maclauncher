@@ -1,7 +1,7 @@
 // Entry for one launcher view. The mock bridge is installed before the
 // launcher's own renderer entry runs, so the unmodified launcher UI renders
 // against it.
-import demoData from "../data/state.json";
+import { demoData } from "./data";
 import type { LauncherState } from "../../../src/renderer/src/ui/types";
 import { createLauncherApi, type DemoGameActions, type DemoGraphics, type DemoSettingsActions } from "./mock/api";
 import { followNavigation } from "./mock/navigation";

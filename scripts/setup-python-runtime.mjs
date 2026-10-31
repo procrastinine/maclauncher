@@ -3,10 +3,12 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { fetch } from "undici";
 
-export const PIN = Object.freeze(JSON.parse(fs.readFileSync(new URL("../src/modules/shared/runtime/embedded-python.json", import.meta.url), "utf8")));
+const { embeddedPythonProfile } = createRequire(import.meta.url)("../src/modules/shared/runtime/python.js");
+const ARCHITECTURES = Object.freeze({ arm64: "arm64", aarch64: "arm64", x64: "x64", x86_64: "x64" });
 export function verifyArchive(file, pin) {
   if (!fs.lstatSync(file).isFile() || crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex") !== pin.sha256)
     throw new Error("Python build input does not match its pinned SHA-256.");
@@ -14,8 +16,12 @@ export function verifyArchive(file, pin) {
 async function download(url, target, pin) {
   const response = await fetch(url, { signal: AbortSignal.timeout(120000) });
   if (!response.ok) throw new Error(`Python build input download failed (${response.status}).`);
-  fs.writeFileSync(target, Buffer.from(await response.arrayBuffer()));
-  verifyArchive(target, pin);
+  const temporary = target + ".download-" + process.pid;
+  try {
+    fs.writeFileSync(temporary, Buffer.from(await response.arrayBuffer()), { flag: "wx" });
+    verifyArchive(temporary, pin);
+    fs.renameSync(temporary, target);
+  } finally { fs.rmSync(temporary, { force: true }); }
 }
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, { stdio: "inherit", ...options });
@@ -100,21 +106,27 @@ function normalizePythonEntrypoints(destDir) {
   }
 }
 
+// Installs the publisher build for one app architecture. The Intel build runs
+// under Rosetta on Apple Silicon while its pinned packages are installed.
 export async function main(argv = process.argv.slice(2)) {
-  let dest = "src/resources/python";
+  let dest = "src/resources/python", arch = process.arch;
   for (let i = 0; i < argv.length; i++) {
     const name = argv[i], value = argv[++i];
     if (!value) throw new Error("A Python setup option is missing its value.");
     if (name === "--dest") dest = value;
-    else if (name === "--version" && [PIN.version, "3.12"].includes(value)) continue;
-    else if (name === "--arch" && ["arm64", "aarch64"].includes(value)) continue;
+    else if (name === "--version" && ["3.12.15", "3.12"].includes(value)) continue;
+    else if (name === "--arch" && Object.hasOwn(ARCHITECTURES, value)) arch = ARCHITECTURES[value];
     else throw new Error("Unsupported Python setup option or pinned version.");
   }
-  if (process.platform !== "darwin" || process.arch !== "arm64") throw new Error("This embedded Python profile requires Apple Silicon macOS.");
+  const PIN = embeddedPythonProfile(arch);
+  if (process.platform !== "darwin" || arch === "arm64" && process.arch !== "arm64") throw new Error("The Apple Silicon Python build installs on an Apple Silicon Mac.");
   const destination = path.resolve(dest), temporary = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-python-"));
   try {
-    const archive = path.join(temporary, "python.tar.gz"), extracted = path.join(temporary, "input");
-    await download(PIN.url, archive, PIN);
+    const cache = path.resolve("dist/upstream-downloads");
+    fs.mkdirSync(cache, { recursive: true });
+    const archive = path.join(cache, PIN.sha256 + ".tar.gz"), extracted = path.join(temporary, "input");
+    if (fs.existsSync(archive)) verifyArchive(archive, PIN);
+    else await download(PIN.url, archive, PIN);
     fs.mkdirSync(extracted); run("/usr/bin/tar", ["-xzf", archive, "-C", extracted]);
     const staged = path.join(temporary, "prepared");
     copyPythonTree(path.join(extracted, "python"), staged);
@@ -127,14 +139,15 @@ export async function main(argv = process.argv.slice(2)) {
       "--require-hashes", "--only-binary=:all:", "--no-index", "--find-links", wheels, "--requirement", requirements],
       { env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" } });
     normalizePythonEntrypoints(staged);
-    run(python, ["-I", "-c", "import sys, ctypes, pefile, aplib, corrupy; assert sys.version_info[:3] == (3, 12, 15)"]);
+    run(python, ["-I", "-c", `import sys, ctypes, platform, pefile, aplib, corrupy; assert sys.version_info[:3] == (${PIN.version.split(".").join(", ")}) and platform.machine() == ${JSON.stringify(PIN.architecture)}`]);
     fs.writeFileSync(path.join(staged, "runtime.json"), JSON.stringify(PIN, null, 2) + "\n");
     fs.mkdirSync(path.dirname(destination), { recursive: true });
     const backup = fs.existsSync(destination) ? destination + "-old-" + Date.now() : null;
     if (backup) fs.renameSync(destination, backup);
     try { copyPythonTree(staged, destination); }
     catch (error) { fs.rmSync(destination, { recursive: true, force: true }); if (backup) fs.renameSync(backup, destination); throw error; }
-    console.log("Embedded Python " + PIN.version + " installed at " + destination);
+    if (backup) fs.rmSync(backup, { recursive: true, force: true });
+    console.log("Embedded Python " + PIN.version + " (" + PIN.architecture + ") installed at " + destination);
   } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

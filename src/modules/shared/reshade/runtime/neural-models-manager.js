@@ -25,7 +25,17 @@ function normalizeSettings(value) {
   for(const [method,version]of Object.entries(value?.defaultVersions||{}))if(Object.hasOwn(methods,method)&&valid(version))defaults[method]=version;
   return {defaultVersion:Models.validVersion(value?.defaultVersion)?value.defaultVersion:null,...(Object.keys(defaults).length||Object.hasOwn(value||{},'defaultVersions')?{defaultVersions:defaults}:{})};
 }
-function getState({ userDataDir, settings } = {}) {
+function modelSupport(context) {
+  const Neural = require("../neural");
+  if (!Neural.hostSupported(context)) return { supported: false,
+    reason: "Neural models require Apple Silicon and macOS 14.0 or later." };
+  const root = context.root || require("..").runtimeRoot(context.app);
+  return Neural.resolve(root, context) ? { supported: true, reason: null } : { supported: false,
+    reason: "The selected graphics package does not include a compatible neural provider." };
+}
+function getState(context = {}) {
+  const { userDataDir, settings } = context;
+  const { supported, reason } = modelSupport(context);
   const source = Setup.sourceFor();
   const installed = Models.listManaged(userDataDir).map(item => ({ ...item,...modelPresentation(item.operation||item.method,item.intrinsicScale),itemGroup:modelGroup(item.operation||item.method), removalLabel: "Remove",
     removalConfirm: "Remove this imported neural model copy? The original package remains unchanged." }));
@@ -34,7 +44,7 @@ function getState({ userDataDir, settings } = {}) {
   const defaultSelections=Object.entries(MODEL_OPERATIONS).flatMap(([id,operation])=>{const model=selectNeuralModel(id,choices,preferences);return model?[{id,label:operation.label,version:model.version,
     compatibleVersions:choices.filter(row=>row.ready!==false&&compatibleNeuralModel(row,id)).map(row=>row.version)}]:[];});
   const versions = installed.map(item => item.version), versionLabels = Object.fromEntries(installed.map(item => [item.version, item.versionLabel]));
-  const catalog = { status: "success", delivery: "local-files", versions, versionLabels, installable: false, importable: true,
+  const catalog = { status: "success", delivery: "local-files", versions, versionLabels, installable: false, importable: supported, ...(reason ? { importReason: reason } : {}),
     importLabel: "Import compatible model…", importBusyLabel: "Importing neural model…", importInputKinds: ["file", "directory"], importExtensions:require('../neural/model-sources').PICKER_EXTENSIONS,
     importDescription: "Imports rendering, super-resolution, restoration, interpolation and relative-depth models with their checksums and original notices. Compatible raw weights are packaged automatically. Model terms apply separately.",
     sourceUrl: source.releaseUrl, source: source.releaseUrl,
@@ -44,7 +54,7 @@ function getState({ userDataDir, settings } = {}) {
     description: "Models can be selected in Graphics and video processing. Compatible models install from local packages or downloads. Original local sources remain unchanged.",
     itemGroups:MODEL_GROUPS.map(group=>({...group,operations:Object.keys(MODEL_OPERATIONS).filter(method=>modelGroup(method)===group.id)})),
     setupActions: Setup.sourcesFor().map(row=>{const present=Setup.sourceInstalled(choices,row),presentation=modelPresentation(row.method,present?.intrinsicScale||row.intrinsicScale||MODEL_OPERATIONS[row.method]?.scale);
-      return {id:row.files?'downloadModel:'+row.version:'downloadDlssMac',label:row.label,itemGroup:modelGroup(row.method),group:'Neural',...presentation,buttonLabel:'Download model…',available:true,installed:Boolean(present),installedVersion:present?.version,description:presentation.purpose+' '+row.description+' '+row.weightTerms};}),
+      return {id:row.files?'downloadModel:'+row.version:'downloadDlssMac',label:row.label,itemGroup:modelGroup(row.method),group:'Neural',...presentation,buttonLabel:'Download model…',available:supported,...(reason?{reason}:{}),installed:Boolean(present),installedVersion:present?.version,description:presentation.purpose+' '+row.description+' '+row.weightTerms};}),
     setupPresentation:{mode:'table',label:'Models'},defaultSelections,
     registrationPresentation:{label:'Use existing package…',description:'Use a compatible prepared model package in its current location. Import model converts raw weights or creates a managed copy.'},
     installed, installing: null, variants: [], defaultVersion: normalizeSettings(settings).defaultVersion, versionLabels, catalog };
@@ -56,6 +66,8 @@ module.exports = {
   ui: { groupId: "graphics", tabLabel: "Neural models", sectionLabel: "Neural models", order: 0, memberOrder: 5, management: "managed" },
   normalizeSettings, getState, importRuntime, coordinateImportRuntime: importRuntime, uninstallRuntime: Models.removeModel,
   performSetupAction: context => {
+    const { supported, reason } = modelSupport(context);
+    if (!supported) throw new Error(reason);
     if (context.setupActionId === "downloadDlssMac") return Setup.downloadDlssMac(context);
     if(context.setupActionId?.startsWith('downloadModel:'))return Setup.downloadModel({...context,sourceVersion:context.setupActionId.slice('downloadModel:'.length)});
     throw new Error("Choose an available neural model action.");

@@ -17,7 +17,7 @@ function installation(t) {
 }
 
 test("shared temporal selection enables Wine's matched game integration and preserves the saved runtime selection", t => {
-  const install = installation(t), options = { host: { arch: "arm64", macOSVersion: "26.0" }, executableArchitecture: "x86_64", baseEnvironment: {} };
+  const install = installation(t), options = { host: { hardwareArch: "arm64", macOSVersion: "26.0" }, executableArchitecture: "x86_64", baseEnvironment: {} };
   const saved = { graphicsBackend: "dxmt", dlss: false };
   for (const temporalMethod of ["metalfx", "fsr2", "fsr3", "fsr4"]) {
     const settings = DLSS.withTemporalSelection(saved, rows(true, temporalMethod));
@@ -66,14 +66,14 @@ test("Wine bridge dependency planning reads enabled Advanced temporal rows", () 
 });
 
 test("DLSS uses installed matched libraries, selected graphics and real host requirements", t => {
-  const install = installation(t), common = { host: { arch: "arm64", macOSVersion: "15.7" }, executableArchitecture: "x86_64", baseEnvironment: {} };
+  const install = installation(t), common = { host: { hardwareArch: "arm64", macOSVersion: "15.7" }, executableArchitecture: "x86_64", baseEnvironment: {} };
   const run = (settings, options = common) => CrossOver.buildEnvironment(settings, install, "/private/game", "/private/game/bottle", options);
   const dxmt = run({ graphicsBackend: "dxmt", dlss: true });
   assert.equal(dxmt.overrides.DXMT_ENABLE_NVEXT, "1");
   assert.equal(dxmt.overrides.D3DM_ENABLE_METALFX, "0");
   assert.match(CrossOver.wineEnvironmentString(dxmt.overrides), /'DXMT_ENABLE_NVEXT=1'/);
   assert.throws(() => run({ graphicsBackend: "d3dmetal", dlss: true }), /unavailable/);
-  const d3d = run({ graphicsBackend: "d3dmetal", dlss: true }, { ...common, host: { arch: "arm64", macOSVersion: "26.0" } });
+  const d3d = run({ graphicsBackend: "d3dmetal", dlss: true }, { ...common, host: { hardwareArch: "arm64", macOSVersion: "26.0" } });
   assert.equal(d3d.overrides.DXMT_ENABLE_NVEXT, "0");
   assert.equal(d3d.overrides.D3DM_ENABLE_METALFX, "1");
   const auto = run({ dlss: true });
@@ -81,7 +81,7 @@ test("DLSS uses installed matched libraries, selected graphics and real host req
   assert.equal(auto.overrides.DXMT_ENABLE_NVEXT, "1");
   assert.throws(() => run({ graphicsBackend: "dxvk", dlss: true }), /requires DXMT or D3DMetal/);
   assert.throws(() => run({ graphicsBackend: "dxmt", dlss: true }, { ...common, executableArchitecture: "x86" }), /64-bit Windows/);
-  assert.throws(() => run({ graphicsBackend: "dxmt", dlss: true }, { ...common, host: { arch: "x64", macOSVersion: "26.0" } }), /Apple Silicon/);
+  assert.throws(() => run({ graphicsBackend: "dxmt", dlss: true }, { ...common, host: { hardwareArch: "x64", macOSVersion: "26.0" } }), /Apple Silicon/);
   fs.unlinkSync(path.join(install.crossoverRoot, "lib/dxmt/x86_64-windows/nvngx.dll"));
   assert.throws(() => run({ graphicsBackend: "dxmt", dlss: true }), /unavailable/);
 });
@@ -89,7 +89,7 @@ test("DLSS uses installed matched libraries, selected graphics and real host req
 test("turning DLSS off clears inherited flags without changing graphics or requiring libraries", () => {
   const install = { crossoverRoot: "/absent/CrossOver" };
   const result = CrossOver.buildEnvironment({ graphicsBackend: "wined3d", dlss: false }, install, "/game", "/game/bottle",
-    { baseEnvironment: { DXMT_ENABLE_NVEXT: "1", D3DM_ENABLE_METALFX: "1" }, host: { arch: "x64", macOSVersion: "11.0" } });
+    { baseEnvironment: { DXMT_ENABLE_NVEXT: "1", D3DM_ENABLE_METALFX: "1" }, host: { hardwareArch: "x64", macOSVersion: "11.0" } });
   assert.equal(result.environment.DXMT_ENABLE_NVEXT, "0");
   assert.equal(result.environment.D3DM_ENABLE_METALFX, "0");
   assert.equal(result.overrides.CX_GRAPHICS_BACKEND, "wined3d");

@@ -34,22 +34,28 @@ function createGithubActionsDiscovery({ owner, repo, workflow, branch = "main", 
     };
     logger?.info?.(`[github] fetching public artifacts ${name}`);
     const data = await read(`actions/workflows/${encodeURIComponent(workflow)}/runs?per_page=${maxRuns}&status=success&branch=${encodeURIComponent(branch)}&event=${event}`);
-    if (!Array.isArray(data.workflow_runs) || data.workflow_runs.length > maxRuns) throw new Error("Invalid public GitHub workflow list.");
+    if (!Array.isArray(data.workflow_runs)) throw new Error("Invalid public GitHub workflow list.");
     const entries = [], seenRuns = new Set(), seenArtifacts = new Set();
-    let matchedRuns = 0;
-    for (const run of data.workflow_runs) {
+    let matchedRuns = 0, failure = null;
+    for (const run of data.workflow_runs.slice(0, maxRuns)) {
       if (!identity(run?.id) || seenRuns.has(run.id)) continue;
       seenRuns.add(run.id);
       if (run.status !== "completed" || run.conclusion !== "success" || run.head_branch !== branch || run.event !== event ||
-        run.path !== `.github/workflows/${workflow}` || run.repository?.full_name?.toLowerCase() !== name.toLowerCase() ||
+        String(run.path).split("@")[0] !== `.github/workflows/${workflow}` || run.repository?.full_name?.toLowerCase() !== name.toLowerCase() ||
         run.head_repository?.full_name?.toLowerCase() !== name.toLowerCase() || !/^[a-f0-9]{40}$/i.test(run.head_sha || "") ||
         !Number.isFinite(Date.parse(run.created_at))) continue;
+      // A run whose artifact list cannot be read is skipped; older runs stay listed.
       const artifacts = [];
-      for (let page = 1; page <= Math.ceil(maxArtifacts / 100); page += 1) {
-        const list = await read(`actions/runs/${run.id}/artifacts?per_page=100&page=${page}`);
-        if (!Array.isArray(list.artifacts) || list.artifacts.length > 100) throw new Error("Invalid public GitHub artifact list.");
-        artifacts.push(...list.artifacts.slice(0, maxArtifacts - artifacts.length));
-        if (list.artifacts.length < 100 || artifacts.length >= maxArtifacts) break;
+      try {
+        for (let page = 1; page <= Math.ceil(maxArtifacts / 100); page += 1) {
+          const list = await read(`actions/runs/${run.id}/artifacts?per_page=100&page=${page}`);
+          if (!Array.isArray(list.artifacts)) throw new Error("Invalid public GitHub artifact list.");
+          artifacts.push(...list.artifacts.slice(0, Math.min(100, maxArtifacts - artifacts.length)));
+          if (list.artifacts.length < 100 || artifacts.length >= maxArtifacts) break;
+        }
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        failure ||= error; logger?.warn?.(`[github] skipped run ${run.id} of ${name}: ${error.message || error}`); continue;
       }
       let matched = false;
       for (const artifact of artifacts) {
@@ -59,12 +65,21 @@ function createGithubActionsDiscovery({ owner, repo, workflow, branch = "main", 
           artifact.workflow_run?.id !== run.id || artifact.workflow_run.head_sha?.toLowerCase() !== run.head_sha.toLowerCase() ||
           artifact.workflow_run.head_branch !== branch || !githubAssetDigest(artifact) ||
           !Number.isFinite(Date.parse(artifact.expires_at)) || Date.parse(artifact.expires_at) <= (dependencies.now || Date.now)()) continue;
-        const mapped = await mapArtifact(artifact, { run, sourceUrl: `https://github.com/${owner}/${repo}/commit/${run.head_sha.toLowerCase()}`,
-          githubAssetDigest, nightlyArtifactUrl: () => nightlyArtifactUrl({ owner, repo, artifactId: artifact.id }), signal });
+        // An artifact the mapper cannot read is skipped; the query fails only
+        // when no artifact could be read.
+        let mapped;
+        try {
+          mapped = await mapArtifact(artifact, { run, artifacts, sourceUrl: `https://github.com/${owner}/${repo}/commit/${run.head_sha.toLowerCase()}`,
+            githubAssetDigest, nightlyArtifactUrl: () => nightlyArtifactUrl({ owner, repo, artifactId: artifact.id }), signal });
+        } catch (error) {
+          if (signal?.aborted) throw error;
+          failure ||= error; logger?.warn?.(`[github] skipped artifact ${artifact.name} of ${name}: ${error.message || error}`); continue;
+        }
         for (const entry of Array.isArray(mapped) ? mapped : mapped ? [mapped] : []) { entries.push(entry); matched = true; }
       }
       if (matched && ++matchedRuns >= matchedLimit) break;
     }
+    if (failure && !entries.length) throw failure;
     return entries;
   };
 }

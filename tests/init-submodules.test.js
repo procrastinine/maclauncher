@@ -159,7 +159,20 @@ test('production checkout metadata matches every top-level source pin without in
   const top = new Map([...plan.modules, ...plan.skipped].map(item => [item.path, item]));
   const projects = new Map(inventory.projects.map(item => [item.id, item]));
   for (const project of inventory.projects) {
-    assert.ok(project.path, project.id + ' needs a tracked checkout path');
+    if (!project.path) {
+      assert.equal(project.parent, undefined, project.id + ' is an independent copied or archive source');
+      assert.equal(project.checkoutOrigin, undefined, project.id + ' does not initialize a checkout');
+      assert.match(project.revision, /^[a-f0-9]{40}$/);
+      assert.ok(project.pinRefs?.length, project.id + ' needs exact source evidence');
+      const consumers = inventory.recipes.filter(recipe => recipe.project === project.id || recipe.inputs?.some(input => input.project === project.id));
+      assert.ok(consumers.length, project.id + ' needs an app adaptation consumer');
+      for (const ref of project.pinRefs) assert.equal(require('../scripts/check-upstream-overlays.cjs').sourceRef(ROOT, ref), project.revision);
+      for (const consumer of consumers) {
+        assert.ok(consumer.ownedFiles.length, consumer.id + ' needs owned adaptation inputs');
+        for (const file of consumer.ownedFiles) assert.ok(fs.statSync(path.join(ROOT, file.path)).isFile(), file.path);
+      }
+      continue;
+    }
     if (!project.parent) assert.equal(top.get(project.path)?.revision, project.revision, project.id);
     else {
       const parent = projects.get(project.parent);
@@ -167,6 +180,6 @@ test('production checkout metadata matches every top-level source pin without in
       assert.equal(top.has(project.path), false, 'Nested sources retain the upstream parent Gitlink');
     }
   }
-  assert.equal(plan.mirrors.length, inventory.projects.filter(project => project.checkoutOrigin &&
+  assert.equal(plan.mirrors.length, inventory.projects.filter(project => project.path && project.checkoutOrigin &&
     plan.modules.some(item => project.path === item.path || item.recursive && project.path.startsWith(item.path + '/'))).length);
 });

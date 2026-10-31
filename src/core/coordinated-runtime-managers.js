@@ -5,6 +5,9 @@ const { readJsonObject } = require("./json-files");
 const { removeManagedRuntimeQuarantine } = require("../modules/shared/runtime/managed-quarantine");
 const { coordinatorFor, coordinationError, conflicts, containsPath, runtimeIdentity } = require("./runtime-coordinator");
 const { withoutClearedDefaults } = require("./settings-merge");
+const Architecture = require("../modules/shared/runtime/architecture");
+const { isAbortError, throwIfAborted } = require("../modules/shared/runtime/download-utils");
+const { installedRuntimeAvailability, installedRuntimeReplaceable } = require("./runtime-install-availability.mjs");
 
 const operations = new AsyncLocalStorage();
 const instrumented = new WeakSet();
@@ -45,6 +48,31 @@ function selectInstalled(rows, data, manager) {
     (!data.variant || row.variant === data.variant) && (!data.platformKey || row.platformKey === data.platformKey));
   if (matches.length === 1) return matches[0];
   return null;
+}
+// The build an installed row belongs to: its architecture variant, otherwise
+// its own architecture.
+function buildOf(row) {
+  return Architecture.requestedArchitecture({ variant: row.variant }) || Architecture.targetArchitecture(row.architecture);
+}
+// A damaged or incomplete copy of the version and build being installed. A
+// usable copy of that build leaves nothing to replace.
+function damagedInstallation(rows, data, manager, build) {
+  const version = managerVersion(manager, data.version);
+  const copies = rows.filter(row => managerVersion(manager, row.version) === version && (!data.sectionId || row.sectionId === data.sectionId) &&
+    (!build || !buildOf(row) || buildOf(row) === build) &&
+    (!data.variant || row.variant === data.variant || Architecture.requestedArchitecture({ variant: data.variant })));
+  if (copies.some(row => installedRuntimeAvailability(row) === "installed")) return null;
+  return copies.find(installedRuntimeReplaceable) || null;
+}
+// Runs a step at the start of the download task that matches, so the step
+// shares that task's progress row and cancellation.
+function withTaskStep(downloads, matches, step) {
+  return new Proxy(downloads, { get(target, key) {
+    const value = Reflect.get(target, key, target);
+    if (key !== "runTask") return typeof value === "function" ? value.bind(target) : value;
+    return (meta, runner) => target.runTask(meta, typeof runner !== "function" || !matches(meta) ? runner
+      : async task => { await step(task); return runner(task); });
+  } });
 }
 function readRuntimeSettings(userDataDir) { return withoutClearedDefaults(readJsonObject(path.join(userDataDir, "settings.json"))?.runtimes); }
 
@@ -173,6 +201,53 @@ function instrumentRuntimeManagers(managers) {
           payload = { ...data, userDataDir, version: installed.version, sectionId: installed.sectionId,
             installDir: installed.installDir, platformKey: installed.platformKey, variant: installed.variant };
         }
+        // Installing a version again replaces a damaged or incomplete copy of the
+        // same build, whether Play, Reinstall in Runtimes or Repair in the
+        // inspector asked for it. The copy is removed inside this lease, after
+        // consent, as the first step of the installation's own download task.
+        // Removal comes before the download because managers install into the
+        // version's own directory and either refuse an occupied one or return
+        // their existing record without downloading, so no replacement can be
+        // verified beside the copy. A row's installDir is not always the whole
+        // version directory either, so the copy cannot be set aside generically.
+        // Usable, unavailable and included copies stay.
+        async function installOverDamaged(self, args) {
+          if (typeof manager.uninstallRuntime !== "function" || !rows().some(installedRuntimeReplaceable)) return original.call(self, payload, ...args);
+          let build = Architecture.requestedArchitecture(data);
+          // Without a build choice, the manager installs the build it chooses.
+          if (!build && typeof manager.chooseArchitecture === "function") {
+            try { build = Architecture.targetArchitecture(manager.chooseArchitecture(null, data.settings, userDataDir)); } catch { build = null; }
+          }
+          const damaged = () => damagedInstallation(rows(), data, manager, build);
+          let pending = Boolean(damaged());
+          const remove = async task => {
+            if (!pending) return;
+            pending = false;
+            throwIfAborted(task?.signal);
+            const copy = damaged();
+            if (!copy) return;
+            task?.onProgress?.({ detail: "Removing damaged installation…" });
+            await manager.uninstallRuntime({ userDataDir, settings: data.settings, logger: data.logger, version: copy.version,
+              sectionId: copy.sectionId, variant: copy.variant, platformKey: copy.platformKey, installDir: copy.installDir,
+              ...(buildOf(copy) ? { architecture: buildOf(copy) } : {}) });
+          };
+          if (!pending) return original.call(self, payload, ...args);
+          const tasks = typeof payload.downloads?.runTask === "function";
+          if (!tasks) await remove();
+          const ownTask = meta => {
+            try { return meta?.managerId === manager.id && (!meta.version || managerVersion(manager, meta.version) === version); }
+            catch { return false; }
+          };
+          try {
+            const result = await original.call(self, tasks ? { ...payload, downloads: withTaskStep(payload.downloads, ownTask, remove) } : payload, ...args);
+            if (!pending || !damaged()) return result;
+          } catch (error) {
+            if (!pending || isAbortError(error) || !damaged()) throw error;
+          }
+          // The manager opened no download task of its own and kept the damaged copy.
+          await remove();
+          return original.call(self, payload, ...args);
+        }
         if (action === "uninstall") validateRemoval();
         if (action === "install" && version) {
           const installed = ready();
@@ -193,7 +268,7 @@ function instrumentRuntimeManagers(managers) {
               if (installed) return installedResult(installed);
             }
             if (action === "uninstall") validateRemoval();
-            const result = await original.call(this, payload, ...args);
+            const result = action === "install" && version ? await installOverDamaged(this, args) : await original.call(this, payload, ...args);
             if (action === "install") await removeManagedRuntimeQuarantine(result, { userDataDir, signal: payload.signal });
             return action === "install" ? installedResult(result) : result;
           }, { coordinator, userDataDir });

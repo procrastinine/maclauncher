@@ -1,51 +1,53 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const os = require("node:os");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const { createPinnedNativeManager, hashFile } = require("../../runtime/pinned-native-manager");
-const { createGithubReleaseDiscovery } = require("../../runtime/github-runtime-catalog");
+const Upstream = require("../../runtime/upstream");
 const MachO = require("../../runtime/macho-load-commands");
+const Architecture = require("../../runtime/architecture");
 const { systemVersionSync, versionAtLeast } = require("../../runtime/bundled-native");
 const { excludedReason } = require("../../runtime/runtime-content");
+const { macDownloads, locatePackaged } = require("../../runtime/release-files");
 const exec = promisify(execFile);
 const SOURCE = "https://github.com/rizinorg/cutter/releases";
 const PLUGIN = "lib/rizin/plugins/core_ghidra.dylib";
 const safe = name => typeof name === "string" && name && !path.isAbsolute(name) && !/[\\\x00-\x1f]/.test(name) && name.split("/").every(p => p && p !== "." && p !== "..");
 
-async function mapRelease(release, { resolveRevision, githubAssetDigest, sourceUrl }) {
+// Releases from 2.0.0. Each CPU build shares the release version; the macOS
+// floor is read from the installed binaries.
+function recognize(release) {
   const version = /^v?(\d+\.\d+\.\d+)$/.exec(release.tag_name || "")?.[1];
-  if (!version || Number(version.split(".")[0]) < 2 || release.prerelease || release.draft) return null;
-  const asset = release.assets?.find(a => a.name === `Cutter-v${version}-macOS-arm64.dmg`);
-  const sha256 = githubAssetDigest(asset);
-  if (!sha256 || !asset?.size || asset.size > 256 * 1024 * 1024) return null;
-  return { version, upstreamRevision: await resolveRevision(release), sourceUrl, hostArchitectures: ["arm64"], localBuild: false,
-    asset: { filename: asset.name, url: asset.browser_download_url, bytes: asset.size, sha256 } };
+  if (!version || Number(version.split(".")[0]) < 2) return null;
+  const current = ["arm64", "x86_64"].map(cpu => `Cutter-v${version}-macOS-${cpu}.dmg`);
+  const downloads = macDownloads((release.assets || []).filter(item => /cutter/i.test(item?.name || "")), { preferred: current });
+  return downloads.length ? downloads.map(({ asset, architecture }) => ({ version, architecture, assets: [asset] }))
+    : { version, installReason: "This release has no macOS download." };
 }
+const upstream = Upstream.github({ repository: "rizinorg/cutter", allArchitectures: true, recognize });
 
-async function extractArchive(archive, destination, signal, dependencies = {}) {
-  const run = dependencies.run || exec, mount = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-native-tools-"));
-  let attached = false;
-  try {
-    await run("/usr/bin/hdiutil", ["attach", "-readonly", "-nobrowse", "-noautoopen", "-mountpoint", mount, archive], { signal, timeout: 60000 });
-    attached = true;
-    const source = fs.realpathSync(path.join(mount, "Cutter.app", "Contents", "Resources"));
-    const copy = relative => {
-      const file = path.join(source, relative), real = fs.realpathSync(file);
-      if (!real.startsWith(source + path.sep)) throw new Error("Native tool payload contains an external link.");
-      const target = path.join(destination, relative), stat = fs.statSync(real);
-      if (stat.isDirectory()) {
-        fs.mkdirSync(target, { recursive: true });
-        for (const name of fs.readdirSync(real)) if (!excludedReason(relative + "/" + name)) copy(relative + "/" + name);
-      } else if (stat.isFile()) { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.copyFileSync(real, target); }
-    };
-    for (const relative of ["bin/rizin", "bin/rz-bin", PLUGIN, "lib/rizin/plugins/rz_ghidra_sleigh", "share/rizin"]) copy(relative);
-    for (const name of fs.readdirSync(path.join(source, "lib"))) if (/^librz_.*\.\d+\.\d+\.dylib$/.test(name)) copy("lib/" + name);
-    fs.cpSync(path.join(__dirname, "..", "resources", "native-notices"), path.join(destination, "notices"), { recursive: true });
-  } finally {
-    try { await run("/usr/bin/hdiutil", ["detach", mount], { timeout: 30000 }); fs.rmSync(mount, { recursive: true, force: true }); }
-    catch (error) { if (attached) throw error; try { fs.rmdirSync(mount); } catch {} }
-  }
+// The shared installer unpacks the disk image or archive. Only the command-line
+// tools leave Cutter's app bundle, which a publisher may move into a folder.
+const appResources = root => locatePackaged(root, "Cutter.app/Contents/Resources");
+function selectPayload(unpacked) {
+  const resources = appResources(unpacked);
+  if (!resources) throw new Error("The Cutter package does not contain Cutter.app.");
+  const source = fs.realpathSync(resources), payload = fs.mkdtempSync(path.join(unpacked, ".payload-"));
+  const copy = relative => {
+    const file = path.join(source, relative), real = fs.realpathSync(file);
+    if (!real.startsWith(source + path.sep)) throw new Error("Native tool payload contains an external link.");
+    const target = path.join(payload, relative), stat = fs.statSync(real);
+    if (stat.isDirectory()) {
+      fs.mkdirSync(target, { recursive: true });
+      for (const name of fs.readdirSync(real)) if (!excludedReason(relative + "/" + name)) copy(relative + "/" + name);
+    } else if (stat.isFile()) { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.copyFileSync(real, target); }
+  };
+  for (const relative of ["bin/rizin", "bin/rz-bin", PLUGIN, "lib/rizin/plugins/rz_ghidra_sleigh", "share/rizin"]) copy(relative);
+  for (const name of fs.readdirSync(path.join(source, "lib"))) if (/^librz_.*\.\d+\.\d+\.dylib$/.test(name)) copy("lib/" + name);
+  for (const name of fs.readdirSync(unpacked)) if (path.join(unpacked, name) !== payload) fs.rmSync(path.join(unpacked, name), { recursive: true, force: true });
+  for (const name of fs.readdirSync(payload)) fs.renameSync(path.join(payload, name), path.join(unpacked, name));
+  fs.rmdirSync(payload);
+  fs.cpSync(path.join(__dirname, "..", "resources", "native-notices"), path.join(unpacked, "notices"), { recursive: true });
 }
 
 function inventory(root) {
@@ -65,10 +67,12 @@ function inventory(root) {
   walk(root); return files;
 }
 
-async function prepareInstall({ unpacked, signal }, dependencies = {}) {
+async function prepareInstall({ unpacked, signal, pin }, dependencies = {}) {
+  if (!fs.existsSync(path.join(unpacked, "bin", "rizin"))) selectPayload(unpacked);
+  const architecture = ["arm64", "x64"].includes(pin?.architecture) ? pin.architecture : dependencies.architecture || Architecture.selectedArchitecture();
   const run = dependencies.run || exec, files = inventory(unpacked); let minimumMacOS = "0.0";
   for (const relative of Object.keys(files).filter(p => p.startsWith("bin/") || p.endsWith(".dylib"))) {
-    const file = path.join(unpacked, relative), image = MachO.readMachOLoadCommands(file, { architecture: "arm64" });
+    const file = path.join(unpacked, relative), image = MachO.readMachOLoadCommands(file, { architecture });
     for (const slice of image.slices) {
       if (!versionAtLeast(minimumMacOS, slice.minimumMacOS)) minimumMacOS = slice.minimumMacOS;
       for (const dependency of slice.dependencies) {
@@ -92,10 +96,8 @@ async function prepareInstall({ unpacked, signal }, dependencies = {}) {
 }
 
 function createManager({ dependencies = {} } = {}) {
-  const core = createPinnedNativeManager({ id: "native-inspector", label: "Rizin / Ghidra", catalog: [], supportsDefault: true, sourceUrl: SOURCE,
-    discoverCatalog: createGithubReleaseDiscovery({ owner: "rizinorg", repo: "cutter", mapRelease, dependencies }),
-    resolveExecutable: root => path.join(root, "bin", "rizin"), prepareInstall: options => prepareInstall(options, dependencies),
-    dependencies: { ...dependencies, extractArchive: dependencies.extractArchive || ((...args) => extractArchive(...args, dependencies)) } });
+  const core = createPinnedNativeManager({ id: "native-inspector", label: "Rizin / Ghidra", supportsDefault: true, sourceUrl: SOURCE, upstream,
+    resolveExecutable: root => path.join(root, "bin", "rizin"), prepareInstall: options => prepareInstall(options, dependencies), dependencies });
   const checked = new Map();
   function verify(install) {
     try {
@@ -122,6 +124,6 @@ function createManager({ dependencies = {} } = {}) {
       return { ...state, catalog, sections: [{ ...state.sections[0], label: "Rizin / Ghidra", catalog }] }; },
     resolveSelection: (...args) => { const selected = core.resolveSelection(...args), install = verify(selected.install);
       return { ...selected, install, ready: Boolean(install), reason: install ? null : selected.reason || "Native inspection files changed. Reinstall the selected tool." }; },
-    __test: { createManager, mapRelease, extractArchive, inventory, prepareInstall, verify } };
+    __test: { createManager, recognize, appResources, selectPayload, inventory, prepareInstall, verify } };
 }
 module.exports = createManager();

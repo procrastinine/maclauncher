@@ -118,7 +118,7 @@ test('native installer publishes verification and extraction steps through the e
   const { createPinnedNativeManager } = require('../src/modules/shared/runtime/pinned-native-manager');
   const downloads = new DownloadManager(), stages = [];
   const runtime = createPinnedNativeManager({ id: 'onboarding-fixture', label: 'Example compiler', supportsDefault: true,
-    catalog: [{ version: 'example', upstreamRevision: 'example', asset: { filename: 'example.zip', url: 'https://example.test/example.zip',
+    discoverCatalog: async () => [{ version: 'example', upstreamRevision: 'example', asset: { filename: 'example.zip', url: 'https://example.test/example.zip',
       bytes: archive.length, sha256: crypto.createHash('sha256').update(archive).digest('hex') } }],
     resolveExecutable: directory => path.join(directory, 'host'),
     dependencies: { systemVersionSync: () => '26.0', downloadToFile: async (_url, destination, { onProgress }) => {

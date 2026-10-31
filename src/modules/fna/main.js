@@ -158,9 +158,9 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
       if (!entry.nativeAppPath) throw new Error("This game does not include an author's macOS app.");
       const executable = AppBundle.resolveAppBundleExecutablePath(entry.nativeAppPath);
       const architectures = Native.readMachOArchitectures(executable);
-      if (!architectures.includes(process.arch === "x64" ? "x86_64" : process.arch) && !architectures.includes("x86_64")) throw new Error("The author's Mac app does not support this CPU architecture.");
+      if (!architectures.some(architecture => require("../shared/runtime/host-capabilities").architectureSupport(architecture).supported)) throw new Error("The author's Mac app does not support this CPU architecture.");
       return NativeFocus.spawnForegroundNativeGame({ context, executablePath: executable, args: context.gameArguments || [], options: { cwd: path.dirname(executable), env: { ...process.env } },
-        needsRosetta: process.arch === "arm64" && !architectures.includes("arm64") });
+        needsRosetta: require("../shared/runtime/architecture").imageRequiresRosetta(architectures) });
     }
     if (runtimeId !== "fna") return null;
     const launch = prepareGame(entry, context), settings = context.runtimeSettings || {};

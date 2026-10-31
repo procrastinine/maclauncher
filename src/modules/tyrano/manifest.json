@@ -107,14 +107,14 @@
       },
       "native": {
         "graphicsHost": "window",
-        "label": "Native app"
+        "label": "Game's macOS app"
       }
     },
     "labels": {
       "nwjs-patched": "NW.js (Patched)",
       "nwjs": "NW.js",
       "electron": "Electron",
-      "native": "Native app"
+      "native": "Game's macOS app"
     },
     "hosted": {
       "id": "electron",
@@ -166,7 +166,7 @@
         "iconOnly": true,
         "autoRun": true,
         "resultFields": [
-          { "key": "bundleLabel", "label": "", "empty": "Unpacked" }
+          { "key": "bundleLabel", "label": "Game data", "empty": "Unpacked" }
         ]
       },
       {
@@ -192,7 +192,7 @@
       },
       {
         "id": "removeExtraction",
-        "label": "Remove Extracted",
+        "label": "Remove extracted files",
         "kind": "danger",
         "confirm": "Remove extracted Tyrano data?",
         "hiddenWhen": [

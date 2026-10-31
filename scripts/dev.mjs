@@ -1,10 +1,10 @@
+import "./runtime-content-register.cjs";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveElectronBinary } from "../src/core/electron-binary.js";
 import { startLauncherDevServer } from "./dev-server.mjs";
 import { prepareDevelopmentApp } from "./dev-app.mjs";
-import { developmentContentEnvironment } from "./dev-server.mjs";
 
 export async function startDevelopment(electronArguments = ["."]) {
   const args = new Set(process.argv.slice(2));
@@ -26,7 +26,7 @@ export async function startDevelopment(electronArguments = ["."]) {
   vite.printUrls();
 
   const electronEnv = {
-    ...developmentContentEnvironment(process.env, projectRoot),
+    ...process.env,
     ELECTRON_START_URL: url,
     MACLAUNCHER_DEBUG: debug ? "1" : process.env.MACLAUNCHER_DEBUG,
     MACLAUNCHER_DEVTOOLS: devtools,
@@ -34,7 +34,7 @@ export async function startDevelopment(electronArguments = ["."]) {
   };
   delete electronEnv.ELECTRON_RUN_AS_NODE;
 
-  const electron = spawn(electronBinary, electronArguments, {
+  const electron = spawn(electronBinary, [path.join(projectRoot, "scripts/dev-bootstrap.cjs"), ...electronArguments], {
     stdio: "inherit",
     cwd: projectRoot,
     env: electronEnv

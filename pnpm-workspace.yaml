@@ -13,10 +13,9 @@ enableGlobalVirtualStore: false
 minimumReleaseAge: 10080
 minimumReleaseAgeStrict: true
 minimumReleaseAgeIgnoreMissingTime: false
-# Security fixes for Electron's TLS certificate blocklist and URI parsing.
+# Security fix for URI parsing.
 # The lockfile retains the exact package identities and integrity hashes.
 minimumReleaseAgeExclude:
-  - electron@44.9.3
   - fast-uri@3.1.9
 trustPolicy: no-downgrade
 trustLockfile: false

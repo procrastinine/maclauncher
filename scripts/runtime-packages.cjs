@@ -13,8 +13,18 @@ const ROOT = path.resolve(__dirname, '..');
 const LOCK = 'build/runtime-packages.json';
 const key = item => `${item.id || item.managerId}/${item.version}/${item.arch}`;
 
-function validateLock(value, { plan, dependencies } = {}) {
-  if (!value || value.schemaVersion !== 1 || typeof value.repository !== 'string' || !Array.isArray(value.packages))
+const ARCHITECTURES = Object.freeze(['arm64', 'x64']);
+
+// One compatible package per version, preferring a separate build for this
+// launcher CPU over Universal while preserving other included versions.
+function selectArchitecture(lock, arch) {
+  if (!lock?.architectures?.includes(arch)) throw new Error('The package lock does not cover this launcher architecture.');
+  return { repository: lock.repository, arch, maximumMacOS: lock.maximumMacOS,
+    packages: require('../src/modules/shared/runtime/included-helpers').preferredIncludedBuilds(lock.packages, arch) };
+}
+
+function validateSelection(value, { plan, dependencies } = {}) {
+  if (!value || typeof value.repository !== 'string' || !Array.isArray(value.packages))
     throw new Error('Application runtime inputs require a versioned package lock.');
   const config = Model.configuration(value);
   plan ||= Model.assertPublishable(Model.createPlan({ ...config, dependencies }));
@@ -41,29 +51,50 @@ function validateLock(value, { plan, dependencies } = {}) {
         (record.sourceAsset.sha256 !== source.sha256 || record.sourceAsset.bytes !== source.bytes))
       throw new Error('A runtime source download differs from its source identity.');
   }
-  return { schemaVersion: 1, repository: value.repository, ...config, packages: [...selected.values()] };
+  return { repository: value.repository, ...config, packages: [...selected.values()] };
 }
 
-function readLock({ repoRoot = ROOT, dependencies } = {}) {
-  return validateLock(JSON.parse(B.readRegular(path.join(repoRoot, LOCK), 4 * 1024 ** 2).bytes), { dependencies });
-}
-
-function createLock({ catalogs, arch = 'arm64', maximumMacOS, repository = 'procrastinine/maclauncher-builds', dependencies } = {}) {
-  let plan = Model.assertPublishable(Model.createPlan({ arch, maximumMacOS: maximumMacOS || '13.0', dependencies }));
-  const packages = [...plan.packages, ...plan.supplementals].map(item => {
-    const id = item.id || item.managerId;
-    const catalog = JSON.parse(B.readRegular(path.join(catalogs, id + '.json'), 2 * 1024 ** 2).bytes);
-    const record = Catalog.validateProjectCatalog(catalog, { projectId: id, repository, architecture: arch }).packages
-      .find(record => record.version === item.version && record.arch === item.arch);
-    if (!record) throw new Error(`Missing published package identity: ${key(item)}.`);
-    return record;
-  });
-  if (maximumMacOS === undefined) {
-    maximumMacOS = packages.reduce((floor, record) => B.versionAtLeast(record.minimumMacOS, floor) ? record.minimumMacOS : floor,
-      plan.launcherMinimumMacOS);
-    plan = Model.createPlan({ arch, maximumMacOS, dependencies });
+// The lock lists every included package for every launcher CPU that is built.
+function validateLock(value, { plans = {}, dependencies } = {}) {
+  if (!value || value.schemaVersion !== 2 || typeof value.repository !== 'string' || !Array.isArray(value.packages) ||
+      !Array.isArray(value.architectures) || !value.architectures.length ||
+      value.architectures.some((arch, index) => arch !== ARCHITECTURES.filter(item => value.architectures.includes(item))[index]))
+    throw new Error('Application runtime inputs require a versioned package lock for explicit launcher architectures.');
+  const used = new Set();
+  for (const arch of value.architectures) {
+    const selection = validateSelection(selectArchitecture(value, arch), { plan: plans[arch], dependencies });
+    for (const record of selection.packages) used.add(key(record));
   }
-  return validateLock({ schemaVersion: 1, repository, arch, maximumMacOS, packages }, { plan, dependencies });
+  if (used.size !== value.packages.length) throw new Error('The package lock contains a runtime that no launcher architecture includes.');
+  return { schemaVersion: 2, repository: value.repository, architectures: [...value.architectures], maximumMacOS: value.maximumMacOS,
+    packages: value.packages.map(record => Catalog.validateProjectRecord(record, { projectId: record.id, repository: value.repository })) };
+}
+
+function readLock({ repoRoot = ROOT, arch, dependencies } = {}) {
+  const lock = validateLock(JSON.parse(B.readRegular(path.join(repoRoot, LOCK), 4 * 1024 ** 2).bytes), { dependencies });
+  return arch === undefined ? lock : validateSelection(selectArchitecture(lock, arch), { dependencies });
+}
+
+function createLock({ catalogs, architectures = ARCHITECTURES, maximumMacOS, repository = 'procrastinine/maclauncher-builds', dependencies } = {}) {
+  const records = new Map();
+  let floor = '0.0';
+  for (const arch of architectures) {
+    const plan = Model.assertPublishable(Model.createPlan({ arch, maximumMacOS: maximumMacOS || '13.0', dependencies }));
+    if (B.versionAtLeast(plan.launcherMinimumMacOS, floor)) floor = plan.launcherMinimumMacOS;
+    for (const item of [...plan.packages, ...plan.supplementals]) {
+      const id = item.id || item.managerId;
+      if (records.has(key(item))) continue;
+      const catalog = JSON.parse(B.readRegular(path.join(catalogs, id + '.json'), 2 * 1024 ** 2).bytes);
+      const record = Catalog.validateProjectCatalog(catalog, { projectId: id, repository, architecture: arch }).packages
+        .find(record => record.version === item.version && record.arch === item.arch);
+      if (!record) throw new Error(`Missing published package identity: ${key(item)}.`);
+      records.set(key(item), record);
+    }
+  }
+  maximumMacOS ??= [...records.values()].reduce((value, record) => B.versionAtLeast(record.minimumMacOS, value) ? record.minimumMacOS : value, floor);
+  const packages = [...records.values()].sort((a, b) => key(a).localeCompare(key(b)));
+  return validateLock({ schemaVersion: 2, repository, architectures: ARCHITECTURES.filter(arch => architectures.includes(arch)),
+    maximumMacOS, packages }, { dependencies });
 }
 
 async function extractPackage(archive, destination, record) {
@@ -128,8 +159,21 @@ async function extractPackage(archive, destination, record) {
   } finally { input.destroy(); stream.destroy(); }
 }
 
-async function fetchPackages({ lock = readLock(), repoRoot = ROOT, dependencies = {} } = {}) {
-  lock = validateLock(lock, { dependencies: dependencies.model });
+// Host-shared virtio-fs volumes can keep reporting freshly removed directory
+// entries after their contents are deleted. Retry the stage cleanup briefly
+// before treating such races as real failures of the package fetch.
+async function removeStaging(staging) {
+  for (let attempt = 0; ; attempt++) {
+    try { return fs.rmSync(staging, { recursive: true, force: true }); }
+    catch (error) {
+      if ((error.code !== 'ENOTEMPTY' && error.code !== 'EBUSY') || attempt >= 8) throw error;
+      await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
+    }
+  }
+}
+
+async function fetchPackages({ lock = readLock({ arch: process.arch }), repoRoot = ROOT, dependencies = {} } = {}) {
+  lock = validateSelection(lock, { dependencies: dependencies.model });
   const root = path.join(repoRoot, 'src/resources/native-runtimes'), cache = path.join(repoRoot, 'dist/runtime-downloads');
   B.realDirectory(root, { create: true }); B.realDirectory(cache, { create: true });
   const declarations = [];
@@ -144,7 +188,7 @@ async function fetchPackages({ lock = readLock(), repoRoot = ROOT, dependencies 
       if (fs.existsSync(destination)) B.verifyPayload(destination, declaration);
       else fs.renameSync(staging, destination);
       declarations.push(declaration);
-    } finally { fs.rmSync(staging, { recursive: true, force: true }); }
+    } finally { await removeStaging(staging); }
   }
   const config = { arch: lock.arch, maximumMacOS: lock.maximumMacOS };
   const plan = Model.createPlan({ ...config, dependencies: dependencies.model });
@@ -168,8 +212,8 @@ async function main(args) {
     const result = createLock({ catalogs: path.resolve(rest[0]) });
     fs.writeFileSync(path.join(ROOT, LOCK), JSON.stringify(result, null, 2) + '\n'); return result;
   }
-  if (command === 'check' && !rest.length) { const result = readLock(); return { packages: result.packages.length, arch: result.arch, maximumMacOS: result.maximumMacOS }; }
+  if (command === 'check' && !rest.length) { const result = readLock(); return { packages: result.packages.length, architectures: result.architectures, maximumMacOS: result.maximumMacOS }; }
   throw new Error('Usage: node scripts/runtime-packages.cjs lock <catalog-directory>|check');
 }
-module.exports = { LOCK, validateLock, readLock, createLock, extractPackage, fetchPackages, main };
+module.exports = { LOCK, ARCHITECTURES, selectArchitecture, validateSelection, validateLock, readLock, createLock, extractPackage, fetchPackages, main };
 if (require.main === module) main(process.argv.slice(2)).then(result => console.log(JSON.stringify(result))).catch(error => { console.error(error.message); process.exitCode = 1; });

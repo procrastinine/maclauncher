@@ -6,6 +6,21 @@ const test = require("node:test");
 const Included = require("../src/modules/shared/runtime/included-helpers");
 const B = require("../src/modules/shared/runtime/bundled-native");
 
+test("included packages prefer this app's build per version and preserve other versions", () => {
+  const universal = { id: "sample", version: "1.0", arch: "universal", launcherArchitectures: ["arm64", "x64"] };
+  const intel = { ...universal, arch: "x64", launcherArchitectures: ["x64"] };
+  const legacy = { ...intel, version: "0.9", launcherArchitectures: ["arm64", "x64"] };
+  const silicon = { ...universal, arch: "arm64", launcherArchitectures: ["arm64"] };
+  for (const rows of [[universal, intel, legacy], [intel, universal, legacy]]) {
+    assert.equal(Included.declared(rows, { id: "sample", arch: "x64" }), intel);
+    assert.equal(Included.declared(rows, { id: "sample", arch: "arm64" }), universal);
+    assert.deepEqual(Included.preferredIncludedBuilds(rows, "x64"), [intel, legacy]);
+    assert.equal(Included.declared(rows, { id: "sample", arch: "arm64", version: "0.9" }), legacy);
+  }
+  assert.equal(Included.declared([universal, silicon, intel], { id: "sample", arch: "arm64" }), silicon);
+  assert.equal(Included.declared([universal], { id: "sample" }), universal);
+});
+
 test("included helpers resolve only declared host versions and reject modified bytes", t => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "included-helper-")));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -24,6 +39,18 @@ test("included helpers resolve only declared host versions and reject modified b
   assert.equal(Included.resolveIncluded([declaration], { ...options, version: "2.0" }), null);
   fs.writeFileSync(path.join(directory, "data"), Buffer.alloc(bytes.length));
   assert.throws(() => Included.resolveIncluded([declaration], options), /checksum|changed|size/i);
+});
+
+test("a helper without a build for this Mac reports the Mac it needs instead of a missing installation", t => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "included-host-")));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const declaration = { id: "reader", version: "1.0", launcherArchitectures: ["arm64"], directoryRelative: "reader/1.0/arm64",
+    manifestRelative: "manifest.json", manifestSha256: "a".repeat(64), files: [] };
+  assert.throws(() => Included.requireIncluded([declaration], { id: "reader", arch: "x64", resourcesRoot: root }),
+    error => error.code === "HOST_ARCHITECTURE_UNSUPPORTED" && error.message === "Requires a Mac with Apple Silicon.");
+  assert.throws(() => Included.requireIncluded([declaration], { id: "reader", arch: "arm64", resourcesRoot: root }), /missing\. Reinstall/);
+  assert.throws(() => Included.requireIncluded([declaration], { id: "other", arch: "arm64", resourcesRoot: root }), /included other is missing/);
+  assert.equal(Included.hostRequirement([declaration], { id: "reader", arch: "arm64" }), null);
 });
 
 test("an unpackaged launcher uses only its included resource root", () => {

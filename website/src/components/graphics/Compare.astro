@@ -2,6 +2,10 @@
 // A before/after comparison. Both images share one frame; dragging the slider
 // (or using the arrow keys on it) moves the divider. Without JavaScript the
 // divider stays in the middle.
+//
+// Site images load and decode with the page, never lazily: a lazy image inside
+// a tab or behind the divider starts loading only when shown and flashes empty
+// the first time it appears.
 import type { ImageMetadata } from "astro";
 import { Image } from "astro:assets";
 
@@ -21,8 +25,8 @@ const quality = format === "webp" ? 92 : undefined;
 
 <figure class:list={["ml-compare", { pixelated }]}>
   <div class="ml-compare-frame" style="--split: 50%">
-    <Image src={before} alt={`${alt} (${beforeLabel})`} format={format} quality={quality} />
-    <Image src={after} alt={`${alt} (${afterLabel})`} format={format} quality={quality} class="ml-compare-after" />
+    <Image src={before} alt={`${alt} (${beforeLabel})`} format={format} quality={quality} loading="eager" decoding="sync" />
+    <Image src={after} alt={`${alt} (${afterLabel})`} format={format} quality={quality} loading="eager" decoding="sync" class="ml-compare-after" />
     <span class="ml-compare-label before" aria-hidden="true">{beforeLabel}</span>
     <span class="ml-compare-label after" aria-hidden="true">{afterLabel}</span>
     <input type="range" min="0" max="100" value="50" step="0.5" aria-label={`Divider between ${beforeLabel} and ${afterLabel}`} />

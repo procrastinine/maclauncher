@@ -106,11 +106,11 @@
             {
               "key": "version",
               "type": "select",
-              "label": "Version to register",
+              "label": "Version",
               "options": [
                 {
                   "value": "auto",
-                  "label": "Current selection"
+                  "label": "Default"
                 }
               ],
               "optionsAction": "listRuntimeVersions",
@@ -170,11 +170,11 @@
             {
               "key": "version",
               "type": "select",
-              "label": "Version to register",
+              "label": "Version",
               "options": [
                 {
                   "value": "auto",
-                  "label": "Current selection"
+                  "label": "Default"
                 }
               ],
               "optionsAction": "listRuntimeVersions",
@@ -232,11 +232,11 @@
             {
               "key": "version",
               "type": "select",
-              "label": "Version to register",
+              "label": "Version",
               "options": [
                 {
                   "value": "auto",
-                  "label": "Current selection"
+                  "label": "Default"
                 }
               ],
               "optionsAction": "listRuntimeVersions",

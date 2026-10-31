@@ -36,6 +36,7 @@ test('real core final and process-adapter merges retain only this browser launch
   const {EventEmitter}=require('node:events'),{PassThrough}=require('node:stream');
   const {TOKEN_ENV,PROTOCOL_PREFIX}=require('../src/core/hosted-process');
   const ReShade=require('../src/modules/shared/reshade');
+  t.mock.method(require('../src/modules/shared/reshade/live-resources'),'supported',()=>true);
   const {prepareBrowserGraphicsEnvironment}=require('../src/modules/shared/web/runtime/browser-graphics');
   const first=fixture(t), second=fixture(t), calls=[];
   const selected=new Map([['first',first.env],['second',second.env]]);

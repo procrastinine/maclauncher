@@ -1,7 +1,7 @@
 import React, { memo } from "react";
 import type { GamePreparation, RecentGame } from "../types";
 import type { LibraryActions } from "./library-actions";
-import { formatBytes, formatDownloadPercent } from "../ui-helpers";
+import { filesUnavailableReason, formatBytes, formatDownloadPercent } from "../ui-helpers";
 import { TrashIcon } from "../icons";
 
 function preparationLabel(preparation: GamePreparation) {
@@ -27,17 +27,21 @@ type PlayButtonProps = {
 
 export const PlayButton = memo(function PlayButton({ g, isRunning, onPlay, onStop, showLabel, preparation }: PlayButtonProps) {
   const waiting = Boolean(preparation && !isRunning);
-  const launchUnavailable = !isRunning && g.moduleSupports?.launch === false;
+  // Play stays available while the files are missing: it checks again and
+  // explains the cause, so a drive that just returned starts normally.
+  const filesUnavailable = !isRunning && !waiting ? filesUnavailableReason(g) : undefined;
+  const launchUnavailable = !isRunning && !filesUnavailable && g.moduleSupports?.launch === false;
   const removing = preparation?.phase === "remove";
   const label = isRunning ? "Stop" : waiting && !removing ? "Cancel" : waiting ? preparationLabel(preparation!) : "Play";
   // The status beside the button names the step. Only an icon-only row button
   // starting a game also names it, without the backend's own step label.
-  const title = !waiting && launchUnavailable ? "Launch unavailable for this game"
+  const title = filesUnavailable ? filesUnavailable
+    : !waiting && launchUnavailable ? "Launch unavailable for this game"
     : waiting && !removing && !showLabel && preparation!.phase !== "install" ? `Starting · ${label}` : label;
   if (launchUnavailable && !waiting) {
     const data = g.moduleData || {};
     const input = data.sourceKind || g.moduleLabel || g.moduleShortLabel || "Game input";
-    const reason = data.inspectionReason || data.compatibility;
+    const reason = g.moduleSupports?.launchRequirement || data.inspectionReason || data.compatibility;
     const explanation = `${input}: ${reason || "Inspection only. Select a compatible runtime or import a supported game export to play."}`;
     return <span className="detailMeta gameInspectionNotice" role="status" title={explanation}>
       {explanation}
@@ -94,6 +98,7 @@ export const GameActions = memo(function GameActions({ g, isRunning, actions, in
   const canEditSaves = g.moduleSupports?.saveEditing !== false || g.moduleSupports?.saveLocation === true;
   const canUseCheats = g.moduleSupports?.cheats === true;
   const removing = preparation?.phase === "remove";
+  const filesUnavailable = filesUnavailableReason(g);
   const completed = preparation && typeof preparation.completed === "number" && Number.isFinite(preparation.completed) && preparation.completed >= 0 ? preparation.completed : null;
   const total = preparation && typeof preparation.total === "number" && Number.isFinite(preparation.total) && preparation.total > 0 ? preparation.total : null;
   const percent = preparation && typeof preparation.percent === "number" && Number.isFinite(preparation.percent) ? Math.max(0, Math.min(100, preparation.percent)) : null;
@@ -112,8 +117,8 @@ export const GameActions = memo(function GameActions({ g, isRunning, actions, in
       <PlayButton g={g} isRunning={isRunning} onPlay={onPlay} onStop={onStop} showLabel={inspector} preparation={preparation} />
       {canLaunch && <button
         className="btn small"
-        title="Save a .command file that starts this game when opened"
-        disabled={removing}
+        title={filesUnavailable || "Save a .command file that starts this game when opened"}
+        disabled={removing || Boolean(filesUnavailable)}
         onClick={() => onCreateCommand(g.gamePath)}
       >
         {inspector ? "Create shortcut…" : "Shortcut"}
@@ -125,10 +130,11 @@ export const GameActions = memo(function GameActions({ g, isRunning, actions, in
           value={exactCount ? Math.min(completed!, total!) : percent ?? undefined}
           aria-valuetext={countLabel || undefined} />}
       </div>}
+      {/* Save tools stay usable: saves kept outside the game folder and snapshots remain available. */}
       {inspector && canLaunch && canEditSaves && <button className="btn small" title="Save tools" onClick={() => onOpenSaveTools(g)} disabled={removing}>
         {g.moduleSupports?.saveEditing === true ? "Edit saves" : "Saves"}
       </button>}
-      {inspector && canLaunch && canUseCheats && <button className="btn small" title="Cheats" onClick={() => openCheats(g)} disabled={removing}>Cheats</button>}
+      {inspector && canLaunch && canUseCheats && <button className="btn small" title={filesUnavailable || "Cheats"} onClick={() => openCheats(g)} disabled={removing || Boolean(filesUnavailable)}>Cheats</button>}
       <button
         className="btn iconOnly danger forgetAction"
         title={removing ? "Removing" : isRunning || preparation ? "Stop or finish launching before removal" : "Forget game"}

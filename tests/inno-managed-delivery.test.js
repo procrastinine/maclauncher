@@ -75,7 +75,8 @@ test('managed installer fixture: consent/install/resume, full extraction, offlin
     settings: { runtimes: { innoextract: { defaultVersion: record.version } } },
     confirmRuntimeInstall: async () => { consents++; return false; } };
   assert.equal(manager.ui.management, 'managed');
-  assert.equal(manager.getState({ userDataDir: context.userDataDir }).catalog.recommendedVersion, null);
+  assert.deepEqual(manager.getState({ userDataDir: context.userDataDir }).catalog.versions, []);
+  assert.equal(manager.getState({ userDataDir: context.userDataDir }).catalog.recommendedVersion ?? null, null);
   await assert.rejects(Inputs.prepareInput(setup, context), /cancel/i);
   assert.equal(downloads, 0); assert.equal(refreshes, 0); assert.equal(fs.existsSync(context.userDataDir), false);
   const rtp = require('../src/modules/rgss/rtp').createRtpStore({ download: async () => { throw Error('unexpected RTP acquisition after declined helper'); } });

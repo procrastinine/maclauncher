@@ -9,9 +9,17 @@ const Graphics = require("../src/modules/unity/graphics");
 const Launch = require("../src/modules/unity/launch");
 const Saves = require("../src/modules/unity/save-location");
 const SharedManaged = require("../src/modules/shared/runtime/managed-assembly");
+const Providers = require("../src/modules/shared/runtime/providers");
+const { resolveRuntimeSupportForEntry } = require("../src/core/launch-capability");
 
 function temporary(t) { const root = fs.mkdtempSync(path.join(os.tmpdir(), "unity-module-")); t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root; }
 function context(root, file = root) { return { rootDir: root, inputPath: file, stat: fs.statSync(file) }; }
+// A minimal x64 Windows GUI executable, the record the Windows runtimes read.
+function windowsExecutable(file) {
+  const bytes = Buffer.alloc(1024); bytes.writeUInt16LE(0x5a4d); bytes.writeUInt32LE(128, 60);
+  bytes.writeUInt32LE(0x4550, 128); bytes.writeUInt16LE(0x8664, 132); bytes.writeUInt16LE(1, 134); bytes.writeUInt16LE(240, 148); bytes.writeUInt16LE(2, 150);
+  bytes.writeUInt16LE(0x20b, 152); bytes.writeUInt16LE(2, 220); fs.writeFileSync(file, bytes);
+}
 
 test("Unity detects exact versions from Windows, Linux and compressed-container structure", t => {
   const root = temporary(t), a = path.join(root, "windows"), b = path.join(root, "linux"); fs.mkdirSync(a); fs.mkdirSync(b);
@@ -43,9 +51,50 @@ test("Unity separates IL2CPP native-code and Direct3D shader blockers before ins
   const root = temporary(t), direct3d = path.join(root, "direct3d"), native = path.join(root, "native"); fs.mkdirSync(direct3d); fs.mkdirSync(native);
   game(direct3d, { apis: [2, 18] }); game(native, { il2cpp: true });
   const win = Detect.detectGame(context(direct3d)), cpp = Detect.detectGame(context(native));
-  assert.equal(win.moduleData.compatibility, "Direct3D shader conversion required");
-  assert.throws(() => Launch.preflight(win), /Direct3D shaders/);
-  assert.equal(cpp.moduleData.scriptingBackend, "il2cpp"); assert.throws(() => Launch.preflight(cpp), /IL2CPP code needs a native port/);
+  assert.equal(win.moduleData.compatibility, "Runs in a Windows runtime (Direct3D 11 and Direct3D 12 shaders)");
+  assert.throws(() => Launch.preflight(win), error => error.message === "This build has shaders only for Direct3D 11 and Direct3D 12, and the Mac Mono player needs Metal or OpenGL shaders. " +
+    "Its Windows executable runs in a Windows runtime, which translates Direct3D to Metal or Vulkan.");
+  assert.equal(cpp.moduleData.scriptingBackend, "il2cpp"); assert.equal(cpp.moduleData.compatibility, "Runs in a Windows runtime (IL2CPP code)");
+  assert.throws(() => Launch.preflight(cpp), /IL2CPP compiled this game's code .* Its Windows executable runs in a Windows runtime\.$/);
+});
+
+test("Unity names the shader APIs a build has and mentions a Windows runtime only for a Windows executable", t => {
+  const root = temporary(t), linux = path.join(root, "linux"), vulkan = path.join(root, "vulkan"); fs.mkdirSync(linux); fs.mkdirSync(vulkan);
+  game(linux, { linux: true, apis: [21, 11] }); game(vulkan, { apis: [21] });
+  const elf = Detect.detectGame(context(linux)), exe = Detect.detectGame(context(vulkan));
+  assert.equal(elf.moduleData.compatibility, "Shaders only for Vulkan and OpenGL ES 3");
+  assert.throws(() => Launch.preflight(elf), error => error.message === "This build has shaders only for Vulkan and OpenGL ES 3, and the Mac Mono player needs Metal or OpenGL shaders.");
+  assert.doesNotMatch(elf.moduleData.graphics.reason, /Direct3D|Windows/);
+  assert.equal(exe.moduleData.compatibility, "Runs in a Windows runtime (Vulkan shaders)");
+  assert.throws(() => Launch.preflight(exe), error => !/Direct3D/.test(error.message) && error.message.endsWith(" Its Windows executable runs in a Windows runtime."));
+  assert.deepEqual(Detect.macPlayerBlocker({ scriptingBackend: "mono", graphics: { status: "native-renderer-present" }, windowsApis: ["System.Windows.Forms"] }, "/Game.x86_64"),
+    { label: "Uses Windows desktop APIs", reason: "This game's Mono code uses Windows desktop APIs that the Mac Mono player does not provide." });
+  assert.equal(Detect.macPlayerBlocker({ scriptingBackend: "mono", graphics: { status: "native-renderer-present" }, windowsApis: [] }, "/Game.exe"), null);
+});
+
+test("a Unity game the Mac player cannot run is offered the Windows runtimes and not the Unity player", t => {
+  const root = temporary(t), userDataDir = path.join(root, "data");
+  const providers = Providers.listRuntimeProviders([require("../src/modules/crossover/main")]);
+  const Unity = Providers.composeRuntimeProviders(require("../src/modules/unity/main"), providers);
+  const offered = (name, options = {}) => {
+    const directory = path.join(root, name); fs.mkdirSync(directory);
+    const source = game(directory, options); if (!options.linux) windowsExecutable(source.file);
+    const entry = Providers.decorateRuntimeEntry(Detect.detectGame(context(directory)), providers);
+    return { entry, supported: resolveRuntimeSupportForEntry(Unity, Unity.manifest, entry, {}, { userDataDir }) };
+  };
+  const mono = offered("mono");
+  assert.ok(mono.supported.includes("unity") && mono.supported.includes("sikarugir"), mono.supported.join());
+  assert.equal(Unity.canLaunchRuntime("unity", mono.entry, {}, { userDataDir }), true);
+  assert.deepEqual(Unity.runtimeRecommendation(mono.entry), { version: "2020.1.17f1", sectionId: "default" });
+  for (const options of [{ apis: [2, 18] }, { il2cpp: true }]) {
+    const blocked = offered(options.il2cpp ? "il2cpp" : "direct3d", options);
+    assert.equal(blocked.supported.includes("unity"), false, blocked.supported.join());
+    assert.equal(blocked.supported.includes("sikarugir"), true, blocked.supported.join());
+    assert.equal(Unity.canLaunchRuntime("unity", blocked.entry, {}, { userDataDir }), false);
+    assert.equal(Unity.runtimeRecommendation(blocked.entry), null);
+  }
+  const linux = offered("linux", { linux: true, apis: [21] });
+  assert.deepEqual(linux.supported.filter(runtimeId => ["unity", "sikarugir", "crossover"].includes(runtimeId)), []);
 });
 
 test("Unity inspects native imports without invoking game code", t => {

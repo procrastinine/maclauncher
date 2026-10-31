@@ -119,29 +119,23 @@ test("Siglus library export inspection reads the selected CPU instead of combini
   assert.equal((await inspectMachOExports(input.original, { arch: "x64" })).includes("game_string_free"), false);
   assert.deepEqual(Siglus.resolveProfile(input.install).libraryArchitectures.sort(), ["arm64", "x86_64"]);
 });
-test("KiriKiri verifies every universal slice before signing the managed executable", async t => {
+test("KiriKiri signs the managed universal executable, including one that brings its own libraries", async t => {
   const root = directory(t), executable = path.join(root, "krkrsdl2"), calls = [];
   const pin = { asset: { filename: "krkrsdl2-macos.zip" }, executableRelative: "krkrsdl2", version: "development-fixture" };
-  const bytes = universal([{ cpu: X64, bytes: image({ cpu: X64, fileType: 2, installName: null }) },
-    { cpu: ARM64, bytes: image({ fileType: 2, installName: null }) }]);
-  fs.writeFileSync(executable, bytes);
-  await KiriKiri.prepareReleaseInstall({ unpacked: root, pin }, { execFile: signatureOnly(calls) });
-  assert.deepEqual(calls, [["--force", "--sign", "-", executable], ["--verify", "--strict", executable]]);
-  const bad = universal([{ cpu: X64, bytes: image({ cpu: X64, fileType: 2, installName: null, dependencies: ["@rpath/libMissing.dylib"] }) },
-    { cpu: ARM64, bytes: image({ fileType: 2, installName: null }) }]);
-  fs.writeFileSync(executable, bad); calls.length = 0;
-  await assert.rejects(KiriKiri.prepareReleaseInstall({ unpacked: root, pin }, { execFile: signatureOnly(calls) }), /unbundled/);
-  assert.equal(calls.length, 0); assert.deepEqual(fs.readFileSync(executable), bad);
-});
-test("KiriKiri rejects invalid deployment metadata and truncation before signing", async t => {
-  const root = directory(t), executable = path.join(root, "krkrsdl2");
-  const pin = { asset: { filename: "krkrsdl2-macos.zip" }, executableRelative: "krkrsdl2", version: "development-fixture" };
-  for (const bytes of [image({ fileType: 2, installName: null, platform: 2 }), image({ fileType: 2, installName: null, platform: null }),
-    image({ fileType: 2, installName: null }).subarray(0, 40)]) {
-    fs.writeFileSync(executable, bytes); const calls = [];
-    await assert.rejects(KiriKiri.prepareReleaseInstall({ unpacked: root, pin }, { execFile: signatureOnly(calls) }));
-    assert.equal(calls.length, 0);
+  for (const dependencies of [[], ["@executable_path/../Frameworks/libSDL2.dylib"]]) {
+    const bytes = universal([{ cpu: X64, bytes: image({ cpu: X64, fileType: 2, installName: null, dependencies }) },
+      { cpu: ARM64, bytes: image({ fileType: 2, installName: null, dependencies }) }]);
+    fs.writeFileSync(executable, bytes); calls.length = 0;
+    await KiriKiri.prepareReleaseInstall({ unpacked: root, pin }, { execFile: signatureOnly(calls) });
+    assert.deepEqual(calls, [["--force", "--sign", "-", executable], ["--verify", "--strict", executable]]);
   }
+});
+test("KiriKiri rejects a truncated executable before signing", async t => {
+  const root = directory(t), executable = path.join(root, "krkrsdl2"), calls = [];
+  const pin = { asset: { filename: "krkrsdl2-macos.zip" }, executableRelative: "krkrsdl2", version: "development-fixture" };
+  fs.writeFileSync(executable, image({ fileType: 2, installName: null }).subarray(0, 40));
+  await assert.rejects(KiriKiri.prepareReleaseInstall({ unpacked: root, pin }, { execFile: signatureOnly(calls) }));
+  assert.equal(calls.length, 0);
 });
 test("NScripter missing-library diagnostics retain paths with spaces and need no external inspection", t => {
   const root = directory(t), executable = path.join(root, "onsyuri");

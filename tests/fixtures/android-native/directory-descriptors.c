@@ -16,6 +16,8 @@ sigset_t klj_signal_mask_to_host(uint64_t mask){return (sigset_t)mask;}
 int klj_signal_to_guest(int signal){return signal;}
 int kl_errno_to_linux(int value){return value;}
 uid_t klj_process_uid_from_host(uid_t uid){return uid;}
+/* Directory descriptors never acquire an ashmem access lease. */
+void klj_ashmem_capability_release(int64_t handle){(void)handle;assert(!"Unexpected ashmem lease in directory descriptor fixture");}
 static off_t next(int fd,char name[256]){
     unsigned char bytes[280];ssize_t count=klj_descriptor_getdents64(fd,bytes,24);
     if(count<0&&errno==EINVAL)count=klj_descriptor_getdents64(fd,bytes,32);

@@ -138,6 +138,7 @@ async function runGameCli(argv = process.argv.slice(2)) {
         }
       });
       const settings = launcher.loadSettings();
+      options.game = require("../main/game-command").resolveGameCommandPath(launcher.userDataDir, options.game);
       const detectionReport = options.inspect ? await Modules.explainDetectionAsync(options.game) : null;
       if (detectionReport?.error) throw new Error(detectionReport.error.message);
       const entry = await launcher.resolveEntry(options.game, {

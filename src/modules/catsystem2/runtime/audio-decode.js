@@ -4,7 +4,7 @@ const { spawn, execFile } = require("node:child_process"), { promisify } = requi
 const B = require("../../shared/runtime/bundled-native"), Native = require("../../shared/runtime/local-native");
 const declarations = require("./distribution-supplementals.json"), run = promisify(execFile);
 const VERSION = "1.0.0-ml1", LIMITS = Object.freeze({ inputBytes: 64 * 1024 * 1024, pcmBytes: 256 * 1024 * 1024, seconds: 600, timeoutMs: 30000 });
-const signatures = new Map(); let hostVersion;
+const signatures = new Map();
 
 async function resolveHelper({ resourcesRoot, platform = process.platform, arch = process.arch, dependencies = {} } = {}) {
   if (platform !== "darwin" || !["arm64", "x64"].includes(arch)) throw new Error("Ogg/Vorbis decoding requires an Apple Silicon or Intel Mac.");
@@ -22,7 +22,7 @@ async function resolveHelper({ resourcesRoot, platform = process.platform, arch 
         record.dependencySources[1]?.sha256 !== "b33cc4934322bcbf6efcbacf49e3ca01aadbea4114ec9589d1b1e9d20f72954b" ||
         JSON.stringify(Native.readMachOArchitectures(executablePath).sort()) !== JSON.stringify(binary.architectures.slice().sort()))
       throw new Error("The included Ogg/Vorbis decoder's source, version or CPU identity changed.");
-    const current = dependencies.systemVersion ? await dependencies.systemVersion() : hostVersion ||= (await run("/usr/bin/sw_vers", ["-productVersion"], { timeout: 10000 })).stdout.trim();
+    const current = dependencies.systemVersion ? await dependencies.systemVersion() : B.systemVersionSync();
     if (!B.versionAtLeast(current, pin.minimumMacOS)) throw new Error(`Ogg/Vorbis decoding requires macOS ${pin.minimumMacOS}.`);
     const identity = B.fileIdentity(executablePath);
     if (signatures.get(executablePath) !== identity) {

@@ -2,7 +2,7 @@ const Core = require("./nwjs-runtime-manager");
 const fs = require("node:fs");
 const path = require("node:path");
 const Custom = require("../../runtime/custom-runtime");
-const { selectRuntimeVersion, managerDefaultVersion } = require("../../runtime/version-choices");
+const { selectRuntimeVersion, managerDefaultVersion, savedDefaultVersion } = require("../../runtime/version-choices");
 const AppBundle = require("../../runtime/app-bundle");
 const managedInstalled = Core.listInstalled;
 const Greenworks = require("./greenworks-runtime");
@@ -10,6 +10,8 @@ const GreenworksSdk = require("./greenworks-sdk");
 const { cleanupNwjsGameData } = require("./nwjs-cleanup");
 const { runDownloadTask } = require("../../runtime/download-manager");
 const { buildRuntimeDownloadMeta } = require("../../runtime/runtime-downloads");
+const Architecture = require("../../runtime/architecture");
+const Host = require("../../runtime/host-capabilities");
 
 let catalogPromise = null;
 let catalogPromiseMode = null;
@@ -28,7 +30,7 @@ let greenworksCatalog = {
   source: null,
   error: null
 };
-let greenworksCatalogReleases = [];
+let greenworksCatalogRows = [];
 const DEFAULT_VARIANT = "sdk";
 const VARIANTS = [];
 const GREENWORKS_SECTION_ID = "greenworks";
@@ -37,7 +39,8 @@ function normalizeSettings(input) {
   return {
     defaultVersion: typeof input?.defaultVersion === "string" && input.defaultVersion.trim() !== "auto" ? input.defaultVersion.trim() || null : null,
     defaultVariant: input?.defaultVariant ? Core.normalizeVariant(input.defaultVariant) : DEFAULT_VARIANT,
-    greenworksDefaultVersion: typeof input?.greenworksDefaultVersion === "string" && input.greenworksDefaultVersion.trim() !== "auto" ? input.greenworksDefaultVersion.trim() || null : null
+    greenworksDefaultVersion: typeof input?.greenworksDefaultVersion === "string" && input.greenworksDefaultVersion.trim() !== "auto" ? input.greenworksDefaultVersion.trim() || null : null,
+    ...(Architecture.targetArchitecture(input?.defaultArchitecture) ? {defaultArchitecture: Architecture.targetArchitecture(input.defaultArchitecture)} : {})
   };
 }
 
@@ -68,7 +71,8 @@ function newestInstalled(installed) {
   return list[0] || null;
 }
 
-function runtimeSelection({ runtimeData, managerSettings, userDataDir, sourceRoot, needsGreenworks, platform = process.platform, arch = process.arch } = {}) {
+function runtimeSelection({ runtimeData, managerSettings, userDataDir, sourceRoot, needsGreenworks, platform = process.platform, arch } = {}) {
+  arch = Architecture.chooseArchitecture({ request: { architecture: arch }, saved: runtimeData?.architecture || managerSettings?.defaultArchitecture });
   const manual = selectRuntimeVersion({ manual: runtimeData?.version }).version;
   needsGreenworks ??= sourceRoot ? require("./greenworks-preparation").findGreenworksTargets(sourceRoot).length > 0 : false;
   const compatibleVersions = needsGreenworks ? require("./greenworks-contracts.json").map(item => item.nwVersion) : null;
@@ -79,24 +83,32 @@ function runtimeSelection({ runtimeData, managerSettings, userDataDir, sourceRoo
     (!compatibleVersions || compatibleVersions.includes(value))).sort((a,b) => compareSemver(b,a));
   const ready = userDataDir ? Core.resolveBestInstalled({ userDataDir, variant: DEFAULT_VARIANT, platform, arch, versions: compatibleVersions }) : null;
   const fallback = managerDefaultVersion({ listed, installed: ready ? [ready.version] : [] });
-  const version = selectRuntimeVersion({ manual, recommended: needsGreenworks ? fallback : null,
-    defaultVersion: managerSettings?.customDefaults?.default || managerSettings?.defaultVersion, fallback }).version;
+  const { version, source } = selectRuntimeVersion({ manual, recommended: needsGreenworks ? fallback : null,
+    defaultVersion: managerSettings?.customDefaults?.default || savedDefaultVersion(managerSettings?.defaultVersion,
+      { listed: catalog.versions, installed: userDataDir ? Core.listInstalled(userDataDir).map(row => row.version) : [] }), fallback });
   const install = version && userDataDir ? Core.resolveBestInstalled({ userDataDir, version, variant: DEFAULT_VARIANT, platform, arch, versions: compatibleVersions }) : null;
-  return { version, variant: DEFAULT_VARIANT, install };
+  return { version, source, variant: DEFAULT_VARIANT, architecture: arch, install };
 }
 
 function resolveRuntimeConfig(options) {
-  const { version, variant } = runtimeSelection(options);
-  return { version, variant };
+  const { version, variant, architecture } = runtimeSelection(options);
+  const explicit = Architecture.targetArchitecture(options?.runtimeData?.architecture || options?.managerSettings?.defaultArchitecture);
+  return { version, variant, ...(explicit || architecture !== Architecture.defaultArchitecture() ? {architecture} : {}) };
 }
 
 async function resolveSelection(entry, settings, userDataDir) {
   const options = { userDataDir, managerSettings: settings?.runtimes?.nwjs, runtimeData: entry?.runtimeData?.[entry?.runtimeId || "nwjs"],
     sourceRoot: entry?.contentRootDir || entry?.gamePath };
   const selected = runtimeSelection(options);
-  return { ...selected, ready: Boolean(selected.install), requiresDownload:!selected.install,
-    discoveryRequired:!selected.version,
-    installOptions: { sectionId: "default", variant: selected.variant } };
+  const actualArchitecture = selected.install?.platformKey === "osx-x64" ? "x64" : selected.architecture;
+  const support = Host.architectureSupport(actualArchitecture);
+  const { source, ...rest } = selected;
+  return { ...rest, ready: Boolean(selected.install) && support.supported, requiresDownload:!selected.install,
+    ...(support.reason ? {reason: support.reason} : {}),
+    // A default that is not installed is chosen from a list read this session,
+    // so a saved default that upstream removed gives way on the first Play.
+    discoveryRequired: !selected.version || !selected.install && source === "default" && !catalog.fetchedAt,
+    installOptions: { sectionId: "default", variant: selected.variant, architecture: selected.architecture } };
 }
 
 async function refreshCatalog({ logger, force, sectionId, latestOnly } = {}) {
@@ -124,14 +136,17 @@ async function refreshNwjsCatalog({ logger, force, latestOnly } = {}) {
   catalogPromiseMode = mode;
   catalogPromise = (async () => {
     try {
-      const res = await Core.fetchAvailableVersions({ logger, latestOnly: latestOnly === true });
+      const res = await Core.fetchAvailableVersions({ logger, latestOnly: latestOnly === true, arch: Architecture.selectedArchitecture() });
       catalog = {
         status: "success",
         versions: res.versions || [],
         fetchedAt: Date.now(),
         source: res.source || null,
         mode,
+        rows: res.rows || [],
         availabilityByVersion: res.availabilityByVersion || {},
+        versionRequirements: res.versionRequirements || {},
+        architectureCatalogs: res.architectureCatalogs || {},
         installableVersions: res.installableVersions || res.versions || [],
         error: null
       };
@@ -165,7 +180,7 @@ async function refreshGreenworksCatalog({ logger, force } = {}) {
   greenworksCatalogPromise = (async () => {
     try {
       const res = await Greenworks.fetchAvailableVersions({ logger });
-      greenworksCatalogReleases = res.releases || [];
+      greenworksCatalogRows = res.rows || [];
       greenworksCatalog = {
         status: "success",
         versions: res.versions || [],
@@ -190,8 +205,10 @@ async function refreshGreenworksCatalog({ logger, force } = {}) {
 
 function getState({ settings, userDataDir }) {
   const cfg = normalizeSettings(settings);
-  const installed = Core.listInstalled(userDataDir);
-  const latestInstalled = newestInstalled(installed.filter(row => row.ready !== false && row.status !== "damaged"));
+  const installed = Core.listInstalled(userDataDir).map(row => Architecture.tagInstall(row,
+    row.platformKey === "osx-arm64" ? "arm64" : row.platformKey === "osx-x64" ? "x64" : row.platformKey === "osx-universal" ? "universal" : undefined));
+  const latestInstalled = newestInstalled(installed.filter(row => row.ready !== false && row.status !== "damaged" &&
+    (!row.architecture || row.architecture === Architecture.defaultArchitecture() || Architecture.defaultArchitecture() === "arm64" && row.architecture === "x64")));
   const latestAvailable = Array.isArray(catalog.versions) ? catalog.versions[0] : null;
   const base = {
     ...cfg,
@@ -200,6 +217,7 @@ function getState({ settings, userDataDir }) {
       listed: (catalog.installableVersions || catalog.versions).filter(version => catalog.availabilityByVersion?.[version]?.unavailable !== true), installed: latestInstalled ? [latestInstalled.version] : [] }) }).version,
     defaultSource: cfg.defaultVersion ? "saved" : "manager",
     installed,
+    launcherArchitecture: Architecture.defaultArchitecture(),
     installing: null,
     availabilityByVersion: catalog.availabilityByVersion || {},
     catalog: {
@@ -211,6 +229,7 @@ function getState({ settings, userDataDir }) {
       mode: catalog.mode || null,
       supportsLatestOnly: false,
       installableVersions: catalog.installableVersions || catalog.versions,
+      versionRequirements: catalog.versionRequirements || {},
       latestAvailableVersion: latestAvailable,
       latestInstalledVersion: latestInstalled?.version || null,
       updateAvailable:
@@ -219,6 +238,15 @@ function getState({ settings, userDataDir }) {
           : false
     }
   };
+  if (Object.keys(catalog.architectureCatalogs || {}).length) {
+    base.catalog.architecture = Architecture.defaultArchitecture();
+    base.catalog.architectureCatalogs = Object.fromEntries(Object.entries(catalog.architectureCatalogs).map(([architecture, selected]) =>
+      [architecture, {...base.catalog, ...selected, architecture,
+        // Each CPU's list declares the CPU of the builds published for it.
+        versionRequirements: {...base.catalog.versionRequirements, ...Object.fromEntries((selected.versions || []).map(version => [version,
+          {...base.catalog.versionRequirements?.[version], architecture}]))},
+        ...(architecture === Architecture.defaultArchitecture() ? {versions: catalog.versions, installableVersions: catalog.installableVersions || catalog.versions} : {})}]));
+  }
   const greenworksInstalled = Greenworks.listInstalled(userDataDir);
   const greenworksLatestInstalled = newestInstalled(greenworksInstalled);
   const greenworksLatestAvailable = Array.isArray(greenworksCatalog.versions)
@@ -278,6 +306,7 @@ async function installRuntime({
   userDataDir,
   version,
   variant,
+  architecture,
   logger,
   onProgress,
   sectionId,
@@ -290,13 +319,13 @@ async function installRuntime({
   if (!version || version === "auto") {
     // This install follows an explicit action or the shared Play consent.
     await refreshCatalog({ force: true, logger });
-    version = runtimeSelection({ userDataDir }).version;
+    version = runtimeSelection({ userDataDir, arch: architecture }).version;
     if (!version) throw new Error("No compatible NW.js version is available for install.");
   }
   const v = Core.normalizeVersion(version);
   const kind = Core.normalizeVariant(variant);
   const platform = process.platform;
-  const arch = process.arch;
+  const arch = Architecture.targetArchitecture(architecture) || Architecture.selectedArchitecture();
   const meta = buildRuntimeDownloadMeta({
     label: "NW.js",
     managerId: "nwjs",
@@ -314,10 +343,11 @@ async function installRuntime({
         variant: kind,
         platform,
         arch,
+        files: catalog.rows?.find(row => row.version === v)?.files,
         logger,
         onProgress: taskProgress,
         signal: callerSignal && taskSignal ? AbortSignal.any([callerSignal, taskSignal]) : callerSignal || taskSignal
-      }),
+      }).then(installed => ({...installed, architecture: installed.platformKey === "osx-x64" ? "x64" : arch})),
     { onProgress }
   );
 }
@@ -338,7 +368,7 @@ async function installGreenworks({ userDataDir, version, logger, onProgress, dow
         userDataDir,
         nwVersion: v,
         logger,
-        releases: greenworksCatalogReleases,
+        rows: greenworksCatalogRows,
         onProgress: taskProgress,
         signal: callerSignal && taskSignal ? AbortSignal.any([callerSignal, taskSignal]) : callerSignal || taskSignal
       }),
@@ -387,7 +417,8 @@ module.exports = {
   resolveRuntimeConfig,
   applySettingsUpdate: (action, payload, settings) => action === "setDefault"
     ? { ...normalizeSettings(settings), [payload?.sectionId === GREENWORKS_SECTION_ID ? "greenworksDefaultVersion" : "defaultVersion"]:
-      payload?.version && payload.version !== "auto" ? String(payload.version).trim() || null : null } : settings,
+      payload?.version && payload.version !== "auto" ? String(payload.version).trim() || null : null,
+      ...(payload?.sectionId !== GREENWORKS_SECTION_ID && Architecture.requestedArchitecture(payload) ? {defaultArchitecture: Architecture.requestedArchitecture(payload)} : {}) } : settings,
   refreshCatalog,
   getState,
   installRuntime,
@@ -399,6 +430,7 @@ module.exports = {
   cleanupGameData,
   updateSettingsAfterInstall,
   updateSettingsAfterUninstall,
+  upstream: [Core.source, Greenworks.source],
   core: Core
 };
 

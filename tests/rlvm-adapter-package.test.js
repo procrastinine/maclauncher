@@ -1,3 +1,4 @@
+const Harness=require('./helpers/future-upstream.cjs');
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');
 const {pathToFileURL}=require('node:url');
 const Adapter=require('../src/modules/siglus/runtime/rlvm-adapter-manager'),Manager=require('../src/modules/siglus/runtime/rlvm-manager');
@@ -10,10 +11,11 @@ test('the adapter alone installs after normal consent and retains verified offli
  const record=JSON.parse(fs.readFileSync(archive+'.json'));
  const {catalog}=await import(pathToFileURL(path.resolve(__dirname,'../../maclauncher-builds/tools/runtime-package.mjs')));
  const published=catalog([record],{project:'rlvm-adapter',repository:'procrastinine/maclauncher-builds'});
- let fetches=0,downloads=0,consents=0;
- const component=Adapter.createManager({systemVersionSync:()=> '26.0',fetchUrlBuffer:async url=>{
-  assert.equal(url,'https://raw.githubusercontent.com/procrastinine/maclauncher-builds/main/catalogs/rlvm-adapter.json');fetches++;return {status:200,body:Buffer.from(JSON.stringify(published))};
- },downloadToFile:async(url,target)=>{assert.equal(url,published.packages[0].asset.url);downloads++;fs.copyFileSync(archive,target);}});
+ let downloads=0,consents=0;
+ const catalogUrl='https://raw.githubusercontent.com/procrastinine/maclauncher-builds/main/catalogs/rlvm-adapter.json',before=Harness.network.requests.length;
+ const fetches=()=>Harness.network.requests.slice(before).filter(url=>url===catalogUrl).length;
+ Harness.network.routes={[catalogUrl]:published};t.after(()=>{Harness.network.routes=null;});
+ const component=Adapter.createManager({systemVersionSync:()=> '26.0',downloadToFile:async(url,target)=>{assert.equal(url,published.packages[0].asset.url);downloads++;fs.copyFileSync(archive,target);}});
  const engineRoot=path.join(root,'engine'),enginePath=path.join(engineRoot,'rlvm.app/Contents/MacOS/rlvm');fs.mkdirSync(path.dirname(enginePath),{recursive:true});fs.copyFileSync('/usr/bin/true',enginePath);
  const engine={executablePath:enginePath,installDir:engineRoot,version:'0.14'};
  const game=path.join(root,'game');fs.mkdirSync(game);const scene=Buffer.alloc(480);scene.writeUInt32LE(464);scene.writeUInt32LE(10002,4);scene.writeUInt32LE(464,8);scene.writeUInt32LE(464,0x20);scene.writeUInt32LE(16,0x24);scene.writeUInt32LE(16,0x28);
@@ -25,11 +27,11 @@ test('the adapter alone installs after normal consent and retains verified offli
  t.mock.method(Adapter,'getState',options=>component.getState(options));
  const action={entry,mod:Module,info:Module.manifest,registry:{listModules:()=>[Module],getModule:()=>Module,listSharedRuntimeManagers:()=>[]},runAction:()=>assert.fail('No setup action is needed')};
  assert.equal(await prepareForLaunch({...action,context:{...context,confirmRuntimeInstall:async()=>false},install:()=>assert.fail('Declined consent cannot install')}),false);
- assert.deepEqual([fetches,downloads],[0,0]);
+ assert.deepEqual([fetches(),downloads],[0,0]);
  const uses=[];
- assert.equal(await prepareForLaunch({...action,context:{...context,recordRuntimeUse:row=>uses.push(row),confirmRuntimeInstall:async plan=>{consents++;assert.equal(plan.managerId,'rlvm-adapter');assert.equal(plan.version,record.version);assert.deepEqual([fetches,downloads],[0,0]);return true;}},
+ assert.equal(await prepareForLaunch({...action,context:{...context,recordRuntimeUse:row=>uses.push(row),confirmRuntimeInstall:async plan=>{consents++;assert.equal(plan.managerId,'rlvm-adapter');assert.equal(plan.version,record.version);assert.deepEqual([fetches(),downloads],[0,0]);return true;}},
   install:async(manager,payload)=>{assert.equal(manager.id,'rlvm-adapter');await component.installRuntime({...payload,...context});}}),true);
- assert.deepEqual([fetches,downloads,consents],[1,1,1]);assert.equal(settings.runtimes['rlvm-adapter'].defaultVersion,record.version);
+ assert.deepEqual([fetches(),downloads,consents],[1,1,1]);assert.equal(settings.runtimes['rlvm-adapter'].defaultVersion,record.version);
  const selected=component.resolveSelection(entry,settings,context.userDataDir);assert.equal(selected.ready,true);assert.equal(selected.install.declaration.arch,'universal');assert.equal(selected.install.declaration.minimumMacOS,'13.0');
  assert.deepEqual(selected.install.declaration.files.map(row=>row.path).sort(),['files/LICENSE','files/adapter.json','files/rlvm-adapter.dylib','manifest.json']);
  const binary=Adapter.verifyInstall(selected.install),installed=Manager.resolveForLaunch(engine,entry,{...context,recordRuntimeUse:row=>uses.push(row)});

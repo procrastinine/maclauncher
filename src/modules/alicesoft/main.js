@@ -8,7 +8,6 @@ const { createBundledNativeRuntime, resolveInstalledAsset } = require("../shared
 const { getUiServices } = require("../shared/ui-services");
 const GameData = require("../shared/game-data");
 const { runtimeVersionChoices } = require("../shared/runtime/version-choices");
-const { createCatalogDiscovery } = require("./catalog");
 const LiveVariables = require("./live-variables");
 const Decompiler = require("./decompiler");
 const decompilerManagers = require("./decompiler-managers").managers;
@@ -21,8 +20,7 @@ const managers = Object.fromEntries([
 ].map(({ id, label, owner, repo }) => [id, createPinnedNativeManager({
   id, label, projectBuilds: { projectId: id, repository: "procrastinine/maclauncher-builds" },
   sourceUrl: `https://github.com/${owner}/${repo}/releases`,
-  legacyInstalledRuntime: createBundledNativeRuntime({ managerId: id }),
-  discoverCatalog: createCatalogDiscovery(repo), catalog: []
+  legacyInstalledRuntime: createBundledNativeRuntime({ managerId: id })
 })]));
 
 managers.system3.payloadPolicy = require("./system3-payload-policy.json");

@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./future-upstream.cjs");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
@@ -15,9 +17,24 @@ function modernFeed(version = "2027.2.0.4") {
   const attributes = file => `url="https://gms.yoyogames.com/${file}.zip" sparkle:version="${version}" length="3" sparkle:dsaSignature="${signature}"`;
   return Buffer.from(`<rss><channel><item><enclosure ${attributes("core")}><module name="mac" ${attributes("mac")}/><module name="macYYC" ${attributes("yyc")}/><module name="base-module-osx-arm64" ${attributes("arm")}/><module name="base-module-osx-x64" ${attributes("intel")}/></enclosure></item></channel></rss>`);
 }
+// Answers each YoYo Games feed with `respond(url)` ({ status, body }) while
+// `operation` runs.
+async function withFeeds(respond, operation) {
+  Harness.network.routes = Object.fromEntries(Catalog.FEEDS.map(feed => [feed.url, url => {
+    const { status = 200, body = Buffer.alloc(0) } = respond(url) || {};
+    return { status, headers: {}, body };
+  }]));
+  try { return await operation(); } finally { Harness.network.routes = null; }
+}
+const refresh = (options, respond) => withFeeds(respond, () => Catalog.refreshCatalog(options));
 async function discover(userDataDir, { modern = "2027.2.0.4", legacy = "1.4.9998", legacyBytes = 3 } = {}) {
-  return Catalog.refreshCatalog({ userDataDir, fetch: async url => ({ status: 200,
-    body: Catalog.FEEDS.find(feed => feed.url === url)?.family === "studio-1.4" ? legacyFeed(legacy, { bytes: legacyBytes }) : modernFeed(modern) }) });
+  return refresh({ userDataDir }, url => ({ status: 200,
+    body: Catalog.FEEDS.find(feed => feed.url === url)?.family === "studio-1.4" ? legacyFeed(legacy, { bytes: legacyBytes }) : modernFeed(modern) }));
+}
+// Serves file downloads from `files` ({ url: bytes }) while `operation` runs.
+async function withFiles(files, operation) {
+  Harness.network.routes = files;
+  try { return await operation(); } finally { Harness.network.routes = null; }
 }
 function runnerApp(destination) {
   const executable = path.join(destination, "Contents/MacOS/Mac_Runner");
@@ -37,4 +54,4 @@ function legacyReceipt(userDataDir, version) {
   fs.writeFileSync(path.join(directory, "runtime.json"), JSON.stringify(record));
   return record;
 }
-module.exports = { signature, legacyFilename, legacyFeed, modernFeed, discover, runnerApp, legacyReceipt, hash };
+module.exports = { signature, legacyFilename, legacyFeed, modernFeed, discover, refresh, withFeeds, withFiles, runnerApp, legacyReceipt, hash, Harness };

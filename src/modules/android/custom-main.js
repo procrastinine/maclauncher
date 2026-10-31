@@ -38,8 +38,9 @@ module.exports = {
   },
   prepareSaveLocation(entry, context) { return Storage.prepareStorage(entry, context.userDataDir); },
   ensureRuntime(entry, context) {
-    LaunchPolicy.execution(context);
-    const selection = manager.resolveSelection(entry, context?.settings, context?.userDataDir);
+    const selection = LaunchPolicy.execution(context) === "art"
+      ? ArtRuntime.manager.resolveCommonSelection(entry, context?.settings, context?.userDataDir)
+      : manager.resolveSelection(entry, context?.settings, context?.userDataDir);
     return selection.ready ? null : { managerId: manager.id, version: selection.version, ...(selection.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {} };
   },
   getRuntimeRequirements(entry, context) {
@@ -53,7 +54,9 @@ module.exports = {
     if (runtimeId !== "klepton") return null;
     const execution = LaunchPolicy.execution(context);
     entry.defaultSaveDir = Storage.storagePaths(context.userDataDir, entry.gameId).filesRoot;
-    const selection = manager.resolveSelection(entry, context.settings, context.userDataDir);
+    const selection = execution === "art"
+      ? ArtRuntime.manager.resolveCommonSelection(entry, context.settings, context.userDataDir)
+      : manager.resolveSelection(entry, context.settings, context.userDataDir);
     if (!selection.ready) throw new Error(selection.reason);
     if (context.useRuntime) await context.useRuntime({ managerId: manager.id, version: selection.version,
       sourcePath: selection.install.installDir });

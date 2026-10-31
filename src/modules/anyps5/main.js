@@ -8,6 +8,7 @@ const Vulkan=require("../shared/vulkan");
 const Tools=require("./tools");
 const Input=require("./input");
 const Bundled=require("../shared/runtime/bundled-native");
+const Architecture=require("../shared/runtime/architecture");
 const vulkanOptions=Object.freeze({architecture:"x64",preferredBackend:"kosmickrisp"});
 
 module.exports={id:manifest.id,manifest,detectGame,runtimeManagers:[manager],normalizeRuntimeId:value=>value==="inspection"?value:"anyps5",
@@ -29,7 +30,8 @@ module.exports={id:manifest.id,manifest,detectGame,runtimeManagers:[manager],nor
     const inputRouting=Input.routingEnvironment(context.runtimeSettings,selected.install);
     Bundled.verifyPayload(selected.install.root,selected.install.declaration);
     context.recordRuntimeUse?.({managerId:manager.id,version:selected.version,sectionId:"default",sourcePath:selected.install.installDir});
-    await context.ensureRosetta?.();
+    const needsRosetta=Architecture.requiresRosetta("x64");
+    if(needsRosetta) await context.ensureRosetta?.();
     const launch=await prepareGame(entry,context,selected.install);
     const input=Input.prepare(entry,context,selected.install);
     const vulkan=Vulkan.resolve(context,vulkanOptions);
@@ -38,7 +40,7 @@ module.exports={id:manifest.id,manifest,detectGame,runtimeManagers:[manager],nor
     delete environment.ANYPS5_MOUSE_ROUTING;
     Object.assign(environment,inputRouting);
     context.onEntryChange?.({defaultSaveDir:entry.defaultSaveDir,moduleData:entry.moduleData});
-    return spawnForegroundNativeGame({context,executablePath:launch.executable,args:context.gameArguments||[],needsRosetta:true,
+    return spawnForegroundNativeGame({context,executablePath:launch.executable,args:context.gameArguments||[],needsRosetta,
       options:{cwd:launch.directory,gameArguments:false,env:environment}});
   },
   cleanupGameData:(entry,context)=>{fs.rmSync(gameDirectory(entry,context),{recursive:true,force:true});return true;},

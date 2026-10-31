@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -43,6 +45,22 @@ test("normalizeSettings preserves explicit global version choices", () => {
   assert.equal(fallback.defaultVersion, null);
   assert.equal(fallback.defaultVariant, "sdk");
   assert.equal(fallback.greenworksDefaultVersion, null);
+});
+
+// The NW.js version index answers for every listed URL in these tests.
+async function listed(t, payload, options = {}) {
+  Harness.network.routes = { "https://nwjs.io/versions.json": payload };
+  t.after(() => { Harness.network.routes = null; });
+  return Manager.core.fetchAvailableVersions(options);
+}
+
+test("NW.js lists every published SDK release; the macOS floor comes from the downloaded app", async t => {
+  const result = await listed(t, [{ version: "v0.119.2", files: ["osx-arm64", "osx-x64"], flavors: ["sdk"] },
+    { version: "v0.80.0", files: ["osx-x64"], flavors: ["sdk"] }], { arch: "x64" });
+  assert.deepEqual(result.installableVersions, ["0.119.2", "0.80.0"]);
+  assert.deepEqual(result.versionRequirements, {});
+  assert.deepEqual(result.rows[0].files.map(file => [file.architecture, file.url]), [
+    ["arm64", "https://dl.nwjs.io/v0.119.2/nwjs-sdk-v0.119.2-osx-arm64.zip"], ["x64", "https://dl.nwjs.io/v0.119.2/nwjs-sdk-v0.119.2-osx-x64.zip"]]);
 });
 
 test("global version actions preserve the exact explicit choice", () => {
@@ -260,24 +278,21 @@ test("getState exposes sections and variants", () => {
   }
 });
 
-test("NW.js refresh enumerates stable history and reports host SDK availability", async () => {
+test("NW.js refresh enumerates stable history and reports host SDK availability", async t => {
   const payload = { versions: [
     { version: "v0.80.0", files: ["osx-x64"], flavors: ["sdk"] },
     { version: "v0.118.0-beta1", files: ["osx-arm64"], flavors: ["sdk"] },
     { version: "v0.117.0", files: ["osx-arm64", "osx-x64"], flavors: ["sdk"] },
     { version: "v0.12.3", files: ["osx-x64"], flavors: ["normal"] }
   ] };
-  const fetcher = async url => {
-    assert.equal(url, "https://nwjs.io/versions.json");
-    return { status: 200, headers: {}, body: Buffer.from(JSON.stringify(payload)) };
-  };
-  const all = await Manager.core.fetchAvailableVersions({ arch: "arm64", fetcher });
+  const all = await listed(t, payload, { arch: "arm64" });
   assert.deepEqual(all.versions, ["0.117.0", "0.80.0", "0.12.3"]);
   assert.deepEqual(all.installableVersions, ["0.117.0", "0.80.0"]);
   assert.equal(all.availabilityByVersion["0.117.0"].mode, "native");
   assert.equal(all.availabilityByVersion["0.80.0"].mode, "rosetta");
   assert.equal(all.availabilityByVersion["0.12.3"].mode, "unavailable");
-  const latest = await Manager.core.fetchAvailableVersions({ latestOnly: true, fetcher });
+  assert.match(all.versionRequirements["0.12.3"].installReason, /no SDK/);
+  const latest = await Manager.core.fetchAvailableVersions({ latestOnly: true });
   assert.deepEqual(latest.versions, ["0.117.0"]);
 });
 
@@ -304,6 +319,26 @@ test("NW.js full refresh cannot reuse a reduced cache or alter the selected runt
     assert.equal(state.catalog.mode, "all");
     assert.ok(state.sections.every(section => section.catalog.supportsLatestOnly === false));
     assert.deepEqual(settings, { defaultVersion: "0.80.0", defaultVariant: "sdk" });
+  } finally {
+    Manager.core.fetchAvailableVersions = original;
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("NW.js per-CPU download lists declare the CPU of their builds", async () => {
+  const original = Manager.core.fetchAvailableVersions;
+  const userDataDir = makeTempDir("maclauncher-nwjs-cpu-");
+  try {
+    Manager.core.fetchAvailableVersions = async () => ({ versions: ["0.117.0", "0.80.0"], installableVersions: ["0.117.0", "0.80.0"],
+      versionRequirements: {}, architectureCatalogs: { arm64: { versions: ["0.117.0"], versionRequirements: {} },
+        x64: { versions: ["0.117.0", "0.80.0"], versionRequirements: {} } } });
+    await Manager.refreshCatalog({ force: true, latestOnly: false });
+    const catalogs = Manager.getState({ settings: {}, userDataDir }).sections[0].catalog.architectureCatalogs;
+    assert.equal(catalogs.arm64.versionRequirements["0.117.0"].architecture, "arm64");
+    assert.equal(catalogs.x64.versionRequirements["0.117.0"].architecture, "x64");
+    assert.equal(catalogs.x64.versionRequirements["0.80.0"].architecture, "x64");
+    // The launcher CPU's list also holds the versions it installs through Rosetta, without claiming them.
+    if (process.arch === "arm64") assert.equal(catalogs.arm64.versionRequirements["0.80.0"]?.architecture, undefined);
   } finally {
     Manager.core.fetchAvailableVersions = original;
     fs.rmSync(userDataDir, { recursive: true, force: true });

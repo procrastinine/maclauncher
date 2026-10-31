@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { nativeMethodDiagnostics, spawnSync } = require('./helpers/android-java');
 
-const source = path.resolve(__dirname, '../src/modules/android/native');
+const source = path.resolve(__dirname, '../src/external/maclauncher-android/src/modules/android/native');
 const fixtures = path.join(__dirname, 'fixtures/android-framework-services');
 function javaHome() {
   if (process.env.JAVA_HOME && fs.existsSync(path.join(process.env.JAVA_HOME, 'bin/javac'))) return process.env.JAVA_HOME;
@@ -304,7 +304,7 @@ test('Committed native resize uses original component callbacks and Activity rel
   const changes=env.ANDROID_CONFIGURATION_SOURCE==='0'?[]:['HostApplication','HostActivity','FrameworkResources','HostSurface','HostSurfaceControl'].map(name=>path.join(source,'java/maclauncher/android/framework',name+'.java'));
   run(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',temporary,...changes,...['ConfigurationChangeProbe','HostWindowProcessProbe','HostWindowProbe','PackageManifest','SyntheticResources'].map(name=>path.join(fixtures,name+'.java')),...['LayoutInflationProbe','ResourceFixtureData'].map(name=>path.join(fixtures,'../android-native/'+name+'.java'))],env);
   if(changes.length){
-    const asm=JSON.parse(fs.readFileSync(path.join(source,'asm-binary.json'))).files.map(file=>path.join(source,'tools',file.path)).join(path.delimiter),bindingCp=[temporary,cp,asm].join(path.delimiter);
+    const asm=JSON.parse(fs.readFileSync(path.join(source,'asm-binary.json'))).files.map(file=>path.join(require('./helpers/android-java').toolInputsRoot,file.path)).join(path.delimiter),bindingCp=[temporary,cp,asm].join(path.delimiter);
     run(path.join(home,'bin/javac'),['--release','21','-cp',bindingCp,'-d',temporary,path.join(source,'framework/NativeBindings.java'),path.join(fixtures,'../android-framework-policy/FrameworkNativeOverlay.java')],env);
     run(path.join(home,'bin/java'),['-cp',bindingCp,'FrameworkNativeOverlay',path.resolve(runtime,'android-framework.jar'),temporary,'android/view/SurfaceControl'],env);
   }
@@ -320,7 +320,7 @@ test('Android transaction latch is independent of hidden output and native prese
   const identities=path.join(temporary,'ids');fs.mkdirSync(identities,{mode:0o700});env.KL_ANDROID_ID_DIRECTORY=fs.realpathSync(identities);
   const changes=['bridge/CanvasFrameSource','bridge/CanvasOverlay','framework/HostSurfaceControl'].map(name=>path.join(source,'java/maclauncher/android',name+'.java'));
   run(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',temporary,...changes,...['CanvasLatchProbe','HostWindowProbe','PackageManifest','SyntheticResources'].map(name=>path.join(fixtures,name+'.java')),...['LayoutInflationProbe','ResourceFixtureData'].map(name=>path.join(fixtures,'../android-native/'+name+'.java'))],env);
-  const asm=JSON.parse(fs.readFileSync(path.join(source,'asm-binary.json'))).files.map(file=>path.join(source,'tools',file.path)).join(path.delimiter),bindingCp=[temporary,cp,asm].join(path.delimiter);
+  const asm=JSON.parse(fs.readFileSync(path.join(source,'asm-binary.json'))).files.map(file=>path.join(require('./helpers/android-java').toolInputsRoot,file.path)).join(path.delimiter),bindingCp=[temporary,cp,asm].join(path.delimiter);
   run(path.join(home,'bin/javac'),['--release','21','-cp',bindingCp,'-d',temporary,path.join(source,'framework/NativeBindings.java'),path.join(fixtures,'../android-framework-policy/FrameworkNativeOverlay.java')],env);
   run(path.join(home,'bin/java'),['-cp',bindingCp,'FrameworkNativeOverlay',path.resolve(runtime,'android-framework.jar'),temporary,'android/view/SurfaceControl'],env);
   assert.match(await platformWindow({runtime,home,root:fs.realpathSync(temporary),classpath:temporary+path.delimiter+cp,args:['-Xverify:all','-Dandroid.fixture.input=maclauncher.android.CanvasLatchProbe'],env}),/PASS original transaction latch, coalesced identity, backend backpressure and independent physical display/);
@@ -334,7 +334,7 @@ test('Android graphics capability queries preserve actual EGL configuration beha
   const cp=['android-host.jar','android-framework.jar'].map(name=>path.resolve(runtime,name)).join(path.delimiter),env={...process.env,...identity.environment};
   const overlay=[];
   if(env.KL_MVK_DYLIB&&env.VULKAN_HEADERS&&env.KLEPTON_SOURCE){
-    const {prepareVulkanSource}=await import('../src/modules/android/native/vulkan-sources.mjs');
+    const {prepareVulkanSource}=await import('../src/external/maclauncher-android/src/modules/android/native/vulkan-sources.mjs');
     const prepared=prepareVulkanSource(env.KLEPTON_SOURCE,temporary),library=path.join(temporary,'capabilities.dylib');
     run('clang',['-arch','arm64','-mmacosx-version-min=13.0','-O1','-dynamiclib','-I'+source,'-I'+env.VULKAN_HEADERS,
       '-I'+path.join(home,'include'),'-I'+path.join(home,'include/darwin'),
@@ -455,8 +455,9 @@ test('AOSP StrictJarFile retains manifest verification and descriptor-backed ZIP
 
 test('AOSP portability normalization retains real behavior and untouched native methods', t => {
   const home=javaHome();if(!home)return t.skip('Java 21 development tools are not installed');
+  if(!require('./helpers/android-java').runtimeRoot())return t.skip('Requires an Android runtime via KLEPTON_NATIVE_RUNTIME or MACLAUNCHER_TEST_USER_DATA');
   const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-framework-portability-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
-  const asm=JSON.parse(fs.readFileSync(path.join(source,'asm-binary.json'),'utf8')).files.map(file=>path.join(source,'tools',file.path)).join(path.delimiter),env={...process.env};
+  const asm=JSON.parse(fs.readFileSync(path.join(source,'asm-binary.json'),'utf8')).files.map(file=>path.join(require('./helpers/android-java').toolInputsRoot,file.path)).join(path.delimiter),env={...process.env};
   for(const key of Object.keys(env))if(/^(DYLD_|KLEPTON_|KL_|RESHADE_)/.test(key)||['JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS','CLASSPATH'].includes(key))delete env[key];
   run(path.join(home,'bin/javac'),['--release','21','-cp',asm,'-d',temporary,...javaFiles(path.join(source,'framework')),...javaFiles(path.join(source,'portability')),
     ...['JvmCleaner','JvmPortability'].map(name=>path.join(source,'java/maclauncher/android/framework',name+'.java')),path.join(fixtures,'FrameworkPortabilityProbe.java')],env);
@@ -477,7 +478,7 @@ test('AOSP content resolver retains upstream observer and Binder behavior', asyn
 test('PCM source queues retain independent clocks and cancellation', t => {
   if(process.platform!=='darwin')return t.skip('Requires macOS native tools');
   const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-pcm-sources-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
-  const native=path.resolve('src/modules/android/native'),probe=path.join(temporary,'probe');
+  const native=path.resolve('src/external/maclauncher-android/src/modules/android/native'),probe=path.join(temporary,'probe');
   run('clang',['-std=c11','-O1','-I'+native,path.join(native,'audio-pcm.c'),path.resolve('tests/fixtures/android-audio/PCMSourceProbe.c'),'-o',probe]);
   assert.match(run(probe,[]),/PASS independent PCM queues/);
 });

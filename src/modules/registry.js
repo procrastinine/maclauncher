@@ -5,7 +5,9 @@ const { applyGameName } = require("../core/game-name");
 const { UNKNOWN_MODULE } = require("./shared/unknown-module");
 const Detection = require("./detection");
 const RuntimeProviders = require("./shared/runtime/providers");
+const { withReleaseRoot } = require("./shared/web/release-root");
 const { withNetworkSettings } = require("./shared/runtime/network-isolation");
+const { withHostSettings } = require("./shared/runtime/host-settings");
 
 const MODULES_DIR = path.resolve(__dirname);
 // "shared" is a special namespace for cross-module code (not a module itself).
@@ -115,19 +117,13 @@ const SHARED_RUNTIME_MANAGERS = loadSharedRuntimeManagers(SHARED_SUBMODULES);
 
 const moduleIndex = new Map();
 const moduleList = [];
-const sharedIndex = new Map();
 
 for (const original of MODULES) {
   const composed = RuntimeProviders.composeRuntimeProviders(original, RUNTIME_PROVIDERS);
-  const mod = composed && { ...composed, manifest: withNetworkSettings(composed.manifest) };
+  const mod = composed && { ...composed, manifest: withHostSettings(withNetworkSettings(composed.manifest)) };
   if (!mod || !mod.id) continue;
   moduleIndex.set(mod.id, mod);
   moduleList.push(mod);
-}
-
-for (const sub of SHARED_SUBMODULES) {
-  if (!sub?.id) continue;
-  sharedIndex.set(sub.id, sub);
 }
 
 function findIndexHtml(rootDir) {
@@ -139,15 +135,21 @@ function findIndexHtml(rootDir) {
   }
 }
 
+const providerContext = inputPath => ({ inputPath: typeof inputPath === "string" && inputPath ? path.resolve(inputPath) : null });
+// Every detected game gets its release folder, when the layout proves one,
+// before providers record their evidence.
+const finishDetected = (detected, inputPath) => RuntimeProviders.decorateRuntimeEntry(withReleaseRoot(applyGameName(detected)),
+  RUNTIME_PROVIDERS, providerContext(inputPath));
+
 function explainDetection(inputPath, options = {}) {
   const report = Detection.explainDetection(inputPath, MODULES, options);
-  if (report.detected) report.detected = RuntimeProviders.decorateRuntimeEntry(applyGameName(report.detected), RUNTIME_PROVIDERS);
+  if (report.detected) report.detected = finishDetected(report.detected, inputPath);
   return report;
 }
 
 async function explainDetectionAsync(inputPath, options = {}) {
   const report = await Detection.explainDetectionAsync(inputPath, MODULES, options);
-  if (report.detected) report.detected = RuntimeProviders.decorateRuntimeEntry(applyGameName(report.detected), RUNTIME_PROVIDERS);
+  if (report.detected) report.detected = finishDetected(report.detected, inputPath);
   return report;
 }
 
@@ -169,10 +171,6 @@ function listModules() {
 
 function listSharedSubmodules() {
   return SHARED_SUBMODULES.map(sub => ({ id: sub.id, dir: sub.dir }));
-}
-
-function getSharedSubmodule(id) {
-  return sharedIndex.get(id) || null;
 }
 
 function listSharedRuntimeManagers() {
@@ -255,7 +253,6 @@ module.exports = {
   getModuleDir,
   getModuleInfo,
   getRuntimeManagerUi,
-  getSharedSubmodule,
   listModuleIds,
   listModules,
   listSharedSubmodules,

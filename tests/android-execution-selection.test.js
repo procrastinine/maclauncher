@@ -88,6 +88,21 @@ test('Only ART adds its exact managed supplier to ordinary consent and installat
   assert.deepEqual(Module.getRuntimeRequirements(entry, {...context, runtimeId:'macapk'}), [], 'Optional providers keep their own runtime selection');
 });
 
+test('a unified Android package is consented and installed once for ART', async t => {
+  const {launcher, entry} = fixture(t), Module = require('../src/modules/android/main'),
+    Common = require('../src/modules/android/runtime-manager'), Art = require('../src/modules/android/art/runtime-manager');
+  const {prepareForLaunch} = require('../src/core/runtime-preparation');
+  t.mock.method(Art.manager, 'resolveSelection', () => ({ready:false, managerId:'android', version:'unified', install:null}));
+  const events = [], context = launcher.getLaunchContext(entry, {});
+  context.runtimeSettings.execution = 'art';
+  context.confirmRuntimeInstall = async plan => {events.push(['consent', plan.managerId, plan.version]);return true;};
+  const registry = {listModuleIds:() => ['android'], getModule:() => Module};
+  assert.equal(await prepareForLaunch({entry, mod:Module, info:manifest, context, registry,
+    runAction:() => assert.fail('Package preparation does not launch an app'),
+    install:async (manager, plan) => {assert.equal(manager, Common);events.push(['install', manager.id, plan.version]);}}), true);
+  assert.deepEqual(events, [['consent', 'android', 'unified'], ['install', 'android', 'unified']]);
+});
+
 function descriptor(root) {
   const definition = require('../src/modules/android/art/supplier.json');
   const components = Object.fromEntries(Object.keys(require('../src/modules/android/art/components.json')).map(name => [name, path.join(root, name)]));
@@ -108,6 +123,7 @@ test('ART launch retains the selected common platform and attaches only its veri
   t.mock.method(Common, 'resolveSelection', () => ({ready:true, version:declaration.version, install:{root:common.root, installDir:common.root, declaration}}));
   t.mock.method(Runtime, 'resolveForLaunch', async (options, selected) => {assert.equal(options.root, common.root);assert.equal(selected, declaration);return common;});
   let supplierResolutions = 0;
+  t.mock.method(Art.manager, 'resolveSelection', () => ({ready:true, managerId:'android-art', version:'art-explicit'}));
   t.mock.method(Art, 'resolveForLaunch', async () => {supplierResolutions++;return supplier;});
   const context = launcher.getLaunchContext({...entry, runtimeSettings:{klepton:{execution:'art'}}}, {}), leases = [];
   context.useRuntime = async lease => leases.push(lease);

@@ -1,0 +1,36 @@
+#!/usr/bin/env node
+// Explicit installation prepares the same pinned inputs used by app builds.
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+
+const ROOT = path.resolve(__dirname, '..');
+
+async function prepareDevelopmentInputs({ repoRoot = ROOT, arch = process.arch, platform = process.platform,
+  installElectron = () => execFileSync(process.execPath, [path.join(repoRoot, 'node_modules/electron/install.js')],
+    { cwd: repoRoot, stdio: 'inherit' }),
+  readLock = require('./runtime-packages.cjs').readLock,
+  preparePython = require('./ci-macos.cjs').preparePython,
+  prepareSevenZip = require('./published-inputs.cjs').prepareSevenZip,
+  prepareDeclaredPublishers = require('./published-inputs.cjs').prepareDeclaredPublishers,
+  fetchPackages = require('./runtime-packages.cjs').fetchPackages } = {}) {
+  await installElectron();
+  if (platform !== 'darwin') return { electron: true, nativePackages: 0, platform };
+  const lock = readLock({ repoRoot, arch });
+  const python = await preparePython({ repoRoot, arch });
+  const sevenZip = await prepareSevenZip({ repoRoot });
+  const publishers = await prepareDeclaredPublishers({ repoRoot });
+  const result = await fetchPackages({ repoRoot, lock });
+  return { electron: true, arch, nativePackages: result.packages, ...python, sevenZip, publishers };
+}
+
+async function main(args = process.argv.slice(2)) {
+  if (args.length && (args.length !== 2 || args[0] !== '--arch' || !['arm64', 'x64'].includes(args[1])))
+    throw new Error('Usage: node scripts/setup-development.cjs [--arch arm64|x64]');
+  return prepareDevelopmentInputs({ arch: args[1] || process.arch });
+}
+
+module.exports = { prepareDevelopmentInputs, main };
+if (require.main === module) main().then(result => console.log(JSON.stringify(result))).catch(error => {
+  console.error(error.message);
+  process.exitCode = 1;
+});

@@ -8,17 +8,19 @@ import { presentModuleFields } from "./module-tools-model";
 import { MenuButton } from "./Popover";
 import { ErrorText } from "./ErrorText";
 
-export function ModuleTools({ game, groups, actions, results, busy, cancelling = {}, error = null, onAction, onCancel, onRevealPath }: {
+export function ModuleTools({ game, groups, actions, results, busy, cancelling = {}, error = null, onAction, onCancel, onRevealPath, unavailable }: {
   game: RecentGame; groups: ModuleUiGroup[]; actions: ModuleUiAction[];
   results: Record<string, any>; busy: Record<string, boolean>; onAction: LibraryActions["onModuleAction"];
   /** The last failed action; it is shown in the group that ran it. */
   error?: ModuleActionError | null;
   cancelling?: Record<string, boolean>; onCancel?: LibraryActions["onCancelModuleAction"];
   onRevealPath?: LibraryActions["onRevealToolPath"];
+  /** Why the game's files cannot be read; tools that read them are disabled. Earlier results stay. */
+  unavailable?: string;
 }) {
   const byId = new Map(actions.map(action => [action.id, action]));
-  return <>{groups.map(group => {
-    if (matchesAnyCondition(game, group.hiddenWhen)) return null;
+  const shown = groups.flatMap(group => {
+    if (matchesAnyCondition(game, group.hiddenWhen)) return [];
     const visibleActions = group.actions.map(id => byId.get(id))
       .filter((action): action is ModuleUiAction => Boolean(action) && action!.inspector !== false && !matchesAnyCondition(game, action!.hiddenWhen));
     const info = presentModuleFields(game, (group.infoFields || []).filter(field => !matchesAnyCondition(game, field.hiddenWhen)));
@@ -29,7 +31,12 @@ export function ModuleTools({ game, groups, actions, results, busy, cancelling =
       return fields.length ? [{ action, fields }] : [];
     });
     const failure = error && group.actions.includes(error.actionId) ? <ErrorText error={error.message} inline /> : null;
-    if (!visibleActions.length && !info.length && !resultGroups.length && !failure) return null;
+    return !visibleActions.length && !info.length && !resultGroups.length && !failure ? [] : [{ group, visibleActions, info, resultGroups, failure }];
+  });
+  return <>{shown.map(({ group: declared, visibleActions, info, resultGroups, failure }) => {
+    // Tools outside the declared groups collapse under "More tools" beside
+    // other groups; shown alone, they need no extra disclosure.
+    const group = declared.generated && shown.length === 1 ? { ...declared, label: "Game tools", collapsed: false } : declared;
     const labelOverride = group.labelKey ? getByPath(game, group.labelKey) : null;
     const label = typeof labelOverride === "string" && labelOverride.trim() ? labelOverride.trim() : group.label;
     const help = group.note ? <HelpTip label={`About ${label}`}>{group.note}</HelpTip> : null;
@@ -42,9 +49,9 @@ export function ModuleTools({ game, groups, actions, results, busy, cancelling =
       // A tool's main action leads its group; the primary button style is kept for Play.
       return <button key={action.id} type="button" className={["btn", "small",
             action.kind === "danger" ? "danger" : "", iconOnly ? "iconOnly" : ""].filter(Boolean).join(" ")}
-            disabled={Boolean(busy[action.id]) || matchesAnyCondition(game, action.disabledWhen)}
+            disabled={Boolean(busy[action.id]) || Boolean(unavailable) || matchesAnyCondition(game, action.disabledWhen)}
             aria-busy={Boolean(busy[action.id]) || undefined}
-            title={action.label} aria-label={action.label} onClick={() => void onAction(game.gamePath, action.id, action)}>
+            title={unavailable || action.label} aria-label={action.label} onClick={() => void onAction(game.gamePath, action.id, action)}>
             {action.icon ? <><ActionIcon icon={action.icon} />{!iconOnly && <span>{action.label}</span>}</> : action.label}
           </button>;
     };

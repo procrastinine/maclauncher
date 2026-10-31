@@ -10,8 +10,8 @@ function createManager(dependencies = {}) {
     manifestRelative: "runtime.json", sourceRelative: "source.json", executableRelative: "bin/prosper-app", supportsDefault: true,
     validateManifest(manifest, record) {
       if (manifest.managerId !== "prosper" || manifest.arch !== record.arch || manifest.gameArchitecture !== "x86_64" ||
-          !/^[a-f0-9]{40}$/.test(manifest.upstreamRevision || "") || manifest.redistribution !== "local-only")
-        throw new Error("The Prosper runtime has an unsupported layout or distribution identity.");
+          !/^[a-f0-9]{40}$/.test(manifest.upstreamRevision || ""))
+        throw new Error("The Prosper runtime has an unsupported layout or source revision.");
     },
     verifyPayload: async selected => Bundled.verifyPayload(selected.root, selected.declaration), dependencies });
   const inspectPackage = manager.customRuntime.inspect;

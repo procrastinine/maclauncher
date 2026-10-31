@@ -27,14 +27,28 @@ test("pickBestExeCandidate returns the only candidate", () => {
   assert.equal(pick, "Solo.exe");
 });
 
+test("icon choices share executable roles, skip support programs and retain secondary fallbacks", () => {
+  for (const support of ["Setup.exe", "unins000.exe", "CrashReporter.exe", "pythonw.exe", "QtWebEngineProcess.exe", "ffmpeg.exe", "Game-Updater.exe"]) {
+    assert.equal(IconUtils.pickBestExeCandidate([support], "Title", "Title"), null, support);
+    assert.equal(IconUtils.pickBestExeCandidate([support, "Title.exe"], "Title", "Title"), "Title.exe", support);
+  }
+  assert.equal(IconUtils.pickBestExeCandidate(["TitleLauncher.exe", "Game.exe"], "Title Launcher", "TitleLauncher"), "Game.exe");
+  assert.equal(IconUtils.pickBestExeCandidate(["TitleLauncher.exe"], "Title", "Title"), "TitleLauncher.exe");
+  assert.equal(IconUtils.pickBestExeCandidate(["observer.exe", "Server.exe"], "Observer", "Observer"), "observer.exe");
+  assert.equal(IconUtils.pickBestExeCandidate(["Game.exe", "Crashlands.exe"], "Crashlands", "Crashlands"), "Crashlands.exe");
+});
+
 test("findBestExePath selects the best exe in a directory", () => {
   const root = makeTempDir("maclauncher-icon-");
   try {
     touch(path.join(root, "Uninstall.exe"));
+    touch(path.join(root, "CrashReporter.exe"));
+    touch(path.join(root, "pythonw.exe"));
     touch(path.join(root, "CoolGame.exe"));
     touch(path.join(root, "CoolGameLauncher.exe"));
     const pick = IconUtils.findBestExePath(root, "Cool Game");
     assert.equal(pick, path.join(root, "CoolGame.exe"));
+    assert.deepEqual(IconUtils.listExeCandidates(root).sort(), ["CoolGame.exe", "CoolGameLauncher.exe"]);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

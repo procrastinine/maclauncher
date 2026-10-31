@@ -1,36 +1,96 @@
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os"), crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
-const { pipeline } = require("node:stream/promises");
-const { Transform } = require("node:stream");
-const HTTP = require("undici");
-const { fetchUrlBuffer } = require("../modules/shared/runtime/download-utils");
+const Upstream = require("../modules/shared/runtime/upstream");
 const Python = require("../modules/shared/runtime/python");
-const TOOLS = require("./external-store-tools.json");
 const { reuseCompletedDownload } = require("./external-download-reuse");
 const { readJsonDocument } = require("./json-files");
+// Runs Legendary with a check of the manifest it selects. The check wraps
+// Legendary's manifest lookups when the release has them; a release without
+// them still runs, and a request for an exact build then ends with code 87.
+const LEGENDARY_HOOKS = "('get_cdn_manifest','get_uri_manifest','load_manifest')";
 const LEGENDARY_ENTRY = `import json,runpy,sys
 request=json.load(sys.stdin)
-if request.get('expectedVersion') or request.get('expectedManifestBuildId') or request.get('recordPath'):
+exact=request.get('expectedVersion') or request.get('expectedManifestBuildId')
+if exact or request.get('recordPath'):
     from legendary.core import LegendaryCore
-    original=LegendaryCore.get_cdn_manifest
-    original_uri=LegendaryCore.get_uri_manifest
-    def inspect(self,result):
-        meta=self.load_manifest(result[0]).meta
-        if request.get('expectedVersion') and meta.build_version != request['expectedVersion']:
-            raise SystemExit(86)
-        if request.get('expectedManifestBuildId') and meta.build_id != request['expectedManifestBuildId']:
-            raise SystemExit(86)
-        if request.get('recordPath'):
-            with open(request['recordPath'],'w') as output:
-                json.dump({'version':meta.build_version,'buildId':meta.build_id},output)
-        return result
-    def selected_manifest(self,*args,**kwargs):
-        return inspect(self,original(self,*args,**kwargs))
-    def selected_uri(self,*args,**kwargs):
-        return inspect(self,original_uri(self,*args,**kwargs))
-    LegendaryCore.get_cdn_manifest=selected_manifest
-    LegendaryCore.get_uri_manifest=selected_uri
+    if all(callable(getattr(LegendaryCore,name,None)) for name in ${LEGENDARY_HOOKS}):
+        original=LegendaryCore.get_cdn_manifest
+        original_uri=LegendaryCore.get_uri_manifest
+        def inspect(self,result):
+            try:
+                meta=self.load_manifest(result[0]).meta
+                version,build=meta.build_version,meta.build_id
+            except Exception:
+                if exact: raise SystemExit(87)
+                return result
+            if request.get('expectedVersion') and version != request['expectedVersion']:
+                raise SystemExit(86)
+            if request.get('expectedManifestBuildId') and build != request['expectedManifestBuildId']:
+                raise SystemExit(86)
+            if request.get('recordPath'):
+                with open(request['recordPath'],'w') as output:
+                    json.dump({'version':version,'buildId':build},output)
+            return result
+        def selected_manifest(self,*args,**kwargs):
+            return inspect(self,original(self,*args,**kwargs))
+        def selected_uri(self,*args,**kwargs):
+            return inspect(self,original_uri(self,*args,**kwargs))
+        LegendaryCore.get_cdn_manifest=selected_manifest
+        LegendaryCore.get_uri_manifest=selected_uri
+    elif exact:
+        raise SystemExit(87)
 sys.argv=['legendary']+request['args']
+runpy.run_module('legendary.cli',run_name='__main__')`;
+// Wheel handling with the included Python's packaging library: choosing the
+// newest release that satisfies a requirement and has a wheel this Python
+// accepts, reading a wheel's own requirements, and extracting it safely.
+const WHEELS = `import email.parser,json,pathlib,sys,zipfile
+from packaging.requirements import Requirement
+from packaging.specifiers import SpecifierSet
+from packaging.tags import sys_tags
+from packaging.utils import canonicalize_name,parse_wheel_filename
+from packaging.version import Version
+request=json.load(sys.stdin)
+if request['mode']=='select':
+    tags={str(tag):rank for rank,tag in enumerate(sys_tags())}
+    wanted=SpecifierSet(request.get('specifier') or '')
+    python=Version('.'.join(map(str,sys.version_info[:3])))
+    best=None
+    for release in request['releases']:
+        try: version=Version(release['version'])
+        except Exception: continue
+        if version.is_prerelease or version not in wanted: continue
+        for item in release['files']:
+            try:
+                ranks=[tags[str(tag)] for tag in parse_wheel_filename(item['name'])[3] if str(tag) in tags]
+                if not ranks or item.get('requiresPython') and python not in SpecifierSet(item['requiresPython']): continue
+            except Exception: continue
+            key=(version,-min(ranks))
+            if best is None or key>best[0]: best=(key,{'version':release['version'],'name':item['name']})
+    print(json.dumps(best and best[1]))
+elif request['mode']=='requires':
+    archive=zipfile.ZipFile(request['wheel'])
+    name=next(item for item in archive.namelist() if item.count('/')==1 and item.endswith('.dist-info/METADATA'))
+    metadata=email.parser.Parser().parsestr(archive.read(name).decode('utf-8'))
+    found=[]
+    for line in metadata.get_all('Requires-Dist') or []:
+        requirement=Requirement(line)
+        if requirement.marker is None or requirement.marker.evaluate({'extra':''}):
+            found.append({'name':canonicalize_name(requirement.name),'specifier':str(requirement.specifier)})
+    print(json.dumps(found))
+else:
+    root=pathlib.Path(request['root']).resolve()
+    archive=zipfile.ZipFile(request['wheel'])
+    assert all(not pathlib.PurePosixPath(item.filename).is_absolute() and '..' not in pathlib.PurePosixPath(item.filename).parts and (item.external_attr >> 16) & 0o170000 != 0o120000 for item in archive.infolist())
+    archive.extractall(root)
+    print('null')`;
+// Checks an installed Legendary: it imports with its dependencies, reports its
+// version, and has the manifest lookups the entry above checks.
+const LEGENDARY_CHECK = `import json,runpy,sys
+from legendary.core import LegendaryCore
+print(json.dumps(all(callable(getattr(LegendaryCore,name,None)) for name in ${LEGENDARY_HOOKS})))
+sys.stdout.flush()
+sys.argv=['legendary','--version']
 runpy.run_module('legendary.cli',run_name='__main__')`;
 const clone = value => JSON.parse(JSON.stringify(value));
 const publicError = message => Object.assign(new Error(message), { externalPublic: true });
@@ -84,38 +144,129 @@ function launch(command, args, { input, env, cwd, signal, onLine, captureOutput 
       if (failure) reject(failure);
       else if (cancelled) reject(signal?.reason || new Error("Cancelled"));
       else if (code === 86) reject(publicError("The selected Epic build is no longer current. Refresh versions or supply its earlier manifest URL."));
+      else if (code === 87) reject(publicError("This Legendary release cannot confirm the selected Epic build. Choose the current build to download it."));
       else if (code !== 0) reject(publicError("The store download helper could not complete this action. Check account access and the selected game version."));
       else resolve({ stdout: output });
     });
     child.stdin.on("error", () => {}); child.stdin.end(input || "");
   });
 }
-const provisionTasks = new Map();
-async function ensureLegendary({ userDataDir, signal, onProgress, fetchBytes = fetchUrlBuffer, execute = launch, pythonPath } = {}) {
+// Legendary and its dependencies come from PyPI: Legendary's newest release,
+// then for each requirement its wheel names, the newest release that
+// satisfies it with a wheel the included Python accepts. PyPI's SHA-256
+// verifies each wheel, and the installation records every package. Installed
+// copies keep working offline. A newest release that cannot confirm exact
+// Epic builds yields to the newest installed Legendary that can.
+const LEGENDARY = Upstream.pypi({ project: "legendary-gl", recognize: pypiWheels });
+function pypiWheels({ version, files }) {
+  const wheels = files.filter(item => /\.whl$/i.test(item.name || ""));
+  return wheels.length ? { version, files: wheels, details: { requiresPython: Object.fromEntries(wheels.map(item => [item.name, item.details?.requires_python || ""])) } } : [];
+}
+const RECEIPT = ".maclauncher-tools.json";
+const legendaryVersion = receipt => receipt?.legendaryVersion || receipt?.packages?.find(item => item?.name === "legendary-gl")?.version || null;
+const newerVersion = (a, b) => String(b).localeCompare(String(a), undefined, { numeric: true });
+// Installed Legendary copies, newest first. A receipt without `confirmsBuilds`
+// belongs to a release that has the manifest lookups.
+function installedLegendary(parent) {
+  let names = [];
+  try { names = fs.readdirSync(parent).filter(name => name.startsWith("legendary-")); } catch {}
+  return names.map(name => {
+    const packagesPath = path.join(parent, name), receipt = readJson(path.join(packagesPath, RECEIPT));
+    return { packagesPath, version: legendaryVersion(receipt), confirmsBuilds: receipt?.confirmsBuilds !== false };
+  }).filter(item => item.version && fs.existsSync(path.join(item.packagesPath, "legendary", "cli.py"))).sort((a, b) => newerVersion(a.version, b.version));
+}
+const prepared = new Map(), provisionTasks = new Map();
+async function ensureLegendary({ userDataDir, signal, onProgress, execute = launch, pythonPath, logger } = {}) {
   const embedded = pythonPath || Python.resolveEmbeddedPythonBinary(Python.resolveEmbeddedPythonRoot());
   if (!embedded || !path.isAbsolute(embedded)) throw publicError("The included game download helper is unavailable. Reinstall MacLauncher.");
-  const identity = crypto.createHash("sha256").update(JSON.stringify(TOOLS)).digest("hex"), parent = path.join(userDataDir, "external", "tools"), target = path.join(parent, `legendary-${TOOLS.legendaryVersion}-${identity.slice(0, 12)}`);
-  if (readJson(path.join(target, ".maclauncher-tools.json"))?.identity === identity && fs.existsSync(path.join(target, "legendary/cli.py"))) return { pythonPath: embedded, packagesPath: target };
-  if (provisionTasks.has(target)) return provisionTasks.get(target);
+  const parent = path.join(userDataDir, "external", "tools");
+  // PyPI is asked once per session; later store actions reuse the answer.
+  if (prepared.has(parent)) return { pythonPath: embedded, packagesPath: prepared.get(parent) };
+  if (provisionTasks.has(parent)) return provisionTasks.get(parent);
   const task = (async () => {
-    fs.mkdirSync(parent, { recursive: true, mode: 0o700 }); const stage = fs.mkdtempSync(path.join(parent, ".legendary-setup-"));
+    const installed = installedLegendary(parent), usable = installed.find(item => item.confirmsBuilds) || installed[0];
+    const settle = packagesPath => { prepared.set(parent, packagesPath); return { pythonPath: embedded, packagesPath }; };
+    let row;
     try {
-      const packageRoot = path.join(stage, "packages"); fs.mkdirSync(packageRoot);
-      for (const pin of TOOLS.packages) {
-        signal?.throwIfAborted(); onProgress?.(`Preparing Epic download support (${pin.name})`);
-        const { body } = await fetchBytes(pin.url, { signal, maxBytes: Math.max(pin.bytes + 1024, 4 * 1024 * 1024) });
-        if (body.length !== pin.bytes || crypto.createHash("sha256").update(body).digest("hex") !== pin.sha256) throw publicError("The Epic download helper failed its integrity check.");
-        const archive = path.join(stage, pin.filename); fs.writeFileSync(archive, body, { mode: 0o600, flag: "wx" });
-        await execute(embedded, ["-c", "import pathlib,sys,zipfile; r=pathlib.Path(sys.argv[2]).resolve(); z=zipfile.ZipFile(sys.argv[1]); assert all(not pathlib.PurePosixPath(i.filename).is_absolute() and '..' not in pathlib.PurePosixPath(i.filename).parts and (i.external_attr >> 16) & 0o170000 != 0o120000 for i in z.infolist()); z.extractall(r)", archive, packageRoot], { signal, env: { ...process.env, PYTHONNOUSERSITE: "1", PYTHONDONTWRITEBYTECODE: "1" } });
-        fs.rmSync(archive);
-      }
-      await execute(embedded, ["-m", "legendary.cli", "--version"], { signal, env: { ...process.env, PYTHONPATH: packageRoot, PYTHONNOUSERSITE: "1", PYTHONDONTWRITEBYTECODE: "1" } });
-      writeJson(path.join(packageRoot, ".maclauncher-tools.json"), { identity, packages: TOOLS.packages.map(({ name, version, sha256 }) => ({ name, version, sha256 })) });
-      if (fs.existsSync(target)) fs.rmSync(target, { recursive: true }); fs.renameSync(packageRoot, target);
-      return { pythonPath: embedded, packagesPath: target };
-    } finally { await fs.promises.rm(stage, { recursive: true, force: true }); }
+      onProgress?.("Checking Epic download support");
+      row = await newestRelease(LEGENDARY, "", { signal, python: wheelTool(embedded, execute, signal) });
+    } catch (error) {
+      signal?.throwIfAborted();
+      if (usable) return settle(usable.packagesPath);
+      throw publicError(`The Epic download helper is unavailable: ${error.externalPublic ? error.message : "PyPI could not be reached."}`);
+    }
+    if (!row) {
+      if (usable) return settle(usable.packagesPath);
+      throw publicError("PyPI lists no Legendary release for the included Python.");
+    }
+    const current = installed.find(item => item.version === row.version);
+    if (current && (current.confirmsBuilds || !usable?.confirmsBuilds)) return settle(current.packagesPath);
+    if (current) return settle(usable.packagesPath);
+    let added;
+    try { added = await installLegendary({ parent, embedded, execute, signal, onProgress, first: row }); }
+    catch (error) {
+      signal?.throwIfAborted();
+      if (!usable) throw error;
+      logger?.warn?.(`[external] Legendary ${row.version} could not be installed: ${error.message || error}`);
+      onProgress?.(`Using Legendary ${usable.version}; Legendary ${row.version} could not be installed`);
+      return settle(usable.packagesPath);
+    }
+    if (!added.confirmsBuilds && usable?.confirmsBuilds) {
+      logger?.warn?.(`[external] Legendary ${row.version} has no manifest lookups to confirm Epic builds; using Legendary ${usable.version}.`);
+      onProgress?.(`Using Legendary ${usable.version}; Legendary ${row.version} cannot confirm Epic builds`);
+      return settle(usable.packagesPath);
+    }
+    return settle(added.packagesPath);
   })();
-  provisionTasks.set(target, task); try { return await task; } finally { provisionTasks.delete(target); }
+  provisionTasks.set(parent, task); try { return await task; } finally { provisionTasks.delete(parent); }
+}
+function wheelTool(embedded, execute, signal) {
+  return async request => JSON.parse((await execute(embedded, ["-I", "-c", WHEELS], { input: JSON.stringify(request), signal,
+    env: { ...process.env, PYTHONNOUSERSITE: "1", PYTHONDONTWRITEBYTECODE: "1" } })).stdout || "null");
+}
+// The newest release of a PyPI source that satisfies `specifier` and has a
+// wheel the included Python accepts, as that row with its chosen file.
+async function newestRelease(source, specifier, { signal, python }) {
+  const rows = await source.discover({ signal });
+  const choice = await python({ mode: "select", specifier, releases: rows.map(row => ({ version: row.version,
+    files: row.files.map(item => ({ name: item.name, requiresPython: row.details?.requiresPython?.[item.name] || "" })) })) });
+  const row = choice && rows.find(item => item.version === choice.version);
+  const listed = row?.files.find(item => item.name === choice.name);
+  return listed ? { version: row.version, file: listed, source } : null;
+}
+async function installLegendary({ parent, embedded, execute, signal, onProgress, first }) {
+  fs.mkdirSync(parent, { recursive: true, mode: 0o700 }); const stage = fs.mkdtempSync(path.join(parent, ".legendary-setup-"));
+  const python = wheelTool(embedded, execute, signal);
+  try {
+    const packageRoot = path.join(stage, "packages"); fs.mkdirSync(packageRoot);
+    const wanted = new Map([["legendary-gl", []]]), resolved = new Map(), packages = [];
+    for (const [name, specifiers] of wanted) {
+      if (resolved.has(name)) continue;
+      if (wanted.size > 64) throw publicError("Legendary names more dependencies than MacLauncher installs.");
+      signal?.throwIfAborted(); onProgress?.(`Preparing Epic download support (${name})`);
+      const release = name === "legendary-gl" ? first : await newestRelease(Upstream.pypi({ project: name, recognize: pypiWheels }), specifiers.join(","), { signal, python });
+      if (!release) throw publicError(`PyPI lists no ${name} release that Legendary can use with the included Python.`);
+      resolved.set(name, release.version);
+      const archive = path.join(stage, release.file.name), downloaded = await release.source.download(release.file, archive, { signal });
+      for (const requirement of await python({ mode: "requires", wheel: archive })) {
+        if (!wanted.has(requirement.name)) wanted.set(requirement.name, []);
+        if (requirement.specifier) wanted.get(requirement.name).push(requirement.specifier);
+      }
+      await python({ mode: "extract", wheel: archive, root: packageRoot });
+      fs.rmSync(archive);
+      packages.push({ name, version: release.version, filename: release.file.name, url: release.file.url, sha256: downloaded.sha256, integrity: downloaded.integrity });
+    }
+    const lines = [];
+    const result = await execute(embedded, ["-c", LEGENDARY_CHECK], { signal, onLine: line => lines.push(line),
+      env: { ...process.env, PYTHONPATH: packageRoot, PYTHONNOUSERSITE: "1", PYTHONDONTWRITEBYTECODE: "1" } })
+      .catch(() => { signal?.throwIfAborted(); throw publicError(`Legendary ${first.version} does not run with the included Python${lines.length ? `: ${lines.at(-1)}` : "."}`); });
+    const confirmsBuilds = /^true\b/.test(String(result.stdout || "").trim());
+    const identity = crypto.createHash("sha256").update(JSON.stringify(packages.map(({ name, version, sha256 }) => [name, version, sha256]))).digest("hex");
+    writeJson(path.join(packageRoot, RECEIPT), { identity, legendaryVersion: first.version, confirmsBuilds, source: "https://pypi.org/project/legendary-gl/", packages });
+    const target = path.join(parent, `legendary-${first.version}-${identity.slice(0, 12)}`);
+    if (fs.existsSync(target)) fs.rmSync(target, { recursive: true }); fs.renameSync(packageRoot, target);
+    return { packagesPath: target, version: first.version, confirmsBuilds };
+  } finally { await fs.promises.rm(stage, { recursive: true, force: true }); }
 }
 const GOG_CLIENT_ID = "46899977096215655";
 // Public Galaxy OAuth application credential, shared by the GOG desktop client
@@ -157,28 +308,19 @@ function normalizeGogVersions(appId, product) {
     languages: [...new Set(installers.map(item => item.language || "en"))], supportsManifestOverride: false,
     historyNote: "Available GOG offline installer versions, platforms and languages. Earlier builds are available when supplied by GOG." };
 }
-async function requestJson(url, { headers, signal, fetchBytes = fetchUrlBuffer } = {}) {
+// GOG's account, catalog and content services. Installer files come from the
+// CDN host each download link names.
+const GOG = Upstream.service({ hosts: ["gog.com"] });
+async function requestJson(url, { headers, signal } = {}) {
   try {
     const requestSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000);
-    const { body, status = 200 } = await fetchBytes(url, { headers, signal: requestSignal, maxRedirects: headers?.Authorization ? 0 : 5, maxBytes: 32 * 1024 * 1024 });
+    const { body, status = 200 } = await GOG.request(url, { headers, signal: requestSignal, maxRedirects: headers?.Authorization ? 0 : 5, maxBytes: 32 * 1024 * 1024 });
     if ([401, 403].includes(status)) throw Object.assign(publicError("Sign in again to access this store library."), { authExpired: true });
     if (status < 200 || status >= 300) throw Object.assign(publicError(`The store request failed (HTTP ${status}). Refresh and try again.`), { httpStatus: status });
     return JSON.parse(body.toString("utf8"));
   }
   catch (error) { if (/HTTP (?:401|403)/.test(error?.message || "")) throw Object.assign(publicError("Sign in again to access this store library."), { authExpired: true }); throw error; }
 }
-async function downloadFile(url, output, { signal, expectedSize, expectedMd5, onBytes } = {}) {
-  // Signed CDN links already carry access; account tokens are never forwarded.
-  const response = await HTTP.fetch(url, { signal, redirect: "follow" });
-  if (!response.ok || !response.body) throw publicError("The game download is unavailable. Refresh versions and try again.");
-  const hash = crypto.createHash("md5"); let count = 0;
-  const meter = new Transform({ transform(bytes, _encoding, callback) { count += bytes.length; hash.update(bytes); onBytes?.(bytes.length); callback(null, bytes); } });
-  await pipeline(response.body, meter, fs.createWriteStream(output, { flags: "wx", mode: 0o644 }), { signal });
-  if (expectedSize && count !== expectedSize) throw publicError("The game download has an unexpected size.");
-  if (expectedMd5 && hash.digest("hex") !== expectedMd5.toLowerCase()) throw publicError("The game download failed its integrity check.");
-  return { size: count, headers: response.headers };
-}
-
 function createExternalStoreDownloads(options = {}) {
   const store = options.store;
   if (!["epic", "gog"].includes(store) || !path.isAbsolute(options.userDataDir || "")) throw new Error("A store and MacLauncher profile are required.");
@@ -191,7 +333,7 @@ function createExternalStoreDownloads(options = {}) {
   const active = () => { if (!session || state.connection.status !== "connected") throw publicError(`Connect a ${label(store)} account to continue.`); };
   const persist = async () => { if (session) await options.saveSession?.(clone(session)); };
   async function gogToken(params, expectedGeneration = generation, signal = sessionController.signal) {
-    const data = await requestJson(`https://auth.gog.com/token?${new URLSearchParams({ client_id: GOG_CLIENT_ID, client_secret: GOG_CLIENT_SECRET, ...params })}`, { fetchBytes: options.fetchBytes, signal });
+    const data = await requestJson(`https://auth.gog.com/token?${new URLSearchParams({ client_id: GOG_CLIENT_ID, client_secret: GOG_CLIENT_SECRET, ...params })}`, { signal });
     if (!data.access_token || !data.refresh_token) throw publicError("GOG sign-in was not accepted. Obtain a new authorization code.");
     if (disposed || generation !== expectedGeneration) throw publicError("The store account changed.");
     session = { ...session, ...data, expires_at: new Date(Date.now() + Number(data.expires_in || 3600) * 1000).toISOString() }; await persist(); return session;
@@ -204,13 +346,13 @@ function createExternalStoreDownloads(options = {}) {
     if (endpoint.protocol !== "https:" || !(endpoint.hostname === "gog.com" || endpoint.hostname.endsWith(".gog.com"))) throw publicError("GOG returned an unsupported account service URL.");
     if (retry && Date.parse(session.expires_at || "") < Date.now() + 30000) await gogToken({ grant_type: "refresh_token", refresh_token: session.refresh_token }, expectedGeneration, signal);
     if (disposed || generation !== expectedGeneration) throw publicError("The store account changed.");
-    try { return await requestJson(url, { headers: { Authorization: `Bearer ${session.access_token}` }, signal, fetchBytes: options.fetchBytes }); }
+    try { return await requestJson(url, { headers: { Authorization: `Bearer ${session.access_token}` }, signal }); }
     catch (error) { if (retry && error.authExpired) { await gogToken({ grant_type: "refresh_token", refresh_token: session.refresh_token }, expectedGeneration, signal); return gogGet(url, signal, false); } throw error; }
   }
   async function legendary(args, { signal, code, onLine, expectedVersion, expectedManifestBuildId } = {}) {
     signal ||= sessionController.signal;
     const expectedGeneration = generation;
-    const support = await (options.ensureLegendary || ensureLegendary)({ userDataDir: options.userDataDir, signal, fetchBytes: options.fetchBytes,
+    const support = await (options.ensureLegendary || ensureLegendary)({ userDataDir: options.userDataDir, signal, logger: options.logger,
       onProgress: detail => { state.connection.detail = detail; emit(); }, execute: options.execute, pythonPath: options.pythonPath });
     if (disposed || generation !== expectedGeneration) throw publicError("The store account changed.");
     runtimeDir ||= fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-epic-session-")); fs.chmodSync(runtimeDir, 0o700);
@@ -416,26 +558,29 @@ function createExternalStoreDownloads(options = {}) {
           for (let index = 0; index < installer.files.length; index++) {
             signal.throwIfAborted(); const file = installer.files[index], link = await gogGet(file.downlink, signal);
             const url = new URL(link.downlink); if (url.protocol !== "https:") throw publicError("GOG returned an unsupported download link.");
-            let filename = file.filename || decodeURIComponent(path.posix.basename(url.pathname));
-            // GOG's CDN path carries the original filename for multipart files.
+            const cdn = Upstream.service({ hosts: [url.hostname] });
+            let md5, expectedSize = Number(file.size) || null, listedName;
+            if (link.checksum) {
+              const { body, status } = await cdn.request(link.checksum, { signal, maxBytes: 4 * 1024 * 1024 }); const xml = body.toString("utf8");
+              md5 = /\bmd5="([a-f0-9]{32})"/i.exec(xml)?.[1]; expectedSize = Number(/\btotal_size="(\d+)"/.exec(xml)?.[1]) || expectedSize;
+              listedName = /<file\b[^>]*\bname="([^"]+)"/.exec(xml)?.[1];
+              if (status !== 200 || !md5) throw publicError("GOG did not return valid checksum metadata for this file.");
+            }
+            // The checksum record names the file; otherwise GOG's CDN path carries it.
+            let filename = listedName || file.filename || decodeURIComponent(path.posix.basename(url.pathname));
             filename = path.basename(String(filename)).replace(/[\x00-\x1f<>:"|?*\\/]/g, "_");
             if (!filename || filename === "." || filename === "..") filename = `${appId}-${index + 1}.bin`;
-            const output = path.join(content, filename); let md5, expectedSize = Number(file.size) || null;
-            if (link.checksum) {
-              const { body } = await (options.fetchBytes || fetchUrlBuffer)(link.checksum, { signal, maxBytes: 4 * 1024 * 1024 }); const xml = body.toString("utf8");
-              md5 = /\bmd5="([a-f0-9]{32})"/i.exec(xml)?.[1]; expectedSize = Number(/\btotal_size="(\d+)"/.exec(xml)?.[1]) || expectedSize;
-              if (!md5) throw publicError("GOG did not return valid checksum metadata for this file.");
-            }
-            job.detail = filename; emit(); let lastEmit = 0;
-            const completed = await (options.downloadFile || downloadFile)(url.href, output, { signal, expectedSize, expectedMd5: md5,
-              onBytes: count => { job.downloaded += count; if (Date.now() - lastEmit > 150) { lastEmit = Date.now(); emit(); } } });
-            const disposition = completed?.headers?.get?.("content-disposition"), suggested = /filename\*=UTF-8''([^;]+)/i.exec(disposition || "")?.[1] || /filename="([^"]+)"/i.exec(disposition || "")?.[1];
-            if (suggested) {
-              const safeName = path.basename(decodeURIComponent(suggested)).replace(/[\x00-\x1f<>:"|?*\\/]/g, "_");
-              if (safeName && safeName !== "." && safeName !== ".." && safeName !== filename) {
-                if (fs.existsSync(path.join(content, safeName))) throw publicError("GOG supplied conflicting installer filenames.");
-                fs.renameSync(output, path.join(content, safeName)); filename = safeName;
-              }
+            if (files.includes(filename)) throw publicError("GOG supplied conflicting installer filenames.");
+            const listed = cdn.file({ name: filename, url: url.href, ...(expectedSize ? { bytes: expectedSize } : {}), ...(md5 ? { digest: { algorithm: "md5", value: md5 } } : {}) });
+            if (!listed) throw publicError("GOG returned an unsupported download link.");
+            job.detail = filename; emit(); let lastEmit = 0; const before = job.downloaded;
+            try {
+              await cdn.download(listed, path.join(content, filename), { signal, onProgress: ({ downloaded }) => {
+                job.downloaded = before + downloaded; if (Date.now() - lastEmit > 150) { lastEmit = Date.now(); emit(); } } });
+            } catch (error) {
+              if (signal.aborted) throw error;
+              throw /its publisher lists/.test(error?.message || "") ? publicError("The game download failed its integrity check.")
+                : error?.statusCode ? publicError("The game download is unavailable. Refresh versions and try again.") : error;
             }
             files.push(filename);
           }
@@ -463,4 +608,4 @@ function createExternalStoreDownloads(options = {}) {
   return { snapshot, connect, submitAuth, loadLibrary, getVersions, download, cancel, markImported, disconnect, dispose };
 }
 
-module.exports = { createExternalStoreDownloads, ensureLegendary, normalizeEpicLibrary, normalizeGogVersions, codeFromInput, findSession, launch, AUTH_URLS, TOOLS };
+module.exports = { createExternalStoreDownloads, ensureLegendary, normalizeEpicLibrary, normalizeGogVersions, codeFromInput, findSession, launch, AUTH_URLS, LEGENDARY };

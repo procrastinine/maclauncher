@@ -1,40 +1,36 @@
 # Network isolation
 
-Settings → Launcher contains one **Network access** checkbox that supplies the
-initial setting for newly imported games. Each game's inspector has an On/Off
-checkbox that applies across its runtimes. Changing the default does not change
-existing games. Changes take effect on the next launch; runtime settings do
-not contain separate network controls. The default is disabled. Runtime-specific
-requirements can keep access disabled where online execution is unavailable.
+Network isolation blocks a game's Internet and local-network access. It is controlled per game and applies to every runtime.
 
-On macOS, isolation blocks Internet and local-network IP connections and incoming listeners in the game process and its child processes. This applies to native libraries and child executables as well as JavaScript or Java APIs. The game is not started if the network policy cannot be installed. Launch paths that hand control to an unrelated application service cannot provide this guarantee and report an error when isolation is enabled.
+## Setting
 
-Local Unix-socket communication remains available for runtime coordination, including Wine's private server. Electron games retain access to one specific loopback port serving their local assets. That server only serves files from the game's permitted content directories; it is not a network proxy. A game that runs its own Steam API from a Steam installation also reaches a running Steam client through the client's local endpoints: loopback ports 57343 and 57344, or the loopback addresses named by the `Steam3Master` and `SteamClientService` environment variables. Games that use the included Steam helper and other games receive no Steam endpoint. Other loopback endpoints remain blocked. Explicit graphics-library injection is preserved when crossing macOS's protected launch helpers.
+Each game's inspector has one **Network access** checkbox, which applies to all of the game's runtimes; runtime settings have no separate network controls. A change takes effect on the next launch.
 
-Native application event registration remains available for standard macOS actions,
-including Quit from the Dock. This does not grant permission to send automation
-events to other applications.
+The **Network access** checkbox in **Settings → Launcher** sets the initial value for newly imported games, and it is off by default. Changing it does not change existing games. A game without a saved choice copies the current default once, and saved per-game choices are kept where possible. Some runtimes keep network access off where they cannot run online.
 
-Native applications can register their own per-process accessibility and text
-input endpoints. Incoming accessibility clients are validated through macOS TCC;
-the system's accessibility authorization remains authoritative. This permits
-native window controls and assistive access without granting the game access to
-another application's accessibility server.
+Some local web packages load their playable content from a website and need network access turned on.
 
-The setting applies to the owned game process tree. It is not a system-wide firewall and does not change a Steam client, browser or other external service. This includes a Steam client that Play [starts for a Steam game](STEAM_API.md) after consent or a standing Start automatically choice. Games that require those services retain their connection and offline-mode requirements. Runtime downloads and preparation follow their existing explicit consent flow before the game starts.
+## What isolation blocks
 
-Electron and NW.js use this same policy for browser requests and Node networking.
-The owned Electron browser broker keeps Chromium's GPU and network-service
-sandboxes. Its first game preload installs the native network policy in the
-Node-capable renderer before publisher scripts run. Browser requests use the
-session's origin restrictions and a local non-forwarding proxy; WebRTC uses the
-same proxy policy. Only the local asset origin bypasses it. A failed renderer
-policy or preload closes the game window.
-Enabling access permits online content without also permitting child-process
-execution. **Block child processes** is an independent runtime option. Android
-combines network isolation with its existing file-access policy rather than
-applying a second sandbox.
+On macOS, isolation blocks Internet and local-network IP connections and incoming listeners in the game process and its child processes. This covers native libraries and child executables as well as JavaScript and Java APIs. If the network policy cannot be installed, the game does not start. A launch path that hands control to an unrelated application service cannot keep this guarantee, so it reports an error while isolation is on.
 
-Existing saved per-game network choices are preserved where possible. Games
-without a saved choice copy the current default once. Some local web packages
-load their playable content from a website and require enabled network access.
+The setting applies to the game's own process tree. It is not a system-wide firewall and does not change a Steam client, a browser or another external service, including a Steam client that Play [starts for a Steam game](STEAM_API.md) after consent or with **Start automatically**. Games that require those services keep their connection and offline-mode requirements. Runtime [downloads](README.md#downloads-and-offline-use) and preparation happen before the game starts and are not affected by the game's setting.
+
+## What stays available
+
+- Local Unix-socket communication stays available for runtime coordination, including Wine's private server.
+- An Electron game can reach the one loopback port that serves its local assets. That server only serves files from the game's permitted content directories and is not a network proxy.
+- A game that runs its own Steam API from a Steam installation can reach a running Steam client through the client's local endpoints: loopback ports 57343 and 57344, or the loopback addresses named by the `Steam3Master` and `SteamClientService` environment variables. Games that use the included Steam helper, and all other games, get no Steam endpoint. Other loopback endpoints stay blocked.
+- Explicit graphics-library injection still works through macOS's protected launch helpers.
+- Native applications can still register for standard macOS application events, such as Quit from the Dock. This does not let them send automation events to other applications.
+- Native applications can register their own accessibility and text input endpoints for their process. Incoming accessibility clients are validated through macOS TCC, and the system's accessibility authorization decides which are allowed. Window controls and assistive access keep working, and the game gets no access to another application's accessibility server.
+
+## Electron and NW.js
+
+Electron and NW.js apply the same policy to browser requests and to Node networking. MacLauncher's Electron browser broker keeps Chromium's GPU and network-service sandboxes. The game's first preload script installs the native network policy in the renderer, which has Node access, before any publisher script runs. Browser requests go through the session's origin restrictions and a local proxy that forwards nothing, and WebRTC follows the same proxy policy; only the local asset origin bypasses it. If the renderer policy or the preload fails, the game window closes.
+
+Turning network access on allows online content but does not allow child processes. **Block child processes** is a separate runtime option, described in [web runtimes](WEB_RUNTIMES.md).
+
+## Android
+
+Android combines network isolation with its file-access policy and does not add a second sandbox.

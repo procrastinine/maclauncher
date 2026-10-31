@@ -7,7 +7,7 @@ const B = require('../src/modules/shared/runtime/bundled-native');
 const Verifier = require('../src/modules/android/runtime-verifier');
 const factories = {
   android: require('../src/modules/android/runtime-manager').createManager,
-  'android-art': require('../src/modules/android/art/runtime-manager').createManager,
+  'android-art': require('../src/modules/android/art/runtime-manager').createLegacyManager,
   'android-aim': require('../src/modules/android/providers/aim/manager').createManager
 };
 
@@ -53,9 +53,20 @@ for (const [id, createManager] of Object.entries(factories)) {
     const selected = manager.inspectPackage(input, record);
     assert.equal(fs.existsSync(path.join(selected.payloadRoot, 'source.tar.gz')), false);
     assert.equal(B.verifyPayload(selected.root, selected.declaration), true);
-    const legacy = { ...manifest, files: [...files, { path: 'source.tar.gz', size: 1, mode: 0o644, sha256: record.sourceSha256 }] };
+    const sourceBytes = Buffer.from('s'), sourcePath = path.join(input, prefix, 'source.tar.gz');
+    const legacy = { ...manifest, files: [...files, { path: 'source.tar.gz', size: sourceBytes.length, mode: 0o644, sha256: B.digest(sourceBytes) }] };
     const legacyBytes = Buffer.from(JSON.stringify(legacy)); fs.writeFileSync(path.join(input, manifestRelative), legacyBytes);
-    assert.throws(() => manager.inspectPackage(input, { ...record, manifestSha256: B.digest(legacyBytes) }), /ENOENT|source|missing|file/i);
+    const legacySelected = manager.inspectPackage(input, { ...record, manifestSha256: B.digest(legacyBytes) });
+    assert.equal(legacySelected.executablePath, selected.executablePath, 'Source provenance does not change the selected runnable binary');
+    assert.equal(legacySelected.sourceIdentity.declaredSourceSha256, record.sourceSha256);
+    assert.throws(() => B.verifyPayload(legacySelected.root, legacySelected.declaration), /inventory|ENOENT|missing|file/i,
+      'A file explicitly declared in a legacy payload remains part of its byte inventory');
+    fs.writeFileSync(sourcePath, sourceBytes, { mode: 0o644 });
+    assert.notEqual(B.digest(sourceBytes), record.sourceSha256, 'Corresponding-source metadata is separate from the payload file digest');
+    assert.equal(B.verifyPayload(legacySelected.root, legacySelected.declaration), true);
+    fs.appendFileSync(sourcePath, 'changed');
+    assert.throws(() => B.verifyPayload(legacySelected.root, legacySelected.declaration), /checksum|permissions|exceeds/i);
+    fs.unlinkSync(sourcePath);
     fs.writeFileSync(path.join(input, manifestRelative), metadata);
     if (arch !== 'arm64') return;
     const userDataDir = path.join(root, 'data'), nativeResourceRoot = path.join(root, 'absent-included');

@@ -1,26 +1,19 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { spawn, spawnSync } = require("node:child_process");
+const { spawnSync } = require("node:child_process");
 const Rosetta = require("../../shared/runtime/rosetta");
 const AppBundle = require("../../shared/runtime/app-bundle");
-const GitHubCLI = require("../../shared/runtime/github-cli");
-const GitHub = require("../../shared/runtime/github-transport");
-
-const {
-  attachAbortSignal,
-  createAbortError,
-  downloadToFile,
-  throwIfAborted
-} = require("../../shared/runtime/download-utils");
-const Releases = require("../../shared/runtime/github-releases");
+const { readMachOLoadCommands } = require("../../shared/runtime/macho-load-commands");
+const Upstream = require("../../shared/runtime/upstream");
+const Archive = require("../../shared/runtime/archive");
+const ReleaseFiles = require("../../shared/runtime/release-files");
 const {
   normalizeLoveVersion,
   compareLoveVersions,
   compareLoveVersionsDesc,
   normalizeNightlyBuildKey,
   compareNightlyBuildKeysDesc,
-  parseNightlyBuildTimestamp,
   shortSha
 } = require("../version");
 
@@ -29,7 +22,7 @@ const REPO_NAME = "love";
 const INSTALL_META_FILE = ".maclauncher-love.json";
 const CHANNEL_STABLE = "stable";
 const CHANNEL_NIGHTLY = "nightly";
-const NIGHTLY_WORKFLOW = ".github/workflows/main.yml";
+const NIGHTLY_WORKFLOW = "main.yml";
 const NIGHTLY_ARTIFACT_NEEDLE = "love-macos";
 
 function ensureDir(filePath) {
@@ -167,12 +160,22 @@ function detectArchitecture(executablePath) {
       if (hasX64) {
         return {
           architecture: "x64",
-          requiresRosetta: process.platform === "darwin" && process.arch === "arm64"
+          requiresRosetta: require("../../shared/runtime/architecture").requiresRosetta("x64")
         };
       }
     }
   } catch {}
   return { architecture: "unknown", requiresRosetta: false };
+}
+
+function validateDownloadedBundle(appPath, { arch = require("../../shared/runtime/architecture").selectedArchitecture() } = {}) {
+  const executable = resolveExecutablePath(appPath);
+  const info = readMachOLoadCommands(executable);
+  const nativeArch = arch === "x64" ? "x86_64" : arch;
+  if (!info.architectures.includes(nativeArch) && !(nativeArch === "arm64" && info.architectures.includes("x86_64"))) {
+    throw new Error("The LÖVE download has no supported 64-bit executable for this Mac.");
+  }
+  return info.architectures;
 }
 
 function readBundleInfo(appPath) {
@@ -341,10 +344,6 @@ function resolveInstalled({ userDataDir, channel, version }) {
   );
 }
 
-function resolveLatestInstalled(userDataDir, channel) {
-  return listInstalled(userDataDir, channel).find(entry => entry.ready) || null;
-}
-
 function findNightlyByBundleVersion({ userDataDir, version }) {
   const normalized = normalizeLoveVersion(version);
   if (!normalized) return null;
@@ -357,19 +356,18 @@ function normalizeReleaseVersion(release) {
   return normalizeLoveVersion(release?.tag_name || release?.name || "");
 }
 
+// Any archive format the publisher switches to; libraries, iOS and source
+// packages are not the Mac application.
 function isMacReleaseAsset(asset) {
   const lower = String(asset?.name || "").toLowerCase();
-  if (!lower.endsWith(".zip")) return false;
-  if (lower.includes("apple-libraries")) return false;
-  if (lower.includes("ios")) return false;
-  if (lower.includes("source")) return false;
+  if (!Archive.archiveKind(lower) || /apple-libraries|ios|source|debug|symbols/.test(lower)) return false;
   return lower.includes("macos") || lower.includes("macosx");
 }
 
 function scoreMacReleaseAsset(asset) {
   const lower = String(asset?.name || "").toLowerCase();
   let score = 0;
-  if (lower.includes("-macos.zip")) score += 400;
+  if (/-macos\.[a-z0-9.]+$/.test(lower)) score += 400;
   if (lower.includes("macosx-ub")) score += 300;
   if (lower.includes("macosx-x64")) score += 200;
   if (lower.includes("macosx")) score += 100;
@@ -387,183 +385,24 @@ function pickStableReleaseAsset(release) {
   return assets[0];
 }
 
-function sortStableReleases(releases) {
-  const list = Array.isArray(releases) ? releases.slice() : [];
-  list.sort((a, b) => {
-    const va = normalizeReleaseVersion(a);
-    const vb = normalizeReleaseVersion(b);
-    if (va && vb && va !== vb) return compareLoveVersionsDesc(va, vb);
-    const da = Date.parse(a?.published_at || a?.created_at || "") || 0;
-    const db = Date.parse(b?.published_at || b?.created_at || "") || 0;
-    return db - da;
-  });
-  return list;
-}
+// Stable releases from 0.7.0, the first with a 64-bit Mac build, with the Mac
+// archive under its current name or a renamed or reformatted one.
+const stableSource = Upstream.github({ repository: `${REPO_OWNER}/${REPO_NAME}`, allArchitectures: true, recognize: release => {
+  const version = normalizeReleaseVersion(release), asset = pickStableReleaseAsset(release);
+  return version && asset && compareLoveVersions(version, "0.7.0") >= 0 ? { version, assets: [asset] } : null;
+} });
 
-async function fetchAvailableVersions({ logger, releases } = {}) {
-  const releaseList = Array.isArray(releases)
-    ? releases
-    : await Releases.fetchGithubReleases({
-        owner: REPO_OWNER,
-        repo: REPO_NAME,
-        logger,
-        includePrerelease: false,
-        maxPages: 20
-      });
-  const sorted = sortStableReleases(releaseList);
-  const entries = [];
-  const entriesByVersion = {};
-  for (const release of sorted) {
-    const version = normalizeReleaseVersion(release);
-    const asset = pickStableReleaseAsset(release);
-    if (!version || !asset?.browser_download_url) continue;
-    if (entriesByVersion[version]) continue;
-    const entry = {
-      channel: CHANNEL_STABLE,
-      version,
-      releaseId: release.id || null,
-      tagName: release.tag_name || release.name || version,
-      browserDownloadUrl: asset.browser_download_url,
-      assetName: asset.name || null,
-      release
-    };
-    entries.push(entry);
-    entriesByVersion[version] = entry;
+// One row per version, from its newest release.
+async function fetchAvailableVersions({ logger, signal } = {}) {
+  const entries = [], entriesByVersion = {};
+  for (const row of (await stableSource.discover({ logger, signal })).slice().sort((a, b) => compareLoveVersionsDesc(a.version, b.version))) {
+    if (entriesByVersion[row.version] || !row.files[0]) continue;
+    const file = row.files[0];
+    entriesByVersion[row.version] = { channel: CHANNEL_STABLE, version: row.version, file,
+      browserDownloadUrl: file.url, assetName: file.name, sha256: file.digest?.algorithm === "sha256" ? file.digest.value : null };
+    entries.push(entriesByVersion[row.version]);
   }
-  return {
-    versions: entries.map(entry => entry.version),
-    entries,
-    entriesByVersion,
-    source: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases`
-  };
-}
-
-function runCommand(cmd, args, options = {}) {
-  const { signal, ...spawnOptions } = options;
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { ...spawnOptions, stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    const removeAbort = attachAbortSignal(signal, () => {
-      try {
-        child.kill("SIGTERM");
-      } catch {}
-    });
-    child.stdout.on("data", chunk => {
-      stdout += chunk.toString("utf8");
-    });
-    child.stderr.on("data", chunk => {
-      stderr += chunk.toString("utf8");
-    });
-    child.on("error", error => {
-      removeAbort();
-      reject(error);
-    });
-    child.on("close", code => {
-      removeAbort();
-      if (signal?.aborted) return reject(createAbortError());
-      if (code === 0) return resolve({ stdout, stderr });
-      const error = new Error(`${cmd} failed (${code})`);
-      error.code = code;
-      error.stdout = stdout;
-      error.stderr = stderr;
-      reject(error);
-    });
-  });
-}
-
-async function canUseGh({ logger, runCommand: runner, required } = {}) {
-  if (runner) return GitHubCLI.available({ logger, runCommand: runner, required });
-  const status = await GitHub.authenticationStatus(), usable = status.available && status.authenticated;
-  if (!usable && required) throw new Error("Upstream LÖVE nightly downloads require GitHub CLI authentication. Authenticate with gh and restart MacLauncher.");
-  return usable;
-}
-
-function runGhToFile(args, outputPath, { signal } = {}) {
-  throwIfAborted(signal);
-  return new Promise((resolve, reject) => {
-    const fd = fs.openSync(outputPath, "w");
-    const child = spawn(GitHubCLI.executable(), args, { stdio: ["ignore", fd, "pipe"] });
-    let stderr = "";
-    let closed = false;
-    const closeFd = () => {
-      if (closed) return;
-      closed = true;
-      try {
-        fs.closeSync(fd);
-      } catch {}
-    };
-    const removeAbort = attachAbortSignal(signal, () => {
-      try {
-        child.kill("SIGTERM");
-      } catch {}
-      closeFd();
-      reject(createAbortError());
-    });
-
-    child.stderr.on("data", chunk => {
-      stderr += chunk.toString("utf8");
-    });
-    child.on("error", error => {
-      removeAbort();
-      closeFd();
-      if (error?.code === "ENOENT") {
-        reject(new Error("GitHub CLI (gh) is not installed."));
-        return;
-      }
-      reject(error);
-    });
-    child.on("close", code => {
-      removeAbort();
-      closeFd();
-      if (code === 0) return resolve(true);
-      const error = new Error("gh command failed while downloading.");
-      error.code = code;
-      error.stderr = stderr;
-      reject(error);
-    });
-  });
-}
-
-function workflowRef(workflowPath) {
-  return encodeURIComponent(String(workflowPath || "").trim());
-}
-
-function getRunDate(run) {
-  const value = run?.run_started_at || run?.created_at || run?.updated_at || "unknown-date";
-  const timestamp = Date.parse(value);
-  return {
-    value,
-    timestamp: Number.isFinite(timestamp) ? timestamp : 0
-  };
-}
-
-async function actionMetadata(route, { request = GitHub.request, signal } = {}) {
-  throwIfAborted(signal);
-  const response = await request(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/${route}`, { signal });
-  if (response.status !== 200) throw new Error(`GitHub Actions catalog request failed (HTTP ${response.status}).`);
-  return JSON.parse(Buffer.from(response.body).toString("utf8"));
-}
-async function fetchRuns({ latestOnly, request, signal } = {}) {
-  const runs = [], perPage = 50;
-  for (let page = 1; page <= (latestOnly ? 4 : 10); page++) {
-    const result = await actionMetadata(`actions/workflows/${workflowRef(NIGHTLY_WORKFLOW)}/runs?branch=main&per_page=${perPage}&page=${page}`, { request, signal });
-    if (!Array.isArray(result.workflow_runs)) throw new Error("GitHub Actions returned an invalid workflow catalog.");
-    runs.push(...result.workflow_runs);
-    if (result.workflow_runs.length < perPage) break;
-  }
-  return runs;
-}
-async function fetchArtifacts(runId, { request, signal } = {}) {
-  if (!Number.isSafeInteger(runId) || runId <= 0) throw new Error("GitHub Actions run identity is invalid.");
-  const artifacts = [];
-  for (let page = 1; page <= 10; page++) {
-    const result = await actionMetadata(`actions/runs/${runId}/artifacts?per_page=100&page=${page}`, { request, signal });
-    if (!Array.isArray(result.artifacts)) throw new Error("GitHub Actions returned an invalid artifact catalog.");
-    artifacts.push(...result.artifacts);
-    if (result.artifacts.length < 100) return artifacts;
-  }
-  throw new Error("GitHub Actions artifact catalog exceeds its page limit.");
+  return { versions: entries.map(entry => entry.version), entries, entriesByVersion, source: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases` };
 }
 
 function buildNightlyKey(runStartedAt, headSha) {
@@ -586,62 +425,41 @@ function buildNightlyVersionLabel(entry) {
   return [bundle, sha, date].filter(Boolean).join(" · ");
 }
 
-async function fetchNightlySourceVersion(headSha, options = {}) {
+// The upstream version in src/common/version.h at a workflow commit.
+async function fetchNightlySourceVersion(headSha, { logger, signal } = {}) {
   if (!/^[a-f0-9]{40}$/i.test(headSha || "")) return null;
-  try {
-    const result = await actionMetadata(`contents/src/common/version.h?ref=${headSha}`, options);
-    const source = Buffer.from(String(result.content || "").replace(/\s/g, ""), "base64").toString("utf8");
-    return source.match(/^\s*#define\s+LOVE_VERSION_STRING\s+"([0-9]+(?:\.[0-9]+)+)"/m)?.[1] || null;
-  } catch { throwIfAborted(options.signal); return null; }
+  const header = Upstream.index({ locations: [`https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${headSha.toLowerCase()}/src/common/version.h`],
+    parse: ([document]) => { const version = /^\s*#define\s+LOVE_VERSION_STRING\s+"([0-9]+(?:\.[0-9]+)+)"/m.exec(document.text)?.[1]; return version ? [{ version }] : []; } });
+  try { return (await header.discover({ logger, signal }))[0]?.version || null; }
+  catch { if (signal?.aborted) throw signal.reason; return null; }
 }
 
-async function listNightlyBuilds({ latestOnly, request, signal } = {}) {
-  const runs = await fetchRuns({ latestOnly, request, signal });
-  runs.sort((a, b) => getRunDate(b).timestamp - getRunDate(a).timestamp);
-  const matches = [];
+// Successful main-branch builds publish a Mac artifact; GitHub's digest
+// verifies each one. The short scan lists the newest build.
+const nightlySource = Upstream.githubActions({ repository: `${REPO_OWNER}/${REPO_NAME}`, workflow: NIGHTLY_WORKFLOW, branch: "main", limit: 1, maxRuns: 20,
+  recognize: async (artifact, { run, signal }) => {
+    if (!String(artifact?.name || "").toLowerCase().includes(NIGHTLY_ARTIFACT_NEEDLE)) return null;
+    const runStartedAt = run.run_started_at || run.created_at, headSha = run.head_sha.toLowerCase(), buildKey = buildNightlyKey(runStartedAt, headSha);
+    const sourceVersion = await fetchNightlySourceVersion(headSha, { signal });
+    const details = { runId: run.id, artifactId: artifact.id, artifactName: artifact.name || null, headSha, sourceVersion,
+      sourceVersionSource: sourceVersion ? "src/common/version.h at the workflow commit" : null, runStartedAt };
+    return buildKey ? { version: buildKey, label: buildNightlyVersionLabel({ buildKey, ...details }), details } : null;
+  } });
 
-  for (const run of runs) {
-    if (run?.head_branch !== "main") continue;
-    if (run?.conclusion !== "success") continue;
-    const artifacts = await fetchArtifacts(run.id, { request, signal });
-    const artifact = artifacts.find(item =>
-      !item?.expired && String(item?.name || "").toLowerCase().includes(NIGHTLY_ARTIFACT_NEEDLE)
-    );
-    if (!artifact) continue;
-    const { value } = getRunDate(run);
-    const sourceVersion = await fetchNightlySourceVersion(run.head_sha, { request, signal });
-    matches.push({
-      channel: CHANNEL_NIGHTLY,
-      version: buildNightlyKey(value, run.head_sha || ""),
-      buildKey: buildNightlyKey(value, run.head_sha || ""),
-      runId: run.id,
-      artifactId: artifact.id,
-      artifactName: artifact.name || null,
-      headSha: run.head_sha || null,
-      sourceVersion,
-      sourceVersionSource: sourceVersion ? "src/common/version.h at the workflow commit" : null,
-      runStartedAt: value,
-      label: buildNightlyVersionLabel({
-        buildKey: buildNightlyKey(value, run.head_sha || ""),
-        headSha: run.head_sha || null,
-        sourceVersion,
-        runStartedAt: value
-      })
-    });
-    if (latestOnly) break;
-  }
-
+async function listNightlyBuilds({ latestOnly, logger, signal } = {}) {
+  const matches = (await nightlySource.discover({ logger, signal, latestOnly: latestOnly !== false })).filter(row => row.files[0])
+    .map(row => ({ channel: CHANNEL_NIGHTLY, version: row.version, buildKey: row.version, label: row.label, file: row.files[0], ...row.details }));
   return {
     versions: matches.map(entry => entry.buildKey),
     entries: matches,
     entriesByVersion: Object.fromEntries(matches.map(entry => [entry.buildKey, entry])),
-    source: `https://github.com/${REPO_OWNER}/${REPO_NAME}/actions/workflows/main.yml`
+    source: `https://github.com/${REPO_OWNER}/${REPO_NAME}/actions/workflows/${NIGHTLY_WORKFLOW}`
   };
 }
 
 async function extractZip(zipPath, destDir, signal) {
   ensureDir(destDir);
-  await runCommand("/usr/bin/ditto", ["-x", "-k", zipPath, destDir], { signal });
+  await ReleaseFiles.extractArchive(zipPath, destDir, signal);
 }
 
 function copyAppBundle(sourceAppPath, destAppPath) {
@@ -699,6 +517,7 @@ async function installStableVersion({
 } = {}) {
   const targetVersion = normalizeLoveVersion(version);
   if (!targetVersion) throw new Error(`Invalid LÖVE version: ${String(version || "")}`);
+  if (compareLoveVersions(targetVersion, "0.7.0") < 0) throw new Error("LÖVE releases before 0.7 have no 64-bit macOS download.");
   const existing = resolveInstalled({ userDataDir, channel: CHANNEL_STABLE, version: targetVersion });
   if (existing?.appPath) return existing;
 
@@ -707,29 +526,25 @@ async function installStableVersion({
     const refreshed = await fetchAvailableVersions({ logger });
     entry = refreshed.entriesByVersion[targetVersion] || null;
   }
-  if (!entry?.browserDownloadUrl) {
+  if (!entry?.file && !entry?.browserDownloadUrl) {
     throw new Error(`LÖVE release v${targetVersion} was not found.`);
   }
 
   const installDir = getInstallDir({ userDataDir, channel: CHANNEL_STABLE, version: targetVersion });
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-love-stable-"));
-  const archivePath = path.join(tmpDir, entry.assetName || `love-${targetVersion}.zip`);
+  const file = entry.file || Upstream.listedFile({ filename: entry.assetName, url: entry.browserDownloadUrl, sha256: entry.sha256 });
+  const archivePath = path.join(tmpDir, file.name);
 
   try {
-    await downloadToFile(entry.browserDownloadUrl, archivePath, {
-      headers: {
-        "User-Agent": "maclauncher",
-        "Accept": "application/octet-stream"
-      },
-      onProgress,
-      signal
-    });
+    // GitHub's published digest verifies the file behind the release URL.
+    const { sha256, integrity } = await stableSource.download(file, archivePath, { onProgress, signal });
     const unpackDir = path.join(tmpDir, "unpacked");
     await extractZip(archivePath, unpackDir, signal);
     const sourceAppPath = await resolveExtractedApp(unpackDir, signal);
     if (!sourceAppPath) {
       throw new Error(`Could not find love.app in ${entry.assetName || "downloaded archive"}.`);
     }
+    validateDownloadedBundle(sourceAppPath);
     const destAppPath = path.join(installDir, "love.app");
     copyAppBundle(sourceAppPath, destAppPath);
     const bundleInfo = readBundleInfo(destAppPath);
@@ -738,8 +553,10 @@ async function installStableVersion({
       version: targetVersion,
       source: "GitHub Releases",
       installedAt: new Date().toISOString(),
-      browserDownloadUrl: entry.browserDownloadUrl,
-      assetName: entry.assetName || null,
+      browserDownloadUrl: file.url,
+      assetName: file.name,
+      archiveSha256: sha256,
+      integrity,
       bundleVersionRaw: bundleInfo.bundleVersionRaw,
       bundleVersionNormalized: bundleInfo.bundleVersionNormalized || targetVersion,
       architecture: bundleInfo.architecture,
@@ -755,14 +572,15 @@ async function installNightlyVersion({
   userDataDir,
   entry,
   logger,
+  onProgress,
   signal
 } = {}) {
   const buildKey = normalizeNightlyBuildKey(entry?.buildKey || entry?.version);
   if (!buildKey) throw new Error("Missing LÖVE nightly build key.");
   const existing = resolveInstalled({ userDataDir, channel: CHANNEL_NIGHTLY, version: buildKey });
   if (existing?.appPath) return existing;
-  if (!entry?.artifactId) {
-    throw new Error(`Nightly build ${buildKey} is missing an artifact id.`);
+  if (!entry?.file) {
+    throw new Error(`Nightly build ${buildKey} is no longer available for download.`);
   }
 
   const installDir = getInstallDir({ userDataDir, channel: CHANNEL_NIGHTLY, version: buildKey });
@@ -770,18 +588,15 @@ async function installNightlyVersion({
   const archivePath = path.join(tmpDir, `${buildKey}.zip`);
 
   try {
-    logger?.info?.(`[love] downloading nightly ${buildKey} with gh`);
-    await runGhToFile(
-      ["api", `/repos/${REPO_OWNER}/${REPO_NAME}/actions/artifacts/${entry.artifactId}/zip`],
-      archivePath,
-      { signal }
-    );
+    logger?.info?.(`[love] downloading nightly ${buildKey}`);
+    const { sha256, integrity } = await nightlySource.download(entry.file, archivePath, { onProgress, signal });
     const unpackDir = path.join(tmpDir, "unpacked");
     await extractZip(archivePath, unpackDir, signal);
     const sourceAppPath = await resolveExtractedApp(unpackDir, signal);
     if (!sourceAppPath) {
       throw new Error(`Could not find love.app in nightly artifact ${buildKey}.`);
     }
+    validateDownloadedBundle(sourceAppPath);
     const destAppPath = path.join(installDir, "love.app");
     copyAppBundle(sourceAppPath, destAppPath);
     const bundleInfo = readBundleInfo(destAppPath);
@@ -791,6 +606,8 @@ async function installNightlyVersion({
       version: buildKey,
       source: "GitHub Actions",
       installedAt: new Date().toISOString(),
+      archiveSha256: sha256,
+      integrity,
       bundleVersionRaw: bundleInfo.bundleVersionRaw,
       bundleVersionNormalized: bundleInfo.bundleVersionNormalized,
       architecture: bundleInfo.architecture,
@@ -818,12 +635,6 @@ function uninstallVersion({ userDataDir, channel, version, installDir } = {}) {
   return true;
 }
 
-function formatNightlyDate(input) {
-  const timestamp = parseNightlyBuildTimestamp(input);
-  if (timestamp == null) return "";
-  return new Date(timestamp).toISOString().slice(0, 10);
-}
-
 function isRosettaAvailable({ force = false } = {}) {
   return Rosetta.isAvailable({ force });
 }
@@ -843,29 +654,27 @@ module.exports = {
   compareNightlyBuildKeysDesc,
   buildNightlyKey,
   buildNightlyVersionLabel,
-  formatNightlyDate,
   installRootDir,
   getInstallDir,
   listInstalled,
   listInstalledStable,
   listInstalledNightly,
   resolveInstalled,
-  resolveLatestInstalled,
   findNightlyByBundleVersion,
   readInstallMeta,
   writeInstallMeta,
   readBundleInfo,
   resolveExecutablePath,
   fetchAvailableVersions,
-  canUseGh,
   listNightlyBuilds,
   installStableVersion,
   installNightlyVersion,
   uninstallVersion,
   isRosettaAvailable,
+  upstream: [stableSource, nightlySource],
   __test: {
     copyAppBundle,
-    pickStableReleaseAsset,
-    sortStableReleases
+    validateDownloadedBundle,
+    pickStableReleaseAsset
   }
 };

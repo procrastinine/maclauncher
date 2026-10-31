@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { DownloadTask, LauncherState, ReShadeFilter, RuntimeManagerState, RuntimeRefreshOptions, RuntimeUiState } from "../types";
 import {
+  architectureLabel,
   availabilityLabel,
   formatDownloadPercent,
   formatRuntimeVersionTag,
+  runtimeVersionTagger,
   formatUserError,
   resolveRuntimeNotice,
   resolveRuntimeSections,
@@ -24,6 +26,7 @@ import { RuntimeSetupSelector } from "./RuntimeSetupSelector";
 import { RuntimeModelTable } from "./RuntimeModelTable";
 import type { ReShadeFilterApi } from "./ReShadeFilterLibrary";
 import { presentRuntimeManagers, runtimeCategories, withLauncherLibraries } from "../../../../modules/runtime-presentations";
+import { installedRuntimeAvailability } from "../../../../core/runtime-install-availability.mjs";
 import { PluginLibrary } from "./PluginLibrary";
 import type { RuntimeSettingsApi } from "./RuntimeSettingsWindow";
 import { EffectsPresetManager } from "./EffectsPresetManager";
@@ -61,7 +64,7 @@ type RuntimesViewProps = {
   updateRuntimeUiSection: (
     managerId: string,
     sectionId: string,
-    key: "remoteOpen" | "installVersion" | "installVariant" | "installedSort",
+    key: "remoteOpen" | "installVersion" | "installVariant" | "installArchitecture" | "installedSort",
     value: any
   ) => void;
   onRuntimeRefresh: (
@@ -73,18 +76,20 @@ type RuntimesViewProps = {
     managerId: string,
     sectionId: string,
     version: string,
-    variant?: string
+    variant?: string,
+    architecture?: string
   ) => unknown;
   onRuntimeImport?: (managerId: string, sectionId: string, version?: string) => void;
   onRuntimeRegister?: (managerId: string, sectionId: string) => void;
   onRuntimeSetupAction?: (managerId: string, sectionId: string, setupActionId: string, toolVersion?: string) => void;
-  onRuntimeInstalledAction?: (managerId: string, sectionId: string, version: string, installedActionId: string) => void;
+  onRuntimeInstalledAction?: (managerId: string, sectionId: string, version: string, installedActionId: string, architecture?: string) => void;
   onRuntimeSetDefault: (
     managerId: string,
     sectionId: string,
     version: string | null,
     variant?: string,
-    selectionId?:string
+    selectionId?:string,
+    architecture?: string
   ) => void;
   onRuntimeUninstall: (
     managerId: string,
@@ -94,6 +99,25 @@ type RuntimesViewProps = {
   onCancelDownload: (id: string) => void;
   onOpenSource?: (url: string) => void;
 };
+
+// The CPU an installed build is shown with names the Macs that can run its
+// package. A catalog's declared build CPU or host requirement wins over the
+// file's own CPU: a library that x86_64 Wine loads but whose package runs only
+// on Apple Silicon is not tagged Intel. Two installations of one version from
+// different build choices are told apart by that build choice. Only a build for
+// another CPU than the automatic one carries a tag.
+function buildArchitecture(install: Record<string, any>, section: Record<string, any>, installed: Record<string, any>[]): string | null {
+  const slot = (row: Record<string, any>) => /^architecture:(.+)$/.exec(String(row.variant || ""))?.[1] || null;
+  if (slot(install) && installed.some(row => row !== install && row.version === install.version && slot(row) && slot(row) !== slot(install)))
+    return slot(install);
+  const catalogs = section.catalog?.architectureCatalogs || {};
+  const catalog = slot(install) && catalogs[slot(install) as string] ? catalogs[slot(install) as string] : section.catalog;
+  const requirement = install.custom ? null : catalog?.versionRequirements?.[install.version];
+  const hosts = (Array.isArray(requirement?.hostArchitectures) ? requirement.hostArchitectures : [])
+    .map((value: string) => value === "x86_64" ? "x64" : value);
+  const declared = requirement?.architecture || (hosts.length > 1 ? "universal" : hosts[0]) || null;
+  return declared || install.architecture || null;
+}
 
 export function RuntimesView({
   state, settingsApi,
@@ -132,6 +156,7 @@ export function RuntimesView({
   const activeSectionTab = sectionTabs.find(tab => tab.choices.some(choice => choice.id === activeRuntimeChoice?.id));
   const activeRuntimeManager = activeRuntimeChoice?.manager || null;
   const activeRuntimeSection = activeRuntimeChoice?.section || null;
+  const activeRuntimeVersionTag = useMemo(() => runtimeVersionTagger(activeRuntimeSection), [activeRuntimeSection]);
   const shaderLibrary = activeRuntimeManager?.ui?.library === "shaders";
   const pluginLibrary = activeRuntimeManager?.ui?.library === "plugins";
   const presetLibrary = activeRuntimeManager?.ui?.library === "presets";
@@ -212,7 +237,7 @@ export function RuntimesView({
   const activeRuntimeInstalled = Array.isArray(activeRuntimeSection?.installed)
     ? activeRuntimeSection.installed.filter(matchesItemGroup)
     : [];
-  const activeRuntimeVariants = Array.isArray(activeRuntimeSection?.variants)
+  const activeRuntimeVariants = !activeRuntimeSection?.architectureVariants && Array.isArray(activeRuntimeSection?.variants)
     ? activeRuntimeSection.variants
     : [];
   const activeRuntimeHasVariants = activeRuntimeVariants.length > 0;
@@ -264,10 +289,7 @@ export function RuntimesView({
   const activeRuntimeSubtitleParts = [] as string[];
   if (summaryPresentation.showDefaultVersion && activeRuntimeSection?.defaultVersion) {
     activeRuntimeSubtitleParts.push(
-      `Default ${formatRuntimeVersionTag(
-        activeRuntimeSection.defaultVersion,
-        activeRuntimeSection
-      )}`
+      `Default ${activeRuntimeVersionTag(activeRuntimeSection.defaultVersion)}`
     );
   }
   if (summaryPresentation.showDefaultVersion && activeRuntimeDefaultVariantLabel) {
@@ -354,7 +376,8 @@ export function RuntimesView({
                   </div>
                   <div className="runtimePanelHeaderActions">
                     {activeRuntimeSupportsDefault && activeRuntimeSection.defaultSource === "saved" && <button className="btn small" disabled={runtimeBusy}
-                      onClick={() => onRuntimeSetDefault(activeRuntimeManager.id, activeRuntimeSection.id, null)}>Clear default</button>}
+                      title={activeRuntimeSection.defaultVersion ? `${activeRuntimeVersionTag(activeRuntimeSection.defaultVersion)} is the chosen default. MacLauncher chooses one automatically again.` : undefined}
+                      onClick={() => onRuntimeSetDefault(activeRuntimeManager.id, activeRuntimeSection.id, null)}>Use automatic default</button>}
                     {activeRuntimeDownloadSummary && (
                       <div className="chip">{activeRuntimeDownloadSummary}</div>
                     )}
@@ -401,8 +424,8 @@ export function RuntimesView({
                         <div className="runtimeCatalogDetails">
                           {activeRuntimeSection.description && <p>{activeRuntimeSection.description}</p>}
                           {activeRuntimeSubtitle && <div>{activeRuntimeSubtitle}</div>}
-                          {summaryPresentation.latestAvailableVersion && <div>Latest available {formatRuntimeVersionTag(summaryPresentation.latestAvailableVersion, activeRuntimeSection)}</div>}
-                          {summaryPresentation.latestInstalledVersion && <div>Latest installed {formatRuntimeVersionTag(summaryPresentation.latestInstalledVersion, activeRuntimeSection)}</div>}
+                          {summaryPresentation.latestAvailableVersion && <div>Latest available {activeRuntimeVersionTag(summaryPresentation.latestAvailableVersion)}</div>}
+                          {summaryPresentation.latestInstalledVersion && <div>Latest installed {activeRuntimeVersionTag(summaryPresentation.latestInstalledVersion)}</div>}
                           <div>{summaryPresentation.versionCount} {managementPresentation.localFiles
                             ? summaryPresentation.versionCount === 1 ? "file" : "files" : managementPresentation.local
                             ? summaryPresentation.versionCount === 1 ? "application" : "applications"
@@ -492,13 +515,26 @@ export function RuntimesView({
                     {managementPresentation.local && activeRuntimeSection.catalog?.status === "error" &&
                       <ErrorText error={activeRuntimeSection.catalog?.error} inline />}
 
-                    {!managementPresentation.local && (
+                    {/* A runtime whose packages another runtime installs names that runtime instead of an empty download list. */}
+                    {!managementPresentation.local && activeRuntimeSection.catalog?.packagesFrom && (() => {
+                      const from = activeRuntimeSection.catalog.packagesFrom;
+                      const target = runtimeManagers.find(manager => manager.id === from.managerId);
+                      const label = from.label || target?.label || from.managerId;
+                      return <div className="runtimeMeta runtimePackagesFrom">
+                        <span className="dim">{label} installs these versions, and its panel lists their downloads and updates.</span>
+                        {target && <button type="button" className="btn small" onClick={() => {
+                          setRuntimeManagerId(target.id);
+                          setRuntimeSectionId(from.sectionId || target.sections?.[0]?.id || "default");
+                        }}>Open {label}</button>}
+                      </div>;
+                    })()}
+                    {!managementPresentation.local && !activeRuntimeSection.catalog?.packagesFrom && (
                       <RuntimeCatalogSources managerId={activeRuntimeManager.id} section={activeRuntimeSection}
                         ui={activeRuntimeUi} busy={runtimeBusy} variant={activeRuntimeResolvedInstallVariant}
                         downloads={activeRuntimeDownloads} onOpenSource={onOpenSource}
                         onRefresh={options => onRuntimeRefresh(activeRuntimeManager.id, activeRuntimeSection.id, options)}
                         onSelect={(key, field, value) => updateRuntimeUiSection(activeRuntimeManager.id, key, field, value)}
-                        onInstall={(version, variant) => onRuntimeInstall(activeRuntimeManager.id, activeRuntimeSection.id, version, variant)} />
+                        onInstall={(version, variant, architecture) => architecture ? onRuntimeInstall(activeRuntimeManager.id, activeRuntimeSection.id, version, variant, architecture) : onRuntimeInstall(activeRuntimeManager.id, activeRuntimeSection.id, version, variant)} />
                     )}
                     {activeRuntimeSection.catalog?.importable && onRuntimeImport && <div className="runtimeImport">
                       <button className="btn" disabled={Boolean(pendingAction) || Boolean(activeRuntimeSection.catalog.importVersionRequired && !activeRuntimeInstallVersion)}
@@ -529,7 +565,7 @@ export function RuntimesView({
                             {(setup.description || setup.version) && <HelpTip label={`About ${setup.toolLabel || setup.label}`}>{setup.description && <p>{setup.description}</p>}{setup.version && <p>{setup.version}</p>}</HelpTip>}</div>
                           {setup.versions?.length > 0 ? <select className="input inputSmall" aria-label={`${setup.toolLabel || setup.label} version`}
                             value={selected} disabled={Boolean(pendingAction)} onChange={event => setSetupVersions(current => ({ ...current, [key]: event.target.value }))}>
-                            {setup.versions.map((version: string) => <option key={version} value={version}>{setup.versionLabels?.[version] || version}</option>)}
+                            {setup.versions.map((version: string) => <option key={version} value={version} title={version}>{formatRuntimeVersionTag(version, setup)}</option>)}
                           </select> : null}
                         </div>
                         <button className="btn" disabled={Boolean(pendingAction) || installed || setup.available === false}
@@ -565,14 +601,29 @@ export function RuntimesView({
                       </select>
                     </span>}
                   </div>
+                  {activeRuntimeSupportsDefault && !defaultSelections && activeRuntimeSection.defaultVersion &&
+                    // A default shared by several sections can be installed in another one.
+                    ![activeRuntimeSection, ...(Array.isArray(activeRuntimeManager?.sections) ? activeRuntimeManager.sections : [])]
+                      .some((section: any) => (Array.isArray(section?.installed) ? section.installed : []).some((inst: any) => inst.version === activeRuntimeSection.defaultVersion)) &&
+                    <div className="dim runtimeAvailability" data-runtime-default-missing="true">
+                      The default version, {activeRuntimeVersionTag(activeRuntimeSection.defaultVersion)}, is not installed. MacLauncher asks before downloading it when a game needs it.
+                    </div>}
                   {activeRuntimeInstalledSorted.length === 0 ? (
                     <div className="empty">{managementPresentation.emptyLabel}</div>
                   ) : (
                     <div className="saveList">
                       {activeRuntimeInstalledSorted.map(inst => {
+                        const automaticArchitecture = activeRuntimeSection.automaticArchitecture || activeRuntimeSection.launcherArchitecture;
+                        const preferredArchitecture = activeRuntimeSection.defaultArchitecture || automaticArchitecture;
+                        const installArchitecture = (row: Record<string, any>) => buildArchitecture(row, activeRuntimeSection, activeRuntimeInstalledSorted);
+                        const installBuild = installArchitecture(inst);
                         const defaultFor = defaultSelections?.filter((row: Record<string, any>) => row.version === inst.version).map((row: Record<string, any>) => row.label) || [];
                         const isDefault =
                           defaultSelections ? defaultFor.length > 0 : (activeRuntimeSupportsDefault || inst.custom) && inst.version === activeRuntimeSection.defaultVersion &&
+                          // A version installed only for another CPU, such as an Intel-only
+                          // build on Apple Silicon, is still the default.
+                          (!installArchitecture(inst) || installArchitecture(inst) === "universal" || !preferredArchitecture || installArchitecture(inst) === preferredArchitecture ||
+                            !activeRuntimeInstalledSorted.some(row => row.version === inst.version && row.ready !== false && [preferredArchitecture, "universal"].includes(installArchitecture(row)))) &&
                           (activeRuntimeSection.defaultVariant
                             ? inst.variant === activeRuntimeSection.defaultVariant
                             : true);
@@ -589,21 +640,23 @@ export function RuntimesView({
                         return (
                           <div
                             className="saveRow"
-                            key={`${inst.version}-${inst.platformKey}-${inst.variant}`}
+                            key={`${inst.version}-${inst.platformKey}-${inst.variant}-${inst.architecture}`}
                           >
                             <div className="saveRowMain">
                               <div className="saveName">
-                                {formatRuntimeVersionTag(inst.version, activeRuntimeSection)}
+                                {activeRuntimeVersionTag(inst.version)}
+                                {installBuild && installBuild !== "universal" && automaticArchitecture &&
+                                  installBuild !== automaticArchitecture && <span className="badge">{architectureLabel(installBuild)}</span>}
                                 {isDefault && (
                                   <span className="badge badgeAccent" title={defaultFor.length ? `Automatic for ${defaultFor.join(", ")}` : undefined}>Default</span>
                                 )}
-                                {inst.ready === false && <StatusBadge tone="warning">{availabilityLabel(inst.external ? "unavailable" : "needsRepair")}</StatusBadge>}
+                                {inst.ready === false && <StatusBadge tone="warning">{availabilityLabel(installedRuntimeAvailability(inst) === "unavailable" ? "unavailable" : "needsRepair")}</StatusBadge>}
                                 {isRuntimeIncluded(inst) && <StatusBadge>{availabilityLabel("included")}</StatusBadge>}
                                 {inst.custom && <span className="badge">Custom</span>}
                                 {activeRuntimeHasMultipleVariants && inst.variant && (
                                   <span className="badge">{variantLabel}</span>
                                 )}
-                                {(defaultFor.length > 0 || inst.platformKey || inst.minimumMacOS || installDetail || inst.installDir || Object.keys(inst.libraries || {}).length > 0) && <HelpTip label={`About ${formatRuntimeVersionTag(inst.version, activeRuntimeSection)}`}>
+                                {(defaultFor.length > 0 || inst.platformKey || inst.minimumMacOS || installDetail || inst.installDir || Object.keys(inst.libraries || {}).length > 0) && <HelpTip label={`About ${activeRuntimeVersionTag(inst.version)}`}>
                                   {defaultFor.length > 0 && <p>Automatic for {defaultFor.join(", ")}.</p>}
                                   {inst.platformKey && <p>{inst.platformKey}</p>}
                                   {inst.minimumMacOS && <p>Requires macOS {inst.minimumMacOS} or later.</p>}
@@ -618,7 +671,7 @@ export function RuntimesView({
                             <div className="saveRowActions">
                               {onRuntimeInstalledAction && (inst.actions || []).filter((action: any) => action.available !== false).map((action: any) =>
                                 <button className="btn" key={action.id} disabled={runtimeBusy}
-                                  onClick={() => onRuntimeInstalledAction(activeRuntimeManager.id, activeRuntimeSection.id, inst.version, action.id)}>
+                                  onClick={() => onRuntimeInstalledAction(activeRuntimeManager.id, activeRuntimeSection.id, inst.version, action.id, inst.architecture)}>
                                   {action.label}
                                 </button>)}
                               {(!isDefault || incompleteDefault) && inst.ready !== false && (inst.custom || activeRuntimeSection.supportsDefault !== false) && (
@@ -632,7 +685,9 @@ export function RuntimesView({
                                         activeRuntimeManager.id,
                                         activeRuntimeSection.id,
                                         inst.version,
-                                        inst.variant
+                                        inst.variant,
+                                        undefined,
+                                        inst.architecture
                                       )
                                     }
                                   >

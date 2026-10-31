@@ -1,9 +1,8 @@
-const { createGithubReleaseDiscovery } = require("../../shared/runtime/github-runtime-catalog");
-const HTTP = require("undici");
+const Upstream = require("../../shared/runtime/upstream");
+const { macDownloads } = require("../../shared/runtime/release-files");
 
 const SOURCE_URL = "https://github.com/EasyRPG/Player/releases";
 const ARCHIVE_URL = "https://easyrpg.org/downloads/player/";
-const VERSION = /^\d+\.\d+(?:\.\d+){0,2}$/;
 
 function compareVersions(left, right) {
   const a = String(left).split(".").map(Number), b = String(right).split(".").map(Number);
@@ -13,44 +12,42 @@ function compareVersions(left, right) {
   }
   return 0;
 }
-
-function archiveIdentity(version) {
-  if (!VERSION.test(version)) throw new Error("Invalid EasyRPG release version.");
-  const filename = `easyrpg-player-${version}-macos.app.zip`;
-  return { filename, artifactId: filename, url: `${ARCHIVE_URL}${version}/${filename}` };
+// Entries of a directory listing directly inside `base`: folders end in "/".
+function entries(html, base) {
+  const found = new Set();
+  for (const [, href] of String(html).matchAll(/href=["']([^"'?#]+)["']/gi)) {
+    try {
+      const url = new URL(href, base);
+      if (url.origin !== new URL(base).origin || !url.pathname.startsWith(new URL(base).pathname)) continue;
+      const rest = url.pathname.slice(new URL(base).pathname.length);
+      if (/^[^/]+\/?$/.test(rest)) found.add(decodeURIComponent(rest));
+    } catch {}
+  }
+  return [...found];
 }
 
-function validateRecordedArtifact(asset, entry) {
-  if (!VERSION.test(entry?.version || "")) return false;
-  const expected = archiveIdentity(entry.version);
-  return asset?.integrity === "recorded-local" && asset.url === expected.url &&
-    asset.filename === expected.filename && asset.artifactId === expected.artifactId &&
-    Number.isSafeInteger(asset.bytes) && asset.bytes > 0;
-}
+// easyrpg.org lists one folder per release; each folder lists the release's
+// files. Releases from 0.8, the first with a Mac app, are listed. The current
+// app archive name wins; a renamed or reformatted Mac download is followed.
+// The publisher states no checksum, so the download's own is recorded.
+const source = Upstream.index({ locations: [ARCHIVE_URL], allArchitectures: true,
+  parse: async ([listing], { fetch: read, latestOnly, logger }) => {
+    const versions = entries(listing.text, listing.url).map(name => /^(\d+(?:\.\d+)+)\/$/.exec(name)?.[1])
+      .filter(version => version && compareVersions(version, "0.8") >= 0).sort((a, b) => compareVersions(b, a)).slice(0, latestOnly ? 1 : 100);
+    const rows = [];
+    for (const version of versions) {
+      const folder = `${ARCHIVE_URL}${version}/`;
+      try {
+        const document = await read(folder);
+        if (document?.status !== 200) throw new Error(`the release folder answered ${document?.status}`);
+        const names = entries(document.text, folder).filter(name => !name.endsWith("/") && !/libretro/i.test(name));
+        const downloads = macDownloads(names.map(name => ({ name })), { preferred: `easyrpg-player-${version}-macos.app.zip` });
+        rows.push(...(downloads.length ? downloads.map(({ asset, architecture }) => ({ version, sourceUrl: folder, ...(architecture ? { architecture } : {}),
+          files: [{ name: asset.name, url: `${folder}${encodeURIComponent(asset.name)}` }] }))
+          : [{ version, sourceUrl: folder, installReason: "No Mac app bundle is available for this release. Select a newer release or import a compatible local runtime." }]));
+      } catch (error) { logger?.warn?.(`[easyrpg] skipped ${version}: ${error.message || error}`); }
+    }
+    return rows;
+  } });
 
-async function headArtifact(url, { signal } = {}) {
-  const timeout = AbortSignal.timeout(20000);
-  const response = await HTTP.fetch(url, { method: "HEAD", redirect: "error",
-    signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`EasyRPG Mac release lookup failed (${response.status}).`);
-  const bytes = Number(response.headers.get("content-length"));
-  if (!Number.isSafeInteger(bytes) || bytes <= 0) throw new Error("EasyRPG Mac release has no valid archive size.");
-  return { bytes };
-}
-
-function createDiscovery(dependencies = {}) {
-  return options => createGithubReleaseDiscovery({ owner: "EasyRPG", repo: "Player", dependencies,
-    mapRelease: async (release, { resolveRevision, sourceUrl }) => {
-      const version = String(release.tag_name || "").replace(/^v(?=\d)/, "");
-      if (!VERSION.test(version) || compareVersions(version, "0.8") < 0) return null;
-      const identity = archiveIdentity(version);
-      const metadata = await (dependencies.headArtifact || headArtifact)(identity.url, { signal: options?.signal });
-      const revision = await resolveRevision(release);
-      return { version, upstreamRevision: revision, upstreamTag: release.tag_name, sourceUrl, localBuild: false,
-        ...(metadata ? { asset: { ...identity, bytes: metadata.bytes, integrity: "recorded-local" } }
-          : { installReason: "No Mac app bundle is available for this release. Select a newer release or import a compatible local runtime." }) };
-    } })(options);
-}
-
-module.exports = { SOURCE_URL, ARCHIVE_URL, VERSION, compareVersions, archiveIdentity, validateRecordedArtifact, headArtifact, createDiscovery };
+module.exports = { SOURCE_URL, ARCHIVE_URL, compareVersions, source };

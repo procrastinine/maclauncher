@@ -2,7 +2,6 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { createPinnedNativeManager } = require("../../shared/runtime/pinned-native-manager");
 const { createBundledNativeRuntime } = require("../../shared/runtime/bundled-native");
-const Github = require("../../shared/runtime/github-releases");
 const Profile = require("./profile");
 const Custom = require("../../shared/runtime/custom-runtime");
 
@@ -10,20 +9,9 @@ function createManager({ dependencies = {} } = {}) {
   const manager = createPinnedNativeManager({
     id: "fna", label: "FNA native host", sourceUrl: "https://github.com/FNA-XNA/FNA/tags",
     projectBuilds: { projectId: "fna", repository: "procrastinine/maclauncher-builds" },
-    catalog: [],
     resolveExecutable: root => path.join(root, "dotnet"),
     dependencies: dependencies.manager || {},
-    legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "fna", ...(dependencies.bundle || {}) }),
-    discoverCatalog: async ({ signal, logger }) => {
-      logger?.info?.("[fna] fetching monthly source versions");
-      const tags = await Github.fetchGithubTags({ owner: "FNA-XNA", repo: "FNA", signal });
-      return tags.filter(tag => /^\d{2}\.\d{2}$/.test(tag.name)).map(tag => ({
-        version: tag.name, upstreamRevision: tag.commit.sha,
-        architecture: "arm64", hostArchitectures: ["arm64"], sourceUrl: `https://github.com/FNA-XNA/FNA/tree/${tag.name}`,
-        label: `FNA ${tag.name} source`, localBuild: false,
-        installReason: "Source release; Mac hosts are available from MacLauncher Builds."
-      }));
-    }
+    legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "fna", ...(dependencies.bundle || {}) })
   });
   const baseResolve = manager.resolveSelection;
   manager.resolveSelection = (...args) => {

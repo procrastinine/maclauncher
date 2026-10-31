@@ -141,6 +141,27 @@ test("a custom named command launches a registered shell script with its saved l
   assert.ok(stored.lastPlayedAt);
 });
 
+test("a previously saved unindexed command launches its relocated library game", async t => {
+  if (process.platform !== "darwin") return t.skip("macOS command scripts");
+  const root = fixture(t), gamePath = path.join(root, "Old game.sh"), moved = path.join(root, "Moved game.sh");
+  const marker = path.join(root, "relocated-ran.txt"), userDataDir = path.join(root, "Library");
+  fs.writeFileSync(gamePath, 'printf "%s" "relocated" > "$SCRIPT_MARKER"\n', { mode: 0o644 });
+  const launcher = createLauncher({ userDataDir }), entry = await launcher.resolveEntry(gamePath, { runtimeId: "native" });
+  GameStore.writeGameRecord(userDataDir, { ...entry, networkAccess: true });
+  const command = writeGameCommand(path.join(root, "Existing custom shortcut"), {
+    gamePath, userDataDir, executablePath: process.execPath, repoRoot, packaged: false
+  });
+  fs.renameSync(gamePath, moved);
+  const { createGameMetadataService } = require("../src/core/game-metadata");
+  const metadata = createGameMetadataService({ userDataDir, registry: require("../src/modules/registry") });
+  await metadata.relocateEntry(entry, moved, launcher.loadSettings());
+  assert.ok(fs.readFileSync(command, "utf8").includes("Old game.sh"), "the old shortcut is outside the indexed/default directories");
+  const result = runCommand(command, { SCRIPT_MARKER: marker });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(await readLaunchedFile(marker, "relocated"), "relocated");
+  assert.equal(GameStore.readGameRecord(userDataDir, entry.gameId).gamePath, moved);
+});
+
 test("one saved command follows the registered game's native and hosted runtime choices without the launcher UI", async t => {
   if (process.platform !== "darwin") return t.skip("macOS native app fixture");
   const root = fixture(t), app = path.join(root, "Game ' ✨.app");

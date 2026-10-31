@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import type { LauncherState } from "../types";
+import type { AppUpdateState, LauncherState } from "../types";
 import {
   buildRuntimeSettingsDefaults,
+  defaultRuntimeChoices,
   formatModuleLabel,
   formatRuntimeLabel,
   formatRuntimeOption,
@@ -11,7 +12,7 @@ import {
   resolveRuntimeEntry,
   resolveRuntimeSettingsSchema,
   runtimeSettingsEqual,
-  sortModulesForSettings
+  settingsSectionModules
 } from "../ui-helpers";
 import { RuntimeSettingsWindow, type RuntimeSettingsApi } from "./RuntimeSettingsWindow";
 import { HelpTip } from "./HelpTip";
@@ -32,7 +33,49 @@ type SettingsViewProps = {
   showNonDefaultTags: boolean;
   onSetLauncherSettings: (patch: Record<string, any>) => void;
   onSetModuleSettings: (moduleId: string, patch: Record<string, any>) => void;
+  onAppUpdate?: (action: AppUpdateAction) => void;
 };
+
+type AppUpdateAction = "check" | "cancel" | "restart";
+
+/** The Check for Updates button, the launch setting and the latest result. */
+export function appUpdateStatus(update: AppUpdateState | undefined): { action: AppUpdateAction; label: string; busy: boolean; status: string } {
+  const check = update?.lastCheck;
+  const when = check ? new Date(check.checkedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "";
+  if (update?.phase === "checking") return { action: "check", label: "Checking…", busy: true, status: "Checking GitHub for a newer release…" };
+  if (update?.phase === "downloading") return { action: "cancel", label: "Cancel Download", busy: false,
+    status: `Downloading MacLauncher ${update.version}…${Number.isFinite(update.progress) ? ` ${Math.floor((update.progress as number) * 100)}%` : ""}` };
+  if (update?.phase === "ready") return { action: "restart", label: "Restart to Update", busy: false, status: `MacLauncher ${update.version} is ready to install.` };
+  const status = update?.error ? `The update could not be installed: ${update.error}`
+    : !check ? `${update?.currentVersion ? `MacLauncher ${update.currentVersion}. ` : ""}Not checked yet.`
+      : check.outcome === "available" ? `MacLauncher ${check.version} is available. Checked ${when}.`
+        : check.outcome === "error" ? `The last check failed (${when}): ${check.message || "unknown reason"}`
+          : `MacLauncher ${check.currentVersion} is up to date. Checked ${when}.`;
+  return { action: "check", label: "Check for Updates…", busy: false, status };
+}
+
+function AppUpdateRows({ update, checkAtLaunch, onAction, onSetLauncherSettings }: {
+  update?: AppUpdateState; checkAtLaunch: boolean; onAction?: (action: AppUpdateAction) => void;
+  onSetLauncherSettings: (patch: Record<string, any>) => void;
+}) {
+  const shown = appUpdateStatus(update);
+  return <>
+    <div className="settingsRow">
+      <div className="settingsLabel">Updates</div>
+      <div className="settingsControl settingsUpdateControl">
+        <button type="button" className="btn" disabled={shown.busy || !onAction} onClick={() => onAction?.(shown.action)}>{shown.label}</button>
+        <span className="settingsStatus" role="status">{shown.status}</span>
+      </div>
+    </div>
+    <div className="settingsRow">
+      <div className="settingsLabel">Check for updates at launch <HelpTip label="About checking for updates at launch">Each start asks GitHub for a newer MacLauncher release and shows a dialog when one is available. While this is off, MacLauncher contacts GitHub for updates only through Check for Updates….</HelpTip></div>
+      <div className="settingsControl">
+        <Toggle label="Check for updates at launch" checked={checkAtLaunch}
+          onChange={checked => onSetLauncherSettings({ checkForUpdatesAtLaunch: checked })} />
+      </div>
+    </div>
+  </>;
+}
 
 export function SettingsView({
   state,
@@ -42,9 +85,10 @@ export function SettingsView({
   showIcons,
   showNonDefaultTags,
   onSetLauncherSettings,
-  onSetModuleSettings
+  onSetModuleSettings,
+  onAppUpdate
 }: SettingsViewProps) {
-  const modules = useMemo(() => sortModulesForSettings(state.modules || []), [state.modules]);
+  const modules = useMemo(() => settingsSectionModules(state.modules || []), [state.modules]);
   // Shaders and presets are managed in Runtimes ▸ Graphics.
   const section = (id?: string | null) => id?.replace(/^module:/, "") || "launcher";
   const [activeTab, setActiveTab] = useState(() => section(sectionId));
@@ -106,6 +150,8 @@ export function SettingsView({
                     onChange={checked => onSetLauncherSettings({ showNonDefaultTags: checked })} />
                 </div>
               </div>
+              <AppUpdateRows update={state.appUpdate} checkAtLaunch={state.launcherSettings.checkForUpdatesAtLaunch === true}
+                onAction={onAppUpdate} onSetLauncherSettings={onSetLauncherSettings} />
             </div>}
             {modules.filter(mod => mod.id === tab).map(mod => {
               const moduleSettings = state.moduleSettings?.[mod.id] || {};
@@ -146,12 +192,18 @@ export function SettingsView({
                     };
                   })
                 : [];
-              const runtimeTabs = runtimeButtons.filter(runtime => runtime.hasSettings || runtime.hasDescription);
+              // Every runtime offered as the default has a tab, so the chosen
+              // default always shows what it is and which settings it has.
+              const runtimeChoices = defaultRuntimeChoices(mod);
+              const runtimeTabs = runtimeButtons.filter(runtime => runtime.hasSettings || runtime.hasDescription || runtimeChoices.includes(runtime.id));
               // Module-wide accounts follow the module fields; runtime-specific
               // accounts sit with their runtime's settings.
               const accountDescriptors = [...(mod.ui?.accounts ? [mod.ui.accounts] : []), ...(mod.ui?.accountProviders || [])];
+              const savedRuntime = moduleSettings.defaultRuntime ?? settingsDefaults.defaultRuntime;
+              const defaultRuntime = typeof savedRuntime === "string" && savedRuntime
+                ? savedRuntime : mod.runtime?.default || runtimeChoices[0] || "";
               const selectedRuntime = runtimeTabs.find(runtime => runtime.id === activeRuntimes[mod.id])
-                || runtimeTabs.find(runtime => runtime.id === moduleSettings.defaultRuntime)
+                || runtimeTabs.find(runtime => runtime.id === defaultRuntime)
                 || runtimeTabs.find(runtime => runtime.id === mod.runtime?.default)
                 || runtimeTabs[0];
               return (
@@ -159,6 +211,32 @@ export function SettingsView({
                   <div className="settingsTitle">
                     {formatModuleLabel(mod.label, mod.shortLabel, mod.id)}
                   </div>
+                  {(runtimeChoices.length > 1 || (defaultRuntime && !runtimeChoices.includes(defaultRuntime))) && (
+                    <div className="settingsRow">
+                      <div className="settingsLabel">Default runtime</div>
+                      <div className="settingsControl">
+                        <select
+                          className="input"
+                          aria-label="Default runtime"
+                          value={defaultRuntime}
+                          onChange={e => {
+                            const runtimeId = e.target.value;
+                            setActiveRuntimes(current => ({ ...current, [mod.id]: runtimeId }));
+                            onSetModuleSettings(mod.id, { defaultRuntime: runtimeId });
+                          }}
+                        >
+                          {!runtimeChoices.includes(defaultRuntime) && <option value={defaultRuntime}>
+                            {formatRuntimeOption(defaultRuntime, mod)} (saved; choose a compatible runtime)
+                          </option>}
+                          {runtimeChoices.map(rt => (
+                            <option key={rt} value={rt}>
+                              {formatRuntimeOption(rt, mod)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  )}
                   {settingKeys.length > 0 && (
                     settingKeys.map(key => {
                       const defaultValue = settingsDefaults[key];
@@ -166,40 +244,7 @@ export function SettingsView({
                         moduleSettings[key] !== undefined
                           ? moduleSettings[key]
                           : defaultValue;
-                      if (key === "defaultRuntime" && mod.runtime?.supported) {
-                        const runtimeValue =
-                          typeof currentValue === "string" && currentValue
-                            ? currentValue
-                            : mod.runtime.supported[0] || "";
-                        // A module with one runtime has nothing to choose.
-                        if (mod.runtime.supported.length < 2 && mod.runtime.supported.includes(runtimeValue)) return null;
-                        return (
-                          <div className="settingsRow" key={`${mod.id}-${key}`}>
-                            <div className="settingsLabel">Default runtime</div>
-                            <div className="settingsControl">
-                              <select
-                                className="input"
-                                aria-label="Default runtime"
-                                value={runtimeValue}
-                                onChange={e => {
-                                  const runtimeId = e.target.value;
-                                  setActiveRuntimes(current => ({ ...current, [mod.id]: runtimeId }));
-                                  onSetModuleSettings(mod.id, { defaultRuntime: runtimeId });
-                                }}
-                              >
-                                {!mod.runtime.supported.includes(runtimeValue) && <option value={runtimeValue}>
-                                  {formatRuntimeOption(runtimeValue, mod)} (saved; choose a compatible runtime)
-                                </option>}
-                                {mod.runtime.supported.map(rt => (
-                                  <option key={rt} value={rt}>
-                                    {formatRuntimeOption(rt, mod)}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          </div>
-                        );
-                      }
+                      if (key === "defaultRuntime") return null;
                       if (typeof defaultValue === "boolean") {
                         const label = key === "toolsButtonVisible" ? "Show Tools button" : formatSettingLabel(key);
                         return (

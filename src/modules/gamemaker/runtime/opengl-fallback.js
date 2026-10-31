@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const Native = require("../../shared/runtime/local-native");
+const { readMachOLoadCommands } = require("../../shared/runtime/macho-load-commands");
 const Manager = require("./opengl-helper-manager");
 const { selectRuntimeVersion, managerDefaultVersion } = require("../../shared/runtime/version-choices");
 
@@ -21,13 +22,7 @@ const LEGACY_SOURCE_ABI = Object.freeze({
     "1.4.9999"
   ]
 });
-const TESTED_VENDOR_SHA256 = "d63b5d5152d427b333b64883c26edc6701214d0a5ad027fa6f09e579fa31c1b0";
-const TESTED_VENDOR_BUILDS = Object.freeze({ "2026.0.0.23": TESTED_VENDOR_SHA256,
-  "2024.13.1.242": "4871c81c7425b18cb8aa0650c82019f75dde504ca2d1d7e61d14aa5f1e874ffe",
-  "2.3.7.476": "50916940fb11afe911f1bb11b24be075c8b616d5afae10b933c407bf618e1fbb",
-  "1.4.9999": "dd8395d9dcdb5eb6e58641a730b22640d1909e72a55a48c3450cf6d0231040fa",
-  "2.2.5.378": "054debab706e5fd42ce73df6c4739ce86c31804e00e039b9e78c16dfaffc265a" });
-const SUPPORTED_RUNNER_VERSIONS = Object.freeze(Object.keys(TESTED_VENDOR_BUILDS));
+const OPENGL = /^\/System\/Library\/Frameworks\/OpenGL\.framework\//;
 function installDirectory(userDataDir, helperVersion) {
   const version = Manager.core.normalizeVersion(helperVersion);
   if (typeof userDataDir !== "string" || !path.isAbsolute(userDataDir) || userDataDir.includes("\0")) {
@@ -50,9 +45,6 @@ function legacyStatus({ userDataDir, helperVersion } = {}) {
     const directory = installDirectory(userDataDir, helperVersion);
     const record = JSON.parse(fs.readFileSync(path.join(directory, "helper.json"), "utf8"));
     if (record.version !== helperVersion || !Object.hasOwn(LEGACY_SOURCE_ABI, record.sourceSha256) || record.architecture !== "universal" ||
-      record.testedVendorSha256 !== TESTED_VENDOR_SHA256 ||
-      !Array.isArray(record.supportedRunnerVersions) || !record.supportedRunnerVersions.length ||
-      record.supportedRunnerVersions.some(version => !SUPPORTED_RUNNER_VERSIONS.includes(version)) ||
       !/^[a-f0-9]{64}$/.test(record.binarySha256 || "")) {
       throw new Error("The OpenGL helper build record does not match its pinned source/version.");
     }
@@ -66,12 +58,10 @@ function legacyStatus({ userDataDir, helperVersion } = {}) {
       (!Array.isArray(record.legacyLogicalRunnerVersions) || JSON.stringify(record.legacyLogicalRunnerVersions) !== JSON.stringify(logical)))
       throw new Error("The OpenGL helper coordinate ABI differs from its owned source.");
     return { ...record, legacy: true, legacyLogicalRunnerVersions: [...logical],
-      runnerChecksums: Object.fromEntries(record.supportedRunnerVersions.map(version => [version, TESTED_VENDOR_BUILDS[version]])),
       ready: true, dylibPath, installDir: directory, reason: null };
   } catch (error) {
     const missing = error.code === "ENOENT";
-    return { ready: false, version: helperVersion,
-      supportedRunnerVersions: [...SUPPORTED_RUNNER_VERSIONS], reason: missing
+    return { ready: false, version: helperVersion, reason: missing
         ? "The selected graphics helper is not installed. Install it in Runtimes."
         : error.message };
   }
@@ -111,16 +101,19 @@ function getFallbackStatus({ userDataDir, helperVersion, entry, settings, manage
   try { return Manager.verifyInstall(selected.install); }
   catch (error) { return { ready: false, version: selected.version, reason: error.message }; }
 }
-function supportsRunner(helper, runnerVersion, runnerSha256) {
-  const checksums = helper?.runnerChecksums || helper?.manifest?.runnerChecksums || TESTED_VENDOR_BUILDS;
-  return Boolean(runnerSha256 && checksums[runnerVersion] === runnerSha256);
+// The helper replaces AppKit's OpenGL pixel-format request, so it serves any
+// runner that draws through OpenGL; the runner's own load commands say so.
+// Before the runner is installed, the helper is planned together with it.
+function drawsWithOpenGL(executablePath) {
+  if (!executablePath) return false;
+  try { return readMachOLoadCommands(executablePath).slices.some(slice => slice.dependencies.some(library => OPENGL.test(library.path))); }
+  catch { return false; }
 }
 function runtimeRequirements(entry, context, official, manager = Manager) {
   const mode = context.runtimeSettings?.softwareOpenGLFallback;
   if (mode === false || mode === "disabled" || !official?.version) return [];
-  const runnerVersion = official.install?.runtimeVersion || official.version;
   const selected = selection(entry, context, manager);
-  if (!selected.ready && mode !== true && mode !== "enabled" && !supportsRunner(null, runnerVersion, official.install?.binarySha256 || TESTED_VENDOR_BUILDS[runnerVersion])) return [];
+  if (!selected.ready && mode !== true && mode !== "enabled" && official.install?.executablePath && !drawsWithOpenGL(official.install.executablePath)) return [];
   return selected.ready ? [] : [{ managerId: manager.id, version: selected.version,
     ...(selected.discoveryRequired ? { discoveryRequired: true } : {}),
     requiresDownload: true, installOptions: {} }];
@@ -128,11 +121,11 @@ function runtimeRequirements(entry, context, official, manager = Manager) {
 
 // The caller owns a private, ad-hoc-signed runner stage. Never apply this
 // environment to the installed vendor binary or the launcher process itself.
-function resolveFallback({ userDataDir, runnerVersion, runnerSha256, helperVersion, entry, settings, manager = Manager } = {}) {
+// Its package names the runner versions that use the reviewed legacy
+// coordinates; every other runner keeps AppKit's coordinates.
+function resolveFallback({ userDataDir, runnerVersion, helperVersion, entry, settings, manager = Manager } = {}) {
   const status = getFallbackStatus({ userDataDir, helperVersion, entry, settings, manager });
   if (!status.ready) return status;
-  if (!supportsRunner(status, runnerVersion, runnerSha256))
-    return { ready: false, version: status.version, reason: "The selected graphics helper does not support this official runner checksum." };
   return { ...status, environment: {
     DYLD_INSERT_LIBRARIES: status.dylibPath,
     MACLAUNCHER_ALLOW_SOFTWARE_OPENGL: "1",
@@ -141,5 +134,4 @@ function resolveFallback({ userDataDir, runnerVersion, runnerSha256, helperVersi
 }
 
 module.exports = { getFallbackStatus, resolveFallback, selection, runtimeRequirements, manager: Manager,
-  supportsRunner, SUPPORTED_RUNNER_VERSIONS, TESTED_VENDOR_SHA256, TESTED_VENDOR_BUILDS,
-  __test: { installDirectory } };
+  drawsWithOpenGL, __test: { installDirectory } };

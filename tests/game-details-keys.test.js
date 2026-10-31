@@ -53,7 +53,7 @@ test("library startup keeps spinner and accessible Cancel without visible Starti
   assert.match(starting, /aria-label="Cancel Alpha"/);
   assert.match(starting, /aria-busy="true"/);
   assert.match(starting, /title="Starting · Cancel"/);
-  assert.match(render("install"), />Installing</);
+  assert.match(render("install"), /role="status">Preparing game</);
   assert.match(render("remove"), />Removing</);
 });
 // Simple and Advanced are views of the one mounted graphics editor; the former

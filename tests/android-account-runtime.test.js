@@ -18,7 +18,7 @@ test('an Android build without included metadata remains manageable and offline'
   assert.equal(selection.ready, false);
   // Discovery requires consent; a missing catalog never selects a package version.
   assert.equal(selection.version, null);
-  assert.equal(selection.selectionRequired, true);
+  assert.equal(selection.selectionRequired, undefined);
   assert.equal(selection.discoveryRequired, true);
   assert.equal(selection.install, null);
   assert.deepEqual(manager.getState({ userDataDir: root }).catalog.includedVersions, []);

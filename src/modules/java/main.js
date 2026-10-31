@@ -13,7 +13,7 @@ const {
 const { extractJarIconToPath } = require("./jar-icon");
 const JavaRuntimeManager = require("./runtime/java-runtime-manager");
 const Custom = require("../shared/runtime/custom-runtime");
-const { selectRuntimeVersion } = require("../shared/runtime/version-choices");
+const { selectRuntimeVersion, usableDefaultVersion } = require("../shared/runtime/version-choices");
 const Rosetta = require("../shared/runtime/rosetta");
 const GraphicsInputs = require("../shared/runtime/native-graphics-inputs");
 const { confirmToolInstall } = require("../shared/runtime/tool-install");
@@ -26,7 +26,6 @@ const Writable = require("../shared/writable-input");
 
 const JavaCore = JavaRuntimeManager.core.java;
 const VineflowerCore = JavaRuntimeManager.core.vineflower;
-const MAX_MANAGED_LINE = Math.max(...LTS_LINES);
 
 let runCommandOverride = null;
 
@@ -56,9 +55,10 @@ function existsFile(p) {
   }
 }
 
+// LTS lines have their own sections; every other feature release is in Other.
 function isManagedLine(line) {
   const value = Number(line);
-  return Number.isFinite(value) && LTS_LINES.includes(value);
+  return Number.isInteger(value) && value > 0;
 }
 
 function normalizeLineOrNull(input) {
@@ -266,11 +266,14 @@ function resolveLineConfig(cfg, line, userDataDir) {
       defaultVariant: JavaCore.defaultVariantForHost()
     };
   }
-  const section = cfg.lines?.[line] && typeof cfg.lines[line] === "object" ? cfg.lines[line] : {};
+  const key = JavaRuntimeManager.sectionIdForLine(line);
+  const section = cfg.lines?.[key] && typeof cfg.lines[key] === "object" ? cfg.lines[key] : {};
+  const state = JavaRuntimeManager.lineState({ settings: cfg, userDataDir, line });
   return {
-    defaultVersion: selectRuntimeVersion({ defaultVersion: normalizeVersionForLine(section.defaultVersion, line),
-      fallback: JavaRuntimeManager.getState({ settings: cfg, userDataDir }).sections?.find(item => String(item.id) === String(line))?.defaultVersion }).version,
-    defaultVariant: normalizeVariantOrNull(section.defaultVariant) || JavaCore.defaultVariantForHost()
+    // A saved version that Adoptium no longer lists and that is not installed gives way to the line's newest version.
+    defaultVersion: usableDefaultVersion({ ...state, defaultVersion: normalizeVersionForLine(section.defaultVersion, line) || state?.defaultVersion }),
+    defaultVariant: normalizeVariantOrNull(section.defaultVariant) || JavaCore.defaultVariantForHost(),
+    catalogRead: Boolean(state?.catalog?.fetchedAt)
   };
 }
 
@@ -396,11 +399,7 @@ function findSectionStateById(managerState, sectionId) {
 }
 
 async function resolveInstallVersionForLine(line, context) {
-  const state = JavaRuntimeManager.getState({
-    settings: context.settings?.runtimes?.java,
-    userDataDir: context.userDataDir
-  });
-  const section = findSectionStateById(state, String(line));
+  const section = JavaRuntimeManager.lineState({ settings: context.settings?.runtimes?.java, userDataDir: context.userDataDir, line });
   return selectRuntimeVersion({ defaultVersion: section?.defaultVersion }).version;
 }
 
@@ -436,16 +435,13 @@ async function ensureVineflowerInstalled(context) {
 
 async function ensureDecompilerJavaRuntime(context, requiredJava = 17) {
   const minimumJava = Math.max(17, Number(requiredJava) || 17);
-  if (minimumJava > MAX_MANAGED_LINE) {
-    throw new Error(`This decompiler requires Java ${minimumJava}; the launcher manages up to Java ${MAX_MANAGED_LINE}.`);
-  }
   const cfg = JavaRuntimeManager.normalizeSettings(context.settings?.runtimes?.java);
+  // The newest LTS lines first; a decompiler that needs a later release uses its own line.
   const orderedLines = Array.from(
     new Set([
       cfg.defaultLine,
-      17,
-      21,
-      25
+      ...[...LTS_LINES].reverse(),
+      minimumJava
     ])
   ).filter(line => Number.isFinite(Number(line)) && isManagedLine(Number(line)) && Number(line) >= minimumJava);
 
@@ -526,14 +522,7 @@ async function launchRuntime(runtimeId, entry, context) {
   if (!Number.isFinite(line)) {
     throw new Error("Java runtime line is unknown for this game.");
   }
-  if (!isManagedLine(line)) {
-    if (requiredLine && requiredLine > MAX_MANAGED_LINE) {
-      throw new Error(
-        `This jar requires Java ${requiredLine}, but the launcher currently manages up to Java ${MAX_MANAGED_LINE}.`
-      );
-    }
-    throw new Error(`Unsupported Java line ${line}.`);
-  }
+  if (!isManagedLine(line)) throw new Error(`Unsupported Java line ${line}.`);
 
   const lineConfig = resolveLineConfig(cfg, line, context.userDataDir);
   const install = resolveInstalledRuntime({
@@ -568,23 +557,22 @@ async function ensureRuntime(entry, context) {
   if ((context.runtimeId || entry.runtimeId || manifest.runtime.default) !== "java") return null;
   const { line, requiredLine, cfg, runtimeData } = resolveRequestedLine(entry, context.settings);
   if (!Number.isFinite(line)) throw new Error("Java runtime line is unknown for this game.");
-  if (!isManagedLine(line)) {
-    if (requiredLine && requiredLine > MAX_MANAGED_LINE) {
-      throw new Error(`This jar requires Java ${requiredLine}, but the launcher currently manages up to Java ${MAX_MANAGED_LINE}.`);
-    }
-    throw new Error(`Unsupported Java line ${line}.`);
-  }
+  if (!isManagedLine(line)) throw new Error(`Unsupported Java line ${line}.`);
   const lineConfig = resolveLineConfig(cfg, line, context.userDataDir);
   const installed = resolveInstalledRuntime({ userDataDir: context.userDataDir, line, runtimeData, lineConfig, entry });
   if (installed?.javaPath) {
     await ensureInstalledRosetta(installed, context);
     return null;
   }
-  const version = selectRuntimeVersion({ manual: normalizeVersionOrNull(runtimeData.version),
-    defaultVersion: lineConfig.defaultVersion }).version;
+  const manual = normalizeVersionOrNull(runtimeData.version);
+  const version = selectRuntimeVersion({ manual, defaultVersion: lineConfig.defaultVersion }).version;
   const requiredVariant = JavaSteam.requiredVariant(entry, { explicitVariant: normalizeVariantOrNull(runtimeData.variant), preferredVariant: lineConfig.defaultVariant });
   const variant = requiredVariant || normalizeVariantOrNull(runtimeData.variant) || lineConfig.defaultVariant;
-  return { managerId: JavaRuntimeManager.id, version, ...(!version ? { discoveryRequired: true } : {}), installOptions: { sectionId: String(line), line, variant,
+  // A default that is not installed is chosen from a list read this session,
+  // so a saved default that Adoptium removed gives way on the first Play.
+  const discover = !version || !manual && !lineConfig.catalogRead;
+  return { managerId: JavaRuntimeManager.id, version: discover ? null : version, ...(discover ? { discoveryRequired: true } : {}),
+    installOptions: { sectionId: JavaRuntimeManager.sectionIdForLine(line), line, variant,
     ...(requiredVariant ? { strictVariant: true, preserveDefaults: true } : {}) } };
 }
 
@@ -671,14 +659,7 @@ module.exports = {
       if (!Number.isFinite(requestedLine)) {
         throw new Error("Java runtime line is unknown for this game.");
       }
-      if (!isManagedLine(requestedLine)) {
-        if (requiredLine && requiredLine > MAX_MANAGED_LINE) {
-          throw new Error(
-            `This jar requires Java ${requiredLine}, but the launcher currently manages up to Java ${MAX_MANAGED_LINE}.`
-          );
-        }
-        throw new Error(`Unsupported Java line ${requestedLine}.`);
-      }
+      if (!isManagedLine(requestedLine)) throw new Error(`Unsupported Java line ${requestedLine}.`);
 
       const lineConfig = resolveLineConfig(cfg, requestedLine, context.userDataDir);
       const currentRuntimeData = resolveRuntimeData(entry);

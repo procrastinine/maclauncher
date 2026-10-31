@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const manifest = require("./manifest.json");
-const { detectGame } = require("./detect");
+const { detectGame, macPlayerBlocker } = require("./detect");
 const manager = require("./runtime/manager");
 const Launch = require("./launch");
 const { resolveSaveLocations } = require("./save-location");
@@ -20,11 +20,14 @@ function refreshEntry(entry, context) {
   context.onEntryChange?.({ moduleData: entry.moduleData });
   return info;
 }
+// Runtime choices read the recorded inspection and never the game's files.
+const macPlayerBlocked = entry => Boolean(macPlayerBlocker(entry?.moduleData, entry?.gamePath));
+
 function runtimeStatus(entry, context) {
   const info = Launch.inspectEntry(entry), selected = manager.resolveSelection(entry, context.settings, context.userDataDir);
-  const blocked = info.scriptingBackend !== "mono" || info.graphics.status === "requires-shader-conversion" || info.windowsApis.length;
-  return { version: selected.version, ready: selected.ready && !blocked, installed: selected.ready,
-    reason: blocked ? info.compatibility : selected.reason, compatibility: info.compatibility,
+  const blocker = macPlayerBlocker(info, entry.gamePath);
+  return { version: selected.version, ready: selected.ready && !blocker, installed: selected.ready,
+    reason: blocker ? blocker.reason : selected.reason, compatibility: info.compatibility,
     nativeImports: info.nativeImports, nativePlugins: info.nativePlugins };
 }
 
@@ -50,9 +53,11 @@ module.exports = {
   id: "unity", manifest, detectGame, runtimeManagers: [manager, AssetRipper, Cpp2IL], resolveSaveLocations,
   resolveGraphicsInputs,
   normalizeRuntimeId: value => value === "native" ? "native" : "unity",
-  canLaunchRuntime: (runtimeId, entry) => runtimeId !== "native" || Boolean(entry.nativeAppPath),
+  filterRuntimeSupport: (entry, supported) => macPlayerBlocked(entry) ? supported.filter(id => id !== "unity") : supported,
+  canLaunchRuntime: (runtimeId, entry) => runtimeId === "native" ? Boolean(entry.nativeAppPath)
+    : runtimeId !== "unity" || !macPlayerBlocked(entry),
   // A game runs on the exact Unity player version its data reports.
-  runtimeRecommendation: entry => entry.runtimeId === "unity" && entry.moduleData?.detectedVersion
+  runtimeRecommendation: entry => entry.runtimeId === "unity" && entry.moduleData?.detectedVersion && !macPlayerBlocked(entry)
     ? { version: entry.moduleData.detectedVersion, sectionId: "default" } : null,
   ensureRuntime: async (entry, context) => {
     if (context.runtimeId === "native") return null;
@@ -63,8 +68,7 @@ module.exports = {
     if (!selection.version) throw new Error(selection.reason);
     if (selection.version !== info.detectedVersion) throw new Error(selection.reason);
     if (selection.ready) return null;
-    await manager.ensureCatalogVersion({ userDataDir: context.userDataDir, version: selection.version, signal: context.signal, logger: context.logger });
-    context.onRuntimeStateChange?.();
+    // The exact release is looked up by the consented installation.
     return { managerId: "unity", version: selection.version, requiresDownload: true, installOptions: { sectionId: "default" } };
   },
   launchRuntime: async (runtimeId, entry, context) => {

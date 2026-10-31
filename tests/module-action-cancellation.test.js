@@ -26,7 +26,8 @@ function fixture(t, actions, options = {}) {
     listSharedRuntimeManagers: () => [], getRuntimeManagerUi: () => null };
   const operations = createBackendOperations({ userDataDir: path.join(root, "data"), registry, ...options });
   const requests = createModuleActionRequests({ request: (_lane, method, ...args) => operations[method](...args) });
-  const entry = id => ({ gameId: id, gamePath: path.join(root, id), moduleId: info.id });
+  // Module actions read the game's files, so each fixture game folder exists.
+  const entry = id => { fs.mkdirSync(path.join(root, id), { recursive: true }); return { gameId: id, gamePath: path.join(root, id), moduleId: info.id }; };
   return { root, operations, requests, entry };
 }
 

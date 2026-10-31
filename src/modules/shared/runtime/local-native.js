@@ -74,7 +74,7 @@ function hashFile(filePath) {
   }
 }
 
-function resolveLocalRuntime({ runtimePath, runtimeVersion, upstreamRevision, expectedSha256, preferredExecutable, allowLibrary = false, platform = process.platform, arch = process.arch } = {}) {
+function resolveLocalRuntime({ runtimePath, runtimeVersion, upstreamRevision, expectedSha256, preferredExecutable, requiredArchitecture, runtimeLabel = "Runtime", allowLibrary = false, platform = process.platform, arch, hostArchitecture } = {}) {
   if (platform !== "darwin") throw new Error("This runtime requires a native macOS host.");
   if (typeof runtimeVersion !== "string" || !runtimeVersion.trim() || typeof upstreamRevision !== "string" || !upstreamRevision.trim()) {
     throw new Error("Choose an explicit runtime version and pinned upstream revision.");
@@ -99,8 +99,12 @@ function resolveLocalRuntime({ runtimePath, runtimeVersion, upstreamRevision, ex
   if (!(stat.mode & 0o111)) throw new Error("Selected runtime does not have executable permission.");
   fs.accessSync(executablePath, fs.constants.X_OK);
   const architectures = readMachOArchitectures(executablePath, { allowLibrary });
+  if (requiredArchitecture && !architectures.includes(requiredArchitecture === "x64" ? "x86_64" : requiredArchitecture))
+    throw new Error(`${runtimeLabel} ${runtimeVersion} requires a ${requiredArchitecture === "x64" ? "x86_64" : requiredArchitecture} executable.`);
+  const physicalArchitecture = hostArchitecture || arch || require("./host-capabilities").getHostCapabilities().hardwareArch;
+  arch ||= physicalArchitecture;
   const nativeArch = arch === "x64" ? "x86_64" : arch;
-  const needsRosetta = nativeArch === "arm64" && !architectures.includes("arm64") && architectures.includes("x86_64");
+  const needsRosetta = require("./architecture").imageRequiresRosetta(architectures, { platform: "darwin", hardwareArch: physicalArchitecture });
   if (!architectures.includes(nativeArch) && !needsRosetta) throw new Error(`Runtime does not support this Mac's ${arch} CPU.`);
   const sha256 = hashFile(executablePath);
   if (expectedSha256 && expectedSha256 !== sha256) throw new Error("Runtime checksum changed; register the selected version again before launching.");

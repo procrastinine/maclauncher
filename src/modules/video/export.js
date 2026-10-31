@@ -1,6 +1,7 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
 const ReShade = require("../shared/reshade"), Plans = require("../shared/effects/plan"), Effects = require("../shared/effects/runtime");
 const Native = require("../shared/runtime/bundled-native");
+const Requirements = require("../shared/runtime/feature-requirements");
 const { throwIfAborted } = require("../shared/runtime/download-utils");
 
 function runtimeFeatures(root) {
@@ -83,8 +84,15 @@ function exportPlan(entry, options = {}) {
 async function exportVideo({entry, input, output, width, height, scale, maxHeight, context = {}}, dependencies = {}) {
   const {signal, userDataDir} = context;throwIfAborted(signal);
   const root = context.graphicsRuntimeRoot || ReShade.runtimeRoot();
-  if ((context.platform || process.platform) !== "darwin" || !Native.versionAtLeast(context.macOSVersion || Native.systemVersionSync(), "14.0"))
-    throw new Error("Graphics video export requires macOS 14 or later.");
+  const platform = context.platform || process.platform;
+  if (platform !== "darwin") throw new Error("Graphics video export requires macOS.");
+  const manifest = dependencies.manifest || require("../shared/reshade/publication").forRoot(root);
+  const row = manifest.files.find(row => row.path === "maclauncher-graphics-video");
+  if (!row) throw new Error("Graphics video export is unavailable in this application build.");
+  const minimumMacOS = row.optionalLoad?.minimumMacOS || row.minimumMacOS || manifest.minimumMacOS;
+  const support = Requirements.requirementSupport({platform: "darwin", minimumMacOS},
+    {platform, macOSVersion: context.macOSVersion || Native.systemVersionSync()});
+  if (support.supported === false) throw new Error(`Graphics video export requires macOS ${minimumMacOS} or later.`);
   if (!userDataDir || !path.isAbsolute(userDataDir)) throw new Error("The video export settings directory is unavailable.");
   input = fs.realpathSync(input);if (!fs.statSync(input).isFile()) throw new Error("The source video was not found.");
   output = outputFile(input, output);const sizeArgs = dimensions({width, height, scale, maxHeight});
@@ -121,9 +129,6 @@ async function exportVideo({entry, input, output, width, height, scale, maxHeigh
   }
   const run = async lease => {
   try {
-    const manifest = dependencies.manifest || require("../shared/reshade/publication").forRoot(root);
-    const row = manifest.files.find(row => row.path === "maclauncher-graphics-video");
-    if (!row) throw new Error("Graphics video export is unavailable in this application build.");
     (dependencies.verifyFile || require("../shared/reshade/payload-verification").verifyFile)(root, row);
     const prepared = await (dependencies.prepare || Effects.prepare)(job, {...options, fallback: false, launchPreparation: true});
     throwIfAborted(signal);

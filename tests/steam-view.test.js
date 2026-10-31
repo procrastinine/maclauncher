@@ -726,6 +726,37 @@ test("Google Play opens offline and uses native browser sign-in, saved sessions 
   } finally { provider?.close(); context.close(); }
 });
 
+test("Google Play's owned library states why it is unavailable until a saved sign-in connects", async () => {
+  const context = setup(); let provider;
+  try {
+    context.view.render(); await context.view.settle();
+    find(context.view.render(), node => node.props.id === "steam-google-play-tab").props.onClick();
+    const component = find(context.view.render(), node => node.props.store === "google-play" && node.props.onImported);
+    provider = harness(component.type, component.props); provider.render(); await provider.settle();
+    const requirement = "Connect a Google account to list its purchases.";
+    const owned = () => find(provider.render(), node => node.type === "input" && node.props.name === "google-play-library-scope" && node.props.value === "owned");
+    const ownedLabel = () => find(provider.render(), node => node.type === "label" && React.Children.toArray(node.props.children).some(child => React.isValidElement(child) && child.props.name === "google-play-library-scope" && child.props.value === "owned"));
+    const reason = () => find(provider.render(), node => node.props.className === "externalModeReason");
+    context.publishExternal("google-play", { ...context.state, hasSavedSession: true, capabilities: { search: true, ownedLibrary: true }, ownedLibraryRequirement: requirement,
+      connection: { status: "disconnected", accountName: "saved@example.invalid" }, library: [{ appId: "com.owned.game", name: "Cached owned game", platforms: ["android"], shared: false, owned: true }] });
+    provider.render();
+    assert.ok(find(provider.render(), node => node.type === "span" && node.props.children === "saved@example.invalid"));
+    assert.equal(owned().props.disabled, true);
+    assert.equal(reason().props.children, requirement);
+    assert.equal(owned().props["aria-describedby"], reason().props.id);
+    assert.equal(ownedLabel().props.title, requirement);
+    context.publishExternal("google-play", { ...context.state, hasSavedSession: true, capabilities: { search: true, ownedLibrary: true }, connection: { status: "disconnected" } });
+    assert.equal(reason().props.children, "Connect Google Play to list owned apps.", "a store without its own wording still states the requirement");
+    assert.equal(context.calls.some(call => ["external-connect", "external-library", "external-search"].includes(call[0])), false, "showing the reason stays offline");
+    context.publishExternal("google-play", { ...context.state, hasSavedSession: true, capabilities: { search: true, ownedLibrary: true }, ownedLibraryRequirement: requirement,
+      connection: { status: "connected", mode: "browser", accountName: "saved@example.invalid" } });
+    assert.equal(owned().props.disabled, false);
+    assert.equal(owned().props["aria-describedby"], undefined);
+    assert.equal(ownedLabel().props.title, undefined);
+    assert.equal(reason(), undefined);
+  } finally { provider?.close(); context.close(); }
+});
+
 test("Google Play store searches are explicit, cached separately from owned games and locally filterable", async () => {
   const context = setup(); let provider;
   try {

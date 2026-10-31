@@ -1,3 +1,4 @@
+const Harness = require("./helpers/future-upstream.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -131,7 +132,7 @@ function createHostedFixture(t, mutateManifest) {
     downloadToFile:async(url,destination,{signal,onProgress})=>{assert.equal(url,record.asset.url);calls.downloads++;onProgress?.({downloaded:archive.length,total:archive.length});await control.download?.(signal);signal?.throwIfAborted();fs.writeFileSync(destination,archive);},
     extractArchive:async(_archive,destination)=>{fs.writeFileSync(path.join(destination,'runtime-package.json'),JSON.stringify(wrapper));fs.cpSync(directory,path.join(destination,'files'),{recursive:true});}});
   const previous=Builds.manager;Builds.manager=manager;t.after(()=>{Builds.manager=previous;});
-  t.mock.method(Manager.core,'canUseGh',()=>assert.fail('A public baseline must not invoke gh or require authentication'));
+  for (const method of ['fetchAvailableVersions','fetchLatestAvailableVersions']) t.mock.method(Manager.core,method,()=>assert.fail('A public baseline must not query GitHub Actions'));
   return {root,userDataDir,manager,calls,control,record,executable};
 }
 
@@ -197,7 +198,8 @@ test("MKXP-Z first installation persists its default while preserving saved choi
   const next = Manager.updateSettingsAfterInstall(settings, {
     version: "2026-01-12T18-22-32Z_new"
   });
-  assert.equal(next, settings);
+  assert.equal(next, undefined, "An existing default needs no settings write");
+  assert.deepEqual(settings, { defaultVersion: "2026-01-10T18-22-32Z_old" });
   assert.deepEqual(Manager.updateSettingsAfterInstall({}, {version:"new"}), {defaultVersion:"new"});
   assert.deepEqual(Manager.updateSettingsAfterInstall({defaultVersion:null}, {version:"new"}), {defaultVersion:"new"});
 });
@@ -230,16 +232,28 @@ test("getState exposes sections and variants", () => {
   }
 });
 
-test("canUseGh handles availability checks", async () => {
-  const ok = await Manager.core.canUseGh({
-    runCommand: () => Promise.resolve({ stdout: "", stderr: "" })
-  });
-  assert.equal(ok, true);
-
-  const fail = await Manager.core.canUseGh({
-    runCommand: () => Promise.reject(new Error("no gh"))
-  });
-  assert.equal(fail, false);
+test("MKXP-Z lists one compatible app per successful run with GitHub's digest and no sign-in", async t => {
+  t.after(() => { Harness.network.routes = null; });
+  const API = "https://api.github.com/repos/mkxp-z/mkxp-z/actions", repository = { full_name: "mkxp-z/mkxp-z" };
+  const run = (id, day, sha) => ({ id, status: "completed", conclusion: "success", head_branch: "dev", event: "push", path: ".github/workflows/autobuild.yml",
+    head_sha: sha.repeat(40), run_started_at: `2026-10-${day}T10:00:00Z`, created_at: `2026-10-${day}T10:00:00Z`, repository, head_repository: repository });
+  const artifact = (row, index, name, extra = {}) => ({ id: row.id * 10 + index, name, expired: false, size_in_bytes: 4096, digest: "sha256:" + "d".repeat(64),
+    expires_at: "2099-01-01T00:00:00Z", workflow_run: { id: row.id, head_sha: row.head_sha, head_branch: "dev" }, ...extra });
+  const newer = run(30, 29, "b"), older = run(20, 20, "a"), version = row => `${row.run_started_at.replace(/:/g, "-")}_${row.head_sha}`;
+  Harness.network.routes = { [`${API}/workflows/autobuild.yml/runs`]: { total_count: 2, workflow_runs: [newer, older] },
+    [`${API}/runs/30/artifacts`]: { artifacts: [artifact(newer, 0, "mkxp-z.macos.x86_64.standalone"), artifact(newer, 1, "mkxp-z.macos.universal.app"), artifact(newer, 2, "mkxp-z.macos.arm64.app")] },
+    // The universal app lacks GitHub's digest, so the run's native app is listed.
+    [`${API}/runs/20/artifacts`]: { artifacts: [artifact(older, 0, "mkxp-z.macos.universal.app", { digest: null }), artifact(older, 1, "mkxp-z.macos.arm64.app"), artifact(older, 2, "mkxp-z.macos.x86_64.app")] } };
+  const latest = await Manager.core.fetchLatestAvailableVersions();
+  assert.deepEqual(latest.versions, [version(newer)]);
+  assert.equal(latest.entries[0].artifactId, 301);
+  assert.equal(latest.entries[0].file.url, "https://nightly.link/mkxp-z/mkxp-z/actions/artifacts/301.zip");
+  assert.deepEqual(latest.entries[0].file.digest, { algorithm: "sha256", value: "d".repeat(64) });
+  assert.equal(Harness.network.requests.filter(url => url.includes("/runs/20/")).length, 0, "Latest stops at the newest listed build");
+  const all = await Manager.core.fetchAvailableVersions();
+  assert.deepEqual(all.versions, [version(newer), version(older)]);
+  assert.equal(all.entries[1].artifactId, require("../src/modules/shared/runtime/architecture").selectedArchitecture() === "x64" ? 202 : 201);
+  assert.equal(Manager.upstream, Manager.core.source); assert.equal(Manager.upstream.kind, "githubActions");
 });
 
 test('latest successful MKXP-Z run selects its compatible app before standalone or foreign CPU artifacts',()=>{
@@ -253,22 +267,26 @@ test('latest successful MKXP-Z run selects its compatible app before standalone 
   assert.equal(Manager.core.selectMacosArtifact([{id:1,name:'macos',expired:true}]),null);
 });
 
-test("unavailable optional Actions downloads preserve the exact selection without app fallback", async t => {
+test("unavailable Actions downloads preserve the exact selection without app fallback", async t => {
   const userDataDir = makeTempDir("maclauncher-mkxpz-runtime-");
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
-  t.mock.method(Manager.core, "canUseGh", async () => false);
+  t.mock.method(Manager.core, "fetchAvailableVersions", async () => { throw new Error("Actions unavailable"); });
   t.mock.method(Builds.manager, "refreshCatalog", async () => {});
-  await assert.rejects(Manager.installRuntime({ userDataDir, version: "chosen-actions-version" }), /GitHub CLI unavailable/);
+  await assert.rejects(Manager.installRuntime({ userDataDir, version: "chosen-actions-version" }), /Actions unavailable/);
   assert.equal(fs.existsSync(path.join(userDataDir, "runtimes")), false);
+  // A build the refreshed list no longer names is reported, not replaced.
+  t.mock.method(Manager.core, "fetchAvailableVersions", async () => ({ versions: [], entries: [] }));
+  await assert.rejects(Manager.installRuntime({ userDataDir, version: "chosen-actions-version" }), /not found for version chosen-actions-version/);
+  assert.deepEqual(Manager.core.listInstalled(userDataDir), []);
 });
 
-test('empty MKXP-Z resources install the exact public baseline without gh or a prior Refresh',{skip:process.platform!=='darwin'},async t=>{
+test('empty MKXP-Z resources install the exact public baseline without an Actions query or a prior Refresh',{skip:process.platform!=='darwin'},async t=>{
   const f=createHostedFixture(t),events=[],downloads=new DownloadManager({progressThrottleMs:0,onChange:()=>events.push(downloads.list())});
   assert.equal(Manager.core.listInstalled(f.userDataDir).length,0);Manager.getState({userDataDir:f.userDataDir,settings:{}});
   assert.deepEqual(f.calls,{catalog:0,downloads:0},'Cold status performs no network or development-path fallback');
   const installed=await Manager.installRuntime({userDataDir:f.userDataDir,version:Binary.version,downloads});
   assert.equal(installed.version,Binary.version);assert.equal(installed.source,'MacLauncher Builds');assert.equal(installed.projectPackage,true);
-  assert.equal(installed.appPath,path.join(f.userDataDir,'runtimes/mkxpz',Binary.version,'payload/files',Binary.appName));
+  assert.equal(installed.appPath,path.join(f.userDataDir,'runtimes/mkxpz',f.record.arch,Binary.version,'payload/files',Binary.appName));
   assert.deepEqual(f.calls,{catalog:1,downloads:1});assert.deepEqual(downloads.list(),[]);
   assert.ok(events.some(rows=>rows.some(row=>row.managerId==='mkxpz'&&row.sectionId==='default'&&row.downloaded===f.record.asset.bytes)));
   assert.equal(Manager.core.resolveOwnedRuntime({userDataDir:f.userDataDir,version:Binary.version}).appPath,installed.appPath);
@@ -276,9 +294,17 @@ test('empty MKXP-Z resources install the exact public baseline without gh or a p
   assert.equal((await Manager.installRuntime({userDataDir:f.userDataDir,version:Binary.version,downloads})).appPath,installed.appPath);
   assert.deepEqual(f.calls,{catalog:1,downloads:1},'An existing selected installation is not copied or downloaded again');
   const settings={defaultVersion:'explicit-older'};
-  assert.equal(Manager.updateSettingsAfterInstall(settings,installed),settings,'Adding the hosted baseline preserves an existing saved default');
+  assert.equal(Manager.updateSettingsAfterInstall(settings,installed),undefined,'Adding the hosted baseline needs no settings write for an existing default');
+  assert.deepEqual(settings,{defaultVersion:'explicit-older'});
   assert.equal(Manager.normalizeSettings({}).defaultVersion,null);
-  const license=path.join(installed.payloadRoot,'licenses/LICENSE'),changed=fs.readFileSync(license);changed[0]^=1;fs.writeFileSync(license,changed);
+  const legacy=path.join(f.userDataDir,'runtimes/mkxpz',Binary.version);
+  fs.renameSync(installed.installDir,legacy);
+  const retained=Manager.core.resolveOwnedRuntime({userDataDir:f.userDataDir,version:Binary.version});
+  assert.equal(retained.installDir,legacy,'Existing shared-layout installations remain usable without migration');
+  assert.equal((await Manager.installRuntime({userDataDir:f.userDataDir,version:Binary.version,downloads})).installDir,legacy);
+  assert.deepEqual(f.calls,{catalog:1,downloads:1},'Legacy reuse remains offline and does not reinstall the package');
+  assert.equal(Manager.core.listInstalled(f.userDataDir).filter(row=>row.version===Binary.version).length,1);
+  const license=path.join(retained.payloadRoot,'licenses/LICENSE'),changed=fs.readFileSync(license);changed[0]^=1;fs.writeFileSync(license,changed);
   assert.throws(()=>Manager.core.resolveOwnedRuntime({userDataDir:f.userDataDir,version:Binary.version}),/checksum/);
 });
 
@@ -302,12 +328,11 @@ test('MKXP-Z publisher packages require complete byte identity metadata',{skip:p
 
 test('explicit MKXP-Z Refresh combines public baseline and optional Actions without changing selection',{skip:process.platform!=='darwin'},async t=>{
   const f=createHostedFixture(t),settings={defaultVersion:Binary.version};
-  t.mock.method(Manager.core,'canUseGh',async()=>false);
+  t.mock.method(Manager.core,'fetchLatestAvailableVersions',async()=>{throw Error('Actions unavailable');});
   const publicCatalog=await Manager.refreshCatalog({userDataDir:f.userDataDir,force:true});
   assert.ok(publicCatalog.versions.includes(Binary.version));assert.equal(f.calls.downloads,0);
   const newer='2027-01-12T18-22-32Z_abcdef';
-  t.mock.method(Manager.core,'canUseGh',async()=>true);
-  t.mock.method(Manager.core,'fetchLatestAvailableVersions',async()=>({versions:[newer],entries:[{version:newer,artifactId:1}]}));
+  t.mock.method(Manager.core,'fetchLatestAvailableVersions',async()=>({versions:[newer],entries:[{version:newer,artifactId:1,file:{url:'https://nightly.link/mkxp-z/mkxp-z/actions/artifacts/1.zip'}}]}));
   const merged=await Manager.refreshCatalog({userDataDir:f.userDataDir,force:true});
   assert.deepEqual(merged.versions,[newer,Binary.version]);assert.equal(f.calls.downloads,0);
   const refreshed = Manager.getState({settings,userDataDir:f.userDataDir});
@@ -316,7 +341,7 @@ test('explicit MKXP-Z Refresh combines public baseline and optional Actions with
   assert.equal(refreshed.notice.title,"Version sources");
   assert.deepEqual(settings,{defaultVersion:Binary.version});
   t.mock.method(f.manager,'refreshCatalog',async()=>{throw Error('Public catalog unavailable');});
-  assert.ok((await Manager.refreshCatalog({userDataDir:f.userDataDir,force:true})).versions.includes(newer),'An independent public catalog failure cannot disable authenticated Actions');
+  assert.ok((await Manager.refreshCatalog({userDataDir:f.userDataDir,force:true})).versions.includes(newer),'An independent public catalog failure cannot disable Actions');
   t.mock.method(f.manager,'refreshCatalog',async()=>{});
   t.mock.method(Manager.core,'fetchLatestAvailableVersions',async()=>{throw Error('Optional Actions unavailable');});
   assert.ok((await Manager.refreshCatalog({userDataDir:f.userDataDir,force:true})).versions.includes(Binary.version),'An optional Actions failure cannot disable the public baseline');
@@ -345,7 +370,52 @@ test("consented MKXP-Z install without a selection discovers versions before ask
   const userDataDir=makeTempDir("maclauncher-mkxpz-unselected-");t.after(()=>fs.rmSync(userDataDir,{recursive:true,force:true}));
   t.mock.method(Manager.core,"listInstalled",()=>[]);
   const refresh=t.mock.method(Builds.manager,"refreshCatalog",async()=>{});
-  t.mock.method(Manager.core,"canUseGh",async()=>false);
+  t.mock.method(Manager.core,"fetchLatestAvailableVersions",async()=>{throw Error("Actions unavailable");});
   await assert.rejects(Manager.installRuntime({userDataDir,version:null}),/^Error: No MKXP-Z versions are available/);
   assert.equal(refresh.mock.callCount(),1);
+});
+
+test("MKXP-Z lists each CPU's MacLauncher Builds packages and installs the build Play uses", async t => {
+  const Architecture = require("../src/modules/shared/runtime/architecture");
+  const userDataDir = makeTempDir("maclauncher-mkxpz-cpu-"); t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
+  const repository = "procrastinine/maclauncher-builds", version = "MCLv1-1003";
+  const record = arch => ({ schemaVersion: 2, id: "mkxpz", version, arch, launcherArchitectures: [arch], minimumMacOS: "11.0",
+    manifestRelative: "manifest.json", manifestSha256: "a".repeat(64), sourceSha256: "b".repeat(64), updatePolicy: "manual", tag: `mkxpz/v${version}/${arch}`,
+    asset: { filename: `mkxpz-${version}-${arch}.tar.gz`, bytes: 1, sha256: (arch === "arm64" ? "c" : "d").repeat(64),
+      url: `https://github.com/${repository}/releases/download/${encodeURIComponent(`mkxpz/v${version}/${arch}`)}/mkxpz-${version}-${arch}.tar.gz` } });
+  let packages = [record("arm64")];
+  // The Intel app on Apple Silicon with an Apple-Silicon-only Builds package.
+  const hosted = Architecture.withArchitecture("x64", () => Builds.createManager({ systemVersionSync: () => "26.0",
+    hostCapabilities: { platform: "darwin", hardwareArch: "arm64", rosettaAvailable: true },
+    fetchUrlBuffer: async () => ({ status: 200, body: Buffer.from(JSON.stringify({ schemaVersion: 2, projectId: "mkxpz", updatePolicy: "manual", packages })) }) }));
+  const previous = Builds.manager; Builds.manager = hosted; t.after(() => { Builds.manager = previous; });
+  t.mock.method(Manager.core, "fetchLatestAvailableVersions", async () => ({ entries: [] }));
+  await Manager.refreshCatalog({ userDataDir, force: true });
+  let state = Manager.getState({ userDataDir });
+  assert.equal(state.launcherArchitecture, "x64");
+  assert.equal(state.automaticArchitecture, "arm64");
+  assert.deepEqual(state.catalog.versions, [version]);
+  assert.equal(state.catalog.architectureCatalogs.arm64.versionRequirements[version].architecture, "arm64");
+  assert.deepEqual(state.catalog.architectureCatalogs.x64.versions, []);
+  const owned = t.mock.method(Manager.core, "resolveOwnedRuntime", () => null);
+  assert.equal(Manager.resolveSelection(null, { runtimes: {} }, userDataDir).version, version);
+  assert.equal(owned.mock.calls.at(-1).arguments[0].architecture, "arm64");
+  const installs = t.mock.method(hosted, "installRuntime", async options => ({ version: options.version }));
+  const resolved = t.mock.method(Builds, "resolveOwned", options => ({ version: options.version, architecture: options.architecture }));
+  assert.equal((await Manager.installRuntime({ userDataDir, version })).architecture, "arm64");
+  assert.equal(installs.mock.calls.at(-1).arguments[0].architecture, "arm64");
+  assert.equal(resolved.mock.calls.at(-1).arguments[0].architecture, "arm64");
+  // A later Intel package becomes automatic in the Intel app; Apple Silicon stays one choice away.
+  packages = [record("arm64"), record("x64")];
+  await Manager.refreshCatalog({ userDataDir, force: true });
+  state = Manager.getState({ userDataDir });
+  assert.equal(state.automaticArchitecture, "x64");
+  assert.equal(state.catalog.versionRequirements[version].architecture, "x64");
+  assert.equal(state.catalog.architectureCatalogs.arm64.versionRequirements[version].architecture, "arm64");
+  await Manager.installRuntime({ userDataDir, version, architecture: "arm64" });
+  assert.equal(installs.mock.calls.at(-1).arguments[0].architecture, "arm64");
+  assert.equal(resolved.mock.calls.at(-1).arguments[0].architecture, "arm64");
+  // Set default keeps the automatic build unless another CPU's list was used.
+  assert.equal(Manager.applySettingsUpdate("setDefault", { version }, {}, { userDataDir }).defaultArchitecture, undefined);
+  assert.equal(Manager.applySettingsUpdate("setDefault", { version, architecture: "arm64" }, {}, { userDataDir }).defaultArchitecture, "arm64");
 });

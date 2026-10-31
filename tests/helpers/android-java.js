@@ -5,20 +5,30 @@ const childProcess = require('node:child_process');
 
 // Source fixtures compile the owned adapters over the same full framework used
 // by Host. Keep fixture classes first, including intentional test replacements.
-// A built Android runtime comes from KLEPTON_NATIVE_RUNTIME or the declared
-// default directory. The runtime is a managed package, so a plain checkout has
-// neither; tests that need one skip through this lookup.
+// A built Android runtime comes from an explicit path or a ready managed
+// installation. Selection reads local metadata only and never downloads.
 function runtimeRoot() {
   let root = process.env.KLEPTON_NATIVE_RUNTIME;
   if (!root) {
-    const declaration = path.resolve(__dirname, '../../src/modules/android/managed-packages.json');
-    if (fs.existsSync(declaration)) {
-      const entry = JSON.parse(fs.readFileSync(declaration, 'utf8'))[0];
-      root = path.resolve(__dirname, '../../src/resources/native-runtimes', entry.directoryRelative);
+    const userDataDir = process.env.MACLAUNCHER_TEST_USER_DATA;
+    if (!userDataDir) return null;
+    const manager = require('../../src/modules/android/runtime-manager');
+    const installed = manager.getState({ userDataDir }).installed.filter(row => row.ready !== false)
+      .sort((a, b) => require('../../src/modules/shared/runtime/pinned-native-manager').compareRuntimeVersions(a.version, b.version) ||
+        String(b.installedAt || '').localeCompare(String(a.installedAt || '')));
+    for (const row of installed) {
+      const selected = manager.resolveSelection({ runtimeData: { klepton: { version: row.version } } }, {}, userDataDir, { verification: 'status' });
+      if (selected.ready && fs.existsSync(path.join(selected.install.root, 'android-framework.jar'))) {
+        root = selected.install.root; break;
+      }
     }
   }
   return root && fs.existsSync(path.resolve(root, 'android-framework.jar')) ? path.resolve(root) : null;
 }
+
+const sourceRoot = path.resolve(__dirname, '../../src/external/maclauncher-android/src/modules/android/native');
+// Tool JARs are generated producer inputs, separate from the source checkout.
+const toolInputsRoot = process.env.ANDROID_JAVA_TOOL_INPUTS || path.resolve(__dirname, '../../src/modules/android/native/tools');
 
 // JDK 21 from JAVA_HOME or the macOS registry; null when neither names one.
 function javaHome() {
@@ -30,11 +40,11 @@ function javaHome() {
 function frameworkArguments(executable, args) {
   if (!['java', 'javac'].includes(path.basename(executable)) || args.includes('-jar')) return args;
   const root = runtimeRoot();
-  if (!root) throw new Error('Android Java fixtures require the framework; set KLEPTON_NATIVE_RUNTIME to a built runtime.');
+  if (!root) return args;
   const framework = path.resolve(root, 'android-framework.jar');
   const result = [...args];
   if(path.basename(executable)==='javac'&&result.some(value=>/\/java\/maclauncher\/android\/(?:RuntimeBootstrap|framework\/(?:HostApplication|HostSystemServices))\.java$/.test(value))){
-    const timing=path.resolve(__dirname,'../../src/modules/android/native/java/maclauncher/android/framework/HostStartupTiming.java');
+    const timing=path.join(sourceRoot,'java/maclauncher/android/framework/HostStartupTiming.java');
     if(!result.includes(timing))result.push(timing);
   }
   if(path.basename(executable)==='java')result.unshift(...require('../../src/modules/android/jvm-options').frameworkJvmOptions,'-Dandroid.test.runtime='+path.dirname(framework));
@@ -88,4 +98,4 @@ function nativeMethodDiagnostics(output) {
   return startup === 7 ? lines.filter(line => line !== hostRuntimeWarning) : lines;
 }
 
-module.exports = { frameworkArguments, javaHome, nativeMethodDiagnostics, processNamespace, runtimeIdentity, runtimeRoot, spawnSync };
+module.exports = { frameworkArguments, javaHome, nativeMethodDiagnostics, processNamespace, runtimeIdentity, runtimeRoot, sourceRoot, toolInputsRoot, spawnSync };

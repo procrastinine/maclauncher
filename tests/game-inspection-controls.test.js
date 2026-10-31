@@ -36,7 +36,7 @@ test('inspection retains tools, runtime choice and notes while omitting launch, 
   assert.match(markup, /aria-label="Runtime"/);
   assert.match(markup, /Extract/);
   assert.match(markup, /Notes/);
-  assert.doesNotMatch(markup, />Launch<|Launch arguments|Network access|>Saves<|Save tools|Edit saves|Save \.command|>Graphics<|Frame generation|aria-label="Play /);
+  assert.doesNotMatch(markup, />Launch<|Launch arguments|Network access|>Saves<|Save tools|Edit saves|Create shortcut…|title="Save a \.command|>Graphics<|Frame generation|aria-label="Play /);
 });
 test('launchable inputs retain launch, save and graphics controls even without an installed runtime', () => {
   const markup = inspector(true);
@@ -44,7 +44,7 @@ test('launchable inputs retain launch, save and graphics controls even without a
   assert.match(markup, /Launch arguments/);
   assert.match(markup, /Network access/);
   assert.match(markup, />Saves</);
-  assert.match(markup, /Save \.command/);
+  assert.match(markup, /title="Save a \.command file[^>]*>Create shortcut…<\/button>/);
   assert.match(markup, /Graphics/);
 });
 test('inspection reason uses existing format metadata, with a useful fallback for unknown formats', () => {

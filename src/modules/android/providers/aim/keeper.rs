@@ -73,7 +73,7 @@ fn exec_output(ctl: &Path, data: &Path, args: &[&str], timeout: Duration) -> Res
 fn exec(ctl: &Path, data: &Path, args: &[&str], timeout: Duration) -> Result<String, String> {
     exec_output(ctl, data, args, timeout).map(|(out, _)| out)
 }
-fn activity_result(output: &str) -> Result<(), String> {
+fn activity_result(output: &str) -> Result<bool, String> {
     // ActivityManager's shell command can exit successfully after a timed-out
     // startActivityAndWait. Only its original WaitResult confirms the launch.
     if output.lines().any(|line| line.trim_start().starts_with("Error:")) {
@@ -84,7 +84,9 @@ fn activity_result(output: &str) -> Result<(), String> {
         // INVALID_DELAY. The original shell omits TotalTime in that case.
         // Already-visible activities retain their valid zero launch time.
         Some("ok") if output.lines().find_map(|line| line.trim().strip_prefix("TotalTime:"))
-            .is_some_and(|time| time.trim().parse::<i64>().is_ok_and(|time| time >= 0)) => Ok(()),
+            .is_some_and(|time| time.trim().parse::<i64>().is_ok_and(|time| time >= 0)) => Ok(true),
+        Some("timeout") if output.lines().find_map(|line| line.trim().strip_prefix("WaitTime:"))
+            .is_some_and(|time| time.trim().parse::<i64>().is_ok_and(|time| time >= 0)) => Ok(false),
         Some(_) => Err(format!("Android activity did not finish starting.\nAndroid am: {}", output.trim())),
         None => Err(format!("Android did not report an activity launch result.\nAndroid am: {}", output.trim())),
     }
@@ -335,7 +337,8 @@ fn run() -> Result<(), String> {
         if STOP.load(Ordering::Relaxed) { return Ok(()); }
         let launched = if mode == LaunchMode::AppHost || activity.is_empty() && game_arguments.is_none() {
             let component = if mode == LaunchMode::AppHost && !activity.is_empty() { format!("{package}/{activity}") } else { package.clone() };
-            command(&ctl, &["--data".into(), data.to_string_lossy().into(), "open".into(), component], Duration::from_secs(120))?
+            let (out, error) = command_output(&ctl, &["--data".into(), data.to_string_lossy().into(), "open".into(), component], Duration::from_secs(120))?;
+            [out.trim(), error.trim()].into_iter().filter(|text| !text.is_empty()).collect::<Vec<_>>().join("\n")
         } else {
             let mut arguments=vec!["/system/bin/am".to_owned(),"start".into(),"-W".into()];
             if activity.is_empty() { arguments.extend(["-a".into(),"android.intent.action.MAIN".into(),"-c".into(),"android.intent.category.LAUNCHER".into(),"-p".into(),package.clone()]); }
@@ -343,12 +346,12 @@ fn run() -> Result<(), String> {
             if let Some(value)=&game_arguments { arguments.extend(["--es".into(),"maclauncher.arguments".into(),value.clone()]); }
             let (out, error) = exec_output(&ctl,&data,&arguments.iter().map(String::as_str).collect::<Vec<_>>(),Duration::from_secs(120))?;
             let result = [out.trim(), error.trim()].into_iter().filter(|text| !text.is_empty()).collect::<Vec<_>>().join("\n");
-            activity_result(&result)?;
             result
         };
         if mode == LaunchMode::AppHost { app_host_result(&launched)?; }
-        if launched.lines().any(|line| line.starts_with("Error:")) { return Err(launched.trim().into()); }
-        println!("Android game started."); let _ = std::io::stdout().flush();
+        let confirmed = if mode == LaunchMode::AndroidServices { activity_result(&launched)? } else { true };
+        println!("{}", if confirmed { "Android game started." } else { "Android activity is still starting." });
+        let _ = std::io::stdout().flush();
         while !STOP.load(Ordering::Relaxed) {
             if let Some(status) = child.as_mut().unwrap().try_wait().map_err(|e| e.to_string())? {
                 return if status.success() { Ok(()) } else { Err("Android stopped unexpectedly.".into()) };

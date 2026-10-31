@@ -19,7 +19,7 @@ function getState({ userDataDir, settings } = {}) {
     for (const row of installed) if (!rows.has(row.version)) rows.set(row.version, row.source);
     const versions = available.map(row => row.version), labels = Object.fromEntries([...rows].map(([key, row]) => [key,
       row.tag || row.date ? row.tag || `${row.date.slice(0, 10)} · ${row.commit.slice(0, 8)}` : key]));
-    const latestAvailableVersion = available[0]?.version || null;
+    const usable = available.filter(row => !row.reason).map(row => row.version), latestAvailableVersion = usable[0] || null;
     return { id: pack.id, label: pack.label, supportsDefault: true, shaderFamily: pack.family, description: pack.description, managementTitle: pack.label,
       registrationPresentation: { label: "Use collection folder…", description: "Use a compatible shader collection folder in its current location. Import filter adds individual shaders to the library." },
       installed: installed.map(row => ({ ...row, versionLabel: labels[row.version], removalLabel: "Remove",
@@ -30,12 +30,13 @@ function getState({ userDataDir, settings } = {}) {
         emptyLabel: "No collection versions installed.",
         fetchedAt: previous?.fetchedAt || null, source: `https://github.com/${pack.repository}`,
         sourceUrl: `https://github.com/${pack.repository}`, delivery: "download", mode: "all", versions,
-        versionLabels: labels, installable: versions.length > 0, installableVersions: versions,
+        versionLabels: labels, installable: usable.length > 0, installableVersions: usable,
         includedVersions: [], buildableVersions: [], supportsLatestOnly: false, refreshLabel: "Refresh versions",
         latestAvailableVersion, latestInstalledVersion: installed[0]?.version || null,
         updateAvailable: Boolean(latestAvailableVersion && installed.length && !installed.some(row => row.version === latestAvailableVersion)),
         versionRequirements: Object.fromEntries(versions.map(key => [key, { requiresDownload: !installed.some(row => row.version === key),
-          requiresBuild: false, available: installed.some(row => row.version === key), included: false, installLabel: "Install" }])) } };
+          requiresBuild: false, available: installed.some(row => row.version === key), included: false, installLabel: "Install",
+          ...(rows.get(key)?.reason ? { installReason: rows.get(key).reason } : {}) }])) } };
   });
   return { ...sections[0], id: Shaders.ID, label: "Shader library", sections };
 }
@@ -47,7 +48,7 @@ function updateDefault(settings, sectionId, selected) {
   return normalizeSettings(value);
 }
 module.exports = {
-  id: Shaders.ID, label: "Shader library", distributionRequired: false,
+  id: Shaders.ID, label: "Shader library", distributionRequired: false, upstream: [...Shaders.sources.values()],
   delivery: { included: "none", catalog: "remote", sourceBuild: false },
   ui: Presentation.ui,
   normalizeSettings, getState, installRuntime: Shaders.installRuntime, uninstallRuntime: Shaders.uninstallRuntime,

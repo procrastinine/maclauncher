@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -151,12 +153,13 @@ test("Godot Standard and .NET downloads select distinct actual archive packages"
   assert.deepEqual(Manager.updateSettingsAfterInstall(defaults, {version: "3.5.2-stable", variant: "standard"}, {preserveDefaults: true}), defaults);
 });
 
-test("Godot archive refresh defaults to all exact releases in newest version order", async () => {
-  const fetcher = async () => ({ status: 200, headers: {}, body: Buffer.from(sampleArchiveHtml) });
-  const all = await Manager.core.fetchAvailableVersions({ fetcher });
+test("Godot archive refresh defaults to all exact releases in newest version order", async t => {
+  t.after(() => { Harness.network.routes = null; });
+  Harness.network.routes = { [Manager.core.ARCHIVE_URL]: sampleArchiveHtml };
+  const all = await Manager.core.fetchAvailableVersions();
   assert.deepEqual(all.versions, ["4.5.1-stable", "4.5.1-rc2", "4.5-rc1", "4.5-beta1"]);
   assert.equal(all.mode, "all");
-  const latest = await Manager.core.fetchAvailableVersions({ latestOnly: true, fetcher });
+  const latest = await Manager.core.fetchAvailableVersions({ latestOnly: true });
   assert.deepEqual(latest.versions, ["4.5.1-stable", "4.5-rc1"]);
   assert.deepEqual(Manager.core.__test.extractArchiveVersions(sampleArchiveHtml), all.versions);
 });
@@ -226,4 +229,37 @@ test("Godot effective defaults prefer stable published versions and clear back t
     Manager.core.fetchAvailableVersions = async () => ({versions:[]});await Manager.refreshCatalog({force:true});
     assert.equal(Manager.getState({settings:{defaultVersion:null},userDataDir:"/unused"}).defaultVersion,"4.6-stable");
   } finally {Manager.core.fetchAvailableVersions=fetch;Manager.core.listInstalled=list;}
+});
+
+test("Godot skips 32-bit downloads and repairs the publisher's 2.1 fat archive link", async t => {
+  const core = Manager.core;
+  const links = [
+    "https://downloads.godotengine.org/?version=2.1.6&flavor=stable&slug=osx.32.zip&platform=macos.32",
+    "https://downloads.godotengine.org/?version=2.1.6&flavor=stable&slug=osx.64.zip&platform=macos.64"
+  ];
+  const selected = core.__test.selectMacDownload(links, "standard");
+  assert.equal(selected.slug, "osx.fat.zip");
+  assert.equal(new URL(selected.url).searchParams.get("slug"), "osx.fat.zip");
+  assert.equal(core.__test.selectMacDownload(links.slice(0, 1), "standard"), null);
+  const html = ["1.1-stable", "2.0-stable", "2.0.4.1-stable", "2.1.6-stable", "4.7-stable"].map(version =>
+    `<a class="archive-version" href="/download/archive/${version}">${version}</a>`).join("");
+  t.after(() => { Harness.network.routes = null; });
+  Harness.network.routes = { [core.ARCHIVE_URL]: html };
+  const catalog = await core.fetchAvailableVersions();
+  assert.deepEqual(catalog.versions, ["4.7-stable", "2.1.6-stable", "2.0.4.1-stable"]);
+  await assert.rejects(core.resolveDownloadUrl({ version: "2.0-stable", variant: "standard" }), /no 64-bit macOS download/);
+});
+
+test("Godot 2.0 patch releases select the existing publisher Intel fat archive before downloading", async t => {
+  const version = "2.0.4.1-stable", filename = "Godot_v2.0.4.1_stable_osx.fat.zip";
+  const url = `https://github.com/godotengine/godot/releases/download/${version}/${filename}`;
+  t.after(() => { Harness.network.routes = null; });
+  Harness.network.routes = { [`https://api.github.com/repos/godotengine/godot/releases/tags/${version}`]: { tag_name: version, assets: [
+    { name: "Godot_osx32.zip", browser_download_url: "https://example.invalid/32.zip" },
+    { name: filename, browser_download_url: url, size: 4096, digest: "sha256:" + "e".repeat(64) }
+  ] } };
+  const file = await Manager.core.resolveDownloadUrl({ version, variant: "standard" });
+  assert.equal(file.url, url);
+  assert.deepEqual(file.digest, { algorithm: "sha256", value: "e".repeat(64) });
+  await assert.rejects(Manager.core.resolveDownloadUrl({ version, variant: "mono" }), /no supported 64-bit macOS download/);
 });

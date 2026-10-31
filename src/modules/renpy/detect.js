@@ -330,6 +330,23 @@ function findExecutableBaseName(inputPath, rootDir) {
   return fallback;
 }
 
+// Multi-platform releases ship a Mac app beside the Windows and Linux
+// launchers. Such an app holds no game of its own; its game is the release
+// folder around it. An app whose autorun folder holds the game stays the game.
+function releaseFolderForApp(appPath) {
+  const autorun = path.join(appPath, "Contents", "Resources", "autorun");
+  if (existsDir(autorun)) {
+    try {
+      const relative = path.relative(fs.realpathSync(appPath), fs.realpathSync(autorun));
+      if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) return null;
+    } catch {
+      return null;
+    }
+  }
+  const parent = path.dirname(appPath);
+  return isRoot(parent) ? parent : null;
+}
+
 function resolveContentRoot(context) {
   if (!context?.isAppBundle) return context.rootDir;
   const autorun = path.join(context.rootDir, "Contents", "Resources", "autorun");
@@ -351,7 +368,11 @@ function detectGame(context) {
   let gameFolderOnly = false;
   let adjustedContext = context;
 
-  if (isGameFolder(rootDir)) {
+  const release = context.isAppBundle ? releaseFolderForApp(rootDir) : null;
+  if (release) {
+    adjustedContext = { ...context, rootDir: release, isAppBundle: false };
+    rootDir = release;
+  } else if (isGameFolder(rootDir)) {
     const appPath = findAppBundleForGameFolder(rootDir);
     if (appPath) {
       adjustedContext = { ...context, rootDir: appPath, isAppBundle: true };

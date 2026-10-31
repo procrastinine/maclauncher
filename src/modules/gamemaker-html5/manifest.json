@@ -13,7 +13,7 @@
     "entries": {
       "electron": { "label": "Electron", "graphicsHost": "remote", "settings": { "defaults": { "enableProtections": true }, "fields": [{ "key": "enableProtections", "type": "boolean", "label": "Enable protections" }] } },
       "nwjs": { "label": "NW.js", "graphicsHost": "remote", "settings": { "defaults": { "enableProtections": true }, "fields": [{ "key": "enableProtections", "type": "boolean", "label": "Enable protections" }] } },
-      "native": { "graphicsHost": "window", "label": "Native app" }
+      "native": { "graphicsHost": "window", "label": "Game's macOS app" }
     }
   },
   "supports": { "cheats": false, "cheatsPatcher": false, "saveEditing": false, "saveLocation": false },

@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness=require('./helpers/future-upstream.cjs');
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),crypto=require('node:crypto');
 const{spawnSync}=require('node:child_process'),{writeZipArchive}=require('./helpers/zip-fixture');
 const Tool=require('../src/modules/android/tools/jadx-manager'),Decompiler=require('../src/modules/android/tools/decompile');
@@ -14,8 +16,9 @@ function setup(t){const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-jadx-
 const hash=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 test('JADX catalog is offline until explicit Refresh and selects cross-platform stable releases',async t=>{
  const{context}=setup(t);assert.deepEqual(Tool.getState(context).catalog.versions,[]);
- const release=(v,extras={})=>({tag_name:'v'+v,assets:[{name:`jadx-${v}.zip`,size:10,browser_download_url:`https://github.com/skylot/jadx/releases/download/v${v}/jadx-${v}.zip`}],...extras});
- await Tool.refreshCatalog({...context,force:true},{fetchReleases:async()=>[release('1.5.5'),release('1.5.6'),release('1.6.0'),release('2.0.0',{prerelease:true}),release('1.7.0',{assets:[]})]});
+ const repository='skylot/jadx',release=(v,extras={})=>Harness.githubRelease(repository,'v'+v,[`jadx-${v}.zip`],extras);
+ Harness.network.routes=Harness.githubRoutes(repository,[release('1.7.0',{assets:[]}),release('2.0.0',{prerelease:true}),release('1.6.0'),release('1.5.6'),release('1.5.5')]);
+ try{await Tool.refreshCatalog({...context,force:true});}finally{Harness.network.routes=null;}
  assert.deepEqual(new Set(Tool.getState(context).catalog.versions),new Set(['1.6.0','1.5.6']));assert.equal(Tool.ui.groupId,'tools');
 });
 test('APK output chooser cancel has no tool, download or filesystem effects',async t=>{
@@ -43,8 +46,9 @@ test('official JADX CLI decompiles a generated DEX APK and XML resources through
  const{root,output,apk,entry,context}=setup(t),classes=path.join(root,'classes'),dex=path.join(root,'dex');fs.mkdirSync(classes);fs.mkdirSync(dex);
  const run=(cmd,args)=>{const r=spawnSync(cmd,args,{encoding:'utf8',timeout:30000});assert.ifError(r.error);assert.equal(r.status,0,r.stdout+r.stderr);};
  run(path.join(path.dirname(java),'javac'),['--release','11','-d',classes,path.resolve('tests/fixtures/android-jadx/Fixture.java')]);run(java,['-cp',r8,'com.android.tools.r8.D8','--min-api','26','--output',dex,path.join(classes,'org/example/jadx/Fixture.class')]);
- writeZipArchive(apk,[{name:'AndroidManifest.xml',data:binaryManifest()},{name:'classes.dex',data:fs.readFileSync(path.join(dex,'classes.dex'))},{name:'assets/original.txt',data:'Original resource'}]);const original=hash(apk),pin=Tool.core.rowFor(context.userDataDir,'1.5.6');
- await Tool.installRuntime({...context,version:'1.5.6',confirmRuntimeInstall:async()=>true},{downloadToFile:async(url,target)=>{assert.equal(url,pin.url);fs.copyFileSync(archive,target);}});let spawned;
+ writeZipArchive(apk,[{name:'AndroidManifest.xml',data:binaryManifest()},{name:'classes.dex',data:fs.readFileSync(path.join(dex,'classes.dex'))},{name:'assets/original.txt',data:'Original resource'}]);const original=hash(apk),published=Harness.githubRelease('skylot/jadx','v1.5.6',['jadx-1.5.6.zip']);published.assets=published.assets.map(({digest,...asset})=>({...asset,size:fs.statSync(archive).size}));
+ Harness.network.routes=Harness.githubRoutes('skylot/jadx',[published]);try{await Tool.refreshCatalog({...context,force:true});}finally{Harness.network.routes=null;}const pin=Tool.core.rowFor(context.userDataDir,'1.5.6');
+ Harness.network.routes={[pin.url]:fs.readFileSync(archive)};try{await Tool.installRuntime({...context,version:'1.5.6',confirmRuntimeInstall:async()=>true});}finally{Harness.network.routes=null;}let spawned;
  const result=await Decompiler.decompileApk(entry,{version:'1.5.6',outputDir:output},{...context,onToolProcessSpawn:child=>{spawned=child;}},{run:(c,p,o)=>Tool.core.run(c,p,o,{ensureHost:async()=>({javaPath:java,runtimeIdentity:{managerId:'java',version:'fixture-21',sourcePath:path.dirname(path.dirname(java))}})})});
  assert.equal(result.status,'Decompiled');assert.match(fs.readFileSync(path.join(result.outputDir,'sources/org/example/jadx/Fixture.java'),'utf8'),/Fixture value/);assert.match(fs.readFileSync(path.join(result.outputDir,'resources/AndroidManifest.xml'),'utf8'),/org.example.jadx/);assert.equal(hash(apk),original);assert.ok(spawned&&spawned.exitCode===0);assert.ok(fs.existsSync(path.join(Tool.core.installRoot(context.userDataDir,'1.5.6'),'files/LICENSE')));t.diagnostic('Official JADX1.5.6: actual Java source, XML resources, original APK unchanged, process exit0');
 });

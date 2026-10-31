@@ -48,36 +48,47 @@ test("Godot3 packed GDScript retains explicit version and Mono choices with an i
   const value = pack({"project.binary": settings({"application/config/name": "Game"}), "Main.gdc": Buffer.from("GDSC")}), f = fixture(t, value);
   f.entry.moduleData.detectedVersion = "3.5.2";f.entry.moduleData.detectedMajor = 3;
   assert.equal(Pack.scripting(f.source, value), "gdscript");
-  assert.equal(Godot.__test.resolveRuntimeVariant(settingsGlobal, {}, f.entry), "mono");
-  assert.equal(Godot.__test.resolveRuntimeVariant(settingsGlobal, {}, {...f.entry, runtimeSettings: {godot: {preferExtracted: true}}}), "mono");
+  assert.equal(Godot.__test.resolveRuntimeVariant(settingsGlobal, {}, f.entry), "standard", "GDScript-only content selects Standard over the saved variant");
+  assert.equal(Godot.__test.resolveRuntimeVariant(settingsGlobal, {}, {...f.entry, runtimeSettings: {godot: {preferExtracted: true}}}), "standard");
   assert.equal(Godot.__test.resolveRuntimeVariant(settingsGlobal, {variant: "mono"}, f.entry), "mono");
   assert.equal(Godot.__test.resolveRuntimeVariant(settingsGlobal, {variant: "standard"}, f.entry), "standard");
   // Version discovery is explicit; the archive list is supplied locally instead of querying godotengine.org.
   const archive = t.mock.method(require("../src/modules/godot/runtime/godot-runtime"), "fetchAvailableVersions",
     async () => ({versions: ["4.6.3-stable", "3.5.2-stable"], source: "test-archive", mode: "all"}));
   const mono = path.join(f.root, "profile/runtimes/godot/3.5.2-stable/mono/Godot.app");createGodotApp(mono);
-  const globalPlan = await Godot.ensureRuntime(f.entry, {userDataDir: path.join(f.root, "profile"), settings: settingsGlobal});
-  assert.equal(globalPlan.version, "4.6.3-stable", "The explicit global choice is not replaced by another installed version");
+  assert.equal(await Godot.ensureRuntime(f.entry, {userDataDir: path.join(f.root, "profile"), settings: settingsGlobal}), null,
+    "The detected engine recommendation precedes the global default and reuses its installed Mono runtime");
+  assert.equal(settingsGlobal.runtimes.godot.defaultVersion, "4.6.3-stable", "The game recommendation preserves the global default");
+  f.entry.runtimeData = {godot: {version: "4.6.3-stable"}};
+  const explicitPlan = await Godot.ensureRuntime(f.entry, {userDataDir: path.join(f.root, "profile"), settings: settingsGlobal});
+  assert.equal(explicitPlan.version, "4.6.3-stable", "A manual game choice precedes the detected engine recommendation");
   f.entry.runtimeData = {godot: {version: "3.5.2-stable"}};
   assert.equal(await Godot.ensureRuntime(f.entry, {userDataDir: path.join(f.root, "profile"), settings: settingsGlobal}), null);
-  const standardSettings = {runtimes: {godot: {...settingsGlobal.runtimes.godot, defaultVariant: "standard"}}};
-  const planned = await Godot.ensureRuntime(f.entry, {userDataDir: path.join(f.root, "profile"), settings: standardSettings});
+  assert.equal(Godot.actions.runtimeStatus(f.entry, {}, {userDataDir: path.join(f.root, "profile"), settings: settingsGlobal}).requiredVariant, "mono",
+    "A GDScript game runs on the only installed build, .NET, without a download");
+  f.entry.runtimeData = {godot: {version: "3.5.2-stable", variant: "standard"}};
+  const planned = await Godot.ensureRuntime(f.entry, {userDataDir: path.join(f.root, "profile"), settings: settingsGlobal});
   assert.equal(planned.installOptions.variant, "standard");assert.equal(planned.version, "3.5.2-stable");
-  assert.equal(standardSettings.runtimes.godot.defaultVersion, "4.6.3-stable", "Preparing a per-game override preserves the global choice");
+  assert.equal(settingsGlobal.runtimes.godot.defaultVersion, "4.6.3-stable", "Preparing a per-game override preserves the global choice");
   const standard = path.join(f.root, "profile/runtimes/godot/3.5.2-stable/standard/Godot.app");createGodotApp(standard);
+  f.entry.runtimeData = {godot: {version: "3.5.2-stable"}};
   assert.equal(await Godot.ensureRuntime(f.entry, {userDataDir: path.join(f.root, "profile"), settings: settingsGlobal}), null);
-  assert.equal(Godot.actions.runtimeStatus(f.entry, {}, {userDataDir: path.join(f.root, "profile"), settings: standardSettings}).requiredVariant, "standard");
-  for (const files of [
-    {"project.binary": settings({"mono/project/assembly_name": "Game"}), "Main.gdc": Buffer.from("GDSC")},
-    {"project.binary": settings({"application/config/name": "Game"}), "Main.cs.remap": Buffer.from("Managed")},
-    {"project.binary": settings({"application/config/name": "Game"})}
+  assert.equal(Godot.actions.runtimeStatus(f.entry, {}, {userDataDir: path.join(f.root, "profile"), settings: settingsGlobal}).requiredVariant, "standard",
+    "Standard is preferred once both builds are installed");
+  for (const [files, expected] of [
+    [{"project.binary": settings({"mono/project/assembly_name": "Game"}), "Main.gdc": Buffer.from("GDSC")}, "mono"],
+    [{"project.binary": settings({"application/config/name": "Game"}), "Main.cs.remap": Buffer.from("Managed")}, "mono"],
+    [{"project.binary": settings({"application/config/name": "Game"})}, "standard"]
   ]) {
     const other = pack(files);fs.writeFileSync(f.source, other.buffer);f.entry.moduleData.packSize = other.size;
-    assert.equal(Godot.__test.resolveRuntimeVariant(settingsGlobal, {}, f.entry), "mono", "managed or unproven content keeps the Mono path");
+    assert.equal(Godot.__test.resolveRuntimeVariant(settingsGlobal, {}, f.entry), expected, "C# or Mono declarations select .NET and other content selects Standard");
   }
   fs.writeFileSync(f.source, value.buffer);f.entry.moduleData.packSize = value.size;
-  fs.mkdirSync(path.join(f.root, "data_game_windows_x86_64"));assert.equal(Godot.__test.resolveRuntimeVariant(settingsGlobal, {}, f.entry), "mono", "external assembly directories are not overlooked");
-  fs.rmdirSync(path.join(f.root, "data_game_windows_x86_64"));
+  const data = path.join(f.root, "data_game_windows_x86_64");fs.mkdirSync(path.join(data, "Assemblies"), {recursive: true});
+  assert.equal(Godot.__test.resolveRuntimeVariant(settingsGlobal, {}, f.entry), "standard", "A data folder without assemblies is not .NET content");
+  fs.writeFileSync(path.join(data, "Assemblies", "Game.dll"), "MZ");
+  assert.equal(Godot.__test.resolveRuntimeVariant(settingsGlobal, {}, f.entry), "mono", "external assembly directories are not overlooked");
+  fs.rmSync(data, {recursive: true});
   const encrypted = Buffer.from(value.buffer);encrypted.writeUInt32LE(2, value.offset + 4);encrypted.writeUInt32LE(1, value.offset + 20);fs.writeFileSync(f.source, encrypted);
-  assert.equal(Godot.__test.resolveRuntimeVariant(settingsGlobal, {}, f.entry), "mono");
+  assert.equal(Godot.__test.resolveRuntimeVariant(settingsGlobal, {}, f.entry), "standard");
 });

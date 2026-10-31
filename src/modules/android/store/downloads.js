@@ -1,5 +1,5 @@
-const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto"), https = require("node:https");
-const { pipeline } = require("node:stream/promises"), { Transform } = require("node:stream");
+const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
+const Upstream = require("../../shared/runtime/upstream");
 const { createPlayProtocol, packageName, versionCode, ARCHITECTURES, ANDROID_SDKS } = require("./protocol");
 const { readApkIdentity } = require("./apk-identity");
 const { readJsonDocument, writeJsonAtomic } = require("../../../core/json-files");
@@ -11,31 +11,35 @@ const publicError = message => Object.assign(new Error(message), { playPublic: t
 const safeError = error => error?.playPublic || error?.googlePlayPublic ? error.message : error?.code === "ENOSPC" ? "There is not enough space for this download." : "Google Play could not complete this action. Check the account, network and selected app version.";
 const cancelled = error => error?.name === "AbortError" || error?.code === "ABORT_ERR";
 const validSession = value => value && (value.mode === "microg" && typeof value.microgAccountId === "string" && value.microgAccountId.length > 0 || typeof value.email === "string" && value.email.includes("@") && typeof value.aasToken === "string" && value.aasToken.length > 5);
-const libraryNote = "The account list comes from Google Play purchase history. Free apps can also be found with Search; Google Play may omit some earlier acquisitions.";
+const libraryNote = "Owned library lists the apps in the account's Google Play purchase history. That history can leave out some older apps, and Store search also finds free apps.";
+// Purchase history needs an authorized session. A saved sign-in is listed
+// without unlocking it, so the owned library waits for an explicit connection.
+const ownedLibraryRequirement = "Connect a Google account to list its purchases.";
 function allowedDownload(url) { const value = new URL(url); if (value.protocol !== "https:" || !/(?:^|\.)(?:google\.com|googleapis\.com|googleusercontent\.com|gvt1\.com|ggpht\.com)$/.test(value.hostname)) throw publicError("Google Play supplied an unsupported download address."); return value; }
+// A delivery names each file's host, size and SHA-256 or SHA-1, which verify
+// it. The delivery's cookies go only to the file's own origin.
 async function downloadPlayFile(item, output, { signal, onBytes } = {}) {
-  const initial = allowedDownload(item.url), hashes = { sha256: crypto.createHash("sha256"), sha1: crypto.createHash("sha1") };
-  let received = 0;
-  async function open(url, redirects = 0) {
-    signal?.throwIfAborted(); const target = allowedDownload(url); if (redirects > 5) throw publicError("Google Play returned too many download redirects.");
-    const cookie = target.origin === initial.origin ? (item.cookies || []).filter(value => /^[a-zA-Z0-9_.-]+$/.test(value.name) && !/[\r\n;]/.test(value.value)).map(value => `${value.name}=${value.value}`).join("; ") : "";
-    const response = await new Promise((resolve, reject) => { const req = https.get(target, { signal, headers: cookie ? { Cookie: cookie } : {}, timeout: 30000 }, resolve); req.on("timeout", () => req.destroy(publicError("Google Play download timed out."))); req.on("error", reject); });
-    if ([301, 302, 303, 307, 308].includes(response.statusCode)) { const location = response.headers.location; response.destroy(); if (!location) throw publicError("Google Play returned an incomplete download redirect."); return open(new URL(location, target).href, redirects + 1); }
-    if (response.statusCode !== 200) { response.destroy(); throw publicError(`Google Play download failed (HTTP ${response.statusCode}). Refresh the app and try again.`); }
-    return response;
+  const url = allowedDownload(item.url), source = Upstream.service({ hosts: [url.hostname] });
+  const digest = item.sha256 ? { algorithm: "sha256", value: item.sha256 } : item.sha1 ? { algorithm: "sha1", value: item.sha1 } : null;
+  const listed = source.file({ name: path.basename(output), url: url.href, ...(item.size ? { bytes: item.size } : {}), ...(digest ? { digest } : {}) });
+  const cookie = (item.cookies || []).filter(value => /^[a-zA-Z0-9_.-]+$/.test(value.name) && !/[\r\n;]/.test(value.value)).map(value => `${value.name}=${value.value}`).join("; ");
+  let counted = 0, result;
+  try {
+    result = await source.download(listed, output, { signal, ...(cookie ? { headers: { Cookie: cookie } } : {}),
+      onProgress: ({ downloaded }) => { if (downloaded > counted) onBytes?.(downloaded - counted); counted = downloaded; } });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw /its publisher lists/.test(error?.message || "") ? publicError("A Google Play file failed its integrity check. Download it again.")
+      : error?.statusCode ? publicError(`Google Play download failed (HTTP ${error.statusCode}). Refresh the app and try again.`) : error;
   }
-  const response = await open(initial.href); fs.mkdirSync(path.dirname(output), { recursive: true });
-  const meter = new Transform({ transform(bytes, _encoding, done) { received += bytes.length; if (item.size && received > item.size) return done(publicError("A Google Play file exceeded its declared size.")); hashes.sha256.update(bytes); hashes.sha1.update(bytes); onBytes?.(bytes.length); done(null, bytes); } });
-  await pipeline(response, meter, fs.createWriteStream(output, { flags: "wx", mode: 0o600 }), ...(signal ? [{ signal }] : []));
-  const sha256 = hashes.sha256.digest("hex"), sha1 = hashes.sha1.digest("hex");
-  if (item.size && item.size !== received || item.sha256 && item.sha256 !== sha256 || item.sha1 && item.sha1 !== sha1) throw publicError("A Google Play file failed its integrity check. Download it again.");
-  return { size: received, sha256, sha1 };
+  fs.chmodSync(output, 0o600);
+  return { size: result.bytes, sha256: result.sha256 };
 }
 function createGooglePlayDownloads(options = {}) {
   if (!path.isAbsolute(options.userDataDir || "")) throw Error("A MacLauncher profile directory is required.");
   const root = path.join(options.userDataDir, "external", "google-play"), defaultDirectory = path.join(options.userDataDir, "external", "downloads", "google-play"), cacheFile = path.join(root, "library.json"), cached = readJson(cacheFile);
   const state = { connection: { status: "disconnected", accountName: cached?.email || "" }, library: cached?.library || [], libraryLoading: false, libraryError: null, libraryFetchedAt: cached?.fetchedAt || null,
-    libraryNote, hasSavedSession: false, capabilities: { search: true, ownedLibrary: true }, downloads: [], defaultDirectory };
+    libraryNote, hasSavedSession: false, capabilities: { search: true, ownedLibrary: true }, ownedLibraryRequirement, downloads: [], defaultDirectory };
   const protocol = options.protocol || createPlayProtocol(options), jobs = new Map(), catalog = new Map(), observations = new Map(), entries = new Map(state.library.map(row => [row.appId, row]));
   let session, disposed = false, generation = 0, pendingConnect, activeLibrary, libraryAccount = cached?.email, lifetime = new AbortController();
   const snapshot = () => clone(state), emit = () => { if (!disposed) options.onChange?.(snapshot()); };
@@ -201,7 +205,7 @@ function createGooglePlayDownloads(options = {}) {
           signal.throwIfAborted(); const output = path.resolve(stage, file.filename), relative = path.relative(stage, output);
           if (path.isAbsolute(relative) || relative === ".." || relative.startsWith(`..${path.sep}`) || /[\\\x00-\x1f]/.test(file.filename)) throw publicError("Google Play supplied an unsafe file path.");
           record.detail = file.filename; emit();
-          const verified = await (options.downloadFile || downloadPlayFile)(file, output, { signal, onBytes: bytes => { record.downloaded += bytes; if (Date.now() - lastEmit > 150) { lastEmit = Date.now(); emit(); } } });
+          const verified = await downloadPlayFile(file, output, { signal, onBytes: bytes => { record.downloaded += bytes; if (Date.now() - lastEmit > 150) { lastEmit = Date.now(); emit(); } } });
           if (["base", "split", "asset"].includes(file.type)) {
             const identity = (options.readApkIdentity || readApkIdentity)(output);
             if (identity.packageName !== appId || identity.versionCode !== code || file.type === "base" && identity.split) throw publicError("A downloaded APK does not match the requested package and exact version code.");

@@ -185,7 +185,7 @@ function inspectGraphics(dataRoot, { detection } = {}) {
       graphicsLabels: found.apis.map(api => GRAPHICS[api]), nativeGraphicsAPIs, source: info?.isFile() ? loose : `${archive}!globalgamemanagers`,
       version: found.version, targetPlatform: found.targetPlatform,
       playerSettings: found.playerSettings,
-      reason: nativeGraphicsAPIs.length ? null : "This build contains only graphics APIs that the native Mac player cannot use." };
+      reason: nativeGraphicsAPIs.length ? null : "This build has no Metal or OpenGL shaders for the Mac player." };
   } catch (error) {
     if (error.code === "DETECTION_LIMIT") throw error;
     return { status: "unknown", graphicsAPIs: [], nativeGraphicsAPIs: [], reason: error.message };

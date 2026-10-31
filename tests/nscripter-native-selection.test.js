@@ -22,9 +22,9 @@ test("Onsyuri refuses missing explicit versions and architectures instead of lau
   assert.equal(Module.__test.resolveOnsyuriMacInstall("/owned", settings, { version: "0.7.6", variant: "x64" }).installDir, "/owned/older");
   assert.equal(Module.__test.resolveOnsyuriMacInstall("/owned", settings).installDir, "/owned/current");
   assert.throws(() => Module.__test.resolveOnsyuriWebInstall("/owned", {}, { version: "0.7.6" }), /0\.7\.6.*not installed/);
-  // A missing saved default stays exact, and with no choice the sole installation is not used in its place.
+  // A missing saved default stays exact while nothing is listed; with no choice the installed version plays.
   assert.throws(() => Module.__test.resolveOnsyuriWebInstall("/owned", { runtimes: { onsyuri: { web: { defaultVersion: "0.7.6" } } } }), /0\.7\.6.*not installed/);
-  assert.throws(() => Module.__test.resolveOnsyuriWebInstall("/owned", {}), /Choose .* version in Runtimes/);
+  assert.equal(Module.__test.resolveOnsyuriWebInstall("/owned", {}).installDir, "/owned/web");
   assert.equal(Module.__test.resolveOnsyuriWebInstall("/owned", { runtimes: { onsyuri: { web: { defaultVersion: current } } } }).installDir, "/owned/web");
   Runtime.listInstalledMac = () => [{ version: current, variant: "arm64", installDir: "/owned/current", ready: false, error: "Runtime requires macOS 27.0." },
     { version: "0.7.6", variant: "arm64", installDir: "/owned/other", ready: true }];

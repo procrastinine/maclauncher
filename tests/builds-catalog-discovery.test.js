@@ -1,6 +1,6 @@
 const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os"), https = require("node:https"), http = require("node:http");
-const Downloads = require("../src/modules/shared/runtime/download-utils");
+const Downloads = require("../src/modules/shared/runtime/upstream-transport");
 
 // Every runtime manager is refreshed offline. MacLauncher Builds catalogs answer
 // with versions this launcher has never seen, in each package layout; every

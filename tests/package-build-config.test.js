@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
 const test = require("node:test");
+const { finished } = require("node:stream/promises");
 const { FileMatcher, getMainFileMatchers, getNodeModuleFileMatcher } = require("app-builder-lib/out/fileMatcher");
 const { doMergeConfigs } = require("app-builder-lib/out/util/config/config");
 const Content = require("../scripts/runtime-content.cjs");
@@ -104,7 +105,7 @@ test("Android source exporters remain excluded from actual ASAR files while meta
   const oldMain = matchersFor(previous.build).find(matcher => matcher.from === source);
   for (const alias of aliases) assert.equal(selectedBy(oldMain,alias),true);
   const walk = require("builder-util").walk;
-  const before = path.join(root,"before.asar");await asar.createPackageFromFiles(source,before,await walk(source,oldMain.createFilter()));
+  const before = path.join(root,"before.asar");await finished(await asar.createPackageFromFiles(source,before,await walk(source,oldMain.createFilter())));
   assert.throws(()=>Check.inspectAsar(before,{version:config.version,product:config.build.productName},{packageConfig:previous}),/link is missing its target/);
   // Apply the actual normalized launcher FileSet; the sealed helper stays outside ASAR.
   const selected = [];
@@ -123,7 +124,7 @@ test("Android source exporters remain excluded from actual ASAR files while meta
     assert.equal(require("../src/modules/shared/runtime/bundled-native").digest(fs.readFileSync(path.join(projectRoot,"src/resources/native-runtimes",helper.directoryRelative,file.path))),file.sha256);
   }
   assert.equal(selected.some(file=>file.startsWith("src/external/")),false);
-  const after = path.join(root,"after.asar");await asar.createPackage(stage,after);
+  const after = path.join(root,"after.asar");await finished(await asar.createPackage(stage,after));
   assert.equal(Check.inspectAsar(after,{version:config.version,product:config.build.productName},{packageConfig:config}).archiveLinks,0);
 });
 test("late root FileSet exclusions survive Builder merging and npm filters retain runtime entry points", () => {
@@ -265,11 +266,16 @@ test("managed Android runtime payloads are excluded while owned integration help
   assert.equal(plan.supplementals.some(item => managed.has(item.id)), false);
   const helper = plan.supplementals.find(item => item.id === 'android-privacy');
   assert.ok(helper);
-  const development = JSON.parse(fs.readFileSync(path.join(projectRoot,'src/modules/android/managed-packages.json')));
-  const original = development.find(item => item.id === 'android-privacy');
-  const locked = require('../build/runtime-packages.json').packages.find(item => item.id === 'android-privacy');
+  const declarations = require('../src/modules/android/privacy-distribution.json');
+  const original = declarations.find(item => item.id === helper.id && item.version === helper.version && item.arch === helper.arch);
+  assert.ok(original, 'The packaged helper matches the declaration used by the clipboard consumer');
+  const selection = require('../scripts/runtime-packages.cjs').selectArchitecture(require('../build/runtime-packages.json'), 'arm64');
+  const locked = selection.packages.find(item => item.id === helper.id && item.version === helper.version && item.arch === helper.arch);
+  assert.ok(locked, 'The helper has its exact selected release identity');
   assert.equal(helper.version, locked.version); assert.equal(helper.manifestSha256, locked.manifestSha256);
   assert.equal(helper.sourceSha256, original.sourceSha256);
+  assert.equal(helper.sourceSha256, require('node:crypto').createHash('sha256').update(fs.readFileSync(
+    path.join(projectRoot, 'src/external/maclauncher-android/src/modules/android/native/clipboard-helper.mm'))).digest('hex'));
   assert.deepEqual(helper.files.find(file => file.path === 'clipboard-helper'), original.files.find(file => file.path === 'clipboard-helper'));
   assert.deepEqual(helper.notices, original.notices, 'Native helper bytes and license declarations survive the binary-only projection');
   const planned = distribution.resourceRules(plan,Content.applyBuildPolicy(doMergeConfigs([packageConfig().build])).extraResources).find(item => item.from === 'src/resources');

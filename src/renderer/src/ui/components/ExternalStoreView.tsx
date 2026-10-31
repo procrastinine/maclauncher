@@ -32,7 +32,7 @@ export type ExternalStoreSnapshot = {
     phase?: "browser" | "authorizing"; error?: string; authUrl?: string; guard?: { kind: "authorization"; url?: string; message?: string } };
   library: ExternalLibraryGame[]; libraryLoading: boolean; libraryError?: string | null; downloads: ExternalDownload[];
   defaultDirectory?: string; cancellationNotice?: string; hasSavedKey?: boolean; hasSavedSession?: boolean; libraryNote?: string;
-  capabilities?: { search?: boolean; ownedLibrary?: boolean };
+  capabilities?: { search?: boolean; ownedLibrary?: boolean }; ownedLibraryRequirement?: string;
   availableAccounts?: ExternalSharedAccount[]; search?: ExternalSearchState;
 };
 export type ExternalStoreSelection = {
@@ -208,6 +208,8 @@ export function ExternalStoreView({ store, api, onImported, active = true }: { s
   const publicMode = store === "itch" && itchMode === "public";
   const googlePlay = store === "google-play";
   const searchingStore = googlePlay && (googleScope === "search" || !connected);
+  // An owned library needs a connected account; a saved sign-in is listed before it is used.
+  const ownedLibraryReason = state.capabilities?.ownedLibrary === false || connected ? "" : state.ownedLibraryRequirement || `Connect ${name} to list owned apps.`;
   const librarySource = searchingStore ? searchResults : state.library;
   const libraryBusy = searchingStore ? searchBusy : state.libraryLoading;
   const sharedAccounts = state.availableAccounts || [];
@@ -376,8 +378,8 @@ export function ExternalStoreView({ store, api, onImported, active = true }: { s
       {publicStatus && <span className="externalPublicStatus" role="status">{publicStatus}</span>}
     </form>}
     {!connected && !publicMode && <div className={`steamLogin${googlePlay ? " externalAndroidLogin" : ""}`}>
-      <div className="steamLoginIntro">{googlePlay ? <h2>Google Play account</h2> : <><span className={`steamBadge store-${store}`}>{name}</span><h2>Connect {name}</h2></>}
-        <HelpTip label={`About ${name} downloads`}><p>{googlePlay ? "Browser sign-in is shared with Settings → Android. Google handles passwords and account confirmation in a separate window. Existing shared accounts can also be selected without opening an Android sign-in window." : store === "gog" ? "Browse owned games and download available offline installer editions for Mac, Windows and Linux." : store === "itch" ? "Load purchased and claimed games, then choose an available upload and platform before downloading." : "Browse owned games and choose the available platform and build before downloading."}</p><p>Account and version results are cached. Store searches and refresh actions check the network; browsing local installations stays offline.</p></HelpTip>
+      <div className="steamLoginIntro">{!googlePlay && <span className={`steamBadge store-${store}`}>{name}</span>}
+        <h2 className="externalControlHelp">{googlePlay ? "Google Play account" : `Connect ${name}`} <HelpTip label={`About ${name} downloads`}><p>{googlePlay ? "Browser sign-in is shared with Settings → Android. Google handles passwords and account confirmation in a separate window. Existing shared accounts can also be selected without opening an Android sign-in window." : store === "gog" ? "Browse owned games and download available offline installer editions for Mac, Windows and Linux." : store === "itch" ? "Load purchased and claimed games, then choose an available upload and platform before downloading." : "Browse owned games and choose the available platform and build before downloading."}</p><p>Account and version results are cached. Store searches and refresh actions check the network; browsing local installations stays offline.</p></HelpTip></h2>
       </div>
       <form className="steamLoginForm" onSubmit={authenticate}>
         {googlePlay ? <>
@@ -418,8 +420,8 @@ export function ExternalStoreView({ store, api, onImported, active = true }: { s
     {(connected || googlePlay) && <>
       {googlePlay && <><div className="externalModeToolbar"><fieldset className="externalModeSegments"><legend className="externalVisuallyHidden">Google Play library scope</legend>
         <label data-selected={searchingStore}><input type="radio" name="google-play-library-scope" value="search" checked={searchingStore} onChange={() => setGoogleScope("search")} /><span>Store search</span></label>
-        {state.capabilities?.ownedLibrary !== false && <label data-selected={!searchingStore}><input type="radio" name="google-play-library-scope" value="owned" checked={!searchingStore} disabled={!connected} onChange={() => setGoogleScope("owned")} /><span>Owned library</span></label>}
-      </fieldset><HelpTip label="About Google Play libraries"><p>{state.libraryNote || "Owned library lists Google Play purchase history. Free apps can be found with Store search; this list may not include every app previously acquired."}</p><p>Search checks Google Play, F-Droid and IzzyOnDroid independently. F-Droid and IzzyOnDroid work without Google sign-in. A package ID or Google Play URL checks Google Play only; repository URLs and fdroid: or izzy: package prefixes check that source. Typing a list filter stays offline.</p></HelpTip></div>
+        {state.capabilities?.ownedLibrary !== false && <label data-selected={!searchingStore} title={ownedLibraryReason || undefined}><input type="radio" name="google-play-library-scope" value="owned" checked={!searchingStore} disabled={!connected} aria-describedby={ownedLibraryReason ? `${store}-owned-library-reason` : undefined} onChange={() => setGoogleScope("owned")} /><span>Owned library</span></label>}
+      </fieldset>{ownedLibraryReason && <span className="externalModeReason" id={`${store}-owned-library-reason`}>{ownedLibraryReason}</span>}<HelpTip label="About Google Play libraries"><p>{state.libraryNote || "Owned library lists the apps in the account's Google Play purchase history. That history can leave out some older apps, and Store search also finds free apps."}</p><p>Search checks Google Play, F-Droid and IzzyOnDroid independently. F-Droid and IzzyOnDroid work without Google sign-in. A package ID or Google Play URL checks Google Play only; repository URLs and fdroid: or izzy: package prefixes check that source. Typing a list filter stays offline.</p></HelpTip></div>
       {searchingStore && <form className="externalStoreSearchForm" onSubmit={searchStore}><label className="steamField">App name, package ID or store URL<input className="input" aria-label="Google Play store query" value={storeQuery} onChange={event => setStoreQuery(event.target.value)} placeholder="Search apps, fdroid:org.example.app, or a store URL" spellCheck={false} /></label><button className="btn primary" type="submit" disabled={!storeQuery.trim()}>Search</button></form>}
       {searchingStore && searchSources.length > 0 && <div className="externalSearchSources" aria-label="Android search progress" role="status">{searchSources.map(source => <span className={`externalSearchSource ${source.status}`} key={source.id}><span className={`steamBadge store-${source.id}`}>{source.label}</span><span>{source.status === "loading" ? "Searching…" : source.status === "completed" ? `${searchResults.filter(game => androidSource(game) === source.id).length} results` : source.status === "skipped" ? source.id === "google-play" && !connected ? "Sign-in required" : "Skipped" : "Search failed"}</span>{source.error && <HelpTip label={`${source.label} search details`}><p>{formatUserError(source.error)}</p></HelpTip>}</span>)}</div>}</>}
       <div className="steamToolbar"><LibrarySearch query={query} onQueryChange={setQuery} />

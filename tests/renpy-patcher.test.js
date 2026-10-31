@@ -15,6 +15,53 @@ function writeFile(filePath, contents) {
   fs.writeFileSync(filePath, contents, "utf8");
 }
 
+test("Ren'Py layout hints prefer legacy SDK folders without changing existing modern game choices", t => {
+  const root = makeTempDir("renpy-layout-order-"); t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const sdk = path.join(root, "7.3.5"), game = path.join(root, "game");
+  for (const directory of [sdk, game]) for (const name of ["darwin-x86_64", "py2-mac-universal"]) {
+    writeFile(path.join(directory, "lib", name, "renpy"), "program");
+  }
+  assert.equal(Patcher.findMacLibDir(sdk, 7).name, "darwin-x86_64");
+  assert.equal(Patcher.findMacLibDir(game, 7).name, "py2-mac-universal");
+  assert.equal(Patcher.findMacLibDir(game, 7, {version: "6.99.12"}).name, "darwin-x86_64");
+  assert.equal(Patcher.findMacLibDir(sdk, 7, {version: "7.4.0"}).name, "py2-mac-universal");
+});
+
+test("Ren'Py unknown library names use bounded Mac executable discovery and actual CPU slices", async t => {
+  const {image, ARM64, X64} = require("./fixtures/macho-image");
+  const Architecture = require("../src/modules/shared/runtime/architecture");
+  const root = makeTempDir("renpy-layout-content-"); t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  for (const name of ["python", "renpy"]) writeFile(path.join(root, "lib", "linux-future", name), "\x7fELF");
+  fs.mkdirSync(path.join(root, "lib", "py3-mac-universal")); // Empty stale folders must not hide working content.
+  function mac(name, cpu) {
+    for (const program of ["python", "renpy"]) writeFile(path.join(root, "lib", name, program), image({cpu, fileType: 2, installName: null}));
+  }
+  mac("too/deep/to/search/runtime", ARM64);
+  assert.equal(Patcher.findMacLibDir(root, 8), null);
+  mac("py314-mac-future-arm", ARM64); mac("py314-mac-future-intel", X64);
+  for (const [arch, name] of [["arm64", "py314-mac-future-arm"], ["x64", "py314-mac-future-intel"]]) {
+    Architecture.withArchitecture(arch, () => assert.equal(Patcher.findMacLibDir(root, 8).name, name));
+  }
+  fs.writeFileSync(path.join(root, Patcher.SDK_LAYOUT_FILE), JSON.stringify({macLibDirName: "py314-mac-future-intel"}));
+  mac("py3-mac-universal", ARM64);
+  assert.equal(Patcher.findMacLibDir(root, 8).name, "py314-mac-future-intel", "A recorded SDK choice survives a later extra layout");
+});
+
+test("Ren'Py legacy SDK patch records the Darwin platform and preserves game launch names", t => {
+  const root = makeTempDir("renpy-darwin-patch-"); t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const sdkDir = path.join(root, "sdk"), gameDir = path.join(root, "game"), userDataDir = path.join(root, "profile");
+  writeFile(path.join(sdkDir, "lib", "darwin-x86_64", "renpy"), "program");
+  writeFile(path.join(gameDir, "MyGame.sh"), "#!/bin/sh\n");
+  const options = {userDataDir, gameId: "darwin-game", gamePath: gameDir, contentRootDir: gameDir,
+    renpyBaseName: "MyGame", renpyMajor: 7, sdkInstallDir: sdkDir, sdkVersion: "7.3.5"};
+  const status = Patcher.patchGame(options);
+  assert.equal(status.patched, true);
+  assert.equal(status.platform, "darwin-x86_64");
+  assert.equal(Patcher.readPatchMeta(userDataDir, options.gameId).macLibDirName, "darwin-x86_64");
+  assert.equal(fs.readFileSync(path.join(gameDir, "lib", "darwin-x86_64", "MyGame"), "utf8"), "program");
+  assert.equal(Patcher.unpatchGame(options).patched, false);
+});
+
 test("Ren'Py patcher installs and removes runtime libs", () => {
   const userDataDir = makeTempDir("maclauncher-renpy-user-");
   const gameDir = makeTempDir("maclauncher-renpy-game-");

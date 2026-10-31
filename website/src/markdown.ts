@@ -8,6 +8,8 @@ import path from "node:path";
 import { getCollection, type CollectionEntry } from "astro:content";
 import { sidebar } from "./sidebar.mjs";
 import { htmlPath, markdownPath, pageName, siteUrl } from "./markdown-paths";
+import { featureTableMarkdown } from "./requirements";
+import { verifyCommandMarkdown } from "./verify-command";
 
 type Entry = CollectionEntry<"docs">;
 type SidebarItem = string | { link?: string; items?: SidebarItem[]; autogenerate?: { directory: string } };
@@ -110,7 +112,9 @@ function convertBody(body: string, pages: Set<string>): string {
             case "LinkCard": return `- [${props.title}](${siteLink(props.href, pages)})${props.description ? `: ${props.description}` : ""}`;
             case "Sample": return `*Image: ${props.alt}.*${props.caption ? ` ${props.caption}` : ""}`;
             case "Compare": return `*Image comparison, ${props.beforeLabel || "Before"} and ${props.afterLabel || "After"}: ${props.alt}.*${props.caption ? ` ${props.caption}` : ""}`;
-            case "DemoEmbed": return `[Try the launcher](${new URL("demo/", siteUrl).href}): the real launcher interface, running in the browser on example data.`;
+            case "MacFeatureTable": return featureTableMarkdown();
+            case "VerifyCommand": return verifyCommandMarkdown();
+            case "DemoEmbed": return `[Try the interactive demo](${new URL("demo/", siteUrl).href}): the real launcher interface on example games, where every button explains what it would do.`;
             default: return null;
           }
         })();
@@ -125,14 +129,21 @@ function convertBody(body: string, pages: Set<string>): string {
   return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-/** One page as Markdown: its title, summary and address, then its text. */
+/** One page as Markdown: its title, summary and address, the hero's links
+ * (named by their hover titles, such as the Apple Silicon and Intel
+ * downloads), then its text. */
 export function pageMarkdown(entry: Entry, pages: Set<string>): string {
   const tagline = entry.data.hero?.tagline;
+  const actions = (entry.data.hero?.actions || []).map(action => {
+    const title = typeof action.attrs?.title === "string" ? action.attrs.title : action.text;
+    return `- [${title}](${siteLink(action.link, pages)})`;
+  });
   return [
     `# ${entry.data.title}`,
     ...(entry.data.description ? [`> ${entry.data.description}`] : []),
     ...(typeof tagline === "string" && tagline ? [tagline] : []),
     `Web page: ${new URL(htmlPath(entry.id), siteUrl).href}`,
+    ...(actions.length ? [actions.join("\n")] : []),
     convertBody(entry.body || "", pages)
   ].join("\n\n") + "\n";
 }

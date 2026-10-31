@@ -4,7 +4,7 @@ const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const GameData = require("../shared/game-data");
 const { throwIfAborted } = require("../shared/runtime/download-utils");
-const { inspectData } = require("./detect");
+const { inspectData, macPlayerBlocker } = require("./detect");
 const Steam = require("./steam");
 const exec = promisify(execFile);
 const escapeXml = value => String(value).replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[character]);
@@ -17,16 +17,14 @@ function moduleRoot(entry, context) {
 function inspectEntry(entry) {
   const root = entry.moduleData?.dataRoot;
   if (!path.isAbsolute(root || "") || root.includes("\0")) throw new Error("Unity game data was not found.");
-  const info = inspectData(root);
+  const info = inspectData(root, { gamePath: entry.gamePath });
   if (!info) throw new Error("Unity game data does not contain a supported exact player version.");
   return info;
 }
 
 function preflight(entry) {
-  const info = inspectEntry(entry);
-  if (info.scriptingBackend !== "mono") throw new Error("Windows IL2CPP code needs a native port; replacing its Unity player cannot run it.");
-  if (info.graphics.status === "requires-shader-conversion") throw new Error("This Unity build contains Direct3D shaders. A Mac Mono player needs Metal or OpenGL shaders.");
-  if (info.windowsApis.length) throw new Error("This game's Mono code uses Windows desktop APIs that the Mac player does not provide.");
+  const info = inspectEntry(entry), blocker = macPlayerBlocker(info, entry.gamePath);
+  if (blocker) throw new Error(blocker.reason);
   return info;
 }
 

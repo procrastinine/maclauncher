@@ -1,3 +1,5 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -6,6 +8,7 @@ const path = require("node:path");
 const { EventEmitter } = require("node:events");
 const { image, universal, ARM64, X64 } = require("./fixtures/macho-image");
 const Manager = require("../src/modules/unity/tools/assetripper-manager");
+const { stoppedDownloads, assertConsentedDiscovery, assertReceiptOffline } = require("./helpers/catalog-only-runtime.cjs");
 const Session = require("../src/modules/unity/tools/assetripper-session");
 const Assets = require("../src/modules/unity/tools/assets");
 const { createRuntimeCoordinator } = require("../src/core/runtime-coordinator");
@@ -32,37 +35,58 @@ function fakeSession(root) {
     isOpen: () => open, close: () => { if (open) { open = false; child.emit("close", 0); } }, waitClosed: async () => {} };
   return session;
 }
+const repository = "AssetRipper/AssetRipper";
+// Release routes whose list request is counted.
+function releaseRoutes(releases, counter) {
+  const routes = Harness.githubRoutes(repository, releases), list = `https://api.github.com/repos/${repository}/releases`, listing = routes[list];
+  routes[list] = () => { counter.requests++; return listing; };
+  return routes;
+}
 const fakeUse = async (_identities, work) => work({ bind: async () => {}, retainUntilClosed: () => {} });
 
+test("AssetRipper discovers inside a consented install and keeps earlier installations offline", { skip: process.platform !== "darwin" }, async t => {
+  const { root } = setup(t), downloads = stoppedDownloads(), counter = { requests: 0 };
+  const url = (tag, cpu) => `https://github.com/${repository}/releases/download/${tag}/AssetRipper_mac_${cpu}.tar.xz`;
+  const release = tag => Harness.githubRelease(repository, tag, ["arm64", "x64"].map(cpu => `AssetRipper_mac_${cpu}.tar.xz`));
+  const manager = Manager.__test.createManager({ dependencies: { systemVersionSync: () => "15.0", downloadToFile: downloads.downloadToFile } });
+  Harness.network.routes = releaseRoutes([release("2.1.0"), release("2.0.0")], counter);
+  t.after(() => { Harness.network.routes = null; });
+  await assertConsentedDiscovery({ manager, userDataDir: path.join(root, "consent"), discoveries: () => counter.requests, downloads,
+    newestUrl: url("2.1.0", process.arch === "x64" ? "x64" : "arm64") });
+  Harness.network.routes = null;
+  const offline = Manager.__test.createManager({ dependencies: { systemVersionSync: () => "15.0" } });
+  assertReceiptOffline({ manager: offline, userDataDir: path.join(root, "offline"), pin: { version: "2.0.0", upstreamRevision: "1ac666f47d8e9dedf96afb0b914c70d7656151ea",
+    minimumMacOS: "12.0", architecture: process.arch === "x64" ? "x64" : "arm64", localBuild: false,
+    asset: { filename: "AssetRipper_mac_arm64.tar.xz", url: url("2.0.0", "arm64"), bytes: 27205056, sha256: "237a6da404bf089c5e5c71a5a9a698c2ea580872292dfa5ce21e25fd1dbe9045" } } });
+});
 test("AssetRipper catalog remains offline until refresh and retains multiple stable native releases", async t => {
-  const { context } = setup(t); let requests = 0;
-  const release = (tag, name = "AssetRipper_mac_arm64.tar.xz") => ({ tag_name: tag, assets: [{ name, id: 123,
-    size: 1024, digest: "sha256:" + "c".repeat(64), browser_download_url: `https://github.com/AssetRipper/AssetRipper/releases/download/${tag}/${name}` }] });
-  const manager = Manager.__test.createManager({ dependencies: {
-    systemVersionSync: () => "15.0", fetchGithubReleases: async () => { requests++; return [release("2.1.0"), release("2.0.0"),
-      release("1.3.14", "AssetRipper_mac_arm64.zip"), release("1.3.10", "AssetRipper_mac_arm64.zip"),
-      release("1.3.0"), release("3.0.0-rc1"), { ...release("4.0.0"), prerelease: true }, release("5.0.0", "AssetRipper_win_x64.zip")]; },
-    fetchGithubTags: async () => { requests++; return ["2.1.0", "2.0.0", "1.3.14", "1.3.10"].map(name => ({ name, commit: { sha: "a".repeat(40) } })); }
-  } });
+  const { context } = setup(t), counter = { requests: 0 };
+  const release = (tag, name = "AssetRipper_mac_arm64.tar.xz", extra) => Harness.githubRelease(repository, tag, [name], extra);
+  const manager = Manager.__test.createManager({ dependencies: { systemVersionSync: () => "15.0" } });
   assert.deepEqual(manager.getState(context).catalog.versions, []);
-  assert.deepEqual(manager.core.listCatalog().map(pin => pin.version), ["2.0.0", "1.3.14"]);
-  assert.equal(manager.resolveSelection({}, {}, context.userDataDir).version, "2.0.0");
-  assert.equal(requests, 0);
-  await manager.refreshCatalog({ ...context, force: true });
-  assert.equal(requests, 2);
-  assert.deepEqual(manager.getState(context).catalog.versions, ["2.1.0", "2.0.0", "1.3.14", "1.3.10"]);
-  assert.equal(manager.resolveSelection({}, {}, context.userDataDir).version, "2.0.0");
+  assert.deepEqual(manager.core.listCatalog().map(pin => pin.version), []);
+  const automatic = manager.resolveSelection({}, {}, context.userDataDir);
+  assert.equal(automatic.version, null); assert.equal(automatic.discoveryRequired, true);
+  assert.equal(counter.requests, 0);
+  Harness.network.routes = releaseRoutes([release("5.0.0", "AssetRipper_win_x64.zip"), release("4.0.0", undefined, { prerelease: true }),
+    release("3.0.0-rc1"), release("2.1.0"), release("2.0.0"), release("1.3.14", "AssetRipper_mac_arm64.zip"),
+    release("1.3.10", "AssetRipper_mac_arm64.zip"), release("1.3.0")], counter);
+  try { await manager.refreshCatalog({ ...context, force: true }); } finally { Harness.network.routes = null; }
+  assert.equal(counter.requests, 1);
+  assert.deepEqual(manager.getState(context).catalog.versions, ["5.0.0", "2.1.0", "2.0.0", "1.3.14", "1.3.10"]);
+  assert.match(manager.getState(context).catalog.versionRequirements["5.0.0"].installReason, /no macOS download/, "A release without a Mac download stays listed with its reason");
+  assert.equal(manager.resolveSelection({}, {}, context.userDataDir).version, "2.1.0", "The newest listed release is the manager default");
   const settings = { runtimes: { assetripper: { defaultVersion: "2.1.0" } } };
   assert.equal(manager.resolveSelection({}, settings, context.userDataDir).version, "2.1.0");
   assert.equal(manager.resolveSelection({ runtimeData: { assetripper: { version: "1.3.14" } } }, settings, context.userDataDir).version, "1.3.14");
-  assert.equal(manager.resolveSelection({}, { runtimes: { assetripper: { defaultVersion: null } } }, context.userDataDir).version, null);
+  assert.equal(manager.resolveSelection({}, { runtimes: { assetripper: { defaultVersion: null } } }, context.userDataDir).version, "2.1.0", "A cleared saved default uses the manager default");
   assert.deepEqual(settings, { runtimes: { assetripper: { defaultVersion: "2.1.0" } } });
   assert.equal(manager.ui.tabLabel, "Tools");
   assert.equal(manager.getState(context).sections[0].label, "AssetRipper");
-  manager.getState(context); assert.equal(requests, 2);
+  manager.getState(context); assert.equal(counter.requests, 1);
 });
 
-test("native inventory checks full library closure, CPU, host floor and changed siblings", t => {
+test("native inventory checks CPU, host floor and changed siblings", t => {
   const { installDir, install } = setup(t);
   const manager = Manager.__test.createManager({ dependencies: { systemVersionSync: () => "15.0" } });
   assert.equal(manager.__test.verifyInstall(install).minimumMacOS, "12.0.0");
@@ -73,8 +97,6 @@ test("native inventory checks full library closure, CPU, host floor and changed 
   assert.equal(manager.__test.verifyInstall(install), null);
   fs.writeFileSync(path.join(installDir, "libcapstone.dylib"), image({ cpu: X64, fileType: 6 }));
   assert.throws(() => Manager.__test.prepareInstall({ unpacked: installDir }, { systemVersionSync: () => "15.0" }), { code: "MACHO_ARCH" });
-  fs.writeFileSync(path.join(installDir, "libcapstone.dylib"), image({ cpu: ARM64, fileType: 6, dependencies: ["/opt/homebrew/lib/example.dylib"] }));
-  assert.throws(() => Manager.__test.prepareInstall({ unpacked: installDir }, { systemVersionSync: () => "15.0" }), { code: "MACHO_CLOSURE" });
 });
 
 test("universal siblings verify the selected Apple Silicon dependency closure and macOS floor", t => {

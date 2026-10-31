@@ -73,7 +73,7 @@ function diskImage(directory) {
 }
 function createManager(dependencies = {}) {
   const run = dependencies.execute || execute, runSync = dependencies.executeSync || execFileSync;
-  const base = createPinnedNativeManager({ id: ID, label: "Metal compiler", catalog: [], upstreamUrl: SOURCE, sourceUrl: SOURCE, supportsDefault: true,
+  const base = createPinnedNativeManager({ id: ID, label: "Metal compiler", upstreamUrl: SOURCE, sourceUrl: SOURCE, supportsDefault: true,
     discoverCatalog: async ({ signal } = {}) => { throwIfAborted(signal); return (await (dependencies.readCatalog || (() => readLocalCatalog(runSync)))()).map(componentEntry); },
     resolveExecutable: directory => path.join(toolchain(directory), "usr/bin/metal"),
     prepareInstall: async ({ unpacked, signal }) => {

@@ -6,7 +6,7 @@ const path = require('node:path');
 const { spawnSync } = require('./helpers/android-java');
 
 const root = path.resolve(__dirname, '..');
-const source = path.join(root, 'src/modules/android/native');
+const source = path.join(root, 'src/external/maclauncher-android/src/modules/android/native');
 const fixtures = path.join(__dirname, 'fixtures/android-native');
 test('Android interval timers translate complete timeval fields at the native boundary',t=>{
   if(process.platform!=='darwin')return t.skip('Requires macOS interval timers');
@@ -39,7 +39,7 @@ test('Android property iteration and raw file calls share native owners',async t
   fs.writeFileSync(properties,original.slice(original.indexOf('static const struct { const char *prop, *build_field; }'),original.indexOf('int  klb_prctl(')));
   preparePropertySource(properties);
   const binary=path.join(temporary,'probe');
-  const {exportSources}=await import('../src/modules/android/native/binder-rpc/build.mjs');
+  const {exportSources}=await import('../src/external/maclauncher-android/src/modules/android/native/binder-rpc/build.mjs');
   const pins=JSON.parse(fs.readFileSync(path.join(source,'source-pins.json')));
   const api='libc/include/bits/get_device_api_level_inlines.h';exportSources(bionicSource,pins.aospBionic,[api],temporary);
   run('clang',['-std=gnu11','-Wall','-Wextra','-Werror','-Wno-unused-function','-I'+source,
@@ -128,8 +128,8 @@ function commonProbeEnvironment(temporary) {
   return {...process.env, KL_ANDROID_ID_DIRECTORY: fs.realpathSync(directory)};
 }
 function commonRuntimeClasspath(temporary) {
-  const runtime = process.env.KLEPTON_NATIVE_RUNTIME || path.resolve(root, 'src/resources/native-runtimes',
-    require('../src/modules/android/managed-packages.json')[0].directoryRelative);
+  const runtime = require('./helpers/android-java').runtimeRoot();
+  assert.ok(runtime, 'Requires a ready managed Android runtime or KLEPTON_NATIVE_RUNTIME');
   return [temporary, process.env.ANDROID_HOST_CLASSES, ...['android-host.jar', 'android-framework.jar'].map(name => path.resolve(runtime, name))]
     .filter(Boolean).join(path.delimiter);
 }
@@ -385,6 +385,7 @@ test('Android native C++ guards reuse actual host synchronization and abort sema
 });
 
 test('Android display teardown retains the bound window until producers and callbacks retire', t => {
+ if(!require('./helpers/android-java').runtimeRoot())return t.skip('Requires an Android runtime via KLEPTON_NATIVE_RUNTIME or MACLAUNCHER_TEST_USER_DATA');
   const home = jdk();
   if (!home || process.platform !== 'darwin') return t.skip('Requires macOS and Java 21 development tools');
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'android-display-retirement-'));
@@ -409,6 +410,7 @@ test('Android display teardown retains the bound window until producers and call
 });
 
 test('Android launch configuration validates bounds, text and runtime containment', t => {
+ if(!require('./helpers/android-java').runtimeRoot())return t.skip('Requires an Android runtime via KLEPTON_NATIVE_RUNTIME or MACLAUNCHER_TEST_USER_DATA');
   const home = jdk();
   if (!home) return t.skip('Java 21 development tools are not installed');
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'android-config-'));
@@ -452,6 +454,7 @@ test('SoundPool releases native samples and collected owners',t=>{
 // failure fixtures; original queue/Messenger ownership by NativeMessageQueueProbe.
 
 test('Android viewport metadata follows original window state without a GPU', t => {
+ if(!require('./helpers/android-java').runtimeRoot())return t.skip('Requires an Android runtime via KLEPTON_NATIVE_RUNTIME or MACLAUNCHER_TEST_USER_DATA');
  const home=jdk();if(!home)return t.skip('Java 21 development tools unavailable');
  const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'android-platform-'));t.after(()=>fs.rmSync(tmp,{recursive:true,force:true}));
  run(path.join(home,'bin/javac'),['--release','21','-cp',commonRuntimeClasspath(tmp),'-d',tmp,...commonProbeSources(),path.join(fixtures,'VisibleDisplayFrameProbe.java')]);
@@ -494,6 +497,7 @@ test('Original libcore environment uses UTF-8 independently of graphics',t=>{
 });
 
 test('Android native surfaces preserve real buffer ownership, pointer state and typed metadata', t=>{
+ if(!require('./helpers/android-java').runtimeRoot())return t.skip('Requires an Android runtime via KLEPTON_NATIVE_RUNTIME or MACLAUNCHER_TEST_USER_DATA');
  const home=jdk();if(!home||process.platform!=='darwin')return t.skip('Requires macOS and Java21');
  const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'android-surfaces-'));t.after(()=>fs.rmSync(tmp,{recursive:true,force:true}));
  const probes=['SurfaceLifecycle','Environment','Pointer','ProcessIdentity','CustomPointer','Capture','FirstFailureProbe','MetadataProbe'];
@@ -511,6 +515,7 @@ test('Android native surfaces preserve real buffer ownership, pointer state and 
 });
 
 test('Android unavailable services and SDK worker diagnostics do not poison the host owner', t => {
+ if(!require('./helpers/android-java').runtimeRoot())return t.skip('Requires an Android runtime via KLEPTON_NATIVE_RUNTIME or MACLAUNCHER_TEST_USER_DATA');
  const home=jdk();if(!home||process.platform!=='darwin')return t.skip('Requires macOS and Java21');
  const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'android-optional-api-'));t.after(()=>fs.rmSync(tmp,{recursive:true,force:true}));
  run(path.join(home,'bin/javac'),['--release','21','-cp',commonRuntimeClasspath(tmp),'-d',tmp,...commonProbeSources(),path.join(fixtures,'FirstFailureProbe.java'),path.join(fixtures,'UnavailableServicesProbe.java')]);
@@ -521,6 +526,7 @@ test('Android unavailable services and SDK worker diagnostics do not poison the 
 });
 
 test('Android native heap statistics reflect real allocations without retaining samples',t=>{
+ if(!require('./helpers/android-java').runtimeRoot())return t.skip('Requires an Android runtime via KLEPTON_NATIVE_RUNTIME or MACLAUNCHER_TEST_USER_DATA');
  const home=jdk();if(!home||process.platform!=='darwin')return t.skip('Requires macOS and Java21');
  const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'android-heap-'));t.after(()=>fs.rmSync(tmp,{recursive:true,force:true}));const library=path.join(tmp,'heap.dylib');
  run('clang',['-dynamiclib','-Wall','-Wextra','-Werror','-mmacosx-version-min=13.0','-I'+path.join(home,'include'),'-I'+path.join(home,'include/darwin'),path.join(source,'native-heap.c'),path.join(fixtures,'heap-test.c'),'-o',library]);

@@ -316,3 +316,49 @@ test("a staged application reader never substitutes for a missing managed instal
   assert.throws(() => Inno.resolveHelper({ userDataDir: root, resourcesRoot, arch: "x64" }),
     error => error.code === "INSTALLER_TOOL_MISSING");
 });
+
+test("Locate moves an installer's source set, reuses its extracted bytes and restores records on refusal", async t => {
+  const f = fixture(t), Store = require("../src/core/game-store");
+  fs.writeFileSync(f.slice, "installer data");
+  let moduleId = "fixture";
+  const registry = { listModuleIds: () => ["fixture"], listModules: () => [{ id: "fixture" }], getModuleInfo: id => ({ id }),
+    getModule: () => null, getModuleDir: () => path.join(f.root, "module"),
+    detectGameAsync: async input => ({ moduleId, gamePath: input, contentRootDir: input, name: "Fixture", moduleData: {} }) };
+  const service = require("../src/core/game-metadata").createGameMetadataService({ userDataDir: f.userDataDir, registry,
+    inputPreparation: (file, options) => Inputs.prepareInput(file, { ...f.options, ...options }) });
+  const entry = await service.importEntry(f.file, {});
+  Store.writeGameRecord(f.userDataDir, entry);
+  const beforeFiles = fs.readFileSync(path.join(entry.gamePath, "index.html"));
+  const movedDir = path.join(f.root, "Moved installer");
+  fs.mkdirSync(movedDir);
+  const moved = path.join(movedDir, "renamed.exe"), companion = path.join(movedDir, path.basename(f.slice));
+  fs.renameSync(f.file, moved); fs.renameSync(f.slice, companion);
+  const result = await service.relocateEntry(entry, moved, {});
+  assert.equal(result.gameId, entry.gameId);
+  assert.equal(result.gamePath, entry.gamePath, "the launcher-owned game is not moved or unpacked again");
+  assert.equal(result.importPath, moved);
+  assert.deepEqual(result.containerData.sources.map(source => source.path), [moved, companion]);
+  assert.deepEqual(fs.readFileSync(path.join(result.gamePath, "index.html")), beforeFiles);
+  assert.equal((await service.refreshEntry(result, {}, { force: true })).containerData.cached, true);
+  assert.deepEqual(f.calls(), ["--inspect-json", "--extract"], "relocation and offline refresh do not extract again");
+  const container = path.dirname(path.dirname(result.gamePath));
+  const currentFile = path.join(container, "current.json"), current = fs.readFileSync(currentFile);
+  const receiptFile = path.join(path.dirname(result.gamePath), "receipt.json"), receipt = fs.readFileSync(receiptFile);
+  const wrong = path.join(movedDir, "other.exe");
+  fs.copyFileSync(moved, wrong);
+  moduleId = "other";
+  await assert.rejects(service.relocateEntry(result, wrong, {}), error => error.code === "GAME_TYPE_MISMATCH");
+  assert.deepEqual(Store.readGameRecord(f.userDataDir, entry.gameId), result);
+  assert.deepEqual(fs.readFileSync(currentFile), current);
+  assert.deepEqual(fs.readFileSync(receiptFile), receipt);
+  // An installer with other contents is unpacked before detection. A refusal
+  // removes that copy and keeps the game's existing one.
+  const copies = fs.readdirSync(container).sort(), different = path.join(movedDir, "different.exe");
+  fs.writeFileSync(different, Buffer.concat([fs.readFileSync(moved).subarray(0, -1), Buffer.from([1])]));
+  await assert.rejects(service.relocateEntry(result, different, {}), error => error.code === "GAME_TYPE_MISMATCH");
+  assert.deepEqual(f.calls().slice(-2), ["--inspect-json", "--extract"], "the other installer was unpacked");
+  assert.deepEqual(fs.readdirSync(container).sort(), copies);
+  assert.deepEqual(Store.readGameRecord(f.userDataDir, entry.gameId), result);
+  assert.deepEqual(fs.readFileSync(currentFile), current);
+  assert.deepEqual(fs.readFileSync(path.join(result.gamePath, "index.html")), beforeFiles);
+});

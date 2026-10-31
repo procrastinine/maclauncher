@@ -27,24 +27,40 @@ test("background Steam imports retain their request options while ordinary queue
   assert.deepEqual(queue.list(), []);
 });
 
-test("concurrent drop/menu imports serialize persistence and deduplicate an in-flight path", async () => {
-  const queue = createGameImportQueue(), stored = [];
+test("a slow import never holds up an independent one, and an in-flight path is deduplicated", async () => {
+  const queue = createGameImportQueue(), finished = [];
   let release;
   const slow = new Promise(resolve => { release = resolve; });
   queue.setImporter(async input => {
-    const snapshot = [...stored];
     if (input.endsWith("first.exe")) await slow;
-    stored.splice(0, stored.length, ...snapshot, input);
+    finished.push(input);
     return input;
   });
   const first = queue.import("first.exe");
   assert.equal(queue.import("./first.exe"), first);
-  const second = queue.import("second.pck");
-  await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(stored, []);
+  assert.equal(await queue.import("second.pck"), path.resolve("second.pck"));
+  assert.deepEqual(finished, [path.resolve("second.pck")]);
   release();
-  await Promise.all([first, second]);
-  assert.deepEqual(stored, [path.resolve("first.exe"), path.resolve("second.pck")]);
+  await first;
+  assert.deepEqual(finished, [path.resolve("second.pck"), path.resolve("first.exe")]);
+});
+
+test("imports start in arrival order, a few at a time", async () => {
+  const queue = createGameImportQueue(), started = [], releases = new Map();
+  queue.setImporter(input => { started.push(path.basename(input)); return new Promise(resolve => releases.set(path.basename(input), () => resolve(input))); });
+  const names = ["a.exe", "b.exe", "c.exe", "d.exe", "e.exe"];
+  const imports = names.map(name => queue.import(name));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(started, ["a.exe", "b.exe", "c.exe"]);
+  assert.deepEqual(queue.list().map(job => job.phase), ["processing", "processing", "processing", "queued", "queued"]);
+  releases.get("b.exe")();
+  await imports[1]; await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(started, ["a.exe", "b.exe", "c.exe", "d.exe"]);
+  for (const name of ["a.exe", "c.exe", "d.exe"]) releases.get(name)();
+  await Promise.all([imports[0], imports[2], imports[3]]); await new Promise(resolve => setImmediate(resolve));
+  releases.get("e.exe")();
+  assert.deepEqual(await Promise.all(imports), names.map(name => path.resolve(name)));
+  assert.deepEqual(queue.list(), []);
 });
 
 test("an unsupported Finder document does not block later imports or retries", async () => {
@@ -81,7 +97,7 @@ test("Finder prefers supported game formats and offers common sidecars without t
 
 test("queued cancellation prevents import work and reports every pending input without blocking active work", async () => {
   let release; const updates = [], calls = [];
-  const queue = createGameImportQueue({ onChange: value => updates.push(value) });
+  const queue = createGameImportQueue({ onChange: value => updates.push(value), concurrency: 1 });
   queue.setImporter(async input => { calls.push(input); await new Promise(resolve => { release = resolve; }); return input; });
   const first = queue.import("first.exe"), second = queue.import("second.exe");
   const cancelled = assert.rejects(second, error => error.code === "ABORT_ERR");
@@ -106,7 +122,7 @@ test("active import cancellation delegates to the asynchronous backend and queue
 });
 
 test("a cancelled queued path can be re-added before the earlier import completes", async () => {
-  const queue = createGameImportQueue(), calls = []; let release;
+  const queue = createGameImportQueue({ concurrency: 1 }), calls = []; let release;
   queue.setImporter(async input => { calls.push(input); if (input.endsWith("first.exe")) await new Promise(resolve => { release = resolve; }); return input; });
   const first = queue.import("first.exe"), skipped = queue.import("second.exe");
   const cancelled = assert.rejects(skipped, error => error.code === "ABORT_ERR");

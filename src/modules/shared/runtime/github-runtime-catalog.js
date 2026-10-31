@@ -4,11 +4,12 @@ function githubAssetDigest(asset) {
   const match = /^sha256:([a-f0-9]{64})$/i.exec(asset?.digest || "");
   return match ? match[1].toLowerCase() : null;
 }
-function createGithubReleaseDiscovery({ owner, repo, mapRelease, assetFilter, includePrerelease = false, maxPages = 5, maxEntries = 500, dependencies = {} }) {
+function createGithubReleaseDiscovery({ owner, repo, mapRelease, assetFilter, includePrerelease = false, allArchitectures = false, maxPages = 5, maxEntries = 500, dependencies = {} }) {
   if (typeof mapRelease !== "function") throw new Error("GitHub runtime catalogs need an engine release mapper.");
+  if (typeof allArchitectures !== "boolean") throw new Error("Runtime catalog architecture coverage must be explicit.");
   if (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > 20 || !Number.isInteger(maxEntries) || maxEntries < 1 || maxEntries > 2000)
     throw new Error("GitHub runtime catalog limits must use 1–20 pages and 1–2000 entries.");
-  return async ({ logger, signal } = {}) => {
+  const discover = async ({ logger, signal } = {}) => {
     const [releases, tags] = await Promise.all([
       (dependencies.fetchGithubReleases || Github.fetchGithubReleases)({ owner, repo, logger, signal, includePrerelease, maxPages, assetFilter, ...(dependencies.request ? { request: dependencies.request } : {}) }),
       (dependencies.fetchGithubTags || Github.fetchGithubTags)({ owner, repo, signal, maxPages, ...(dependencies.request ? { request: dependencies.request } : {}) })
@@ -24,17 +25,33 @@ function createGithubReleaseDiscovery({ owner, repo, mapRelease, assetFilter, in
     const entries = [];
     // Mappers only select engine-specific versions/assets. Pagination, draft and
     // prerelease policy, release bounds and commit lookups stay shared.
+    // A release that a mapper cannot read is skipped and the other releases stay
+    // listed. Only a query where no release could be read fails.
+    let failure = null;
     for (const release of releases) {
-      const mapped = await mapRelease(release, { owner, repo, resolveRevision, githubAssetDigest,
-        sourceUrl: release.html_url || `https://github.com/${owner}/${repo}/releases/tag/${encodeURIComponent(release.tag_name)}` });
+      let mapped;
+      try {
+        mapped = await mapRelease(release, { owner, repo, resolveRevision, githubAssetDigest,
+          sourceUrl: release.html_url || `https://github.com/${owner}/${repo}/releases/tag/${encodeURIComponent(release.tag_name)}` });
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        failure ||= error;
+        logger?.warn?.(`[${owner}/${repo}] skipped release ${release?.tag_name}: ${error.message || error}`);
+        continue;
+      }
       for (const entry of Array.isArray(mapped) ? mapped : mapped ? [mapped] : []) {
         entries.push(entry);
         if (entries.length >= maxEntries) break;
       }
       if (entries.length >= maxEntries) break;
     }
+    if (failure && !entries.length) throw failure;
     return entries;
   };
+  // A complete mapper includes every offered CPU, even when the publisher only
+  // supplies one. CPU-filtered mappers leave this false and run for each CPU.
+  discover.allArchitectures = allArchitectures;
+  return discover;
 }
 function githubCommitSource(commit, { owner, repo, head = false } = {}) {
   if (!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(owner || "") || !/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(repo || "") ||
@@ -47,11 +64,12 @@ function githubCommitSource(commit, { owner, repo, head = false } = {}) {
     sourceUrl: `https://github.com/${owner}/${repo}/commit/${revision}`, committedAt, publishedAt: committedAt, subject, head,
     versionLabel: [head ? "HEAD" : null, committedAt?.slice(0, 10), revision.slice(0, 12)].filter(Boolean).join(" · ") };
 }
-function createGithubCommitDiscovery({ owner, repo, mapCommit = githubCommitSource, limit = 20, dependencies = {} }) {
+function createGithubCommitDiscovery({ owner, repo, branch, mapCommit = githubCommitSource, limit = 20, dependencies = {} }) {
   if (typeof mapCommit !== "function") throw new Error("GitHub source catalogs need a commit mapper.");
   return async ({ logger, signal } = {}) => {
     logger?.info?.(`[github] fetching immutable source builds ${owner}/${repo}`);
-    const commits = await (dependencies.fetchGithubCommits || Github.fetchGithubCommits)({ owner, repo, signal, limit, ...(dependencies.request ? { request: dependencies.request } : {}) });
+    const commits = await (dependencies.fetchGithubCommits || Github.fetchGithubCommits)({ owner, repo, signal, limit, ...(branch ? { branch } : {}),
+      ...(dependencies.request ? { request: dependencies.request } : {}) });
     const entries = [];
     for (const [index, commit] of commits.entries()) {
       const mapped = await mapCommit(commit, { owner, repo, head: index === 0, sourceUrl: commit.html_url || `https://github.com/${owner}/${repo}/commit/${commit.sha}` });

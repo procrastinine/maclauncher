@@ -52,7 +52,7 @@ function requireNativeProfile(entry) {
 
 function createModule({ manager = Managers.createManager(), launchEnabled = manifest.supports.launch } = {}) {
   const nativeEntry = entry => launchEnabled && entry?.moduleData?.editionId === "steins-gate-windows-hd" &&
-    process.platform === "darwin" && process.arch === "arm64";
+    process.platform === "darwin";
   function selectedRuntime(entry, context) {
     const selected = manager.resolveSelection(entry, context.settings, context.userDataDir);
     if (selected.ready) Native.verifyNativeProfile(selected.install);

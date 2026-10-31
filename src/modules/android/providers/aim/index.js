@@ -4,7 +4,7 @@ const { once } = require("node:events");
 const Bundled = require("../../../shared/runtime/bundled-native");
 const manager = require("./manager");
 const { confirmToolInstall } = require("../../../shared/runtime/tool-install");
-const { downloadToFile } = require("../../../shared/runtime/download-utils");
+const Upstream = require("../../../shared/runtime/upstream");
 const { runDownloadTask } = require("../../../shared/runtime/download-manager");
 const { environment } = require("../../../shared/runtime/macos-sandbox");
 const image = require("./image-source.json");
@@ -38,12 +38,6 @@ function resolveController(runtime) {
 }
 
 function resolveLaunchMode() { return "android-services"; }
-
-async function hashFile(file, signal) {
-  const hash = crypto.createHash("sha256");
-  for await (const chunk of fs.createReadStream(file)) { signal?.throwIfAborted(); hash.update(chunk); }
-  return hash.digest("hex");
-}
 
 async function capture(command, args, { env, cwd, signal, input, timeout = 120000, maximum = 4 * 1024 * 1024 } = {}) {
   signal?.throwIfAborted();
@@ -96,9 +90,10 @@ async function prepareSystem({ context, storage, policy, runtime = resolveRuntim
         kind: "runtime", dedupeKey: "android-aim-image:" + directory }, async ({ signal: taskSignal, onProgress }) => {
         const signal = context.signal && taskSignal ? AbortSignal.any([context.signal, taskSignal]) : context.signal || taskSignal;
         try {
-          await (dependencies.downloadToFile || downloadToFile)(imageSource.url, archive, { signal, onProgress });
-          onProgress?.({ detail: "Verifying…" });
-          if (await hashFile(archive, signal) !== imageSource.sha256) throw new Error("The Android system image checksum did not match.");
+          // The AIM preparation helper accepts exactly this original image, so
+          // the download is checked against its recorded size and SHA-256.
+          await Upstream.download(Upstream.listedFile({ filename: path.basename(new URL(imageSource.url).pathname), url: imageSource.url,
+            bytes: imageSource.size, sha256: imageSource.sha256 }), archive, { signal, onProgress });
           signal?.throwIfAborted();
           onProgress?.({ detail: "Preparing…" });
           return await prepare(signal);

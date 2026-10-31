@@ -2,6 +2,21 @@ const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path"), crypto = require("node:crypto");
 const { createAndroidStoreDownloads } = require("../src/modules/android/store/aggregate");
 const { createRepositoryDownloads, normalizeRepositoryPackage, parseSourceQuery, parseIzzySearch } = require("../src/modules/android/store/repositories");
+const Transport = require("../src/modules/shared/runtime/upstream-transport");
+// The repository answers through the shared transport: entry.json as a
+// request, the index and APKs as file downloads.
+function repository(t, data, digest, counts = {}) {
+  t.mock.method(Transport, "fetchUrlBuffer", async url => {
+    assert.ok(url.endsWith("entry.json"), url);
+    return { status: 200, headers: {}, body: Buffer.from(JSON.stringify({ index: { name: "/index-v2.json", size: data.length, sha256: digest } })) };
+  });
+  t.mock.method(Transport, "downloadToFile", async (url, output, { onProgress } = {}) => {
+    const body = url.endsWith("index-v2.json") ? data : Buffer.from("APK fixture");
+    counts[url.endsWith("index-v2.json") ? "indexes" : "transfers"] = (counts[url.endsWith("index-v2.json") ? "indexes" : "transfers"] || 0) + 1;
+    fs.writeFileSync(output, body); onProgress?.({ downloaded: body.length, total: body.length });
+  });
+  return counts;
+}
 const hash = crypto.createHash("sha256").update("APK fixture").digest("hex"), otherHash = "e".repeat(64), packageId = "org.example.game";
 const item = { metadata: { name: { "en-US": "Example game" }, license: "GPL-3.0-only" }, versions: {
   [hash]: { file: { name: `/${packageId}_31.apk`, sha256: hash, size: 11 }, manifest: { versionCode: 31, versionName: "3.1", nativecode: ["armeabi-v7a"], usesSdk: { minSdkVersion: 23, targetSdkVersion: 34 } } },
@@ -45,27 +60,25 @@ test("repository metadata preserves exact APK identities, actual ABI variants an
   assert.equal(rows[0].appId, `izzy:${packageId}`); assert.equal(rows[0].name, "Example & Game");
 });
 test("repository index is hash checked once, parsed off the main thread and exact downloads preserve custom content", async t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "repository-test-")); let transfers = 0, indexes = 0, duplicatePrompts = 0;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "repository-test-")); let duplicatePrompts = 0;
   const data = Buffer.from(JSON.stringify({ packages: { [packageId]: item } })), digest = crypto.createHash("sha256").update(data).digest("hex");
+  const counts = repository(t, data, digest, { indexes: 0, transfers: 0 });
   const service = createRepositoryDownloads({ source: "fdroid", userDataDir: root, confirmDuplicate: async () => { duplicatePrompts++; return "use-existing"; },
-    fetchData: async url => { if (url.endsWith("entry.json")) return Buffer.from(JSON.stringify({ index: { name: "/index-v2.json", size: data.length, sha256: digest } })); indexes++; return data; },
-    readApkIdentity: () => ({ packageName: packageId, versionCode: "31", split: null }),
-    downloadFile: async (_choice, output, { onBytes }) => { transfers++; fs.writeFileSync(output, "APK fixture"); onBytes(11); return { size: 11, sha256: hash }; } });
+    readApkIdentity: () => ({ packageName: packageId, versionCode: "31", split: null }) });
   t.after(async () => { await service.dispose(); fs.rmSync(root, { recursive: true, force: true }); });
-  const versions = await service.getVersions(`fdroid:${packageId}`, { architecture: "armv7", androidSdk: 25 }); await service.getVersions(`fdroid:${packageId}`, { architecture: "arm64", androidSdk: 34 }); assert.equal(indexes, 1);
+  const versions = await service.getVersions(`fdroid:${packageId}`, { architecture: "armv7", androidSdk: 25 }); await service.getVersions(`fdroid:${packageId}`, { architecture: "arm64", androidSdk: 34 }); assert.equal(counts.indexes, 1);
   async function finish(selection) { const job = service.download({ appId: `fdroid:${packageId}`, branch: hash, architecture: "armv7", androidSdk: 25, autoImport: false, ...selection }); return until(() => service.snapshot().downloads.find(row => row.id === job.id && ["completed", "error"].includes(row.status))); }
-  const wrong = await finish({ architecture: "arm64" }); assert.equal(wrong.status, "error"); assert.equal(transfers, 0);
+  const wrong = await finish({ architecture: "arm64" }); assert.equal(wrong.status, "error"); assert.equal(counts.transfers, 0);
   const first = await finish({}); assert.equal(first.status, "completed", first.error); const metadata = JSON.parse(fs.readFileSync(path.join(first.path, ".maclauncher-external.json"))); assert.equal(metadata.store, "fdroid"); assert.equal(metadata.appId, packageId); assert.equal(metadata.sha256, hash);
-  const duplicate = await finish({}); assert.equal(duplicate.reused, true); assert.equal(transfers, 1); assert.equal(duplicatePrompts, 1);
-  const destination = path.join(root, "custom"); fs.mkdirSync(destination); fs.writeFileSync(path.join(destination, "keep.txt"), "keep"); const custom = await finish({ destination }); assert.equal(custom.status, "completed", custom.error); assert.equal(transfers, 2); assert.equal(fs.readFileSync(path.join(destination, "keep.txt"), "utf8"), "keep");
+  const duplicate = await finish({}); assert.equal(duplicate.reused, true); assert.equal(counts.transfers, 1); assert.equal(duplicatePrompts, 1);
+  const destination = path.join(root, "custom"); fs.mkdirSync(destination); fs.writeFileSync(path.join(destination, "keep.txt"), "keep"); const custom = await finish({ destination }); assert.equal(custom.status, "completed", custom.error); assert.equal(counts.transfers, 2); assert.equal(fs.readFileSync(path.join(destination, "keep.txt"), "utf8"), "keep");
 });
 test("a damaged installation index is kept beside it and a completed repository download is added", async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "repository-index-test-")), index = path.join(root, "external/installations.json");
   const data = Buffer.from(JSON.stringify({ packages: { [packageId]: item } })), digest = crypto.createHash("sha256").update(data).digest("hex");
+  repository(t, data, digest);
   const service = createRepositoryDownloads({ source: "fdroid", userDataDir: root,
-    fetchData: async url => url.endsWith("entry.json") ? Buffer.from(JSON.stringify({ index: { name: "/index-v2.json", size: data.length, sha256: digest } })) : data,
-    readApkIdentity: () => ({ packageName: packageId, versionCode: "31", split: null }),
-    downloadFile: async (_choice, output, { onBytes }) => { fs.writeFileSync(output, "APK fixture"); onBytes(11); return { size: 11, sha256: hash }; } });
+    readApkIdentity: () => ({ packageName: packageId, versionCode: "31", split: null }) });
   t.after(async () => { await service.dispose(); fs.rmSync(root, { recursive: true, force: true }); });
   const damaged = '[{"path": "/Games/Kept"}, {"path": "/Games/Trunc';fs.mkdirSync(path.dirname(index), { recursive: true });fs.writeFileSync(index, damaged);
   const job = service.download({ appId: `fdroid:${packageId}`, branch: hash, architecture: "armv7", androidSdk: 25, autoImport: false });

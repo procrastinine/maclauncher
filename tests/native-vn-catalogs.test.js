@@ -1,46 +1,21 @@
+// Required first: it replaces the network before modules load.
+const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const Kiri = require("../src/modules/kirikiri/catalog");
-const Alice = require("../src/modules/alicesoft/catalog");
 
-test("KiriKiri discovery binds its moving release to a commit and a published Mac digest", async () => {
-  const revision = "a".repeat(40), sha256 = "b".repeat(64);
-  const dependencies = {
-    fetchGithubTags: async () => [{ name: "latest", commit: { sha: revision } }],
-    fetchGithubReleases: async () => [{ tag_name: "latest", assets: [{ name: "krkrsdl2-macos.zip",
-      digest: `sha256:${sha256}`, browser_download_url: "https://example.test/mac.zip" },
-      { name: "krkrsdl2-win32.zip", digest: `sha256:${sha256}`, browser_download_url: "https://example.test/win.zip" }] }],
-    resolveGithubTagCommit: async () => assert.fail("tag metadata must supply the immutable revision")
+test("KiriKiri discovery binds its moving release to a commit and the publisher's Mac digest", async () => {
+  const repository = "krkrsdl2/krkrsdl2", latest = Harness.githubRelease(repository, "latest", ["krkrsdl2-macos.zip", "krkrsdl2-win32.zip"]);
+  const discover = async releases => {
+    Harness.network.routes = Harness.githubRoutes(repository, releases);
+    try { return await Kiri.source.discover({}); } finally { Harness.network.routes = null; }
   };
-  const entries = await Kiri.createCatalogDiscovery(dependencies)({});
-  assert.equal(entries.length, 1); assert.equal(entries[0].version, "development-aaaaaaaaaaaa");
-  assert.equal(entries[0].upstreamRevision, revision); assert.equal(entries[0].asset.sha256, sha256);
-  assert.equal(entries[0].asset.url, "https://example.test/mac.zip"); assert.equal(entries[0].executableRelative, "krkrsdl2");
-  dependencies.fetchGithubReleases = async () => [{ tag_name: "latest", assets: [{ name: "krkrsdl2-macos.zip", browser_download_url: "https://example.test/mac.zip" }] }];
-  const unpinned = await Kiri.createCatalogDiscovery(dependencies)({});
-  assert.equal(unpinned[0].asset, undefined); assert.equal(unpinned[0].localBuild, false);
-  assert.match(unpinned[0].installReason, /has no compatible Mac package/);
-});
-
-test("AliceSoft discovery preserves every published release and its actual tag commit without claiming Mac assets", async () => {
-  const tags = ["v1.8.0", "v1.7.2", "android-0.1.0"];
-  const dependencies = { fetchGithubTags: async () => tags.map((name, i) => ({ name, commit: { sha: String(i + 1).repeat(40) } })),
-    fetchGithubReleases: async () => tags.map(tag_name => ({ tag_name, target_commitish: "master",
-      assets: [{ name: "windows.zip", browser_download_url: "https://example.test/windows.zip", digest: `sha256:${"f".repeat(64)}` }] })) };
-  const entries = await Alice.createCatalogDiscovery("system3-sdl2", dependencies)({});
-  assert.deepEqual(entries.map(item => item.version), ["1.8.0", "1.7.2", "android-0.1.0"]);
-  assert.deepEqual(entries.map(item => item.releaseTag), tags);
-  assert.equal(entries[0].upstreamRevision, "1".repeat(40));
-  for (const entry of entries) { assert.equal(entry.localBuild, false); assert.equal(entry.asset, undefined); assert.match(entry.installReason, /No compatible Mac package/); }
-});
-
-test("System4 discovery gives its moving nightly an immutable commit identity and preserves historical releases", async () => {
-  const tags = ["nightly", "1.0.0", "0.9.0"], revisions = ["a", "b", "c"].map(char => char.repeat(40));
-  const entries = await Alice.createCatalogDiscovery("xsystem4", {
-    fetchGithubTags: async () => tags.map((name, i) => ({ name, commit: { sha: revisions[i] } })),
-    fetchGithubReleases: async () => tags.map(tag_name => ({ tag_name, assets: [] }))
-  })({});
-  assert.deepEqual(entries.map(row => row.version), ["development-aaaaaaaaaaaa", "1.0.0", "0.9.0"]);
-  assert.equal(entries[0].releaseTag, "nightly"); assert.equal(entries[0].upstreamRevision, revisions[0]);
-  assert.match(entries[0].installReason, /Windows\/Linux/);
+  const [entry] = await discover([latest]), revision = Harness.githubRoutes(repository, [latest])[`https://api.github.com/repos/${repository}/tags`][0].commit.sha;
+  assert.equal(entry.version, `development-${revision.slice(0, 12)}`); assert.equal(entry.revision, revision);
+  assert.deepEqual(entry.files.map(file => [file.name, file.url, file.digest.value]),
+    [["krkrsdl2-macos.zip", latest.assets[0].browser_download_url, latest.assets[0].digest.slice(7)]]);
+  const [undigested] = await discover([{ ...latest, assets: latest.assets.map(({ digest, ...asset }) => asset) }]);
+  assert.equal(undigested.files[0].digest, undefined, "A download without a published digest records its own at installation");
+  const [windows] = await discover([{ ...latest, assets: latest.assets.slice(1) }]);
+  assert.deepEqual(windows.files, []); assert.match(windows.installReason, /has no compatible Mac package/);
 });

@@ -1,17 +1,18 @@
 [
   {
     "id": "steam-api-helper",
-    "version": "0.5.0",
+    "version": "0.5.1",
     "arch": "universal",
     "launcherArchitectures": [
       "arm64",
       "x64"
     ],
     "minimumMacOS": "13.0",
+    "sourceRelative": null,
     "sourceSha256": "40597e2596bf3df91e7a8d1be6939f75d2d427bbeb91d0ac2316420c1c0cb23e",
-    "directoryRelative": "steam-api-helper/0.5.0/universal",
+    "directoryRelative": "steam-api-helper/0.5.1/universal",
     "manifestRelative": "helper.json",
-    "manifestSha256": "14a494ccde3d18287d9ab5ab22d3275dfdf329f3b2a3937671aa4acbf6ba648b",
+    "manifestSha256": "6f021a0486dea0415518823556e240c6de614ac333b667e701375bfe6864f8b5",
     "files": [
       {
         "path": "LICENSE",
@@ -21,15 +22,15 @@
       },
       {
         "path": "helper.json",
-        "size": 3291,
-        "sha256": "14a494ccde3d18287d9ab5ab22d3275dfdf329f3b2a3937671aa4acbf6ba648b",
+        "size": 3435,
+        "sha256": "6f021a0486dea0415518823556e240c6de614ac333b667e701375bfe6864f8b5",
         "mode": 420
       },
       {
         "path": "libsteam_api.dylib",
         "size": 465552,
         "sha256": "6a9ce700bf002fb817518221ebe093213ad84e093cb5d63d7a3315f004e74cae",
-        "mode": 420,
+        "mode": 493,
         "architectures": [
           "arm64",
           "x86_64"
@@ -38,26 +39,26 @@
     ],
     "notices": [
       {
-        "name": "MacLauncher offline client API",
+        "name": "MacLauncher offline Steam API",
         "license": "MIT",
         "path": "LICENSE"
       }
-    ],
-    "sourceRelative": null
+    ]
   },
   {
     "id": "steam-ticket-loader",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "arch": "universal",
     "launcherArchitectures": [
       "arm64",
       "x64"
     ],
     "minimumMacOS": "13.0",
+    "sourceRelative": null,
     "sourceSha256": "5b5604323f8d6a016efb50056403fe504271ddbd70ba738b268eb3b4dc223f00",
-    "directoryRelative": "steam-ticket-loader/0.1.0/universal",
+    "directoryRelative": "steam-ticket-loader/0.1.1/universal",
     "manifestRelative": "helper.json",
-    "manifestSha256": "e7993470ff2c3be3ec3e310720eb921ea90602a051850d8b9a471b4c6551fb56",
+    "manifestSha256": "f45f13523cd1a3abac93d76f0d1037f5f722db5fe30a7230eac46b315e4099c2",
     "files": [
       {
         "path": "LICENSE",
@@ -67,15 +68,15 @@
       },
       {
         "path": "helper.json",
-        "size": 856,
-        "sha256": "e7993470ff2c3be3ec3e310720eb921ea90602a051850d8b9a471b4c6551fb56",
+        "size": 1011,
+        "sha256": "f45f13523cd1a3abac93d76f0d1037f5f722db5fe30a7230eac46b315e4099c2",
         "mode": 420
       },
       {
         "path": "libsdkencryptedappticket.dylib",
         "size": 50112,
         "sha256": "6bbc5615b6d02465b9ccb858cf1cfe944d401cb6192dd6e2712d78b77a41eb2c",
-        "mode": 420,
+        "mode": 493,
         "architectures": [
           "arm64",
           "x86_64"
@@ -84,11 +85,10 @@
     ],
     "notices": [
       {
-        "name": "MacLauncher encrypted-ticket loader",
+        "name": "MacLauncher Steam ticket loader",
         "license": "MIT",
         "path": "LICENSE"
       }
-    ],
-    "sourceRelative": null
+    ]
   }
 ]

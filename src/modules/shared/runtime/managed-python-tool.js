@@ -5,21 +5,33 @@ const Python = require("./python");
 const Content = require("./runtime-content");
 const { assertOwnDirectory } = require("../writable-input");
 const { readZipEntries, readZipEntryBuffer } = require("./zip");
-const { fetchUrlBuffer, downloadToFile, throwIfAborted } = require("./download-utils");
+const Upstream = require("./upstream");
+const { throwIfAborted } = require("./download-utils");
 const { readRuntimeCatalog, writeRuntimeCatalog } = require("./runtime-catalog");
 const { runDownloadTask } = require("./download-manager");
 const { confirmToolInstall } = require("./tool-install");
 const { runToolCommand } = require("./tool-command");
 const { withRuntimeMutation, withRuntimeUse } = require("../../../core/coordinated-runtime-managers");
 const Custom = require("./custom-runtime");
-const { selectRuntimeVersion, managerDefaultVersion } = require("./version-choices");
+const { selectRuntimeVersion, managerDefaultVersion, savedDefaultVersion } = require("./version-choices");
 
-const LIMITS = { entries: 2000, versions: 500, archive: 32 * 1024 ** 2, expanded: 64 * 1024 ** 2 };
+const LIMITS = { entries: 2000, versions: 500, archive: 256 * 1024 ** 2, expanded: 512 * 1024 ** 2 };
 const safeRelative = name => typeof name === "string" && name && !name.includes("\\") && !/[\x00-\x1f]/.test(name) &&
   !path.posix.isAbsolute(name) && name.split("/").every(part => part && part !== "." && part !== "..");
 
-function createManagedPythonTool({ id, label, packageName, moduleName, scriptName, requiredFiles,
-  discoverCatalog, pins = [], sourceUrl, sourceId, archiveLimits = {}, minimumVersion, order = 260 }) {
+// A PyPI release's pure-Python wheel, the publisher's current file name first.
+// Pre-releases and releases without such a wheel are left out.
+function pythonWheel({ version, files, info }) {
+  if (!/^\d+(?:\.\d+)*(?:\.post\d+)?$/.test(version)) return null;
+  const distribution = String(info?.name || "").replace(/[-.]+/g, "_").toLowerCase(), exact = `${distribution}-${version}-py3-none-any.whl`;
+  const [wheel] = files.filter(file => file.name.toLowerCase().startsWith(`${distribution}-${version}-`) && /-[a-z0-9.]*py3[a-z0-9.]*-none-any\.whl$/i.test(file.name))
+    .sort((a, b) => Number(b.name.toLowerCase() === exact) - Number(a.name.toLowerCase() === exact) || a.name.length - b.name.length);
+  return wheel ? { version, files: [wheel], sourceUrl: `https://pypi.org/project/${info.name}/${version}/` } : null;
+}
+
+// A Python tool listed by an upstream source: a PyPI wheel or a source archive.
+function createManagedPythonTool({ id, label, moduleName, scriptName, requiredFiles,
+  upstream, sourceUrl, sourceId, archiveLimits = {}, minimumVersion, order = 260 }) {
   if (!/^[a-z0-9-]+$/.test(id || "") || !label || Boolean(moduleName) === Boolean(scriptName) ||
     moduleName && !/^[A-Za-z_][A-Za-z0-9_.]*$/.test(moduleName) || scriptName && !safeRelative(scriptName))
     throw new Error("Managed Python tools need an identifier and one module or script entry point.");
@@ -32,7 +44,7 @@ function createManagedPythonTool({ id, label, packageName, moduleName, scriptNam
   if (!Number.isSafeInteger(manifestBytes)) throw new Error("Managed Python tool entry count exceeds its metadata size limit.");
   const required = requiredFiles || [scriptName || moduleName.replace(/\./g, "/") + "/__main__.py"];
   if (!required.every(safeRelative)) throw new Error("Managed Python tool paths are invalid.");
-  const source = sourceUrl || `https://pypi.org/project/${packageName}/`;
+  const source = sourceUrl;
   const states = new Map(), pending = new Map(), verified = new Map();
   const compare = (a, b) => String(b).localeCompare(String(a), "en", { numeric: true });
   function normalizeVersion(value) {
@@ -45,17 +57,14 @@ function createManagedPythonTool({ id, label, packageName, moduleName, scriptNam
   }
   let installRoot = (userDataDir, version) => path.join(directory(userDataDir), normalizeVersion(version));
   const orderedRows = rows => rows.some(row => row.kind === "github-commit") ? rows.slice() : rows.slice().sort((a, b) => compare(a.version, b.version));
+  // Cached rows keep the shape earlier versions wrote. A row without the
+  // publisher's digest installs with its SHA-256 recorded.
   function validRow(row) {
     try {
       const url = new URL(row.url);
-      if (row.kind === "github-commit") {
-        const repository = /^([A-Za-z0-9][A-Za-z0-9_.-]*)\/([A-Za-z0-9][A-Za-z0-9_.-]*)$/.exec(row.repository || "");
-        return Boolean(repository && /^[a-f0-9]{40}$/.test(row.revision || "") && row.version === "git-" + row.revision &&
-          row.url === `https://codeload.github.com/${row.repository}/zip/${row.revision}` &&
-          row.archivePrefix === `${repository[2]}-${row.revision}/`);
-      }
-      return normalizeVersion(row.version) === row.version && (!minimumVersion || compare(row.version, minimumVersion) <= 0) && url.protocol === "https:" && !url.username && !url.password &&
-        Number.isSafeInteger(row.bytes) && row.bytes > 0 && row.bytes <= limits.archive && /^[a-f0-9]{64}$/.test(row.sha256 || "") &&
+      return normalizeVersion(row.version) === row.version && url.protocol === "https:" && !url.username && !url.password &&
+        (row.kind === "github-commit" || !minimumVersion || compare(row.version, minimumVersion) <= 0) &&
+        (row.bytes == null || Number.isSafeInteger(row.bytes) && row.bytes > 0) && (!row.sha256 || /^[a-f0-9]{64}$/.test(row.sha256)) &&
         (!row.archivePrefix || safeRelative(row.archivePrefix.replace(/\/$/, "")));
     } catch { return false; }
   }
@@ -70,9 +79,7 @@ function createManagedPythonTool({ id, label, packageName, moduleName, scriptNam
       assertOwnDirectory(directory(userDataDir), path.join(root, "files"), { create: false });
       if (!fs.lstatSync(root).isDirectory() || fs.lstatSync(root).isSymbolicLink() || !stat.isFile() || stat.isSymbolicLink() || stat.size > manifestBytes) return null;
       const record = JSON.parse(fs.readFileSync(file, "utf8"));
-      const archiveValid = record.artifact?.kind === "github-commit"
-        ? /^[a-f0-9]{64}$/.test(record.archiveSha256 || "") && Number.isSafeInteger(record.archiveBytes) && record.archiveBytes > 0 && record.archiveBytes <= limits.archive
-        : record.archiveSha256 === record.artifact?.sha256;
+      const archiveValid = /^[a-f0-9]{64}$/.test(record.archiveSha256 || "") && (!record.artifact?.sha256 || record.archiveSha256 === record.artifact.sha256);
       if (record.id !== id || record.version !== version || !validRow(record.artifact) || record.artifact.version !== version ||
         !archiveValid || !record.files || Object.keys(record.files).length > limits.entries ||
         required.some(relative => !record.files[relative])) return null;
@@ -104,7 +111,8 @@ function createManagedPythonTool({ id, label, packageName, moduleName, scriptNam
   function getState({ userDataDir, settings } = {}) {
     const record = cached(userDataDir), installed = listInstalled(userDataDir), cfg = normalizeSettings(settings);
     const rows = orderedRows(record?.entries || []), versions = rows.map(row => row.version);
-    const base = { supportsDefault: true, defaultVersion: cfg.defaultVersion || managerDefaultVersion({ listed: versions, installed: installed.map(row => row.version) }), defaultSource: cfg.defaultVersion ? "saved" : "manager", installed, installing: null, variants: [],
+    const saved = savedDefaultVersion(cfg.defaultVersion, { listed: versions, installed: installed.map(row => row.version) });
+    const base = { supportsDefault: true, defaultVersion: saved || managerDefaultVersion({ listed: versions, installed: installed.map(row => row.version) }), defaultSource: saved ? "saved" : "manager", installed, installing: null, variants: [],
       catalog: { ...(states.get(userDataDir) || { status: record ? "success" : "idle", fetchedAt: record?.fetchedAt || null, error: null }),
         source, sourceUrl: source, versions, installable: versions.length > 0, installableVersions: versions,
         includedVersions: [], buildableVersions: [], supportsLatestOnly: false,
@@ -114,22 +122,17 @@ function createManagedPythonTool({ id, label, packageName, moduleName, scriptNam
           requiresBuild: false, available: installed.some(row => row.version === version), installLabel: "Install" }])) } };
     return { ...base, sections: [{ id: "default", label, ...base }] };
   }
-  async function pypiCatalog({ signal }, dependencies) {
-    if (!/^[a-z0-9][a-z0-9-]*$/.test(packageName || "")) throw new Error(`${label} has no package source.`);
-    const result = await (dependencies.fetchUrlBuffer || fetchUrlBuffer)(`https://pypi.org/pypi/${packageName}/json`, { signal, maxBytes: 8 * 1024 ** 2 });
-    if (result.status !== 200) throw new Error(`${label} package lookup failed (HTTP ${result.status}).`);
-    const data = JSON.parse(result.body.toString("utf8")), rows = [];
-    for (const [version, assets] of Object.entries(data.releases || {})) {
-      if (!/^\d+\.\d+\.\d+$/.test(version) || !Array.isArray(assets)) continue;
-      const filename = packageName.replace(/-/g, "_") + `-${version}-py3-none-any.whl`;
-      const matches = assets.filter(asset => asset.filename === filename && !asset.yanked);
-      if (matches.length !== 1) continue;
-      const asset = matches[0], url = new URL(asset.url);
-      const row = { version, url: asset.url, bytes: asset.size, sha256: asset.digests?.sha256,
-        sourceUrl: `https://pypi.org/project/${packageName}/${version}/` };
-      if (url.hostname === "files.pythonhosted.org" && validRow(row)) rows.push(row);
-    }
-    return rows;
+  // Rows of the upstream source in the cached row shape. Source snapshots keep
+  // the publisher's order, newest first.
+  const commits = upstream.kind === "githubCommits";
+  async function discover({ signal, logger }) {
+    return (await upstream.discover({ signal, logger })).flatMap(row => {
+      const [listed] = row.files;
+      return listed ? [{ version: row.version, url: listed.url, ...(listed.bytes ? { bytes: listed.bytes } : {}),
+        ...(listed.digest?.algorithm === "sha256" ? { sha256: listed.digest.value } : listed.digest ? { digest: listed.digest } : {}),
+        sourceUrl: row.sourceUrl || source, ...(row.label ? { versionLabel: row.label } : {}), ...(row.publishedAt ? { publishedAt: row.publishedAt } : {}),
+        ...(commits ? { kind: "github-commit", repository: upstream.repository, revision: row.revision } : {}) }] : [];
+    });
   }
   async function refreshCatalog(context = {}, dependencies = {}) {
     directory(context.userDataDir);
@@ -138,12 +141,14 @@ function createManagedPythonTool({ id, label, packageName, moduleName, scriptNam
     states.set(context.userDataDir, { status: "loading", fetchedAt: previous?.fetchedAt || null, error: null });
     const task = (async () => {
       try {
-        const entries = await (dependencies.discoverCatalog || discoverCatalog || pypiCatalog)(context, dependencies);
-        if (!Array.isArray(entries) || !entries.length || entries.length > LIMITS.versions || !entries.every(validRow))
-          throw new Error(`No valid ${label} downloads were found.`);
+        // Rows this launcher cannot read are left out; an answer without a
+        // usable row fails, so the previous list stays.
+        const discovered = await discover(context);
+        const entries = Array.isArray(discovered) ? orderedRows(discovered.filter(validRow)).slice(0, LIMITS.versions) : [];
+        if (!entries.length) throw new Error(`No valid ${label} downloads were found.`);
         throwIfAborted(context.signal);
         const record = writeRuntimeCatalog({ userDataDir: context.userDataDir, managerId: id, sourceId, source,
-          entries: orderedRows(entries) });
+          entries });
         states.set(context.userDataDir, { status: "success", fetchedAt: record.fetchedAt, error: null });
         return getState(context).catalog;
       } catch (error) {
@@ -153,9 +158,16 @@ function createManagedPythonTool({ id, label, packageName, moduleName, scriptNam
     })();
     pending.set(context.userDataDir, task); return task;
   }
+  // The required files are found where the package keeps them: at its root
+  // (a wheel), below a recorded prefix, or in the shallowest folder holding
+  // them all (a source archive).
   function extract(archive, destination, artifact) {
-    const zip = readZipEntries(archive), prefix = artifact.archivePrefix ? artifact.archivePrefix.replace(/\/?$/, "/") : "";
+    const zip = readZipEntries(archive);
     if (!zip?.entries?.length || zip.entries.length > limits.entries || zip.entries.length !== zip.info.entries) throw new Error(`${label} archive is invalid.`);
+    const names = new Set(zip.entries.map(item => item.name));
+    const prefix = artifact.archivePrefix ? artifact.archivePrefix.replace(/\/?$/, "/")
+      : ["", ...[...names].filter(name => name.endsWith("/" + required[0])).map(name => name.slice(0, -required[0].length)).sort((a, b) => a.length - b.length)]
+        .find(candidate => required.every(relative => names.has(candidate + relative))) || "";
     const files = {}, seen = new Set(); let bytes = 0;
     for (const item of zip.entries) {
       const name = item.name.replace(/\/$/, "");
@@ -184,7 +196,7 @@ function createManagedPythonTool({ id, label, packageName, moduleName, scriptNam
     return withRuntimeMutation({ managerId: id, sectionId: "default", ...(version ? { version } : {}) }, async () => {
       const existing = version && resolve({ userDataDir: context.userDataDir, version }); if (existing) return existing;
       await confirmToolInstall(context, { managerId: id, label, version, requiresDownload: true, installOptions: { sectionId: "default" } });
-      let artifact = cached(context.userDataDir)?.entries.find(row => row.version === version) || pins.find(row => row.version === version);
+      let artifact = cached(context.userDataDir)?.entries.find(row => row.version === version);
       if (!artifact) {
         await refreshCatalog(context, dependencies);
         version ||= getState(context).catalog.versions[0];
@@ -200,19 +212,10 @@ function createManagedPythonTool({ id, label, packageName, moduleName, scriptNam
         const temporary = fs.mkdtempSync(path.join(directory(context.userDataDir), ".install-")); let backup;
         try {
           const archive = path.join(temporary, "package.zip"), filesRoot = path.join(temporary, "files"); fs.mkdirSync(filesRoot);
-          if (artifact.kind === "github-commit") {
-            const response = await (dependencies.fetchUrlBuffer || fetchUrlBuffer)(artifact.url, { signal, maxBytes: limits.archive });
-            throwIfAborted(signal);
-            if (response.status !== 200 || !Buffer.isBuffer(response.body) || !response.body.length || response.body.length > limits.archive)
-              throw new Error(`${label} source download is invalid or exceeds its size limit.`);
-            fs.writeFileSync(archive, response.body);
-          } else await (dependencies.downloadToFile || downloadToFile)(artifact.url, archive, { signal, onProgress: task.onProgress });
+          const listed = Upstream.listedFile({ url: artifact.url, bytes: artifact.bytes ?? undefined, sha256: artifact.sha256, digest: artifact.digest });
+          const { sha256: archiveSha256, bytes: archiveBytes } = await upstream.download(listed, archive, { signal, onProgress: task.onProgress });
           throwIfAborted(signal);
-          const archiveBytes = fs.statSync(archive).size, archiveSha256 = Native.hashFile(archive);
-          if (artifact.kind !== "github-commit" && (archiveBytes !== artifact.bytes || archiveSha256 !== artifact.sha256))
-            throw new Error(`${label} download checksum does not match the selected version.`);
-          const files = extract(archive, filesRoot, artifact), record = { id, version, artifact, archiveSha256,
-            ...(artifact.kind === "github-commit" ? { archiveBytes } : {}),
+          const files = extract(archive, filesRoot, artifact), record = { id, version, artifact, archiveSha256, archiveBytes,
             installedAt: new Date().toISOString(), files };
           const metadata = JSON.stringify(record, null, 2);
           if (Buffer.byteLength(metadata) > manifestBytes) throw new Error(`${label} file inventory exceeds its metadata size limit.`);
@@ -231,8 +234,11 @@ function createManagedPythonTool({ id, label, packageName, moduleName, scriptNam
       });
     }, { userDataDir: context.userDataDir });
   }
+  // A registered tool path is passed on; a saved version applies as the
+  // default, so one that left the list gives way to the manager's default.
   async function ensureTool(context, payload = {}, dependencies = {}) {
-    return installRuntime({ ...context, version: payload?.version || manager.normalizeSettings(context.settings?.runtimes?.[id]).defaultVersion }, dependencies);
+    const saved = manager.normalizeSettings(context.settings?.runtimes?.[id]).defaultVersion;
+    return installRuntime({ ...context, version: payload?.version || (Custom.isPath(saved) ? saved : null) }, dependencies);
   }
   async function run(context, args, options = {}, dependencies = {}) {
     const installed = options.installed || await ensureTool(context, options, dependencies);
@@ -249,7 +255,7 @@ function createManagedPythonTool({ id, label, packageName, moduleName, scriptNam
       return installed;
     }, { userDataDir: context.userDataDir });
   }
-  const manager = { id, label, delivery: { included: "none", catalog: "remote", sourceBuild: false }, distributionRequired: false,
+  const manager = { id, label, upstream, delivery: { included: "none", catalog: "remote", sourceBuild: false }, distributionRequired: false,
     ui: { groupId: "tools", tabLabel: "Tools", sectionLabel: label, order: 200, memberOrder: order, management: "managed" },
     normalizeSettings, getState, refreshCatalog, installRuntime, ensureTool, run, resolve,
     uninstallRuntime: ({ userDataDir, version, installDir }) => {
@@ -291,4 +297,4 @@ function createManagedPythonTool({ id, label, packageName, moduleName, scriptNam
   return manager;
 }
 
-module.exports = { createManagedPythonTool };
+module.exports = { createManagedPythonTool, pythonWheel };

@@ -22,18 +22,20 @@ static Broker broker(const char *directory){
     int pair[2];assert(!socketpair(AF_UNIX,SOCK_STREAM,0,pair));pid_t pid=fork();assert(pid>=0);
     if(!pid){
         close(pair[0]);if(directory_fd>=0){close(directory_fd);directory_fd=-1;}
-        unsigned char operation;
+        unsigned char operation;unsigned queries=0;uint64_t query_duration=0;
         while(!exact(pair[1],&operation,1,0)){
-            assert(operation==1);int output[2];assert(!pipe(output));pid_t child=fork();assert(child>=0);
+            assert(operation==1);queries++;uint64_t began=query_now();int output[2];assert(!pipe(output));pid_t child=fork();assert(child>=0);
             if(!child){close(output[0]);assert(dup2(output[1],1)==1);close(output[1]);execl(helper,helper,"--namespace-processes",directory,(char*)0);_exit(127);}
             close(output[1]);char bytes[65536];size_t at=0;ssize_t n;
             while((n=read(output[0],bytes+at,sizeof bytes-1-at))>0)at+=(size_t)n;
             close(output[0]);bytes[at]=0;int status;assert(waitpid(child,&status,0)==child);
+            query_duration+=query_now()-began;
             uint32_t hosts[4096],count=0;char *cursor=strchr(bytes,'[');
             if(!WIFEXITED(status)||WEXITSTATUS(status)||!cursor)count=UINT32_MAX;
             else {cursor++;while(*cursor&&*cursor!=']'){char *end;long host=strtol(cursor,&end,10);assert(end!=cursor&&host>0&&host<=INT32_MAX&&count<4096);hosts[count++]=htonl((uint32_t)host);cursor=*end==','?end+1:end;}}
             uint32_t header=htonl(count);if(exact(pair[1],&header,sizeof header,1)||(count!=UINT32_MAX&&exact(pair[1],hosts,(size_t)count*sizeof *hosts,1)))break;
         }
+        dprintf(STDERR_FILENO,"Fixture command broker: %u requests, %.3f ms native helper time\n",queries,query_duration/1e6);
         close(pair[1]);_exit(0);
     }
     close(pair[1]);return(Broker){pid,pair[0]};

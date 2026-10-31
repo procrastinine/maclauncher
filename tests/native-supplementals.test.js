@@ -5,6 +5,16 @@ const Modules = require('../src/modules/registry');
 const fs = require('node:fs');
 const path = require('node:path');
 
+test('supplemental requirements include exactly one build per version for the app CPU', () => {
+  const universal = structuredClone(S.declarations().find(item => item.id === 'steam-api-helper'));
+  const intel = { ...structuredClone(universal), arch: 'x64', launcherArchitectures: ['x64'],
+    directoryRelative: `${universal.id}/${universal.version}/x64` };
+  for (const file of intel.files) if (file.architectures) file.architectures = ['x86_64'];
+  const dependencies = { supplementals: () => [universal, intel] };
+  assert.deepEqual(S.requirements({ arch: 'arm64' }, dependencies), [universal]);
+  assert.deepEqual(S.requirements({ arch: 'x64' }, dependencies), [intel]);
+});
+
 test('registered supplemental declarations have pure module exports and complete pinned inventories', () => {
   const declarations = S.declarations();
   const exported = Modules.listModules().flatMap(info => Modules.getModule(info.id)?.distributionSupplementals || []);

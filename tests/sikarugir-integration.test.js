@@ -119,7 +119,7 @@ function managedFixture(t, { installed = [], approval = true, native = false } =
   };
   const provider = Provider.createProvider({ manager, platform: "darwin", launch: Launch,
     launchDependencies: { prepareGraphicsView: graphics, run,
-      rosetta: { isAvailable: () => true }, host: { platform: "darwin", arch: "arm64", macOSVersion: "15.0" } } });
+      rosetta: { isAvailable: () => true }, host: { platform: "darwin", hardwareArch: "arm64", macOSVersion: "15.0" } } });
   provider.runtime = manifest.runtime.entries.sikarugir;
   const mod = composeRuntimeProviders({ id: manifest.id, manifest, runtimeManagers: [manager],
     normalizeRuntimeId: () => "sikarugir", filterRuntimeSupport: () => [], canLaunchRuntime: () => false }, [provider]);
@@ -174,10 +174,14 @@ test("unknown Windows imports select Sikarugir and preserve the generic folder a
   assert.equal(entry.moduleId, "crossover"); assert.equal(entry.runtimeId, "sikarugir");
   assert.equal(entry.moduleData.executablePath, executable);
   assert.equal(fs.existsSync(path.join(userDataDir, "runtimes")), false, "import does not install a runtime");
-  pe(path.join(windows, "Settings.exe"));
+  const settings = pe(path.join(windows, "Settings.exe"));
+  assert.equal(Modules.detectGame(windows).moduleData.executablePath, executable, "a settings tool does not compete with the game");
+  pe(path.join(windows, "Sequel.exe"));
   assert.throws(() => Modules.detectGame(windows), error => error.code === "DETECTION_CONFLICT" && /Select one \.exe/.test(error.message));
+  assert.equal(Modules.detectGame(settings).moduleData.executablePath, settings);
   assert.equal(Modules.detectGame(executable).moduleId, "crossover");
-  const nested = path.join(root, "NestedOnly"); pe(path.join(nested, "bin", "Game.exe"));
+  // A single wrapper folder is detected as the game; deeper executables are not.
+  const nested = path.join(root, "NestedOnly"); pe(path.join(nested, "bin", "Game.exe")); fs.mkdirSync(path.join(nested, "data"));
   assert.notEqual(Modules.explainDetection(nested).selectedModuleId, "crossover");
   const x64 = await core.resolveEntry(pe(path.join(root, "Unknown64", "Game.exe"), 0x8664));
   assert.equal(x64.runtimeId, "sikarugir"); assert.equal(x64.moduleData.executableArchitecture, "x86_64");

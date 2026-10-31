@@ -55,6 +55,7 @@
     "entries": {
       "klepton": {
         "label": "MacLauncher Android",
+        "hostFeature": "APPLE_SILICON",
         "graphicsHost": "explicit",
         "settings": {
           "defaults": {
@@ -300,6 +301,7 @@
       },
       "macapk": {
         "label": "Mac.apk",
+        "hostFeature": "APPLE_SILICON",
         "graphicsHost": "window",
         "settings": {
           "defaults": {
@@ -381,12 +383,13 @@
           ]
         },
         "description": "ARM64 Android runtime with optional Google sign-in.",
-        "requirements": "Apple Silicon · macOS 26.4 or later",
+        "requirements": "Apple Silicon · macOS version stated by each release",
         "preparation": "Play downloads a needed runtime after confirmation.",
         "dataNotice": "Each runtime keeps separate game data; switching preserves it."
       },
       "aim": {
         "label": "AIM",
+        "hostFeature": "APPLE_SILICON",
         "graphicsHost": "window",
         "settings": {
           "defaults": {
@@ -422,6 +425,7 @@
       "apktool": { "groupId": "tools", "tabLabel": "Tools", "sectionLabel": "Apktool", "order": 200, "memberOrder": 245, "management": "managed" },
       "jadx": { "groupId": "tools", "tabLabel": "Tools", "sectionLabel": "JADX", "order": 200, "memberOrder": 240, "management": "managed" },
       "android": {
+        "hostFeature": "APPLE_SILICON",
         "groupId": "maclauncher-android",
         "tabLabel": "MacLauncher Android",
         "sectionLabel": "JVM",
@@ -431,6 +435,7 @@
         "category": "platforms"
       },
       "android-art": {
+        "hostFeature": "APPLE_SILICON",
         "groupId": "maclauncher-android",
         "tabLabel": "MacLauncher Android",
         "sectionLabel": "ART",
@@ -440,6 +445,7 @@
         "category": "platforms"
       },
       "macapk": {
+        "hostFeature": "APPLE_SILICON",
         "groupId": "macapk",
         "tabLabel": "Mac.apk",
         "order": 124,
@@ -447,6 +453,7 @@
         "category": "platforms"
       },
       "android-aim": {
+        "hostFeature": "APPLE_SILICON",
         "groupId": "android-aim",
         "tabLabel": "AIM",
         "order": 125,

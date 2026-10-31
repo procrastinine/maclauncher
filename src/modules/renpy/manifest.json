@@ -32,7 +32,8 @@
     "rootMarkers": [
       "renpy",
       "game",
-      "Contents/Resources/autorun"
+      "Contents/Resources/autorun",
+      "Contents/Info.plist"
     ],
     "rootExtensions": [
       ".rpy",
@@ -70,13 +71,13 @@
       },
       "native": {
         "graphicsHost": "window",
-        "label": "Native app"
+        "label": "Game's macOS app"
       }
     },
     "labels": {
       "patched": "Ren'Py Patch",
       "sdk": "Ren'Py SDK",
-      "native": "Native app"
+      "native": "Game's macOS app"
     },
     "manager": {
       "sdk": "sdk"
@@ -389,7 +390,7 @@
       },
       {
         "id": "removeExtraction",
-        "label": "Remove Extracted",
+        "label": "Remove extracted files",
         "kind": "danger",
         "confirm": "Remove extracted Ren'Py files?",
         "hiddenWhen": [
@@ -444,7 +445,7 @@
       },
       {
         "id": "patching",
-        "label": "Ren'Py Patching",
+        "label": "Ren'Py patch",
         "actions": [
           "patchStatus",
           "patch",

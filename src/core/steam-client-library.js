@@ -4,10 +4,19 @@ const os = require('node:os');
 const { pathToFileURL } = require('node:url');
 const { steamLibraryArchitectures, steamPlatforms } = require('./steam-architectures');
 
+// Steam records each app's type in its app information. Games, applications,
+// demos, mods, soundtracks and betas are listed; tools, configurations, DLC and
+// Steam's own shared components, such as the Steamworks Common
+// Redistributables, are not. An app without a recorded type stays listed.
+const LISTED_APP_TYPES = new Set(['game', 'application', 'demo', 'mod', 'music', 'beta']);
+function steamAppListed(info) { return LISTED_APP_TYPES.has(String(info?.common?.type || 'game').toLowerCase()); }
+
 // Steam cache v39-v41, including v41's interned keys. Format reference:
 // https://github.com/ValveResourceFormat/SteamAppInfo
-function parseAppInfoCache(buffer) {
+// `appIds` limits decoding to those apps and skips the other records.
+function parseAppInfoCache(buffer, { appIds } = {}) {
   if (!Buffer.isBuffer(buffer) || buffer.length < 12 || buffer.length > 128 * 1024 * 1024) throw new Error('Invalid Steam app cache.');
+  const wanted = appIds ? new Set([...appIds].map(Number)) : null;
   const magic = buffer.readUInt32LE(0), version = magic & 255;
   if (![0x07564427, 0x07564428, 0x07564429].includes(magic)) throw new Error('Unsupported Steam app cache version.');
   let offset = version >= 41 ? 16 : 8, limit = buffer.length;
@@ -55,6 +64,7 @@ function parseAppInfoCache(buffer) {
     const size = u32(), start = offset, end = start + size;
     const fixed = version >= 40 ? 60 : 40;
     if (size < fixed || end > limit) throw new Error('Invalid Steam app cache record.');
+    if (wanted && !wanted.has(appId)) { offset = end; continue; }
     offset += fixed;
     const outerLimit = limit; limit = end;
     const value = object(0); apps.set(appId, value.appinfo || value);
@@ -78,10 +88,11 @@ function parseSteamLicenses(text) {
   return [...apps.values()];
 }
 
-async function readAppInfo(homeDir = os.homedir()) {
-  const file = path.join(homeDir, 'Library/Application Support/Steam/appcache/appinfo.vdf');
+// `steamRoot` selects another Steam client's folder, such as one in a CrossOver bottle.
+async function readAppInfo(homeDir = os.homedir(), { steamRoot = path.join(homeDir, 'Library/Application Support/Steam'), appIds } = {}) {
+  const file = path.join(steamRoot, 'appcache/appinfo.vdf');
   const stat = await fs.stat(file); if (stat.size > 128 * 1024 * 1024) throw new Error('Steam app cache is too large.');
-  return parseAppInfoCache(await fs.readFile(file));
+  return parseAppInfoCache(await fs.readFile(file), { appIds });
 }
 async function cachedIcon(steamRoot, appId, hash) {
   const roots = [path.join(steamRoot, 'appcache/librarycache', String(appId)), path.join(steamRoot, 'appcache/librarycache')];
@@ -104,8 +115,8 @@ function createSteamClientLibrary({ homeDir = os.homedir(), queryConsole, onProg
       cachedApps = appinfo;
       const rows = [], steamRoot = path.join(homeDir, 'Library/Application Support/Steam');
       for (const license of licenses) {
-        const info = appinfo.get(license.appId), common = info?.common || {}, type = String(common.type || 'game').toLowerCase();
-        if (!['game', 'application', 'demo', 'mod', 'music', 'beta'].includes(type)) continue;
+        const info = appinfo.get(license.appId), common = info?.common || {};
+        if (!steamAppListed(info)) continue;
         rows.push({ ...license, name: common.name || `App ${license.appId}`, ...steamLibraryArchitectures(info),
           platforms: steamPlatforms(common.oslist),
           iconUrl: await cachedIcon(steamRoot, license.appId, common.icon) });
@@ -115,4 +126,4 @@ function createSteamClientLibrary({ homeDir = os.homedir(), queryConsole, onProg
     async getAppInfo(appId) { try { cachedApps ||= await readAppInfo(homeDir); return cachedApps.get(Number(appId)) || null; } catch { return null; } }
   };
 }
-module.exports = { parseAppInfoCache, parseSteamLicenses, readAppInfo, createSteamClientLibrary };
+module.exports = { parseAppInfoCache, parseSteamLicenses, readAppInfo, createSteamClientLibrary, steamAppListed };

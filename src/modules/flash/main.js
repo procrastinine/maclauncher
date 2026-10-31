@@ -5,7 +5,7 @@ const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
 const RuffleRuntimeManager = require("./runtime/ruffle-runtime-manager");
 const Custom = require("../shared/runtime/custom-runtime");
-const { selectRuntimeVersion } = require("../shared/runtime/version-choices");
+const { selectRuntimeVersion, usableDefaultVersion } = require("../shared/runtime/version-choices");
 const ProjectorRuntimeManager = require("./runtime/projector-manager");
 const FFDec = require("./runtime/ffdec-manager");
 const Tools = require("./tools");
@@ -103,7 +103,8 @@ const resolveRuffleSelection = Custom.createSelector(RuffleRuntimeManager, funct
   const runtimeData = resolveRuntimeData(entry, RUFFLE_RUNTIME_ID);
   const overrideVersion = normalizeRuffleVersionOrNull(runtimeData.version);
   const state = RuffleRuntimeManager.getState({ settings: settings?.runtimes?.ruffle, userDataDir });
-  const defaultVersion = state.sections?.[0]?.defaultVersion || state.defaultVersion;
+  // A saved default that is neither listed nor installed gives way to the newest usable version.
+  const defaultVersion = usableDefaultVersion(state.sections?.[0] || state);
   const latestInstalled = RuffleCore.listInstalled(userDataDir)[0]?.version || null;
   const requestedVersion = selectRuntimeVersion({ manual: overrideVersion, defaultVersion }).version;
 
@@ -120,7 +121,7 @@ const resolveRuffleSelection = Custom.createSelector(RuffleRuntimeManager, funct
 }, { result: (selection, { entry, settings, userDataDir }) => ({
   runtimeData: resolveRuntimeData(entry, RUFFLE_RUNTIME_ID),
   overrideVersion: normalizeRuffleVersionOrNull(resolveRuntimeData(entry, RUFFLE_RUNTIME_ID).version),
-  defaultVersion: RuffleRuntimeManager.getState({ settings: settings?.runtimes?.ruffle, userDataDir }).sections?.[0]?.defaultVersion,
+  defaultVersion: usableDefaultVersion(RuffleRuntimeManager.getState({ settings: settings?.runtimes?.ruffle, userDataDir }).sections?.[0]),
   latestInstalled: RuffleCore.listInstalled(userDataDir)[0]?.version || null,
   requestedVersion: selection.version, install: selection.install, reason: selection.reason
 }) });
@@ -135,7 +136,7 @@ async function resolveInstallVersion(context) {
     settings: context.settings?.runtimes?.ruffle,
     userDataDir: context.userDataDir
   });
-  let version = selectRuntimeVersion({ defaultVersion: current?.sections?.[0]?.defaultVersion || current.defaultVersion }).version;
+  let version = selectRuntimeVersion({ defaultVersion: usableDefaultVersion(current?.sections?.[0] || current) }).version;
   if (version) return version;
 
   await RuffleRuntimeManager.refreshCatalog({
@@ -149,7 +150,7 @@ async function resolveInstallVersion(context) {
     settings: context.settings?.runtimes?.ruffle,
     userDataDir: context.userDataDir
   });
-  version = selectRuntimeVersion({ defaultVersion: refreshed?.sections?.[0]?.defaultVersion || refreshed.defaultVersion }).version;
+  version = selectRuntimeVersion({ defaultVersion: usableDefaultVersion(refreshed?.sections?.[0] || refreshed) }).version;
   return version || null;
 }
 
@@ -173,7 +174,11 @@ async function ensureRuntime(entry, context) {
   if (selection.install?.appPath) return null;
   if (selection.reason) throw new Error(selection.reason);
   const version = selection.requestedVersion;
-  if (!version) return { managerId: RuffleRuntimeManager.id, version: null, discoveryRequired: true,
+  // A default that is not installed is chosen from a list read this session,
+  // so a saved default that upstream removed gives way on the first Play.
+  const state = RuffleRuntimeManager.getState({ settings: context.settings?.runtimes?.ruffle, userDataDir: context.userDataDir });
+  const unread = !selection.overrideVersion && !state.catalog?.fetchedAt && !(state.installed || []).some(row => row.version === version);
+  if (!version || unread) return { managerId: RuffleRuntimeManager.id, version: null, discoveryRequired: true,
     installOptions: { sectionId: "default" } };
   if (RuffleCore.resolveInstalled({ userDataDir: context.userDataDir, version })?.appPath) return null;
   return { managerId: RuffleRuntimeManager.id, version, installOptions: { sectionId: "default" } };

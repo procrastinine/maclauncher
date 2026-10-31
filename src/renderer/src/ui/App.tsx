@@ -300,6 +300,9 @@ export default function App() {
 
   const inspectionGame = useMemo(() => state?.recents.find(game => game.gamePath === selectedGamePath) || null,
     [state?.recents, selectedGamePath]);
+  useEffect(() => {
+    if (inspectionGame?.gamePath) void api?.prioritizeGame?.(inspectionGame.gamePath).catch(error => setError(String(error?.message || error)));
+  }, [api, inspectionGame?.gamePath, setError]);
   const inspectionModule = useMemo(() => state?.modules.find(module => module.id === inspectionGame?.moduleId) || null,
     [state?.modules, inspectionGame?.moduleId]);
   const inspectionModuleState = inspectionGame ? state?.moduleStates[inspectionGame.moduleId] : undefined;
@@ -333,7 +336,7 @@ export default function App() {
       if (active) setCheatsPatchStatusByPath(previous => updatePathValue(previous, gamePath, status));
     }).catch(() => {});
     return () => { active = false; };
-  }, [api, inspectionGame?.gamePath, inspectionGame?.moduleSupports.cheatsPatcher,
+  }, [api, inspectionGame?.gamePath, inspectionGame?.moduleSupports.cheatsPatcher, inspectionGame?.availability,
     inspectionGame?.runtimeId, inspectionGame?.runtimeData, inspectionGame?.runtimeSettings, inspectionGame?.moduleData]);
 
   useEffect(() => {
@@ -348,13 +351,13 @@ export default function App() {
       if (active) setLibsPatchStatusByPath(previous => updatePathValue(previous, gamePath, status));
     }).catch(() => {});
     return () => { active = false; };
-  }, [api, inspectionGame?.gamePath, inspectionGame?.runtimeId, inspectionGame?.runtimeData,
+  }, [api, inspectionGame?.gamePath, inspectionGame?.availability, inspectionGame?.runtimeId, inspectionGame?.runtimeData,
     inspectionGame?.runtimeSettings, inspectionGame?.moduleData, inspectionModuleState?.libs?.dependencies]);
 
   const automaticInspectionKey = useMemo(() => {
     if (!inspectionGame) return "";
     return JSON.stringify([inspectionModule?.ui?.actions?.filter(action => action.autoRun).map(action => action.id),
-      inspectionGame.runtimeId, inspectionGame.moduleData, inspectionGame.runtimeData, inspectionGame.runtimeSettings,
+      inspectionGame.availability?.reason, inspectionGame.runtimeId, inspectionGame.moduleData, inspectionGame.runtimeData, inspectionGame.runtimeSettings,
       inspectionModuleSettings, inspectionModuleState, inspectionDefaults,
       inspectionManager && resolveRuntimeSections(inspectionManager).map(section => [section.id, section.defaultVersion,
         section.defaultVariant, section.installed?.map((install: any) => [install.version, install.ready,
@@ -362,7 +365,8 @@ export default function App() {
   }, [inspectionGame, inspectionModule, inspectionModuleSettings, inspectionModuleState, inspectionDefaults, inspectionManager]);
 
   useEffect(() => {
-    if (!api || !inspectionGame) return;
+    // Automatic tool checks read the game's files; they run again once the files return.
+    if (!api || !inspectionGame || inspectionGame.availability) return;
     let active = true;
     for (const action of inspectionModule?.ui?.actions?.filter(action => action.autoRun) || []) {
       inspectionRequests.run(inspectionGame.gamePath, action.id, automaticInspectionKey,
@@ -387,7 +391,7 @@ export default function App() {
     const section = resolveInspectorRuntimeSection(inspectionModule, inspectionGame.runtimeId, inspectionManager || null, sectionId);
     const graphicsDependencies = inspectGraphics ? Object.entries(state?.runtimeManagers || {}).map(([id, manager]) =>
       [id, manager.defaultVersion, manager.installed?.map((item: { version?: string; ready?: boolean; status?: string }) => [item.version, item.ready, item.status])]) : null;
-    return JSON.stringify([statusAction, inspectGraphics, recommend, sectionId, inspectionGame.runtimeId, inspectionGame.moduleData,
+    return JSON.stringify([statusAction, inspectGraphics, recommend, sectionId, inspectionGame.availability?.reason, inspectionGame.runtimeId, inspectionGame.moduleData,
       inspectionGame.runtimeData, inspectionGame.runtimeSettings, inspectionModuleSettings, inspectionDefaults,
       section?.defaultVersion, section?.defaultVariant, section?.installed, section?.catalog?.fetchedAt, graphicsDependencies, state?.running?.[inspectionGame.gamePath] || 0]);
   }, [inspectionGame, inspectionModule, inspectionManager, inspectionModuleSettings, inspectionDefaults, state?.runtimeManagers, state?.running]);
@@ -478,9 +482,17 @@ export default function App() {
     [visibleGames, selectedGamePath]
   );
 
+  // A located game keeps its ID under a new path, and the selection follows it.
+  const selectedIdentity = useRef<{ gameId: string; gamePath: string } | null>(null);
   useEffect(() => {
-    if (selectedGamePath && !selectedGame) setSelectedGamePath(null);
-  }, [selectedGamePath, selectedGame]);
+    if (selectedGame?.gameId) selectedIdentity.current = { gameId: selectedGame.gameId, gamePath: selectedGame.gamePath };
+  }, [selectedGame]);
+  useEffect(() => {
+    if (!selectedGamePath || selectedGame) return;
+    const previous = selectedIdentity.current;
+    const moved = previous?.gamePath === selectedGamePath ? visibleGames.find(game => game.gameId === previous.gameId) : null;
+    setSelectedGamePath(moved ? moved.gamePath : null);
+  }, [selectedGamePath, selectedGame, visibleGames]);
 
   const isFiltering =
     Boolean(searchQuery.trim()) ||
@@ -881,7 +893,7 @@ export default function App() {
   function updateRuntimeUiSection(
     managerId: string,
     sectionId: string,
-    key: "remoteOpen" | "installVersion" | "installVariant" | "installedSort",
+    key: "remoteOpen" | "installVersion" | "installVariant" | "installArchitecture" | "installedSort",
     value: any
   ) {
     setRuntimeUi(prev => {
@@ -968,17 +980,18 @@ export default function App() {
     return onRuntimeAction(managerId, "setup", { sectionId, setupActionId, toolVersion });
   }
 
-  async function onRuntimeInstalledAction(managerId: string, sectionId: string, version: string, installedActionId: string) {
-    return onRuntimeAction(managerId, "installedAction", { sectionId, version, installedActionId });
+  async function onRuntimeInstalledAction(managerId: string, sectionId: string, version: string, installedActionId: string, architecture?: string) {
+    return onRuntimeAction(managerId, "installedAction", { sectionId, version, installedActionId, ...(architecture ? {architecture} : {}) });
   }
 
   async function onRuntimeInstall(
     managerId: string,
     sectionId: string,
     version: string,
-    variant?: string
+    variant?: string,
+    architecture?: string
   ) {
-    return onRuntimeAction(managerId, "install", { sectionId, version, variant });
+    return onRuntimeAction(managerId, "install", { sectionId, version, variant, ...(architecture ? {architecture} : {}) });
   }
 
   async function onRuntimeSetDefault(
@@ -986,9 +999,10 @@ export default function App() {
     sectionId: string,
     version: string | null,
     variant?: string,
-    selectionId?:string
+    selectionId?:string,
+    architecture?: string
   ) {
-    return onRuntimeAction(managerId, "setDefault", { sectionId, version, variant,...(selectionId?{selectionId}:{}) });
+    return onRuntimeAction(managerId, "setDefault", { sectionId, version, variant,...(selectionId?{selectionId}:{}), ...(architecture ? {architecture} : {}) });
   }
 
   async function onRuntimeUninstall(
@@ -1004,6 +1018,7 @@ export default function App() {
     return onRuntimeAction(managerId, "uninstall", {
       sectionId,
       version: install.version,
+      architecture: install.architecture,
       variant: install.variant,
       platformKey: install.platformKey,
       installDir: install.installDir
@@ -1360,6 +1375,20 @@ export default function App() {
       await api.forgetGame(gamePath);
     } catch (e: any) {
       setError(String(e?.message || e));
+    }
+  }, [api]);
+
+  // Locate… keeps the game's ID and settings; a refusal shows under the notice.
+  const onLocateGame = useCallback(async function onLocateGame(gamePath: string) {
+    if (!api?.locateGame) return;
+    setModuleActionBusyByPath(prev => ({ ...prev, [gamePath]: { ...(prev[gamePath] || {}), locateGame: true } }));
+    setModuleActionErrorByPath(prev => ({ ...prev, [gamePath]: null }));
+    try {
+      await api.locateGame(gamePath);
+    } catch (e: any) {
+      setModuleActionErrorByPath(prev => ({ ...prev, [gamePath]: { actionId: "locateGame", message: String(e?.message || e) } }));
+    } finally {
+      setModuleActionBusyByPath(prev => ({ ...prev, [gamePath]: { ...(prev[gamePath] || {}), locateGame: false } }));
     }
   }, [api]);
 
@@ -1790,6 +1819,7 @@ export default function App() {
     openCheats,
     onCreateCommand,
     onForgetGame,
+    onLocateGame,
     onReveal,
     onPickSaveDir,
     onResetSaveDir,
@@ -1811,7 +1841,7 @@ export default function App() {
     onModuleAction, onCancelModuleAction, onRevealToolPath
   }), [
     onPlay, onStop, onMoveGame, onSetFavorite, onSaveGameNotes, onToggleSelection, onOpenSaveTools, openCheats, onCreateCommand,
-    onForgetGame, onReveal, onPickSaveDir, onResetSaveDir, onSetRuntime, onSetNetworkAccess, onSetSteamClientStart, onSetLaunchArguments,
+    onForgetGame, onLocateGame, onReveal, onPickSaveDir, onResetSaveDir, onSetRuntime, onSetNetworkAccess, onSetSteamClientStart, onSetLaunchArguments,
     onOpenRuntimeSettings, onSetRuntimeData, openRuntimesManager, onRuntimeInstall,
     refreshLibsPatchStatus, onPatchLibs, onUnpatchLibs, onSetGameLibVersion,
     refreshCheatsPatchStatus, onPatchCheatsIntoGame, onUnpatchCheatsFromGame,
@@ -1928,6 +1958,7 @@ export default function App() {
         sectionId={state.utilityWindow?.sectionId || utilityWindowContext.sectionId}
         navigationKey={state.utilityWindow?.revision}
         onSetLauncherSettings={onSetLauncherSettings} onSetModuleSettings={onSetModuleSettings}
+        onAppUpdate={api?.appUpdate ? action => { void api.appUpdate(action).catch((e: any) => setError(String(e?.message || e))); } : undefined}
       />}
       {state && utilityWindowContext.view === "credits" && <CreditsView
         acknowledgments={acknowledgments} canOpenExternal={canOpenExternal} onOpenLink={onOpenAcknowledgmentsLink}

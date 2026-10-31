@@ -4,11 +4,10 @@ const { createBundledNativeRuntime } = require("../../shared/runtime/bundled-nat
 const Catalog = require("./catalog");
 const Profile = require("./profile");
 
-function createManager({ arch = process.arch, dependencies = {} } = {}) {
+function createManager({ dependencies = {} } = {}) {
   const core = createPinnedNativeManager({ id: "siglus", label: "siglus_rs", projectBuilds: { projectId: "siglus", repository: "procrastinine/maclauncher-builds" },
     sourceUrl: Catalog.RELEASES,
-    catalog: [],
-    legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "siglus", arch, ...(dependencies.bundle || {}) }),
+    legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "siglus", ...(dependencies.bundle || {}) }),
     resolveExecutable: root => path.join(root, "bin", "siglus-host"), dependencies });
   const selection = core.resolveSelection.bind(core), installed = core.core.resolveInstalled.bind(core.core), getState = core.getState.bind(core);
   core.resolveSelection = (entry, settings, userDataDir) => {

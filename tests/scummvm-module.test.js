@@ -6,6 +6,8 @@ const path = require("node:path");
 const Module = require("../src/modules/scummvm/main");
 const Detection = require("../src/modules/scummvm/detect");
 const Manager = require("../src/modules/scummvm/runtime/manager");
+const Catalog = require("../src/modules/scummvm/runtime/catalog");
+const RuntimeCatalog = require("../src/modules/shared/runtime/runtime-catalog");
 
 function temporary(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "scummvm-module-"));
@@ -18,6 +20,13 @@ function fixture(root, names) {
   return root;
 }
 function detect(root, input = root, app = false) { return Module.detectGame({ rootDir: root, inputPath: input, isAppBundle: app, stat: fs.statSync(input) }); }
+// Local imports choose a version from the cached catalog of an earlier Refresh.
+function listed(profile, version = "2026.4.0") {
+  const filename = `scummvm-${version}-macosx.dmg`;
+  RuntimeCatalog.writeRuntimeCatalog({ userDataDir: profile, managerId: "scummvm", source: Catalog.SOURCE_URL, entries: [{ version,
+    upstreamRevision: "a".repeat(40), minimumMacOS: "11.0", hostArchitectures: ["arm64", "x64"], localBuild: false,
+    asset: { filename, url: Catalog.SOURCE_URL + version + "/" + filename, sha256: "b".repeat(64) } }] });
+}
 function binary() {
   const data = Buffer.alloc(32); data.writeUInt32LE(0xfeedfacf); data.writeUInt32LE(process.arch === "arm64" ? 0x0100000c : 0x01000007, 4); data.writeUInt32LE(2, 12);
   return data;
@@ -101,7 +110,7 @@ test("ScummVM parses supported edition output while requiring the selected game 
 test("ScummVM installed launch uses automatic detection, private paths and requested settings", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t), source = fixture(path.join(root, "source"), { "game.scummvm": "" }), profile = path.join(root, "profile"), executable = path.join(root, "scummvm");
   fs.writeFileSync(executable, binary(), { mode: 0o755 });
-  Manager.core.registerLocal({ userDataDir: profile, runtimePath: executable, version: "2026.4.0" });
+  listed(profile); Manager.core.registerLocal({ userDataDir: profile, runtimePath: executable, version: "2026.4.0" });
   const entry = { ...detect(source), gameId: "fixture" }, calls = [];
   const context = { userDataDir: profile, settings: {}, runtimeSettings: { fullscreen: true, language: "de" },
     gameArguments: ["--engine-option", "A quoted value", "", "$(literal)"],
@@ -125,7 +134,7 @@ test("ScummVM game identification obtains consent before downloading a missing p
 test("ScummVM game identification uses the selected installed player and updates the recognized edition", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t), source = fixture(path.join(root, "source"), { "game.scummvm": "" }), profile = path.join(root, "profile"), executable = path.join(root, "scummvm");
   fs.writeFileSync(executable, binary(), { mode: 0o755 });
-  Manager.core.registerLocal({ userDataDir: profile, runtimePath: executable, version: "2026.4.0" });
+  listed(profile); Manager.core.registerLocal({ userDataDir: profile, runtimePath: executable, version: "2026.4.0" });
   const entry = { ...detect(source), gameId: "fixture" }; let changed = 0;
   const result = await Module.__test.inspectWithRuntime(entry, {
     userDataDir: profile, settings: {}, confirmRuntimeInstall: async () => assert.fail("An installed player needs no download consent"),
