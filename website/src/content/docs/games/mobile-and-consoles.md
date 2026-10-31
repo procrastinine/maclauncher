@@ -41,7 +41,7 @@ PS5 games are x86-64 programs, the same instruction family as PC games, and the 
 
 The default, [AnyPS5](https://github.com/boykopovar/AnyPS5), converts the game's executable and modules into macOS programs and supplies its own versions of the PS5 system libraries. Converted games run natively on Intel Macs and through [Rosetta](https://support.apple.com/en-us/102527) on Apple Silicon, with graphics on Vulkan over Metal using an Intel-compatible driver. MacLauncher uses its own macOS port of AnyPS5 and manages the conversion, runtime versions, the Vulkan driver and your controls. You need an unpacked, decrypted PS5 game folder (with `sce_sys/param.json` and the game executable) and macOS 26 or later.
 
-Controls map to keyboard and mouse out of the box (I/J/K/L for the face buttons, WASD for the left stick, and so on), and every binding can be edited per game; physical controllers work too. The first launch converts the game, and later launches reuse that work.
+Controls map to keyboard and mouse by default (I/J/K/L for the face buttons, WASD for the left stick, and so on), and every binding can be edited per game; physical controllers work too. The first launch converts the game, and later launches reuse that work.
 
 <span id="runtime-prosper"></span>The second runtime, [Prosper](https://github.com/mattias800/prosper), runs the original PS5 programs instead of converting them. Play downloads a missing package after consent and continues preparation. **Runtimes** lists packages from MacLauncher Builds and also accepts local builds. Prosper runs as an Intel program, using Rosetta on Apple Silicon, and needs Vulkan 1.4 with Intel support. AnyPS5 stays the default.
 

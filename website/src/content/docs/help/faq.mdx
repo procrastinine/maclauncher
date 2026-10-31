@@ -67,9 +67,9 @@ Choose **Check for Updates…** in the MacLauncher menu, or the same button in *
 
 Sometimes MacLauncher can't replace itself: macOS may be running it from a temporary read-only copy because it was opened straight from the Downloads folder, or the folder it's in may not be writable. Then it offers the release page instead, so you can download the new version yourself. Moving MacLauncher to the Applications folder fixes the first case. [App updates](https://github.com/procrastinine/maclauncher/blob/master/docs/UPDATES.md) lists every check.
 
-### How can I be sure nothing was added to MacLauncher?
+### How can I trust MacLauncher binaries?
 
-Everything that MacLauncher builds itself is built in the open. That covers the app and the compiled packages from [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds), the companion project that compiles game engines and helpers for macOS. Each one is built on GitHub's own machines from public source code and public recipes, which are the instructions and patches that turn a project's source into a Mac package. For every file such a build produces, GitHub signs a build record that names the exact source code, recipe and build run behind it. A few older package versions were built before this setup and have no GitHub build record; the verification table lists them separately as built locally.
+The app and the compiled packages from [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds), the companion project that compiles game engines and helpers for macOS, are built on GitHub's own machines from public source code and public recipes. A recipe is the set of instructions and patches that turns a project's source into a Mac package. For every file such a build produces, GitHub signs a build record that names the exact source code, recipe and build run behind it. A few older package versions were built before this setup and have no GitHub build record; the verification table lists them separately as built locally.
 
 Anyone can read that source and those recipes, [check a download against its build record](#how-do-i-check-a-download-myself) with GitHub's command-line tool, and rebuild it to compare. [Verifying MacLauncher](https://github.com/procrastinine/maclauncher/blob/master/docs/development/VERIFYING.md) walks through the checks for the app, and the [package verification table](https://procrastinine.github.io/maclauncher-builds/verification.html) lists build records, recipes and supplied-file checks for MacLauncher Builds packages.
 
@@ -83,7 +83,7 @@ A passing check means that GitHub's own machines built exactly this file from th
 
 ### What does a build record prove?
 
-A build record proves where a file came from: which public source code and recipe built it, in which build run on GitHub's machines. Since GitHub signs it, nothing can be slipped into a download between that public source and the file without the check failing. The record does not prove that the source itself is safe. What makes that checkable is that the source is public, so anyone can read exactly what went into each build.
+A build record proves where a file came from: which public source code and recipe built it, in which build run on GitHub's machines. Because GitHub signs the record, a file changed after the build no longer matches it, and the check fails. The record does not prove that the source itself is safe; the source is public, so it can be reviewed.
 
 A rebuild is a second, independent check. A rebuilt MacLauncher Builds package is compared byte for byte with the published one, and the verification table shows each recorded result. The app's ZIP archive is not designed to come out identical on every build, because it stores timestamps and each build signs the app locally, so a rebuilt app is compared file by file instead.
 

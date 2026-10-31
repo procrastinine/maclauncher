@@ -5,8 +5,6 @@ description: A native runtime system, a graphics and effects layer, and a tinker
 
 MacLauncher plays games on macOS. It has three parts: a native runtime system, a graphics and effects layer, and a set of tools for tinkering with your games. Each part works on its own, and they are designed to work together.
 
-Everything MacLauncher builds itself is built in the open. The app and the compiled packages from [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds) are built on GitHub's own machines from public source code, and GitHub signs a record of exactly which source produced each file, so anyone can confirm that nothing was added along the way. A few older package versions predate this setup and are marked as built locally. Components taken unchanged from their publishers, such as Python and Electron, are checked against the publishers' own checksums and signatures. [How can I be sure nothing was added?](/maclauncher/help/faq/#how-can-i-be-sure-nothing-was-added-to-maclauncher) explains what these records prove, and [Verifying MacLauncher](https://github.com/procrastinine/maclauncher/blob/master/docs/development/VERIFYING.md) shows how to check them.
-
 ![The MacLauncher library with a game selected, its inspector showing runtime and graphics settings](../../assets/launcher-flow.png)
 
 *The Android version of [Shattered Pixel Dungeon](https://github.com/00-Evan/shattered-pixel-dungeon), running with [CRT Royale](https://github.com/akgunter/crt-royale-reshade) shaders.*
