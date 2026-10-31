@@ -117,6 +117,26 @@ function containedPath(root, relative) {
   }
 }
 
+function developmentSources(root, declarations) {
+  const file = path.join(root, 'build/source-dependencies.json');
+  if (!fs.lstatSync(file).isFile() || fs.statSync(file).size > LIMITS.output)
+    throw new Error('Development source dependencies must be a bounded regular file.');
+  const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const groups = [value.submodules, value.testSubmodules === undefined ? [] : value.testSubmodules,
+    value.recursiveSubmodules === undefined ? [] : value.recursiveSubmodules];
+  if (value.schemaVersion !== 1 || !Array.isArray(value.submodules) || !value.submodules.length ||
+      groups.some(group => !Array.isArray(group) || new Set(group).size !== group.length))
+    throw new Error('Development source dependencies require explicit pinned submodule paths.');
+  for (const location of groups.flat()) {
+    relativePath(location);
+    if (!declarations.some(item => item.path === location)) throw new Error('Unknown top-level submodule path: ' + location + '.');
+  }
+  const selected = new Set([...groups[0], ...groups[1]]), recursive = new Set(groups[2]);
+  if ([...recursive].some(location => !selected.has(location)))
+    throw new Error('Recursive development sources must belong to the selected source dependencies.');
+  return { selected, recursive };
+}
+
 async function readPlan({ repoRoot = ROOT, paths = [], all = false, run = runGit, signal } = {}) {
   const root = fs.realpathSync(repoRoot);
   const top = (await run(['rev-parse', '--show-toplevel'], { cwd: root, signal })).stdout.trim();
@@ -131,6 +151,7 @@ async function readPlan({ repoRoot = ROOT, paths = [], all = false, run = runGit
   const requested = new Set(paths.map(relativePath));
   for (const location of requested) if (!declarations.some(item => item.path === location)) throw new Error('Unknown top-level submodule path: ' + location + '.');
   if (!declarations.length) return { modules: [], skipped: [], mirrors: [] };
+  const development = !requested.size && !all ? developmentSources(root, declarations) : null;
   const indexed = (await run(['ls-files', '--stage', '-z', '--', ...declarations.map(item => item.path)], { cwd: root, signal })).stdout;
   const links = new Map();
   for (const row of indexed.split('\0').filter(Boolean)) {
@@ -142,10 +163,10 @@ async function readPlan({ repoRoot = ROOT, paths = [], all = false, run = runGit
   for (const item of declarations) {
     const revision = links.get(item.path);
     if (!revision) throw new Error('Missing pinned Gitlink for ' + item.path + '.');
-    const selected = requested.size ? requested.has(item.path) : all || item.initialize;
-    const record = { path: item.path, revision, recursive: item.recursive };
+    const selected = requested.size ? requested.has(item.path) : all ? item.initialize : development.selected.has(item.path);
+    const record = { path: item.path, revision, recursive: development ? development.recursive.has(item.path) : item.recursive };
     if (selected) { containedPath(root, item.path); modules.push(record); }
-    else skipped.push({ ...record, reason: requested.size ? 'not-selected' : 'reference-only' });
+    else skipped.push({ ...record, reason: all ? 'reference-only' : 'not-selected' });
   }
   return { modules, skipped, mirrors: readMirrors(root, declarations, modules) };
 }
@@ -216,8 +237,9 @@ if (require.main === module) {
     const options = parseArgs(process.argv.slice(2));
     if (options.help) {
       process.stdout.write('Usage: node scripts/init-submodules.cjs [--dry-run] [--all] [--jobs N] [-- PATH ...]\n' +
-        'Initialize pinned build inputs. --all includes reference-only sources; explicit paths select individual top-level sources.\n' +
-        '.gitmodules controls recursive versus primary-only checkout. --dry-run performs no initialization or fetching.\n');
+        'Initialize the app and test sources in build/source-dependencies.json. Nested sources require recursiveSubmodules.\n' +
+        '--all selects the maintainer sources enabled in .gitmodules; explicit paths select individual pinned sources.\n' +
+        'Maintainer and explicit selections follow .gitmodules recursion policy. --dry-run performs no fetching.\n');
       return;
     }
     const result = await initSubmodules({ ...options, onProgress: value => process.stdout.write(

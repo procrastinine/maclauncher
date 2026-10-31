@@ -9,6 +9,7 @@ const exec = promisify(execFile);
 const ROOT = path.resolve(__dirname, "..");
 const INVENTORY = path.join(__dirname, "upstream-overlays.json");
 const LIMITS = Object.freeze({ files: 100000, bytes: 512 * 1024 * 1024, gitOutput: 32 * 1024 * 1024 });
+const OPTIONAL_SOURCE_INSTRUCTION = "Optional upstream checkouts are absent; run node scripts/init-submodules.cjs --all for maintainer sources (reference-only sources use -- PATH).";
 const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 
 function relativePath(value) {
@@ -221,6 +222,18 @@ async function checkInventory({ root = ROOT, inventory = JSON.parse(fs.readFileS
   const errors = [], warnings = [], checked = [];
   const projects = new Map(inventory.projects.map(project => [project.id, project]));
   const sourcePaths = new Set(inventory.projects.filter(project => project.path).map(project => project.path));
+  const dependencyFile = path.join(root, "build/source-dependencies.json");
+  const dependencies = fs.existsSync(dependencyFile) ? JSON.parse(fs.readFileSync(dependencyFile, "utf8")) : {};
+  const requiredSources = new Set([...(dependencies.submodules || []), ...(dependencies.testSubmodules || [])]);
+  const unavailableOptionalSources = inventory.projects.filter(project => project.path && !requiredSources.has(project.path) &&
+    !fs.existsSync(path.join(root, project.path, ".git")));
+  const optionalInput = file => unavailableOptionalSources.find(project => file === project.path || file.startsWith(project.path + "/"));
+  const optionalEvidence = (file, details) => {
+    const project = optionalInput(file);
+    if (!project) return false;
+    warnings.push({ code: "optional-source-evidence-unavailable", id: project.id, path: file, ...details });
+    return true;
+  };
   const top = await submodules(root), links = await indexLinks(root);
   for (const module of top) if (!sourcePaths.has(module.path)) errors.push({ code: "untracked-upstream", path: module.path });
   for (const location of links.keys()) if (!sourcePaths.has(location)) errors.push({ code: "untracked-index-gitlink", path: location });
@@ -268,16 +281,19 @@ async function checkInventory({ root = ROOT, inventory = JSON.parse(fs.readFileS
     } catch (error) { errors.push({ code: "source-inspection-failed", id: project.id, message: error.message.split("\n")[0] }); }
   }
   for (const project of inventory.projects) for (const ref of project.pinRefs || []) {
+    if (!fs.existsSync(path.join(root, ref.path)) && optionalEvidence(ref.path, { project: project.id })) continue;
     try { if (sourceRef(root, ref) !== project.revision) errors.push({ code: "module-pin-drift", id: project.id, path: ref.path }); }
     catch (error) { errors.push({ code: "pin-evidence-invalid", id: project.id, message: error.message }); }
   }
   const declaredFiles = new Set();
   for (const recipe of inventory.recipes) {
     for (const ref of recipe.versionRefs || []) {
+      if (!fs.existsSync(path.join(root, ref.path)) && optionalEvidence(ref.path, { recipe: recipe.id })) continue;
       try { if (sourceRef(root, ref) !== recipe.version) errors.push({ code: "adaptation-version-drift", recipe: recipe.id, path: ref.path }); }
       catch (error) { errors.push({ code: "version-evidence-invalid", recipe: recipe.id, message: error.message }); }
     }
     for (const ref of recipe.pinRefs || []) {
+      if (!fs.existsSync(path.join(root, ref.path)) && optionalEvidence(ref.path, { recipe: recipe.id })) continue;
       try { if (sourceRef(root, ref) !== (recipe.revision || projects.get(recipe.project).revision)) errors.push({ code: "recipe-pin-drift", recipe: recipe.id, path: ref.path }); }
       catch (error) { errors.push({ code: "pin-evidence-invalid", recipe: recipe.id, message: error.message }); }
     }
@@ -287,7 +303,7 @@ async function checkInventory({ root = ROOT, inventory = JSON.parse(fs.readFileS
       catch { errors.push({ code: "owned-adaptation-missing", recipe: recipe.id, path: file.path }); }
     }
     for (const file of [...recipe.tests || [], ...recipe.buildEntries || []]) if (!fs.existsSync(path.join(root, file))) errors.push({ code: "recipe-entry-missing", recipe: recipe.id, path: file });
-    for (const file of recipe.sourceEvidence || []) if (!fs.existsSync(path.join(root, relativePath(file)))) errors.push({ code: "source-evidence-missing", recipe: recipe.id, path: file });
+    for (const file of recipe.sourceEvidence || []) if (!fs.existsSync(path.join(root, relativePath(file))) && !optionalEvidence(file, { recipe: recipe.id })) errors.push({ code: "source-evidence-missing", recipe: recipe.id, path: file });
     for (const guard of recipe.guards || []) {
       const project = projects.get(guard.sourceProject || recipe.project);
       if (!project?.path || !fs.existsSync(path.join(root, project.path, ".git"))) continue;
@@ -314,7 +330,8 @@ async function checkInventory({ root = ROOT, inventory = JSON.parse(fs.readFileS
   }
   for (const file of ownedAdaptationFiles(root, sourcePaths)) if (!declaredFiles.has(file)) errors.push({ code: "untracked-owned-adaptation", path: file });
   return { schemaVersion: 1, mode: "offline", passed: errors.length === 0, projects: checked.length,
-    topLevelSubmodules: top.length, recipes: inventory.recipes.length, errors, warnings, checked };
+    topLevelSubmodules: top.length, recipes: inventory.recipes.length, errors, warnings, checked,
+    ...(unavailableOptionalSources.length ? { optionalSourceInstruction: OPTIONAL_SOURCE_INSTRUCTION } : {}) };
 }
 
 function ensureOwnedWork(root, inventory, requested) {
@@ -442,6 +459,8 @@ async function checkCandidate({ root = ROOT, inventory = JSON.parse(fs.readFileS
   validateInventory(inventory);
   const project = inventory.projects.find(item => item.id === projectId);
   if (!project || !/^[a-f0-9]{40}$/.test(revision || "")) throw Error("Choose an inventoried project and a full candidate commit.");
+  if (!fetch && !sourceDir && project.path && !fs.existsSync(path.join(root, project.path, ".git")))
+    throw Error(`Optional source checkout ${project.id} is absent; run node scripts/init-submodules.cjs --all to inspect it.`);
   const work = ensureOwnedWork(root, inventory, workDir);
   let source = sourceDir || project.path && path.join(root, project.path);
   if (fetch) {
@@ -577,7 +596,10 @@ if (require.main === module) {
       const applied = report.results?.some(result => result.overlayApplyChecked);
       process.stdout.write(report.mode === "offline" ? `${report.projects} source projects, ${report.recipes} adaptation recipes: ${report.passed ? "checked" : "review required"}\n` : `${report.project} ${report.candidateRevision}: ${report.passed ? applied ? "current overlay applies; review/rebuild required" : "source snapshot checked; review/build required" : "overlay conflict"}\n`);
       for (const issue of report.errors || []) process.stdout.write(`${issue.code}: ${issue.id || issue.recipe || issue.path}\n`);
-      for (const issue of report.warnings || []) process.stdout.write(`${issue.code}: ${issue.path || issue.id}\n`);
+      if (report.optionalSourceInstruction) process.stdout.write(report.optionalSourceInstruction + "\n");
+      for (const issue of report.warnings || []) if (!report.optionalSourceInstruction ||
+        !["checkout-uninitialized", "parent-source-unavailable", "optional-source-evidence-unavailable"].includes(issue.code))
+        process.stdout.write(`${issue.code}: ${issue.path || issue.id}\n`);
       for (const result of report.results || []) if (result.error) process.stdout.write(`${result.recipe}: ${result.error}\n`);
     }
     process.exitCode = report.passed ? 0 : 1;

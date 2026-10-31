@@ -48,6 +48,9 @@ function fixture(t) {
     (item.recursive === false ? '\tmaclauncher-recursive = false\n' : '') +
     (item.initialize === false ? '\tmaclauncher-init = false\n' : '')).join('');
   fs.writeFileSync(path.join(root.root, '.gitmodules'), gitmodules);
+  fs.mkdirSync(path.join(root.root, 'build'));
+  fs.writeFileSync(path.join(root.root, 'build/source-dependencies.json'), JSON.stringify({ schemaVersion: 1,
+    submodules: [entries[0].path], testSubmodules: [entries[1].path], recursiveSubmodules: [entries[1].path] }));
   fs.mkdirSync(path.join(root.root, 'scripts'));
   fs.writeFileSync(path.join(root.root, 'scripts/upstream-overlays.json'), JSON.stringify({ schemaVersion: 1, projects: [
     { id: 'recursive', path: entries[1].path, repository: recursive.url, revision: recursive.revision },
@@ -55,7 +58,7 @@ function fixture(t) {
       revision: leaf.revision, checkoutOrigin: leaf.url, checkoutOriginReason: 'Public mirror for the pinned source.' }
   ], recipes: [] }));
   for (const entry of entries) git(['update-index', '--add', '--cacheinfo', '160000,' + entry.source.revision + ',' + entry.path], root.root);
-  git(['add', '.gitmodules', 'scripts/upstream-overlays.json'], root.root); git(['commit', '-qm', 'Pinned dependencies'], root.root);
+  git(['add', '.gitmodules', 'scripts/upstream-overlays.json', 'build/source-dependencies.json'], root.root); git(['commit', '-qm', 'Pinned dependencies'], root.root);
   const checkout = path.join(directory, 'checkout');
   git(['clone', '--no-recurse-submodules', '-q', root.root, checkout]);
   git(['config', 'submodule.recurse', 'true'], checkout);
@@ -86,7 +89,7 @@ test('actual offline initialization skips primary-only children and references, 
   const configBefore = fs.readFileSync(path.join(checkout, '.git/config'));
   const plan = await initSubmodules({ repoRoot: checkout, run, dryRun: true });
   assert.deepEqual(plan.modules.map(item => [item.path, item.recursive]), [[entries[0].path, false], [entries[1].path, true]]);
-  assert.equal(plan.skipped[0].reason, 'reference-only');
+  assert.equal(plan.skipped[0].reason, 'not-selected');
   assert.equal(plan.mirrors[0].revision, leaf.revision);
   assert.equal(git(['ls-files', '--stage', '-z'], checkout), indexBefore);
   assert.deepEqual(fs.readFileSync(path.join(checkout, '.git/config')), configBefore);
@@ -120,6 +123,42 @@ test('actual offline initialization skips primary-only children and references, 
   assert.ok(calls.filter(call => call.mutation).every(call => !call.args.includes('--force') && !call.args.includes('--remote')));
 });
 
+test('default setup avoids undeclared nested sources and leaves existing maintainer checkouts intact', async t => {
+  const { checkout, run, git, entries, recursive, leaf } = fixture(t);
+  const metadata = path.join(checkout, 'build/source-dependencies.json');
+  fs.writeFileSync(metadata, JSON.stringify({ schemaVersion: 1, submodules: [entries[0].path], testSubmodules: [entries[1].path] }));
+  const initial = await initSubmodules({ repoRoot: checkout, run });
+  assert.ok(initial.modules.every(item => !item.recursive));
+  const source = path.join(checkout, entries[1].path), child = path.join(source, 'deps/leaf');
+  assert.equal(git(['rev-parse', 'HEAD'], source), recursive.revision);
+  assert.equal(fs.existsSync(path.join(child, '.git')), false, 'The producer checkout does not fetch its upstream dependency tree');
+  await initSubmodules({ repoRoot: checkout, run, all: true });
+  assert.equal(git(['rev-parse', 'HEAD'], child), leaf.revision);
+  fs.writeFileSync(path.join(child, 'content.txt'), 'Retained maintainer work');
+  fs.writeFileSync(metadata, JSON.stringify({ schemaVersion: 1, submodules: [entries[0].path], testSubmodules: [] }));
+  const narrowed = await initSubmodules({ repoRoot: checkout, run });
+  assert.deepEqual(narrowed.modules.map(item => item.path), [entries[0].path]);
+  assert.equal(fs.readFileSync(path.join(child, 'content.txt'), 'utf8'), 'Retained maintainer work');
+  assert.equal(git(['rev-parse', 'HEAD'], source), recursive.revision);
+  assert.equal(git(['rev-parse', 'HEAD'], child), leaf.revision);
+  assert.equal(fs.existsSync(path.join(checkout, entries[2].path, '.git')), false, '--all retains the enabled maintainer set, without reference-only sources');
+});
+
+test('invalid development source metadata fails before Git mutation', async t => {
+  const { checkout, run, calls, entries } = fixture(t), file = path.join(checkout, 'build/source-dependencies.json');
+  const valid = { schemaVersion: 1, submodules: [entries[0].path], testSubmodules: [entries[1].path] };
+  for (const invalid of [
+    { ...valid, schemaVersion: 2 }, { ...valid, submodules: [] }, { ...valid, testSubmodules: null },
+    { ...valid, submodules: [entries[0].path, entries[0].path] }, { ...valid, submodules: ['../outside'] },
+    { ...valid, testSubmodules: ['src/external/undeclared'] }, { ...valid, recursiveSubmodules: false },
+    { ...valid, recursiveSubmodules: [entries[2].path] }
+  ]) {
+    fs.writeFileSync(file, JSON.stringify(invalid));
+    await assert.rejects(initSubmodules({ repoRoot: checkout, run }), /source dependencies|safe repository-relative|Unknown top-level|Recursive development sources/);
+  }
+  assert.ok(calls.every(call => !call.mutation));
+});
+
 test('missing or conflicted Gitlinks and unsafe checkout locations fail before mutation', async t => {
   const value = fixture(t), { checkout, run, git, calls, entries } = value;
   await assert.rejects(initSubmodules({ repoRoot: checkout, run, paths: ['undeclared'] }), /Unknown top-level/);
@@ -150,7 +189,12 @@ test('mirror pin drift refuses origin rewriting', async t => {
 });
 
 test('production checkout metadata matches every top-level source pin without initializing references', async () => {
-  const plan = await readPlan();
+  const development = await readPlan(), metadata = require('../build/source-dependencies.json');
+  assert.deepEqual(development.modules.map(item => item.path).sort(), [...metadata.submodules, ...metadata.testSubmodules].sort());
+  assert.equal(development.modules.length, 7);
+  assert.ok(development.modules.every(item => !item.recursive), 'Ordinary setup does not fetch producer dependency trees');
+  const plan = await readPlan({ all: true });
+  assert.equal(plan.modules.length, 70);
   const yuri = plan.modules.find(item => item.path === 'src/external/onscripter-yuri');
   assert.ok(yuri); assert.equal(yuri.recursive, false);
   assert.ok(plan.modules.filter(item => item !== yuri).every(item => item.recursive));

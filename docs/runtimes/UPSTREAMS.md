@@ -127,11 +127,11 @@ Local builds and CI use the same source initializer:
 node scripts/init-submodules.cjs
 ```
 
-The initializer checks out the exact commits that the repository records for its submodules (Gitlinks). In `.gitmodules`, `maclauncher-recursive = false` marks sources whose nested dependencies are not fetched, and `maclauncher-init = false` marks optional references; other sources include their nested dependencies at their recorded commits.
+The initializer checks out the exact commits recorded as Gitlinks. Ordinary setup selects the app and test sources in `build/source-dependencies.json`; nested dependencies require an explicit `recursiveSubmodules` entry. The maintainer selection uses `.gitmodules`: `maclauncher-recursive = false` keeps only the primary checkout, and `maclauncher-init = false` marks reference-only sources.
 
 - `--dry-run` lists the plan without fetching.
 - `-- PATH ...` selects declared top-level paths.
-- `--all` includes the optional references and still leaves out the nested dependencies of sources marked `maclauncher-recursive = false`.
+- `--all` selects the enabled maintainer sources and their declared nested dependencies. Sources marked `maclauncher-recursive = false` keep only their primary checkout. Reference-only sources can be selected explicitly with `-- PATH ...`.
 
 Sources are fetched from their recorded public mirrors at their exact commits. Initialization leaves tracked local edits intact and never follows a moving branch. After launcher changes are pulled with `git pull --no-recurse-submodules`, running the initializer again fetches any updated commits.
 

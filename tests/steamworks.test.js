@@ -22,7 +22,7 @@ function ownedExport(context) {
   return root;
 }
 
-test("Steam API overlay refuses a changed source before modifying any output", { skip: !available }, context => {
+test("Steam API overlay refuses a changed source before modifying any output", { skip: available ? false : "Optional upstream integration; run node scripts/init-submodules.cjs --all." }, context => {
   const root = ownedExport(context), files = Object.keys(Overlay.ORIGINAL_SHA256);
   fs.appendFileSync(path.join(root, files.at(-1)), "\nchanged upstream\n");
   const before = files.map(file => fs.readFileSync(path.join(root, file)));
@@ -30,7 +30,7 @@ test("Steam API overlay refuses a changed source before modifying any output", {
   files.forEach((file, index) => assert.deepEqual(fs.readFileSync(path.join(root, file)), before[index]));
 });
 
-test("Steam API overlay changes only an owned export and records exact input/output identities", { skip: !available }, context => {
+test("Steam API overlay changes only an owned export and records exact input/output identities", { skip: available ? false : "Optional upstream integration; run node scripts/init-submodules.cjs --all." }, context => {
   const root = ownedExport(context);
   const before = Object.keys(Overlay.ORIGINAL_SHA256).map(file => fs.readFileSync(path.join(source, file)));
   const result = Overlay.applySourceOverlay(root);

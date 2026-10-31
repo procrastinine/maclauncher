@@ -280,7 +280,29 @@ test("a missing checkout is reported separately and remains uninitialized", asyn
   const report = await Check.checkInventory(current);
   assert.equal(report.passed, true);
   assert.ok(report.warnings.some(issue => issue.code === "checkout-uninitialized"));
+  assert.match(report.optionalSourceInstruction, /node scripts\/init-submodules\.cjs --all/);
   assert.equal(fs.existsSync(path.join(current.source, ".git")), false);
+});
+
+test("optional source evidence has an explicit setup instruction while missing owned evidence still fails", async t => {
+  const current = fixture(t), relative = "src/external/fixture";
+  current.inventory.projects[0].pinRefs.push({ kind: "literal", path: relative + "/pin.txt", value: current.revision });
+  current.inventory.recipes[0].sourceEvidence = [relative + "/engine.c"];
+  fs.renameSync(current.source, current.source + "-uninitialized");
+  const report = await Check.checkInventory(current);
+  assert.equal(report.passed, true);
+  assert.match(report.optionalSourceInstruction, /node scripts\/init-submodules\.cjs --all/);
+  assert.equal(report.warnings.filter(issue => issue.code === "optional-source-evidence-unavailable").length, 2);
+  current.inventory.recipes[0].sourceEvidence.push("src/modules/fixture/missing-owned.c");
+  assert.ok((await Check.checkInventory(current)).errors.some(issue => issue.code === "source-evidence-missing" && issue.path === "src/modules/fixture/missing-owned.c"));
+});
+
+test("an absent optional candidate checkout names the maintainer command before creating staging storage", async t => {
+  const current = fixture(t), workDir = path.join(current.root, ".local/candidate");
+  fs.renameSync(current.source, current.source + "-uninitialized");
+  await assert.rejects(Check.checkCandidate({ ...current, projectId: "fixture", revision: current.revision, workDir }),
+    /node scripts\/init-submodules\.cjs --all/);
+  assert.equal(fs.existsSync(workDir), false);
 });
 
 test("candidate check applies only to an owned copy and records original/adapted identities", async t => {
