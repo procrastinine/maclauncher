@@ -44,6 +44,9 @@ allowBuilds:
 
 # Check installed dependencies before running scripts; installation is explicit.
 verifyDepsBeforeRun: error
+# Run postinstall on every install, so an update that changes only the included
+# package lock still prepares those packages.
+optimisticRepeatInstall: false
 patchedDependencies:
   '@doctormckay/steam-crypto@1.2.0': patches/@doctormckay__steam-crypto@1.2.0.patch
   node-bignumber@1.2.2: patches/node-bignumber@1.2.2.patch
