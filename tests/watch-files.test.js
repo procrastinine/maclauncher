@@ -1,5 +1,5 @@
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), os = require("node:os"), path = require("node:path");
-const { watchFileChanges } = require("../src/core/watch-files");
+const { watchFileChanges, watchDirectory } = require("../src/core/watch-files");
 const { EventEmitter } = require("node:events");
 
 const until = async (predicate, what) => {
@@ -9,6 +9,67 @@ const until = async (predicate, what) => {
     await new Promise(resolve => setTimeout(resolve, 10));
   }
 };
+// A native stream that is not live yet: subscriptions exist but deliver nothing on their own.
+function silentStream(t) {
+  const subscriptions = [];
+  t.mock.method(fs, "watch", (_directory, _options, changed) => {
+    const handle = new EventEmitter();handle.close = () => {};
+    subscriptions.push({ handle, changed });return handle;
+  });
+  return subscriptions;
+}
+const nextTurn = () => new Promise(resolve => setImmediate(resolve));
+// Mocked timers run one link of the window's timer chain per tick, so a whole window takes several.
+const drain = t => { for (let step = 0; step < 8; step++) t.mock.timers.tick(2000); };
+
+// These run first, so no reconciliation window from a real-timer test is pending.
+test("an edit made before the native stream is live is reconciled once, within a bounded window", async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "watch-reconcile-")), file = path.join(root, "cheats.json");
+  fs.writeFileSync(file, "{}");fs.writeFileSync(path.join(root, "other.json"), "{}");
+  t.mock.timers.enable({ apis: ["setTimeout"] });silentStream(t);
+  let changes = 0;
+  const watcher = watchFileChanges(file, () => changes++);
+  try {
+    await nextTurn();
+    const armed = changes;
+    fs.writeFileSync(file + ".new", "{\"a\":1}");fs.renameSync(file + ".new", file);
+    t.mock.timers.tick(25);
+    assert.equal(changes, armed + 1, "the replacement is reconciled");
+    assert.equal(armed, 0, "an unchanged directory is not reported");
+    fs.writeFileSync(path.join(root, "other.json"), "{\"unrelated\":1}");
+    drain(t);
+    assert.equal(changes, 1, "neither the reported replacement nor an unrelated entry is reported again");
+    fs.writeFileSync(file, "{\"b\":2}");drain(t);
+    assert.equal(changes, 1, "reconciliation ends after its window, so idle watchers do not poll");
+  } finally { watcher.close();drain(t);fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test("arming another watcher reconciles an established watcher whose notification the replaced stream dropped", async t => {
+  const first = fs.mkdtempSync(path.join(os.tmpdir(), "watch-established-")), second = fs.mkdtempSync(path.join(os.tmpdir(), "watch-added-"));
+  const file = path.join(first, "settings.json");fs.writeFileSync(file, "{}");
+  t.mock.timers.enable({ apis: ["setTimeout"] });const subscriptions = silentStream(t);
+  let changes = 0, added = 0;
+  const established = watchFileChanges(file, () => changes++);
+  let other = null;
+  try {
+    await nextTurn();drain(t);
+    const settled = changes;
+    fs.writeFileSync(file, "{\"a\":1}");
+    other = watchDirectory(second, () => added++);
+    await nextTurn();
+    t.mock.timers.tick(25);
+    assert.equal(changes, settled + 1, "the established watcher reconciles its dropped edit");
+    assert.equal(settled, 0);assert.equal(added, 0, "the unchanged new directory is not reported");
+    // A native notification updates the snapshot, so the window does not repeat it.
+    fs.writeFileSync(file, "{\"b\":2}");subscriptions[0].changed("change", "settings.json");
+    assert.equal(changes, 2);
+    drain(t);
+    assert.equal(changes, 2);assert.equal(added, 0);
+  } finally {
+    other?.close();established.close();drain(t);
+    for (const root of [first, second]) fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("a file watcher arms once its missing directory appears and follows a replaced directory", async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "watch-files-")), directory = path.join(root, "settings"), file = path.join(directory, "cheats.json");
