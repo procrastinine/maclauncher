@@ -96,7 +96,7 @@ test("shader library state stays local and derived planes require a capable proc
   assert.equal(Manager.ui.groupId, "graphics"); assert.equal(Manager.ui.tabLabel, "Graphics");
   assert.equal(Manager.ui.library, "shaders");
   assert.ok(Manager.getState({ userDataDir }).sections.every(section => ["mpv","isf","magpie","reshade","libretro"].includes(section.shaderFamily)));
-  assert.deepEqual(Manager.getState({ userDataDir }).sections.map(section=>section.id), ["anime4k","artcnn","cfl-prediction","mpv-default","cunny","acnet","mpv-prescalers","vidvox-isf","slang-shaders","magpie","cshade","prod80","fxshaders","ssrt3","niceguy","quint"]);
+  assert.deepEqual(Manager.getState({ userDataDir }).sections.map(section=>section.id), ["anime4k","artcnn","cfl-prediction","mpv-default","cunny","acnet","mpv-prescalers","vidvox-isf","slang-shaders","magpie","cshade","prod80","fxshaders","ssrt3","niceguy","quint","astrayfx","otisfx"]);
   assert.deepEqual(fs.readdirSync(userDataDir), [], "status does not create storage or contact a server");
   await assert.rejects(install({ userDataDir, sectionId: "cfl-prediction", confirmRuntimeInstall: approved }), /Refresh/);
   await refresh(userDataDir, "cfl-prediction");
@@ -148,6 +148,51 @@ test("managed FX collections retain their include and texture directories throug
  assert.ok(resolved.includePaths.includes(path.join(root,"Shaders")));assert.ok(resolved.texturePaths.includes(path.join(root,"Textures")));
  assert.deepEqual(fs.readFileSync(path.join(resolved.texturePaths.at(-1),"lookup.png")),contents.get("Textures/lookup.png"));
  assert.deepEqual(Shaders.inspectCustom(root,{sectionId:"prod80"}).effects.map(row=>row.format),["fx"]);
+});
+// AstrayFX permits only unmodified copies, so both collections install their
+// selected public commit as published: no recipe, added notice or rewrite.
+test("AstrayFX and OtisFX install exact public commits unmodified with their notices and resource folders",async t=>{
+ const userDataDir=fixture(t),commit="c".repeat(40),roots={};
+ const collections=[
+  ["astrayfx","BlueSkyDefender/AstrayFX",[
+   ["Shaders/Smart_Sharp.fx",'uniform float Sharpness < ui_type = "slider"; > = 0.5;\n'],
+   ["Shaders/Temporal_AA.fx",'#include "Overwatch.fxh"\n'],
+   ["Shaders/Overwatch.fxh","// shared depth settings\n"]]],
+  ["otisfx","FransBouma/OtisFX",[
+   ["Shaders/GoldenRatio.fx",'texture texSpirals < source = "GoldenSpirals.png"; >;\n'],
+   ["Textures/GoldenSpirals.png","composition guide texture fixture"]]]
+ ];
+ for(const [sectionId,origin,sources] of collections){
+  const pack=Shaders.Catalog.packs.find(row=>row.id===sectionId);
+  assert.deepEqual([pack.repository,pack.branch,pack.family,pack.delivery],[origin,"master","reshade","tree"]);
+  assert.equal(pack.sourceOverlay,undefined);assert.equal(pack.bundledNotices,undefined);
+  const contents=new Map([[pack.licenseFile,Buffer.from(sectionId+" license notice")],...sources.map(([file,text])=>[file,Buffer.from(text)])]);
+  const tree=[...contents].map(([file,bytes])=>blob(file,bytes)),downloads=[];
+  tree.push({type:"blob",path:"Previews/large.mp4",size:1e9,sha:"d".repeat(40)});
+  await refresh(userDataDir,sectionId,commit,undefined,{tree,truncated:false});
+  assert.deepEqual(Manager.getState({userDataDir}).sections.find(row=>row.id===sectionId).catalog.versions,["git-"+commit]);
+  assert.equal(Shaders.available(userDataDir,sectionId)[0].reason,undefined);
+  const installed=await install({userDataDir,sectionId,confirmRuntimeInstall:approved},{
+   [`${API}${origin}/git/trees/${commit}`]:{tree,truncated:false},
+   ...Object.fromEntries([...contents].map(([file,bytes])=>[`https://raw.githubusercontent.com/${origin}/${commit}/${file}`,url=>{downloads.push(url);return bytes;}]))
+  });
+  assert.equal(installed.source.commit,commit);assert.equal(installed.sourceOverlay,undefined);
+  assert.equal(downloads.length,contents.size);assert.ok(downloads.every(url=>!url.includes("Previews")));
+  roots[sectionId]=path.join(installed.root,"files");
+  assert.deepEqual(Object.keys(installed.files).sort(),[...contents.keys()].sort());
+  for(const [file,bytes] of contents){
+   const target=path.join(roots[sectionId],file);
+   assert.deepEqual(fs.readFileSync(target),bytes,file);assert.equal(fs.statSync(target).mode&0o222,0);
+  }
+ }
+ const effects=Shaders.listEffects(userDataDir,{formats:["fx"]},options),find=label=>effects.find(row=>row.label===label);
+ assert.deepEqual(effects.map(row=>[row.collection,row.label]).sort(),
+  [["AstrayFX collection","Smart Sharp"],["AstrayFX collection","Temporal AA"],["OtisFX collection","GoldenRatio"]]);
+ assert.ok(effects.every(row=>row.available));
+ const temporal=Shaders.resolveEffect(userDataDir,find("Temporal AA").id,{formats:["fx"]},"window",options);
+ assert.ok(temporal.includePaths.includes(path.join(roots.astrayfx,"Shaders")));
+ const golden=Shaders.resolveEffect(userDataDir,find("GoldenRatio").id,{formats:["fx"]},"window",options);
+ assert.ok(golden.texturePaths.includes(path.join(roots.otisfx,"Textures")));
 });
 test("older managed shader traits refresh locally without changing immutable pack metadata", async t => {
   const userDataDir = fixture(t), conditional = Buffer.from("//!DESC Example CNN x2\n//!HOOK MAIN\n//!WIDTH HOOKED.w 2 *\n//!HEIGHT HOOKED.h 2 *\n//!WHEN OUTPUT.w HOOKED.w >\nvec4 hook(){return vec4(1);}");

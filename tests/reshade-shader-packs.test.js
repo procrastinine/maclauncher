@@ -18,7 +18,7 @@ test("included shaders are available offline without a runtime manager or user-d
   assert.equal(managers.some(item => item.id === "reshade-shaders"), false);
   const rows = Packs.listEffects(userDataDir, features);
   const fx = rows.filter(row => row.format === "fx");
-  assert.equal(fx.length, 10);assert.ok(fx.every(row => row.available && row.bundled));
+  assert.equal(fx.length, 11);assert.ok(fx.every(row => row.available && row.bundled));
   assert.deepEqual(new Set(fx.map(row => row.group)), new Set(["SweetFX", "RetroArch CRT", "Accessibility"]));
   assert.deepEqual(fs.readdirSync(userDataDir), []);
   assert.equal(Packs.install, undefined);assert.equal(Packs.uninstall, undefined);
@@ -41,6 +41,18 @@ test("CRT Royale retains its complete original source closure and license notice
   }
   assert.match(fs.readFileSync(selected.file, "utf8"), /either version 2 of the License, or any later version/);
   assert.match(fs.readFileSync(path.join(root, "Shaders/crt-royale/lib/blur-functions.fxh"), "utf8"), /MIT LICENSE/);
+});
+test("included FXAA is SweetFX's pinned FXAA 3.11 effect with its original include and notice", () => {
+  const row = Packs.listEffects(null, features).find(item => item.id === "shader:sweetfx:fxaa");
+  assert.equal(row.label, "SweetFX · FXAA");assert.equal(row.purpose, "Anti-aliasing and blur");assert.equal(row.format, "fx");
+  assert.equal(row.available, true);
+  const selected = Packs.resolveEffect(null, row.id, features), source = fs.readFileSync(selected.file, "utf8");
+  assert.equal(Packs.lookup(row.id).pack.revision, "93ddf39b357f5da534ed6d34ba4ec8cc7dcfa361");
+  assert.match(selected.file, /shader-collection\/sweetfx\/Shaders\/SweetFX\/FXAA\.fx$/);
+  assert.match(source, /#include "FXAA\.fxh"/);assert.match(source, /technique FXAA/);
+  const include = selected.includePaths.map(directory => path.join(directory, "FXAA.fxh")).find(file => fs.existsSync(file));
+  assert.ok(include);assert.match(fs.readFileSync(include, "utf8"), /NVIDIA FXAA 3\.11 by TIMOTHY LOTTES[\s\S]*COPYRIGHT \(C\) 2010, 2011 NVIDIA CORPORATION/);
+  assert.match(fs.readFileSync(path.join(__dirname, "../src/modules/shared/reshade/shader-collection/NOTICE.md"), "utf8"), /FXAA\.fxh/);
 });
 test("saved included pack IDs migrate to stable shader IDs without losing parameters", () => {
   const legacy = "pack:sweetfx:93ddf39b357f:tonemap", parameters = { Exposure: [1] };

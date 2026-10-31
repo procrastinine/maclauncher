@@ -1610,9 +1610,10 @@
       "revision": "93ddf39b357f5da534ed6d34ba4ec8cc7dcfa361",
       "licensePaths": [
         "LICENSE",
-        "Shaders/SweetFX/SMAA.fxh"
+        "Shaders/SweetFX/SMAA.fxh",
+        "Shaders/SweetFX/FXAA.fxh"
       ],
-      "usage": "Bundled SweetFX shader sources, shared include and SMAA lookup textures.",
+      "usage": "Bundled SweetFX shader sources, shared includes and SMAA lookup textures.",
       "pinRefs": [
         {
           "kind": "json",
@@ -13174,7 +13175,7 @@
         },
         {
           "path": "docs/graphics/README.md",
-          "sha256": "cf9734218e1292cc5f4f975827389ed9f9bac023e3974a0da5d41aba76706c11"
+          "sha256": "ee52cf76da0641b07bb6c27a3df62fdb9a9bd881890d5fdcbe74e1cdab42e8d9"
         },
         {
           "path": "docs/game-types/RENPY.md",
@@ -13406,7 +13407,7 @@
         },
         {
           "path": "src/modules/shared/reshade/managed-shader-packs.json",
-          "sha256": "0d3c68dfe92bf29d148a739d6e5d68cbd3dd7950e670bbbe36709a43ebdcf4f8"
+          "sha256": "287247cf04b9ce977517d462f2b4be080d477c70a0d43c5ed40a7ab549749195"
         },
         {
           "path": "src/modules/shared/reshade/model-sources.js",
@@ -14198,7 +14199,7 @@
         },
         {
           "path": "src/modules/shared/reshade/shader-packs.json",
-          "sha256": "b79f600a56924e342ed658fc919b8f1b2b5ca3cde2c12875ca85014d002dee3d"
+          "sha256": "b45a2da5883d86d64e9d2d623f6401f509abe58bc85b5667d376bf0e1e41755b"
         },
         {
           "path": "src/modules/shared/reshade/shader-providers.js",

@@ -14,7 +14,7 @@ Every row has one of five types, named by what it does to the image:
 | Downsample | Image to a smaller processing image | Area and other kernels, fixed reductions |
 | Upscale | Image to an enlarged image, or one fitted to the window | Spatial filters, fixed-scale neural models and shaders |
 | Temporal upscaling | Scene frame and its history to a reconstructed image | MetalFX Temporal, FSR, Arm ASR, Snapdragon GSR 2 |
-| Frame generation | Consecutive frames to a denser sequence of images | Lossless Scaling LSFG, MLX interpolation, RIFE |
+| Frame generation | Consecutive frames to a denser sequence of images | Lossless Scaling LSFG, MLX interpolation, RIFE, VideoToolbox interpolation, MetalFX image interpolation, Vision optical flow, Automatic |
 
 Most effects need only the completed image. Color filters, resizing and image reconstruction all work this way. Scene effects also need data from the game's renderer that matches the image: depth for depth effects, and depth, motion vectors and camera jitter for temporal upscaling. This renderer data is called the scene guides. Some providers, the components that implement a method, also need the camera projection. Whether a game supplies this data depends on the running process and its [renderer integration](SHARED_PROCESSING.md). The [frame-source and scene-input tables](INPUTS_AND_ADAPTERS.md#frame-sources-and-scene-inputs) list what native GPU frames, browser window streams, uploaded bitmaps and video decoders each supply. A missing input affects only the rows that need it.
 
@@ -95,7 +95,7 @@ A shader's name does not decide its type. Its authored output size, scale factor
 Included effects ship with the app and update with it:
 
 - the built-in **CRT**, **Grayscale**, **Colour** (vibrance), **Sharpen** and **CAS Sharpen** effects, and **Combine effects…**, which runs two to four of them as one row;
-- SweetFX SMAA, Tonemap, Vibrance and Curves;
+- SweetFX SMAA, FXAA, Tonemap, Vibrance and Curves;
 - CRT Easymode, Lottes, GTU, zfast and CRT Royale;
 - Image color balance, threshold deband, pixel palette and soft bloom;
 - **Daltonize**, LMS color-vision simulation and error redistribution with adjustable strength;
@@ -105,11 +105,11 @@ Included effects ship with the app and update with it:
 
 The included **CRT** effect has these parameters: CRT strength, Simulated content height, Scanline beam width, Scanline darkness, Pixel softness, Phosphor glow, Screen curvature, Rounded corners, Edge shading and Screen edge fade. With the default Simulated content height of 240, the effect keeps 240-row spacing as the window changes size; a value of 0 follows the render target.
 
-**CAS Sharpen** applies AMD Contrast Adaptive Sharpening in linear light and preserves alpha. The [collection notices](../../src/modules/shared/reshade/shader-collection/NOTICE.md) record the sources and licenses of the included shaders. The [provider reference](PROVIDERS.md#shader-formats-and-image-effects) describes the algorithm and inputs of each native image effect.
+**CAS Sharpen** applies AMD Contrast Adaptive Sharpening in linear light and preserves alpha. **FXAA** is SweetFX's unchanged ReShade FX version of NVIDIA FXAA 3.11 at quality preset 15, with Subpix, Edge Detection Threshold and Darkness Threshold parameters. Its first pass stores luma in the alpha channel for the second pass, and its output alpha keeps that luma. The [collection notices](../../src/modules/shared/reshade/shader-collection/NOTICE.md) record the sources and licenses of the included shaders. The [provider reference](PROVIDERS.md#shader-formats-and-image-effects) describes the algorithm and inputs of each native image effect.
 
 ### Collections
 
-Beside **Library**, a **Collections** sub-tab lists shader collections with their versions, installation state and defaults. Installed shaders appear in the inspector under their input and output category. These collections are refreshed and installed only on request: Anime4K, ArtCNN, Chroma from Luma, CuNNy, ACNet/ARNet, RAVU/NNEDI3, Vidvox ISF, libretro Slang, MagpieFX, CShade, prod80, FXShaders, qUINT, NiceGuy shaders, Visibility bitmask lighting and the mpv shader collection.
+Beside **Library**, a **Collections** sub-tab lists shader collections with their versions, installation state and defaults. Installed shaders appear in the inspector under their input and output category. These collections are refreshed and installed only on request: Anime4K, ArtCNN, Chroma from Luma, CuNNy, ACNet/ARNet, RAVU/NNEDI3, Vidvox ISF, libretro Slang, MagpieFX, CShade, prod80, FXShaders, qUINT, NiceGuy shaders, Visibility bitmask lighting, AstrayFX, OtisFX and the mpv shader collection.
 
 Some collections include:
 
@@ -120,6 +120,8 @@ Some collections include:
 | FXShaders | NeoBloom and ArcaneBloom. |
 | libretro Slang | Pixel-art reconstruction (xBRZ, SABR and pixel-art scalers), dedithering, median and bilateral restoration, CRT halation and shaders that use image history. |
 | NiceGuy shaders | Screen-space lighting, reflections, depth fog and image effects, with their original textures. |
+| AstrayFX | RadiantGI indirect lighting, GloomAO ambient occlusion, DLAA Plus, NFAA and temporal anti-aliasing, Depth Cues, Smart Sharp and Clarity sharpening, bloom, lens flare, image trails and the Limbo Mod and SnowScape looks. Its author permits only unmodified copies, and its files are installed exactly as published. |
+| OtisFX | Cinematic depth of field, adaptive and height fog, depth haze, darkening and directional blur, Emphasize, MultiLUT and PandaFX grading, golden-ratio guides and borders, with their original bokeh, noise and lookup textures. |
 | Visibility bitmask lighting (SSRT3) | Indirect lighting through two entry points, lighting only and diffuse composition. It reads the game's actual depth, normals, radiance and camera matrices. |
 
 **Refresh versions** reads Anime4K's releases and the newest commit on the default branch of every other collection's repository. A release is listed when it has an Anime4K archive in a format MacLauncher extracts (ZIP, gzip, xz or bzip2 tar, or disk image); a ZIP archive is preferred when a release offers several. The download is checked against the size and SHA-256 digest that GitHub lists for it, as described in [Runtime release catalogs](../runtimes/RUNTIME_CATALOGS.md#integrity). A release removed upstream leaves the list, while a commit cannot change and stays listed after later ones. A new commit that lacks the collection's license notice, a source file that its adaptation needs or any supported shader stays listed with that reason. Installation passes over it, and earlier commits remain installable.
@@ -239,9 +241,11 @@ Each download is checked against a fixed checksum and keeps its original license
 
 ### Frame generation
 
-Frame generation inserts images between real frames without changing the game's simulation rate. A frame-generation row's **Frame multiplier** sets the requested ratio. For LSFG, it is 2×, 3×, 4× or 5×: 3× requests two generated images per real frame, taking a 30 fps source toward 90 fps. Turning the row off stops generation. LSFG's Quality or Performance mode, 16-bit or 32-bit precision and motion-estimation scale tune its workload.
+Frame generation inserts images between real frames without changing the game's simulation rate. A frame-generation row's **Frame multiplier** sets the requested ratio. For LSFG, it is 2×, 3×, 4× or 5×: 3× requests two generated images per real frame, taking a 30 fps source toward 90 fps. Turning the row off stops generation. LSFG's Quality or Performance mode, 16-bit or 32-bit precision and motion-estimation scale tune its workload. For methods that interpolate between two images, such as LSFG, MLX interpolation and RIFE, **Keep static content** returns generated pixels to the real frames wherever both real frames match locally, so interface elements and text stay sharp; it is on by default, and the [provider reference](PROVIDERS.md#static-content) describes its comparison and limits.
 
-**Output** holds the shared pacing controls. With **Frame pacing** set to Adaptive, generation varies up to the selected multiplier to approach a **Target frame rate** from 30 to 240 fps, limited by the display's refresh rate. **Smooth cadence** favors evenly spaced images. These controls change only the images delivered to the display, never the game's simulation. The main **Motion clarity** control uses the same presentation clock.
+VideoToolbox interpolation, MetalFX image interpolation and Vision optical flow interpolate between two images with frameworks included in macOS, so they need no model files or renderer inputs. VideoToolbox interpolation runs on the Neural Engine at 2× or 4×. MetalFX image interpolation estimates motion from the two images and produces 2×. Vision optical flow warps along Vision's optical flow at 2× to 5× and blends where the flow is unreliable. **Automatic** chooses among these three for each frame: when the method in use falls behind, the row moves to the next method at once, and it returns to a preferred method after ten seconds with time to spare, never sooner than thirty seconds after leaving it. A row that names a method keeps that method. The [provider reference](PROVIDERS.md#image-pair-methods-from-macos-frameworks) lists their sizes, color handling and requirements.
+
+**Output** holds the shared pacing controls. With **Frame pacing** set to Adaptive, generation varies up to the selected multiplier to approach a **Target frame rate** from 30 to 240 fps, limited by the display's refresh rate. With either pacing mode, an image that no display refresh can show is not generated, and image changes are timed to fall between display refreshes, as described in [Timing](FRAME_API.md#timing). **Smooth cadence** favors evenly spaced images. These controls change only the images delivered to the display, never the game's simulation. The main **Motion clarity** control uses the same presentation clock.
 
 LSFG works with native windows, browser surfaces, iOS layers and explicit frame presenters. It uses opaque frames with display-driven timing. Ordinary 8-bit sRGB input uses the original SDR kernels, and HDR and wide-gamut input use the original HDR generation kernel, as described in the [provider reference](PROVIDERS.md#frame-generation). Applications that submit explicit presentation timestamps keep presenting only their real frames. Model selections, scaling and frame-generation controls update during play. The provider reference also lists the other frame-generation methods and the inputs they need.
 

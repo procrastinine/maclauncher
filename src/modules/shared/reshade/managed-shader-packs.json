@@ -390,6 +390,44 @@
           "label": "Screen-space reflections"
         }
       ]
+    },
+    {
+      "id": "astrayfx",
+      "label": "AstrayFX",
+      "repository": "BlueSkyDefender/AstrayFX",
+      "branch": "master",
+      "family": "reshade",
+      "delivery": "tree",
+      "prefixes": [
+        "Shaders/"
+      ],
+      "includePaths": [
+        "Shaders"
+      ],
+      "license": "Copyright Jose Negrete / BlueSkyDefender and source notices; CC BY-ND 4.0 or the author's unmodified-copy terms, installed unmodified",
+      "licenseFile": "README.md",
+      "description": "RadiantGI indirect lighting, GloomAO ambient occlusion, DLAA Plus, NFAA and temporal anti-aliasing, Depth Cues, Smart Sharp, Clarity, bloom, lens flare, image trails and the Limbo Mod and SnowScape looks. Several effects read game depth."
+    },
+    {
+      "id": "otisfx",
+      "label": "OtisFX",
+      "repository": "FransBouma/OtisFX",
+      "branch": "master",
+      "family": "reshade",
+      "delivery": "tree",
+      "prefixes": [
+        "Shaders/",
+        "Textures/"
+      ],
+      "includePaths": [
+        "Shaders"
+      ],
+      "texturePaths": [
+        "Textures"
+      ],
+      "license": "MIT and BSD-2-Clause source notices",
+      "licenseFile": "LICENSE",
+      "description": "Cinematic depth of field, adaptive and height fog, depth haze, darkening and directional blur, Emphasize, MultiLUT and PandaFX grading, golden-ratio guides and borders, with original bokeh, noise and lookup textures."
     }
   ]
 }

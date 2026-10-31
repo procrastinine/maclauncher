@@ -10,8 +10,12 @@ include paths and texture paths. The ReShade runtime supplies the shared
 Source: [CeeJayDK/SweetFX](https://github.com/CeeJayDK/SweetFX/tree/93ddf39b357f5da534ed6d34ba4ec8cc7dcfa361),
 revision `93ddf39b357f5da534ed6d34ba4ec8cc7dcfa361`.
 
-- `sweetfx/Shaders/SweetFX/{Tonemap,Vibrance,Curves}.fx`: Christian Cann Schuldt
+- `sweetfx/Shaders/SweetFX/{Tonemap,Vibrance,Curves,FXAA}.fx`: Christian Cann Schuldt
   Jensen / CeeJayDK, MIT. The complete license is in [sweetfx/LICENSE](sweetfx/LICENSE).
+- `sweetfx/Shaders/SweetFX/FXAA.fxh`: NVIDIA FXAA 3.11 by Timothy Lottes,
+  copyright 2010 and 2011 NVIDIA Corporation. The original copyright and
+  warranty notice is retained in the file. `FXAA.fx` and `FXAA.fxh` are
+  included unchanged.
 - `sweetfx/Shaders/SweetFX/SMAA.fxh` and
   `sweetfx/Textures/SweetFX/{AreaTex,SearchTex}.png`: SMAA by Jorge Jimenez,
   Jose I. Echevarria, Belen Masia, Fernando Navarro and Diego Gutierrez, MIT.

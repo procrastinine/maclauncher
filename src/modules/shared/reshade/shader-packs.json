@@ -4,8 +4,8 @@
     {
       "id": "sweetfx",
       "label": "SweetFX",
-      "license": "MIT",
-      "description": "SMAA color-edge antialiasing, tone mapping, vibrance and contrast curves.",
+      "license": "MIT and NVIDIA FXAA 3.11 notice",
+      "description": "SMAA color-edge and FXAA 3.11 antialiasing, tone mapping, vibrance and contrast curves.",
       "includePaths": [
         "Shaders",
         "Shaders/SweetFX"
@@ -25,6 +25,14 @@
             "smaa"
           ],
           "adapter": "smaa-color.fx"
+        },
+        {
+          "id": "fxaa",
+          "label": "FXAA",
+          "purpose": "Anti-aliasing and blur",
+          "file": "Shaders/SweetFX/FXAA.fx",
+          "requires": [],
+          "license": "MIT (SweetFX) and NVIDIA FXAA 3.11 notice"
         },
         {
           "id": "tonemap",
