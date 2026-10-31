@@ -224,17 +224,18 @@ test('explicit package fetch reuses immutable resources and retains correspondin
   const dependencies = { model: f.dependencies, download: async (url, output) => {
     requested.push(url); assert.equal(url, f.record.asset.url); fs.copyFileSync(f.archive, output);
   } };
-  const first = await R.fetchPackages({ lock: f.selection, repoRoot, dependencies });
+  const first = await R.fetchPackages({ lock: f.selection, packageLock: f.lock, repoRoot, dependencies });
   assert.equal(first.packages, 1);
+  assert.deepEqual(first.removed, []);
   assert.equal(first.inventory.packageRepository, repository);
   assert.deepEqual(first.inventory.projectPackages, R.validateSelection(f.selection, { dependencies: f.dependencies }).packages);
   assert.deepEqual(first.inventory.sourceArtifacts, f.plan.sourceArtifacts);
   const runtime = path.join(repoRoot, 'src/resources/native-runtimes/runtime-fixture/1.0/arm64');
   assert.equal(B.verifyPayload(runtime, f.declaration), true);
-  await R.fetchPackages({ lock: f.selection, repoRoot, dependencies });
+  await R.fetchPackages({ lock: f.selection, packageLock: f.lock, repoRoot, dependencies });
   assert.deepEqual(requested, [f.record.asset.url]);
   const runner = path.join(runtime, 'files/bin/runner'); fs.chmodSync(runner, 0o644);
-  await assert.rejects(R.fetchPackages({ lock: f.selection, repoRoot, dependencies }), /checksum|permissions/);
+  await assert.rejects(R.fetchPackages({ lock: f.selection, packageLock: f.lock, repoRoot, dependencies }), /checksum|permissions/);
   assert.equal(fs.statSync(runner).mode & 0o777, 0o644, 'an existing installed resource is preserved');
   assert.ok(fs.readdirSync(path.dirname(runtime)).every(name => !name.startsWith('.install-')));
 });
@@ -252,7 +253,7 @@ test('stage cleanup retries shared-volume directory-not-empty races without fail
     }
     return original(target, options);
   });
-  const result = await R.fetchPackages({ lock: f.selection, repoRoot, dependencies });
+  const result = await R.fetchPackages({ lock: f.selection, packageLock: f.lock, repoRoot, dependencies });
   assert.equal(result.packages, 1);
   assert.ok(simulated.mock.calls.length >= 3, 'the staged removal is retried before giving up');
   const parent = path.join(repoRoot, 'src/resources/native-runtimes/runtime-fixture/1.0');
@@ -262,7 +263,7 @@ test('stage cleanup retries shared-volume directory-not-empty races without fail
 test('corrupt downloaded archives do not publish resources or leave extraction stages', async t => {
   const f = await fixture(t), repoRoot = path.join(f.root, 'app');
   const dependencies = { model: f.dependencies, download: async (_url, output) => fs.writeFileSync(output, 'changed download') };
-  await assert.rejects(R.fetchPackages({ lock: f.selection, repoRoot, dependencies }), /checksum|size/);
+  await assert.rejects(R.fetchPackages({ lock: f.selection, packageLock: f.lock, repoRoot, dependencies }), /checksum|size/);
   const parent = path.join(repoRoot, 'src/resources/native-runtimes/runtime-fixture/1.0');
   assert.ok(fs.readdirSync(parent).every(name => !name.startsWith('.install-') && name !== 'arm64'));
 });
@@ -277,4 +278,76 @@ test('failed member verification retires partially extracted stages without publ
   await assert.rejects(R.fetchPackages({ lock, repoRoot, dependencies }), /checksum/);
   const parent = path.join(repoRoot, 'src/resources/native-runtimes/runtime-fixture/1.0');
   assert.deepEqual(fs.readdirSync(parent), []);
+});
+
+function installedLayout(t) {
+  const repoRoot = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'runtime-packages-prune-'));
+  t.after(() => fs.rmSync(repoRoot, { recursive: true, force: true }));
+  const root = path.join(repoRoot, 'src/resources/native-runtimes'), cache = path.join(repoRoot, 'dist/runtime-downloads');
+  const write = (file, bytes = 'x') => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes); return file; };
+  const install = (id, version, arch, { archive = true } = {}) => {
+    write(path.join(root, id, version, arch, 'helper.json'), JSON.stringify({ id, version }));
+    if (archive) write(path.join(cache, `${id}-${version}-${arch}.tar.gz`));
+  };
+  const record = (id, version, arch) => ({ id, version, arch, launcherArchitectures: arch === 'universal' ? ['arm64', 'x64'] : [arch],
+    manifestRelative: 'helper.json', asset: { filename: `${id}-${version}-${arch}.tar.gz` } });
+  return { repoRoot, root, cache, write, install, record };
+}
+
+test('cleanup removes only earlier fetched versions that no architecture in the full lock uses', async t => {
+  const f = installedLayout(t), exists = relative => fs.existsSync(path.join(f.repoRoot, relative));
+  // Apple Silicon selects 2.0; the Intel app still uses 1.5 from the same folder.
+  const lock = { packages: [f.record('helper', '2.0', 'arm64'), f.record('helper', '1.5', 'x64')] };
+  const selection = { packages: [lock.packages[0]] };
+  f.install('helper', '2.0', 'arm64'); f.install('helper', '1.5', 'x64'); f.install('helper', '1.0', 'universal');
+  f.install('helper', '0.9', 'arm64'); f.install('helper', '0.9', 'x64');
+  f.install('helper', '0.8-local', 'universal', { archive: false });
+  f.install('helper', '0.7', 'universal');
+  f.install('other', '1.0', 'universal');
+  f.write(path.join(f.root, 'helper/effects/common.fxh'));
+  f.write(path.join(f.root, 'helper/0.6/universal.json'));
+  f.write(path.join(f.cache, 'helper-0.6-universal.tar.gz'));
+  f.write(path.join(f.cache, 'helper-0.5-arm64.tar.gz'));
+  f.write(path.join(f.cache, 'notes.txt'));
+  fs.symlinkSync(path.join(f.root, 'helper/1.0'), path.join(f.root, 'helper/link'));
+  const running = `/usr/bin/game --helper ${path.join(f.root, 'helper/0.7')}/universal/helper.json\n`;
+  const removed = await R.pruneUnlockedPackages({ lock, selection, repoRoot: f.repoRoot, processes: running });
+  assert.deepEqual(removed.sort(), ['dist/runtime-downloads/helper-0.5-arm64.tar.gz', 'dist/runtime-downloads/helper-0.9-arm64.tar.gz',
+    'dist/runtime-downloads/helper-0.9-x64.tar.gz', 'dist/runtime-downloads/helper-1.0-universal.tar.gz',
+    'src/resources/native-runtimes/helper/0.9', 'src/resources/native-runtimes/helper/1.0']);
+  for (const kept of ['helper/2.0/arm64', 'helper/1.5/x64', 'helper/0.8-local', 'helper/0.7', 'helper/effects', 'helper/0.6', 'other/1.0'])
+    assert.ok(exists('src/resources/native-runtimes/' + kept), kept);
+  for (const kept of ['helper-2.0-arm64.tar.gz', 'helper-1.5-x64.tar.gz', 'helper-0.7-universal.tar.gz', 'helper-0.6-universal.tar.gz',
+    'other-1.0-universal.tar.gz', 'notes.txt'])
+    assert.ok(exists('dist/runtime-downloads/' + kept), kept);
+  assert.ok(fs.lstatSync(path.join(f.root, 'helper/link')).isSymbolicLink());
+  assert.deepEqual(await R.pruneUnlockedPackages({ lock, selection, repoRoot: f.repoRoot, processes: running }), []);
+});
+
+test('cleanup keeps every folder of an id with generation leases or when processes cannot be listed', async t => {
+  const f = installedLayout(t), lock = { packages: [f.record('helper', '2.0', 'universal')] };
+  f.install('helper', '2.0', 'universal'); f.install('helper', '1.0', 'universal');
+  assert.deepEqual(R.unlockedPackages({ lock, repoRoot: f.repoRoot, processes: null }), { folders: [], archives: [] });
+  f.write(path.join(f.root, 'helper/.generation-leases/1-lease.json'), '{}');
+  assert.deepEqual(R.unlockedPackages({ lock, repoRoot: f.repoRoot, processes: '' }), { folders: [], archives: [] });
+  fs.rmSync(path.join(f.root, 'helper/.generation-leases/1-lease.json'));
+  assert.deepEqual(R.unlockedPackages({ lock, repoRoot: f.repoRoot, processes: '' }).folders, [path.join(f.root, 'helper/1.0')]);
+});
+
+test('the stale package hint compares local manifests for this CPU without network access', t => {
+  t.mock.method(globalThis, 'fetch', () => { throw new Error('The hint must stay offline.'); });
+  const f = installedLayout(t), manifest = Buffer.from('{"id":"helper","version":"2.0"}\n');
+  const arm = { ...f.record('helper', '2.0', 'arm64'), manifestSha256: B.digest(manifest) };
+  const intel = { ...f.record('helper', '1.5', 'x64'), manifestSha256: 'a'.repeat(64) };
+  const hint = arch => R.includedPackagesHint({ repoRoot: f.repoRoot, arch });
+  assert.equal(hint('arm64'), null, 'no lock file means nothing to compare');
+  f.write(path.join(f.repoRoot, R.LOCK), JSON.stringify({ architectures: ['arm64', 'x64'], packages: [arm, intel] }));
+  const installed = path.join(f.root, 'helper/2.0/arm64/helper.json');
+  assert.match(hint('arm64'), /differ from build\/runtime-packages\.json\. Run pnpm install/);
+  f.write(installed, manifest);
+  assert.equal(hint('arm64'), null);
+  assert.match(hint('x64'), /Run pnpm install/, 'the Intel selection is not installed');
+  f.write(installed, '{"id":"helper","version":"1.9"}\n');
+  assert.match(hint('arm64'), /Run pnpm install/);
+  assert.equal(globalThis.fetch.mock.calls.length, 0);
 });

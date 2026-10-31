@@ -71,6 +71,28 @@ test('dependency caches describe the actual local installation without changing 
   assert.equal(dev.dependencyLayoutKey(root), dev.dependencyLayoutKey(root));
   assert.deepEqual(fs.readFileSync(file), before);
 });
+test('Vite cache cleanup keeps the current set and the two most recently modified others', t => {
+  const cacheRoot = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'maclauncher-vite-cache-'));
+  t.after(() => fs.rmSync(cacheRoot, { recursive: true, force: true }));
+  const set = (checkout, layout, age) => {
+    const file = path.join(cacheRoot, checkout, layout);
+    fs.mkdirSync(path.join(file, 'deps'), { recursive: true });
+    const at = new Date(Date.now() - age * 60_000); fs.utimesSync(file, at, at);
+    return file;
+  };
+  const checkout = 'a'.repeat(16), clone = 'b'.repeat(16), removedClone = 'c'.repeat(16);
+  const current = set(checkout, '1'.repeat(16), 50);
+  const newest = set(clone, '2'.repeat(16), 1), second = set(checkout, '3'.repeat(16), 2);
+  const older = set(checkout, '4'.repeat(16), 3), oldest = set(removedClone, '5'.repeat(16), 4);
+  fs.mkdirSync(path.join(cacheRoot, 'unrelated'));
+  fs.symlinkSync(newest, path.join(cacheRoot, checkout, '6'.repeat(16)));
+  assert.deepEqual(dev.pruneViteCaches(cacheRoot, current).sort(), [older, oldest].sort());
+  for (const file of [current, newest, second, path.join(cacheRoot, 'unrelated')]) assert.ok(fs.existsSync(file), file);
+  assert.ok(fs.lstatSync(path.join(cacheRoot, checkout, '6'.repeat(16))).isSymbolicLink());
+  assert.equal(fs.existsSync(path.join(cacheRoot, removedClone)), false, 'an emptied checkout directory is removed');
+  assert.deepEqual(dev.pruneViteCaches(cacheRoot, current), []);
+  assert.deepEqual(dev.pruneViteCaches(path.join(cacheRoot, 'missing'), current), []);
+});
 test('real Vite cold startup prepares React and leaves an occupied server running', { timeout: 30000 }, async () => {
   const existing = http.createServer((request, response) => response.end('existing server'));
   await new Promise(resolve => existing.listen(0, '127.0.0.1', resolve));

@@ -172,7 +172,75 @@ async function removeStaging(staging) {
   }
 }
 
-async function fetchPackages({ lock = readLock({ arch: process.arch }), repoRoot = ROOT, dependencies = {} } = {}) {
+const PACKAGE_ARCHITECTURES = ['arm64', 'x64', 'universal'], ARCHIVE = /^(.+)-(arm64|x64|universal)\.tar\.gz$/;
+
+// Earlier fetched versions of locked package ids that no lock record for any
+// launcher CPU references. A folder is recognized only in the installed layout
+// <id>/<version>/<arch>/<locked manifest> with its downloaded archive
+// <id>-<version>-<arch>.tar.gz beside the current ones. Local stages without an
+// archive, links, dot entries, other files, ids outside the lock, generation
+// caches with leases and folders named by a running command line stay. An
+// archive stays while its unrecognized folder does.
+function unlockedPackages({ lock, selection, repoRoot = ROOT, processes }) {
+  const root = path.join(repoRoot, 'src/resources/native-runtimes'), cache = path.join(repoRoot, 'dist/runtime-downloads');
+  const ids = new Map(), assets = new Set();
+  for (const record of [...lock.packages, ...(selection?.packages || [])]) {
+    if (!ids.has(record.id)) ids.set(record.id, { versions: new Set(), manifests: new Set() });
+    ids.get(record.id).versions.add(record.version); ids.get(record.id).manifests.add(record.manifestRelative);
+    assets.add(record.asset.filename);
+  }
+  const regular = file => { try { return fs.lstatSync(file).isFile(); } catch { return false; } };
+  const archived = new Map();
+  if (B.realDirectory(cache)) for (const entry of fs.readdirSync(cache, { withFileTypes: true })) {
+    const match = ARCHIVE.exec(entry.name);
+    const id = match && [...ids.keys()].filter(id => match[1].startsWith(id + '-')).sort((a, b) => b.length - a.length)[0];
+    if (entry.isFile() && id && !assets.has(entry.name)) archived.set(entry.name, path.join(id, match[1].slice(id.length + 1), match[2]));
+  }
+  const folders = [];
+  for (const [id, { versions, manifests }] of processes === null ? [] : ids) {
+    const parent = path.join(root, id), leases = path.join(parent, '.generation-leases');
+    if (!B.realDirectory(parent) || fs.existsSync(leases) && (!B.realDirectory(leases) || fs.readdirSync(leases).length)) continue;
+    for (const entry of fs.readdirSync(parent, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name.startsWith('.') || versions.has(entry.name)) continue;
+      const folder = path.join(parent, entry.name), children = fs.readdirSync(folder, { withFileTypes: true });
+      if (!children.length || children.some(child => !child.isDirectory() || !PACKAGE_ARCHITECTURES.includes(child.name) ||
+          !archived.has(`${id}-${entry.name}-${child.name}.tar.gz`) ||
+          ![...manifests].some(manifest => regular(path.join(folder, child.name, manifest)))) ||
+          processes.includes(folder + path.sep) || processes.split('\n').some(line => line.endsWith(folder)))
+        continue;
+      folders.push(folder);
+    }
+  }
+  const archives = [...archived].filter(([, relative]) => {
+    const folder = path.join(root, path.dirname(relative));
+    return !fs.existsSync(folder) || folders.includes(folder);
+  }).map(([name]) => path.join(cache, name));
+  return { folders, archives };
+}
+
+async function pruneUnlockedPackages(options) {
+  const { folders, archives } = unlockedPackages(options);
+  for (const folder of folders) await removeStaging(folder);
+  for (const archive of archives) fs.rmSync(archive, { force: true });
+  const base = options.repoRoot || ROOT;
+  return [...folders, ...archives].map(file => path.relative(base, file));
+}
+
+// Offline comparison of the installed manifests with the lock for one launcher
+// CPU. It reads only local files and returns one line when anything differs.
+function includedPackagesHint({ repoRoot = ROOT, arch = process.arch } = {}) {
+  let packages;
+  try { packages = selectArchitecture(JSON.parse(fs.readFileSync(path.join(repoRoot, LOCK), 'utf8')), arch).packages; }
+  catch { return null; }
+  const root = path.join(repoRoot, 'src/resources/native-runtimes');
+  const current = record => {
+    try { return B.readRegular(path.join(root, key(record), record.manifestRelative), B.LIMITS.manifestBytes).sha256 === record.manifestSha256; }
+    catch { return false; }
+  };
+  return packages.every(current) ? null : `The included packages differ from ${LOCK}. Run pnpm install to update them.`;
+}
+
+async function fetchPackages({ lock = readLock({ arch: process.arch }), repoRoot = ROOT, dependencies = {}, packageLock } = {}) {
   lock = validateSelection(lock, { dependencies: dependencies.model });
   const root = path.join(repoRoot, 'src/resources/native-runtimes'), cache = path.join(repoRoot, 'dist/runtime-downloads');
   B.realDirectory(root, { create: true }); B.realDirectory(cache, { create: true });
@@ -203,7 +271,16 @@ async function fetchPackages({ lock = readLock({ arch: process.arch }), repoRoot
     supplementals: plan.supplementals, sourceArtifacts: plan.sourceArtifacts, projectPackages: lock.packages,
     packageRepository: lock.repository };
   Payload.validateInventory(inventory, config, dependencies.model);
-  return { inventory, packages: declarations.length };
+  // The full lock covers `setup:dev --arch x64` in the same folder. Cleanup
+  // after a complete fetch reports problems without failing the install.
+  let removed = [];
+  try {
+    const processes = (dependencies.processes || (await import('./generation-cache.mjs')).generationProcesses)();
+    removed = await pruneUnlockedPackages({ lock: packageLock || readLock({ repoRoot, dependencies: dependencies.model }),
+      selection: lock, repoRoot, processes });
+    if (removed.length) console.log('Removed earlier included packages: ' + removed.join(', '));
+  } catch (error) { console.warn('Included package cleanup: ' + error.message); }
+  return { inventory, packages: declarations.length, removed };
 }
 
 async function main(args) {
@@ -215,5 +292,6 @@ async function main(args) {
   if (command === 'check' && !rest.length) { const result = readLock(); return { packages: result.packages.length, architectures: result.architectures, maximumMacOS: result.maximumMacOS }; }
   throw new Error('Usage: node scripts/runtime-packages.cjs lock <catalog-directory>|check');
 }
-module.exports = { LOCK, ARCHITECTURES, selectArchitecture, validateSelection, validateLock, readLock, createLock, extractPackage, fetchPackages, main };
+module.exports = { LOCK, ARCHITECTURES, selectArchitecture, validateSelection, validateLock, readLock, createLock, extractPackage,
+  unlockedPackages, pruneUnlockedPackages, includedPackagesHint, fetchPackages, main };
 if (require.main === module) main(process.argv.slice(2)).then(result => console.log(JSON.stringify(result))).catch(error => { console.error(error.message); process.exitCode = 1; });

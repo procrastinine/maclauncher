@@ -29,6 +29,28 @@ export function dependencyLayoutKey(root) {
   return createHash("sha256").update(JSON.stringify(records)).digest("hex").slice(0, 16);
 }
 
+// Each checkout and dependency layout has its own optimized dependency set,
+// <checkout>/<layout>. The current set and the two most recently modified
+// others stay; links, unrecognized names and the current set are never removed.
+export function pruneViteCaches(cacheRoot, current, { keep = 2 } = {}) {
+  const sets = [];
+  if (!fs.existsSync(cacheRoot)) return [];
+  for (const checkout of fs.readdirSync(cacheRoot, { withFileTypes: true })) {
+    if (!checkout.isDirectory() || !/^[0-9a-f]{16}$/.test(checkout.name)) continue;
+    for (const layout of fs.readdirSync(path.join(cacheRoot, checkout.name), { withFileTypes: true })) {
+      const file = path.join(cacheRoot, checkout.name, layout.name);
+      if (layout.isDirectory() && /^[0-9a-f]{16}$/.test(layout.name) && file !== path.resolve(current))
+        sets.push({ file, at: fs.statSync(file).mtimeMs });
+    }
+  }
+  const removed = sets.sort((a, b) => b.at - a.at).slice(keep).map(({ file }) => file);
+  for (const file of removed) fs.rmSync(file, { recursive: true, force: true });
+  for (const checkout of new Set(removed.map(file => path.dirname(file)))) {
+    try { fs.rmdirSync(checkout); } catch {}
+  }
+  return removed;
+}
+
 export function devServerUrl(server, host) {
   const address = server.httpServer?.address();
   if (!address || typeof address === "string") throw new Error("Vite did not open an HTTP port.");
@@ -82,17 +104,19 @@ export async function prepareRenderer(server, url, { fetchPage = fetch, signal }
 }
 
 export async function startLauncherDevServer({ root, host = "127.0.0.1", port = 5174,
-  timeoutMs = 30_000, createViteServer, prepare = prepareRenderer } = {}) {
+  timeoutMs = 30_000, createViteServer, prepare = prepareRenderer,
+  cacheRoot = path.join(os.homedir(), "Library", "Caches", "maclauncher", "vite") } = {}) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error("MACLAUNCHER_DEV_PORT must be a valid port number.");
   const createServer = createViteServer || (await import("vite")).createServer;
+  const cacheDir = path.join(cacheRoot, createHash("sha256").update(path.resolve(root)).digest("hex").slice(0, 16), dependencyLayoutKey(root));
+  try { pruneViteCaches(cacheRoot, cacheDir); } catch (error) { console.warn("Development cache cleanup: " + error.message); }
   const server = await createServer({
     configFile: path.join(root, "vite.config.mjs"),
     plugins: [{ name: "development-script-policy", transformIndexHtml() {
       return [{ tag: "meta", attrs: { "http-equiv": "Content-Security-Policy",
         content: "script-src 'self' 'unsafe-inline'" }, injectTo: "head-prepend" }];
     } }],
-    cacheDir: path.join(os.homedir(), "Library", "Caches", "maclauncher", "vite",
-      createHash("sha256").update(path.resolve(root)).digest("hex").slice(0, 16), dependencyLayoutKey(root)),
+    cacheDir,
     // Vite selects another port when occupied. The existing process stays alone,
     // and Electron always receives this owned server's actual bound port.
     server: { host, port, strictPort: false,

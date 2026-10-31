@@ -1,5 +1,6 @@
 import "./runtime-content-register.cjs";
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveElectronBinary } from "../src/core/electron-binary.js";
@@ -12,6 +13,14 @@ export async function startDevelopment(electronArguments = ["."]) {
     throw new Error("Usage: node scripts/dev.mjs [--debug] [--background]");
   }
   if (args.has("--background") && !electronArguments.includes("--background")) electronArguments=[...electronArguments,"--background"];
+  // A pull without an install can leave earlier included packages in place.
+  // The offline manifest check only reports; startup continues either way.
+  if (process.platform === "darwin") {
+    try {
+      const hint = createRequire(import.meta.url)("./runtime-packages.cjs").includedPackagesHint();
+      if (hint) console.warn(hint);
+    } catch {}
+  }
   const electronBinary = await prepareDevelopmentApp({ electronBinary: resolveElectronBinary() });
   const debug = args.has("--debug") || process.env.MACLAUNCHER_DEBUG === "1";
   const devtools = process.env.MACLAUNCHER_DEVTOOLS === "0" ? "0" : "1";
