@@ -41,7 +41,7 @@ The included HG-3 image reader supports lossless 24-bit and 32-bit frames within
 
 ### Archive and script tools
 
-Archive and script tools, the default runtime, provides detection, the engine version and the inspector tools but cannot launch the game. [FelineSystem2](https://github.com/kokseen1/FelineSystem2) is used only as a reference, and MacLauncher does not run it. Its unlicensed core and embedded game assets are not distributed.
+Archive and script tools, the default runtime, provides detection, the engine version and the inspector tools but cannot launch the game. [FelineSystem2](https://github.com/kokseen1/FelineSystem2) is used only as a reference. MacLauncher neither runs nor distributes it, because it does not play CatSystem2 games.
 
 ### CrossOver and Sikarugir (Wine)
 

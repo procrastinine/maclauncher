@@ -47,6 +47,10 @@ By default through MacLauncher Android, which runs the Android framework without
 
 Mostly not. Most runtimes run the game's own engine natively on macOS, or run the game's code on the Mac's real processor while translating its system calls, the way WINE does. DOS games are the exception, through [DOSBox Staging](https://www.dosbox-staging.org/). [How games run on a Mac](/maclauncher/background/how-games-run/) explains the difference.
 
+### What about decompilation and recompilation ports?
+
+[Decompilation and recompilation projects](https://github.com/SubmitGame/awesome-decomp-games) rebuild individual games for current systems from the original game's compiled code, and most of them are older console games. MacLauncher covers a different kind of game: games built on shared engines, such as indie games packaged for Windows, Android and iOS games and visual novels, which a runtime for their engine can play. It doesn't download individual ports, but a port's macOS build works like any other Mac app: download it with a launcher such as [Quiver Launcher](https://github.com/tgeorgiadis/quiver-launcher) and drag it into MacLauncher. [Mac apps and scripts](/maclauncher/games/more/#mac-apps-and-scripts) describes how Mac apps are imported.
+
 ### Why is it built on Electron?
 
 Browser-based games are a big share of all games, and they run on the included [Electron](https://www.electronjs.org/) without any download. The codebase can also move to other platforms later, and the launcher's own weight hardly matters once a game is running. To skip the library window entirely, save a `.command` launcher for a game and double-click that.

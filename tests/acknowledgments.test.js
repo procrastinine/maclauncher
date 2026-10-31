@@ -156,7 +156,7 @@ test('all Credits links also appear as links in public attributions', () => {
 
 test('attributions retain separate component and proprietary terms', () => {
   const doc = fs.readFileSync(path.join(root, 'docs/ATTRIBUTIONS.md'), 'utf8');
-  assert.match(doc, /\[FelineSystem2\][^\n]+core has no license/);
+  assert.match(doc, /\[FelineSystem2\][^\n]+does not play CatSystem2 games/);
   assert.match(doc, /\[Unity player components\][^\n]+\[official GameMaker runtimes\][^\n]+\[Adobe Flash Player\][^\n]+vendor terms/);
   assert.match(doc, /\[Kosugi\][^\n]+\(Apache-2\.0\)/);
 });

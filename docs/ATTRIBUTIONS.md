@@ -138,7 +138,7 @@ The Windows [Impacto](https://github.com/CommitteeOfZero/impacto) adaptation (IS
 
 [ReMinori](https://github.com/luoyily/ReMinori) (AGPL-3.0) supplies the native interpreter for the selected PAZ profile. The [macOS adaptation](game-types/MINORI.md) uses revision [`79b00990324404bfbd496e7fa76c690cf040f744`](https://github.com/luoyily/ReMinori/commit/79b00990324404bfbd496e7fa76c690cf040f744), MacLauncher's platform and archive changes, and an [FFmpeg](https://ffmpeg.org/) 7.1.2 movie bridge built with an LGPL-2.1-or-later configuration. Rust dependencies keep their own notices, and the interpreter, movie libraries and corresponding source keep their license obligations.
 
-[FelineSystem2](https://github.com/kokseen1/FelineSystem2) is a compatibility source reference. Its core has no license and is excluded from distribution.
+[FelineSystem2](https://github.com/kokseen1/FelineSystem2) is a compatibility source reference. It is not distributed or run, because it does not play CatSystem2 games.
 
 ## Proprietary components
 
