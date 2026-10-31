@@ -82,4 +82,17 @@ function rows(target, launch) {
   };
 }
 
-module.exports = {configure, rows, flush};
+// Removes the rows of every plan file under a directory, such as the folder
+// of an entry that is deleted, from memory and from the store at once.
+function forget(directory) {
+  const prefix = path.resolve(directory) + path.sep;
+  for (const target of [...live.keys()]) if (path.resolve(target).startsWith(prefix)) live.delete(target);
+  const targets = storedTargets();
+  if (!targets) return 0;
+  const removed = [...targets.keys()].filter(target => path.resolve(target).startsWith(prefix));
+  for (const target of removed) targets.delete(target);
+  if (removed.length) { store.timer ||= setTimeout(flush, 1000);flush(); }
+  return removed.length;
+}
+
+module.exports = {configure, rows, flush, forget};

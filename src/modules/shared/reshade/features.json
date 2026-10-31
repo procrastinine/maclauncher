@@ -4,6 +4,7 @@
     "sharedFrameEncoder": true,
     "hardwareQueryAPI": 1,
     "browserFrameAPI": 1,
+    "windowSourceAPI": 1,
     "virtualWindowAPI": 1,
     "virtualSourceControlAPI": 1,
     "virtualSourceActivationAPI": 1,
@@ -29,7 +30,12 @@
     "depthInputAPI": 1,
     "comparisonAPI": 1,
     "adaptiveQualityAPI": 1,
+    "performanceHudAPI": 1,
+    "frameRateCapAPI": 1,
+    "presentationOptionsAPI": 1,
+    "screenshotAPI": 1,
     "xessGenerationAPI": 1,
+    "generationStaticContentAPI": 1,
     "spatialMethods": [
       "bilinear",
       "metalfx",
@@ -42,7 +48,11 @@
     "frameGenerationMethods": [
       "lsfg",
       "metalfx",
-      "mlx-interpolation"
+      "mlx-interpolation",
+      "vt-interpolation",
+      "metalfx-image",
+      "vision-flow",
+      "auto"
     ],
     "presentation": {
       "effects": true,
@@ -65,7 +75,8 @@
             "metalfx",
             "fsr4"
           ],
-          "effectPlacement": true
+          "effectPlacement": true,
+          "frameRateCap": true
         },
         "remote": {
           "spatial": true,
@@ -99,7 +110,8 @@
             "metalfx",
             "fsr4"
           ],
-          "effectPlacement": true
+          "effectPlacement": true,
+          "frameRateCap": true
         }
       },
       "effectPlacement": true

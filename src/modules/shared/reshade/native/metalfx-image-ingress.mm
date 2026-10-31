@@ -94,6 +94,7 @@ ShaderResult captureInterpolation(id sdk,id commands,id<MTLDevice>device,void*ow
         result.colorRegion={0,0,uint32_t(color.width),uint32_t(color.height)};
         result.outputRegion={0,0,uint32_t(outputWidth),uint32_t(outputHeight)};
         result.depthRegion={0,0,uint32_t(inputWidth),uint32_t(inputHeight)};result.motionRegion=result.depthRegion;
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 270000
         if(@available(macOS 27.0,*)){
             if([sdk respondsToSelector:@selector(contentWidth)]&&[sdk respondsToSelector:@selector(contentHeight)]&&
                 [sdk respondsToSelector:@selector(depthContentOffsetX)]&&[sdk respondsToSelector:@selector(depthContentOffsetY)]&&
@@ -124,6 +125,7 @@ ShaderResult captureInterpolation(id sdk,id commands,id<MTLDevice>device,void*ow
                 }
             }
         }
+#endif
         const bool matching=image(result.depth,device)&&image(result.motion,device)&&region(result.depth,result.depthRegion)&&region(result.motion,result.motionRegion)&&
             result.depthRegion.width==frame.renderWidth&&result.depthRegion.height==frame.renderHeight&&
             result.motionRegion.width==frame.renderWidth&&result.motionRegion.height==frame.renderHeight&&

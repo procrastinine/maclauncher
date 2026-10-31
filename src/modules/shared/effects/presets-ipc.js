@@ -14,5 +14,8 @@ function register({ ipcMain, userDataDir, app, loadSettings, pickFile, changed, 
   ipcMain.handle("launcher:getEffectsPresetEditor", (_event, plan) => Runtime.info(entry(plan == null ? null : Plan.validate(plan)), options()));
   ipcMain.handle("launcher:getEffectsPresetParameters", (_event, nodeId, plan) => Runtime.describe(entry(), nodeId, plan, options()));
   ipcMain.handle("launcher:pickEffectsPresetFile", (_event, kind, expectedOperation) => expectedOperation===undefined?pickFile(kind):pickFile(kind,expectedOperation));
+  // A game's status read reports measured row costs; presets with the same
+  // rows keep the latest total. A library that cannot be read is left alone.
+  return { measured(plan, contexts) { try { if (Presets.recordCost(userDataDir, plan, contexts)) changed?.(Presets.list(userDataDir)); } catch {} } };
 }
 module.exports = { register };

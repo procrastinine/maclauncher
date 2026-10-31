@@ -80,6 +80,8 @@ class Generation final:public GenerationEncoder {
 public:
     Generation(id<MTLDevice>d,std::shared_ptr<GenerationEncoder>p,const ImageColorDescription&c,bool standard,unsigned count):provider(std::move(p)),island(std::make_shared<ColorIsland>(d,c,standard,!standard&&(std::string_view(provider->method())=="fsr3"||std::string_view(provider->method())=="lsfg")?80.f:0.f,!standard&&(std::string_view(provider->method())=="fsr3"||std::string_view(provider->method())=="lsfg")?std::optional<ColorPrimaries>(ColorPrimaries::BT709):std::nullopt)),description(c),sdr(standard),capacity(count){if(count>4)throw std::runtime_error("Color generation capacity exceeds its bounded phase count");provider->setColorDescription(island->providerColor());}
     const char*method()const noexcept override{return provider->method();}
+    const char*activeMethod()const noexcept override{return provider->activeMethod();}
+    std::string activeReason()const override{return provider->activeReason();}
     ShaderResult preparationStatus()const override{return provider->preparationStatus();}
     bool requiresScene()const noexcept override{return provider->requiresScene();}
     bool gpuTimingAvailable()const override{return provider->gpuTimingAvailable();}

@@ -280,6 +280,7 @@ function mainGraphicsFixture(t, hooks = {}) {
   const session = {id: 1, pid: 12345}, runningGameSessions = new Map([[entry.gamePath, new Map([[session.id, session]])]]);
   const handlers = {}, events = [], saves = [], StoredPlan = require("../src/modules/shared/effects/stored-plan");
   const context = {
+    graphicsShortcuts: require("../src/main/graphics-shortcuts").create({globalShortcut: {}, readAssignments: () => ({})}),
     AbortController, runningGameSessions, gameRecordsCache: [entry], logger: {warn() {}},
     BrowserWindow: {getAllWindows: () => []},
     loadSettings: () => ({}), loadGamesHydrated: () => [entry], findGameByPath: () => entry,
@@ -315,7 +316,7 @@ function mainGraphicsFixture(t, hooks = {}) {
   };
   const queueBegin = source.indexOf("const graphicsEdits = new Map();"), queueEnd = source.indexOf("function gameGraphicsLive(", queueBegin);
   const ownerBegin = source.indexOf('const GraphicsStatus = require("./graphics-status");'), ownerEnd = source.indexOf("function publishReShadeFilters(", ownerBegin);
-  const stopBegin = source.indexOf("async function stopRunSession("), stopEnd = source.indexOf("function buildRuntimeManagerState(", stopBegin);
+  const stopBegin = source.indexOf("async function stopRunSession("), stopEnd = source.indexOf("// App-scope module actions", stopBegin);
   vm.runInNewContext(source.slice(queueBegin, queueEnd) + source.slice(ownerBegin, ownerEnd) + source.slice(stopBegin, stopEnd) +
     "\nthis.graphicsStatus = graphicsStatus;this.settle = async () => { while (graphicsEdits.size) await Promise.allSettled([...graphicsEdits.values()]); };", context);
   // Acceptance is observed after the queued publication returns.

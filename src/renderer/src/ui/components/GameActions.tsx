@@ -115,7 +115,7 @@ export const GameActions = memo(function GameActions({ g, isRunning, actions, in
   return (
     <div className={`gameActions${inspector ? " inspectorGameActions" : ""}`}>
       <PlayButton g={g} isRunning={isRunning} onPlay={onPlay} onStop={onStop} showLabel={inspector} preparation={preparation} />
-      {canLaunch && <button
+      {canLaunch && !g.ephemeral && <button
         className="btn small"
         title={filesUnavailable || "Save a .command file that starts this game when opened"}
         disabled={removing || Boolean(filesUnavailable)}
@@ -135,7 +135,8 @@ export const GameActions = memo(function GameActions({ g, isRunning, actions, in
         {g.moduleSupports?.saveEditing === true ? "Edit saves" : "Saves"}
       </button>}
       {inspector && canLaunch && canUseCheats && <button className="btn small" title={filesUnavailable || "Cheats"} onClick={() => openCheats(g)} disabled={removing || Boolean(filesUnavailable)}>Cheats</button>}
-      <button
+      {/* A session entry is removed when its session ends, never forgotten. */}
+      {!g.ephemeral && <button
         className="btn iconOnly danger forgetAction"
         title={removing ? "Removing" : isRunning || preparation ? "Stop or finish launching before removal" : "Forget game"}
         aria-label={`${removing ? "Removing" : "Forget"} ${g.name}`}
@@ -144,7 +145,7 @@ export const GameActions = memo(function GameActions({ g, isRunning, actions, in
         onClick={() => onForgetGame(g.gamePath)}
       >
         <TrashIcon />
-      </button>
+      </button>}
     </div>
   );
 });

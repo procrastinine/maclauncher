@@ -70,7 +70,7 @@ test('network IPC persists one concrete choice and broadcasts the same legacy/de
   assert(start>=0&&end>start);vm.runInNewContext(source.slice(start,end),context);
   assert.equal(context.serializeGameEntry(saved).networkAccess,true,'saved legacy choice matches the inspector');
   const handlerStart=source.indexOf('ipcMain.handle("launcher:setGameNetworkAccess",');
-  const handlerEnd=source.indexOf('\nrequire("../modules/shared/effects/presets-ipc")',handlerStart);
+  const handlerEnd=source.lastIndexOf('\n',source.indexOf('require("../modules/shared/effects/presets-ipc")',handlerStart));
   assert(handlerStart>=0&&handlerEnd>handlerStart);vm.runInNewContext(source.slice(handlerStart,handlerEnd),context);
   const invoke=value=>handlers.get('launcher:setGameNetworkAccess')(null,saved.gamePath,value);
   for(const networkAccess of [true,false]){

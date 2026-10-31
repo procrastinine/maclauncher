@@ -4,6 +4,9 @@ import { withAvailability } from "../ui-helpers";
 import { ErrorText } from "./ErrorText";
 
 const launcherApi = () => typeof window === "undefined" ? undefined : window.MacLauncher?.launcher;
+/** The last GPU time measured while the preset's rows ran, with the game's image size. */
+export const presetCostLabel = (row: EffectsPreset) => row.measuredCost
+  ? `GPU ${row.measuredCost.milliseconds.toFixed(2)} ms at ${row.measuredCost.width} × ${row.measuredCost.height}` : "";
 
 // Saved presets follow change broadcasts; a list that arrives after a newer
 // broadcast is ignored.
@@ -45,7 +48,8 @@ export function EffectsPresetMenuItems({ templates = [], disabled, onApply, onSa
         {!row.available && row.reason && <span className="menuItemDetail">{row.reason}</span>}
       </button>)}
       {presets.map(row => <button key={row.id} type="button" className="btn small" disabled={disabled}
-        onClick={() => onApply(structuredClone(row.plan))}>{row.name}</button>)}
+        onClick={() => onApply(structuredClone(row.plan))}>{row.name}
+        {row.measuredCost && <span className="menuItemDetail">{presetCostLabel(row)}</span>}</button>)}
     </div>}
     <hr className="menuSeparator" />
     <button type="button" className="btn small" disabled={disabled} onClick={onSave}>Save as preset…</button>

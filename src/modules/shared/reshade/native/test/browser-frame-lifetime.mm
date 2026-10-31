@@ -14,10 +14,14 @@ static std::atomic<double>browserFixtureTime{10};
 static double browserFixtureMediaTime(){return browserFixtureTime.load();}
 #define CACurrentMediaTime browserFixtureMediaTime
 #define MacFXBrowserOutputWindow MacFXBrowserConfigurationTestOutputWindow
-#define MacFXBrowserStream MacFXBrowserConfigurationTestStream
+#define MacFXWindowStreamReceiver MacFXBrowserConfigurationTestReceiver
+#ifndef MACFX_WINDOW_STREAM_SOURCE
+#define MACFX_WINDOW_STREAM_SOURCE <window-stream.mm>
+#endif
 #ifndef MACFX_BROWSER_SOURCE
 #define MACFX_BROWSER_SOURCE <browser-frame.mm>
 #endif
+#include MACFX_WINDOW_STREAM_SOURCE
 #include MACFX_BROWSER_SOURCE
 #undef CACurrentMediaTime
 
@@ -170,7 +174,7 @@ static void permissionFailureCleanup(){
     assert(channel().state().demand(22,true,uint32_t(getpid())));demand=channel().demand();
     assert(channel().probe(22,demand.epoch));value.session->claimTicket=channel().claim(22);assert(value.session->claimTicket);
     value.session->publishVisibility();assert(value.session->visibilityActive);
-    auto receiver=[MacFXBrowserStream new];receiver->session=value.session;
+    auto receiver=[MacFXWindowStreamReceiver new];receiver->owner=value.session;
     [receiver stream:(SCStream*)value.stream didStopWithError:[NSError errorWithDomain:SCStreamErrorDomain code:SCStreamErrorUserDeclined userInfo:nil]];
     assert(value.session->retired&&!value.session->recoverAfterGeometry);
     const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(1);

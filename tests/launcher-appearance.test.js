@@ -8,6 +8,7 @@ function fixture() {
   const handlers = new Map();
   const settings = { launcher: {} };
   const context = {
+    graphicsShortcuts: require('../src/main/graphics-shortcuts').create({globalShortcut: {}, readAssignments: () => ({})}),
     LibraryState: { DEFAULT_LIBRARY_STATE: {}, normalizeLibraryState: value => value || {} },
     SteamClientStart: { startPreference: value => value || 'ask' },
     nativeTheme: { themeSource: 'system' }, loadSettings: () => settings,

@@ -474,3 +474,21 @@ test("main status IPC uses current process identity without module, model or cat
     contextBridge: {exposeInMainWorld: (_, value) => {api = value.launcher;}}, ipcRenderer: {invoke: (...args) => {calls.push(args);}}, webUtils: {}})});
   assert.deepEqual(calls, []);await api.getGameGraphicsStatus("/Game");assert.deepEqual(calls, [["launcher:getGameGraphicsStatus", "/Game"]]);
 });
+test("stage records carry each row's measured GPU time: its own interval or its shared command buffer", t => {
+  const f = fixture(t);Status.read(f.entry, f.options);
+  const bytes = Buffer.alloc(32768), now = BigInt(Date.now());
+  bytes.writeUInt32LE(process.pid, 0);bytes.writeBigUInt64LE(1n, 8);bytes.writeUInt32LE(3, 16);bytes.writeUInt32LE(3, 20);
+  bytes.write(f.revision, 112);bytes.write(f.digest, 177);bytes.writeBigUInt64LE(now, 504);bytes.writeBigUInt64LE(1n, 512);
+  [["neural", 1, 2.5, 0], ["sharpen", 2, 4.25, 1], ["generation", 2, 4.25, 1]].forEach(([id, scope, milliseconds, section], index) => {
+    const start = 1024 + index * 768;bytes.write(id, start);bytes.writeUInt32LE(3, start + 644);bytes.writeBigUInt64LE(1n, start + 688);bytes.writeBigUInt64LE(now, start + 704);
+    bytes.writeDoubleLE(milliseconds, start + 712);bytes.writeUInt32LE(scope, start + 720);bytes.writeUInt32LE(section, start + 724);bytes.writeBigUInt64LE(now, start + 728);
+  });
+  const fd = fs.openSync(f.selected.binding.file, "r+");t.after(() => fs.closeSync(fd));fs.writeSync(fd, bytes, 0, bytes.length, 4096);
+  const stages = Status.read(f.entry, f.options).contexts[0].stages;
+  assert.deepEqual(stages.map(stage => stage.gpu), [{milliseconds: 2.5, scope: "row", section: 0, observedAt: Number(now)},
+    {milliseconds: 4.25, scope: "section", section: 1, observedAt: Number(now)}, {milliseconds: 4.25, scope: "section", section: 1, observedAt: Number(now)}]);
+  for (const [scope, milliseconds] of [[3, 1], [1, -1], [1, Number.NaN], [0, 2]]) {
+    bytes.writeDoubleLE(milliseconds, 1024 + 712);bytes.writeUInt32LE(scope, 1024 + 720);fs.writeSync(fd, bytes, 0, bytes.length, 4096);
+    assert.equal(Status.read(f.entry, f.options).contexts[0].stages[0].gpu, undefined, "an unknown scope or invalid time is not reported");
+  }
+});

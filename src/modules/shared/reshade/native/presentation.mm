@@ -15,6 +15,7 @@
 #include "temporal-plan.hpp"
 #include "scene-destination.hpp"
 #include "frame-capture.hpp"
+#include "screenshot-image.hpp"
 #include "image-admission.hpp"
 #include "color-contract.hpp"
 #include "color-island.hpp"
@@ -24,6 +25,9 @@
 #include "runtime-status.hpp"
 #include "generation-budget.hpp"
 #include "generation-timeline.hpp"
+#include "hud-overlay.hpp"
+#include <mach/mach.h>
+#include <mach/mach_time.h>
 #import <CoreVideo/CoreVideo.h>
 #include <atomic>
 #include <array>
@@ -40,7 +44,7 @@ struct ImageRetry {
  bool pending(double now)const{return !impossible&&now<at;}
 };
 struct FramePublication {std::optional<macfx::LivePacket>controls;std::string revision;unsigned width=0,height=0;MTLPixelFormat format=MTLPixelFormatInvalid;uintptr_t device=0;};
-struct Batch {std::string planReason;std::shared_ptr<const FramePublication>publication;unsigned inputWidth=0,inputHeight=0,outputWidth=0,outputHeight=0,displayImages=1;std::shared_ptr<macfx::ImageReservation>generationAdmission,previousGenerationAdmission;id<MTLTexture>real,sourceSnapshot,finalScratch,outputScratch,generationSource,comparisonRaw,comparisonBefore,comparisonAfter,comparisonOutput;std::vector<id<MTLTexture>>generated,admitted,timelineImages;std::vector<bool>generatedMapped;std::vector<macfx::GenerationEvent>events;std::function<macfx::ShaderResult()>generationCompletion;std::vector<macfx::GenerationSequenceResult::Completion>generationCompletions;unsigned requestedGenerated=0;bool pacingObservation=false;std::vector<std::shared_ptr<macfx::ImageReservation>>timelineAdmissions;macfx::TimelinePhases phases;uint64_t id=0,epoch=0;double sourceTime=0,sourcePeriod=1.0/60;uint64_t contentId=0,contentEpoch=0,imageRevision=0;double contentPTS=0;bool contentStamped=false;bool targeted=false,opaqueDisplay=false,realIssued=false,realAdmitted=false,retired=false,redraw=false,inputMapped=false,realMapped=false,sourceSynthetic=false;double target=0;macfx::ImageColorDescription color;std::shared_ptr<macfx::EffectExecution>execution;std::shared_ptr<const macfx::EffectSceneLease>scene;std::function<macfx::ShaderResult()>sceneCompletion;std::shared_ptr<macfx::FrameCapture>capture;macfx::PresentationContract contract;macfx::OutputPolicy output;std::shared_ptr<Retirement> retirement;};
+struct Batch {std::string planReason;std::shared_ptr<const FramePublication>publication;unsigned inputWidth=0,inputHeight=0,outputWidth=0,outputHeight=0,displayImages=1;std::shared_ptr<macfx::ImageReservation>generationAdmission,previousGenerationAdmission;id<MTLTexture>real,sourceSnapshot,finalScratch,outputScratch,generationSource,comparisonRaw,comparisonBefore,comparisonAfter,comparisonOutput;std::vector<id<MTLTexture>>generated,admitted,timelineImages;std::vector<bool>generatedMapped;std::vector<macfx::GenerationEvent>events;std::function<macfx::ShaderResult()>generationCompletion;std::vector<macfx::GenerationSequenceResult::Completion>generationCompletions;unsigned requestedGenerated=0;bool pacingObservation=false;std::vector<std::shared_ptr<macfx::ImageReservation>>timelineAdmissions;macfx::TimelinePhases phases;uint64_t id=0,epoch=0;double sourceTime=0,sourcePeriod=1.0/60;uint64_t contentId=0,contentEpoch=0,imageRevision=0;double contentPTS=0;bool contentStamped=false;bool targeted=false,opaqueDisplay=false,realIssued=false,realAdmitted=false,retired=false,redraw=false,inputMapped=false,realMapped=false,sourceSynthetic=false,displayLimited=false;double target=0;macfx::ImageColorDescription color;std::shared_ptr<macfx::EffectExecution>execution;std::shared_ptr<const macfx::EffectSceneLease>scene;std::function<macfx::ShaderResult()>sceneCompletion;std::shared_ptr<macfx::FrameCapture>capture;macfx::PresentationContract contract;macfx::OutputPolicy output;std::shared_ptr<Retirement> retirement;};
 struct Display {std::shared_ptr<Batch>batch;int generated=-1;double due=0;bool replay=false;unsigned subframe=0,totalSubframes=1;uint64_t outputId=0;bool repeatedCycle=false;};
 macfx::AdaptiveQualitySample qualitySample(const std::shared_ptr<Batch>&batch,macfx::EffectQualityPoint point){
  macfx::AdaptiveQualitySample value;if(!batch->execution||batch->redraw||batch->sourceSynthetic||!batch->execution->supportsGpuQuality(point))return value;
@@ -91,7 +95,7 @@ struct macfx::FramePresenter::Impl:std::enable_shared_from_this<Impl>{
  mutable std::mutex mutex;std::mutex submission,privateQueueMutex;std::atomic<bool>privateQueueUnavailable{false};PresenterStatus status;RSPresentationTiming timing{};std::vector<std::shared_ptr<Batch>>pool;std::vector<std::weak_ptr<Retirement>>retirements;std::optional<Display>immediate,motionFrame;OutputPolicy outputPolicy;unsigned nextSubframe=0,lastQueuedSubframe=0;double nextSubframeTime=0,lastQueuedTime=0;bool motionRepeated=false;
  std::atomic<bool>gpuFailed{false};std::shared_ptr<const FramePublication>publication,failedPublication;uint64_t publicationGeneration=~uint64_t(0);std::unique_ptr<EffectPlanState>failureReader;std::mutex failureReaderMutex;
  std::atomic<unsigned> displayHz{0};unsigned appliedRefresh=0;uint32_t currentDisplay=0;
- uint64_t appliedControls=~uint64_t(0),presentationEpoch=1;unsigned liveMultiplier=0;bool generationEnabled=true,generationUnavailable=false;double lastTrace=0;std::string legacyInput;
+ uint64_t appliedControls=~uint64_t(0),presentationEpoch=1;unsigned liveMultiplier=0;bool generationEnabled=true,generationUnavailable=false,displayLimitedDelivery=false;double lastTrace=0;std::string legacyInput;
  const bool traceEnabled=nativeConfig().diagnostics.trace;
  uint64_t presentedCallbacks=0,nonpositivePresentations=0,duplicatePresentations=0;
  std::shared_ptr<ImageReservation>generationAdmission;GenerationEncoder*admittedGenerator=nullptr;unsigned admittedGenerationWidth=0,admittedGenerationHeight=0;uint64_t admittedGenerationSequence=0;ImageRetry generationRetry;
@@ -102,6 +106,15 @@ struct macfx::FramePresenter::Impl:std::enable_shared_from_this<Impl>{
  uint64_t refreshedHoldEpoch=0,refreshedHoldGeneration=0;const LiveState*refreshedHoldReader=nullptr;
  bool holdActive=false,holdResuming=false,holdReset=false,holdCancelling=false,lastVisibleOpaque=false;unsigned issuedPresentations=0;
  OverlayDrawables drawables;std::atomic<bool>drawablesReported{false};
+ // Performance overlay and owned presentation options (output.hud,
+ // output.displaySync, output.drawableCount). Layer defaults are restored when
+ // a plan leaves an option unset.
+ ScreenshotImage screenshot;HudOverlay hud;std::atomic<double>lastFinalGpuMs{-1};std::array<double,3>hudLatency{-1,-1,-1};std::atomic<bool>hudShown{false},hudFailed{false};
+ bool defaultDisplaySync=true;unsigned defaultDrawables=3;bool appliedDisplaySync=true;unsigned appliedDrawables=3;
+ // Refresh phase of the shared generation timeline: the display link's next
+ // refresh in host seconds, and the shortest observed delay from a due time to
+ // display over the last 32 untargeted images (protected by mutex).
+ std::atomic<double>refreshTime{0};std::array<double,32>presentLeads{};unsigned presentLeadCount=0,presentLeadCursor=0;double presentLead=0;
  // Bits: same-size native FX, compatible source, explicit source owner needed.
  // Other ingress has no native-Metal override and retains the prior policy.
  std::atomic<unsigned>nativeMetalCapabilities{2};
@@ -116,17 +129,60 @@ struct macfx::FramePresenter::Impl:std::enable_shared_from_this<Impl>{
   if(!sourceColor.valid()||!outputColor.valid())throw std::runtime_error("Presentation color metadata is invalid");
   graphFormat=imageColorIsHDR(sourceColor)||!SpatialEncoder::supportsFormat(layer.pixelFormat)?MTLPixelFormatRGBA16Float:layer.pixelFormat;displayHeadroom.store(std::clamp(config.displayHeadroom,1.f,100.f));colorEncoder=std::make_shared<ColorEncoder>(layer.device);
 worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.framebufferOnly=NO;layer.allowsNextDrawableTimeout=YES;
+  defaultDisplaySync=appliedDisplaySync=layer.displaySyncEnabled;defaultDrawables=appliedDrawables=unsigned(layer.maximumDrawableCount);
   if(const auto configured=configuredSourceInterval(config.sourceFrameRate))interval=configured;
   plans->setStatusContext(reinterpret_cast<uintptr_t>(owner));
   if(config.generation)generator=prepareGenerator(config.generationMethod,*config.generation);
   if(config.adaptive){if(!config.generation||config.adaptive->maximumMultiplier!=config.generation->multiplier)throw std::runtime_error("Adaptive pacing requires a matching maximum graph capacity");if(config.sourceFrameRate>0)throw std::runtime_error("Adaptive pacing uses observed source timestamps");pacing=std::make_unique<AdaptivePacing>(*config.adaptive);}
   ownPresentation(layer);
  }
- std::shared_ptr<GenerationEncoder>prepareGenerator(const std::string&method,const LsfgConfig&options){auto value=makeGenerationEncoder(layer.device,method,options);if(imageColorNeedsSDRIsland(sourceColor)||graphFormat==MTLPixelFormatRGBA16Float)return makeColorIslandGenerationEncoder(layer.device,value,sourceColor,method=="lsfg"||method=="mlx-interpolation"||method=="rife");value->setColorDescription(sourceColor);return value;}
+ std::shared_ptr<GenerationEncoder>prepareGenerator(const std::string&method,const LsfgConfig&options){auto value=makeGenerationEncoder(layer.device,method,options);if(imageColorNeedsSDRIsland(sourceColor)||graphFormat==MTLPixelFormatRGBA16Float)return makeColorIslandGenerationEncoder(layer.device,value,sourceColor,method=="lsfg"||generationUsesSDRColor(method));value->setColorDescription(sourceColor);return value;}
  CAMetalLayer *layerSnapshot()const {
   // Retain the owner before Stop can detach it. Driver/property calls occur
   // after this lock is released, so their callbacks may query presenter state.
   std::lock_guard lock(mutex);return layer;
+ }
+ // Owned output layer options, set outside the state lock like other layer
+ // properties. An unset option restores the layer's own default.
+ void applyPresentationOptions(){
+  std::optional<bool>sync;std::optional<unsigned>count;
+  {std::lock_guard<std::mutex>lock(mutex);
+   const bool desiredSync=outputPolicy.displaySync.value_or(defaultDisplaySync);const unsigned desiredCount=outputPolicy.drawableCount?outputPolicy.drawableCount:defaultDrawables;
+   if(desiredSync!=appliedDisplaySync){appliedDisplaySync=desiredSync;sync=desiredSync;}
+   if(desiredCount!=appliedDrawables){appliedDrawables=desiredCount;count=desiredCount;}}
+  if(!sync&&!count)return;
+  CAMetalLayer*target=layerSnapshot();if(!target)return;
+  if(sync)target.displaySyncEnabled=*sync;
+  if(count)target.maximumDrawableCount=*count;
+ }
+ // Overlay counters come from the presenter's own status and timing; nothing
+ // here adds work to a frame that the overlay does not draw.
+ HudSample hudSample(const std::shared_ptr<Batch>&batch){
+  HudSample sample;bool generating=false;
+  {std::lock_guard<std::mutex>lock(mutex);
+   generating=bool(generator)&&generationEnabled;
+   sample.counters={status.encoded,status.presentedReal,status.presentedGenerated,status.presented,status.dropped};
+   sample.displayTimes.assign(recentPresentations.begin(),recentPresentations.end());
+   sample.captureLatencyMs=hudLatency[0];sample.presentationLatencyMs=hudLatency[1];sample.endToEndLatencyMs=hudLatency[2];
+   if(generator&&batch->displayLimited){sample.provider="passthrough";sample.providerReason=displayLimitedReason;}
+   else if(generator){sample.provider=generator->activeMethod();const auto why=generator->activeReason();sample.providerReason=why.empty()?status.reason:why;}
+   else if(generationUnavailable){sample.provider="passthrough";sample.providerReason=status.reason;}
+  }
+  sample.refreshHz=displayHz.load();
+  const double period=batch->sourcePeriod>0?batch->sourcePeriod:0;sample.captureIntervalMs=period*1000;
+  // Without generation there is no interpolation target. An explicit cap is
+  // the target; otherwise the HUD uses its measured capture-counter rate,
+  // rather than the reciprocal of one potentially irregular source interval.
+  sample.targetFps=generating?(batch->output.hasPacing&&batch->output.framePacing=="adaptive"?double(batch->output.targetFps):period>0?batch->displayImages/period:0):batch->output.frameRateCap;
+  sample.gpuMs=lastFinalGpuMs.load(std::memory_order_relaxed);
+  // Row means come from the effect chain, which measures them while the HUD is on.
+  if(batch->execution)for(const auto&cost:batch->execution->rowCosts())sample.rows.push_back({cost.id,{},cost.milliseconds,cost.shared,cost.section});
+  std::stable_sort(sample.rows.begin(),sample.rows.end(),[](const HudRow&a,const HudRow&b){return a.section<b.section;});
+  if(batch->output.adaptiveQuality.enabled)sample.budgetMs=batch->output.adaptiveQuality.budgetMs;
+  task_vm_info_data_t info{};mach_msg_type_number_t count=TASK_VM_INFO_COUNT;
+  if(task_info(mach_task_self(),TASK_VM_INFO,reinterpret_cast<task_info_t>(&info),&count)==KERN_SUCCESS)sample.residentBytes=info.phys_footprint;
+  if(CAMetalLayer*target=layerSnapshot())sample.gpuBytes=target.device.currentAllocatedSize;
+  return sample;
  }
  // Every output acquisition passes through the drawable count. A frame is
  // skipped while the layer's drawables are all in use, without requesting one.
@@ -170,7 +226,7 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
     std::weak_ptr<Impl>weak=shared_from_this();dispatch_source_set_event_handler(wakeup,^{if(auto self=weak.lock())self->schedule();});
     dispatch_source_set_timer(wakeup,DISPATCH_TIME_FOREVER,DISPATCH_TIME_FOREVER,0);dispatch_resume(wakeup);
     if(CVDisplayLinkCreateWithActiveCGDisplays(&link)!=kCVReturnSuccess||!link)throw std::runtime_error("Frame generation display timing is unavailable");
-    if(CVDisplayLinkSetOutputCallback(link,[](CVDisplayLinkRef,const CVTimeStamp*,const CVTimeStamp*out,CVOptionFlags,CVOptionFlags*,void*opaque)->CVReturn{auto*self=static_cast<Impl*>(opaque);if(out&&(out->flags&kCVTimeStampVideoRefreshPeriodValid)&&out->videoRefreshPeriod>0){const auto hz=unsigned(std::lround(double(out->videoTimeScale)/out->videoRefreshPeriod));if(hz>=20&&hz<=1000)self->displayHz.store(hz);}self->schedule();return kCVReturnSuccess;},this)!=kCVReturnSuccess)throw std::runtime_error("Frame generation display callback is unavailable");
+    if(CVDisplayLinkSetOutputCallback(link,[](CVDisplayLinkRef,const CVTimeStamp*,const CVTimeStamp*out,CVOptionFlags,CVOptionFlags*,void*opaque)->CVReturn{auto*self=static_cast<Impl*>(opaque);static const double hostSeconds=[]{mach_timebase_info_data_t base{};mach_timebase_info(&base);return double(base.numer)/base.denom/1e9;}();if(out&&(out->flags&kCVTimeStampHostTimeValid))self->refreshTime.store(double(out->hostTime)*hostSeconds);if(out&&(out->flags&kCVTimeStampVideoRefreshPeriodValid)&&out->videoRefreshPeriod>0){const auto hz=unsigned(std::lround(double(out->videoTimeScale)/out->videoRefreshPeriod));if(hz>=20&&hz<=1000)self->displayHz.store(hz);}self->schedule();return kCVReturnSuccess;},this)!=kCVReturnSuccess)throw std::runtime_error("Frame generation display callback is unavailable");
     if(currentDisplay&&CVDisplayLinkSetCurrentCGDisplay(link,currentDisplay)!=kCVReturnSuccess)throw std::runtime_error("Frame generation display selection is unavailable");
    }
    if(!CVDisplayLinkIsRunning(link)&&CVDisplayLinkStart(link)!=kCVReturnSuccess)throw std::runtime_error("Frame generation display timing could not start");
@@ -447,6 +503,7 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
    auto desired=presentationGraphicsEnvironment();auto next=desired.generation?prepareGenerator(desired.generationMethod,*desired.generation):nullptr;
    {std::lock_guard<std::mutex>lock(mutex);if(inFlight){result.busy=true;result.reason="Waiting for the current graphics frame";return false;}retireDelivery();generator=std::move(next);execution.reset();outputPolicy={};motionFrame.reset();planMode=false;config.generation=desired.generation;config.generationMethod=desired.generationMethod;config.adaptive=desired.adaptive;pool.clear();historyReady=false;generationSequence=0;appliedControls=~uint64_t(0);}
   }
+  applyPresentationOptions();
   if(!selected.active)observeBypassedPlan(reinterpret_cast<uintptr_t>(owner));
   return true;
  }
@@ -475,9 +532,12 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
     // producer attempts must not compress a slower reconstruction interval.
     const double fresh=latest&&!latest->redraw&&!batch->contentStamped?batch->sourceTime-latest->sourceTime:batch->sourcePeriod;
     if(std::isfinite(fresh)&&fresh>0)batch->sourcePeriod=boundedSourcePeriod(fresh);
-    const unsigned hz=displayHz.load(),budget=hz?std::clamp(unsigned(std::max(1.,std::floor(hz*batch->sourcePeriod+.25))),1u,maximumTimelineImages):maximumTimelineImages;
+    const unsigned hz=displayHz.load(),budget=displayVisibleImages(hz,batch->sourcePeriod,maximumTimelineImages);
     const bool carry=latest&&latest!=batch&&!latest->redraw&&!latest->realIssued&&!latest->retired;
     if(delivery.replace(batch->id,phases,now,batch->sourcePeriod,budget,carry,batch->targeted?std::optional<double>(batch->target):std::nullopt)){
+     // Targeted batches keep the application's timestamps; others move their
+     // image changes clear of the refresh latch points.
+     if(!batch->targeted&&hz){const double refresh=refreshTime.load();if(refresh>0)delivery.alignToRefresh(refresh-presentLead,1./hz);}
      if(latest!=batch){if(carry){if(immediate){++status.dropped;retireBatch(immediate->batch);}immediate=Display{latest,-1,now};}else retireBatch(latest);}
      batch->displayImages=delivery.snapshot().pending;latest=batch;
     }else retireBatch(batch);deliveryMetrics();}
@@ -577,7 +637,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   if(display.batch->output.active()&&!display.replay)encodeMotion(commands,final,drawable.texture,display);else if(config.flipY&&!display.replay)encodeFlipped(commands,final,drawable.texture);else if(final!=drawable.texture){
   auto copy=[commands blitCommandEncoder];if(!copy)throw std::runtime_error("Cannot create final presentation encoder");
   [copy copyFromTexture:final sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(final.width,final.height,1) toTexture:drawable.texture destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];[copy endEncoding];}
-  if(display.batch->capture&&!display.replay)display.batch->capture->finish(commands,drawable.texture);
+  if(display.batch->capture&&!display.replay)display.batch->capture->finish(commands,screenshot.prepare(commands,drawable.texture,targetColor,display.outputId?display.outputId:display.batch->id,colorEncoder));
   // Only a prepared virtual transition opts into this one immutable image.
   // Capture final orientation/effects once, before the producer may be hidden.
   bool captureReplay=false;if(replayEnabled.load(std::memory_order_relaxed)&&display.generated<0&&!display.replay){std::lock_guard<std::mutex>lock(mutex);if(replayEnabled&&!replayCapture&&!completedReplay){replayCapture=true;captureReplay=true;}}
@@ -593,15 +653,25 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
     }}];
    }catch(...){std::lock_guard<std::mutex>lock(mutex);replayCapture=false;throw;}
   }
+  // The overlay is drawn last, after capture and replay retention, so neither
+  // a screenshot nor a retained image contains it.
+  if(display.batch->output.hud!="off"&&!hudFailed.load(std::memory_order_relaxed)){
+   hudShown.store(true,std::memory_order_relaxed);const auto batch=display.batch;
+   try{@try{hud.encode(commands,drawable.texture,display.batch->output.hud=="detailed",targetColor.transfer,targetColor.referenceWhite,CACurrentMediaTime(),[&]{return hudSample(batch);});}
+    @catch(NSException*error){throw std::runtime_error(error.reason.UTF8String?:"Performance overlay failed");}}
+   catch(const std::exception&error){hudFailed.store(true);nativeLog(std::string("Performance overlay disabled for this output: ")+error.what());}
+  }else if(hudShown.exchange(false,std::memory_order_relaxed))hud.reset();
+  const double encodedAt=CACurrentMediaTime();
   auto held=std::make_shared<std::optional<Display>>(display);std::weak_ptr<Impl>weak=shared_from_this();
   const auto generated=display.generated;const bool replay=display.replay;const auto subframe=display.subframe;const bool repeatedCycle=display.repeatedCycle;const auto frameWidth=display.batch->outputWidth,frameHeight=display.batch->outputHeight;const auto frameId=display.batch->id,frameEpoch=display.batch->epoch;const auto frameTime=display.batch->sourceTime;
-  const auto frameContract=display.batch->contract;const bool frameOpaque=display.batch->opaqueDisplay;const auto observedBatch=display.batch;
+  const auto frameContract=display.batch->contract;const bool frameOpaque=display.batch->opaqueDisplay;const auto observedBatch=display.batch;const double displayDue=display.due;
   const auto quality=(!replay&&!subframe&&!repeatedCycle&&generated<0)?qualitySample(observedBatch,EffectQualityPoint::Final):AdaptiveQualitySample{};
   auto issued=std::make_shared<PresentationTicket>(); // Protected by Impl::mutex.
   const bool targeted=display.batch->targeted&&generated<0&&!subframe&&!repeatedCycle;const double requestedTime=display.batch->target;const double scheduleTime=display.batch->targeted?(subframe||repeatedCycle||generated>=0?display.due:requestedTime):0;
   auto retirementCompletion=retirement?std::make_shared<CompletionLease>([retirement](bool completed){if(!completed)retirement->completed(MTLCommandBufferStatusNotEnqueued);}):nullptr;
   [commands addCompletedHandler:^(id<MTLCommandBuffer>completed){held->reset();if(auto self=weak.lock()){
     completeQuality(completed,observedBatch,quality,EffectQualityPoint::Final,RuntimeAdaptiveQualityScope::FinalProcessing);
+    if(completed.status==MTLCommandBufferStatusCompleted&&completed.GPUEndTime>completed.GPUStartTime)self->lastFinalGpuMs.store((completed.GPUEndTime-completed.GPUStartTime)*1000,std::memory_order_relaxed);
     if(completed.status!=MTLCommandBufferStatusCompleted){std::lock_guard<std::mutex>lock(self->mutex);
      if(issued->completed()&&self->issuedPresentations)--self->issuedPresentations;
      if(completed.status==MTLCommandBufferStatusError&&frameHoldEpoch&&self->holdActive&&frameHoldEpoch==self->holdStatus.epoch&&frameContract==self->desiredHoldContract){self->holdResuming=false;self->holdStatus.state="failed";self->holdStatus.reason="A pending presentation failed on the GPU";}
@@ -639,8 +709,16 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
     if(!displayed||std::find(self->recentPresentations.begin(),self->recentPresentations.end(),time)!=self->recentPresentations.end()){if(self->traceEnabled){if(!displayed)++self->nonpositivePresentations;else ++self->duplicatePresentations;}++self->status.dropped;if(targeted)++self->timing.skipped;}
     else {self->recentPresentations[self->presentationCursor++%self->recentPresentations.size()]=time;
     const bool actualSynthetic=generated>=0||observedBatch->sourceSynthetic;DiagnosticScope scope(!actualSynthetic?DiagnosticStage::PresentedReal:DiagnosticStage::PresentedGenerated,reinterpret_cast<uintptr_t>(self->owner),frameWidth,frameHeight);
-    if(!subframe&&!repeatedCycle){if(!actualSynthetic){++self->status.presentedReal;self->lastRealDisplayed=time;}else ++self->status.presentedGenerated;}
+    if(!subframe&&!repeatedCycle){++self->status.presented;if(!actualSynthetic){++self->status.presentedReal;self->lastRealDisplayed=time;}else ++self->status.presentedGenerated;}
+    if(!actualSynthetic&&!replay&&!subframe&&!repeatedCycle&&frameTime>0){
+     // Capture: source timestamp to presenter encoding. Presentation: encoding
+     // to display. A source without host-time timestamps reports neither.
+     const auto bounded=[](double value){return value>=0&&value<5000?value:-1.;};
+     self->hudLatency={bounded((encodedAt-frameTime)*1000),bounded((time-encodedAt)*1000),bounded((time-frameTime)*1000)};}
     if(!replay&&!subframe&&!repeatedCycle&&self->pacing&&frameEpoch==self->presentationEpoch)self->pacing->reportPresented(actualSynthetic,frameTime,time);
+    if(!replay&&!subframe&&!repeatedCycle&&!observedBatch->targeted&&displayDue>0){const double lead=time-displayDue;if(std::isfinite(lead)&&lead>=0&&lead<1){
+     self->presentLeads[self->presentLeadCursor++%self->presentLeads.size()]=lead;self->presentLeadCount=std::min<unsigned>(self->presentLeadCount+1,self->presentLeads.size());
+     self->presentLead=*std::min_element(self->presentLeads.begin(),self->presentLeads.begin()+self->presentLeadCount);}}
     if(targeted){++self->timing.presented;self->timing.lastPresentedFrame=frameId;self->timing.lastPresentedTarget=requestedTime;self->timing.lastPresentedTime=time;++self->timing.lateness[targettime::bucket(requestedTime,time)];}
     if(!replay&&!subframe&&!repeatedCycle)self->observe(RuntimeStatusPhase::Presented,observedBatch,actualSynthetic,time,colorPolicyReason);
     self->status.lastPresentedFrame=frameId;self->status.lastLatencyMs=std::max(0.,(time-frameTime)*1000);}
@@ -745,16 +823,17 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   if(generationBudgetOwner==generator.get()&&generationBudgetDevice==device&&generationBudgetWidth==w&&generationBudgetHeight==h&&generationBudgetMultiplier==multiplier&&generationBudgetFormat==graphFormat)return;
   generationBudgetOwner=generator.get();generationBudgetDevice=device;generationBudgetWidth=w;generationBudgetHeight=h;generationBudgetMultiplier=multiplier;generationBudgetFormat=graphFormat;generationRetry.reset();
  }
- std::shared_ptr<Batch>acquire(unsigned w,unsigned h){
+ std::shared_ptr<Batch>acquire(unsigned w,unsigned h,const GenerationDelivery*mode=nullptr){
   const unsigned gw=planMode&&execution&&generator?execution->generationOutputWidth():w,gh=planMode&&execution&&generator?execution->generationOutputHeight():h;
-  std::lock_guard<std::mutex>lock(mutex);const unsigned capacity=generator&&generationEnabled?1:std::min(4u,unsigned(layer.maximumDrawableCount));if(inFlight>=capacity)return {};
+  const bool displayLimited=mode&&mode->displayLimited;
+  std::lock_guard<std::mutex>lock(mutex);const unsigned capacity=mode?mode->sourceCapacity:generator&&generationEnabled?1:std::min(4u,unsigned(layer.maximumDrawableCount));if(inFlight>=capacity)return {};
   if(width!=w||height!=h||!pool.empty()&&(pool.front()->real.width!=gw||pool.front()->real.height!=gh)){cancelRetirements();completedReplay.reset();pool.clear();immediate.reset();motionFrame.reset();latest.reset();delivery.reset();accountedDeliveryDrops=0;if(pacing)pacing->reset();historyReady=false;width=w;height=h;}
   generationBudgetContract(gw,gh);
   std::shared_ptr<Batch>batch;for(auto&candidate:pool)if(candidate.use_count()==1){batch=candidate;break;}
   if(!batch){if(pool.size()>=4)return {};batch=std::make_shared<Batch>();batch->admitted.reserve(4);batch->real=makeTexture(layer.device,gw,gh,graphFormat);batch->outputWidth=w;batch->outputHeight=h;pool.push_back(batch);}
-  batch->epoch=presentationEpoch;batch->inputMapped=false;batch->realMapped=false;batch->generatedMapped.assign(batch->generated.size(),false);batch->contentStamped=false;batch->contentId=0;batch->contentEpoch=0;batch->imageRevision=0;batch->contentPTS=0;batch->redraw=false;batch->color=sourceColor;batch->output=outputPolicy;batch->displayImages=1;batch->retirement.reset();batch->generationAdmission.reset();batch->events.clear();batch->generationCompletion={};batch->generationCompletions.clear();batch->requestedGenerated=0;batch->pacingObservation=false;batch->timelineAdmissions.clear();batch->realIssued=false;batch->realAdmitted=false;batch->retired=false;
+  batch->epoch=presentationEpoch;batch->inputMapped=false;batch->realMapped=false;batch->generatedMapped.assign(batch->generated.size(),false);batch->contentStamped=false;batch->contentId=0;batch->contentEpoch=0;batch->imageRevision=0;batch->contentPTS=0;batch->redraw=false;batch->color=sourceColor;batch->output=outputPolicy;batch->displayImages=1;batch->retirement.reset();batch->generationAdmission.reset();batch->events.clear();batch->generationCompletion={};batch->generationCompletions.clear();batch->requestedGenerated=0;batch->pacingObservation=false;batch->timelineAdmissions.clear();batch->realIssued=false;batch->realAdmitted=false;batch->retired=false;batch->displayLimited=false;
   if(generationRetry.impossible){batch->generated.clear();batch->admitted.clear();}
-  if(generator&&generationEnabled&&config.generation&&(!execution||execution->generationStages().size()<2)&&batch->generated.size()<config.generation->multiplier-1&&!generationRetry.impossible&&!generationRetry.pending(CACurrentMediaTime())){
+  if(generator&&generationEnabled&&!displayLimited&&config.generation&&(!execution||execution->generationStages().size()<2)&&batch->generated.size()<config.generation->multiplier-1&&!generationRetry.impossible&&!generationRetry.pending(CACurrentMediaTime())){
    try{while(batch->generated.size()<config.generation->multiplier-1)batch->generated.push_back(makeTexture(layer.device,gw,gh,graphFormat));}
    catch(const ImageBudgetExceeded&error){generationRetry.denied(error,CACurrentMediaTime());if(error.structurallyImpossible)batch->generated.clear();}
   }return batch;
@@ -766,20 +845,22 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   return image;
  }
  void generationObserved(const std::shared_ptr<Batch>&batch,const EffectGenerationStage&stage,RuntimeStatusPhase phase,const std::string&reason={}){
-  RuntimeStatusEvent event;event.context=reinterpret_cast<uintptr_t>(owner);event.processing=true;event.phase=phase;event.frameId=batch->id;event.planRevision=batch->execution->revision();event.stageId=stage.id;event.requestedMethod=stage.encoder->method();event.activeMethod=phase==RuntimeStatusPhase::Bypassed||phase==RuntimeStatusPhase::Failed?"passthrough":event.requestedMethod;event.reason=reason;event.inputWidth=stage.width;event.inputHeight=stage.height;event.outputWidth=stage.width;event.outputHeight=stage.height;observeRuntimeStatus(event);
+  // Automatic reports the candidate that runs now and why it was chosen.
+  const bool passthrough=phase==RuntimeStatusPhase::Bypassed||phase==RuntimeStatusPhase::Failed;const std::string why=reason.empty()&&!passthrough?stage.encoder->activeReason():reason;
+  RuntimeStatusEvent event;event.context=reinterpret_cast<uintptr_t>(owner);event.processing=true;event.phase=phase;event.frameId=batch->id;event.planRevision=batch->execution->revision();event.stageId=stage.id;event.requestedMethod=stage.encoder->method();event.activeMethod=passthrough?"passthrough":stage.encoder->activeMethod();event.reason=why;event.inputWidth=stage.width;event.inputHeight=stage.height;event.outputWidth=stage.width;event.outputHeight=stage.height;observeRuntimeStatus(event);
  }
- ShaderResult composeGeneration(id<MTLCommandBuffer>commands,const std::shared_ptr<Batch>&batch){
+ ShaderResult composeGeneration(id<MTLCommandBuffer>commands,const std::shared_ptr<Batch>&batch,unsigned visibleImages=0){
   unsigned capacity=maximumTimelineImages;
   if(batch->output.hasPacing&&batch->output.framePacing=="adaptive"){
    const auto refresh=displayHz.load();const unsigned hz=refresh?std::min(refresh,batch->output.targetFps):batch->output.targetFps;
    capacity=std::clamp(unsigned(std::max(1.,std::floor(hz*batch->sourcePeriod+.25))),1u,maximumTimelineImages);
   }
-  GenerationSequenceInput input;input.commands=commands;input.source=batch->generationSource;input.execution=batch->execution;input.capacity=capacity;input.owner=reinterpret_cast<uintptr_t>(owner);input.sourceFrameId=batch->id;
+  GenerationSequenceInput input;input.commands=commands;input.source=batch->generationSource;input.execution=batch->execution;input.capacity=capacity;input.displayImages=visibleImages?visibleImages:displayVisibleImages(displayHz.load(),batch->sourcePeriod,maximumTimelineImages);input.owner=reinterpret_cast<uintptr_t>(owner);input.sourceFrameId=batch->id;
   input.timeMs=(batch->contentStamped?batch->contentPTS:batch->sourceTime-begun)*1000;input.durationMs=batch->sourcePeriod*1000;input.origin=config.origin;input.color=batch->color;input.opaque=batch->opaqueDisplay;input.displayMapped=batch->realMapped;
   input.content={batch->contentStamped?batch->contentId:batch->id,batch->contentStamped?batch->contentEpoch:1,batch->id,batch->imageRevision,false,batch->realMapped,batch->scene};
   input.image=[&](unsigned slot,unsigned w,unsigned h){return timelineImage(batch,slot,w,h);};
   input.observe=[&](const EffectGenerationStage&stage,RuntimeStatusPhase phase,const std::string&reason){generationObserved(batch,stage,phase,reason);};
-  auto encoded=encodeGenerationSequence(input,generationEventSequence);if(!encoded.result.encoded)return encoded.result;
+  auto encoded=encodeGenerationSequence(input,generationEventSequence);if(!encoded.result.encoded)return encoded.result;batch->displayLimited=encoded.displayLimited;
   batch->timelineAdmissions=std::move(encoded.admissions);batch->events=std::move(encoded.events);batch->generationCompletions=std::move(encoded.completions);batch->generated.clear();batch->generatedMapped.clear();batch->phases=TimelinePhases{};
   for(const auto&event:batch->events)if(event.synthetic){batch->generated.push_back(event.image);batch->generatedMapped.push_back(event.displayMapped);batch->phases.timestamps[batch->phases.count++]=float(event.phase);}
   batch->real=batch->events.back().image;batch->realMapped=batch->events.back().displayMapped;
@@ -913,14 +994,18 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   if(traceEnabled&&sourceTime-lastTrace>2){lastTrace=sourceTime;std::lock_guard<std::mutex>lock(mutex);traceStatus("frame");}
   const auto size=layer.drawableSize;if(!std::isfinite(size.width)||!std::isfinite(size.height)||size.width<1||size.height<1||size.width>16384||size.height>16384){result.reason="Invalid presentation dimensions";return result;}
   if(!content&&planMode&&execution&&execution->canDetachNeural()&&!target&&!observer&&!effectDepth&&execution->commandQueue()==privateCommandsQueue())return submitDetached(commands,source,frameId,sourceTime,sourcePeriod,opaque);
-  auto batch=acquire(size.width,size.height);if(!batch){std::lock_guard<std::mutex>lock(mutex);++status.dropped;result.busy=true;result.reason="Presentation queue is full";return result;}batch->inputWidth=source.width;batch->inputHeight=source.height;batch->id=frameId;batch->sourceTime=sourceTime;batch->sourcePeriod=sourcePeriod;batch->targeted=target!=nullptr;batch->target=target?target->hostTime:0;batch->execution=planMode?execution:nullptr;batch->scene.reset();batch->sceneCompletion={};batch->planReason=planReason;batch->redraw=redraw;batch->inputMapped=batch->realMapped=sourceMapped;if(content){batch->contentStamped=true;batch->contentId=content->contentId;batch->contentEpoch=content->epoch;batch->imageRevision=content->imageRevision;batch->contentPTS=contentTimeMs/1000;}
+  const auto deliveryMode=generationDelivery(generator&&generationEnabled,outputPolicy.active(),displayHz.load(),sourcePeriod,unsigned(layer.maximumDrawableCount));
+  // Retire an older paced interval only when its delivery route changes.
+  // A real-only source buffer must not race a previously queued image.
+  {std::lock_guard lock(mutex);if(displayLimitedDelivery!=deliveryMode.displayLimited){retireDelivery();displayLimitedDelivery=deliveryMode.displayLimited;}}
+  auto batch=acquire(size.width,size.height,&deliveryMode);if(!batch){std::lock_guard<std::mutex>lock(mutex);++status.dropped;result.busy=true;result.reason="Presentation queue is full";return result;}batch->inputWidth=source.width;batch->inputHeight=source.height;batch->id=frameId;batch->sourceTime=sourceTime;batch->sourcePeriod=sourcePeriod;batch->targeted=target!=nullptr;batch->target=target?target->hostTime:0;batch->execution=planMode?execution:nullptr;batch->scene.reset();batch->sceneCompletion={};batch->planReason=planReason;batch->redraw=redraw;batch->inputMapped=batch->realMapped=sourceMapped;if(content){batch->contentStamped=true;batch->contentId=content->contentId;batch->contentEpoch=content->epoch;batch->imageRevision=content->imageRevision;batch->contentPTS=contentTimeMs/1000;}
   if(batch->execution)stamp(batch);else batch->contract={};
   if(heldInputs&&batch->execution&&batch->execution->revision()!=heldInputs->plan->revision){
    result.reason="The encoded plan does not match the held graphics publication";
    if(!failHeldAttempt(heldEpoch,{heldInputs->plan->revision,heldInputs->controlsDigest},result.reason))result.busy=true;return result;
   }
   id<CAMetalDrawable>drawable=nil;
-  if((!generator||!generationEnabled)&&!outputPolicy.active()){
+  if(!deliveryMode.deferred){
    if(!commands||commands.status>=MTLCommandBufferStatusCommitted){result.reason="Presentation requires an unsubmitted command buffer";return result;}
    drawable=outputDrawable(layer);if(!drawable){{std::lock_guard<std::mutex>lock(mutex);++status.dropped;}result.busy=true;result.reason="Presentation layer has no available drawable";return result;}
    if(drawable.texture.width!=batch->outputWidth||drawable.texture.height!=batch->outputHeight){std::lock_guard<std::mutex>lock(mutex);++status.dropped;result.busy=true;result.reason="Presentation size changed before encoding";return result;}
@@ -963,18 +1048,29 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   if(content&&lastContentId)pendingProducerReset|=content->imageRevision!=lastImageRevision||sourceMapped!=lastContentMapped;
   bool generatedReady=false;if(!redraw&&generator&&generationEnabled){
    if(pendingProducerReset){historyReady=false;++generationSequence;if(batch->execution)for(const auto&stage:batch->execution->generationStages())++stage.state->sequence;pendingProducerReset=false;}
-   if(batch->execution&&batch->execution->generationStages().size()>1){const auto composed=composeGeneration(commands,batch);if(!composed.encoded){result.encoded=false;result.busy=composed.busy;result.reason=composed.reason;return result;}producer->generationEncoded.store(true);generatedReady=batch->phases.count>0;}
+   if(batch->execution&&batch->execution->generationStages().size()>1){const auto composed=composeGeneration(commands,batch,deliveryMode.displayLimited?1:0);if(!composed.encoded){result.encoded=false;result.busy=composed.busy;result.reason=composed.reason;return result;}producer->generationEncoded.store(true);generatedReady=batch->phases.count>0;}
    else{
    InterpolationPlan phases;unsigned requested=0;
    if(pacing){std::lock_guard<std::mutex>lock(mutex);const auto refresh=displayHz.load();if(refresh&&refresh!=appliedRefresh){auto options=*config.adaptive;options.displayRefreshHz=refresh;pacing=std::make_unique<AdaptivePacing>(options);appliedRefresh=refresh;}const auto decision=pacing->observe(frameId,sourceTime,historyReady,5);if(!decision.valid){result.encoded=false;result.reason="Adaptive source identity or submission time is invalid";failWithoutLock(result.reason);return result;}phases=decision.admitted;requested=decision.requested.count;}
-   else {const unsigned multiplier=liveMultiplier?liveMultiplier:config.generation->multiplier;phases.count=multiplier-1;for(unsigned i=0;i<phases.count;++i)phases.timestamps[i]=float(i+1)/multiplier;}
+   else {const unsigned multiplier=liveMultiplier?liveMultiplier:config.generation->multiplier;phases.count=multiplier-1;for(unsigned i=0;i<phases.count;++i)phases.timestamps[i]=float(i+1)/multiplier;
+    const bool requestedPhases=phases.count!=0;phases=displayLimitedPhases(phases,displayVisibleImages(displayHz.load(),sourcePeriod,phases.count+1));batch->displayLimited=requestedPhases&&!phases.count;}
+   if(deliveryMode.displayLimited){phases={};batch->displayLimited=true;}
    batch->phases=phases;batch->admitted.assign(batch->generated.begin(),batch->generated.begin()+std::min<size_t>(phases.count,batch->generated.size()));
    const auto stage= batch->execution&&!batch->execution->generationStages().empty()?&batch->execution->generationStages().front():nullptr;
    const auto sequence=stage?++stage->state->sequence:++generationSequence;
    if(stage&&stage->state->admission&&admittedGenerator!=generator.get()){generationAdmission=stage->state->admission;admittedGenerator=generator.get();admittedGenerationWidth=batch->real.width;admittedGenerationHeight=batch->real.height;admittedGenerationSequence=sequence-1;}
-   if(admitGeneration(batch,sequence)){
+   if(batch->displayLimited){batch->phases=TimelinePhases{};historyReady=false;
+    // No refresh can show a generated image: the provider does not run, and
+    // its next interval starts a new sequence.
+    if(stage)generationObserved(batch,*stage,RuntimeStatusPhase::Bypassed,displayLimitedReason);
+   }else if(admitGeneration(batch,sequence)){
     if(stage&&stage->encoder->requiresScene()){const auto scene=batch->execution->bindGenerationScene(commands,0,batch->real,batch->scene,config.origin);if(!scene.encoded){result.encoded=false;result.busy=scene.busy;result.reason=scene.reason;return result;}}
-    auto generated=generator->encodeColorTimed(commands,batch->real,batch->admitted,sequence,phases,batch->realMapped,stage&&batch->execution->generationGpuTimingRequested(0));if(stage&&generated.encoded&&generated.ready){ImageContentStamp measured{batch->contentStamped?batch->contentId:effectFrameId,batch->contentStamped?batch->contentEpoch:1,batch->id,batch->imageRevision,false,batch->realMapped,batch->scene};batch->execution->recordGenerationGpuTiming(commands,0,measured,generated.gpuTiming);}generatedReady=generated.encoded&&generated.ready;batch->generationCompletion=generated.completion;if(stage)batch->generationCompletions.push_back({0,generated.completion});batch->generatedMapped.assign(batch->generated.size(),generator->outputDisplayMapped(batch->realMapped));
+    auto generated=generator->encodeColorTimed(commands,batch->real,batch->admitted,sequence,phases,batch->realMapped,stage&&batch->execution->generationGpuTimingRequested(0));
+    // The shared per-pair comparison and static-content blend-back of the
+    // generation timeline; a false receipt suppresses only generated images.
+    if(stage&&generated.encoded){const ImagePairAnalysisKey key{stage->state->previousEventId,generationEventSequence+1,batch->contentStamped?batch->contentId:batch->id,batch->contentStamped?batch->contentEpoch:1,batch->imageRevision,config.origin,batch->opaqueDisplay,batch->realMapped};
+     if(auto pair=encodeGenerationPair(commands,*stage,batch->real,key,batch->admitted,phases,generated.ready)){auto provider=generated.completion;generated.completion=[provider,pair]{if(provider){const auto result=provider();if(!result.encoded)return result;}return pair();};}}
+    if(stage&&generated.encoded&&generated.ready){ImageContentStamp measured{batch->contentStamped?batch->contentId:effectFrameId,batch->contentStamped?batch->contentEpoch:1,batch->id,batch->imageRevision,false,batch->realMapped,batch->scene};batch->execution->recordGenerationGpuTiming(commands,0,measured,generated.gpuTiming);}generatedReady=generated.encoded&&generated.ready;batch->generationCompletion=generated.completion;if(stage)batch->generationCompletions.push_back({0,generated.completion});batch->generatedMapped.assign(batch->generated.size(),generator->outputDisplayMapped(batch->realMapped));
     if(stage){generationObserved(batch,*stage,generated.encoded?RuntimeStatusPhase::Encoded:RuntimeStatusPhase::Bypassed,generated.reason);producer->generationEncoded.store(generated.encoded);}
     if(stage){stage->state->admission=generationAdmission;if(generated.encoded)stage->state->previousEventId=++generationEventSequence;}
     if(!generated.encoded&&!generated.busy){admittedGenerator=nullptr;generationRetry.at=CACurrentMediaTime()+.25;nativeLog("Frame generation bypassed: "+generated.reason);}
@@ -987,11 +1083,11 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
    if(pacing){batch->pacingObservation=true;batch->requestedGenerated=requested;}
    }
   }
-  if((generator&&generationEnabled)||outputPolicy.active()){batch->retirement=retirement;auto held=std::make_shared<std::shared_ptr<Batch>>(batch);[commands addCompletedHandler:^(id<MTLCommandBuffer>completed){
+  if(deliveryMode.deferred){batch->retirement=retirement;auto held=std::make_shared<std::shared_ptr<Batch>>(batch);[commands addCompletedHandler:^(id<MTLCommandBuffer>completed){
     if(retirement)retirement->completed(completed.status);
     if(auto self=weak.lock()){if(completed.status==MTLCommandBufferStatusCompleted)self->publish(*held,generatedReady);else if(completed.status==MTLCommandBufferStatusError)self->gpuFailure(*held,completed.error.localizedDescription.UTF8String?:"Source frame processing failed");}
     held->reset();}];}
-  else { {std::lock_guard<std::mutex>lock(mutex);producer->pending.store(true);++status.pending;status.maxPending=std::max(status.maxPending,status.pending);}if(!encodeFinal(commands,drawable,{batch,-1,sourceTime},true,retirement)){result.encoded=false;result.busy=true;result.reason="Neural output is busy; the previous completed frame remains displayed";return result;} }
+  else { {std::lock_guard<std::mutex>lock(mutex);if(batch->pacingObservation&&pacing)pacing->reportDelivery(batch->requestedGenerated,0);producer->pending.store(true);++status.pending;status.maxPending=std::max(status.maxPending,status.pending);}if(!encodeFinal(commands,drawable,{batch,-1,sourceTime},true,retirement)){result.encoded=false;result.busy=true;result.reason="Neural output is busy; the previous completed frame remains displayed";return result;} }
   // Rejected/busy frames retain their identity so callers can retry unchanged.
   // An accepted encoding reserves identity even if its host later abandons it.
   producer->encoded.store(true);observe(RuntimeStatusPhase::Encoded,batch);requestRuntimeStatusPoll(true);frameRetry.reset();lastSubmission=frameId;{std::lock_guard<std::mutex>lock(mutex);if(!redraw){if(content){interval=sourcePeriod;lastContentId=content->contentId;lastContentEpoch=content->epoch;lastContentPTS=content->pts;lastContentTimeMs=contentTimeMs;lastContentPTSUnknown=ptsUnknown;lastImageRevision=content->imageRevision;lastContentMapped=sourceMapped;lastContentDuration=sourcePeriod;lastContentTarget=target?target->hostTime:0;}else if(!config.sourceFrameRate&&lastSourceTime)interval=updateSourceInterval(interval,sourceTime-lastSourceTime);}lastSourceTime=sourceTime;++status.encoded;if(target){++timing.accepted;if(target->hostTime<=targetSubmittedAt)++timing.lateAtSubmit;}if(retirement){retirements.erase(std::remove_if(retirements.begin(),retirements.end(),[](const auto&entry){auto value=entry.lock();return !value||value->done.load();}),retirements.end());retirements.push_back(retirement);retirement->arm();}}return result;
@@ -1036,6 +1132,20 @@ macfx::FrameResult macfx::FramePresenter::submitDisplayFrame(id<MTLCommandBuffer
 void macfx::FramePresenter::setDisplay(uint32_t displayId){std::unique_lock<std::mutex>serial(impl->submission,std::try_to_lock);if(!serial.owns_lock())return;if(displayId&&displayId!=impl->currentDisplay&&!impl->stopping.load()){
  impl->currentDisplay=displayId;
  if(impl->link&&CVDisplayLinkSetCurrentCGDisplay(impl->link,displayId)!=kCVReturnSuccess)impl->bypassGeneration("Frame generation display selection is unavailable");
+ // The HUD also needs display timing when no generator starts the delivery
+ // link. Read the display's nominal period without starting another timer.
+ CVDisplayLinkRef timing=impl->link;const bool temporary=!timing;
+ if(!timing&&CVDisplayLinkCreateWithCGDisplay(displayId,&timing)!=kCVReturnSuccess)timing=nullptr;
+ unsigned refresh=0;
+ if(timing){
+  const auto period=CVDisplayLinkGetNominalOutputVideoRefreshPeriod(timing);
+  if(!(period.flags&kCVTimeIsIndefinite)&&period.timeValue>0&&period.timeScale>0){
+   const double hz=double(period.timeScale)/period.timeValue;
+   if(std::isfinite(hz)&&hz>=20&&hz<=1000)refresh=unsigned(std::lround(hz));
+  }
+  if(temporary)CVDisplayLinkRelease(timing);
+ }
+ impl->displayHz.store(refresh);
 }}
 
 bool macfx::FramePresenter::terminalGpuFailure()const{return impl->gpuFailed.load();}

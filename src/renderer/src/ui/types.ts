@@ -207,6 +207,9 @@ export type LauncherSettings = {
   showNonDefaultTags: boolean;
   networkAccess?: boolean;
   checkForUpdatesAtLaunch?: boolean;
+  /** Graphics shortcut assignments by action, in canonical accelerator form. */
+  graphicsShortcuts?: Record<string, string>;
+  graphicsScreenshotFolder?: string;
   library?: {
     version: number;
     order: string[];
@@ -240,14 +243,14 @@ export type GameGraphicsSettings = { spatialShader?: GameReShadeSettings | null;
   effectPlacement: "before" | "after";
   spatialMultiplier: number | null; spatialSharpness: number; ls1Mode: "quality" | "performance"; frameGeneration: "off" | "lsfg" | "metalfx" | "fsr3" | "xess"; frameMultiplier: number;
   framePacing: "fixed" | "adaptive"; targetFps: number; smoothCadence: boolean;
-  lsfgMode: "quality" | "performance"; lsfgFp16: boolean; lsfgFlowScale: number; modelVersion: string | null };
+  lsfgMode: "quality" | "performance"; lsfgFp16: boolean; lsfgFlowScale: number; keepStaticContent?: boolean; modelVersion: string | null };
 export type GraphicsInputs = { cameraProjection: boolean; source: string; methods: string[]; requiresDownload?: boolean;
   nativeVideo?: boolean; shaderBindingsNextLaunch?: boolean;
   nativeSpatialMethods?: string[]; nativeSpatialMethodLabels?: Record<string, string>;
   sourceResolution?: false | { heights: boolean; multipliers: number[]; percentages?:boolean;processing?:boolean;control?: string; live?: boolean; methods?: string[]; methodLabels?: Record<string, string>; filterExclusiveWithTemporal?: boolean }; spatialBindingsNextLaunch?: boolean;
   depth?: boolean; motionVectors?: boolean; viewMatrix?: boolean; projectionMatrix?: boolean; sceneAovAPI?:1;sceneAovs?:string[];noisyColor?:boolean;architecture?: "arm64" | "x86_64";
   temporalSource?: string; temporalOutput?: string; commandBuffer?: string };
-export type GraphicsCapabilities = { hardware?:GraphicsHardware; spatial: boolean; temporal?: boolean; temporalMethods?: string[]; temporalProfiles?: Record<string,string[]>; cameraTemporalMethods?: string[]; effectPlacement?: boolean; frameGeneration: boolean; adaptive?: boolean; motionClarity?: boolean; depthInput?: boolean; comparison?: boolean; adaptiveQuality?: boolean; outputColor?: boolean; lsfgHDR?: boolean; shaderInputPolicy?: boolean; liveSwitching?: boolean; virtualWindow?: boolean | {activationAPI: 1; autoAPI?: 1; percentageAPI?: 1; channelAPI?: 1}; spatialMethods: string[]; spatialMethodLabels?: Record<string, string>; frameGenerationMethods: string[]; resolutionMultipliers?: number[]; resolutionScope?: "metal" };
+export type GraphicsCapabilities = { hardware?:GraphicsHardware; spatial: boolean; temporal?: boolean; temporalMethods?: string[]; temporalProfiles?: Record<string,string[]>; cameraTemporalMethods?: string[]; effectPlacement?: boolean; frameGeneration: boolean; adaptive?: boolean; motionClarity?: boolean; depthInput?: boolean; comparison?: boolean; adaptiveQuality?: boolean; staticContent?: boolean; performanceHud?: boolean; frameRateCap?: boolean; presentationOptions?: boolean; outputColor?: boolean; lsfgHDR?: boolean; shaderInputPolicy?: boolean; liveSwitching?: boolean; virtualWindow?: boolean | {activationAPI: 1; autoAPI?: 1; percentageAPI?: 1; channelAPI?: 1}; spatialMethods: string[]; spatialMethodLabels?: Record<string, string>; frameGenerationMethods: string[]; resolutionMultipliers?: number[]; resolutionScope?: "metal" };
 export type NeuralEffectSettings = {modelPath: string | null; temporal: boolean; intensity: number; denoiseStrength?: number};
 /** A sizing helper names the row that owns it. Only resize rows carry it; the edit operations keep it consistent. */
 export type EffectOwnership = {id: string; role: "input" | "fit"};
@@ -258,7 +261,8 @@ export type VideoEffectNode =
 export type EffectExtent = {relativeTo: "input" | "presentation"; factor: number} | {relativeTo: "presentation"; automatic: true} | {width: number; height?: number} | {height: number; width?: number};
 export type AdaptiveQualitySettings = {enabled: boolean;nodeId: string;budgetMs: number;minScale: number;maxScale: number};
 export type GraphicsOutputSettings = {toneMapping?: "auto" | "preserve" | "reinhard" | "pbr-neutral";adaptiveQuality?: AdaptiveQualitySettings;comparison?: {mode: "off" | "before" | "wipe" | "difference";position?:number;gain?:number};motionClarity?: "off" | "bfi" | "beam"; subframes?: number; duty?: number; brightness?: number;
-  framePacing?: "fixed" | "adaptive"; targetFps?: number; smoothCadence?: boolean};
+  framePacing?: "fixed" | "adaptive"; targetFps?: number; smoothCadence?: boolean;
+  hud?: "off" | "compact" | "detailed"; frameRateCap?: number; displaySync?: boolean; drawableCount?: 2 | 3};
 /** ReShade depth-input definitions of a game; a saved plan keeps only non-default values. */
 export type GraphicsDepthInput = {reversed: boolean; logarithmic: boolean; farPlane: number; multiplier: number};
 export type GameEffectsPlan = { schema: 1 | 2; mode: "advanced"; enabled?: boolean; video: VideoEffectNode[]; output?: GraphicsOutputSettings; depthInput?: Partial<GraphicsDepthInput>; renderResolution?: {height: number; maximum?: true; method?: string; managedBy?: string} | {multiplier: number; method?: string; managedBy?: string} | null };
@@ -275,7 +279,7 @@ export type EffectCatalogRow = { id: string; kind: VideoEffectNode["kind"]; labe
   traits?: ShaderTraits;
   colorPolicy?: {provider: string; conversion?: string; hdrToneMap?: string; sceneToneMap?: string; restoresSourceEncoding?: boolean; restoresHighlights?: boolean};
   inputContract?: {domain: "image" | "scene" | "image-pair"; color: "rgb"; requires: string[]; acceptsSynthetic: boolean; history?: string; derives?: string[];requiresResizeContext?:"upscale"};
-  outputContract?: {domain: "image" | "timeline"; sizing: "preserve" | "intrinsic" | "stage" | "scene-output" | "shader";preservesSize?:boolean;compositeTarget?:boolean;geometryRules?:Array<{stages:string[];width:string;height:string;when?:string}>; scale?: number | {x: number; y: number};scaleRange?:{min:{x:number;y:number};max:{x:number;y:number}}; direction?: "downsample" | "upscale"; resizeDirections?:Array<"downsample"|"upscale">;resizeContext?:"upscale"; extentEditable?: boolean; phases?: "midpoint" | "explicit"; maximumMultiplier?: number};
+  outputContract?: {domain: "image" | "timeline"; sizing: "preserve" | "intrinsic" | "stage" | "scene-output" | "shader";preservesSize?:boolean;compositeTarget?:boolean;geometryRules?:Array<{stages:string[];width:string;height:string;when?:string}>; scale?: number | {x: number; y: number};scaleRange?:{min:{x:number;y:number};max:{x:number;y:number}}; direction?: "downsample" | "upscale"; resizeDirections?:Array<"downsample"|"upscale">;resizeContext?:"upscale"; extentEditable?: boolean; phases?: "midpoint" | "explicit"; maximumMultiplier?: number; multipliers?: number[]};
   template: VideoEffectTemplate;
   available: boolean; availableWithoutModel?: boolean; availableWithoutInputs?: boolean; reason?: string; requirements?: string[]; pendingInputs?: string[]; inputsAbsent?: boolean; inputReason?: string };
 export type MetalFXHardwareOperation = {supported:boolean;metal4Supported:boolean;minimumMacOS:string;minScale?:number;maxScale?:number;reason?:string;metal4Reason?:string};
@@ -313,7 +317,8 @@ export type GraphicsNotice = {message: string; rowId?: string; dropped?: true};
 export type GraphicsProcessingPhase = "unknown" | "preparing" | "prepared" | "encoded" | "completed" | "presented" | "bypassed" | "failed" | "stopped" | "hidden";
 export type GraphicsStageStatus = {id: string; requestedMethod: string; activeMethod: string; reason: string; phase: GraphicsProcessingPhase;
   resolutionScope?:{kind:"shader-group";members:string[]};
-  input: {width: number; height: number}; output: {width: number; height: number}; frameId: number; encoded: number; completed: number; presented: number; observedAt: number};
+  input: {width: number; height: number}; output: {width: number; height: number}; frameId: number; encoded: number; completed: number; presented: number; observedAt: number;
+  gpu?: {milliseconds: number; scope: "row" | "section"; section: number; observedAt: number}};
 export type GraphicsContextStatus = {pid: number; id: string; phase: GraphicsProcessingPhase; frameId: number; encoded: number; completed: number;
   presentedReal: number; presentedGenerated: number; sourceTime: number; presentedTime: number; input: {width: number; height: number}; output: {width: number; height: number};
   requestedBytes: number; admittedBytes: number; planRevision: string; controlsDigest: string; reason: string; observedAt: number; matchesPrepared: boolean; identityState: "matching" | "previous" | "unverified"; historical: boolean;
@@ -321,7 +326,7 @@ export type GraphicsContextStatus = {pid: number; id: string; phase: GraphicsPro
   acceptedRevision?: string; acceptedControlsDigest?: string; acceptedAt?: number;
   adaptiveQuality?: {nodeId:string;state:"pending"|"active"|"off";scale:number;meanMilliseconds:number;
     scope:"unknown"|"source-and-processing"|"image-processing"|"final-processing"|"offline-frame"|"external-processing";reason:string;observedAt:number};
-  frameSource?: {source: "metal-drawable" | "opengl-framebuffer" | "layer-surface" | "software-bitmap" | "window-stream" | "explicit-texture" | "decoded-video" | "unknown"; inputs: string[]; observedAt: number};
+  frameSource?: {source: "metal-drawable" | "opengl-framebuffer" | "layer-surface" | "software-bitmap" | "window-stream" | "explicit-texture" | "decoded-video" | "external-window" | "unknown"; inputs: string[]; observedAt: number};
   admission?: {reason: string; observedAt: number; counts: Record<string, number>; queue: string; generation: number; format: number; width: number; height: number}};
 export type GameGraphicsStatus = {state: "off" | "stopped" | "unbound" | "unavailable" | "preparing" | "prepared" | "observed" | "historical" | "unverified" | "failed"; reason?: string; launchId?: string; launchPid?: number;
   prepared?: {mode: "simple" | "advanced"; planRevision: string; controlsDigest: string;shaderGroups?:Array<{members:string[]}>} | null;
@@ -330,7 +335,8 @@ export type GameGraphicsStatus = {state: "off" | "stopped" | "unbound" | "unavai
     output?: {requested?: GraphicsOutputSettings | null;applied?: GraphicsOutputSettings | null;pending?: Array<{id: string;reason: string}>}} | null;
   contexts: GraphicsContextStatus[]};
 export type EffectsChainTemplate = { id: string; name: string; plan: GameEffectsPlan; available: boolean; reason?: string };
-export type EffectsPreset = { id: string; name: string; updatedAt: number; plan: GameEffectsPlan; notices?: GraphicsNotice[] };
+export type EffectsPreset = { id: string; name: string; updatedAt: number; plan: GameEffectsPlan; notices?: GraphicsNotice[];
+  measuredCost?: {milliseconds: number; width: number; height: number; measuredAt: number} };
 export type EffectsPresetInput = { id?: string; name: string; updatedAt?: number; plan: GameEffectsPlan };
 export type ReShadeState = { available: boolean; neuralAvailable?: boolean; reason?: string; shaderParameters?: boolean; shaderLiveSwitching?: boolean; presets: Array<{ id: string; label: string; available?: boolean; reason?: string; installed?: boolean; group?: string; depthHosts?: string[];
   format?: ShaderFormat; nativeVideo?: boolean; nativeVideoAvailable?: boolean; traits?: ShaderTraits }>; version?: string;
@@ -392,6 +398,8 @@ export type RecentGame = {
   moduleShortLabel: string;
   moduleRuntimeSupport: RuntimeId[];
   moduleSupports: ModuleSupports;
+  /** A session entry, such as window graphics, that exists only while it runs. */
+  ephemeral?: boolean;
   gameType: string | null;
   indexDir: string | null;
   indexHtml: string | null;
@@ -724,6 +732,9 @@ declare global {
         ): Promise<boolean>;
         setModuleSettings(moduleId: ModuleId, patch: Record<string, any>): Promise<boolean>;
         setLauncherSettings(patch: Record<string, any>): Promise<boolean>;
+        /** Graphics shortcut actions that have a handler, with their assignments and registration problems. */
+        getGraphicsShortcuts?(): Promise<Array<{action: string; label: string; accelerator: string | null; reason?: string}>>;
+        chooseScreenshotFolder?(): Promise<string | null>;
         /** "check" runs Check for Updates with its native dialogs. */
         appUpdate(action: "check" | "cancel" | "restart"): Promise<boolean>;
         setModuleRuntimeSettings(

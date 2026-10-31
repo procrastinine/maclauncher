@@ -6,6 +6,7 @@ const Live = require("../reshade/live-controls"), Writable = require("../writabl
 const SourceResolution = require("../reshade/source-resolution"), RuntimeRecord = require("../reshade/runtime-record");
 const {isPresentationFit} = require("./contracts.mjs");
 const StoredPlan = require("./stored-plan");
+const OutputOptions = require("./output-options");
 const LaunchBinding = require("../reshade/launch-binding");
 const warn = require("../graphics-warning"), Items = require("../item-results");
 const {info: infoGraphics} = require("../graphics-warning");
@@ -598,12 +599,12 @@ async function prepare(entry, options = {}) {
           : require("./contracts.mjs").shaderDefaultOutput({traits})) });
     } else if (Providers.neural(node)) {
       const Neural = require("../reshade/neural");await useNeuralModel(node,ctx,launch,options);
-      const {frameMultiplier,framePacing,targetFps,smoothCadence,...neuralSettings}=node.settings;
+      const {frameMultiplier,framePacing,targetFps,smoothCadence,keepStaticContent,...neuralSettings}=node.settings;
       const prepared = node.method === "mlx-dlss" || !Neural.prepareMethod ? Neural.prepare(node.settings, ctx) : Neural.prepareMethod(node.method, neuralSettings, ctx);
       requireNeuralBinding(prepared,launch,options);
       Object.assign(environment, prepared.environment);
       nodes.push({ id: node.id, kind: ["frame-generation","temporal"].includes(node.kind) ? node.kind : "neural", enabled: true, method: node.method,
-        settings: {...prepared.settings,...(node.kind === "frame-generation" ? {frameMultiplier,framePacing,targetFps,smoothCadence} : {})},
+        settings: {...prepared.settings,...(node.kind === "frame-generation" ? {frameMultiplier,framePacing,targetFps,smoothCadence,...(keepStaticContent !== undefined ? {keepStaticContent} : {})} : {})},
         ...(!["frame-generation","temporal"].includes(node.kind) ? {intrinsicScale: prepared.intrinsicScale||Providers.descriptor(node.method).scale} : {}),
         modelPath: prepared.settings.modelPath, requirements });
     } else if(["temporal","frame-generation"].includes(node.kind)&&node.method==="xess") {
@@ -788,6 +789,9 @@ async function prepare(entry, options = {}) {
     if(output.comparison.mode!=="off")throw new Error("Image comparison requires an updated graphics runtime.");
     const {comparison,...supportedOutput}=output;output=Object.keys(supportedOutput).length?supportedOutput:undefined;
   }
+  // Overlay, source cap and presentation options reach only a graphics package
+  // that declares them; an older package keeps its own output block valid.
+  output=OutputOptions.supported(output,ctx.graphicsCapabilities,pendingOutput);
   const document = { schema: 1, mode: "advanced", revision: digest(output ? {nodes,output} : nodes), nodes, ...(output ? {output} : {}) };
   // No running reader sees partial rows or a failed compilation.
   if (options.live ? !LaunchBinding.isCurrent(entry, launch, options) : options.isCurrent && options.isCurrent() !== true) return defer(STOPPED);

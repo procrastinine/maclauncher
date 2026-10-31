@@ -164,6 +164,8 @@ contextBridge.exposeInMainWorld("MacLauncher", {
       ipcRenderer.invoke("launcher:setModuleSettings", moduleId, patch),
     setLauncherSettings: patch =>
       ipcRenderer.invoke("launcher:setLauncherSettings", patch),
+    getGraphicsShortcuts: () => ipcRenderer.invoke("launcher:getGraphicsShortcuts"),
+    chooseScreenshotFolder: () => ipcRenderer.invoke("launcher:chooseScreenshotFolder"),
     appUpdate: action => ipcRenderer.invoke("launcher:appUpdate", action),
     setModuleRuntimeSettings: (moduleId, runtimeId, settings) =>
       ipcRenderer.invoke("launcher:setModuleRuntimeSettings", moduleId, runtimeId, settings),

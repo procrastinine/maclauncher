@@ -35,9 +35,9 @@ function stored(root) {
     const inspected = StoredPlan.inspect(raw.plan);
     if (inspected.error) throw new Error(inspected.error.message);
     ids.add(raw.id);names.add(nameKey(raw.name));
-    const notices = StoredPlan.notices(inspected);
-    return Object.defineProperty({ id: raw.id, name: name(raw.name), updatedAt: raw.updatedAt, plan: inspected.plan, ...(notices.length ? { notices } : {}) },
-      "raw", { value: raw });
+    const notices = StoredPlan.notices(inspected), cost = measuredCost(raw.measuredCost);
+    return Object.defineProperty({ id: raw.id, name: name(raw.name), updatedAt: raw.updatedAt, plan: inspected.plan, ...(notices.length ? { notices } : {}),
+      ...(cost ? { measuredCost: cost } : {}) }, "raw", { value: raw });
   }, { id: (_raw, index) => index });
   return { rows: read.results, retained: read.failures.map(row => data.presets[row.id]),
     notices: read.failures.map(row => {
@@ -53,6 +53,50 @@ function write(root, presets, retained = []) {
     throw new Error("The graphics preset library is full. Remove an unused preset before saving another.");
   Writable.atomicWrite(location(root), contents, { root });
   return presets;
+}
+// The last GPU time measured while a preset's rows ran in a game, with the
+// game's image size: one value per preset that each new measurement replaces.
+// Saving an edited preset drops it, since the rows it measured changed.
+function measuredCost(value) {
+  if (!value || typeof value !== "object" || !Number.isFinite(value.milliseconds) || value.milliseconds <= 0 || value.milliseconds > 10000 ||
+      ![value.width, value.height].every(size => Number.isInteger(size) && size > 0 && size <= 65536) || !Number.isSafeInteger(value.measuredAt) || value.measuredAt < 1) return undefined;
+  return { milliseconds: value.milliseconds, width: value.width, height: value.height, measuredAt: value.measuredAt };
+}
+// Enabled rows without their identities: a preset applied to a game keeps
+// running the same chain while these are equal.
+const chain = plan => JSON.stringify((plan?.video || []).filter(row => row.enabled !== false).map(({ id, enabled, ...row }) => row));
+// One context's total: each row's own GPU interval plus each shared command
+// buffer once. Every enabled row must report a measurement.
+function chainCost(stages, ids) {
+  let total = 0;const sections = new Map();
+  for (const id of ids) {
+    const gpu = stages.find(stage => stage.id === id)?.gpu;if (!gpu) return null;
+    if (gpu.scope === "row") total += gpu.milliseconds;else sections.set(gpu.section, Math.max(sections.get(gpu.section) || 0, gpu.milliseconds));
+  }
+  for (const value of sections.values()) total += value;
+  return total > 0 ? Math.round(total * 100) / 100 : null;
+}
+// Records a running game's measured chain cost on every preset with the same
+// rows. A recent value at the same image size is kept, so status reads do not
+// rewrite the library each time. Returns whether a preset changed.
+function recordCost(root, plan, contexts, now = Date.now()) {
+  const ids = (plan?.video || []).filter(row => row.enabled !== false).map(row => row.id);
+  if (!ids.length || !Array.isArray(contexts)) return false;
+  for (const context of contexts) {
+    if (context.identityState !== "matching" || context.historical) continue;
+    const milliseconds = chainCost(context.stages || [], ids);if (milliseconds == null) continue;
+    const cost = measuredCost({ milliseconds, width: context.input?.width, height: context.input?.height, measuredAt: now });if (!cost) continue;
+    const signature = chain(plan), { rows, retained } = stored(root);let changed = false;
+    const next = rows.map(row => {
+      if (chain(row.plan) !== signature) return row;
+      const previous = measuredCost(row.raw.measuredCost);
+      if (previous && previous.width === cost.width && previous.height === cost.height && now - previous.measuredAt < 30000) return row;
+      changed = true;return Object.defineProperty({ ...row, measuredCost: cost }, "raw", { value: { ...row.raw, measuredCost: cost } });
+    });
+    if (changed) write(root, next, retained);
+    return changed;
+  }
+  return false;
 }
 function find(rows, id, updatedAt) {
   if (typeof id !== "string" || !UUID.test(id)) throw new Error("Choose a graphics preset.");
@@ -75,4 +119,4 @@ function remove(root, id, updatedAt) {
   const { rows, retained } = stored(root), index = find(rows, id, updatedAt);
   rows.splice(index, 1);return write(root, rows, retained);
 }
-module.exports = { LIMITS, location, list: read, notices, save, remove };
+module.exports = { LIMITS, location, list: read, notices, save, remove, recordCost };

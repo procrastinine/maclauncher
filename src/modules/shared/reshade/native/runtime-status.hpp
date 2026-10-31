@@ -9,7 +9,7 @@ namespace macfx {
 // Hidden: macOS reports the game's window hidden and the game is not drawing
 // to it; no change is accepted while such a context is current.
 enum class RuntimeStatusPhase : uint32_t {Prepared=1,Encoded=2,Completed=3,Presented=4,Bypassed=5,Failed=6,Stopped=7,Preparing=8,Hidden=9};
-enum class RuntimeFrameSource : uint32_t {Unknown=0,MetalDrawable=1,OpenGLFramebuffer=2,LayerSurface=3,SoftwareBitmap=4,BrowserWindow=5,ExplicitTexture=6,DecodedVideo=7};
+enum class RuntimeFrameSource : uint32_t {Unknown=0,MetalDrawable=1,OpenGLFramebuffer=2,LayerSurface=3,SoftwareBitmap=4,BrowserWindow=5,ExplicitTexture=6,DecodedVideo=7,ExternalWindow=8};
 enum RuntimeFrameInput : uint32_t {RuntimeInputDepth=1,RuntimeInputMotion=2,RuntimeInputJitter=4,RuntimeInputCamera=8,RuntimeInputExposure=16,RuntimeInputViewMatrix=32,RuntimeInputProjectionMatrix=64};
 enum class RuntimeAdaptiveQualityState : uint32_t {Pending=1,Active=2,Off=3};
 enum class RuntimeAdaptiveQualityScope : uint32_t {Unknown=0,SourceAndProcessing=1,ImageProcessing=2,FinalProcessing=3,OfflineFrame=4,ExternalProcessing=5};
@@ -53,6 +53,16 @@ void observeRuntimeFrameSource(uintptr_t,RuntimeFrameSource,uint32_t inputs=0) n
 // Optional metadata on the existing leased context. No mapping, polling or
 // timing is created here; the caller supplies its completed GPU-work scope.
 void observeRuntimeAdaptiveQuality(const RuntimeAdaptiveQualityEvent&) noexcept;
+// Row: the row's own GPU interval. Section: the whole command buffer that the
+// row shares with every row reporting the same section number.
+enum class RuntimeStageCostScope : uint32_t {None=0,Row=1,Section=2};
+struct RuntimeStageCostEvent {
+    uintptr_t context=0;std::string_view planRevision,stageId;
+    double milliseconds=0;RuntimeStageCostScope scope=RuntimeStageCostScope::None;uint32_t section=0;
+};
+// Updates an existing stage record of the context's current or accepted
+// revision on an already leased page; it creates no stage, poll or timing.
+void observeRuntimeStageCost(const RuntimeStageCostEvent&) noexcept;
 // Admission checks are metadata observations, never encoded/completed frames.
 // This uses only an existing, currently leased page and the same bounded writer.
 void observeRuntimeAdmission(uintptr_t context,std::string_view reason,unsigned width=0,unsigned height=0,
@@ -69,7 +79,9 @@ struct Header {
 struct Stage {
     char id[129],requested[128],active[128],reason[256];
     uint32_t phase,inputWidth,inputHeight,outputWidth,outputHeight,reserved;
-    uint64_t frameId,encoded,completed,presented,observedAt;char padding[56];
+    uint64_t frameId,encoded,completed,presented,observedAt;
+    // A row's running mean of completed GPU time (RuntimeStageCostScope).
+    double gpuMilliseconds;uint32_t gpuScope,gpuSection;uint64_t gpuObservedAt;char padding[32];
 };
 struct Admission {
     uint32_t schema,reason;uint64_t observedAt,counts[24],queue,generation;
@@ -95,6 +107,7 @@ struct Context {
     AdaptiveQuality adaptiveQuality;
 };
 static_assert(sizeof(Stage)==768 && offsetof(Stage,frameId)==672 && offsetof(Stage,phase)==644);
+static_assert(offsetof(Stage,gpuMilliseconds)==712 && offsetof(Stage,gpuScope)==720 && offsetof(Stage,gpuSection)==724 && offsetof(Stage,gpuObservedAt)==728);
 static_assert(offsetof(Context,rows)==1024 && sizeof(Context)<=slotSize);
 static_assert(offsetof(Context,planRevision)==112 && offsetof(Context,reason)==242);
 static_assert(offsetof(Context,acceptedRevision)==528 && offsetof(Context,acceptedAt)==664);

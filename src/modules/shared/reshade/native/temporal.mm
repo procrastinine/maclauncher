@@ -209,8 +209,13 @@ int metalfx(const RSTemporalFrame &f,RSTemporalResult *r,bool prepareOnly=false,
     if(commands.status>=MTLCommandBufferStatusCommitted||!commands.retainedReferences)return answer(r,RS_TEMPORAL_INVALID,"A retaining, uncommitted Metal command buffer is required.");
     if(o.storageMode!=MTLStorageModePrivate)return answer(r,RS_TEMPORAL_INVALID,"MetalFX requires a private output texture.");
     if(f.exposure){auto exposure=(__bridge id<MTLTexture>)f.exposure;if(exposure.width!=1||exposure.height!=1||exposure.pixelFormat!=MTLPixelFormatR16Float)return answer(r,RS_TEMPORAL_INVALID,"MetalFX requires a 1 by 1 R16Float exposure texture.");}
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 270000
     if(f.flags&(RS_TEMPORAL_OUTPUT_MOTION|RS_TEMPORAL_JITTERED_MOTION)){if(@available(macOS 27.0,*)){}else return answer(r,RS_TEMPORAL_UNAVAILABLE,"These motion-vector conventions require macOS 27 or later.");}
     if(f.colorX||f.colorY||f.depthX||f.depthY||f.motionX||f.motionY||f.outputX||f.outputY){if(@available(macOS 27.0,*)){}else return answer(r,RS_TEMPORAL_UNAVAILABLE,"Temporal texture subregions require macOS 27 or later.");}
+#else
+    if(f.flags&(RS_TEMPORAL_OUTPUT_MOTION|RS_TEMPORAL_JITTERED_MOTION))return answer(r,RS_TEMPORAL_UNAVAILABLE,"This graphics build does not include the macOS 27 motion-vector conventions.");
+    if(f.colorX||f.colorY||f.depthX||f.depthY||f.motionX||f.motionY||f.outputX||f.outputY)return answer(r,RS_TEMPORAL_UNAVAILABLE,"This graphics build does not include macOS 27 temporal texture subregions.");
+#endif
     auto context=owner(f.owner);std::unique_lock<std::mutex> lock(context->mutex,std::try_to_lock);
     if(!lock.owns_lock())return answer(r,RS_TEMPORAL_BUSY,"The temporal owner is encoding another frame.");
     if(!prepareOnly&&context->frame&&f.frameId<=context->frame&&!(f.flags&RS_TEMPORAL_RESET))return answer(r,RS_TEMPORAL_INVALID,"Temporal frame identities must increase.");
@@ -227,7 +232,9 @@ int metalfx(const RSTemporalFrame &f,RSTemporalResult *r,bool prepareOnly=false,
         else {descriptor.inputContentMinScale=1;descriptor.inputContentMaxScale=2;}
         if(@available(macOS 14.4,*)){descriptor.reactiveMaskTextureEnabled=f.reactive!=nullptr;if(f.reactive)descriptor.reactiveMaskTextureFormat=((__bridge id<MTLTexture>)f.reactive).pixelFormat;}
         else if(f.reactive)return answer(r,RS_TEMPORAL_UNAVAILABLE,"A temporal reactive mask requires macOS 14.4 or later.");
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 270000
         if(@available(macOS 27.0,*)){descriptor.outputResolutionMotionVectorsEnabled=bool(f.flags&RS_TEMPORAL_OUTPUT_MOTION);descriptor.jitteredMotionVectorsEnabled=bool(f.flags&RS_TEMPORAL_JITTERED_MOTION);}
+#endif
         InternalScope scope;auto next=[descriptor newTemporalScalerWithDevice:device];if(!next)return answer(r,RS_TEMPORAL_UNAVAILABLE,"MetalFX could not create a temporal scaler for these inputs.");
         context->scaler=next;context->key=key;context->device=device;context->reset=true;
     }
@@ -246,7 +253,9 @@ int metalfx(const RSTemporalFrame &f,RSTemporalResult *r,bool prepareOnly=false,
     if(@available(macOS 14.4,*))s.reactiveMaskTexture=(__bridge id<MTLTexture>)f.reactive;
     s.inputContentWidth=f.renderWidth;s.inputContentHeight=f.renderHeight;s.jitterOffsetX=f.jitterX;s.jitterOffsetY=f.jitterY;s.motionVectorScaleX=f.motionScaleX;s.motionVectorScaleY=f.motionScaleY;s.preExposure=f.preExposure;
     s.depthReversed=bool(f.flags&RS_TEMPORAL_DEPTH_REVERSED);s.reset=context->reset.exchange(false)||colorReset||bool(f.flags&RS_TEMPORAL_RESET)||(context->frame&&f.frameId!=context->frame+1);
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 270000
     if(@available(macOS 27.0,*)){s.colorContentOffsetX=f.colorX;s.colorContentOffsetY=f.colorY;s.depthContentOffsetX=f.depthX;s.depthContentOffsetY=f.depthY;s.motionContentOffsetX=f.motionX;s.motionContentOffsetY=f.motionY;s.reactiveMaskContentOffsetX=f.colorX;s.reactiveMaskContentOffsetY=f.colorY;s.outputOffsetX=f.outputX;s.outputOffsetY=f.outputY;}
+#endif
     r->reset=s.reset;
     // Track this exact buffer before encoding, including a partially failed
     // encode. The weak owner avoids a scaler -> buffer -> owner cycle.
@@ -526,7 +535,9 @@ void encodeTemporal(id scaler,SEL selector,id commands){
         if(hasCamera&&!state->cameraMismatchReported){macfx::nativeLog("Temporal camera ignored: its depth direction differs from the scaler's depthReversed");state->cameraMismatchReported=true;}
         state->cameraFrame=0;
     }
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 270000
     if(@available(macOS 27.0,*)){f.colorX=uint32_t(s.colorContentOffsetX);f.colorY=uint32_t(s.colorContentOffsetY);f.depthX=uint32_t(s.depthContentOffsetX);f.depthY=uint32_t(s.depthContentOffsetY);f.motionX=uint32_t(s.motionContentOffsetX);f.motionY=uint32_t(s.motionContentOffsetY);f.outputX=uint32_t(s.outputOffsetX);f.outputY=uint32_t(s.outputOffsetY);}
+#endif
     auto destinationFrame=f;if(!(f.flags&RS_TEMPORAL_CAMERA_VALID))destinationFrame.frameId=0;
     const auto sceneDestination=macfx::effectPlanRequested()?macfx::takeTemporalSceneDestination(destinationFrame):std::optional<macfx::TemporalSceneDestination>{};
     if(sceneDestination){if(!(f.flags&RS_TEMPORAL_CAMERA_VALID))f.frameId=sceneDestination->frameId;f.flags|=sceneDestination->flags;
@@ -625,7 +636,9 @@ void rememberScaler(id scaler,MTLFXTemporalScalerDescriptor *descriptor,unsigned
     // Camera-aware integrations supply additional scene data per encode through
     // rsSetTemporalCamera. A plain MetalFX descriptor supplies neither projection
     // nor HDR range, so those inputs are never invented here.
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 270000
     if(@available(macOS 27.0,*)){if(descriptor.isOutputResolutionMotionVectorsEnabled)state->descriptorFlags|=RS_TEMPORAL_OUTPUT_MOTION;if(descriptor.isJitteredMotionVectorsEnabled)state->descriptorFlags|=RS_TEMPORAL_JITTERED_MOTION;}
+#endif
     objc_setAssociatedObject(scaler,&association,state,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 

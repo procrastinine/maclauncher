@@ -19,6 +19,7 @@ function fixture(t, {live = false} = {}) {
       return published ? {revision: published.documentRevision, launchId: binding.launchId} : null;
     } };
   const context = { AbortController, EffectsRuntime, EffectsPlan: Plan, StoredPlan, ReShade,
+    graphicsShortcuts: require("../src/main/graphics-shortcuts").create({globalShortcut: {}, readAssignments: () => ({})}),
     ReShadeFilters: require("../src/modules/shared/reshade/filter-library"),
     fs, userDataDir, app: {}, logger: {warn() {}}, downloadManager: {}, confirmRuntimeInstallation: () => assert.fail("No download in IPC fixture"),
     BrowserWindow: {getAllWindows: () => [{isDestroyed: () => false, webContents: {isDestroyed: () => false, send: (channel, payload) => sent.push([channel, payload])}}]},
@@ -36,7 +37,7 @@ function fixture(t, {live = false} = {}) {
     // Main's own timers run only when a test calls them.
     setTimeout: (callback, ms) => {const timer = {callback, ms, unref() {}};timers.push(timer);return timer;}, clearTimeout: timer => {if (timer) timer.cleared = true;},
     require: id => {
-      if (["./graphics-update", "./graphics-status", "./graphics-runtime-use", "./graphics-catalog"].includes(id)) return require(path.join("../src/main", id));
+      if (["./graphics-update", "./graphics-status", "./graphics-runtime-use", "./graphics-catalog", "./graphics-shortcuts"].includes(id)) return require(path.join("../src/main", id));
       if (id === "../modules/shared/effects/edit-operations.mjs") return require("../src/modules/shared/effects/edit-operations.mjs");
       if (id === "node:timers/promises") return require(id);
       if (id === "../modules/shared/bounded-retry") return require("../src/modules/shared/bounded-retry");

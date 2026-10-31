@@ -94,6 +94,7 @@ test('a replacement game run suppresses the old delayed banner and recovery with
   for (const replacementFinishesFirst of [false, true]) {
     const messages = [], logs = [], recoveries = [];
     const context = { runningGameSessions: new Map(), pendingGameCompletions: new Map(), nextRunSessionId: 1,
+      graphicsShortcuts: require('../src/main/graphics-shortcuts').create({globalShortcut: {}, readAssignments: () => ({})}), removeEphemeralEntry: () => false,
       broadcastActivity() {}, observeGameProcess: require('../src/core/game-process-events').observeGameProcess,
       ...require('../src/core/process-lifecycle'),
       findGameByPath: () => ({ name: 'Example' }), gameRecordsCache: [], path,
@@ -140,6 +141,7 @@ test('a game that stops after its files disappear is reported with that reason, 
   const source = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8');
   const messages = [], recoveries = [];
   const context = { runningGameSessions: new Map(), pendingGameCompletions: new Map(), nextRunSessionId: 1,
+    graphicsShortcuts: require('../src/main/graphics-shortcuts').create({globalShortcut: {}, readAssignments: () => ({})}), removeEphemeralEntry: () => false,
     broadcastActivity() {}, observeGameProcess: require('../src/core/game-process-events').observeGameProcess,
     ...require('../src/core/process-lifecycle'),
     findGameByPath: () => ({ name: 'Example', gameId: 'example', gamePath: '/Volumes/Games/Example' }), gameRecordsCache: [], path,

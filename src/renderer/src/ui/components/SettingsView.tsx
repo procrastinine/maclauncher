@@ -23,10 +23,11 @@ import { SearchableSidebar } from "./SearchableSidebar";
 import { CommitNumberInput, CommitTextInput } from "./CommitInput";
 import { Toggle } from "./FieldRow";
 import { StatusBadge } from "./StatusBadge";
+import { GraphicsShortcutSettings, type GraphicsShortcutApi } from "./GraphicsShortcutSettings";
 
 type SettingsViewProps = {
   state: LauncherState;
-  api?: RuntimeSettingsApi;
+  api?: RuntimeSettingsApi & GraphicsShortcutApi;
   sectionId?: string | null;
   navigationKey?: number;
   showIcons: boolean;
@@ -150,6 +151,7 @@ export function SettingsView({
                     onChange={checked => onSetLauncherSettings({ showNonDefaultTags: checked })} />
                 </div>
               </div>
+              <GraphicsShortcutSettings api={api} settings={state.launcherSettings} onSetLauncherSettings={onSetLauncherSettings} />
               <AppUpdateRows update={state.appUpdate} checkAtLaunch={state.launcherSettings.checkForUpdatesAtLaunch === true}
                 onAction={onAppUpdate} onSetLauncherSettings={onSetLauncherSettings} />
             </div>}

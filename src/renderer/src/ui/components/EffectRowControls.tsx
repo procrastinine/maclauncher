@@ -14,6 +14,9 @@ import {AdaptiveQualityControls} from "./AdaptiveQualityControls";
 import {HelpTip} from "./HelpTip";
 
 const resizeHeightPresets = [540, 720, 1080];
+// A declared multiplier list narrows the maximum to the phases a method produces.
+const multiplierSupported = (choice: EffectCatalogRow | undefined, factor: number) =>
+  factor <= (choice?.outputContract?.maximumMultiplier || 5) && (!choice?.outputContract?.multipliers || choice.outputContract.multipliers.includes(factor));
 const NEURAL_DEFAULTS = {modelPath: null, temporal: false, intensity: 1};
 
 /**
@@ -68,9 +71,9 @@ export function EffectRowControls({editor, row: node, choice, simple = false}: {
         : void editor.setSettings(node.id, {settings: {...NEURAL_DEFAULTS, ...node.settings, ...patch}})}
       onImport={() => editor.pickModel(node)} onManage={editor.manageNeuralModels} />
     {node.kind === "frame-generation" && <EffectGraphicsSettings node={node} choice={choice} status={status} adaptive={support?.adaptive === true}
-      onChange={settings} onExtentChange={() => {}} />}{qualityControls}</>;
+      staticContent={support?.staticContent === true} onChange={settings} onExtentChange={() => {}} />}{qualityControls}</>;
   return <>{resolution}{policy}{node.kind !== "neural" && <EffectGraphicsSettings node={node} choice={choice} status={status} adaptive={support?.adaptive === true}
-    onChange={settings} onExtentChange={extent => void editor.setExtent(node.id, extent)}
+    staticContent={support?.staticContent === true} onChange={settings} onExtentChange={extent => void editor.setExtent(node.id, extent)}
     processingOptions={qualityControls} onManageModels={editor.onManageModels} />}</>;
 }
 
@@ -210,8 +213,8 @@ function ResizeOutputSettings({nodeId, extent, downsample, anyDirection = false,
   </>;
 }
 
-function EffectGraphicsSettings({node, choice, status, onChange, onExtentChange, onManageModels, processingOptions}: {
-  node: Exclude<VideoEffectNode, {kind: "shader" | "neural"}>; status?: ReShadeState; adaptive: boolean;
+function EffectGraphicsSettings({node, choice, status, staticContent = false, onChange, onExtentChange, onManageModels, processingOptions}: {
+  node: Exclude<VideoEffectNode, {kind: "shader" | "neural"}>; status?: ReShadeState; adaptive: boolean; staticContent?: boolean;
   choice?: EffectCatalogRow;
   onChange: (patch: Partial<GameGraphicsSettings>) => void; onManageModels?: () => void;
   onExtentChange: (extent?: EffectExtent) => void; processingOptions?: React.ReactNode;
@@ -264,7 +267,10 @@ function EffectGraphicsSettings({node, choice, status, onChange, onExtentChange,
     {node.kind === "frame-generation" && <>
       <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor={id("multiplier")}>Frame multiplier <HelpTip label="About frame multiplication">{node.method === "lsfg" && "Requires compatible Lossless Scaling models and an opaque image. "}Generated frames can add delay and artifacts. Displayed frame rate depends on the game, processing and display.</HelpTip></label>
         {choice?.outputContract?.maximumMultiplier === 2 && (value.frameMultiplier ?? 2) === 2 ? <span className="detailValue">2× frame rate</span> : <select id={id("multiplier")} className="input" value={value.frameMultiplier ?? 2} onChange={event => onChange({frameMultiplier: Number(event.target.value)})}>
-          {[2, 3, 4, 5].filter(factor => factor <= (choice?.outputContract?.maximumMultiplier || 5) || factor === value.frameMultiplier).map(factor => <option key={factor} value={factor} disabled={factor > (choice?.outputContract?.maximumMultiplier || 5)}>{factor}× frame rate{factor > (choice?.outputContract?.maximumMultiplier || 5) ? " · Unsupported" : ""}</option>)}</select>}</div>
+          {[2, 3, 4, 5].filter(factor => multiplierSupported(choice, factor) || factor === value.frameMultiplier).map(factor => <option key={factor} value={factor} disabled={!multiplierSupported(choice, factor)}>{factor}× frame rate{!multiplierSupported(choice, factor) ? " · Unsupported" : ""}</option>)}</select>}</div>
+      {staticContent && choice?.inputContract?.domain === "image-pair" && <label className="inlineCheck"><input type="checkbox" checked={value.keepStaticContent !== false}
+        onChange={event => onChange({keepStaticContent: event.target.checked})} />Keep static content
+        <HelpTip label="About static content">Generated pixels return to the real frames wherever both real frames match locally, so interface elements and text stay sharp. A small object that moves quickly across a detailed unchanged area can disappear from generated images.</HelpTip></label>}
       {node.method === "lsfg" && <><div className="detailRow detailControlRow"><label className="detailLabel" htmlFor={id("mode")}>LSFG mode</label>
         <select id={id("mode")} className="input" value={value.lsfgMode || "quality"} onChange={event => onChange({lsfgMode: event.target.value as "quality" | "performance"})}>
           {([["quality", "Quality"], ["performance", "Performance"]] as const).filter(([mode]) => supportsLossless(`lsfg${value.lsfgFp16 === false ? "Fp32" : "Fp16"}${mode === "quality" ? "Quality" : "Performance"}`) || mode === (value.lsfgMode || "quality")).map(([mode, label]) => {

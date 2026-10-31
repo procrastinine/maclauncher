@@ -623,6 +623,43 @@
       "baseSha256": null
     },
     {
+      "path": "src/window-stream.hpp",
+      "source": "window-stream.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/window-stream.mm",
+      "source": "window-stream.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "path": "src/window-overlay-policy.hpp",
+      "source": "window-overlay-policy.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/window-source.h",
+      "source": "window-source.h",
+      "baseSha256": null
+    },
+    {
+      "path": "src/window-source.mm",
+      "source": "window-source.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "path": "src/graphics-window.mm",
+      "source": "graphics-window.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "src/graphics-window-Info.plist",
+      "source": "graphics-window-Info.plist",
+      "baseSha256": null
+    },
+    {
       "path": "src/source-timing.hpp",
       "source": "source-timing.hpp",
       "baseSha256": null
@@ -681,6 +718,11 @@
     {
       "path": "src/generation-timeline.hpp",
       "source": "generation-timeline.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "generation-schedule.hpp",
+      "path": "src/generation-schedule.hpp",
       "baseSha256": null
     },
     {
@@ -1422,6 +1464,57 @@
       "path": "src/vulkan-scene.mm",
       "baseSha256": null,
       "nativeLink": true
+    },
+    {
+      "source": "hud-counters.hpp",
+      "path": "src/hud-counters.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "hud-overlay.hpp",
+      "path": "src/hud-overlay.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "source-frame-cap.hpp",
+      "path": "src/source-frame-cap.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "source-frame-pacing.hpp",
+      "path": "src/source-frame-pacing.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "screenshot-color.hpp",
+      "path": "src/screenshot-color.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "screenshot-image.hpp",
+      "path": "src/screenshot-image.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "image-pair-generation.mm",
+      "path": "src/image-pair-generation.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "image-pair-kernels.hpp",
+      "path": "src/image-pair-kernels.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "generation-automatic.hpp",
+      "path": "src/generation-automatic.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "metalduck-MIT.txt",
+      "path": "src/metalduck-MIT.txt",
+      "baseSha256": null
     }
   ]
 }

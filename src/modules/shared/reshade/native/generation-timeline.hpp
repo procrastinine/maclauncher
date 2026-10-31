@@ -2,6 +2,7 @@
 // Copyright (c) MacLauncher contributors. MIT license.
 #include "adaptive-pacing.hpp"
 #include "effect-node.hpp"
+#include "generation-schedule.hpp"
 #include <array>
 #include <string>
 #include <vector>

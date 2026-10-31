@@ -10,6 +10,8 @@
 #include "color-conversion.hpp"
 #include "temporal-provider.hpp"
 #include "metalfx-generation-resources.hpp"
+#include "generation-automatic.hpp"
+#include <algorithm>
 #import <MetalFX/MetalFX.h>
 #include <atomic>
 #include <cmath>
@@ -136,6 +138,7 @@ class MetalGeneration final:public GenerationEncoder {
   if(!region(depth,actual.depthX,actual.depthY,actual.renderWidth,actual.renderHeight)||!region(motion,actual.motionX,actual.motionY,actual.renderWidth,actual.renderHeight)||depth.width!=motion.width||depth.height!=motion.height)return "MetalFX interpolation depth and motion must have matching allocated extents and valid declared regions";
   if(actual.outputWidth!=source.width||actual.outputHeight!=source.height||actual.outputX>=source.width||actual.outputY>=source.height)return "MetalFX interpolation requires the complete current output extent";
   if(!std::isfinite(actual.motionScaleX)||!std::isfinite(actual.motionScaleY)||!std::isfinite(actual.jitterX)||!std::isfinite(actual.jitterY)||!std::isfinite(actual.frameTimeMs)||actual.frameTimeMs<0)return "MetalFX interpolation requires finite actual motion, jitter and frame timing";
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 270000
   if(@available(macOS 27.0,*)){
    if(sceneMatrices&&sceneMatrices->frameId==actual.frameId&&(sceneMatrices->flags&(RS_SCENE_VIEW_VALID|RS_SCENE_PROJECTION_VALID))==(RS_SCENE_VIEW_VALID|RS_SCENE_PROJECTION_VALID)&&bool(sceneMatrices->flags&(RS_SCENE_CLIP_ZERO_TO_ONE|RS_SCENE_CLIP_MINUS_ONE_TO_ONE))){
     auto value=*sceneMatrices;
@@ -149,7 +152,9 @@ class MetalGeneration final:public GenerationEncoder {
     for(auto matrix:{simd_inverse(view),simd_inverse(projection)})for(unsigned c=0;c<4;++c)for(unsigned r=0;r<4;++r)valid&=std::isfinite(matrix.columns[c][r]);
     if(valid)inputs.matrices=value;
    }
-  }else if(actual.depthX||actual.depthY||actual.motionX||actual.motionY||actual.outputX||actual.outputY||depth.width!=actual.renderWidth||depth.height!=actual.renderHeight)return "MetalFX interpolation content regions require macOS 27 or later";
+  }else
+#endif
+  if(actual.depthX||actual.depthY||actual.motionX||actual.motionY||actual.outputX||actual.outputY||depth.width!=actual.renderWidth||depth.height!=actual.renderHeight)return "MetalFX interpolation content regions require macOS 27 or later";
   inputs.perspective=(actual.flags&RS_TEMPORAL_CAMERA_VALID)&&std::isfinite(actual.nearPlane)&&std::isfinite(actual.farPlane)&&std::isfinite(actual.verticalFov)&&actual.nearPlane>0&&actual.farPlane>actual.nearPlane&&actual.verticalFov>0&&actual.verticalFov<3.1415927f;
   if(!inputs.perspective&&!inputs.matrices)return "MetalFX interpolation needs an actual perspective camera or macOS 27 view/projection matrices with a declared depth interval";
   inputs.color=source;
@@ -217,7 +222,10 @@ class MetalGeneration final:public GenerationEncoder {
     if(request->uiMode!=InterpolatorUI::None)descriptor.uiTextureFormat=request->color;
     // Completion-owned external snapshots remain authoritative even on SDKs
     // that can manage mutable previous-color storage internally.
-    bool distortion=false;if(@available(macOS 27.0,*)){descriptor.requiresPrevColorTexture=YES;descriptor.distortionTextureEnabled=bool(request->distortion.texture);distortion=descriptor.distortionTextureEnabled;}
+    bool distortion=false;
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 270000
+    if(@available(macOS 27.0,*)){descriptor.requiresPrevColorTexture=YES;descriptor.distortionTextureEnabled=bool(request->distortion.texture);distortion=descriptor.distortionTextureEnabled;}
+#endif
     const auto create=[&]()->id<MTLFXFrameInterpolator>{@try{InternalTemporalScope scope;return [descriptor newFrameInterpolatorWithDevice:gpu];}@catch(NSException*){return nil;}};
     id<MTLFXFrameInterpolator>interpolator=create();
     auto uiMode=request->uiMode;
@@ -227,7 +235,11 @@ class MetalGeneration final:public GenerationEncoder {
      interpolator=create();
      uiMode=InterpolatorUI::None;
     }
-    if(!interpolator&&distortion){if(@available(macOS 27.0,*))descriptor.distortionTextureEnabled=NO;distortion=false;interpolator=create();}
+    if(!interpolator&&distortion){
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 270000
+     if(@available(macOS 27.0,*))descriptor.distortionTextureEnabled=NO;
+#endif
+     distortion=false;interpolator=create();}
     if(!interpolator&&linked){descriptor.scaler=nil;linked=nil;interpolator=create();}
     if(!interpolator)throw std::runtime_error("MetalFX could not create an interpolator for these image contracts");
     next->uiMode=uiMode;next->linked=linked!=nil;next->retryLink=request->retryLink;
@@ -312,18 +324,90 @@ public:
    interpolator.jitterOffsetX=actual.jitterX;interpolator.jitterOffsetY=actual.jitterY;interpolator.deltaTime=actual.frameTimeMs/1000;
    if(inputs.perspective){interpolator.nearPlane=actual.nearPlane;interpolator.farPlane=actual.farPlane;interpolator.fieldOfView=actual.verticalFov*180/3.14159265358979323846;}
    interpolator.aspectRatio=float(source.width)/source.height;interpolator.depthReversed=bool(actual.flags&RS_TEMPORAL_DEPTH_REVERSED);interpolator.shouldResetHistory=reset;
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 270000
    if(@available(macOS 27.0,*)){
     interpolator.distortionTexture=field;interpolator.distortionOffsetX=field?inputs.distortion.x:0;interpolator.distortionOffsetY=field?inputs.distortion.y:0;interpolator.distortionWidth=field?inputs.distortion.width:0;interpolator.distortionHeight=field?inputs.distortion.height:0;
     interpolator.contentWidth=actual.renderWidth;interpolator.contentHeight=actual.renderHeight;
     interpolator.depthContentOffsetX=actual.depthX;interpolator.depthContentOffsetY=actual.depthY;interpolator.motionContentOffsetX=actual.motionX;interpolator.motionContentOffsetY=actual.motionY;interpolator.outputOffsetX=actual.outputX;interpolator.outputOffsetY=actual.outputY;
     if(inputs.matrices){simd_float4x4 view,projection;std::memcpy(&view,inputs.matrices->view,sizeof(view));std::memcpy(&projection,inputs.matrices->projection,sizeof(projection));interpolator.worldToViewMatrix=view;interpolator.viewToClipMatrix=projection;}
    }
+#endif
    for(auto output:outputs){interpolator.outputTexture=output;InternalTemporalScope scope;[interpolator encodeToCommandBuffer:commands];}
    receipt->armed.store(true);
    result.completion=[receipt]()->ShaderResult{const auto status=receipt->status.load();if(status==1)return {true,{}};if(status==2)return {false,"MetalFX interpolation commands failed or were abandoned"};return {false,"MetalFX interpolation is still in flight",true};};
    sceneCommands=nil;sceneDepth=nil;sceneMotion=nil;sceneAovs.reset();sceneMatrices.reset();sceneResources.reset();result.encoded=true;result.ready=!reset;result.generated=result.ready?outputs.size():0;result.historyFrames=reset?1:2;if(reset)result.reason="MetalFX interpolation history is warming";return result;
   }
   return reject("MetalFX interpolation requires macOS 26 or later");
+ }
+};
+// Automatic runs one model-free image-pair candidate per capture. The row's
+// multiplier selects the candidates; AutomaticGenerationChoice decides when
+// to leave or return to a preferred one from each pair's measured interval.
+class AutomaticGeneration final:public GenerationEncoder {
+ struct Candidate {std::shared_ptr<GenerationEncoder>encoder;std::string error;};
+ struct Timing {std::atomic<double>cost{0};std::atomic<bool>measured{false};};
+ id<MTLDevice>device;std::vector<Candidate>candidates;AutomaticGenerationChoice choice;
+ std::chrono::steady_clock::time_point previousEncode{};std::shared_ptr<Timing>timing=std::make_shared<Timing>();bool previousBusy=false;
+ mutable std::mutex reasonLock;std::string reason;
+ static const char*label(std::string_view method){return method=="vt-interpolation"?"VideoToolbox interpolation":method=="metalfx-image"?"MetalFX image interpolation":method=="vision-flow"?"Vision optical flow":"another method";}
+ void explain(size_t from,bool returned,const char*why){
+  const auto*was=candidates[from].encoder?candidates[from].encoder->method():"";std::lock_guard guard(reasonLock);
+  reason=std::string("Automatic: ")+(returned?std::string("returned to ")+label(activeMethod())+" "+why:std::string(label(was))+" "+why+"; using "+label(activeMethod()));
+ }
+ bool usable(size_t index)const{const auto&candidate=candidates[index];if(!candidate.encoder||!candidate.error.empty())return false;const auto status=candidate.encoder->preparationStatus();return status.encoded;}
+ template<class Action>void each(Action action){for(auto&candidate:candidates)if(candidate.encoder&&candidate.error.empty())try{action(*candidate.encoder);}catch(const std::exception&error){candidate.error=error.what();}}
+ const Candidate&active()const{return candidates[choice.active()];}
+public:
+ AutomaticGeneration(id<MTLDevice>value,const LsfgConfig&config):device(value){
+  for(const auto method:automaticGenerationCandidates){
+   if(!generationAcceptsMultiplier(method,config.multiplier))continue;
+   Candidate candidate;try{candidate.encoder=makeGenerationEncoder(device,std::string(method),config);}catch(const std::exception&error){candidate.error=error.what();}
+   candidates.push_back(std::move(candidate));
+  }
+  if(std::none_of(candidates.begin(),candidates.end(),[](const auto&candidate){return bool(candidate.encoder);}))throw std::runtime_error(candidates.empty()?"Automatic generation has no method for this multiplier":candidates.front().error);
+  choice=AutomaticGenerationChoice(candidates.size());choice.settle([&](size_t index){return bool(candidates[index].encoder);});
+ }
+ const char*method()const noexcept override{return "auto";}
+ const char*activeMethod()const noexcept override{return active().encoder?active().encoder->method():method();}
+ std::string activeReason()const override{std::lock_guard guard(reasonLock);return reason.empty()?std::string("Automatic: using ")+label(activeMethod()):reason;}
+ void setColorDescription(const ImageColorDescription&color)override{
+  each([&](GenerationEncoder&encoder){encoder.setColorDescription(color);});
+  if(std::none_of(candidates.begin(),candidates.end(),[](const auto&candidate){return candidate.encoder&&candidate.error.empty();}))throw std::runtime_error(candidates.front().error);
+ }
+ ShaderResult preparationStatus()const override{
+  if(usable(choice.active()))return {true,{}};
+  for(size_t index=0;index<candidates.size();++index)if(usable(index))return {true,{}};
+  for(const auto&candidate:candidates)if(candidate.encoder&&candidate.error.empty()){const auto status=candidate.encoder->preparationStatus();if(status.busy)return status;}
+  for(const auto&candidate:candidates)if(!candidate.error.empty())return {false,candidate.error};
+  return {false,"Automatic generation has no prepared method"};
+ }
+ GenerationResult prepare(id<MTLCommandBuffer>commands,id<MTLTexture>source,const RSTemporalFrame*frame)override{
+  // Every candidate prepares in the background, so a switch finds it ready.
+  GenerationResult first;bool any=false,busy=false;
+  for(auto&candidate:candidates)if(candidate.encoder&&candidate.error.empty()){
+   const auto result=candidate.encoder->prepare(commands,source,frame);
+   if(result.encoded&&!any){first=result;any=true;}else if(!result.encoded&&!result.busy)candidate.error=result.reason;else busy|=result.busy;
+  }
+  choice.settle([&](size_t index){return usable(index);});
+  if(any)return first;
+  GenerationResult result;result.busy=busy;result.reason=busy?"Preparing automatic generation":preparationStatus().reason;return result;
+ }
+ uint64_t imageBytes(unsigned width,unsigned height,const GenerationMeasure&measure)const override{uint64_t total=0;for(const auto&candidate:candidates)if(candidate.encoder)total+=candidate.encoder->imageBytes(width,height,measure);return total;}
+ GenerationResult encode(id<MTLCommandBuffer>commands,id<MTLTexture>source,const std::vector<id<MTLTexture>>&outputs,uint64_t sequence,const InterpolationPlan&phases)override{
+  const auto now=std::chrono::steady_clock::now();
+  if(previousEncode!=std::chrono::steady_clock::time_point{}&&(timing->measured.load()||previousBusy)){
+   // Behind: the last pair took longer than a capture interval or was refused
+   // as busy. Headroom: it took at most three quarters of the interval.
+   const double interval=std::chrono::duration<double>(now-previousEncode).count(),cost=timing->cost.load();const size_t from=choice.active();const bool behind=previousBusy||cost>interval;
+   if(choice.observe(behind,!previousBusy&&cost<=interval*.75,now,[&](size_t index){return usable(index);}))explain(from,!behind,behind?"fell behind":"after ten seconds of headroom");
+  }
+  {const size_t from=choice.active();if(choice.settle([&](size_t index){return usable(index);}))explain(from,false,"is not prepared");}
+  previousEncode=now;timing->measured.store(false);
+  auto&candidate=candidates[choice.active()];
+  if(!candidate.encoder||!candidate.error.empty()){GenerationResult result;result.frameId=sequence;result.reason=candidate.error.empty()?"Automatic generation has no prepared method":candidate.error;return result;}
+  auto result=candidate.encoder->encode(commands,source,outputs,sequence,phases);previousBusy=result.busy;
+  if(result.encoded&&result.ready){auto measured=timing;[commands addCompletedHandler:^(id<MTLCommandBuffer>finished){if(finished.status==MTLCommandBufferStatusCompleted){measured->cost.store(std::chrono::duration<double>(std::chrono::steady_clock::now()-now).count());measured->measured.store(true);}}];}
+  return result;
  }
 };
 }
@@ -335,6 +419,10 @@ std::shared_ptr<GenerationEncoder>makeGenerationEncoder(id<MTLDevice>device,cons
  if(method=="mlx-interpolation")return makeNeuralGenerationEncoder(device,config);
  if(method=="rife")return makeRifeGenerationEncoder(device,config);
  if(method=="fsr3")return makeFSR3GenerationEncoder(device,config);
+ if(method=="vt-interpolation")return makeVideoToolboxGenerationEncoder(device,config);
+ if(method=="metalfx-image")return makeMetalFXImageGenerationEncoder(device,config);
+ if(method=="vision-flow")return makeVisionFlowGenerationEncoder(device,config);
+ if(method=="auto")return std::make_shared<AutomaticGeneration>(device,config);
  throw std::runtime_error("Unknown frame-generation provider");
 }
 }

@@ -63,7 +63,11 @@ test("registry and every module load in plain Node without attempting to require
       assert.equal(composed.detectGame, mod.detectGame);
       for (const id of Object.keys(mod.actions || {})) assert.equal(typeof composed.actions[id], "function", mod.id + "." + id);
       assert.equal(composed.manifest.runtime.default, mod.manifest.runtime.default);
-      assert.equal(typeof composed.getRuntimeProvider, "function");
+      if (mod.manifest.runtime.providers?.length === 0) {
+        assert.equal(composed.getRuntimeProvider, mod.getRuntimeProvider, mod.id);
+        assert.equal(composed.launchRuntime, mod.launchRuntime, mod.id);
+        assert.equal(typeof composed.launchRuntime, "function", mod.id);
+      } else assert.equal(typeof composed.getRuntimeProvider, "function", mod.id);
     }
     assert.deepEqual(registry.listModuleIds().sort(), expectedIds.sort());
     for (const id of ["godot", "renpy", "rgss", "java", "love", "flash", "nscripter"]) {

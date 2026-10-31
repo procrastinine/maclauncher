@@ -18,11 +18,17 @@ struct ImageContentStamp {
  // fields group timing only; image identity and provider history stay above.
  uint64_t qualityContentId=0,qualityEpoch=0;
 };
+// A row's mean completed GPU time. shared marks the time of the whole command
+// buffer that contains the row's section (rows with the same section share it);
+// otherwise the row reported its own GPU interval.
+struct EffectRowCost {std::string id;double milliseconds=0;bool shared=false;uint32_t section=0;};
 struct EffectGenerationStage {
  // inputIdentity names the exact input; historyIdentity names its input
  // contract, which an upstream control edit leaves unchanged.
  std::string id,inputIdentity,historyIdentity;size_t row=0;bool sceneCoordinates=true;unsigned width=0,height=0;GraphicsConfig graphics;
  std::shared_ptr<GenerationEncoder>encoder;
+ // Row option for image-pair providers; applied by the shared pair analysis.
+ bool keepStaticContent=true;
  struct State {uint64_t sequence=0,processingSequence=0,previousEventId=0;bool skippedSource=false;std::shared_ptr<ImageReservation>admission;std::shared_ptr<ImagePairAnalysis>pairAnalysis;std::vector<std::function<ShaderResult()>>previousCompletions;
   void startAfterCut(const State&previous)noexcept{sequence=previous.sequence+1;}
  };
@@ -59,6 +65,12 @@ public:
     bool supportsGpuQuality(EffectQualityPoint)const;
     uint64_t nextQualitySequence()noexcept;
     void observeGpuQuality(const AdaptiveQualitySample&,EffectQualityPoint,RuntimeAdaptiveQualityScope);
+    // Per-row cost for status Details, the HUD and presets. It is measured
+    // only while the status page is leased or the HUD is on, from the intervals
+    // Adaptive quality uses: a row's own external GPU interval, or its command buffer.
+    bool rowCostRequested()const;
+    void recordRowCost(const std::string&id,double milliseconds,bool shared,uint32_t section)const;
+    std::vector<EffectRowCost>rowCosts()const;
     void publishQualityStatus()const noexcept;
     bool frameContractMatches(const ShaderFrame&)const;
     bool frameContractMatches(const ShaderFrame&,id<MTLCommandQueue>)const;

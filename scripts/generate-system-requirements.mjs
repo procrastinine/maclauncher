@@ -16,8 +16,8 @@ const maximum = values => values.filter(Boolean).reduce((a, b) => Requirements.v
 // come directly from the declarations used by its capability gates.
 export function platformFeatures(requirements = Requirements) {
   return [
-    ...Object.values(requirements.METALFX), requirements.METALFX_EXTRA_INPUTS,
-    requirements.METAL4, requirements.NEURAL, requirements.FSR4,
+    ...Object.values(requirements.METALFX), ...Object.values(requirements.FRAME_GENERATION || {}), requirements.METALFX_EXTRA_INPUTS,
+    requirements.METAL4, requirements.NEURAL, requirements.FSR4, requirements.WINDOW_GRAPHICS,
     ...Object.values(requirements.WINE_BACKENDS), ...Object.values(requirements.TEMPLATE_RENDERERS),
     {...requirements.WINE_TEMPORAL, label: "Temporal upscaling in Windows games"},
     {...requirements.WINE_MODERN_VULKAN, label: "Vulkan renderers for Windows games"}
@@ -30,6 +30,7 @@ const groups = [
     ["libmacfx-libplacebo.dylib", "libplacebo-prepare"].includes(row.path)],
   ["ISF shaders", row => row.path.startsWith("isf/")],
   ["Video export", row => row.path === "maclauncher-graphics-video"],
+  ["Window graphics", row => row.path === "maclauncher-graphics-window"],
   ["MLX neural processing", row => row.path.startsWith("neural/") && row.path !== "neural/maclauncher-neural-video"],
   ["Neural video decoding and encoding", row => row.path === "neural/maclauncher-neural-video"]
 ];
@@ -90,8 +91,8 @@ export function generateSystemRequirements(text, {requirements = Requirements, p
   appMinimum = require("../package.json").build.mac.minimumSystemVersion} = {}) {
   text = replaceTable(text, "platform-requirements", [
     "| Feature | Minimum macOS | Processor and device |", "| --- | --- | --- |",
-    ...platformFeatures(requirements).map(row => `| ${row.label} | ${version(row.minimumMacOS)} | ${
-      row.hardwareArchitectures?.join() === "arm64" ? "Apple Silicon" : "Support queried per Metal device"} |`)
+    ...platformFeatures(requirements).map(row => `| ${row.label} | ${version(row.minimumMacOS)} | ${row.deviceSupport ||
+      (row.hardwareArchitectures?.join() === "arm64" ? "Apple Silicon" : "Support queried per Metal device")} |`)
   ]);
   text = replaceTable(text, "selected-graphics-requirements", [
     "| Included component | Package version | Processor | Effective minimum macOS |", "| --- | --- | --- | --- |",

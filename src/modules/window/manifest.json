@@ -1,0 +1,41 @@
+{
+  "id": "window",
+  "label": "Window",
+  "shortLabel": "Window",
+  "family": "native",
+  "gameType": "window",
+  "icon": {"path": "resources/icon.png", "kind": "symbol"},
+  "runtime": {
+    "default": "capture",
+    "supported": ["capture"],
+    "providers": [],
+    "entries": {
+      "capture": {
+        "label": "Window capture",
+        "graphicsHost": "window",
+        "explicitFrames": true,
+        "settings": {
+          "defaults": {"output": "inPlace", "captureCursor": false},
+          "fields": [
+            {"key": "output", "type": "select", "label": "Output",
+              "description": "Scaled to screen fills the window's screen with the processed image at the window's aspect ratio and passes clicks to the window. It needs the Accessibility permission. A display is always shown in place.",
+              "options": [{"value": "inPlace", "label": "In place"}, {"value": "scaled", "label": "Scaled to screen"}]},
+            {"key": "captureCursor", "type": "boolean", "label": "Include pointer in capture",
+              "description": "Effects also apply to the pointer. Changes apply while the window has graphics."}
+          ]
+        }
+      }
+    }
+  },
+  "supports": {"cheats": false, "cheatsPatcher": false, "saveEditing": false, "saveLocation": false},
+  "settingsDefaults": {},
+  "ui": {
+    "appActions": [
+      {"id": "applyGraphics", "label": "Apply Graphics To", "menus": ["file", "dock"], "stopLabel": "Stop Window Graphics", "shortcut": "windowGraphics"}
+    ],
+    "infoFields": [
+      {"key": "moduleData.bundleIdentifier", "label": "Bundle ID"},
+      {"key": "moduleData.applicationPath", "label": "Application", "format": "path"}
+    ]
+  }
+}

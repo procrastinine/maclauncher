@@ -1,5 +1,6 @@
 // Copyright (c) MacLauncher contributors. MIT license.
 #include "image-pair-analysis.hpp"
+#include "generation-methods.hpp"
 #include "generation-timeline.hpp"
 #include "image-admission.hpp"
 #include "metal-library-cache.hpp"
@@ -33,7 +34,13 @@ struct Receipt {
   float meanDifference, changedTileFraction;
   uint32_t changedPixels, pixelCount;
 };
-static_assert(sizeof(Parameters) == 72 && sizeof(Receipt) == 72);
+struct BlendParameters {
+  uint32_t width, height, alphaMode, contract;
+  float phase, reserved[3];
+  uint64_t previousEventId, epoch, imageRevision;
+};
+static_assert(sizeof(Parameters) == 72 && sizeof(Receipt) == 72 &&
+              sizeof(BlendParameters) == 56);
 const char *shader = R"METAL(
 #include <metal_stdlib>
 using namespace metal;
@@ -96,6 +103,39 @@ kernel void pair_decision(device const Tile*tiles[[buffer(0)]],device History&hi
   history={p.currentEventId,p.epoch,p.imageRevision,p.contract,0};
  }
 }
+struct BlendParameters {
+ uint width,height,alphaMode,contract;float phase,reserved0,reserved1,reserved2;
+ ulong previousEventId,epoch,imageRevision;
+};
+struct BlendOutput {float4 color[[color(0),index(0)]];float4 weight[[color(0),index(1)]];};
+vertex float4 static_blend_vertex(uint id[[vertex_id]]) {
+ const float2 points[]={float2(-1,-1),float2(3,-1),float2(-1,3)};return float4(points[id],0,1);
+}
+// Static-content blend-back. A pixel whose 3x3 neighborhood is unchanged
+// between the two real endpoints, relative to that neighborhood's own
+// contrast, takes the real image at the generated phase. Changed and flat
+// areas, nonfinite input and unmatched history keep the generated pixel.
+fragment BlendOutput static_blend(float4 position[[position]],
+ texture2d<float,access::read>current[[texture(0)]],texture2d<float,access::read>previous[[texture(1)]],
+ device const History&history[[buffer(0)]],constant BlendParameters&p[[buffer(1)]]) {
+ const uint2 center=uint2(position.xy);
+ if(!p.previousEventId||history.eventId!=p.previousEventId||history.epoch!=p.epoch||history.imageRevision!=p.imageRevision||
+    history.contract!=p.contract||center.x>=p.width||center.y>=p.height)discard_fragment();
+ float change=0,low=MAXFLOAT,high=-MAXFLOAT;
+ for(int y=-1;y<=1;++y)for(int x=-1;x<=1;++x){
+  const uint2 at=uint2(clamp(int2(center)+int2(x,y),int2(0),int2(p.width-1,p.height-1)));
+  const float4 a=visible(current.read(at),p.alphaMode),b=visible(previous.read(at),p.alphaMode);
+  if(any(!isfinite(a))||any(!isfinite(b)))discard_fragment();
+  const float4 d=abs(a-b);change=max(change,max(max(d.r,d.g),max(d.b,d.a)));
+  const float la=dot(a.rgb,float3(.2126f,.7152f,.0722f)),lb=dot(b.rgb,float3(.2126f,.7152f,.0722f));
+  low=min(low,min(la,lb));high=max(high,max(la,lb));
+ }
+ const float contrast=high-low;
+ const float weight=(1-smoothstep(.05f,.15f,change/(contrast+.02f)))*smoothstep(.03f,.10f,contrast);
+ if(weight<=0)discard_fragment();
+ BlendOutput output;output.color=mix(previous.read(center),current.read(center),p.phase);output.weight=float4(weight);
+ return output;
+}
 )METAL";
 
 uint32_t colorContract(const ImageColorDescription &color) {
@@ -121,6 +161,8 @@ struct ImagePairAnalysis::Impl {
   id<MTLCommandQueue> queue;
   id<MTLTexture> previous;
   id<MTLComputePipelineState> tilesPipeline, decisionPipeline;
+  // Optional: absent when the device or format cannot blend two sources.
+  id<MTLRenderPipelineState> blendPipeline;
   id<MTLBuffer> tiles, history, receipts;
   std::shared_ptr<ImageReservation> buffersAdmission;
   std::array<std::atomic<bool>, receiptCount> leased{};
@@ -163,6 +205,22 @@ struct ImagePairAnalysis::Impl {
         decisionPipeline.maxTotalThreadsPerThreadgroup < threadsPerTile)
       throw std::runtime_error(error.localizedDescription.UTF8String
                                    ?: "Cannot prepare GPU image-pair analysis");
+    auto blend = [MTLRenderPipelineDescriptor new];
+    blend.vertexFunction = [library newFunctionWithName:@"static_blend_vertex"];
+    blend.fragmentFunction = [library newFunctionWithName:@"static_blend"];
+    blend.colorAttachments[0].pixelFormat = prototype.pixelFormat;
+    blend.colorAttachments[0].blendingEnabled = YES;
+    blend.colorAttachments[0].sourceRGBBlendFactor =
+        blend.colorAttachments[0].sourceAlphaBlendFactor =
+            MTLBlendFactorSource1Alpha;
+    blend.colorAttachments[0].destinationRGBBlendFactor =
+        blend.colorAttachments[0].destinationAlphaBlendFactor =
+            MTLBlendFactorOneMinusSource1Alpha;
+    NSError *blendError = nil;
+    if (blend.vertexFunction && blend.fragmentFunction)
+      blendPipeline =
+          [queue.device newRenderPipelineStateWithDescriptor:blend
+                                                       error:&blendError];
     auto descriptor = [MTLTextureDescriptor
         texture2DDescriptorWithPixelFormat:prototype.pixelFormat
                                      width:width
@@ -235,9 +293,13 @@ ImagePairAnalysis::ImagePairAnalysis(id<MTLCommandQueue> queue,
                                      uintptr_t owner)
     : impl(std::make_shared<Impl>(queue, prototype, color, owner)) {}
 ImagePairAnalysis::~ImagePairAnalysis() = default;
+bool ImagePairAnalysis::blendAvailable() const noexcept {
+  return impl->blendPipeline != nil;
+}
 ImagePairAnalysisResult
 ImagePairAnalysis::encode(id<MTLCommandBuffer> commands, id<MTLTexture> source,
-                          const ImagePairAnalysisKey &key) {
+                          const ImagePairAnalysisKey &key,
+                          const ImagePairGenerated &blend) {
   if (!commands || commands.commandQueue != impl->queue ||
       !commands.retainedReferences ||
       commands.status >= MTLCommandBufferStatusCommitted || !source ||
@@ -302,6 +364,44 @@ ImagePairAnalysis::encode(id<MTLCommandBuffer> commands, id<MTLTexture> source,
                                     (impl->height + tileSide - 1) / tileSide, 1)
           threadsPerThreadgroup:MTLSizeMake(threadsPerTile, 1, 1)];
   [compute endEncoding];
+  // Blend-back reads the previous endpoint from the history image, so it runs
+  // before the copy below replaces that image with the current endpoint.
+  if (impl->blendPipeline && blend.images.size() == blend.phases.size())
+    for (size_t index = 0; index < blend.images.size(); ++index) {
+      const auto output = blend.images[index];
+      const float phase = blend.phases[index];
+      if (!output || output.device != impl->queue.device ||
+          output.width != impl->width || output.height != impl->height ||
+          output.pixelFormat != impl->previous.pixelFormat ||
+          !(output.usage & MTLTextureUsageRenderTarget) || !(phase > 0) ||
+          !(phase < 1))
+        continue;
+      auto pass = [MTLRenderPassDescriptor renderPassDescriptor];
+      pass.colorAttachments[0].texture = output;
+      pass.colorAttachments[0].loadAction = MTLLoadActionLoad;
+      pass.colorAttachments[0].storeAction = MTLStoreActionStore;
+      auto render = [commands renderCommandEncoderWithDescriptor:pass];
+      if (!render)
+        return {{false, "Cannot encode static-content blend-back"}, {}};
+      const BlendParameters values{impl->width,
+                                   impl->height,
+                                   parameters.alphaMode,
+                                   contract,
+                                   phase,
+                                   {0, 0, 0},
+                                   key.previousEventId,
+                                   key.epoch,
+                                   key.imageRevision};
+      [render setRenderPipelineState:impl->blendPipeline];
+      [render setFragmentTexture:source atIndex:0];
+      [render setFragmentTexture:impl->previous atIndex:1];
+      [render setFragmentBuffer:impl->history offset:0 atIndex:0];
+      [render setFragmentBytes:&values length:sizeof(values) atIndex:1];
+      [render drawPrimitives:MTLPrimitiveTypeTriangle
+                 vertexStart:0
+                 vertexCount:3];
+      [render endEncoding];
+    }
   // Publish the new history identity only after its actual image copy. A
   // discarded/failed partial command must never make stale pixels appear to
   // belong to the next pair, even when its old CPU-side event IDs advanced.
@@ -332,6 +432,6 @@ ImagePairAnalysis::encode(id<MTLCommandBuffer> commands, id<MTLTexture> source,
   return {{true, {}}, [flight] { return flight->complete(); }};
 }
 bool usesImagePairAnalysis(std::string_view method) noexcept {
-  return method == "lsfg" || method == "mlx-interpolation" || method == "rife";
+  return generationUsesImagePairs(method);
 }
 } // namespace macfx

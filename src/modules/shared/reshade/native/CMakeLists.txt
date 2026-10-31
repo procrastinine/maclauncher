@@ -117,6 +117,8 @@ set_source_files_properties(src/generation-execution.mm PROPERTIES COMPILE_OPTIO
 target_sources(reshade-macos PRIVATE src/image-pair-analysis.mm)
 set_source_files_properties(src/image-pair-analysis.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
 target_sources(reshade-macos PRIVATE src/fsr3-generation.mm)
+target_sources(reshade-macos PRIVATE src/image-pair-generation.mm)
+target_link_libraries(reshade-macos PRIVATE "-framework VideoToolbox" "-framework Vision")
 target_sources(reshade-macos PRIVATE src/depth-resample.mm)
 target_sources(reshade-macos PRIVATE src/scene-guides.mm)
 set_source_files_properties(src/scene-guides.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
@@ -136,8 +138,8 @@ find_path(LIBRASHADER_INCLUDE_DIR librashader.h HINTS "${CMAKE_CURRENT_SOURCE_DI
 target_sources(reshade-macos PRIVATE src/virtual-window.mm)
 target_sources(reshade-macos PRIVATE src/presentation-hold.mm)
 set_source_files_properties(src/presentation-hold.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
-target_sources(reshade-macos PRIVATE src/browser-frame.mm)
-set_source_files_properties(src/browser-frame.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+target_sources(reshade-macos PRIVATE src/browser-frame.mm src/window-stream.mm src/window-source.mm)
+set_source_files_properties(src/browser-frame.mm src/window-stream.mm src/window-source.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
 target_link_libraries(reshade-macos PRIVATE "-weak_framework ScreenCaptureKit" "-framework CoreMedia")
 target_sources(reshade-macos PRIVATE src/video-frame.mm)
 set_source_files_properties(src/video-frame.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
@@ -145,6 +147,12 @@ add_executable(maclauncher-graphics-video src/graphics-video.mm)
 target_compile_options(maclauncher-graphics-video PRIVATE -fobjc-arc -Wno-deprecated-declarations -mmacosx-version-min=14.0)
 target_link_options(maclauncher-graphics-video PRIVATE -mmacosx-version-min=14.0)
 target_link_libraries(maclauncher-graphics-video PRIVATE "-framework Foundation" "-framework AVFoundation" "-framework CoreVideo" "-framework CoreMedia" "-framework CoreGraphics" "-framework VideoToolbox" "-framework Metal")
+# Window graphics: the system content picker and window-source sessions.
+add_executable(maclauncher-graphics-window src/graphics-window.mm)
+target_compile_options(maclauncher-graphics-window PRIVATE -fobjc-arc -mmacosx-version-min=15.2)
+target_link_options(maclauncher-graphics-window PRIVATE -mmacosx-version-min=15.2
+  "SHELL:-sectcreate __TEXT __info_plist ${CMAKE_CURRENT_SOURCE_DIR}/src/graphics-window-Info.plist")
+target_link_libraries(maclauncher-graphics-window PRIVATE "-framework AppKit" "-framework ScreenCaptureKit" "-framework CoreGraphics")
 
 target_include_directories(reshade-macos PRIVATE ${LIBRASHADER_INCLUDE_DIR})
 add_dependencies(reshade-macos vkd3d-shader)
@@ -249,7 +257,7 @@ if(BUILD_TESTING)
   foreach(file hook-originals.mm dormant-activation.mm explicit-constructor.cpp generation-budget.cpp image-budget.cpp
       source-timing.cpp resolution-scale.cpp publisher-pixels.cpp uniform-sources.cpp
       virtual-visibility.cpp browser-frame-policy.cpp color-contract.mm depth-demand.mm window-binding.mm command-deadline.mm overlay-drawables.mm
-      bitmap-surface.mm metal-library-cache.mm quartz-frame.mm source-control.mm native-config.cpp)
+      bitmap-surface.mm metal-library-cache.mm quartz-frame.mm source-control.mm native-config.cpp generation-automatic.cpp)
     native_fixture(${file})
   endforeach()
   native_fixture(runtime-status.cpp UNITS runtime-status.cpp)
@@ -275,6 +283,8 @@ if(BUILD_TESTING)
   native_fixture(browser-frame-lifetime.mm NAME browser-frame-callbacks DEFINES BROWSER_TEST_ACTUAL_SOURCE
     LINK reshade-macos "-weak_framework ScreenCaptureKit")
   native_fixture(graphics-video.mm LINK "-framework AVFoundation" "-framework VideoToolbox")
+  native_fixture(window-overlay-policy.cpp)
+  native_fixture(window-source-fixture.mm LINK reshade-macos "-weak_framework ScreenCaptureKit")
   native_fixture(provider.mm)
   foreach(file presentation-lifecycle.mm presentation-failure.mm presentation-reentrant.mm presentation-replay.mm
       presentation-epoch.mm presentation-observed-fg.mm adaptive-presentation-test.mm neural-presentation.mm)

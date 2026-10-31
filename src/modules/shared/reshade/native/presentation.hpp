@@ -15,6 +15,9 @@ struct PresenterConfig {SpatialMethod method=SpatialMethod::Bilinear;FrameOrigin
 enum class PresenterPreparation {Ready,Working,Unavailable};
 struct PresenterStatus {
  uint64_t submitted=0,encoded=0,completedReal=0,presentedReal=0,presentedGenerated=0,dropped=0,lastPresentedFrame=0;
+ // Every displayed real or generated image, counted on its own so the overlay
+ // can check presentedReal + presentedGenerated == presented.
+ uint64_t presented=0;
  unsigned pending=0,maxPending=0;double lastLatencyMs=0;bool stopped=false;std::string reason;AdaptivePacingStatus adaptive;
 };
 class SceneWindowAuthority;

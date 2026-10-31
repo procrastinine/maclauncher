@@ -6,7 +6,7 @@ const identity = value => typeof value === "string" && /^[\w-]{1,128}$/.test(val
 const digest = value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 const hash = value => crypto.createHash("sha256").update(value).digest("hex");
 const phases = ["unknown", "prepared", "encoded", "completed", "presented", "bypassed", "failed", "stopped", "preparing", "hidden"];
-const frameSources = ["unknown", "metal-drawable", "opengl-framebuffer", "layer-surface", "software-bitmap", "window-stream", "explicit-texture", "decoded-video"];
+const frameSources = ["unknown", "metal-drawable", "opengl-framebuffer", "layer-surface", "software-bitmap", "window-stream", "explicit-texture", "decoded-video", "external-window"];
 function supported(root) {
   try {return require("./runtime-record").read(root).features?.graphics?.runtimeStatusAPI === 1;} catch {return false;}
 }
@@ -78,6 +78,13 @@ function adaptiveQuality(bytes){
   if(!state||!scope||!nodeId||!Number.isFinite(scale)||scale<=0||scale>16||!Number.isFinite(meanMilliseconds)||meanMilliseconds<0||state==="active"&&scope==="unknown")return undefined;
   return {nodeId,state,scope,scale,meanMilliseconds,reason:text(bytes,start+169,256),observedAt:number(bytes,start+32)};
 }
+// A row's mean completed GPU time: "row" is its own GPU interval; "section"
+// is the whole command buffer it shares with rows of the same section.
+function stageCost(bytes, start) {
+  const milliseconds = bytes.readDoubleLE(start + 712), scope = ["", "row", "section"][bytes.readUInt32LE(start + 720)];
+  if (!scope || !Number.isFinite(milliseconds) || milliseconds <= 0 || milliseconds > 10000) return {};
+  return {gpu: {milliseconds, scope, section: bytes.readUInt32LE(start + 724), observedAt: number(bytes, start + 728)}};
+}
 function context(bytes, includeStages = true) {
   const stages = includeStages ? Math.min(bytes.readUInt32LE(20), STAGES) : 0, rows = [];
   for (let index = 0; index < stages; index++) {
@@ -86,7 +93,8 @@ function context(bytes, includeStages = true) {
       reason: text(bytes, start + 385, 256), phase: phases[bytes.readUInt32LE(start + 644)] || "unknown",
       input: {width: bytes.readUInt32LE(start + 648), height: bytes.readUInt32LE(start + 652)},
       output: {width: bytes.readUInt32LE(start + 656), height: bytes.readUInt32LE(start + 660)},
-      frameId: number(bytes, start + 672), encoded: number(bytes, start + 680), completed: number(bytes, start + 688), presented: number(bytes, start + 696), observedAt: number(bytes, start + 704)});
+      frameId: number(bytes, start + 672), encoded: number(bytes, start + 680), completed: number(bytes, start + 688), presented: number(bytes, start + 696), observedAt: number(bytes, start + 704),
+      ...stageCost(bytes, start)});
   }
   const nativeAdmission = admission(bytes),quality=adaptiveQuality(bytes);
   const frameSource = bytes.readUInt32LE(912) === 1 ? {source: frameSources[bytes.readUInt32LE(916)] || "unknown",

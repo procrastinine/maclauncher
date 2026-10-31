@@ -3,6 +3,7 @@
 #import <Metal/Metal.h>
 #include "log.hpp"
 #include "native-config.hpp"
+#include "screenshot-color.hpp"
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -20,8 +21,7 @@ void writeCapturedFrame(const std::string &,const void *,unsigned,unsigned,bool,
 class FrameCapture {
     struct Image {id<MTLBuffer> bytes;id<MTLTexture> texture;unsigned width=0,height=0,stride=0;bool bgra=false;};
     static bool supported(id<MTLTexture> texture) {
-        return texture&&(texture.pixelFormat==MTLPixelFormatBGRA8Unorm||texture.pixelFormat==MTLPixelFormatBGRA8Unorm_sRGB||
-            texture.pixelFormat==MTLPixelFormatRGBA8Unorm||texture.pixelFormat==MTLPixelFormatRGBA8Unorm_sRGB);
+        return texture&&captureWritesFormat(texture.pixelFormat);
     }
     static bool readable(id<MTLCommandBuffer> commands,id<MTLTexture> texture) {
         return commands&&supported(texture)&&commands.status<MTLCommandBufferStatusCommitted&&commands.device==texture.device&&texture.sampleCount==1&&!texture.framebufferOnly;
@@ -49,13 +49,15 @@ class FrameCapture {
             const auto input=temporary+"-before.png",output=temporary+"-after.png";
             struct Remove{const std::string&a,&b;~Remove(){unlink(a.c_str());unlink(b.c_str());}}remove{input,output};
             bool published=false;
+            // A final-only capture has no source image and publishes one file.
+            const bool pair=first.bytes!=nil;
             @try{try{if(captureFrameCurrent(reservation)){
-                writeCapturedFrame(input,first.bytes.contents,first.width,first.height,first.bgra,inputFlip,first.stride);
+                if(pair)writeCapturedFrame(input,first.bytes.contents,first.width,first.height,first.bgra,inputFlip,first.stride);
                 writeCapturedFrame(output,last.bytes.contents,last.width,last.height,last.bgra,outputFlip,last.stride);
                 const timeval time{time_t(capturedAt/1000000),suseconds_t(capturedAt%1000000)},times[2]{time,time};
-                if(utimes(input.c_str(),times)||utimes(output.c_str(),times))throw std::runtime_error("Cannot timestamp the captured frame");
+                if((pair&&utimes(input.c_str(),times))||utimes(output.c_str(),times))throw std::runtime_error("Cannot timestamp the captured frame");
                 if(captureFrameCurrent(reservation)){
-                    if(std::rename(input.c_str(),(name+"-before.png").c_str())||std::rename(output.c_str(),(name+"-after.png").c_str()))throw std::runtime_error("Cannot publish the captured frame pair");
+                    if((pair&&std::rename(input.c_str(),(name+"-before.png").c_str()))||std::rename(output.c_str(),(name+"-after.png").c_str()))throw std::runtime_error("Cannot publish the captured frame pair");
                     published=true;nativeLog("Metal frame capture saved: "+name);
                 }
             }}catch(const std::exception&error){nativeLog(error.what());}}@catch(NSException*error){nativeLog(error.reason.UTF8String?:"Frame capture publication failed");}
@@ -90,14 +92,20 @@ class FrameCapture {
 public:
     ~FrameCapture(){if(!finished.load(std::memory_order_acquire))state->abandon();}
     static bool configured(){return nativeConfig().capture.configured();}
+    // Diagnostic capture attaches processing on its own; a screenshot channel
+    // captures only frames that are already processed.
+    static bool forcesAttachment(){const auto&capture=nativeConfig().capture;return capture.configured()&&!capture.finalOnly;}
     static bool pending(uint64_t frame){const auto&capture=nativeConfig().capture;if(!capture.configured())return false;return capture.trigger?captureTriggerPending():frame==capture.frame;}
     static std::shared_ptr<FrameCapture>begin(id<MTLCommandBuffer>commands,id<MTLTexture>source,uint64_t frame,bool flip=false){
-        if(!pending(frame))return {};if(!supported(source)){unsupported(source);return {};}if(!readable(commands,source))return {};
+        if(!pending(frame))return {};
+        const bool finalOnly=nativeConfig().capture.finalOnly;
+        if(!finalOnly){if(!supported(source)){unsupported(source);return {};}if(!readable(commands,source))return {};}
         const auto ticket=claimCaptureFrame(frame);if(!ticket)return {};
         struct Reservation{uint64_t ticket;~Reservation(){if(ticket)finishCaptureFrame(ticket,false);}}reservation{ticket};
         std::shared_ptr<State>state;
         @try{try{state=std::make_shared<State>(ticket,nativeConfig().capture.prefix,flip);reservation.ticket=0;
-            if(!read(state,commands,source,true,flip)){state->abandon();return {};}
+            if(finalOnly){std::lock_guard guard(state->mutex);state->sourceDone=true;}
+            else if(!read(state,commands,source,true,flip)){state->abandon();return {};}
             return std::shared_ptr<FrameCapture>(new FrameCapture(state));
         }catch(...){if(state)state->abandon();}}@catch(NSException*error){(void)error;if(state)state->abandon();}return {};
     }

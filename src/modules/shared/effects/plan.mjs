@@ -1,4 +1,4 @@
-import {NEURAL,coordinateTransform,sceneInputNames} from "./operation-contracts.mjs";
+import {NEURAL,GENERATION,coordinateTransform,sceneInputNames} from "./operation-contracts.mjs";
 import {graphicsType,shaderResizes} from "./contracts.mjs";
 export const MAX_NODES = 32;
 export const MAX_PARAMETERS = 4096;
@@ -111,13 +111,17 @@ export function validate(value) {
   let renderResolution, output;
   const depth = storedDepthInput(value.depthInput);
   if(value.output !== undefined){
-    if(!object(value.output)||Object.keys(value.output).some(key=>!["motionClarity","subframes","duty","brightness","framePacing","targetFps","smoothCadence","comparison","adaptiveQuality","toneMapping"].includes(key)))throw new Error("Choose supported output settings.");
+    if(!object(value.output)||Object.keys(value.output).some(key=>!["motionClarity","subframes","duty","brightness","framePacing","targetFps","smoothCadence","comparison","adaptiveQuality","toneMapping","hud","frameRateCap","displaySync","drawableCount"].includes(key)))throw new Error("Choose supported output settings.");
     const motion=["motionClarity","subframes","duty","brightness"].some(key=>Object.hasOwn(value.output,key)), pacing=["framePacing","targetFps","smoothCadence"].some(key=>Object.hasOwn(value.output,key));
     output={...(motion?{motionClarity:"off",subframes:2,duty:.5,brightness:1}:{}),...(pacing?{framePacing:"fixed",targetFps:120,smoothCadence:false}:{}),...value.output};
     if(motion&&(!["off","bfi","beam"].includes(output.motionClarity)||!Number.isInteger(output.subframes)||output.subframes<2||output.subframes>8||
        !Number.isFinite(output.duty)||output.duty<.125||output.duty>1||!Number.isFinite(output.brightness)||output.brightness<1||output.brightness>8))throw new Error("Choose a supported subframe count, duty and brightness.");
     if(pacing&&(!["fixed","adaptive"].includes(output.framePacing)||!Number.isInteger(output.targetFps)||output.targetFps<30||output.targetFps>240||typeof output.smoothCadence!=="boolean"))throw new Error("Choose fixed or adaptive pacing and a target from 30 to 240 Hz.");
     if(value.output.toneMapping!==undefined&&!["auto","preserve","reinhard","pbr-neutral"].includes(value.output.toneMapping))throw new Error("Choose a supported output tone mapping method.");
+    if(value.output.hud!==undefined&&!["off","compact","detailed"].includes(value.output.hud))throw new Error("Choose an off, compact or detailed performance overlay.");
+    if(value.output.frameRateCap!==undefined&&value.output.frameRateCap!==0&&!(Number.isInteger(value.output.frameRateCap)&&value.output.frameRateCap>=10&&value.output.frameRateCap<=1000))throw new Error("Choose a frame-rate cap from 10 to 1000 frames per second, or Off.");
+    if(value.output.displaySync!==undefined&&typeof value.output.displaySync!=="boolean")throw new Error("Choose whether presentation waits for display sync.");
+    if(value.output.drawableCount!==undefined&&![2,3].includes(value.output.drawableCount))throw new Error("Choose 2 or 3 presentation drawables.");
     if(value.output.adaptiveQuality!==undefined){
       const selected=value.output.adaptiveQuality;
       if(!object(selected)||Object.keys(selected).some(key=>!["enabled","nodeId","budgetMs","minScale","maxScale"].includes(key)))throw new Error("Choose supported adaptive quality settings.");
@@ -164,7 +168,7 @@ export function validate(value) {
       return { ...common, shader: shaderSettings(node.shader),...(node.settings!==undefined?{settings:{modelPath:node.settings.modelPath??null}}:{}),...(node.extent!==undefined?{extent:extent(node.extent)}:{}), ...owned };
     }
     if (typeof node.method !== "string" || !/^[a-z][a-z0-9:._-]{0,79}$/.test(node.method) || node.method === "off" ||
-        node.kind === "frame-generation" && !["lsfg", "metalfx","fsr3","xess"].includes(node.method) && NEURAL[node.method]?.kind!=="frame-generation" || !object(node.settings))
+        node.kind === "frame-generation" && !Object.hasOwn(GENERATION,node.method) && NEURAL[node.method]?.kind!=="frame-generation" || !object(node.settings))
       throw new Error("A graphics row needs a supported method and settings.");
     let outputSize;
     if (node.extent !== undefined && (node.outputSize !== undefined || node.presentationScale !== undefined)) throw new Error("Choose one effect output size.");
@@ -243,7 +247,8 @@ export function normalize(value) {
 // settings and provider checks. Never throws: {plan: null, dropped: []} for an
 // absent value, otherwise {plan, dropped: [{part, id, reason, label?}]} or {error}.
 const OUTPUT_GROUPS = Object.freeze({motionClarity: ["motionClarity", "subframes", "duty", "brightness"],
-  framePacing: ["framePacing", "targetFps", "smoothCadence"], toneMapping: ["toneMapping"], adaptiveQuality: ["adaptiveQuality"], comparison: ["comparison"]});
+  framePacing: ["framePacing", "targetFps", "smoothCadence"], toneMapping: ["toneMapping"], adaptiveQuality: ["adaptiveQuality"], comparison: ["comparison"],
+  hud: ["hud"], frameRateCap: ["frameRateCap"], presentationOptions: ["displaySync", "drawableCount"]});
 const reasonOf = error => String(error?.message || "Choose a valid ordered effects plan.").replace(/[\x00-\x1f\x7f]/g, " ").slice(0, 512);
 function envelope(value) {
   let size;

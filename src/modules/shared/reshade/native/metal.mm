@@ -18,6 +18,7 @@
 #include "isf-node.hpp"
 #include "temporal-plan.hpp"
 #include "frame-capture.hpp"
+#include "screenshot-image.hpp"
 #include "metal4-diagnostics.hpp"
 #include "source-texture.hpp"
 #include "frame.hpp"
@@ -58,6 +59,7 @@
 #include "scene-copy-boundary.hpp"
 #include "hook-originals.hpp"
 #include "native-layer.h"
+#include "source-frame-pacing.hpp"
 #include "contents-geometry.hpp"
 #include <unistd.h>
 #import <IOSurface/IOSurface.h>
@@ -197,7 +199,7 @@ RSMNativeLayer *nativeLayer(id layer) { return objc_getAssociatedObject(layer,&n
 bool explicitHost() { return macfx::nativeConfig().explicitHost; }
 bool acceptsNativeLayer(CALayer *layer) { return nativeLayer(layer)||(explicitHost()?false:macfx::acceptsLayer(layer)); }
 bool currentPresentationDemand() {
-    if(macfx::imageProcessingRequested()||macfx::virtualWindowEnabled()||macfx::timingEnabled()||macfx::FrameCapture::configured())return true;
+    if(macfx::imageProcessingRequested()||macfx::virtualWindowEnabled()||macfx::timingEnabled()||macfx::FrameCapture::forcesAttachment())return true;
     try{return macfx::drawableResolutionRequested();}catch(...){return false;}
 }
 uint64_t pendingCaptureFrame(CAMetalLayer *layer) {
@@ -380,6 +382,7 @@ void validateDepth(const macfx::DepthFrame &depth,id<MTLTexture> source,uint64_t
         throw std::runtime_error("Depth requires a shader-readable, resolved R32Float or Depth32Float texture");
 }
 struct Runtime {
+    macfx::ScreenshotImage screenshot;
     unsigned uniformCapacity=4;
     std::shared_ptr<macfx::borrowed::Owner> borrowedOwner;
     __weak id<MTLCommandQueue> processingQueue=nil;
@@ -695,7 +698,7 @@ struct Runtime {
                 auto capture=macfx::FrameCapture::begin(buffer,source,frames+1,captureFlipY);
                 if(selected.execution){selected.execution->setStatusContext(statusContext);macfx::ImageContentStamp stamp{scene.frameId,1,context.frameId,0,scene.synthetic,scene.displayMapped,aligned};const auto result=selected.execution->encodeContentImage(context,stamp,false,false);if(!result.encoded){if(result.busy)throw SpatialBusy(result.reason);throw std::runtime_error(result.reason);}}
                 else if(source!=target){if(source.width!=target.width||source.height!=target.height||source.pixelFormat!=target.pixelFormat)throw SpatialBusy("Preparing the final MetalFX image fit");auto copy=[buffer blitCommandEncoder];if(!copy)throw std::runtime_error("Cannot retain the complete MetalFX image");[copy copyFromTexture:source sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0)sourceSize:MTLSizeMake(source.width,source.height,1)toTexture:target destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];[copy endEncoding];}
-                if(capture)capture->finish(buffer,target,captureFlipY);if(receipt){receipt->advanced=true;receipt->planRevision=prefix->revision();}observePlanFrame(context,prefix->revision());lastFrame=now;if(captureTime>0)lastHostTime=captureTime;++frames;return;
+                if(capture)capture->finish(buffer,screenshot.prepare(buffer,target,description,context.frameId),captureFlipY);if(receipt){receipt->advanced=true;receipt->planRevision=prefix->revision();}observePlanFrame(context,prefix->revision());lastFrame=now;if(captureTime>0)lastHostTime=captureTime;++frames;return;
             }
             if(scene.execution) {
                 scene.execution->setStatusContext(statusContext);
@@ -703,7 +706,7 @@ struct Runtime {
                 auto capture=scene.capture?scene.capture:macfx::FrameCapture::begin(buffer,source,frames+1,captureFlipY);
                 const auto result=scene.execution->encodeAfterScene(context,false,false,scene.displayMapped);
                 if(!result.encoded){if(result.busy)throw SpatialBusy(result.reason);throw std::runtime_error(result.reason);}
-                if(capture)capture->finish(buffer,target,captureFlipY);
+                if(capture)capture->finish(buffer,screenshot.prepare(buffer,target,colorDescription?*colorDescription:scene.execution->imageColor(),context.frameId),captureFlipY);
                 if(receipt){receipt->advanced=true;receipt->planRevision=scene.execution->revision();}
                 observePlanFrame(context,scene.execution->revision());
                 lastFrame=now;if(captureTime>0)lastHostTime=captureTime;++frames;return;
@@ -715,7 +718,7 @@ struct Runtime {
                 auto capture=macfx::FrameCapture::begin(buffer,source,frames+1,captureFlipY);
                 const auto result=selected.execution->encode(context);
                 if(!result.encoded){if(result.busy)throw SpatialBusy(result.reason);throw std::runtime_error(result.reason);}
-                if(capture)capture->finish(buffer,target,captureFlipY);
+                if(capture)capture->finish(buffer,screenshot.prepare(buffer,target,colorDescription?*colorDescription:selected.execution->imageColor(),context.frameId),captureFlipY);
                 if(receipt){receipt->advanced=true;receipt->planRevision=selected.execution->revision();}
                 observePlanFrame(context,selected.execution->revision(),selected.error);
                 lastFrame=now;if(captureTime>0)lastHostTime=captureTime;++frames;return;
@@ -988,7 +991,7 @@ struct Runtime {
         auto output=copyOutput?[buffer blitCommandEncoder]:nil;
         if(copyOutput) [output copyFromTexture:this->color(current) sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(w,h,1) toTexture:target destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];
         [output endEncoding];
-        if(capture)capture->finish(buffer,target,captureFlipY);
+        if(capture)capture->finish(buffer,screenshot.prepare(buffer,target,colorDescription?*colorDescription:macfx::describeImageColor(macfx::ImageColorSpace::LegacySDR),sourceFrameId),captureFlipY);
         colorInput=nil;
         if(receipt){receipt->selection=selection;receipt->afterScaling=scaleFirst;
             if(!sameSelection(selection,desired))receipt->planRevision.clear();}
@@ -1660,11 +1663,14 @@ void observeGameDrawable(CAMetalLayer *layer,bool acquired,double milliseconds,b
 void installMetalDeviceHooks(id<MTLDevice> device);
 id<CAMetalDrawable> nextDrawable(id object,SEL selector) {
     if(macfx::ownsPresentation(object)||(explicitHost()&&!nativeLayer(object))) return reinterpret_cast<id<CAMetalDrawable>(*)(id,SEL)>(original(object,selector))(object,selector);
+    // A selected source cap paces the game's own drawable requests, with or
+    // without processing; owned output layers are never paced here.
+    macfx::paceSourceFrame((__bridge const void*)object);
     if(!macfx::effectRequested())if(auto history=nativeHistory(object,false))history->images.reset();
     const auto activePresentation=macfx::metalPresentation((CAMetalLayer*)object);
     const bool readsSource=activePresentation&&!activePresentation->snapshot().stopped;
     bool source=false;try{source=macfx::drawableResolutionRequested();}catch(...){}
-    if(!nativeLayer(object)&&!macfx::imageProcessingRequested(readsSource)&&!source&&!macfx::virtualWindowEnabled()&&!macfx::timingEnabled()&&!macfx::FrameCapture::configured())
+    if(!nativeLayer(object)&&!macfx::imageProcessingRequested(readsSource)&&!source&&!macfx::virtualWindowEnabled()&&!macfx::timingEnabled()&&!macfx::FrameCapture::forcesAttachment())
         return reinterpret_cast<id<CAMetalDrawable>(*)(id,SEL)>(original(object,selector))(object,selector);
     installMetalDeviceHooks(((CAMetalLayer*)object).device);
     if(!explicitHost())macfx::acceptsLayer(object);
@@ -1731,7 +1737,7 @@ void macfx::writeCapturedFrame(const std::string &file,const void *bytes,unsigne
 __attribute__((constructor)) static void loadMetal() { @autoreleasepool {
     if(explicitHost()) return;
     macfx::DiagnosticScope diagnostics(macfx::DiagnosticStage::Hooks,1);
-    if(!macfx::liveEffects() && !macfx::effectRequested() && !macfx::timingEnabled() && !macfx::graphicsRequested() && !macfx::FrameCapture::configured()) return;
+    if(!macfx::liveEffects() && !macfx::effectRequested() && !macfx::timingEnabled() && !macfx::graphicsRequested() && !macfx::FrameCapture::forcesAttachment()) return;
     if(@available(macOS 26.0,*))if(macfx::timingEnabled())hookMetal4Feedback();
     try { if(macfx::effectRequested())prepareLaunchEffect(); }
     catch(const std::exception &error) { log("Effect preload failed: "+std::string(error.what())); return; }

@@ -43,12 +43,29 @@ export const MODEL_OPERATIONS=Object.freeze({...NEURAL,
 });
 export const GENERATION=Object.freeze({
   lsfg:Object.freeze({scene:false,camera:false,matrices:false,maximumMultiplier:5,gpuWorkScope:"caller-command-buffer"}),
-  "mlx-interpolation":Object.freeze({scene:false,camera:false,matrices:false,maximumMultiplier:5,gpuWorkScope:"external-queues"}),
-  rife:Object.freeze({scene:false,camera:false,matrices:false,maximumMultiplier:5,gpuWorkScope:"external-queues"}),
+  "mlx-interpolation":Object.freeze({scene:false,camera:false,matrices:false,maximumMultiplier:5,color:"sdr",gpuWorkScope:"external-queues"}),
+  rife:Object.freeze({scene:false,camera:false,matrices:false,maximumMultiplier:5,color:"sdr",gpuWorkScope:"external-queues"}),
   metalfx:Object.freeze({scene:true,camera:true,matrices:false,maximumMultiplier:2,gpuWorkScope:"caller-command-buffer"}),
   fsr3:Object.freeze({scene:true,camera:true,matrices:false,maximumMultiplier:2,gpuWorkScope:"caller-command-buffer"}),
-  xess:Object.freeze({scene:true,camera:false,matrices:true,maximumMultiplier:2,gpuWorkScope:"external-queues"})
+  xess:Object.freeze({scene:true,camera:false,matrices:true,maximumMultiplier:2,gpuWorkScope:"external-queues"}),
+  // Image-pair methods built on macOS frameworks need no model files. A
+  // declared multiplier list narrows maximumMultiplier to the phases the
+  // framework produces; color "sdr" selects the provider's 8-bit SDR boundary.
+  "vt-interpolation":Object.freeze({scene:false,camera:false,matrices:false,maximumMultiplier:4,multipliers:Object.freeze([2,4]),color:"sdr",minimumMacOS:"26.0",gpuWorkScope:"external-queues"}),
+  "metalfx-image":Object.freeze({scene:false,camera:false,matrices:false,maximumMultiplier:2,minimumMacOS:"26.0",gpuWorkScope:"external-queues"}),
+  "vision-flow":Object.freeze({scene:false,camera:false,matrices:false,maximumMultiplier:5,minimumMacOS:"11.0",gpuWorkScope:"external-queues"}),
+  // Automatic runs one of its candidates per capture, in this order of preference.
+  auto:Object.freeze({scene:false,camera:false,matrices:false,maximumMultiplier:5,color:"sdr",candidates:Object.freeze(["vt-interpolation","metalfx-image","vision-flow"]),gpuWorkScope:"external-queues"})
 });
+// The multipliers a generation method accepts, from its declared list or its maximum.
+export function generationMultipliers(method){
+  const operation=GENERATION[method];if(!operation)return [];
+  return operation.multipliers?[...operation.multipliers]:[2,3,4,5].filter(value=>value<=operation.maximumMultiplier);
+}
+// Automatic candidates that a capability list includes, in preference order.
+export function automaticCandidates(available,multiplier){
+  return GENERATION.auto.candidates.filter(method=>available.includes(method)&&(!multiplier||generationMultipliers(method).includes(multiplier)));
+}
 export const TEMPORAL=Object.freeze({
   metalfx:Object.freeze({camera:false,matrices:false,gpuWorkScope:"caller-command-buffer"}),
   "metalfx-denoised":Object.freeze({camera:false,matrices:true,requires:Object.freeze(["noisyColor","normal","roughness","diffuseAlbedo","specularAlbedo"]),gpuWorkScope:"caller-command-buffer"}),

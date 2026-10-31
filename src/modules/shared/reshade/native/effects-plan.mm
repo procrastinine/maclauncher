@@ -62,7 +62,22 @@ ShaderParameters parameters(id value){
 }
 bool sceneResourceName(const std::string&name){if(name.empty()||name.size()>512||name=="__proto__"||name=="constructor"||name=="prototype")return false;const auto letter=[](char c){return c=='_'||(c>='a'&&c<='z')||(c>='A'&&c<='Z');};size_t i=0;for(;;){if(i>=name.size()||!letter(name[i++]))return false;while(i<name.size()&&(letter(name[i])||(name[i]>='0'&&name[i]<='9')))++i;if(i==name.size())return true;if(i+1>=name.size()||name[i]!=':'||name[i+1]!=':')return false;i+=2;}}
 void parseOutput(id output,OutputPolicy &policy){
-    fields(output,{@"motionClarity",@"subframes",@"duty",@"brightness",@"framePacing",@"targetFps",@"smoothCadence",@"comparison",@"adaptiveQuality",@"toneMapping"});
+    fields(output,{@"motionClarity",@"subframes",@"duty",@"brightness",@"framePacing",@"targetFps",@"smoothCadence",@"comparison",@"adaptiveQuality",@"toneMapping",@"hud",@"frameRateCap",@"displaySync",@"drawableCount"});
+    if(output[@"hud"]){
+        policy.hud=text(output[@"hud"],16);
+        if(policy.hud!="off"&&policy.hud!="compact"&&policy.hud!="detailed")throw std::runtime_error("Output performance overlay mode is invalid");
+    }
+    if(output[@"frameRateCap"]){
+        const double cap=number(output[@"frameRateCap"])?[output[@"frameRateCap"] doubleValue]:-1;
+        if(cap!=0&&(cap<10||cap>1000||std::floor(cap)!=cap))throw std::runtime_error("Output frame-rate cap must be off or 10 to 1000 frames per second");
+        policy.frameRateCap=cap;
+    }
+    if(output[@"displaySync"])policy.displaySync=flag(output,@"displaySync");
+    if(output[@"drawableCount"]){
+        const double count=number(output[@"drawableCount"])?[output[@"drawableCount"] doubleValue]:0;
+        if(count!=2&&count!=3)throw std::runtime_error("Output drawable count must be 2 or 3");
+        policy.drawableCount=unsigned(count);
+    }
     if(output[@"toneMapping"]){
         policy.toneMapping=text(output[@"toneMapping"],16);
         if(policy.toneMapping!="auto"&&policy.toneMapping!="preserve"&&policy.toneMapping!="reinhard"&&policy.toneMapping!="pbr-neutral")throw std::runtime_error("Output tone mapping mode is invalid");

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 #include "adaptive-pacing.hpp"
+#include "generation-schedule.hpp"
 #include <array>
 #include <algorithm>
 #include <cmath>
@@ -14,13 +15,15 @@ struct DeliveryStatus {unsigned pending=0;uint64_t droppedGenerated=0,droppedRea
 // owns no image, producer, clock, callback or dynamic allocation.
 class DeliveryPlan {
  std::array<DueFrame,32> entries{};unsigned first=0,count=0;uint64_t lastSource=0;DeliveryStatus status;
+ // The current batch's source interval and the refresh-phase delay in use.
+ double batchStart=0,batchPeriod=0,alignment=-1;
  void drop(const DueFrame&frame){if(frame.generated<0)++status.droppedReal;else ++status.droppedGenerated;}
 public:
  template<class Phases>bool replace(uint64_t sourceId,const Phases&phases,double completedAt,double sourcePeriod,unsigned maximumImages=32,bool preserveClosingReal=false,std::optional<double>realDeadline={}){
   bool valid=sourceId>lastSource&&std::isfinite(completedAt)&&completedAt>0&&std::isfinite(sourcePeriod)&&sourcePeriod>0&&sourcePeriod<=1&&(!realDeadline||(std::isfinite(*realDeadline)))&&phases.count<std::size(entries)&&phases.count<=std::size(phases.timestamps);float previous=0;
   for(unsigned i=0;valid&&i<phases.count;++i){const float phase=phases.timestamps[i];valid=std::isfinite(phase)&&phase>previous&&phase<1;previous=phase;}
   if(!valid){++status.rejectedBatches;return false;}
-  for(unsigned i=first;i<count;++i)if(!(preserveClosingReal&&entries[i].generated<0))drop(entries[i]);first=0;count=0;lastSource=sourceId;
+  for(unsigned i=first;i<count;++i)if(!(preserveClosingReal&&entries[i].generated<0))drop(entries[i]);first=0;count=0;lastSource=sourceId;batchStart=completedAt;batchPeriod=sourcePeriod;
   // No older real frame is re-enqueued. The first generated image can be
   // displayed immediately; the new real image closes that interpolation span.
   const unsigned generated=std::min(phases.count,maximumImages?maximumImages-1:0u);
@@ -45,9 +48,23 @@ public:
   if(!std::isfinite(now)||!std::isfinite(lead)||lead<=0||first>=count||entries[first].due>now+lead)return {};
   const auto next=entries[first++];status.pending=count-first;return next;
  }
+ // Delays the pending due times of the current batch by the refresh-phase
+ // rule of the shared generation timeline and returns that delay in seconds.
+ // The delay carries to later batches while it stays clear of the latch
+ // points, and the closing real stays at least half a refresh ahead of the
+ // next expected source image, so no batch moves into its successor's interval.
+ double alignToRefresh(double latchTime,double refreshPeriod){
+  if(first>=count||!std::isfinite(refreshPeriod)||refreshPeriod<=0)return 0;
+  std::array<double,32>due{};const unsigned pending=count-first;
+  for(unsigned i=0;i<pending;++i)due[i]=entries[first+i].due;
+  const auto phase=refreshPhaseDelay(due,pending,latchTime,refreshPeriod,alignment,batchStart+batchPeriod-refreshPeriod/2-entries[count-1].due);
+  alignment=phase.delay;
+  for(unsigned i=first;i<count;++i)entries[i].due+=phase.delay;
+  return phase.delay;
+ }
  void clear(){for(unsigned i=first;i<count;++i)drop(entries[i]);first=count=0;status.pending=0;}
  std::optional<double> nextTime()const{return first<count?std::optional<double>(entries[first].due):std::nullopt;}
- void reset(){entries={};first=count=0;lastSource=0;status={};}
+ void reset(){entries={};first=count=0;lastSource=0;status={};batchStart=batchPeriod=0;alignment=-1;}
  DeliveryStatus snapshot()const{return status;}
 };
 }

@@ -28,6 +28,7 @@ test("main graphics inspection carries current process identities without a full
   const coordinator = require("../src/core/runtime-coordinator").createRuntimeCoordinator();
   const pendingEdits = [];
   const context = {userDataDir: f.userDataDir, app: {}, runningGameSessions: sessions, loadSettings: () => ({}), runtimeInventoryRevision: 0, ReShade, cachedState: null,
+    graphicsShortcuts: require("../src/main/graphics-shortcuts").create({globalShortcut: {}, readAssignments: () => ({})}), removeEphemeralEntry: () => false,
     backendService:{invalidateGraphicsPreparation:async()=>false},
     downloadManager: {}, confirmRuntimeInstallation: () => assert.fail("No download in lifecycle fixture"),
     settingsCoordinator: coordinator.client(), listRuntimeManagers: () => [{id: "graphics-models"}],
@@ -74,6 +75,7 @@ function mainFixture(t, {running = true} = {}) {
   const coordinator = require("../src/core/runtime-coordinator").createRuntimeCoordinator();
   const pendingEdits = [];
   const context = {userDataDir: f.userDataDir, app: {}, runningGameSessions: sessions, loadSettings: () => ({}), runtimeInventoryRevision: 0, cachedState: null,
+    graphicsShortcuts: require("../src/main/graphics-shortcuts").create({globalShortcut: {}, readAssignments: () => ({})}),
     downloadManager: {}, confirmRuntimeInstallation: () => assert.fail("No download in lifecycle fixture"),
     backendService:{invalidateGraphicsPreparation:async()=>false},
     settingsCoordinator: coordinator.client(), listRuntimeManagers: () => [{id: "graphics-models"}],

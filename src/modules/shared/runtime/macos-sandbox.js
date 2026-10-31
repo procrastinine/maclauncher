@@ -267,6 +267,9 @@ async function scopeGraphics(graphics, directory, writableDirectory, signal) {
   if (result.RESHADE_CAPTURE_PREFIX) {
     result.RESHADE_CAPTURE_PREFIX = path.join(writableDirectory, "frame-capture");
     if (result.RESHADE_CAPTURE_TRIGGER) result.RESHADE_CAPTURE_TRIGGER = path.join(writableDirectory, "frame-capture.request");
+    // A screenshot channel's launch record reports the moved paths.
+    if (result.RESHADE_CAPTURE_FINAL === "1" && result.RESHADE_CAPTURE_TRIGGER)
+      require("../reshade/screenshots").relocate(graphics.RESHADE_CAPTURE_PREFIX, {prefix: result.RESHADE_CAPTURE_PREFIX, trigger: result.RESHADE_CAPTURE_TRIGGER});
   }
   if (result.RESHADE_LOSSLESS_MODEL) readable.push(await canonical(result.RESHADE_LOSSLESS_MODEL, "file"));
   if (result.RESHADE_CONTROL_FILE) readable.push(await canonical(result.RESHADE_CONTROL_FILE, "file"));

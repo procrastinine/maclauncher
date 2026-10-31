@@ -35,6 +35,7 @@
 #include <memory>
 #include <mutex>
 #include <stdexcept>
+#include "source-frame-pacing.hpp"
 
 extern "C" IOSurfaceRef rsFilterOpenGLSurface(void *,IOSurfaceRef);
 extern "C" void glGenVertexArraysAPPLE(GLsizei, GLuint *);
@@ -511,6 +512,9 @@ void process(CGLContextObj context) {
     inside=false;
 }
 void flushBuffer(id object,SEL selector) {
+    // Only the selected window's producer owns a source clock. Auxiliary or
+    // unselected contexts must not wait or displace its reservation.
+    if(!inside&&macfx::sourceFrameRateCap()>0){const auto context=[(NSOpenGLContext *)object CGLContextObj];macfx::paceSourceFrame(context,context&&macfx::acceptsOpenGL(context));}
     process([(NSOpenGLContext *)object CGLContextObj]);
     FlushGuard guard;
     macfx::DiagnosticScope scope(macfx::DiagnosticStage::OpenGLFlush,reinterpret_cast<uintptr_t>((__bridge void *)object));
@@ -518,6 +522,7 @@ void flushBuffer(id object,SEL selector) {
 }
 }
 extern "C" CGLError rsFlushDrawable(CGLContextObj context) {
+    if(!inside&&macfx::sourceFrameRateCap()>0)macfx::paceSourceFrame(context,context&&macfx::acceptsOpenGL(context));
     process(context);
     FlushGuard guard;
     macfx::DiagnosticScope scope(macfx::DiagnosticStage::OpenGLFlush,reinterpret_cast<uintptr_t>(context));

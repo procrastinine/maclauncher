@@ -1,10 +1,18 @@
 import React, {useEffect, useRef, useState} from "react";
-import type {GameGraphicsStatus, RecentGame} from "../types";
+import type {GameGraphicsStatus, GraphicsStageStatus, RecentGame} from "../types";
 
 const extent = (value: {width: number; height: number}) => value.width > 0 && value.height > 0 ? `${value.width} × ${value.height}` : "—";
 const admissionLabel = (value: string) => value.replace(/-/g, " ").replace(/^./, letter => letter.toUpperCase());
 const phases = {unknown: "Not reported", preparing: "Preparing…", prepared: "Prepared", encoded: "Encoded", completed: "Completed", presented: "Presented", bypassed: "Bypassed", failed: "Failed", stopped: "Stopped", hidden: "Window hidden"};
-const sourceLabels = {"metal-drawable": "Metal drawable", "opengl-framebuffer": "OpenGL interop", "layer-surface": "Layer surface", "software-bitmap": "Bitmap upload", "window-stream": "Window capture", "explicit-texture": "Runtime texture", "decoded-video": "Decoded video", unknown: "Unreported"};
+// A row's own GPU time, or the command buffer it shares with the named rows.
+const gpuCost = (row: GraphicsStageStatus, rows: GraphicsStageStatus[]) => {
+  if (!row.gpu) return "";
+  const time = `GPU ${row.gpu.milliseconds.toFixed(2)} ms`;
+  if (row.gpu.scope === "row") return ` · ${time}`;
+  const shared = rows.filter(other => other.id !== row.id && other.gpu?.scope === "section" && other.gpu.section === row.gpu?.section).map(other => other.requestedMethod || other.id);
+  return ` · ${time} for its command buffer${shared.length ? `, shared with ${shared.join(", ")}` : ""}`;
+};
+const sourceLabels = {"metal-drawable": "Metal drawable", "opengl-framebuffer": "OpenGL interop", "layer-surface": "Layer surface", "software-bitmap": "Bitmap upload", "window-stream": "Window capture", "explicit-texture": "Runtime texture", "decoded-video": "Decoded video", "external-window": "Picked window", unknown: "Unreported"};
 export function GraphicsRuntimeStatus({game, running, visible, live, onStatus, requestKey = "", inspectDetails = false}: {
   game: Pick<RecentGame, "gamePath" | "effects" | "graphics" | "reshade">; running: boolean; visible: boolean; live?: boolean;
   onStatus?: (status: GameGraphicsStatus | null) => void; requestKey?: string; inspectDetails?: boolean;
@@ -94,7 +102,7 @@ export function GraphicsRuntimeStatus({game, running, visible, live, onStatus, r
           </details>}
           {context.stages.map(row => <p key={row.id}>{row.requestedMethod || row.id}
             {row.activeMethod === "retained" ? " (previous version)" : row.activeMethod && row.activeMethod !== row.requestedMethod ? ` → ${row.activeMethod}` : ""}: {phases[row.phase]}
-            {` · ${extent(row.input)} → ${extent(row.output)}`}{row.reason ? ` · ${row.reason}` : ""}</p>)}
+            {` · ${extent(row.input)} → ${extent(row.output)}`}{gpuCost(row, context.stages)}{row.reason ? ` · ${row.reason}` : ""}</p>)}
         </div>)}
       </>}
     </div>

@@ -312,7 +312,7 @@ function createLauncher({
     const graphicsDiagnostics = Object.fromEntries(["diagnostics", "capture", "gpuTiming", "trace"]
       .filter(key => typeof options.graphicsDiagnostics?.[key] === "boolean")
       .map(key => [key, options.graphicsDiagnostics[key]]));
-    let gameEffects, preparedGraphics, graphicsProcessBound = false, graphicsAttachment;
+    let gameEffects, preparedGraphics, graphicsProcessBound = false, graphicsAttachment, captureCompanion;
     const graphicsPreparation=options.graphicsPreparation||require('./graphics-preparation').createGraphicsPreparation();
     // Only library ids can name a stored record; other launch identities have none.
     const latestGraphicsRecord=()=>typeof entry.gameId==='string'&&/^[0-9A-Za-z_-]+$/.test(entry.gameId)?GameStore.readGameRecord(userDataDir,entry.gameId):null;
@@ -322,6 +322,29 @@ function createLauncher({
       graphicsProcessBound = true;
       try { ReShade.bindLaunchProcess(entry, child.pid, {userDataDir}); }
       catch (error) { warnGraphics(logger, "Graphics live controls are unavailable for this launch.", error.message); }
+      if (captureCompanion) startCaptureCompanion(child);
+    };
+    // A game whose process refuses the graphics library receives graphics
+    // through a module's window capture instead: a companion process applies
+    // this launch's plan and live controls to a captured copy of the game's
+    // window, and ends with the game.
+    const findCaptureCompanion = library => {
+      for (const moduleInfo of registry.listModules()) {
+        try {
+          const companion = registry.getModule(moduleInfo.id)?.captureCompanion?.(library, {logger});
+          if (companion) return companion;
+        } catch (error) { warnGraphics(logger, "Window capture for graphics is unavailable.", error.message); }
+      }
+      return null;
+    };
+    const startCaptureCompanion = child => {
+      const companion = captureCompanion;captureCompanion = null;
+      const environment = {...ReShade.mergeEnvironment(process.env, preparedGraphics), RESHADE_EXPLICIT_HOST: "1"};
+      delete environment.DYLD_INSERT_LIBRARIES;delete environment.STEAM_DYLD_INSERT_LIBRARIES;
+      try {
+        const capture = companion.start(child.pid, environment);
+        child.once?.("exit", () => { try { capture.kill("SIGTERM"); } catch {} });
+      } catch (error) { warnGraphics(logger, "Window capture for graphics could not start.", error.message); }
     };
     const prepareGameEffects = graphicsArchitecture => options.gameEffects === true
       ? (async () => {
@@ -356,7 +379,9 @@ function createLauncher({
         ...(graphicsRoot ? { root: fs.realpathSync(graphicsRoot) } : {}), ...graphicsDiagnostics,
         graphicsInputs: context.graphicsInputs,
         graphicsArchitecture: context.graphicsInputs?.architecture || info.runtime?.entries?.[runtimeId]?.graphicsArchitecture,
-        explicitHost: info.runtime?.entries?.[runtimeId]?.graphicsHost === "explicit",
+        // A runtime whose own process submits frames through the library, such
+        // as a window capture session, keeps the capabilities of its host.
+        explicitHost: info.runtime?.entries?.[runtimeId]?.graphicsHost === "explicit" || info.runtime?.entries?.[runtimeId]?.explicitFrames === true,
         graphicsHost,
         useModel: version => options.runtimeUseScope?.useRuntime({ managerId: "graphics-models", version }),
         useRuntime: identity => options.runtimeUseScope?.useRuntime(identity) });
@@ -417,9 +442,13 @@ function createLauncher({
       const checked = await Injection.preflight(target, preparedGraphics.DYLD_INSERT_LIBRARIES.split(path.delimiter).filter(Boolean), {signal: context.signal});
       if (checked.available !== false) return nativeOptions;
       graphicsAttachment = checked;
-      try { require("../modules/shared/reshade/launch-binding").attachmentUnavailable(entry, checked.reason, {userDataDir}); }
+      const processor = ReShade.executionRequirements(context.effectsEntry || entry).needed.processor;
+      const library = preparedGraphics.DYLD_INSERT_LIBRARIES.split(path.delimiter).find(file => path.basename(file) === "libreshade-macos.dylib");
+      captureCompanion = processor && library ? findCaptureCompanion(library) : null;
+      try { require("../modules/shared/reshade/launch-binding").attachmentUnavailable(entry, checked.reason, {userDataDir, captured: Boolean(captureCompanion)}); }
       catch (error) { warnGraphics(logger, "Graphics attachment status could not be recorded.", error.message); }
-      if (ReShade.executionRequirements(context.effectsEntry || entry).needed.processor) {
+      if (captureCompanion) warnGraphics(logger, "The game's process cannot load graphics. Graphics process a captured copy of its window.", checked.reason);
+      else if (processor) {
         context.graphicsPreparationFailure = {reason: checked.reason};
         warnGraphics(logger, "Graphics processing is unavailable. Starting with the game's original rendering.", checked.reason);
       }

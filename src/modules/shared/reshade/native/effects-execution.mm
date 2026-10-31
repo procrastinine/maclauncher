@@ -302,7 +302,11 @@ public:
  }
  ~ShaderCallBindings(){if(isf)bindISFSceneInputs(node,nullptr);if(placebo)module->bindScene(node.get(),nullptr);}
 };
-bool generationCameraAvailable(const std::string&method,const RSTemporalFrame*scene){if(!scene)return false;if(scene->flags&RS_TEMPORAL_CAMERA_VALID)return true;if(method=="metalfx")if(@available(macOS 27.0,*)){const auto matrices=temporalSceneMatrices(*scene);return matrices&&(matrices->flags&(RS_SCENE_VIEW_VALID|RS_SCENE_PROJECTION_VALID))==(RS_SCENE_VIEW_VALID|RS_SCENE_PROJECTION_VALID)&&(matrices->flags&(RS_SCENE_CLIP_ZERO_TO_ONE|RS_SCENE_CLIP_MINUS_ONE_TO_ONE));}return false;}
+bool generationCameraAvailable(const std::string&method,const RSTemporalFrame*scene){if(!scene)return false;if(scene->flags&RS_TEMPORAL_CAMERA_VALID)return true;
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 270000
+if(method=="metalfx")if(@available(macOS 27.0,*)){const auto matrices=temporalSceneMatrices(*scene);return matrices&&(matrices->flags&(RS_SCENE_VIEW_VALID|RS_SCENE_PROJECTION_VALID))==(RS_SCENE_VIEW_VALID|RS_SCENE_PROJECTION_VALID)&&(matrices->flags&(RS_SCENE_CLIP_ZERO_TO_ONE|RS_SCENE_CLIP_MINUS_ONE_TO_ONE));}
+#endif
+return false;}
 ShaderResult sceneShaderCall(const std::shared_ptr<ShaderNode>&node,const std::string&format,const ShaderFrame&frame,const RSShaderSceneInputsV1*inputs,bool prepare){ShaderCallBindings bindings(node,format,inputs);if(!bindings.result.encoded)return bindings.result;return prepare?node->prepare(frame):node->encode(frame);}
 
 }
@@ -424,6 +428,16 @@ struct EffectExecution::Impl {
     };
     std::mutex qualityFramesMutex;std::map<std::tuple<void*,uint64_t,uint64_t>,std::weak_ptr<ExternalQualityFrame>>qualityFrames;
     std::atomic<uint64_t>qualityTimingTokens{0};
+    // Sections group rows by command buffer: 1 is the source image's buffer
+    // (prefix rows and generation), 2 the buffer of each displayed image.
+    mutable std::mutex costLock;std::map<std::string,EffectRowCost>costs;
+    void recordCost(const std::string&id,double milliseconds,bool shared,uint32_t section)noexcept{try{
+        if(id.empty()||!std::isfinite(milliseconds)||milliseconds<=0||milliseconds>10000)return;
+        double mean;{std::lock_guard guard(costLock);auto&cost=costs[id];const bool first=cost.id.empty()||cost.shared!=shared;
+            cost.id=id;cost.milliseconds=first?milliseconds:cost.milliseconds+(milliseconds-cost.milliseconds)*.1;cost.shared=shared;cost.section=section;mean=cost.milliseconds;}
+        RuntimeStageCostEvent event;event.context=statusContext.load();event.planRevision=snapshot->revision;event.stageId=id;event.milliseconds=mean;
+        event.scope=shared?RuntimeStageCostScope::Section:RuntimeStageCostScope::Row;event.section=section;observeRuntimeStageCost(event);
+    }catch(...){} }
     std::shared_ptr<ExternalQualityFrame>externalQualityFrame(const ShaderFrame&frame,const ImageContentStamp*content,bool generated,bool redraw){
         const bool grouped=content&&content->qualityContentId&&content->qualityEpoch;
         if(!qualityExternalMask||!quality||!snapshot->quality||redraw||!grouped&&(generated||content&&content->synthetic)||!quality->supports(*snapshot->quality,qualityAdoption,qualityPoint))return {};
@@ -583,6 +597,9 @@ EffectQualityStatus EffectExecution::qualityStatus()const{return impl->quality?i
 bool EffectExecution::supportsGpuQuality(EffectQualityPoint point)const{return !impl->qualityExternalMask&&impl->quality&&impl->snapshot->quality&&impl->quality->supports(*impl->snapshot->quality,impl->qualityAdoption,point);}
 uint64_t EffectExecution::nextQualitySequence()noexcept{return impl->quality?impl->quality->nextSequence():0;}
 void EffectExecution::observeGpuQuality(const AdaptiveQualitySample&sample,EffectQualityPoint point,RuntimeAdaptiveQualityScope scope){if(impl->quality&&impl->snapshot->quality){impl->quality->observe(*impl->snapshot->quality,impl->qualityAdoption,sample,point,scope);publishQualityStatus();}}
+bool EffectExecution::rowCostRequested()const{return impl->snapshot->output.hud!="off"||impl->statusContext.load()&&runtimeStatusLeased();}
+void EffectExecution::recordRowCost(const std::string&id,double milliseconds,bool shared,uint32_t section)const{impl->recordCost(id,milliseconds,shared,section);}
+std::vector<EffectRowCost>EffectExecution::rowCosts()const{std::lock_guard guard(impl->costLock);std::vector<EffectRowCost>result;result.reserve(impl->costs.size());for(const auto&[id,cost]:impl->costs)result.push_back(cost);return result;}
 void EffectExecution::publishQualityStatus()const noexcept{if(impl->quality)impl->quality->publish(impl->statusContext,impl->snapshot->revision);}
 const ImageColorDescription&EffectExecution::imageColor()const{return impl->colorDescription;}
 bool EffectExecution::frameContractMatches(const ShaderFrame&f)const{return frameContractMatches(f,f.commands.commandQueue);}
@@ -769,6 +786,7 @@ ShaderResult EffectExecution::encodeRange(const ShaderFrame &incoming,size_t beg
         impl->reportSpatialBypasses(begin,end);
         uint32_t rangeTimingMask=0;for(size_t index=begin;index<end;++index)rangeTimingMask|=uint32_t(1)<<index;
         auto externalQuality=(rangeTimingMask&impl->qualityExternalMask)?impl->externalQualityFrame(frame,content,generated,redraw):nullptr;
+        const bool costTiming=rowCostRequested();const uint32_t costSection=begin<impl->split?1:2;
         if(begin==end&&frame.source.width==frame.target.width&&frame.source.height==frame.target.height&&frame.source.pixelFormat==frame.target.pixelFormat){copy(frame.commands,frame.source,frame.target);return {true,{}};}
         bool coordinates=!generated&&(begin==0||impl->temporalEnd&&begin==impl->temporalEnd);bool colourJittered=temporal!=nullptr;
         auto held=impl->acquire(frame.commands);
@@ -788,7 +806,9 @@ ShaderResult EffectExecution::encodeRange(const ShaderFrame &incoming,size_t beg
         const uint64_t frameId=content?content->observationId:frame.frameId;
         [frame.commands addCompletedHandler:^(id<MTLCommandBuffer>completed){
             const auto execution=lease->execution;
+            const double section=(completed.GPUEndTime-completed.GPUStartTime)*1000;
             for(unsigned index=0;execution&&index<lease->count;++index){const auto&observed=lease->observations[index];const auto&row=execution->rows[observed.row];
+                if(costTiming&&completed.status==MTLCommandBufferStatusCompleted&&row.spec.gpuWorkScope!="external-queues")execution->recordCost(row.spec.id,section,true,costSection);
                 std::string problem;bool success=completed.status==MTLCommandBufferStatusCompleted;
                 if(success&&observed.completion){const auto result=observed.completion();success=result.encoded;problem=result.reason;}
                 if(success&&row.neuralScene&&!observed.completion){const auto result=row.neuralScene->completion();success=result.encoded;problem=result.reason;}
@@ -900,7 +920,7 @@ ShaderResult EffectExecution::encodeRange(const ShaderFrame &incoming,size_t beg
                 ShaderHistoryInput history;history.contentId=content?content->contentId:context.frameId;history.epoch=content&&content->epoch?content->epoch:historyAovs?historyAovs->value.epoch:1;history.imageRevision=content&&content->imageRevision?content->imageRevision:historyAovs?historyAovs->value.imageRevision:0;history.inputIdentity=mapped?row.mappedInputIdentity:row.inputIdentity;history.historyIdentity=mapped?row.mappedHistoryIdentity:row.historyIdentity;history.synthetic=generated||displayAdvanced||(content&&content->synthetic);history.redraw=redraw&&!displayAdvanced;history.reset=historyScene&&(historyScene->flags&RS_TEMPORAL_RESET);ShaderHistoryScope historyScope(&history);
                 ShaderCallBindings inputBindings(row.shader,row.spec.format,row.spec.sceneBindings.empty()?nullptr:&namedFrame.value);if(!inputBindings.result.encoded){transientInputs=true;throw std::runtime_error(inputBindings.result.reason);}
                 if(row.neural)setNeuralStatusContext(row.neural,impl->statusContext,row.spec.id,impl->snapshot->revision);
-                if(row.neural||row.spec.format=="native"){if(displayAdvanced&&!displayContentId)displayContentId=displayImageSequence.fetch_add(1,std::memory_order_relaxed);NeuralInputStamp stamp;stamp.contentId=displayAdvanced?displayContentId:content?content->contentId:context.frameId;stamp.epoch=content?content->epoch:1;stamp.observationId=frameId;stamp.imageRevision=content?content->imageRevision:0;stamp.inputIdentity=mapped?row.mappedInputIdentity:row.inputIdentity;stamp.historyIdentity=mapped?row.mappedHistoryIdentity:row.historyIdentity;stamp.synthetic=displayAdvanced||(content?content->synthetic:generated);const bool measure=externalQuality&&(impl->qualityExternalMask&(uint32_t(1)<<i));encoded=row.neural?encodeNeuralStamped(row.neural,context,stamp,redraw&&!displayAdvanced,measure?&neuralTiming:nullptr):encodeNativeImageStamped(row.shader,context,stamp,redraw&&!displayAdvanced,mapped,&rowCompletion,measure?&neuralTiming:nullptr);if(measure&&encoded.encoded){const auto timing=std::move(neuralTiming);const auto bit=uint32_t(1)<<i;externalQuality->expect(bit);[frame.commands addCompletedHandler:^(id<MTLCommandBuffer>commands){const auto measured=commands.status==MTLCommandBufferStatusCompleted&&timing?timing():NeuralGpuTimingValue{};externalQuality->reported(bit,measured.state==NeuralGpuTimingState::Complete?measured.nanoseconds:0,measured.state==NeuralGpuTimingState::NoNewWork);}];}}
+                if(row.neural||row.spec.format=="native"){if(displayAdvanced&&!displayContentId)displayContentId=displayImageSequence.fetch_add(1,std::memory_order_relaxed);NeuralInputStamp stamp;stamp.contentId=displayAdvanced?displayContentId:content?content->contentId:context.frameId;stamp.epoch=content?content->epoch:1;stamp.observationId=frameId;stamp.imageRevision=content?content->imageRevision:0;stamp.inputIdentity=mapped?row.mappedInputIdentity:row.inputIdentity;stamp.historyIdentity=mapped?row.mappedHistoryIdentity:row.historyIdentity;stamp.synthetic=displayAdvanced||(content?content->synthetic:generated);const bool quality=externalQuality&&(impl->qualityExternalMask&(uint32_t(1)<<i)),measure=quality||costTiming&&row.externalTiming;encoded=row.neural?encodeNeuralStamped(row.neural,context,stamp,redraw&&!displayAdvanced,measure?&neuralTiming:nullptr):encodeNativeImageStamped(row.shader,context,stamp,redraw&&!displayAdvanced,mapped,&rowCompletion,measure?&neuralTiming:nullptr);if(measure&&encoded.encoded){const auto timing=std::move(neuralTiming);const auto bit=uint32_t(1)<<i;if(quality)externalQuality->expect(bit);const auto costs=costTiming?impl:nullptr;const auto rowId=row.spec.id;[frame.commands addCompletedHandler:^(id<MTLCommandBuffer>commands){const auto measured=commands.status==MTLCommandBufferStatusCompleted&&timing?timing():NeuralGpuTimingValue{};if(quality)externalQuality->reported(bit,measured.state==NeuralGpuTimingState::Complete?measured.nanoseconds:0,measured.state==NeuralGpuTimingState::NoNewWork);if(costs&&measured.state==NeuralGpuTimingState::Complete)costs->recordCost(rowId,measured.nanoseconds/1e6,false,0);}];}}
                 else if(externalQuality&&(impl->qualityExternalMask&(uint32_t(1)<<i))){
                     struct Ticket {std::shared_ptr<Impl::ExternalQualityFrame> frame;uint32_t bit;uint64_t token,frameId;};
                     auto*ticket=new Ticket{externalQuality,uint32_t(1)<<i,++impl->qualityTimingTokens,context.frameId};externalQuality->expect(ticket->bit);
@@ -1450,7 +1470,7 @@ EffectExecutionSelection EffectPlanExecutor::buildSnapshot(const ShaderFrame &in
                 }}
                 if(!generator){
                     generator=makeGenerationEncoder(next->device,node.method,*config.generation);
-                    const bool sdr=node.method=="mlx-interpolation"||node.method=="rife";
+                    const bool sdr=generationUsesSDRColor(node.method);
                     if(imageColorNeedsSDRIsland(description)||current.pixelFormat==MTLPixelFormatRGBA16Float||lsfgLinear)generator=makeColorIslandGenerationEncoder(next->device,generator,description,sdr,config.generation->multiplier-1);
                     else generator->setColorDescription(description);
                 }
@@ -1470,7 +1490,7 @@ EffectExecutionSelection EffectPlanExecutor::buildSnapshot(const ShaderFrame &in
                 if(!ready.encoded){if(ready.busy)throw ScenePreparing(ready.reason,[generator]{return generator->preparationStatus();});impl->pendingGenerations.erase(node.id);require(ready);}
                 if(usesImagePairAnalysis(node.method)&&!stageState->pairAnalysis)
                     stageState->pairAnalysis=std::make_shared<ImagePairAnalysis>(next->queue,current,description,next->statusContext);
-                EffectGenerationStage stage;stage.id=node.id;stage.inputIdentity=upstream;stage.historyIdentity=contract;stage.sceneCoordinates=sceneCoordinates;stage.row=next->rows.size();stage.width=current.width;stage.height=current.height;stage.graphics=config;stage.encoder=generator;if(stageState)stage.state=std::move(stageState);stage.historySource=std::move(historySource);
+                EffectGenerationStage stage;stage.id=node.id;stage.inputIdentity=upstream;stage.historyIdentity=contract;stage.sceneCoordinates=sceneCoordinates;stage.row=next->rows.size();stage.width=current.width;stage.height=current.height;stage.graphics=config;stage.encoder=generator;stage.keepStaticContent=node.settings.boolean("keepStaticContent",true);if(stageState)stage.state=std::move(stageState);stage.historySource=std::move(historySource);
                 next->stages.push_back(std::move(stage));
                 {RuntimeStatusEvent event;event.context=next->statusContext;event.processing=true;event.phase=RuntimeStatusPhase::Prepared;event.planRevision=snapshot->revision;event.stageId=node.id;event.requestedMethod=node.method;event.activeMethod=node.method;event.inputWidth=current.width;event.inputHeight=current.height;event.outputWidth=current.width;event.outputHeight=current.height;observeRuntimeStatus(event);}
                 if(!next->generation){next->graphics=config;next->firstSplit=next->rows.size();next->generationInputIdentity=upstream;next->generator=generator;next->generationW=unsigned(current.width);next->generationH=unsigned(current.height);}

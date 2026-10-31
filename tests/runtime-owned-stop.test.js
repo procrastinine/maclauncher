@@ -69,7 +69,7 @@ test('direct CLI SIGINT calls the same owner and preserves its clean exit',async
 });
 test('actual main Stop functions keep the original session through cleanup and report failure instead of stopping its replacement',async()=>{
   const source=fs.readFileSync(path.resolve(__dirname,'../src/main/main.js'),'utf8');
-  const functions=source.slice(source.indexOf('async function stopRunSession('),source.indexOf('function buildRuntimeManagerState('));
+  const functions=source.slice(source.indexOf('async function stopRunSession('),source.indexOf('// App-scope module actions'));
   const sessions=new Map(),session={pid:123,stopProcess:async()=>{throw Error('Owned shutdown failed');}};sessions.set('game',new Map([[1,session]]));
   const cancel=source.slice(source.indexOf('function cancelGraphicsEdits('),source.indexOf('function editGraphics('));
   let aborted=0;
@@ -113,9 +113,10 @@ test('actual launcher and main retain module, runtime and graphics leases until 
   const operations=createBackendOperations({userDataDir:root,registry,runtimeCoordinator:coordinator.client()}),entry=await operations.importEntry(gamePath,{});
   await operations.launchEntry(entry,{settings:{}});
   const source=fs.readFileSync(path.resolve(__dirname,'../src/main/main.js'),'utf8');
-  const code=source.slice(source.indexOf('function registerGameRun('),source.indexOf('function buildRuntimeManagerState('));
+  const code=source.slice(source.indexOf('function registerGameRun('),source.indexOf('// App-scope module actions'));
   let graphicsReleased=0;
   const context={graphicsEditControllers:new Map(),runningGameSessions:new Map(),pendingGameCompletions:new Map(),nextRunSessionId:1,broadcastActivity(){},
+    graphicsShortcuts:require('../src/main/graphics-shortcuts').create({globalShortcut:{},readAssignments:()=>({})}),removeEphemeralEntry:()=>false,
     requestProcessStop,afterProcessStop,observeGameProcess:require('../src/core/game-process-events').observeGameProcess,
     gameRecordsCache:[],loadGamesHydrated:()=>[],findGameByPath:()=>null,backendService:{cancelLaunch:async()=>false},logger:{error(){},warn(){}},stopProcessTree:()=>assert.fail('Owned main Stop fell back')};
   const cancel=source.slice(source.indexOf('function cancelGraphicsEdits('),source.indexOf('function editGraphics('));

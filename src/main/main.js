@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { app, BrowserWindow, dialog, ipcMain, Menu, shell, session, nativeImage, nativeTheme, screen, systemPreferences, safeStorage } = require("electron");
+const { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, shell, session, nativeImage, nativeTheme, screen, systemPreferences, safeStorage } = require("electron");
 
 const Modules = require("../modules/registry");
 const GameData = require("../modules/shared/game-data");
@@ -478,6 +478,10 @@ function normalizeLauncherSettings(settings) {
   settings.launcher = { ...DEFAULT_LAUNCHER_SETTINGS, ...current, networkAccess: current.networkAccess === true,
     checkForUpdatesAtLaunch: current.checkForUpdatesAtLaunch === true, startSteamClient: SteamClientStart.startPreference(current.startSteamClient),
     appearance: ["system", "light", "dark"].includes(current.appearance) ? current.appearance : "system", library };
+  // Graphics shortcuts keep only assignments that pass the native-shortcut rules.
+  if (current.graphicsShortcuts !== undefined) settings.launcher.graphicsShortcuts = require("../modules/shared/graphics-shortcuts.mjs").normalize(current.graphicsShortcuts);
+  if (current.graphicsScreenshotFolder !== undefined && !(typeof current.graphicsScreenshotFolder === "string" && path.isAbsolute(current.graphicsScreenshotFolder)))
+    delete settings.launcher.graphicsScreenshotFolder;
 }
 
 function pruneRuntimeSettingsDefaults(settings) {
@@ -616,6 +620,15 @@ function resolveModuleRuntimeSettings(settings, moduleId, moduleInfo, runtimeId)
 
 function resolveRuntimeSettingsForEntry(entry, settings, moduleInfo, runtimeId) {
   return launcherService.runtimeSettingsStore.resolveForEntry(entry, settings, moduleInfo, runtimeId);
+}
+
+// A module can confirm a settings change that needs a system permission. A
+// declined permission keeps the module's replacement value.
+function reviewRuntimeSettings(moduleId, runtimeId, next, previous) {
+  const review = Modules.getModule(moduleId)?.reviewRuntimeSettings;
+  if (typeof review !== "function") return next;
+  try { return review(runtimeId, next, previous, { systemPreferences }) || next; }
+  catch (error) { logger.warn("[runtime] Settings review failed:", error.message); return next; }
 }
 
 function loadSettings() {
@@ -1105,6 +1118,8 @@ function normalizeGameEntry(entry, settings, precomputed = null) {
     iconPath,
     iconSource,
     lastPlayedAt: entry.lastPlayedAt ?? null,
+    // A session entry that exists only while it runs.
+    ...(entry.ephemeral === true ? { ephemeral: true } : {}),
     moduleFamily: moduleInfo.family,
     moduleLabel: moduleInfo.label,
     moduleShortLabel: moduleInfo.shortLabel,
@@ -1540,6 +1555,8 @@ async function applyGameDockIdentity(entry) {
 
 const gamePoliciesByWebContentsId = new Map();
 const runningGameSessions = new Map();
+// Graphics shortcut hot keys; game actions are held only while a game runs.
+const graphicsShortcuts = require("./graphics-shortcuts").create({globalShortcut, readAssignments: () => loadSettings().launcher?.graphicsShortcuts, logger});
 const pendingGameCompletions = new Map();
 let nextRunSessionId = 1;
 const pendingRuntimeRecoveryPrompts = new Set();
@@ -1593,6 +1610,7 @@ function registerGameRun(gamePath, session) {
   const runs = runningGameSessions.get(gamePath) || new Map();
   runs.set(id, { id, ...session });
   runningGameSessions.set(gamePath, runs);
+  graphicsShortcuts.setActive(runningGameSessions.size > 0);
   broadcastActivity({ runningChanged: true });
   return id;
 }
@@ -1604,7 +1622,9 @@ function unregisterGameRun(gamePath, runId) {
   runs.delete(runId);
   if (graphicsRuntimeUse) void graphicsRuntimeUse.release().catch(error => logger.warn("[graphics] Model release failed:", error.message));
   if (runs.size === 0) runningGameSessions.delete(gamePath);
+  graphicsShortcuts.setActive(runningGameSessions.size > 0);
   broadcastActivity({ runningChanged: true });
+  if (runs.size === 0) removeEphemeralEntry(gamePath);
 }
 
 function registerGameWindowRun(gamePath, win, runtimeId) {
@@ -1689,6 +1709,112 @@ async function stopGameRuns(gamePath) {
   const failed = results.find(result => result.status === "rejected");
   if (failed) throw failed.reason;
   return Boolean(results[0].value) || sessions.length > 0;
+}
+
+// App-scope module actions (File and Dock menus) start ephemeral entries: a
+// library row that exists while its session runs and is removed with its
+// folder when the session ends.
+const EphemeralEntries = require("../core/ephemeral-entries");
+const moduleAppActions = require("./module-app-actions").createModuleAppActions({ registry: Modules, logger,
+  targetContext: () => ({ excludePid: process.pid }),
+  choose: (moduleId, actionId, target) => startEphemeralSession(moduleId, actionId, target).catch(error => {
+    logger.error("[session]", error.message);
+    for (const win of launcherWindows) {
+      try { win.webContents.send("launcher:gameFailed", { gamePath: null, message: `${target?.label || "The session"} could not start. ${error.message}` }); } catch {}
+    }
+  }) });
+const appActionIcons = new Map();
+function appActionIcon(target) {
+  const file = target?.iconPath;
+  if (typeof file !== "string" || !path.isAbsolute(file)) return null;
+  if (appActionIcons.has(file)) return appActionIcons.get(file);
+  appActionIcons.set(file, null);
+  void app.getFileIcon(file, { size: "small" }).then(image => {
+    if (image.isEmpty()) return;
+    appActionIcons.set(file, image.resize({ width: 16, height: 16 }));
+    if (appActionIcons.size > 128) appActionIcons.delete(appActionIcons.keys().next().value);
+    setupAppMenu();
+  }).catch(() => {});
+  return null;
+}
+function refreshModuleAppActions() {
+  if (isChildGame) return;
+  void moduleAppActions.refresh().then(changed => { syncAppActionShortcuts();if (changed) setupAppMenu(); })
+    .catch(error => logger.warn("[app actions]", error.message));
+}
+function runningEphemeralEntries() {
+  const games = gameRecordsCache || [];
+  return [...runningGameSessions.keys()].map(gamePath => findGameByPath(games, gamePath))
+    .filter(entry => entry && EphemeralEntries.isEphemeral(userDataDir, entry));
+}
+function ephemeralStopItems() {
+  return moduleAppActions.stopItems(runningEphemeralEntries(),
+    entry => stopGameRuns(entry.gamePath).catch(error => logger.error("[session]", error.message)));
+}
+// An app action's shortcut is held only while the action is available, so
+// Settings lists it only where it can act. It starts a session for the
+// frontmost app, or stops that app's session.
+const appActionShortcuts = new Map();
+function syncAppActionShortcuts() {
+  const wanted = new Set(moduleAppActions.declared().map(({ action }) => action.shortcut).filter(name => moduleAppActions.forShortcut(name)));
+  for (const [name, remove] of appActionShortcuts) if (!wanted.has(name)) { remove();appActionShortcuts.delete(name); }
+  for (const name of wanted) {
+    if (appActionShortcuts.has(name)) continue;
+    try { appActionShortcuts.set(name, graphicsShortcuts.handle(name, () => toggleAppActionSession(name), { always: true })); }
+    catch (error) { logger.warn("[app actions]", error.message); }
+  }
+}
+async function toggleAppActionSession(shortcut) {
+  const pid = await GraphicsShortcuts.frontmostPid();
+  if (!pid || pid === process.pid) return;
+  await moduleAppActions.refresh();
+  const found = moduleAppActions.forShortcut(shortcut);
+  if (!found) return;
+  const running = runningEphemeralEntries().filter(entry => entry.moduleId === found.moduleId && entry.moduleData?.pid === pid);
+  if (running.length) { for (const entry of running) await stopGameRuns(entry.gamePath);return; }
+  const target = found.targets.find(item => item.target?.pid === pid);
+  if (target) await startEphemeralSession(found.moduleId, found.action.id, target);
+}
+async function startEphemeralSession(moduleId, actionId, target) {
+  const entry = moduleAppActions.createEntry(moduleId, actionId, target, { userDataDir });
+  EphemeralEntries.mark(userDataDir, entry.gameId);
+  let stored;
+  try {
+    const settings = loadSettings();
+    const upserted = upsertGame(loadGamesHydrated({ persist: false }), entry, settings);
+    stored = upserted.entry;
+    saveGameRecord(stored);
+    saveSettings(settings);
+    cachedState = buildState(settings, upserted.games);
+    broadcastState();
+    if (!await runGameEntry(stored, stored.runtimeId)) removeEphemeralEntry(stored.gamePath);
+  } catch (error) {
+    removeEphemeralEntry(stored?.gamePath || entry.gamePath, { gameId: entry.gameId });
+    throw error;
+  }
+  setupAppMenu();
+}
+// Removes an ended session's entry. Ordinary entries are never touched.
+function removeEphemeralEntry(gamePath, { gameId } = {}) {
+  if (isChildGame || runningGameSessions.get(gamePath)?.size) return false;
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath) || (gameId ? { gameId, gamePath } : null);
+  if (!entry || !EphemeralEntries.isEphemeral(userDataDir, entry)) return false;
+  if (entry.moduleId) {
+    try { moduleAppActions.endEntry(entry, { userDataDir, logger }); }
+    catch (error) { logger.warn("[session] The ended session's settings could not be saved:", error.message); }
+  }
+  const settings = loadSettings();
+  const { games: remaining } = removeGameByPath(games, gamePath, settings);
+  try { EphemeralEntries.remove(userDataDir, entry.gameId); }
+  catch (error) { logger.warn("[session] The ended session's folder could not be removed:", error.message); }
+  gameRecordsCache = gameRecordsCache?.filter(game => game.gameId !== entry.gameId) ?? null;
+  graphicsLaunchWarnings.delete(gamePath);gameLaunchNotices.delete(gamePath);
+  saveSettings(settings);
+  cachedState = buildState(settings, remaining);
+  broadcastState();
+  setupAppMenu();
+  return true;
 }
 
 function buildRuntimeManagerState(settings) {
@@ -2539,6 +2665,7 @@ function setupAppMenu() {
       label: "File",
       submenu: [
         { label: "Open…", accelerator: "CmdOrCtrl+O", click: () => void openGamesFromMenu() },
+        ...(isChildGame ? [] : moduleAppActions.menuItems("file", { icon: appActionIcon })),
         { type: "separator" },
         ...(process.platform === "darwin" ? [{ role: "close" }] : [{ role: "quit" }])
       ]
@@ -2557,6 +2684,10 @@ function setupAppMenu() {
   );
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+  if (process.platform === "darwin" && !isChildGame) app.dock?.setMenu(Menu.buildFromTemplate([
+    ...moduleAppActions.menuItems("dock", { icon: appActionIcon }),
+    ...ephemeralStopItems()
+  ]));
 }
 
 function upsertGame(games, nextEntry, settings, checks = null) {
@@ -2650,6 +2781,9 @@ async function init() {
     for (const gameId of GameRelocation.recoverInterruptedRelocations(userDataDir)) {
       logger.warn(`[library] An interrupted Locate… for game ${gameId} could not be undone; its backups are kept.`);
     }
+    // Sessions end with the launcher process; their entries never outlive it.
+    const ephemeral = EphemeralEntries.sweep(userDataDir);
+    if (ephemeral.length) logger.info(`[library] removed ${ephemeral.length} ended session entries`);
   }
 
   const settings = loadSettingsHydrated({ persist: !isChildGame });
@@ -2665,6 +2799,8 @@ async function init() {
     void refreshRuntimeSnapshots();
     void refreshModuleSnapshots();
     void refreshLibraryMetadata(games, settings);
+    void moduleAppActions.maintain({ userDataDir, logger });
+    refreshModuleAppActions();
   }
 
   const directGame = getArgValue("--maclauncher-game=");
@@ -3169,7 +3305,7 @@ ipcMain.handle("launcher:setGameNetworkAccess", async (_event, gamePath, network
   return true;
 });
 
-require("../modules/shared/effects/presets-ipc").register({ ipcMain, userDataDir, app, loadSettings, pickFile: pickEffectFile,
+const effectsPresets = require("../modules/shared/effects/presets-ipc").register({ ipcMain, userDataDir, app, loadSettings, pickFile: pickEffectFile,
   inventoryRevision: () => graphicsCatalog.revision(),
   changed: presets => {
     for (const win of launcherWindows) {
@@ -3631,6 +3767,7 @@ ipcMain.handle("launcher:getGameGraphicsStatus", (_event, gamePath) => {
     graphicsStatus.observed(entry.gamePath, {documentRevision: revision, launchId: result.launchId, outcomes: {
       ...Object.fromEntries(shown.filter(([id]) => !stages[id]).map(([id, row]) => [id, {state: row.state, reason: row.reason}])), ...outcome.rows}});
   }
+  if (result?.contexts?.some(context => context.stages?.some(stage => stage.gpu))) effectsPresets.measured(storedGraphicsPlan(entry).plan, result.contexts);
   return result;
 });
 ipcMain.handle("launcher:getGameEffectParameters", async (_event, gamePath, nodeId, draftPlan) => {
@@ -3638,7 +3775,9 @@ ipcMain.handle("launcher:getGameEffectParameters", async (_event, gamePath, node
   if (!entry) throw new Error("Game not found in library.");
   return EffectsRuntime.describe(entry, nodeId, draftPlan, await gameEffectsOptions(entry));
 });
-ipcMain.handle("launcher:setGameEffects", (_event, gamePath, value, request = {}) => {
+ipcMain.handle("launcher:setGameEffects", (_event, gamePath, value, request = {}) => setGameEffects(gamePath, value, request));
+// The Graphics editor and the bypass shortcut save and publish through here.
+function setGameEffects(gamePath, value, request = {}) {
   const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
   if (!entry) throw new Error("Game not found in library.");
   if (!request || typeof request !== "object" || Array.isArray(request)) throw new Error("Choose valid graphics edit options.");
@@ -3673,6 +3812,53 @@ ipcMain.handle("launcher:setGameEffects", (_event, gamePath, value, request = {}
   // A running game without a live binding takes the plan at its next launch.
   if (!session.running || session.live) publishGraphics(gamePath, seq, desiredRevision, effects);
   return {plan: effects, desiredRevision, ...clientRevision, ...(dropped.length ? {notices: dropped} : {})};
+}
+// User-assigned graphics shortcuts. Bypass toggles the same master switch as
+// the Graphics checkbox; a screenshot asks the running game's frame capture
+// for its final processed image and moves it into the screenshot folder.
+const GraphicsShortcuts = require("./graphics-shortcuts");
+async function shortcutGame() {
+  const running = [...runningGameSessions.entries()].flatMap(([gamePath, runs]) => [...runs.values()].map(run => ({gamePath, pid: run.pid})));
+  if (running.length <= 1) return GraphicsShortcuts.chooseGame(running, null);
+  // A window-graphics entry runs a helper; its captured app's pid is on the entry.
+  const games = loadGamesHydrated({ persist: false });
+  for (const item of running) item.targetPid = findGameByPath(games, item.gamePath)?.moduleData?.pid;
+  return GraphicsShortcuts.chooseGame(running, await GraphicsShortcuts.frontmostPid());
+}
+graphicsShortcuts.handle("bypass", async () => {
+  const gamePath = await shortcutGame(), entry = gamePath && findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
+  const stored = entry && storedGraphicsPlan(entry);
+  if (!stored?.plan || stored.source === "invalid") return;
+  setGameEffects(gamePath, require("../modules/shared/effects/edit-operations.mjs").setMaster(stored.plan, stored.plan.enabled === false));
+});
+let screenshotPending = false;
+graphicsShortcuts.handle("screenshot", async () => {
+  if (screenshotPending) return;
+  screenshotPending = true;
+  try {
+    const gamePath = await shortcutGame(), entry = gamePath && findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
+    if (!entry) return;
+    const session = graphicsSession(entry);
+    const launch = session.live ? require("../modules/shared/reshade/launch-binding").read(entry, {userDataDir, runningPids: [session.pid]}) : null;
+    const channel = launch?.screenshotCapture;
+    if (!channel) { logger.warn("[graphics] Processed screenshots need a running game with live graphics and an updated graphics runtime."); return; }
+    const Screenshots = require("../modules/shared/reshade/screenshots");
+    Screenshots.cleanup(channel.prefix);
+    const requestedAt = Date.now();
+    Screenshots.request(channel.trigger);
+    if (!await Screenshots.wait(channel.prefix, requestedAt)) {
+      Screenshots.cleanup(channel.prefix);
+      logger.warn("[graphics] No processed frame was captured for the screenshot. Graphics processing must be on.");
+      return;
+    }
+    logger.info("[graphics] Screenshot saved:", Screenshots.save({prefix: channel.prefix, title: entry.name, settings: loadSettings().launcher}));
+  } finally { screenshotPending = false; }
+});
+ipcMain.handle("launcher:getGraphicsShortcuts", () => graphicsShortcuts.status());
+ipcMain.handle("launcher:chooseScreenshotFolder", async event => {
+  const result = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {properties: ["openDirectory", "createDirectory"],
+    defaultPath: require("../modules/shared/reshade/screenshots").folder(loadSettings().launcher)});
+  return result.canceled ? null : result.filePaths[0] || null;
 });
 ipcMain.handle("launcher:resetGameEffects", (_event, gamePath) => editGraphics(gamePath, async signal => {
   const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
@@ -3938,7 +4124,8 @@ ipcMain.handle("launcher:setGameRuntimeSettings", async (_event, gamePath, runti
     const defaults =
       resolveModuleRuntimeSettings(settings, moduleId, moduleInfo, runtimeId) ||
       buildRuntimeSettingsDefaults(schema);
-    const normalized = normalizeRuntimeSettings(schema, payload, defaults);
+    const normalized = reviewRuntimeSettings(moduleId, runtimeId, normalizeRuntimeSettings(schema, payload, defaults),
+      resolveRuntimeSettingsForEntry(entry, settings, moduleInfo, runtimeId));
     if (shallowEqual(normalized, defaults)) {
       setEntryRuntimeSettings(entry, runtimeId, null);
     } else {
@@ -3947,6 +4134,11 @@ ipcMain.handle("launcher:setGameRuntimeSettings", async (_event, gamePath, runti
   }
   entry.updatedAt = Date.now();
   saveGameRecord(entry);
+  // A module can apply some settings to its running session at once.
+  if (runningGameSessions.get(entry.gamePath)?.size) {
+    try { Modules.getModule(moduleId)?.runtimeSettingsChanged?.(entry, runtimeId, resolveRuntimeSettingsForEntry(entry, settings, moduleInfo, runtimeId)); }
+    catch (error) { logger.warn("[runtime] Settings could not be applied to the running session:", error.message); }
+  }
   cachedState = buildState(settings, games);
   broadcastState();
   return true;
@@ -3990,6 +4182,7 @@ ipcMain.handle("launcher:setLauncherSettings", async (_event, patch) => {
   normalizeLauncherSettings(settings);
   nativeTheme.themeSource = settings.launcher.appearance;
   saveSettings(settings);
+  graphicsShortcuts.refresh();
   cachedState = buildState(settings, loadGamesHydrated({ persist: false }));
   broadcastState();
   return true;
@@ -4037,7 +4230,8 @@ ipcMain.handle("launcher:setModuleRuntimeSettings", async (_event, moduleId, run
     delete runtimeSettings[runtimeId];
   } else {
     const defaults = readRuntimeDefaults(runtimeId, moduleInfo) || buildRuntimeSettingsDefaults(schema);
-    const normalized = normalizeRuntimeSettings(schema, payload, defaults);
+    const normalized = reviewRuntimeSettings(moduleId, runtimeId, normalizeRuntimeSettings(schema, payload, defaults),
+      { ...defaults, ...(runtimeSettings[runtimeId] || {}) });
     if (shallowEqual(normalized, defaults)) {
       delete runtimeSettings[runtimeId];
     } else {
@@ -4572,8 +4766,10 @@ app.on("activate", () => {
 // A drive connected while the launcher was in the background is found on return.
 app.on("browser-window-focus", (_event, win) => {
   if (!isChildGame && cachedState && launcherWindows.has(win)) gameAvailability.focus();
+  // Running apps change while the launcher is in the background.
+  if (!isChildGame && cachedState && launcherWindows.has(win)) refreshModuleAppActions();
 });
-app.on("will-quit", () => gameAvailability.close());
+app.on("will-quit", () => {gameAvailability.close();graphicsShortcuts.dispose();});
 
 app.on("window-all-closed", () => {
   app.quit();

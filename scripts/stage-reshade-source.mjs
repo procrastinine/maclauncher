@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { execFileSync } from "node:child_process";
 import Content from "./runtime-content.cjs";
 import Production from "../src/modules/shared/runtime/production-source.js";
@@ -27,10 +28,17 @@ export function copyPinnedReShadeSources(source, destination, consumed, sourceDi
       : relative === "third_party/spirv-cross" ? ["*.cpp", "*.hpp", "*.h", "include", "CMakeLists.txt", "cmake", "pkg-config", "LICENSE", "LICENSES", "README.md"]
       : relative === "third_party/vkd3d" ? ["libs/vkd3d-shader", "libs/vkd3d-common", "include", "COPYING", "LICENSE", "AUTHORS", "README"]
       : relative === "third_party/reshade-shaders" ? ["Shaders", "Textures", "README.md", "REFERENCE.md"] : [];
-    const archive = execFileSync("git", ["-C", directory, "archive", "--format=tar", "HEAD", ...scope], { maxBuffer: 64 * 1024 * 1024 });
+    // tar may stop reading at the end-of-archive marker, so the archive goes through a file, not a pipe.
+    const staging = fs.mkdtempSync(path.join(os.tmpdir(), "reshade-source-"));
+    const archive = path.join(staging, "source.tar");
     const target = path.join(destination, relative);
-    fs.mkdirSync(target, { recursive: true });
-    execFileSync("/usr/bin/tar", ["-xf", "-", "-C", target], { input: archive, stdio: ["pipe", "pipe", "pipe"] });
+    try {
+      execFileSync("git", ["-C", directory, "archive", "--format=tar", `--output=${archive}`, "HEAD", ...scope], { stdio: "pipe" });
+      fs.mkdirSync(target, { recursive: true });
+      execFileSync("/usr/bin/tar", ["-xf", archive, "-C", target], { stdio: "pipe" });
+    } finally {
+      fs.rmSync(staging, { recursive: true, force: true });
+    }
     profiles.push({ path: relative, scope, ...Production.prune(target) });
   }
   return profiles;

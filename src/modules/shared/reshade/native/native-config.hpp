@@ -27,8 +27,10 @@ struct LegacyGraphicsConfig {
     const std::optional<std::string> *find(const char *key) const noexcept;
 };
 // Diagnostic frame capture: a fixed frame number, or one capture per trigger file.
+// finalOnly (RESHADE_CAPTURE_FINAL=1) is the screenshot mode: only the final
+// processed image is written, and capture never attaches processing by itself.
 struct CaptureConfig {
-    std::string prefix;std::optional<std::string> trigger;uint64_t frame=120;
+    std::string prefix;std::optional<std::string> trigger;uint64_t frame=120;bool finalOnly=false;
     bool configured() const noexcept {return !prefix.empty();}
 };
 // enabled: RESHADE_DIAGNOSTICS is present; path: its value, the prefix of diagnostic files.

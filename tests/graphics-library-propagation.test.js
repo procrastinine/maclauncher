@@ -73,7 +73,7 @@ test('every effective runtime entry passes its graphics metadata and selection t
   let expected;
   t.mock.method(ReShade,'prepare',async(_entry,options)=>{
     assert.equal(options.graphicsHost,expected.graphicsHost||null);
-    assert.equal(options.explicitHost,expected.graphicsHost==='explicit');
+    assert.equal(options.explicitHost,expected.graphicsHost==='explicit'||expected.explicitFrames===true);
     assert.equal(options.graphicsArchitecture,expected.graphicsArchitecture);
     return {DYLD_INSERT_LIBRARIES:selected,RESHADE_EFFECT:'/selected/prepared.fx',RESHADE_EFFECT_MODEL_ROOTS:modelRoots};
   });

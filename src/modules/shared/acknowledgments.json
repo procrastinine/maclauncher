@@ -14,6 +14,8 @@
   { "label": "MAKO model processing (GPL-3.0-or-later)", "url": "https://github.com/eugeniosegala/MAKO" },
   { "label": "Valve SteamCMD (proprietary)", "url": "https://developer.valvesoftware.com/wiki/SteamCMD" },
   { "label": "AMD FidelityFX FSR1 (MIT)", "url": "https://github.com/GPUOpen-Effects/FidelityFX-FSR" },
+  { "label": "MetalDuck optical-flow frame generation (MIT)", "url": "https://github.com/Nycolazs/MetalDuck" },
+  { "label": "MetalGoose frame generation techniques (reference)", "url": "https://github.com/Stallion77RepoOfficial/MetalGoose" },
   { "label": "SPIRV-Cross (Apache-2.0 or MIT)", "url": "https://github.com/KhronosGroup/SPIRV-Cross" },
   { "label": "SPIRV-Headers (MIT)", "url": "https://github.com/KhronosGroup/SPIRV-Headers" },
   { "label": "ReShade shader headers (CC0-1.0)", "url": "https://github.com/crosire/reshade-shaders" },

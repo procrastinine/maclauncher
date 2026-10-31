@@ -41,11 +41,20 @@ public:
  virtual GenerationResult encodeColor(id<MTLCommandBuffer>commands,id<MTLTexture>source,const std::vector<id<MTLTexture>>&outputs,uint64_t sequence,const InterpolationPlan&phases,bool){return encode(commands,source,outputs,sequence,phases);}
  virtual bool gpuTimingAvailable()const{return false;}
  virtual GenerationResult encodeColorTimed(id<MTLCommandBuffer>commands,id<MTLTexture>source,const std::vector<id<MTLTexture>>&outputs,uint64_t sequence,const InterpolationPlan&phases,bool mapped,bool){return encodeColor(commands,source,outputs,sequence,phases,mapped);}
+ // The method that ran the latest pair; Automatic reports its current candidate.
+ virtual const char *activeMethod()const noexcept{return method();}
+ // Why activeMethod() runs, when a provider chooses among methods; empty otherwise.
+ virtual std::string activeReason()const{return {};}
 };
 std::shared_ptr<GenerationEncoder> makeGenerationEncoder(id<MTLDevice>,const std::string&,const LsfgConfig&);
 std::shared_ptr<GenerationEncoder> makeNeuralGenerationEncoder(id<MTLDevice>,const LsfgConfig&);
 std::shared_ptr<GenerationEncoder> makeRifeGenerationEncoder(id<MTLDevice>,const LsfgConfig&);
 std::shared_ptr<GenerationEncoder> makeXessGenerationEncoder(id<MTLDevice>,const LsfgConfig&);
 std::shared_ptr<GenerationEncoder> makeFSR3GenerationEncoder(id<MTLDevice>,const LsfgConfig&);
+std::shared_ptr<GenerationEncoder> makeVideoToolboxGenerationEncoder(id<MTLDevice>,const LsfgConfig&);
+std::shared_ptr<GenerationEncoder> makeMetalFXImageGenerationEncoder(id<MTLDevice>,const LsfgConfig&);
+std::shared_ptr<GenerationEncoder> makeVisionFlowGenerationEncoder(id<MTLDevice>,const LsfgConfig&);
 bool metalFXGenerationAvailable(id<MTLDevice>)noexcept;
+bool videoToolboxGenerationAvailable()noexcept;
+bool visionFlowGenerationAvailable()noexcept;
 }

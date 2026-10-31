@@ -237,6 +237,7 @@ test("the production menu opens native utility windows from any focused view and
   const opened = [];
   const library = {};
   vm.runInNewContext(menu + "\nsetupAppMenu();", { process: { platform: "darwin" }, app: { name: "MacLauncher" },
+    moduleAppActions: require("../src/main/module-app-actions").createModuleAppActions({registry: {listModules: () => []}}), appActionIcon: () => null,
     devtoolsEnabled: false, sendToolsMenuEvent() {}, openGamesFromMenu() {}, openUtilityFromMenu: view => opened.push(view),
     ensureLauncherWindow: () => { opened.push("library"); return Promise.resolve(); }, isChildGame: false,
     launcherWindows: new Set([library]), logger: { error() {} },
@@ -287,6 +288,7 @@ test("fullscreen keeps the Mac shortcut hidden beside the native command and ret
   function templateFor(platform) {
     let template;
     vm.runInNewContext(menu + "\nsetupAppMenu();", { process: { platform }, app: { name: "MacLauncher" },
+      moduleAppActions: require("../src/main/module-app-actions").createModuleAppActions({registry: {listModules: () => []}}), appActionIcon: () => null,
       devtoolsEnabled: false, sendToolsMenuEvent() {}, openGamesFromMenu() {}, openUtilityFromMenu() {}, isChildGame: false,
       Menu: { buildFromTemplate: value => { template = value; return value; }, setApplicationMenu() {} } });
     return template;

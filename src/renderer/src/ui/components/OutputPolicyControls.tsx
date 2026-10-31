@@ -74,7 +74,8 @@ export function OutputPolicyControls({editor}: {editor: EffectsEditor}) {
   const motion = output?.motionClarity && output.motionClarity !== "off";
   // Automatic display subframes come only from an enabled subframe shader.
   const automaticMotion = plan.enabled !== false && plan.video.some(node => node.enabled && node.kind === "shader") ? "Automatic" : "Automatic (Off)";
-  const set = Boolean(output?.motionClarity || output?.framePacing || output?.comparison || output?.toneMapping || orphanQuality);
+  const set = Boolean(output?.motionClarity || output?.framePacing || output?.comparison || output?.toneMapping || orphanQuality ||
+    (output?.hud && output.hud !== "off") || output?.frameRateCap || output?.displaySync !== undefined || output?.drawableCount);
   return <details className="effectNodeSettings graphicsOutput" open={set || undefined}><summary>Output</summary>
     <div className="graphicsMotion" aria-label="Motion clarity">
       <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor="effects-motion-clarity">Motion clarity
@@ -132,5 +133,40 @@ export function OutputPolicyControls({editor}: {editor: EffectsEditor}) {
           <GraphicsNumber id="effects-comparison-gain" className="input" min="1" max="16" step="0.25" value={output.comparison.gain ?? 1}
             onValue={gain => void setOutput(current => ({comparison: {...current.comparison!, gain}}))} /></div>}
       </>}
+      <PresentationOptionControls editor={editor} />
   </details>;
+}
+
+/** Performance overlay, source frame-rate cap, display sync and drawable count, each shown when the runtime declares it or the plan holds it. */
+function PresentationOptionControls({editor}: {editor: EffectsEditor}) {
+  const {plan, support, setOutput} = editor, output = plan.output;
+  const pending = (id: string) => editor.graphics.pendingOutput(id)?.reason;
+  const cap = output?.frameRateCap ?? 0;
+  return <>
+    {(support?.performanceHud || (output?.hud && output.hud !== "off")) && <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor="effects-hud">Performance overlay
+      <HelpTip label="About the performance overlay">Draws frame rates, GPU time, latency, pacing, memory and frame counters over the processed image. Screenshots do not include it. Updates during play.</HelpTip></label>
+      <select id="effects-hud" className="input" value={output?.hud || "off"} title={support?.performanceHud ? undefined : pending("performance-overlay")}
+        onChange={event => void setOutput({hud: event.target.value === "off" ? undefined : event.target.value as "compact" | "detailed"})}>
+        <option value="off">Off</option><option value="compact" disabled={!support?.performanceHud}>Compact</option><option value="detailed" disabled={!support?.performanceHud}>Detailed</option>
+      </select></div>}
+    {(support?.frameRateCap || cap > 0) && <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor="effects-frame-cap">Frame-rate cap
+      <HelpTip label="About the frame-rate cap">Limits how often new source frames are accepted: how often a game renders, or how often a window is captured. The source's own timing applies when the cap is off. Updates during play.</HelpTip></label>
+      <select id="effects-frame-cap" className="input" value={cap > 0 ? "on" : "off"} title={support?.frameRateCap ? undefined : pending("frame-rate-cap")}
+        onChange={event => void setOutput({frameRateCap: event.target.value === "on" ? 60 : undefined})}>
+        <option value="off">Off</option><option value="on" disabled={!support?.frameRateCap}>Limit</option>
+      </select>
+      {cap > 0 && <><GraphicsNumber id="effects-frame-cap-value" className="input" min="10" max="1000" step="1" value={cap} onValue={frameRateCap => void setOutput({frameRateCap})} /><span className="unitLabel">fps</span></>}
+    </div>}
+    {(support?.presentationOptions || output?.displaySync !== undefined || output?.drawableCount) && <>
+      <label className="inlineCheck" title={support?.presentationOptions ? undefined : pending("presentation-options")}><input type="checkbox" disabled={!support?.presentationOptions} checked={output?.displaySync ?? true}
+        onChange={event => void setOutput({displaySync: event.target.checked ? undefined : false})} />Display sync
+        <HelpTip label="About display sync">Presents processed images at the display refresh. Turning it off can lower latency in fullscreen and can show tearing.</HelpTip></label>
+      <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor="effects-drawables">Drawables
+        <HelpTip label="About drawable count">Two drawables lower latency; three keep presentation smoother when GPU time varies.</HelpTip></label>
+        <select id="effects-drawables" className="input" disabled={!support?.presentationOptions} value={String(output?.drawableCount ?? 3)}
+          onChange={event => void setOutput({drawableCount: event.target.value === "3" ? undefined : 2})}>
+          <option value="3">3</option><option value="2">2</option>
+        </select></div>
+    </>}
+  </>;
 }

@@ -67,6 +67,10 @@ if (pins.length !== consumed.size || new Set(pins.map(line => line.trim().split(
 const nativeFiles = ["libreshade-macos.dylib", "libvkd3d-shader.dylib", "fx-compile"];
 if(fs.existsSync(path.join(build,"shaderc-offline")))nativeFiles.push("shaderc-offline");
 if(fs.existsSync(path.join(build,"maclauncher-graphics-video"))) nativeFiles.push("maclauncher-graphics-video");
+if(features.graphics.windowSourceAPI===1){
+  if(!fs.existsSync(path.join(build,"maclauncher-graphics-window")))throw Error("The declared window graphics helper is missing.");
+  nativeFiles.push("maclauncher-graphics-window");
+}
 if(features.graphics.hardwareQueryAPI===1){
   if(!fs.existsSync(path.join(build,"maclauncher-graphics-hardware")))throw Error("The declared graphics device query helper is missing.");
   nativeFiles.push("maclauncher-graphics-hardware");
@@ -457,6 +461,7 @@ const nativePaths = new Map(nativeFiles.map(file => [file, path.join(build, file
 for(const [relative,file] of retroarchInputs)if(nativeFiles.includes(relative))nativePaths.set(relative,file);
 for(const [relative,load] of optionalLoad){nativeFiles.push(relative);nativePaths.set(relative,optionalInputs.get(relative));}
 if(nativeFiles.includes("maclauncher-graphics-video")) optionalLoad.set("maclauncher-graphics-video", {architectures: ["arm64", "x86_64"], minimumMacOS: "14.0"});
+if(nativeFiles.includes("maclauncher-graphics-window")) optionalLoad.set("maclauncher-graphics-window", {architectures: ["arm64", "x86_64"], minimumMacOS: "15.2"});
 for (const [relative, file] of temporalInputs) if (/\.(dylib|so)$/.test(relative)) { nativeFiles.push(relative); nativePaths.set(relative, file); }
 const nativeArchitectures = new Map();
 for (const file of nativeFiles) {
@@ -541,6 +546,7 @@ if(features.graphics.adaptiveQualityAPI===1){
   if(!/\b_rsAdaptiveQualityAPI\b/.test(symbols)||!/\b_rsVideoGetQualityStatus\b/.test(symbols)||!["EffectQualitySession","observeGpuQuality","observeRuntimeAdaptiveQuality"].every(name=>symbols.includes(name)))throw Error("The graphics library is missing shared adaptive quality processing or status support.");
   if(fs.readFileSync(path.join(ownedSource,"src/generation-methods.hpp"),"utf8")!==generationMethodsHeader())throw Error("The native generation contracts differ from their shared registry.");
 }
+if(features.graphics.generationStaticContentAPI===1&&!symbols.includes("ImagePairAnalysis14blendAvailable"))throw Error("The graphics library is missing static-content blend-back for image-pair generation.");
 if(features.graphics.temporalProviderRegistryAPI===1&&!/\b_rsTemporalProviderMethodMask\b/.test(symbols))throw Error("The graphics library is missing the registered temporal provider dispatcher.");
 if(features.graphics.temporalProfileAPI===1&&!/\b_rsTemporalProfileAPI\b/.test(symbols))throw Error("The graphics library is missing temporal profile validation support.");
 if(features.graphics.sceneGuideTransformAPI===1&&!symbols.includes("SceneGuideEncoder6encode"))throw Error("The graphics library is missing shared scene-guide normalization.");
@@ -550,6 +556,7 @@ if(features.graphics.videoFrameGenerationMethods?.includes("rife")&&!symbols.inc
 if (!/\b_rsProcessFrame\b/.test(symbols)) throw new Error("The ReShade library must provide its shared frame encoder.");
 if (!/\b_rsSubmitFramePresenterAtTimeObserved\b/.test(symbols)) throw new Error("The ReShade library must provide frame retirement callbacks for explicit presentation.");
 if (features.graphics.browserFrameAPI === 1 && !/\b_rsBrowserFrameAPI\b/.test(symbols)) throw new Error("The ReShade library must provide its completed browser-window frame source.");
+if (features.graphics.windowSourceAPI === 1 && !/\b_rsWindowSourceAPI\b/.test(symbols)) throw new Error("The ReShade library must provide its picked-window frame source.");
 if (features.graphics.observedPresentationAPI === 1 && !/\b_rsSubmitFramePresenterObserved\b/.test(symbols)) throw new Error("The ReShade library must provide display-driven frame retirement callbacks.");
 if (features.graphics.temporalMethods?.length && !/\b_rsProcessTemporalFrame\b/.test(symbols)) throw new Error("The ReShade library must provide its temporal frame encoder.");
 if (features.graphics.temporalCameraAPI === 1) for (const name of ["rsSetTemporalCamera", "rsSetTemporalCameraForTextures", "rsClearTemporalCameraTextures", "rsGetTemporalMethod"])

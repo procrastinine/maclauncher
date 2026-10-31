@@ -2,7 +2,7 @@ const Model = require("./plan.mjs");
 const Graphics = require("../reshade/graphics-settings");
 const Providers = require("./providers");
 const Contracts=require("./contracts.mjs"),Items=require("../item-results");
-const {sceneInputNames,sceneInputAvailable,sceneInputLabel,GENERATION,TEMPORAL}=require("./operation-contracts.mjs");
+const {sceneInputNames,sceneInputAvailable,sceneInputLabel,GENERATION,TEMPORAL,generationMultipliers}=require("./operation-contracts.mjs");
 function validate(value) {
   const plan = Model.validate(value), ReShade = require("../reshade");
   plan.video = plan.video.map(node => {
@@ -10,18 +10,23 @@ function validate(value) {
       if (!Providers.neural(node)) throw new Error("Choose an available neural rendering method.");
       if(Providers.descriptor(node.method).kind!==node.kind)throw new Error("The selected neural operation has a different input and output type.");
       const Neural = require("../reshade/neural");
-      const {frameMultiplier,framePacing,targetFps,smoothCadence,...imageSettings}=node.settings;
+      const {frameMultiplier,framePacing,targetFps,smoothCadence,keepStaticContent,...imageSettings}=node.settings;
       const settings=node.method === "mlx-dlss" ? Neural.settings(node.settings) : Neural.settingsForMethod ? Neural.settingsForMethod(node.method, imageSettings) : Neural.settings(imageSettings);
       if(node.kind === "frame-generation"){
         const schedule=Graphics.updateStageSettings({}, {frameGeneration:node.method,
           ...(frameMultiplier !== undefined ? {frameMultiplier} : {}), ...(framePacing !== undefined ? {framePacing} : {}),
-          ...(targetFps !== undefined ? {targetFps} : {}), ...(smoothCadence !== undefined ? {smoothCadence} : {})});
-        Object.assign(settings,{frameMultiplier:schedule.frameMultiplier,framePacing:schedule.framePacing,targetFps:schedule.targetFps,smoothCadence:schedule.smoothCadence});
+          ...(targetFps !== undefined ? {targetFps} : {}), ...(smoothCadence !== undefined ? {smoothCadence} : {}), ...(keepStaticContent !== undefined ? {keepStaticContent} : {})});
+        Object.assign(settings,{frameMultiplier:schedule.frameMultiplier,framePacing:schedule.framePacing,targetFps:schedule.targetFps,smoothCadence:schedule.smoothCadence,keepStaticContent:schedule.keepStaticContent});
       }
       return {...node,settings};
     }
-    if (node.kind !== "shader") return { ...node, settings: Graphics.updateStageSettings({}, { ...node.settings,
-      [Model.isResize(node) ? "spatialMethod" : node.kind === "temporal" ? "temporalMethod" : "frameGeneration"]: node.method }) };
+    if (node.kind !== "shader") {
+      const settings=Graphics.updateStageSettings({}, { ...node.settings,
+        [Model.isResize(node) ? "spatialMethod" : node.kind === "temporal" ? "temporalMethod" : "frameGeneration"]: node.method });
+      if(node.kind==="frame-generation"&&!generationMultipliers(node.method).includes(settings.frameMultiplier))
+        throw new Error("Choose a frame multiplier that the selected generation method produces.");
+      return { ...node, settings };
+    }
     // Advanced rows have their own native parameter map, outside the legacy
     // 128-uniform live packet. Validate ordinary shader fields separately.
     const { parameters, ...settings } = node.shader;
@@ -67,6 +72,8 @@ const METHODS = Object.freeze({ area: {label: "Area", recommended: ["downsample"
   fsr1: {label: "AMD FSR 1", recommended: ["upscale"]}, fsr2: {label: "AMD FSR 2"}, fsr3: {label: "AMD FSR 3", recommended: ["temporal"]}, fsr4: {label: "AMD FSR 4"},
   xess: {label: "Intel XeSS"}, asr: {label: "Arm ASR"}, sgsr2: {label: "Snapdragon GSR 2"}, mako: {label: "Mako"}, ls1: {label: "Lossless Scaling LS1"},
   lsfg: {label: "Lossless Scaling Frame Generation", recommended: ["frame-generation"]}, libplacebo: {label: "libplacebo"},
+  "vt-interpolation": {label: "VideoToolbox interpolation"}, "metalfx-image": {label: "MetalFX image interpolation"},
+  "vision-flow": {label: "Vision optical flow"}, auto: {label: "Automatic"},
   ...Object.fromEntries(["lanczos", "ewa_lanczos", "spline36", "mitchell", "catmull_rom"].map(name => ["libplacebo:" + name, {general: true}])) });
 function modelSource(method){
   const sources=require('../reshade/neural/setup').sourcesFor(method),source=sources.find(row=>row.defaultForOperation)||sources[0];
@@ -156,12 +163,14 @@ function catalog({ reshadeState = {}, graphicsCapabilities = {}, graphicsInputs 
       const sceneRequirements=scene?["depth","motion",...(matrices?["viewMatrix","projectionMatrix"]:camera?["camera"]:[]),...(operation?.requires||[])]:[];
       const pendingInputs=sceneRequirements.filter(key=>!sceneInputAvailable(key,graphicsInputs));
       const xess=kind==="frame-generation"?xessGenerationProvider:xessProvider;
-      const hardwareReason = ["metalfx","metalfx-denoised"].includes(method) ? require("../reshade/hardware-support").operationReason(support.hardware,
+      const hardwareReason = ["metalfx","metalfx-denoised","metalfx-image"].includes(method) ? require("../reshade/hardware-support").operationReason(support.hardware,
         method==="metalfx-denoised"?"denoised":kind==="frame-generation"?"interpolation":kind==="temporal"?"temporal":"spatial") : null;
       const runtimeReason = hardwareReason || (!supported ? method.startsWith("metalfx") ? "The selected graphics processor does not include this MetalFX operation." : "This method is unavailable for the current graphics runtime." :
         method==="fsr4"&&!(support.temporalProfiles?.fsr4||["exact-fast"]).includes(settings.fsr4Profile)?"This FSR 4 profile is not included in the selected graphics processor.":null);
       const reason = runtimeReason || (method==="xess"&&xess?.available!==true?xess?.reason||"Install the Intel XeSS runtime and a compatible GPU compute host.":null) || (requiredModel && !model ? "Compatible Lossless Scaling models are required." : null);
-      const category = method.startsWith("metalfx") ? "MetalFX" : method==="xess"?"Intel XeSS":/^fsr\d$/.test(method) ? "AMD FidelityFX" : ["ls1", "lsfg"].includes(method) ? "Lossless Scaling" : "Standard filters";
+      const category = method.startsWith("metalfx") ? "MetalFX" : method==="xess"?"Intel XeSS":/^fsr\d$/.test(method) ? "AMD FidelityFX" : ["ls1", "lsfg"].includes(method) ? "Lossless Scaling" :
+        ["vt-interpolation","vision-flow","auto"].includes(method) ? "macOS frameworks" : "Standard filters";
+      const midpoint=scene||operation?.maximumMultiplier===2;
       rows.push({ id: kind + ":" + method, kind, label: method === "downsample" ? "Downsample" : support.spatialMethodLabels?.[method] || METHODS[method]?.label || (method.startsWith("libplacebo:") ? require("./presentation.mjs").libplaceboFilterLabel(method.slice(11)) : method),
         group: resize ? "Resize" : "Temporal", category,
         ...(["ls1","lsfg"].includes(method)?{traits:{neural:true}}:{}),
@@ -169,10 +178,10 @@ function catalog({ reshadeState = {}, graphicsCapabilities = {}, graphicsInputs 
         ...(method==="xess"?{backends:xess?.backends||[],runtimeManagerId:"graphics-xess",availableWithoutRuntime:xess?.availableWithoutRuntime===true}:{}),
         ...(support.colorPipeline&&["ls1","lsfg"].includes(method)?{colorPolicy:method==="lsfg"&&support.lsfgHDR?Providers.SCRGB_COLOR_POLICY:Providers.SDR_COLOR_POLICY}:{}),
         inputContract:{domain:scene?"scene":kind==="frame-generation"?"image-pair":"image",color:"rgb",requires:[...sceneRequirements,...(kind==="frame-generation"?["opaque"]:[])],acceptsSynthetic:!scene},
-        outputContract:{domain:kind==="frame-generation"?"timeline":"image",sizing:resize?"stage":kind==="temporal"?"scene-output":"preserve",...(resize?{direction:kind,extentEditable:true}:{}),...(kind==="frame-generation"?{phases:scene?"midpoint":"explicit",maximumMultiplier:scene?2:5,...(scene?{syntheticFrames:"passthrough"}:{})}:{})},
+        outputContract:{domain:kind==="frame-generation"?"timeline":"image",sizing:resize?"stage":kind==="temporal"?"scene-output":"preserve",...(resize?{direction:kind,extentEditable:true}:{}),...(kind==="frame-generation"?{phases:midpoint?"midpoint":"explicit",maximumMultiplier:operation?.maximumMultiplier||(scene?2:5),...(operation?.multipliers?{multipliers:[...operation.multipliers]}:{}),...(scene?{syntheticFrames:"passthrough"}:{})}:{})},
         template: { kind, enabled: true, method, settings: { ...stageSettings,
           [resize ? "spatialMethod" : kind === "temporal" ? "temporalMethod" : "frameGeneration"]: method,
-          ...(resize ? { spatialMultiplier: null } : {}), ...(kind==="frame-generation"&&scene?{frameMultiplier:2}:{}), ...(model ? { modelVersion: model.version } : {}) },
+          ...(resize ? { spatialMultiplier: null } : {}), ...(kind==="frame-generation"&&midpoint?{frameMultiplier:2}:{}), ...(model ? { modelVersion: model.version } : {}) },
           ...(kind === "downsample" ? {extent: {relativeTo: "input", factor: .5}} : {}) },
         available: !reason, ...(kind==="frame-generation"?{acceptsSynthetic:!scene}:{}), preservesCoordinates: resize && support.depthTransforms === true || kind === "temporal" && support.depthTransforms === true,
         coordinateTransform: resize || kind === "temporal" ? "scale" : "unknown", preservesSceneInputs:(resize||kind==="temporal")&&support.sceneGuideTransforms===true,

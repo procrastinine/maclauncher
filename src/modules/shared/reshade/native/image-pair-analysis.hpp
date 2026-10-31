@@ -5,6 +5,7 @@
 #include <functional>
 #include <memory>
 #include <string_view>
+#include <vector>
 
 namespace macfx {
 // Timeline identities, rather than a node-global last-result flag, bind each
@@ -21,6 +22,14 @@ struct ImagePairAnalysisResult {
   // result suppresses synthetic descendants; the real endpoint stays valid.
   std::function<ShaderResult()> completion;
 };
+// Generated images of the analyzed pair and their phases in (0, 1).
+// Static-content blend-back writes each image in place, in the same command
+// buffer and before the pair's history advances, so it shares the history
+// image and identity check with the repeat and cut decision.
+struct ImagePairGenerated {
+  std::vector<id<MTLTexture>> images;
+  std::vector<float> phases;
+};
 class ImagePairAnalysis {
   struct Impl;
   std::shared_ptr<Impl> impl;
@@ -31,9 +40,15 @@ public:
                     const ImageColorDescription &, uintptr_t owner);
   ~ImagePairAnalysis();
   ImagePairAnalysisResult encode(id<MTLCommandBuffer>, id<MTLTexture>,
-                                 const ImagePairAnalysisKey &);
+                                 const ImagePairAnalysisKey &,
+                                 const ImagePairGenerated &blend = {});
+  // False when this device cannot build the blend-back pass for the image
+  // format; analysis continues and generated images stay unchanged.
+  bool blendAvailable() const noexcept;
 };
-// These color-pair providers do not expose an original SDK scene-cut decision.
-// Scene providers retain their own reset/no-interpolation contracts.
+// Every registered color-pair provider (a generation method that declares no
+// scene input) uses the shared analysis and blend-back. These providers expose
+// no original SDK scene-cut decision; scene providers retain their own
+// reset/no-interpolation contracts.
 bool usesImagePairAnalysis(std::string_view method) noexcept;
 } // namespace macfx

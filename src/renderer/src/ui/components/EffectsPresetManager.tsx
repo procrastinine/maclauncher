@@ -3,6 +3,7 @@ import type { EffectsPreset, GameEffectsInfo, GameEffectsPlan, GraphicsNotice, R
 import { EffectsControls } from "./EffectsControls";
 import { HelpTip } from "./HelpTip";
 import { ErrorText } from "./ErrorText";
+import { presetCostLabel } from "./EffectsPresetPicker";
 import { confirmAction } from "../confirm-action";
 import {effectSelectionKey} from "../../../../modules/shared/effects/selection-key.mjs";
 import {NEURAL} from "../../../../modules/shared/effects/operation-contracts.mjs";
@@ -103,7 +104,7 @@ export function EffectsPresetManager({ api: suppliedApi, status, selectedId, nav
       <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor="graphics-preset-selection">Preset</label>
         <select id="graphics-preset-selection" className="input" value={selected?.id || ""} disabled={dirty}
           onChange={event => choose(presets.find(row => row.id === event.target.value))}>
-          <option value="">New preset</option>{presets.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}
+          <option value="">New preset</option>{presets.map(row => <option key={row.id} value={row.id}>{row.name}{row.measuredCost ? ` · ${presetCostLabel(row)}` : ""}</option>)}
         </select>
         <button className="btn small" disabled={dirty} onClick={() => choose()}>New</button>
       </div>
@@ -117,6 +118,7 @@ export function EffectsPresetManager({ api: suppliedApi, status, selectedId, nav
         {selected && <button className="btn small danger" onClick={() => void remove()}>Delete…</button>}
       </div>
       {dirty && <p className="detailMeta" role="status">Unsaved changes.</p>}
+      {!dirty && selected?.measuredCost && <p className="detailMeta">Last measured while its rows ran in a game: {presetCostLabel(selected)}.</p>}
       {info && <EffectsControls key={selected?.id || "new"} game={{ gamePath: "graphics-preset-editor", runtimeId: "native", effects: plan }} status={status}
         graphicsHost="window" running={false} editor={{ info, onChange: next => { unsaved.current = true;setPlan(next);setDirty(true); },
           pickFile: async (kind,expectedOperation) => { if (!api?.pickEffectsPresetFile) throw new Error("Effect file selection is unavailable.");return api.pickEffectsPresetFile(kind,expectedOperation); },

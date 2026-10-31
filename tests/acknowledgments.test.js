@@ -97,6 +97,7 @@ test('every registered runtime manager has a linked upstream project in Credits'
     system3: 'https://github.com/kichikuou/system3-sdl2',
     'undertale-mod-cli': 'https://github.com/UnderminersTeam/UndertaleModTool',
     unity: 'https://unity.com/releases/editor/archive',
+    'xash3d-fwgs': 'https://github.com/FWGS/xash3d-fwgs',
     'xsys35-decompiler': 'https://github.com/kichikuou/xsys35c',
     xsystem35: 'https://github.com/kichikuou/xsystem35-sdl2',
     xsystem4: 'https://github.com/nunuhara/xsystem4'

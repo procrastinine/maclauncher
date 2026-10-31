@@ -172,7 +172,8 @@ function serialize(value) {
 // share the shape {message, rowId?}: `rowId` names a row kept off in the plan,
 // and `dropped: true` marks a part that is not in the effective plan.
 const OUTPUT_LABELS = Object.freeze({motionClarity: "display subframe settings", framePacing: "frame pacing settings", toneMapping: "output tone mapping",
-  adaptiveQuality: "adaptive quality setting", comparison: "image comparison setting"});
+  adaptiveQuality: "adaptive quality setting", comparison: "image comparison setting", hud: "performance overlay setting",
+  frameRateCap: "frame-rate cap", presentationOptions: "display sync and drawable settings"});
 function notices(result) {
   return (Array.isArray(result?.dropped) ? result.dropped : []).map(row => {
     const name = row.part === "output" ? String(row.id).replace(/^output\.?/, "") : "";

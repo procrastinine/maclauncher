@@ -12782,7 +12782,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/temporal.mm",
-          "sha256": "b92c3a94a8d656c20bef8b21e14ff45e4e9e6091deb41585ed9ccc31f7017df8"
+          "sha256": "34e8111b07602b5e9c1c78e860d68a05cc1dadbb064af9777c0cac50a8cd732e"
         },
         {
           "path": "src/modules/shared/reshade/temporal/camera.h",
@@ -13223,7 +13223,7 @@
         },
         {
           "path": "scripts/graphics-runtime.json",
-          "sha256": "d7e9e04aba51d476bebb8438be9c8828e8dcb3f4e4085f7810c28480ba08e6ea"
+          "sha256": "d195fa466a2168acfe9ed2bd3c93380dfe942ff12a385b9b8aa0f86223146be0"
         },
         {
           "path": "scripts/native-supplementals.cjs",
@@ -13239,11 +13239,11 @@
         },
         {
           "path": "scripts/stage-reshade-source.mjs",
-          "sha256": "dd0531fa969cdba7eab383f95a7a3d20db04d6abef975f1d3620fe80f9d61aa3"
+          "sha256": "405c03540582b76d9419cb522958dc9115a9a39833ffbf807771884b25202d65"
         },
         {
           "path": "scripts/stage-reshade.mjs",
-          "sha256": "6fe663a63a5c87bd6cda2d5249dbe2449c82ca81e2a315de05caeaf4a8996cee"
+          "sha256": "822f6406213234215c6ae45d3ce823a30c865e6887dc40a8d5b1e73bec3b4a0f"
         },
         {
           "path": "src/core/backend-operations.js",
@@ -13263,7 +13263,7 @@
         },
         {
           "path": "src/core/launcher.js",
-          "sha256": "556025a484acf73770e88cb13a66e58a164c04492b5f736467d9638a2dea629a"
+          "sha256": "d15fa40d12a7f12b786290b532515d1ea8d034eba1ef8f1271d3c95dd1adb941"
         },
         {
           "path": "src/core/process-stop.js",
@@ -13279,7 +13279,7 @@
         },
         {
           "path": "src/main/main.js",
-          "sha256": "6e25aa7755a5850706032e55e5400dbec5024b8abf488098952f45ac413ef6b1"
+          "sha256": "68772e3d3ed65c0a7da0db6d4534a5b0cbc8c4cad76afa0f104c2aff0a586ada"
         },
         {
           "path": "src/modules/gamemaker/main.js",
@@ -13311,19 +13311,19 @@
         },
         {
           "path": "src/modules/shared/effects/plan.d.mts",
-          "sha256": "9de92ae0c76824bb600e4a9c158ad678f48774dcf67ded8a148ddf63b3aee80b"
+          "sha256": "a028514cce2142861dfffa35da64bc03d3d3a36baff84c1b51338fea6633ce3c"
         },
         {
           "path": "src/modules/shared/effects/plan.js",
-          "sha256": "bb67243d12d5a907daa4e6c668c4dc2c67fd3ff3b7a049b6e4b0f17b4ba712ce"
+          "sha256": "06dcbd580b3d7046b3562d67f70887e67584ecee905af87f928bb024b02f3684"
         },
         {
           "path": "src/modules/shared/effects/plan.mjs",
-          "sha256": "21f49ef587533671a53a8e93ee347449392ca623946994468414b364326cff2b"
+          "sha256": "2d64c2cc761b86615c8f6ff92237f030716755eb6f6d2681c4c91cdde5248fab"
         },
         {
           "path": "src/modules/shared/effects/runtime.js",
-          "sha256": "d49d68f14d7f7475f1a6ae5c2c63bfb878ba96f380e7a48ed52c47a80c085be6"
+          "sha256": "955b7c50e2751020486da42ec013b3855e91f616df717f75c9514af736dd733f"
         },
         {
           "path": "src/modules/shared/reshade/diagnostic-retention.js",
@@ -13331,7 +13331,7 @@
         },
         {
           "path": "src/modules/shared/reshade/distribution-supplementals.json",
-          "sha256": "951242d5fa685cd2554cf2c7424e14018dd51c254fe6f3dee8b069aee1a55721"
+          "sha256": "25fb96ff9724479745668426b041228ff778077085ac4821befc9db1d26ea217"
         },
         {
           "path": "src/modules/shared/reshade/effect-chain.js",
@@ -13367,7 +13367,7 @@
         },
         {
           "path": "src/modules/shared/reshade/features.json",
-          "sha256": "7253da41ab5604d544ea5cf4629e089039a33eccf68040402c810a58f5289345"
+          "sha256": "d7bcb88a6d1326efca59110da4d3a1fd050a23c126c0720e7e6aec6bf0aa2350"
         },
         {
           "path": "src/modules/shared/reshade/filter-library.js",
@@ -13375,15 +13375,15 @@
         },
         {
           "path": "src/modules/shared/reshade/graphics-settings.js",
-          "sha256": "37eefcea9c63d1399a4c9c45055178f7148c2a3a584b4b093da09fb284e4bb1c"
+          "sha256": "271eea098ef9c7252be7fa1f8fa155989298814b14ced99d56dfa6530c5938b6"
         },
         {
           "path": "src/modules/shared/reshade/index.js",
-          "sha256": "b8b9cdada67fc9b45e0b17e505aa004331c0dfe387457dc940d068dd65223401"
+          "sha256": "3c1aa411d1103ebac43e524bf93a57ace29a04988729f633e6d9f172bebe81a3"
         },
         {
           "path": "src/modules/shared/reshade/launch-binding.js",
-          "sha256": "99c9229a9aa49294dff8d35feb2902d67d1f44892cbbef3fef90bf33ed26522a"
+          "sha256": "6b7c2becb2642cf68e4b612f048605d3139142648780617fbf144c822c7ee20b"
         },
         {
           "path": "src/modules/shared/reshade/libplacebo-build.mjs",
@@ -13743,7 +13743,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/browser-frame.mm",
-          "sha256": "155d47562ac110a9c7bd070d281798e948b1f4e08728632aa421d7b949c5a373"
+          "sha256": "cb7e0275e30461e42b450649d48c35160ec3fdbbb25923583031228f3e2afbe8"
         },
         {
           "path": "src/modules/shared/reshade/native/build-retroarch.mjs",
@@ -13759,7 +13759,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/CMakeLists.txt",
-          "sha256": "ffc8a69a5efbee8466939cc8c0be7edcdaff9dcc549339e80d2dd7b24e64e958"
+          "sha256": "b6b16b909cff5d9931eaf070cdc7ae3d10db948821593a8c628c3a6df1785ea7"
         },
         {
           "path": "src/modules/shared/reshade/native/color-contract.hpp",
@@ -13775,7 +13775,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/delivery-plan.hpp",
-          "sha256": "36f559d052650aaeb609e5fe20fb25b6e2f51be7298e98f7a9f8c7bba5706013"
+          "sha256": "8367a285ef4372154b124709ef5cfa3f757c664a4e242f10b3304b83fa564351"
         },
         {
           "path": "src/modules/shared/reshade/native/depth-demand.hpp",
@@ -13811,11 +13811,11 @@
         },
         {
           "path": "src/modules/shared/reshade/native/effects-execution.hpp",
-          "sha256": "9ce0130628573f47d173236fdb742d87c64a4a0c3f298e7a44ad8c0db0dc9331"
+          "sha256": "ab68f52977e5604138e82134621ac7f63ff498b457026131695610262a62f394"
         },
         {
           "path": "src/modules/shared/reshade/native/effects-execution.mm",
-          "sha256": "b5f71900099c165d3e5ca6e34c2b522c8e3329aad314302a00c4ef690a0882fc"
+          "sha256": "1f3b7de46ebf1c61b2dcc5a56922114e50c3c5dbfa7356463e9a6231f0cb818a"
         },
         {
           "path": "src/modules/shared/reshade/native/effects-plan.hpp",
@@ -13823,11 +13823,11 @@
         },
         {
           "path": "src/modules/shared/reshade/native/effects-plan.mm",
-          "sha256": "4b0bf5174e2932d3d603fb4600515940ff37e414b0942ae4ee1f3b880fd36f6e"
+          "sha256": "040f2b8358e93e860b5dbcd23fd51198f38dcf1224b5e82a987a2468a853ec90"
         },
         {
           "path": "src/modules/shared/reshade/native/frame-capture.hpp",
-          "sha256": "cf419792c86fe61bf694190ad823e90fbe8cdcad50364a406804d7f180f648bb"
+          "sha256": "fba767469a4dcedf038a5c0ebe8c98a722c63b9aacf54e29924274a84126f2da"
         },
         {
           "path": "src/modules/shared/reshade/native/frame-depth.h",
@@ -13947,7 +13947,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/metal.mm",
-          "sha256": "f8d610656a4cd3ae3e25ff756a012c04d33337dc53ccda568c2235b94280b6d6"
+          "sha256": "b9f3958489cb2ab6bb603996d85b31f69dd4d571456cf7a17f69bee891264682"
         },
         {
           "path": "src/modules/shared/reshade/native/metal4-diagnostics.hpp",
@@ -13979,7 +13979,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/opengl.mm",
-          "sha256": "dde58844d7964936df8ea941adb4e76a28ff7c16f61432ca2cd7356fc7846f49"
+          "sha256": "9cdd8279bbe4eb3bbef3129a7784497b531f60a9366f75a8dff2914089e1a964"
         },
         {
           "path": "src/modules/shared/reshade/native/presentation-api.mm",
@@ -14003,11 +14003,11 @@
         },
         {
           "path": "src/modules/shared/reshade/native/presentation.hpp",
-          "sha256": "c0190d0e420fe40712fefe0e740d7160d58866ef95eb7f103b3f9d5db7a42937"
+          "sha256": "fadd4bc8901baeaba05c49b467912eed14d4e72b233da1fb0bb88b112018555b"
         },
         {
           "path": "src/modules/shared/reshade/native/presentation.mm",
-          "sha256": "1f01c65f6ac39a6d1ca3ff90f16b7e9203ba593f0b43087cdba82b1db68d20fc"
+          "sha256": "afbee565b2fa9f603d5699ea55007ed7e35271781025206c80da3e62eb50d6a3"
         },
         {
           "path": "src/modules/shared/reshade/native/processor-sources.json",
@@ -14055,11 +14055,11 @@
         },
         {
           "path": "src/modules/shared/reshade/native/runtime-status.cpp",
-          "sha256": "40b62d86ef8244458772a7c388c9c63d33998ac3ca1de84222e6798f473d0e80"
+          "sha256": "5b147b856b2bc8daefd09daf8ef8b4e946a4706ab007e07122bdecdf7c73ccee"
         },
         {
           "path": "src/modules/shared/reshade/native/runtime-status.hpp",
-          "sha256": "bcfd6b185c56301d70a33554bdf4970f7211397eb1812821a1ab3b06b839c136"
+          "sha256": "ec6e1f7c41422a6df7372b9f5e900b6a4f6814a113f335eb1892a6812b6f6c8e"
         },
         {
           "path": "src/modules/shared/reshade/native/source-control.hpp",
@@ -14067,7 +14067,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/source-overlay.json",
-          "sha256": "de91811f7da231a5c1a2bdbea78c1618d5410c32cada08aa33f5a0de5abb4bd0"
+          "sha256": "431ea069d9bb1263af6d43f6298724b67bb14168c38b6a1f1629664b7178c9cb"
         },
         {
           "path": "src/modules/shared/reshade/native/source-texture.hpp",
@@ -14111,7 +14111,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/temporal.mm",
-          "sha256": "b92c3a94a8d656c20bef8b21e14ff45e4e9e6091deb41585ed9ccc31f7017df8"
+          "sha256": "34e8111b07602b5e9c1c78e860d68a05cc1dadbb064af9777c0cac50a8cd732e"
         },
         {
           "path": "src/modules/shared/reshade/native/uniform-sources.hpp",
@@ -14227,11 +14227,11 @@
         },
         {
           "path": "src/modules/shared/runtime/macos-sandbox.js",
-          "sha256": "640d8ff762b4130b9a8471614a4a0ddad4a098af79268b812119ba25c8705aa1"
+          "sha256": "c18d35b86c5af4229ab4ea480f9345c94ac16e6971861885df2b2d0ea29c6be6"
         },
         {
           "path": "src/modules/shared/web/preload/launcher.js",
-          "sha256": "f14c3b1c5371df071d5f507c9aa044da34a192efd0fb02905a2d9031244f3ab7"
+          "sha256": "6a6c7337d1690f0e24f5814c8242fa386224a31050a34e3c2efd625dd663d03b"
         },
         {
           "path": "src/modules/unity/main.js",
@@ -14259,15 +14259,15 @@
         },
         {
           "path": "src/renderer/src/ui/components/EffectsPresetManager.tsx",
-          "sha256": "f7fb14749263ccc76675bdb9a2fbf2df430d89fe6fc2e3caf369e9400426d057"
+          "sha256": "f8591aaed578ffb20475f61bc0ccc95fb1623ac784eff4e251e97f5f67b9faef"
         },
         {
           "path": "src/renderer/src/ui/components/EffectsPresetPicker.tsx",
-          "sha256": "d4aef9711b205acf3292d4e85437e0f1d38327ed4025e79c5cab37bb18919b5c"
+          "sha256": "0078ee31f468e9e490d07cc100a485557e6b9d97013a54cf497845a9042653af"
         },
         {
           "path": "src/renderer/src/ui/components/GameActions.tsx",
-          "sha256": "3298b48e45cea642215fc3c326f9780a4e31f10dad341c27278f9a95e52f3e49"
+          "sha256": "43230a54fb63c922b209ecbcee74b05c5f4f246d0697dbec7561a51bb272ed16"
         },
         {
           "path": "src/renderer/src/ui/components/GameDetails.tsx",
@@ -14295,7 +14295,7 @@
         },
         {
           "path": "src/renderer/src/ui/components/SettingsView.tsx",
-          "sha256": "1853ad80e6ea6cf96b07540fba827f3a93375687edfd2f082c2a1c3d8a26a324"
+          "sha256": "ced03bea9750e425ec70fc2a2299d2418aa5475bcf21135a31c088402eb9b619"
         },
         {
           "path": "src/renderer/src/ui/components/ShaderLibraryFamily.tsx",
@@ -14315,7 +14315,7 @@
         },
         {
           "path": "src/renderer/src/ui/types.ts",
-          "sha256": "2416bbc4b2f9c15f5f7ee81723d02e62137cc7a30e4697d5b30f08c97d9dda5b"
+          "sha256": "513a9f5bf84931e8cbb2e9c749381a37959be87a29295f529050de16b6effb18"
         },
         {
           "path": "src/main/graphics-catalog.js",
@@ -14339,7 +14339,7 @@
         },
         {
           "path": "src/modules/shared/effects/execution-requirements.js",
-          "sha256": "f9fde78fb2b0c72b1bf665086178e47721223496c5e407ab371070c85a469a47"
+          "sha256": "70a8d3faaea1601bfb95df370fafbd3dbe168174d4d7e22ebfc6fc131fc6c45c"
         },
         {
           "path": "src/modules/shared/effects/live-plan.js",
@@ -14359,7 +14359,7 @@
         },
         {
           "path": "src/modules/shared/effects/operation-contracts.mjs",
-          "sha256": "2d413501c34a3ac6a8d7c30ee342ba3fdc03fa16ed62d0a22a86635c0b45f0b6"
+          "sha256": "140adde897e72d32309629acd68f96838b1246d9f1b6e74ec2b193b889e675a5"
         },
         {
           "path": "src/modules/shared/effects/presentation.d.mts",
@@ -14371,11 +14371,11 @@
         },
         {
           "path": "src/modules/shared/effects/presets-ipc.js",
-          "sha256": "ab345b232727bb6096d01fed0876c6baee5c385990465f5ab9b7a41cdf0ea91b"
+          "sha256": "9f5e3bef152f4b5b29841a4aa6058c359b2c4296e2f876ee923243be778f0dbe"
         },
         {
           "path": "src/modules/shared/effects/presets.js",
-          "sha256": "c2a460567a91577801517102a08796d3bd3c0f0e2a6537f283a39f8c28010cd5"
+          "sha256": "5a6c0a616d7fa3d93972af7e2223497f762e954bae91f8baf3c9d969bf0534b0"
         },
         {
           "path": "src/modules/shared/effects/providers.js",
@@ -14391,7 +14391,7 @@
         },
         {
           "path": "src/modules/shared/effects/stored-plan.js",
-          "sha256": "6f5492bc8ad012ca5d9671d6f3c714a3873abd022b09354dc2d78fea9552aa43"
+          "sha256": "21a4719e46c6b29284f7270f6f3577219966a1e3efd3a559fbb80994f123a539"
         },
         {
           "path": "src/modules/shared/reshade/compiler-isolation.mjs",
@@ -14491,7 +14491,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/color-island.mm",
-          "sha256": "2cc1db79c787d68ff8618c1a4fae14fb23c59c2581997f7e8b3d49170f2872f2"
+          "sha256": "43f0d3eecd22f1982c67fdde6365b30d051c62de48ed3c9c6de97e26e28a1a87"
         },
         {
           "path": "src/modules/shared/reshade/native/color-source.json",
@@ -14631,15 +14631,15 @@
         },
         {
           "path": "src/modules/shared/reshade/native/generation-execution.hpp",
-          "sha256": "c9aadaf4033cb463ad58a01ab9662d266351f68ac8c0df7167a37ec2c1fcd394"
+          "sha256": "57855a781ea51ffee533f72bbc8671e1078f6abb73cf3d80b6d2db07f9c61763"
         },
         {
           "path": "src/modules/shared/reshade/native/generation-execution.mm",
-          "sha256": "8d92d132b34be7fcf3adb3cc18043b5d9414069565a1392793c2da6824730e07"
+          "sha256": "6da17f2cc1dbf589e601cef50527fe893996984f2f331b4943f3092de29d16a2"
         },
         {
           "path": "src/modules/shared/reshade/native/generation-methods.hpp",
-          "sha256": "6b5cf2ccc818e57f871d681a9d62f6ddd9f85c196f701961fb8fddab04e67dd6"
+          "sha256": "1b9fb267041e0da94362c1fccd0ccdf4197a4d97d2f34e190f81d3d67e752850"
         },
         {
           "path": "src/modules/shared/reshade/native/generation-provider.h",
@@ -14647,15 +14647,15 @@
         },
         {
           "path": "src/modules/shared/reshade/native/generation-provider.hpp",
-          "sha256": "512eabecde4f2453d65ffce4b50d1095b06f2ed6e93d82813d31ddc9886cbca5"
+          "sha256": "d50becb3b740cfbab12783de937e058be64a3768419c0493e5e4c90aeacf81e9"
         },
         {
           "path": "src/modules/shared/reshade/native/generation-provider.mm",
-          "sha256": "0040926b9a73492ee732fc9a26119051d419ad8fc10101d92e63fbb891737d1e"
+          "sha256": "cd2ad1fe56c3640a2661223cb73d549f634a53eb28029c20d0f10cfa78f65938"
         },
         {
           "path": "src/modules/shared/reshade/native/generation-timeline.hpp",
-          "sha256": "ae33df257af66a608d4ac11feccccad87fcb25618ac152b12fb7072020755d82"
+          "sha256": "5d1550769aa3a3f5599de358e47f04f6d66a8b39ca8b701ea7a311e35ecb8f72"
         },
         {
           "path": "src/modules/shared/reshade/native/gpu-completion.hpp",
@@ -14687,11 +14687,11 @@
         },
         {
           "path": "src/modules/shared/reshade/native/image-pair-analysis.hpp",
-          "sha256": "4b965bde3d2f01a462db90834b96befae8d7b8c9bab3fe3bc0f999f5c3cfad79"
+          "sha256": "a893a73c3c78fa8ace89f60692fa1b254de97fd2102d7783392149289e887d05"
         },
         {
           "path": "src/modules/shared/reshade/native/image-pair-analysis.mm",
-          "sha256": "b73c6b8659b845ba66c326ea9bac1b675198ec3f1741265143a2e09bef62ddd8"
+          "sha256": "edc50b3bfa3705fdb1f76f1c280a93b8fd333ef82a125aac41c8102d77b2aaef"
         },
         {
           "path": "src/modules/shared/reshade/native/isf-node.hpp",
@@ -14759,7 +14759,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/metalfx-generation-resources.mm",
-          "sha256": "b023acc1a51cb671fc721d9adc9188f9ce84821ebdf6dbbcde21755223bf5466"
+          "sha256": "67b0259d75210b55f500333f52eecaf809d7d0a4450db5ffd90286a5218beba1"
         },
         {
           "path": "src/modules/shared/reshade/native/metalfx-image-ingress.hpp",
@@ -14767,15 +14767,15 @@
         },
         {
           "path": "src/modules/shared/reshade/native/metalfx-image-ingress.mm",
-          "sha256": "17b05594109c605792abfaa5ab035a36513c37239c172be9e6ff89561539c145"
+          "sha256": "f754a8a3487f18b125b537e526de2b5c2ff2adcc64c5ae19775807974731b73f"
         },
         {
           "path": "src/modules/shared/reshade/native/native-config.hpp",
-          "sha256": "a6d4950a1ac1e6aee4e497fa251c2d0348540216b7a3d33e97ebbcaed346c7f1"
+          "sha256": "038bb71d0e77eb38dea7a1fbf93ec9037ad3db2281bd3cf33aea2c86a055d0f1"
         },
         {
           "path": "src/modules/shared/reshade/native/native-config.mm",
-          "sha256": "a28f87a8fd7afa74e48bed4ed7dbd6623b043a5669e21b5999960db2b0f4c738"
+          "sha256": "9ecbb2be588300b8c64fb94d15df6b21808ec361f902d6ec7501868d3c282e12"
         },
         {
           "path": "src/modules/shared/reshade/native/native-filter-sources.json",
@@ -14815,7 +14815,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/output-policy.hpp",
-          "sha256": "e7cd25cd084500e47846f2868dc4a89192317f093de8f9e1fa13511e39a9fde7"
+          "sha256": "07d5dc71ef0f0384d51b2c86171c86df28994d48120626b9b059bef7192d5669"
         },
         {
           "path": "src/modules/shared/reshade/native/overlay-drawables.hpp",
@@ -15047,7 +15047,7 @@
         },
         {
           "path": "src/modules/shared/reshade/runtime-status.js",
-          "sha256": "abf73eb335c60ff09951394d2e7db13dd198e769ad6234b10a80d328e04cb385"
+          "sha256": "d1181af599c7b41cdd89102d30a25c90ea21df5b6bea84b344ce6843ec3dbf82"
         },
         {
           "path": "src/modules/shared/reshade/shader-input-policy.js",
@@ -15091,7 +15091,7 @@
         },
         {
           "path": "src/renderer/src/ui/components/EffectRowControls.tsx",
-          "sha256": "5aba2d664c883c48d2a0b3eb636920e9e68348b9f0e71bd049cd1ed96c269ca0"
+          "sha256": "676cdf2c7829e464ae7f934806932d6169c432c2604bc6c97b31706dd8e751f4"
         },
         {
           "path": "src/renderer/src/ui/components/GraphicsStatusLabel.tsx",
@@ -15099,7 +15099,7 @@
         },
         {
           "path": "src/renderer/src/ui/components/OutputPolicyControls.tsx",
-          "sha256": "db61973605043650a17eabc0b311b611763cd17b12f9b9e4633ebaa6248e751f"
+          "sha256": "13effb052a829badad8e15c17beed2be8ebe596ef1fb61805b06ac7d08183035"
         },
         {
           "path": "src/renderer/src/ui/components/SimpleEffectsView.tsx",
@@ -15131,7 +15131,7 @@
         },
         {
           "path": "src/modules/shared/effects/prepared-rows.js",
-          "sha256": "13948d638bc1038dac5d559b7a12c08e3203172cc414d3fcab05ee77b7c5251e"
+          "sha256": "6e63bcbc56f1d183f180bebd807c32426023c971207eefe95eefdf1b70f71fae"
         },
         {
           "path": "src/modules/shared/reshade/native/vulkan-scene.h",
@@ -15339,11 +15339,11 @@
         },
         {
           "path": "tests/graphics-launch-binding.test.js",
-          "sha256": "6253e55c8a7fe23cbc64ffd9095681adf67f4b5b6464e540f429f9c85456b6e7"
+          "sha256": "654c4af0b9bff4f9b3e722c47b25ed6be7723b60959b260f9481bf649a7a1554"
         },
         {
           "path": "tests/graphics-library-propagation.test.js",
-          "sha256": "945d29d7ef7ee9c2db72bfb01a1852c5c076b423caa254638252b0704f0f0711"
+          "sha256": "194d695d3374e41eddb9fbd303f10e0e2454946f090450f6bc22287b64187cc3"
         },
         {
           "path": "tests/graphics-live-resources.test.js",
@@ -15459,7 +15459,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/test/browser-frame-lifetime.mm",
-          "sha256": "1b5e725d0b6d3da508da1965fd6a45bcb66399bdf3f382bc49e53f1b514bfec2"
+          "sha256": "e2cc26027287b2f54d54c71414cc664974815869f6b3cef61fdd2e7269a333c0"
         },
         {
           "path": "src/modules/shared/reshade/native/test/browser-frame-policy.cpp",
@@ -15651,7 +15651,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/test/run.mjs",
-          "sha256": "aaadefb9ab021362cd444eddfc4cfdea61e88548db3b0a1203d946426e5c8fc6"
+          "sha256": "9c779d8c5a36774d4b4c9deca6e38ce927577f7472e95ec63080cf5db04ff516"
         },
         {
           "path": "src/modules/shared/reshade/native/test/runtime-status.cpp",
@@ -15692,6 +15692,234 @@
         {
           "path": "src/modules/shared/reshade/native/test/image-pool.mm",
           "sha256": "7c943b3ca7b50025fb33a2721cc2fe0d0ece8257b44481518004bbc753f3ee21"
+        },
+        {
+          "path": "src/core/ephemeral-entries.js",
+          "sha256": "7127593fb5d0bac72dcc85f5d0f2f9ab301596a18152f8f3d83ec1d8760a4bf5"
+        },
+        {
+          "path": "src/main/graphics-shortcuts.js",
+          "sha256": "3846c1e4d53db33d211df5ad6fe45d4803907d0e38a4a3014d062cd9e8e93b02"
+        },
+        {
+          "path": "src/main/module-app-actions.js",
+          "sha256": "756b5a0556bece925b1ca0e884122bd12d94fcb5a9b9a60032460a96b9a99fbd"
+        },
+        {
+          "path": "src/modules/shared/effects/application-stacks.js",
+          "sha256": "c28df9247dffbbc9a819cee22fc9312050e0285b28847a4d8f2ded83e07f4942"
+        },
+        {
+          "path": "src/modules/shared/effects/output-options.js",
+          "sha256": "8787d45ba3c2d02e8bf9d18a329f9a16379d35b30a76dae549be535c2066f30d"
+        },
+        {
+          "path": "src/modules/shared/graphics-shortcuts.d.mts",
+          "sha256": "2b33d1ec09b1fe8228b6e4e590baf2eb4edcd060d2fa24a6f961d62da8fd1ec3"
+        },
+        {
+          "path": "src/modules/shared/graphics-shortcuts.mjs",
+          "sha256": "558adcd312644b83987b701c070f3f6dc87db8089342be756f35ea64ac094e5d"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/generation-automatic.hpp",
+          "sha256": "fd4640238572ac51b94d6466437837473c7252810a52727ed07e534b267f9efb"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/generation-schedule.hpp",
+          "sha256": "5696ce6a9826a4ec97a7d3f9d33e53a901b86d22cc556bb3338c6b1e658d2ffd"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/graphics-window-Info.plist",
+          "sha256": "ba67c386c1b3372f98189fc9a3a67c248183c087b950f20fd61cde30fcd0e022"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/graphics-window.mm",
+          "sha256": "a1b0da696b6da69924112b4c80f45628f8397d671d241d2faeb56ac8cb0fd88d"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/hud-counters.hpp",
+          "sha256": "a40ffe6e2013814befdba6b735f6bd80227d3ec7ae9acadb397ca09a08237479"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/hud-overlay.hpp",
+          "sha256": "7d696f4dfbfa531f3478c0904c39c5fb43fff06b69ac457850a0610e7695363b"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/image-pair-generation.mm",
+          "sha256": "45fee6f317f9e8b95de2f56b59ba0c88dcba01a77d922471e5cfa0f2c432a24e"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/image-pair-kernels.hpp",
+          "sha256": "f12b01390347835a548e4f69144708cf8cde209d72a201ba23745d973a6c03c3"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/metalduck-MIT.txt",
+          "sha256": "9747336f369790da559df3cce6308891a3f75ac09cd466d5bab4178e149429e4"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/screenshot-color.hpp",
+          "sha256": "01f62c141fa66d4d828e957d8f9af01963bc3d2780e6dad56c8149424bd857c9"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/screenshot-image.hpp",
+          "sha256": "c5cf182e91032d109afd419da34842f05efc90155fbaa4520ab14dfadcf2ef19"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/source-frame-cap.hpp",
+          "sha256": "b735e24148156dbc3001ca1c088ab5bc6b2b07c4acf9e41efe14f392591edd77"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/source-frame-pacing.hpp",
+          "sha256": "259ddbec42234d1fa6b9256f32e5fadfd4fcec4f4797e62e5975d6dbb8319f42"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/test/display-limited-delivery.cpp",
+          "sha256": "bddf4471c0caf446358f073dc00a34a1ea1d7b05a1d0318ba1335c723642101d"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/test/generation-automatic.cpp",
+          "sha256": "8d11d4682251607724dff0d09beb95f4127d58e39d94b34ca2c674c079ea66ea"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/test/hud-counters.cpp",
+          "sha256": "6d7306720083f861345bb58487b1c2c44565869474b3e2257ef73f590085f059"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/test/screenshot-color.mm",
+          "sha256": "bb2de6d0698fdb956b0888b3af6207e53d10ed99e8320ff69fbe0da84423d5ab"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/test/source-frame-pacing.cpp",
+          "sha256": "b3c067f0ed408de10b3dbaa7b59c160288ce48b7d7b4daabd498273d7ebe24f3"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/test/window-overlay-policy.cpp",
+          "sha256": "d60d5a960a4a0abac848eb51eb1b399bbeac8fa74cc3af597820899e75a748bf"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/test/window-source-fixture.mm",
+          "sha256": "dff3fbf9d851ba812f5ac5f753586a1fbc4e5c73dc7ee63596de56cf6eac67c6"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/window-overlay-policy.hpp",
+          "sha256": "3d094a378bc582c71ba1a6d21f4a184561ec4adba34392fa53a5d982f670d202"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/window-source.h",
+          "sha256": "c2cc9676195340193e49a5abd747550d2095dc57ebc046c11a286e5350b1d47f"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/window-source.mm",
+          "sha256": "541e98b08c531c2ba91e7202e71d570b9fe164504e5dcc121df9241276e7a3a0"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/window-stream.hpp",
+          "sha256": "9969cd55cc746d8de784c1f0495a2475ab27dc901d0782f1732e3dc6dd44c6e1"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/window-stream.mm",
+          "sha256": "bc15c363e40a8c470de62c3b53697e65edfaaf1184186a05c389c6b89831c764"
+        },
+        {
+          "path": "src/modules/shared/reshade/screenshots.js",
+          "sha256": "14f1e5c4c391a6995d7db96d9af8fc8c6362f3d95f3ab39597c386dce8eefa91"
+        },
+        {
+          "path": "src/modules/window/app-actions.js",
+          "sha256": "9eb38ee059b6630dd18013cf3792dcdc7fceb0f3918eba83d65ba126f0d0cf18"
+        },
+        {
+          "path": "src/modules/window/applications.js",
+          "sha256": "3addcf098b93c59e80639b1774c6f769b9e8bbb607e4d35c13040c91b2d6ec88"
+        },
+        {
+          "path": "src/modules/window/launch.js",
+          "sha256": "bf5747723c6872b9fc85dc967433353bee97a43152daedaf9ba50d640a92b6c0"
+        },
+        {
+          "path": "src/modules/window/main.js",
+          "sha256": "8944db75d228af6c42e6498089ba28a3a5a502415cd74a1b27a8fe0d558616d9"
+        },
+        {
+          "path": "src/modules/window/manifest.json",
+          "sha256": "3c0294c4c14ac163b7b99ddb8302399ba131f84e01fc5d627fc51ddca6df0217"
+        },
+        {
+          "path": "src/modules/window/resources/icon.json",
+          "sha256": "23ed0d4c984cc36599a23f2d577f99f60e952cc5a481a47bd6956517a0d7ed38"
+        },
+        {
+          "path": "src/modules/window/resources/icon.png",
+          "sha256": "df41884830e6ca74553d955d7f6577ea4e6a6dc2be9570c630818bf1e563fa5c"
+        },
+        {
+          "path": "src/modules/window/resources/icon.svg",
+          "sha256": "025af3d26a6e9d302174fcdf3bd0f46e5a16e93056ffce4b00d9d356219ff7c9"
+        },
+        {
+          "path": "src/renderer/src/ui/components/GraphicsShortcutSettings.tsx",
+          "sha256": "197e61d5a233297c3d06791dae6fcfa58c9cb61b36dc74505b3532db09600210"
+        },
+        {
+          "path": "tests/application-stacks.test.js",
+          "sha256": "b3d27f7454ddfa8027a81cd0faecf6a808d822192bdb7ef66715a26b2e1d5d4f"
+        },
+        {
+          "path": "tests/ephemeral-entry.test.js",
+          "sha256": "99c4b04178a4bff9d5c9c9ddec0fcfe6b8cf5089c3623143f0148651017a668d"
+        },
+        {
+          "path": "tests/generation-schedule-native.test.js",
+          "sha256": "0298a2f938a817d8e1d35927ab908c45a51da011abe8dd0fb87f1fa1cbb11748"
+        },
+        {
+          "path": "tests/generation-static-content.test.js",
+          "sha256": "12709f734e9e9ece7d6947050e27162549ba67e0eab054bbee7052fb71b1dfe6"
+        },
+        {
+          "path": "tests/graphics-hud-counters.test.js",
+          "sha256": "8acd793507be0e828627f2a3a5d9be2548baf9f755fac7e6c95c0f35d4fb2863"
+        },
+        {
+          "path": "tests/graphics-image-pair-generation.test.js",
+          "sha256": "5f3edddd9334351d8602576d7be73e733cddb2cbd7a3faf660de80322b4aae99"
+        },
+        {
+          "path": "tests/graphics-presentation-options.test.js",
+          "sha256": "1b7208a3c524909737d34f9cb01fd08ecfd039f1e25e5d941744a20a658e35d8"
+        },
+        {
+          "path": "tests/graphics-preset-cost.test.js",
+          "sha256": "b9205f47c508f5699116a36d28a1ac74e70f8d3ef7612abfbeb5723b5d24731e"
+        },
+        {
+          "path": "tests/graphics-screenshots.test.js",
+          "sha256": "c40cdce46101897c406f525392f6f5846d4339ca6b0b03aacd7fa4c5f396943d"
+        },
+        {
+          "path": "tests/graphics-shortcuts.test.js",
+          "sha256": "a696f0f34af1fa4edab9269efbb6795d7c661f241f10132c6f25719154e2be5d"
+        },
+        {
+          "path": "tests/graphics-source-frame-pacing.test.js",
+          "sha256": "a504d482934355d3f2da86de72487421885fb6ab2cb755717761642684750ffa"
+        },
+        {
+          "path": "tests/module-app-actions.test.js",
+          "sha256": "25969ab94954e44d7bd8a851aa9c55973a098b24b275e0ddf19691a0e56f37de"
+        },
+        {
+          "path": "tests/native/generation-schedule.cpp",
+          "sha256": "2711e0dd604fb5295d7068f320227d3fffaca8e09140cc31c31fb4b4469ea0de"
+        },
+        {
+          "path": "tests/window-capture-fallback.test.js",
+          "sha256": "98e71039fac1c76a156a4cda65f5f61d54f179727632ab339a6179c90c9f1a8e"
+        },
+        {
+          "path": "tests/window-module.test.js",
+          "sha256": "27410e7a3495c479f79adcdb8ce35fbe114dd5302c7bac565f461a019fc5e8e0"
         }
       ],
       "buildEntries": [
@@ -15741,7 +15969,29 @@
         "src/modules/shared/reshade/native/test/metal-library-reuse.mm",
         "tests/effects-edit-operations.test.js",
         "tests/graphics-editor-demand.test.js",
-        "tests/graphics-preparation-caches.test.js"
+        "tests/graphics-preparation-caches.test.js",
+        "src/modules/shared/reshade/native/test/display-limited-delivery.cpp",
+        "src/modules/shared/reshade/native/test/generation-automatic.cpp",
+        "src/modules/shared/reshade/native/test/hud-counters.cpp",
+        "src/modules/shared/reshade/native/test/screenshot-color.mm",
+        "src/modules/shared/reshade/native/test/source-frame-pacing.cpp",
+        "src/modules/shared/reshade/native/test/window-overlay-policy.cpp",
+        "src/modules/shared/reshade/native/test/window-source-fixture.mm",
+        "tests/application-stacks.test.js",
+        "tests/ephemeral-entry.test.js",
+        "tests/generation-schedule-native.test.js",
+        "tests/generation-static-content.test.js",
+        "tests/graphics-hud-counters.test.js",
+        "tests/graphics-image-pair-generation.test.js",
+        "tests/graphics-presentation-options.test.js",
+        "tests/graphics-preset-cost.test.js",
+        "tests/graphics-screenshots.test.js",
+        "tests/graphics-shortcuts.test.js",
+        "tests/graphics-source-frame-pacing.test.js",
+        "tests/module-app-actions.test.js",
+        "tests/native/generation-schedule.cpp",
+        "tests/window-capture-fallback.test.js",
+        "tests/window-module.test.js"
       ]
     },
     {

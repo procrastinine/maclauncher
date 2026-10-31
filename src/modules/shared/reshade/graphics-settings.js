@@ -3,7 +3,7 @@ const Models = require("./models");
 const SourceResolution = require("./source-resolution");
 const ShaderSettings = require("./shader-settings");
 const warn = require("../graphics-warning");
-const {GENERATION}=require("../effects/operation-contracts.mjs"),{libplaceboFilterLabel}=require("../effects/presentation.mjs");
+const {GENERATION,generationMultipliers}=require("../effects/operation-contracts.mjs"),{libplaceboFilterLabel}=require("../effects/presentation.mjs");
 const generationMethod=value=>value==="off"||Object.hasOwn(GENERATION,value);
 const SPATIAL_METHODS = Object.freeze(["off", "bilinear", "metalfx", "fsr1", "mako", "ls1", "nearest", "bicubic"]);
 const TEMPORAL_METHODS = Object.freeze(["off", "metalfx", "metalfx-denoised", "fsr2", "fsr3", "fsr4", "xess", "asr", "sgsr2"]);
@@ -18,7 +18,7 @@ function supportsSpatialMethod(support, method, direction) {
 const unavailable = message => Object.assign(new Error(message), {code: "GRAPHICS_OPTIONAL_UNAVAILABLE"});
 const DEFAULTS = Object.freeze({ spatialMethod: "off", spatialShader: null, spatialMultiplier: null, spatialSharpness: 0.5, temporalMethod: "off", temporalSharpness: 0.5, asrQuality:"quality", fsr4Profile:"exact-fast", xessBackend:"auto", effectPlacement: "before", ls1Mode: "quality", frameGeneration: "off",
   frameMultiplier: 2, framePacing: "fixed", targetFps: 120, smoothCadence: false,
-  lsfgMode: "quality", lsfgFp16: true, lsfgFlowScale: 1, modelVersion: null,
+  lsfgMode: "quality", lsfgFp16: true, lsfgFlowScale: 1, keepStaticContent: true, modelVersion: null,
   neuralMethod: "off", neuralModelPath: null, neuralInputHeight: null, neuralInputScale: null, neuralIntensity: 1, neuralTemporal: false });
 const within = (value, minimum, maximum) => typeof value === "number" && Number.isFinite(value) && value >= minimum && value <= maximum;
 function normalizeSpatialShader(value) {
@@ -50,6 +50,7 @@ const valid = {
   smoothCadence: value => typeof value === "boolean",
   lsfgMode: value => ["quality", "performance"].includes(value), lsfgFp16: value => typeof value === "boolean",
   lsfgFlowScale: value => within(value, 0.25, 1),
+  keepStaticContent: value => typeof value === "boolean",
   modelVersion: value => value === null || typeof value === "string" &&
     (/^sha256-[a-f0-9]{64}$/.test(value) || value.startsWith("/") && value.length <= 4096 && !/[\0\r\n]/.test(value))
 };
@@ -81,7 +82,11 @@ function updateStageSettings(current, patch) {
 }
 function enabled(value) { return value.spatialMethod !== "off" || Boolean(value.spatialShader) || value.frameGeneration !== "off" || Boolean(value.temporalMethod && value.temporalMethod !== "off") || value.neuralMethod === "mlx-dlss"; }
 function normalizeCapabilities(graphics, presentation) {
-  return { spatial: presentation?.spatial === true, resizeAPI: graphics?.resizeAPI || 0, colorPipeline:graphics?.colorPipelineAPI===1, outputColor:graphics?.outputColorAPI===1, lsfgHDR:graphics?.lsfgHDRAPI===1, shaderInputPolicy:graphics?.shaderInputPolicyAPI===1, comparison:graphics?.comparisonAPI===1, adaptiveQuality:graphics?.adaptiveQualityAPI===1, motionClarity: graphics?.motionClarityAPI === 1, depthTransforms: graphics?.depthTransformAPI === 1, depthInput: graphics?.depthInputAPI === 1, sceneGuideTransforms:graphics?.sceneGuideTransformAPI===1, sceneWindowContinuation:graphics?.sceneWindowContinuationAPI===1,
+  return { spatial: presentation?.spatial === true, resizeAPI: graphics?.resizeAPI || 0, colorPipeline:graphics?.colorPipelineAPI===1, outputColor:graphics?.outputColorAPI===1, lsfgHDR:graphics?.lsfgHDRAPI===1, shaderInputPolicy:graphics?.shaderInputPolicyAPI===1, comparison:graphics?.comparisonAPI===1, adaptiveQuality:graphics?.adaptiveQualityAPI===1, staticContent:graphics?.generationStaticContentAPI===1, motionClarity: graphics?.motionClarityAPI === 1, depthTransforms: graphics?.depthTransformAPI === 1, depthInput: graphics?.depthInputAPI === 1, sceneGuideTransforms:graphics?.sceneGuideTransformAPI===1, sceneWindowContinuation:graphics?.sceneWindowContinuationAPI===1,
+    // The overlay and presentation options belong to the shared presenter; a
+    // source cap needs a frame adapter that declares it for this host.
+    performanceHud: graphics?.performanceHudAPI === 1, presentationOptions: graphics?.presentationOptionsAPI === 1,
+    frameRateCap: graphics?.frameRateCapAPI === 1 && presentation?.frameRateCap === true,
     downsampleMethods: Array.isArray(graphics?.downsampleMethods) ? graphics.downsampleMethods.filter(spatialMethod) : [],
     temporal: presentation?.temporal === true,
     temporalProfiles:graphics?.temporalProfiles||{},
@@ -100,6 +105,18 @@ function normalizeCapabilities(graphics, presentation) {
     ...(graphics?.spatialMethodLabels ? {spatialMethodLabels: graphics.spatialMethodLabels} : {}),
     spatialMethods: Array.isArray(graphics?.spatialMethods) ? graphics.spatialMethods.filter(method => spatialMethod(method) && method !== "off") : [],
     frameGenerationMethods: Array.isArray(graphics?.frameGenerationMethods) ? graphics.frameGenerationMethods.filter(method => generationMethod(method)&&method!=="off") : [] };
+}
+// A generation method's declared macOS floor and MetalFX device support hide it.
+// Automatic stays listed while at least one of its candidates remains.
+function generationReason(method, operationReason, {macOSVersion} = {}) {
+  if (["metalfx", "metalfx-image"].includes(method) && operationReason("interpolation")) return operationReason("interpolation");
+  const Requirements = require("../runtime/feature-requirements"), minimumMacOS = GENERATION[method]?.minimumMacOS;
+  const requirement = Requirements.FRAME_GENERATION[method] || (minimumMacOS ? {platform: "darwin", minimumMacOS} : null);
+  return requirement ? Requirements.requirementSupport(requirement, {platform: "darwin", macOSVersion}).reason : null;
+}
+function generationMethodsAllowed(methods, operationReason, options = {}) {
+  const allowed = methods.filter(method => method === "auto" || !generationReason(method, operationReason, options));
+  return allowed.filter(method => method !== "auto" || GENERATION.auto.candidates.some(candidate => allowed.includes(candidate)));
 }
 function capabilities(root, host, options = {}) {
   try {
@@ -159,8 +176,8 @@ function capabilities(root, host, options = {}) {
       result.spatialMethods = result.spatialMethods.filter(method => method !== "metalfx" || !operationReason("spatial"));
       result.temporalMethods = result.temporalMethods.filter(temporalAllowed);
       result.providerTemporalMethods = result.providerTemporalMethods.filter(temporalAllowed);
-      result.frameGenerationMethods = result.frameGenerationMethods.filter(method => method !== "metalfx" || !operationReason("interpolation"));
-      result.providerGenerationMethods = result.providerGenerationMethods.filter(method => method !== "metalfx" || !operationReason("interpolation"));
+      result.frameGenerationMethods = generationMethodsAllowed(result.frameGenerationMethods, operationReason, {...options, macOSVersion: options.macOSVersion || hardware.macOSVersion});
+      result.providerGenerationMethods = generationMethodsAllowed(result.providerGenerationMethods, operationReason, {...options, macOSVersion: options.macOSVersion || hardware.macOSVersion});
       const inputReason = Hardware.metalFX27InputsReason(graphics, {...options, macOSVersion: options.macOSVersion || hardware.macOSVersion}) || operationReason("temporal");
       result.metalFX27Inputs = !inputReason;
       if (inputReason) result.metalFX27InputsReason = inputReason;
@@ -200,6 +217,8 @@ async function prepare(value, { root, userDataDir, signal, graphicsHost = null, 
   }
   if (settings.frameGeneration !== "off" && !(support.frameGeneration&&support.frameGenerationMethods.includes(settings.frameGeneration)||allowPendingInputs&&support.providerGenerationMethods?.includes(settings.frameGeneration)))
     throw unavailable("Frame generation cannot be presented by this graphics runtime. Disable frame generation.");
+  if (settings.frameGeneration !== "off" && !generationMultipliers(settings.frameGeneration).includes(settings.frameMultiplier))
+    throw unavailable("The selected frame-generation method does not produce this frame multiplier. Choose a supported multiplier.");
   if (settings.frameGeneration !== "off" && settings.framePacing === "adaptive" && !support.adaptive)
     throw unavailable("Adaptive frame generation is unavailable for this runtime. Choose Fixed.");
   const required = [];
@@ -228,4 +247,4 @@ async function prepare(value, { root, userDataDir, signal, graphicsHost = null, 
     RESHADE_LSFG_MODE: settings.lsfgMode, RESHADE_LSFG_FP16: settings.lsfgFp16 ? "1" : "0", RESHADE_LSFG_FLOW_SCALE: String(settings.lsfgFlowScale),
     ...(model ? { RESHADE_LOSSLESS_MODEL: model.modelPath } : {}) };
 }
-module.exports = { DEFAULTS, SPATIAL_METHODS, TEMPORAL_METHODS, RESOLUTION_MULTIPLIERS, spatialMethod, supportsSpatialMethod, normalizeSettings, updateSettings, updateStageSettings, enabled, capabilities, prepare };
+module.exports = { DEFAULTS, SPATIAL_METHODS, TEMPORAL_METHODS, RESOLUTION_MULTIPLIERS, spatialMethod, supportsSpatialMethod, normalizeSettings, updateSettings, updateStageSettings, enabled, capabilities, prepare, generationMethodsAllowed };

@@ -158,15 +158,18 @@ function nodeUnavailableReason(launch, node, neuralLibrary,options) {
 function supportsPlan(launch, plan, neuralLibrary,options) {
   return launch?.effectPlanAPI === 1 && (!plan || plan.enabled === false || plan.video.every(node => !nodeUnavailableReason(launch, node, neuralLibrary,options)));
 }
-function attachmentUnavailable(entry, reason, {userDataDir} = {}) {
+// `captured`: a window capture companion processes a copy of the game's
+// window with this launch's plan, so graphics stay available with a warning.
+function attachmentUnavailable(entry, reason, {userDataDir, captured = false} = {}) {
   const launch = read(entry, {userDataDir});
   if (launch?.schema !== 1 || launch.phase !== "prepared" || !launchIdentity(launch.launchId)) return false;
   const detail = String(reason || "").replace(/[\x00-\x1f\x7f]/g, " ").slice(0, 512);
   if (!detail) return false;
   const file = path.join(path.dirname(Live.file(entry, userDataDir)), "launch.json");
   const warnings = (Array.isArray(launch.graphicsWarnings) ? launch.graphicsWarnings : []).filter(row => row.id !== "native-attachment");
-  Writable.atomicWrite(file, JSON.stringify({...launch, graphicsAttachment: {available: false, reason: detail},
-    graphicsWarnings: [...warnings, {id: "native-attachment", reason: detail}]}), {root: userDataDir});
+  const warning = captured ? `Graphics process a captured copy of the game's window. ${detail}` : detail;
+  Writable.atomicWrite(file, JSON.stringify({...launch, graphicsAttachment: {available: captured, ...(captured ? {captured: true} : {}), reason: detail},
+    graphicsWarnings: [...warnings, {id: "native-attachment", reason: warning}]}), {root: userDataDir});
   return true;
 }
 // Called only after optional preparation produced the child's environment.

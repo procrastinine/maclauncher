@@ -243,6 +243,22 @@ void observeRuntimeAdaptiveQuality(const RuntimeAdaptiveQualityEvent&event) noex
     }
     value->writing.clear(std::memory_order_release);
 }
+void observeRuntimeStageCost(const RuntimeStageCostEvent&event) noexcept {
+    const auto scope=uint32_t(event.scope);
+    if(!event.context||!hexadecimal(event.planRevision)||event.stageId.empty()||event.stageId.size()>128||scope<1||scope>2||
+       !std::isfinite(event.milliseconds)||event.milliseconds<=0||event.milliseconds>10000)return;
+    auto*value=mapping.load(std::memory_order_acquire);
+    if(!leased(value)||value->writing.test_and_set(std::memory_order_acquire))return;
+    const unsigned selected=contextIndex(value,event.context,false);
+    if(selected!=slotCount){
+        auto*row=slot(value,selected);
+        const auto same=[&](const char*text,size_t size){return event.planRevision==std::string_view(text,strnlen(text,size));};
+        if(row->phase!=uint32_t(RuntimeStatusPhase::Stopped)&&(same(row->planRevision,sizeof(row->planRevision))||same(row->acceptedRevision,sizeof(row->acceptedRevision)))&&row->stages<=stageCount)
+            for(unsigned i=0;i<row->stages;++i)if(event.stageId==std::string_view(row->rows[i].id,strnlen(row->rows[i].id,sizeof(row->rows[i].id)))){
+                begin(row);auto&stage=row->rows[i];stage.gpuMilliseconds=event.milliseconds;stage.gpuScope=scope;stage.gpuSection=event.section;stage.gpuObservedAt=now();end(row);break;}
+    }
+    value->writing.clear(std::memory_order_release);
+}
 void observeRuntimeAdmission(uintptr_t context,std::string_view reason,unsigned width,unsigned height,uintptr_t queue,uint32_t format) noexcept {
     if(!context)return;auto* value=mapping.load(std::memory_order_acquire);if(!leased(value))return;
     static constexpr const char* reasons[]={"frame-owner-accepted","frame-owner-missing","present-registered","present-already-claimed","present-commit",
