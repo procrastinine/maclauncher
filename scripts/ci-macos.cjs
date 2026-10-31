@@ -49,8 +49,12 @@ async function preparePython({ arch, repoRoot, force = false, install = async ar
   require('./python-resources.cjs').assertProfile(JSON.parse(B.readRegular(path.join(root, 'runtime.json'), B.LIMITS.manifestBytes).bytes), arch);
   return { python: expected.architecture, installed: true };
 }
+function prepareElectron({ repoRoot = path.resolve(__dirname, '..'), tool = execFileSync } = {}) {
+  tool(process.execPath, [path.join(repoRoot, 'node_modules/electron/install.js')], { cwd: repoRoot, stdio: 'inherit' });
+}
 async function fetchResources({ config = readConfiguration(), repoRoot = path.resolve(__dirname, '..') } = {}) {
   verifyRunner(config);
+  prepareElectron({ repoRoot });
   const python = await preparePython({ arch: config.arch, repoRoot, force: true });
   await require('./published-inputs.cjs').prepareSevenZip({ repoRoot });
   await require('./published-inputs.cjs').prepareDeclaredPublishers({ repoRoot });
@@ -156,17 +160,21 @@ async function finalize({ config = readConfiguration(), repoRoot = path.resolve(
     minimumMacOS: pkg.build.mac.minimumSystemVersion, packageRepository: inventory.packageRepository }), { flag: 'wx', mode: 0o644 });
   return { archive: name, sha256, sourceCommit, nativePackages: inventory.packages.length, nativeSupplementals: inventory.supplementals.length };
 }
-async function main(args) {
-  if (args.length !== 1) throw new Error('Usage: node scripts/ci-macos.cjs sources|configure|fetch|finalize');
-  if (args[0] === 'sources') {
-    const value = JSON.parse(fs.readFileSync(path.join(__dirname, '../build/source-dependencies.json'), 'utf8'));
-    if (value.schemaVersion !== 1 || !Array.isArray(value.submodules) || !value.submodules.length ||
-        new Set(value.submodules).size !== value.submodules.length || value.submodules.some(file => Payload.safeFile(file) !== file))
-      throw new Error('Application source dependencies require explicit pinned submodules.');
-    execFileSync('git', ['-c', 'submodule.recurse=false', 'submodule', 'update', '--init', '--checkout', '--', ...value.submodules],
-      { cwd: path.resolve(__dirname, '..'), stdio: 'inherit' });
-    return { submodules: value.submodules.length };
-  }
+function initializeSources({ repoRoot = path.resolve(__dirname, '..'), tests = false, tool = execFileSync } = {}) {
+  const value = JSON.parse(fs.readFileSync(path.join(repoRoot, 'build/source-dependencies.json'), 'utf8'));
+  const groups = [value.submodules, ...(tests ? [value.testSubmodules] : [])];
+  if (value.schemaVersion !== 1 || groups.some(group => !Array.isArray(group) || !group.length ||
+      new Set(group).size !== group.length || group.some(file => Payload.safeFile(file) !== file)))
+    throw new Error('Application source dependencies require explicit pinned submodules.');
+  const submodules = [...new Set(groups.flat())];
+  tool('git', ['-c', 'submodule.recurse=false', 'submodule', 'update', '--init', '--checkout', '--', ...submodules],
+    { cwd: repoRoot, stdio: 'inherit' });
+  return { submodules: submodules.length };
+}
+async function main(args, sourceOptions) {
+  if (args.length !== 1) throw new Error('Usage: node scripts/ci-macos.cjs sources|test-sources|configure|fetch|finalize');
+  if (args[0] === 'sources' || args[0] === 'test-sources')
+    return initializeSources({ ...sourceOptions, tests: args[0] === 'test-sources' });
   const config = readConfiguration();
   if (args[0] === 'configure') {
     verifyRunner(config);
@@ -177,7 +185,7 @@ async function main(args) {
   }
   if (args[0] === 'fetch') return fetchResources({ config });
   if (args[0] === 'finalize') return finalize({ config });
-  throw new Error('Usage: node scripts/ci-macos.cjs configure|fetch|finalize');
+  throw new Error('Usage: node scripts/ci-macos.cjs sources|test-sources|configure|fetch|finalize');
 }
-module.exports = { verifyTagVersion, readConfiguration, verifyRunner, verifyAppVersion, preparePython, fetchResources, releaseNotes, assertCopiedPayload, finalize, main };
+module.exports = { verifyTagVersion, readConfiguration, verifyRunner, verifyAppVersion, preparePython, prepareElectron, fetchResources, releaseNotes, assertCopiedPayload, finalize, initializeSources, main };
 if (require.main === module) main(process.argv.slice(2)).then(result => console.log(JSON.stringify(result))).catch(error => { console.error(error.message); process.exitCode = 1; });

@@ -6,12 +6,56 @@ const os = require('node:os');
 const { createHash } = require('node:crypto');
 const test = require('node:test');
 const { load: parse } = require('js-yaml');
-const { verifyTagVersion, readConfiguration, verifyRunner, verifyAppVersion, releaseNotes, assertCopiedPayload, preparePython } = require('../scripts/ci-macos.cjs');
+const { verifyTagVersion, readConfiguration, verifyRunner, verifyAppVersion, releaseNotes, assertCopiedPayload, preparePython, prepareElectron, main } = require('../scripts/ci-macos.cjs');
 
 const environment = { MACLAUNCHER_APP_ARCH: 'arm64' };
 // The committed lock is checked against the current application plan by its
 // own test below. Tests of other CI steps read this fixed selection instead.
 const fixtureLock = Object.freeze({ repository: 'owner/runtime-builds', arch: 'arm64', maximumMacOS: '13.0', packages: [] });
+test('explicit resource fetch prepares Electron before publisher and included-package downloads', async () => {
+  const filename = path.resolve(__dirname, '../scripts/ci-macos.cjs');
+  const originalRequire = require('node:module').createRequire(filename), calls = [];
+  const reached = new Error('Electron installer reached');
+  const ciRequire = name => name === 'node:child_process' ? { execFileSync(...args) { calls.push(args); throw reached; } } : originalRequire(name);
+  const ciModule = { exports: {} }, repoRoot = path.resolve(os.tmpdir(), 'ci-electron-source');
+  new Function('require', 'module', 'exports', '__dirname', '__filename', 'process', fs.readFileSync(filename, 'utf8').replace(/^#!.*\n/, ''))(
+    ciRequire, ciModule, ciModule.exports, path.dirname(filename), filename, { ...process, platform: 'darwin', arch: 'arm64' });
+  await assert.rejects(ciModule.exports.fetchResources({ config: { arch: 'x64' }, repoRoot }), /runner CPU/);
+  assert.deepEqual(calls, [], 'Invalid runners cannot start acquisition');
+  await assert.rejects(ciModule.exports.fetchResources({ config: { arch: 'arm64' }, repoRoot }), error => error === reached);
+  assert.deepEqual(calls, [[process.execPath, [path.join(repoRoot, 'node_modules/electron/install.js')], { cwd: repoRoot, stdio: 'inherit' }]]);
+  const shared = [];
+  prepareElectron({ repoRoot, tool: (...args) => shared.push(args) });
+  assert.deepEqual(shared, calls, 'Development setup and CI use the same Electron installer');
+});
+test('packaging and repository tests initialize their own declared sources at Gitlink commits', async t => {
+  const repoRoot = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ci-test-sources-'));
+  t.after(() => fs.rmSync(repoRoot, { recursive: true, force: true }));
+  const declaration = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../build/source-dependencies.json'), 'utf8'));
+  const android = 'src/external/maclauncher-android';
+  assert.equal(declaration.submodules.length, 6);
+  assert.equal(declaration.submodules.includes(android), false, 'Android producer source is not an app packaging input');
+  assert.deepEqual(declaration.testSubmodules, [android]);
+  const plan = await require('../scripts/init-submodules.cjs').readPlan({ paths: [android] });
+  assert.equal(plan.modules[0].path, android);
+  assert.match(plan.modules[0].revision, /^[a-f0-9]{40}$/);
+  fs.mkdirSync(path.join(repoRoot, 'build'));
+  const metadata = path.join(repoRoot, 'build/source-dependencies.json');
+  fs.writeFileSync(metadata, JSON.stringify(declaration));
+  const calls = [], tool = (...args) => calls.push(args);
+  assert.deepEqual(await main(['sources'], { repoRoot, tool }), { submodules: 6 });
+  assert.deepEqual(await main(['test-sources'], { repoRoot, tool }), { submodules: 7 });
+  const prefix = ['-c', 'submodule.recurse=false', 'submodule', 'update', '--init', '--checkout', '--'];
+  assert.deepEqual(calls, [
+    ['git', [...prefix, ...declaration.submodules], { cwd: repoRoot, stdio: 'inherit' }],
+    ['git', [...prefix, ...declaration.submodules, android], { cwd: repoRoot, stdio: 'inherit' }]
+  ]);
+  for (const testSubmodules of [undefined, [], [android, android], ['../outside']]) {
+    fs.writeFileSync(metadata, JSON.stringify({ ...declaration, testSubmodules }));
+    await assert.rejects(main(['test-sources'], { repoRoot, tool }), /explicit pinned submodules|Unsafe/);
+  }
+  assert.equal(calls.length, 2, 'Invalid declarations cannot reach Git');
+});
 test('finalize CLI exposes payload verification during its synchronous packaging callback', async t => {
   const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ci-cli-payload-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

@@ -29,15 +29,12 @@ function createReader({ declaration, resourceRoot, spawnProcess = spawn } = {}) 
   }
   function resolve() {
     const pin = definition();
-    const root = Included.requireIncluded([pin], { id: pin.id, version: pin.version, resourcesRoot: resourceRoot }).directory;
-    const metadata = Bundled.readRegular(path.join(root, pin.manifestRelative), Bundled.LIMITS.manifestBytes);
-    if (metadata.sha256 !== pin.manifestSha256) throw new Error("The included APK metadata reader changed. Reinstall MacLauncher.");
-    const manifest = JSON.parse(metadata.bytes), executableRelative = Bundled.relativeFile(manifest.executableRelative);
-    const executable = pin.files.find(record => record.path === executableRelative);
-    if (manifest.schemaVersion !== 1 || manifest.version !== pin.version || !executable?.architectures?.includes("arm64") || !(executable.mode & 0o111))
-      throw new Error("The included APK metadata reader is invalid. Reinstall MacLauncher.");
-    Bundled.verifyPayload(root, pin);
-    return { root, executable: fs.realpathSync(path.join(root, executableRelative)), identity: identity() };
+    const selected = Included.inspectIncluded([pin], { id: pin.id, version: pin.version, resourcesRoot: resourceRoot,
+      executableRelative: manifest => manifest.executable,
+      validatePayload(_manifest, _record, { primary }) {
+        if (!(primary.mode & 0o111)) throw new Error("The included APK metadata reader is not executable.");
+      } });
+    return { root: selected.root, executable: fs.realpathSync(selected.executablePath), identity: identity() };
   }
   async function inspect({ sourceApks, locale, outputDirectory, context = {} }) {
     context.signal?.throwIfAborted();

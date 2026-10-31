@@ -19,6 +19,8 @@ The first command initializes the upstream source checkouts. The second installs
 
 `init-submodules.cjs` follows the checkout policy in `.gitmodules`. Required sources include their nested dependencies at the commits the parent records, primary-only sources leave out unused children and reference-only sources stay uninitialized. `--dry-run` lists the plan without fetching, `-- PATH ...` selects specific top-level sources and `--all` includes the reference sources. The script never follows moving branches and never discards local changes. [Upstreams](../runtimes/UPSTREAMS.md#upstream-commits-and-updates) describes the source inventory and how sources are updated.
 
+During CI installation, postinstall leaves preparation to the workflow's explicit configure and fetch steps. Fetch prepares Electron, the selected Python profile, publisher inputs and included packages for that runner's CPU. An explicit `pnpm setup:dev` remains available for development setup.
+
 `pnpm setup:dev` repeats the install preparation after an included-package lock change or repairs missing inputs. `pnpm setup:dev --arch x64` prepares the Intel package selection and Python profile on a Mac with Intel execution support; `--arch arm64` selects Apple Silicon. Non-macOS dependency installation prepares Electron and leaves the Mac-only inputs alone. `pnpm electron:install` repairs only the Electron installation and can download its binary. Launch scripts find the installed files without importing Electron's npm entry point, whose recent versions would download the binary automatically. Unit tests, renderer builds, native launches and read-only inspection do not need the Electron binary. Starting dev does not install or download dependencies or included packages.
 
 ## Dependency policy
@@ -93,6 +95,8 @@ The launcher writes its main log to `userData/logs/main.log`. MKXP-Z writes a lo
 - `pnpm typecheck` checks the renderer types without emitting files.
 - `pnpm test` runs the Node backend and UI contract tests.
 - `pnpm check` runs type checking, the unit tests and the renderer build.
+
+The normal source initialization above includes the pinned Android source used by native and framework tests. A checkout prepared only for app packaging can run `node scripts/ci-macos.cjs test-sources` before repository-wide tests or source audits. This initializes the packaging sources and the additional test sources declared in `build/source-dependencies.json`, at their existing Gitlink commits and without fetching nested upstream trees. Android test inputs remain separate from the included Builds runtime packages.
 
 `node scripts/generate-system-requirements.mjs` updates the marked tables in [System requirements](../runtimes/SYSTEM_REQUIREMENTS.md) from the shared capability declarations and included graphics package records. `--check` reports drift without writing files. `--resources /path/to/Resources` also verifies the selected package's manifest, binary checksums, processor slices and macOS minima. Ordinary generation and the requirements tests need no installed app or downloaded packages.
 

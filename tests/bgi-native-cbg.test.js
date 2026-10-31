@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
 const { spawnSync } = require("node:child_process");
+const NodeModule = require("node:module");
 const { cbg } = require("./helpers/bgi-cbg-fixture.cjs");
 const Overlay = require("../src/modules/bgi/native/versions/modern-vm-v3/source-overlay");
 const Base = require("../src/modules/bgi/native/source-overlay");
@@ -90,17 +91,45 @@ test("CBG2 rejects payload overlap, invalid sizes, trees, versions and alpha bac
 test("BGI v3 stages a distinct guarded codec/probe version without changing v2 or upstream inputs", t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "bgi-cbg-stage-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const sourceRoot = path.resolve("src/external/openbgi"), destination = path.join(root, "source");
-  const receipt = Overlay.stageSource({ sourceRoot, destination });
+  // Exercise the complete owned staging path with an explicitly synthetic input
+  // profile, without requiring an unused OpenBGI research checkout in the app.
+  const sourceRoot = path.join(root, "upstream"), destination = path.join(root, "source");
+  const upstream = {"src/build_number.h": Buffer.from("#define SYNTHETIC_BUILD_NUMBER 734\n"),
+    "src/main.c": Buffer.from("/* Synthetic upstream entry, retained separately from the owned probe. */\n")};
+  const inputs = {sourceRevision: Base.SOURCE_REVISION, files: Object.entries(upstream).map(([file, bytes]) => {
+    const target = path.join(sourceRoot, file); fs.mkdirSync(path.dirname(target), {recursive: true}); fs.writeFileSync(target, bytes);
+    return {path: file, size: bytes.length, sha256: Overlay.sha256(bytes)};
+  })};
+  const load = (file, replacements) => {
+    const loaded = new NodeModule(file, module), nativeRequire = NodeModule.createRequire(file);
+    loaded.paths = NodeModule._nodeModulePaths(path.dirname(file));
+    loaded.require = name => Object.hasOwn(replacements, name) ? replacements[name] : nativeRequire(name);
+    loaded._compile(fs.readFileSync(file, "utf8"), file);
+    return loaded.exports;
+  };
+  const parent = load(require.resolve("../src/modules/bgi/native/source-overlay"), {"./source-inputs.json": inputs});
+  const overlay = load(require.resolve("../src/modules/bgi/native/versions/modern-vm-v3/source-overlay"), {"../../source-overlay": parent});
+  const receipt = overlay.stageSource({ sourceRoot, destination });
   assert.equal(receipt.version, "0.0.1-build734-mac-vm-v3");
   assert.equal(receipt.parentVersion, Base.VERSION);
   assert.equal(Overlay.sha256(fs.readFileSync(path.join(destination, "src/cbg-bitmap.c"))),
     Overlay.sha256(fs.readFileSync(path.resolve("src/modules/bgi/native/versions/modern-vm-v3/cbg-bitmap.c"))));
   assert.match(fs.readFileSync(path.join(destination, "src/main.c"), "utf8"), /0\.0\.1-build734-mac-vm-v3/);
   assert.doesNotThrow(() => Overlay.verifyBase());
-  const oldStage = path.join(root, "parent"); Base.stageSource({ sourceRoot, destination: oldStage });
+  for (const [file, bytes] of Object.entries(upstream)) {
+    assert.deepEqual(fs.readFileSync(path.join(sourceRoot, file)), bytes);
+    const record = receipt.files.find(row => row.originalPath === file);
+    assert.equal(record.originalSha256, Overlay.sha256(bytes));
+    assert.deepEqual(fs.readFileSync(path.join(destination, record.path)), bytes);
+  }
+  const oldStage = path.join(root, "parent"); parent.stageSource({ sourceRoot, destination: oldStage });
   const codecBefore = fs.readFileSync(path.join(oldStage, "src/cbg-bitmap.c"));
   fs.appendFileSync(path.join(oldStage, "src/main.c"), "\n");
   assert.throws(() => Overlay.applyCodec(oldStage), /source context changed/);
+  assert.deepEqual(fs.readFileSync(path.join(oldStage, "src/cbg-bitmap.c")), codecBefore);
+  const input = path.join(sourceRoot, "src/build_number.h");
+  const changed = Buffer.from(upstream["src/build_number.h"]); changed[0] ^= 1; fs.writeFileSync(input, changed);
+  assert.throws(() => overlay.stageSource({sourceRoot, destination: path.join(root, "changed-input")}), /OpenBGI input changed/);
+  assert.equal(fs.existsSync(path.join(root, "changed-input")), false);
   assert.deepEqual(fs.readFileSync(path.join(oldStage, "src/cbg-bitmap.c")), codecBefore);
 });

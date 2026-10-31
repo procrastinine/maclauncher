@@ -22,19 +22,19 @@ function resolveBundledTicket({ resourcesRoot, architecture, version, catalog, d
     return { ready: false, reason: "The encrypted-ticket loader package version is invalid." };
   }
   try {
-    const included = Included.resolveIncluded(includedDeclarations, { id: ID, version: packageVersion, resourcesRoot });
+    const included = Included.inspectIncluded(includedDeclarations, { id: ID, version: packageVersion, resourcesRoot,
+      executableRelative: FILENAME, required: false,
+      validateManifest(manifest) {
+        if (manifest.schemaVersion !== 1 || manifest.id !== ID || manifest.version !== pin.version ||
+            (manifest.packageVersion ?? manifest.version) !== packageVersion || manifest.policy !== "unavailable" ||
+            !Source.sameSourceIdentity(manifest, pin) || manifest.librarySha256 !== pin.librarySha256 ||
+            JSON.stringify(manifest.architectures) !== JSON.stringify(pin.architectures) ||
+            manifest.minimumMacOS !== pin.minimumMacOS) {
+          throw new Error("The included encrypted-ticket loader source or version changed.");
+        }
+      } });
     if (included) {
-      const { directory, manifest: content, item } = included;
-      const manifest = JSON.parse(content.bytes);
-      if (manifest.schemaVersion !== 1 || manifest.id !== ID || manifest.version !== pin.version ||
-          (manifest.packageVersion ?? manifest.version) !== packageVersion || manifest.policy !== "unavailable" ||
-          !Source.sameSourceIdentity(manifest, pin) || manifest.librarySha256 !== pin.librarySha256 ||
-          JSON.stringify(manifest.architectures) !== JSON.stringify(pin.architectures) ||
-          manifest.minimumMacOS !== pin.minimumMacOS) {
-        throw new Error("The included encrypted-ticket loader source or version changed.");
-      }
-      Bundle.verifyPayload(directory, { ...manifest, files: [...manifest.files,
-        { path: item.manifestRelative, size: content.size, sha256: item.manifestSha256, mode: 0o644 }] });
+      const { directory } = included;
       const libraryPath = path.join(directory, FILENAME), library = Bundle.readRegular(libraryPath, 4 * 1024 * 1024);
       if (!/^[a-f0-9]{64}$/.test(pin.librarySha256 || "") || library.sha256 !== pin.librarySha256 ||
           !Native.readMachOArchitectures(libraryPath, { allowLibrary: true }).includes(architecture)) {

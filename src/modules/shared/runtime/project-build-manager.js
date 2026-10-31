@@ -6,39 +6,16 @@ const { selectRuntimeVersion, managerDefaultVersion } = require("./version-choic
 const Custom = require("./custom-runtime");
 const Architecture = require("./architecture");
 
-const SHA = /^[a-f0-9]{64}$/;
-function inspectPackage(root, record, { projectId, manifestRelative, sourceRelative, executableRelative, filesPrefix = "", dataOnly = false, validateManifest }) {
+const Contract = require("./package-contract.cjs");
+function inspectPackage(root, record, { projectId, manifestRelative, sourceRelative, executableRelative, filesPrefix = "", dataOnly = false, validateManifest, validatePayload }) {
   if (record.id !== projectId || record.manifestRelative !== manifestRelative) throw new Error("The runtime package belongs to a different project or format.");
   const stored = Bundled.readRegular(path.join(root, manifestRelative), Bundled.LIMITS.manifestBytes);
   if (stored.sha256 !== record.manifestSha256 || stored.mode !== 0o644) throw new Error("The runtime package manifest changed.");
   const manifest = JSON.parse(stored.bytes);
-  if (manifest.schemaVersion !== 1 || manifest.version !== record.version || manifest.minimumMacOS !== record.minimumMacOS ||
-      !Array.isArray(manifest.files) || !manifest.files.length || manifest.files.length > Bundled.LIMITS.files)
-    throw new Error("The runtime package differs from its selected catalog entry.");
-  validateManifest(manifest, record);
-  const prefix = typeof filesPrefix === "function" ? filesPrefix(manifest, record) : filesPrefix;
+  validateManifest?.(manifest, record);
+  const { prefix, executable, files, primary } = Contract.manifestPayload(manifest, record, { executableRelative, filesPrefix, dataOnly });
+  validatePayload?.(manifest, record, { primary, files });
   const sourcePath = typeof sourceRelative === "function" ? sourceRelative(manifest, record) : sourceRelative;
-  if (typeof prefix !== "string" || prefix && (!prefix.endsWith("/") || Bundled.relativeFile(prefix.slice(0, -1)) !== prefix.slice(0, -1)))
-    throw new Error("The runtime package directory is invalid.");
-  const executable = Bundled.relativeFile(typeof executableRelative === "function"
-    ? executableRelative(manifest, record) : executableRelative);
-  const names = new Set(), files = manifest.files.map(file => {
-    const name = Bundled.relativeFile(prefix + Bundled.relativeFile(file.path));
-    if (names.has(name) || !Number.isSafeInteger(file.size) || file.size < 0 || file.size > Bundled.LIMITS.fileBytes ||
-        !Number.isInteger(file.mode) || file.mode < 0 || file.mode > 0o777 || !SHA.test(file.sha256 || "") ||
-        file.format !== undefined && !["mach-o", "pe"].includes(file.format) || file.format === "pe" && !file.architectures?.length ||
-        file.architectures && (!Array.isArray(file.architectures) || !file.architectures.length ||
-        file.architectures.some(arch => !(file.format === "pe" ? ["arm64", "x86_64", "x86"] : ["arm64", "x86_64"]).includes(arch)) ||
-          file.format !== "pe" && !file.architectures.includes(file.executionArchitecture || (record.arch === "x64" ? "x86_64" : "arm64"))) ||
-        Object.hasOwn(file, "executionArchitecture") && (file.executionArchitecture !== "x86_64" || !file.architectures?.includes("x86_64")))
-      throw new Error("The runtime package file inventory is invalid.");
-    names.add(name); return { ...file, path: name };
-  });
-  const primary = files.find(file => file.path === prefix + executable);
-  const primaryArchitectures = record.arch === "universal" ? ["arm64", "x86_64"] : [record.arch === "x64" ? "x86_64" : "arm64"];
-  if (!primary || !dataOnly && (!primaryArchitectures.every(architecture => primary.architectures?.includes(architecture)) || primary.executionArchitecture && primary.executionArchitecture !== (record.arch === "x64" ? "x86_64" : "arm64")) ||
-      dataOnly && (manifest.kind !== "data" || files.some(file => file.architectures || file.format)) || names.has(manifestRelative))
-    throw new Error("The runtime package source or executable identity is invalid.");
   for (const file of [primary]) {
     const full = path.join(root, file.path);
     Bundled.fileIdentity(full, { maximum: file.size });
@@ -47,7 +24,7 @@ function inspectPackage(root, record, { projectId, manifestRelative, sourceRelat
       throw new Error("The runtime package source or executable differs from its manifest.");
   }
   files.push({ path: manifestRelative, size: stored.size, mode: 0o644, sha256: stored.sha256 });
-  return { root, payloadRoot: path.join(root, prefix), manifest,
+  return { root, primary, payloadRoot: path.join(root, prefix), manifest,
     declaration: { ...record, files }, executablePath: path.join(root, prefix, executable),
     sourceIdentity: Catalog.sourceIdentity(record, {manifest, sourceRelative: sourcePath}) };
 }

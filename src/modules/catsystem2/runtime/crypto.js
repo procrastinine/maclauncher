@@ -1,42 +1,38 @@
 const Included = require("../../shared/runtime/included-helpers");
-const fs = require("node:fs");
-const path = require("node:path");
 const { spawn, execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const B = require("../../shared/runtime/bundled-native");
 const Native = require("../../shared/runtime/local-native");
 const declarations = require("./distribution-supplementals.json");
 const run = promisify(execFile), signatures = new Map();
-const VERSION = "1.0.0", MAXIMUM = 64 * 1024 * 1024;
+const VERSION = Included.declared(declarations, { id: "catsystem2-kif-crypto" })?.version, MAXIMUM = 64 * 1024 * 1024;
 
-async function resolveHelper({ resourcesRoot, helperVersion = VERSION, platform = process.platform, arch = process.arch, dependencies = {} } = {}) {
+async function resolveHelper({ resourcesRoot, helperVersion, platform = process.platform, arch = process.arch, dependencies = {} } = {}) {
   if (platform !== "darwin" || !["arm64", "x64"].includes(arch)) throw new Error("Encrypted KIF tools require an Apple Silicon or Intel Mac.");
-  const pin = (dependencies.declarations || declarations).find(item => item.id === "catsystem2-kif-crypto" && item.version === helperVersion);
+  const pin = Included.declared(dependencies.declarations || declarations, { id: "catsystem2-kif-crypto", version: helperVersion, arch });
   if (!pin) throw new Error("This app build has no KIF helper for the selected version.");
-  const included = Included.resolveIncluded(dependencies.declarations || declarations, { id: pin.id, version: pin.version, arch, resourcesRoot });
-  if (included) {
-    const { directory } = included;
-    B.verifyPayload(directory, pin);
-    const record = JSON.parse(B.readRegular(path.join(directory, pin.manifestRelative), B.LIMITS.manifestBytes).bytes);
-    const executable = pin.files.find(file => file.path === "kif-crypto"), executablePath = path.join(directory, executable.path);
-    if (record.schemaVersion !== 1 || record.id !== pin.id || record.version !== pin.version || record.protocolVersion !== "KBF1" ||
-        record.scope !== "kif-little-endian-blowfish" || record.sourceSha256 !== pin.sourceSha256 || record.binarySha256 !== executable.sha256 ||
-        record.minimumMacOS !== pin.minimumMacOS || record.sourceKind !== "owned-source" || record.verifiedBuild !== true || record.build?.signing !== "ad-hoc" ||
-        JSON.stringify(record.architectures) !== JSON.stringify(executable.architectures) ||
-        JSON.stringify(Native.readMachOArchitectures(executablePath).sort()) !== JSON.stringify(executable.architectures.slice().sort()))
-      throw new Error("The Included KIF helper's version or source identity changed.");
-    const systemVersion = dependencies.systemVersion ? await dependencies.systemVersion() : B.systemVersionSync();
-    if (!B.versionAtLeast(systemVersion, pin.minimumMacOS)) throw new Error(`Encrypted KIF tools require macOS ${pin.minimumMacOS}.`);
-    const signatureKey = B.fileIdentity(executablePath);
-    if (signatures.get(executablePath) !== signatureKey) {
-      await (dependencies.verifySignature || (file => run("/usr/bin/codesign", ["--verify", "--strict", file], { timeout: 10000, maxBuffer: 128 * 1024 })))(executablePath);
-      if (signatures.size >= 16) signatures.delete(signatures.keys().next().value);
-      signatures.set(executablePath, signatureKey);
-    }
-    return Object.freeze({ version: pin.version, executablePath, binarySha256: executable.sha256,
-      sourceSha256: pin.sourceSha256, manifestSha256: pin.manifestSha256, minimumMacOS: pin.minimumMacOS, shared: true });
+  const included = Included.inspectIncluded(dependencies.declarations || declarations, { id: pin.id, version: pin.version, arch, resourcesRoot,
+    executableRelative: "kif-crypto",
+    validatePayload(record, selected, { primary }) {
+      if (record.protocolVersion !== "KBF1" || record.scope !== "kif-little-endian-blowfish" ||
+          record.sourceSha256 !== selected.sourceSha256 || record.binarySha256 !== primary.sha256 ||
+          record.sourceKind !== "owned-source" || record.verifiedBuild !== true || record.build?.signing !== "ad-hoc" ||
+          JSON.stringify(record.architectures) !== JSON.stringify(primary.architectures))
+        throw new Error("The Included KIF helper's version or source identity changed.");
+    } });
+  const { primary: executable, executablePath } = included;
+  if (JSON.stringify(Native.readMachOArchitectures(executablePath).sort()) !== JSON.stringify(executable.architectures.slice().sort()))
+    throw new Error("The Included KIF helper's CPU identity changed.");
+  const systemVersion = dependencies.systemVersion ? await dependencies.systemVersion() : B.systemVersionSync();
+  if (!B.versionAtLeast(systemVersion, pin.minimumMacOS)) throw new Error(`Encrypted KIF tools require macOS ${pin.minimumMacOS}.`);
+  const signatureKey = B.fileIdentity(executablePath);
+  if (signatures.get(executablePath) !== signatureKey) {
+    await (dependencies.verifySignature || (file => run("/usr/bin/codesign", ["--verify", "--strict", file], { timeout: 10000, maxBuffer: 128 * 1024 })))(executablePath);
+    if (signatures.size >= 16) signatures.delete(signatures.keys().next().value);
+    signatures.set(executablePath, signatureKey);
   }
-  throw new Error("The included KIF helper is missing. Reinstall MacLauncher.");
+  return Object.freeze({ version: pin.version, executablePath, binarySha256: executable.sha256,
+    sourceSha256: pin.sourceSha256, manifestSha256: pin.manifestSha256, minimumMacOS: pin.minimumMacOS, shared: true });
 }
 
 function transform(helper, key, bytes, { encrypt = false, signal, spawnChild = spawn } = {}) {

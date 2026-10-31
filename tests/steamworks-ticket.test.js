@@ -10,7 +10,7 @@ const hash = value => crypto.createHash("sha256").update(value).digest("hex");
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "steam-ticket-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const version = "ticket-unavailable-fixture-1", directory = path.join(root, "native-runtimes", Ticket.ID, version, "universal");
+  const version = "ticket-unavailable-fixture-1", directory = path.join(root, "native-runtimes", Ticket.ID, version, "arm64");
   fs.mkdirSync(directory, { recursive: true });
   const bytes = Buffer.alloc(32);
   bytes.writeUInt32LE(0xfeedfacf); bytes.writeUInt32LE(0x0100000c, 4); bytes.writeUInt32LE(6, 12);
@@ -18,7 +18,8 @@ function fixture(t) {
   fs.writeFileSync(library, bytes, { mode: 0o644 });
   const pin = { schemaVersion: 1, id: Ticket.ID, version, sourceKind: "owned", sourceSha256: "a".repeat(64), sourceRevision: null,
     librarySha256: hash(bytes), architectures: ["arm64"], minimumMacOS: "13.0", policy: "unavailable" };
-  const declaration = { id: Ticket.ID, version, launcherArchitectures: ["arm64"], directoryRelative: `${Ticket.ID}/${version}/universal`, manifestRelative: "helper.json" };
+  const declaration = { id: Ticket.ID, version, arch: "arm64", minimumMacOS: pin.minimumMacOS,
+    launcherArchitectures: ["arm64"], directoryRelative: `${Ticket.ID}/${version}/arm64`, manifestRelative: "helper.json" };
   const declarations = [declaration];
   const manifest = { schemaVersion: 1, ...pin, files: [{ path: Ticket.FILENAME, size: bytes.length, mode: 0o644,
     sha256: hash(bytes), architectures: ["arm64"] }] };

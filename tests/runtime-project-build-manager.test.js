@@ -7,6 +7,52 @@ const { prepareForLaunch } = require("../src/core/runtime-preparation");
 const Bundled = require("../src/modules/shared/runtime/bundled-native");
 const sha = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 
+test("shared package selection preserves exact versions and the explicit launcher's CPU", () => {
+  const { selectPackageRecord } = require("../src/modules/shared/runtime/package-contract.cjs");
+  const universal = { id: "sample", version: "2.0", arch: "universal", launcherArchitectures: ["arm64", "x64"] };
+  const intel = { ...universal, arch: "x64", launcherArchitectures: ["x64"] };
+  const silicon = { ...universal, arch: "arm64", launcherArchitectures: ["arm64"] };
+  const previous = { ...universal, version: "1.0" };
+  const rows = [universal, previous, silicon, intel], order = [...rows];
+  assert.equal(selectPackageRecord(rows, { id: "sample", arch: "arm64" }), silicon);
+  assert.equal(selectPackageRecord(rows, { id: "sample", arch: "x64" }), intel);
+  assert.equal(selectPackageRecord(rows, { id: "sample", arch: "x86_64" }), intel);
+  assert.equal(selectPackageRecord(rows, { id: "sample", version: "1.0", arch: "arm64" }), previous);
+  assert.equal(selectPackageRecord(rows, { id: "sample", version: "absent", arch: "arm64" }), null);
+  assert.equal(selectPackageRecord(rows, { id: "other", arch: "arm64" }), null);
+  assert.equal(selectPackageRecord([silicon], { arch: "x64" }), null);
+  assert.equal(selectPackageRecord([{ version: "1.0", architectures: ["x86_64"] }], { arch: "x86_64" }).version, "1.0");
+  assert.deepEqual(rows, order, "Choosing an architecture does not reorder the declared defaults");
+});
+
+test("project inspection shares the executable contract across manifest and sealed-record inventories", t => {
+  const { inspectPackage } = require("../src/modules/shared/runtime/project-build-manager");
+  const { image } = require("./fixtures/macho-image");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "project-inventory-contract-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const binary = image(), file = { path: "bin/helper", size: binary.length, mode: 0o755,
+    sha256: sha(binary), architectures: ["arm64"] };
+  for (const sealed of [false, true]) {
+    const directory = path.join(root, sealed ? "sealed" : "manifest"), executable = path.join(directory, file.path);
+    fs.mkdirSync(path.dirname(executable), { recursive: true });
+    fs.writeFileSync(executable, binary, { mode: 0o755 }); fs.chmodSync(executable, 0o755);
+    const manifest = { schemaVersion: 1, id: "sample", version: "2.0", minimumMacOS: "13.0", executable: file.path,
+      ...(sealed ? {} : { files: [file] }) };
+    const bytes = Buffer.from(JSON.stringify(manifest));
+    fs.writeFileSync(path.join(directory, "manifest.json"), bytes, { mode: 0o644 });
+    const record = { id: "sample", version: "2.0", arch: "arm64", minimumMacOS: "13.0",
+      manifestRelative: "manifest.json", manifestSha256: sha(bytes), ...(sealed ? { files: [file,
+        { path: "manifest.json", size: bytes.length, mode: 0o644, sha256: sha(bytes) }] } : {}) };
+    const selected = inspectPackage(directory, record, { projectId: "sample", manifestRelative: "manifest.json",
+      executableRelative: value => value.executable, sourceRelative: null });
+    assert.equal(selected.executablePath, executable);
+    assert.equal(selected.primary.path, file.path);
+    assert.equal(Bundled.verifyPayload(directory, selected.declaration), true);
+    assert.throws(() => inspectPackage(directory, { ...record, version: "other" }, { projectId: "sample",
+      manifestRelative: "manifest.json", executableRelative: value => value.executable }), /selected catalog entry/);
+  }
+});
+
 test("project manager accepts a checksum-bound manifest source pointer with a distinct producer revision", {skip: process.platform !== "darwin"}, async t => {
   const Catalog = require("../src/modules/shared/runtime/maclauncher-builds");
   const {nativeTool, packageFor} = require("./helpers/managed-tool-fixture.cjs");

@@ -2,6 +2,7 @@ const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os");
 const { promisify } = require("node:util"), execute = promisify(require("node:child_process").execFile);
 const Arguments = require("../src/modules/android/launch-arguments");
+const Included = require("../src/modules/android/included-files");
 
 test("Android argument transport retains literal arrays and never inherits another game's parameters", t => {
   const root=fs.mkdtempSync(path.join(os.tmpdir(),"android-arguments-"));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
@@ -10,8 +11,13 @@ test("Android argument transport retains literal arrays and never inherits anoth
   assert.deepEqual(JSON.parse(environment.MACLAUNCHER_GAME_ARGUMENTS),context.gameArguments);
   assert.deepEqual(Arguments.environment({},environment),{KEEP:"yes"});
   const file=Arguments.prepareAgent(context),modified=fs.statSync(file).mtimeMs;
-  assert.deepEqual(fs.readFileSync(file),fs.readFileSync(path.resolve(__dirname,"../src/modules/android/resources/launch-arguments.jar")));
+  const includedFile=Included.file("resources/launch-arguments.jar"),includedBytes=fs.readFileSync(includedFile);
+  assert.deepEqual(fs.readFileSync(file),includedBytes);
   assert.equal(Arguments.prepareAgent(context),file);assert.equal(fs.statSync(file).mtimeMs,modified);
+  fs.writeFileSync(file,"changed cached agent");
+  assert.equal(Arguments.prepareAgent(context),file);
+  assert.deepEqual(fs.readFileSync(file),includedBytes);
+  assert.deepEqual(fs.readFileSync(includedFile),includedBytes,"Repairing the per-user copy preserves the sealed included helper");
   assert.equal(Arguments.prepareAgent({gameArguments:[]}),null);
   assert.ok(Arguments.jvmOptions(file).at(-1).endsWith("=jvm"));
   const appOptions=Arguments.processOptions(context,{env:{KEEP:"yes"},stdio:"pipe"});

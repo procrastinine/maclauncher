@@ -17,8 +17,8 @@ function fixture(t) {
   fs.mkdirSync(path.dirname(data), { recursive: true }); fs.writeFileSync(data, "original game data");
   const consumerPath = path.join(runnerAppPath, "Contents/MacOS/Mac_Runner");
   fs.mkdirSync(path.dirname(consumerPath), { recursive: true }); fs.writeFileSync(consumerPath, "changed native fixture");
-  const pin = Catalog.find(item => item.version === GameMaker.LEGACY_HELPER_VERSION);
   const profile = Profiles.find(item => item.id === GameMaker.LEGACY_HELPER_PROFILE);
+  const pin = Catalog.find(item => item.version === profile.helperVersion);
   const install = { version: GameMaker.LEGACY_RUNNER, runnerAppPath, binarySha256: GameMaker.LEGACY_SHA256, architectures: ["x86_64"] };
   t.mock.method(Steam, "resolveBundledLibrary", options => {
     assert.deepEqual(options.catalog, [pin]); assert.deepEqual(options.interfaces, pin.qualifiedInterfaces);
@@ -29,7 +29,7 @@ function fixture(t) {
 
 test("legacy GameMaker selects an explicit successor helper without changing its runner or graphics policy", t => {
   const f = fixture(t), dependency = GameMaker.resolveDependency({ steamRequired: true, steamAppId: -480 }, f.data, f.install);
-  assert.equal(dependency.version, GameMaker.LEGACY_HELPER_VERSION); assert.equal(dependency.abiProfile, GameMaker.LEGACY_HELPER_PROFILE);
+  assert.equal(dependency.version, f.profile.helperVersion); assert.equal(dependency.abiProfile, GameMaker.LEGACY_HELPER_PROFILE);
   assert.equal(dependency.consumerPath, f.consumerPath); assert.equal(dependency.appId, 480);
   assert.deepEqual(dependency.interfaces, f.profile.interfaces); assert.deepEqual(dependency.symbols, f.profile.symbols);
   assert.equal(fs.readFileSync(f.data, "utf8"), "original game data");
@@ -46,7 +46,7 @@ test("legacy GameMaker passes dynamically loaded APIs and the exact runner profi
     return { version: value.version, mode: "offline", environment: { ...options.baseEnvironment } };
   } };
   await GameMaker.prepareDependency(dependency, { gameId: "original", contentRootDir: path.dirname(f.data) }, context, baseEnvironment);
-  assert.equal(request.abiProfile, GameMaker.LEGACY_HELPER_PROFILE); assert.equal(request.version, GameMaker.LEGACY_HELPER_VERSION);
+  assert.equal(request.abiProfile, GameMaker.LEGACY_HELPER_PROFILE); assert.equal(request.version, f.profile.helperVersion);
   assert.deepEqual(request.symbols, f.profile.symbols); assert.deepEqual(request.interfaces, f.profile.interfaces);
   assert.deepEqual(request.nativeLibraryPaths, []); assert.equal(request.preferOffline, true);
   assert.equal(fs.existsSync(request.ownedDirectory), false);
@@ -64,4 +64,17 @@ test("a changed or unidentified legacy consumer fails before Steam setup", async
   assert.throws(() => GameMaker.resolveDependency({ steamRequired: true }, f.data, f.install),
     error => error.code === "GAMEMAKER_STEAM_APP_ID_REQUIRED" && error.fallbackRuntimeId === "butterscotch");
   assert.equal(fs.existsSync(context.userDataDir), false);
+});
+
+test("legacy GameMaker resolves the real included helper selected by its consumer profile", { skip: process.platform !== "darwin" }, t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gamemaker-published-steam-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const profile = Profiles.find(item => item.id === GameMaker.LEGACY_HELPER_PROFILE);
+  const pin = Catalog.find(item => item.version === profile.helperVersion);
+  const dependency = GameMaker.resolveDependency({ steamRequired: true, steamAppId: 480 }, path.join(root, "data.win"),
+    { version: GameMaker.LEGACY_RUNNER, binarySha256: GameMaker.LEGACY_SHA256, architectures: ["x86_64"] });
+  assert.equal(dependency.ready, true);
+  assert.equal(dependency.version, profile.helperVersion);
+  assert.equal(Native.hashFile(dependency.libraryPath), pin.librarySha256);
+  assert.ok(dependency.architectures.includes("x86_64"));
 });

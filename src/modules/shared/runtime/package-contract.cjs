@@ -36,6 +36,53 @@ function relativeFile(value) {
     part !== "." && part !== ".." && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(part));
 }
 
+// The declaration supplies the default; an explicit version never falls back.
+function selectPackageRecord(records, { id, version: selectedVersion, arch = process.arch } = {}) {
+  if (!Array.isArray(records)) throw new Error("Package declarations must be an array.");
+  const host = arch === "x86_64" ? "x64" : arch, native = host === "x64" ? "x86_64" : host;
+  if (!["arm64", "x64"].includes(host)) throw new Error("Package selection requires an Apple Silicon or Intel CPU.");
+  const eligible = records.filter(record => object(record) && (id === undefined || record.id === id) &&
+    (selectedVersion === undefined || record.version === selectedVersion) &&
+    (Array.isArray(record.launcherArchitectures) ? record.launcherArchitectures.includes(host) :
+      Array.isArray(record.architectures) ? record.architectures.includes(native) : [host, native, "universal"].includes(record.arch)));
+  const rank = record => [host, native].includes(record.arch) ? 0 : 1;
+  return eligible.sort((left, right) => rank(left) - rank(right))[0] || null;
+}
+
+function manifestPayload(manifest, record, { executableRelative, filesPrefix = "", dataOnly = false } = {}) {
+  if (!object(manifest) || manifest.schemaVersion !== 1 || (manifest.packageVersion ?? manifest.version) !== record.version ||
+      manifest.minimumMacOS !== record.minimumMacOS || manifest.id !== undefined && manifest.id !== record.id)
+    throw new Error("The runtime package differs from its selected catalog entry.");
+  const prefix = typeof filesPrefix === "function" ? filesPrefix(manifest, record) : filesPrefix;
+  if (typeof prefix !== "string" || prefix && (!prefix.endsWith("/") || !relativeFile(prefix.slice(0, -1))))
+    throw new Error("The runtime package directory is invalid.");
+  const executable = B.relativeFile(typeof executableRelative === "function" ? executableRelative(manifest, record) : executableRelative);
+  // Included packages seal their inventory in runtime-package.json; the helper
+  // manifest describes its protocol and need not repeat that inventory.
+  const sealed = Array.isArray(record.files), inventory = sealed ? record.files.filter(file => file.path !== record.manifestRelative) : manifest.files;
+  if (!Array.isArray(inventory) || !inventory.length || inventory.length > B.LIMITS.files)
+    throw new Error("The runtime package differs from its selected catalog entry.");
+  const names = new Set(), files = inventory.map(file => {
+    const name = B.relativeFile((sealed ? "" : prefix) + B.relativeFile(file.path));
+    if (names.has(name) || !Number.isSafeInteger(file.size) || file.size < 0 || file.size > B.LIMITS.fileBytes ||
+        !Number.isInteger(file.mode) || file.mode < 0 || file.mode > 0o777 || !SHA256.test(file.sha256 || "") ||
+        file.format !== undefined && !["mach-o", "pe"].includes(file.format) || file.format === "pe" && !file.architectures?.length ||
+        file.architectures && (!Array.isArray(file.architectures) || !file.architectures.length ||
+          file.architectures.some(arch => !(file.format === "pe" ? ["arm64", "x86_64", "x86"] : ["arm64", "x86_64"]).includes(arch)) ||
+          file.format !== "pe" && !file.architectures.includes(file.executionArchitecture || (record.arch === "x64" ? "x86_64" : "arm64"))) ||
+        Object.hasOwn(file, "executionArchitecture") && (file.executionArchitecture !== "x86_64" || !file.architectures?.includes("x86_64")))
+      throw new Error("The runtime package file inventory is invalid.");
+    names.add(name); return { ...file, path: name };
+  });
+  const primary = files.find(file => file.path === prefix + executable);
+  const architectures = record.arch === "universal" ? ["arm64", "x86_64"] : [record.arch === "x64" ? "x86_64" : "arm64"];
+  if (!primary || !dataOnly && (!architectures.every(arch => primary.architectures?.includes(arch)) ||
+      primary.executionArchitecture && primary.executionArchitecture !== (record.arch === "x64" ? "x86_64" : "arm64")) ||
+      dataOnly && (manifest.kind !== "data" || files.some(file => file.architectures || file.format)) || names.has(record.manifestRelative))
+    throw new Error("The runtime package source or executable identity is invalid.");
+  return { prefix, executable, files, primary };
+}
+
 function contract(value) {
   if (value === undefined) return 1;
   if (!Number.isSafeInteger(value) || value < 1) throw new Error("The runtime launcher contract is invalid.");
@@ -220,4 +267,4 @@ function validateDeclaration(item) {
   return item;
 }
 
-module.exports = { packageRecord, compatibilityMetadata, sourceMetadata, validatePublicMetadata, validateSourceArtifact, validateDeclaration, object, checksum, identity, version, relativeFile, contract };
+module.exports = { packageRecord, compatibilityMetadata, sourceMetadata, validatePublicMetadata, validateSourceArtifact, validateDeclaration, object, checksum, identity, version, relativeFile, contract, selectPackageRecord, manifestPayload };

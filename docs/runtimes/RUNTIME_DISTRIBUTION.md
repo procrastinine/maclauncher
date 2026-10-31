@@ -55,6 +55,8 @@ Runtimes downloaded from their publishers include NW.js, Ren'Py, Godot, LÖVE, J
 
 ### Included components
 
+The app selects each included package from its declared version and processor build. The sealed package declaration records the complete file inventory, checksums and permissions; the helper manifest describes its executable or protocol. Included helpers and downloadable packages use the shared package contract for identity, path, processor and payload checks. Explicit version choices retain their declared version.
+
 Python, 7-Zip and evbunpack are included in the app for importing and extracting games. Python and 7-Zip are the upstream macOS binaries at fixed versions, and evbunpack is built from a fixed upstream commit. They are included directly, not through MacLauncher Builds.
 
 The innoextract Mac build is a MacLauncher Builds package that is downloaded rather than included. It is listed in **Runtimes → Tools → Installer reader**, and import and RTP preparation download it when needed.

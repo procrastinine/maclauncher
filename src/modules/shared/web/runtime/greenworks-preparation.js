@@ -9,7 +9,6 @@ const AppId = require("../../runtime/steamworks/app-id");
 const Steam = require("../../runtime/steamworks");
 const SteamProfiles = require("../../runtime/steamworks/profiles");
 const Ticket = require("../../runtime/steamworks/ticket");
-const SteamCatalog = require("../../runtime/steamworks/versions.json");
 const ProfileCatalog = require("../../runtime/steamworks/profiles.json");
 const Native = require("../../runtime/local-native");
 const { versionAtLeast, systemVersionSync } = require("../../runtime/bundled-native");
@@ -124,9 +123,7 @@ function resolveApiRoute({ contract, sdk, getNativeSdk, context, architecture, h
   const profileId = contract.helperAbiProfile || contract.offlineAbiProfile;
   const listedProfile = ProfileCatalog.find(profile => profile.id === profileId);
   if (mode === "auto" && profileId && (!listedProfile || listedProfile.architectures.includes(architecture))) {
-    const pin = contract.helperVersion ? SteamCatalog.find(item => item.version === contract.helperVersion) : SteamCatalog[0];
-    if (!pin) throw failure("The selected Greenworks Steam API helper version is unavailable.", "GREENWORKS_API_UNAVAILABLE");
-    const profile = SteamProfiles.resolveProfile({ id: profileId, pin, architecture, requiredInterfaces: contract.interfaces });
+    const { pin, profile } = SteamProfiles.selectProfile({ id: profileId, architecture, requiredInterfaces: contract.interfaces });
     if (profile.bridgeLibrarySha256 !== contract.nativeSha256 || profile.bridgeJavascriptSha256 !== contract.javascriptSha256 ||
         profile.hostVersion !== contract.nwVersion || profile.sdkVersion !== contract.sdkVersion)
       throw failure("The selected Greenworks offline profile changed.", "GREENWORKS_ABI_UNVERIFIED");
@@ -134,7 +131,7 @@ function resolveApiRoute({ contract, sdk, getNativeSdk, context, architecture, h
       throw failure("The NW.js executable checksum does not match the selected Greenworks ABI.", "GREENWORKS_HOST_CHANGED");
     const helper = Steam.resolveBundledLibrary({ resourcesRoot: context.resourcesRoot, architecture, interfaces: pin.qualifiedInterfaces, catalog: [pin] });
     if (!helper.ready) throw failure(helper.reason || "The Greenworks Steam API library is unavailable.", "GREENWORKS_API_UNAVAILABLE");
-    const ticket = Ticket.resolveBundledTicket({ resourcesRoot: context.resourcesRoot, architecture, version: contract.ticketVersion });
+    const ticket = Ticket.resolveBundledTicket({ resourcesRoot: context.resourcesRoot, architecture, version: profile.encryptedTicketVersion });
     if (!ticket.ready) throw failure(ticket.reason || "The Greenworks encrypted-ticket loader is unavailable.", "GREENWORKS_TICKET_UNAVAILABLE");
     if (profile.encryptedTicketSourceKind !== "owned" || profile.encryptedTicketVersion !== ticket.version ||
         profile.encryptedTicketSourceSha256 !== ticket.sourceSha256 || profile.encryptedTicketLibrarySha256 !== ticket.sha256 ||

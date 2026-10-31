@@ -1,6 +1,8 @@
 const Environment = require("./environment");
 const Catalog = require("./profiles.json");
+const Pins = require("./versions.json");
 const Source = require("./source-identity");
+const Contract = require("../package-contract.cjs");
 
 const invalid = (code, message) => Object.assign(new Error(message), { code });
 
@@ -12,11 +14,13 @@ const retiredProfiles = new Map([
 ]);
 
 /** Saved ABI identifiers retain the same consumer contract on the owned helper. */
-function normalizeProfileSelection(selection) {
+function normalizeProfileSelection(selection, { profiles = Catalog } = {}) {
   const abiProfile = retiredProfiles.get(selection?.abiProfile);
   if (!abiProfile) return selection;
+  const profile = profiles.find(profile => profile.id === abiProfile);
+  if (!profile) return selection;
   return { ...selection, abiProfile,
-    ...(selection.version === "goldberg-mac-1.0.0-ml1-universal" ? { version: "0.5.0" } : {}) };
+    ...(selection.version === "goldberg-mac-1.0.0-ml1-universal" ? { version: profile.helperVersion } : {}) };
 }
 
 /** Exact consumer interfaces are bound to one native payload and source. */
@@ -25,7 +29,7 @@ function resolveProfile({ id, pin, architecture, requiredInterfaces = [], profil
   if (typeof id !== "string" || !/^[a-zA-Z0-9_.-]{1,128}$/.test(id)) {
     throw invalid("STEAM_API_PROFILE_INVALID", "Invalid Steam API compatibility profile.");
   }
-  id = normalizeProfileSelection({ abiProfile: id }).abiProfile;
+  id = normalizeProfileSelection({ abiProfile: id }, { profiles }).abiProfile;
   const matches = profiles.filter(profile => profile.id === id);
   if (matches.length !== 1) throw invalid("STEAM_API_PROFILE_UNKNOWN", "This Steam API compatibility profile is not available.");
   const profile = matches[0];
@@ -49,4 +53,13 @@ function resolveProfile({ id, pin, architecture, requiredInterfaces = [], profil
   return { ...profile, interfaces: [...interfaces], architectures: [...profile.architectures] };
 }
 
-module.exports = { resolveProfile, normalizeProfileSelection };
+/** Consumer profiles select their declared helper, independently of catalog order. */
+function selectProfile({ id, version, architecture, requiredInterfaces, profiles = Catalog, catalog = Pins }) {
+  const selection = normalizeProfileSelection({ abiProfile: id, version }, { profiles });
+  const listed = profiles.find(profile => profile.id === selection.abiProfile);
+  const pin = Contract.selectPackageRecord(catalog, { version: selection.version ?? listed?.helperVersion, arch: architecture });
+  const profile = resolveProfile({ id: selection.abiProfile, pin, architecture, requiredInterfaces, profiles });
+  return { profile, pin };
+}
+
+module.exports = { resolveProfile, selectProfile, normalizeProfileSelection };

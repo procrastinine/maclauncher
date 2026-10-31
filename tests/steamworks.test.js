@@ -104,17 +104,17 @@ function libraryFixture(root, architecture) {
 test("Steam API lookup enforces interface, architecture, manifest and full payload identity", context => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "steamworks-payload-"));
   context.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const directory = path.join(root, "native-runtimes/steam-api-helper", Overlay.VERSION, "universal");
+  const directory = path.join(root, "native-runtimes/steam-api-helper", Overlay.VERSION, "x64");
   const library = libraryFixture(directory, "x86_64"), interfaces = ["SteamClient017", "SteamUser018"];
-  const manifest = { schemaVersion: 1, id: "steam-api-helper", version: Overlay.VERSION, sourceRevision: Overlay.SOURCE_REVISION,
+  const manifest = { schemaVersion: 1, id: "steam-api-helper", version: Overlay.VERSION, minimumMacOS: "13.0", sourceRevision: Overlay.SOURCE_REVISION,
     librarySha256: library.sha256, qualifiedInterfaces: interfaces,
     files: [{ path: "libsteam_api.dylib", size: library.bytes.length, sha256: library.sha256, mode: 0o644, architectures: ["x86_64"] }] };
   const content = JSON.stringify(manifest);
   fs.writeFileSync(path.join(directory, "helper.json"), content, { mode: 0o644 });
-  const catalog = [{ version: Overlay.VERSION, sourceRevision: Overlay.SOURCE_REVISION, architectures: ["x86_64"], qualifiedInterfaces: interfaces,
+  const catalog = [{ version: Overlay.VERSION, minimumMacOS: "13.0", sourceRevision: Overlay.SOURCE_REVISION, architectures: ["x86_64"], qualifiedInterfaces: interfaces,
     librarySha256: library.sha256, manifestSha256: crypto.createHash("sha256").update(content).digest("hex") }];
-  const declarations = [{ id: "steam-api-helper", version: Overlay.VERSION, launcherArchitectures: [process.arch],
-    directoryRelative: `steam-api-helper/${Overlay.VERSION}/universal`, manifestRelative: "helper.json", manifestSha256: catalog[0].manifestSha256 }];
+  const declarations = [{ id: "steam-api-helper", version: Overlay.VERSION, arch: "x64", minimumMacOS: "13.0", launcherArchitectures: [process.arch],
+    directoryRelative: `steam-api-helper/${Overlay.VERSION}/x64`, manifestRelative: "helper.json", manifestSha256: catalog[0].manifestSha256 }];
   const options = { resourcesRoot: root, architecture: "x86_64", interfaces, catalog, declarations };
   assert.equal(Steam.resolveBundledLibrary(options).ready, true);
   assert.equal(Steam.resolveBundledLibrary({ ...options, architecture: "arm64" }).ready, false);
@@ -133,15 +133,15 @@ test("source-package revisions preserve native ABI identity and never fall back 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "steamworks-package-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const packageVersion = Overlay.VERSION + "-package2";
-  const directory = path.join(root, "native-runtimes/steam-api-helper", packageVersion, "universal");
+  const directory = path.join(root, "native-runtimes/steam-api-helper", packageVersion, "x64");
   const library = libraryFixture(directory, "x86_64"), interfaces = ["SteamClient017", "SteamUser018"];
-  const manifest = { schemaVersion: 1, id: "steam-api-helper", version: Overlay.VERSION, packageVersion, sourcePackageVersion: 2,
+  const manifest = { schemaVersion: 1, id: "steam-api-helper", version: Overlay.VERSION, packageVersion, minimumMacOS: "13.0", sourcePackageVersion: 2,
     sourceRevision: Overlay.SOURCE_REVISION, librarySha256: library.sha256, qualifiedInterfaces: interfaces,
     files: [{ path: "libsteam_api.dylib", size: library.bytes.length, sha256: library.sha256, mode: 0o644, architectures: ["x86_64"] }] };
-  const pin = { version: Overlay.VERSION, packageVersion, sourcePackageVersion: 2, sourceRevision: Overlay.SOURCE_REVISION,
+  const pin = { version: Overlay.VERSION, packageVersion, minimumMacOS: "13.0", sourcePackageVersion: 2, sourceRevision: Overlay.SOURCE_REVISION,
     architectures: ["x86_64"], qualifiedInterfaces: interfaces, librarySha256: library.sha256 };
-  const declarations = [{ id: "steam-api-helper", version: packageVersion, launcherArchitectures: [process.arch],
-    directoryRelative: `steam-api-helper/${packageVersion}/universal`, manifestRelative: "helper.json" }];
+  const declarations = [{ id: "steam-api-helper", version: packageVersion, arch: "x64", minimumMacOS: "13.0", launcherArchitectures: [process.arch],
+    directoryRelative: `steam-api-helper/${packageVersion}/x64`, manifestRelative: "helper.json" }];
   const publishManifest = () => {
     const content = JSON.stringify(manifest);
     fs.writeFileSync(path.join(directory, "helper.json"), content, { mode: 0o644 });

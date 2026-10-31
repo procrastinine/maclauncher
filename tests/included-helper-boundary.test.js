@@ -83,3 +83,47 @@ test("the retired Goldberg package is absent from runtime catalogs and cannot re
   assert.equal(result.ready, false);
   assert.equal(result.present, false);
 });
+
+test("included inspection uses a sealed inventory when a helper manifest describes only its protocol", async t => {
+  const { image } = require("./fixtures/macho-image");
+  for (const scenario of ["intact", "binary changed", "manifest changed", "missing primary", "traversal", "wrong CPU", "wrong mode"]) {
+    await t.test(scenario, t => {
+      const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "included-protocol-")));
+      t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+      const binary = image(), metadata = Buffer.from(JSON.stringify({ schemaVersion: 1, id: "sample", version: "2.0",
+        minimumMacOS: "13.0", executable: "bin/helper", protocolVersion: 1 }));
+      const support = Buffer.from("helper protocol data\n");
+      const record = { id: "sample", version: "2.0", arch: "arm64", launcherArchitectures: ["arm64"], minimumMacOS: "13.0",
+        directoryRelative: "sample/2.0/arm64", manifestRelative: "manifest.json", manifestSha256: B.digest(metadata), files: [
+          { path: "bin/helper", size: binary.length, mode: 0o755, sha256: B.digest(binary), architectures: ["arm64"] },
+          { path: "support.txt", size: support.length, mode: 0o644, sha256: B.digest(support) },
+          { path: "manifest.json", size: metadata.length, mode: 0o644, sha256: B.digest(metadata) }
+        ] };
+      const directory = path.join(root, "native-runtimes", record.directoryRelative), executable = path.join(directory, "bin/helper");
+      fs.mkdirSync(path.dirname(executable), { recursive: true });
+      fs.writeFileSync(executable, binary, { mode: 0o755 }); fs.chmodSync(executable, 0o755);
+      fs.writeFileSync(path.join(directory, "manifest.json"), metadata, { mode: 0o644 });
+      fs.writeFileSync(path.join(directory, "support.txt"), support, { mode: 0o644 });
+      if (scenario === "binary changed") fs.writeFileSync(executable, Buffer.alloc(binary.length));
+      if (scenario === "manifest changed") fs.appendFileSync(path.join(directory, "manifest.json"), " ");
+      if (scenario === "missing primary") record.files.splice(0, 1);
+      if (scenario === "traversal") record.files[0].path = "../helper";
+      if (scenario === "wrong CPU") record.files[0].architectures = ["x86_64"];
+      if (scenario === "wrong mode") fs.chmodSync(executable, 0o644);
+      const inspect = () => Included.inspectIncluded([record], { id: "sample", arch: "arm64", resourcesRoot: root,
+        executableRelative: manifest => manifest.executable });
+      if (scenario !== "intact") {
+        const expected = { "binary changed": /checksum/, "manifest changed": /manifest changed/,
+          "missing primary": /executable identity/, traversal: /relative|unsafe|invalid/i,
+          "wrong CPU": /inventory|executable identity/, "wrong mode": /executable differs from its manifest/ };
+        assert.throws(inspect, expected[scenario]);
+        return;
+      }
+      const selected = inspect();
+      assert.equal(selected.executablePath, executable);
+      assert.equal(selected.manifest.files, undefined, "Protocol metadata need not duplicate its sealed inventory");
+      assert.deepEqual(selected.declaration.files, record.files);
+      assert.equal(B.verifyPayload(selected.root, selected.declaration), true);
+    });
+  }
+});

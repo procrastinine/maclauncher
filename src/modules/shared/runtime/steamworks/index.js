@@ -36,19 +36,18 @@ function resolveBundledLibrary({ resourcesRoot, architecture, interfaces, catalo
     return { ready: false, reason: "The bundled Steam API package version is invalid." };
   }
   try {
-    const included = Included.resolveIncluded(includedDeclarations, { id: "steam-api-helper", version: packageVersion, resourcesRoot });
+    const included = Included.inspectIncluded(includedDeclarations, { id: "steam-api-helper", version: packageVersion, resourcesRoot,
+      executableRelative: "libsteam_api.dylib", required: false,
+      validateManifest(manifest) {
+        if (manifest.schemaVersion !== 1 || manifest.id !== "steam-api-helper" || manifest.version !== pin.version ||
+            (manifest.packageVersion ?? manifest.version) !== packageVersion ||
+            (pin.sourcePackageVersion != null && manifest.sourcePackageVersion !== pin.sourcePackageVersion) ||
+            !Source.sameSourceIdentity(manifest, pin) || manifest.librarySha256 !== pin.librarySha256 ||
+            JSON.stringify(manifest.qualifiedInterfaces) !== JSON.stringify(pin.qualifiedInterfaces) ||
+            JSON.stringify(manifest.defaultInterfaces) !== JSON.stringify(pin.defaultInterfaces)) throw new Error("The bundled Steam API source/version identity changed.");
+      } });
     if (included) {
-      const { directory, manifest: content, item } = included;
-      const manifest = JSON.parse(content.bytes);
-      if (manifest.schemaVersion !== 1 || manifest.id !== "steam-api-helper" || manifest.version !== pin.version ||
-          (manifest.packageVersion ?? manifest.version) !== packageVersion ||
-          (pin.sourcePackageVersion != null && manifest.sourcePackageVersion !== pin.sourcePackageVersion) ||
-          !Source.sameSourceIdentity(manifest, pin) || manifest.librarySha256 !== pin.librarySha256 ||
-          JSON.stringify(manifest.qualifiedInterfaces) !== JSON.stringify(pin.qualifiedInterfaces) ||
-          JSON.stringify(manifest.defaultInterfaces) !== JSON.stringify(pin.defaultInterfaces)) throw new Error("The bundled Steam API source/version identity changed.");
-      // The included declaration seals the manifest independently of its contents.
-      Bundle.verifyPayload(directory, { ...manifest, files: [...manifest.files,
-        { path: item.manifestRelative, size: content.size, sha256: item.manifestSha256, mode: 0o644 }] });
+      const { directory } = included;
       const library = verifiedLibrary(path.join(directory, "libsteam_api.dylib"), { sha256: pin.librarySha256, architecture });
       return { ready: true, version: pin.version, packageVersion, ...Source.sourceFields(pin), ...library, directory, mode: "offline", interfaces };
     }

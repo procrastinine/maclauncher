@@ -3,14 +3,12 @@ const path = require("node:path");
 const Native = require("../../shared/runtime/local-native");
 const Steam = require("../../shared/runtime/steamworks");
 const Profiles = require("../../shared/runtime/steamworks/profiles");
-const Catalog = require("../../shared/runtime/steamworks/versions.json");
 const Exports = require("../export");
 
 // Observed from the exact native runner and corresponding Windows Steam API.
 // It is a legacy ABI profile, not a promise about every Steam service or game.
 const LEGACY_RUNNER = "1.4.9999";
 const LEGACY_SHA256 = "dd8395d9dcdb5eb6e58641a730b22640d1909e72a55a48c3450cf6d0231040fa";
-const LEGACY_HELPER_VERSION = "0.5.0";
 const LEGACY_HELPER_PROFILE = "gamemaker-legacy-1.4.9999-offline-abi0.5.0";
 const LEGACY_INTERFACES = Object.freeze([
   "SteamClient017", "STEAMAPPLIST_INTERFACE_VERSION001", "STEAMAPPS_INTERFACE_VERSION007",
@@ -45,8 +43,7 @@ function resolveDependency(inspection, dataPath, install, { runnerVersion = inst
     } catch {}
   }
   if (offline && legacy) {
-    const pin = Catalog.find(item => item.version === LEGACY_HELPER_VERSION);
-    const profile = Profiles.resolveProfile({ id: LEGACY_HELPER_PROFILE, pin, architecture, requiredInterfaces: LEGACY_INTERFACES });
+    const { pin, profile } = Profiles.selectProfile({ id: LEGACY_HELPER_PROFILE, architecture, requiredInterfaces: LEGACY_INTERFACES });
     if (profile.consumerVersion !== LEGACY_RUNNER || profile.consumerSha256 !== LEGACY_SHA256)
       throw Object.assign(new Error("The selected GameMaker Steam API profile does not match this runner."), { code: "STEAM_API_PROFILE_CHANGED" });
     const library = Steam.resolveBundledLibrary({ resourcesRoot, architecture, interfaces: pin.qualifiedInterfaces, catalog: [pin] });
@@ -90,5 +87,5 @@ async function prepareDependency(dependency, entry, context, baseEnvironment) {
   return prepared;
 }
 
-module.exports = { LEGACY_RUNNER, LEGACY_SHA256, LEGACY_HELPER_VERSION, LEGACY_HELPER_PROFILE,
+module.exports = { LEGACY_RUNNER, LEGACY_SHA256, LEGACY_HELPER_PROFILE,
   LEGACY_INTERFACES, required, resolveDependency, prepareDependency };

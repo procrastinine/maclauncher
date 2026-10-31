@@ -15,19 +15,18 @@ function declaration(version = HELPER_VERSION) {
   return item;
 }
 
-async function resolveConfigHelper({ resourcesRoot, helperVersion = HELPER_VERSION, platform = process.platform, arch = process.arch, dependencies = {} } = {}) {
+async function resolveConfigHelper({ resourcesRoot, helperVersion, platform = process.platform, arch = process.arch, dependencies = {} } = {}) {
   if (platform !== "darwin" || !["arm64", "x64"].includes(arch)) throw new Error("MKXP-Z config isolation requires an Apple Silicon or Intel Mac.");
-  const pin = declaration(helperVersion);
-  const directory = Included.resolveIncluded(declarations, { id: pin.id, version: pin.version, arch, resourcesRoot })?.directory;
-  if (!directory) throw new Error("The included MKXP-Z configuration helper is missing. Reinstall MacLauncher.");
-  Bundled.verifyPayload(directory, pin);
-  const record = JSON.parse(Bundled.readRegular(path.join(directory, pin.manifestRelative), Bundled.LIMITS.manifestBytes).bytes);
-  const library = pin.files.find(file => file.path === "mkxpz-config.dylib"), dylibPath = path.join(directory, library.path);
-  if (record.schemaVersion !== 1 || record.id !== pin.id || record.version !== pin.version || record.sourceSha256 !== pin.sourceSha256 ||
-      record.binarySha256 !== library.sha256 || record.minimumMacOS !== pin.minimumMacOS ||
-      record.scope !== (pin.version === "1.0.0" || pin.version.startsWith("config-identity-v7-") ? "selected-executable-config-and-display-identity" : "selected-executable-bundle-config-chdir") || record.build?.signing !== "ad-hoc" ||
-      record.build?.installName !== "@rpath/mkxpz-config.dylib" ||
-      JSON.stringify(record.architectures) !== JSON.stringify(library.architectures)) throw new Error("The MKXP-Z config helper build identity changed.");
+  const included = Included.inspectIncluded(declarations, { id: "mkxpz-config-helper", version: helperVersion, arch, resourcesRoot,
+    executableRelative: "mkxpz-config.dylib",
+    validatePayload(record, pin, { primary }) {
+      if (record.sourceSha256 !== pin.sourceSha256 || record.binarySha256 !== primary.sha256 ||
+          record.scope !== "selected-executable-config-and-display-identity" || record.build?.signing !== "ad-hoc" ||
+          record.build?.installName !== "@rpath/mkxpz-config.dylib" ||
+          JSON.stringify(record.architectures) !== JSON.stringify(primary.architectures))
+        throw new Error("The MKXP-Z config helper build identity changed.");
+    } });
+  const { item: pin, directory, primary: library, executablePath: dylibPath } = included;
   const systemVersion = dependencies.systemVersion ? await dependencies.systemVersion() : Bundled.systemVersionSync();
   if (!Bundled.versionAtLeast(systemVersion, pin.minimumMacOS)) throw new Error(`MKXP-Z config isolation requires macOS ${pin.minimumMacOS}.`);
   const signatureKey = Bundled.fileIdentity(dylibPath);

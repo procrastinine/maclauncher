@@ -1,13 +1,11 @@
 #!/usr/bin/env node
 // Explicit installation prepares the same pinned inputs used by app builds.
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 
 async function prepareDevelopmentInputs({ repoRoot = ROOT, arch = process.arch, platform = process.platform,
-  installElectron = () => execFileSync(process.execPath, [path.join(repoRoot, 'node_modules/electron/install.js')],
-    { cwd: repoRoot, stdio: 'inherit' }),
+  installElectron = () => require('./ci-macos.cjs').prepareElectron({ repoRoot }),
   readLock = require('./runtime-packages.cjs').readLock,
   preparePython = require('./ci-macos.cjs').preparePython,
   prepareSevenZip = require('./published-inputs.cjs').prepareSevenZip,
@@ -23,9 +21,11 @@ async function prepareDevelopmentInputs({ repoRoot = ROOT, arch = process.arch, 
   return { electron: true, arch, nativePackages: result.packages, ...python, sevenZip, publishers };
 }
 
-async function main(args = process.argv.slice(2)) {
+async function main(args = process.argv.slice(2), { env = process.env } = {}) {
   if (args.length && (args.length !== 2 || args[0] !== '--arch' || !['arm64', 'x64'].includes(args[1])))
     throw new Error('Usage: node scripts/setup-development.cjs [--arch arm64|x64]');
+  if (env.CI && env.npm_lifecycle_event === 'postinstall')
+    return { skipped: true, reason: 'CI configure and fetch prepare the selected app inputs.' };
   return prepareDevelopmentInputs({ arch: args[1] || process.arch });
 }
 

@@ -16,7 +16,7 @@ function environment(t) {
   const sha256 = Native.hashFile(libraryPath), userDataDir = path.join(root, "data");
   const interfaces = ["SteamClient017", "SteamUser018"];
   const dependencies = {
-    catalog: [{ version: "qualified-1", qualifiedInterfaces: interfaces }],
+    catalog: [{ version: "qualified-1", architectures: ["arm64"], qualifiedInterfaces: interfaces }],
     inspectMachOExports: async () => ["SteamAPI_Init", "SteamAPI_Shutdown", "SteamAPI_RunCallbacks"],
     resolveBundledLibrary: options => ({ ready: true, mode: "offline", libraryPath, sha256,
       version: "qualified-1", sourceRevision: "a".repeat(40), architectures: ["arm64"], interfaces: options.interfaces })

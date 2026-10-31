@@ -42,7 +42,7 @@ test('the packaged Android metadata closure resolves without a source checkout o
       fs.mkdirSync(path.dirname(destination), { recursive: true });
       fs.copyFileSync(path.join(repository, 'src/modules/android', name), destination);
     }
-    for (const name of ['included-helpers.js', 'bundled-native.js', 'host-capabilities.js', 'feature-requirements.js', '../reshade/neural/source.json', '../reshade/temporal/fsr4/source.json', 'local-native.js', 'app-bundle.js', 'pe-exports.js']) {
+    for (const name of ['included-helpers.js', 'package-contract.cjs', 'bundled-native.js', 'host-capabilities.js', 'feature-requirements.js', '../reshade/neural/source.json', '../reshade/temporal/fsr4/source.json', 'local-native.js', 'app-bundle.js', 'pe-exports.js']) {
       const destination = path.join(root, 'src/modules/shared/runtime', name);
       fs.mkdirSync(path.dirname(destination), { recursive: true });
       fs.copyFileSync(path.join(repository, 'src/modules/shared/runtime', name), destination);

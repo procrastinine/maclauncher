@@ -15,6 +15,8 @@ const Steam = require("../src/modules/shared/runtime/steamworks");
 const SteamProfiles = require("../src/modules/shared/runtime/steamworks/profiles");
 const SteamCatalog = require("../src/modules/shared/runtime/steamworks/versions.json");
 const ProfileCatalog = require("../src/modules/shared/runtime/steamworks/profiles.json");
+const ConsumerProfile = ProfileCatalog.find(profile => profile.id === Contract.helperAbiProfile);
+const HelperVersion = ConsumerProfile.helperVersion;
 const Ticket = require("../src/modules/shared/runtime/steamworks/ticket");
 const Web = require("../src/modules/web/main");
 const { prepareForLaunch } = require("../src/core/runtime-preparation");
@@ -55,20 +57,17 @@ function availableNativeSdk(t, root) {
   const sdk = { version: Sdk.PIN.version, sdkVersion: Sdk.PIN.sdkVersion,
     libraryPath: path.join(root, Sdk.PIN.filename), apiLibraryPath: path.join(root, Sdk.PIN.api.filename),
     sha256: Sdk.PIN.sha256, apiSha256: Sdk.PIN.api.sha256, source: "native-game-library" };
-  const ticket = { ready: true, version: Contract.ticketVersion, libraryPath: path.join(root, "included", Sdk.PIN.filename),
+  const ticket = { ready: true, version: ConsumerProfile.encryptedTicketVersion, libraryPath: path.join(root, "included", Sdk.PIN.filename),
     sourceKind: "owned", sourceSha256: "a".repeat(64), sha256: "b".repeat(64), policy: "unavailable" };
   t.mock.method(Sdk, "resolveQualifiedTicket", () => sdk);
   t.mock.method(Ticket, "resolveBundledTicket", () => ticket);
-  const savedSteamCatalog = [...SteamCatalog], savedProfiles = [...ProfileCatalog];
-  t.after(() => { SteamCatalog.splice(0, SteamCatalog.length, ...savedSteamCatalog); ProfileCatalog.splice(0, ProfileCatalog.length, ...savedProfiles); });
-  SteamCatalog.unshift({ version: Contract.helperVersion, qualifiedInterfaces: Contract.interfaces });
-  ProfileCatalog.unshift({ id: Contract.helperAbiProfile, architectures: ["arm64"] });
-  t.mock.method(SteamProfiles, "resolveProfile", () => ({ id: Contract.helperAbiProfile, helperVersion: Contract.helperVersion,
+  const pin = SteamCatalog.find(pin => pin.version === HelperVersion);
+  t.mock.method(SteamProfiles, "selectProfile", () => ({ pin, profile: { id: Contract.helperAbiProfile, helperVersion: pin.version,
     bridgeLibrarySha256: Contract.nativeSha256, bridgeJavascriptSha256: Contract.javascriptSha256,
     hostVersion: Contract.nwVersion, sdkVersion: Sdk.PIN.sdkVersion,
     encryptedTicketSourceKind: "owned", encryptedTicketVersion: ticket.version,
-    encryptedTicketSourceSha256: ticket.sourceSha256, encryptedTicketLibrarySha256: ticket.sha256, encryptedTicketPolicy: ticket.policy }));
-  t.mock.method(Steam, "resolveBundledLibrary", () => ({ ready: true, version: Contract.helperVersion, mode: "offline" }));
+    encryptedTicketSourceSha256: ticket.sourceSha256, encryptedTicketLibrarySha256: ticket.sha256, encryptedTicketPolicy: ticket.policy } }));
+  t.mock.method(Steam, "resolveBundledLibrary", () => ({ ready: true, version: pin.version, mode: "offline" }));
   return { ...sdk, ticket };
 }
 
@@ -164,7 +163,7 @@ test("automatic Greenworks uses its exact included API profile and optional nati
     sourceRoot: entry.gamePath, runtimeVersion: "0.103.1", architecture: "arm64", baseEnvironment });
   assert.equal(steam.sdk.libraryPath, sdk.ticket.libraryPath);
   assert.equal(Sdk.resolveQualifiedTicket.mock.callCount(), 0);
-  assert.equal(calls[0][0].version, Contract.helperVersion);
+  assert.equal(calls[0][0].version, HelperVersion);
   assert.deepEqual(calls[0][0].nativeLibraryPaths, []);
   assert.equal(calls[0][0].abiProfile, Contract.helperAbiProfile); assert.equal(calls[0][0].preferOffline, true);
   assert.notEqual(calls[0][0].abiProfile, "luasteam-4.0.2-sdk1.63-ml1"); assert.deepEqual(calls[0][0].interfaces, Contract.interfaces);

@@ -7,5 +7,8 @@
     "src/modules/renpy/resources/unren/third_party/rpatool",
     "src/modules/renpy/resources/unren/third_party/UnRen-Gideon-mod-",
     "src/modules/renpy/resources/unren/third_party/unrpyc"
+  ],
+  "testSubmodules": [
+    "src/external/maclauncher-android"
   ]
 }

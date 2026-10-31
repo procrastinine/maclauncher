@@ -1,4 +1,5 @@
 const path = require("node:path");
+const Contract = require("./package-contract.cjs");
 const B = require("./bundled-native");
 
 // Included helpers resolve only from their packaging declarations and only
@@ -38,8 +39,7 @@ function preferredIncludedBuilds(declarations, arch = process.arch) {
 function declared(declarations, { id, version, arch = process.arch } = {}) {
   if (!Array.isArray(declarations)) throw new Error("Included helper declarations are invalid.");
   const host = launcherArch(arch);
-  return preferredIncludedBuilds(declarations, host).find(item => item.id === id &&
-    (version === undefined || item.version === version)) || null;
+  return Contract.selectPackageRecord(preferredIncludedBuilds(declarations, host), { id, version, arch: host });
 }
 const MAC_NAMES = Object.freeze({ arm64: "a Mac with Apple Silicon", x64: "an Intel Mac" });
 // Helpers are published for specific launcher CPUs, and each app includes the
@@ -81,4 +81,15 @@ function requireIncluded(declarations, options = {}) {
   throw new Error(`The included ${options.id} is missing. Reinstall MacLauncher.`);
 }
 
-module.exports = { SOURCE_RESOURCES, isPackaged, resourcesRoot, nativeRoot, preferredIncludedBuilds, declared, hostRequirement, resolveIncluded, requireIncluded };
+function inspectIncluded(declarations, { executableRelative, validateManifest, validatePayload, dataOnly = false, required = true, ...options } = {}) {
+  const included = required ? requireIncluded(declarations, options) : resolveIncluded(declarations, options);
+  if (!included) return null;
+  const inspection = require("./project-build-manager").inspectPackage(included.directory, included.item, {
+    projectId: included.item.id, manifestRelative: included.item.manifestRelative,
+    sourceRelative: included.item.sourceRelative, executableRelative, dataOnly, validateManifest, validatePayload
+  });
+  B.verifyPayload(included.directory, inspection.declaration);
+  return { ...included, ...inspection };
+}
+
+module.exports = { SOURCE_RESOURCES, isPackaged, resourcesRoot, nativeRoot, preferredIncludedBuilds, declared, hostRequirement, resolveIncluded, requireIncluded, inspectIncluded };

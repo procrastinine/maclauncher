@@ -2,6 +2,22 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const Setup = require('../scripts/setup-development.cjs');
 
+test('CI postinstall defers all acquisition while explicit setup and invalid arguments retain their behavior', async t => {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dev-setup-no-inputs-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const entry = path.join(root, 'scripts/setup-development.cjs');
+  fs.mkdirSync(path.dirname(entry));
+  fs.copyFileSync(require.resolve('../scripts/setup-development.cjs'), entry);
+  const isolated = require(entry), env = { CI: '1', npm_lifecycle_event: 'postinstall' };
+  const expected = { skipped: true, reason: 'CI configure and fetch prepare the selected app inputs.' };
+  assert.deepEqual(await Setup.main([], { env }), expected);
+  assert.deepEqual(await isolated.main([], { env }), expected, 'No input modules exist in this isolated checkout');
+  await assert.rejects(isolated.main(['--invalid'], { env }), /Usage:/);
+  await assert.rejects(isolated.main([], { env: { CI: '1', npm_lifecycle_event: 'setup:dev' } }), /Cannot find module/);
+  await assert.rejects(isolated.main([], { env: { npm_lifecycle_event: 'postinstall' } }), /Cannot find module/);
+});
+
 function fixture(overrides = {}) {
   const calls = [], lock = { arch: 'arm64', packages: [{ id: 'graphics', version: '0.3.1' }] };
   const step = (name, result) => async options => { calls.push({ name, options }); return result; };

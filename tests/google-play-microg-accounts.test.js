@@ -60,9 +60,15 @@ test("custom microG reuse keeps master storage private and disposal cancels acti
 test("the included account-control overlay is hash verified and needs no Java compiler at runtime", async t => {
   const context = fixture(t), cache = path.join(context.userDataDir, "cache"); fs.mkdirSync(cache);
   const output = await materializeControl(context, {}, { javaPath: "/no-compiler-required/java" }, cache);
-  const record = require("../src/modules/android/store/resources/account-control.json");
+  const included = require("../src/modules/android/included-files");
+  const record = included.json("store/resources/account-control.json");
+  const bytes = fs.readFileSync(included.file("store/resources/account-control.jar"));
+  assert.deepEqual(fs.readFileSync(output), bytes);
   assert.equal(crypto.createHash("sha256").update(fs.readFileSync(output)).digest("hex"), record.sha256);
   assert.equal(path.extname(output), ".jar"); assert.equal(fs.statSync(output).mode & 0o777, 0o400);
+  const modified = fs.statSync(output).mtimeMs;
+  assert.equal(await materializeControl(context, {}, { javaPath: "/no-compiler-required/java" }, cache), output);
+  assert.equal(fs.statSync(output).mtimeMs, modified);
 });
 
 test("browser sign-in registers with the actual provider before exposing a shared account reference", async t => {

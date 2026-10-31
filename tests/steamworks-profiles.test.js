@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { resolveProfile, normalizeProfileSelection } = require('../src/modules/shared/runtime/steamworks/profiles');
+const { resolveProfile, selectProfile, normalizeProfileSelection } = require('../src/modules/shared/runtime/steamworks/profiles');
 const catalog = require('../src/modules/shared/runtime/steamworks/profiles.json');
 const pins = require('../src/modules/shared/runtime/steamworks/versions.json');
 const pinForProfile = id => pins.find(pin => pin.version === catalog.find(profile =>
@@ -15,10 +15,10 @@ test('saved Goldberg profile choices normalize only to their exact owned-helper 
   for (const abiProfile of legacy) {
     const saved = Object.freeze({ abiProfile, version: 'goldberg-mac-1.0.0-ml1-universal', language: 'english' });
     const normalized = normalizeProfileSelection(saved);
-    assert.deepEqual(normalized, { ...saved, abiProfile: `${abiProfile}-offline-abi0.5.0`, version: '0.5.0' });
+    const target = catalog.find(profile => profile.id === `${abiProfile}-offline-abi0.5.0`);
+    assert.deepEqual(normalized, { ...saved, abiProfile: target.id, version: target.helperVersion });
     assert.equal(saved.abiProfile, abiProfile);
     assert.equal(saved.version, 'goldberg-mac-1.0.0-ml1-universal');
-    const target = catalog.find(profile => profile.id === normalized.abiProfile);
     assert.ok(target);
     assert.equal(target.helperVersion, normalized.version);
     assert.equal(catalog.some(profile => profile.id === abiProfile), false);
@@ -76,10 +76,14 @@ test('Greenworks offline qualification retains its exact bridge, host, ticket an
   assert.deepEqual(profile.architectures, ['arm64']);
   const successor = resolveProfile({ id: contract.helperAbiProfile, pin: pinForProfile(contract.helperAbiProfile),
     architecture: 'arm64', requiredInterfaces: contract.interfaces });
-  assert.equal(successor.helperVersion, contract.helperVersion);
+  assert.equal(successor.helperVersion, selectProfile({ id: contract.helperAbiProfile, architecture: 'arm64' }).pin.version);
   assert.equal(successor.bridgeLibrarySha256, profile.bridgeLibrarySha256);
   assert.equal(successor.bridgeJavascriptSha256, profile.bridgeJavascriptSha256);
-  assert.equal(successor.encryptedTicketVersion, contract.ticketVersion);
+  const ticket = require('../src/modules/shared/runtime/steamworks/ticket-versions.json')
+    .find(pin => pin.version === successor.encryptedTicketVersion);
+  assert.ok(ticket);
+  assert.equal(successor.encryptedTicketLibrarySha256, ticket.librarySha256);
+  assert.equal(successor.encryptedTicketSourceSha256, ticket.sourceSha256);
   assert.equal(successor.encryptedTicketPolicy, 'unavailable');
   assert.equal(successor.id, profile.id);
   assert.equal(successor.encryptedTicketLibrarySha256, profile.encryptedTicketLibrarySha256);
@@ -87,6 +91,24 @@ test('Greenworks offline qualification retains its exact bridge, host, ticket an
     { code: 'STEAM_API_PROFILE_CHANGED' });
   assert.throws(() => resolveProfile({ id: profile.id, pin: { ...pin, librarySha256: '0'.repeat(64) }, architecture: 'arm64' }),
     { code: 'STEAM_API_PROFILE_CHANGED' });
+});
+
+test('profile selection follows declared helper facts and preserves explicit older choices', () => {
+  const original = catalog[0], current = pins.find(pin => pin.version === original.helperVersion);
+  const next = {...original, helperVersion: 'next-published-version'};
+  const nextPin = {...current, version: next.helperVersion};
+  const selected = selectProfile({id: next.id, architecture: next.architectures[0], profiles: [next],
+    catalog: [current, nextPin]});
+  assert.equal(selected.pin, nextPin, 'An unrelated first catalog entry cannot replace a profile binding');
+  const legacy = 'luasteam-4.0.2-sdk1.63-ml1';
+  const profile = catalog.find(profile => profile.id === `${legacy}-offline-abi0.5.0`);
+  const old = {...profile, helperVersion: '0.5.0'}, oldPin = {...current, version: old.helperVersion};
+  const saved = Object.freeze({abiProfile: legacy, version: old.helperVersion});
+  const retained = normalizeProfileSelection(saved, {profiles: [old]});
+  assert.equal(retained.version, oldPin.version);
+  assert.equal(selectProfile({id: retained.abiProfile, version: retained.version, architecture: old.architectures[0],
+    profiles: [old], catalog: [nextPin, oldPin]}).pin, oldPin);
+  assert.equal(saved.abiProfile, legacy);
 });
 
 test('every published ABI profile is tied to its exact sealed helper and consumer identity', () => {

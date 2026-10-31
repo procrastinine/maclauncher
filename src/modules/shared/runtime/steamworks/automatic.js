@@ -94,7 +94,7 @@ function loaderEnvironment(base, directories) {
 /** Shared native API setup. A module supplies actual consumer/ABI evidence. */
 async function prepareAutomaticLaunch(request, context = {}, dependencies = {}) {
   if (request?.required !== true) return null;
-  request = Profiles.normalizeProfileSelection(request);
+  request = Profiles.normalizeProfileSelection(request, dependencies.profiles ? { profiles: dependencies.profiles } : {});
   const arch = architecture(request.arch || request.architecture);
   let symbols = stringList(request.symbols, SYMBOL, "symbol names");
   const requiredInterfaces = stringList(request.interfaces, Environment.INTERFACE, "interface versions", 128);
@@ -105,10 +105,12 @@ async function prepareAutomaticLaunch(request, context = {}, dependencies = {}) 
   const inspectExports = dependencies.inspectMachOExports || require("../macho-exports").inspectMachOExports;
   const native = dependencies.native || Native;
   const catalog = dependencies.catalog || Catalog;
-  const selectedPin = request.version ? catalog.find(pin => pin.version === request.version) : catalog[0];
-  if (request.version && !selectedPin) throw failure("STEAM_API_VERSION_UNKNOWN", "Choose an explicitly listed Steam API helper version.");
-  const profile = Profiles.resolveProfile({ id: request.abiProfile, pin: selectedPin, architecture: arch,
-    requiredInterfaces, ...(dependencies.profiles ? { profiles: dependencies.profiles } : {}) });
+  if (request.version && !catalog.some(pin => pin.version === request.version))
+    throw failure("STEAM_API_VERSION_UNKNOWN", "Choose an explicitly listed Steam API helper version.");
+  const selected = request.abiProfile ? Profiles.selectProfile({ id: request.abiProfile, version: request.version,
+    architecture: arch, requiredInterfaces, catalog, ...(dependencies.profiles ? { profiles: dependencies.profiles } : {}) }) : null;
+  const selectedPin = selected?.pin || (request.version ? catalog.find(pin => pin.version === request.version) : catalog[0]);
+  const profile = selected?.profile || null;
   const managed = await Managed.resolveManagedRequirement({ profile, sources: request.managedConsumers,
     symbols, signal: context.signal });
   symbols = managed.symbols;
