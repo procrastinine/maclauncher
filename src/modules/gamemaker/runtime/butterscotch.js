@@ -23,12 +23,7 @@ function createManager(dependencies = {}) {
   runtime.resolveSelection = (entry, settings, userDataDir, { gameArgumentsRequired, ...options } = {}) => {
     const argumentsRequired = gameArgumentsRequired || typeof entry?.launchArguments === "string" && entry.launchArguments.trim();
     const constraints = argumentsRequired ? { ...options, compatible: pin => supportsGameArguments(pin) && (!options.compatible || options.compatible(pin)) } : options;
-    if (!argumentsRequired) return resolveSelection(entry, settings, userDataDir, constraints);
-    // Games with launch arguments recommend the first build that repeats them,
-    // including cold Play before its exact package has been discovered.
-    const recommendedVersion = "MCLv1-1007";
-    return { ...resolveSelection(entry, settings, userDataDir, { ...constraints,
-      recommendedVersion: options.recommendedVersion ?? options.recommended ?? recommendedVersion }), recommendedVersion };
+    return resolveSelection(entry, settings, userDataDir, constraints);
   };
   const installRuntime = runtime.installRuntime.bind(runtime);
   runtime.installRuntime = async (options = {}) => {

@@ -378,7 +378,7 @@ test("consented MKXP-Z install without a selection discovers versions before ask
 test("MKXP-Z lists each CPU's MacLauncher Builds packages and installs the build Play uses", async t => {
   const Architecture = require("../src/modules/shared/runtime/architecture");
   const userDataDir = makeTempDir("maclauncher-mkxpz-cpu-"); t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
-  const repository = "procrastinine/maclauncher-builds", version = "MCLv1-1003";
+  const repository = "procrastinine/maclauncher-builds", version = "99.4.2-fixture";
   const record = arch => ({ schemaVersion: 2, id: "mkxpz", version, arch, launcherArchitectures: [arch], minimumMacOS: "11.0",
     manifestRelative: "manifest.json", manifestSha256: "a".repeat(64), sourceSha256: "b".repeat(64), updatePolicy: "manual", tag: `mkxpz/v${version}/${arch}`,
     asset: { filename: `mkxpz-${version}-${arch}.tar.gz`, bytes: 1, sha256: (arch === "arm64" ? "c" : "d").repeat(64),

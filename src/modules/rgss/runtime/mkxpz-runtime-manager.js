@@ -3,7 +3,6 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 const Architecture = require("../../shared/runtime/architecture");
 const Upstream = require("../../shared/runtime/upstream");
-const Binary = require("./bundled-binary.json");
 const Builds = require("./mkxpz-builds");
 const {
   attachAbortSignal,
@@ -18,15 +17,6 @@ const DEFAULTS = {
   artifactNeedle: "macos"
 };
 
-const Owned = require("./owned-builds.json");
-const BINARY_PINS = [Binary, ...(Binary.retained || []), ...Owned.releases];
-// Defaults come from the shared manager choice: the saved default, else the
-// newest compatible published or installed version for this Mac.
-const BINARY_CATALOG = Object.freeze(BINARY_PINS.map(pin => Object.freeze({ version: pin.version, upstreamRevision: pin.upstreamRevision,
-  sourceUrl: pin.sourceUrl, localBuild: pin.sourceKind === "owned-source-adaptation",
-  ...(pin.sourceKind === "owned-source-adaptation"
-    ? { sourceArtifact: pin.sourceArtifact, adaptation: Object.freeze({ id: pin.adaptationId, executableSha256: pin.executableSha256 }) }
-    : { publishedBinary: Object.freeze({ executableSha256: pin.executableSha256, treeSha256: pin.treeSha256 }) }) })));
 const INSTALL_META_FILE = ".maclauncher-mkxpz.json";
 
 function ensureDir(p) {
@@ -370,7 +360,6 @@ function resolveOwnedRuntime({ userDataDir, version, architecture }) {
 }
 
 module.exports = {
-  catalog: BINARY_CATALOG,
   DEFAULTS,
   normalizeVersion,
   compareVersions,

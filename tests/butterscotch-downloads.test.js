@@ -42,7 +42,7 @@ function binary({ architecture = "arm64", floor = 0x1a0000, external } = {}) {
   return Buffer.concat([header, ...commands]);
 }
 
-test("Butterscotch preserves explicit choices and recommends the argument ABI only for games that need it", t => {
+test("Butterscotch preserves explicit choices and selects argument support from the catalog", t => {
   const root = temporary(t), runtime = createManager({ now: () => now, systemVersionSync: () => "26.0" });
   const automatic = runtime.resolveSelection({}, {}, root);
   assert.equal(automatic.version, null);
@@ -54,12 +54,13 @@ test("Butterscotch preserves explicit choices and recommends the argument ABI on
   assert.deepEqual(runtime.distributionVersions, []);
   assert.equal(runtime.resolveSelection({ runtimeData: { butterscotch: { version: old } } }, {}, root).version, old);
   assert.equal(runtime.resolveSelection({}, { runtimes: { butterscotch: { defaultVersion: old } } }, root).version, old);
-  assert.equal(runtime.resolveSelection({ launchArguments: "--example" }, {}, root).version, "MCLv1-1007");
+  const cold = runtime.resolveSelection({ launchArguments: "--example" }, {}, root);
+  assert.equal(cold.version, null); assert.equal(cold.discoveryRequired, true);
   Fixture.cache(root);
   const unrecommended = runtime.resolveSelection({ launchArguments: "--example" }, {}, root);
-  assert.equal(unrecommended.version, "MCLv1-1007", "An argument-bearing game requests its exact ABI recommendation before discovery");
-  assert.equal(unrecommended.ready, false); assert.equal(unrecommended.recommendedVersion, "MCLv1-1007");
-  assert.equal(runtime.resolveSelection({ launchArguments: "--example" }, { runtimes: { butterscotch: { defaultVersion: old } } }, root).version, "MCLv1-1007");
+  assert.equal(unrecommended.version, Fixture.argsVersion, "An argument-bearing game selects a capable catalog version");
+  assert.equal(unrecommended.ready, false); assert.equal(unrecommended.recommendedVersion, undefined);
+  assert.equal(runtime.resolveSelection({ launchArguments: "--example" }, { runtimes: { butterscotch: { defaultVersion: old } } }, root).version, old);
   assert.equal(runtime.resolveSelection({}, {}, root, { version: old }).version, old);
   for (const dependencies of [{ now: () => now, systemVersionSync: () => "13.0" },
     { now: () => Date.parse("2030-01-01"), systemVersionSync: () => "26.0" }]) {
@@ -137,18 +138,18 @@ test("argument-capable Play discovers after consented install and reuses its exa
   const root=temporary(t),userDataDir=path.join(root,"launcher"),payload=path.join(root,"payload"),archive=path.join(root,"fixture.zip");
   fs.mkdirSync(payload);fs.writeFileSync(path.join(payload,"butterscotch"),binary({floor:0x0d0000,architecture:process.arch==="x64"?"x86_64":"arm64"}),{mode:0o755});
   execFileSync("/usr/bin/ditto",["-c","-k",payload,archive]);
-  const recommended="MCLv1-1007",bytes=fs.readFileSync(archive),rows=Fixture.rows().butterscotch.map(row=>({...row,...(row.version===Fixture.argsVersion?{version:recommended}:{}),architecture:process.arch==="x64"?"x86_64":"arm64",workflow:{id:1},asset:{...row.asset,sha256:crypto.createHash("sha256").update(bytes).digest("hex"),bytes:bytes.length}}));
+  const catalogVersion=Fixture.argsVersion,bytes=fs.readFileSync(archive),rows=Fixture.rows().butterscotch.map(row=>({...row,architecture:process.arch==="x64"?"x86_64":"arm64",workflow:{id:1},asset:{...row.asset,sha256:crypto.createHash("sha256").update(bytes).digest("hex"),bytes:bytes.length}}));
   let downloads=0,refreshes=0;
   t.mock.method(require("../src/modules/shared/runtime/maclauncher-builds"),"fetchProjectCatalog",async()=>({packages:[]}));
   const runtime=createManager({systemVersionSync:()=>"26.0",downloadToFile:async(_url,dest)=>{downloads++;fs.writeFileSync(dest,bytes);},run:async()=>({stdout:"--save-folder <directory>\n--renderer <renderer>\n"})});
   // Discovery lists these rows; the consented install starts it.
   runtime.refreshCatalog=async options=>{refreshes++;Fixture.cache(options.userDataDir,{butterscotch:rows});return runtime.getState({userDataDir:options.userDataDir}).catalog;};
-  assert.equal(runtime.resolveSelection({launchArguments:"--example"},{},userDataDir).version,recommended);
+  assert.equal(runtime.resolveSelection({launchArguments:"--example"},{},userDataDir).version,null);
   assert.equal(refreshes,0);assert.equal(downloads,0);
   const installed=await runtime.installRuntime({userDataDir,gameArgumentsRequired:true});
-  assert.equal(installed.version,recommended);assert.ok(refreshes>0);assert.equal(downloads,1);
+  assert.equal(installed.version,catalogVersion);assert.ok(refreshes>0);assert.equal(downloads,1);
   const coldRefreshes=refreshes;
-  const selected=runtime.resolveSelection({launchArguments:"--example"},{},userDataDir);assert.equal(selected.ready,true);assert.equal(selected.version,recommended);
+  const selected=runtime.resolveSelection({launchArguments:"--example"},{},userDataDir);assert.equal(selected.ready,true);assert.equal(selected.version,catalogVersion);
   await runtime.installRuntime({userDataDir,gameArgumentsRequired:true});assert.equal(refreshes,coldRefreshes);assert.equal(downloads,1);
   await assert.rejects(runtime.installRuntime({userDataDir,version:Fixture.legacyVersion,gameArgumentsRequired:true}),/incompatible runtime profile/);
   assert.equal(downloads,1,"An exact incompatible choice cannot silently substitute another runtime");
@@ -156,24 +157,24 @@ test("argument-capable Play discovers after consented install and reuses its exa
   assert.equal(runtime.resolveSelection({launchArguments:"--example"},{},userDataDir).ready,false);
 });
 
-test("only games requiring argument transport recommend its ABI build while other defaults follow the catalog", { skip: process.platform !== "darwin" }, t => {
+test("argument transport follows future catalog versions and the shared saved choices", { skip: process.platform !== "darwin" }, t => {
   const root = temporary(t), runtime = createManager({ systemVersionSync: () => "26.0" });
   const game = { launchArguments: "--game-option" }, cold = runtime.resolveSelection(game, {}, root);
-  assert.equal(cold.version, "MCLv1-1007"); assert.equal(cold.recommendedVersion, "MCLv1-1007");
+  assert.equal(cold.version, null); assert.equal(cold.discoveryRequired, true); assert.equal(cold.recommendedVersion, undefined);
   assert.equal(runtime.resolveSelection({}, {}, root).recommendedVersion, undefined);
-  const base = Fixture.rows().butterscotch[1], rows = ["MCLv1-1007", "MCLv2-fixture"].map(version => ({ ...base, version }));
+  const base = Fixture.rows().butterscotch[1], rows = ["90.0.0-fixture", "91.0.0-fixture"].map(version => ({ ...base, version }));
   Fixture.cache(root, { butterscotch: rows });
-  assert.equal(runtime.resolveSelection(game, {}, root).version, "MCLv1-1007");
-  assert.equal(runtime.resolveSelection({}, {}, root).version, "MCLv2-fixture", "An unset default selects the newest compatible catalog version");
-  assert.equal(runtime.resolveSelection({ ...game, runtimeData: { butterscotch: { version: "MCLv2-fixture" } } }, {}, root).version, "MCLv2-fixture");
-  assert.equal(runtime.resolveSelection(game, { runtimes: { butterscotch: { defaultVersion: "MCLv2-fixture" } } }, root).version, "MCLv1-1007", "The game recommendation precedes the Runtimes default");
-  assert.equal(runtime.resolveSelection({}, { runtimes: { butterscotch: { defaultVersion: "MCLv2-fixture" } } }, root).version, "MCLv2-fixture");
+  assert.equal(runtime.resolveSelection(game, {}, root).version, "91.0.0-fixture");
+  assert.equal(runtime.resolveSelection({}, {}, root).version, "91.0.0-fixture", "An unset default selects the newest compatible catalog version");
+  assert.equal(runtime.resolveSelection({ ...game, runtimeData: { butterscotch: { version: "90.0.0-fixture" } } }, {}, root).version, "90.0.0-fixture");
+  assert.equal(runtime.resolveSelection(game, { runtimes: { butterscotch: { defaultVersion: "90.0.0-fixture" } } }, root).version, "90.0.0-fixture", "The shared saved default takes precedence");
+  assert.equal(runtime.resolveSelection({}, { runtimes: { butterscotch: { defaultVersion: "91.0.0-fixture" } } }, root).version, "91.0.0-fixture");
   const executable = path.join(root, "installed-runner");
   fs.writeFileSync(executable, binary({ floor: 0x0d0000, architecture: process.arch === "x64" ? "x86_64" : "arm64" }), { mode: 0o755 });
-  runtime.core.registerLocal({ userDataDir: root, version: "MCLv2-fixture", runtimePath: executable });
-  assert.equal(runtime.resolveSelection(game, {}, root).version, "MCLv1-1007", "A compatible installation does not replace the game's exact recommendation");
-  assert.equal(runtime.resolveSelection({}, {}, root).version, "MCLv2-fixture");
-  assert.equal(runtime.resolveSelection({}, {runtimes:{butterscotch:{defaultVersion:null}}}, root).version, "MCLv2-fixture", "Clearing a saved default retains the manager default");
-  runtime.core.registerLocal({ userDataDir: root, version: "MCLv1-1007", runtimePath: executable });
-  assert.equal(runtime.resolveSelection(game, {}, root).version, "MCLv1-1007", "The game recommendation ranks compatible installed choices");
+  runtime.core.registerLocal({ userDataDir: root, version: "91.0.0-fixture", runtimePath: executable });
+  assert.equal(runtime.resolveSelection(game, {}, root).version, "91.0.0-fixture", "The compatible installed catalog choice works offline");
+  assert.equal(runtime.resolveSelection({}, {}, root).version, "91.0.0-fixture");
+  assert.equal(runtime.resolveSelection({}, {runtimes:{butterscotch:{defaultVersion:null}}}, root).version, "91.0.0-fixture", "Clearing a saved default retains the manager default");
+  runtime.core.registerLocal({ userDataDir: root, version: "90.0.0-fixture", runtimePath: executable });
+  assert.equal(runtime.resolveSelection(game, {}, root).version, "91.0.0-fixture", "An older installed build does not replace the shared default");
 });
