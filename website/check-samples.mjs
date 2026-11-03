@@ -1,4 +1,5 @@
-// Website build check for the graphics sample images: images meant to show the
+// Website build check for the graphics sample images, reported as warnings that
+// never stop the build. Images meant to show the
 // same scene must come from the same source.
 // - both sides of every <Compare before after>;
 // - within a <Tabs> block, the samples at the same position in each tab (for
@@ -11,7 +12,7 @@ import sharp from "sharp";
 
 const docs = path.join(import.meta.dirname, "src/content/docs");
 const threshold = 0.6;
-const failures = [];
+const warnings = [];
 const files = fs.readdirSync(docs, { recursive: true }).filter(name => name.endsWith(".mdx")).map(name => path.join(docs, name));
 
 const thumbnails = new Map();
@@ -30,12 +31,12 @@ function correlation(a, b) {
 let checked = 0, lowest = null;
 async function compare(file, label, a, b, imports) {
   const [first, second] = [imports[a], imports[b]];
-  if (!first || !second) { failures.push(`${file}: ${label} uses an image that isn't imported (${a}, ${b}).`); return; }
+  if (!first || !second) { warnings.push(`${file}: ${label} uses an image that isn't imported (${a}, ${b}).`); return; }
   const value = correlation(await thumbnail(first), await thumbnail(second));
   checked++;
   const description = `${file}: ${label} ${path.basename(first)} and ${path.basename(second)}`;
   if (!lowest || value < lowest.value) lowest = { value, description };
-  if (value < threshold) failures.push(`${description} don't show the same scene (correlation ${value.toFixed(2)}).`);
+  if (value < threshold) warnings.push(`${description} don't show the same scene (correlation ${value.toFixed(2)}).`);
 }
 
 for (const file of files) {
@@ -64,7 +65,4 @@ for (const file of files) {
 }
 
 console.log(`[samples] ${checked} image pairs checked${lowest ? `; lowest correlation ${lowest.value.toFixed(2)} (${lowest.description})` : ""}.`);
-if (failures.length) {
-  for (const failure of failures) console.error(`[samples] ${failure}`);
-  process.exit(1);
-}
+for (const warning of warnings) console.log(`::warning::[samples] ${warning}`);

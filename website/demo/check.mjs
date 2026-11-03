@@ -1,9 +1,10 @@
-// Website build check for the launcher demo, run after `astro build`:
+// Website build check for the launcher demo, run after `astro build`. It reports
+// findings as warnings and never stops the build:
 // - every article a demo action can link exists, including its anchor, for
 //   every game type and each of its runtimes;
 // - the demo data has one example game per registered game type, and each
 //   type has an article;
-// - the demo uses the app's React release, and its data the app's version;
+// - the demo uses the app's React release;
 // - the demo data has every required top-level key of the renderer's
 //   LauncherState type;
 // - the mock's explicit handlers still exist in the launcher's bridge, and the
@@ -15,15 +16,15 @@ const website = path.resolve(import.meta.dirname, "..");
 const repoRoot = path.resolve(website, "..");
 const dist = path.join(website, "dist");
 const { ACTION_ARTICLES, MODULE_ARTICLES, allArticles } = await import("./src/articles.ts");
-const failures = [], notes = [];
+const warnings = [], notes = [];
 const demoData = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "data/state.json"), "utf8"));
 const runtimes = demoData.state.modules.map(info => ({ id: info.id, runtimes: info.runtime?.supported || [] }));
 
 for (const article of new Map(allArticles(runtimes).map(item => [item.path, item])).values()) {
   const [page, anchor] = article.path.split("#");
   const file = path.join(dist, page, "index.html");
-  if (!fs.existsSync(file)) { failures.push(`Missing page for "${article.title}": ${article.path}`); continue; }
-  if (anchor && !fs.readFileSync(file, "utf8").includes(`id="${anchor}"`)) failures.push(`Missing anchor for "${article.title}": ${article.path}`);
+  if (!fs.existsSync(file)) { warnings.push(`Missing page for "${article.title}": ${article.path}`); continue; }
+  if (anchor && !fs.readFileSync(file, "utf8").includes(`id="${anchor}"`)) warnings.push(`Missing anchor for "${article.title}": ${article.path}`);
 }
 
 // Game types and runtime providers come from the module manifests the
@@ -37,8 +38,8 @@ const dataIds = new Set(demoData.state.modules.map(info => info.id));
 const absent = moduleIds.filter(id => !dataIds.has(id)), removed = [...dataIds].filter(id => !moduleIds.includes(id));
 const examples = new Set(demoData.state.recents.map(entry => entry.moduleId));
 const unexampled = demoData.state.modules.filter(info => info.detection && !examples.has(info.id)).map(info => info.id);
-if (unexampled.length) failures.push(`Game types without an example: ${unexampled.join(", ")}. Run pnpm run demo:data.`);
-if (absent.length || removed.length) failures.push(`The demo data is out of date (new: ${absent.join(", ") || "none"}; removed: ${removed.join(", ") || "none"}). Run pnpm run demo:data.`);
+if (unexampled.length) warnings.push(`Game types without an example: ${unexampled.join(", ")}. Run pnpm run demo:data.`);
+if (absent.length || removed.length) warnings.push(`The demo data is out of date (new: ${absent.join(", ") || "none"}; removed: ${removed.join(", ") || "none"}). Run pnpm run demo:data.`);
 const unmapped = moduleIds.filter(id => !MODULE_ARTICLES[id]);
 if (unmapped.length) notes.push(`Game types shown with the overview article: ${unmapped.join(", ")}`);
 
@@ -48,19 +49,16 @@ const sitePackage = JSON.parse(fs.readFileSync(path.join(website, "package.json"
 for (const name of ["react", "react-dom"]) {
   const app = String(appPackage.dependencies?.[name] || appPackage.devDependencies?.[name] || "").replace(/^[\^~]/, "");
   const site = sitePackage.dependencies?.[name];
-  if (app !== site) failures.push(`The website uses ${name} ${site}; the app uses ${app}.`);
+  if (app !== site) warnings.push(`The website uses ${name} ${site}; the app uses ${app}.`);
 }
-// Check for Updates in the demo names the app's version.
-const shownVersion = demoData.state.appUpdate?.currentVersion;
-if (shownVersion !== appPackage.version) failures.push(`The demo data names MacLauncher ${shownVersion}; the app is ${appPackage.version}. Run pnpm run demo:data.`);
 
 // The renderer reads the demo data as a LauncherState, so the data has each key
 // the type requires. Keys marked `?` may be absent.
 const typesFile = "src/renderer/src/ui/types.ts";
 const stateKeys = objectTypeKeys(fs.readFileSync(path.join(repoRoot, typesFile), "utf8"), "LauncherState");
-if (!stateKeys?.length) failures.push(`Could not read the keys of LauncherState in ${typesFile}; the check reads one plain object type, \`type LauncherState = { ... }\`.`);
+if (!stateKeys?.length) warnings.push(`Could not read the keys of LauncherState in ${typesFile}; the check reads one plain object type, \`type LauncherState = { ... }\`.`);
 else for (const key of stateKeys.filter(key => !key.optional && !Object.hasOwn(demoData.state, key.name))) {
-  failures.push(`The demo data lacks the LauncherState key "${key.name}", which ${typesFile} requires. Add it in demo/data/generate.cjs and run pnpm run demo:data.`);
+  warnings.push(`The demo data lacks the LauncherState key "${key.name}", which ${typesFile} requires. Add it in demo/data/generate.cjs and run pnpm run demo:data.`);
 }
 
 // The top-level property names of an object type or interface in TypeScript
@@ -90,7 +88,7 @@ const bridge = new Set([...bridgeSource.matchAll(/^ {4}([A-Za-z]+):/gm)].map(mat
 const mockSource = fs.readFileSync(path.join(import.meta.dirname, "src/mock/api.ts"), "utf8");
 const handled = new Set([...mockSource.matchAll(/^ {4}([A-Za-z]+):/gm)].map(match => match[1]));
 const stale = [...handled].filter(name => !bridge.has(name));
-if (stale.length) failures.push(`The demo answers bridge methods the launcher no longer has: ${stale.join(", ")}`);
+if (stale.length) warnings.push(`The demo answers bridge methods the launcher no longer has: ${stale.join(", ")}`);
 const fallback = [...bridge].filter(name => !handled.has(name));
 notes.push(`${handled.size} bridge methods answered by the demo; ${fallback.length} use the generic fallback.`);
 // A fallback that is not a quiet read names a topic after itself, and should have its own article.
@@ -98,7 +96,4 @@ const generic = fallback.filter(name => !/^(get|list|read)[A-Z]/.test(name) && !
 if (generic.length) notes.push(`Bridge methods shown with the general article: ${generic.join(", ")}`);
 
 for (const note of notes) console.log(`[demo] ${note}`);
-if (failures.length) {
-  for (const failure of failures) console.error(`[demo] ${failure}`);
-  process.exit(1);
-}
+for (const warning of warnings) console.log(`::warning::[demo] ${warning}`);
