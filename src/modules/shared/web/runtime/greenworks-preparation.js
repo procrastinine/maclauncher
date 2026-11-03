@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../../copy-file");
 const path = require("node:path");
 const Observations = require("../../../../core/file-observations");
 const Nwjs = require("./nwjs-manager");
@@ -239,7 +240,7 @@ function copyOwnedTree(source, destination) {
     for (const name of fs.readdirSync(source)) copyOwnedTree(path.join(source, name), path.join(destination, name));
   } else if (stat.isFile()) {
     if (existing && !existing.isFile()) throw failure("Greenworks overlay destination has an incompatible directory.", "GREENWORKS_OVERLAY_INVALID");
-    fs.copyFileSync(source, destination);
+    cloneOrCopySync(source, destination);
   } else if (stat.isSymbolicLink()) {
     if (existing) fs.unlinkSync(destination);
     fs.symlinkSync(fs.readlinkSync(source), destination);

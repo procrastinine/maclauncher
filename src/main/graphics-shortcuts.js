@@ -5,6 +5,7 @@
 // game runs, and actions marked `always` (such as starting window graphics)
 // whenever their handler exists. Carbon hot keys need no permission.
 const Shortcuts = require("../modules/shared/graphics-shortcuts.mjs");
+const ProcessTree = require("../core/process-tree");
 
 function create({globalShortcut, readAssignments, logger}) {
   const handlers = new Map(), registered = new Map(), failures = new Map();
@@ -67,11 +68,13 @@ async function frontmostPid({execFile = require("node:child_process").execFile} 
   } catch { return null; }
 }
 // The game a shortcut acts on: the only running game, otherwise the one whose
-// process or captured app (`targetPid`) is frontmost, otherwise the most
-// recently started one.
-function chooseGame(running, pid) {
+// process or captured app (`targetPid`) is frontmost, then the one with a
+// frontmost descendant in the [pid, parent pid] `processes` rows (a Wine
+// supervisor shell and its wine child), otherwise the most recently started one.
+function chooseGame(running, pid, processes = []) {
   if (running.length <= 1) return running[0]?.gamePath || null;
-  return running.find(item => pid && (item.pid === pid || item.targetPid === pid))?.gamePath || running.at(-1).gamePath;
+  return running.find(item => pid && (item.pid === pid || item.targetPid === pid))?.gamePath ||
+    running.find(item => pid && ProcessTree.descendants(item.pid, processes).has(pid))?.gamePath || running.at(-1).gamePath;
 }
 
 module.exports = { create, frontmostPid, chooseGame };

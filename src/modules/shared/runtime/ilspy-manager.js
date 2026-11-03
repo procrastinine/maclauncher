@@ -124,7 +124,7 @@ module.exports = {
   id: "ilspy", label: "ILSpy", upstream: Catalog.source, distributionRequired: false,
   delivery: { included: "none", catalog: "remote", sourceBuild: false },
   ui: { groupId: "tools", tabLabel: "Tools", sectionLabel: "ILSpy", order: 200, memberOrder: 200, management: "managed" },
-  normalizeVersion: Catalog.normalizeVersion, normalizeSettings, getState, refreshCatalog, installRuntime, uninstallRuntime,
+  normalizeVersion: Catalog.normalizeVersion, normalizeSettings, getState, refreshCatalog, installRuntime, uninstallRuntime, trashFirst: true,
   applySettingsUpdate: (action, payload, settings) => action === "setDefault"
     ? { ...normalizeSettings(settings), defaultVersion: payload?.version ? Catalog.normalizeVersion(payload.version) : null } : settings,
   updateSettingsAfterInstall: (settings, installed) => normalizeSettings(settings).defaultVersion ? settings : { ...settings, defaultVersion: installed.version },

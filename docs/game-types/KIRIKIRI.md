@@ -55,26 +55,28 @@ The adapter makes a small number of changes to the private script copies. Source
 
 ### KAG3 polyfill and fonts
 
-KiriKiri SDL2 needs the SDL version of the KAG3 scripts, taken from [krkrsdl2/kag3](https://github.com/krkrsdl2/kag3/tree/fe6d40e9a1667293ebb053af7f06374b7dac9292) at `fe6d40e9a1667293ebb053af7f06374b7dac9292`, together with its fonts. These scripts and fonts remain in the installed krkrsdl2 package. Preparation verifies the package and resource manifests, records the selected resource revision and manifest hash, and refers to those files from each prepared game. The included Ume Gothic O5 font carries its embedded license notice.
+KiriKiri SDL2 needs the SDL version of the KAG3 scripts, taken from [krkrsdl2/kag3](https://github.com/krkrsdl2/kag3/tree/fe6d40e9a1667293ebb053af7f06374b7dac9292) at `fe6d40e9a1667293ebb053af7f06374b7dac9292`, together with its font. Resources already present in a sealed installed krkrsdl2 package are reused. Preparation verifies the package and resource manifests, records the selected resource revision and manifest hash, and refers to those files from each prepared game. The Ume Gothic O5 font carries its embedded license notice.
 
-If the selected engine version lacks these resources, preparation takes them from a compatible installed package, or installs one, without changing the engine selection or defaults. Verified polyfill caches from earlier installations remain usable.
+If the selected engine version lacks these resources, preparation uses a compatible installed package or the bundled KAG3 scripts. The script-only route downloads the pinned Ume Gothic O5 font on first Play after consent, checks its size and SHA-256, and prepares the shared resource folder in permanent Application Support. The original resource manifest and file hashes remain unchanged. Existing verified resource folders remain usable offline. The engine selection and defaults stay unchanged.
 
 ## Saves
 
-New saves go to `userData/games/<gameId>/modules/kirikiri/saves/`, and the inspector shows this location before the first launch. A per-game save-folder override is honored by the native runtime, and save browsing and snapshots use the same active folder. Files in the original game folder are left alone unless that folder is chosen as the override.
+KAG chooses save locations from its game configuration and the native runtime data path. `dataName` supplies the prefix for system and configuration save files; `saveDataID` validates save contents but does not choose a separate directory. Without a save-folder override, Play leaves these locations as KAG chooses them.
 
-The save folder is passed to the interpreter with `-datapath`, ending the path with a slash, because the SDL2 backend keeps the path exactly as supplied and KAG appends file names directly to `System.dataPath`. When Play prepares an archived KAG3 game, it points only its own copy of the game configuration at `System.dataPath`.
+Import compares the game's known save location and file-name prefix with those of the other games in the library. When they collide, import can select a separate folder through the native `-datapath` option and records it as a visible per-game save-folder setting. Otherwise the game's own locations, distinct prefixes and explicit native arguments stay in use, and dynamic TJS configurations stay unchanged.
+
+The selected folder is passed with `-datapath`, ending the path with a slash because KAG appends file names directly to `System.dataPath`. For archived KAG3 games, only the adapted configuration uses `System.dataPath`; the original archives stay unchanged. The adapted scripts preserve the original game's executable-relative asset paths.
 
 Some older KAG configurations ignore that path. If a loose project's `saveDataLocation` resolves relative to `System.exePath`, the game would write inside the runtime bundle, so launch is refused before that can happen. Loose native projects are never rewritten.
 
-Existing portable saves are not migrated automatically; they must be imported into the chosen save folder. Removing a game deletes its per-game launcher data, including the default saves, but keeps runtime registrations and saves in an external override folder.
+Save folders from earlier MacLauncher versions are recovered once when the native destination can be used safely. Unique files and conflicting versions are preserved at that destination. A forced save folder from MacLauncher 0.5.1 retained after unsuccessful recovery remains selected through the visible save-folder override. Explicit folders and `-datapath` options keep their settings. KAG3 compatibility profiles and shared runtime resources remain in use.
 
 ## Settings
 
 | Setting | Description |
 | --- | --- |
 | Version | **Default** or a specific installed version for this game. |
-| Extra runtime options | One option per line, for example `-drawthread=4`. MacLauncher sets `-datapath` itself. |
+| Extra runtime options | One option per line, for example `-drawthread=4`. Save-folder overrides set `-datapath`. |
 
 ## Script export
 

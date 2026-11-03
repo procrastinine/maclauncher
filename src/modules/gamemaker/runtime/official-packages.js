@@ -12,6 +12,7 @@ function cachedPackages(userDataDir, version) {
   try {
     const build = getCatalogVersion(version, userDataDir);
     const root = path.join(userDataDir, "runtimes", "gamemaker-official", "artifacts", version);
+    // Each cache records the launcher-selected Igor/package CPU independently of the physical Mac.
     const observed = JSON.parse(fs.readFileSync(path.join(root, `observed-${process.arch}.json`), "utf8"));
     const packages = build.packages.map(pin => {
       const entry = observed[pin.filename];

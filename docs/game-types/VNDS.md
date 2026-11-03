@@ -9,7 +9,7 @@ VNDS is a visual novel script format. MacLauncher plays games that have already 
 
 ## Game files and saves
 
-Original game folders and supported ZIP archives are read in place. Saves and session settings are kept in the game's private launcher data. AAC and M4A audio that the interpreter cannot play is converted once and cached in the same place.
+Original game folders and supported ZIP archives are read in place, with the original novel folder as the working directory. Saves use `~/Library/Application Support/LOVE/VNDS-LOVE/novels/<novel folder>`, following VNDS-LOVE's folder identity and LÖVE's [save-directory rules](https://github.com/love2d/love/blob/11.5/src/modules/filesystem/physfs/Filesystem.cpp). Import assigns a visible save-folder override based on the library game ID only when another library game already uses the same save location. An existing override remains the effective save location. AAC and M4A audio that the interpreter cannot play is converted once and cached in launcher data. The shared interpreter, archive mount plan and converted audio remain separate from game content and saves.
 
 The inspector edits saves, and **Show scripts** opens the game's existing script folder in Finder.
 

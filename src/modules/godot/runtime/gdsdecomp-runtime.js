@@ -1,8 +1,8 @@
 const fs = require("node:fs");
+const { cloneOrCopy } = require("../../shared/copy-file");
 const os = require("node:os");
 const path = require("node:path");
-const { spawn } = require("node:child_process");
-const { attachAbortSignal, createAbortError, throwIfAborted } = require("../../shared/runtime/download-utils");
+const { throwIfAborted } = require("../../shared/runtime/download-utils");
 const Upstream = require("../../shared/runtime/upstream");
 const { macDownloads, extractArchive } = require("../../shared/runtime/release-files");
 
@@ -199,37 +199,8 @@ function listInstalled(userDataDir) {
   return out;
 }
 
-function runCommand(cmd, args, options) {
-  const { signal, ...spawnOptions } = options || {};
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { ...spawnOptions, stdio: ["ignore", "pipe", "pipe"] });
-    let stderr = "";
-    const removeAbort = attachAbortSignal(signal, () => {
-      try {
-        child.kill("SIGTERM");
-      } catch {}
-    });
-    child.stderr.on("data", b => {
-      stderr += b.toString("utf8");
-    });
-    child.on("error", err => {
-      removeAbort();
-      reject(err);
-    });
-    child.on("close", code => {
-      removeAbort();
-      if (signal?.aborted) return reject(createAbortError());
-      if (code === 0) return resolve(true);
-      const err = new Error(`${cmd} failed (${code})`);
-      err.stderr = stderr;
-      reject(err);
-    });
-  });
-}
-
 async function copyBundle(src, dest, signal) {
-  const ditto = fs.existsSync("/usr/bin/ditto") ? "/usr/bin/ditto" : "ditto";
-  await runCommand(ditto, [src, dest], { signal });
+  await cloneOrCopy(src, dest, { signal });
 }
 
 // One row per version, from its newest release.

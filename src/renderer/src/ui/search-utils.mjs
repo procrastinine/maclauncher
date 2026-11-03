@@ -10,19 +10,26 @@ function matchesGameQuery(game, normalizedQuery) {
   return name.includes(normalizedQuery) || path.includes(normalizedQuery);
 }
 
-function filterGames(games, query, allowedModuleIds) {
+// The type filter covers entries of the filterable modules (the type options).
+// Entries that a module creates without detection, such as a running window
+// session, always pass it.
+function filterGames(games, query, allowedModuleIds, filterableModuleIds = null) {
   const list = Array.isArray(games) ? games : [];
   const normalized = normalizeSearchQuery(query);
   const allowed =
     allowedModuleIds && typeof allowedModuleIds[Symbol.iterator] === "function"
       ? new Set(allowedModuleIds)
       : null;
+  const filterable =
+    filterableModuleIds && typeof filterableModuleIds[Symbol.iterator] === "function"
+      ? new Set(filterableModuleIds)
+      : null;
   const enforceTypeFilter = Boolean(allowed);
-  if (enforceTypeFilter && allowed.size === 0) return [];
+  if (enforceTypeFilter && allowed.size === 0 && !filterable) return [];
   return list.filter(game => {
     if (enforceTypeFilter) {
       const moduleId = typeof game?.moduleId === "string" ? game.moduleId : "";
-      if (!allowed.has(moduleId)) return false;
+      if (!allowed.has(moduleId) && (!filterable || filterable.has(moduleId))) return false;
     }
     if (!normalized) return true;
     return matchesGameQuery(game, normalized);

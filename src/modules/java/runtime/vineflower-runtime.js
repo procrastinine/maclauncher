@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../../shared/copy-file");
 const os = require("node:os");
 const path = require("node:path");
 
@@ -243,7 +244,7 @@ async function installVersion({
 
     safeRm(installDir);
     ensureDir(installDir);
-    fs.copyFileSync(tmpJar, jarPath);
+    cloneOrCopySync(tmpJar, jarPath);
 
     writeInstallMeta(installDir, {
       version: requestedVersion,

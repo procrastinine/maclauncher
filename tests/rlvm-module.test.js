@@ -87,6 +87,7 @@ test("runtime switching refreshes the persisted save folder before another launc
   Store.writeGameRecord(context.userDataDir, { ...rlvm, runtimeId: "siglus" });
   const siglus = await operations.refreshSaveLocations(rlvm, {});
   assert.equal(siglus.runtimeId, "siglus", "selection comes from the current stored record");
+  assert.equal(siglus.defaultSaveDir, path.join(entry.gamePath, "savedata_rs"));
   assert.notEqual(siglus.defaultSaveDir, rlvm.defaultSaveDir);
   assert.equal(Store.readGameRecord(context.userDataDir, entry.gameId).defaultSaveDir, siglus.defaultSaveDir);
   assert(events.some(event => event.type === "entryChanged" && event.value.gameId === entry.gameId));

@@ -131,7 +131,7 @@ test("every named catalog record is listed; records this launcher cannot use sho
   const later = { ...hostedRecord("0.41.0-MCLv5"), schemaVersion: 3, futureLayout: true }; delete later.asset;
   const damaged = hostedRecord("0.41.0-MCLv4"); damaged.asset = { ...damaged.asset, sha256: "not-a-checksum" };
   const otherCpu = { ...hostedRecord("0.41.0-MCLv8"), arch: "riscv64", launcherArchitectures: ["riscv64"] };
-  const rows = [later, { ...hostedRecord("0.41.0-MCLv3"), launcherContract: 2 }, damaged, otherCpu,
+  const rows = [later, { ...hostedRecord("0.41.0-MCLv3"), launcherContract: 3 }, damaged, otherCpu,
     { ...hostedRecord("0.41.0-MCLv2"), manifestRelative: "package.json" }, { ...hostedRecord("0.41.0-MCLv1"), launcherContract: 1, futureCapability: "x" },
     { version: "../escape" }, null];
   const reasons = {

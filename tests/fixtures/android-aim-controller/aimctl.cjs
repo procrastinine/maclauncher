@@ -43,7 +43,7 @@ module.exports=function(config){
   if(guest[1]==='path'){if(mode()==='app-host')throw Error('Unsupported package shell used in app-host');if(read('installed')==='yes')console.log('package:/data/app/example/base.apk');return;}
   if(mode()==='app-host')throw Error('Package installation used app-host');
   if(guest[1]==='install-create'){
-   if(config.cancelInstall){fs.writeFileSync(file('install-active'),'1');worker();setInterval(()=>{},1000);return;}
+   if(config.cancelInstall){fs.writeFileSync(file('install-active'),'1');worker();require('../../helpers/fixture-process').waitForTestEnd();return;}
    console.log('Success: created install session [42]');return;
   }
   if(guest[1]==='install-commit'){

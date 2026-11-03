@@ -17,6 +17,15 @@ unsigned admitted(const GenerationDelivery&mode){
  return count;
 }
 int main(){
+ // G4: every non-window presenter passes zero even on a known display.
+ // This preserves the v0.5.1 capacity/deferral for every positive period.
+ for(const unsigned drawables:{2u,3u,8u})for(const double period:{1./24,1./30,1./60,1./120})for(const bool subframes:{false,true}){
+  const auto game=generationDelivery(true,subframes,0,period,drawables);
+  CHECK(!game.displayLimited&&game.deferred&&game.sourceCapacity==1);
+  const auto ordinary=generationDelivery(false,subframes,0,period,drawables);
+  CHECK(!ordinary.displayLimited&&ordinary.deferred==subframes&&ordinary.sourceCapacity==std::min(4u,drawables));
+  CHECK(displayVisibleImages(0,period,32)==32);
+ }
  const auto baseline=generationDelivery(false,false,60,1./60,3);
  const auto limited=generationDelivery(true,false,60,1./60,3);
  CHECK(!baseline.displayLimited&&!baseline.deferred&&baseline.sourceCapacity==3);

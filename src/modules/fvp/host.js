@@ -17,8 +17,11 @@ function hostCommand(launch, install, { resolveRoot = Python.resolveEmbeddedPyth
   if (!path.isAbsolute(dylibPath || "") || !fs.statSync(dylibPath).isFile()) throw new Error("The RFVP native library is missing. Reinstall the selected runtime.");
   const helperPath = resolveScript();
   const architectures = Native.readMachOArchitectures(pythonPath), libraryArchitectures = Native.readMachOArchitectures(dylibPath, { allowLibrary: true });
+  // The included Python host and loaded RFVP library must match this launcher package’s process ABI.
   const architecture = process.arch === "x64" ? "x86_64" : process.arch;
   if (!architectures.includes(architecture) || !libraryArchitectures.includes(architecture)) throw new Error("The included game host and RFVP runtime must support this Mac's CPU.");
-  return { executablePath: pythonPath, args: ["-I", "-B", "-u", helperPath, dylibPath, launch.playRoot, launch.textEncoding, launch.textHiDpi ? "1" : "0"] };
+  const gameRoot = launch.gameRoot || launch.root;
+  if (!path.isAbsolute(gameRoot || "")) throw new Error("The RFVP game directory is missing.");
+  return { executablePath: pythonPath, args: ["-I", "-B", "-u", helperPath, dylibPath, gameRoot, launch.textEncoding, launch.textHiDpi ? "1" : "0"] };
 }
 module.exports = { hostCommand, resolveHostScript };

@@ -10,6 +10,9 @@ def main():
     library_path, game_root, encoding, hidpi = sys.argv[1:5]
     if not os.path.isabs(library_path) or not os.path.isabs(game_root):
         raise ValueError("RFVP paths must be absolute.")
+    # Relative engine data and save paths belong to the actual selected game
+    # root. The published C API supplies no independent save-directory option.
+    os.chdir(game_root)
     library = ctypes.CDLL(library_path)
     entry = library.rfvp_run_entry
     entry.argtypes = (ctypes.c_char_p, ctypes.c_char_p)

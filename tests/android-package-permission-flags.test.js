@@ -12,7 +12,7 @@ test('package metadata avoids grant verification and requested permissions retai
  const source=path.resolve('src/modules/android/native/java/maclauncher/android/framework');
  run('javac',['--release','21','-cp',cp,'-d',output,...['HostPackages','HostPermissions'].map(name=>path.join(source,name+'.java')),'tests/fixtures/android-package-metadata/PackagePermissionFlagsProbe.java','tests/fixtures/android-window-session/RuntimeFixture.java','tests/fixtures/android-framework-services/SignApkSet.java']);
  for(const role of ['client','server']){
-  const directory=path.join(output,role);fs.mkdirSync(directory);fs.copyFileSync('tests/fixtures/android-framework-services/manifests/remote-provider-'+role+'.xml.bin',path.join(directory,'AndroidManifest.xml'));
+  const directory=path.join(output,role);fs.mkdirSync(directory);fs.copyFileSync(require('./helpers/manifest-fixtures').file(t,'android-framework-services/manifests/remote-provider-'+role),path.join(directory,'AndroidManifest.xml'));
   run('jar',['--create','--file',path.join(output,role+'-unsigned.apk'),'-C',directory,'AndroidManifest.xml']);
  }
  for(const name of ['publisher','foreign'])run('keytool',['-genkeypair','-alias','owned','-keyalg','RSA','-keysize','2048','-dname','CN=Package Fixture','-validity','2','-storetype','PKCS12','-keystore',path.join(output,name+'.p12'),'-storepass','test-only-password','-keypass','test-only-password','-noprompt']);

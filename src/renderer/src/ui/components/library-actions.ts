@@ -3,6 +3,7 @@ import type { ModuleUiAction, RecentGame, RuntimeId, RuntimeSettingsContext } fr
 export type LibraryActions = {
   onPlay: (gamePath: string) => Promise<void>;
   onStop: (gamePath: string) => Promise<void>;
+  onRemoveSessionTarget: (gamePath: string, id: string) => Promise<void>;
   onMoveGame: (gamePath: string, delta: number) => Promise<void>;
   onSetFavorite: (gamePath: string, favorite: boolean) => Promise<void>;
   onSaveGameNotes: (gamePath: string, notes: string) => Promise<void>;

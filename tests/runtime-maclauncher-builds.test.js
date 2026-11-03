@@ -106,7 +106,7 @@ test("release identities and every required package field are checked before exp
 
 test("a later record schema or launcher contract is listed with a reason; added fields are ignored", () => {
   const later = { ...record("2.0"), schemaVersion: 3 }; delete later.asset;
-  const contract = { ...record("3.0"), launcherContract: 2 };
+  const contract = { ...record("3.0"), launcherContract: 3 };
   const additive = { ...record("4.0"), launcherContract: 1, futureCapability: { values: [1, 2] } };
   const invalid = { ...record("5.0"), launcherContract: 0 };
   const result = Catalogs.validateProjectCatalog({ ...catalog(record("1.0"), later, contract, additive, invalid), schemaVersion: 3, notes: "added" }, options);
@@ -116,10 +116,11 @@ test("a later record schema or launcher contract is listed with a reason; added 
   assert.deepEqual(result.unavailable.map(item => [item.version, item.reason]), [["2.0", "Requires a newer MacLauncher."],
     ["3.0", "Requires a newer MacLauncher."], ["5.0", "The runtime launcher contract is invalid."]]);
   assert.throws(() => Catalogs.validateProjectRecord(contract, options), /newer MacLauncher/);
-  assert.equal(Catalogs.validateProjectRecord(contract, { ...options, launcherContract: 2 }).launcherContract, 2);
-  assert.deepEqual(Catalogs.validateProjectCatalog(catalog(contract), { ...options, launcherContract: 2 }).packages.map(item => item.version), ["3.0"]);
+  assert.equal(Catalogs.validateProjectRecord(contract, { ...options, launcherContract: 3 }).launcherContract, 3);
+  assert.deepEqual(Catalogs.validateProjectCatalog(catalog(contract), { ...options, launcherContract: 3 }).packages.map(item => item.version), ["3.0"]);
   assert.throws(() => Catalogs.validateProjectCatalog({ ...catalog(record()), schemaVersion: 1 }, options), /selected project/);
-  assert.throws(() => Catalogs.validateProjectCatalog(catalog(record()), { ...options, launcherContract: 0 }), /launcher contract/);
+  for (const launcherContract of [0, null, 1.5])
+    assert.throws(() => Catalogs.validateProjectCatalog(catalog(record()), { ...options, launcherContract }), /launcher contract/);
 });
 
 test("unsafe versions and invalid source identities never construct a catalog URL or download", async () => {

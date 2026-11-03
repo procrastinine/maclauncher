@@ -96,6 +96,7 @@ async function exportVideo({entry, input, output, width, height, scale, maxHeigh
   if (!userDataDir || !path.isAbsolute(userDataDir)) throw new Error("The video export settings directory is unavailable.");
   input = fs.realpathSync(input);if (!fs.statSync(input).isFile()) throw new Error("The source video was not found.");
   output = outputFile(input, output);const sizeArgs = dimensions({width, height, scale, maxHeight});
+  // Offline export uses the included video host selected for this launcher process, including Intel under Rosetta.
   const identities = [], options = {...context, root, runtimeIdentities: identities, graphicsHost: "explicit", graphicsArchitecture: process.arch,
     graphicsInputs: {source: "offline-video", nativeVideo: false, sourceResolution: false, depth: false, motionVectors: false, methods: []}};
   let plan = exportPlan(entry, options);

@@ -138,8 +138,9 @@ remaining settings.
 
 MacLauncher Android and Mac.apk keep separate account stores; AIM has no account
 controls. Both account panels in **Settings → Android** sign in through the
-browser by default, and **External → Android** uses the same shared account
-list. The account table scrolls and has a refresh icon and **Sign in in
+browser by default. **External → Android** can use those provider accounts or
+a remembered browser sign-in without starting Android. The account table
+scrolls and has a refresh icon and **Sign in in
 browser** in its toolbar. Saved accounts appear immediately, without
 starting an Android runtime. Refresh reads the original provider again, and the
 list updates after sign-in and account changes without reopening the window.
@@ -149,7 +150,9 @@ Sign-in opens a native Google account window, where Google handles passwords
 and account challenges; closing the window cancels the attempt. Launcher
 preferences record which accounts are selected but never passwords or tokens,
 and an optional remembered browser authorization is kept in the launcher's
-encrypted session storage. Removing an Android account also disconnects a matching External
+encrypted session storage. The browser window keeps cookies only in memory;
+**Use saved sign-in** reuses the remembered authorization after a restart.
+Removing an Android account also disconnects a matching External
 selection; other provider accounts are unaffected.
 
 How games use these accounts depends on the runtime: see
@@ -489,11 +492,16 @@ One original AccountManagerService holds the launcher's account database and
 authenticator sessions. Authenticators keep their verified package identities
 and run in separate processes. Listing accounts reads installed files and does
 not authorize network requests. Signing in from Settings or External opens the
-same native Google account window. After Google handles the password and any
-challenges, the result is registered with microG through the original
-AccountManager APIs under microG's verified package identity. Sign-in downloads the account runtime, Java and microG packages when they are missing. The microG Services and Companion APKs come from the newest [microG GmsCore release](https://github.com/microg/GmsCore/releases) that offers both. microG names each APK `<package>-<versionCode>.apk`. A downloaded APK must be signed with microG's certificate, have the package name and version code that its file name gives, and match the SHA-256 that GitHub publishes when there is one. The installation records each file's SHA-256 and keeps working offline. Neither a
+same native Google account window. External uses the exchanged authorization
+directly for Google Play. In Settings, the result is registered with microG
+through the original AccountManager APIs under microG's verified package
+identity. Settings sign-in downloads the account runtime, Java and microG
+packages when they are missing. The microG Services and Companion APKs come from the newest [microG GmsCore release](https://github.com/microg/GmsCore/releases) that offers both. microG names each APK `<package>-<versionCode>.apk`. A downloaded APK must be signed with microG's certificate, have the package name and version code that its file name gives, and match the SHA-256 that GitHub publishes when there is one. The installation records each file's SHA-256 and keeps working offline. Neither a
 game nor a background provider request can open interactive Google sign-in by
 itself, even when no account is selected.
+[Storage upkeep](../development/DATA_MODEL.md#derived-data-upkeep) keeps the
+selected microG release and every release whose APKs are still installed, and
+it removes other recognized releases while the launcher is idle.
 
 For recognized microG Services and Companion packages, Google integration
 exposes the provider's declared compatibility certificate to Google client
@@ -662,6 +670,10 @@ shadows and simulated service environment are not part of the game runtime.
 Klepton and the upstream native implementations share the same graphics, audio,
 storage and process services. The JDK owns the Java boot classes and the JVM's
 memory and thread lifecycle.
+The IDs of ended processes and threads are reused before higher IDs are allocated.
+Each Android process or thread ID is reserved by a POSIX `fcntl` write lock on
+its numbered lease file. Releasing an ID closes its lease descriptor; macOS
+releases the process's remaining lease locks when that process exits.
 
 Shared JVM launch options expose the JDK collection delegates and monitor fields
 that Android's desugared Java library wrappers use, so those wrappers keep the
@@ -701,6 +713,8 @@ declarations connect ARM32 callers to the same implementation.
 
 ### Mac.apk
 
+Launch-argument, policy, text-input and account-control JARs come from the included `android-launcher` package, built and attested on GitHub. The app package lock records that package's release and digest. The publisher's apksig verifier is a separate, unpacked file in the app, and Java runs it from there; package inspection does not copy it into launcher data.
+
 [Mac.apk](https://github.com/kksimp/Mac.apk) runs ARM64 Android apps, with
 optional Google sign-in; its versions are the publisher's own releases. Installation reads each release's macOS requirement from the downloaded app's `LSMinimumSystemVersion` and finds the runtime wherever the download places the app.
 
@@ -725,6 +739,8 @@ Mac.apk application windows and Dock entries use the game's name.
 
 ### AIM
 
+The managed `android-aim` package, built and attested on GitHub, supplies the AIM controller from the selected runtime installation.
+
 [AIM](https://github.com/hahnlee/aim) runs applications with Android services
 and original ART, without booting a Linux kernel or a virtual machine. It
 requires macOS 26.0 or later. MacLauncher builds AIM from an exact upstream
@@ -738,6 +754,11 @@ In **Runtimes → Downloads**, an image download stays cancelable through checks
 verification and preparation, and a downloaded image is reused. Image preparations are shared across host versions
 that have identical system-image and overlay inputs, so selecting another
 compatible host keeps the existing image storage and application data.
+Extraction and overlay writes require a mounted image volume. Before attaching
+an image, preparation moves aside any nonempty mount folder that is not a
+mounted volume, and it leaves mounted volumes attached. Storage upkeep removes
+the folders moved aside while the launcher is idle, and it keeps disk-image
+backing files and application data.
 
 AIM applications run offline and without Google account integration. Other
 behavior:

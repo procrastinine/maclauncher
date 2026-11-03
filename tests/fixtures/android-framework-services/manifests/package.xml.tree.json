@@ -1,0 +1,103 @@
+{
+  "resourceIds": {
+    "name": 16842755,
+    "enabled": 16842766,
+    "exported": 16842768,
+    "authorities": 16842776,
+    "value": 16842788,
+    "minSdkVersion": 16843276,
+    "versionCode": 16843291,
+    "versionName": 16843292,
+    "targetSdkVersion": 16843376,
+    "compileSdkVersion": 16844146,
+    "compileSdkVersionCodename": 16844147
+  },
+  "tree": {
+    "name": "manifest",
+    "attrs": {
+      "versionCode": 12,
+      "versionName": "1.2",
+      "compileSdkVersion": 36,
+      "compileSdkVersionCodename": "16",
+      ":package": "owned.packages",
+      ":platformBuildVersionCode": 36,
+      ":platformBuildVersionName": 16
+    },
+    "children": [
+      {
+        "name": "uses-sdk",
+        "attrs": {
+          "minSdkVersion": 21,
+          "targetSdkVersion": 35
+        },
+        "children": []
+      },
+      {
+        "name": "application",
+        "attrs": {},
+        "children": [
+          {
+            "name": "property",
+            "attrs": {
+              "name": "owned.application.property",
+              "value": "manifest"
+            },
+            "children": []
+          },
+          {
+            "name": "meta-data",
+            "attrs": {
+              "name": "application",
+              "value": "value"
+            },
+            "children": []
+          },
+          {
+            "name": "provider",
+            "attrs": {
+              "name": "owned.packages.Provider",
+              "enabled": false,
+              "exported": false,
+              "authorities": "owned.packages.provider"
+            },
+            "children": [
+              {
+                "name": "property",
+                "attrs": {
+                  "name": "owned.provider.property",
+                  "value": false
+                },
+                "children": []
+              },
+              {
+                "name": "meta-data",
+                "attrs": {
+                  "name": "provider",
+                  "value": "real"
+                },
+                "children": []
+              }
+            ]
+          },
+          {
+            "name": "service",
+            "attrs": {
+              "name": "owned.packages.Service",
+              "exported": false
+            },
+            "children": [
+              {
+                "name": "property",
+                "attrs": {
+                  "name": "owned.service.property",
+                  "value": 7
+                },
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

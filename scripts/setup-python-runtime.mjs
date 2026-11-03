@@ -5,10 +5,14 @@ import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { fetch } from "undici";
 
 const { embeddedPythonProfile } = createRequire(import.meta.url)("../src/modules/shared/runtime/python.js");
+const Host = createRequire(import.meta.url)("../src/modules/shared/runtime/host-capabilities.js");
 const ARCHITECTURES = Object.freeze({ arm64: "arm64", aarch64: "arm64", x64: "x64", x86_64: "x64" });
+export function assertPythonBuildHost(arch, host = Host.getHostCapabilities()) {
+  if (host.platform !== "darwin" || arch === "arm64" && host.hardwareArch !== "arm64")
+    throw new Error("The Apple Silicon Python build installs on an Apple Silicon Mac.");
+}
 export function verifyArchive(file, pin) {
   if (!fs.lstatSync(file).isFile() || crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex") !== pin.sha256)
     throw new Error("Python build input does not match its pinned SHA-256.");
@@ -109,6 +113,7 @@ function normalizePythonEntrypoints(destDir) {
 // Installs the publisher build for one app architecture. The Intel build runs
 // under Rosetta on Apple Silicon while its pinned packages are installed.
 export async function main(argv = process.argv.slice(2)) {
+  // Select the invoking process's publisher build by default, including under Rosetta.
   let dest = "src/resources/python", arch = process.arch;
   for (let i = 0; i < argv.length; i++) {
     const name = argv[i], value = argv[++i];
@@ -119,7 +124,7 @@ export async function main(argv = process.argv.slice(2)) {
     else throw new Error("Unsupported Python setup option or pinned version.");
   }
   const PIN = embeddedPythonProfile(arch);
-  if (process.platform !== "darwin" || arch === "arm64" && process.arch !== "arm64") throw new Error("The Apple Silicon Python build installs on an Apple Silicon Mac.");
+  assertPythonBuildHost(arch);
   const destination = path.resolve(dest), temporary = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-python-"));
   try {
     const cache = path.resolve("dist/upstream-downloads");

@@ -1,4 +1,5 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
+const { cloneOrCopySync } = require("../shared/copy-file");
 const Zip = require("../shared/runtime/zip");
 const { runDownloadTask } = require("../shared/runtime/download-manager");
 const Upstream = require("../shared/runtime/upstream");
@@ -128,9 +129,9 @@ function create({ storageRoot, inventory, hash, ...dependencies }) {
           if (stat.isSymbolicLink() || !(stat.isFile() || stat.isDirectory())) throw new Error("The plugin source must be a regular file or folder.");
           if (stat.isDirectory()) {
             inventory(resolved.local);
-            fs.cpSync(resolved.local, payload, { recursive: true });
+            cloneOrCopySync(resolved.local, payload);
           } else if (/\.zip$/i.test(resolved.local)) await extract(resolved.local, payload, combined);
-          else if (/\.(lua|js)$/i.test(resolved.local)) fs.copyFileSync(resolved.local, path.join(payload, path.basename(resolved.local)));
+          else if (/\.(lua|js)$/i.test(resolved.local)) cloneOrCopySync(resolved.local, path.join(payload, path.basename(resolved.local)));
           else throw new Error("Choose a Lua script, JavaScript script, ZIP package or plugin folder.");
         } else {
           const downloaded = path.join(stage, resolved.archive ? "download.zip" : `plugin${resolved.extension}`);

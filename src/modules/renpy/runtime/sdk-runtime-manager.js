@@ -233,6 +233,7 @@ module.exports = Custom.configure({
   getState,
   installRuntime,
   uninstallRuntime,
+  trashFirst: true,
   performInstalledAction,
   updateSettingsAfterInstall,
   updateSettingsAfterUninstall,

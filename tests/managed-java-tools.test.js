@@ -303,3 +303,15 @@ test("Java tools reuse selected or compatible installed hosts and consent before
   await assert.rejects(JavaHost.ensure({ ...context, confirmRuntimeInstall: async () => false }, 17, { manager }), { code: "ABORT_ERR" });
   assert.deepEqual(calls, [], "Declined host consent cannot query release metadata");
 });
+
+
+test("held coarse JAR times recheck installed tool bytes while status remains metadata only", async t => {
+  const {holdFileTimes} = require("./helpers/held-file-times.cjs"), {manager, release, userDataDir, archive} = setup(t);
+  Harness.network.routes = routes("example/tool", [release("1.0.0")], {files: {"example.zip": archive}});
+  t.after(() => {Harness.network.routes = null;});await manager.refreshCatalog({userDataDir, force: true});
+  const installed = await manager.installRuntime({userDataDir, version: "1.0.0", confirmRuntimeInstall: async () => true});
+  holdFileTimes(t, [installed.jarPath]);assert.ok(manager.core.resolve({userDataDir, version: "1.0.0"}));
+  const bytes = fs.readFileSync(installed.jarPath);bytes[0] ^= 1;fs.writeFileSync(installed.jarPath, bytes);
+  assert.ok(manager.core.resolve({userDataDir, version: "1.0.0", verification: "status"}));
+  assert.equal(manager.core.resolve({userDataDir, version: "1.0.0"}), null);
+});

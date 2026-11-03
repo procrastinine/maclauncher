@@ -24,7 +24,12 @@ function fixture(t) {
   const declaration = { id: "steam-api-helper", version, launcherArchitectures: [process.arch],
     directoryRelative: `steam-api-helper/${version}/universal`, manifestRelative: "helper.json" };
   const declarations = [declaration];
-  const seal = () => { const text = JSON.stringify(manifest); fs.writeFileSync(path.join(directory, "helper.json"), text, { mode: 0o644 }); declaration.manifestSha256 = hash(text); };
+  const seal = () => {
+    const text = JSON.stringify(manifest);
+    fs.writeFileSync(path.join(directory, "helper.json"), text, { mode: 0o644 });
+    declaration.manifestSha256 = hash(text);
+    declaration.files = [...manifest.files, { path: "helper.json", size: Buffer.byteLength(text), mode: 0o644, sha256: declaration.manifestSha256 }];
+  };
   seal();
   const userDataDir = path.join(root, "data"), context = { resourcesRoot: root, userDataDir, baseEnvironment: { PATH: "/usr/bin:/bin" } };
   const request = { required: true, arch: "arm64", appId: 480, symbols: ["SteamAPI_Init", "SteamAPI_Shutdown"], preferOffline: true,

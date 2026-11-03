@@ -2,6 +2,7 @@
 #import <Metal/Metal.h>
 #include "../frame.h"
 #include "../command-order.hpp"
+#include "../payload-files.hpp"
 #include "sdk-compat.hpp"
 #include "projection.hpp"
 #include <algorithm>
@@ -198,8 +199,8 @@ FfxErrorCode createPipeline(FfxFsr2Interface *api,FfxFsr2Pass pass,const FfxPipe
     unsigned variant=(f&FFX_FSR2_ENABLE_HIGH_DYNAMIC_RANGE?1:0)|(f&FFX_FSR2_ENABLE_DEPTH_INVERTED?2:0)|(f&FFX_FSR2_ENABLE_DISPLAY_RESOLUTION_MOTION_VECTORS?4:0)|(f&FFX_FSR2_ENABLE_MOTION_VECTORS_JITTER_CANCELLATION?8:0);
     NSString *base=[NSString stringWithFormat:@"%s/%s/%u/%u",c.shaderDirectory.c_str(),shaderGroup,variant,(unsigned)pass];
     NSError *error=nil;
-    NSString *source=[NSString stringWithContentsOfFile:[base stringByAppendingString:@".metal"] encoding:NSUTF8StringEncoding error:&error];
-    NSData *metadata=[NSData dataWithContentsOfFile:[base stringByAppendingString:@".json"]];
+    NSString *source=[NSString stringWithContentsOfFile:maclauncher::payloadFile([base stringByAppendingString:@".metal"]) encoding:NSUTF8StringEncoding error:&error];
+    NSData *metadata=[NSData dataWithContentsOfFile:maclauncher::payloadFile([base stringByAppendingString:@".json"])];
     NSDictionary *info=metadata?[NSJSONSerialization JSONObjectWithData:metadata options:0 error:&error]:nil;
     if(!source || !info) return fail(c,"FidelityFX shader resources are unavailable.");
     MTLCompileOptions *options=[MTLCompileOptions new]; options.languageVersion=MTLLanguageVersion2_3;

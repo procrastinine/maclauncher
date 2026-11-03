@@ -43,7 +43,7 @@ test("FVP rejects unrelated HCB suffixes, invalid offsets, unknown syscalls and 
   assert.equal(Inspect.inspectGame(root).archiveCount, 0); // Valid loose HCB still identifies the engine.
 });
 
-test("FVP warm preparation observes new translations while preserving an explicitly selected original script", t => {
+test("FVP warm metadata preserves explicit translations through the required script adapter", t => {
   const root = directory(t), original = path.join(root, "original"); fs.mkdirSync(original); fixture(original);
   const context = { userDataDir: path.join(root, "library") }, folder = { gameId: "folder", gamePath: original };
   Prepare.prepareLaunch(folder, context);
@@ -51,17 +51,27 @@ test("FVP warm preparation observes new translations while preserving an explici
   Prepare.prepareLaunch(chosen, context);
   fs.writeFileSync(path.join(original, "game.bch"), script("Translation"));
   const translated = Prepare.prepareLaunch(folder, context), retained = Prepare.prepareLaunch(chosen, context);
-  assert.equal(folder.moduleData.scriptName, "game.bch"); assert.ok(fs.existsSync(path.join(translated.playRoot, "game.bch")));
-  assert.equal(chosen.moduleData.scriptName, "game.hcb"); assert.ok(fs.existsSync(path.join(retained.playRoot, "game.hcb")));
+  assert.equal(folder.moduleData.scriptName, "game.bch"); assert.equal(translated.scriptPath, path.join(original, "game.bch"));
+  assert.equal(chosen.moduleData.scriptName, "game.hcb"); assert.equal(retained.scriptPath, path.join(original, "game.hcb"));
+  for (const launch of [translated, retained]) { assert.equal(launch.gameRoot, path.join(launch.directory, "play")); }
+  assert.equal(fs.readlinkSync(path.join(retained.gameRoot, "game.hcb")), path.join(original, "game.hcb"));
+  assert.equal(fs.readlinkSync(path.join(translated.gameRoot, "game.bch")), path.join(original, "game.bch"));
 });
 
-test("FVP failed source-view replacement retains the previous launch view and private saves", t => {
+test("FVP direct preparation leaves unrelated old views and saves untouched", t => {
   const root = directory(t), original = path.join(root, "original"); fs.mkdirSync(original); fixture(original);
-  const entry = { gameId: "retain", gamePath: original }, context = { userDataDir: path.join(root, "library") }, first = Prepare.prepareLaunch(entry, context);
-  const inode = fs.statSync(first.playRoot).ino; fs.writeFileSync(path.join(first.saveRoot, "rfvp_s000.bin"), "retained");
-  fs.symlinkSync(path.join(original, "graph.bin"), path.join(original, "unsupported-alias.bin"));
-  assert.throws(() => Prepare.prepareLaunch(entry, context), /aliases/);
-  assert.equal(fs.statSync(first.playRoot).ino, inode); assert.equal(fs.readFileSync(path.join(first.saveRoot, "rfvp_s000.bin"), "utf8"), "retained");
+  const entry = { gameId: "retain", gamePath: original }, context = { userDataDir: path.join(root, "library") };
+  const moduleRoot = Prepare.directoryFor(entry, context), play = path.join(moduleRoot, "play"), saves = path.join(moduleRoot, "saves"), receipt = path.join(moduleRoot, "preparation.json");
+  fs.mkdirSync(play, {recursive: true}); fs.mkdirSync(saves); fs.writeFileSync(path.join(play, "private-user-file"), "sole copy"); fs.writeFileSync(path.join(saves, "rfvp_s000.bin"), "retained"); fs.writeFileSync(receipt, "not read during Play");
+  const first = Prepare.prepareLaunch(entry, context);
+  const blocked = file => [play, saves, receipt].some(name => String(file) === name || String(file).startsWith(name + path.sep));
+  for (const name of ["lstatSync", "statSync", "readFileSync", "readdirSync"]) {
+    const originalMethod = fs[name]; t.mock.method(fs, name, (file, ...args) => { assert.equal(blocked(file), false, "current Play must not inspect obsolete mirrors"); return originalMethod(file, ...args); });
+  }
+  t.mock.method(fs, "symlinkSync", () => assert.fail("Play must not create game aliases"));
+  t.mock.method(fs, "copyFileSync", () => assert.fail("Play must not copy game files"));
+  const second = Prepare.prepareLaunch(entry, context);
+  assert.equal(first.gameRoot, original); assert.equal(second.gameRoot, original); assert.equal(second.saveRoot, path.join(original, "save"));
 });
 
 test("FVP shared import, save resolver and runtime consent hooks require no manual preparation", async t => {
@@ -85,39 +95,44 @@ test("FVP propagates cancellation and shared detection budgets instead of fallin
   }
 });
 
-test("FVP preparation keeps original scripts, assets and Windows saves unchanged and exposes private save output", t => {
+test("FVP preserves an explicit working save folder and original content", t => {
   const root = directory(t), original = path.join(root, "original"); fs.mkdirSync(original); fixture(original);
   fs.mkdirSync(path.join(original, "save")); fs.writeFileSync(path.join(original, "save", "s001.bin"), "original Windows save");
   fs.mkdirSync(path.join(original, "voice")); fs.writeFileSync(path.join(original, "voice", "sample.ogg"), "audio");
   const before = snapshots(original), context = { userDataDir: path.join(root, "library"), runtimeSettings: { textEncoding: "sjis", textHiDpi: false } };
-  const entry = { gameId: "one", gamePath: original }, launch = Prepare.prepareLaunch(entry, context);
-  assert.equal(fs.realpathSync(path.join(launch.playRoot, "game.hcb")), fs.realpathSync(path.join(original, "game.hcb")));
-  assert.equal(fs.realpathSync(path.join(launch.playRoot, "graph.bin")), fs.realpathSync(path.join(original, "graph.bin")));
-  assert.equal(fs.realpathSync(path.join(launch.playRoot, "save")), fs.realpathSync(launch.saveRoot)); assert.equal(launch.textHiDpi, false);
-  fs.writeFileSync(path.join(launch.playRoot, "save", "rfvp_global.bin"), "private RFVP save");
-  const stat = fs.statSync(launch.playRoot), second = Prepare.prepareLaunch(entry, context);
-  assert.equal(fs.statSync(second.playRoot).ino, stat.ino); assert.equal(fs.readFileSync(path.join(second.saveRoot, "rfvp_global.bin"), "utf8"), "private RFVP save");
-  assert.deepEqual(snapshots(original), before); assert.equal(entry.defaultSaveDir, launch.saveRoot);
+  const entry = { gameId: "one", gamePath: original, saveDirOverride: path.join(root, "saved-external-choice") }, launch = Prepare.prepareLaunch(entry, context);
+  assert.equal(launch.gameRoot, path.join(launch.directory, "play")); assert.equal(launch.root, original); assert.equal(launch.saveRoot, entry.saveDirOverride); assert.equal(launch.textHiDpi, false);
+  assert.equal(launch.env.FVP_BASE_PATH, launch.gameRoot); assert.equal(launch.env.FVP_HCB_ROOT, launch.gameRoot); assert.equal(fs.readlinkSync(path.join(launch.gameRoot, "save")), entry.saveDirOverride);
+  assert.deepEqual(snapshots(original), before); assert.equal(entry.saveDirOverride, path.join(root, "saved-external-choice"));
+  fs.writeFileSync(path.join(launch.saveRoot, "rfvp_global.bin"), "RFVP progress");
+  fs.rmSync(context.userDataDir, {recursive: true});
+  assert.equal(fs.readFileSync(path.join(entry.saveDirOverride, "rfvp_global.bin"), "utf8"), "RFVP progress");
+  assert.equal(fs.readFileSync(path.join(original, "save", "s001.bin"), "utf8"), "original Windows save");
+  assert.equal(entry.defaultSaveDir, launch.saveRoot);
 });
 
-test("FVP replaces changed source views without losing private saves and supports uppercase scenario names", t => {
+test("FVP adapts nonstandard script and archive names without changing originals", t => {
   const root = directory(t), original = path.join(root, "original"); fs.mkdirSync(original); fixture(original);
-  fs.renameSync(path.join(original, "game.hcb"), path.join(original, "GAME.HCB"));
-  const entry = { gameId: "one", gamePath: original }, context = { userDataDir: path.join(root, "library") }, first = Prepare.prepareLaunch(entry, context);
-  assert.ok(fs.existsSync(path.join(first.playRoot, "game.hcb")));
-  fs.writeFileSync(path.join(first.saveRoot, "rfvp_s000.bin"), "progress"); fs.writeFileSync(path.join(original, "cursor0.ani"), "new asset");
-  const second = Prepare.prepareLaunch(entry, context);
-  assert.equal(fs.readFileSync(path.join(second.playRoot, "cursor0.ani"), "utf8"), "new asset");
-  assert.equal(fs.readFileSync(path.join(second.saveRoot, "rfvp_s000.bin"), "utf8"), "progress");
-  fs.writeFileSync(path.join(original, "GAME.HCB"), script("Changed title")); Prepare.gameData(entry, context); assert.equal(entry.moduleData.title, "Changed title");
+  fs.renameSync(path.join(original, "game.hcb"), path.join(original, "SNOW.HCB")); fs.renameSync(path.join(original, "graph.bin"), path.join(original, "GRAPH.BIN"));
+  fs.mkdirSync(path.join(original, "save"));
+  const entry = { gameId: "one", gamePath: original }, context = { userDataDir: path.join(root, "library") }, before = snapshots(original), launch = Prepare.prepareLaunch(entry, context);
+  assert.equal(launch.gameRoot, path.join(launch.directory, "play")); assert.equal(launch.scriptPath, path.join(original, "SNOW.HCB"));
+  assert.equal(fs.readlinkSync(path.join(launch.gameRoot, "game.hcb")), path.join(original, "SNOW.HCB"));
+  assert.equal(fs.readlinkSync(path.join(launch.gameRoot, "graph.bin")), path.join(original, "GRAPH.BIN"));
+  assert.deepEqual(snapshots(original), before);
 });
 
-test("FVP preparation rejects aliases and writable output within originals, including custom-save aliases", t => {
+test("FVP direct route accepts ordinary source aliases and keeps released private saves active", t => {
   const root = directory(t), original = path.join(root, "original"); fs.mkdirSync(original); fixture(original);
   const entry = { gameId: "one", gamePath: original }, context = { userDataDir: path.join(root, "library") };
-  assert.throws(() => Prepare.prepareLaunch({ ...entry, saveDirOverride: path.join(original, "save") }, context), /outside/);
-  fs.symlinkSync(original, path.join(root, "alias")); assert.throws(() => Prepare.prepareLaunch({ ...entry, saveDirOverride: path.join(root, "alias") }, context), /outside/);
-  fs.symlinkSync(path.join(original, "graph.bin"), path.join(original, "alias.bin")); assert.throws(() => Prepare.prepareLaunch(entry, context), /aliases/);
+  fs.symlinkSync(path.join(original, "graph.bin"), path.join(original, "ordinary-asset.alias"));
+  const launch = Prepare.prepareLaunch(entry, context);
+  assert.equal(launch.gameRoot, original); assert.equal(launch.saveRoot, path.join(original, "save"));
+  fs.unlinkSync(path.join(original, "ordinary-asset.alias"));
+  const released = {...entry, gameId: "released", defaultSaveDir: path.join(Prepare.directoryFor({...entry, gameId: "released"}, context), "saves")};
+  fs.mkdirSync(released.defaultSaveDir, {recursive: true});fs.writeFileSync(path.join(released.defaultSaveDir, "slot"), "released data");
+  const adapted = Prepare.prepareLaunch(released, context);
+  assert.equal(adapted.saveRoot, released.defaultSaveDir);assert.equal(fs.readFileSync(path.join(adapted.gameRoot, "save", "slot"), "utf8"), "released data");
   assert.throws(() => Prepare.directoryFor({ gameId: "../escape" }, context), /saved game/);
 });
 
@@ -127,7 +142,7 @@ test("FVP included host uses exact embedded Python and managed dylib with isolat
   const executable = macho(path.join(root, "python3")), dylibPath = macho(path.join(root, "librfvp.dylib"), true);
   const options = { resolveRoot: () => root, resolveBinary: value => { assert.equal(value, root); return executable; } };
   const command = Host.hostCommand(launch, { dylibPath }, options);
-  assert.equal(command.executablePath, executable); assert.deepEqual(command.args.slice(-4), [dylibPath, launch.playRoot, "gbk", "0"]);
+  assert.equal(command.executablePath, executable); assert.deepEqual(command.args.slice(-4), [dylibPath, original, "gbk", "0"]);
   assert.deepEqual(command.args.slice(0, 3), ["-I", "-B", "-u"]); assert.ok(fs.readFileSync(command.args[3], "utf8").includes("rfvp_run_entry"));
   assert.equal(command.args[3], path.resolve("src/modules/fvp/host.py")); assert.equal(fs.existsSync(path.join(launch.directory, "rfvp-host.py")), false);
   assert.throws(() => Host.hostCommand(launch, { dylibPath }, { resolveRoot: () => null, resolveBinary: () => null }), /included Python/);
@@ -138,6 +153,25 @@ test("FVP resolves its one immutable host from unpacked ASAR paths", t => {
   const root = directory(t), packed = path.join(root, "app.asar", "src/modules/fvp"), unpacked = path.join(root, "app.asar.unpacked", "src/modules/fvp");
   fs.mkdirSync(unpacked, { recursive: true }); fs.copyFileSync(path.resolve("src/modules/fvp/host.py"), path.join(unpacked, "host.py"));
   assert.equal(Host.resolveHostScript(packed), path.join(unpacked, "host.py"));
+});
+
+test("FVP launch sends the original directory to the host and foreground child cwd", async t => {
+  const {EventEmitter} = require("node:events"), {PassThrough} = require("node:stream");
+  const root = directory(t), original = path.join(root, "original");fs.mkdirSync(original);fixture(original);
+  const focusPath = require.resolve("../src/modules/shared/runtime/native-focus"), focus = require(focusPath), previousFocus = focus.spawnForegroundNativeGame;
+  const mainPath = require.resolve("../src/modules/fvp/main"), previousMain = require.cache[mainPath], previousHost = Host.hostCommand;
+  let spawned;
+  const child = new EventEmitter();child.stdout = new PassThrough();child.stderr = new PassThrough();
+  focus.spawnForegroundNativeGame = async options => { spawned = options;return child; };
+  delete require.cache[mainPath];const Module = require(mainPath), manager = Module.runtimeManagers[0], previousSelection = manager.resolveSelection;
+  t.after(() => { focus.spawnForegroundNativeGame = previousFocus;Host.hostCommand = previousHost;manager.resolveSelection = previousSelection;if(previousMain)require.cache[mainPath] = previousMain;else delete require.cache[mainPath]; });
+  manager.resolveSelection = () => ({ready: true, install: {dylibPath: "/fixture/runtime/librfvp.dylib"}});
+  Host.hostCommand = launch => { assert.equal(launch.gameRoot, original);return {executablePath: "/fixture/python", args: [launch.gameRoot]}; };
+  const entry = {gameId: "launch", gamePath: original}, context = {userDataDir: path.join(root, "library"), settings: {}, runtimeSettings: {}};
+  assert.equal(await Module.launchRuntime("rfvp", entry, context), child);
+  assert.equal(spawned.options.cwd, original);assert.equal(spawned.options.env.FVP_BASE_PATH, original);assert.equal(spawned.options.env.FVP_HCB_ROOT, original);
+  assert.equal(fs.existsSync(path.join(Prepare.directoryFor(entry, context), "play")), false);
+  child.emit("close", 0, null);
 });
 
 test("FVP schemas expose managed runtime settings and optional raw-asset actions without setup steps", () => {

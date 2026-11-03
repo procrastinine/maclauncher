@@ -288,6 +288,7 @@ async function inspectFile(handle, size, cpu) {
  */
 function createMachOExportInspector({ fileSystem = fs.promises } = {}) {
   const cache = new Map();
+  // The default slice belongs to the consuming process; callers can request a different runtime CPU.
   return async function inspectMachOExports(file, { arch = process.arch } = {}) {
     if (typeof file !== "string" || !path.isAbsolute(file) || file.includes("\0")) fail("An absolute local file path is required.", "MACHO_PATH");
     const cpu = ARCHITECTURES.get(arch);

@@ -17,7 +17,7 @@ test('native permission clients query enrolled app owners and retire reverse dir
  execFileSync(home+'/bin/javac',['--release','21','-cp',cp,'-d',classes,...changed.map(name=>path.join(source,name+'.java')),'tests/fixtures/android-platform-service/RemotePermissionProbe.java','tests/fixtures/android-framework-services/PackageManifest.java']);
  execFileSync(home+'/bin/jar',['--update','--file',path.join(privateRuntime,'android-host.jar'),'-C',classes,'.']);
  const prepared=path.join(root,'android/apps/fixture/prepared');await fs.mkdir(prepared,{recursive:true});const apk=path.join(prepared,'app.apk');
- await fs.copyFile('tests/fixtures/android-framework-services/manifests/permissions.xml.bin',path.join(prepared,'AndroidManifest.xml'));
+ await fs.copyFile(require('./helpers/manifest-fixtures').file(t,'android-framework-services/manifests/permissions'),path.join(prepared,'AndroidManifest.xml'));
  execFileSync(home+'/bin/jar',['--create','--file',apk+'.unsigned','-C',prepared,'AndroidManifest.xml']);
  const key=path.join(root,'signer.p12'),signer=classes+path.delimiter+path.resolve('src/modules/android/native/tools/apksig.jar');
  execFileSync(home+'/bin/keytool',['-genkeypair','-alias','owned','-keyalg','RSA','-keysize','2048','-dname','CN=Permission Fixture','-validity','2','-storetype','PKCS12','-keystore',key,'-storepass','test-only-password','-keypass','test-only-password','-noprompt'],{stdio:'pipe'});

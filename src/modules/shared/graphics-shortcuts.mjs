@@ -7,7 +7,8 @@
 export const ACTIONS = Object.freeze({
   bypass: "Bypass graphics effects",
   screenshot: "Save processed screenshot",
-  windowGraphics: "Start or stop window graphics"});
+  windowPointer: "Toggle pointer in window graphics",
+  windowGraphics: "Toggle Graphics for Front App"});
 
 const MODIFIERS = Object.freeze({control: "Control", ctrl: "Control", option: "Option", alt: "Option", shift: "Shift", command: "Command", cmd: "Command"});
 const ORDER = ["Control", "Option", "Shift", "Command"];
@@ -96,3 +97,9 @@ export function fromKeyboardEvent(event) {
   if (!main) return null;
   return [event.ctrlKey && "Control", event.altKey && "Option", event.shiftKey && "Shift", event.metaKey && "Command", main].filter(Boolean).join("+");
 }
+
+// Shared help for the window actions in Settings and session inspectors.
+export const ACTION_HELP = Object.freeze({
+  windowGraphics: "Applies graphics to the frontmost app's window, or stops that app's window graphics when already running. Assign the keyboard shortcut in Settings.",
+  windowPointer: "Shows or hides the drawn pointer in the frontmost app's scaled window graphics while they run. It does not change the saved Show pointer in picture setting."
+});

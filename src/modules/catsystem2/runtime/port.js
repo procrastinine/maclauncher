@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../../shared/copy-file");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { execFileSync } = require("node:child_process");
@@ -133,7 +134,7 @@ static std::unique_ptr<SceneManager> sceneManager;
     sceneManager = std::make_unique<SceneManager>(*audioManager, *imageManager, *fileManager, currChoices);`);
   mainText = mainText.replace("    return 0;\n}", '    return 0;\n    } catch (const std::exception &error) { std::cerr << "CatSystem2 native diagnostic: " << error.what() << std::endl; SDL_Quit(); return 2; }\n}');
   fs.writeFileSync(main, mainText);
-  fs.copyFileSync(path.join(__dirname, "macos-paths.h"), path.join(root, "maclauncher-paths.h"));
+  cloneOrCopySync(path.join(__dirname, "macos-paths.h"), path.join(root, "maclauncher-paths.h"));
 }
 
 async function buildDiagnostic({ sourceDir = sourcePath, outputDir, signal } = {}) {

@@ -14,6 +14,7 @@ const P = { ...Prepare, prepareGame: (entry, context, install = resourcePackage(
 const D = require("../src/modules/kirikiri/detect");
 const Native = require("../src/modules/shared/runtime/local-native");
 const Kiri = require("../src/modules/kirikiri/main");
+const KiriBackcompat = require("../src/modules/kirikiri/backcompat");
 const { signalUnavailableOptionalPlugins, requiredNativeFeatures } = require("../src/modules/kirikiri/script");
 
 function fixture(t) { const root = fs.mkdtempSync(path.join(os.tmpdir(), "kiri-prepare-")); t.after(() => fs.rmSync(root, { recursive: true, force: true })); return fs.realpathSync(root); }
@@ -391,8 +392,9 @@ test("later sealed KAG3 resource revisions and extra production files work while
   assert.throws(() => Prepare.resources(f.context.userDataDir), /resource checksum differs/, "Legacy caches retain the exact launcher pin");
 });
 
-test("the native module launches its automatic prepared project with saves outside the runtime and original game", { skip: process.platform !== "darwin" }, async t => {
+test("KiriKiri consumes one verified prepared result per Play and preserves direct native datapath options", { skip: process.platform !== "darwin" }, async t => {
   const root = fixture(t), f = project(root), binary = path.join(root, "native-runtime"), bytes = Buffer.alloc(32); bytes.writeUInt32LE(0xfeedfacf); bytes.writeUInt32LE(process.arch === "arm64" ? 0x0100000c : 0x01000007, 4); bytes.writeUInt32LE(2, 12); fs.writeFileSync(binary, bytes, { mode: 0o755 });
+  t.mock.method(os, "homedir", () => path.join(root, "home"));
   const manager = Kiri.runtimeManagers[0]; manager.core.registerLocal({ userDataDir: f.context.userDataDir, version: "snapshot-124bdf8-macos-v2", runtimePath: binary });
   const override = path.join(root, "custom-saves"); f.entry.saveDirOverride = override; let call;
   const context = { ...f.context, runtimeId: "krkrsdl2", settings: {}, runtimeSettings: { version: "snapshot-124bdf8-macos-v2" }, spawnDetachedChecked: (...args) => { call = args; return "native-process"; } };
@@ -400,15 +402,20 @@ test("the native module launches its automatic prepared project with saves outsi
   const donor = resourcePackage(path.join(root, "donor"));
   t.mock.method(manager.core, "listInstalled", () => [donor.install]);
   context.gameArguments = ["-title=A quoted game", "-literal=$(touch unexpected)"];
+  const prepare = t.mock.method(Prepare, "prepareGame");
   Kiri.prepareLaunch(f.entry, context);
+  assert.equal(prepare.mock.callCount(), 1);
   assert.equal(f.entry.moduleData.kagVersion, "3.24 stable");
   assert.equal(await Kiri.launchRuntime("krkrsdl2", f.entry, context), "native-process");
+  assert.equal(prepare.mock.callCount(), 1, "launch consumes the result already verified during preparation");
   assert.equal(call[1].at(-1), f.entry.moduleData.preparedRoot);
   assert.equal(call[2].cwd, f.entry.moduleData.preparedRoot);
   assert.ok(call[1].includes(`-datapath=${override}${path.sep}`));
   assert.deepEqual(call[1].slice(0, context.gameArguments.length), context.gameArguments);
+  delete f.entry.saveDirOverride;
   for (const gameArguments of [["-datapath=/outside"], ["-DATAPATH", "/outside"]]) {
-    await assert.rejects(Kiri.launchRuntime("krkrsdl2", f.entry, { ...context, gameArguments }), /manages KiriKiri's save directory/);
+    await Kiri.launchRuntime("krkrsdl2", f.entry, { ...context, gameArguments });
+    assert.deepEqual(call[1].slice(0, gameArguments.length), gameArguments);
   }
   assert.equal(f.entry.contentRootDir, f.game);
   assert.equal(fs.existsSync(path.join(f.game, "savedata")), false);
@@ -416,8 +423,12 @@ test("the native module launches its automatic prepared project with saves outsi
   manager.core.registerLocal({ userDataDir: f.context.userDataDir, version: "MCLv1-1001", runtimePath: newer });
   f.entry.runtimeData = { krkrsdl2: { version: "snapshot-124bdf8-macos-v2" } };
   context.runtimeSettings.version = "MCLv1-1001";
+  delete f.entry.saveDirOverride;
   await Kiri.launchRuntime("krkrsdl2", f.entry, context);
   assert.equal(call[0], fs.realpathSync(newer));
+  assert.equal(prepare.mock.callCount(), 4, "subsequent direct launches verify preparation again");
+  assert.equal(call[1].some(arg => /^-datapath(?:=|$)/i.test(arg)), false);
+  assert.equal(f.entry.defaultSaveDir, null);
   assert.equal(f.entry.runtimeData.krkrsdl2.version, "snapshot-124bdf8-macos-v2");
 });
 

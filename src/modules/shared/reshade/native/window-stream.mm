@@ -16,6 +16,8 @@ bool transientWindowCaptureError(NSError *error){
     return error.code==SCStreamErrorAttemptToConfigState||error.code==SCStreamErrorInvalidParameter||
         error.code==SCStreamErrorFailedApplicationConnectionInterrupted||error.code==SCStreamErrorInternalError;
 }
+namespace {std::atomic<unsigned>streamStops{0};}
+unsigned pendingWindowStreamStops(){return streamStops.load();}
 void WindowStream::streamStopped(NSError *error){fail(windowCaptureError("stream-stopped",error),geometryGeneration>1&&transientWindowCaptureError(error));}
 bool WindowStream::prepareDevice(){
     device=MTLCreateSystemDefaultDevice();queue=[device newCommandQueue];
@@ -36,17 +38,22 @@ void WindowStream::preparePresenter(RuntimeFrameSource source,std::optional<bool
     const std::weak_ptr<WindowStream>weak=shared_from_this();
     presenter->setPreparationObserver([weak](const EffectPreparationNotice&){if(auto self=weak.lock())self->requestReplay();});
 }
-NSError *WindowStream::attach(SCContentFilter *filter){
-    receiver=[MacFXWindowStreamReceiver new];receiver->owner=shared_from_this();
+bool WindowStream::attach(SCContentFilter *filter,NSError *__autoreleasing *failure){
+    receiver=[receiverClass new];receiver->owner=shared_from_this();
     stream=[[SCStream alloc]initWithFilter:filter configuration:configuration(geometry) delegate:receiver];
+    return [stream addStreamOutput:receiver type:SCStreamOutputTypeScreen sampleHandlerQueue:intakeQueue error:failure];
+}
+NSError *WindowStream::attach(SCContentFilter *filter){
     NSError *failure=nil;
-    if(![stream addStreamOutput:receiver type:SCStreamOutputTypeScreen sampleHandlerQueue:intakeQueue error:&failure])
+    if(!attach(filter,&failure))
         return failure?:[NSError errorWithDomain:SCStreamErrorDomain code:SCStreamErrorInternalError userInfo:nil];
     return nil;
 }
 void WindowStream::startCapture(void (^started)()){
-    auto self=shared_from_this();
+    auto self=shared_from_this();starting=true;
     [stream startCaptureWithCompletionHandler:^(NSError *error){
+        self->starting=false;
+        if(self->retired){dispatch_async(self->renderQueue,^{self->stopCapture();});return;}
         if(error){self->fail(windowCaptureError("start",error));return;}
         if(started)dispatch_async(dispatch_get_main_queue(),^{if(!self->retired)started();});
     }];
@@ -66,12 +73,20 @@ void WindowStream::fail(const std::string &reason,bool recover){
 }
 void WindowStream::close(){ // Main thread. Late stream and GPU callbacks retain only this retired session.
     if(closed.exchange(true))return;retired=true;ready=false;hostClosed();
+    ++streamStops;
     auto self=shared_from_this();dispatch_async(renderQueue,^{
         if(self->presenter){self->presenter->setPreparationObserver({});self->presenter->stop();}self->raw.reset();self->replayRequested=false;
         {std::lock_guard<std::mutex>lock(self->pendingMutex);self->pending.reset();}
-        SCStream *stream=self->stream;self->stream=nil;MacFXWindowStreamReceiver *receiver=self->receiver;
-        if(stream)[stream stopCaptureWithCompletionHandler:^(NSError*){(void)receiver;}];
+        self->stopRequested=true;self->stopCapture();
     });
+}
+void WindowStream::stopCapture(){
+    if(!stopRequested||(starting&&deferStopUntilStarted))return;
+    stopRequested=false;SCStream *capture=stream;stream=nil;
+    MacFXWindowStreamReceiver *output=receiver;if(deferStopUntilStarted)receiver=nil;
+    // Keep the stream and its delegate alive until replayd acknowledges stop.
+    if(capture)[capture stopCaptureWithCompletionHandler:^(NSError*){(void)capture;(void)output;--streamStops;}];
+    else --streamStops;
 }
 SCStreamConfiguration *WindowStream::configuration(const BrowserFrameGeometry &g){
     auto config=[SCStreamConfiguration new];config.width=g.pixelsWidth;config.height=g.pixelsHeight;

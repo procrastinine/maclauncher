@@ -510,7 +510,8 @@ set_tests_properties(metal-native-unretained-owner-teardown PROPERTIES ENVIRONME
  "RESHADE_EFFECT=${CMAKE_CURRENT_SOURCE_DIR}/tests/two-pass.fx;RESHADE_INCLUDE_PATH=${CMAKE_CURRENT_SOURCE_DIR}/third_party/reshade-shaders/Shaders;RESHADE_WINDOW_TITLE=Filtered")
 
 # AMD FSR1 uses checked-in SPIR-V and the shared Metal spatial encoder.
-target_include_directories(reshade-macos PRIVATE third_party/fsr/ffx-fsr compat/fsr)
+target_include_directories(reshade-macos PRIVATE third_party/fsr/ffx-fsr)
+include(compat/fsr/build.cmake)
 add_executable(fx-fsr1-test tests/fsr1.mm)
 set_target_properties(fx-fsr1-test PROPERTIES OBJCXX_STANDARD 20)
 target_include_directories(fx-fsr1-test PRIVATE src tests)

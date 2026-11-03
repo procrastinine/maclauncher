@@ -110,7 +110,7 @@ test("HashLink preflight rejects Windows/mismatched native modules and preserves
   assert.equal(Module.__test.inspectDependencies(entry, context).ready, true);
 });
 
-test("HashLink reads original bytecode and isolates relative writes with explicit dylib search and arguments", { skip: process.platform !== "darwin" }, async t => {
+test("HashLink reads original bytecode and preserves original relative writes with explicit dylib search and arguments", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t), executable = path.join(root, "hl"), game = path.join(root, "source"), userDataDir = path.join(root, "managed");
   fs.mkdirSync(game);
   const boot = path.join(game, "game.hl");
@@ -123,14 +123,16 @@ test("HashLink reads original bytecode and isolates relative writes with explici
     runtimeSettings: { appArgs: ["literal argument"] }, spawnDetachedChecked: async (...args) => { call = args; return {}; } });
   assert.equal(call[0], executable); assert.equal(path.basename(call[1][0]), "game.hl"); assert.equal(call[1][1], "literal argument");
   assert.deepEqual(call[1].slice(2), ["--title", "A quoted game", "", "$(literal)"]);
-  assert.equal(call[1][0], boot); assert.notEqual(call[2].cwd, path.dirname(boot));
+  assert.equal(call[1][0], boot); assert.equal(call[2].cwd, path.dirname(boot));
   assert.equal(call[2].env.DYLD_LIBRARY_PATH, [root, game].join(path.delimiter));
   fs.writeFileSync(path.join(call[2].cwd, "player-save.json"), "keep player save");
   assert.deepEqual(fs.readFileSync(boot), bytecode());
   const again = Module.__test.prepareLaunch({ gameId: "launch", moduleData: { bytecodePath: boot } }, { userDataDir });
-  assert.equal(fs.readFileSync(path.join(again.wrapper, "player-save.json"), "utf8"), "keep player save");
+  assert.equal(fs.readFileSync(path.join(again.root, "player-save.json"), "utf8"), "keep player save");
+  // An updated game launches with the saves it already wrote.
   fs.writeFileSync(boot, bytecode(["std"], 4));
-  assert.throws(() => Module.__test.prepareLaunch({ gameId: "launch", moduleData: { bytecodePath: boot } }, { userDataDir }), /bytecode changed/);
+  const updated = Module.__test.prepareLaunch({ gameId: "launch", moduleData: { bytecodePath: boot } }, { userDataDir });
+  assert.equal(fs.readFileSync(path.join(updated.root, "player-save.json"), "utf8"), "keep player save");
 });
 
 test("HashLink identifies native SDL ABI independently of the shared bytecode format", { skip: process.platform !== "darwin" }, t => {
@@ -192,20 +194,16 @@ test("existing exact 1.9 registrations and explicit choices retain their identit
   assert.equal(entry.runtimeData.hashlink.version, "1.9");
 });
 
-test("HashLink resource overlay aliases static assets and isolates unknown writable sidecars", t => {
-  const root = temporary(t), source = path.join(root, "source"); fs.mkdirSync(source);
-  const boot = path.join(source, "game.hl"); fs.writeFileSync(boot, bytecode());
-  fs.writeFileSync(path.join(source, "assets.pak"), "large immutable resource");
-  fs.writeFileSync(path.join(source, "config.json"), "author setting");
-  fs.writeFileSync(path.join(source, "sdl.hdll"), "MZwindows-module");
-  fs.writeFileSync(path.join(source, "game.exe"), "MZwindows-launcher");
-  const launch = Module.__test.prepareLaunch({ gameId: "overlay", moduleData: { bytecodePath: boot } }, { userDataDir: path.join(root, "data") });
-  assert.equal(fs.lstatSync(path.join(launch.wrapper, "assets.pak")).isSymbolicLink(), true);
-  assert.equal(fs.lstatSync(path.join(launch.wrapper, "config.json")).isSymbolicLink(), false);
-  assert.equal(launch.bytecodePath, boot);
-  assert.deepEqual(fs.readdirSync(launch.wrapper).sort(), ["assets.pak", "config.json"]);
-  fs.writeFileSync(path.join(launch.wrapper, "config.json"), "player setting");
-  assert.equal(fs.readFileSync(path.join(source, "config.json"), "utf8"), "author setting");
+test("HashLink preparation uses the original root without walking or copying game content", t => {
+  const root = temporary(t), source = path.join(root, "source");fs.mkdirSync(source);
+  const boot = path.join(source, "game.hl");fs.writeFileSync(boot, bytecode());
+  fs.writeFileSync(path.join(source, "assets.pak"), "original resource");
+  const userDataDir = path.join(root, "data");
+  t.mock.method(fs, "readdirSync", () => {throw new Error("Play must not enumerate game content");});
+  const launch = Module.__test.prepareLaunch({moduleData:{bytecodePath:boot}}, {userDataDir});
+  assert.equal(launch.root, source);assert.equal(launch.bytecodePath, boot);
+  assert.equal(fs.existsSync(userDataDir), false);
+  assert.equal(fs.lstatSync(path.join(source, "assets.pak")).isSymbolicLink(), false);
 });
 
 test("HashLink requires an Intel bytecode slice before accepting or launching a local runtime", { skip: process.platform !== "darwin" || process.arch !== "arm64" }, async t => {
@@ -223,25 +221,16 @@ test("HashLink requires an Intel bytecode slice before accepting or launching a 
   assert.equal(Module.runtimeManagers[0].core.resolveRegistered({ userDataDir, version: "1.16" }), null);
 });
 
-test("HashLink removes obsolete copies while retaining player saves and rejecting changed private bytecode", t => {
-  const root = temporary(t), source = path.join(root, "source"), userDataDir = path.join(root, "data"); fs.mkdirSync(source);
-  const boot = path.join(source, "game.hl"), modulePath = path.join(source, "sdl.hdll");
-  fs.writeFileSync(boot, bytecode()); fs.writeFileSync(modulePath, "MZwindows-module");
-  const entry = { gameId: "migrate", moduleData: { bytecodePath: boot } };
-  const launch = Module.__test.prepareLaunch(entry, { userDataDir });
-  const recordPath = path.join(launch.directory, "game-source.json"), record = JSON.parse(fs.readFileSync(recordPath));
-  delete record.layoutVersion; fs.writeFileSync(recordPath, JSON.stringify(record));
-  const oldBytecode = path.join(launch.wrapper, "game.hl");
-  fs.writeFileSync(oldBytecode, "modified private program");
-  fs.copyFileSync(modulePath, path.join(launch.wrapper, "sdl.hdll"));
-  fs.writeFileSync(path.join(launch.wrapper, "player-save.json"), "player state");
-  assert.throws(() => Module.__test.prepareLaunch(entry, { userDataDir }), /Managed HashLink bytecode changed/);
-  assert.equal(fs.readFileSync(path.join(launch.wrapper, "player-save.json"), "utf8"), "player state");
-  fs.copyFileSync(boot, oldBytecode);
-  const migrated = Module.__test.prepareLaunch(entry, { userDataDir });
-  assert.equal(migrated.bytecodePath, boot);
-  assert.deepEqual(fs.readdirSync(migrated.wrapper), ["player-save.json"]);
-  assert.equal(fs.readFileSync(path.join(migrated.wrapper, "player-save.json"), "utf8"), "player state");
+test("HashLink preparation preserves every legacy private file without migration", t => {
+  const root = temporary(t), source = path.join(root, "source"), userDataDir = path.join(root, "data");fs.mkdirSync(source);
+  const boot = path.join(source, "game.hl");fs.writeFileSync(boot, bytecode());
+  const directory = path.join(userDataDir, "games", "legacy", "modules", "hashlink"), old = path.join(directory, "game");fs.mkdirSync(old, {recursive:true});
+  const files = {"game.hl":"private modified program", "sdl.hdll":"old native module", "player-save.json":"player state"};
+  for(const [name,bytes] of Object.entries(files))fs.writeFileSync(path.join(old,name),bytes);
+  const marker = path.join(directory, "game-source.json"), bytes=JSON.stringify({root:source});fs.writeFileSync(marker,bytes);
+  const launch = Module.__test.prepareLaunch({gameId:"legacy",moduleData:{bytecodePath:boot}}, {userDataDir});
+  assert.equal(launch.root, source);assert.equal(fs.readFileSync(marker,"utf8"),bytes);
+  for(const [name,bytes] of Object.entries(files))assert.equal(fs.readFileSync(path.join(old,name),"utf8"),bytes);
 });
 
 test('hosted HashLink selections retain project validation instead of requiring stock archive metadata',t=>{

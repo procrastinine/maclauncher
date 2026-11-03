@@ -2,7 +2,7 @@ const fs=require("node:fs");
 const manifest=require("./manifest.json");
 const {detectGame}=require("./detect");
 const manager=require("./runtime/manager");
-const {gameDirectory,saveDirectory,prepareGame}=require("./prepare");
+const {gameDirectory,saveDirectory,resolveSaveLocations,prepareGame}=require("./prepare");
 const {spawnForegroundNativeGame}=require("../shared/runtime/native-focus");
 const Vulkan=require("../shared/vulkan");
 const Tools=require("./tools");
@@ -11,7 +11,7 @@ const Bundled=require("../shared/runtime/bundled-native");
 const Architecture=require("../shared/runtime/architecture");
 const vulkanOptions=Object.freeze({architecture:"x64",preferredBackend:"kosmickrisp"});
 
-module.exports={id:manifest.id,manifest,detectGame,runtimeManagers:[manager],normalizeRuntimeId:value=>value==="inspection"?value:"anyps5",
+module.exports={id:manifest.id,manifest,detectGame,resolveSaveLocations,runtimeManagers:[manager],normalizeRuntimeId:value=>value==="inspection"?value:"anyps5",
   filterRuntimeSupport:entry=>entry.moduleData?.inspectionOnly?["inspection"]:["anyps5"],
   canLaunchRuntime:(runtimeId,entry)=>runtimeId==="anyps5"&&entry.moduleData?.inspectionOnly!==true,
   onImport:(entry,context)=>{entry.defaultSaveDir=saveDirectory(entry,context);},

@@ -1,5 +1,5 @@
 {
- "source": "git show 38fdd4d (v0.4.0) shader-settings/graphics-settings normalizeSettings; editor = Plan.migrate(automaticPlan(record, {draftPlan: true})) before the one-time upgrade",
+ "source": "git show v0.4.0 shader-settings/graphics-settings normalizeSettings; editor = Plan.migrate(automaticPlan(record, {draftPlan: true})) before the one-time upgrade",
  "capabilities": {
   "spatial": true,
   "spatialMethods": [

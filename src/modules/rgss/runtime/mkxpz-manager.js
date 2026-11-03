@@ -302,6 +302,7 @@ module.exports = {
   getState,
   installRuntime,
   uninstallRuntime,
+  trashFirst: true,
   updateSettingsAfterInstall,
   updateSettingsAfterUninstall,
   core: Core

@@ -55,3 +55,18 @@ test("buildOnsyuriIndex includes game files and aliases", () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("generated Yuri index replaces a staged alias without writing the original index", t => {
+  const root = makeTempDir("maclauncher-onsyuri-index-alias-");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const gameRoot = path.join(root, "game"), wrapperDir = path.join(root, "wrapper");
+  writeFile(path.join(gameRoot, "0.txt"), "*define\ngame\n*start\nend\n");
+  const original = path.join(root, "publisher-index.json");
+  writeFile(original, '{"publisher":"unchanged"}');
+  fs.mkdirSync(wrapperDir);
+  fs.symlinkSync(original, path.join(wrapperDir, "onsyuri_index.json"));
+  NscripterModule.__test.buildOnsyuriIndex({ wrapperDir, gameRootDir: gameRoot, gameId: "owned-game", scriptInfo: {} });
+  assert.equal(fs.readFileSync(original, "utf8"), '{"publisher":"unchanged"}');
+  assert.equal(fs.lstatSync(path.join(wrapperDir, "onsyuri_index.json")).isSymbolicLink(), false);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(wrapperDir, "onsyuri_index.json"), "utf8")).gamedir, "/onsyuri/owned-game");
+});

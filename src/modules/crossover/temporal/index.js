@@ -128,6 +128,9 @@ function resolvePlan(entry, context = {}, { install, runtimeId = context.runtime
       if (!selectedSupport) {
         const available = adapter(root, { verify, macOSVersion: host.macOSVersion }), { support: selectedManager, selected } = supportSelection(entry, { ...context, runtimeSettings: settings }, runtimeId, undefined, verify, available);
         const pin = selectedManager.core.catalog.find(row => row.version === selected.version);
+        if (allowDownload && available && !pin && selected.discoveryRequired) return {
+          inputs: { ...inputs, requiresDownload: true }, requiresDownload: true,
+          download: { managerId: selectedManager.id, version: null, discoveryRequired: true } };
         if (allowDownload && pin && available && !(context.userDataDir && selectedManager.core.resolveInstalled({ userDataDir: context.userDataDir, version: pin.version, verification: verify ? "full" : "status" }))) return {
           inputs: { ...inputs, requiresDownload: true }, requiresDownload: true, download: { managerId: selectedManager.id, version: pin.version } };
         return null;
@@ -217,31 +220,9 @@ function sceneLibraries(entry, settings = {}) {
   }
   return result;
 }
+// Wine games present through the shared window adapter as x86_64 processes.
 function sceneDemand(entry, context = {}, {root} = {}) {
-  const Contracts = require("../../shared/effects/operation-contracts.mjs"), plan = require("../../shared/effects/plan.mjs").salvage(entry.effects).plan;
-  if (!plan || plan.enabled === false) return [];
-  const inputs = new Set(), add = requirements => Contracts.sceneInputNames(requirements).forEach(name => inputs.add(name));
-  for (const node of plan.video) {
-    if (!node.enabled) continue;
-    const neural = Contracts.NEURAL[node.method], operation = node.kind === "temporal" ? Contracts.TEMPORAL[node.method]
-      : node.kind === "frame-generation" ? Contracts.GENERATION[node.method] : null;
-    const scene = neural ? neural.kind === node.kind && neural.history === "scene"
-      : operation && (node.kind === "temporal" || operation.scene === true);
-    if (scene) add(["depth", "motion", ...(operation?.matrices ? ["viewMatrix", "projectionMatrix"] : operation?.camera ? ["camera"] : []), ...(operation?.requires || [])]);
-    if (node.kind !== "shader") continue;
-    // Only selected source metadata is inspected; its shared cache revalidates
-    // source/dependency identity. A fresh implicit FX input remains unknown
-    // until ordinary shader preparation reports its compiled requirements.
-    const shaders = node.shader.preset === "chain" ? (node.shader.effects || []).map(preset => ({...node.shader, preset})) : [node.shader];
-    for (const shader of shaders) try {
-      const selected = require("../../shared/reshade").resolveShaderSelection({reshade: {...shader, enabled: true}},
-        {userDataDir: context.userDataDir, settings: context.settings, graphicsHost: "window", graphicsArchitecture: "x86_64", ...(root ? {root} : {})});
-      if (!selected || selected.traits?.sourceError) continue;
-      add(selected.requirements);add(selected.traits?.sceneInputs);
-      add(require("../../shared/reshade/shader-scene-bindings").requirements(selected.sceneBindings || selected.traits?.sceneBindings));
-    } catch {} // Unknown or invalid optional metadata never authorizes an API install.
-  }
-  return [...inputs];
+  return require("../../shared/effects/scene-demand").sceneDemand(entry, context, {root, graphicsHost: "window", graphicsArchitecture: "x86_64"});
 }
 function resolveScenePlan(entry, context = {}, { install, settings = context.runtimeSettings || {}, verify = false,
   requested, root,
@@ -262,8 +243,8 @@ function resolveScenePlan(entry, context = {}, { install, settings = context.run
   const driverSelection = vulkan.sceneManager.resolveSelection(entry, context.settings, context.userDataDir, { verification });
   const required = Object.entries(selections).map(([id, selected]) => ({ id, selected, manager: support.apiManagers[id] }));
   required.push({ id: vulkan.sceneProjectId, selected: driverSelection, manager: vulkan.sceneManager });
-  const requirements = required.filter(item => !item.selected.ready && item.selected.version).map(item => ({ managerId: item.id,
-    version: item.selected.version, requiresDownload: true, installOptions: { sectionId: "default" },
+  const requirements = required.filter(item => !item.selected.ready && (item.selected.version || item.selected.discoveryRequired)).map(item => ({ managerId: item.id,
+    version: item.selected.version || null, ...(item.selected.discoveryRequired ? { discoveryRequired: true } : {}), requiresDownload: true, installOptions: { sectionId: "default" },
     detail: "Installs matching Vulkan scene support. The selected Windows renderer and original game libraries are preserved." }));
   const result = { libraries: sources, sceneRequirements: demanded, packageReady: false, activationReady: false, requirements,
     reason: "The matched loaded Wine profile and actual Vulkan device handshake are pending." };

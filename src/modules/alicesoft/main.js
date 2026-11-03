@@ -12,6 +12,8 @@ const LiveVariables = require("./live-variables");
 const Decompiler = require("./decompiler");
 const decompilerManagers = require("./decompiler-managers").managers;
 const System4Tools = require("./system4-tools");
+const SavePaths = require("./save-paths");
+const LaunchArguments = require("../shared/runtime/launch-arguments");
 
 const managers = Object.fromEntries([
   { id: "system3", label: "AliceSoft System 1–3 (SDL2)", owner: "kichikuou", repo: "system3-sdl2" },
@@ -48,9 +50,34 @@ async function registerRuntime(entry, payload, context) {
 }
 
 function resolveSaveLocations(entry, context = {}) {
-  if (!entry.gameId || !context.userDataDir) return { primaryDirectory: null, directories: [] };
-  const directory = path.join(GameData.resolveGameModuleDir(context.userDataDir, entry.gameId, manifest.id), "saves");
-  return { primaryDirectory: directory, directories: [{ directory, label: "Saves", source: "managed native interpreter" }] };
+  // These are current native configuration facts, not a save-folder override.
+  // Unknown configuration never changes an otherwise working native launch.
+  try {
+    const root = entry.contentRootDir;
+    if (!path.isAbsolute(root || "")) return { primaryDirectory: null, directories: [] };
+    const runtimeId = runtimeFor(entry), environment = context.environment || process.env;
+    const args = context.gameArguments || LaunchArguments.parse(entry.launchArguments || "");
+    let explicit = typeof entry.saveDirOverride === "string" ? entry.saveDirOverride.trim() : "";
+    if (explicit && !path.isAbsolute(explicit)) return { primaryDirectory: null, directories: [] };
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i];
+      // A different game/config root needs its own effective native facts.
+      if (["-gamedir", "-gamefile"].includes(arg) || /^--(?:game-dir|game-file|config)(?:=|$)/.test(arg))
+        return { primaryDirectory: null, directories: [] };
+      if (arg === (runtimeId === "xsystem4" ? "--save-folder" : "-savedir")) {
+        if (!args[i + 1]) return { primaryDirectory: null, directories: [] };
+        explicit = path.resolve(root, args[++i]);
+      } else if (runtimeId === "xsystem4" && arg.startsWith("--save-folder=")) {
+        explicit = path.resolve(root, arg.slice("--save-folder=".length));
+      }
+    }
+    const primaryDirectory = explicit || (runtimeId === "system3" ? SavePaths.system3SaveRoot(root)
+      : runtimeId === "xsystem35" ? SavePaths.system35SaveLocation(root, environment).directory
+      : SavePaths.system4SaveRoot(root, environment));
+    return { primaryDirectory, directories: [{ directory: primaryDirectory, role: "primary", label: "Native saves" }] };
+  } catch {
+    return { primaryDirectory: null, directories: [] };
+  }
 }
 
 function resolveLaunchSpec(runtimeId, entry, context) {
@@ -63,15 +90,18 @@ function resolveLaunchSpec(runtimeId, entry, context) {
   const manager = managers[runtimeId];
   const selected = manager.resolveSelection(entry, context.settings, context.userDataDir, { version: context.runtimeSettings?.version });
   if (!selected.install) throw new Error(`${selected.reason} Install a compatible version in Runtimes.`);
-  if (!entry.gameId || !context.userDataDir) throw new Error("Import this game before launching so saves have a stable directory.");
-  const defaultSaveDir = resolveSaveLocations(entry, context).primaryDirectory;
   const override = typeof entry.saveDirOverride === "string" ? entry.saveDirOverride.trim() : "";
   if (override && !path.isAbsolute(override)) throw new Error("Save directory override must be an absolute local path.");
-  const saveDir = override || defaultSaveDir;
-  fs.mkdirSync(saveDir, { recursive: true });
-  entry.defaultSaveDir = defaultSaveDir;
-  context.onEntryChange?.({ defaultSaveDir });
-  const args = [runtimeId === "xsystem4" ? "--save-folder" : "-savedir", saveDir];
+  const args = [];
+  if (override) {
+    fs.mkdirSync(override, { recursive: true });
+    args.push(runtimeId === "xsystem4" ? "--save-folder" : "-savedir", override);
+  }
+  const locations = resolveSaveLocations(entry, context);
+  if (entry.defaultSaveDir !== locations.primaryDirectory || JSON.stringify(entry.saveLocations || []) !== JSON.stringify(locations.directories))
+    context.onEntryChange?.({ defaultSaveDir: locations.primaryDirectory, saveLocations: locations.directories });
+  entry.defaultSaveDir = locations.primaryDirectory;
+  entry.saveLocations = locations.directories;
   const settings = context.runtimeSettings || {};
   let fontGothic = null;
   let fontMincho = null;
@@ -104,7 +134,7 @@ function resolveLaunchSpec(runtimeId, entry, context) {
   const pin = manager.core.listCatalog({ userDataDir: context.userDataDir }).find(row => row?.version === selected.version) || selected.install.catalogEntry;
   return { runtimePath: selected.install.runtimePath, runtimeVersion: selected.version,
     upstreamRevision: selected.install.upstreamRevision, expectedSha256: selected.install.binarySha256,
-    debugAdapter: pin?.debugAdapter, args, cwd: rootDir, detected };
+    debugAdapter: pin?.debugAdapter, args, cwd: rootDir, env:require("../shared/runtime/dependency-environment").environment(selected.install), detected };
 }
 
 async function launchRuntime(runtimeId, entry, context) {
@@ -115,10 +145,18 @@ async function launchRuntime(runtimeId, entry, context) {
     const runtime = { ...Native.resolveLocalRuntime(spec), debugAdapter: spec.debugAdapter };
     const spawn = context.spawnOwnedChecked || context.spawnDetachedChecked;
     if (typeof spawn !== "function") throw new Error("Native process launcher is unavailable.");
+    // This explicit tool runs in a symbol sidecar workspace. Retain its
+    // existing save boundary until that workspace supports native save policy.
+    const debugArgs = [...spec.args];
+    if (!(typeof entry.saveDirOverride === "string" && entry.saveDirOverride.trim())) {
+      const directory = path.join(GameData.resolveGameModuleDir(context.userDataDir, entry.gameId, manifest.id), "saves");
+      fs.mkdirSync(directory, { recursive: true });
+      debugArgs.unshift("-savedir", directory);
+    }
     const session = await LiveVariables.startSession({ entry, userDataDir: context.userDataDir, runtime,
       scenarioPath: spec.detected.scenarioPath,
-      spawn: directory => spawn(runtime.executablePath, [...spec.args, "-debug_dap"],
-        { cwd: directory, detached: false, stdio: ["pipe", "pipe", "pipe"] }, runtime.needsRosetta) });
+      spawn: directory => spawn(runtime.executablePath, [...debugArgs, "-debug_dap"],
+        { cwd: directory, env:spec.env, detached: false, stdio: ["pipe", "pipe", "pipe"] }, runtime.needsRosetta) });
     return session.child;
   }
   return Native.launchLocalRuntime({ ...spec, context });

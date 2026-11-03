@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopy } = require("../../../shared/copy-file");
 const path = require("node:path");
 const { readMachOLoadCommands } = require("../../../shared/runtime/macho-load-commands");
 const { versionAtLeast } = require("../../../shared/runtime/bundled-native");
@@ -151,7 +152,7 @@ async function copyTree(source, destination, sourceRoot, signal) {
     return;
   }
   if (!stat.isFile()) fail("The graphics package contains a nonregular file.");
-  await fs.promises.copyFile(source, destination, fs.constants.COPYFILE_FICLONE);
+  await cloneOrCopy(source, destination, { signal });
   await fs.promises.chmod(destination, stat.mode & 0o777);
 }
 async function stageTemplateClosure({ templateRoot, destinationRoot, signal, templateVersion } = {}) {

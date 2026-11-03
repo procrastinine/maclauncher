@@ -27,6 +27,8 @@ const { observeGameProcess } = require("../core/game-process-events");
 const { readJsonObject, readJsonDocument, onUnreadablePreserved, writeJsonAtomic } = require("../core/json-files");
 const { coordinatorFor } = require("../core/runtime-coordinator");
 const { createSettingsSnapshots } = require("../core/settings-snapshots");
+const { applySaveIdentity } = require("../core/save-identity");
+const { ORIGINAL_GAME_MIRRORS_MIGRATION, CURRENT_SETTINGS_MIGRATION } = require("../core/data-migration-ids");
 const { createUtilityWindowController } = require("./utility-windows");
 const { runRuntimeManagerAction } = require("../core/runtime-manager-service");
 const { createBackendService } = require("../core/backend-worker-client");
@@ -83,7 +85,7 @@ const DEFAULT_LAUNCHER_SETTINGS = {
   library: LibraryState.DEFAULT_LIBRARY_STATE
 };
 
-const GAME_SCHEMA_VERSION = 1;
+const GAME_SCHEMA_VERSION = GameStore.CURRENT_RECORD_SCHEMA_VERSION;
 
 const ICON_EXTRACTION_ENABLED = process.env.MACLAUNCHER_ICON_EXTRACT !== "0";
 
@@ -195,15 +197,17 @@ const graphicsLaunchWarnings = new Map();
 const gameLaunchNotices = new Map();
 let graphicsImportsClosing = false;
 const runtimeStateSnapshots = {};
+const { sanitizeRuntimeErrors } = require("../core/runtime-errors.mjs");
 let runtimeInventoryRevision = 0;
 const moduleStateSnapshots = {};
 let snapshotSaveTimer;
 let snapshotWrite = Promise.resolve();
 const snapshotFile = path.join(userDataDir, "ui-state-cache.json");
+// Cache identity follows the launcher CPU because its default runtime catalogs differ under Rosetta.
 try {
   const stat = fs.lstatSync(snapshotFile);
   if (stat.isFile() && !stat.isSymbolicLink() && stat.size <= 8 * 1024 ** 2) {
-    const cached = JSON.parse(fs.readFileSync(snapshotFile, "utf8"));
+    const cached = sanitizeRuntimeErrors(JSON.parse(fs.readFileSync(snapshotFile, "utf8")));
     if (cached.platform === process.platform && cached.arch === process.arch && cached.version === app.getVersion()) {
       Object.assign(runtimeStateSnapshots, cached.runtimeManagers || {});
       Object.assign(moduleStateSnapshots, cached.moduleStates || {});
@@ -213,8 +217,8 @@ try {
 function saveStateSnapshotsSoon() {
   clearTimeout(snapshotSaveTimer);
   snapshotSaveTimer = setTimeout(() => {
-    const value = JSON.stringify({ platform: process.platform, arch: process.arch, version: app.getVersion(),
-      runtimeManagers: runtimeStateSnapshots, moduleStates: moduleStateSnapshots });
+    const value = JSON.stringify(sanitizeRuntimeErrors({ platform: process.platform, arch: process.arch, version: app.getVersion(),
+      runtimeManagers: runtimeStateSnapshots, moduleStates: moduleStateSnapshots }));
     snapshotWrite = snapshotWrite.catch(() => {}).then(async () => {
       const temporary = snapshotFile + ".tmp";
       await fs.promises.mkdir(userDataDir, { recursive: true });
@@ -232,6 +236,8 @@ function refreshModuleSnapshots() {
   return backendService.request("state", "moduleStates", loadSettings())
     .catch(error => logger.warn("[modules] background state failed", error.message));
 }
+// Running sessions' own events, such as a list a session supplies to a picker.
+const sessionEvents = require("./module-app-actions").createSessionEvents();
 const backendService = createBackendService({ userDataDir,
   appInfo: { appPath: app.getAppPath(), isPackaged: app.isPackaged, version: app.getVersion(),
     bootstrapPath: path.resolve(__dirname, "bootstrap.js"),
@@ -262,21 +268,24 @@ const backendService = createBackendService({ userDataDir,
       const owner = getLauncherDialogOwner();
       const selected = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options);
       return selected.canceled || !selected.filePaths.length ? null : { filePaths: selected.filePaths, archivePath: selected.filePaths[0] };
-    }
+    },
+    storageUpkeepBusy: () => !storageUpkeepQuiet()
   },
   onEvent: (event, payload, lane) => {
+    if (event === "sessionEvent") { sessionEvents.dispatch(payload);return; }
     if (event === "toolLaunch" || event === "gameProcess") { registerProcessRun(payload.gamePath, payload.child, payload.runtimeId); return; }
     if (event === "unreadablePreserved") { noticeUnreadable(payload); return; }
     if (event === "toolProcess") { logRuntimeToolSpawn(payload.process, payload, payload); return; }
     if (event === "log") { logger[payload.level]?.(...payload.args); return; }
     if (event === "runtimeState" || event === "moduleState") {
       const snapshots = event === "runtimeState" ? runtimeStateSnapshots : moduleStateSnapshots;
-      if (JSON.stringify(snapshots[payload.id]) === JSON.stringify(payload.state)) return;
+      const state = sanitizeRuntimeErrors(payload.state);
+      if (JSON.stringify(snapshots[payload.id]) === JSON.stringify(state)) return;
       if (event === "runtimeState") {
         const inventory = state => [state?.installed, state?.sections?.map(section => [section.id, section.installed])];
-        if (JSON.stringify(inventory(snapshots[payload.id])) !== JSON.stringify(inventory(payload.state))) runtimeInventoryRevision += 1;
+        if (JSON.stringify(inventory(snapshots[payload.id])) !== JSON.stringify(inventory(state))) runtimeInventoryRevision += 1;
       }
-      snapshots[payload.id] = payload.state;
+      snapshots[payload.id] = state;
       saveStateSnapshotsSoon(); scheduleStateRebuild(); return;
     }
     if (event === "preparation") {
@@ -295,6 +304,8 @@ const backendService = createBackendService({ userDataDir,
         const index = gameRecordsCache.findIndex(entry => entry.gameId === payload.gameId);
         if (index >= 0) gameRecordsCache[index] = record;
       }
+      // A running session's targets are listed in the File and Dock menus.
+      if (record && EphemeralEntries.isEphemeral(userDataDir, record)) setupAppMenu();
       scheduleStateRebuild(); return;
     }
     if (event === "runtimeChanged") {
@@ -423,7 +434,10 @@ function settingsPath() {
 // An unreadable settings document is kept byte for byte beside it before any
 // save, and one notice names the copy. Its readable top-level settings remain.
 function readSettingsDocument() {
-  return readJsonDocument(settingsPath());
+  const document = readJsonDocument(settingsPath());
+  if (document?.dataMigrations?.[CURRENT_SETTINGS_MIGRATION]?.complete === true) return document;
+  return require("../core/backcompat/settings-conversions").migrateLegacySettings(document, { userDataDir, registry: Modules, logger,
+    commitSettings: (before, next) => settingsCoordinator.applySettings(before, next) });
 }
 
 // One notice names each new copy of an unreadable stored document, whether
@@ -645,7 +659,7 @@ function normalizeSettings(settings) {
   settings.runtimes = withoutClearedDefaults(settings.runtimes);
   lastRuntimeSettingsMigration = pruneRuntimeSettingsDefaults(settings);
 
-  const keep = new Set(["modules", "runtimes", "launcher"]);
+  const keep = new Set(["modules", "runtimes", "launcher", "dataMigrations"]);
   for (const key of Object.keys(settings)) {
     if (!keep.has(key)) delete settings[key];
   }
@@ -701,7 +715,10 @@ function serializeGameEntry(entry) {
     iconPath: entry.iconPath || null,
     iconSource: entry.iconSource || null,
     lastPlayedAt: entry.lastPlayedAt ?? null,
-    lastBuiltAt: entry.lastBuiltAt ?? null
+    lastBuiltAt: entry.lastBuiltAt ?? null,
+    // A session entry keeps its kind for the library view; its directory's
+    // marker decides removal.
+    ...(entry.ephemeral === true ? { ephemeral: true } : {})
   };
 }
 
@@ -721,23 +738,25 @@ function assertGameNotRemoving(entry) {
   if (isGameRemoving(entry)) throw Object.assign(new Error("Game removal is in progress. Try again when it finishes."), { code: "GAME_IN_USE" });
 }
 
-function saveGameRecord(entry) {
+function saveGameRecord(entry, { baseline } = {}) {
   assertGameNotRemoving(entry);
-  const record = serializeGameEntry(entry);
-  const index = gameRecordsCache?.findIndex(game => game.gameId === record.gameId) ?? -1;
-  if (index >= 0 && JSON.stringify(gameRecordsCache[index]) === JSON.stringify(record)) return;
-  GameStore.writeGameRecord(app.getPath("userData"), record);
+  const requested = serializeGameEntry(entry);
+  const index = gameRecordsCache?.findIndex(game => game.gameId === requested.gameId) ?? -1;
+  const current = GameStore.readGameRecord(app.getPath("userData"), requested.gameId);
+  const previous = baseline || (index >= 0 ? serializeGameEntry(gameRecordsCache[index]) : current && serializeGameEntry(current));
+  // Apply this operation's delta to disk, including worker changes that have
+  // not reached the main-process cache through entryChanged yet.
+  const record = current ? mergeSettingsChanges(previous, requested, current) : requested;
+  if (!current || JSON.stringify(current) !== JSON.stringify(record)) GameStore.writeGameRecord(app.getPath("userData"), record);
   if (gameRecordsCache) {
     if (index >= 0) gameRecordsCache[index] = record;
     else gameRecordsCache.push(record);
   }
+  return record;
 }
 
 function saveGameRecords(entries) {
-  for (const entry of entries || []) {
-    if (!isGameRemoving(entry)) saveGameRecord(entry);
-  }
-  gameRecordsCache = (entries || []).map(serializeGameEntry);
+  gameRecordsCache = (entries || []).map(entry => isGameRemoving(entry) ? serializeGameEntry(entry) : saveGameRecord(entry));
 }
 
 function persistGames(entries) {
@@ -755,7 +774,7 @@ function loadGamesHydrated({ persist = true } = {}) {
   } catch {}
   if (changed && persist) saveGameRecords(games);
   gameRecordsCache = games;
-  return games;
+  return structuredClone(games);
 }
 
 function orderGames(games, library) {
@@ -1118,8 +1137,9 @@ function normalizeGameEntry(entry, settings, precomputed = null) {
     iconPath,
     iconSource,
     lastPlayedAt: entry.lastPlayedAt ?? null,
-    // A session entry that exists only while it runs.
-    ...(entry.ephemeral === true ? { ephemeral: true } : {}),
+    // A session entry that exists only while it runs, with the windows,
+    // apps or displays it serves.
+    ...(entry.ephemeral === true ? { ephemeral: true, ...sessionTargetsView(entry) } : {}),
     moduleFamily: moduleInfo.family,
     moduleLabel: moduleInfo.label,
     moduleShortLabel: moduleInfo.shortLabel,
@@ -1715,14 +1735,70 @@ async function stopGameRuns(gamePath) {
 // library row that exists while its session runs and is removed with its
 // folder when the session ends.
 const EphemeralEntries = require("../core/ephemeral-entries");
-const moduleAppActions = require("./module-app-actions").createModuleAppActions({ registry: Modules, logger,
-  targetContext: () => ({ excludePid: process.pid }),
-  choose: (moduleId, actionId, target) => startEphemeralSession(moduleId, actionId, target).catch(error => {
+function chooseAppActionTarget(moduleId, actionId, target) {
+  return startEphemeralSession(moduleId, actionId, target).catch(error => {
     logger.error("[session]", error.message);
     for (const win of launcherWindows) {
       try { win.webContents.send("launcher:gameFailed", { gamePath: null, message: `${target?.label || "The session"} could not start. ${error.message}` }); } catch {}
     }
-  }) });
+  });
+}
+// A running session takes module actions in its game's lane, where its
+// process runs, and sends its own events back through that lane.
+const moduleAppActions = require("./module-app-actions").createModuleAppActions({ registry: Modules, logger,
+  targetContext: () => ({ excludePid: process.pid }), choose: chooseAppActionTarget,
+  openPicker: (moduleId, actionId) => openAppActionPicker(moduleId, actionId).catch(error => logger.error("[app actions]", error.message)),
+  sessions: {
+    running: moduleId => runningEphemeralEntries().find(entry => entry.moduleId === moduleId) || null,
+    request: (entry, action, payload) => backendService.request("game:" + (entry.gameId || entry.gamePath), "moduleAction", entry, action, payload, loadSettings()),
+    subscribe: (entry, listener) => sessionEvents.subscribe(entry.gameId, listener)
+  } });
+// Screen Recording belongs to MacLauncher, which asks for it once, while it
+// is undetermined; module helpers only check it. Asking for screen sources
+// shows the system prompt.
+async function screenAccess() {
+  if (process.platform !== "darwin") return "granted";
+  if (systemPreferences.getMediaAccessStatus("screen") === "not-determined") {
+    try { await require("electron").desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width: 0, height: 0 } }); }
+    catch (error) { logger.warn("[app actions] Screen Recording could not be requested:", error.message); }
+  }
+  return systemPreferences.getMediaAccessStatus("screen");
+}
+// A picker action's window lists its live targets while it is open.
+const appActionPicker = require("./app-action-picker").createAppActionPicker({ appActions: moduleAppActions, logger,
+  targetContext: () => ({ excludePid: process.pid, logger, screenAccess }),
+  iconFor: file => app.getFileIcon(file, { size: "normal" }).then(image => image.isEmpty() ? null : image.toDataURL()),
+  send: (win, payload) => { if (!win.isDestroyed()) win.webContents.send("launcher:appActionPicker", payload); },
+  choose: chooseAppActionTarget });
+function startAppActionPicker(win, moduleId, actionId) {
+  if (!win.__appActionPicker) {
+    win.__appActionPicker = true;
+    win.on("closed", () => appActionPicker.stop(win));
+    win.on("focus", () => appActionPicker.focus(win));
+  }
+  appActionPicker.start(win, moduleId, actionId);
+}
+async function openAppActionPicker(moduleId, actionId) {
+  const win = await utilityWindows.open({ view: "appAction", moduleId, actionId });
+  if (!win || win.isDestroyed()) return;
+  startAppActionPicker(win, moduleId, actionId);
+}
+function appActionPickerWindow(event) { return BrowserWindow.fromWebContents(event.sender); }
+// A picker window whose page reloaded without a running picker starts it again.
+ipcMain.handle("launcher:appActionPickerState", async event => {
+  const win = appActionPickerWindow(event);
+  if (!win || win.isDestroyed()) return null;
+  const request = utilityWindows.stateForWindow(win, {})?.utilityWindow;
+  if (request?.view === "appAction" && !await appActionPicker.state(win)) startAppActionPicker(win, request.moduleId, request.actionId);
+  return appActionPicker.state(win);
+});
+ipcMain.handle("launcher:appActionPickerChoose", (event, targetId) => appActionPicker.choose(appActionPickerWindow(event), String(targetId || "")));
+ipcMain.handle("launcher:appActionPickerLink", async event => {
+  const url = appActionPicker.link(appActionPickerWindow(event));
+  if (url) await shell.openExternal(url);
+  return Boolean(url);
+});
+
 const appActionIcons = new Map();
 function appActionIcon(target) {
   const file = target?.iconPath;
@@ -1749,19 +1825,68 @@ function runningEphemeralEntries() {
 }
 function ephemeralStopItems() {
   return moduleAppActions.stopItems(runningEphemeralEntries(),
-    entry => stopGameRuns(entry.gamePath).catch(error => logger.error("[session]", error.message)));
+    entry => stopGameRuns(entry.gamePath).catch(error => logger.error("[session]", error.message)),
+    (entry, id) => removeSessionTarget(entry, id).catch(error => logger.error("[session]", error.message)),
+    { runSessionAction: (entry, action) => {
+        const current = runningEphemeralEntries().find(row => row.gameId === entry.gameId && row.gamePath === entry.gamePath && row.moduleId === entry.moduleId);
+        return current ? Promise.resolve(moduleAppActions.sessionAction(current, action)).catch(error => logger.error("[session]", error.message)) : false;
+      },
+      shortcutLabel: name => graphicsShortcuts.status().find(item => item.action === name)?.accelerator || null,
+      // Graphics shortcuts are assigned in the Launcher section of Settings.
+      openShortcutSettings: () => utilityWindows.open({ view: "settings", sectionId: "launcher" }).catch(error => logger.error("[settings]", error.message)) });
+}
+// Removes one target from a running session; the session ends with its last.
+async function removeSessionTarget(entry, id) {
+  await moduleAppActions.removeTarget(entry, id);
+  setupAppMenu();
+}
+ipcMain.handle("launcher:removeSessionTarget", async (_event, gamePath, id) => {
+  const entry = runningEphemeralEntries().find(row => row.gamePath === gamePath);
+  if (!entry || typeof id !== "string") return false;
+  await removeSessionTarget(entry, id);
+  return true;
+});
+// The inspector's list of a session's targets, bounded.
+function sessionTargetsView(entry) {
+  let targets = null;
+  try { targets = moduleAppActions.sessionTargets(entry); } catch { return {}; }
+  if (!Array.isArray(targets)) return {};
+  const text = value => typeof value === "string" && value ? value.slice(0, 256) : null;
+  return { sessionTargets: targets.filter(target => text(target?.id) && text(target.label)).slice(0, 64).map(target => ({
+    id: text(target.id), label: text(target.label), ...(text(target.detail) ? { detail: text(target.detail) } : {}) })) };
 }
 // An app action's shortcut is held only while the action is available, so
-// Settings lists it only where it can act. It starts a session for the
-// frontmost app, or stops that app's session.
+// Settings lists it only where it can act. It adds the frontmost app to the
+// running session, or starts one, and removes an app the session already
+// serves.
 const appActionShortcuts = new Map();
 function syncAppActionShortcuts() {
-  const wanted = new Set(moduleAppActions.declared().map(({ action }) => action.shortcut).filter(name => moduleAppActions.forShortcut(name)));
+  // A session shortcut is listed while its action is available, and its hot
+  // key is held while a session runs. A changed assignment rebuilds the
+  // menus, whose Stop submenus name it.
+  const declared = moduleAppActions.declared();
+  const wanted = new Map(declared.map(({ action }) => action.shortcut).filter(name => moduleAppActions.forShortcut(name))
+    .map(name => [name, { run: () => toggleAppActionSession(name), always: true }]));
+  for (const name of declared.flatMap(({ sessionShortcuts }) => sessionShortcuts.map(item => item.shortcut)))
+    if (!wanted.has(name) && moduleAppActions.sessionShortcut(name)) wanted.set(name, { run: () => runSessionShortcut(name), always: false });
   for (const [name, remove] of appActionShortcuts) if (!wanted.has(name)) { remove();appActionShortcuts.delete(name); }
-  for (const name of wanted) {
+  for (const [name, { run, always }] of wanted) {
     if (appActionShortcuts.has(name)) continue;
-    try { appActionShortcuts.set(name, graphicsShortcuts.handle(name, () => toggleAppActionSession(name), { always: true })); }
+    try { appActionShortcuts.set(name, graphicsShortcuts.handle(name, run, { always })); }
     catch (error) { logger.warn("[app actions]", error.message); }
+  }
+  const assigned = JSON.stringify(graphicsShortcuts.status().filter(item => wanted.has(item.action)).map(item => [item.action, item.accelerator]));
+  if (syncAppActionShortcuts.assigned !== undefined && syncAppActionShortcuts.assigned !== assigned) setupAppMenu();
+  syncAppActionShortcuts.assigned = assigned;
+}
+// Runs a session shortcut's module action in each running session of its
+// module that serves the frontmost app.
+async function runSessionShortcut(name) {
+  const pid = await GraphicsShortcuts.frontmostPid();
+  const found = moduleAppActions.sessionShortcut(name);
+  if (!pid || !found) return;
+  for (const entry of runningEphemeralEntries().filter(row => row.moduleId === found.moduleId)) {
+    if ((moduleAppActions.sessionTargets(entry) || []).some(target => target.pid === pid)) await moduleAppActions.sessionAction(entry, found.action);
   }
 }
 async function toggleAppActionSession(shortcut) {
@@ -1770,12 +1895,35 @@ async function toggleAppActionSession(shortcut) {
   await moduleAppActions.refresh();
   const found = moduleAppActions.forShortcut(shortcut);
   if (!found) return;
-  const running = runningEphemeralEntries().filter(entry => entry.moduleId === found.moduleId && entry.moduleData?.pid === pid);
-  if (running.length) { for (const entry of running) await stopGameRuns(entry.gamePath);return; }
+  const running = runningEphemeralEntries().filter(entry => entry.moduleId === found.moduleId);
+  const served = running.flatMap(entry => (moduleAppActions.sessionTargets(entry) || (entry.moduleData?.pid ? [{ id: null, pid: entry.moduleData.pid }] : []))
+    .filter(item => item.pid === pid).map(item => [entry, item.id]));
+  if (served.length) {
+    for (const [entry, id] of served) await (id ? removeSessionTarget(entry, id) : stopGameRuns(entry.gamePath));
+    return;
+  }
   const target = found.targets.find(item => item.target?.pid === pid);
   if (target) await startEphemeralSession(found.moduleId, found.action.id, target);
 }
-async function startEphemeralSession(moduleId, actionId, target) {
+async function startEphemeralSession(moduleId, actionId, target, queued = false) {
+  if (!queued) {
+    const previous = startEphemeralSession.pending || Promise.resolve();
+    const next = previous.catch(() => {}).then(() => startEphemeralSession(moduleId, actionId, target, true));
+    startEphemeralSession.pending = next;
+    try { return await next; } finally { if (startEphemeralSession.pending === next) startEphemeralSession.pending = null; }
+  }
+  const running = moduleAppActions.runningSession(moduleId, actionId);
+  if (running) {
+    if (!await moduleAppActions.addTarget(running, actionId, target, { userDataDir })) throw new Error("The graphics session is no longer available.");
+    setupAppMenu();return;
+  }
+  // An open picker's processes end before the session's process starts, and
+  // the picker starts again with the session as the source of its list.
+  const resume = await appActionPicker.pause();
+  try { await startNewEphemeralSession(moduleId, actionId, target); }
+  finally { resume(); }
+}
+async function startNewEphemeralSession(moduleId, actionId, target) {
   const entry = moduleAppActions.createEntry(moduleId, actionId, target, { userDataDir });
   EphemeralEntries.mark(userDataDir, entry.gameId);
   let stored;
@@ -1788,6 +1936,22 @@ async function startEphemeralSession(moduleId, actionId, target) {
     cachedState = buildState(settings, upserted.games);
     broadcastState();
     if (!await runGameEntry(stored, stored.runtimeId)) removeEphemeralEntry(stored.gamePath);
+    else if (runningGameSessions.get(stored.gamePath)?.size) {
+      // The running session is selected in the library, where Stop and its
+      // graphics are. With no effects, the target looks unchanged until some
+      // are added, so the entry says so and its Graphics section opens.
+      const empty = !ReShade.executionRequirements(stored).needed.processor;
+      if (empty) {
+        gameLaunchNotices.set(stored.gamePath, ["No effects were set when this session started. Effects added under Graphics apply while it runs."]);
+        cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
+        broadcastState();
+      }
+      for (const win of launcherWindows) {
+        try { win.webContents.send("launcher:gameImported", stored.gamePath, { graphics: empty }); } catch {}
+      }
+      // With a chain, the processed target stays in front.
+      if (empty) void ensureLauncherWindow().catch(error => logger.warn("[session]", error.message));
+    }
   } catch (error) {
     removeEphemeralEntry(stored?.gamePath || entry.gamePath, { gameId: entry.gameId });
     throw error;
@@ -1827,7 +1991,7 @@ function buildRuntimeManagerState(settings) {
     if (unavailableReason(ui?.hostFeature)) continue;
     out[manager.id] = {
       label: manager.label || manager.id,
-      ...withRunnableBuilds(state),
+      ...require("../core/runtime-state-snapshot.mjs").snapshotRuntimeState(withRunnableBuilds(state)),
       id: manager.id,
       ui
     };
@@ -1881,9 +2045,10 @@ const activityDelivery = require("./activity-delivery").createActivityDelivery((
   win.webContents.send("launcher:activity", message));
 const saveEditorWindows = new Map();
 const utilityWindows = createUtilityWindowController({
-  createWindow: options => {
+  createWindow: (options, request) => {
     const workArea = screen.getPrimaryDisplay().workAreaSize;
     return new BrowserWindow({ ...options,
+      ...(request?.view === "appAction" ? { title: moduleAppActions.title(request.moduleId, request.actionId) || options.title } : {}),
       width: Math.min(options.width, Math.max(options.minWidth, workArea.width - 48)),
       height: Math.min(options.height, Math.max(options.minHeight, workArea.height - 48)),
       backgroundColor: nativeTheme.shouldUseDarkColors ? "#111318" : "#f5f6f8",
@@ -1981,7 +2146,7 @@ const microgAccounts = require("../modules/android/store/microg-accounts").creat
     }
   })
 });
-const googleSessionVault = require("./steam-session").createSteamSessionStorage({ userDataDir, safeStorage, namespace: "external/google-play" });
+const googleSessionVault = require("./steam-session").createSteamSessionStorage({ userDataDir, safeStorage, namespace: "external/google-play", cacheDecrypted: true });
 const googleAccountManager = require("../modules/android/store/google-account-manager").createGoogleAccountManager({
   browserAuth: googlePlayAuth, microg: microgAccounts, vault: googleSessionVault,
   onChanged: () => externalStores.accounts("google-play", false),
@@ -2666,6 +2831,7 @@ function setupAppMenu() {
       submenu: [
         { label: "Open…", accelerator: "CmdOrCtrl+O", click: () => void openGamesFromMenu() },
         ...(isChildGame ? [] : moduleAppActions.menuItems("file", { icon: appActionIcon })),
+        ...(isChildGame ? [] : ephemeralStopItems()),
         { type: "separator" },
         ...(process.platform === "darwin" ? [{ role: "close" }] : [{ role: "quit" }])
       ]
@@ -2709,11 +2875,15 @@ function upsertGame(games, nextEntry, settings, checks = null) {
       : now;
   merged.updatedAt = now;
 
-  const normalized = normalizeGameEntry(merged, settings, checks ? { checks, current: true } : null);
+  let normalized = normalizeGameEntry(merged, settings, checks ? { checks, current: true } : null);
   normalized.gameId = gameId;
   normalized.createdAt = merged.createdAt;
   normalized.updatedAt = merged.updatedAt;
   normalized.schemaVersion = GAME_SCHEMA_VERSION;
+  // Commit new imports against the current library, after asynchronous detection.
+  if (!existing) normalized = applySaveIdentity(normalized, { games: ordered,
+    describe: (game, context) => Modules.getModule(resolveModuleId(game))?.resolveSaveIdentity?.(game, context),
+    context: { settings, userDataDir, logger } });
 
   const nextGames = LibraryState.upsertLibraryEntry(ordered, normalized);
   const nextOrder = nextGames.map(entry => entry?.gameId).filter(Boolean);
@@ -2768,6 +2938,40 @@ function reorderGame(games, gamePath, toIndex, settings) {
   return result.ordered;
 }
 
+// Derived-data upkeep runs only while no game runs or prepares and nothing
+// downloads; the backend asks again before every removal.
+function storageUpkeepQuiet() {
+  return !Object.keys(buildRunningState()).length && !gamePreparations.size &&
+    ![...downloadManager.list(), ...backendService.listDownloads()].some(task => task.status === "downloading");
+}
+
+// A one-time data migration with work opens the launcher window first, which
+// shows the migration's progress until the library state exists. The window
+// cannot close meanwhile, because closing the last window quits the app.
+let startupMigration = null;
+function showStartupMigration(progress) {
+  if (!startupMigration && !getArgValue("--maclauncher-game=")) {
+    void ensureLauncherWindow({ background: backgroundStartup })
+      .then(win => { if (startupMigration) win?.setClosable(false); })
+      .catch(error => logger.warn("[launcher]", error.message));
+  }
+  startupMigration = progress;
+  for (const win of launcherWindows) {
+    try { win.webContents.send("launcher:startupMigration", progress); } catch {}
+  }
+  // Yield between games so the window can paint and receive progress.
+  return new Promise(resolve => setImmediate(resolve));
+}
+function finishStartupMigration() {
+  if (!startupMigration) return;
+  startupMigration = null;
+  mainWindow?.setClosable(true);
+  broadcastState();
+  // Activity requests made before the library state existed were not served.
+  const activity = getLauncherActivity();
+  for (const win of launcherWindows) activityDelivery.ready(win, activity);
+}
+
 async function init() {
   logger.info("MacLauncher starting");
   setupAppMenu();
@@ -2789,10 +2993,22 @@ async function init() {
   const settings = loadSettingsHydrated({ persist: !isChildGame });
   const games = loadGamesHydrated({ persist: !isChildGame });
   if (!isChildGame) {
+    if (settings?.dataMigrations?.[ORIGINAL_GAME_MIRRORS_MIGRATION]?.complete !== true) await require("../core/backcompat/data-migrations").runDataMigrations({
+      settings, games, registry: Modules, userDataDir, logger,
+      onProgress: showStartupMigration,
+      saveSettings: next => {
+        // Persist through the loaded snapshot so unrelated concurrent edits merge.
+        settings.dataMigrations = { ...settings.dataMigrations,
+          [ORIGINAL_GAME_MIRRORS_MIGRATION]: next.dataMigrations[ORIGINAL_GAME_MIRRORS_MIGRATION] };
+        saveSettings(settings);
+      },
+      saveEntry: (entry, baseline) => Object.assign(entry, saveGameRecord(entry, { baseline: serializeGameEntry(baseline) }))
+    }).catch(error => logger.warn("[migration] Original game paths remain pending:", error.message));
     const synced = LibraryState.syncLibraryStateWithGames(settings?.launcher?.library, games);
     if (settings?.launcher) settings.launcher.library = synced.library;
     if (synced.changed) saveSettings(settings);
     cachedState = buildState(settings, games);
+    finishStartupMigration();
     syncCheatsFiles(games);
     // The window paints stored records immediately. Backend inventories and
     // metadata validation never delay opening Electron or handle selection.
@@ -2800,6 +3016,8 @@ async function init() {
     void refreshModuleSnapshots();
     void refreshLibraryMetadata(games, settings);
     void moduleAppActions.maintain({ userDataDir, logger });
+    require("./storage-maintenance").scheduleStorageMaintenance({ logger, isQuiet: storageUpkeepQuiet,
+      request: () => backendService.request("maintenance", "maintainStorage") });
     refreshModuleAppActions();
   }
 
@@ -2978,6 +3196,7 @@ async function init() {
 
 ipcMain.handle("launcher:getState", event =>
   utilityWindows.stateForWindow(BrowserWindow.fromWebContents(event.sender), getLauncherState()));
+ipcMain.handle("launcher:getStartupMigration", () => startupMigration);
 ipcMain.handle("launcher:prioritizeGame", (_event, gamePath) => {
   prioritizeLibraryEntry(gameRecordsCache?.find(entry => entry.gamePath === gamePath));
   return true;
@@ -2995,7 +3214,8 @@ ipcMain.on("launcher:activityStopped", event => {
   if (launcherWindows.has(win)) activityDelivery.close(win);
 });
 ipcMain.handle("launcher:openUtilityWindow", async (_event, request) => {
-  await utilityWindows.open(request);
+  if (request?.view === "appAction") await openAppActionPicker(request.moduleId, request.actionId);
+  else await utilityWindows.open(request);
   return true;
 });
 
@@ -3150,8 +3370,7 @@ app.on("before-quit", event => {
 });
 
 ipcMain.handle("launcher:forgetGame", async (_event, gamePath) => {
-  await removeLibraryEntry(gamePath);
-  return true;
+  return removeLibraryEntry(gamePath);
 });
 
 ipcMain.handle("launcher:findMissingGames", async (_event, gamePaths) => {
@@ -3191,14 +3410,46 @@ function assertGameRemovalAvailable(entry, ownRemoval = false) {
   }
 }
 
+async function confirmGameRemoval(entries, { owner, trash = false, confirmOriginal = false, ignoreMissingSource = false } = {}) {
+  const Backcompat = require("../core/backcompat/game-removal");
+  const settings = loadSettings();
+  const retained = entries.map(entry => ({ entry, acknowledgment: Backcompat.retainedGameDataRemoval(entry, settings, userDataDir) }))
+    .filter(item => item.acknowledgment);
+  if (!retained.length && !confirmOriginal) return [];
+  const ordinaryDetail = trash ? "Game files will be moved to the Trash and launcher data will be removed." : "The library entry and launcher game data will be removed. Original game files will stay in place.";
+  const retainedDetail = retained.map(({ entry, acknowledgment }) => `${entry.name || path.basename(entry.gamePath)}\n` + acknowledgment.retained.map(item =>
+    `${item.mirrorRoot || `Location was not recorded. Launcher game data: ${GameData.resolveGameDir(userDataDir, entry.gameId)}`}\n${item.reason}`).join("\n\n")).join("\n\n");
+  const options = { type: "warning", buttons: retained.length ? ["Show in Finder", "Remove Anyway", "Cancel"] : ["Cancel", "Move to Trash"],
+    defaultId: retained.length ? 2 : 0, cancelId: retained.length ? 2 : 0,
+    message: retained.length ? "Remove game data containing retained files?" : entries.length === 1 ? "Move this game to the Trash?" : `Move ${entries.length} selected games to the Trash?`,
+    detail: ordinaryDetail + (ignoreMissingSource ? " Missing files will be forgotten." : "") + "\n\n" +
+      entries.map(entry => `${entry.name || path.basename(entry.gamePath)}\n${entry.gamePath}`).join("\n\n") +
+      (retained.length ? "\n\nRecovery could not restore these files. Remove Anyway permanently deletes their launcher game data.\n\n" + retainedDetail : "") };
+  while (true) {
+    const result = owner ? await dialog.showMessageBox(owner, options) : await dialog.showMessageBox(options);
+    if (retained.length && result.response === 0) {
+      const first = retained[0];
+      shell.showItemInFolder(first.acknowledgment.retained.find(item => item.mirrorRoot)?.mirrorRoot || GameData.resolveGameDir(userDataDir, first.entry.gameId));
+      continue;
+    }
+    return result.response === 1 ? retained.map(item => item.acknowledgment) : null;
+  }
+}
+
 async function removeLibraryEntry(gamePath, options = {}) {
   const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
   if (!entry) throw new Error("Game not found in library.");
   assertGameRemovalAvailable(entry);
+  const acknowledgments = options.retainedGameDataAcknowledgments || await confirmGameRemoval([entry], { owner: getLauncherDialogOwner(), trash: options.trash });
+  if (acknowledgments === null) return false;
+  assertGameRemovalAvailable(entry);
+  const { retainedGameDataAcknowledgments: _acknowledgments, ...removalOptions } = options;
+  const acknowledgment = acknowledgments.find(item => item.gameId === entry.gameId);
+  if (acknowledgment) removalOptions.retainedGameDataAcknowledgment = acknowledgment;
   gameRemovals.set(gamePath, { gamePath, gameId: entry.gameId, phase: "remove", label: "Removing" });
   broadcastState();
   try {
-    await backendService.request(`game:${entry.gameId || gamePath}`, "removeGameData", entry, options);
+    await backendService.request(`game:${entry.gameId || gamePath}`, "removeGameData", entry, removalOptions);
     assertGameRemovalAvailable(entry, true);
     // Merge into current library/settings after cleanup, preserving unrelated
     // imports, notes and runtime changes that finished while the worker ran.
@@ -3213,28 +3464,25 @@ async function removeLibraryEntry(gamePath, options = {}) {
 async function removeLibraryPaths(gamePaths, options) {
   const removedPaths = [], failures = [];
   for (const gamePath of gamePaths) {
-    try { await removeLibraryEntry(gamePath, options); removedPaths.push(gamePath); }
+    try { if (await removeLibraryEntry(gamePath, options)) removedPaths.push(gamePath); }
     catch (error) { failures.push({ gamePath, error: String(error?.message || error) }); }
   }
   return { removedPaths, failures };
 }
 
-ipcMain.handle("launcher:forgetGames", async (_event, gamePaths) => {
+ipcMain.handle("launcher:forgetGames", async (event, gamePaths) => {
   const entries = LibraryMaintenance.selectLibraryEntries(loadGamesHydrated({ persist: false }), gamePaths);
-  return removeLibraryPaths(entries.map(entry => entry.gamePath));
+  const acknowledgments = await confirmGameRemoval(entries, { owner: BrowserWindow.fromWebContents(event.sender) });
+  if (acknowledgments === null) return { removedPaths: [], failures: [] };
+  return removeLibraryPaths(entries.map(entry => entry.gamePath), { retainedGameDataAcknowledgments: acknowledgments });
 });
 
 ipcMain.handle("launcher:deleteGames", async (event, gamePaths) => {
   const entries = LibraryMaintenance.selectLibraryEntries(loadGamesHydrated({ persist: false }), gamePaths);
   if (!entries.length) return { removedPaths: [], failures: [] };
-  const confirm = await dialog.showMessageBox(BrowserWindow.fromWebContents(event.sender), {
-    type: "warning", buttons: ["Cancel", "Move to Trash"], defaultId: 0, cancelId: 0,
-    message: `Move ${entries.length} selected ${entries.length === 1 ? "game" : "games"} to the Trash?`,
-    detail: "Game files will be moved to the Trash and launcher data will be removed. Missing files will be forgotten.\n\n" +
-      entries.map(entry => `${entry.name}\n${entry.gamePath}`).join("\n\n")
-  });
-  if (confirm.response !== 1) return { removedPaths: [], failures: [] };
-  return removeLibraryPaths(entries.map(entry => entry.gamePath), { trash: true, ignoreMissingSource: true });
+  const acknowledgments = await confirmGameRemoval(entries, { owner: BrowserWindow.fromWebContents(event.sender), trash: true, confirmOriginal: true, ignoreMissingSource: true });
+  if (acknowledgments === null) return { removedPaths: [], failures: [] };
+  return removeLibraryPaths(entries.map(entry => entry.gamePath), { trash: true, ignoreMissingSource: true, retainedGameDataAcknowledgments: acknowledgments });
 });
 
 ipcMain.handle("launcher:setGameFavorite", async (_event, gamePath, favorite) => {
@@ -3823,7 +4071,9 @@ async function shortcutGame() {
   // A window-graphics entry runs a helper; its captured app's pid is on the entry.
   const games = loadGamesHydrated({ persist: false });
   for (const item of running) item.targetPid = findGameByPath(games, item.gamePath)?.moduleData?.pid;
-  return GraphicsShortcuts.chooseGame(running, await GraphicsShortcuts.frontmostPid());
+  // A launched process can start the frontmost app, such as a Wine supervisor and its wine child.
+  const [pid, processes] = await Promise.all([GraphicsShortcuts.frontmostPid(), require("../core/process-tree").list()]);
+  return GraphicsShortcuts.chooseGame(running, pid, processes);
 }
 graphicsShortcuts.handle("bypass", async () => {
   const gamePath = await shortcutGame(), entry = gamePath && findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
@@ -4011,18 +4261,9 @@ ipcMain.handle("launcher:deleteGame", async (event, gamePath) => {
   if (!entry) throw new Error("Game not found in library.");
   assertGameRemovalAvailable(entry);
 
-  const confirm = await dialog.showMessageBox(win, {
-    type: "warning",
-    buttons: ["Cancel", "Move to Trash"],
-    defaultId: 0,
-    cancelId: 0,
-    message: "Move this game to the Trash?",
-    detail: gamePath
-  });
-  if (confirm.response !== 1) return false;
-
-  await removeLibraryEntry(gamePath, { trash: true });
-  return true;
+  const acknowledgments = await confirmGameRemoval([entry], { owner: win, trash: true, confirmOriginal: true });
+  if (acknowledgments === null) return false;
+  return removeLibraryEntry(gamePath, { trash: true, retainedGameDataAcknowledgments: acknowledgments });
 });
 
 ipcMain.handle("launcher:launchGame", async (_event, gamePath) => {
@@ -4134,10 +4375,12 @@ ipcMain.handle("launcher:setGameRuntimeSettings", async (_event, gamePath, runti
   }
   entry.updatedAt = Date.now();
   saveGameRecord(entry);
-  // A module can apply some settings to its running session at once.
-  if (runningGameSessions.get(entry.gamePath)?.size) {
-    try { Modules.getModule(moduleId)?.runtimeSettingsChanged?.(entry, runtimeId, resolveRuntimeSettingsForEntry(entry, settings, moduleInfo, runtimeId)); }
-    catch (error) { logger.warn("[runtime] Settings could not be applied to the running session:", error.message); }
+  // A module can apply some settings to its running session at once, in the
+  // game's lane, where that session runs.
+  if (runningGameSessions.get(entry.gamePath)?.size && typeof Modules.getModule(moduleId)?.runtimeSettingsChanged === "function") {
+    void backendService.request(`game:${entry.gameId || entry.gamePath}`, "runtimeSettingsChanged", entry, runtimeId,
+      resolveRuntimeSettingsForEntry(entry, settings, moduleInfo, runtimeId))
+      .catch(error => logger.warn("[runtime] Settings could not be applied to the running session:", error.message));
   }
   cachedState = buildState(settings, games);
   broadcastState();

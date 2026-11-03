@@ -16,11 +16,32 @@
 #include <atomic>
 #include <cmath>
 #include <cstring>
+#include <dlfcn.h>
 #include <map>
 #include <mutex>
 #include <stdexcept>
 namespace macfx {
 namespace {
+// Optional generation frameworks stay unloaded until a selected provider asks.
+// Handles remain open for the process lifetime: asynchronous work retains classes
+// and function pointers after an encoder is destroyed.
+struct API_AVAILABLE(macos(26.0)) VideoToolboxAPI {
+ void*handle=dlopen("/System/Library/Frameworks/VideoToolbox.framework/VideoToolbox",RTLD_LAZY|RTLD_LOCAL);
+ decltype(&VTMotionEstimationSessionCreate)create=nullptr;
+ decltype(&VTMotionEstimationSessionInvalidate)invalidate=nullptr;
+ decltype(&VTMotionEstimationSessionEstimateMotionVectors)estimate=nullptr;
+ const CFStringRef*multiPass=nullptr;const CFStringRef*vectorSize=nullptr;
+ VideoToolboxAPI(){if(!handle)return;
+  create=reinterpret_cast<decltype(create)>(dlsym(handle,"VTMotionEstimationSessionCreate"));
+  invalidate=reinterpret_cast<decltype(invalidate)>(dlsym(handle,"VTMotionEstimationSessionInvalidate"));
+  estimate=reinterpret_cast<decltype(estimate)>(dlsym(handle,"VTMotionEstimationSessionEstimateMotionVectors"));
+  multiPass=static_cast<const CFStringRef*>(dlsym(handle,"kVTMotionEstimationSessionCreationOption_UseMultiPassSearch"));
+  vectorSize=static_cast<const CFStringRef*>(dlsym(handle,"kVTMotionEstimationSessionCreationOption_MotionVectorSize"));
+ }
+ bool motionAvailable()const{return create&&invalidate&&estimate&&multiPass&&vectorSize;}
+};
+const VideoToolboxAPI&videoToolbox() API_AVAILABLE(macos(26.0)){static const VideoToolboxAPI api;return api;}
+bool visionFramework(){static void*handle=dlopen("/System/Library/Frameworks/Vision.framework/Vision",RTLD_LAZY|RTLD_LOCAL);return handle!=nullptr;}
 constexpr uint32_t pixelFormatBGRA='BGRA',pixelFormat420Full='420f',pixelFormat420Video='420v';
 dispatch_queue_t preparationQueue(){static dispatch_queue_t queue=dispatch_queue_create("org.maclauncher.graphics.image-pair.prepare",dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL,QOS_CLASS_USER_INITIATED,0));return queue;}
 dispatch_queue_t externalQueue(){static dispatch_queue_t queue=dispatch_queue_create("org.maclauncher.graphics.image-pair.external",dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_CONCURRENT,QOS_CLASS_USER_INTERACTIVE,0));return queue;}
@@ -28,6 +49,19 @@ bool srgbView(MTLPixelFormat format){return format==MTLPixelFormatBGRA8Unorm_sRG
 bool readableColor(id<MTLTexture>image){return image&&image.textureType==MTLTextureType2D&&image.sampleCount==1&&!image.framebufferOnly&&(image.usage&MTLTextureUsageShaderRead);}
 struct Convert {uint32_t fullRange=1,flags=0;float coverage[2]={1,1},vectorScale[2]={1,1};};
 struct FlowParams {float t,gain,consistency,colorTolerance;};
+// Completion callbacks may run in a different order from their registration.
+// Read the command's terminal state directly before consulting GPU output;
+// keep a cached result after its weak command reference has disappeared.
+struct ImagePairReceipt {
+ __weak id<MTLCommandBuffer>commands;id<MTLBuffer>valid=nil;
+ std::atomic<unsigned>result{0};
+ unsigned status()const{
+  if(const auto cached=result.load())return cached;
+  id<MTLCommandBuffer>current=commands;if(!current)return 0;
+  if(current.status==MTLCommandBufferStatusCompleted)return !valid||*static_cast<const uint32_t*>(valid.contents)!=0?1:2;
+  return current.status==MTLCommandBufferStatusError?2:0;
+ }
+};
 // Compiled kernels, shared by every provider instance on a device.
 struct Kernels {
  id<MTLComputePipelineState>toYCbCr,fromYCbCr,resample,luma,expand,depth,flow;
@@ -163,10 +197,10 @@ class VideoToolboxGeneration final:public GenerationEncoder {
  static void prepareSession(std::shared_ptr<Preparation>request,id<MTLDevice>device,unsigned interpolated){
   dispatch_async(preparationQueue(),^{@autoreleasepool{@try{try{
    if(@available(macOS 26.0,*)){
-    if(!VTLowLatencyFrameInterpolationConfiguration.supported)throw std::runtime_error("VideoToolbox low-latency interpolation is not supported on this Mac");
+    if(![NSClassFromString(@"VTLowLatencyFrameInterpolationConfiguration") isSupported])throw std::runtime_error("VideoToolbox low-latency interpolation is not supported on this Mac");
     double dimension=1920,pixels=1920.0*1080;
 #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 270000
-    if(@available(macOS 27.0,*)){const auto d=[VTLowLatencyFrameInterpolationConfiguration maximumDimensionForSpatialScaleFactor:1],p=[VTLowLatencyFrameInterpolationConfiguration maximumPixelCountForSpatialScaleFactor:1];if(d>0&&p>0){dimension=double(d);pixels=double(p);}}
+    if(@available(macOS 27.0,*)){const auto d=[NSClassFromString(@"VTLowLatencyFrameInterpolationConfiguration") maximumDimensionForSpatialScaleFactor:1],p=[NSClassFromString(@"VTLowLatencyFrameInterpolationConfiguration") maximumPixelCountForSpatialScaleFactor:1];if(d>0&&p>0){dimension=double(d);pixels=double(p);}}
 #endif
     std::string last="VideoToolbox could not start a low-latency interpolation session";
     // The processor's own limit first, then two smaller sizes.
@@ -174,12 +208,12 @@ class VideoToolboxGeneration final:public GenerationEncoder {
     for(const auto&limit:fallbacks){
      auto next=std::make_shared<Session>();fitSize(request->width,request->height,std::min(dimension,limit[0]),std::min(pixels,limit[1]),next->frameW,next->frameH);
      next->width=request->width;next->height=request->height;next->interpolated=interpolated;
-     auto configuration=[[VTLowLatencyFrameInterpolationConfiguration alloc] initWithFrameWidth:next->frameW frameHeight:next->frameH numberOfInterpolatedFrames:interpolated];
+     auto configuration=(VTLowLatencyFrameInterpolationConfiguration*)[[NSClassFromString(@"VTLowLatencyFrameInterpolationConfiguration") alloc] initWithFrameWidth:next->frameW frameHeight:next->frameH numberOfInterpolatedFrames:interpolated];
      if(!configuration)continue;
      NSArray<NSNumber*>*formats=configuration.frameSupportedPixelFormats;
      for(uint32_t candidate:{pixelFormatBGRA,pixelFormat420Full,pixelFormat420Video})if([formats containsObject:@(candidate)]){next->format=candidate;break;}
      if(!next->format){last="VideoToolbox interpolation offers no supported 8-bit pixel format";continue;}
-     auto processor=[VTFrameProcessor new];NSError*error=nil;
+     VTFrameProcessor*processor=[NSClassFromString(@"VTFrameProcessor") new];NSError*error=nil;
      if(![processor startSessionWithConfiguration:configuration error:&error]){if(error.localizedDescription.UTF8String)last=error.localizedDescription.UTF8String;continue;}
      next->processor=processor;
      next->sourcePool=createPool(configuration.sourcePixelBufferAttributes,next->format,next->frameW,next->frameH);
@@ -253,21 +287,22 @@ public:
     const float point=std::clamp(std::round(phases.timestamps[i]*(points+1)),1.0f,float(points))/float(points+1);
     if(requested.count&&point<=requested.lastObject.floatValue)return rejected(sequence,"VideoToolbox interpolation cannot place these phases");
     id buffer=pooledBuffer(session->destinationPool);if(!buffer)return rejected(sequence,"VideoToolbox interpolation frame buffers are in use",true);
-    auto frame=[[VTFrameProcessorFrame alloc] initWithBuffer:(__bridge CVPixelBufferRef)buffer presentationTimeStamp:CMTimeMakeWithSeconds(double(previousSequence-1)+point,600)];
+    auto frame=(VTFrameProcessorFrame*)[[NSClassFromString(@"VTFrameProcessorFrame") alloc] initWithBuffer:(__bridge CVPixelBufferRef)buffer presentationTimeStamp:CMTimeMakeWithSeconds(double(previousSequence-1)+point,600)];
     if(!frame)return rejected(sequence,"VideoToolbox interpolation could not describe its output");
     [requested addObject:@(point)];[targets addObject:frame];destinations.push_back(buffer);
    }
-   auto sourceFrame=[[VTFrameProcessorFrame alloc] initWithBuffer:(__bridge CVPixelBufferRef)current presentationTimeStamp:CMTimeMake(int64_t(sequence),1)];
-   auto previousFrame=[[VTFrameProcessorFrame alloc] initWithBuffer:(__bridge CVPixelBufferRef)pair presentationTimeStamp:CMTimeMake(int64_t(sequence-1),1)];
-   auto parameters=sourceFrame&&previousFrame?[[VTLowLatencyFrameInterpolationParameters alloc] initWithSourceFrame:sourceFrame previousFrame:previousFrame interpolationPhase:requested destinationFrames:targets]:nil;
+   auto sourceFrame=(VTFrameProcessorFrame*)[[NSClassFromString(@"VTFrameProcessorFrame") alloc] initWithBuffer:(__bridge CVPixelBufferRef)current presentationTimeStamp:CMTimeMake(int64_t(sequence),1)];
+   auto previousFrame=(VTFrameProcessorFrame*)[[NSClassFromString(@"VTFrameProcessorFrame") alloc] initWithBuffer:(__bridge CVPixelBufferRef)pair presentationTimeStamp:CMTimeMake(int64_t(sequence-1),1)];
+   auto parameters=sourceFrame&&previousFrame?(VTLowLatencyFrameInterpolationParameters*)[[NSClassFromString(@"VTLowLatencyFrameInterpolationParameters") alloc] initWithSourceFrame:sourceFrame previousFrame:previousFrame interpolationPhase:requested destinationFrames:targets]:nil;
    if(!parameters)return rejected(sequence,"VideoToolbox interpolation rejected this pair");
    VTFrameProcessor*processor=session->processor;
    @try{InternalTemporalScope scope;[processor processWithCommandBuffer:commands parameters:parameters];}@catch(NSException*error){return rejected(sequence,error.reason.UTF8String?:"VideoToolbox interpolation failed");}
    for(size_t i=0;i<outputs.size();++i)if(!leave(commands,destinations[i],outputs[i],holders))return rejected(sequence,"Cannot convert the VideoToolbox interpolation output");
-   auto completed=std::make_shared<std::atomic<unsigned>>(0);
-   [commands addCompletedHandler:^(id<MTLCommandBuffer>finished){(void)holders;(void)pair;(void)current;(void)parameters;(void)keep;completed->store(finished.status==MTLCommandBufferStatusCompleted?1:2);}];
-   GenerationResult result;result.frameId=sequence;result.encoded=result.ready=true;result.generated=unsigned(outputs.size());result.historyFrames=2;
-   result.completion=[completed]()->ShaderResult{const auto status=completed->load();if(status==1)return {true,{}};if(status==2)return {false,"VideoToolbox interpolation commands failed or were abandoned"};return {false,"VideoToolbox interpolation is still in flight",true};};
+   auto completed=std::make_shared<ImagePairReceipt>();completed->commands=commands;
+   [commands addCompletedHandler:^(id<MTLCommandBuffer>finished){(void)holders;(void)pair;(void)current;(void)parameters;(void)keep;completed->result.store(finished.status==MTLCommandBufferStatusCompleted?1:2);}];
+   // These are encoded candidates. The completion receipt alone attests GPU-valid output.
+  GenerationResult result;result.frameId=sequence;result.encoded=result.ready=true;result.generated=unsigned(outputs.size());result.historyFrames=2;
+   result.completion=[completed]()->ShaderResult{const auto status=completed->status();if(status==1)return {true,{}};if(status==2)return {false,"VideoToolbox interpolation commands failed or were abandoned"};return {false,"VideoToolbox interpolation is still in flight",true};};
    return result;
   }
   return rejected(sequence,"VideoToolbox low-latency interpolation requires macOS 26 or later");
@@ -282,7 +317,7 @@ class MetalImageGeneration final:public GenerationEncoder {
   unsigned width=0,height=0,lumaW=0,lumaH=0,fieldW=0,fieldH=0;MTLPixelFormat color=MTLPixelFormatInvalid;
   id interpolator=nil;CFTypeRef estimator=nullptr;CVPixelBufferPoolRef lumaPool=nullptr;CVMetalTextureCacheRef cache=nullptr;
   id<MTLTexture>depth=nil,motion=nil,history[2]={nil,nil};bool depthReady=false;
-  ~Session(){if(@available(macOS 26.0,*)){if(estimator){VTMotionEstimationSessionInvalidate((VTMotionEstimationSessionRef)estimator);CFRelease(estimator);}}if(lumaPool)CVPixelBufferPoolRelease(lumaPool);if(cache)CFRelease(cache);}
+  ~Session(){if(@available(macOS 26.0,*)){if(estimator){videoToolbox().invalidate((VTMotionEstimationSessionRef)estimator);CFRelease(estimator);}}if(lumaPool)CVPixelBufferPoolRelease(lumaPool);if(cache)CFRelease(cache);}
  };
  struct Preparation {unsigned width=0,height=0;MTLPixelFormat color=MTLPixelFormatInvalid;std::shared_ptr<Session>value;std::string error;std::atomic<bool>done{false};};
  static constexpr unsigned blockSize=16;
@@ -298,9 +333,9 @@ class MetalImageGeneration final:public GenerationEncoder {
     fitSize(request->width,request->height,1920,1920.0*1080,next->lumaW,next->lumaH);
     // One vector per 16x16 block, padded by the estimator to a multiple of four vectors.
     next->fieldW=((next->lumaW+blockSize-1)/blockSize+3)&~3u;next->fieldH=((next->lumaH+blockSize-1)/blockSize+3)&~3u;
-    NSDictionary*options=@{(__bridge id)kVTMotionEstimationSessionCreationOption_UseMultiPassSearch:@YES,(__bridge id)kVTMotionEstimationSessionCreationOption_MotionVectorSize:@(blockSize)};
+    NSDictionary*options=@{(__bridge id)*videoToolbox().multiPass:@YES,(__bridge id)*videoToolbox().vectorSize:@(blockSize)};
     VTMotionEstimationSessionRef estimator=nullptr;
-    if(VTMotionEstimationSessionCreate(kCFAllocatorDefault,(__bridge CFDictionaryRef)options,next->lumaW,next->lumaH,&estimator)!=noErr||!estimator)throw std::runtime_error("VideoToolbox could not create a motion-estimation session");
+    if(videoToolbox().create(kCFAllocatorDefault,(__bridge CFDictionaryRef)options,next->lumaW,next->lumaH,&estimator)!=noErr||!estimator)throw std::runtime_error("VideoToolbox could not create a motion-estimation session");
     next->estimator=estimator;
     next->lumaPool=createPool(nil,kCVPixelFormatType_OneComponent8,next->lumaW,next->lumaH);
     if(!next->lumaPool||CVMetalTextureCacheCreate(kCFAllocatorDefault,nullptr,device,nullptr,&next->cache)!=kCVReturnSuccess)throw std::runtime_error("Motion estimation could not allocate its frame buffers");
@@ -340,7 +375,8 @@ class MetalImageGeneration final:public GenerationEncoder {
 public:
  MetalImageGeneration(id<MTLDevice>value,const LsfgConfig&config):device(value){
   if(config.multiplier!=2)throw std::runtime_error("MetalFX image interpolation produces one midpoint between real frames");
-  if(!metalFXGenerationAvailable(device))throw std::runtime_error("MetalFX interpolation is unavailable on this device or macOS version");
+  bool motionAvailable=false;if(@available(macOS 26.0,*))motionAvailable=videoToolbox().motionAvailable();
+  if(!motionAvailable||!metalFXGenerationAvailable(device))throw std::runtime_error("MetalFX interpolation is unavailable on this device or macOS version");
   gpu=kernels(device);
  }
  const char*method()const noexcept override{return "metalfx-image";}
@@ -382,7 +418,7 @@ public:
    // Its generated image is then omitted and the real endpoint stays.
    ExternalStep::schedule(step,commands,100,[current,reference,luma,blocks](std::shared_ptr<ExternalStep>step){
     if(@available(macOS 26.0,*)){
-     const OSStatus status=VTMotionEstimationSessionEstimateMotionVectors((VTMotionEstimationSessionRef)current->estimator,(__bridge CVPixelBufferRef)reference,(__bridge CVPixelBufferRef)luma,kVTMotionEstimationFrameFlags_CurrentBufferWillBeNextReferenceBuffer,nullptr,
+     const OSStatus status=videoToolbox().estimate((VTMotionEstimationSessionRef)current->estimator,(__bridge CVPixelBufferRef)reference,(__bridge CVPixelBufferRef)luma,kVTMotionEstimationFrameFlags_CurrentBufferWillBeNextReferenceBuffer,nullptr,
       ^(OSStatus result,VTMotionEstimationInfoFlags,CFDictionaryRef,CVPixelBufferRef vectors){step->complete(result==noErr&&copyVectors(vectors,blocks));});
      if(status!=noErr)step->complete(false);
     }else step->complete(false);
@@ -397,11 +433,12 @@ public:
    // Captured content is a flat plane at the far end of a nominal camera.
    interpolator.nearPlane=.1f;interpolator.farPlane=1000;interpolator.fieldOfView=60;interpolator.aspectRatio=float(source.width)/source.height;interpolator.depthReversed=NO;interpolator.shouldResetHistory=resetHistory;resetHistory=false;
    for(auto output:outputs){interpolator.outputTexture=output;InternalTemporalScope scope;[interpolator encodeToCommandBuffer:commands];}
-   previousSlot=slot;busy->store(true);auto completed=std::make_shared<std::atomic<unsigned>>(0);auto flag=busy;
+   previousSlot=slot;busy->store(true);auto completed=std::make_shared<ImagePairReceipt>();completed->commands=commands;completed->valid=step->valid;auto flag=busy;
    [commands addCompletedHandler:^(id<MTLCommandBuffer>finished){(void)holders;(void)reference;(void)luma;(void)blocks;(void)previousColor;(void)snapshot;(void)current;
-    const bool valid=*static_cast<const uint32_t*>(step->valid.contents)!=0;completed->store(finished.status==MTLCommandBufferStatusCompleted&&valid?1:2);flag->store(false);}];
-   GenerationResult result;result.frameId=sequence;result.encoded=result.ready=true;result.generated=unsigned(outputs.size());result.historyFrames=2;
-   result.completion=[completed]()->ShaderResult{const auto status=completed->load();if(status==1)return {true,{}};if(status==2)return {false,"MetalFX image interpolation had no motion field for this pair or its commands failed"};return {false,"MetalFX image interpolation is still in flight",true};};
+    const bool valid=finished.status==MTLCommandBufferStatusCompleted&&*static_cast<const uint32_t*>(step->valid.contents)!=0;completed->result.store(valid?1:2);flag->store(false);}];
+   // These are encoded candidates. The completion receipt alone attests GPU-valid output.
+  GenerationResult result;result.frameId=sequence;result.encoded=result.ready=true;result.generated=unsigned(outputs.size());result.historyFrames=2;
+   result.completion=[completed]()->ShaderResult{const auto status=completed->status();if(status==1)return {true,{}};if(status==2)return {false,"MetalFX image interpolation had no motion field for this pair or its commands failed"};return {false,"MetalFX image interpolation is still in flight",true};};
    return result;
   }
   return rejected(sequence,"MetalFX image interpolation requires macOS 26 or later");
@@ -420,9 +457,9 @@ class VisionFlowGeneration final:public GenerationEncoder {
  unsigned poolW=0,poolH=0,flowW=0,flowH=0;NSUInteger revision=0;float gain=1;
  id previousFlow=nil;id<MTLTexture>history[2]={nil,nil};int previousSlot=-1;uint64_t previousSequence=0;unsigned historyW=0,historyH=0;MTLPixelFormat historyFormat=MTLPixelFormatInvalid;
  static bool vectors(CVPixelBufferRef source,CVPixelBufferRef target,NSUInteger revision,id<MTLTexture>output){
-  auto request=[[VNGenerateOpticalFlowRequest alloc] initWithTargetedCVPixelBuffer:target options:@{}];
+  auto request=(VNGenerateOpticalFlowRequest*)[[NSClassFromString(@"VNGenerateOpticalFlowRequest") alloc] initWithTargetedCVPixelBuffer:target options:@{}];
   request.revision=revision;request.computationAccuracy=VNGenerateOpticalFlowRequestComputationAccuracyHigh;request.outputPixelFormat=kCVPixelFormatType_TwoComponent16Half;
-  NSError*error=nil;auto handler=[[VNImageRequestHandler alloc] initWithCVPixelBuffer:source options:@{}];
+  NSError*error=nil;auto handler=(VNImageRequestHandler*)[[NSClassFromString(@"VNImageRequestHandler") alloc] initWithCVPixelBuffer:source options:@{}];
   if(![handler performRequests:@[request] error:&error])return false;
   auto observation=request.results.firstObject;return observation&&copyVectors(observation.pixelBuffer,output);
  }
@@ -434,8 +471,8 @@ public:
   if(CVMetalTextureCacheCreate(kCFAllocatorDefault,nullptr,device,nullptr,&cache)!=kCVReturnSuccess)throw std::runtime_error("Vision optical flow could not create its texture cache");
   // Revision 1 reports vectors in pixels; the later revision reports about
   // 0.38 of the displacement at this size and accuracy.
-  if([VNGenerateOpticalFlowRequest.supportedRevisions containsIndex:VNGenerateOpticalFlowRequestRevision1])revision=VNGenerateOpticalFlowRequestRevision1;
-  else{revision=VNGenerateOpticalFlowRequest.defaultRevision;gain=2.6f;}
+  if([[NSClassFromString(@"VNGenerateOpticalFlowRequest") supportedRevisions] containsIndex:VNGenerateOpticalFlowRequestRevision1])revision=VNGenerateOpticalFlowRequestRevision1;
+  else{revision=[NSClassFromString(@"VNGenerateOpticalFlowRequest") defaultRevision];gain=2.6f;}
  }
  ~VisionFlowGeneration(){if(pool)CVPixelBufferPoolRelease(pool);if(cache)CFRelease(cache);}
  const char*method()const noexcept override{return "vision-flow";}
@@ -475,17 +512,18 @@ public:
    [encoder setTexture:previousColor atIndex:0];[encoder setTexture:snapshot atIndex:1];[encoder setTexture:forward atIndex:2];[encoder setTexture:backward atIndex:3];[encoder setTexture:outputs[i] atIndex:4];
    [encoder setBytes:&params length:sizeof(params) atIndex:0];[encoder setBuffer:step->valid offset:0 atIndex:1];Kernels::dispatch(encoder,gpu->flow,unsigned(source.width),unsigned(source.height));[encoder endEncoding];
   }
-  auto completed=std::make_shared<std::atomic<unsigned>>(0);
-  [commands addCompletedHandler:^(id<MTLCommandBuffer>finished){(void)holders;(void)reference;(void)frame;(void)forward;(void)backward;(void)previousColor;(void)snapshot;completed->store(finished.status==MTLCommandBufferStatusCompleted?1:2);}];
+  auto completed=std::make_shared<ImagePairReceipt>();completed->commands=commands;
+  [commands addCompletedHandler:^(id<MTLCommandBuffer>finished){(void)holders;(void)reference;(void)frame;(void)forward;(void)backward;(void)previousColor;(void)snapshot;completed->result.store(finished.status==MTLCommandBufferStatusCompleted?1:2);}];
+  // These are encoded candidates. The completion receipt alone attests GPU-valid output.
   GenerationResult result;result.frameId=sequence;result.encoded=result.ready=true;result.generated=unsigned(outputs.size());result.historyFrames=2;
-  result.completion=[completed]()->ShaderResult{const auto status=completed->load();if(status==1)return {true,{}};if(status==2)return {false,"Vision optical-flow commands failed or were abandoned"};return {false,"Vision optical flow is still in flight",true};};
+  result.completion=[completed]()->ShaderResult{const auto status=completed->status();if(status==1)return {true,{}};if(status==2)return {false,"Vision optical-flow commands failed or were abandoned"};return {false,"Vision optical flow is still in flight",true};};
   return result;
   }
  }
 };
 }
-bool videoToolboxGenerationAvailable()noexcept{@try{if(@available(macOS 26.0,*))return VTLowLatencyFrameInterpolationConfiguration.supported;}@catch(NSException*){}return false;}
-bool visionFlowGenerationAvailable()noexcept{return true;}
+bool videoToolboxGenerationAvailable()noexcept{@try{if(@available(macOS 26.0,*))return videoToolbox().handle&&[NSClassFromString(@"VTLowLatencyFrameInterpolationConfiguration") isSupported];}@catch(NSException*){}return false;}
+bool visionFlowGenerationAvailable()noexcept{return visionFramework()&&NSClassFromString(@"VNGenerateOpticalFlowRequest")&&NSClassFromString(@"VNImageRequestHandler");}
 std::shared_ptr<GenerationEncoder>makeVideoToolboxGenerationEncoder(id<MTLDevice>device,const LsfgConfig&config){return std::make_shared<VideoToolboxGeneration>(device,config);}
 std::shared_ptr<GenerationEncoder>makeMetalFXImageGenerationEncoder(id<MTLDevice>device,const LsfgConfig&config){return std::make_shared<MetalImageGeneration>(device,config);}
 std::shared_ptr<GenerationEncoder>makeVisionFlowGenerationEncoder(id<MTLDevice>device,const LsfgConfig&config){return std::make_shared<VisionFlowGeneration>(device,config);}

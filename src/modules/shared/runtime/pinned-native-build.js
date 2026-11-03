@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../copy-file");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { execFile, spawn } = require("node:child_process");
@@ -97,7 +98,7 @@ function stagePinnedFiles(sourceDir, files, destination) {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     if (link !== undefined) fs.symlinkSync(link, target);
     else {
-      fs.copyFileSync(source, target);
+      cloneOrCopySync(source, target);
       fs.chmodSync(target, stat.mode & 0o777);
     }
     return target;
@@ -205,7 +206,7 @@ async function buildPinnedRuntime({ manager, version, sourceDir, userDataDir, cm
     const options = ["-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_OSX_DEPLOYMENT_TARGET=13.0", "-DFETCHCONTENT_FULLY_DISCONNECTED=ON", "-DFETCHCONTENT_UPDATES_DISCONNECTED=ON", ...cmakeOptions];
     if (overlay) {
       const stagedOverlay = path.join(installDir, "build-overlay.h");
-      fs.copyFileSync(overlay, stagedOverlay);
+      cloneOrCopySync(overlay, stagedOverlay);
       overlaySha256 = Native.hashFile(stagedOverlay);
       const includePath = "'" + stagedOverlay.replace(/'/g, "'\\''") + "'";
       const flagsIndex = options.findLastIndex(option => option.startsWith("-DCMAKE_C_FLAGS="));

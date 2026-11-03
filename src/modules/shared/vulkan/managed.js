@@ -17,7 +17,7 @@ function createManager(dependencies = {}) {
         throw new Error("The KosmicKrisp package differs from its GLES 3.2 profile.");
     },
     async verifyPayload(selected, { signal } = {}) {
-      Bundled.verifyPayload(selected.root, selected.declaration);
+      Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
       for (const file of selected.manifest.files.filter(file => file.architectures))
         await execute("/usr/bin/codesign", ["--verify", "--strict", path.join(selected.payloadRoot, file.path)],
           { signal, timeout: 30000, maxBuffer: 1024 * 1024 });
@@ -74,7 +74,7 @@ function createSceneManager(dependencies = {}) {
       sceneDescriptor(manifest);
     },
     async verifyPayload(selected, { signal } = {}) {
-      Bundled.verifyPayload(selected.root, selected.declaration);
+      Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
       await Bundled.verifySignatures(selected.root, selected.declaration, { signal });
     }, dependencies });
   return { ...result, distributionRequired: false,

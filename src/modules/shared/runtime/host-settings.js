@@ -1,5 +1,6 @@
 const Requirements = require("./feature-requirements");
 const Host = require("./host-capabilities");
+const { restoreRuntimeState } = require("../../../core/runtime-state-snapshot.mjs");
 
 // A runtime setting or one of its choices names the feature it depends on, such
 // as "WINE_TEMPORAL" or "TEMPLATE_RENDERERS.kosmickrisp" in feature-requirements.
@@ -51,6 +52,7 @@ function withHostSettings(manifest, host = Host.getHostCapabilities()) {
 // on an Intel Mac, are not offered. Intel builds stay on Apple Silicon, where
 // they run through Rosetta.
 function withRunnableBuilds(state, support = architecture => Host.architectureSupport(architecture)) {
+  state = restoreRuntimeState(state);
   if (!state || typeof state !== "object") return state;
   const catalog = value => {
     const catalogs = value?.architectureCatalogs;

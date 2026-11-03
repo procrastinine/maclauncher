@@ -38,13 +38,13 @@ function publicJson(file, value) {
   B.realDirectory(path.dirname(file), { create: true });
   fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n', { flag: 'wx', mode: 0o644 });
 }
-// The repository holds the Apple Silicon Python. Another architecture's app
-// installs the publisher build of the same release for its CPU first.
+// Checkout setup and app builds install the pinned publisher build for their CPU.
 async function preparePython({ arch, repoRoot, force = false, install = async args => (await import('./setup-python-runtime.mjs')).main(args) }) {
   const root = path.join(repoRoot, 'src/resources/python');
-  const installed = JSON.parse(B.readRegular(path.join(root, 'runtime.json'), B.LIMITS.manifestBytes).bytes);
+  const metadata = path.join(root, 'runtime.json');
+  const installed = fs.existsSync(metadata) ? JSON.parse(B.readRegular(metadata, B.LIMITS.manifestBytes).bytes) : null;
   const expected = require('../src/modules/shared/runtime/python').embeddedPythonProfile(arch);
-  if (!force && installed.architecture === expected.architecture && installed.sha256 === expected.sha256) return { python: expected.architecture, installed: false };
+  if (!force && installed?.architecture === expected.architecture && installed.sha256 === expected.sha256 && fs.existsSync(path.join(root, 'bin/python3'))) return { python: expected.architecture, installed: false };
   await install(['--arch', arch, '--dest', root]);
   require('./python-resources.cjs').assertProfile(JSON.parse(B.readRegular(path.join(root, 'runtime.json'), B.LIMITS.manifestBytes).bytes), arch);
   return { python: expected.architecture, installed: true };
@@ -104,13 +104,24 @@ function assertCopiedPayload(resourceRoot, inventory, verified) {
     expectedFiles.add(safe);
     for (let directory = path.posix.dirname(safe); directory !== '.'; directory = path.posix.dirname(directory)) expectedDirectories.add(directory);
   }
+  const sidecars=path.join(resourceRoot,'.declarations');
+  if(fs.existsSync(sidecars)){
+    const records=inventory.projectPackages||[];
+    const context=require('../src/modules/shared/runtime/included-package-dependencies').context(path.dirname(resourceRoot),{lock:{packages:records},verification:'status'});
+    for(const record of records){
+      const selected=context.visit(record),logical=require('../src/modules/shared/runtime/package-contract.cjs').logicalFiles(selected.declaration,selected.resolveDependency);
+      for(const name of ['.declarations/'+record.asset.sha256+'.json',...logical.map(file=>selected.declaration.directoryRelative+'/'+file.path)]){
+        expectedFiles.add(name);for(let dir=path.posix.dirname(name);dir!=='.';dir=path.posix.dirname(dir))expectedDirectories.add(dir);
+      }
+    }
+  }
   function walk(relative) {
     const directory = path.join(resourceRoot, relative);
     B.realDirectory(directory);
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
       const name = relative ? `${relative}/${entry.name}` : entry.name;
       if (entry.isDirectory() && expectedDirectories.has(name)) walk(name);
-      else if (entry.isFile() && expectedFiles.delete(name)) continue;
+      else if ((entry.isFile() || entry.isSymbolicLink() && B.appAlias(path.join(resourceRoot,name))) && expectedFiles.delete(name)) continue;
       else throw new Error('The app contains a native file or directory outside its sealed payload.');
     }
   }

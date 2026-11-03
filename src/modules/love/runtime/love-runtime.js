@@ -4,6 +4,8 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const Rosetta = require("../../shared/runtime/rosetta");
 const AppBundle = require("../../shared/runtime/app-bundle");
+const { hasFineChangeTime } = require("../../shared/file-time");
+const { createVerifiedIdentityCache } = require("../../shared/runtime/verified-identity");
 const { readMachOLoadCommands } = require("../../shared/runtime/macho-load-commands");
 const Upstream = require("../../shared/runtime/upstream");
 const Archive = require("../../shared/runtime/archive");
@@ -178,14 +180,43 @@ function validateDownloadedBundle(appPath, { arch = require("../../shared/runtim
   return info.architectures;
 }
 
-function readBundleInfo(appPath) {
+const listingFacts = createVerifiedIdentityCache({ maximum: 64 });
+function listingIdentity(appPath, executablePath) {
+  try {
+    return JSON.stringify([appPath, path.join(appPath, "Contents/Info.plist"), executablePath].map((file, index) => {
+      const stat = fs.statSync(file, { bigint: true }), link = fs.lstatSync(file, { bigint: true });
+      if (index && !hasFineChangeTime(stat)) throw new Error("Coarse bundle facts cannot be reused.");
+      const facts = value => [value.dev, value.ino, value.mode, value.size, value.mtimeNs, value.ctimeNs].map(String);
+      return [fs.realpathSync(file), facts(stat), facts(link)];
+    }));
+  } catch { return null; }
+}
+
+function readBundleInfo(appPath, { listing = false } = {}) {
+  if (!listing) return readBundleInfoUncached(appPath, false);
+  const executablePath = resolveExecutablePath(appPath);
+  const status = AppBundle.appBundleStatus(appPath, { executablePath });
+  if (!status.ready) return { ...readBundleInfoUncached(appPath, true), ...status };
+  let unavailable;
+  const info = listingFacts.verify(appPath, {
+    identity: () => listingIdentity(appPath, resolveExecutablePath(appPath)),
+    verify: () => {
+      const value = readBundleInfoUncached(appPath, true);
+      if (!value.ready) { unavailable = value; return false; }
+      return value;
+    }
+  });
+  return { ...(info || unavailable) };
+}
+
+function readBundleInfoUncached(appPath, listing) {
   const plistInfo = readAppBundleInfo(appPath);
   const executablePath = resolveExecutablePath(appPath);
   const status = AppBundle.appBundleStatus(appPath, { executablePath });
   const architectureInfo = status.ready
     ? detectArchitecture(executablePath)
     : { architecture: "unknown", requiresRosetta: false };
-  return {
+  const info = {
     appPath,
     executablePath,
     ...status,
@@ -194,6 +225,7 @@ function readBundleInfo(appPath) {
     architecture: architectureInfo.architecture,
     requiresRosetta: architectureInfo.requiresRosetta
   };
+  return info;
 }
 
 function walkDirectories(rootDir, predicate, maxDepth = 5) {
@@ -235,6 +267,11 @@ function findAppBundle(rootDir, preferredName = null) {
 }
 
 function listInstalledStable(userDataDir) {
+  return structuredClone(require("../../../core/coordinated-runtime-managers").memoizeRuntimeResolution(module.exports,
+    JSON.stringify(["listInstalledStable", userDataDir]), () => listInstalledStableUncached(userDataDir)));
+}
+
+function listInstalledStableUncached(userDataDir) {
   const root = installRootDir(userDataDir, CHANNEL_STABLE);
   const out = [];
   let versions = [];
@@ -251,7 +288,7 @@ function listInstalledStable(userDataDir) {
     const appPath = findAppBundle(installDir, "love.app");
     if (!appPath) continue;
     const meta = readInstallMeta(installDir) || {};
-    const bundleInfo = readBundleInfo(appPath);
+    const bundleInfo = readBundleInfo(appPath, { listing: true });
     out.push({
       channel: CHANNEL_STABLE,
       version,
@@ -277,6 +314,11 @@ function listInstalledStable(userDataDir) {
 }
 
 function listInstalledNightly(userDataDir) {
+  return structuredClone(require("../../../core/coordinated-runtime-managers").memoizeRuntimeResolution(module.exports,
+    JSON.stringify(["listInstalledNightly", userDataDir]), () => listInstalledNightlyUncached(userDataDir)));
+}
+
+function listInstalledNightlyUncached(userDataDir) {
   const root = installRootDir(userDataDir, CHANNEL_NIGHTLY);
   const out = [];
   let versions = [];
@@ -293,7 +335,7 @@ function listInstalledNightly(userDataDir) {
     const appPath = findAppBundle(installDir, "love.app");
     if (!appPath) continue;
     const meta = readInstallMeta(installDir) || {};
-    const bundleInfo = readBundleInfo(appPath);
+    const bundleInfo = readBundleInfo(appPath, { listing: true });
     out.push({
       channel: CHANNEL_NIGHTLY,
       version: buildKey,
@@ -338,8 +380,8 @@ function resolveInstalled({ userDataDir, channel, version }) {
   return (
     listInstalled(userDataDir, installChannel).find(entry => {
       if (!entry.ready) return false;
-      if (installChannel === CHANNEL_NIGHTLY) return entry.buildKey === normalizedVersion;
-      return entry.version === normalizedVersion;
+      const matches = installChannel === CHANNEL_NIGHTLY ? entry.buildKey === normalizedVersion : entry.version === normalizedVersion;
+      return matches && AppBundle.appBundleStatus(entry.appPath, { executablePath: entry.executablePath }).ready;
     }) || null
   );
 }

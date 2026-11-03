@@ -107,3 +107,183 @@ test("shared macOS sandbox confines files and iOS adds only its own scene servic
   assert.ok(injected.profile.includes('(literal "'+canonicalLibrary+'")'));
   assert.ok(!injected.profile.includes('(subpath "'+fs.realpathSync(path.dirname(library))+'")'));
 });
+
+// Hold every field used by the old cache key while bytes change in place.
+// File identity is held by inode, so renaming the prior generation cannot
+// accidentally make the fixture reveal its otherwise-hidden write.
+function coarseTimes(t, ...heldFiles) {
+  const original = fs.lstatSync, held = new Map();
+  const hold = file => { const stat = original(file, { bigint: true }); held.set(`${stat.dev}:${stat.ino}`, stat); };
+  heldFiles.forEach(hold);
+  t.mock.method(fs, "lstatSync", (file, ...args) => {
+    const info = original(file, ...args); if (!info) return info;
+    const saved = held.get(`${info.dev}:${info.ino}`);
+    return new Proxy(info, { get(target, key) {
+      let value = saved && ["dev", "ino", "size", "mtimeNs", "mtimeMs", "ctimeNs", "ctimeMs", "mode"].includes(key) ? saved[key] : target[key];
+      if (typeof target[key] === "number" && typeof value === "bigint") value = Number(value);
+      if (key === "ctimeNs" && typeof value === "bigint") return value / 1000000000n * 1000000000n;
+      if (key === "ctimeMs" && typeof value === "number") return Math.floor(value / 1000) * 1000;
+      return value;
+    } });
+  });
+  return hold;
+}
+function ipaCache(t) {
+  const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ios-coarse-")));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const source = path.join(directory, "original.ipa"), root = path.join(directory, "cache");
+  const write = text => zip(source, [["resource", Buffer.from(text)]]);
+  write("one");
+  return { directory, source, root, write, resource: path.join(root, "contents/resource"), meta: path.join(root, "source.json") };
+}
+function noStaging(root) {
+  assert.deepEqual(fs.readdirSync(root).filter(name => /^\.(?:input|extract|prepare|replaced)-/.test(name) || name.endsWith(".tmp")), []);
+}
+function preparedIpa(t) {
+  const f = ipaCache(t), file = require.resolve("../src/modules/ios/prepare"), prior = require.cache[file];
+  t.mock.method(require("../src/modules/shared/runtime/host-capabilities"), "getHostCapabilities", () => ({ platform: "darwin", hardwareArch: "arm64" }));
+  t.mock.method(require("../src/modules/shared/runtime/tool-command"), "runToolCommand", async () => ({ stdout: "", stderr: "" }));
+  delete require.cache[file];const module = require(file);
+  t.after(() => { if (prior) require.cache[file] = prior; else delete require.cache[file]; });
+  const info = Buffer.from(JSON.stringify({ CFBundleIdentifier: "org.example.owned", CFBundleExecutable: "Owned", CFBundleName: "Owned" }));
+  f.write = text => zip(f.source, [["Payload/Owned.app/Info.plist", info], ["Payload/Owned.app/Owned", binary()], ["Payload/Owned.app/resource", Buffer.from(text)]]);
+  f.write("one");
+  f.framework = path.join(f.directory, "PlayTools.framework");fs.mkdirSync(f.framework);fs.writeFileSync(path.join(f.framework, "PlayTools"), "fixture tools");
+  f.frameworkHash = require("node:crypto").createHash("sha256").update("fixture tools").digest("hex");
+  return { ...f, module, options: { source: f.source, root: f.root, framework: f.framework, frameworkHash: f.frameworkHash } };
+}
+
+test("coarse iOS source identities use byte keys and preserve private generations", async t => {
+  await t.test("equal-size IPA rewrites refresh clean contents without accumulating old generations", async t => {
+    const f = ipaCache(t);coarseTimes(t, f.source);
+    const { extract } = require("../src/modules/ios/prepare");
+    await extract(f);const old = fs.readFileSync(f.meta, "utf8");f.write("two");
+    await extract(f);
+    assert.equal(fs.readFileSync(f.resource, "utf8"), "two");
+    assert.notEqual(JSON.parse(fs.readFileSync(f.meta)).sourceSha256, JSON.parse(old).sourceSha256);
+    await extract(f);f.write("tri");await extract(f);
+    assert.equal(fs.existsSync(path.join(f.root, "preserved")), false);
+    noStaging(f.root);
+  });
+  await t.test("a hidden private write is retained while the new original becomes current", async t => {
+    const f = ipaCache(t), hold = coarseTimes(t, f.source), { extract } = require("../src/modules/ios/prepare");
+    await extract(f);hold(f.resource);fs.writeFileSync(f.resource, "mod");
+    const save = path.join(f.root, "data/home/save.dat");fs.mkdirSync(path.dirname(save), { recursive: true });fs.writeFileSync(save, "progress");
+    f.write("two");await extract(f);
+    assert.equal(fs.readFileSync(f.resource, "utf8"), "two");
+    const retained = path.join(f.root, "preserved"), names = fs.readdirSync(retained);
+    assert.equal(names.length, 1);assert.equal(fs.readFileSync(path.join(retained, names[0], "resource"), "utf8"), "mod");
+    assert.equal(fs.readFileSync(save, "utf8"), "progress");
+    await extract(f);assert.equal(fs.readdirSync(retained).length, 1);
+  });
+  await t.test("legacy coarse receipts preserve private changes without probing obsolete generations", async t => {
+    const f = ipaCache(t);coarseTimes(t, f.source);const { extract } = require("../src/modules/ios/prepare");
+    await extract(f);const legacy = JSON.parse(fs.readFileSync(f.meta));delete legacy.sourceSha256;delete legacy.files;fs.writeFileSync(f.meta, JSON.stringify(legacy));
+    fs.writeFileSync(path.join(f.root, "contents/save.dat"), "legacy progress");
+    fs.mkdirSync(path.join(f.root, ".previous"));fs.writeFileSync(path.join(f.root, ".previous/older-save.dat"), "older progress");
+    await extract(f);
+    const directories = fs.readdirSync(path.join(f.root, "preserved")).map(name => path.join(f.root, "preserved", name));
+    assert.ok(directories.some(folder => fs.existsSync(path.join(folder, "save.dat"))));
+    assert.equal(fs.readFileSync(path.join(f.root, ".previous/older-save.dat"), "utf8"), "older progress");
+    assert.equal(fs.readFileSync(f.resource, "utf8"), "one");noStaging(f.root);
+  });
+  await t.test("source mutation during a held-stat hash leaves the prior tree and receipt intact", async t => {
+    const f = ipaCache(t);coarseTimes(t, f.source);const { extract } = require("../src/modules/ios/prepare");
+    await extract(f);const receipt = fs.readFileSync(f.meta);f.write("two");
+    const opened = new Map(), open = fs.openSync, read = fs.readSync;let mutated = false;
+    t.mock.method(fs, "openSync", (file, ...args) => { const fd = open(file, ...args);opened.set(fd, String(file));return fd; });
+    t.mock.method(fs, "readSync", (fd, ...args) => { const count = read(fd, ...args);if (!mutated && count && opened.get(fd) === f.source) { mutated = true;f.write("tri"); }return count; });
+    await assert.rejects(extract(f), /changed during preparation or extraction/);
+    assert.equal(mutated, true);assert.equal(fs.readFileSync(f.resource, "utf8"), "one");assert.deepEqual(fs.readFileSync(f.meta), receipt);noStaging(f.root);
+  });
+  await t.test("a changed staged archive is rejected before extraction or publication", async t => {
+    const f = ipaCache(t);coarseTimes(t, f.source);const { extract } = require("../src/modules/ios/prepare");
+    await extract(f);const receipt = fs.readFileSync(f.meta);f.write("two");
+    const shared = require("../src/modules/shared/copy-file"), copy = shared.cloneOrCopySync;let mutated = false;
+    t.mock.method(shared, "cloneOrCopySync", (from, to, ...args) => { const result = copy(from, to, ...args);if (String(from) === f.source) { zip(to, [["resource", Buffer.from("tri")]]);mutated = true; }return result; });
+    const file = require.resolve("../src/modules/ios/prepare"), prior = require.cache[file];delete require.cache[file];
+    const checked = require(file);t.after(() => { require.cache[file] = prior; });
+    await assert.rejects(checked.extract(f), /changed during preparation or extraction/);
+    assert.equal(mutated, true);assert.equal(fs.readFileSync(f.resource, "utf8"), "one");assert.deepEqual(fs.readFileSync(f.meta), receipt);noStaging(f.root);
+  });
+  await t.test("a held-stat source rewrite during extraction does not publish a new tree", async t => {
+    const f = ipaCache(t);coarseTimes(t, f.source);const { extract } = require("../src/modules/ios/prepare");
+    await extract(f);const receipt = fs.readFileSync(f.meta);f.write("two");
+    const open = Archive.open;
+    t.mock.method(Archive, "open", file => { const archive = open(file), extract = archive.extract;return { ...archive, async extract(...args) { await extract(...args);f.write("tri"); } }; });
+    await assert.rejects(extract(f), /changed during preparation or extraction/);
+    assert.equal(fs.readFileSync(f.resource, "utf8"), "one");assert.deepEqual(fs.readFileSync(f.meta), receipt);noStaging(f.root);
+  });
+  await t.test("receipt publication failure restores both the prior tree and prior receipt", async t => {
+    const f = ipaCache(t);coarseTimes(t, f.source);const { extract } = require("../src/modules/ios/prepare");
+    await extract(f);const receipt = fs.readFileSync(f.meta);f.write("two");
+    const rename = fs.renameSync;
+    t.mock.method(fs, "renameSync", (from, to) => { if (String(to) === f.meta && String(from).endsWith(".tmp")) throw new Error("fixture receipt rename failure");return rename(from, to); });
+    await assert.rejects(extract(f), /receipt rename failure/);
+    assert.equal(fs.readFileSync(f.resource, "utf8"), "one");assert.deepEqual(fs.readFileSync(f.meta), receipt);noStaging(f.root);
+  });
+  await t.test("preparation retains a modified prior bundle and the separate saved-data root", async t => {
+    const f = preparedIpa(t), hold = coarseTimes(t, f.source);
+    const first = await f.module.prepare(f.options), resource = path.join(first.appRoot, "resource");hold(resource);fs.writeFileSync(resource, "mod");
+    const save = path.join(f.root, "data/home/save.dat");fs.mkdirSync(path.dirname(save), { recursive: true });fs.writeFileSync(save, "progress");
+    f.write("two");const second = await f.module.prepare(f.options);
+    assert.equal(fs.readFileSync(path.join(second.appRoot, "resource"), "utf8"), "two");
+    const retained = fs.readdirSync(path.join(f.root, "preserved"));assert.equal(retained.length, 1);
+    assert.equal(fs.readFileSync(path.join(f.root, "preserved", retained[0], "Owned.app/resource"), "utf8"), "mod");
+    assert.equal(fs.readFileSync(save, "utf8"), "progress");noStaging(f.root);
+  });
+  await t.test("copied dependency mutation fails before any new prepared bundle is published", async t => {
+    const shared = require("../src/modules/shared/copy-file"), copy = shared.cloneOrCopySync;let library, mutated = false;
+    t.mock.method(shared, "cloneOrCopySync", (from, to, ...args) => { const result = copy(from, to, ...args);if (String(from) === library) { fs.writeFileSync(to, "other");mutated = true; }return result; });
+    const f = preparedIpa(t);coarseTimes(t, f.source);const first = await f.module.prepare(f.options), meta = path.join(f.root, "prepared.json"), receipt = fs.readFileSync(meta);
+    library = path.join(f.directory, "libFixture.dylib");fs.writeFileSync(library, "first");
+    const options = { ...f.options, frameworkDependencies: [{ name: "libFixture.dylib", sha256: require("node:crypto").createHash("sha256").update("first").digest("hex") }] };
+    await assert.rejects(f.module.prepare(options), /changed during preparation or extraction/);
+    assert.equal(mutated, true);assert.equal(fs.readFileSync(path.join(first.appRoot, "resource"), "utf8"), "one");assert.deepEqual(fs.readFileSync(meta), receipt);noStaging(f.root);
+  });
+  await t.test("a framework inventory failure cleans both preparation and input snapshots", async t => {
+    const f = preparedIpa(t);coarseTimes(t, f.source);await f.module.prepare(f.options);f.write("two");
+    const file = path.join(f.framework, "settings.bin");fs.writeFileSync(file, "settings");const stat = fs.lstatSync;
+    t.mock.method(fs, "lstatSync", (name, ...args) => { if (String(name) === file) throw new Error("fixture inventory read failed");return stat(name, ...args); });
+    await assert.rejects(f.module.prepare(f.options), /inventory read failed/);noStaging(f.root);
+    assert.equal(fs.readFileSync(path.join(f.root, "prepared/Owned.app/resource"), "utf8"), "one");
+  });
+});
+
+test("warm iOS preparation avoids repeated work while retaining coarse input verification", async t => {
+  await t.test("fine identities reuse runtime hashes without input reads, conversion, signing or receipt writes", async t => {
+    t.mock.method(require("../src/modules/shared/file-time"), "hasFineChangeTime", () => true);
+    const f = preparedIpa(t), dependency = path.join(f.directory, "libFixture.dylib");fs.writeFileSync(dependency, "first");
+    const options = { ...f.options, frameworkDependencies: [{ name: "libFixture.dylib", sha256: require("node:crypto").createHash("sha256").update("first").digest("hex") }] };
+    const first = await f.module.prepare(options), inode = fs.statSync(first.appRoot).ino, meta = path.join(f.root, "prepared.json");
+    const tools = require("../src/modules/shared/runtime/tool-command").runToolCommand, calls = tools.mock.callCount();
+    const legacy = JSON.parse(fs.readFileSync(meta));delete legacy.tools;delete legacy.dependencyFiles;fs.writeFileSync(meta, JSON.stringify(legacy));
+    t.mock.method(Archive, "open", () => assert.fail("A valid legacy receipt does not need another extraction"));
+    await f.module.prepare(options);
+    assert.equal(fs.statSync(first.appRoot).ino, inode, "A verification receipt upgrade leaves the prepared bundle in place");
+    const record = fs.readFileSync(meta);
+    const inputFiles = new Set([f.source, path.join(f.framework, "PlayTools"), dependency]);
+    const open = fs.openSync;
+    t.mock.method(fs, "openSync", (file, ...args) => { assert.equal(inputFiles.has(String(file)), false, "Unchanged precise inputs keep their verified bytes");return open(file, ...args); });
+    const writes = [], write = fs.writeFileSync;
+    t.mock.method(fs, "writeFileSync", (file, ...args) => { writes.push(file);return write(file, ...args); });
+    const second = await f.module.prepare(options);
+    assert.deepEqual(second, first);assert.equal(fs.statSync(second.appRoot).ino, inode);assert.deepEqual(fs.readFileSync(meta), record);
+    assert.deepEqual(writes, [], "An unchanged warm launch writes no receipt or prepared file");
+    assert.equal(tools.mock.callCount(), calls, "An unchanged warm launch neither converts nor signs");
+  });
+  await t.test("coarse runtime identities still read bytes and reject a held-stat rewritten dependency", async t => {
+    const f = preparedIpa(t), hold = coarseTimes(t, f.source), dependency = path.join(f.directory, "libFixture.dylib");fs.writeFileSync(dependency, "first");
+    const options = { ...f.options, frameworkDependencies: [{ name: "libFixture.dylib", sha256: require("node:crypto").createHash("sha256").update("first").digest("hex") }] };
+    await f.module.prepare(options);hold(dependency);
+    const watched = new Set([path.join(f.framework, "PlayTools"), dependency]), reads = new Map(), open = fs.openSync;
+    t.mock.method(fs, "openSync", (file, ...args) => { if (watched.has(String(file))) reads.set(String(file), (reads.get(String(file)) || 0) + 1);return open(file, ...args); });
+    const tools = require("../src/modules/shared/runtime/tool-command").runToolCommand, calls = tools.mock.callCount();
+    await f.module.prepare(options);
+    for (const file of watched) assert.ok(reads.get(file) >= 2, "Coarse runtime inputs retain stable byte validation");
+    assert.equal(tools.mock.callCount(), calls, "Unchanged coarse inputs do not reconvert or sign");
+    const meta = path.join(f.root, "prepared.json"), record = fs.readFileSync(meta);fs.writeFileSync(dependency, "other");
+    await assert.rejects(f.module.prepare(options), /dependencies changed since installation/);
+    assert.deepEqual(fs.readFileSync(meta), record);assert.equal(fs.readFileSync(path.join(f.root, "prepared/Owned.app/resource"), "utf8"), "one");noStaging(f.root);
+  });
+});

@@ -18,6 +18,7 @@ import {sceneRoleHeader} from "../src/modules/shared/reshade/native/scene-role-h
 import {stageLibplaceboScene} from "./stage-libplacebo-scene.mjs";
 import {stageStreamlineSnapshots} from "./stage-streamline-snapshots.mjs";
 import {pruneGraphicsRuntimes} from "./prune-graphics-runtimes.mjs";
+import {ALIAS_INDEX,aliasIndex,deduplicate,resolvedPrefixes} from "./payload-aliases.mjs";
 const features = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, "../src/modules/shared/reshade/features.json"), "utf8"));
 const effectSources = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, "../src/modules/shared/reshade/effect-sources.json"), "utf8"));
 const declarationPath=path.resolve(import.meta.dirname,"../src/modules/shared/reshade/distribution-supplementals.json");
@@ -67,7 +68,7 @@ if (pins.length !== consumed.size || new Set(pins.map(line => line.trim().split(
 const nativeFiles = ["libreshade-macos.dylib", "libvkd3d-shader.dylib", "fx-compile"];
 if(fs.existsSync(path.join(build,"shaderc-offline")))nativeFiles.push("shaderc-offline");
 if(fs.existsSync(path.join(build,"maclauncher-graphics-video"))) nativeFiles.push("maclauncher-graphics-video");
-if(features.graphics.windowSourceAPI===1){
+if(features.graphics.windowSourceAPI===2){
   if(!fs.existsSync(path.join(build,"maclauncher-graphics-window")))throw Error("The declared window graphics helper is missing.");
   nativeFiles.push("maclauncher-graphics-window");
 }
@@ -556,7 +557,7 @@ if(features.graphics.videoFrameGenerationMethods?.includes("rife")&&!symbols.inc
 if (!/\b_rsProcessFrame\b/.test(symbols)) throw new Error("The ReShade library must provide its shared frame encoder.");
 if (!/\b_rsSubmitFramePresenterAtTimeObserved\b/.test(symbols)) throw new Error("The ReShade library must provide frame retirement callbacks for explicit presentation.");
 if (features.graphics.browserFrameAPI === 1 && !/\b_rsBrowserFrameAPI\b/.test(symbols)) throw new Error("The ReShade library must provide its completed browser-window frame source.");
-if (features.graphics.windowSourceAPI === 1 && !/\b_rsWindowSourceAPI\b/.test(symbols)) throw new Error("The ReShade library must provide its picked-window frame source.");
+if (features.graphics.windowSourceAPI === 2 && ![/\b_rsWindowSourceAPI\b/, /\b_rsWindowSourceSubmit\b/].every(symbol => symbol.test(symbols))) throw new Error("The ReShade library must provide its picked-window frame source.");
 if (features.graphics.observedPresentationAPI === 1 && !/\b_rsSubmitFramePresenterObserved\b/.test(symbols)) throw new Error("The ReShade library must provide display-driven frame retirement callbacks.");
 if (features.graphics.temporalMethods?.length && !/\b_rsProcessTemporalFrame\b/.test(symbols)) throw new Error("The ReShade library must provide its temporal frame encoder.");
 if (features.graphics.temporalCameraAPI === 1) for (const name of ["rsSetTemporalCamera", "rsSetTemporalCameraForTextures", "rsClearTemporalCameraTextures", "rsGetTemporalMethod"])
@@ -596,11 +597,20 @@ for (const name of ["ReShade.fxh", "ReShadeUI.fxh"]) inputs.set("include/" + nam
 const effects = path.resolve(import.meta.dirname, "../src/modules/shared/reshade/effects");
 for (const name of fs.readdirSync(effects)) inputs.set("effects/" + name, path.join(effects, name));
 const effectNotices = validateEffectSources(effectSources, [...inputs].map(([relative, input]) => ({ path: relative, sha256: digest(fs.readFileSync(input)) })));
+// Identical files under the paths providers open through the shared payload
+// resolver are stored once; each provider's alias index names the stored copy
+// of every removed path.
+const deduplicated = deduplicate(inputs, { prefixes: resolvedPrefixes(inputs), keep: new Set(nativeFiles) });
+const removedPayload = new Set([...inputs.keys()].filter(relative => !deduplicated.inputs.has(relative)));
+for (const relative of removedPayload) inputs.delete(relative);
+const aliasIndexes = [...deduplicated.indexes].map(([directory, aliases]) => [path.posix.join(directory, ALIAS_INDEX), Buffer.from(aliasIndex(aliases))]);
+if (aliasIndexes.some(([relative]) => inputs.has(relative))) throw new Error("A provider payload cannot supply its own alias index.");
 // Presets, includes and notices belong to the same immutable payload as the
 // native binaries. An effect-only update must not overwrite an older version
 // while a running game still refers to that version's files.
 const payloadHash = digest(Buffer.concat([Buffer.from("adhoc-signature-v1\0" + pins.join("\n") + "\0" + JSON.stringify(features) + "\0" + JSON.stringify(effectSources) + "\0"),
   ...[...extraOwned].flatMap(([relative,file])=>[Buffer.from(relative+'\0'),fs.readFileSync(file)]),
+  ...aliasIndexes.flatMap(([relative, bytes]) => [Buffer.from(relative + "\0"), bytes]),
   ...[...inputs].sort(([a], [b]) => a.localeCompare(b)).flatMap(([relative, input]) =>
     [Buffer.from(relative + "\0"), fs.readFileSync(input)])]));
 const version = "0.1.0-" + sourceHash.slice(0, 8) + "-" + payloadHash.slice(0, 8);
@@ -637,6 +647,7 @@ function record(relative) {
   const file = path.join(destination, relative); fs.chmodSync(file, 0o644);
   return { path: relative, sha256: digest(fs.readFileSync(file)), size: fs.statSync(file).size, mode: 0o644 };
 }
+for (const [relative, bytes] of aliasIndexes) { fs.writeFileSync(path.join(destination, relative), bytes); files.push(record(relative)); }
 fs.writeFileSync(path.join(destination, "runtime.json"), JSON.stringify({ schema: 1, version,
   minimumMacOS, architectures: ["arm64", "x86_64"], features, effectSources, sourceHash, sourcePins: pins.map(line => line.trim()), files }, null, 2) + "\n");
 const manifest = record("runtime.json"); files.push(manifest);
@@ -670,8 +681,8 @@ const declaration = { id: "reshade", version, arch: "universal", launcherArchite
       { name: "MLX-DLSS", license: "Apache-2.0", path: "neural/notices/MLX-DLSS-LICENSE", sourceUrl: "https://github.com/iamwavecut/MLX-DLSS" },
       { name: "MLX", license: "MIT", path: "neural/notices/MLX-LICENSE", sourceUrl: "https://github.com/ml-explore/mlx" },
       { name: "MLX Swift", license: "MIT", path: "neural/notices/MLX-Swift-LICENSE", sourceUrl: "https://github.com/ml-explore/mlx-swift" },
-      { name: "Swift Argument Parser", license: "Apache-2.0", path: "neural/notices/Swift-Argument-Parser-LICENSE", sourceUrl: "https://github.com/apple/swift-argument-parser" },
-      { name: "Swift Numerics", license: "Apache-2.0", path: "neural/notices/Swift-Numerics-LICENSE", sourceUrl: "https://github.com/apple/swift-numerics" }
+      { name: "Swift Argument Parser", license: "Apache-2.0 WITH Swift-exception", path: "neural/notices/Swift-Argument-Parser-LICENSE", sourceUrl: "https://github.com/apple/swift-argument-parser" },
+      { name: "Swift Numerics", license: "Apache-2.0 WITH Swift-exception", path: "neural/notices/Swift-Numerics-LICENSE", sourceUrl: "https://github.com/apple/swift-numerics" }
     ] : []),
     ...(libplacebo?[
       {name:"libplacebo",license:"LGPL-2.1-or-later",path:"notices/libplacebo/libplacebo.360.dylib.LICENSE",sourceUrl:libplacebo.inputs.find(item=>["libplacebo.360.dylib","libplacebo"].includes(item.name)).source},
@@ -704,6 +715,7 @@ const declaration = { id: "reshade", version, arch: "universal", launcherArchite
     ...effectNotices
   ] };
 const { validateDeclaration } = await import("./native-supplementals.cjs");
+if (declaration.notices.some(notice => removedPayload.has(notice.path))) throw new Error("A declared notice must keep its own file, not a payload alias.");
 validateDeclaration(declaration);
 if(priorDeclaration?!fs.readFileSync(declarationPath).equals(priorDeclaration):fs.existsSync(declarationPath))throw Error("The graphics selection changed during staging; the newer selection was preserved.");
 const declarationTemporary=declarationPath+"."+crypto.randomBytes(8).toString("hex")+".tmp";

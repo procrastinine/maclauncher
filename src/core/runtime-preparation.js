@@ -63,9 +63,13 @@ async function managerPlan(entry, info, context, managers, { managerId, runtimeI
       installed: (section.installed || []).filter(install => install.ready !== false && install.status !== "damaged" &&
         (!variant || install.variant === variant)).map(install => install.version)
     }) }).version;
+  // Only the manager's own default, with no game choice or saved default,
+  // is an automatic choice; see runtime-install-origins.js.
+  const automatic = !selectRuntimeVersion({ manual: override.version, defaultVersion: section.defaultVersion }).version;
   const installed = () => version && section.installed?.find(install => install.version === version && install.ready !== false && install.status !== "damaged" && (!variant || install.variant === variant));
   function useInstalled(install) {
     if (!install) return false;
+    if (!automatic) require("./runtime-install-origins").clearRecord(context.userDataDir, { managerId, version: install.version });
     context.recordRuntimeUse?.({ managerId, version: install.version, sectionId: sectionId || section.id || "default",
       ...(install.variant ? { variant: install.variant } : {}),
       ...(install.installDir || install.appPath || install.executablePath ? { sourcePath: install.installDir || install.appPath || install.executablePath } : {}) });
@@ -73,7 +77,7 @@ async function managerPlan(entry, info, context, managers, { managerId, runtimeI
   }
   if (useInstalled(installed())) return null;
   if (!version && typeof manager.refreshCatalog !== "function") throw new Error("No compatible runtime version is available for this game.");
-  return { managerId, version: version || null, ...(!version ? { discoveryRequired: true } : {}),
+  return { managerId, version: version || null, ...(!version ? { discoveryRequired: true } : {}), ...(automatic ? { automatic: true } : {}),
     installOptions: { sectionId: sectionId || section.id || "default", ...(variant ? { variant } : {}) } };
 }
 
@@ -83,10 +87,13 @@ async function runtimePlans(entry, mod, info, context, managers) {
   const runtimeOwner = mod?.getRuntimeProvider?.(context.runtimeId) || mod;
   const manager = managers.find(manager => manager.id === managerId);
   if (manager) {
+    const Custom = require("../modules/shared/runtime/custom-runtime");
     const sectionId = sectionIdFor(entry, info, context.runtimeId);
-    const selected = require("../modules/shared/runtime/custom-runtime").forManager(manager).select(
+    const selected = Custom.forManager(manager).select(
       { ...entry, runtimeId: context.runtimeId }, context.settings, context.userDataDir, sectionId ? { sectionId } : {});
-    if (selected && !selected.ready) throw new Error(selected.reason);
+    const replacement = typeof selected?.version === "string" && selected.version && !Custom.isPath(selected.version) ||
+      selected?.discoveryRequired === true && typeof manager.refreshCatalog === "function";
+    if (selected && !selected.ready && !replacement) throw new Error(selected.reason);
   }
   const primary = typeof runtimeOwner?.ensureRuntime === "function"
     ? await runtimeOwner.ensureRuntime(entry, context)
@@ -111,7 +118,7 @@ async function runtimePlans(entry, mod, info, context, managers) {
   for (const plan of plans) {
     const options = Object.entries(plan.installOptions || {}).sort(([a], [b]) => a.localeCompare(b));
     const key = JSON.stringify([plan.managerId, plan.version, options]);
-    if (!unique.has(key)) unique.set(key, plan);
+    if (!unique.has(key) || unique.get(key).optional && !plan.optional) unique.set(key, plan);
   }
   return [...unique.values()];
 }
@@ -119,10 +126,11 @@ async function runtimePlans(entry, mod, info, context, managers) {
 async function prepareForLaunch({ entry, mod, info, context, registry, runAction, install, report = () => {} }) {
   const managers = listRuntimeManagers(registry);
   let plans = await runtimePlans(entry, mod, info, context, managers);
-  const approved = new Set(), refreshed = new Set();
+  const approved = new Set(), refreshed = new Set(), declined = new Set();
+  const consentKey = plan => JSON.stringify([plan.managerId, Object.entries(plan.installOptions || {}).sort(([a], [b]) => a.localeCompare(b))]);
   let installations;
   for (;;) {
-    installations = plans.map(plan => {
+    installations = plans.filter(plan => !plan.optional || !declined.has(consentKey(plan))).map(plan => {
       const manager = managers.find(manager => manager.id === plan.managerId);
       if (require("../modules/shared/runtime/custom-runtime").isPath(plan.version))
         throw new Error("The selected custom runtime is unavailable. Check its path in Runtimes.");
@@ -132,17 +140,23 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
       const requiresDownload = plan.requiresDownload ?? section?.catalog?.versionRequirements?.[plan.version]?.requiresDownload ?? true;
       const versionLabel = [plan.versionLabel, section?.versionLabels?.[plan.version], section?.catalog?.versionLabels?.[plan.version],
         state?.versionLabels?.[plan.version], state?.catalog?.versionLabels?.[plan.version]].find(value => typeof value === "string" && value.trim());
-      return { manager, plan, requiresDownload, versionLabel };
+      const installedBefore = (state?.sections || [state]).flatMap(item => item?.installed || []).map(row => String(row?.version));
+      return { manager, plan, requiresDownload, versionLabel, installedBefore };
     });
     // Consent covers discovery and acquisition before either occurs.
     for (const { manager, plan, requiresDownload, versionLabel } of installations) {
-      const key = JSON.stringify([manager.id, Object.entries(plan.installOptions || {}).sort(([a], [b]) => a.localeCompare(b))]);
+      const key = consentKey(plan);
       if ((requiresDownload || !plan.version || plan.discoveryRequired) && !approved.has(key)) {
         if (!await downloadApproved(context, { ...plan, ...(versionLabel ? { versionLabel } : {}),
-          label: plan.label || manager.label || manager.id, requiresDownload })) return false;
+          label: plan.label || manager.label || manager.id, requiresDownload })) {
+          if (!plan.optional) return false;
+          declined.add(key);
+          continue;
+        }
         approved.add(key);
       }
     }
+    installations = installations.filter(({ plan }) => !plan.optional || !declined.has(consentKey(plan)));
     const unknown = installations.find(({ plan }) => !plan.version || plan.discoveryRequired);
     if (!unknown) break;
     const { manager, plan } = unknown, label = plan.label || manager.label || manager.id;
@@ -156,11 +170,14 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
     context.onRuntimeStateChange?.();
     plans = await runtimePlans(entry, mod, info, context, managers);
   }
-  for (const { manager, plan } of installations) {
+  for (const { manager, plan, installedBefore } of installations) {
     const label = plan.label || manager.label || manager.id;
     const progressLabel = plan.progressLabel || `Installing ${label}…`;
     report({ phase: "install", label: progressLabel, managerId: manager.id, version: plan.version });
-    await install(manager, { ...plan.installOptions, version: plan.version }, { label, progressLabel });
+    const result = await install(manager, { ...plan.installOptions, version: plan.version }, { label, progressLabel });
+    // A version Play chose on its own may later be superseded and removed.
+    if (plan.automatic === true) require("./runtime-install-origins").recordPlayInstall({ userDataDir: context.userDataDir, manager, plan, result,
+      entry, settings: context.settings, installedBefore, logger: context.logger });
   }
   await context.flushRuntimeUses?.();
   const declaration = info.runtime?.preLaunch?.[context.runtimeId];

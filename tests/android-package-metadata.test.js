@@ -5,9 +5,10 @@ const Runtime = require("../src/modules/android/runtime");
 const Reader = require("../src/modules/android/tools/apk-metadata");
 
 test("APK metadata uses its included reader without selecting or installing an Android runtime", async t => {
+  if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "android-metadata-selection-"));
   t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
-  const apk = path.join(temporary, "game.apk"); fs.copyFileSync(path.join(__dirname, "fixtures/android-package-metadata/metadata.apk"), apk);
+  const apk = path.join(temporary, "game.apk"); fs.copyFileSync(require('./helpers/android-fixture-tools.cjs').metadataApk(t), apk);
   const entry = { gameId: "game", gamePath: apk }, context = { userDataDir: temporary, settings: {}, locale: "en-US" };
   for (const name of ["resolveSelected", "resolveForLaunch", "resolveSelectedForLaunch"])
     t.mock.method(Runtime, name, () => assert.fail("Package resources are independent of game runtimes"));
@@ -61,7 +62,34 @@ test("Verified package metadata survives a missing helper only for the same inpu
   assert.deepEqual(fs.readFileSync(icon), image);
 });
 
+test("Android launch reuses the prepared Dock icon without copying or rewriting it", async t => {
+  const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-direct-dock-icon-'));
+  t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
+  const entry={gameId:'game',name:'Original title'},sourceIdentity={apkSha256:'a'.repeat(64)},context={userDataDir:temporary,locale:'en-US',metadataSourceIdentity:sourceIdentity};
+  const directory=path.join(temporary,'games/game/icons'),cacheRoot=path.join(temporary,'cache');
+  fs.mkdirSync(directory,{recursive:true});fs.mkdirSync(cacheRoot);
+  const icon=path.join(directory,'android.png'),dockIcon=path.join(cacheRoot,'dock-icon.png');
+  fs.writeFileSync(icon,'source icon');fs.writeFileSync(dockIcon,'already prepared Dock icon');
+  const digest=value=>require('node:crypto').createHash('sha256').update(JSON.stringify(value)).digest('hex');
+  fs.writeFileSync(path.join(directory,'android.json'),JSON.stringify({inputIdentity:digest([sourceIdentity,context.locale]),icon:true,label:'Android title'}));
+  t.mock.method(Reader,'identity',()=>{throw Error('No reader needed for verified cached metadata');});
+  let requests=0;
+  t.mock.method(require('../src/modules/shared/dock-icon'),'prepare',async(source,destination)=>{
+    requests++;assert.equal(source,icon);assert.equal(destination,cacheRoot);return dockIcon;
+  });
+  const read=fs.promises.readFile.bind(fs.promises),write=require('../src/modules/shared/writable-input').atomicWrite;
+  t.mock.method(fs.promises,'readFile',(...args)=>{assert.notEqual(args[0],dockIcon,'Launch must not reread the prepared PNG to duplicate it');return read(...args);});
+  t.mock.method(require('../src/modules/shared/writable-input'),'atomicWrite',(...args)=>{assert.fail('Warm icon selection must not write a second icon');return write(...args);});
+  for(let launch=0;launch<2;launch++){
+    const config={title:'Original title'};
+    await Metadata.applyLaunchIdentity(config,entry,{cacheRoot,sourceApk:path.join(temporary,'unused.apk')},{},null,context);
+    assert.equal(config.iconFile,dockIcon);assert.ok(Metadata.dockArguments(config).includes('-Xdock:icon='+dockIcon));
+  }
+  assert.equal(requests,2);assert.deepEqual(fs.readdirSync(cacheRoot),['dock-icon.png']);
+});
+
 test("Runtime.resolve preserves the complete declaration for launch verification", async t => {
+  t.mock.method(require("../src/modules/shared/runtime/host-capabilities"), "getHostCapabilities", () => ({ platform: "darwin", hardwareArch: "arm64" }));
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "android-metadata-verifier-"));
   const verifier = require("../src/modules/android/runtime-verifier");
   t.after(async () => { await verifier.close(); fs.rmSync(temporary, { recursive: true, force: true }); });
@@ -85,10 +113,11 @@ test("Runtime.resolve preserves the complete declaration for launch verification
 });
 
 test("A decoder update preserves known artwork when unchanged package resources cannot be rendered", async t => {
+  if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "android-metadata-reader-update-"));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const apk = path.join(directory, "base.apk");
-  fs.copyFileSync(path.join(__dirname, "fixtures/android-apk-metadata-standalone/base.apk"), apk);
+  fs.copyFileSync(require('./helpers/android-fixture-tools.cjs').metadataApk(t,'base'), apk);
   const entry = { gameId: "game", gamePath: apk }, context = { userDataDir: directory, locale: "en-US" };
   const cache = path.join(directory, "games/game/icons"); fs.mkdirSync(cache, { recursive: true });
   const icon = path.join(cache, "android.png"); fs.copyFileSync(path.resolve("src/modules/android/resources/icon.png"), icon);
@@ -127,12 +156,13 @@ test("APK icon lookup preserves provider artwork after a decoder failure and res
 });
 
 test("Original Android resource metadata renders adaptive icons, localizes labels and reuses disk results", async t => {
+  if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
   if (process.platform !== "darwin") return t.skip("Requires the included macOS APK reader");
   try { Reader.resolve(); } catch { return t.skip("Requires the included APK reader payload"); }
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "android-package-metadata-test-"));
   t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
   const apk = path.join(temporary, "example.apk");
-  fs.copyFileSync(path.join(__dirname, "fixtures/android-package-metadata/metadata.apk"), apk);
+  fs.copyFileSync(require('./helpers/android-fixture-tools.cjs').metadataApk(t), apk);
   const payload = { root: path.join(temporary, "absent-android-runtime"), version: "absent", profile: {} };
   const entry = { gameId: "example", gamePath: apk };
   const context = { userDataDir: temporary, payload, locale: "en-US" };
@@ -162,7 +192,7 @@ test("Original Android resource metadata renders adaptive icons, localizes label
   assert.notEqual(localized.identity, first.identity);
   const splitDirectory = path.join(temporary, "split-input"); fs.mkdirSync(splitDirectory);
   for (const [input, output] of [["base.apk", "z-base.apk"], ["resources.apk", "a-resources.apk"]])
-    fs.copyFileSync(path.join(__dirname, "fixtures/android-apk-metadata-standalone", input), path.join(splitDirectory, output));
+    fs.copyFileSync(require('./helpers/android-fixture-tools.cjs').metadataApk(t,input.replace(/\.apk$/,'')), path.join(splitDirectory, output));
   const split = await Metadata.read({ gameId: "split", gamePath: splitDirectory }, { ...context, locale: "fr-FR" });
   assert.equal(split.label, "Jeu Métadonnées", "Folder imports order the base by manifest identity and retain resource splits");
   assert.ok(split.iconPath);
@@ -206,11 +236,12 @@ test("Original activity orientation selects the initial physical viewport withou
 });
 
 test("Original PackageParser activity policy reaches metadata before guest initialization", { timeout: 30000 }, async t => {
+  if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
   const root = process.env.KLEPTON_NATIVE_RUNTIME, java = process.env.ANDROID_TEST_JAVA;
   if (process.platform !== "darwin" || !root || !java) return t.skip("Requires Android runtime and Java SDK");
   const { execFileSync } = require("node:child_process"), temp = fs.mkdtempSync(path.join(os.tmpdir(), "android-package-orientation-"));
   t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
-  const classes = path.join(temp, "classes"), data = path.join(temp, "data"), apk = path.resolve("tests/fixtures/android-package-metadata/metadata.apk");
+  const classes = path.join(temp, "classes"), data = path.join(temp, "data"), apk = require('./helpers/android-fixture-tools.cjs').metadataApk(t);
   fs.mkdirSync(classes);fs.mkdirSync(data);
   const source = path.resolve("src/modules/android/native/java/maclauncher/android/framework"), cp = [classes, path.join(root, "android-host.jar"), path.join(root, "android-framework.jar")].join(path.delimiter);
   const javac = path.join(path.dirname(java), "javac"), fixture = path.resolve("tests/fixtures/android-package-metadata/PackageOrientationProbe.java");

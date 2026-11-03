@@ -1,4 +1,5 @@
 const fs = require("node:fs"), path = require("node:path");
+const { cloneOrCopySync, cloneOrCopy } = require("../copy-file");
 const { execFile } = require("node:child_process"), { promisify } = require("node:util");
 const { createPinnedNativeManager, hashFile } = require("../runtime/pinned-native-manager");
 const Upstream = require("../runtime/upstream");
@@ -11,6 +12,7 @@ const definitions = {
   kosmickrisp: { label: "KosmicKrisp", library: "libvulkan_kosmickrisp.dylib", source: "https://www.lwjgl.org/browse/release" }
 };
 
+// A library must match its consumer process; callers override the launcher ABI for another runtime.
 function inspect(file, { architecture = process.arch, macOSVersion = systemVersionSync(), signal } = {}) {
   return assertSystemLibraryClosure(readMachOLoadCommands(file, { architecture, signal }), { fileType: 6, maximumMacOS: macOSVersion });
 }
@@ -126,7 +128,7 @@ function createManager(backend, dependencies = {}) {
         for (const [name, bytes] of Object.entries(kept)) fs.writeFileSync(path.join(unpacked, name), bytes);
       } else {
         await installLoader(unpacked, loader, signal);
-        fs.cpSync(path.join(__dirname, "notices"), path.join(unpacked, "notices"), { recursive: true });
+        cloneOrCopySync(path.join(__dirname, "notices"), path.join(unpacked, "notices"));
       }
       const files = [definition.library, ...(loader ? ["libvulkan.1.dylib"] : [])];
       let minimumMacOS = "1.0";
@@ -137,7 +139,7 @@ function createManager(backend, dependencies = {}) {
       }
       return { backend, minimumMacOS, libraries: files.map(file => ({ file, sha256: hashFile(path.join(unpacked, file)) })) };
     }, dependencies: { ...dependencies, extractArchive: (archive, output, signal) => backend === "moltenvk" ? extract(archive, output, signal)
-      : fs.promises.copyFile(archive, path.join(output, definition.library)) } });
+      : cloneOrCopy(archive, path.join(output, definition.library), { signal }) } });
   const result = { ...manager, upstream: loader ? [kosmickrisp, loader] : moltenvk, backend, ui: { groupId: "graphics", tabLabel: "Graphics", sectionLabel: definition.label, memberOrder: backend === "moltenvk" ? 20 : 21, management: "managed" } };
   Custom.configure(result, { inspect(runtimePath) {
     const native = Custom.inspectExecutable(runtimePath, { candidates: [definition.library, "MoltenVK", "Versions/A/MoltenVK"], allowLibrary: true });

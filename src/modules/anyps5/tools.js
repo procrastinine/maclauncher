@@ -1,4 +1,5 @@
 const fs=require("node:fs");
+const { cloneOrCopySync } = require("../shared/copy-file");
 const path=require("node:path");
 const crypto=require("node:crypto");
 const Native=require("../shared/decompilation/native");
@@ -34,7 +35,7 @@ function inspectExecutable(entry,_payload,context) {
     const stat=fs.lstatSync(registry);
     if(stat.isFile()&&!stat.isSymbolicLink()&&stat.size<32*1024*1024) {
       const imports=JSON.parse(fs.readFileSync(registry,"utf8"));
-      if(Array.isArray(imports)) { result.importCount=imports.length;fs.copyFileSync(registry,path.join(outputRoot,"imports.json")); }
+      if(Array.isArray(imports)) { result.importCount=imports.length;cloneOrCopySync(registry,path.join(outputRoot,"imports.json")); }
     }
   } catch(error) { if(error.code!=="ENOENT") {fs.rmSync(outputRoot,{recursive:true,force:true});throw error;} }
   fs.writeFileSync(path.join(outputRoot,"inspection.json"),JSON.stringify(result,null,2)+"\n");

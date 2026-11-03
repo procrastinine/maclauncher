@@ -15,7 +15,7 @@ function createManager(dependencies = {}, { projectId = "nxnative" } = {}) {
         throw new Error("The nxnative package has an unsupported runtime layout.");
     },
     async verifyPayload(selected, { signal } = {}) {
-      Bundled.verifyPayload(selected.root, selected.declaration);
+      Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
       for (const file of selected.manifest.files.filter(file => file.architectures))
         await (dependencies.execute || execute)("/usr/bin/codesign", ["--verify", "--strict", path.join(selected.payloadRoot, file.path)], { signal, timeout: 30000, maxBuffer: 1024 * 1024 });
     }, dependencies });

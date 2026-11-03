@@ -123,6 +123,10 @@ async function runRuntimeManagerActionOnce({ manager, action, payload, userDataD
       const next=manager.applySettingsUpdate("setDefault", data, current,{userDataDir});
       await commitSettings(manager.updateSettingsAfterDefault?.(next,data,{userDataDir,previousSettings:previous})||next,previous);
     } else throw new Error("Unsupported runtime action");
+    // An explicit choice or removal clears a version's automatic-installation record.
+    if (["setDefault", "uninstall"].includes(action) || action === "install" && result)
+      require("./runtime-install-origins").clearRecord(userDataDir, { managerId: manager.id,
+        version: action === "install" ? result?.version ?? data.version : data.version, sectionId: data.sectionId });
     return result ?? true;
   } catch (error) {
     if (isAbortError(error)) return false;

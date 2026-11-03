@@ -4,15 +4,16 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 
-// Offline developer tool. Ordinary native builds consume the checked-in array.
+// Build-time generation from owned GLSL and pinned upstream sources.
 const root = path.resolve(import.meta.dirname, "../..");
 const args = process.argv.slice(2);
-let compiler = "glslang", check = false;
+let compiler = "glslang", outputDirectory;
 for (let index = 0; index < args.length; ++index) {
-  if (args[index] === "--check") check = true;
+  if (args[index] === "--output" && args[index + 1]) outputDirectory = path.resolve(args[++index]);
   else if (args[index] === "--glslang" && args[index + 1]) compiler = args[++index];
-  else throw new Error("Usage: node compat/fsr/generate.mjs [--glslang executable] [--check]");
+  else throw new Error("Usage: node compat/fsr/generate.mjs [--glslang executable] --output directory");
 }
+if (!outputDirectory) throw new Error("--output directory is required");
 const upstream = path.join(root, "third_party/fsr"), destination = import.meta.dirname;
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "fsr-shaders-"));
 const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
@@ -37,10 +38,12 @@ try {
   }
   header += "}\n";
   receipt.headerSha256 = hash(header);
+  const expected = JSON.parse(fs.readFileSync(path.join(destination, "fsr1-shaders.json"), "utf8"));
+  if (receipt.headerSha256 !== expected.headerSha256) throw new Error("Invariant B: generated FSR1 header differs from the original committed header");
+  fs.mkdirSync(outputDirectory, {recursive: true});
   for (const [name, text] of [["fsr1-shaders.hpp", header], ["fsr1-shaders.json", JSON.stringify(receipt, null, 2) + "\n"]]) {
-    const file = path.join(destination, name);
-    if (check) { if (fs.readFileSync(file, "utf8") !== text) throw new Error("Generated shader differs: " + name); }
-    else fs.writeFileSync(file, text);
+    const file = path.join(outputDirectory, name);
+    fs.writeFileSync(file, text);
   }
-  console.log(check ? "FSR1 embedded shaders match their sources." : "FSR1 embedded shaders regenerated.");
+  console.log("Invariant B: FSR1 header SHA-256 matches original: " + receipt.headerSha256);
 } finally { fs.rmSync(temporary, { recursive: true, force: true }); }

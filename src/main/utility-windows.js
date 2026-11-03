@@ -25,7 +25,7 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
     let record = windows.get(request.view);
     if (record?.win.isDestroyed()) { forget(record); record = null; }
     if (record) {
-      if (request.managerId || request.sectionId || request.shaderCategory) {
+      if (request.managerId || request.sectionId || request.shaderCategory || request.moduleId) {
         record.context = context(request);
         onContextChange(record.win);
       }

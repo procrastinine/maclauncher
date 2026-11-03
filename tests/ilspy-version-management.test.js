@@ -67,7 +67,8 @@ function managedFna(t) {
   const files = Object.fromEntries(FnaProfile.requiredFiles(FNA_DOTNET).map(name => [name, Native.hashFile(path.join(payload, name))]));
   fs.writeFileSync(path.join(payload, "fna-runtime.json"), JSON.stringify({ profile: FNA_VERSION,
     upstreamRevision: FNA_REVISION, frameworkVersion: "26.10.0.0", dotnetVersion: FNA_DOTNET,
-    architecture: "arm64", files }));
+    // This fixture is the ready current host, not a retired profile requiring an update.
+    architecture: "arm64", capabilities: { originalGamePaths: true }, files }));
   const selected = { version: FNA_VERSION, upstreamRevision: FNA_REVISION, hostArchitectures: ["arm64"], minimumMacOS: "13.0", localBuild: false,
     asset: { filename: "fixture-fna.tar.gz", url: "https://github.com/example/fna/releases/download/fixture-fna/fixture-fna.tar.gz", sha256: "b".repeat(64) } };
   fs.writeFileSync(path.join(directoryPath, "runtime.json"), JSON.stringify({ version: FNA_VERSION,
@@ -245,6 +246,7 @@ test("macOS 13 uses the ready managed CLR8 floor once per state and installs wit
   const fnaState = FnaManager.getState({ userDataDir });
   assert.deepEqual(fnaState.catalog.includedVersions, []);
   assert.equal(fnaState.installed.find(item => item.version === FNA_VERSION).source, "download");
+  assert.equal(fnaState.installed.find(item => item.version === FNA_VERSION).ready, true);
   assert.equal(state.catalog.versionRequirements[TOOL_VERSION].minimumMacOS, "13.0");
   assert.equal(state.catalog.versionRequirements[TOOL_VERSION].installReason, null);
   assert.equal(state.catalog.installableVersions.includes(TOOL_VERSION), true);

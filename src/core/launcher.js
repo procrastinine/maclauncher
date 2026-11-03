@@ -30,6 +30,8 @@ const SteamClient = require("../modules/shared/runtime/steamworks/installed-clie
 const SteamClientStart = require("../modules/shared/runtime/steamworks/client-start");
 const Installers = require("../modules/shared/installers");
 const { prepareModuleInput, applyInputChanges } = require("../modules/shared/writable-input");
+const { applySaveIdentity } = require("./save-identity");
+const { CURRENT_SETTINGS_MIGRATION } = require("./data-migration-ids");
 const { isAbortError } = require("../modules/shared/runtime/download-utils");
 const { afterProcessStop, waitForProcessStop } = require("./process-lifecycle");
 const GameAvailability = require("./game-availability");
@@ -70,7 +72,7 @@ function resolveModuleSettings(settings, moduleId) {
 /** Shared application services. No Electron dependency, UI creation, or implicit downloads. */
 function createLauncher({
   userDataDir = defaultUserDataDir(), registry = Modules, logger = console, ui,
-  app, processOptions = {}, spawn, launchHosted, onEntryChange, onRuntimeStateChange,
+  app, processOptions = {}, spawn, launchHosted, onEntryChange, onSessionEvent, onRuntimeStateChange,
   writeCheatsFile: writeCheatsOverride, isGameRunning, downloads, onPreparationChange, confirmRuntimeInstall,
   rosetta = Rosetta, onToolLaunch, onToolProcessSpawn, onGameProcessSpawn, runtimeCoordinator, steamApiService = SteamApi.prepareAutomaticLaunch,
   steamClientService = SteamClient.prepareNativeLaunch, steamClientStart = SteamClientStart.ensureClient,
@@ -106,7 +108,14 @@ function createLauncher({
     processes.spawnDetachedChecked(cmd, args, { ...options, ...processOptions }, needsRosetta, context);
 
   function loadSettings() {
-    const raw = readJsonObject(path.join(userDataDir, "settings.json")) || {};
+    let document;
+    try { document = readJsonDocument(path.join(userDataDir, "settings.json")) || {}; }
+    catch (error) { logger?.warn?.("[settings] Stored settings could not be read:", error.message); }
+    const raw = document?.dataMigrations?.[CURRENT_SETTINGS_MIGRATION]?.complete === true ? document
+      : document ? require("./backcompat/settings-conversions").migrateLegacySettings(document, {
+      userDataDir, registry, logger,
+      commitSettings: (before, next) => coordinatorFor(userDataDir).client().applySettings(before, next)
+    }) : {};
     const modules = isRecord(raw.modules) ? { ...raw.modules } : {};
     for (const info of registry.listModules()) {
       modules[info.id] = {
@@ -201,6 +210,16 @@ function createLauncher({
     return unavailable[runtimeId] || (!(info?.runtime?.supported || []).length ? Object.values(unavailable)[0] : null) || null;
   }
 
+  function resolveEntryRuntimeId(entry, settings = loadSettings()) {
+    const moduleId = resolveModuleId(entry), mod = registry.getModule(moduleId), info = registry.getModuleInfo(moduleId);
+    const moduleSettings = settings?.modules?.[moduleId] || {};
+    const raw = typeof entry.runtimeId === "string" && entry.runtimeId.trim() ? entry.runtimeId : null;
+    const requested = raw && typeof mod?.normalizeRuntimeId === "function" ? mod.normalizeRuntimeId(raw) : raw;
+    const context = { ...entry, moduleId, moduleData: isRecord(entry.moduleData) ? { ...entry.moduleData } : {},
+      runtimeData: isRecord(entry.runtimeData) ? { ...entry.runtimeData } : {} };
+    return resolveRuntimeForEntry(requested, mod, info, context, moduleSettings, settings);
+  }
+
   function resolveEntryChecks(entry, settings = loadSettings(), { availability = null, getRuntimeManagerState: states = getRuntimeManagerState } = {}) {
     const moduleId = resolveModuleId(entry), mod = registry.getModule(moduleId), info = registry.getModuleInfo(moduleId);
     const moduleSettings = settings?.modules?.[moduleId] || {};
@@ -208,7 +227,7 @@ function createLauncher({
     const requested = raw && typeof mod?.normalizeRuntimeId === "function" ? mod.normalizeRuntimeId(raw) : raw;
     const context = { ...entry, moduleId, moduleData: isRecord(entry.moduleData) ? { ...entry.moduleData } : {},
       runtimeData: isRecord(entry.runtimeData) ? { ...entry.runtimeData } : {}, ...(availability ? { availability } : {}) };
-    const runtimeId = resolveRuntimeForEntry(requested, mod, info, context, moduleSettings, settings);
+    const runtimeId = resolveEntryRuntimeId(context, settings);
     const supports = mod?.getRuntimeProvider?.(runtimeId)?.supports || {};
     const saveLocationOverride = (supports.saveLocationOverride ?? info?.supports?.saveLocationOverride) !== false;
     const defaultSaveDir = typeof entry.defaultSaveDir === "string" && entry.defaultSaveDir ? entry.defaultSaveDir : null;
@@ -280,6 +299,7 @@ function createLauncher({
       runtimeSettings: options.runtimeSettings ?? runtimeSettingsStore.resolveForEntry(entry, settings, info, runtimeId),
       ...(options.runtimeSettings != null ? { runtimeSettingsOverrides: options.runtimeSettingsOverrides ?? options.runtimeSettings } : {}),
       onEntryChange: patch => {
+        if (typeof patch === "function") patch = patch(entry);
         for (const key of ["contentRootDir", "defaultSaveDir", "moduleData", "runtimeData"]) {
           if (Object.hasOwn(patch || {}, key)) entry[key] = patch[key];
         }
@@ -294,6 +314,9 @@ function createLauncher({
           }
         }
       },
+      // A running session's own output for launcher views, such as a picker
+      // list that the session's process supplies.
+      emitSessionEvent: event => onSessionEvent?.(entry, event),
       onRuntimeStateChange,
       onToolProcessSpawn: async (child, options) => {
         // Register temporary ownership before an asynchronous reservation bind,
@@ -312,7 +335,7 @@ function createLauncher({
     const graphicsDiagnostics = Object.fromEntries(["diagnostics", "capture", "gpuTiming", "trace"]
       .filter(key => typeof options.graphicsDiagnostics?.[key] === "boolean")
       .map(key => [key, options.graphicsDiagnostics[key]]));
-    let gameEffects, preparedGraphics, graphicsProcessBound = false, graphicsAttachment, captureCompanion;
+    let gameEffects, preparedGraphics, graphicsProcessBound = false, graphicsAttachment;
     const graphicsPreparation=options.graphicsPreparation||require('./graphics-preparation').createGraphicsPreparation();
     // Only library ids can name a stored record; other launch identities have none.
     const latestGraphicsRecord=()=>typeof entry.gameId==='string'&&/^[0-9A-Za-z_-]+$/.test(entry.gameId)?GameStore.readGameRecord(userDataDir,entry.gameId):null;
@@ -322,29 +345,6 @@ function createLauncher({
       graphicsProcessBound = true;
       try { ReShade.bindLaunchProcess(entry, child.pid, {userDataDir}); }
       catch (error) { warnGraphics(logger, "Graphics live controls are unavailable for this launch.", error.message); }
-      if (captureCompanion) startCaptureCompanion(child);
-    };
-    // A game whose process refuses the graphics library receives graphics
-    // through a module's window capture instead: a companion process applies
-    // this launch's plan and live controls to a captured copy of the game's
-    // window, and ends with the game.
-    const findCaptureCompanion = library => {
-      for (const moduleInfo of registry.listModules()) {
-        try {
-          const companion = registry.getModule(moduleInfo.id)?.captureCompanion?.(library, {logger});
-          if (companion) return companion;
-        } catch (error) { warnGraphics(logger, "Window capture for graphics is unavailable.", error.message); }
-      }
-      return null;
-    };
-    const startCaptureCompanion = child => {
-      const companion = captureCompanion;captureCompanion = null;
-      const environment = {...ReShade.mergeEnvironment(process.env, preparedGraphics), RESHADE_EXPLICIT_HOST: "1"};
-      delete environment.DYLD_INSERT_LIBRARIES;delete environment.STEAM_DYLD_INSERT_LIBRARIES;
-      try {
-        const capture = companion.start(child.pid, environment);
-        child.once?.("exit", () => { try { capture.kill("SIGTERM"); } catch {} });
-      } catch (error) { warnGraphics(logger, "Window capture for graphics could not start.", error.message); }
     };
     const prepareGameEffects = graphicsArchitecture => options.gameEffects === true
       ? (async () => {
@@ -432,27 +432,57 @@ function createLauncher({
       else delete environment.MACLAUNCHER_GAME_ARGUMENTS;
       return environment;
     };
-    const preflightGameGraphics = async (command, spawnOptions) => {
+    // A game whose code signature refuses the shared processor runs from a
+    // private, re-signed copy while its plan needs processing. Every other
+    // launch runs the original, and a copy it no longer needs is removed.
+    let applicationCopy = null;
+    const copyDirectory = typeof entry.gameId === "string" && /^[0-9A-Za-z_-]+$/.test(entry.gameId)
+      ? path.join(GameData.resolveGameDir(userDataDir, entry.gameId), "effects", "app-copy") : null;
+    context.launchedPath = file => applicationCopy ? applicationCopy.map(file) : file;
+    const releaseCopy = target => {
+      if (!copyDirectory || applicationCopy || typeof target !== "string" || context.isGameRunning()) return;
+      const NativeApplication = require("../modules/shared/native-application");
+      void NativeApplication.releaseCopy(copyDirectory, NativeApplication.copyUnit(target))
+        .catch(error => warnGraphics(logger, "The private graphics copy could not be removed.", error.message));
+    };
+    const preflightGameGraphics = async (command, args, spawnOptions) => {
       const {graphicsExecutable, ...nativeOptions} = spawnOptions || {};
       const target = Object.hasOwn(spawnOptions || {}, "graphicsExecutable") ? graphicsExecutable : command;
-      if (graphicsAttachment?.available === false)
-        return {...nativeOptions, env: require("../modules/shared/runtime/native-injection").withoutGraphics(nativeOptions.env, preparedGraphics)};
-      if (!preparedGraphics?.DYLD_INSERT_LIBRARIES || graphicsProcessBound || target === null) return nativeOptions;
+      const original = {command, args, options: nativeOptions};
       const Injection = require("../modules/shared/runtime/native-injection");
-      const checked = await Injection.preflight(target, preparedGraphics.DYLD_INSERT_LIBRARIES.split(path.delimiter).filter(Boolean), {signal: context.signal});
-      if (checked.available !== false) return nativeOptions;
+      if (graphicsAttachment?.available === false)
+        return {...original, options: {...nativeOptions, env: Injection.withoutGraphics(nativeOptions.env, preparedGraphics)}};
+      if (graphicsProcessBound || target === null) return original;
+      const processing = ReShade.executionRequirements(context.effectsEntry || entry).needed.processor;
+      if (!preparedGraphics?.DYLD_INSERT_LIBRARIES) {if (!processing) releaseCopy(target);return original;}
+      const libraries = preparedGraphics.DYLD_INSERT_LIBRARIES.split(path.delimiter).filter(Boolean);
+      let checked = await Injection.preflight(target, libraries, {signal: context.signal});
+      if (checked.available !== false) {if (checked.available || !processing) releaseCopy(target);return original;}
+      if (processing && copyDirectory && typeof target === "string" && fs.statSync(target, {throwIfNoEntry: false})?.isFile()) {
+        try {
+          const NativeApplication = require("../modules/shared/native-application"), unit = NativeApplication.copyUnit(target);
+          const prepared = await NativeApplication.prepareCopy({unit, directory: copyDirectory, signal: context.signal,
+            executables: async () => [...new Set([path.resolve(target), ...await Injection.blockingExecutables(unit, libraries, {signal: context.signal})])]});
+          const copied = await Injection.preflight(prepared.map(target), libraries, {signal: context.signal});
+          if (copied.available !== false) {
+            applicationCopy = prepared;
+            if (prepared.droppedEntitlements.length) logger?.info?.("[graphics] The private copy leaves out restricted entitlements: " + prepared.droppedEntitlements.join(", "));
+            return prepared.launch(original);
+          }
+          checked = copied;
+        } catch (error) {
+          if (context.signal?.aborted || isAbortError(error)) throw error;
+          checked = {available: false, reason: checked.reason + " A private copy for graphics could not be used: " + (error?.message || String(error))};
+        }
+      } else if (!processing) releaseCopy(target);
       graphicsAttachment = checked;
-      const processor = ReShade.executionRequirements(context.effectsEntry || entry).needed.processor;
-      const library = preparedGraphics.DYLD_INSERT_LIBRARIES.split(path.delimiter).find(file => path.basename(file) === "libreshade-macos.dylib");
-      captureCompanion = processor && library ? findCaptureCompanion(library) : null;
-      try { require("../modules/shared/reshade/launch-binding").attachmentUnavailable(entry, checked.reason, {userDataDir, captured: Boolean(captureCompanion)}); }
+      try { require("../modules/shared/reshade/launch-binding").attachmentUnavailable(entry, checked.reason, {userDataDir}); }
       catch (error) { warnGraphics(logger, "Graphics attachment status could not be recorded.", error.message); }
-      if (captureCompanion) warnGraphics(logger, "The game's process cannot load graphics. Graphics process a captured copy of its window.", checked.reason);
-      else if (processor) {
+      if (processing) {
         context.graphicsPreparationFailure = {reason: checked.reason};
         warnGraphics(logger, "Graphics processing is unavailable. Starting with the game's original rendering.", checked.reason);
       }
-      return {...nativeOptions, env: Injection.withoutGraphics(nativeOptions.env, preparedGraphics)};
+      return {...original, options: {...nativeOptions, env: Injection.withoutGraphics(nativeOptions.env, preparedGraphics)}};
     };
     // The game's own Steam API can request client startup during Play.
     // The default asks before Steam starts; declining still launches the game.
@@ -528,15 +558,17 @@ function createLauncher({
       options = { ...options, env: await context.applyGameEnvironment(options?.env, { gameArguments: options?.gameArguments, needsRosetta }),
         networkIsolation: context.networkAllowed === false, networkSteamClient: context.steamClientConnection === true };
       const graphicsTarget = Object.hasOwn(options, "graphicsExecutable") ? {graphicsExecutable: options.graphicsExecutable} : {};
-      options = await preflightGameGraphics(cmd, options);
+      ({ command: cmd, args, options } = await preflightGameGraphics(cmd, args, options));
       context.signal?.throwIfAborted();
       // Instrumentation wraps the same final handoff used by Play and the CLI.
       // It cannot replace lazy graphics preparation or omit its scoped merge.
       if (!processAdapter) return spawnDetachedChecked(cmd, args, options, needsRosetta, context);
-      const launch = async (command, parameters, spawnOptions, translation = needsRosetta) =>
-        spawnDetachedChecked(command, parameters, await preflightGameGraphics(command,
+      const launch = async (command, parameters, spawnOptions, translation = needsRosetta) => {
+        const prepared = await preflightGameGraphics(command, parameters,
           { ...(command === cmd ? graphicsTarget : {}), ...spawnOptions, env: await context.applyGameEnvironment(spawnOptions?.env, { gameArguments: spawnOptions?.gameArguments, needsRosetta: translation }),
-            networkIsolation: context.networkAllowed === false, networkSteamClient: context.steamClientConnection === true }), translation, context);
+            networkIsolation: context.networkAllowed === false, networkSteamClient: context.steamClientConnection === true });
+        return spawnDetachedChecked(prepared.command, prepared.args, prepared.options, translation, context);
+      };
       return processAdapter(cmd, args, options, needsRosetta, launch);
     };
     context.spawnOwnedChecked = (cmd, args, options, needsRosetta) =>
@@ -594,7 +626,7 @@ function createLauncher({
       entry.contentRootDir ??= entry.gamePath;
       entry.createdAt = existing?.createdAt || Date.now();
       entry.updatedAt = Date.now();
-      entry.schemaVersion ??= 1;
+      entry.schemaVersion ??= GameStore.CURRENT_RECORD_SCHEMA_VERSION;
       const moduleSettings = resolveModuleSettings(settings, entry.moduleId);
       const savedDefault = readJsonObject(path.join(userDataDir, "settings.json"))?.modules?.[entry.moduleId]?.defaultRuntime;
       // Older settings snapshots materialized every module's shipped default.
@@ -613,6 +645,9 @@ function createLauncher({
         if (!existing && typeof mod?.onImport === "function") {
           await mod.onImport(entry, { settings, userDataDir, logger, ui, app });
         }
+        if (!existing) entry = applySaveIdentity(entry, { games: GameStore.loadGames(userDataDir),
+          describe: (game, context) => registry.getModule(resolveModuleId(game))?.resolveSaveIdentity?.(game, context),
+          context: { settings, userDataDir, logger, ui, app } });
         persistEntry(entry);
       }
       return entry;
@@ -919,7 +954,7 @@ function createLauncher({
 
   return {
     userDataDir, loadSettings, resolveEntry, launchEntry, runAction, getLaunchContext, getGameLaunchContext, persistEntry,
-    resolveModuleNativeLaunchPath, resolveRuntimeForEntry, resolveRuntimeSupportForEntry, resolveEntryChecks,
+    resolveModuleNativeLaunchPath, resolveRuntimeForEntry, resolveRuntimeSupportForEntry, resolveEntryRuntimeId, resolveEntryChecks,
     getResolvedModuleSettings,
     resolveModuleSettings, resolveToolsButtonVisible, normalizeCheatsForModule, writeCheatsFile,
     runtimeSettingsStore, saveService

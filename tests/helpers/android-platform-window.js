@@ -24,7 +24,8 @@ async function platformWindow({runtime,home,root,classpath,args,env,main='maclau
   const identity=await require('../../src/modules/android/process-channel').processNamespace(root,1);
   const options={env:{...env,...identity.environment},stdio:['pipe','pipe','pipe']};
   const query=require('../../src/modules/android/process-channel').prepareProcessQuerySpawn(options,path.resolve(runtime,'native/android-supervisor-send'));
-  const parameters=[...args,'-Dandroid.fixture.platformSocket='+service.socketPath,'-Dandroid.fixture.platformPid='+service.identity.pid,'-Dandroid.fixture.apk='+apk,'-cp',classpath,main,path.resolve(runtime),data];
+  const manifests=require('./manifest-fixtures').prepare(path.join(root,'manifest-fixtures'));
+  const parameters=['-Dandroid.test.manifests='+path.join(manifests,'android-framework-services/manifests'),...args,'-Dandroid.fixture.platformSocket='+service.socketPath,'-Dandroid.fixture.platformPid='+service.identity.pid,'-Dandroid.fixture.apk='+apk,'-cp',classpath,main,path.resolve(runtime),data];
   child=spawn(path.join(home,'bin/java'),frameworkArguments(path.join(home,'bin/java'),parameters),query.options);query.attach(child);
   completed=once(child,'close');let stdout='',stderr='',tail='',readyResolve,readyReject;
   const ready=new Promise((resolve,reject)=>{readyResolve=resolve;readyReject=reject;});

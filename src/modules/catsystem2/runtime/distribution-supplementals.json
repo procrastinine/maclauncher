@@ -1,7 +1,7 @@
 [
   {
     "id": "catsystem2-kif-crypto",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "arch": "arm64",
     "launcherArchitectures": [
       "arm64"
@@ -9,20 +9,26 @@
     "minimumMacOS": "11.0",
     "sourceRelative": null,
     "sourceSha256": "325c23b2d1dab9c3c0818da1d9c64b20f21fc959181b25dbe6b7a32a8a792f0c",
-    "directoryRelative": "catsystem2-kif-crypto/1.1.0/arm64",
+    "directoryRelative": "catsystem2-kif-crypto/1.1.1/arm64",
     "manifestRelative": "helper.json",
-    "manifestSha256": "1bee27a4edc1dad9290f4caa6203ff1ad663e06007852f670760679619e8274f",
+    "manifestSha256": "53957456f2eb9c4d54391023e96e3e0d3f229c39935919aefe52a389bde261b8",
     "files": [
       {
-        "path": "MacLauncher-MIT.txt",
-        "size": 1081,
-        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
-        "mode": 420
+        "path": "build-definition.json",
+        "size": 15895,
+        "mode": 420,
+        "sha256": "156f3b0e33e95ba4c5672feaf7beb7fdd8ef6000ade68ff9b53820930e68ff9d"
+      },
+      {
+        "path": "build-inputs.json",
+        "size": 117,
+        "mode": 420,
+        "sha256": "294c94269035c938ad51e7b386f9972aae8c4704254436a896ada371ff44785c"
       },
       {
         "path": "helper.json",
         "size": 820,
-        "sha256": "1bee27a4edc1dad9290f4caa6203ff1ad663e06007852f670760679619e8274f",
+        "sha256": "53957456f2eb9c4d54391023e96e3e0d3f229c39935919aefe52a389bde261b8",
         "mode": 420
       },
       {
@@ -33,6 +39,12 @@
         "architectures": [
           "arm64"
         ]
+      },
+      {
+        "path": "MacLauncher-MIT.txt",
+        "size": 1081,
+        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
+        "mode": 420
       }
     ],
     "notices": [
@@ -45,7 +57,7 @@
   },
   {
     "id": "catsystem2-kif-crypto",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "arch": "x64",
     "launcherArchitectures": [
       "arm64",
@@ -54,20 +66,26 @@
     "minimumMacOS": "11.0",
     "sourceRelative": null,
     "sourceSha256": "325c23b2d1dab9c3c0818da1d9c64b20f21fc959181b25dbe6b7a32a8a792f0c",
-    "directoryRelative": "catsystem2-kif-crypto/1.1.0/x64",
+    "directoryRelative": "catsystem2-kif-crypto/1.1.1/x64",
     "manifestRelative": "helper.json",
-    "manifestSha256": "b31e8ab932c001863c3daaff12ad230e9fa833c9e4398005778a73fef658d339",
+    "manifestSha256": "c097fd9b79ef6db684899a8c3e54e3f82419c53073c5ad76562802135cdca5c4",
     "files": [
       {
-        "path": "MacLauncher-MIT.txt",
-        "size": 1081,
-        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
-        "mode": 420
+        "path": "build-definition.json",
+        "size": 15895,
+        "mode": 420,
+        "sha256": "156f3b0e33e95ba4c5672feaf7beb7fdd8ef6000ade68ff9b53820930e68ff9d"
+      },
+      {
+        "path": "build-inputs.json",
+        "size": 117,
+        "mode": 420,
+        "sha256": "294c94269035c938ad51e7b386f9972aae8c4704254436a896ada371ff44785c"
       },
       {
         "path": "helper.json",
         "size": 822,
-        "sha256": "b31e8ab932c001863c3daaff12ad230e9fa833c9e4398005778a73fef658d339",
+        "sha256": "c097fd9b79ef6db684899a8c3e54e3f82419c53073c5ad76562802135cdca5c4",
         "mode": 420
       },
       {
@@ -79,6 +97,12 @@
           "x86_64"
         ],
         "executionArchitecture": "x86_64"
+      },
+      {
+        "path": "MacLauncher-MIT.txt",
+        "size": 1081,
+        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
+        "mode": 420
       }
     ],
     "notices": [

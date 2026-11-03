@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../shared/copy-file");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const GameData = require("../shared/game-data");
@@ -51,7 +52,7 @@ async function exportBytecode(entry, payload, context, dependencies = {}) {
     context.onEntryChange?.({ moduleData: entry.moduleData }); return result;
   } catch (error) {
     if (fs.existsSync(path.join(temporary, "hlbc.log"))) {
-      const log = path.join(parent, "hlbc-failure.log"); fs.copyFileSync(path.join(temporary, "hlbc.log"), log); error.message += " Log: " + log;
+      const log = path.join(parent, "hlbc-failure.log"); cloneOrCopySync(path.join(temporary, "hlbc.log"), log); error.message += " Log: " + log;
     }
     throw error;
   } finally { fs.rmSync(temporary, { recursive: true, force: true }); }

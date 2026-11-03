@@ -42,7 +42,7 @@ Native games imported from an installed Steam library (`steamapps/common`) recei
 
 ## Saves
 
-macOS Game has no save editor or cheats. With Native macOS, games keep their own save locations and there is no save-location setting. With 32-bit Mac, saves go to the entry's private home and working folders, and the save location can be changed, as described under [Saves and storage](#saves-and-storage).
+macOS Game has no save editor or cheats. Native macOS and 32-bit Mac keep each game's own save locations and provide no save-location override.
 
 ## Inspector tools
 
@@ -63,6 +63,10 @@ The inspector details show the app version, bundle ID and executable.
 
 **Native macOS** runs the game's own app, executable or script and has no download or runtime settings.
 
+#### Graphics
+
+Native apps and executables use the shared **Shaders and filters** and **Scaling and frame generation** controls through the graphics library that is attached at launch. Many published Mac apps have a hardened-runtime or library-validation signature that refuses that library. While the game's graphics need processing, such an app runs from a private copy in the game's data folder: only the refused programs are copied and signed ad hoc, every other file is a link to the original, and the original app is never changed. Only the command runs from the signed copy; arguments, the working directory and environment values keep their original paths. Links beside the copy keep data that the app finds relative to its bundle within reach. With graphics off, the original app runs. Files that the game creates inside the copy, and links that it replaces, survive refreshes and keep the copy from being removed automatically. [Private copies of restricted apps](../graphics/INPUTS_AND_ADAPTERS.md#private-copies-of-restricted-apps) describes the copy, when it is made again or removed, and why apps that use the App Sandbox keep their original rendering.
+
 ### 32-bit Mac
 
 **32-bit Mac** runs apps built only for 32-bit Intel (i386) through [mac32](https://github.com/Shagulka/mac32). mac32 loads a 32-bit Intel application in a 64-bit process and translates its system-library calls for current macOS. MacLauncher downloads the publisher's Mac releases of mac32. The runtime has its own section in Settings and its own **Runtimes → 32-bit Mac** tab, but it is not a separate game type: the apps it runs stay macOS Game entries.
@@ -79,7 +83,9 @@ An entry uses 32-bit Mac when it is an `.app` bundle whose main executable is an
 
 #### Saves and storage
 
-MacLauncher gives each entry its own working directory, home directory and temporary directory. The imported bundle is read from its original location. These directories are not a filesystem sandbox, and the application's code keeps its own file-access behavior. Save tools use the private home folder as the primary save location and the working folder as an alternate, and the save-location setting is available.
+mac32 reads the imported bundle in its original location and runs from the folder containing the app, matching its upstream launcher. The app inherits the normal user home and temporary directory and chooses its own save and preferences paths. MacLauncher keeps a size-limited runtime log in the entry's launcher data but does not redirect game files or saves there.
+
+Earlier MacLauncher versions gave each mac32 game a private home folder and working folder in launcher data. During the first startup after an upgrade, files the game wrote there are recovered once into the user's home folder and the folder containing the app, as [Earlier private game folders](../library/GAME_PREPARATION.md#earlier-private-game-folders) describes: files missing there return to their usual relative paths, existing files stay unchanged, and private versions that differ are kept beside them as `<filename>.MacLauncher-conflict-<id>`. The earlier private home folder itself stays in launcher data.
 
 #### Settings
 

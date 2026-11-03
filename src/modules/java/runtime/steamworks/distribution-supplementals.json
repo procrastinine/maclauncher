@@ -1,7 +1,7 @@
 [
   {
     "id": "java-steamworks",
-    "version": "1.10.0-MCLv2",
+    "version": "1.10.0-MCLv3",
     "arch": "universal",
     "minimumMacOS": "11.0",
     "launcherArchitectures": [
@@ -10,14 +10,26 @@
     ],
     "sourceRelative": null,
     "sourceSha256": "b92ea7eac757c843c358fd2de0103a0851d94f4f5a748dd0f56e7979f9daf141",
-    "directoryRelative": "java-steamworks/1.10.0-MCLv2/universal",
+    "directoryRelative": "java-steamworks/1.10.0-MCLv3/universal",
     "manifestRelative": "helper.json",
-    "manifestSha256": "0e2f440239f7b003b06dfdb93ee28330e55fd12b39d59e7ac627c414d043b5db",
+    "manifestSha256": "267a2fa472c73d140133bfefcd962bafd6a79912acb11b95bcf5d1d4e8a5bcf2",
     "files": [
       {
-        "path": "MacLauncher-MIT.txt",
-        "size": 1081,
-        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
+        "path": "build-definition.json",
+        "size": 16468,
+        "mode": 420,
+        "sha256": "696c8b01b899226f62e3251491f93d1ddc77462d5e8d19df0fc9994448f1deb5"
+      },
+      {
+        "path": "build-inputs.json",
+        "size": 117,
+        "mode": 420,
+        "sha256": "7b5cdf2e3aebc9722d9ed38d550e7c5bf10491c550cb7a1b2ee63a4068c9aa63"
+      },
+      {
+        "path": "helper.json",
+        "size": 2945,
+        "sha256": "267a2fa472c73d140133bfefcd962bafd6a79912acb11b95bcf5d1d4e8a5bcf2",
         "mode": 420
       },
       {
@@ -31,6 +43,12 @@
         ]
       },
       {
+        "path": "MacLauncher-MIT.txt",
+        "size": 1081,
+        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
+        "mode": 420
+      },
+      {
         "path": "steam-agent.jar",
         "size": 5599,
         "sha256": "0cfea1aac0a08a12301f273fffc690b7a2f0b71c885f5ef61438e6d62351d32c",
@@ -40,12 +58,6 @@
         "path": "steamworks4j-MIT.txt",
         "size": 1084,
         "sha256": "f524d824bd479c049c1c7617d06938d6f4f58416ed24f88511d817405f23a4ef",
-        "mode": 420
-      },
-      {
-        "path": "helper.json",
-        "size": 2945,
-        "sha256": "0e2f440239f7b003b06dfdb93ee28330e55fd12b39d59e7ac627c414d043b5db",
         "mode": 420
       }
     ],
@@ -65,7 +77,7 @@
   },
   {
     "id": "java-steamworks",
-    "version": "1.9.0-MCLv2",
+    "version": "1.9.0-MCLv3",
     "arch": "x64",
     "minimumMacOS": "10.9",
     "launcherArchitectures": [
@@ -74,14 +86,26 @@
     ],
     "sourceRelative": null,
     "sourceSha256": "b92ea7eac757c843c358fd2de0103a0851d94f4f5a748dd0f56e7979f9daf141",
-    "directoryRelative": "java-steamworks/1.9.0-MCLv2/x64",
+    "directoryRelative": "java-steamworks/1.9.0-MCLv3/x64",
     "manifestRelative": "helper.json",
-    "manifestSha256": "7b26b13b02ffd92bb28fdab6881c620f1b4445af4d7e42d9f199ef6183df81d0",
+    "manifestSha256": "1961dd8cf83b7f1da4e556b0dcbde1b3b2a2889918b850a4de970bdae0c6741d",
     "files": [
       {
-        "path": "MacLauncher-MIT.txt",
-        "size": 1081,
-        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
+        "path": "build-definition.json",
+        "size": 16468,
+        "mode": 420,
+        "sha256": "696c8b01b899226f62e3251491f93d1ddc77462d5e8d19df0fc9994448f1deb5"
+      },
+      {
+        "path": "build-inputs.json",
+        "size": 117,
+        "mode": 420,
+        "sha256": "7b5cdf2e3aebc9722d9ed38d550e7c5bf10491c550cb7a1b2ee63a4068c9aa63"
+      },
+      {
+        "path": "helper.json",
+        "size": 2930,
+        "sha256": "1961dd8cf83b7f1da4e556b0dcbde1b3b2a2889918b850a4de970bdae0c6741d",
         "mode": 420
       },
       {
@@ -95,6 +119,12 @@
         "executionArchitecture": "x86_64"
       },
       {
+        "path": "MacLauncher-MIT.txt",
+        "size": 1081,
+        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
+        "mode": 420
+      },
+      {
         "path": "steam-agent.jar",
         "size": 5599,
         "sha256": "0cfea1aac0a08a12301f273fffc690b7a2f0b71c885f5ef61438e6d62351d32c",
@@ -104,12 +134,6 @@
         "path": "steamworks4j-MIT.txt",
         "size": 1084,
         "sha256": "171679b0302bc454889dd49220da633cbbb00f050fd6d81449019fa4cc7b0b8c",
-        "mode": 420
-      },
-      {
-        "path": "helper.json",
-        "size": 2930,
-        "sha256": "7b26b13b02ffd92bb28fdab6881c620f1b4445af4d7e42d9f199ef6183df81d0",
         "mode": 420
       }
     ],

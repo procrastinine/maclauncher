@@ -14,6 +14,8 @@ Icon inspection reads the declared loose PNG variants directly from the package 
 
 Preparation extracts a private copy of the application, adjusts its Mach-O platform and library load commands, embeds PlayTools and signs the derived app locally. Later launches reuse that copy, and a change to the IPA or the PlayTools version rebuilds it automatically while keeping game data, input settings and keymaps. Nothing is installed in Applications, and SIP, the system signing policy and the original app's permissions are left alone.
 
+The original IPA remains at its imported location. macOS runs the converted Mac Catalyst application from the prepared bundle. An unchanged launch does not extract, copy, convert or sign it again. Verified runtime binaries with precise change times reuse their recorded hashes, and those with coarse change times are checked byte by byte again. When preparation replaces a private bundle or extracted file that was modified, the modified version is kept.
+
 ## Sandbox and network access
 
 The app runs in an OS-enforced file sandbox with its own private home, temporary files and preferences. It can reach only its prepared bundle, its private storage, the selected graphics libraries and required system resources. The original entitlements, account groups, cloud containers, and camera, microphone and location permissions are not imported.

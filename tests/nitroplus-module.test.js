@@ -1,3 +1,4 @@
+const Backcompat = require("../src/modules/nitroplus/backcompat");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -106,18 +107,45 @@ test("Nitroplus ignores escaping symlinks and requires real NSS chapter metadata
   assert.equal(detect(root), null);
 });
 
-test("Nitroplus launch preparation references original archives and confines generated data to the game", t => {
+test("Nitroplus launch preparation uses original cwd, retains required saves and reuses unchanged metadata", t => {
   const root = game(temporary(t)), userDataDir = temporary(t), runtime = install(temporary(t)), before = hash(path.join(root, "nss.npa"));
   const entry = { ...detect(root), gameId: "abc123" }, context = { userDataDir };
   Module.onImport(entry, context);
   const prepared = Module.__test.prepareLaunch(entry, context, runtime);
   assert.equal(prepared.args[prepared.args.indexOf("--game-root") + 1], root);
+  assert.equal(prepared.cwd, root);
   assert.equal(prepared.saves, path.join(userDataDir, "games/abc123/modules/nitroplus/saves"));
   assert.equal(prepared.env.GST_PLUGIN_SYSTEM_PATH_1_0, "");
   assert.ok(prepared.env.GST_REGISTRY_1_0.startsWith(path.join(userDataDir, "games/abc123/")));
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(prepared.directory, "preparation.json"))).copies, []);
+  const preparation = path.join(prepared.directory, "preparation.json"), stamp = new Date(1000000000000);
+  fs.utimesSync(preparation, stamp, stamp);
+  Module.__test.prepareLaunch(entry, context, runtime);
+  assert.equal(fs.statSync(preparation).mtimeMs, stamp.getTime(), "warm preparation leaves identical metadata untouched");
+  entry.saveDirOverride = path.join(userDataDir, "chosen-saves");
+  Module.onImport(entry, context); assert.equal(entry.defaultSaveDir, entry.saveDirOverride);
+  const override = Module.__test.prepareLaunch(entry, context, runtime);
+  assert.equal(override.args[override.args.indexOf("--save-dir") + 1], entry.saveDirOverride);
+  assert.equal(override.env.MACLAUNCHER_NPENGINE_SAVE_DIR, entry.saveDirOverride);
+  assert.equal(JSON.parse(fs.readFileSync(preparation)).saves, entry.saveDirOverride, "changed launch inputs update metadata");
+  assert.deepEqual(Backcompat.legacyGameMirrors(entry, context), [], "required current save storage is not declared obsolete");
+  const oldRoot = path.join(prepared.directory, "writable-input", "files");
+  const recorded = { ...entry, moduleData: { ...entry.moduleData, writableInput: { schemaVersion: 1, root: oldRoot, sourceRoot: root } } };
+  assert.deepEqual(Backcompat.legacyGameMirrors(recorded, context), [{ mirrorRoot: oldRoot, sourceRoot: root }]);
+  assert.deepEqual(Backcompat.legacyGameMirrors({ ...recorded, saveDirOverride: path.join(oldRoot, "save") }, context), []);
   assert.equal(hash(path.join(root, "nss.npa")), before);
   entry.gameId = "../escape"; assert.throws(() => Module.onImport(entry, context), /persisted game id/);
+});
+
+test("Nitroplus spawns the managed runtime with the original game cwd and private diagnostic storage", async t => {
+  const root = game(temporary(t)), userDataDir = temporary(t), runtime = install(temporary(t));
+  const entry = { ...detect(root), gameId: "directcwd" }, calls = [];
+  t.mock.method(Manager, "resolveSelection", () => ({ ready: true, install: runtime, version: runtime.version }));
+  const child = { pid: 101 };
+  assert.equal(await Module.launchRuntime("npengine", entry, { userDataDir,
+    spawnDetachedChecked: (...args) => { calls.push(args); return child; } }), child);
+  assert.equal(calls[0][2].cwd, root);
+  assert.equal(fs.existsSync(path.join(root, "native.log")), false);
 });
 
 test("Nitroplus explicit script extraction is private, bounded and preserves source hashes", t => {

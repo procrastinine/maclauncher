@@ -25,3 +25,14 @@ test("graphics diagnostic history is bounded without deleting active writers or 
   pruneDiagnostics(root, { maxFiles: 1, maxBytes: 1024, isProcessAlive: () => false });
   assert.deepEqual(fs.readdirSync(root).filter(file => /\.jsonl$/.test(file)).sort(), [name(100), name(500)].sort());
 });
+
+test("neural diagnostic streams share the same bound", t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-diagnostic-retention-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const name = id => `diagnostics-00000000-0000-0000-0000-000000000000.neural.${id}.jsonl`;
+  for (let id = 1; id <= 10; id++) {
+    const file = path.join(root, name(id)); fs.writeFileSync(file, Buffer.alloc(128)); fs.utimesSync(file, id, id);
+  }
+  pruneDiagnostics(root, { maxFiles: 2, maxBytes: 1024, isProcessAlive: () => false });
+  assert.deepEqual(fs.readdirSync(root).sort(), [name(10), name(9)].sort());
+});

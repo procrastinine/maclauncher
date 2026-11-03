@@ -1,6 +1,8 @@
 #pragma once
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <optional>
 // Pure policy for a picked window or display: the capture-rate cap, the
 // overlay frame, its visibility, the source extent and Scaled output's
@@ -32,24 +34,87 @@ inline unsigned windowPixelExtent(double points,double scale)noexcept {
     if(!std::isfinite(points)||!std::isfinite(scale)||points<1||scale<=0)return 0;
     const double pixels=std::ceil(points*scale-1e-6);return pixels>16384?0:unsigned(pixels);
 }
-// A window above the target that intersects it would be covered by the
-// overlay, which floats above ordinary windows. The overlay hides instead.
-// Only ordinary windows (layer 0) of other processes count; menus, the
-// menu bar and the Dock stay above the overlay. A nonzero onlyPid counts
-// only that process's windows.
-struct WindowAbove {WindowRect bounds;int layer=0;int pid=0;double alpha=1;};
-inline bool windowOverlapped(const WindowRect &target,const WindowAbove *above,unsigned count,int ownPid,int onlyPid=0)noexcept {
-    for(unsigned i=0;i<count;++i)if(above[i].layer==0&&above[i].pid!=ownPid&&(!onlyPid||above[i].pid==onlyPid)&&above[i].alpha>0&&
-        windowRectsOverlap(target,above[i].bounds))return true;
-    return false;
-}
-// In place, the overlay hides while another window covers the target. Scaled
-// output covers the target's screen, so it shows only while the target's app
-// is active, and overlapped counts only that app's own windows, such as a
-// dialog in front of the target.
-struct WindowOverlayState {bool processing=false,onScreen=false,overlapped=false,suspended=false,scaled=false,targetActive=true;};
+// The overlay shows while effects run and the target is on screen. A
+// minimized target or one on another Space has nothing to draw over, and its
+// capture continues. Scaled output covers the target's screen and takes the
+// pointer, so it shows only while the target's app is active; otherwise it
+// would cover every other app.
+struct WindowOverlayState {bool processing=false,onScreen=false,suspended=false,scaled=false,targetActive=true;};
 inline bool windowOverlayShown(const WindowOverlayState &s)noexcept {
-    return s.processing&&s.onScreen&&!s.suspended&&!s.overlapped&&(!s.scaled||s.targetActive);
+    return s.processing&&s.onScreen&&!s.suspended&&(!s.scaled||s.targetActive);
+}
+// A window's overlay level: one fixed level above the target's own, at least
+// the floating level (3) that keeps it above ordinary windows (0), and below
+// pop-up menus (101), so the Dock (20), the menu bar (24), menus and the
+// target app's panels above ordinary windows stay in front of it.
+inline int windowOverlayLevel(int targetLayer)noexcept {
+    constexpr int floating=3,belowMenus=100;
+    return targetLayer>=floating&&targetLayer<belowMenus?targetLayer+1:floating;
+}
+inline bool windowRectContains(const WindowRect &outer,const WindowRect &inner)noexcept {
+    return inner.x>=outer.x&&inner.y>=outer.y&&inner.x+inner.width<=outer.x+outer.width&&inner.y+inner.height<=outer.y+outer.height;
+}
+// A window above the target in the window server's list, front to back.
+// `overlay` marks the overlays of this process, which never cover a target.
+// `child` marks a known child window of the target (see windowChildWindows).
+struct WindowAbove {uint32_t id=0;int pid=0,layer=0;double alpha=1;WindowRect bounds;bool overlay=false,child=false;};
+// Whether a window above the target covers it: a visible window that
+// overlaps the target, at the target's layer or above and below the level
+// the overlay keeps in front. The target's capture shows its child windows,
+// so they never cover it. Windows of the target's app at the target's own
+// layer that lie within it, such as sheets, count as child windows before
+// they are known.
+inline bool windowCoversTarget(const WindowAbove &w,int targetPid,int targetLayer,const WindowRect &target)noexcept {
+    if(w.overlay||w.child||!(w.alpha>.01)||w.layer<targetLayer||w.layer>=windowOverlayLevel(targetLayer))return false;
+    if(w.pid==targetPid&&w.layer==targetLayer&&windowRectContains(target,w.bounds))return false;
+    return windowRectsOverlap(w.bounds,target);
+}
+// The window server orders a window together with its child windows, which
+// stay directly above it. An overlay ordered directly above the target
+// therefore lands above the target's child windows, and the windows listed
+// between the overlay and the target are exactly those child windows.
+// Returns how many windows follow the overlay in a front-to-back list of the
+// windows above the target, or zero when the overlay is not in it.
+inline size_t windowChildWindows(uint32_t overlay,const WindowAbove *above,size_t count)noexcept {
+    for(size_t i=0;i<count;++i)if(above[i].id==overlay)return count-i-1;
+    return 0;
+}
+// ScreenCaptureKit crops a window's capture from the bounds of the window and
+// its child windows together, so a child window that reaches past the
+// window's left or top edge moves the crop by that much, and the capture
+// reports no such offset. The crop that keeps the image on the target: its
+// offset within those bounds, in points, and its size.
+inline WindowRect windowCaptureCrop(const WindowRect &target,const WindowAbove *above,size_t count)noexcept {
+    double left=target.x,top=target.y;
+    for(size_t i=0;i<count;++i)if(above[i].child){left=std::min(left,above[i].bounds.x);top=std::min(top,above[i].bounds.y);}
+    return {target.x-left,target.y-top,target.width,target.height};
+}
+// Where an in-place overlay stacks. With nothing over the target, it keeps
+// the front level and is ordered front, so the target's app raising its own
+// window within the ordinary levels leaves the overlay above it. When a
+// window covers the target, the overlay takes the target's level, directly
+// above the target, so that window covers the effect as it covers the
+// target.
+enum class WindowOverlayOrder {front,aboveTarget};
+struct WindowOverlayPlacement {int level=0;WindowOverlayOrder order=WindowOverlayOrder::front;};
+inline bool operator==(const WindowOverlayPlacement &a,const WindowOverlayPlacement &b)noexcept {return a.level==b.level&&a.order==b.order;}
+inline WindowOverlayPlacement windowOverlayPlacement(int targetPid,int targetLayer,const WindowRect &target,const WindowAbove *above,size_t count)noexcept {
+    for(size_t i=0;i<count;++i)if(windowCoversTarget(above[i],targetPid,targetLayer,target))return {targetLayer,WindowOverlayOrder::aboveTarget};
+    return {windowOverlayLevel(targetLayer),WindowOverlayOrder::front};
+}
+// Whether the overlay already stacks as `placement` asks, from the list of
+// windows above the target, front to back, which includes the overlay when
+// it is above the target. In front it is at its level and visible. Above the
+// target it is at the target's level, above the target and behind every
+// window that covers the target.
+inline bool windowOverlayPlaced(const WindowOverlayPlacement &placement,int level,bool visible,uint32_t overlay,
+                                const WindowAbove *above,size_t count,int targetPid,int targetLayer,const WindowRect &target)noexcept {
+    if(!visible||level!=placement.level)return false;
+    if(placement.order==WindowOverlayOrder::front)return true;
+    size_t index=count;for(size_t i=0;i<count;++i)if(above[i].id==overlay){index=i;break;}
+    if(index==count)return false;
+    for(size_t i=index+1;i<count;++i)if(windowCoversTarget(above[i],targetPid,targetLayer,target))return false;
+    return true;
 }
 
 // Scaled output. All rectangles here use window-server coordinates: points

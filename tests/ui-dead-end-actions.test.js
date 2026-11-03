@@ -29,14 +29,27 @@ test('Construct exposes a result folder only when extracted content is ready', t
 });
 
 test('AliceSoft resolves its ordinary save target before launch without creating it', t => {
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ui-saves-'));
-  t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
-  const entry = { gameId: 'game', saveDirOverride: path.join(userDataDir, 'custom') };
-  const result = AliceSoft.resolveSaveLocations(entry, { userDataDir });
-  assert.equal(result.primaryDirectory, path.join(userDataDir, 'games', 'game', 'modules', 'alicesoft', 'saves'));
-  assert.equal(fs.existsSync(result.primaryDirectory), false);
-  assert.equal(entry.saveDirOverride, path.join(userDataDir, 'custom'));
-  assert.equal(AliceSoft.resolveSaveLocations({}, { userDataDir }).primaryDirectory, null);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ui-saves-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const userDataDir = path.join(root, 'profile'), gamePath = path.join(root, 'original-game');
+  fs.mkdirSync(gamePath);
+  const disk = Buffer.alloc(768);disk.writeUInt16LE(2, 0);disk.writeUInt16LE(3, 2);
+  fs.writeFileSync(path.join(gamePath, 'ADISK.DAT'), disk);
+  fs.writeFileSync(path.join(gamePath, 'system3.ini'), '[config]\nsavedir = Authored\n');
+  const entry = { gameId: 'game', moduleId: 'alicesoft', gamePath, contentRootDir: gamePath, moduleData: {generation: 'system3'} };
+  const context = {userDataDir, environment: {}}, result = AliceSoft.resolveSaveLocations(entry, context);
+  const expected = path.join(gamePath, 'Authored');
+  assert.equal(result.primaryDirectory, expected);
+  assert.equal(fs.existsSync(expected), false, 'Reading upstream save configuration does not allocate the save folder');
+  const {hydrateGameSaveLocations, saveDirectoryForEntry} = require('../src/core/save-locations');
+  const registry = {getModule: () => AliceSoft};
+  assert.equal(saveDirectoryForEntry(hydrateGameSaveLocations(entry, registry, context), registry), expected,
+    'The Open Saves backend receives a real upstream target instead of a dead-end null path');
+  entry.saveDirOverride = path.join(root, 'user-chosen');
+  assert.equal(AliceSoft.resolveSaveLocations(entry, context).primaryDirectory, entry.saveDirOverride);
+  assert.equal(fs.existsSync(entry.saveDirOverride), false);
+  assert.equal(fs.existsSync(userDataDir), false, 'Save discovery does not route through a launcher save folder');
+  assert.equal(AliceSoft.resolveSaveLocations({}, context).primaryDirectory, null);
 });
 
 test('Nitroplus archives and script tools remain directly available', () => {

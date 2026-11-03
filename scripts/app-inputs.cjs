@@ -90,13 +90,21 @@ function buildsSources({ repoRoot, plan, packageLock }) {
   Lock.validateSelection(packageLock, { plan });
   if (plan.packages.length) throw new Error('Application engine payloads must use managed delivery.');
   const files = new Map();
-  for (const item of plan.supplementals) {
-    const root = path.join(repoRoot, 'src/resources/native-runtimes', item.directoryRelative);
-    B.verifyPayload(root, item);
-    const record = packageLock.packages.find(record => record.id === item.id && record.version === item.version && record.arch === item.arch);
-    if (!record) throw new Error('An included package has no locked Builds record.');
-    for (const file of item.files) files.set(path.resolve(root, file.path), { ...file, owner: 'builds', package: `${record.id}/${record.version}/${record.arch}`,
-      assetSha256: record.asset.sha256, manifestSha256: record.manifestSha256 });
+  const resourcesRoot=path.join(repoRoot,'src/resources');
+  const context=require('../src/modules/shared/runtime/included-package-dependencies').context;
+  let included;
+  for (const record of packageLock.packages) {
+    const sidecar=path.join(resourcesRoot,'native-runtimes/.declarations',record.asset.sha256+'.json');
+    const fallback=plan.supplementals.find(item=>item.id===record.id&&item.version===record.version&&item.arch===record.arch);
+    const item=fs.existsSync(sidecar)?JSON.parse(B.readRegular(sidecar,B.LIMITS.manifestBytes).bytes):fallback;
+    if(!item)throw new Error('An included dependency is missing its unchanged sealed declaration.');
+    const root=path.join(resourcesRoot,'native-runtimes',item.directoryRelative);
+    let resolveDependency;
+    if(item.dependencies?.length){included ||= context(resourcesRoot,{lock:packageLock,verification:'status'});resolveDependency=included.resolveDependencies(item.dependencies).resolveDependency;}
+    B.verifyPayload(root,item,resolveDependency);
+    const logical=item.aliases?require('../src/modules/shared/runtime/package-contract.cjs').logicalFiles(item,resolveDependency):item.files;
+    for(const file of logical)files.set(path.resolve(root,file.path),{...file,owner:'builds',package:`${record.id}/${record.version}/${record.arch}`,assetSha256:record.asset.sha256,manifestSha256:record.manifestSha256});
+    if(fs.existsSync(sidecar))files.set(path.resolve(sidecar),{...regular(sidecar),owner:'builds',package:`${record.id}/${record.version}/${record.arch}`,assetSha256:record.asset.sha256,manifestSha256:record.manifestSha256});
   }
   return files;
 }
@@ -244,6 +252,7 @@ function unsignedMachO(bytes) {
 }
 function expectedSelections({ repoRoot = ROOT, plan, packageConfig = require('../package.json'), packageLock, requireRenderer = true } = {}) {
   const Check = require('./check-packaging.cjs'), selection = Check.applicationMatchers(packageConfig, { repoRoot });
+  packageLock ||= require('./runtime-packages.cjs').selectArchitecture(JSON.parse(fs.readFileSync(path.join(repoRoot,'build/runtime-packages.json'))),plan.launcherArch);
   const builds = buildsSources({ repoRoot, plan, packageLock }), renderer = requireRenderer ? rendererSources(repoRoot) : null;
   const asar = new Map(), resources = new Map(), sources = new Map(), upstream = new Map();
   for (const relative of ['package.json','pnpm-lock.yaml','build/entitlements.mac.plist',
@@ -329,7 +338,7 @@ function expectedSelections({ repoRoot = ROOT, plan, packageConfig = require('..
     });
   }
   const { FileMatcher } = require('app-builder-lib/out/fileMatcher');
-  for (const rule of require('./distribution-model.cjs').resourceRules(plan, selection.build.extraResources)) {
+  for (const rule of require('./distribution-model.cjs').resourceRules(plan, selection.build.extraResources,{packages:packageLock.packages})) {
     const root = path.resolve(repoRoot, rule.from);
     if (!inside(path.resolve(repoRoot), root)) throw new Error('Application resources require checkout-relative sources.');
     const matcher = new FileMatcher(root, '/resources', value => value, rule.filter);

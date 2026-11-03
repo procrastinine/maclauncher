@@ -48,11 +48,11 @@ function createGooglePlayAuth({ userDataDir, createWindow, getSession, fetch, ex
   if (typeof createWindow !== "function" || typeof getSession !== "function") throw publicError("The Google sign-in window is unavailable.");
   const active = new Map(), sessions = new Map(); let disposed = false;
   const keyFor = value => String(value || "default");
-  function partitionFor(accountId, persistent = true) {
+  function partitionFor(accountId, persistent = false) {
     const hash = crypto.createHash("sha256").update(userDataDir + "\0" + keyFor(accountId)).digest("hex");
     return `${persistent ? "persist:" : ""}external-google-play-${hash}`;
   }
-  function accountSession(accountId, persistent = true) {
+  function accountSession(accountId, persistent = false) {
     const partition = partitionFor(accountId, persistent);
     if (!sessions.has(partition)) sessions.set(partition, getSession(partition));
     return sessions.get(partition);
@@ -71,7 +71,9 @@ function createGooglePlayAuth({ userDataDir, createWindow, getSession, fetch, ex
     if (disposed) return Promise.reject(cancelled());
     if (signal?.aborted) return Promise.reject(cancelled());
     const key = keyFor(accountId), prior = active.get(key); if (prior) { focus(key); return prior.promise; }
-    const browserSession = accountSession(key, remember !== false), controller = new AbortController();
+    // Only the exchanged token persists in the encrypted vault. Browser cookies
+    // stay in memory, avoiding a second disk-cookie Keychain consumer.
+    const browserSession = accountSession(key, false), controller = new AbortController();
     const operationSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
     const job = { controller, promise: null, window: null }; active.set(key, job);
     job.promise = (async () => {
@@ -93,7 +95,7 @@ function createGooglePlayAuth({ userDataDir, createWindow, getSession, fetch, ex
           for (const remove of listeners) remove(); operationSignal.removeEventListener("abort", abort);
           controller.abort();
           if (!window.isDestroyed()) window.close();
-          try { await removeOAuthCookie(browserSession); if (remember === false) await browserSession.clearStorageData(); }
+          try { await removeOAuthCookie(browserSession); await browserSession.clearStorageData(); }
           catch { if (!error) error = publicError("Google sign-in could not clear temporary authorization data. Try signing in again."); }
           error ? reject(error) : resolve(result);
         }

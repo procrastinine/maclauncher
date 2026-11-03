@@ -28,7 +28,7 @@ struct EffectGenerationStage {
  std::string id,inputIdentity,historyIdentity;size_t row=0;bool sceneCoordinates=true;unsigned width=0,height=0;GraphicsConfig graphics;
  std::shared_ptr<GenerationEncoder>encoder;
  // Row option for image-pair providers; applied by the shared pair analysis.
- bool keepStaticContent=true;
+ bool keepStaticContent=false;
  struct State {uint64_t sequence=0,processingSequence=0,previousEventId=0;bool skippedSource=false;std::shared_ptr<ImageReservation>admission;std::shared_ptr<ImagePairAnalysis>pairAnalysis;std::vector<std::function<ShaderResult()>>previousCompletions;
   void startAfterCut(const State&previous)noexcept{sequence=previous.sequence+1;}
  };

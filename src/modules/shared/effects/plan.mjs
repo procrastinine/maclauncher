@@ -2,7 +2,10 @@ import {NEURAL,GENERATION,coordinateTransform,sceneInputNames} from "./operation
 import {graphicsType,shaderResizes} from "./contracts.mjs";
 export const MAX_NODES = 32;
 export const MAX_PARAMETERS = 4096;
+// Earlier saved Automatic sizes and unset neural inputs meant 540 pixels.
 export const DEFAULT_PROCESSING_HEIGHT = 540;
+// New DLSS rows and the DLSS preset reduce to 720 pixels.
+export const NEURAL_INPUT_HEIGHT = 720;
 export const RENDER_DIVISORS = Object.freeze([1, 1.5, 2, 3, 4]);
 export const validRenderDivisor = value => typeof value === "number" && Number.isFinite(value) && value >= 1;
 const kinds = new Set(["shader", "spatial", "downsample", "upscale", "temporal", "neural", "frame-generation"]);
@@ -386,11 +389,11 @@ export function reconstructionPreset(entry = {}, { divisor, spatialMethod, frame
   if(selected)Object.assign(graphics,{neuralModelPath:selected.settings.modelPath??null,neuralIntensity:selected.settings.intensity??1,neuralTemporal:selected.settings.temporal===true});
   const method = spatialMethod || (graphics.spatialMethod && graphics.spatialMethod !== "off" ? graphics.spatialMethod : "metalfx");
   const plan = migrate(composeSimple({ ...entry, effects: undefined, graphics: { ...graphics, neuralMethod: "mlx-dlss",
-    neuralInputHeight: divisor === undefined ? DEFAULT_PROCESSING_HEIGHT : null,
+    neuralInputHeight: divisor === undefined ? NEURAL_INPUT_HEIGHT : null,
     neuralInputScale: divisor === undefined ? null : 1 / divisor,
     spatialMethod: method, spatialMultiplier: null, frameGeneration: "lsfg", frameMultiplier } }, { shaderFacts }));
   return validate({...plan, video: plan.video.map(node => {
-    if (node.id === "legacy-neural-input") return {...node, extent: divisor === undefined ? {height: DEFAULT_PROCESSING_HEIGHT} : {relativeTo: "input", factor: 1 / divisor}};
+    if (node.id === "legacy-neural-input") return {...node, extent: divisor === undefined ? {height: NEURAL_INPUT_HEIGHT} : {relativeTo: "input", factor: 1 / divisor}};
     if (node.kind === "spatial") return {...node, kind: "upscale", extent: {relativeTo: "presentation", factor: 1}};
     return node;
   })});

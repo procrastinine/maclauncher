@@ -1,4 +1,6 @@
 const fs = require("node:fs");
+const { hasFineChangeTime } = require("../../file-time");
+const { cloneOrCopySync } = require("../../copy-file");
 const path = require("node:path");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
@@ -41,7 +43,7 @@ function inspectTicket(file, pin = PIN) {
   const stat = fs.lstatSync(file, { bigint: true });
   if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== BigInt(pin.bytes)) throw error("The native Steamworks SDK library does not match a listed version.");
   const identity = JSON.stringify([fs.realpathSync(file), String(stat.dev), String(stat.ino), String(stat.size), String(stat.mtimeNs), String(stat.ctimeNs)]);
-  if (!identities.has(identity)) {
+  if (!hasFineChangeTime(stat) || !identities.has(identity)) {
     if (hashFile(file) !== pin.sha256) throw error("The native library checksum does not match Steamworks SDK 1.63.");
     const architectures = readMachOArchitectures(file, { allowLibrary: true });
     if (architectures.length !== pin.architectures.length || pin.architectures.some(arch => !architectures.includes(arch))) throw error("The native encrypted-ticket library lacks its listed CPU slices.");
@@ -128,7 +130,7 @@ async function importSdk({ userDataDir, runtimeRoot, runtimePath, version, depen
   fs.mkdirSync(staging);
   try {
     for (const [file, record] of inputs) {
-      fs.copyFileSync(file, path.join(staging, record.filename));
+      cloneOrCopySync(file, path.join(staging, record.filename));
       inspectTicket(file, record); inspectTicket(path.join(staging, record.filename), record);
     }
     const receipt = { version: pin.version, sdkVersion: pin.sdkVersion, sha256: pin.sha256,

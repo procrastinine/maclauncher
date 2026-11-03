@@ -1,5 +1,6 @@
 const fs = require("node:fs"), path = require("node:path");
-const LOG_NAME = /^(?:diagnostics|gpu-timing)-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\.([1-9][0-9]*)\.jsonl$/;
+// Neural nodes write a separate `.neural.<pid>` stream beside each launch's diagnostics.
+const LOG_NAME = /^(?:diagnostics|gpu-timing)-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}(?:\.neural)?\.([1-9][0-9]*)\.jsonl$/;
 function processAlive(pid) {
   try { process.kill(pid, 0); return true; }
   catch (error) { return error.code !== "ESRCH"; }

@@ -25,7 +25,7 @@ test('framework-only shared owner grants and restores original URI access withou
  const prepared=[];
  for(const [gameId,name,manifest,letter]of[['provider','fixture.grants','uri-grants','a'],['client','fixture.client','remote-provider-client','b']]){
   const dirs=Storage.storagePaths(root,gameId),key=letter.repeat(64),directory=path.join(dirs.preparedRoot,key),nativeRoot=path.join(directory,'lib');fs.mkdirSync(nativeRoot,{recursive:true});fs.mkdirSync(dirs.filesRoot,{recursive:true});fs.mkdirSync(dirs.cacheRoot,{recursive:true});
-  const staging=path.join(root,gameId);fs.mkdirSync(staging);fs.copyFileSync(path.resolve('tests/fixtures/android-framework-services/manifests',manifest+'.xml.bin'),path.join(staging,'AndroidManifest.xml'));
+  const staging=path.join(root,gameId);fs.mkdirSync(staging);fs.copyFileSync(require('./helpers/manifest-fixtures').file(t,'android-framework-services/manifests/'+manifest),path.join(staging,'AndroidManifest.xml'));
   const unsigned=path.join(staging,'unsigned.apk'),sourceApk=path.join(directory,'base.apk');run('jar',['--create','--file',unsigned,'-C',staging,'AndroidManifest.xml']);run('java',['-cp',cp,'SignApkSet',path.join(root,'signer.p12'),unsigned,sourceApk]);
   const value={root:directory,key,sourceApk,sourceApks:[sourceApk],nativeRoot,apkSha256:letter.repeat(64),metadata:{packageName:name,applicationProcessName:name,versionCode:1}};
   fs.writeFileSync(path.join(directory,'prepared.json'),JSON.stringify({schemaVersion:2,key,apkSha256:value.apkSha256,metadata:value.metadata,files:[]}));

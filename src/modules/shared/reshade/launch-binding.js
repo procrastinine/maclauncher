@@ -51,10 +51,8 @@ async function resolvePayload(entry, options = {}) {
   if (recoveries.has(key)) return recoveries.get(key);
   const recovery = (async () => {
     try {
-      const execute = require("node:util").promisify(require("node:child_process").execFile), pids = new Set([launch.pid]);
-      const listing = await execute("/bin/ps", ["-axo", "pid=,ppid="], {timeout: 2000, maxBuffer: 2 * 1024 * 1024});
-      const processes = listing.stdout.trim().split("\n").map(line => line.trim().split(/\s+/).map(Number));
-      for (let changed = true; changed && pids.size < 512;) {changed = false;for (const [pid, parent] of processes) if (pids.has(parent) && !pids.has(pid)) {pids.add(pid);changed = true;}}
+      const execute = require("node:util").promisify(require("node:child_process").execFile), ProcessTree = require("../../../core/process-tree");
+      const pids = ProcessTree.descendants(launch.pid, await ProcessTree.list());
       let output;try {output = await execute("/usr/sbin/lsof", ["-a", "-p", [...pids].join(","), "-d", "txt", "-Fn"], {timeout: 3000, maxBuffer: 4 * 1024 * 1024});}
       catch (error) {output = {stdout: error.stdout || ""};}
       const roots = [...new Set(output.stdout.split("\n").filter(line => line.startsWith("n/") && line.endsWith("/libreshade-macos.dylib")).map(line => path.dirname(line.slice(1))))];

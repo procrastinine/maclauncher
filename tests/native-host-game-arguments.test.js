@@ -20,8 +20,9 @@ test("Siglus and RealLive forward literal process arguments through the selected
     const result = await Module.launchRuntime("siglus", entry, { userDataDir: path.join(root, "profile"), runtimeSettings: { encoding: "utf8" }, settings: {}, gameArguments,
       spawnDetachedChecked: (...args) => { calls.push(args); return { pid: 123 }; } });
     assert.equal(result.pid, 123); assert.equal(calls[0][0], install.executablePath);
-    const preparedRoot = engineKind === "siglus" ? path.join(root, "profile/games/siglus/modules/siglus/project") : game;
-    assert.deepEqual(calls[0][1], ["--run", install.libraryPath, preparedRoot, ...(engineKind === "siglus" ? [] : ["utf8"]), "--", ...gameArguments]);
+    assert.deepEqual(calls[0][1], ["--run", install.libraryPath, game, ...(engineKind === "siglus" ? [] : ["utf8"]), "--", ...gameArguments]);
+    assert.equal(calls[0][2].cwd, game);
+    assert.equal(fs.existsSync(path.join(root, "profile/games/siglus/modules/siglus/project")), false);
     assert.equal(fs.readFileSync(path.join(game, "original.dat"), "utf8"), "original bytes");
     assert.equal(fs.existsSync(path.join(root, "unexpected")), false);
   }

@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../copy-file");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { createPinnedNativeManager, hashFile } = require("./pinned-native-manager");
@@ -154,7 +155,7 @@ function createManagedWindowsTool({ id, label, owner, repo, executableName, asse
   async function extractArchive(archive, unpacked, signal) {
     throwIfAborted(signal);
     const target = path.join(unpacked, executableName);
-    if (/\.exe$/i.test(archive) && !files.length) fs.copyFileSync(archive, target);
+    if (/\.exe$/i.test(archive) && !files.length) cloneOrCopySync(archive, target);
     else if (/\.exe$/i.test(archive)) throw new Error(`${label} needs its archive with companion files.`);
     else {
       const work = path.join(unpacked, ".upstream");

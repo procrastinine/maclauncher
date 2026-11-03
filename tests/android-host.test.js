@@ -133,12 +133,12 @@ test("Android shared Java fallback preserves an unavailable saved preference", a
 test("Android missing Java follows consent and cancellation before installation", async () => {
   const fixture = managerFixture(false);
   await assert.rejects(Host.ensureJava(fixture.context, { ...fixture, confirm: async () => { throw Error("canceled"); } }), /canceled/);
-  assert.equal(fixture.calls.some(item => item[0] === "install"), false);
+  assert.equal(fixture.calls.some(item => ["refresh", "install"].includes(item[0])), false);
   const accepted = managerFixture(false);
   await Host.ensureJava(accepted.context, { ...accepted, confirm: async (_context, options) => {
     accepted.calls.push(["consent", options]);
   } });
-  assert.deepEqual(accepted.calls.map(item => item[0]), ["resolve", "resolve", "refresh", "consent", "install", "resolve", "lease"]);
+  assert.deepEqual(accepted.calls.map(item => item[0]), ["resolve", "resolve", "consent", "refresh", "install", "resolve", "lease"]);
   assert.equal(accepted.calls.find(item => item[0] === "install")[1].version, accepted.host.version);
   assert.equal(accepted.calls.find(item => item[0] === "install")[1].variant, "arm64");
 });

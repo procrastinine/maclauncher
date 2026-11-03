@@ -6,7 +6,7 @@ function setup(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "android-apktool-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const apk = path.join(root, "original.apk");
-  const manifest = fs.readFileSync(path.resolve("tests/fixtures/android-package-metadata/metadata.apk"));
+  const manifest = fs.readFileSync(require('./helpers/android-fixture-tools.cjs').metadataApk(t));
   fs.writeFileSync(apk, manifest);
   return { root, apk, entry: { gameId: "apktool-fixture", gamePath: apk, moduleData: { original: true } }, context: { userDataDir: path.join(root, "profile") } };
 }
@@ -21,6 +21,7 @@ test("Apktool is a separate offline managed tool and Android action leaves runti
 });
 
 test("APK decoding retains original package bytes and previous output if a later decode fails", async t => {
+  if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
   const { entry, context, apk } = setup(t), original = fs.readFileSync(apk);
   const run = async (_context, _payload, options) => {
     assert.equal(options.args[0], "decode");
@@ -39,11 +40,12 @@ test("APK decoding retains original package bytes and previous output if a later
 });
 
 test("APK decoding retains resource splits and supplies the original base as a private resource library", async t => {
+  if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
   const { root, entry, context } = setup(t);
   fs.rmSync(entry.gamePath);
   entry.gamePath = path.join(root, "base.apk");
   for (const name of ["base.apk", "resources.apk"])
-    fs.copyFileSync(path.resolve("tests/fixtures/android-apk-metadata-standalone", name), path.join(root, name));
+    fs.copyFileSync(require('./helpers/android-fixture-tools.cjs').metadataApk(t,name.replace(/\.apk$/,'')), path.join(root, name));
   const calls = [];
   const result = await Apktool.decodeApk(entry, {}, context, { run: async (_context, _payload, options) => {
     calls.push(options.args);

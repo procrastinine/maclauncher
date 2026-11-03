@@ -7,6 +7,7 @@ const { once } = require("node:events");
 const Processes = require("../src/core/processes");
 
 const FlashModule = require("../src/modules/flash/main");
+const { untilTestEnds } = require("./helpers/fixture-process");
 
 const RuffleManager = FlashModule.runtimeManagers[0];
 const RuffleCore = RuffleManager.core;
@@ -209,7 +210,7 @@ test("stopping a managed Flash app terminates the tracked native process", async
   const userDataDir = path.join(root, "userData");
   const version = "nightly-2026-03-06";
   const { execPath } = createRuffleInstall(userDataDir, version);
-  fs.writeFileSync(execPath, "#!/usr/bin/env node\nsetInterval(() => {}, 1000);\n", { mode: 0o755 });
+  fs.writeFileSync(execPath, "#!/usr/bin/env node\n" + untilTestEnds + "\n", { mode: 0o755 });
   const swfPath = path.join(root, "game.swf");
   fs.writeFileSync(swfPath, "FWS");
   const child = await FlashModule.launchRuntime("ruffle", {

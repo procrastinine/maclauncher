@@ -111,6 +111,7 @@ async function prepareLaunchEnvironment(entry, context, selection, baseEnvironme
   if (!required) return null;
   verifyHostLua(selection.install.appPath);
   if (typeof context.prepareSteamApi !== "function") throw new Error("The native Steam API launch service is unavailable.");
+  // LuaSteam must match the selected LOVE process ABI, including an Intel launcher’s native default.
   const architecture = selection.install.requiresRosetta ? "x86_64" : process.arch === "x64" ? "x86_64" : process.arch;
   const gameRuntime = GameData.resolveGameRuntimeDir(context.userDataDir, entry.gameId, "love");
   const request = { required: true, appId: required.appId.value, arch: architecture,

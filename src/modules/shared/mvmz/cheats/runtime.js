@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { writeFileAtomic } = require("../../atomic-file");
 
 const TOOLS_LIST_INITIAL_LIMIT = 100;
 const TOOLS_LIST_INCREMENT = 100;
@@ -486,7 +487,7 @@ function installCheatsRuntime(options) {
       fs.mkdirSync(path.dirname(cheatsFilePath), { recursive: true });
     } catch {}
     try {
-      fs.writeFileSync(cheatsFilePath, json, "utf8");
+      writeFileAtomic(cheatsFilePath, json);
       lastWrittenJson = json;
       return true;
     } catch {
@@ -3762,7 +3763,7 @@ function installCheatsRuntime(options) {
       fs.mkdirSync(path.dirname(stateFilePath), { recursive: true });
     } catch {}
     try {
-      fs.writeFileSync(stateFilePath, JSON.stringify(normalized, null, 2), "utf8");
+      writeFileAtomic(stateFilePath, JSON.stringify(normalized, null, 2));
       return true;
     } catch {
       return false;

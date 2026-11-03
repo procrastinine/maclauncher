@@ -30,7 +30,9 @@ Installation verifies the catalog entry, the archive, every installed file and t
 
 ## Preparation and launch
 
-Play prepares a native application entry (a cached app bundle named after the game) and a small, unique config folder for each launch under `userData/games/<gameId>/runtimes/mkxpz/<version>/sessions/<launch-id>/`. Only the main executable gets an APFS copy-on-write clone and an ad hoc signature; native libraries, Ruby resources and other runtime assets stay linked to the base installation. Later launches reuse the signed entry without cloning, signing or reading the executable again.
+The original game folder supplies game data and portable saves, including games extracted from installers. Play does not create a second game tree.
+
+Play prepares a native application entry (a cached app bundle named after the game) and a small, unique config folder for each launch under `userData/games/<gameId>/runtimes/mkxpz/<version>/sessions/<launch-id>/`. Only the main executable is copied, as an APFS copy-on-write clone where the volume supports cloning, and given an ad hoc signature; native libraries, Ruby resources and other runtime assets stay linked to the base installation. Later launches reuse the signed entry without copying, signing or reading the executable again.
 
 Configs, logs and launch records belong to the launch session, so two games, or two launches of the same game, cannot overwrite each other's startup JSON. A config written earlier by the publisher or by a MacLauncher app entry is never carried into the new JSON.
 
@@ -56,7 +58,7 @@ The imported game icon supplies `iconPath` by default, and an explicit runtime i
 
 ### Shared assets
 
-The included Kawariki compatibility scripts and soundfont are extracted into one shared folder for each version of their source, and that folder never changes afterwards. RTP packs are stored separately and are also shared between games. Updates and repairs create a new folder and keep the earlier ones until an explicit **Remove**, which is refused while a game uses them. The inspector's **Assets** group reveals these shared assets, prepares them again (**Extract runtime assets**) and removes them.
+The included Kawariki compatibility scripts are extracted into one shared folder for each version of their source, and that folder never changes afterwards. The GMGSx MIDI soundfont downloads on the first Play after consent, unless **Soundfont path** supplies another file. Its pinned size and SHA-256 are checked before installation, and it remains in shared permanent Application Support for later offline launches. RTP packs are stored separately and are also shared between games. Updates and repairs create a new folder and keep the earlier ones until an explicit **Remove**, which is refused while a game uses them. The inspector's **Assets** group reveals the staged compatibility scripts, prepares them again (**Extract runtime assets**) and removes them.
 
 Packaged support files are identified by the real ASAR archive rather than its virtual inode values, and unpacked support files by their file system identifiers. Unchanged files reuse cached content hashes, changed files are checked again, and a change during a read or a symlinked source stops the extraction.
 

@@ -41,6 +41,35 @@ test("Google Play remains offline until explicit connection and search does not 
   assert.ok(saves.some(value => value.aasToken === "private-aas-fixture")); assert.equal(JSON.stringify(service.snapshot()).includes("private-aas"), false);
   assert.equal(packageName(`https://play.google.com/store/apps/details?id=${appId}`), appId);
 });
+
+test("account-independent device check-in overlaps browser login", async t => {
+  let releaseBrowser, releaseDevice, deviceStarted = false, browserStarted = false;
+  const browser = new Promise(resolve => { releaseBrowser = resolve; });
+  const device = new Promise(resolve => { releaseDevice = resolve; });
+  const { service } = fixture(t, { browserLogin: () => { browserStarted = true; return browser; }, protocol: {
+    prepareDevice: async () => { deviceStarted = true; return device; }
+  } });
+  const pending = service.connect({ mode: "browser" });
+  await until(() => browserStarted && deviceStarted);
+  assert.equal(service.snapshot().connection.phase, "browser");
+  releaseDevice({ androidId: "1234", device: { architecture: "arm64", locale: "en-US", sdk: 34 } });
+  releaseBrowser({ email: "example@example.test", aasToken: "private-fixture-token" });
+  await pending;
+  assert.equal(service.snapshot().connection.status, "connected");
+});
+
+test("closing browser authorization cancels its overlapping device check-in", async t => {
+  let rejectBrowser, checkinSignal;
+  const browser = new Promise((_resolve, reject) => { rejectBrowser = reject; });
+  const { service } = fixture(t, { browserLogin: () => browser, protocol: {
+    prepareDevice: ({ signal }) => { checkinSignal = signal; return new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true })); }
+  } });
+  const pending = service.connect({ mode: "browser" });
+  await until(() => checkinSignal);
+  rejectBrowser(Object.assign(new Error("Sign-in cancelled"), { name: "AbortError" }));
+  await assert.rejects(pending, { name: "AbortError" });
+  assert.equal(checkinSignal.aborted, true);
+});
 test("the default sign-in opens the browser and identifies its pending challenge", async t => {
   let complete;
   const { service } = fixture(t, { browserLogin: ({ androidId }) => new Promise(resolve => {

@@ -1,5 +1,6 @@
 // Provider architecture is the native Wine loader's architecture, independently
 // of the Windows executable and the launcher's own process.
+// The launcher CPU is the fallback ABI; an installed Wine loader supplies its own slices.
 function architecture(install, hostArchitecture = process.arch, fallback = null) {
   const normalize = value => value === "x64" ? "x86_64" : value;
   const candidates = (install?.architectures || install?.installationMetadata?.architectures || [])

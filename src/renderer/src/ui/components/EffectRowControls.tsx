@@ -29,7 +29,7 @@ export function EffectRowControls({editor, row: node, choice, simple = false}: {
     stage.input.width > 0 && stage.input.height > 0 && stage.output.width > 0 && stage.output.height > 0);
   const groupedResolution = reported?.resolutionScope?.kind === "shader-group";
   const dimensions = reported ? `${reported.input.width} × ${reported.input.height} → ${reported.output.width} × ${reported.output.height}` :
-    !node.enabled || plan.enabled === false ? "Off" : "Waiting for frame dimensions";
+    !node.enabled || plan.enabled === false ? "Off" : choice?.sourceUnsupported ? "Inactive" : "Waiting for frame dimensions";
   const quality = plan.output?.adaptiveQuality;
   const qualityEligible = type === "downsample" && (resizeKind(node.kind) || node.kind === "shader" && choice?.outputContract?.extentEditable === true && choice.outputContract.sizing !== "intrinsic");
   const qualityControls = qualityEligible || quality?.nodeId === node.id ? <AdaptiveQualityControls nodeId={node.id} available={support?.adaptiveQuality === true && qualityEligible} policy={quality}

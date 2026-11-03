@@ -130,4 +130,4 @@ async function ensurePackages(context, dependencies = {}) {
     } finally { fs.rmSync(staging, { recursive: true, force: true }); }
   }, { userDataDir: context.userDataDir });
 }
-module.exports = { catalog, source, packageRoot, resolvePackages, ensurePackages, discoverRelease, verifyDownload, releaseAsset };
+module.exports = { catalog, source, packageRoot, resolvePackages, ensurePackages, discoverRelease, verifyDownload, releaseAsset, installedReleases };

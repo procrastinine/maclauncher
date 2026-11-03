@@ -244,8 +244,9 @@ test("AliceSoft versions use actual scenario tags, recognized game IDs and pinne
   }
 });
 
-test("native VN modules repair incomplete registrations and launch explicit versions with isolated saves without Electron", { skip: process.platform !== "darwin" }, async t => {
+test("native VN modules launch original game paths with upstream saves and explicit overrides without Electron", { skip: process.platform !== "darwin" }, async t => {
   const root = fixture(t); const runtimePath = nativeRuntime(root); const userDataDir = path.join(root, "userdata");
+  t.mock.method(os, "homedir", () => path.join(root, "home"));
   for (const [mod, generation, runtimeId, version] of [[Kiri, "kirikiri", "krkrsdl2", "snapshot-124bdf8"], [Alice, "system3", "system3", "1.8.0"], [Alice, "system35", "xsystem35", "2.20.0"]]) {
     const game = path.join(root, generation); fs.mkdirSync(game);
     if (generation === "kirikiri") fs.writeFileSync(path.join(game, "startup.tjs"), "Debug.message('test');"); else scenario(game, generation);
@@ -256,7 +257,8 @@ test("native VN modules repair incomplete registrations and launch explicit vers
     // runtime. Registering a local executable completes this real missing case.
     fs.mkdirSync(manager.core.getInstallDir({ userDataDir, version }), { recursive: true });
     const calls = [];
-    const ctx = { userDataDir, settings: {}, runtimeSettings: { runtimePath, version, textHook: "copy", fullscreen: true },
+    const ctx = { userDataDir, settings: {}, environment: { HOME: path.join(root, "home") },
+      runtimeSettings: { runtimePath, version, textHook: "copy", fullscreen: true },
       spawnDetachedChecked: (...input) => { calls.push(input); return "process"; } };
     assert.equal(mod.actions.runtimeStatus(entry, {}, ctx).ready, false);
     await assert.rejects(() => mod.launchRuntime(runtimeId, entry, ctx), /not installed/);
@@ -265,10 +267,9 @@ test("native VN modules repair incomplete registrations and launch explicit vers
     assert.equal(mod.actions.runtimeStatus(entry, {}, ctx).ready, true);
     assert.equal(await mod.launchRuntime(runtimeId, entry, ctx), "process");
     assert.equal(calls[0][0], runtimePath); assert.equal(calls[0][2].cwd, game);
-    assert.ok(entry.defaultSaveDir.startsWith(path.join(userDataDir, "games", generation)));
-    assert.ok(fs.statSync(entry.defaultSaveDir).isDirectory());
-    assert.ok(calls[0][1].some(arg => arg.includes(entry.defaultSaveDir)));
-    if (generation === "kirikiri") assert.ok(calls[0][1].includes(`-datapath=${entry.defaultSaveDir}${path.sep}`));
+    assert.equal(entry.defaultSaveDir, generation === "kirikiri" ? null : game);
+    assert.equal(calls[0][1].some(arg => /^-datapath=|^-savedir$|^--save-folder$/.test(arg)), false);
+    assert.equal(fs.existsSync(path.join(userDataDir, "games", generation, "modules", mod.id, "saves")), false);
     assert.equal(fs.existsSync(path.join(game, "saves")), false);
     if (generation !== "kirikiri") {
       assert.ok(calls[0][1].includes("-texthook")); assert.ok(calls[0][1].includes("-fullscreen"));
@@ -280,7 +281,7 @@ test("native VN modules repair incomplete registrations and launch explicit vers
     assert.ok(fs.statSync(portable).isDirectory());
     const actualArgs = calls.at(-1)[1];
     assert.ok(actualArgs.includes(generation === "kirikiri" ? `-datapath=${portable}${path.sep}` : portable));
-    assert.ok(entry.defaultSaveDir.startsWith(path.join(userDataDir, "games", generation)));
+    assert.equal(entry.defaultSaveDir, portable);
     entry.saveDirOverride = "relative/save";
     await assert.rejects(() => mod.launchRuntime(runtimeId, entry, ctx), /absolute/);
     delete entry.saveDirOverride;
@@ -355,4 +356,42 @@ test("protected XP3 games refuse native launch before any process starts", async
   fs.writeFileSync(archive, xp3(["startup.tjs"], { protectedEntry: true }));
   const entry = Kiri.detectGame(context(archive)); assert.equal(entry.moduleData.protectedEntries, 1);
   await assert.rejects(() => Kiri.launchRuntime("krkrsdl2", entry, { spawnDetachedChecked: () => assert.fail("spawned") }), /Protected XP3/);
+});
+
+
+test("KiriKiri facts preserve direct behavior and shared core patches only a real effective save collision", t => {
+  const { applySaveIdentity } = require("../src/core/save-identity");
+  const root = fixture(t), home = path.join(root, "home");
+  t.mock.method(os, "homedir", () => home);
+  const game = (gameId, prefix, expression = "System.dataPath") => {
+    const contentRootDir = path.join(root, gameId);fs.mkdirSync(contentRootDir);
+    fs.writeFileSync(path.join(contentRootDir, "Config.tjs"), `;saveDataLocation = ${expression};\n;dataName = "${prefix}";\n;saveDataID = "${gameId}";`);
+    return { gameId, name: "Same title", contentRootDir, moduleData: {} };
+  };
+  const first = game("game-a", "same"), second = game("game-b", "same"), separate = game("game-c", "authored-prefix");
+  const describe = Kiri.resolveSaveIdentity;
+  assert.equal(Kiri.onImport, undefined, "module supplies facts, never import-time policy");
+  assert.equal(applySaveIdentity(first, { games: [], describe }), first);
+  assert.equal(first.saveDirOverride, undefined);
+  assert.equal(applySaveIdentity(separate, { games: [first], describe }), separate, "different authored prefix remains direct");
+  const patched = applySaveIdentity(second, { games: [first], describe });
+  assert.equal(patched.saveDirOverride, path.join(home, "Library", "Application Support", "krkrsdl2", second.gameId));
+  assert.notEqual(describe(patched).identity, describe(first).identity);
+  assert.equal(applySaveIdentity(patched, { games: [first], describe }), patched, "visible selected setting is stable");
+  const explicit = { ...second, saveDirOverride: path.join(root, "chosen") };
+  assert.equal(applySaveIdentity(explicit, { games: [first], describe }), explicit);
+  const dynamic = game("dynamic", "same", "chooseSaveLocation()");
+  assert.equal(describe(dynamic), null);
+  assert.equal(applySaveIdentity(dynamic, { games: [first], describe }), dynamic);
+  const nativeArgs = { ...second, launchArguments: '-datapath="' + path.join(root, "authored-option") + '"' };
+  assert.equal(describe(nativeArgs).directory, path.join(root, "authored-option"));
+  assert.equal(describe(nativeArgs).createPatch, undefined, "existing supported argument is preserved");
+  const suffixed = game("suffix-a", "same", 'System.dataPath + "/authored"');
+  const otherSuffix = { ...suffixed, gameId: "suffix-b" };
+  const chosenSuffix = applySaveIdentity(otherSuffix, { games: [suffixed], describe });
+  assert.equal(Kiri.resolveSaveLocations(chosenSuffix).primaryDirectory, path.join(chosenSuffix.saveDirOverride, "authored"));
+  const literal = game("literal", "same", JSON.stringify(path.join(root, "one", "..", "authored-location")));
+  assert.equal(describe(literal).directory, path.join(root, "authored-location"));
+  assert.equal(describe(literal).createPatch, undefined);
+  assert.equal(fs.existsSync(home), false);
 });

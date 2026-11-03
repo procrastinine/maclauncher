@@ -425,6 +425,7 @@ module.exports = Custom.configure({
   getState,
   installRuntime,
   uninstallRuntime,
+  trashFirst: true,
   updateSettingsAfterInstall,
   updateSettingsAfterUninstall,
   upstream: [Core.source, Gdsdecomp.source],

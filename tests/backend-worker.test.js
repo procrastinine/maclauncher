@@ -6,6 +6,7 @@ const os = require("node:os");
 const { once, EventEmitter } = require("node:events");
 const { BackendWorkerClient, createBackendService } = require("../src/core/backend-worker-client");
 const { createBackendOperations } = require("../src/core/backend-operations");
+const { untilTestEnds } = require("./helpers/fixture-process");
 const workerPath = path.join(__dirname, "fixtures", "backend-worker.cjs");
 
 test("actual backend tool roles cross worker IPC into the ordinary main log without adding stop ownership", async t => {
@@ -418,7 +419,7 @@ test("launch preparation cancels and a spawned process is published before modul
       await new Promise((resolve, reject) => context.signal.addEventListener("abort", () => reject(context.signal.reason), { once: true }));
       assert.fail("cancelled preparation continued");
     }
-    child = await context.spawnDetachedChecked(process.execPath, ["-e", "setInterval(()=>{},1000)"], { stdio: "ignore" });
+    child = await context.spawnDetachedChecked(process.execPath, ["-e", untilTestEnds], { stdio: "ignore" });
     entered();
     if (child.exitCode == null && child.signalCode == null) await once(child, "close");
     return child;

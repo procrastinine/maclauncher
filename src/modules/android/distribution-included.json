@@ -1,7 +1,7 @@
 [
   {
     "id": "android-apk-metadata",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "arch": "arm64",
     "minimumMacOS": "13.0",
     "launcherArchitectures": [
@@ -9,18 +9,36 @@
     ],
     "sourceRelative": null,
     "sourceSha256": "34430ef0f71a136d9bf5a208964ef8b7ccdec1559dc721eca1868ed9b975ea96",
-    "directoryRelative": "android-apk-metadata/1.1.0/arm64",
+    "directoryRelative": "android-apk-metadata/1.1.1/arm64",
     "manifestRelative": "helper.json",
-    "manifestSha256": "1d963928ce3781bc819d019a79393a8d95e9a8eed2b0083145f3b21c7a58caf3",
+    "manifestSha256": "7a6ebd8e22a7422bf426c7d95f258738d24e3bf263b1ed7cc15d972941c75fe2",
     "files": [
       {
         "path": "android-apk-metadata",
-        "size": 812320,
-        "sha256": "1d4e0d56501a5f166f203f378590d2a06e69c5a9cf2dd4b79f0ffdaf4c936395",
+        "size": 812176,
+        "sha256": "b35b2644f9a336bce0d76a239b78ed6f44563b61f15d3decdd46d010d6b00696",
         "mode": 493,
         "architectures": [
           "arm64"
         ]
+      },
+      {
+        "path": "build-definition.json",
+        "size": 16505,
+        "mode": 420,
+        "sha256": "1c30bcb344a9080da89c1f00b29f533fbb974a14b9e5455f62520e414a069fac"
+      },
+      {
+        "path": "build-inputs.json",
+        "size": 117,
+        "mode": 420,
+        "sha256": "1e455d2760823e71462bccf76bdd693ebb86d0479f447a4320001718eaa1fe9a"
+      },
+      {
+        "path": "helper.json",
+        "size": 20789,
+        "sha256": "7a6ebd8e22a7422bf426c7d95f258738d24e3bf263b1ed7cc15d972941c75fe2",
+        "mode": 420
       },
       {
         "path": "licenses/aim/LICENSE",
@@ -387,12 +405,6 @@
         "size": 1081,
         "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
         "mode": 420
-      },
-      {
-        "path": "helper.json",
-        "size": 20789,
-        "sha256": "1d963928ce3781bc819d019a79393a8d95e9a8eed2b0083145f3b21c7a58caf3",
-        "mode": 420
       }
     ],
     "notices": [
@@ -705,7 +717,7 @@
   },
   {
     "id": "android-apk-metadata",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "arch": "x64",
     "minimumMacOS": "13.0",
     "launcherArchitectures": [
@@ -714,19 +726,37 @@
     ],
     "sourceRelative": null,
     "sourceSha256": "34430ef0f71a136d9bf5a208964ef8b7ccdec1559dc721eca1868ed9b975ea96",
-    "directoryRelative": "android-apk-metadata/1.1.0/x64",
+    "directoryRelative": "android-apk-metadata/1.1.1/x64",
     "manifestRelative": "helper.json",
-    "manifestSha256": "bc36fdd1ea303bfa4ae91b62c757c59e425e2f9a2f5802125c9953ef09bd4794",
+    "manifestSha256": "3f9cd0b992ce234295c073b9e6ef5177c7bce18108b75acc7241a69554993c1d",
     "files": [
       {
         "path": "android-apk-metadata",
-        "size": 852400,
-        "sha256": "2865be9fb95b45bf7fdbf2bd36329141fcd64dc7f832432aa060ca714ecdbb79",
+        "size": 845600,
+        "sha256": "82a0558804eef46744d911923afff2795c3e0b6a2c0439b2e37317b6042633ed",
         "mode": 493,
         "architectures": [
           "x86_64"
         ],
         "executionArchitecture": "x86_64"
+      },
+      {
+        "path": "build-definition.json",
+        "size": 16505,
+        "mode": 420,
+        "sha256": "1c30bcb344a9080da89c1f00b29f533fbb974a14b9e5455f62520e414a069fac"
+      },
+      {
+        "path": "build-inputs.json",
+        "size": 117,
+        "mode": 420,
+        "sha256": "1e455d2760823e71462bccf76bdd693ebb86d0479f447a4320001718eaa1fe9a"
+      },
+      {
+        "path": "helper.json",
+        "size": 20830,
+        "sha256": "3f9cd0b992ce234295c073b9e6ef5177c7bce18108b75acc7241a69554993c1d",
+        "mode": 420
       },
       {
         "path": "licenses/aim/LICENSE",
@@ -1060,8 +1090,8 @@
       },
       {
         "path": "licenses/dependencies/56-COPYRIGHT-library.html",
-        "size": 1512520,
-        "sha256": "68129500b616d5838629e68f55ff3aed5e096dacf60ce9eb41bbe599a563afa6",
+        "size": 1499465,
+        "sha256": "5647be074c8edf7339fd863055923a8fc80bc5610a8d4661ec3b767b9d392c27",
         "mode": 420
       },
       {
@@ -1092,12 +1122,6 @@
         "path": "licenses/maclauncher/LICENSE",
         "size": 1081,
         "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
-        "mode": 420
-      },
-      {
-        "path": "helper.json",
-        "size": 20830,
-        "sha256": "bc36fdd1ea303bfa4ae91b62c757c59e425e2f9a2f5802125c9953ef09bd4794",
         "mode": 420
       }
     ],
@@ -1411,7 +1435,7 @@
   },
   {
     "id": "android-launcher",
-    "version": "1.0.0-MCLv4",
+    "version": "1.0.1",
     "arch": "universal",
     "minimumMacOS": "13.0",
     "launcherArchitectures": [
@@ -1419,19 +1443,31 @@
       "x64"
     ],
     "sourceRelative": null,
-    "sourceSha256": "e7351b24b649407f022029c277f4cf8ff1e3f641ba0a0db7ffa015cc9e9a3c3a",
-    "directoryRelative": "android-launcher/1.0.0-MCLv4/universal",
+    "sourceSha256": "d1e55810f81f8fdb0bdede929ece4d24a3323e4f49364ee7ab198c18d9e74259",
+    "directoryRelative": "android-launcher/1.0.1/universal",
     "manifestRelative": "manifest.json",
-    "manifestSha256": "4a2edd468a8537fbcbb1e334c4e7cbfde389c8828f4fc0da53f53afde51d3e93",
+    "manifestSha256": "d9ca9b1a947884f13c6755172e7e9d8f0efe14f926b5fe01c0e3c22b8d4947f9",
     "files": [
       {
-        "path": "files/notices/LICENSE",
+        "path": "build-definition.json",
+        "size": 19259,
+        "mode": 420,
+        "sha256": "654e5782380acaef45c5f38de086dd8ef2a4349f91a1fbf3be4f60fc8215570e"
+      },
+      {
+        "path": "build-inputs.json",
+        "size": 575,
+        "mode": 420,
+        "sha256": "949b5043a38facaa2fb2b77ca9081978ffc515ccbb05d6bb19c7ce40f31da12f"
+      },
+      {
+        "path": "files/notices/account-control.LICENSE",
         "size": 1081,
         "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
         "mode": 420
       },
       {
-        "path": "files/notices/account-control.LICENSE",
+        "path": "files/notices/LICENSE",
         "size": 1081,
         "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
         "mode": 420
@@ -1445,25 +1481,25 @@
       {
         "path": "files/providers/macapk/resources/privacy.jar",
         "size": 34075,
-        "sha256": "a4e05929e8223e8b54a1a639bfd4c60afd1215c9c3da9b3d2f392959bb4eb2e1",
+        "sha256": "6499744367ec6016c99192c1a11368b1abb8181eadc98b4a739b95bdfa3fcfc6",
         "mode": 420
       },
       {
         "path": "files/resources/launch-arguments.jar",
         "size": 7741,
-        "sha256": "7845e8919b0e1f8c0fdd97d55029b7098fe016e8aebecc1c5f738da65b524d8b",
+        "sha256": "e1f46d536a42c50294c52d2bb364993fd73999db2295b43ee80a819cae169f3b",
         "mode": 420
       },
       {
         "path": "files/resources/text-input.jar",
-        "size": 9859,
-        "sha256": "e24000321b982fa6b866593fda2fa6de149760ef6b06b307275873986903c48d",
+        "size": 9861,
+        "sha256": "f67718aab868b53642201ee0e99ddf884a22a08582fe63f26ec310cf67ac49c2",
         "mode": 420
       },
       {
         "path": "files/resources/text-input.json",
         "size": 184,
-        "sha256": "8913634931ea7e6d94773bfcecff324e8840addba6cb04801996358decf95cc1",
+        "sha256": "c2ea070bfd08a5de8b2821c7c07d881eac53e344a43699c9a553d60390c99dd4",
         "mode": 420
       },
       {
@@ -1540,20 +1576,20 @@
       },
       {
         "path": "files/store/resources/account-control.jar",
-        "size": 23776,
-        "sha256": "917738cb00f3d11260269933d60f5bb97c67552d5a8cf9016b56c86a797c4895",
+        "size": 23778,
+        "sha256": "21d1b71388d7d300ed524b90bf19fe12b6a08f34b6d3bf799ac02d5ef9451f49",
         "mode": 420
       },
       {
         "path": "files/store/resources/account-control.json",
         "size": 276,
-        "sha256": "4dc834b6f40851301458854dfd5cdaf5cddd04c90e6e3fc614c4e4ab275f06f8",
+        "sha256": "2ca3aab89d7f89485eb7c45b00d0a6decd6b8e0eedf5f44ea842d9fdae26dd79",
         "mode": 420
       },
       {
         "path": "manifest.json",
-        "size": 5297,
-        "sha256": "4a2edd468a8537fbcbb1e334c4e7cbfde389c8828f4fc0da53f53afde51d3e93",
+        "size": 5291,
+        "sha256": "d9ca9b1a947884f13c6755172e7e9d8f0efe14f926b5fe01c0e3c22b8d4947f9",
         "mode": 420
       }
     ],
@@ -1580,7 +1616,7 @@
   },
   {
     "id": "android-privacy",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "arch": "arm64",
     "launcherArchitectures": [
       "arm64"
@@ -1588,10 +1624,22 @@
     "minimumMacOS": "13.0",
     "sourceRelative": null,
     "sourceSha256": "a95dfc40811e331ffde87ccca5e52e9bc1683bd3c90b09734bf1fcd46a3969ff",
-    "directoryRelative": "android-privacy/1.1.0/arm64",
+    "directoryRelative": "android-privacy/1.1.1/arm64",
     "manifestRelative": "helper.json",
-    "manifestSha256": "82a83e8a9336fe9e862c3cf2a7cb795b2b5920edfaec09e42c9eec064b8f76bf",
+    "manifestSha256": "d73573dc4b769d5d1ff09c0ed466020af77a2909193466e989b3ba916065486e",
     "files": [
+      {
+        "path": "build-definition.json",
+        "size": 15705,
+        "mode": 420,
+        "sha256": "def210d8a30151eba8aa5a3b99a79dc6795f5ce60fbb5bdb3972f988872a3520"
+      },
+      {
+        "path": "build-inputs.json",
+        "size": 117,
+        "mode": 420,
+        "sha256": "c464c934eb78115b9a3b0b0a93a749e5c0c3e5a8b0a3e8fce45193d5f19967c0"
+      },
       {
         "path": "clipboard-helper",
         "size": 80384,
@@ -1604,7 +1652,7 @@
       {
         "path": "helper.json",
         "size": 813,
-        "sha256": "82a83e8a9336fe9e862c3cf2a7cb795b2b5920edfaec09e42c9eec064b8f76bf",
+        "sha256": "d73573dc4b769d5d1ff09c0ed466020af77a2909193466e989b3ba916065486e",
         "mode": 420
       },
       {

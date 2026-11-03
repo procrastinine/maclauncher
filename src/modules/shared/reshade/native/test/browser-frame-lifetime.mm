@@ -15,6 +15,7 @@ static double browserFixtureMediaTime(){return browserFixtureTime.load();}
 #define CACurrentMediaTime browserFixtureMediaTime
 #define MacFXBrowserOutputWindow MacFXBrowserConfigurationTestOutputWindow
 #define MacFXWindowStreamReceiver MacFXBrowserConfigurationTestReceiver
+#define MacFXBrowserStream MacFXBrowserConfigurationTestStream
 #ifndef MACFX_WINDOW_STREAM_SOURCE
 #define MACFX_WINDOW_STREAM_SOURCE <window-stream.mm>
 #endif
@@ -63,12 +64,14 @@ static double browserFixtureMediaTime(){return browserFixtureTime.load();}
 @property(nonatomic,strong)NSMutableArray *configurations;
 @property(nonatomic,strong)NSMutableArray *callbacks;
 @property(nonatomic)unsigned stops;
+@property(nonatomic,copy)void(^started)(NSError*);
 @end
 @implementation BrowserConfigurationStream
 - (instancetype)init{if((self=[super init])){_configurations=[NSMutableArray new];_callbacks=[NSMutableArray new];}return self;}
 - (void)updateConfiguration:(SCStreamConfiguration*)configuration completionHandler:(void(^)(NSError*))callback{
     [_configurations addObject:configuration];[_callbacks addObject:[callback copy]];
 }
+- (void)startCaptureWithCompletionHandler:(void(^)(NSError*))callback{self.started=callback;}
 - (void)stopCaptureWithCompletionHandler:(void(^)(NSError*))callback{++_stops;callback(nil);}
 - (void)finish:(NSUInteger)index error:(NSError*)error{void(^callback)(NSError*)=_callbacks[index];callback(error);}
 @end
@@ -88,6 +91,35 @@ struct BrowserConfigurationCase {
     void close(){session->close();drain();assert(output.closes==1&&stream.stops==1);}
     ~BrowserConfigurationCase(){session->close();drain();}
 };
+static void stopDuringStart(){
+    // B1: browser teardown stops immediately; window capture still waits.
+    for(const bool deferred:{false,true}){
+        BrowserConfigurationCase value;__block bool announced=false;
+        value.session->deferStopUntilStarted=deferred;
+        auto receiver=[MacFXWindowStreamReceiver new];value.session->receiver=receiver;
+        value.session->startCapture(^{announced=true;});assert(value.stream.started&&value.session->starting);
+        value.session->close();value.drain();assert(value.stream.stops==(deferred?0u:1u));
+        assert(macfx::pendingWindowStreamStops()==(deferred?1u:0u));
+        if(!deferred)assert(value.session->receiver==receiver);
+        value.stream.started(nil);value.stream.started=nil;value.drain();
+        assert(value.stream.stops==1&&macfx::pendingWindowStreamStops()==0&&!announced);
+        assert(deferred?!value.session->receiver:value.session->receiver==receiver);
+        value.session->close();value.drain();assert(value.stream.stops==1);
+    }
+}
+static void browserDefaults(){
+    // B2: preserve the old nil-error text instead of synthesizing an NSError.
+    assert(macfx::windowCaptureError("output",nil)=="output domain=unknown code=0: Window capture failed");
+    // B3: browser diagnostics retain their original queue and receiver names.
+    auto browser=std::make_shared<Session>();assert(!browser->deferStopUntilStarted);
+    assert(!strcmp(dispatch_queue_get_label(browser->renderQueue),"org.maclauncher.browser-frames"));
+    assert(!strcmp(dispatch_queue_get_label(browser->intakeQueue),"org.maclauncher.browser-capture"));
+    assert(browser->receiverClass==[MacFXBrowserStream class]);
+    auto window=std::make_shared<macfx::WindowStream>();assert(window->deferStopUntilStarted);
+    assert(!strcmp(dispatch_queue_get_label(window->renderQueue),"org.maclauncher.window-frames"));
+    assert(!strcmp(dispatch_queue_get_label(window->intakeQueue),"org.maclauncher.window-capture"));
+    assert(window->receiverClass==[MacFXWindowStreamReceiver class]);
+}
 static NSError *configurationFailure(){return [NSError errorWithDomain:SCStreamErrorDomain code:SCStreamErrorInvalidParameter userInfo:@{NSLocalizedDescriptionKey:@"Controlled invalid configuration"}];}
 static void configurationCoalescing(){
     BrowserConfigurationCase value;value.resize(900,618);assert(value.stream.configurations.count==1&&value.session->configuring);
@@ -222,7 +254,7 @@ int main(){@autoreleasepool{
     unsigned char bytes[64]{};memcpy(bytes,"MLBRSRC1",8);for(unsigned i=0;i<16;++i)bytes[i+8]=i*17;
     int fd=open(file.c_str(),O_WRONLY|O_CREAT|O_EXCL,0600);assert(fd>=0&&write(fd,bytes,sizeof(bytes))==sizeof(bytes));close(fd);
     setenv("RESHADE_BROWSER_FRAME_STATE",file.c_str(),1);setenv("RESHADE_BROWSER_FRAME_TOKEN","00112233445566778899aabbccddeeff",1);
-    configurationCoalescing();configurationRetry();configurationDeadline();unchangedGeometry();releasedGeometry();unusableImages();recoveryBudget();visibilityEdges();permissionFailureCleanup();
+    browserDefaults();stopDuringStart();configurationCoalescing();configurationRetry();configurationDeadline();unchangedGeometry();releasedGeometry();unusableImages();recoveryBudget();visibilityEdges();permissionFailureCleanup();
     assert(unlink(file.c_str())==0&&rmdir(scratch)==0);
     std::puts("actual browser callbacks: single-flight/coalesced resize, geometry copied past its caller, bounded unusable-image failure with a recorded reason, stale-error rejection, bounded retry/deadline, one stable-geometry recovery, authenticated visibility edges and reentrant Off/close passed; no capture/GPU/window");return 0;
 }}

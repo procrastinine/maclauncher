@@ -1,11 +1,12 @@
 import React from "react";
 import type {EffectCatalogRow, VideoEffectNode} from "../types";
 import type {EffectsEditor} from "../useEffectsEditor";
-import {graphicsType, type GraphicsType} from "../../../../modules/shared/effects/contracts.mjs";
+import {graphicsType, implementationsFor, type GraphicsType} from "../../../../modules/shared/effects/contracts.mjs";
 import {implementationHeading, implementationMore, implementationName, orderImplementationGroups, implementationHelp} from "../../../../modules/shared/effects/presentation.mjs";
 import {acceptsShaders, choiceDetail, customShader, effectAvailability, selectable} from "../effects-catalog";
 import {ImplementationPicker} from "./ImplementationPicker";
 import {EffectRowControls} from "./EffectRowControls";
+import {InactiveEffectNotice} from "./InactiveEffectNotice";
 import {HelpTip} from "./HelpTip";
 import {isolatedItem} from "./ItemBoundary";
 import {StatusBadge} from "./StatusBadge";
@@ -19,6 +20,14 @@ export function SimpleEffectsView({editor}: {editor: EffectsEditor}) {
   const rows = (type: GraphicsType) => projection.slots.find(slot => slot.id === type)?.rows || [];
   const row = (key: string, label: string, nodes: VideoEffectNode[], options: EffectCatalogRow[], category: string) =>
     isolatedItem(key, {label, reset: projection}, () => simpleRow(editor, key, label, nodes, options, category));
+  // A slot whose every method needs inputs the frame source never supplies is
+  // left out unless the plan already holds a row for it.
+  const library = editor.catalog.filter(item => !item.nodeId);
+  const shown = (type: GraphicsType) => {
+    const methods = implementationsFor(type, library);
+    return rows(type).length > 0 || !methods.length || !methods.every(item => item.sourceUnsupported);
+  };
+  const temporal = (["temporal", "generation"] as const).filter(shown);
   return <div className="simpleEffects" aria-label="Simple graphics">
     {projection.customOrder && <div className="detailMeta">Custom order <HelpTip label="About custom effect order">The existing order is retained. Advanced shows every effect and its position.</HelpTip></div>}
     <section className="simpleEffectGroup" aria-label="Image filters"><h4>Image filters</h4>
@@ -30,10 +39,10 @@ export function SimpleEffectsView({editor}: {editor: EffectsEditor}) {
       {(["downsample", "upscale"] as const).map(kind => row(kind, kind === "downsample" ? "Downsample" : "Upscale",
         rows(kind), simpleChoices.get(kind) || [], kind === "downsample" ? "downscaling" : "upscaling"))}
     </section>
-    <section className="simpleEffectGroup" aria-label="Temporal"><h4>Temporal</h4>
-      {(["temporal", "generation"] as const).map(kind => row(kind === "temporal" ? "scene" : kind, kind === "temporal" ? "Temporal upscaling" : "Frame generation",
+    {temporal.length > 0 && <section className="simpleEffectGroup" aria-label="Temporal"><h4>Temporal</h4>
+      {temporal.map(kind => row(kind === "temporal" ? "scene" : kind, kind === "temporal" ? "Temporal upscaling" : "Frame generation",
         rows(kind), simpleChoices.get(kind) || [], kind))}
-    </section>
+    </section>}
   </div>;
 }
 
@@ -41,7 +50,7 @@ function simpleRow(editor: EffectsEditor, key: string, label: string, nodes: Vid
   const {catalog, simpleOptions, setSimpleOptions} = editor;
   const enabled = nodes.filter(node => node.enabled), custom = enabled.length > 1;
   const node = enabled.length === 1 ? enabled[0] : nodes.length === 1 ? nodes[0] : undefined;
-  const selected = node ? editor.choiceFor(node) : undefined, unavailable = node?.enabled && selected?.available === false ? selected.reason : undefined;
+  const selected = node ? editor.choiceFor(node) : undefined, unavailable = node?.enabled && selected?.available === false && !selected.sourceUnsupported ? selected.reason : undefined;
   const attention = node ? editor.attention(node.id, true) : undefined;
   const menu = selected ? options.some(row => row.id === selected.id) ? options.map(row => row.id === selected.id ? selected : row) : [selected, ...options] : options;
   const slot = (category === "downscaling" ? "downsample" : category === "upscaling" ? "upscale" : category) as GraphicsType;
@@ -77,6 +86,7 @@ function simpleRow(editor: EffectsEditor, key: string, label: string, nodes: Vid
       onClick={() => void editor.remove(node.id)}>×</button>}</div>
     {attention && <span className="graphicsState simpleEffectAttention"><StatusBadge tone="warning">Needs attention</StatusBadge>
       <HelpTip label={`Why ${label.toLowerCase()} needs attention`}>{attention}</HelpTip></span>}
+    {!custom && node && <InactiveEffectNotice editor={editor} node={node} choice={selected} className="simpleEffectInactive" />}
   </div>
   {!custom && node?.enabled && simpleOptions === key && <div className="simpleEffectOptions" onDrop={event => editor.dropShaders(event, node, slot)}>
     <EffectRowControls editor={editor} row={node} choice={selected} simple /></div>}

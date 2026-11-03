@@ -34,7 +34,7 @@ The graphics layer works on Intel and Apple Silicon Macs, though some effects ne
 
 Effects live in an ordered list called the chain, which holds up to 32 rows. The image enters at the top, each row does one thing to it, and the image that leaves the last row is fitted to the window. A chain can be a single sharpening pass or something longer, for example:
 
-1. Downsample the game's image to 540p, so the expensive steps have fewer pixels to process.
+1. Downsample the game's image to 720p, so the expensive steps have fewer pixels to process.
 2. Run a neural model on that smaller image.
 3. Upscale the result to the window with [MetalFX](https://developer.apple.com/documentation/metalfx).
 4. Add frame generation to raise the frame rate shown on screen.

@@ -1,4 +1,5 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
+const { cloneOrCopySync } = require("../../../shared/copy-file");
 const execute = require("node:util").promisify(require("node:child_process").execFile);
 const Writable = require("../../../shared/writable-input");
 const digest = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
@@ -63,7 +64,7 @@ async function prepareExecutable({ runtime, app, label, identifier, signal }) {
     // Clone only the native entry. Its dependency tree remains shared. The
     // fixed-size section write changes a few APFS blocks rather than copying
     // the managed runtime's libraries, JRE or framework.
-    fs.copyFileSync(runtime.executable, binary, fs.constants.COPYFILE_FICLONE || 0);
+    cloneOrCopySync(runtime.executable, binary);
     const patch = Buffer.alloc(section.size); encoded.copy(patch);
     const descriptor = fs.openSync(binary, fs.constants.O_RDWR | fs.constants.O_NOFOLLOW);
     try {

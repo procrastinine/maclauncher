@@ -52,7 +52,7 @@ export const GENERATION=Object.freeze({
   // declared multiplier list narrows maximumMultiplier to the phases the
   // framework produces; color "sdr" selects the provider's 8-bit SDR boundary.
   "vt-interpolation":Object.freeze({scene:false,camera:false,matrices:false,maximumMultiplier:4,multipliers:Object.freeze([2,4]),color:"sdr",minimumMacOS:"26.0",gpuWorkScope:"external-queues"}),
-  "metalfx-image":Object.freeze({scene:false,camera:false,matrices:false,maximumMultiplier:2,minimumMacOS:"26.0",gpuWorkScope:"external-queues"}),
+  "metalfx-image":Object.freeze({scene:false,camera:false,matrices:false,maximumMultiplier:2,multipliers:Object.freeze([2]),minimumMacOS:"26.0",gpuWorkScope:"external-queues"}),
   "vision-flow":Object.freeze({scene:false,camera:false,matrices:false,maximumMultiplier:5,minimumMacOS:"11.0",gpuWorkScope:"external-queues"}),
   // Automatic runs one of its candidates per capture, in this order of preference.
   auto:Object.freeze({scene:false,camera:false,matrices:false,maximumMultiplier:5,color:"sdr",candidates:Object.freeze(["vt-interpolation","metalfx-image","vision-flow"]),gpuWorkScope:"external-queues"})

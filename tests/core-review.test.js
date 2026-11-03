@@ -9,6 +9,7 @@ const { createLauncher } = require("../src/core/launcher");
 const GameStore = require("../src/core/game-store");
 const { watchFileChanges } = require("../src/core/watch-files");
 const { writeJsonAtomic } = require("../src/core/json-files");
+const { untilTestEnds } = require("./helpers/fixture-process");
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -168,9 +169,9 @@ test("review: terminating a waited native CLI game also terminates its descendan
   fs.writeFileSync(path.join(macos, "Review"), `#!/usr/bin/env node
 const fs = require("node:fs");
 const { spawn } = require("node:child_process");
-const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+const child = spawn(process.execPath, ["-e", ${JSON.stringify(untilTestEnds)}], { stdio: "ignore" });
 fs.writeFileSync(${JSON.stringify(pidFile)}, String(child.pid));
-setInterval(() => {}, 1000);
+${untilTestEnds}
 `, { mode: 0o755 });
   const env = { ...process.env };
   delete env.NODE_TEST_CONTEXT;

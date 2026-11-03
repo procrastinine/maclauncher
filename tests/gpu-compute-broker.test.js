@@ -1,11 +1,12 @@
 const test=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),os=require("node:os"),path=require("node:path"),crypto=require("node:crypto");
 const Broker=require("../src/modules/shared/runtime/gpu-compute-broker"),Sandbox=require("../src/modules/shared/runtime/macos-sandbox"),Writable=require("../src/modules/shared/writable-input");
+const { untilTestEnds } = require("./helpers/fixture-process");
 const until=async predicate=>{const deadline=Date.now()+3000;for(;;){try{const value=predicate();if(value)return value;}catch{}if(Date.now()>deadline)throw Error("The GPU compute receipt did not arrive.");await new Promise(resolve=>setTimeout(resolve,20));}};
 test("the compute broker uses private prepared programs and authenticates its own child before publishing a receipt",async t=>{
   const userDataDir=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),"gpu-broker-")));let binding;
   t.after(()=>{try{if(binding)Broker.release(binding);}finally{fs.rmSync(userDataDir,{recursive:true,force:true});}});
   binding={...Broker.reserve({userDataDir,launchId:"test-launch"}),namespace:"org.maclauncher.xess.test."};
-  const script=path.join(userDataDir,"owned-host.cjs");fs.writeFileSync(script,'process.stdout.write("MACLAUNCHER_XESS_HELPER "+JSON.stringify({pid:process.pid,token:process.argv.at(-1)})+"\\n");setInterval(()=>{},1000);');
+  const script=path.join(userDataDir,"owned-host.cjs");fs.writeFileSync(script,'process.stdout.write("MACLAUNCHER_XESS_HELPER "+JSON.stringify({pid:process.pid,token:process.argv.at(-1)})+"\\n");'+untilTestEnds);
   const original=Sandbox.isolateComputeHost;let requests=[];Sandbox.isolateComputeHost=async(config,context)=>{requests.push(context.endpoint);return {executable:config.executable,args:config.arguments,environment:{PATH:"/usr/bin:/bin"}};};t.after(()=>{if(original)Sandbox.isolateComputeHost=original;else delete Sandbox.isolateComputeHost;});
   const config={executable:process.execPath,arguments:[script],hostPath:"/trusted/helper.exe",originalLibrary:"/trusted/original.dll",environment:{}};
   Broker.register(binding,config);config.executable="/untrusted/replacement";
@@ -24,7 +25,7 @@ test("backend selection is isolated while another backend is being prepared",asy
   t.after(()=>{try{if(binding)Broker.release(binding);}finally{fs.rmSync(userDataDir,{recursive:true,force:true});}});
   binding={...Broker.reserve({userDataDir,launchId:"two-backends"}),namespace:"org.maclauncher.xess.test."};
   const script=path.join(userDataDir,"owned-host.cjs");
-  fs.writeFileSync(script,'require("fs").writeFileSync(process.env.RECORD_DIR+"/"+process.argv[2].split("/").at(-1)+".json",JSON.stringify(process.argv.slice(2,-1)));process.stdout.write("MACLAUNCHER_XESS_HELPER "+JSON.stringify({pid:process.pid,token:process.argv.at(-1)})+"\\n");setInterval(()=>{},1000);');
+  fs.writeFileSync(script,'require("fs").writeFileSync(process.env.RECORD_DIR+"/"+process.argv[2].split("/").at(-1)+".json",JSON.stringify(process.argv.slice(2,-1)));process.stdout.write("MACLAUNCHER_XESS_HELPER "+JSON.stringify({pid:process.pid,token:process.argv.at(-1)})+"\\n");'+untilTestEnds);
   let releasePolicy,startedPolicy;
   const started=new Promise(resolve=>{startedPolicy=resolve}),waiting=new Promise(resolve=>{releasePolicy=resolve}),launches=[];
   t.mock.method(Sandbox,"isolateComputeHost",async config=>{
@@ -67,7 +68,7 @@ test("a live registration in another realm serves its route once while the launc
   const id=require.resolve("../src/modules/shared/runtime/gpu-compute-broker"),cached=require.cache[id];delete require.cache[id];
   try{Live=require(id);}finally{require.cache[id]=cached;}
   const script=path.join(userDataDir,"owned-host.cjs");
-  fs.writeFileSync(script,'process.stdout.write("MACLAUNCHER_XESS_HELPER "+JSON.stringify({pid:process.pid,token:process.argv.at(-1)})+"\\n");setInterval(()=>{},1000);');
+  fs.writeFileSync(script,'process.stdout.write("MACLAUNCHER_XESS_HELPER "+JSON.stringify({pid:process.pid,token:process.argv.at(-1)})+"\\n");'+untilTestEnds);
   const launches=[];
   t.mock.method(Sandbox,"isolateComputeHost",async config=>{launches.push(config.hostPath);return {executable:config.executable,args:config.arguments,environment:{PATH:"/usr/bin:/bin"}};});
   const config=name=>({executable:process.execPath,arguments:[script],hostPath:"/trusted/"+name+".exe",originalLibrary:"/trusted/original.dll",environment:{}});
@@ -86,6 +87,48 @@ test("a live registration in another realm serves its route once while the launc
   assert.deepEqual(launches,["/trusted/live-d3d12.exe","/trusted/launch-fg.exe"]);
 });
 
+test("notifications during both realms' initial scans drain without another event or timer",async t=>{
+  const callbacks=[],held=[],realReaddir=fs.promises.readdir;
+  t.mock.method(require("../src/core/watch-files"),"watchDirectory",(_root,notify)=>{callbacks.push(notify);return {close(){}};});
+  // Neither the liveness timer nor another filesystem event can rescue a lost notification.
+  t.mock.method(global,"setInterval",()=>({unref(){}}));
+  t.mock.method(global,"clearInterval",()=>{});
+  const id=require.resolve("../src/modules/shared/runtime/gpu-compute-broker"),cached=require.cache[id],realms=[];
+  try{for(let i=0;i<2;i++){delete require.cache[id];realms.push(require(id));}}finally{require.cache[id]=cached;}
+  const userDataDir=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),"gpu-broker-scanning-")));
+  const binding={...realms[0].reserve({userDataDir,launchId:"scanning"}),namespace:"org.maclauncher.xess.scanning.",config:path.join(userDataDir,"hosts.json")};
+  t.after(()=>{for(const release of held)release();for(const realm of realms)realm.release(binding);fs.rmSync(userDataDir,{recursive:true,force:true});});
+  let reads=0;
+  t.mock.method(fs.promises,"readdir",async function(root,...args){
+    const snapshot=await realReaddir.call(this,root,...args);
+    if(root===binding.requestRoot&&++reads<=2){
+      assert.deepEqual(snapshot,[],"each initial read captures the directory before the request exists");
+      await new Promise(resolve=>held.push(resolve));
+    }
+    return snapshot;
+  });
+  const script=path.join(userDataDir,"host.cjs");
+  fs.writeFileSync(script,'console.log("MACLAUNCHER_XESS_HELPER "+JSON.stringify({pid:process.pid,token:process.argv.at(-1)}));'+untilTestEnds);
+  const launches=[];
+  t.mock.method(Sandbox,"isolateComputeHost",async config=>{launches.push(config.hostPath);return {executable:config.executable,args:config.arguments,environment:{PATH:"/usr/bin:/bin"}};});
+  for(const [index,realm] of realms.entries()){
+    realm.register(binding,{executable:process.execPath,arguments:[script],hostPath:"/trusted/realm-"+index+".exe",originalLibrary:"/trusted/original.dll",environment:{}});
+    realm.bind(binding,process.pid);
+  }
+  await until(()=>held.length===2);
+  const requestId=crypto.randomUUID();
+  Writable.atomicWrite(path.join(binding.requestRoot,requestId+".request.json"),JSON.stringify({schema:1,requestId,endpoint:binding.namespace+requestId}),{root:userDataDir});
+  assert.equal(callbacks.length,2);
+  for(const notify of callbacks){notify();notify();}
+  for(const release of held)release();
+  const receipt=await until(()=>JSON.parse(fs.readFileSync(path.join(binding.receiptRoot,requestId+".receipt.json"))));
+  assert.equal(receipt.error,undefined);assert.equal(receipt.helperPID,receipt.launcherPID);
+  assert.match(receipt.hostToken,/^[a-f0-9]{64}$/);
+  assert.deepEqual(launches,["/trusted/realm-1.exe"]);
+  assert.ok(reads>=4,"both realms drain their coalesced notification");
+  assert.equal(fs.existsSync(path.join(binding.requestRoot,requestId+".request.json")),false);
+});
+
 test("queued compute requests survive a missing filesystem notification",async t=>{
   t.mock.method(require("../src/core/watch-files"),"watchDirectory",()=>({close(){}}));
   const id=require.resolve("../src/modules/shared/runtime/gpu-compute-broker"),cached=require.cache[id];
@@ -95,7 +138,7 @@ test("queued compute requests survive a missing filesystem notification",async t
   const binding={...Quiet.reserve({userDataDir,launchId:"unnotified"}),namespace:"org.maclauncher.xess.quiet."};
   t.after(()=>{Quiet.release(binding);fs.rmSync(userDataDir,{recursive:true,force:true});});
   const script=path.join(userDataDir,"host.cjs");
-  fs.writeFileSync(script,'console.log("MACLAUNCHER_XESS_HELPER "+JSON.stringify({pid:process.pid,token:process.argv.at(-1)}));setInterval(()=>{},1000);');
+  fs.writeFileSync(script,'console.log("MACLAUNCHER_XESS_HELPER "+JSON.stringify({pid:process.pid,token:process.argv.at(-1)}));'+untilTestEnds);
   let launches=0;
   t.mock.method(Sandbox,"isolateComputeHost",async config=>{launches++;return {executable:config.executable,args:config.arguments,environment:{PATH:"/usr/bin:/bin"}};});
   Quiet.register(binding,{executable:process.execPath,arguments:[script],hostPath:"/trusted/host.exe",originalLibrary:"/trusted/original.dll",environment:{}});

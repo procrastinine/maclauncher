@@ -1,4 +1,5 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
+const { cloneOrCopySync } = require("../copy-file");
 const Catalog = require("./managed-shader-packs.json"), Traits = require("./shader-traits"), Providers = require("./shader-providers");
 const Writable = require("../writable-input"), Native = require("../runtime/local-native"), Items = require("../item-results");
 const Zip = require("../runtime/zip"), Upstream = require("../runtime/upstream"), Release = require("../runtime/release-files");
@@ -66,7 +67,7 @@ function cached(userDataDir, packId) {
     return record;
   } catch { return null; }
 }
-// Versions come only from an explicit Refresh; the list starts empty.
+// Status reads the local list; Refresh or a consented install discovers versions.
 function available(userDataDir, packId) {
   packFor(packId);
   return [...(cached(userDataDir, packId)?.entries || [])].sort((a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0) ||
@@ -209,7 +210,19 @@ function resolveEffect(userDataDir, id, features = {}, graphicsHost, options = {
     return { file, format: effect.format, traits, ...locations,
       runtimeIdentity: { managerId: ID, sectionId: record.packId, version: record.version, sourcePath: record.root } };
   }
-  throw new Error("This shader pack version is not installed. Install it in Graphics → Shader library.");
+  throw new Error("This shader collection version is not installed. Play offers its download.");
+}
+function missingEffectPlan(userDataDir, id, options = {}) {
+  const selected = parseId(id), pack = selected.pack;
+  if (selectedInstalls(userDataDir, pack.id, options).some(record => effectEntries(record).some(effect => effect.id === selected.effect) &&
+      module.exports.installed(userDataDir, pack.id, record.version, true))) return null;
+  const version = options.packVersion ?? options.settings?.runtimes?.[ID]?.defaultVersions?.[pack.id] ??
+    available(userDataDir, pack.id).find(row => !row.reason)?.version ?? null;
+  // An installed revision that lacks this content-addressed effect cannot be
+  // repaired by downloading the same revision again.
+  if (version && module.exports.installed(userDataDir, pack.id, version, true)) return null;
+  return { managerId: ID, version, ...(!version ? { discoveryRequired: true } : {}), label: pack.label,
+    requiresDownload: true, installOptions: { sectionId: pack.id } };
 }
 function collectionPaths(root,pack,file){
   const paths=names=>names.map(relative=>{
@@ -354,7 +367,7 @@ async function unpack(archive, destination, signal) {
         if (!item.isFile() || !keep(relative)) continue;
         const size = fs.statSync(source).size;
         if (++count > LIMITS.entries || size > LIMITS.file || (expanded += size) > LIMITS.expanded) throw new Error("The shader archive contains an unsafe or oversized entry.");
-        const target = path.join(destination, relative); fs.mkdirSync(path.dirname(target), { recursive: true }); fs.copyFileSync(source, target, fs.constants.COPYFILE_EXCL);
+        const target = path.join(destination, relative); fs.mkdirSync(path.dirname(target), { recursive: true }); cloneOrCopySync(source, target, { exclusive: true });
       }
     })(root, "");
   } finally { fs.rmSync(staging, { recursive: true, force: true }); }
@@ -421,16 +434,21 @@ function inspectCustom(runtimePath, { sectionId } = {}) {
   return { ...collection, effects, root: runtimePath, installDir: runtimePath, filesRoot, packId: sectionId, ready: true };
 }
 async function installRuntime(context = {}) {
-  const pack = packFor(context.sectionId), rows = available(context.userDataDir, pack.id);
-  if (!context.version && !rows.length) throw new Error("Refresh the shader pack version list before installing this version.");
-  const selected = version(context.version || (rows.find(row => !row.reason) || rows[0]).version);
-  const current = installed(context.userDataDir, pack.id, selected, true); if (current) return current;
+  const pack = packFor(context.sectionId);
+  let rows = available(context.userDataDir, pack.id), selected = context.version ? version(context.version) : rows.find(row => !row.reason)?.version;
+  const current = selected && installed(context.userDataDir, pack.id, selected, true); if (current) return current;
+  await confirmToolInstall(context, { managerId: ID, label: pack.label, version: selected || null, requiresDownload: true,
+    installOptions: { sectionId: pack.id }, detail: "Downloads the selected shader source collection and its license notices." });
+  if (!rows.some(row => row.version === selected)) {
+    await module.exports.refreshCatalog({ ...context, sectionId: pack.id });
+    rows = available(context.userDataDir, pack.id);
+    selected = context.version ? version(context.version) : rows.find(row => !row.reason)?.version;
+  }
   const row = rows.find(item => item.version === selected);
-  if (!row) throw new Error("Refresh the shader pack version list before installing this version.");
+  if (!row) throw new Error("The selected shader collection version is unavailable.");
+  if (row.reason) throw new Error(row.reason);
   return withRuntimeMutation({ managerId: ID, sectionId: pack.id, version: selected }, async () => {
     const current = installed(context.userDataDir, pack.id, selected, true); if (current) return current;
-    await confirmToolInstall(context, { managerId: ID, label: pack.label, version: selected, requiresDownload: true,
-      installOptions: { sectionId: pack.id }, detail: "Downloads the selected shader source collection and its license notices." });
     return runDownloadTask(context.downloads, { managerId: ID, sectionId: pack.id, version: selected, label: pack.label,
       kind: "runtime", dedupeKey: `${ID}:${context.userDataDir}:${pack.id}:${selected}` }, async task => {
       const signal = task.signal && context.signal ? AbortSignal.any([task.signal, context.signal]) : task.signal || context.signal,
@@ -475,7 +493,7 @@ async function installRuntime(context = {}) {
           if(!stat.isFile()||stat.isSymbolicLink())throw Error("The shader collection license notice is unavailable.");
           const target=path.join(files,"notices",path.basename(relative));fs.mkdirSync(path.dirname(target),{recursive:true});
           if(fs.existsSync(target)){if(!fs.readFileSync(target).equals(fs.readFileSync(source)))throw Error("The shader collection notice conflicts with its source.");}
-          else fs.copyFileSync(source,target);
+          else cloneOrCopySync(source,target);
         }
         let sourceOverlay;
         if(sourceRecipe){
@@ -512,6 +530,6 @@ async function uninstallRuntime({ userDataDir, sectionId, version: selected, ins
     fs.rmSync(target, { recursive: true, force: true }); verified.delete(target); return true;
   }, { userDataDir });
 }
-module.exports = { ID, Catalog, LIMITS, sources, isId, listEffects, resolveEffect, directory, installRoot, installed, normalizeVersion: version,
+module.exports = { ID, Catalog, LIMITS, sources, isId, listEffects, resolveEffect, missingEffectPlan, directory, installRoot, installed, normalizeVersion: version,
   listInstalled, cached, available, refreshCatalog, installRuntime, uninstallRuntime, states, inspectCustom,
   __test: { discover, extract, validRow, safe, selectTree } };

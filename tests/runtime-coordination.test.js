@@ -7,6 +7,7 @@ const { once } = require("node:events");
 const { createRuntimeCoordinator, isRuntimeProcessAlive } = require("../src/core/runtime-coordinator");
 const { createBackendService } = require("../src/core/backend-worker-client");
 const { runRuntimeManagerAction } = require("../src/core/runtime-manager-service");
+const { untilTestEnds } = require("./helpers/fixture-process");
 const workerPath = path.join(__dirname, "fixtures", "coordinated-backend-worker.cjs");
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 async function waitFor(fn) {
@@ -76,20 +77,28 @@ test("two games share one exact runtime while retaining independent process leas
 });
 
 test("a slow install leaves other managers, versions and host timers responsive", async t => {
-  const gate = deferred();
-  const env = environment(t, { "test.downloadGate": async (id, version) => id === "fixture-a" && version === "1" ? gate.promise : true });
+  const gate = deferred(), entered = deferred();
+  const env = environment(t, { "test.downloadGate": async (id, version) => {
+    if (id !== "fixture-a" || version !== "1") return true;
+    entered.resolve(); return gate.promise;
+  } });
   const blocked = env.service.request("runtime:slow", "runtimeAction", "fixture-a", "install", { version: "1" });
-  await waitFor(() => env.events.some(event => event.event === "installStarted"));
-  let ticks = 0; const timer = setInterval(() => ticks++, 5); t.after(() => clearInterval(timer));
-  const start = performance.now();
-  const results = await Promise.all([
-    env.service.request("runtime:other", "runtimeAction", "fixture-b", "install", { version: "1" }),
-    env.service.request("runtime:version", "runtimeAction", "fixture-a", "install", { version: "2" })
-  ]);
-  assert.deepEqual(results.map(result => result.version), ["1", "2"]);
-  assert.ok(performance.now() - start < 1500); assert.ok(ticks > 0);
-  assert.equal(env.coordinator.snapshot().active.some(lease => lease.kind === "mutation" && lease.identities[0].version === "1"), true);
-  gate.resolve(); await blocked;
+  let blockedSettled = false;
+  void blocked.then(() => { blockedSettled = true; }, () => { blockedSettled = true; });
+  await entered.promise;
+  const hostTick = deferred();
+  let ticks = 0; const timer = setInterval(() => { ticks++; hostTick.resolve(); }, 5); t.after(() => clearInterval(timer));
+  try {
+    const results = await Promise.all([
+      env.service.request("runtime:other", "runtimeAction", "fixture-b", "install", { version: "1" }),
+      env.service.request("runtime:version", "runtimeAction", "fixture-a", "install", { version: "2" })
+    ]);
+    await hostTick.promise;
+    assert.deepEqual(results.map(result => result.version), ["1", "2"]);
+    assert.ok(ticks > 0);
+    assert.equal(blockedSettled, false, "Other managers, versions and host timers progress while the first install stays blocked");
+    assert.equal(env.coordinator.snapshot().active.some(lease => lease.kind === "mutation" && lease.identities[0].version === "1"), true);
+  } finally { gate.resolve(); await blocked; }
 });
 
 test("active leases use the actual selected version and refuse removing only that artifact", async t => {
@@ -341,7 +350,7 @@ test("a returned GUI inspector retains its tool and host versions until the chil
   const { withRuntimeUse } = require("../src/core/coordinated-runtime-managers");
   const coordinator = createRuntimeCoordinator(), reader = coordinator.client(), writer = coordinator.client();
   const tool = { managerId: "inspector", version: "1" }, host = { managerId: "java", version: "21" };
-  const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+  const child = spawn(process.execPath, ["-e", untilTestEnds], { stdio: "ignore" });
   t.after(() => { if (child.exitCode == null && child.signalCode == null) child.kill("SIGKILL"); });
   await once(child, "spawn");
   await withRuntimeUse([tool, host], async use => {

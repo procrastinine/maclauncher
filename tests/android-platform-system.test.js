@@ -29,7 +29,7 @@ test('Original system service has one profile owner, persistent entries and orig
   const data=path.join(root,'app-'+uid),name=mode==='activity'?'org.example.window':uid===1000?'android':'example.diagnostics.u'+uid;
   const config={runtimeRoot:privateRuntime,filesRoot:path.join(data,'files'),cacheRoot:path.join(data,'cache')};
   await fs.mkdir(config.filesRoot,{recursive:true});await fs.mkdir(config.cacheRoot,{recursive:true});
-  if(mode==='activity'){const manifests=path.join(config.filesRoot,'tests/fixtures/android-framework-services/manifests');await fs.mkdir(manifests,{recursive:true});await fs.copyFile(path.resolve('tests/fixtures/android-framework-services/manifests/window.xml.bin'),path.join(manifests,'window.xml.bin'));}
+  if(mode==='activity'){const manifests=path.join(config.filesRoot,'tests/fixtures/android-framework-services/manifests');await fs.mkdir(manifests,{recursive:true});await fs.copyFile(require('./helpers/manifest-fixtures').file(t,'android-framework-services/manifests/window'),path.join(manifests,'window.xml.bin'));}
   const configFile=path.join(data,'launch.json');await fs.writeFile(configFile,'{}');
   const isolated=await prepareSandbox({javaPath:options.javaPath,config,configFile,dataRoot:data,userDataDir:root,processIdentityVersion:1,blockNetwork:true,localSockets:{connect:[lease.socketPath,keyStore.socketPath]}});
   const child=spawn(isolated.command,[...isolated.prefix,...isolated.javaArguments,...frameworkJvmOptions,'-cp',cp,'maclauncher.android.'+(mode==='activity'?'ProfileApplicationProbe':'RemoteSystemStoreProbe'),privateRuntime,data,name,mode,path.join(storage.root,'data'),String(lease.identity.bootCount)],

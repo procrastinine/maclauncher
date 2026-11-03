@@ -24,9 +24,9 @@ Library titles use the caption from the game's configuration when it has one. Lo
 
 ## Saves
 
-With siglus_rs, RealLive and AVG32 games read the original game in place, and their upstream `REALLIVE_SAVE_DIR` and `AVG32_SAVE_DIR` interfaces direct saves to `userData/games/<gameId>/modules/siglus/saves/`.
+With siglus_rs, ordinary launches use the original game directory and its upstream save locations. Siglus uses `savedata`, RealLive uses `savedata_rs`, and AVG32 uses the save filename configured by the game in its original directory. An explicit save-folder override uses the interpreter's save-directory interface where available.
 
-Siglus games write `key.toml` and `savedata` relative to their project. For these games MacLauncher creates a private project that contains top-level symbolic links to the original assets, its own small key configuration and its own saves. The original keys and saves are never linked as writable files, and no complete prepared copy of the game is made. The private project and the key cache live in `userData/games/<gameId>/modules/siglus/` and are removed when the game is forgotten.
+Siglus writes `key.toml` relative to its project. Automatic string decoding uses the original project directly. An explicit string-decoding setting or save-folder override needs a small project adapter, because siglus_rs reads those settings from its project layout. The adapter uses the original assets, keeps its own key configuration and directs saves to the original `savedata` directory or the explicit override. Interpreter caches remain in launcher data.
 
 RLVM keeps its saves separately, as described under [RealLive (RLVM)](#reallive-rlvm). The inspector's save tools work with the native save folder, and save editing and cheats are not available.
 
@@ -54,7 +54,7 @@ Loose RealLive scenarios, unknown protected keys and AVG32 games are not support
 
 ### Siglus
 
-Siglus, the default runtime, uses siglus_rs. MacLauncher Builds packages a publisher release or compiles the declared source revision, retaining the source and download digests. Each package contains the native library, a signed host program that calls the library's C API directly, and the required notices. The publisher's separate launcher UI is left out.
+Siglus, the default runtime, uses siglus_rs. MacLauncher Builds packages a publisher release or compiles the declared source revision, retaining the source and download digests. Each package, built and attested on GitHub, contains the native library, a signed host program that calls the library's C API directly, and the required notices. The publisher's separate launcher UI is left out.
 
 **Runtimes → Siglus** lists the interpreter packages from the [MacLauncher Builds catalog](https://github.com/procrastinine/maclauncher-builds). Installation verifies the archive, its complete file list, the native architecture and the code signatures, and it never compiles a host or copies one from MacLauncher. Package metadata records the interpreter's upstream revision separately from the MacLauncher Builds source revision. Runtime files are installed in `~/Library/Application Support/maclauncher/runtimes/siglus/<architecture>/<version>/`.
 
@@ -68,7 +68,7 @@ The siglus_rs package implements the EF00, PT00 and DT00 add-ons and returns zer
 
 RLVM is an alternative runtime for RealLive games. It accepts the RealLive script revisions listed under [Detection and versions](#detection-and-versions) and includes upstream rlBabel translation support. Siglus games, AVG32 games and loose RealLive scenarios use the Siglus runtime. The original executable is used for import and identification, and RLVM runs the game's data.
 
-The upstream RLVM Mac app and an adapter from MacLauncher Builds are installed separately. RLVM downloads directly from its upstream releases: the release's disk image or, when the release renames or repackages it, another Mac archive. Installation finds the app wherever the download places it and reads its minimum macOS version from the executable, and each installation records its release, commit, archive size and SHA-256. The adapter is a Cocoa library for both Mac CPU architectures that passes the game folder to RLVM, so the folder never has to be chosen in RLVM. Native dependencies are system libraries, and the game uses its own font or a Japanese macOS font.
+The upstream RLVM Mac app and an adapter from MacLauncher Builds are installed separately. RLVM downloads directly from its upstream releases: the release's disk image or, when the release renames or repackages it, another Mac archive. Installation finds the app wherever the download places it and reads its minimum macOS version from the executable, and each installation records its release, commit, archive size and SHA-256. The adapter, an attested MacLauncher Builds package, is a Cocoa library for both Mac CPU architectures that passes the game folder to RLVM, so the folder never has to be chosen in RLVM. Native dependencies are system libraries, and the game uses its own font or a Japanese macOS font.
 
 **Runtimes → RealLive (RLVM)** lists the RLVM releases, and its **MacLauncher adapter** section lists the adapter versions. Intel-only RLVM apps need Rosetta on Apple Silicon, and the shared launch flow requests the Rosetta installation when needed.
 

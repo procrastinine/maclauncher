@@ -62,15 +62,25 @@ function hostRequirement(declarations, { id, arch = process.arch } = {}) {
 /** The declared directory and sealed manifest; "full" also verifies every declared file. */
 function resolveIncluded(declarations, { id, version, arch, resourcesRoot: root, verification = "status" } = {}) {
   if (!["status", "full"].includes(verification)) throw new Error("Choose status or full included helper verification.");
-  const item = declared(declarations, { id, version, arch });
+  let item = declared(declarations, { id, version, arch });
   if (!item) return null;
   const directory = path.join(nativeRoot(root), B.relativeFile(item.directoryRelative));
   let stored;
   try { stored = B.readRegular(path.join(directory, B.relativeFile(item.manifestRelative)), B.LIMITS.manifestBytes); }
   catch (error) { throw new Error(`The included ${id} ${item.version} is missing. Reinstall MacLauncher.`, { cause: error }); }
   if (stored.sha256 !== item.manifestSha256) throw new Error(`The included ${id} ${item.version} manifest changed. Reinstall MacLauncher.`);
-  if (verification === "full") B.verifyPayload(directory, item);
-  return { item, directory, manifestPath: path.join(directory, item.manifestRelative), manifest: stored };
+  const resourceDirectory=root || resourcesRoot(),fs=require('node:fs');
+  let dependencyContext;
+  if(fs.existsSync(path.join(resourceDirectory,'runtime-packages.json'))){
+    const context=require('./included-package-dependencies').context(resourceDirectory,{verification:'status'});
+    const record=context.lock.packages.find(record=>record.id===item.id&&record.version===item.version&&record.arch===item.arch);
+    if(!record||record.manifestSha256!==item.manifestSha256)throw new Error('Included helper differs from the application package lock.');
+    const selected=context.visit(record);item=selected.declaration;
+    dependencyContext={installed:selected.children,resolveDependency:selected.resolveDependency};
+  }
+  const resolveDependency=dependencyContext?.resolveDependency;
+  if (verification === "full") B.verifyPayload(directory, item, resolveDependency);
+  return require('./package-dependencies').attach({ dependencyLibraryPaths: dependencyContext ? require('./package-dependencies').loaderPaths(item,dependencyContext.installed) : [], dependencyReadRoots: dependencyContext ? require('./package-dependencies').readRoots(dependencyContext.installed) : [], item, directory, manifestPath: path.join(directory, item.manifestRelative), manifest: stored },{resolveDependency});
 }
 /** resolveIncluded for a helper a feature cannot work without. */
 function requireIncluded(declarations, options = {}) {
@@ -82,14 +92,15 @@ function requireIncluded(declarations, options = {}) {
 }
 
 function inspectIncluded(declarations, { executableRelative, validateManifest, validatePayload, dataOnly = false, required = true, ...options } = {}) {
-  const included = required ? requireIncluded(declarations, options) : resolveIncluded(declarations, options);
+  const verification=options.verification||'full';
+  const included = required ? requireIncluded(declarations, {...options,verification:'status'}) : resolveIncluded(declarations, {...options,verification:'status'});
   if (!included) return null;
   const inspection = require("./project-build-manager").inspectPackage(included.directory, included.item, {
     projectId: included.item.id, manifestRelative: included.item.manifestRelative,
-    sourceRelative: included.item.sourceRelative, executableRelative, dataOnly, validateManifest, validatePayload
+    sourceRelative: included.item.sourceRelative, executableRelative, dataOnly, validateManifest, validatePayload, resolveDependency: included.resolveDependency, declaration:included.item
   });
-  B.verifyPayload(included.directory, inspection.declaration);
-  return { ...included, ...inspection };
+  if(verification==='full')B.verifyPayload(included.directory, included.item, included.resolveDependency);
+  return require('./package-dependencies').attach({ ...included, ...inspection, declaration:included.item,dependencyLibraryPaths:included.dependencyLibraryPaths },included);
 }
 
 module.exports = { SOURCE_RESOURCES, isPackaged, resourcesRoot, nativeRoot, preferredIncludedBuilds, declared, hostRequirement, resolveIncluded, requireIncluded, inspectIncluded };

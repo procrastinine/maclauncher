@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../../copy-file");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
@@ -303,13 +304,13 @@ async function installMacVersion({
       if (!found) throw new Error(`The ONScripter-Yuri ${v} download contains no Mac executable.`);
       safeRm(installDir);
       ensureDir(path.dirname(installDir));
-      fs.cpSync(extractDir, installDir, { recursive: true, verbatimSymlinks: true });
+      cloneOrCopySync(extractDir, installDir);
       binaryPath = path.join(installDir, path.relative(extractDir, found));
     } else {
       safeRm(installDir);
       ensureDir(installDir);
       const dest = path.join(installDir, "onsyuri");
-      fs.copyFileSync(assetPath, dest);
+      cloneOrCopySync(assetPath, dest);
       binaryPath = dest;
     }
   } finally {
@@ -371,7 +372,7 @@ async function installWebVersion({
       await extract7z(assetPath, installDir, signal);
     } else {
       const dest = path.join(installDir, "onsyuri-web.7z");
-      fs.copyFileSync(assetPath, dest);
+      cloneOrCopySync(assetPath, dest);
     }
   } finally {
     safeRm(tmpDir);

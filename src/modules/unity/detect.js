@@ -104,6 +104,11 @@ function inspectData(dataRoot, context = {}) {
   return info;
 }
 
+// Launch inspects the game again, so per-import evidence and the assembly list
+// stay with that inspection. Game records keep the import summary only.
+const LAUNCH_ONLY = ["nativeImportEvidence", "managedAssemblies"];
+const recordedData = data => Object.fromEntries(Object.entries(data || {}).filter(([key]) => !LAUNCH_ONLY.includes(key)));
+
 // The Mac Mono player runs Mono game code with Metal or OpenGL shaders. IL2CPP
 // machine code, shaders compiled only for other graphics APIs and Windows
 // desktop APIs need the game's own engine instead. A game with a Windows
@@ -151,11 +156,11 @@ function detectGame(context) {
       const peVersion = /\.exe$/i.test(root.gamePath) ? readPeVersion(path.join(path.dirname(root.gamePath), "UnityPlayer.dll"), { detection: context.detection }) || readPeVersion(root.gamePath, { detection: context.detection }) : null;
       return { moduleId: "unity", engine: "unity", gameType: "scripted", runtimeId: root.nativeAppPath ? "native" : "unity",
         name: (info.productName || path.basename(root.gamePath, path.extname(root.gamePath))).replace(/^\*+|\*+$/g, ""), gamePath: root.gamePath,
-        contentRootDir: path.dirname(root.dataRoot), nativeAppPath: root.nativeAppPath || null, moduleData: { ...info, playerVersionResource: peVersion },
+        contentRootDir: path.dirname(root.dataRoot), nativeAppPath: root.nativeAppPath || null, moduleData: { ...recordedData(info), playerVersionResource: peVersion },
         detectionEvidence: [{ type: "unity-data-header", path: info.versionSourcePath }, { type: "unity-backend", backend: info.scriptingBackend, path: info.assemblyPath || path.join(root.dataRoot, "il2cpp_data", "Metadata", "global-metadata.dat") }] };
     } catch (error) { if (error.code === "DETECTION_LIMIT") throw error; }
   }
   return null;
 }
 
-module.exports = { detectGame, inspectData, macPlayerBlocker, parseAssetVersion, VERSION };
+module.exports = { detectGame, inspectData, recordedData, macPlayerBlocker, parseAssetVersion, VERSION };

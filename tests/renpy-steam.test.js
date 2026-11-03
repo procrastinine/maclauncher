@@ -196,7 +196,7 @@ test("optional Steam achievements keep a normal launch when identity, provider o
   await assert.rejects(Steam.prepareGameSteam(args, { inspectAbi: async () => ({ symbols: ["SteamAPI_InitFlat"] }) }), /Configuration changed/);
 });
 
-test("patched Steam project saves are discoverable and return to original paths after the owned bootstrap is removed", t => {
+test("patched Steam compatibility keeps original save paths without recurring old project discovery", t => {
   const f = fixture(t), userDataDir = path.join(f.root, "data");
   f.write("game/options.rpy", "define config.save_directory = None\n");
   f.write("game/saves/existing.save", "original save");
@@ -205,8 +205,8 @@ test("patched Steam project saves are discoverable and return to original paths 
   const wrapper = Sdk.ensureWrapper({ userDataDir, gameId: entry.gameId, gamePath: entry.gamePath, contentRootDir: f.gameRoot, sdkVersion: "patched-8.5.2" });
   Steam.ensureBootstrap(wrapper, { gameRoot: f.gameRoot, python: path.join(f.root, "sdk/python"), libraryPath: path.join(f.root, "helper/libsteam_api.dylib"), appId: 264380 });
   const first = Renpy.resolveSaveLocations(entry, { userDataDir, env: {} });
-  assert.equal(first.primaryDirectory, path.join(wrapper, "game/saves"));
-  assert.equal(first.directories.some(item => item.role === "original" && item.directory === path.join(f.gameDir, "saves")), true);
+  assert.equal(first.primaryDirectory, path.join(f.gameDir, "saves"));
+  assert.deepEqual(first.directories.map(item => item.directory), [path.join(f.gameDir, "saves")]);
   Steam.removeBootstrap(wrapper);
   assert.equal(Renpy.resolveSaveLocations(entry, { userDataDir, env: {} }).primaryDirectory, path.join(f.gameDir, "saves"));
   assert.equal(fs.readFileSync(path.join(f.gameDir, "saves/existing.save"), "utf8"), "original save");

@@ -64,4 +64,13 @@ function verifyRuntime(install) {
 }
 
 
-module.exports = { verifyRuntime, requiredFiles };
+function requireOriginalGamePaths(profile) {
+  if (profile?.capabilities?.originalGamePaths !== true) {
+    const error = new Error("An updated FNA runtime is required to run from the original game directory.");
+    error.code = "FNA_RUNTIME_UPDATE_REQUIRED";
+    throw error;
+  }
+  return profile;
+}
+
+module.exports = { verifyRuntime, requiredFiles, requireOriginalGamePaths };

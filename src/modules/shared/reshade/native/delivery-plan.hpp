@@ -19,8 +19,8 @@ class DeliveryPlan {
  double batchStart=0,batchPeriod=0,alignment=-1;
  void drop(const DueFrame&frame){if(frame.generated<0)++status.droppedReal;else ++status.droppedGenerated;}
 public:
- template<class Phases>bool replace(uint64_t sourceId,const Phases&phases,double completedAt,double sourcePeriod,unsigned maximumImages=32,bool preserveClosingReal=false,std::optional<double>realDeadline={}){
-  bool valid=sourceId>lastSource&&std::isfinite(completedAt)&&completedAt>0&&std::isfinite(sourcePeriod)&&sourcePeriod>0&&sourcePeriod<=1&&(!realDeadline||(std::isfinite(*realDeadline)))&&phases.count<std::size(entries)&&phases.count<=std::size(phases.timestamps);float previous=0;
+ template<class Phases>bool replace(uint64_t sourceId,const Phases&phases,double completedAt,double sourcePeriod,unsigned maximumImages=32,bool preserveClosingReal=false,std::optional<double>realDeadline={},bool contentInterval=false){
+  bool valid=sourceId>lastSource&&std::isfinite(completedAt)&&completedAt>0&&std::isfinite(sourcePeriod)&&sourcePeriod>0&&(contentInterval||sourcePeriod<=1)&&(!realDeadline||(std::isfinite(*realDeadline)))&&phases.count<std::size(entries)&&phases.count<=std::size(phases.timestamps);float previous=0;
   for(unsigned i=0;valid&&i<phases.count;++i){const float phase=phases.timestamps[i];valid=std::isfinite(phase)&&phase>previous&&phase<1;previous=phase;}
   if(!valid){++status.rejectedBatches;return false;}
   for(unsigned i=first;i<count;++i)if(!(preserveClosingReal&&entries[i].generated<0))drop(entries[i]);first=0;count=0;lastSource=sourceId;batchStart=completedAt;batchPeriod=sourcePeriod;

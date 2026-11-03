@@ -12,7 +12,7 @@ test('original Android v1 APK signatures use JDK cryptography and reject changed
   const cp=[output,...['android-host.jar','android-framework.jar'].map(name=>path.resolve(runtime,name))].join(path.delimiter);
   execFileSync(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',output,path.resolve('tests/fixtures/android-framework-services/V1SignatureProbe.java'),path.resolve('tests/fixtures/android-window-session/RuntimeFixture.java')],{stdio:'pipe'});
   const key=path.join(output,'signer.p12'),apk=path.join(output,'signed.apk'),bad=path.join(output,'modified.apk');
-  fs.copyFileSync(path.resolve('tests/fixtures/android-framework-services/manifests/remote-provider-client.xml.bin'),path.join(output,'AndroidManifest.xml'));
+  fs.copyFileSync(require('./helpers/manifest-fixtures').file(t,'android-framework-services/manifests/remote-provider-client'),path.join(output,'AndroidManifest.xml'));
   fs.writeFileSync(path.join(output,'payload'),'original content');
   execFileSync(path.join(home,'bin/keytool'),['-genkeypair','-alias','fixture','-keyalg','RSA','-keysize','2048','-dname','CN=APK Fixture','-validity','2','-storetype','PKCS12','-keystore',key,'-storepass','test-only-password','-keypass','test-only-password','-noprompt'],{stdio:'pipe'});
   execFileSync(path.join(home,'bin/jar'),['--create','--file',apk,'-C',output,'AndroidManifest.xml','-C',output,'payload'],{stdio:'pipe'});

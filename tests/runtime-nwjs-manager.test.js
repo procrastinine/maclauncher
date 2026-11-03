@@ -180,6 +180,7 @@ test("broken NW.js framework aliases remain visible as damaged and cannot be sel
   assert.equal(Manager.core.resolveBestInstalled({ userDataDir, version: "0.117.0", platform: "darwin", arch: "x64" }), null);
   const state = Manager.getState({ userDataDir, settings: {} });
   assert.equal(state.catalog.latestInstalledVersion, "0.116.0");
+  assert.equal(Manager.core.resolveBestInstalled({ userDataDir, platform: "darwin", arch: "x64" }).version, "0.116.0");
   assert.equal(Manager.resolveRuntimeConfig({ userDataDir, arch: "x64" }).version, "0.116.0");
   assert.equal(Manager.resolveRuntimeConfig({ userDataDir, arch: "x64", managerSettings: { defaultVersion: "0.116.0" } }).version, "0.116.0");
 });

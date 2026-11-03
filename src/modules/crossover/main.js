@@ -43,7 +43,7 @@ async function launchRuntime(runtimeId, entry, context) {
   const launch = await Launch.prepareLaunch(entry, context);
   return context.spawnDetachedChecked("/bin/sh", ["-c", Launch.SUPERVISOR, "maclauncher-crossover",
     launch.install.executablePath, launch.install.serverPath, ...launch.args],
-  { cwd: launch.gameRoot, env: launch.environment, graphicsExecutable: launch.environment.WINELOADER || launch.install.loaderPath }, false);
+  { cwd: launch.workingDirectory || launch.gameRoot, env: launch.environment, graphicsExecutable: launch.environment.WINELOADER || launch.install.loaderPath }, false);
 }
 const resolveSaveLocations = () => ({ primaryDirectory: null, directories: [] });
 const crossoverProvider = { runtimeId: "crossover", runtime: manifest.runtime.entries.crossover, managerId: "crossover",

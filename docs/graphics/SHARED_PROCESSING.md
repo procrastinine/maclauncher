@@ -28,6 +28,8 @@ MacLauncher's Godot adapter supports **Game resolution** by changing the root 3D
 
 The Godot Metal compositor supplies its actual root-scene textures through the shared scene API. A perspective projection adds near-plane, far-plane and field-of-view metadata; the depth and motion data are submitted with or without that optional camera description. The Godot helper declares how it handles the Compatibility renderer, viewport selection and multiview. Camera preparation keeps the game's render scale.
 
+The helper is loaded only for a launch whose saved plan reads scene inputs or changes **Game resolution**; other launches start the original project or pack. [Godot graphics](../game-types/GODOT.md#graphics) describes that launch route.
+
 ## CrossOver and Sikarugir
 
 [CrossOver](../runtimes/CROSSOVER.md) and [Sikarugir](../runtimes/SIKARUGIR.md) connect a game's DLSS support to the shared temporal upscalers through DXMT or D3DMetal NVAPI/NGX integration. Selecting a shared temporal method enables this integration at launch, and the game's DLSS option then supplies the scene inputs. The runtime setting **Game temporal integration** enables it with MetalFX Temporal, and the method can later be changed live. Both routes run the selected Metal scaler. The included DXMT camera integration supplies Streamline camera constants when the matching DXMT components are present. The game controls the temporal render resolution.

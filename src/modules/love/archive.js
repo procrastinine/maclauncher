@@ -4,6 +4,7 @@ const crypto = require("node:crypto");
 const Zip = require("../shared/runtime/zip");
 const GameData = require("../shared/game-data");
 const Writable = require("../shared/writable-input");
+const FileSignature = require("../shared/file-signature");
 
 const MAX_ENTRIES = 50000;
 const MAX_BYTES = 4 * 1024 ** 3;
@@ -38,10 +39,10 @@ function readArchive(file) {
   } finally { fs.closeSync(fd); }
 }
 
-function identity(file) {
+function identity(file, legacy = false) {
   const stat = fs.statSync(file, { bigint: true });
   if (!stat.isFile()) throw new Error("LÖVE archive not found.");
-  return [file, stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].map(String);
+  return legacy ? [file, stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].map(String) : [file, FileSignature.signature(stat)];
 }
 
 function selectedEntries(archive) {
@@ -83,14 +84,15 @@ async function prepare(file, entry, context) {
   const files = selectedEntries(archive);
   if (!path.isAbsolute(context.userDataDir || "") || !/^[\w-]+$/.test(entry.gameId || ""))
     throw new Error("LÖVE archive preparation needs a game data directory.");
-  const key = crypto.createHash("sha256").update(JSON.stringify([1, before, archive.root])).digest("hex");
+  const archiveKey = basis => crypto.createHash("sha256").update(JSON.stringify([1, basis, archive.root])).digest("hex");
+  let key = archiveKey(before);
   const parent = path.join(GameData.resolveGameModuleDir(context.userDataDir, entry.gameId, "love"), "archives");
-  const destination = path.join(parent, key), target = path.join(destination, path.basename(file));
+  let destination = path.join(parent, key), target = path.join(destination, path.basename(file));
   Writable.assertOwnDirectory(context.userDataDir, destination, { create: false });
   const ready = () => {
     try {
       const marker = path.join(destination, "prepared.json"), stat = fs.lstatSync(marker);
-      return stat.isFile() && stat.size < 1024 && JSON.parse(fs.readFileSync(marker, "utf8")).key === key &&
+      return stat.isFile() && stat.size < 64 * 1024 && JSON.parse(fs.readFileSync(marker, "utf8")).key === key &&
         fs.lstatSync(target).isDirectory() && !fs.lstatSync(target).isSymbolicLink() &&
         fs.lstatSync(path.join(target, normalize(archive.mainEntry.name).slice(archive.root.length + 1))).isFile();
     } catch { return false; }
@@ -100,6 +102,14 @@ async function prepare(file, entry, context) {
     return target;
   };
   if (ready()) return preparedTarget();
+  // Earlier folders retained only an opaque key. Reuse a matching one in
+  // place; an unmatched old folder stays untouched while a new copy is made.
+  const legacyKey = archiveKey(identity(source, true));
+  const currentKey = key;
+  key = legacyKey; destination = path.join(parent, key); target = path.join(destination, path.basename(file));
+  Writable.assertOwnDirectory(context.userDataDir, destination, { create: false });
+  if (ready()) return preparedTarget();
+  key = currentKey; destination = path.join(parent, key); target = path.join(destination, path.basename(file));
   if (fs.existsSync(destination)) throw new Error("The prepared LÖVE game is incomplete. Remove the game preparation before retrying.");
   Writable.assertOwnDirectory(context.userDataDir, parent);
   const temporary = fs.mkdtempSync(path.join(parent, ".prepare-")), game = path.join(temporary, path.basename(file));
@@ -113,7 +123,7 @@ async function prepare(file, entry, context) {
     }
     context.signal?.throwIfAborted();
     if (JSON.stringify(before) !== JSON.stringify(identity(source))) throw new Error("The LÖVE archive changed during preparation. Retry Play.");
-    fs.writeFileSync(path.join(temporary, "prepared.json"), JSON.stringify({ key }), { flag: "wx", mode: 0o600 });
+    fs.writeFileSync(path.join(temporary, "prepared.json"), JSON.stringify({ key, source: before, root: archive.root }), { flag: "wx", mode: 0o600 });
     try { fs.renameSync(temporary, destination); }
     catch (error) { if (!ready()) throw error; }
     return preparedTarget();

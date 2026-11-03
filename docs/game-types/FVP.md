@@ -17,11 +17,11 @@ RFVP interprets the scenario bytecode and the engine's system-call dialect. FVP 
 
 ## Preparation and storage
 
-Preparation creates a private view of the game in `games/<gameId>/modules/fvp/play/` in the launcher data. Assets are linked to the original files, not copied, and the selected scenario gets the file name the engine expects. The view is reused while the source layout stays the same. The original game folder must contain regular files and folders with unambiguous names. Runtime logs and preparation files are kept in the same module folder.
+Play uses the original game directory when its script and archive names match RFVP and its saves use the game’s `save/` directory. A selected scenario with a different name, uppercase archive names or a separate save folder uses an adapter folder, `games/<gameId>/modules/fvp/play/`, which links the original assets under the names RFVP expects and links its `save/` entry to the selected save directory. Original files remain unchanged. Runtime logs remain in the module directory.
 
 ## Saves
 
-RFVP saves go to `games/<gameId>/modules/fvp/saves/`, or to an explicit save-folder override outside the original game folder. RFVP uses its own [save format](https://github.com/xmoezzz/rfvp/blob/main/setsumei/compatibility/SAVEDATA.md), which differs from the saves of the original Windows engine, and the two are stored separately.
+Games added to the library use the game's `save/` directory. Games that already have a save location, or an explicit save-folder override, keep it, and the adapter folder links to it. RFVP uses its own [save format](https://github.com/xmoezzz/rfvp/blob/main/setsumei/compatibility/SAVEDATA.md), which differs from the saves of the original Windows engine. RFVP's launch interface takes a game directory and a text encoding but has no save-directory option.
 
 ## Settings
 

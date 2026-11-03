@@ -67,6 +67,13 @@ function versionDirectory(version) {
   return Custom.storageKey(String(version || "default"));
 }
 
+// Only the Steam compatibility script and its app-id state live here. Game
+// scripts, assets, caches and saves stay at the selected original project.
+function resolveBootstrapDir(userDataDir, gameId, sdkVersion) {
+  const root = moduleRootDir(userDataDir, gameId);
+  return root ? path.join(root, "steam", versionDirectory(sdkVersion)) : null;
+}
+
 function wrapperMetaPath(wrapperDir) {
   return path.join(wrapperDir, ".maclauncher-renpy-wrapper.json");
 }
@@ -117,6 +124,7 @@ function collectExtras(rootDir) {
   });
 }
 
+// Explicit package builds use an isolated workspace; ordinary Play never calls this.
 function ensureWrapper({ userDataDir, gameId, gamePath, contentRootDir, sdkVersion }) {
   if (!existsDir(contentRootDir)) throw new Error("Ren'Py game folder missing.");
   const wrapperDir = resolveWrapperDir(userDataDir, gameId, sdkVersion);
@@ -385,6 +393,7 @@ function detectSdkPlatform(sdkInstallDir, renpyMajor) {
 
 module.exports = {
   ensureWrapper,
+  resolveBootstrapDir,
   resolveWrapperDir,
   buildMacApp,
   detectSdkPlatform,

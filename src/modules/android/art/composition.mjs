@@ -2,6 +2,7 @@
 import fs from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';import {once} from 'node:events';
 import {prepareMountParents,publishPathMap} from './layout.mjs';
 import {boundedLog} from '../../shared/runtime/bounded-log.js';
+import {cloneOrCopySync} from '../../shared/copy-file.js';
 import {processIdentity,MAX_FRAME} from '../process-channel.js';
 import net from 'node:net';
 import {stopProcess,stopProcesses,retireAll,requireRetired} from './process-retirement.mjs';
@@ -75,7 +76,7 @@ export async function startComposition({directory,supplier,payload,sharedGraphic
  const byPid=path.join(root,'by-pid');fs.mkdirSync(byPid,{recursive:true,mode:0o700});fs.rmSync(path.join(root,'properties'),{recursive:true,force:true});fs.rmSync(path.join(root,'sockets'),{recursive:true,force:true});const socket=path.join(root,'display.sock');fs.rmSync(socket,{force:true});
  const manifest=path.join(root,'manifest');fs.mkdirSync(manifest,{recursive:true});
  // Keep the image declarations; replace only the physical HAL suppliers.
- fs.cpSync(path.join(c.image,'vendor/etc/vintf/manifest'),manifest,{recursive:true});
+ cloneOrCopySync(path.join(c.image,'vendor/etc/vintf/manifest'),manifest);
  fs.rmSync(path.join(manifest,'hwc3.xml'),{force:true});fs.rmSync(path.join(manifest,'android.hardware.graphics.gralloc.ranchu.xml'),{force:true});
  for(const name of ['android.hardware.audio@7.1-impl.ranchu.xml','bluetooth_audio.xml'])fs.rmSync(path.join(manifest,name),{force:true});
  // Match AIM's physical-device overlay: Goldfish Codec2 requires the QEMU
@@ -83,8 +84,8 @@ export async function startComposition({directory,supplier,payload,sharedGraphic
  // wait for it before it can select the image's complete software codecs.
  fs.rmSync(path.join(manifest,'android.hardware.media.c2@1.0-service-goldfish.xml'),{force:true});
  fs.rmSync(path.join(manifest,'android.hardware.sensors-multihal.xml'),{force:true});
- fs.cpSync(c.halManifests,manifest,{recursive:true});
- const maps=['/vendor/lib64/libandroid-log-stderr.so','/system/lib64/libandroid-log-stderr.so','/apex/com.android.hardware.power/lib64/libandroid-log-stderr.so','/apex/com.android.media.swcodec/lib64/libandroid-log-stderr.so'].map((p,i)=>{const file=path.join(root,'log-'+i+'.so');fs.copyFileSync(c.logLibrary,file);return ['ro',p,file];}).concat([['rw','/dev/socket/dnsproxyd',path.join(root,'sockets/dnsproxyd')],['rw','/dev/socket/property_service',path.join(root,'sockets/property_service')],['rw','/dev/socket/property_service_for_system',path.join(root,'sockets/property_service_for_system')],['ro','/dev/__properties__',path.join(root,'properties')],['ro','/vendor/etc/vintf/manifest',manifest],['ro','/vendor/lib64/egl/libGLES_aim.so',path.join(c.halRoot,'libgles.so')],['ro','/vendor/lib64/hw/mapper.aim.so',path.join(c.halRoot,'libmapper.so')],['ro','/vendor/bin/hw/android.hardware.graphics.allocator-service.aim',path.join(c.halRoot,'allocator-service')],['ro','/vendor/bin/hw/android.hardware.graphics.composer3-service.aim',c.composerHal]]);
+ cloneOrCopySync(c.halManifests,manifest);
+ const maps=['/vendor/lib64/libandroid-log-stderr.so','/system/lib64/libandroid-log-stderr.so','/apex/com.android.hardware.power/lib64/libandroid-log-stderr.so','/apex/com.android.media.swcodec/lib64/libandroid-log-stderr.so'].map((p,i)=>{const file=path.join(root,'log-'+i+'.so');cloneOrCopySync(c.logLibrary,file);return ['ro',p,file];}).concat([['rw','/dev/socket/dnsproxyd',path.join(root,'sockets/dnsproxyd')],['rw','/dev/socket/property_service',path.join(root,'sockets/property_service')],['rw','/dev/socket/property_service_for_system',path.join(root,'sockets/property_service_for_system')],['ro','/dev/__properties__',path.join(root,'properties')],['ro','/vendor/etc/vintf/manifest',manifest],['ro','/vendor/lib64/egl/libGLES_aim.so',path.join(c.halRoot,'libgles.so')],['ro','/vendor/lib64/hw/mapper.aim.so',path.join(c.halRoot,'libmapper.so')],['ro','/vendor/bin/hw/android.hardware.graphics.allocator-service.aim',path.join(c.halRoot,'allocator-service')],['ro','/vendor/bin/hw/android.hardware.graphics.composer3-service.aim',c.composerHal]]);
  maps.unshift(['ro','/system/bin/maclauncher-art-window',c.compositionRoot]);
  if(!graphicsOnly)maps.unshift(['ro','/vendor/bin/hw/android.hardware.sensors-service.aim',c.sensorsHal],['ro','/dev/maclauncher-sensor-source',sensorRoot]);
  if(c.serviceWaiter)maps.unshift(['ro','/system/bin/maclauncher-art-service-wait',c.serviceWaiter]);

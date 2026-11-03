@@ -19,7 +19,11 @@ export function sortLibraryGames(games, sort, favorites = []) {
   const favoriteIds = new Set(favorites);
   const sign = direction === "asc" ? 1 : -1;
   return list.sort((a, b) => {
-    if (mode === "custom") return Number(favoriteIds.has(b.gameId)) - Number(favoriteIds.has(a.gameId));
+    // An entry that exists only while its session runs leads the list in
+    // every order, after favorites in the custom order.
+    const session = Number(b.ephemeral === true) - Number(a.ephemeral === true);
+    if (mode === "custom") return Number(favoriteIds.has(b.gameId)) - Number(favoriteIds.has(a.gameId)) || session;
+    if (session) return session;
     if (mode === "recent" || mode === "added") {
       const key = mode === "recent" ? "lastPlayedAt" : "createdAt";
       const av = Number.isFinite(a[key]) && a[key] > 0 ? a[key] : null;

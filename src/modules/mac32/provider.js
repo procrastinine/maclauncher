@@ -41,26 +41,22 @@ function runtimeDirectory(entry, context) {
     throw new Error("mac32 requires a saved app and launcher data directory.");
   return GameData.resolveGameRuntimeDir(context.userDataDir, entry.gameId, "mac32");
 }
-function resolveSaveLocations(entry, context) {
-  const directory = runtimeDirectory(entry, context), home = path.join(directory, "home"), work = path.join(directory, "work");
-  return { primaryDirectory: home, directories: [
-    { directory: home, role: "primary", source: "Private Mac app home folder", confidence: "inferred" },
-    { directory: work, role: "alternate", source: "Private Mac app working folder", confidence: "inferred" }
-  ] };
+function resolveSaveLocations() {
+  // The guest app selects its own locations through the normal macOS APIs.
+  return { primaryDirectory: null, directories: [] };
 }
 function prepareDirectories(entry, context) {
   const directory = runtimeDirectory(entry, context);
   const source = fs.realpathSync(entry.runtimeData.mac32.appPath);
   const prospective = path.join(fs.realpathSync(context.userDataDir), path.relative(context.userDataDir, directory));
   if (source === prospective || inside(source, prospective)) throw new Error("Mac app data must be separate from the original app bundle.");
-  for (const relative of ["work", "home/Library/Application Support", "home/Library/Preferences", "home/Library/Caches",
-    "home/.config", "home/.local/share", "home/.cache", "tmp"])
-    Writable.assertOwnDirectory(context.userDataDir, path.join(directory, relative));
+  Writable.assertOwnDirectory(context.userDataDir, directory);
   // The configured launcher data parent can itself be an alias.
   if (inside(source, fs.realpathSync(directory))) throw new Error("Mac app data must be separate from the original app bundle.");
-  return { directory, cwd: path.join(directory, "work"), home: path.join(directory, "home"), temporary: path.join(directory, "tmp") };
+  // Upstream's app launcher uses the app's parent for adjacent game data.
+  return { directory, cwd: path.dirname(entry.runtimeData.mac32.appPath) };
 }
-function launchOptions(settings, directories, environment = process.env) {
+function launchOptions(settings, _directories, environment = process.env) {
   const appArgs = settings?.appArgs ?? [];
   if (!Array.isArray(appArgs) || appArgs.some(arg => typeof arg !== "string" || arg.includes("\0")))
     throw new Error("Application arguments must be a list of strings without NUL bytes.");
@@ -68,9 +64,9 @@ function launchOptions(settings, directories, environment = process.env) {
   if (typeof libraryDirectory !== "string" || libraryDirectory.includes("\0") || libraryDirectory &&
     (!path.isAbsolute(libraryDirectory) || !fs.statSync(libraryDirectory).isDirectory()))
     throw new Error("The additional library directory must be an existing absolute folder.");
-  const env = { ...Sandbox.environment(environment), HOME: directories.home, CFFIXED_USER_HOME: directories.home,
-    TMPDIR: directories.temporary + path.sep, XDG_CONFIG_HOME: path.join(directories.home, ".config"),
-    XDG_DATA_HOME: path.join(directories.home, ".local", "share"), XDG_CACHE_HOME: path.join(directories.home, ".cache") };
+  const env = Sandbox.environment(environment);
+  for (const key of ["HOME", "CFFIXED_USER_HOME", "TMPDIR", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME"])
+    if (typeof environment[key] === "string") env[key] = environment[key];
   // Upstream checks the variable's presence, including an empty or zero value.
   if (settings?.enableGamePatches === true) delete env.MAC32_NOPATCH;
   else env.MAC32_NOPATCH = "1";
@@ -135,7 +131,7 @@ function captureRuntimeOutput(directory, logger) {
 function createProvider({ manager, platform = process.platform, spawn = NativeFocus.spawnForegroundNativeGame } = {}) {
   const runtimeManager = () => manager || require("./runtime/manager");
   return { runtimeId: "mac32", managerId: "mac32", runtime: manifest.runtime.entries.mac32, supportsEntry,
-    supports: { cheats: false, cheatsPatcher: false, saveEditing: false, saveLocation: true },
+    supports: { cheats: false, cheatsPatcher: false, saveEditing: false, saveLocation: false, saveLocationOverride: false },
     resolveSaveLocations,
     canLaunchRuntime: (runtimeId, entry) => runtimeId === "mac32" && platform === "darwin" && supportsEntry(entry),
     ensureRuntime: async (entry, context) => {

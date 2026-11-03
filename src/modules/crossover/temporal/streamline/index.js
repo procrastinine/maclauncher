@@ -1,4 +1,5 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
+const { cloneOrCopySync } = require("../../../shared/copy-file");
 const Writable = require("../../../shared/writable-input");
 const PE = require("./pe-exports");
 const ORIGINAL = "maclauncher_streamline_original.dll", RECORD = ".maclauncher-streamline.json";
@@ -71,8 +72,8 @@ function prepare({ sourcePath, gameRoot, relativePath, providerRoot, signal }) {
   const temporary = path.join(files.directory, ".streamline-" + crypto.randomUUID());
   let copied = false;
   try {
-    fs.copyFileSync(sourcePath, files.original, fs.constants.COPYFILE_FICLONE | fs.constants.COPYFILE_EXCL);copied = true;
-    fs.copyFileSync(selection.provider.library, temporary, fs.constants.COPYFILE_FICLONE | fs.constants.COPYFILE_EXCL);
+    cloneOrCopySync(sourcePath, files.original, { exclusive: true });copied = true;
+    cloneOrCopySync(selection.provider.library, temporary, { exclusive: true });
     signal?.throwIfAborted();
     Writable.atomicWrite(files.record, JSON.stringify({ schema: 1, sourceSha256: selection.sourceSha256, proxySha256: selection.provider.sha256 }) + "\n", { root: gameRoot });
     fs.renameSync(temporary, files.target);

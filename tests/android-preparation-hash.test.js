@@ -1,6 +1,70 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),crypto=require('node:crypto');
 const {fileHash}=require('../src/modules/android/prepare');
 const digest=value=>crypto.createHash('sha256').update(value).digest('hex');
+// Hold every observed stat field constant, including mtime and a whole-second
+// ctime, while real file bytes change. No filesystem timing or sleeps involved.
+function holdStat(t,file) {
+  const lstat=fs.lstatSync.bind(fs),open=fs.promises.open.bind(fs.promises),original=lstat(file,{bigint:true});
+  const stat=Object.assign(Object.create(Object.getPrototypeOf(original)),original,{ctimeNs:1000000000n,ctimeMs:1000n});
+  const state={stat,reads:0,onReadEnd:null};
+  t.mock.method(fs,'lstatSync',(...args)=>path.resolve(String(args[0]))===file?stat:lstat(...args));
+  t.mock.method(fs.promises,'open',async(...args)=>{
+    const handle=await open(...args);
+    if(path.resolve(String(args[0]))===file){
+      handle.stat=async()=>stat;
+      const create=handle.createReadStream.bind(handle);
+      handle.createReadStream=(...options)=>{state.reads++;const stream=create(...options);stream.once('end',()=>state.onReadEnd?.());return stream;};
+    }
+    return handle;
+  });
+  return state;
+}
+
+test('Coarse Android timestamps recheck memory and persisted digests against the actual bytes',async t=>{
+  const Digests=require('../src/modules/android/preparation-digests');
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-coarse-cache-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const file=path.join(root,'input');fs.writeFileSync(file,'original');const held=holdStat(t,file),cache=Digests.open(root);
+  assert.equal(await fileHash(file,undefined,cache),digest('original'));cache.save();
+  const persisted=Digests.open(root);assert.equal(persisted.get(file).sha256,digest('original'));
+  assert.equal(Digests.reusable(held.stat,persisted.get(file)),false);
+  assert.equal(await fileHash(file,undefined,persisted),digest('original'));
+  assert.equal(held.reads,4,'Even a warm coarse stamp requires two bounded byte passes');
+  fs.writeFileSync(file,'modified');fs.utimesSync(file,held.stat.atime,held.stat.mtime);
+  assert.equal(await fileHash(file,undefined,persisted),digest('modified'));persisted.save();
+  assert.equal(held.reads,6);assert.equal(Digests.open(root).get(file).sha256,digest('modified'));
+});
+
+test('Coarse Android timestamps detect an equal-size mutation during a read and never cache it',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-coarse-read-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const file=path.join(root,'input');fs.writeFileSync(file,'original');const held=holdStat(t,file);
+  held.onReadEnd=()=>{held.onReadEnd=null;fs.writeFileSync(file,'modified');fs.utimesSync(file,held.stat.atime,held.stat.mtime);};
+  await assert.rejects(fileHash(file),error=>{
+    assert.equal(error.code,'ANDROID_PREPARATION_INPUT_CHANGED');
+    assert.equal(error.identityBefore,error.identityDescriptorAfter);assert.equal(error.identityBefore,error.identityPathAfter);return true;
+  });
+  assert.equal(await fileHash(file),digest('modified'));assert.equal(held.reads,4);
+});
+
+test('Coarse Android source timestamps cannot hide changes after the staged APK was copied',async t=>{
+  const {copyOriginal}=require('../src/modules/android/prepare');
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-coarse-copy-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const source=path.join(root,'original.apk'),output=path.join(root,'base.apk');fs.writeFileSync(source,'original package');
+  const held=holdStat(t,source),open=fs.promises.open.bind(fs.promises);let changed=false;
+  t.mock.method(fs.promises,'open',async(...args)=>{
+    const handle=await open(...args);
+    if(String(args[0]).includes(path.sep+'.copy-')){
+      const create=handle.createReadStream.bind(handle);
+      handle.createReadStream=(...options)=>{const stream=create(...options);stream.once('end',()=>{
+        if(!changed){changed=true;fs.writeFileSync(source,'modified package');fs.utimesSync(source,held.stat.atime,held.stat.mtime);}
+      });return stream;};
+    }return handle;
+  });
+  await assert.rejects(copyOriginal(source,output,digest('original package')),/changed during preparation/);
+  assert.equal(changed,true);assert.deepEqual(fs.readdirSync(root),['original.apk']);
+  await copyOriginal(source,output,digest('modified package'));
+  assert.equal(fs.readFileSync(output,'utf8'),'modified package');
+});
+
 test('Installed APK copies preserve independent bytes, private modes and exclusive publication',async t=>{
   const {copyOriginal}=require('../src/modules/android/prepare');
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-package-copy-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));

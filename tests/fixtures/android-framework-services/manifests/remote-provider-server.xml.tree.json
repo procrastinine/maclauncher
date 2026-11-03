@@ -1,0 +1,75 @@
+{
+  "resourceIds": {
+    "label": 16842753,
+    "name": 16842755,
+    "readPermission": 16842759,
+    "writePermission": 16842760,
+    "protectionLevel": 16842761,
+    "exported": 16842768,
+    "authorities": 16842776,
+    "minSdkVersion": 16843276,
+    "versionCode": 16843291,
+    "versionName": 16843292,
+    "targetSdkVersion": 16843376,
+    "compileSdkVersion": 16844146,
+    "compileSdkVersionCodename": 16844147
+  },
+  "tree": {
+    "name": "manifest",
+    "attrs": {
+      "versionCode": 1,
+      "versionName": "1",
+      "compileSdkVersion": 36,
+      "compileSdkVersionCodename": "16",
+      ":package": "fixture.server",
+      ":platformBuildVersionCode": 36,
+      ":platformBuildVersionName": 16
+    },
+    "children": [
+      {
+        "name": "uses-sdk",
+        "attrs": {
+          "minSdkVersion": 23,
+          "targetSdkVersion": 28
+        },
+        "children": []
+      },
+      {
+        "name": "permission",
+        "attrs": {
+          "name": "fixture.server.READ",
+          "protectionLevel": 2
+        },
+        "children": []
+      },
+      {
+        "name": "application",
+        "attrs": {
+          "label": "Provider"
+        },
+        "children": [
+          {
+            "name": "provider",
+            "attrs": {
+              "name": "maclauncher.android.framework.RemoteContentProviderProbe$Provider",
+              "readPermission": "fixture.server.READ",
+              "writePermission": "fixture.server.READ",
+              "exported": true,
+              "authorities": "fixture.rows;fixture.alias"
+            },
+            "children": []
+          },
+          {
+            "name": "provider",
+            "attrs": {
+              "name": "maclauncher.android.framework.RemoteContentProviderProbe$PrivateProvider",
+              "exported": false,
+              "authorities": "fixture.private"
+            },
+            "children": []
+          }
+        ]
+      }
+    ]
+  }
+}

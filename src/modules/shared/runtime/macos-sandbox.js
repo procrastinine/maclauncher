@@ -1,4 +1,5 @@
 const fs = require("node:fs"), path = require("node:path");
+const { cloneOrCopy } = require("../copy-file");
 const { randomUUID } = require("node:crypto");
 const Writable = require("../writable-input");
 const warnGraphics = require("../graphics-warning");
@@ -243,7 +244,7 @@ async function scopeGraphics(graphics, directory, writableDirectory, signal) {
       const size = (await fs.promises.stat(input)).size;
       if (size > 64 * 1024 ** 2 || (total += size) > 256 * 1024 ** 2) throw new Error("Application effect images exceed their size limit.");
       const target = path.join(textures, name);await fs.promises.mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
-      await fs.promises.copyFile(input, target);await fs.promises.chmod(target, 0o600);
+      await cloneOrCopy(input, target);await fs.promises.chmod(target, 0o600);
     }
     result.RESHADE_TEXTURE_PATH = textures;
   }

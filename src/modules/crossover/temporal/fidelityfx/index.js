@@ -1,4 +1,5 @@
 const fs=require("node:fs"),path=require("node:path"),crypto=require("node:crypto");
+const { cloneOrCopySync } = require("../../../shared/copy-file");
 const PE=require("../streamline/pe-exports"),Profile=require("../catalog").FIDELITYFX_PROFILE;
 const Writable=require("../../../shared/writable-input");
 const libraries={vk:Profile.library,dx12:"amd_fidelityfx_dx12.dll"};
@@ -60,9 +61,9 @@ function prepare({sourcePath,sourceSha256,proxySha256,providerRoot,gameRoot,rela
  try{
   // Only the actual selected game library supplies the original. The SDK
   // reference packaged beside the adapter is never used for this copy.
-  fs.copyFileSync(sourcePath,files.original,fs.constants.COPYFILE_FICLONE|fs.constants.COPYFILE_EXCL);copied=true;
+  cloneOrCopySync(sourcePath,files.original,{exclusive:true});copied=true;
   if(hash(files.original)!==selection.sourceSha256)throw Error("The original FidelityFX library changed during preparation.");
-  fs.copyFileSync(selection.provider.library,temporary,fs.constants.COPYFILE_FICLONE|fs.constants.COPYFILE_EXCL);
+  cloneOrCopySync(selection.provider.library,temporary,{exclusive:true});
   if(hash(temporary)!==selection.provider.sha256)throw Error("The FidelityFX adapter changed during preparation.");
   signal?.throwIfAborted();
   Writable.atomicWrite(files.record,JSON.stringify({schema:1,profile:Profile.id,sourceSha256:selection.sourceSha256,proxySha256:selection.provider.sha256})+"\n",{root:gameRoot});

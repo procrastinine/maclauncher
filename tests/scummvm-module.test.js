@@ -121,6 +121,40 @@ test("ScummVM installed launch uses automatic detection, private paths and reque
   assert.deepEqual(calls[0][1].slice(-5), [...context.gameArguments, "--auto-detect"]);
   assert.ok(calls[0][1].includes(`--path=${source}`)); assert.equal(calls[0][2].env.SDL_MAC_BACKGROUND_APP, "0");
 });
+test("ScummVM passes its common Intel closure CPU to graphics, Play and game identification", async t => {
+  const Host = require("../src/modules/shared/runtime/host-capabilities");
+  const {ARM64,X64,image,universal} = require("./fixtures/macho-image");
+  const original = Object.getOwnPropertyDescriptor(process,"arch");
+  Object.defineProperty(process,"arch",{value:"arm64"}); t.after(() => Object.defineProperty(process,"arch",original));
+  t.mock.method(Host,"getHostCapabilities",() => ({platform:"darwin",launcherArch:"arm64",hardwareArch:"arm64",rosettaAvailable:true}));
+  const root = temporary(t), source = fixture(path.join(root,"source"),{"game.scummvm":""});
+  const contents = path.join(root,"ScummVM.app/Contents"), executablePath = path.join(contents,"MacOS/scummvm");
+  fs.mkdirSync(path.dirname(executablePath),{recursive:true}); fs.mkdirSync(path.join(contents,"Frameworks"));
+  fs.writeFileSync(executablePath,universal([ARM64,X64].map(cpu => ({cpu,bytes:image({cpu,fileType:2,installName:null})}))));
+  const library = path.join(contents,"Frameworks/libfixture.dylib"); fs.writeFileSync(library,image({cpu:X64}));
+  const install = {executablePath,needsRosetta:false}, selection = {ready:true,version:"2026.4.0",install};
+  t.mock.method(Manager,"resolveSelection",() => selection);
+  const entry = {...detect(source),gameId:"fixture"}, calls = [], effects = [];
+  const context = {userDataDir:path.join(root,"profile"),settings:{},runtimeSettings:{language:"de"},
+    getGameEffectsEnvironment:async options => {effects.push(options);return {};},
+    spawnDetachedChecked:async (...args) => {calls.push(args);return {pid:null};}};
+  assert.deepEqual(Module.resolveGraphicsInputs(entry,context),{architecture:"x64"});
+  await Module.launchRuntime("scummvm",entry,context);
+  assert.deepEqual(effects,[{needsRosetta:true}]); assert.equal(context.graphicsInputs.architecture,"x64");
+  assert.equal(calls[0][0],executablePath); assert.equal(calls[0][3],true); assert.ok(calls[0][1].includes("--language=de"));
+  let consent = 0;
+  context.ensureRosetta = async () => {consent++;};
+  const result = await Module.__test.inspectWithRuntime(entry,context,{run:async(command,args) => {
+    assert.equal(command,"/usr/bin/arch"); assert.deepEqual(args.slice(0,2),["-x86_64",executablePath]);
+    assert.ok(args.includes("--detect"));return {stdout:`scumm:fixture                  Fixture Game                                    ${source}\n`};
+  }});
+  assert.equal(result.gameId,"scumm:fixture"); assert.equal(consent,1);
+  Object.defineProperty(process,"arch",{value:"x64"}); fs.writeFileSync(library,image({cpu:ARM64}));
+  await assert.rejects(Module.launchRuntime("scummvm",entry,context),/child process architecture/);
+  await assert.rejects(Module.__test.inspectWithRuntime(entry,context,{run:async () => assert.fail("incompatible closure must not execute")}),/child process architecture/);
+  assert.equal(calls.length,1); assert.equal(effects.length,1);
+});
+
 test("ScummVM game identification obtains consent before downloading a missing player", async t => {
   const root = temporary(t), source = fixture(path.join(root, "source"), { "game.scummvm": "" }), profile = path.join(root, "profile");
   let consent = 0;

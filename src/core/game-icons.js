@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const Icons = require("./icon-utils");
 const { executableRole } = require("../modules/shared/executable-candidates");
+const FileSignature = require("../modules/shared/file-signature");
 
 function existing(value, kind) {
   if (typeof value !== "string" || !value || !path.isAbsolute(value)) return false;
@@ -66,7 +67,24 @@ function resolveIconCandidates(entry) {
 }
 function fileIdentity(value) {
   const stat = fs.statSync(value);
-  return [fs.realpathSync(value), stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs];
+  return [fs.realpathSync(value), FileSignature.signature(stat)];
+}
+function sameFingerprint(previous, current) {
+  const parse = value => {
+    if (typeof value !== "string") return null;
+    try {
+      const parts = JSON.parse(value), count = parts?.[1] === "exe" ? 3 : parts?.[1] === "app" ? 4 : 0;
+      if (!Array.isArray(parts) || parts[0] !== "icon-extract-v2" || parts.length !== count) return null;
+      const identities = parts.slice(2).map(identity => {
+        if (!Array.isArray(identity) || ![2, 6].includes(identity.length) || typeof identity[0] !== "string") return null;
+        const signature = FileSignature.normalize(identity.length === 2 ? identity[1] : identity.slice(1));
+        return signature ? [identity[0], signature] : null;
+      });
+      return identities.every(Boolean) ? [parts[0], parts[1], ...identities] : null;
+    } catch { return null; }
+  };
+  const left = parse(previous), right = parse(current);
+  return Boolean(left && right && JSON.stringify(left) === JSON.stringify(right));
 }
 function sourceFingerprint(candidate) {
   try {
@@ -99,4 +117,4 @@ async function selectIconForEntry({ entry, moduleIconPath, moduleDefaultIconPath
     ? { path: moduleDefaultIconPath, source: "module-default" } : { path: null, source: null };
 }
 
-module.exports = { resolveIconCandidates, sourceFingerprint, selectIconForEntry };
+module.exports = { resolveIconCandidates, sourceFingerprint, sameFingerprint, selectIconForEntry };

@@ -35,6 +35,9 @@ namespace {std::atomic<unsigned>queues{0},images{0},copies{0};id device;bool rej
 @end
 @implementation FailureCommands
 - (instancetype)init{if((self=[super init])){_handlers=[NSMutableArray new];_status=MTLCommandBufferStatusNotEnqueued;}return self;}
+// Metadata double: no GPU work or measured timing.
+- (NSTimeInterval)GPUStartTime{return 0;}
+- (NSTimeInterval)GPUEndTime{return 0;}
 - (BOOL)retainedReferences{return YES;}
 - (id)device{return device;}
 - (id)commandQueue{return nil;}
@@ -79,10 +82,11 @@ namespace generation_failure {
 enum class Fault {None,Queue,Create,CreateNil,Callback,Start,Display};
 struct Counts {unsigned creates=0,callbacks=0,starts=0,stops=0,releases=0,queries=0,displays=0,encodes=0,live=0;};
 Fault fault=Fault::None;Counts counts;
-struct Link {bool running=false;};
+struct Link {bool running=false;CVDisplayLinkOutputCallback callback=nullptr;void*context=nullptr;};
+Link*lastLink=nullptr;unsigned lastPhaseCount=0;
 Link* checked(CVDisplayLinkRef value){assert(value);return reinterpret_cast<Link*>(value);}
-CVReturn create(CVDisplayLinkRef*out){++counts.creates;*out=nullptr;if(fault==Fault::Create)return kCVReturnError;if(fault==Fault::CreateNil)return kCVReturnSuccess;*out=reinterpret_cast<CVDisplayLinkRef>(new Link);++counts.live;return kCVReturnSuccess;}
-CVReturn callback(CVDisplayLinkRef value,CVDisplayLinkOutputCallback,void*){checked(value);++counts.callbacks;return fault==Fault::Callback?kCVReturnError:kCVReturnSuccess;}
+CVReturn create(CVDisplayLinkRef*out){++counts.creates;*out=nullptr;if(fault==Fault::Create)return kCVReturnError;if(fault==Fault::CreateNil)return kCVReturnSuccess;*out=reinterpret_cast<CVDisplayLinkRef>(lastLink=new Link);++counts.live;return kCVReturnSuccess;}
+CVReturn callback(CVDisplayLinkRef value,CVDisplayLinkOutputCallback callback,void*context){checked(value)->callback=callback;checked(value)->context=context;++counts.callbacks;return fault==Fault::Callback?kCVReturnError:kCVReturnSuccess;}
 CVReturn start(CVDisplayLinkRef value){auto link=checked(value);++counts.starts;if(fault==Fault::Start)return kCVReturnError;link->running=true;return kCVReturnSuccess;}
 CVReturn stop(CVDisplayLinkRef value){checked(value)->running=false;++counts.stops;return kCVReturnSuccess;}
 void release(CVDisplayLinkRef value){delete checked(value);++counts.releases;assert(counts.live);--counts.live;}
@@ -112,15 +116,36 @@ CVReturn display(CVDisplayLinkRef value,CGDirectDisplayID){checked(value);++coun
 namespace macfx {
 namespace {struct ControlledGeneration final:GenerationEncoder {
  const char*method()const noexcept override{return "lsfg";}
- GenerationResult encode(id<MTLCommandBuffer>,id<MTLTexture>,const std::vector<id<MTLTexture>>&,uint64_t,const InterpolationPlan&)override{++generation_failure::counts.encodes;GenerationResult result;result.encoded=true;return result;}
+ GenerationResult encode(id<MTLCommandBuffer>,id<MTLTexture>,const std::vector<id<MTLTexture>>&,uint64_t,const InterpolationPlan&phases)override{generation_failure::lastPhaseCount=phases.count;++generation_failure::counts.encodes;GenerationResult result;result.encoded=true;return result;}
  uint64_t imageBytes(unsigned,unsigned,const GenerationMeasure&)const override{return 0;}
 };}
 std::shared_ptr<GenerationEncoder>makeGenerationEncoder(id<MTLDevice>,const std::string&,const LsfgConfig&){return std::make_shared<ControlledGeneration>();}
 }
 namespace {
-void publishGeneration(const std::string&file,bool enabled){
-    macfx::LivePacket packet{};memcpy(packet.magic,"MLFXCTL2",8);packet.targetHz=60;packet.multiplier=2;packet.flags=enabled?1:0;
+void publishGeneration(const std::string&file,bool enabled,unsigned multiplier=2){
+    macfx::LivePacket packet{};memcpy(packet.magic,"MLFXCTL2",8);packet.targetHz=60;packet.multiplier=multiplier;packet.flags=enabled?1:0;
     const auto temporary=file+".next";{std::ofstream stream(temporary,std::ios::binary);stream.write(reinterpret_cast<const char*>(&packet),sizeof(packet));assert(stream.good());}assert(!rename(temporary.c_str(),file.c_str()));macfx::refreshLiveState();
+}
+// G4: exercise the actual presenter with identical display/source rates.
+void sourceSchedulingParity(const std::string&file){
+    using namespace generation_failure;
+    for(const auto sourceKind:{macfx::RuntimeFrameSource::Unknown,macfx::RuntimeFrameSource::MetalDrawable,macfx::RuntimeFrameSource::BrowserWindow,macfx::RuntimeFrameSource::ExternalWindow})
+    for(const unsigned hz:{60u,120u}){
+        assert(!counts.live);counts={};fault=Fault::None;rejectPrivateQueue=false;publishGeneration(file,true,3);
+        auto layer=[FailureLayer layer];layer.pixelFormat=MTLPixelFormatBGRA8Unorm;layer.drawableSize=CGSizeMake(32,24);
+        auto descriptor=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:layer.pixelFormat width:32 height:24 mipmapped:NO];
+        auto source=(id<MTLTexture>)[device newTextureWithDescriptor:descriptor];
+        macfx::PresenterConfig config;config.frameSource=sourceKind;config.generation=macfx::LsfgConfig{"controlled-no-provider",true,false,1,3};int owner=0;
+        macfx::FramePresenter presenter(layer,&owner,config);assert(lastLink&&lastLink->callback);
+        CVTimeStamp refresh{};refresh.flags=kCVTimeStampVideoRefreshPeriodValid;refresh.videoTimeScale=hz;refresh.videoRefreshPeriod=1;
+        CVOptionFlags flags=0;lastLink->callback(reinterpret_cast<CVDisplayLinkRef>(lastLink),&refresh,&refresh,0,&flags,lastLink->context);
+        auto commands=[FailureCommands new];const auto result=presenter.submit((id<MTLCommandBuffer>)commands,source,1,CACurrentMediaTime());
+        if(!result.encoded)fprintf(stderr,"source scheduling failed: %s\n",result.reason.c_str());assert(result.encoded);
+        const bool window=sourceKind==macfx::RuntimeFrameSource::ExternalWindow;
+        assert(counts.encodes==(window&&hz==60?0u:1u));
+        if(counts.encodes)assert(lastPhaseCount==(window?1u:2u));
+        presenter.stop();[commands fire:MTLCommandBufferStatusCompleted];assert(!counts.live);
+    }
 }
 void generationCase(generation_failure::Fault failure,const std::string&file){
     using namespace generation_failure;assert(!counts.live);counts={};fault=failure;rejectPrivateQueue=failure==Fault::Queue;publishGeneration(file,true);
@@ -152,6 +177,7 @@ int main(int argc,char**argv){@autoreleasepool{
     }
     assert(phase.argc==2);const std::string file=phase.argv[1];device=[FailureDevice new];
     for(const auto fault:{generation_failure::Fault::Queue,generation_failure::Fault::Create,generation_failure::Fault::CreateNil,generation_failure::Fault::Callback,generation_failure::Fault::Start,generation_failure::Fault::Display})generationCase(fault,file);
+    sourceSchedulingParity(file);
     puts("Actual presenter source: FG queue/create/nil/callback/start/display failures bypass generation without null CoreVideo calls; four unchanged submissions keep caller-buffer rendering and make no resource retry; actual Off/On packets recover the same owner. CoreVideo/LSFG/Metal NSObject stand-ins only, no GPU or display.");
 }}
 #else

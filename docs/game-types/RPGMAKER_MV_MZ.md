@@ -47,7 +47,7 @@ The inspector's **Plugins** group installs or removes two optional plugins:
 - **Install text hooker** adds the Clipboard_llule plugin, a text extractor that copies game text to the clipboard.
 - **Install 500 save slots** adds the CustomizeMaxSaveFile plugin.
 
-Plugin changes apply to the game's [private writable view](../library/GAME_PREPARATION.md#writable-input-views), not to the original files. For RPG Maker MV, the inspector's library patching controls apply the optional PixiJS 5 patch set, with patch status, a patch and unpatch toggle, and version choices for each library.
+Plugin changes made in the inspector apply to the original game files. Play uses the detected project directly, including a project extracted from an installer, without a second copy of the game. For RPG Maker MV, the inspector's library patching controls apply the optional PixiJS 5 patch set, with patch status, a patch and unpatch toggle, and version choices for each library.
 
 **Extract** prepares readable project assets and the project tree through the module's RPG Maker decryption and extraction path but does not decompile JavaScript. The game's JavaScript, plugins and JSON are already readable directly, although shipped JavaScript may be minified or obfuscated and does not contain the author's editor history. Plugin compatibility and the recovery of encrypted resources are separate from extraction.
 

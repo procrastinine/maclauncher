@@ -1,4 +1,5 @@
 const fs = require("node:fs"), path = require("node:path");
+const { cloneOrCopySync } = require("../shared/copy-file");
 const GameData = require("../shared/game-data");
 const Manager = require("./runtime/manager");
 const { confirmToolInstall } = require("../shared/runtime/tool-install");
@@ -23,7 +24,7 @@ async function inspectMedia(entry, _payload, context, dependencies = {}) {
   fs.mkdirSync(root, { recursive: true }); const temporary = fs.mkdtempSync(path.join(root, ".inspect-"));
   try {
     const script = path.join(temporary, "inspect-media.lua"), report = path.join(temporary, "media.json");
-    fs.copyFileSync(path.join(__dirname, "resources", "inspect-media.lua"), script);
+    cloneOrCopySync(path.join(__dirname, "resources", "inspect-media.lua"), script);
     await (dependencies.withRuntimeUse || withRuntimeUse)([{ managerId: manager.id, sectionId: "default", version: selected.version,
       sourcePath: selected.install.installDir }], async use => {
       await (dependencies.runCommand || runToolCommand)(selected.install.executablePath,

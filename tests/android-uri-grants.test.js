@@ -11,7 +11,7 @@ test('original URI grant service retains permission policy and private durable o
  run('javac',['--release','21','-cp',cp,'-d',temp,path.join(fixture,'SignApkSet.java')]);
  const key=path.join(temp,'signer.p12');run('keytool',['-genkeypair','-alias','owned','-keyalg','RSA','-keysize','2048','-dname','CN=URI Grant Fixture','-validity','2','-storetype','PKCS12','-keystore',key,'-storepass','test-only-password','-keypass','test-only-password','-noprompt']);
  for(const [name,manifest]of[['provider','uri-grants'],['client','remote-provider-client']]){
-  const dir=path.join(temp,name);fs.mkdirSync(dir);fs.copyFileSync(path.join(fixture,'manifests',manifest+'.xml.bin'),path.join(dir,'AndroidManifest.xml'));
+  const dir=path.join(temp,name);fs.mkdirSync(dir);fs.copyFileSync(require('./helpers/manifest-fixtures').file(t,'android-framework-services/manifests/'+manifest),path.join(dir,'AndroidManifest.xml'));
   const unsigned=path.join(temp,name+'-unsigned.apk');run('jar',['--create','--file',unsigned,'-C',dir,'AndroidManifest.xml']);
   run('java',['-cp',cp,'SignApkSet',key,unsigned,path.join(temp,name+'.apk')]);
  }

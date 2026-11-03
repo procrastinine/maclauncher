@@ -5,6 +5,7 @@ const {METAL4, requirementSupport, versionAtLeast, normalizeArchitecture} = requ
 const SYSTEM_VERSION = "/System/Library/CoreServices/SystemVersion.plist";
 let hardwareArchitecture, systemVersion;
 
+// Launcher defaults follow its process CPU, including an Intel launcher under Rosetta.
 function defaultArchitecture() { return process.arch; }
 function readHardwareArchitecture(platform, launcherArch, execute) {
   if (platform !== "darwin" || launcherArch !== "x64") return launcherArch;

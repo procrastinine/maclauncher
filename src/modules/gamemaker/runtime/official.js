@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const Native = require("../../shared/runtime/local-native");
+const Host = require("../../shared/runtime/host-capabilities");
 const AppBundle = require("../../shared/runtime/app-bundle");
 const { hashFile } = require("../inspect");
 const { runDownloadTask } = require("../../shared/runtime/download-manager");
@@ -271,7 +272,7 @@ function listRuntimeRows(userDataDir) {
 }
 function catalogState(userDataDir, installed = []) {
   const cached = Catalog.cachedCatalog(userDataDir), versions = [...new Set((cached?.entries || []).map(item => item.version))];
-  const state = Catalog.stateFor(userDataDir, undefined, cached), hostSupported = process.platform === "darwin" && ["arm64", "x64"].includes(process.arch);
+  const state = Catalog.stateFor(userDataDir, undefined, cached), hostSupported = process.platform === "darwin" && ["arm64", "x64"].includes(Host.getHostCapabilities().hardwareArch);
   // A listed release this Mac cannot install, such as one without a base module
   // for its CPU, keeps the reason next to it.
   const versionRequirements = {}, installableVersions = hostSupported ? versions.filter(version => {
@@ -306,6 +307,7 @@ function getState({ settings, userDataDir } = {}) {
   const publicTools = Installer.listBootstrapIgors({ userDataDir }).filter(item => item.ready);
   const localTools = require("./official-tools").listLocalIgors({ userDataDir });
   const toolVersions = [...new Set([...publicTools.map(item => item.version), ...localTools.map(item => item.version), tool.version].filter(Boolean))];
+  // Igor labels, identities and downloads follow the launcher tool CPU rather than the physical Mac.
   const setupActions = [{ id: "installIgor", toolLabel: "Igor", label: "Igor", buttonLabel: tool.status === "damaged" ? "Repair Igor" : "Install Igor", installed: tool.ready,
     version: tool.version, versions: toolVersions, versionLabels: { ...Object.fromEntries(publicTools.map(item => [item.version, `Igor ${item.version} (${process.arch})`])),
       ...Object.fromEntries(localTools.map(item => [item.version, item.versionLabel])) },
@@ -332,6 +334,7 @@ const manager = {
     if (setupActionId !== "installIgor") throw new Error("Unknown official GameMaker setup action.");
     const Installer = require("./official-installer");
     const version = options.toolVersion || require("./official-tools").getSelectedIgorVersion(options) || null;
+    // Download identity and labels retain the launcher-selected Igor CPU.
     return runDownloadTask(downloads, { label: "GameMaker Igor", detail: version ? `Igor ${version} (${process.arch})` : `Igor (${process.arch})`,
       kind: "runtime-tool", managerId: ID, sectionId: "default", version, dedupeKey: `${ID}:igor:${process.arch}:${version || ""}` },
     task => Installer.ensureIgor({ userDataDir: options.userDataDir, toolVersion: options.toolVersion, signal: task.signal, onProgress: task.onProgress,

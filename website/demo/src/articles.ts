@@ -121,7 +121,9 @@ export const ARTICLES = {
   output: color("Final output", "final-output"),
   shaders: page("Shader collections and imports", "graphics/shaders/"),
   shaderLibrary: page("The shader library", "graphics/shaders/#the-shader-library"),
-  shaderFormats: page("Shader formats", "graphics/shaders/#formats")
+  shaderFormats: page("Shader formats", "graphics/shaders/#formats"),
+  windowStarting: page("Applying graphics to a window", "graphics/window-graphics/#starting"),
+  windowSession: page("Several windows and displays", "graphics/window-graphics/#while-it-runs")
 } satisfies Record<string, Article>;
 
 const desktop = (title: string, anchor: string) => page(title, `games/desktop-engines/#${anchor}`);
@@ -301,7 +303,9 @@ export const ACTION_ARTICLES: Record<string, Article[]> = {
   importSaveDir: [ARTICLES.movingSaves], exportSaveDir: [ARTICLES.movingSaves], importSaveFiles: [ARTICLES.movingSaves],
   writeSaveJson: [ARTICLES.saveEditor, ARTICLES.movingSaves], openSaveJsonInExternalEditor: [ARTICLES.saveEditor, ARTICLES.movingSaves],
   steamOpenHistory: [ARTICLES.downloads], steamChooseDirectory: [ARTICLES.downloads], cancelDownload: [ARTICLES.downloadsList],
-  cancelModuleAction: [ARTICLES.gameTools], chooseScreenshotFolder: [ARTICLES.graphicsShortcuts]
+  cancelModuleAction: [ARTICLES.gameTools], chooseScreenshotFolder: [ARTICLES.graphicsShortcuts],
+  appActionPickerState: [ARTICLES.windowStarting], chooseAppActionTarget: [ARTICLES.windowStarting],
+  openAppActionPickerLink: [ARTICLES.windowStarting], removeSessionTarget: [ARTICLES.windowSession]
 };
 // Launcher settings by key.
 const SETTINGS_ARTICLES: Record<string, Article[]> = {

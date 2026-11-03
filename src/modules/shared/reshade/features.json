@@ -4,7 +4,7 @@
     "sharedFrameEncoder": true,
     "hardwareQueryAPI": 1,
     "browserFrameAPI": 1,
-    "windowSourceAPI": 1,
+    "windowSourceAPI": 2,
     "virtualWindowAPI": 1,
     "virtualSourceControlAPI": 1,
     "virtualSourceActivationAPI": 1,

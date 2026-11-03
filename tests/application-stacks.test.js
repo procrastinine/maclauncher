@@ -40,19 +40,25 @@ test("the store keeps at most 50 apps, least recently used first out, and bounds
   assert.equal(Stacks.save(root, {}, { effects: shader("a") }), "skipped", "a stack needs an identity");
 });
 
-test("bundle-less processes and the display have their own keys; uninstalled apps are pruned", t => {
+test("bundle-less processes, each display and All Displays have their own keys; uninstalled apps are pruned", t => {
   const root = library(t), executable = path.join(root, "Game");
   fs.writeFileSync(executable, "");
   const process = { target: "application", executablePath: executable, name: "Game" };
   Stacks.save(root, process, { effects: shader("p") });
-  Stacks.save(root, { target: "display" }, { effects: shader("d") });
+  Stacks.save(root, { target: "display", uuid: "37D8832A-2D66-02CA-B9F7-8F30A301B230", name: "Built-in Retina Display" }, { effects: shader("d") });
+  Stacks.save(root, { target: "display", name: "Studio Display" }, { effects: shader("s") });
+  Stacks.save(root, { target: "all-displays" }, { effects: shader("a") });
+  assert.equal(Stacks.key({ target: "display" }), null, "a display needs its identifier or name");
+  assert.equal(Stacks.lookup(root, { target: "display", uuid: "37D8832A-2D66-02CA-B9F7-8F30A301B230", name: "Renamed" })?.effects.video[0].id, "d",
+    "a display keeps its stack under its stable identifier");
   Stacks.save(root, app("com.example.kept"), { effects: shader("k") });
   Stacks.save(root, app("com.example.gone"), { effects: shader("g") });
   assert.deepEqual(Stacks.bundleIdentifiers(root).sort(), ["com.example.gone", "com.example.kept"]);
   assert.deepEqual(Stacks.prune(root, { "com.example.gone": false, "com.example.kept": true }), ["bundle:com.example.gone"]);
   fs.rmSync(executable);
   assert.deepEqual(Stacks.prune(root, {}), [Stacks.key(process)]);
-  assert.deepEqual(Object.keys(file(root).stacks).sort(), ["bundle:com.example.kept", "display"]);
+  assert.deepEqual(Object.keys(file(root).stacks).sort(),
+    ["all-displays", "bundle:com.example.kept", "display-name:Studio Display", "display:37D8832A-2D66-02CA-B9F7-8F30A301B230"]);
 });
 
 test("an unreadable store is kept aside and replaced; an unreadable plan is not applied", t => {
@@ -72,11 +78,14 @@ test("a window session starts from its app's stack and saves it when it ends", a
   const target = { kind: "application", pid: 9, name: "Example", bundleIdentifier: "com.example.app", path: "/Applications/Example.app" };
   const first = WindowActions.applyGraphics.createEntry(target, { userDataDir: root, gameId: "one" });
   assert.equal(first.effects, undefined, "the first session starts from the default stack");
-  assert.equal(WindowActions.applyGraphics.endEntry({ ...first, effects: shader("crt"), runtimeSettings: { capture: { captureCursor: true } } }, { userDataDir: root }), "saved");
+  assert.equal(WindowActions.applyGraphics.endEntry({ ...first, effects: shader("crt") }, { userDataDir: root }), undefined, "an app whose window was never picked has served nothing");
+  const picked = { ...first, moduleData: { targets: [{ ...first.moduleData.targets[0], windowID: 3 }] } };
+  assert.equal(WindowActions.applyGraphics.endEntry({ ...picked, effects: shader("crt"), runtimeSettings: { capture: { captureCursor: true } } }, { userDataDir: root }), "saved");
   const second = WindowActions.applyGraphics.createEntry({ ...target, pid: 10 }, { userDataDir: root, gameId: "two" });
   assert.equal(second.effects.video[0].id, "crt");
   assert.deepEqual(second.runtimeSettings, { capture: { captureCursor: true } });
-  assert.equal(second.moduleData.pid, 10);
+  assert.equal(second.moduleData.targets.length, 1);
+  assert.equal(second.moduleData.targets[0].pid, 10);
   const pruned = await WindowActions.applyGraphics.maintain({ userDataDir: root, windowGraphics: () => ({ available: true, executable: "/helper" }),
     installedApplications: async (ids, { executable }) => { assert.equal(executable, "/helper");return Object.fromEntries(ids.map(id => [id, false])); } });
   assert.deepEqual(pruned, ["bundle:com.example.app"]);

@@ -90,6 +90,19 @@ fn execute(command: &mut Command) -> Result<(), String> {
     if status.success() { Ok(()) } else { Err(format!("{program}: {status}")) }
 }
 
+// Content markers also survive copying an attached tree. Only a separate
+// mounted volume is a valid extraction, translation or overlay destination.
+fn require_mount_volume(mount: &Path) -> Result<(), String> {
+    use std::os::unix::fs::MetadataExt;
+    let metadata = fs::symlink_metadata(mount).map_err(|e| e.to_string())?;
+    let parent = fs::metadata(mount.parent().ok_or("Android image mount has no parent")?)
+        .map_err(|e| e.to_string())?;
+    if !metadata.is_dir() || metadata.file_type().is_symlink() || metadata.dev() == parent.dev() {
+        return Err(format!("{}: Android image volume is not mounted", mount.display()));
+    }
+    Ok(())
+}
+
 fn prepare(archive: &Path, payload: &Path, output: &Path) -> Result<PathBuf, String> {
     fs::create_dir_all(output).map_err(|e| e.to_string())?;
     let image = output.join("system.dmg");
@@ -98,7 +111,8 @@ fn prepare(archive: &Path, payload: &Path, output: &Path) -> Result<PathBuf, Str
     let shadow = output.join("derived.shadow");
     // Every game shares immutable prepared files. An already attached matching
     // image needs a shared lease, so another game's running lease is preserved.
-    if image.exists() && system::root(&original_mount).is_dir() && system::root(&derived_mount).join(".identity").is_file() {
+    if image.exists() && require_mount_volume(&original_mount).is_ok() && require_mount_volume(&derived_mount).is_ok()
+        && system::root(&original_mount).is_dir() && system::root(&derived_mount).join(".identity").is_file() {
         let _reader = system::ImageLease::read(&image)?;
         let original = system::root(&original_mount);
         let (_, mut plan) = load(&payload.join("image/overlay.toml"), &original, payload)
@@ -113,6 +127,7 @@ fn prepare(archive: &Path, payload: &Path, output: &Path) -> Result<PathBuf, Str
     let _lease = system::ImageLease::write(&image)?;
     if !image.exists() {
         system::build(&image, "Android System", |mount| {
+            require_mount_volume(mount)?;
             execute(Command::new(payload.join("bin/android-image-extract"))
                 .arg(archive).arg(system::root(mount)))?;
             let got = identity::original_identity(&system::root(mount), None)?;
@@ -121,6 +136,7 @@ fn prepare(archive: &Path, payload: &Path, output: &Path) -> Result<PathBuf, Str
         })?;
     }
     system::attach(&image, None, &original_mount, false)?;
+    require_mount_volume(&original_mount)?;
     let original = system::root(&original_mount);
     if identity::original_identity(&original, None)?.as_deref() != Some(ORIGINAL) {
         return Err("Android system image identity differs from the selected version".into());
@@ -132,6 +148,7 @@ fn prepare(archive: &Path, payload: &Path, output: &Path) -> Result<PathBuf, Str
     let derived = identity::compute(ORIGINAL, &plan);
     if shadow.exists() {
         system::attach(&image, Some(&shadow), &derived_mount, false)?;
+        require_mount_volume(&derived_mount)?;
         if identity::read_tree_identity(&system::root(&derived_mount))?.as_deref() == Some(derived.hex.as_str()) {
             return Ok(system::root(&derived_mount));
         }
@@ -139,15 +156,18 @@ fn prepare(archive: &Path, payload: &Path, output: &Path) -> Result<PathBuf, Str
         fs::remove_file(&shadow).map_err(|e| e.to_string())?;
     }
     system::attach(&image, Some(&shadow), &derived_mount, true)?;
+    require_mount_volume(&derived_mount)?;
     let result = assemble::apply(&plan, &derived, &system::root(&derived_mount));
     system::detach(&image, Some(&shadow))?;
     result?;
     system::attach(&image, Some(&shadow), &derived_mount, true)?;
+    require_mount_volume(&derived_mount)?;
     let translated = execute(Command::new(payload.join("bin/linux-translate"))
         .arg("--image").arg(&derived_mount));
     system::detach(&image, Some(&shadow))?;
     translated?;
     system::attach(&image, Some(&shadow), &derived_mount, false)?;
+    require_mount_volume(&derived_mount)?;
     Ok(system::root(&derived_mount))
 }
 
@@ -237,7 +257,8 @@ fn attach_app_host(image: &Path, shadow: &Path, mount: &Path) -> Result<(), Stri
             return Err("Android app host image is attached with different ownership".into());
         }
     }
-    system::attach(image, Some(shadow), mount, false)
+    system::attach(image, Some(shadow), mount, false)?;
+    require_mount_volume(mount)
 }
 
 fn prepare_app_host(payload: &Path, output: &Path, original: &Path) -> Result<PathBuf, String> {
@@ -268,6 +289,7 @@ fn prepare_app_host(payload: &Path, output: &Path, original: &Path) -> Result<Pa
     clone_shadow(&output.join("derived.shadow"), &staging_shadow)?;
     let built = (|| {
         system::attach(&image, Some(&staging_shadow), &staging, true)?;
+        require_mount_volume(&staging)?;
         assemble::apply(&prepared.plan, &wanted, &system::root(&staging))?;
         execute(Command::new(payload.join("bin/linux-translate")).arg("--image").arg(&staging))
     })();

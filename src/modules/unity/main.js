@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const manifest = require("./manifest.json");
-const { detectGame, macPlayerBlocker } = require("./detect");
+const { detectGame, macPlayerBlocker, recordedData } = require("./detect");
 const manager = require("./runtime/manager");
 const Launch = require("./launch");
 const { resolveSaveLocations } = require("./save-location");
@@ -16,7 +16,7 @@ const Il2CppTools = require("./tools/cpp2il");
 
 function refreshEntry(entry, context) {
   const info = Launch.inspectEntry(entry);
-  entry.moduleData = { ...entry.moduleData, ...info };
+  entry.moduleData = recordedData({ ...entry.moduleData, ...info });
   context.onEntryChange?.({ moduleData: entry.moduleData });
   return info;
 }
@@ -62,7 +62,7 @@ module.exports = {
   ensureRuntime: async (entry, context) => {
     if (context.runtimeId === "native") return null;
     const info = Launch.preflight(entry);
-    entry.moduleData = { ...entry.moduleData, ...info };
+    entry.moduleData = recordedData({ ...entry.moduleData, ...info });
     context.onEntryChange?.({ moduleData: entry.moduleData });
     const selection = manager.resolveSelection(entry, context.settings, context.userDataDir);
     if (!selection.version) throw new Error(selection.reason);

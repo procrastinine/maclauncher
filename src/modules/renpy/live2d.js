@@ -276,14 +276,15 @@ function gameTarget(entry, context) {
   if (String(entry.gamePath || "").toLowerCase().endsWith(".app")) throw new Error("Prepare a separate game directory before changing a signed app's libraries.");
   const rootDir = entry.contentRootDir || entry.gamePath;
   const patch = Patcher.readPatchMeta(context.userDataDir, entry.gameId);
-  const version = patch && patch.preexistingMacLib === false ? patch.sdkVersion : entry.moduleData?.version;
+  const version = context.runtimeVersion || (patch && patch.preexistingMacLib === false ? patch.sdkVersion : entry.moduleData?.version);
   const renpyVersion = String(version || "").match(/^(\d+\.\d+\.\d+)/)?.[1];
   if (!renpyVersion) throw new Error("The game's actual macOS runtime version is unknown. Patch its runtime using an explicitly selected SDK first.");
   if (!/^[a-zA-Z0-9_-]{1,128}$/.test(entry.gameId || "")) throw new Error("A valid launcher game identity is required for reversible library patches.");
   fs.mkdirSync(context.userDataDir, { recursive: true });
   const userRoot = fs.realpathSync(context.userDataDir);
   const metadataRoot = secureDirectory(userRoot, GameData.resolveGameModuleDir(userRoot, entry.gameId, "renpy"), true);
-  return target({ rootDir, renpyVersion, metadataRoot, metadataDir: path.join(metadataRoot, "libraries", "live2d") });
+  const metadataDir = path.join(metadataRoot, "libraries", "live2d");
+  return { ...target({ rootDir, renpyVersion, metadataRoot, metadataDir }), libraryPath: path.join(metadataDir, LIBRARY_NAME) };
 }
 function gameStatus(entry, context) {
   try { return status(gameTarget(entry, context)); } catch (error) { return { ready: false, reason: error.message }; }
@@ -291,9 +292,38 @@ function gameStatus(entry, context) {
 async function patchGame(entry, payload, context) {
   const t = gameTarget(entry, context);
   const archivePath = payload?.archivePath || payload?.filePaths?.[0];
-  return archivePath ? importLibrary(t, archivePath, payload) : downloadLibrary(t, { ...context, ...payload });
+  const info = archivePath ? importLibrary(t, archivePath, payload) : await downloadLibrary(t, { ...context, ...payload });
+  entry.moduleData = { ...entry.moduleData, live2dInstalled: true };
+  return info;
 }
-function removeGame(entry, _payload, context) { return removeLibrary(gameTarget(entry, context)); }
+function removeGame(entry, _payload, context) {
+  const result = removeLibrary(gameTarget(entry, context));
+  const { live2dInstalled, ...moduleData } = entry.moduleData || {};
+  entry.moduleData = moduleData;
+  return result;
+}
+
+function launchEnvironment(entry, context, environment = process.env) {
+  if (entry.moduleData?.live2dInstalled !== true) return environment;
+  const t = gameTarget(entry, context), info = status(t);
+  if (!info.ready || !info.owned) throw new Error(info.reason || "The selected game Live2D library is unavailable.");
+  // Ren'Py's onetime_init calls this loader lazily with a Core basename or
+  // executable-relative path. Redirect that one library without changing the
+  // interpreter, its original base, project, cwd or other native libraries.
+  const script = "# coding: utf-8\n# MacLauncher game Live2D library binding v1\n" +
+    "init -1600 python in _maclauncher_live2d:\n" +
+    "    import os\n    import renpy.gl2.live2dmodel\n" +
+    "    original_load = renpy.gl2.live2dmodel.load\n" +
+    "    def load(name, original_load=original_load):\n" +
+    "        decoded = name.decode('utf-8') if isinstance(name, bytes) else name\n" +
+    "        if os.path.basename(decoded) == 'libLive2DCubismCore.dylib':\n" +
+    "            name = u" + JSON.stringify(t.libraryPath) + ".encode('utf-8')\n" +
+    "        return original_load(name)\n" +
+    "    renpy.gl2.live2dmodel.load = load\n";
+  const bootstrap = path.join(t.metadataDir, "00_maclauncher_live2d.rpy");
+  if (!fs.existsSync(bootstrap) || fs.readFileSync(bootstrap, "utf8") !== script) atomicBytes(bootstrap, Buffer.from(script));
+  return { ...environment, RENPY_SEARCHPATH: [environment.RENPY_SEARCHPATH, t.metadataDir].filter(Boolean).join("::") };
+}
 
 // Bounded metadata-only discovery; packed games remain unknown rather than being
 // treated as definitively free of Live2D. No scripts or game code are evaluated.
@@ -344,5 +374,5 @@ async function ensureSdkLibrary(install, options = {}) {
   }
 }
 
-module.exports = { SOURCE_URL, source, requirements, sdkTarget, describeSdk, performSdkAction, gameStatus, patchGame, removeGame,
+module.exports = { SOURCE_URL, source, requirements, sdkTarget, describeSdk, performSdkAction, gameStatus, patchGame, removeGame, launchEnvironment,
   detectModels, ensureSdkLibrary, target, status, importLibrary, removeLibrary, downloadLibrary };

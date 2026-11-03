@@ -42,13 +42,36 @@ function installed(context, dependencies = {}) {
   }
   return dependencies.preferredBackend ? result.sort((a, b) => Number(b.backend === dependencies.preferredBackend) - Number(a.backend === dependencies.preferredBackend)) : result;
 }
-function choices(context, dependencies) {
-  return { vulkanRuntimes: [{ value: "auto", label: "Automatic" }, ...installed(context, dependencies).map(item => ({ value: item.id, label: item.label }))] };
+function choices(context, dependencies = {}) {
+  const rows = installed(context, dependencies).map(item => ({ value: item.id, label: item.label }));
+  const add = (value, label) => { if (!rows.some(row => row.value === value)) rows.push({ value, label: label + " (download)" }); };
+  for (const manager of dependencies.managers || managers) {
+    const state = manager.getState({ userDataDir: context.userDataDir, settings: context.settings?.runtimes?.[manager.id] });
+    const listed = state.catalog?.installableVersions || state.catalog?.versions || [];
+    for (const version of listed) {
+      const pin = manager.core.listCatalog({ userDataDir: context.userDataDir }).find(pin => pin.version === version);
+      if (pin?.deprecated || pin && !Architecture.matchesArchitecture(pin, dependencies.architecture || Architecture.selectedArchitecture()) || state.catalog?.versionRequirements?.[version]?.installReason) continue;
+      add(manager.backend + ":" + version, state.versionLabels?.[version] || state.catalog?.versionLabels?.[version] || definitions[manager.backend].label + " " + version);
+    }
+    const automaticId = manager.backend + ":auto";
+    if (context.runtimeSettings?.vulkanRuntime === automaticId) {
+      const ready = rows.some(row => row.value.startsWith(manager.backend + ":"));
+      rows.push({ value: automaticId, label: definitions[manager.backend].label + (ready ? "" : " (download)") });
+    } else if (!listed.length && !rows.some(row => row.value.startsWith(manager.backend + ":"))) add(automaticId, definitions[manager.backend].label);
+  }
+  for (const item of managed.providers) {
+    const manager = dependencies.adaptedManager || item.manager;
+    const selection = manager.resolveSelection(null, context.settings, context.userDataDir, { verification: "status" });
+    if (selection.ready && context.runtimeSettings?.vulkanRuntime === item.selectionId) rows.push({ value: item.selectionId, label: manager.label });
+    else if (!selection.ready && (selection.version || selection.discoveryRequired)) add(item.selectionId, manager.label);
+  }
+  return { vulkanRuntimes: [{ value: "auto", label: "Automatic" }, ...rows] };
 }
 function resolve(context, dependencies = {}) {
   const request = context.runtimeSettings?.vulkanRuntime || "auto", available = installed(context, dependencies);
   const managedRequest = managed.providers.find(item => item.selectionId === request);
-  const selected = request === "auto" ? available.find(item => !item.sceneOnly || dependencies.sceneOperations) : managedRequest
+  const selected = request === "auto" ? available.find(item => !item.sceneOnly || dependencies.sceneOperations) : request.endsWith(":auto")
+    ? available.find(item => item.backend === request.slice(0, -5) && !item.projectId) : managedRequest
     ? available.find(item => item.projectId === managedRequest.projectId) : available.find(item => item.id === request);
   if (!selected && request === "auto") return null;
   if (!selected) throw new Error("The selected Vulkan library is unavailable for this Mac. Select an installed version in game Settings.");
@@ -59,19 +82,21 @@ function requirements(context, dependencies = {}) {
   const request = context.runtimeSettings?.vulkanRuntime || "auto";
   const managedRequest = managed.providers.find(item => item.selectionId === request || request.startsWith(item.prefix));
   if (!managedRequest) {
-    if (!dependencies.required) return [];
+    if (!dependencies.required && request === "auto") return [];
     const available = installed(context, dependencies);
-    const selected = request === "auto" ? available.find(item => !item.sceneOnly || dependencies.sceneOperations) : available.find(item => item.id === request);
+    const selected = request === "auto" ? available.find(item => !item.sceneOnly || dependencies.sceneOperations) : request.endsWith(":auto")
+      ? available.find(item => item.backend === request.slice(0, -5) && !item.projectId) : available.find(item => item.id === request);
     if (selected) {
       context.recordRuntimeUse?.({ managerId: selected.projectId || "vulkan-" + selected.backend, version: selected.version, sectionId: "default", sourcePath: path.dirname(selected.library) });
       return [];
     }
     const architecture = dependencies.architecture || Architecture.selectedArchitecture();
-    for (const manager of dependencies.managers || managers) {
+    const ordered = [...(dependencies.managers || managers)].sort((a, b) => Number(b.backend === dependencies.preferredBackend) - Number(a.backend === dependencies.preferredBackend));
+    for (const manager of ordered) {
       const name = manager.backend + ":";
       if (request !== "auto" && !request.startsWith(name)) continue;
       const entries = manager.core.listCatalog({ userDataDir: context.userDataDir });
-      const explicit = request === "auto" ? null : request.slice(name.length);
+      const explicit = request === "auto" || request === name + "auto" ? null : request.slice(name.length);
       const state = manager.getState({ settings: context.settings?.runtimes?.[manager.id], userDataDir: context.userDataDir });
       const selected = manager.resolveSelection(null, context.settings, context.userDataDir,
         { version: explicit || undefined, verification: "status" });
@@ -92,6 +117,8 @@ function requirements(context, dependencies = {}) {
   const prefix = managedRequest.prefix, manager = dependencies.adaptedManager || managedRequest.manager;
   const version = request.startsWith(prefix) ? request.slice(prefix.length) : undefined;
   const selection = manager.resolveSelection(null, context.settings, context.userDataDir, { version, verification: "status" });
+  if (!selection.version && selection.discoveryRequired) return [{ managerId: manager.id, version: null,
+    discoveryRequired: true, requiresDownload: true, installOptions: {} }];
   if (!selection.version) throw new Error(selection.reason || "A compatible " + manager.label + " package is unavailable.");
   if (dependencies.architecture && !selection.ready) {
     const pin = manager.core.listCatalog({ userDataDir: context.userDataDir }).find(item => item.version === selection.version);

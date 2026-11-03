@@ -125,6 +125,44 @@ test("Universal installs and legacy sibling directories are reused by both app C
     assert.equal(apple.resolveSelection({}, {}, directory, {version: "1.0", architecture: "arm64"}).install.installDir, legacy);
   }
 });
+test("one Intel package is reused across CPU and flat layouts without duplicate rows or downloads", {skip: process.platform !== "darwin"}, async t => {
+  const {createHash} = require("node:crypto");
+  const hash = bytes => createHash("sha256").update(bytes).digest("hex");
+  const bytes = executable("x64"), archiveSha256 = hash("same publisher archive");
+  for (const layouts of [["arm64"], [""], ["x64"], ["universal"], ["arm64", ""]]) await t.test(layouts.join(" + ") || "flat", async t => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-shared-intel-"));
+    t.after(() => fs.rmSync(directory, {recursive: true, force: true}));
+    const pin = {version: "1.0", upstreamRevision: "same-source", hostArchitectures: ["arm64", "x64"],
+      asset: {url: "https://example.test/engine.zip", filename: "engine.zip", sha256: archiveSha256}};
+    for (const layout of layouts) {
+      const installed = path.join(directory, "runtimes/shared-intel", layout, pin.version);
+      fs.mkdirSync(installed, {recursive: true});
+      fs.writeFileSync(path.join(installed, "engine"), bytes, {mode: 0o755});
+      fs.writeFileSync(path.join(installed, "runtime.json"), JSON.stringify({version: pin.version,
+        upstreamRevision: pin.upstreamRevision, architecture: "x64", source: "download", catalogEntry: pin,
+        executableRelative: "engine", binarySha256: hash(bytes), archiveSha256}));
+    }
+    let downloads = 0;
+    const manager = Architecture.withArchitecture("arm64", () => createPinnedNativeManager({id: "shared-intel", label: "Shared Intel",
+      discoverCatalog: async () => [pin], resolveExecutable: root => path.join(root, "engine"),
+      dependencies: {hostArch: "arm64", hostCapabilities: {platform: "darwin", hardwareArch: "arm64", rosettaAvailable: true},
+        downloadToFile: () => { downloads++; assert.fail("A verified package must be reused without downloading"); },
+        extractArchive: () => assert.fail("An existing package needs no extraction")}}));
+    await manager.refreshCatalog({userDataDir: directory, force: true});
+    const expected = path.join(directory, "runtimes/shared-intel", layouts.includes("") ? "" : layouts[0], pin.version);
+    for (const architecture of ["arm64", "x64"]) {
+      const installed = await manager.installRuntime({userDataDir: directory, version: pin.version, architecture});
+      assert.equal(installed.installDir, expected);
+      assert.equal(installed.binarySha256, hash(bytes));
+      assert.equal(installed.needsRosetta, true);
+    }
+    const rows = manager.getState({userDataDir: directory}).installed;
+    assert.equal(rows.length, 1, "Both build choices resolve the same existing package");
+    assert.equal(rows[0].installDir, expected);
+    assert.equal(rows[0].ready, true);
+    assert.equal(downloads, 0);
+  });
+});
 test("a Builds record published later for the other CPU appears in the catalog with no code change", async t => {
   const {createProjectBuildManager} = require("../src/modules/shared/runtime/project-build-manager");
   const projectId = "later-cpu", repository = "ExampleOwner/runtime-builds", version = "1.0.0-MCLv1";

@@ -78,6 +78,41 @@ test("Onsyuri web retains the trusted launch context when delegating to NW.js", 
   assert.equal(fs.readFileSync(path.join(game, "0.txt"), "utf8"), "*define\ngame\n*start\nend\n");
 });
 
+test("native Yuri retains original cwd and saves, including the required UTF filename adapter", async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-onsyuri-original-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const game = path.join(root, "game"), runtime = path.join(root, "runtime"), profile = path.join(root, "profile");
+  fs.mkdirSync(game); fs.mkdirSync(runtime);
+  const binary = path.join(runtime, "onsyuri"); fs.writeFileSync(binary, "fixture executable; spawn is stubbed");
+  fs.writeFileSync(path.join(game, "ons.cfg"), "original config");
+  t.mock.method(Runtime, "listInstalledMac", () => [{ version: "fixture", variant: "arm64", installDir: runtime, executablePath: binary }]);
+  const launches = [], entry = { gameId: "original", gamePath: game, contentRootDir: game };
+  const context = { userDataDir: profile, settings: {}, runtimeSettings: {}, moduleSettings: {},
+    spawnDetachedChecked: (...args) => { launches.push(args); return {}; } };
+  fs.writeFileSync(path.join(game, "0.txt"), "*define\ngame\n*start\nend\n");
+  await Module.launchRuntime("onsyuri_mac", entry, context);
+  assert.equal(launches[0][2].cwd, game);
+  assert.deepEqual(launches[0][1].slice(0, 2), ["--root", game]);
+  assert.equal(launches[0][1].includes("--save-dir"), false);
+  fs.renameSync(path.join(game, "0.txt"), path.join(game, "0.utf"));
+  await Module.launchRuntime("onsyuri_mac", entry, context);
+  const adapted = launches[1][1][1];
+  assert.equal(fs.realpathSync(path.join(adapted, "0.txt")), fs.realpathSync(path.join(game, "0.utf")));
+  assert.equal(launches[1][2].cwd, game);
+  assert.equal(launches[1][1][launches[1][1].indexOf("--save-dir") + 1], game + path.sep);
+  assert.ok(launches[1][1].includes("--enc:utf8"));
+  fs.writeFileSync(path.join(adapted, "player-created-save.dat"), "keep unique private bytes");
+  await Module.launchRuntime("onsyuri_mac", entry, context);
+  assert.equal(fs.readFileSync(path.join(adapted, "player-created-save.dat"), "utf8"), "keep unique private bytes");
+  fs.renameSync(adapted, adapted + "-preserved");
+  fs.symlinkSync(game, adapted);
+  await assert.rejects(Module.launchRuntime("onsyuri_mac", entry, context), /must not be aliases/);
+  assert.equal(fs.existsSync(path.join(game, "0.txt")), false, "an unsafe adapter alias must never add files to the original game");
+  assert.equal(fs.readFileSync(path.join(adapted + "-preserved", "player-created-save.dat"), "utf8"), "keep unique private bytes");
+  assert.equal(fs.readFileSync(path.join(game, "ons.cfg"), "utf8"), "original config");
+  assert.equal(fs.existsSync(path.join(profile, "games", "original", "modules", "nscripter", "yuri")), false);
+});
+
 test("external NScripter apps use their native executable for effects and retain Launch Services when disabled", async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-onsyuri-app-effects-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

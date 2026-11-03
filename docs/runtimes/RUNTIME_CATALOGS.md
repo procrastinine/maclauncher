@@ -59,6 +59,8 @@ Neither catalog states a minimum macOS version; installation reads it from the d
 
 A successful catalog result is cached in the process for six hours, and `force: true` bypasses that cache. A failed request keeps the last valid rows and the time of the last successful query, and it can be retried immediately.
 
+A failed download-list refresh appears as **Last refresh failed**, with its recorded failure date. Older cached failures without that date say **date unavailable**; the last successful query time is not used as a failure date. URL user names and passwords are removed from error text and installation reasons before caching or display. Existing cached errors are sanitized when read, without rewriting the profile merely to remove old error text.
+
 For ordinary release catalogs, backend callers can request `latestOnly: true`. Leaving it out requests the full list, and the runtime panels always request the full list. GitHub Actions catalogs treat a missing `latestOnly` as the short newest-build scan, and `latestOnly: false` requests the longer history, which is what the **All versions** button sends. The cache records which mode a result came from, so a short result never answers a full refresh. A full refresh that arrives during a short request waits for it and then fetches the history. Concurrent requests for the same mode share one pending request.
 
 The latest available version comes from the remote catalog. The selected default and the latest installed version are tracked separately.

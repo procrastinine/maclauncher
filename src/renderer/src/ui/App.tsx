@@ -24,7 +24,8 @@ import type {
   RuntimeUiState,
   UtilityWindowRequest,
   SaveFileInfo,
-  SaveInfo
+  SaveInfo,
+  StartupMigration
 } from "./types";
 import {
   readRuntimeSettingsContext,
@@ -44,7 +45,9 @@ import { LiveVariablesWindow, readLiveVariableEditorContext } from "./components
 import { SaveToolsModal } from "./components/modals/SaveToolsModal";
 import { CheatsModal } from "./components/modals/CheatsModal";
 import { SettingsView } from "./components/SettingsView";
+import { revealGraphicsSection } from "./components/EffectsControls";
 import { CreditsView } from "./components/CreditsView";
+import { AppActionPicker } from "./components/AppActionPicker";
 import { RuntimesView } from "./components/RuntimesView";
 import { resolveInspectorRuntimeSection } from "./components/runtime-inspector-model";
 import { groupRuntimeManagers, managedRuntimeSections, runtimeManagementPresentation, runtimePendingAction, runtimeRemovalPresentation,
@@ -174,6 +177,7 @@ export default function App() {
   const [selectedGamePath, setSelectedGamePath] = useState<string | null>(null);
   const [draggingGamePath, setDraggingGamePath] = useState<string | null>(null);
   const [dragOrderPaths, setDragOrderPaths] = useState<string[] | null>(null);
+  const [revealGamePath, setRevealGamePath] = useState<string | null>(null);
   const [addDropActive, setAddDropActive] = useState(false);
   const addDropDepth = useRef(0);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -198,6 +202,15 @@ export default function App() {
     }, error => setError(String(error?.message || error)));
   }, [api, failureRecovery, setError]);
 
+  const [startupMigration, setStartupMigration] = useState<StartupMigration | null>(null);
+  useEffect(() => {
+    if (!api?.onStartupMigration || !api.getStartupMigration || isSecondaryView) return;
+    let received = false;
+    const unsubscribe = api.onStartupMigration(progress => { received = true; setStartupMigration(progress); });
+    api.getStartupMigration().then(progress => { if (!received) setStartupMigration(progress); }).catch(() => {});
+    return unsubscribe;
+  }, [api, isSecondaryView]);
+
   useEffect(() => {
     inspectionRequests.retain((state?.recents || []).map(game => game.gamePath));
   }, [inspectionRequests, state?.recents]);
@@ -212,12 +225,14 @@ export default function App() {
 
   useEffect(() => {
     if (!api?.onGameImported || isSecondaryView) return;
-    return api.onGameImported(gamePath => {
+    return api.onGameImported((gamePath, options) => {
       setSearchQuery("");
       setGameTypeFilter({});
       setLibraryScope("all");
       setSelectionMode(false);
       setSelectedGamePath(gamePath);
+      setRevealGamePath(gamePath);
+      if (options?.graphics) revealGraphicsSection(gamePath);
       setInspectorOpen(true);
       setError(null);
     });
@@ -471,7 +486,8 @@ export default function App() {
       filterGames(
         sortLibraryGames(orderedGames, librarySort, favoriteIds),
         searchQuery,
-        gameTypeOptions.length > 0 ? activeGameTypeIds : null
+        gameTypeOptions.length > 0 ? activeGameTypeIds : null,
+        gameTypeOptions.map(option => option.id)
       ).filter(game => libraryScope === "all" || (libraryScope === "favorites"
         ? favorites.has(game.gameId) : (state?.running?.[game.gamePath] || 0) > 0)),
     [orderedGames, librarySort, favoriteIds, favorites, searchQuery, activeGameTypeIds, gameTypeOptions.length, libraryScope, state?.running]
@@ -481,6 +497,15 @@ export default function App() {
     () => visibleGames.find(g => g.gamePath === selectedGamePath) || null,
     [visibleGames, selectedGamePath]
   );
+
+  // An imported game or a started session scrolls into view once it is listed.
+  useEffect(() => {
+    if (!revealGamePath) return;
+    const index = visibleGames.findIndex(game => game.gamePath === revealGamePath);
+    if (index < 0) return;
+    listRef.current?.querySelectorAll<HTMLElement>(".gameItem")[index]?.scrollIntoView({ block: "nearest" });
+    setRevealGamePath(null);
+  }, [revealGamePath, visibleGames]);
 
   // A located game keeps its ID under a new path, and the selection follows it.
   const selectedIdentity = useRef<{ gameId: string; gamePath: string } | null>(null);
@@ -1365,6 +1390,13 @@ export default function App() {
     }
   }, [api]);
 
+  const onRemoveSessionTarget = useCallback(async function onRemoveSessionTarget(gamePath: string, id: string) {
+    if (!api?.removeSessionTarget) return;
+    setError(null);
+    try { await api.removeSessionTarget(gamePath, id); }
+    catch (e: any) { setError(String(e?.message || e)); }
+  }, [api]);
+
   const onForgetGame = useCallback(async function onForgetGame(gamePath: string) {
     if (!api) return;
     const ok = await confirmAction({ message: "Forget this game?", detail: "Its launcher data is removed. Original files stay on disk.",
@@ -1811,6 +1843,7 @@ export default function App() {
   const libraryActions = useMemo<LibraryActions>(() => ({
     onPlay,
     onStop,
+    onRemoveSessionTarget,
     onMoveGame,
     onSetFavorite,
     onSaveGameNotes,
@@ -1840,7 +1873,7 @@ export default function App() {
     onUnpatchCheatsFromGame,
     onModuleAction, onCancelModuleAction, onRevealToolPath
   }), [
-    onPlay, onStop, onMoveGame, onSetFavorite, onSaveGameNotes, onToggleSelection, onOpenSaveTools, openCheats, onCreateCommand,
+    onPlay, onStop, onRemoveSessionTarget, onMoveGame, onSetFavorite, onSaveGameNotes, onToggleSelection, onOpenSaveTools, openCheats, onCreateCommand,
     onForgetGame, onLocateGame, onReveal, onPickSaveDir, onResetSaveDir, onSetRuntime, onSetNetworkAccess, onSetSteamClientStart, onSetLaunchArguments,
     onOpenRuntimeSettings, onSetRuntimeData, openRuntimesManager, onRuntimeInstall,
     refreshLibsPatchStatus, onPatchLibs, onUnpatchLibs, onSetGameLibVersion,
@@ -1960,6 +1993,7 @@ export default function App() {
         onSetLauncherSettings={onSetLauncherSettings} onSetModuleSettings={onSetModuleSettings}
         onAppUpdate={api?.appUpdate ? action => { void api.appUpdate(action).catch((e: any) => setError(String(e?.message || e))); } : undefined}
       />}
+      {api && utilityWindowContext.view === "appAction" && <AppActionPicker api={api} />}
       {state && utilityWindowContext.view === "credits" && <CreditsView
         acknowledgments={acknowledgments} canOpenExternal={canOpenExternal} onOpenLink={onOpenAcknowledgmentsLink}
       />}
@@ -1976,6 +2010,25 @@ export default function App() {
         onRuntimeSetDefault={onRuntimeSetDefault} onRuntimeUninstall={onRuntimeUninstall}
         onCancelDownload={id => api?.cancelDownload(id)} onOpenSource={canOpenExternal ? onOpenAcknowledgmentsLink : undefined}
       />}
+    </div>;
+  }
+
+  // The library appears once the one-time migration has finished. Until then
+  // the window shows its progress and accepts no drops or other input.
+  if (!state && startupMigration) {
+    const refuseDrop = (event: React.DragEvent) => { event.preventDefault(); event.dataTransfer.dropEffect = "none"; };
+    return <div className="app" onDragOver={refuseDrop} onDrop={refuseDrop}>
+      <header className="header">
+        <div className="headerLeft">
+          <img className="brandLogo" src={launcherLogo} alt="" />
+          <div className="title">MacLauncher</div>
+        </div>
+      </header>
+      <main className="startupMigration" role="status">
+        <div>Updating the library from an earlier MacLauncher version…</div>
+        <progress aria-label="Library update progress" max={startupMigration.total} value={startupMigration.done} />
+        <div className="dim">{startupMigration.done} of {startupMigration.total} {startupMigration.total === 1 ? "game" : "games"}</div>
+      </main>
     </div>;
   }
 

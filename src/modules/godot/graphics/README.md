@@ -5,13 +5,16 @@ native temporal upscalers. It supports the Metal Forward+ renderer, finite
 perspective cameras and single-view viewports. Compatibility, Mobile, XR,
 orthographic and custom oblique projections retain the engine's rendering path.
 
-Managed Godot launches and recognized native Godot app bundles receive an inactive
-autoload. Selecting a temporal method attaches a compositor effect to each eligible
+Managed Godot launches and recognized native Godot app bundles receive the helper
+autoload when the saved effect plan has an enabled row that consumes scene inputs
+(`sceneDemand` in `src/modules/shared/effects/scene-demand.js`) or requests a
+different source size. Other launches run the original project or pack.
+Selecting a temporal method attaches a compositor effect to each eligible
 viewport's active camera and selects Godot's MetalFX Temporal input path. The shared
 graphics runtime applies the selected MetalFX or FidelityFX implementation. The
 Temporal selection leaves the game's render scale unchanged. Game default removes the camera effect and
 restores the original compositor and viewport scaler. Existing game compositor
-effects and later camera changes are preserved. The inactive helper reads only the
+effects and later camera changes are preserved. An inactive helper reads only the
 shared cached selection; it adds no render callback or GPU work.
 
 ## Render source control
@@ -48,8 +51,8 @@ Provider metadata advertises `sourceResolutionAPI: 1` for this script contract.
 The source adapter declares the bilinear, MetalFX and FSR 1 methods.
 Older provider stages expose camera support without render source controls.
 Stages with `sourceResolutionLiveAPI: 1` and the matching recorded autoload
-hash also advertise `sourceResolution.live: true`. A dormant control channel
-allows changes during play, including a launch with graphics effects off.
+hash also advertise `sourceResolution.live: true`. While the helper is loaded, a
+dormant control channel allows changes during play.
 It polls at 100 ms intervals without per-frame JSON parsing. A null request
 leaves the game's scale and filter unchanged until the helper owns a source
 override; removing an override restores only values still owned by the helper.
@@ -69,19 +72,27 @@ only when the candidate or applied state changes.
 The [Viewport documentation](https://docs.godotengine.org/en/4.4/classes/class_viewport.html#class-viewport-property-scaling-3d-scale)
 describes the 3D buffer scaling property.
 
-The launcher prepares a per-game `override.cfg`, keeping the original settings and
-autoloads. Packed games use a link to their original PCK; project launches use links
-to the original resources with a separate writable import cache. The game pack,
-project configuration, native executable and bundle remain unchanged. Project
-application settings continue to determine the save directory. The scripts and
-native library reside in the unpacked graphics runtime, outside Electron archives.
+Godot 4.4 reads `override.cfg` beside the file passed with `--main-pack`, from an
+automatically found pack and beside the executable, or in the `--path` project
+folder (`ProjectSettings::_setup` in `core/config/project_settings.cpp`).
+`application/config/project_settings_override` is read from the project's own
+settings, no command-line option adds a setting or autoload, and `--main-pack`
+accepts only pack files. A launch that loads the helper therefore receives a
+per-game `override.cfg` in `modules/godot/camera/<id>/` that keeps the original
+settings and autoloads. Packed games use a link to their original PCK; project
+launches use links to every original project entry, the `.godot` import cache
+included, so reads and writes reach the same files as a direct launch. The
+working directory stays the original game folder. The game pack, project
+configuration, native executable and bundle remain unchanged. Project application
+settings continue to determine the save directory. The scripts and native library
+reside in the unpacked graphics runtime, outside Electron archives.
 
 Graphics bridge preparation is optional at launch. An unavailable helper or an
 unwritable private override/cache leaves the original pack, project or native app
 as the launch target. The launch log reports the unavailable renderer controls;
 independent shared shader and spatial stages remain eligible. Saved graphics
-settings are preserved. An available inactive autoload is retained for live camera
-and source selection, without installing a camera render callback while inactive.
+settings are preserved. A row that needs the helper and is selected during a launch
+without it applies on the next launch.
 
 ## Camera and frame contract
 

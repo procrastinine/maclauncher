@@ -164,7 +164,7 @@ test('original ART System.load uses the shared production NativeBridge loader',a
  run(path.join(java,'bin/java'),['-cp',r8,'com.android.tools.r8.D8','--min-api','35','--output',dex,path.join(root,'probe.jar')]);
  fs.copyFileSync(path.join(dex,'classes.dex'),path.join(root,'probe.dex'));
  const contents=path.join(root,'apk'),libraries=path.join(contents,'lib/armeabi-v7a');fs.mkdirSync(libraries,{recursive:true});
- fs.copyFileSync(path.resolve(__dirname,'fixtures/android-framework-services/manifests/window.xml.bin'),path.join(contents,'AndroidManifest.xml'));
+ fs.copyFileSync(require('./helpers/manifest-fixtures').file(t,'android-framework-services/manifests/window'),path.join(contents,'AndroidManifest.xml'));
  fs.copyFileSync(path.join(dex,'classes.dex'),path.join(contents,'classes.dex'));
  fs.mkdirSync(path.join(contents,'assets/Scenes'),{recursive:true});
  fs.writeFileSync(path.join(contents,'assets/Scenes/mixed-name.scene'),Buffer.from(Array.from({length:8193},(_,i)=>i%251)));

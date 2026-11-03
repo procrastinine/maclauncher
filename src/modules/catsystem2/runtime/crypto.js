@@ -7,6 +7,7 @@ const declarations = require("./distribution-supplementals.json");
 const run = promisify(execFile), signatures = new Map();
 const VERSION = Included.declared(declarations, { id: "catsystem2-kif-crypto" })?.version, MAXIMUM = 64 * 1024 * 1024;
 
+// Included helper selection defaults to the launcher process CPU, including under Rosetta.
 async function resolveHelper({ resourcesRoot, helperVersion, platform = process.platform, arch = process.arch, dependencies = {} } = {}) {
   if (platform !== "darwin" || !["arm64", "x64"].includes(arch)) throw new Error("Encrypted KIF tools require an Apple Silicon or Intel Mac.");
   const pin = Included.declared(dependencies.declarations || declarations, { id: "catsystem2-kif-crypto", version: helperVersion, arch });

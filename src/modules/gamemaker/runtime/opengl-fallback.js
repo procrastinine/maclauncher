@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const Native = require("../../shared/runtime/local-native");
+const Host = require("../../shared/runtime/host-capabilities");
 const { readMachOLoadCommands } = require("../../shared/runtime/macho-load-commands");
 const Manager = require("./opengl-helper-manager");
 const { selectRuntimeVersion, managerDefaultVersion } = require("../../shared/runtime/version-choices");
@@ -35,7 +36,7 @@ function hasLegacyReceipt(userDataDir, helperVersion) {
   catch { return false; }
 }
 function checkHost() {
-  if (process.platform !== "darwin" || !["arm64", "x64"].includes(process.arch)) {
+  if (process.platform !== "darwin" || !["arm64", "x64"].includes(Host.getHostCapabilities().hardwareArch)) {
     throw new Error("The software OpenGL helper requires an Apple Silicon or Intel Mac.");
   }
 }
@@ -111,9 +112,9 @@ function drawsWithOpenGL(executablePath) {
 }
 function runtimeRequirements(entry, context, official, manager = Manager) {
   const mode = context.runtimeSettings?.softwareOpenGLFallback;
-  if (mode === false || mode === "disabled" || !official?.version) return [];
+  if (mode === "disabled" || !official?.version) return [];
   const selected = selection(entry, context, manager);
-  if (!selected.ready && mode !== true && mode !== "enabled" && official.install?.executablePath && !drawsWithOpenGL(official.install.executablePath)) return [];
+  if (!selected.ready && mode !== "enabled" && official.install?.executablePath && !drawsWithOpenGL(official.install.executablePath)) return [];
   return selected.ready ? [] : [{ managerId: manager.id, version: selected.version,
     ...(selected.discoveryRequired ? { discoveryRequired: true } : {}),
     requiresDownload: true, installOptions: {} }];

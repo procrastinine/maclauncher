@@ -93,15 +93,16 @@ test("Ruby CPU library lookup includes versioned Darwin siblings and invalidates
   assert.throws(() => f.prepare("ruby-symlink"), /runtime libraries must remain inside/);
 });
 
-test("two immutable-container games keep independent portable views with the same unchanged MKXP-Z executable", async t => {
+test("two extracted games keep original portable saves with the same unchanged MKXP-Z executable", async t => {
   const f = fixture(t), nativeBefore = treeIdentity(f.sourceApp), launches = [];
   t.mock.method(Manager.core, "resolveOwnedRuntime", () => f.source);
   const games = [entry(f, "container-a"), entry(f, "container-b")];
   for (const game of games) {
     game.moduleId = "rgss"; game.containerData = { extractedRoot: game.contentRootDir, key: game.gameId };
+    game.defaultSaveDir = game.contentRootDir;
     fs.writeFileSync(path.join(game.contentRootDir, "Game.rgss3a"), "immutable packed assets");
   }
-  const originals = treeIdentity(path.join(f.root, "originals"));
+  const packed = games.map(game => fs.readFileSync(path.join(game.contentRootDir, "Game.rgss3a")));
   const inputs = games.map(game => WritableRgss.prepareInput(game, { userDataDir: f.userDataDir }));
   let release; const barrier = new Promise(resolve => { release = resolve; });
   await Promise.all(inputs.map(input => Launcher.launchRuntime(options(f, input, async (command, args, opts) => {
@@ -116,9 +117,12 @@ test("two immutable-container games keep independent portable views with the sam
   assert.notEqual(inputs[0].defaultSaveDir, inputs[1].defaultSaveDir);
   for (let i = 0; i < games.length; i++) {
     assert.equal(games[i].contentRootDir, games[i].gamePath);
+    assert.equal(inputs[i], games[i]);
     assert.equal(fs.readFileSync(path.join(inputs[i].defaultSaveDir, "Save01.rvdata2"), "utf8"), games[i].gameId);
+    assert.deepEqual(fs.readFileSync(path.join(games[i].contentRootDir, "Game.rgss3a")), packed[i]);
+    assert.equal(fs.existsSync(path.join(f.userDataDir, "games", games[i].gameId, "modules", "rgss", "writable-input")), false);
   }
-  assert.deepEqual(treeIdentity(f.sourceApp), nativeBefore); assert.deepEqual(treeIdentity(path.join(f.root, "originals")), originals);
+  assert.deepEqual(treeIdentity(f.sourceApp), nativeBefore);
   assert.ok(!treeIdentity(path.join(f.userDataDir, "games")).some(([name]) => name.includes(".app/") || name.endsWith(".dylib")));
 });
 

@@ -1,6 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const {spawn}=require('node:child_process'),{once}=require('node:events');
+const {testEnvironment}=require('./helpers/fixture-process');
 
 test('composition authority failure still closes descriptors after every owned CPU helper exits',{timeout:15000},async t=>{
  const {startComposition}=await import('../src/modules/android/art/composition.mjs');
@@ -14,7 +15,7 @@ test('composition authority failure still closes descriptors after every owned C
  const owner={socketPath:path.join(root,'owner.sock'),identity:{pid:process.pid,uid:process.getuid(),securityContext:'u:r:system_server:s0',packageName:'android',processName:'android.system'},
   async enroll(){},async retire(){calls++;assert.ok(children.every(p=>p.exitCode!==null||p.signalCode!==null));throw failure;}};
  const spawnProcess=(name,command,args,options)=>{
-  const child=spawn(process.execPath,[fixture,root,name,JSON.stringify(args)],options);
+  const child=spawn(process.execPath,[fixture,root,name,JSON.stringify(args)],{...options,env:{...options.env,...testEnvironment}});
   child.closed=once(child,'close');child.closed.catch(()=>{});children.push(child);return child;
  };
  t.after(async()=>{

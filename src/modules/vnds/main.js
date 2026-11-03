@@ -24,7 +24,10 @@ module.exports = {
   id: manifest.id, manifest, detectGame, save: Save, runtimeManagers: [Interpreter],
   normalizeRuntimeId: () => RUNTIME,
   resolveSaveLocations: Preparation.saveLocations,
-  onImport: (entry, context) => { const locations = Preparation.saveLocations(entry, context); entry.defaultSaveDir = locations.primaryDirectory; entry.saveLocations = locations.directories; },
+  resolveSaveIdentity: Preparation.resolveSaveIdentity,
+  onImport: (entry, context) => {
+    const locations = Preparation.saveLocations(entry, context); entry.defaultSaveDir = locations.primaryDirectory; entry.saveLocations = locations.directories;
+  },
   ensureRuntime: (entry, context) => Love.ensureRuntime(hostEntry(entry), { ...context, runtimeId: "love" }),
   getRuntimeRequirements: (entry, context) => {
     const interpreter = Interpreter.resolveSelection(entry, context.settings, context.userDataDir);

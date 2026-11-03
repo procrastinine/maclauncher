@@ -15,6 +15,7 @@ function declaration(version = HELPER_VERSION) {
   return item;
 }
 
+// Included helper selection defaults to this launcher process; injection validates the game CPU separately.
 async function resolveConfigHelper({ resourcesRoot, helperVersion, platform = process.platform, arch = process.arch, dependencies = {} } = {}) {
   if (platform !== "darwin" || !["arm64", "x64"].includes(arch)) throw new Error("MKXP-Z config isolation requires an Apple Silicon or Intel Mac.");
   const included = Included.inspectIncluded(declarations, { id: "mkxpz-config-helper", version: helperVersion, arch, resourcesRoot,

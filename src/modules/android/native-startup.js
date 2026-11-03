@@ -1,7 +1,7 @@
 const namespace = require("./runtime-source").json("native/resources/storage-namespace.json");
 
 const namespaceKeys = Object.freeze([...Object.keys(namespace.environment), ...Object.keys(namespace.partitions)]);
-const systemKeys = Object.freeze(["PATH", "LANG", "LC_ALL", "LC_CTYPE", "TZ"]);
+const systemKeys = Object.freeze(["PATH", "LANG", "LC_ALL", "LC_CTYPE", "TZ", "DYLD_FALLBACK_LIBRARY_PATH"]);
 const variable = "KL_ANDROID_NATIVE_STARTUP_ENVIRONMENT";
 
 /** Encode an explicitly admitted environment, independently of the host process. */
@@ -22,7 +22,7 @@ function encodeEnvironment(values) {
   return "1:" + Buffer.concat(parts, size).toString("base64url");
 }
 
-/** Namespace paths and the launcher's already admitted locale settings only. */
+/** Namespace paths, locale settings and verified package loader paths. */
 function environment({ androidEnvironment, systemEnvironment, home, temporary }) {
   const values = Object.create(null);
   for (const [keys, source] of [[namespaceKeys, androidEnvironment], [systemKeys, systemEnvironment]])

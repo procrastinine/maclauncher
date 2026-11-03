@@ -103,6 +103,7 @@ function sourceLayout(appPath, architectures) {
   if (!config) return { sourceConfigDir: game, configLayout: "bundle-game", runtimeRubyLoadpaths: [] };
   if (!config.isFile() || config.isSymbolicLink()) throw new Error("MKXP-Z publisher config must be a regular file.");
   const runtimeRubyLoadpaths = [], library = path.join(parent, "stdlib");
+  // Ruby native load paths follow the selected child runtime ABI, defaulting to the launcher CPU.
   const hostCPU = process.arch === "x64" ? "x86_64" : process.arch;
   const cpu = architectures.includes(hostCPU) ? hostCPU : architectures[0];
   const directories = [library];

@@ -51,6 +51,7 @@ function prepareMethod(method,value,context) {
 // A dormant process needs the immutable path for future live selections. This
 // is an authorization candidate, not provider discovery or compatibility proof.
 // Explicit preparation validates the provider and its complete closure.
+// The game ABI defaults to the launcher CPU; physical hardware separately gates neural support.
 function libraryPath(root, {platform = process.platform, graphicsArchitecture = process.arch,hostArchitecture:physicalHost} = {}) {
   return platform === "darwin" && (physicalHost==null||physicalHost==="arm64") && ["arm64","x64","x86_64"].includes(graphicsArchitecture) && path.isAbsolute(root || "") ?
     path.join(root, "neural", Source.library) : null;
@@ -60,6 +61,7 @@ function hostSupported({ platform = process.platform, macOSVersion, hostArchitec
   return Requirements.requirementSupport(Requirements.NEURAL, {platform, hardwareArch: physicalHost || hostArchitecture(),
     macOSVersion: macOSVersion || Native.systemVersionSync()}).supported === true;
 }
+// This process ABI chooses in-process loading or the ARM service; hardware eligibility stays separate.
 function resolve(root, { platform = process.platform, macOSVersion, graphicsArchitecture = process.arch,hostArchitecture:physicalHost } = {}) {
   if (!hostSupported({platform, macOSVersion, hostArchitecture: physicalHost}) || !["arm64","x64","x86_64"].includes(graphicsArchitecture)) return null;
   try {

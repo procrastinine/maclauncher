@@ -36,7 +36,8 @@ function safeInteger64(record, offset) {
   return Number(value);
 }
 
-function identity(stat) { return [stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs].join(":"); }
+const FileSignature = require("../shared/file-signature");
+function identity(stat) { return FileSignature.signature(stat); }
 
 function inspectArchive(file, { detection, maximumIndexBytes = LIMITS.indexBytes } = {}) {
   const stat = fs.lstatSync(file);
@@ -87,10 +88,10 @@ function readMember(archive, member, { detection, maximumBytes = LIMITS.memberBy
     !Number.isSafeInteger(maximumBytes) || maximumBytes < 0 || maximumBytes > LIMITS.memberBytes || member.storedBytes > maximumBytes ||
     !Number.isSafeInteger(maximumOutput) || maximumOutput < 0 || maximumOutput > LIMITS.memberBytes || member.decodedBytes > maximumOutput) throw new Error("MPK member exceeds its extraction bounds.");
   const current = fs.lstatSync(archive.file);
-  if (!current.isFile() || current.isSymbolicLink() || identity(current) !== archive.identity) throw new Error("MPK archive changed during inspection.");
+  if (!current.isFile() || current.isSymbolicLink() || !FileSignature.same(identity(current), archive.identity)) throw new Error("MPK archive changed during inspection.");
   const fd = detection?.readBytes ? null : fs.openSync(archive.file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
   try {
-    if (fd !== null && identity(fs.fstatSync(fd)) !== archive.identity) throw new Error("MPK archive changed during inspection.");
+    if (fd !== null && !FileSignature.same(identity(fs.fstatSync(fd)), archive.identity)) throw new Error("MPK archive changed during inspection.");
     const bytes = boundedRead(fd, archive.file, member.offset, member.storedBytes, detection);
     const output = member.compression === 1 ? zlib.inflateSync(bytes, { maxOutputLength: Math.max(1, member.decodedBytes) }) : bytes;
     if (output.length !== member.decodedBytes) throw new Error("MPK decoded size differs from its index.");

@@ -28,6 +28,7 @@ function fixture(overrides = {}) {
     preparePython: step('python', { python: 'arm64', installed: false }),
     prepareSevenZip: step('7zip', { version: '26.00', architecture: 'universal' }),
     prepareDeclaredPublishers: step('publishers', { files: 1 }),
+    prepareCp932: step('cp932', { generated: false }),
     fetchPackages: step('packages', { packages: lock.packages.length }),
     ...overrides
   };
@@ -37,12 +38,13 @@ function fixture(overrides = {}) {
 test('developer installation uses the app lock and the existing publisher and sealed-package preparation paths', async () => {
   const f = fixture();
   const result = await Setup.prepareDevelopmentInputs(f.options);
-  assert.deepEqual(f.calls.map(row => row.name), ['electron', 'lock', 'python', '7zip', 'publishers', 'packages']);
-  assert.deepEqual(f.calls[1].options, { repoRoot: '/source', arch: 'arm64' });
-  assert.deepEqual(f.calls[2].options, { repoRoot: '/source', arch: 'arm64' });
+  assert.deepEqual(f.calls.map(row => row.name), ['electron', 'cp932', 'lock', 'python', '7zip', 'publishers', 'packages']);
+  assert.deepEqual(f.calls.find(row=>row.name==='lock').options, { repoRoot: '/source', arch: 'arm64' });
+  assert.deepEqual(f.calls.find(row=>row.name==='cp932').options, { repoRoot: '/source' });
+  assert.deepEqual(f.calls.find(row=>row.name==='python').options, { repoRoot: '/source', arch: 'arm64' });
   assert.deepEqual(f.calls.at(-1).options, { repoRoot: '/source', lock: f.lock });
   assert.deepEqual(result, { electron: true, arch: 'arm64', nativePackages: 1, python: 'arm64', installed: false,
-    sevenZip: { version: '26.00', architecture: 'universal' }, publishers: { files: 1 } });
+    sevenZip: { version: '26.00', architecture: 'universal' }, publishers: { files: 1 }, cp932: { generated: false } });
 });
 
 test('an explicit Intel setup selects the Intel lock and Python without rewriting the selection', async () => {
@@ -55,8 +57,8 @@ test('an explicit Intel setup selects the Intel lock and Python without rewritin
 
 test('other platforms install Electron without acquiring Mac packages or publisher inputs', async () => {
   const f = fixture({ platform: 'linux', arch: 'x64' });
-  assert.deepEqual(await Setup.prepareDevelopmentInputs(f.options), { electron: true, nativePackages: 0, platform: 'linux' });
-  assert.deepEqual(f.calls.map(row => row.name), ['electron']);
+  assert.deepEqual(await Setup.prepareDevelopmentInputs(f.options), { electron: true, nativePackages: 0, platform: 'linux', cp932: { generated: false } });
+  assert.deepEqual(f.calls.map(row => row.name), ['electron', 'cp932']);
 });
 
 test('a failed included download remains an installation failure rather than a successful partial setup', async () => {

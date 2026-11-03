@@ -44,6 +44,23 @@ test("MV/MZ prefer patched NW.js from any usable installed version without a gam
   }
   assert.equal(fs.existsSync(path.join(f.userDataDir, "settings.json")), false);
 });
+test("a Rosetta launcher can use an installed ARM NW.js SDK on Apple Silicon", { skip: !mac }, t => {
+  const Host = require("../src/modules/shared/runtime/host-capabilities");
+  const descriptor = Object.getOwnPropertyDescriptor(process, "arch");
+  Object.defineProperty(process, "arch", { ...descriptor, value: "x64" });
+  t.after(() => Object.defineProperty(process, "arch", descriptor));
+  let hardwareArch = "arm64";
+  t.mock.method(Host, "getHostCapabilities", () => ({ platform: "darwin", launcherArch: process.arch, hardwareArch,
+    translated: hardwareArch === "arm64", rosettaAvailable: hardwareArch === "arm64", macOSVersion: "26.0" }));
+  t.mock.method(Nwjs.core, "listInstalled", () => assert.fail("Use the cached installed inventory"));
+  t.mock.method(Nwjs, "refreshCatalog", () => assert.fail("Selection stays offline"));
+  const f = fixture(t, { state: { installed: [{ ...usable, platformKey: "osx-arm64" }] } });
+  for (const id of ["mv", "mz"]) assert.equal(f.select(id), "nwjs-patched");
+  hardwareArch = "x64";
+  for (const id of ["mv", "mz"]) assert.equal(f.select(id), "electron");
+  f.setState({ installed: [usable] });
+  for (const id of ["mv", "mz"]) assert.equal(f.select(id), "nwjs-patched");
+});
 
 test("MV/MZ use Electron when NW.js is absent, damaged or incompatible with the host", t => {
   t.mock.method(Nwjs.core, "listInstalled", () => assert.fail("A missing snapshot must not trigger a scan"));

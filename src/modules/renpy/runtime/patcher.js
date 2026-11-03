@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../../shared/copy-file");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
@@ -233,7 +234,7 @@ function patchGame({
   const preexistingLib = existsDir(targetLibDir);
   if (!preexistingLib) {
     ensureDir(path.dirname(targetLibDir));
-    fs.cpSync(sdkLib.dir, targetLibDir, { recursive: true, verbatimSymlinks: true });
+    cloneOrCopySync(sdkLib.dir, targetLibDir);
   }
 
   const renpyBinaryPath = path.join(targetLibDir, "renpy");
@@ -243,7 +244,7 @@ function patchGame({
     if (!existsFile(renpyBinaryPath)) {
       throw new Error("Ren'Py mac binary not found in SDK libs.");
     }
-    fs.copyFileSync(renpyBinaryPath, baseBinaryPath);
+    cloneOrCopySync(renpyBinaryPath, baseBinaryPath);
   }
 
   ensureExecutable(renpyBinaryPath);

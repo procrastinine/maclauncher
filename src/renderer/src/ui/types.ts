@@ -281,7 +281,9 @@ export type EffectCatalogRow = { id: string; kind: VideoEffectNode["kind"]; labe
   inputContract?: {domain: "image" | "scene" | "image-pair"; color: "rgb"; requires: string[]; acceptsSynthetic: boolean; history?: string; derives?: string[];requiresResizeContext?:"upscale"};
   outputContract?: {domain: "image" | "timeline"; sizing: "preserve" | "intrinsic" | "stage" | "scene-output" | "shader";preservesSize?:boolean;compositeTarget?:boolean;geometryRules?:Array<{stages:string[];width:string;height:string;when?:string}>; scale?: number | {x: number; y: number};scaleRange?:{min:{x:number;y:number};max:{x:number;y:number}}; direction?: "downsample" | "upscale"; resizeDirections?:Array<"downsample"|"upscale">;resizeContext?:"upscale"; extentEditable?: boolean; phases?: "midpoint" | "explicit"; maximumMultiplier?: number; multipliers?: number[]};
   template: VideoEffectTemplate;
-  available: boolean; availableWithoutModel?: boolean; availableWithoutInputs?: boolean; reason?: string; requirements?: string[]; pendingInputs?: string[]; inputsAbsent?: boolean; inputReason?: string };
+  available: boolean; availableWithoutModel?: boolean; availableWithoutInputs?: boolean; reason?: string; requirements?: string[]; pendingInputs?: string[]; inputsAbsent?: boolean; inputReason?: string;
+  /** The frame source can never supply this method's inputs; `replacement` names a working method of its kind. */
+  sourceUnsupported?: boolean; replacement?: string };
 export type MetalFXHardwareOperation = {supported:boolean;metal4Supported:boolean;minimumMacOS:string;minScale?:number;maxScale?:number;reason?:string;metal4Reason?:string};
 export type GraphicsHardware = {state:"unknown"|"ready";reason?:string;macOSVersion?:string;
   device?:{name:string|null;registryID:string|null};
@@ -400,6 +402,8 @@ export type RecentGame = {
   moduleSupports: ModuleSupports;
   /** A session entry, such as window graphics, that exists only while it runs. */
   ephemeral?: boolean;
+  /** The windows, apps or displays a running session serves; each can be removed. */
+  sessionTargets?: Array<{ id: string; label: string; detail?: string }>;
   gameType: string | null;
   indexDir: string | null;
   indexHtml: string | null;
@@ -508,7 +512,7 @@ export type GamePreparation = {
 export type GameFailure = { gamePath: string; message: string };
 export type ImportProgress = { inputPath: string; phase: string; completed?: number; total?: number; cached?: boolean };
 
-export type UtilityWindowRequest = { view: "settings" | "runtimes" | "credits" | "external"; managerId?: string; sectionId?: string; shaderCategory?: string; activate?: boolean };
+export type UtilityWindowRequest = { view: "settings" | "runtimes" | "credits" | "external" | "appAction"; managerId?: string; sectionId?: string; shaderCategory?: string; moduleId?: string; actionId?: string; activate?: boolean };
 export type UtilityWindowContext = Omit<UtilityWindowRequest,"activate"> & { revision?: number };
 
 export type LauncherState = {
@@ -550,6 +554,7 @@ export type AppUpdateState = {
 };
 
 export type LauncherActivity = Partial<Pick<LauncherState, "running" | "preparing" | "importing" | "downloads" | "appUpdate">>;
+export type StartupMigration = { done: number; total: number };
 
 export type RuntimeSettingsContext = {
   scope: "module" | "game";
@@ -640,6 +645,10 @@ declare global {
         getState(): Promise<LauncherState>;
         prioritizeGame?(gamePath: string): Promise<boolean>;
         openUtilityWindow(request: UtilityWindowRequest): Promise<boolean>;
+        appActionPickerState: import("./components/AppActionPicker").AppActionPickerApi["appActionPickerState"];
+        chooseAppActionTarget: import("./components/AppActionPicker").AppActionPickerApi["chooseAppActionTarget"];
+        openAppActionPickerLink: import("./components/AppActionPicker").AppActionPickerApi["openAppActionPickerLink"];
+        onAppActionPicker: import("./components/AppActionPicker").AppActionPickerApi["onAppActionPicker"];
         steamState: import("./components/SteamView").SteamApi["steamState"];
         steamScan: import("./components/SteamView").SteamApi["steamScan"];
         steamImport: import("./components/SteamView").SteamApi["steamImport"];
@@ -700,6 +709,7 @@ declare global {
         launchGameWithRuntime(gamePath: string, runtime: RuntimeId): Promise<boolean>;
         createGameCommand(gamePath: string): Promise<string | null>;
         stopGame(gamePath: string): Promise<boolean>;
+        removeSessionTarget?(gamePath: string, id: string): Promise<boolean>;
         setGameRuntime(gamePath: string, runtime: RuntimeId): Promise<boolean>;
         listEffectsPresets(): Promise<EffectsPreset[]>;
         getEffectsPresetNotices?(): Promise<GraphicsNotice[]>;
@@ -805,8 +815,11 @@ declare global {
         confirmAction?(request: ConfirmActionRequest): Promise<boolean>;
         openExternal(url: string): Promise<boolean>;
         onState(callback: (state: LauncherState) => void): () => void;
+        /** Progress of a one-time data migration that runs before the library state exists. */
+        getStartupMigration?(): Promise<StartupMigration | null>;
+        onStartupMigration?(callback: (progress: StartupMigration) => void): () => void;
         onActivity(callback: (activity: LauncherActivity) => void): () => void;
-        onGameImported(callback: (gamePath: string) => void): () => void;
+        onGameImported(callback: (gamePath: string, options: { graphics?: boolean }) => void): () => void;
         onGameFailed?(callback: (failure: GameFailure) => void): () => void;
       };
     };

@@ -2,7 +2,9 @@ const definitions = Object.freeze({
   external: Object.freeze({ title: "External", width: 1180, height: 780, minWidth: 760, minHeight: 520 }),
   settings: Object.freeze({ title: "Settings", width: 1040, height: 740, minWidth: 700, minHeight: 480 }),
   runtimes: Object.freeze({ title: "Runtimes", width: 1100, height: 760, minWidth: 760, minHeight: 480 }),
-  credits: Object.freeze({ title: "Credits", width: 860, height: 660, minWidth: 560, minHeight: 400 })
+  credits: Object.freeze({ title: "Credits", width: 860, height: 660, minWidth: 560, minHeight: 400 }),
+  // An app action's picker, such as Apply Graphics; its title is the action's.
+  appAction: Object.freeze({ title: "Choose", width: 900, height: 640, minWidth: 520, minHeight: 400 })
 });
 
 // The graphics library and presets live in Runtimes ▸ Graphics. Settings
@@ -30,6 +32,12 @@ export function normalizeUtilityWindowRequest(value) {
     if(typeof value.shaderCategory!=="string"||!/^[a-z][a-z0-9-]{0,63}$/.test(value.shaderCategory))throw new Error("Invalid shader library filter.");
     request.shaderCategory=value.shaderCategory;
   }
+  if (value.view === "appAction") {
+    for (const key of ["moduleId", "actionId"]) {
+      if (typeof value[key] !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(value[key])) throw new Error("Invalid launcher action.");
+      request[key] = value[key];
+    }
+  }
   if ((value.view === "settings" || value.view === "runtimes") && value.sectionId != null && value.sectionId !== "") {
     if (typeof value.sectionId !== "string" || !/^[A-Za-z0-9:_-]{1,128}$/.test(value.sectionId)) {
       throw new Error(value.view === "settings" ? "Invalid settings section." : "Invalid runtime section.");
@@ -47,5 +55,6 @@ export function readUtilityWindowContext(search) {
   const params = new URLSearchParams(search);
   const view = params.get("view");
   if (!utilityWindowDefinition(view)) return null;
-  return normalizeUtilityWindowRequest({ view, managerId: params.get("managerId"), sectionId: params.get("sectionId"), shaderCategory: params.get("shaderCategory") });
+  return normalizeUtilityWindowRequest({ view, managerId: params.get("managerId"), sectionId: params.get("sectionId"), shaderCategory: params.get("shaderCategory"),
+    ...(view === "appAction" ? { moduleId: params.get("moduleId"), actionId: params.get("actionId") } : {}) });
 }

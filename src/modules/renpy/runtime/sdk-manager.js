@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopy } = require("../../shared/copy-file");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
@@ -391,7 +392,7 @@ async function installVersion({ userDataDir, version, major, logger, onProgress,
     ensureDir(path.dirname(installDir));
 
     logger?.info?.(`[renpy] copying SDK to ${installDir}`);
-    await runCommand("/usr/bin/ditto", [sdkRoot, installDir], { signal });
+    await cloneOrCopy(sdkRoot, installDir, { signal });
     restoreMacBinaries(installDir);
 
     if (!isReadySdk(installDir, m)) {

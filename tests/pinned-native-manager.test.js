@@ -843,3 +843,36 @@ test("an install from a cached list whose file the publisher removed reads the c
   assert.equal(installed.version, "2.0");
   assert.equal(discoveries, 2, "One refresh follows the missing file");
 });
+
+test("removing one copy of a version leaves other CPUs', earlier layouts' and replaced managers' copies", async t => {
+  const { runRuntimeManagerAction } = require("../src/core/runtime-manager-service");
+  const coordinator = { acquireMutation: async () => "token", extendMutation: async () => {}, release: async () => {} };
+  // An Intel copy with its record, which Apple silicon may also use through Rosetta.
+  const copy = (folder, architecture) => {
+    fs.mkdirSync(path.join(folder, "bin"), { recursive: true }); fs.writeFileSync(path.join(folder, "bin", "tool"), binary(architecture));
+    fs.writeFileSync(path.join(folder, "runtime.json"), JSON.stringify({ version: "1.2.0", architecture, source: "download", executableRelative: "bin/tool" }));
+    return path.join(folder, "bin", "tool");
+  };
+  const incomplete = folder => { fs.mkdirSync(path.join(folder, "build"), { recursive: true }); return folder; };
+  const remove = (runtime, root) => runRuntimeManagerAction({ manager: runtime, action: "uninstall", userDataDir: root, runtimeCoordinator: coordinator,
+    payload: { version: "1.2.0", variant: "architecture:arm64" } });
+  for (const refuse of [false, true]) {
+    const root = temporary(t), runtimes = path.join(root, "runtimes", "fixture-native");
+    const runtime = await listed({ dependencies: { hostArch: "arm64" } }, root);
+    const arm = incomplete(path.join(runtimes, "arm64", "1.2.0")), intel = copy(path.join(runtimes, "x64", "1.2.0"), "x64");
+    if (refuse) {
+      const original = runtime.uninstallRuntime;
+      runtime.uninstallRuntime = async payload => { await original.call(runtime, payload); throw new Error("Removal refused."); };
+      await assert.rejects(remove(runtime, root), /refused/);
+    } else assert.equal(await remove(runtime, root), true);
+    assert.ok(fs.existsSync(intel), `the Intel copy stays${refuse ? " after a refusal" : ""}`);
+    if (!refuse) assert.ok(!fs.existsSync(arm));
+    assert.deepEqual(fs.readdirSync(path.join(root, "runtimes")).filter(name => name.startsWith(".maclauncher-")), []);
+  }
+  const root = temporary(t), runtime = await listed({ dependencies: { hostArch: "arm64" }, formerIds: ["fixture-former"] }, root);
+  const current = incomplete(path.join(root, "runtimes", "fixture-native", "arm64", "1.2.0"));
+  const earlier = copy(path.join(root, "runtimes", "fixture-native", "1.2.0"), "arm64"), former = copy(path.join(root, "runtimes", "fixture-former", "1.2.0"), "arm64");
+  assert.equal(await remove(runtime, root), true);
+  assert.ok(!fs.existsSync(current));
+  assert.ok(fs.existsSync(earlier) && fs.existsSync(former), "copies of an earlier layout and a replaced manager stay");
+});

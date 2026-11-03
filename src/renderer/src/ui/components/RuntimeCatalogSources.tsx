@@ -4,7 +4,7 @@ import { architectureLabel, isPrereleaseVersion, isRuntimeVersionInstalled, runt
 import { ErrorText } from "./ErrorText";
 import { RefreshIcon } from "../icons";
 import { Select } from "./Select";
-import { isRuntimeIncluded, runtimeCatalogPresentation, runtimeCatalogSources, runtimeSourceUrl, runtimeSourceUiKey } from "./runtime-tabs-model";
+import { isRuntimeIncluded, runtimeCatalogPresentation, runtimeCatalogSources, runtimeRefreshFailure, runtimeSourceUrl, runtimeSourceUiKey } from "./runtime-tabs-model";
 
 type Props = {
   managerId: string;
@@ -203,6 +203,7 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
         {reason && <div className="dim runtimeAvailability" id={`${fieldId}-reason`}>{reason}</div>}
         {refreshing && <div className="dim runtimeActionStatus" role="status">Refreshing versions…</div>}
         {refreshMessage && !refreshing && <div className="dim runtimeActionStatus" role="status">{refreshMessage.startsWith("Versions updated at ") ? "Versions updated." : refreshMessage}</div>}
+        {!refreshing && error && <div className="dim runtimeAvailability">{runtimeRefreshFailure(source.status === "error" ? source : null)}</div>}
         {!refreshing && <ErrorText error={error} inline className="runtimeAvailability" />}
       </div>;
     })}

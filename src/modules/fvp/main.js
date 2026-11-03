@@ -33,7 +33,7 @@ module.exports = {
   onImport: (entry, context) => { entry.defaultSaveDir = Prepare.saveDirectory(entry, context); },
   resolveSaveLocations: (entry, context) => {
     const directory = Prepare.saveDirectory(entry, context);
-    return { primaryDirectory: directory, directories: [{ directory, role: "primary", source: "RFVP private saves", confidence: "exact" }] };
+    return { primaryDirectory: directory, directories: [{ directory, role: "primary", source: "RFVP game save directory", confidence: "exact" }] };
   },
   ensureRuntime: async (entry, context) => {
     Prepare.gameData(entry, context);
@@ -48,7 +48,7 @@ module.exports = {
     entry.moduleData = { ...entry.moduleData, nativeRuntimeError: null };
     context.onEntryChange?.(entry);
     const child = await spawnForegroundNativeGame({ context, executablePath: host.executablePath, args: [...host.args, ...(context.gameArguments || [])],
-      options: { cwd: launch.playRoot, env: launch.env, stdio: ["ignore", "pipe", "pipe"] } });
+      options: { cwd: launch.gameRoot, env: launch.env, stdio: ["ignore", "pipe", "pipe"] } });
     appendLog(child, entry, context, launch.directory);
     return child;
   },

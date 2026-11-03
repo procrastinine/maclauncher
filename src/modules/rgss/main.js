@@ -4,6 +4,7 @@ const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
 const Assets = require("./assets");
 const Rtp = require("./rtp");
+const Soundfont = require("./soundfont");
 const { cheatsSchema, cheatsHelpers } = require("./cheats");
 const {
   resolveArchivePath,
@@ -155,6 +156,7 @@ module.exports = {
     if (context.runtimeId !== "mkxpz") return;
     const { values } = await Rtp.resolveForEntry(entry, context);
     if (values.some(value => !value)) throw new Error("A required RTP pack is missing. Play downloads it after confirmation.");
+    await Soundfont.ensure(context);
     const version = resolveRuntimeVersion(entry, context.settings, context.userDataDir);
     for (const pack of values) await context.useRuntime?.({ managerId: "mkxpz", version: pack.installVersion || version, sectionId: "rtp-" + pack.id, sourcePath: pack.path });
   },

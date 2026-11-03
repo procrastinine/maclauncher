@@ -3,6 +3,7 @@ const path = require("node:path");
 
 const GameData = require("../modules/shared/game-data");
 const { readJsonObject, readJsonDocument, writeJsonAtomic } = require("./json-files");
+const CURRENT_RECORD_SCHEMA_VERSION = 2;
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
@@ -29,25 +30,16 @@ function listGameIds(userDataDir) {
   return entries.filter(entry => entry.isDirectory() && /^[0-9A-Za-z_-]+$/.test(entry.name)).map(entry => entry.name);
 }
 
-function readGameRecord(userDataDir, gameId) {
+function readGameRecord(userDataDir, gameId, options = {}) {
   if (!gameId) return null;
   validateGameId(gameId);
   const infoPath = GameData.resolveGameDataPath(userDataDir, gameId);
   const record = readJsonFile(infoPath);
   if (!record) return null;
   record.gameId = String(gameId);
-  return upgradeGraphics(userDataDir, record);
-}
-
-// v0.4.0 graphics fields become `effects` once, in one atomic rewrite of the
-// record. The upgrade never prevents a record from loading.
-function upgradeGraphics(userDataDir, record) {
-  if (!Object.hasOwn(record, "reshade") && !Object.hasOwn(record, "graphics") && record.effects?.schema !== 1) return record;
-  try {
-    return require("./graphics-record-upgrade").upgradeRecord(userDataDir, record, next => writeGameRecord(userDataDir, next));
-  } catch {
-    return record;
-  }
+  if (typeof record.schemaVersion === "number" && record.schemaVersion >= CURRENT_RECORD_SCHEMA_VERSION) return record;
+  return require("./backcompat/record-conversions").upgradeLoadedRecord(userDataDir, record, next => writeGameRecord(userDataDir, next),
+    {...options, currentVersion: CURRENT_RECORD_SCHEMA_VERSION});
 }
 
 function loadGames(userDataDir) {
@@ -134,6 +126,7 @@ function setGameSteamClientStart(userDataDir, gameId, startSteamClient) {
 }
 
 module.exports = {
+  CURRENT_RECORD_SCHEMA_VERSION,
   listGameIds,
   readGameRecord,
   loadGames,

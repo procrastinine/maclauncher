@@ -29,8 +29,11 @@ async function ensureJava(context, dependencies = {}) {
     if (dependencies.installedOnly === true)
       throw new Error("Apple Silicon Java 21 is not installed. Install Java 21 in Runtimes.");
     let version = config.lines[21].defaultVersion;
+    const installOptions = { sectionId: "21", line: 21, variant: "arm64", strictVariant: true };
+    await (dependencies.confirm || confirmToolInstall)(context, { manager, version, installOptions,
+      label: "Java 21 (Apple Silicon)", requiresDownload: true, detail: "Required to run Android games." });
     if (!version) {
-      await manager.refreshCatalog({ sectionId: "21", force: false, latestOnly: false,
+      await manager.refreshCatalog({ userDataDir: context.userDataDir, sectionId: "21", force: false, latestOnly: false,
         logger: context.logger, signal: context.signal });
       context.onRuntimeStateChange?.();
       version = manager.getState({ userDataDir: context.userDataDir, settings: config }).sections
@@ -38,9 +41,6 @@ async function ensureJava(context, dependencies = {}) {
     }
     context.signal?.throwIfAborted();
     if (!version) throw new Error("No Apple Silicon Java 21 runtime is available. Refresh Temurin in Runtimes.");
-    const installOptions = { sectionId: "21", line: 21, variant: "arm64", strictVariant: true };
-    await (dependencies.confirm || confirmToolInstall)(context, { manager, version, installOptions,
-      label: "Java 21 (Apple Silicon)", requiresDownload: true, detail: "Required to run Android games." });
     await manager.installRuntime({ ...context, ...installOptions, version });
     context.onRuntimeStateChange?.();
     host = resolve(version);

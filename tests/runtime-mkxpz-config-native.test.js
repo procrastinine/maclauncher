@@ -56,9 +56,10 @@ test("native config helper isolates old and parent layouts through original Foun
   const helper = { version: "fixture-v7", architectures: ["arm64", "x86_64"], dylibPath: library,
     binarySha256: Native.hashFile(library), sourceSha256: "b".repeat(64), manifestSha256: "c".repeat(64) };
   const source = { version: "fixture-v1", appPath: app }, warnings = [], copies = [], signs = [];
-  const originalCopy = fs.promises.copyFile, originalPrepare = Application.prepare;
+  const CopyFile = require("../src/modules/shared/copy-file");
+  const originalCopy = CopyFile.cloneOrCopy, originalPrepare = Application.prepare;
   const execute = require("node:util").promisify(require("node:child_process").execFile);
-  t.mock.method(fs.promises, "copyFile", async (...args) => { copies.push(args); return originalCopy(...args); });
+  t.mock.method(CopyFile, "cloneOrCopy", async (...args) => { copies.push(args); return originalCopy(...args); });
   t.mock.method(Application, "prepare", opts => originalPrepare(opts, async (command, args, options) => {
     if (command === "/usr/bin/codesign") signs.push(args); return execute(command, args, options);
   }));
@@ -71,7 +72,8 @@ test("native config helper isolates old and parent layouts through original Foun
   const secondBase = GameRuntime.prepareGameRuntime({ userDataDir, gameId: "native-game", source, helper });
   const second = await GameRuntime.prepareApplication({ prepared: secondBase, userDataDir, gameName: title });
   assert.equal(second.executablePath, first.executablePath); assert.equal(hashReads, coldHashReads, "Warm launch must not hash the source or cloned native entry again");
-  assert.equal(copies.length, 1); assert.equal(copies[0][2], fs.constants.COPYFILE_FICLONE_FORCE | fs.constants.COPYFILE_EXCL);
+  assert.equal(copies.length, 1); assert.equal(copies[0][0], executable);
+  assert.equal(path.basename(copies[0][1]), path.basename(first.executablePath));
   assert.equal(signs.length, 1, "Warm launch must reuse the signed entry");
   assert.notEqual(first.configDir, second.configDir);
   assert.equal(fs.lstatSync(first.sourceConfigDir).isDirectory(), true, "The actual engine's existence check must choose Contents/Game");
@@ -99,5 +101,5 @@ test("native config helper isolates old and parent layouts through original Foun
     if (graphicsLibrary) assert.match(result.stdout, /actual graphics library and config helper coexist/);
   }
   console.log(JSON.stringify({ scope: "Foundation-only native app/config entry", coldCopies: copies.length, warmAdditionalCopies: 0, coldSigns: signs.length,
-    warmAdditionalHashReads: 0, executableBytes: fs.statSync(first.executablePath).size, resourcesShared: true, physicalExclusiveBytes: "Not inferred from logical size; APFS clone-force used" }));
+    warmAdditionalHashReads: 0, executableBytes: fs.statSync(first.executablePath).size, resourcesShared: true, physicalExclusiveBytes: "Not inferred from logical size; shared clone-or-copy used" }));
 });

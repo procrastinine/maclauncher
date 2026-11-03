@@ -47,7 +47,7 @@ Each download source has its own version selector, link and **Install** action, 
 | xsystem35 | xsystem35 |
 | xsystem4 | xsystem4 |
 
-In **Runtimes**, each game type's panel groups its related packages and ABI variants. Each download contains every library it depends on and the required license notices, and a package can contain native libraries as well as executables.
+In **Runtimes**, each game type's panel groups its related packages and ABI variants. Each package contains its required license notices and can contain native libraries as well as executables. A package can also take shared libraries from dependency packages that it declares at exact releases.
 
 The RLVM Mac app downloads from its upstream project, and its MacLauncher adapter is a separate MacLauncher Builds package. ScummVM installs from the publisher's disk image or another published Mac archive, which is checked against the publisher's SHA-256 file when one is listed. Installation then signs it locally (ad hoc) so that MacLauncher's graphics integration can load into it, and the installation record holds the checksum of the signed copy, which later checks verify without the network.
 
@@ -96,11 +96,21 @@ The [package index](https://procrastinine.github.io/maclauncher-builds/) lists t
 
 Each catalog record is checked on its own. A record that the launcher cannot install stays in the version selector with the reason, and the project's other versions remain available. A record reads "Requires a newer MacLauncher." when it has a later record schema, a `launcherContract` above the one the launcher implements for that project, or an architecture the launcher does not know.
 
-`launcherContract` is a positive integer that defaults to 1. A project raises it only when a package depends on launcher behavior that earlier launchers lack. New record fields need no new `launcherContract` value, and launchers that do not use them ignore them. A record for a runtime built from an upstream project names that repository and commit in `source`, and its `capabilities` object lists the facts its module uses to match games. A later record that names its source can be installed without a launcher update, and a record that names no source commit is listed with that reason.
+`launcherContract` is a positive integer that defaults to 1 on a catalog record. MacLauncher supports contracts 1 and 2. Packages that store file aliases or depend on shared packages declare contract 2, and earlier launchers keep offering the compatible older records. A project raises the contract only when a package depends on launcher behavior that earlier launchers lack. New record fields need no new `launcherContract` value, and launchers that do not use them ignore them. A record for a runtime built from an upstream project names that repository and commit in `source`, and its `capabilities` object lists the facts its module uses to match games. A later record that names its source can be installed without a launcher update, and a record that names no source commit is listed with that reason.
 
 ### Installation
 
 Installation checks the downloaded archive against the catalog, extracts it into a temporary directory and checks the layout of the extracted files. It then verifies each file's hash, the native code signatures, CPU architectures and macOS requirement, and moves the complete installation into place in one step. Cancelling removes the temporary directory and leaves installed versions and compatible local registrations as they were.
+
+The same installation consent covers a package's declared dependencies. Dependencies are installed first, each matched by project, release and archive SHA-256, and each keeps its own sealed inventory. A package archive stores identical files once and records the other paths as aliases. Installation creates data aliases as APFS clones, or as ordinary copies on file systems without cloning. A Mach-O alias is a strict relative symbolic link to the one stored copy of the image, so dyld loads that image only once. A Mach-O alias in another directory is accepted only when its load commands resolve identically from both locations. Aliases into a dependency are relative symbolic links to its exact installed files, verified against that dependency's sealed inventory. Libraries without path aliases are found through the library-path environment that the module sets. A shared dependency stays installed while any installed package refers to it, directly or through another dependency.
+
+Packages included in the app use the same declarations. The app keeps its package lock and each package's outer declaration, unchanged, at `native-runtimes/.declarations/<archiveSHA>.json`. The outer declaration describes the stored files and aliases, while the runtime and helper manifests inside the package keep their logical paths, the paths that files have once aliases are in place. Verification checks the stored layout before installation and the complete logical layout afterward, and it rejects undeclared files and links.
+
+Within each backend process, unchanged files can reuse a verified digest. Reuse requires the same file identity, size, permissions and precise modification and change times. Changed files and files with coarse or uncertain change times are read again. These bounded caches hold no file contents, and no verification record is saved. Inventory, alias, dependency and processor checks run on every payload verification.
+
+MKXP-Z can reuse an exact runtime resolution during one launch preparation. Runtime mutation, mutable preparation, process binding and release clear that result.
+
+Godot, LÖVE and NW.js listings fully validate each app bundle on first use and whenever its file facts change. Repeated queries reuse that status only while the bundle entry, directories and symbolic-link targets retain their precise identities. Coarse or uncertain facts require another full check. The selected managed bundle receives full validation before launch. Parsed property lists and LÖVE version and processor facts use the same process-local cache mechanism and are refreshed when their file identity changes. Within one launch preparation, repeated installed-version listings can reuse their results. Runtime mutation, process binding and release clear those results. Custom runtimes retain their own validation and executable paths.
 
 Minimum macOS versions in catalogs are lower bounds, so a requirement of 27.0 also accepts later compatible releases such as 27.1 and 27.2. Each record states its architecture and game ABI explicitly, including Intel builds that need Rosetta on Apple Silicon. [System requirements](SYSTEM_REQUIREMENTS.md) lists the requirements of each runtime.
 
@@ -129,7 +139,7 @@ pnpm package:check -- source --arch arm64 --maximum-macos 13.0
 pnpm package:mac --arm64
 ```
 
-Each command builds or checks one architecture. The Intel app uses `--arch x64` and `--x64`, and it needs the Intel build of the embedded Python, which `node scripts/setup-python-runtime.mjs --arch x64` installs; `--arch arm64` restores the Apple Silicon build that the repository contains. Packaging fails when the embedded Python does not match the app's architecture.
+Each command builds or checks one architecture. The Intel app uses `--arch x64` and `--x64`, and it needs the Intel build of the embedded Python, which `node scripts/setup-python-runtime.mjs --arch x64` installs; `--arch arm64` installs the pinned Apple Silicon publisher build. Packaging fails when the embedded Python does not match the app's architecture.
 
 The final artifact check also takes the app path, the native inventory, the archive and the archive's SHA-256. The launcher's release assets are `MacLauncher.app.zip` for Apple Silicon and `MacLauncher-Intel.app.zip` for Intel. [macOS app builds](../development/CI.md) describes the application workflow.
 
@@ -140,3 +150,9 @@ Each MacLauncher Builds release tag points to the commit that contains everythin
 Catalog metadata and the manifests inside packages are used for installation and integrity checks. Required license notices stay with their binaries. Android system images and proprietary developer SDKs follow their own acquisition and redistribution terms.
 
 Upstream source is used at an exact commit and never edited, and MacLauncher's changes are applied during the build. A working publisher binary is used as it is when a rebuild would add no needed feature or compatibility fix. The build scripts are in [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds).
+
+### One stored copy in the app
+
+When the app is assembled, identical data files from included packages, publisher tools, Python and unpacked application files are stored once. Mach-O images stay at their original locations, so their loader-relative paths still resolve. When a set of identical files includes one in `native-runtimes`, the stored copy stays inside that folder's signing boundary. One regular file holds the bytes, and the other paths in the bundle are relative symbolic links within the same app. The stored copy keeps the required executable bits. Each logical path is still verified against its original source or sealed package inventory, and packaging rejects data stored twice or a link that leads outside the app. License notices, text sources, artwork and Flash files always keep their own copies.
+
+Compiled application inputs are unpacked from the ASAR archive when necessary, so that this sharing covers them too. Android's apksig JAR is unpacked once, and Java uses that file in the app bundle directly; package inspection writes no second copy to launcher data.

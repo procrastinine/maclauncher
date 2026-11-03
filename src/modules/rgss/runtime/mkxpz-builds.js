@@ -15,6 +15,7 @@ function createManager(dependencies = {}) {
       if (manifest.arch !== record.arch || record.arch === "universal" &&
           manifest.files.some(file => file.architectures && !["arm64", "x86_64"].every(arch => file.architectures.includes(arch))))
         throw new Error("The MKXP-Z package CPU coverage differs from its catalog.");
+      // Universal package validation defaults to the launcher CPU; its native slices were checked above.
       Bundled.validateManifest(record.arch === "universal" ? { ...manifest, arch: process.arch } : manifest,
         { managerId: "mkxpz", version: record.version });
       const provenance = manifest.provenance;
@@ -32,7 +33,7 @@ function createManager(dependencies = {}) {
     },
     async verifyPayload(selected, { signal } = {}) {
       signal?.throwIfAborted();
-      Bundled.verifyPayload(selected.root, selected.declaration);
+      Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
       for (const file of selected.declaration.files.filter(item => item.architectures))
         await execute("/usr/bin/codesign", ["--verify", "--strict", path.join(selected.root, file.path)],
           { signal, timeout: 30000, maxBuffer: 1024 * 1024 });
@@ -50,15 +51,18 @@ function runtimeFromInstall(install) {
 function resolveOwned({ userDataDir, version, architecture, verification = "full" }, manager = module.exports.manager) {
   if (!path.isAbsolute(userDataDir || "") || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(version || "") || version === "..")
     throw new Error("The selected MKXP-Z installation identity is invalid.");
-  const directory = manager.core.getInstallDir({ userDataDir, version, architecture });
-  if (!fs.existsSync(path.join(directory, "runtime.json"))) return null;
-  const selected = manager.resolveSelection(null, {}, userDataDir, { version, architecture, verification });
-  if (!selected.ready || !selected.install)
-    throw new Error("The selected MKXP-Z installation is damaged. Remove it and install this version again.");
-  if (verification === "full") {
-    Bundled.verifyPayload(selected.install.root, selected.install.declaration);
-  }
-  return runtimeFromInstall(selected.install);
+  const key = JSON.stringify([userDataDir, version, architecture ?? null, verification]);
+  return require("../../../core/coordinated-runtime-managers").memoizeRuntimeResolution(manager, key, () => {
+    const directory = manager.core.getInstallDir({ userDataDir, version, architecture });
+    if (!fs.existsSync(path.join(directory, "runtime.json"))) return null;
+    const selected = manager.resolveSelection(null, {}, userDataDir, { version, architecture, verification });
+    if (!selected.ready || !selected.install)
+      throw new Error("The selected MKXP-Z installation is damaged. Remove it and install this version again.");
+    if (verification === "full") {
+      Bundled.verifyPayload(selected.install.root, selected.install.declaration);
+    }
+    return runtimeFromInstall(selected.install);
+  });
 }
 
 module.exports = { createManager, manager: createManager(), runtimeFromInstall, resolveOwned };

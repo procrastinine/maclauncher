@@ -1,4 +1,4 @@
-import React, {useEffect, useId, useState} from "react";
+import React, {useEffect, useId, useRef, useState} from "react";
 import {useEffectsEditor, type EffectsEditorProps} from "../useEffectsEditor";
 import {useGraphicsCatalog} from "../useGraphicsCatalog";
 import {shaderFileDrag} from "../shader-drop";
@@ -25,6 +25,10 @@ type Props = EffectsEditorProps & {children?: React.ReactNode; footer?: React.Re
 // The Graphics section's open state follows the user across games for the
 // window's session, like the chosen Simple or Advanced view.
 let graphicsSectionOpen = true;
+// A game whose Graphics section opens and scrolls into view when its
+// inspector next shows it, such as a window session started without effects.
+let revealedGraphics: string | null = null;
+export function revealGraphicsSection(gamePath: string) {graphicsSectionOpen = true;revealedGraphics = gamePath;}
 
 // Notices are complete sentences. A row notice also marks its row; a dropped
 // part has no row, so this list is its only place.
@@ -62,6 +66,12 @@ export function EffectsControls({footer, visible = true, warnings = [], children
     return () => {current = false;};
   }, [menuOpen, embedded, game.gamePath, game.effects]);
   const setOpen = (next: boolean) => {graphicsSectionOpen = next;setOpenState(next);};
+  const sectionRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (embedded || revealedGraphics !== game.gamePath) return;
+    revealedGraphics = null;setOpenState(true);
+    sectionRef.current?.scrollIntoView({block: "start"});
+  }, [embedded, game.gamePath]);
   // The library record carries the saved plan's error and notices and is
   // updated by every save and Clear effects.
   const planError = embedded ? undefined : game.graphicsPlanError;
@@ -93,7 +103,7 @@ export function EffectsControls({footer, visible = true, warnings = [], children
 
   const summary = graphicsSummary(plan, {running, live, warnings: warnings.length + notices.length + saveNotices.length, unreadable: Boolean(planError)});
   const device = info?.graphicsHardware?.state === "ready" ? info.graphicsHardware.device?.name : undefined;
-  return <section className={["effectsControls collapsibleSection graphicsSection", open ? "open" : ""].filter(Boolean).join(" ")}
+  return <section ref={sectionRef} className={["effectsControls collapsibleSection graphicsSection", open ? "open" : ""].filter(Boolean).join(" ")}
     aria-labelledby={`${id}-title`} {...drop}>
     <div className="collapsibleHeader graphicsHeader">
       <h3 className="detailSectionHeading"><button type="button" id={`${id}-title`} className="collapsibleToggle" aria-expanded={open}

@@ -7,6 +7,7 @@ const { detectGame } = require("./detect");
 const NwjsLauncher = require("../shared/web/runtime/nwjs-launcher");
 const NwjsPatchedLauncher = require("../shared/web/runtime/nwjs-patched-launcher");
 const NwjsRuntimeManager = require("../shared/web/runtime/nwjs-manager");
+const WebMetadata = require("../shared/web/metadata");
 const USERENV_SHIM_NAME = "maclauncher-tyrano-userenv.js";
 const USERENV_SHIM_SOURCE = fs.readFileSync(path.join(__dirname, "userenv-shim.js"), "utf8");
 const {
@@ -34,6 +35,18 @@ function formatBundleLabel(packagedType) {
   if (raw === "package.nw") return "package.nw archive";
   if (raw === "asar") return "ASAR archive";
   return raw.replace(/[-_]+/g, " ");
+}
+
+function mergeEntry(previous, incoming, _settings, context = {}) {
+  let current = incoming;
+  if (incoming.moduleData?.packagedType && incoming.moduleData?.extractedRoot) {
+    current = { ...incoming, moduleData: { ...incoming.moduleData } };
+    // Package detection describes the original carrier. Keep its validated
+    // extraction as the readable metadata root, as launch preparation does.
+    applyExtractionStatus(current, resolveExtractionStatus({ entry: current,
+      userDataDir: context.userDataDir, moduleId: manifest.id }));
+  }
+  return WebMetadata.mergeEntry(previous, current);
 }
 
 function applyExtractionStatus(entry, status) {
@@ -82,6 +95,13 @@ function resolveLaunchContent(entry) {
     contentRootDir: entry?.contentRootDir || entry?.gamePath,
     indexHtml: entry?.indexHtml || null
   };
+}
+
+function resolveSaveLocations(entry) {
+  if (entry.runtimeId === "native") return { primaryDirectory: null, directories: [] };
+  const directory = entry.saveDirOverride || entry.gamePath || entry.contentRootDir;
+  return { primaryDirectory: directory || null, directories: directory
+    ? [{ directory, label: "Tyrano file saves", source: entry.saveDirOverride ? "save-folder override" : "original game folder" }] : [] };
 }
 
 function cleanupGameData(entry, context) {
@@ -292,20 +312,18 @@ const actions = {
 };
 
 module.exports = {
-  ...require("../shared/web/metadata"),
+  ...WebMetadata,
+  metadataSources: [...WebMetadata.metadataSources, "extract.js"],
   id: manifest.id,
   manifest,
   detectGame,
+  mergeEntry,
   getRuntimeRequirements: (entry, context) => NwjsPatchedLauncher.getRuntimeRequirements(entry, context, {
     sourceRoot: resolveLaunchContent(entry).contentRootDir
   }),
   launchRuntime,
   runtimeManagers: [NwjsRuntimeManager],
   actions,
-  resolveSaveLocations: (entry, context) => {
-    if (!entry?.gameId || !context?.userDataDir || entry.runtimeId !== "electron") return { primaryDirectory: null, directories: [] };
-    const directory = path.join(require("../shared/game-data").resolveGameModuleDir(context.userDataDir, entry.gameId, manifest.id), "saves");
-    return { primaryDirectory: directory, directories: [{ directory, label: "Tyrano file saves" }] };
-  },
+  resolveSaveLocations,
   cleanupGameData
 };

@@ -1,4 +1,5 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
+const { cloneOrCopySync } = require("../shared/copy-file");
 const Writable = require("../shared/writable-input");
 const MAGIC = Buffer.from("GDPC"), MAX_DIRECTORY = 8 * 1024 * 1024, MAX_ENTRIES = 65536, MAX_PATH = 4096;
 const utf8 = bytes => new TextDecoder("utf-8", {fatal: true}).decode(bytes);
@@ -104,7 +105,7 @@ function withoutEntries(file, target, options, omit, root) {
   Writable.assertOwnDirectory(root, path.dirname(target));const temporary = target + "." + crypto.randomUUID();
   try {
     open(file, options, (source, pack) => {
-      fs.copyFileSync(file, temporary, fs.constants.COPYFILE_FICLONE);fs.chmodSync(temporary, 0o600);
+      cloneOrCopySync(file, temporary);fs.chmodSync(temporary, 0o600);
       const output = fs.openSync(temporary, "r+");
       try {
         const kept = [...pack.entries.values()].filter(entry => !omit(entry.name)), count = Buffer.alloc(4);count.writeUInt32LE(kept.length);

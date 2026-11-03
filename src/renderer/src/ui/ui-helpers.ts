@@ -1,4 +1,5 @@
 import { resolveRuntimeSettingFallback, normalizeListValue, normalizeRuntimeSettingValue } from "../../../core/runtime-setting-values.mjs";
+import { sanitizeErrorMessage } from "../../../core/runtime-errors.mjs";
 export { resolveRuntimeSettingFallback, normalizeListValue, normalizeRuntimeSettingValue };
 
 import type {
@@ -47,12 +48,7 @@ function connectionFailure(message: string) {
 }
 
 export function formatUserError(error: unknown): string {
-  let message = error instanceof Error ? String(error)
-    : error && typeof error === "object" && "message" in error && typeof error.message === "string"
-      ? error.message : String(error);
-  // A proxy or download URL in a network error can carry a user name and
-  // password; the address stays and the credentials are never shown.
-  message = message.replace(/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#@]+@/gi, "$1");
+  let message = sanitizeErrorMessage(error);
   const offline = connectionFailure(message);
   if (offline) return offline;
   // Only unwrap the standard Error/Electron IPC prefixes at the start.

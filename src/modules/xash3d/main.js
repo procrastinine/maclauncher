@@ -4,6 +4,8 @@ const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
 const manager = require("./runtime/manager");
 const GameData = require("../shared/game-data");
+const Architecture = require("../shared/runtime/architecture");
+const Native = require("../shared/runtime/local-native");
 const { spawnForegroundNativeGame } = require("../shared/runtime/native-focus");
 
 const RUNTIME_ID = "xash3d-fwgs";
@@ -13,44 +15,60 @@ function gameDirectory(entry, context) {
   return GameData.resolveGameModuleDir(context.userDataDir, entry.gameId, manifest.id);
 }
 function saveDirectory(entry, context) {
-  const directory = entry.saveDirOverride || path.join(gameDirectory(entry, context), "saves");
+  const directory = entry.saveDirOverride || path.join(entry.contentRootDir || entry.gamePath, entry.moduleData.gameFolder, "save");
   if (!path.isAbsolute(directory) || /[\0\r\n]/.test(directory)) throw new Error("Xash3D FWGS save location must be an absolute local directory.");
   return directory;
 }
-// Points `file` at the `target` folder. A real folder in its place is kept
-// unless it is empty, so files written there are never removed.
+// The explicit save adapter replaces only aliases; ordinary files and folders
+// remain intact and prevent an ambiguous replacement.
 function link(target, file) {
   let stat = null;
   try { stat = fs.lstatSync(file); } catch (error) { if (error.code !== "ENOENT") throw error; }
   if (stat?.isSymbolicLink()) {
     if (fs.readlinkSync(file) === target) return;
     fs.unlinkSync(file);
-  } else if (stat?.isDirectory()) {
-    try { fs.rmdirSync(file); } catch { return; }
-  } else if (stat) fs.unlinkSync(file);
+  } else if (stat) return;
   fs.symlinkSync(target, file, "dir");
 }
-// The engine reads the imported folder as its read-only root and writes its
-// configuration, logs and saves to a private root. Half-Life's folder there
-// links the game libraries of the selected runtime, and the game's `save`
-// folder links the save location.
+function nativeLibrary(directory, name, architecture) {
+  const suffix = architecture === "x64" ? "amd64" : "arm64", cpu = architecture === "x64" ? "x86_64" : "arm64";
+  for (const filename of [`${name}_${suffix}.dylib`, `${name}.dylib`]) {
+    const file = path.join(directory, filename);
+    try { if (fs.statSync(file).isFile() && Native.readMachOArchitectures(file, { allowLibrary: true }).includes(cpu)) return file; }
+    catch (error) { if (!["ENOENT", "ENOTDIR"].includes(error.code)) throw error; }
+  }
+  return null;
+}
+// Library overrides let the engine use its original writable game root without
+// staging the game or adding runtime aliases to the imported folder.
 function prepareLaunch(entry, context, install) {
   const detected = detectGame({ inputPath: entry.gamePath, rootDir: entry.gamePath, stat: fs.statSync(entry.gamePath) });
   if (!detected) throw new Error("The Half-Life game files are incomplete, or the mod's game library is not available for this Mac.");
-  const directory = gameDirectory(entry, context), dataRoot = path.join(directory, "data"), saveRoot = saveDirectory(entry, context);
+  const directory = gameDirectory(entry, context), saveRoot = saveDirectory(entry, context);
   const gameFolder = detected.moduleData.gameFolder, engineGame = path.join(path.dirname(install.executablePath), "valve");
-  fs.mkdirSync(path.join(dataRoot, "valve"), { recursive: true });
-  fs.mkdirSync(path.join(dataRoot, gameFolder), { recursive: true });
-  fs.mkdirSync(saveRoot, { recursive: true });
-  let libraries = [];
-  try { libraries = fs.readdirSync(engineGame, { withFileTypes: true }).filter(item => item.isDirectory()); } catch {}
-  for (const item of libraries) link(path.join(engineGame, item.name), path.join(dataRoot, "valve", item.name));
-  link(saveRoot, path.join(dataRoot, gameFolder, "save"));
+  const architecture = Architecture.selectedArchitecture(), originalGame = path.join(detected.contentRootDir, gameFolder);
+  const server = detected.moduleData.gameLibrary === "Half-Life"
+    ? nativeLibrary(path.join(engineGame, "dlls"), "hl", architecture) : path.join(originalGame, detected.moduleData.gameLibrary);
+  const client = nativeLibrary(path.join(originalGame, "cl_dlls"), "client", architecture) ||
+    nativeLibrary(path.join(engineGame, "cl_dlls"), "client", architecture);
+  if (!server || !client) throw new Error("The Xash3D FWGS runtime is missing its native game libraries.");
+  let dataRoot = detected.contentRootDir;
+  // Upstream's save directory is fixed relative to the writable game root.
+  // A requested custom folder needs this narrow adapter; default Play does not.
+  if (entry.saveDirOverride && path.resolve(entry.saveDirOverride) !== path.resolve(originalGame, "save")) {
+    dataRoot = path.join(directory, "data");
+    fs.mkdirSync(path.join(dataRoot, gameFolder), { recursive: true });
+    fs.mkdirSync(saveRoot, { recursive: true });
+    link(saveRoot, path.join(dataRoot, gameFolder, "save"));
+  }
   entry.defaultSaveDir = saveRoot;
-  const environment = { ...process.env, XASH3D_BASEDIR: dataRoot, XASH3D_RODIR: detected.contentRootDir };
+  const environment = { ...process.env, XASH3D_BASEDIR: dataRoot };
+  if (dataRoot !== detected.contentRootDir) environment.XASH3D_RODIR = detected.contentRootDir;
+  else delete environment.XASH3D_RODIR;
   const extras = path.join(engineGame, "extras.pk3");
   if (fs.existsSync(extras)) environment.XASH3D_EXTRAS_PAK1 = extras;
-  return { directory, dataRoot, saveRoot, gameFolder, root: detected.contentRootDir, environment };
+  return { directory: detected.contentRootDir, dataRoot, saveRoot, gameFolder, root: detected.contentRootDir, environment,
+    args: ["-game", gameFolder, "-dll", server, "-clientlib", client] };
 }
 
 module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [manager],
@@ -67,7 +85,7 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     const launch = prepareLaunch(entry, context, selected.install);
     context.onEntryChange?.(entry);
     return spawnForegroundNativeGame({ context, executablePath: selected.install.executablePath,
-      args: ["-game", launch.gameFolder, ...(context.gameArguments || [])],
+      args: [...launch.args, ...(context.gameArguments || [])],
       options: { cwd: launch.directory, env: launch.environment }, needsRosetta: selected.install.needsRosetta });
   },
   cleanupGameData: (entry, context) => { fs.rmSync(gameDirectory(entry, context), { recursive: true, force: true }); return true; },

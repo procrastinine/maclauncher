@@ -275,7 +275,7 @@ test("export destinations reject traversal and symlinked launcher cache paths", 
   assert.throws(() => Exports.exportChunks(game, context), /symlink/);
 });
 
-test("selecting Studio launches without a hidden setting, validates current data and supplies private saves", { skip: process.platform !== "darwin" }, async t => {
+test("selecting Studio uses original paths without a save override or private game directory", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t);
   const game = entry(root);
   const userDataDir = path.join(root, "launcher");
@@ -288,20 +288,41 @@ test("selecting Studio launches without a hidden setting, validates current data
   context.spawnDetachedChecked = (command, args, options) => {
     spawned = true;
     assert.equal(command, executable);
-    assert.deepEqual(args, [game.moduleData.dataPath, "--save-folder", game.defaultSaveDir, "--renderer", "legacy-gl"]);
+    assert.deepEqual(args, [game.moduleData.dataPath, "--renderer", "legacy-gl"]);
     assert.equal(options.cwd, root);
-    assert.ok(game.defaultSaveDir.startsWith(userDataDir));
+    assert.equal(game.defaultSaveDir, path.dirname(game.moduleData.dataPath));
+    fs.writeFileSync(path.join(options.cwd, "player-save.dat"), "original game progress");
     return { pid: 123 };
   };
   assert.deepEqual(await Module.launchRuntime("butterscotch", game, context), { pid: 123 });
   assert.equal(spawned, true);
   assert.equal(game.moduleData.lastRuntimeSha256, installed.binarySha256);
   assert.equal(game.moduleData.lastRuntimeVersion, version);
+  assert.equal(fs.existsSync(path.join(userDataDir, "games/tiny-game/modules/gamemaker")), false);
   fs.appendFileSync(executable, "changed");
   assert.equal(Butterscotch.resolveSelection(game, context.settings, userDataDir).ready, false);
   await assert.rejects(Module.launchRuntime("butterscotch", game, context), /not installed|changed/);
   writeForm(root, { extensionCount: 1 });
   await assert.rejects(Module.launchRuntime("butterscotch", game, context), /extensions/i);
+  fs.rmSync(userDataDir, { recursive: true });
+  assert.equal(fs.readFileSync(path.join(root, "player-save.dat"), "utf8"), "original game progress");
+});
+
+test("Butterscotch passes an explicit save override without changing its game cwd", { skip: process.platform !== "darwin" }, async t => {
+  const root = temporary(t), game = entry(path.join(root, "source")), userDataDir = path.join(root, "launcher");
+  const version = ManagedFixture.legacyVersion, executable = nativeBinary(root);
+  Butterscotch.core.registerLocal({ userDataDir, version, runtimePath: executable });
+  game.runtimeData = { butterscotch: { version } }; game.saveDirOverride = path.join(root, "chosen-saves");
+  let launch;
+  const context = { userDataDir, settings: {}, runtimeSettings: {}, spawnDetachedChecked: (...args) => { launch = args; } };
+  await Module.launchRuntime("butterscotch", game, context);
+  assert.deepEqual(launch[1], [game.moduleData.dataPath, "--save-folder", game.saveDirOverride, "--renderer", "legacy-gl"]);
+  assert.equal(launch[2].cwd, path.dirname(game.moduleData.dataPath));
+  assert.equal(game.defaultSaveDir, path.dirname(game.moduleData.dataPath));
+  assert.equal(fs.statSync(game.saveDirOverride).isDirectory(), true);
+  assert.equal(fs.existsSync(path.join(userDataDir, "games/tiny-game/modules/gamemaker")), false);
+  game.saveDirOverride = "relative";
+  await assert.rejects(Module.launchRuntime("butterscotch", game, context), /absolute/);
 });
 
 test("decompilation uses the pinned CLI dump command and rejects traversal/YYC input", async t => {
@@ -783,7 +804,128 @@ test("GameMaker inspector exposes only game exports while Play retains exact run
   assert.equal(game.runtimeData.butterscotch.version, "keep");
 });
 
-test("official import and per-game staging preserve vendor bytes, verify whole bundles and isolate saves with owned aliases", async t => {
+test("GameMaker shared save identity preserves direct roots and changes only actual library collisions", t => {
+  const root = temporary(t, { catalog: false }), { applySaveIdentity } = require("../src/core/save-identity");
+  const context = { userDataDir: path.join(root, "launcher") }, describe = Module.resolveSaveIdentity;
+  for (const runtimeId of ["butterscotch", "opengmk"]) {
+    const game = { gameId: runtimeId, runtimeId, launchArguments: '--title "unchanged"',
+      runtimeData: { [runtimeId]: { version: "selected", keep: true } }, moduleData: { dataPath: path.join(root, "game-a", "data.win"), keep: "metadata" } };
+    const independent = { ...game, gameId: "other", moduleData: { dataPath: path.join(root, "game-b", "data.win") } };
+    const before = structuredClone(game);
+    assert.equal(applySaveIdentity(game, { games: [independent], describe, context }), game);
+    const collision = { ...independent, moduleData: { dataPath: path.join(root, "game-a", "other.win") } };
+    const adjusted = applySaveIdentity(game, { games: [collision], describe, context });
+    assert.equal(adjusted.saveDirOverride, path.join(root, "game-a/saves", game.gameId));
+    assert.equal(adjusted.defaultSaveDir, adjusted.saveDirOverride);
+    assert.deepEqual(adjusted.runtimeData, before.runtimeData); assert.deepEqual(adjusted.moduleData, before.moduleData);
+    assert.equal(adjusted.launchArguments, before.launchArguments); assert.deepEqual(game, before);
+  }
+  assert.equal(fs.existsSync(context.userDataDir), false); assert.equal(fs.existsSync(path.join(root, "game-a")), false);
+});
+
+test("GameMaker shared save identity uses selected host plist and preserves a matching original native identity", t => {
+  const root = temporary(t, { catalog: false }), { applySaveIdentity } = require("../src/core/save-identity");
+  const app = (name, identifier) => {
+    const directory = path.join(root, name); fs.mkdirSync(path.join(directory, "Contents"), { recursive: true });
+    fs.writeFileSync(path.join(directory, "Contents/Info.plist"), `<plist><dict><key>CFBundleIdentifier</key><string>${identifier}</string></dict></plist>`); return directory;
+  };
+  const runnerAppPath = app("Vendor.app", "com.vendor.runner");
+  const context = { userDataDir: path.join(root, "launcher"), settings: {}, runtimeId: "official-studio" };
+  let install = { runnerAppPath };
+  t.mock.method(Official.manager, "resolveSelection", () => ({ install }));
+  const game = { gameId: "official-identity", runtimeId: "official-studio", launchArguments: "--keep",
+    runtimeData: { "official-studio": { version: "selected", keep: true }, butterscotch: { version: "unchanged" } },
+    moduleData: { dataPath: path.join(root, "game/data.win"), keep: "metadata" } };
+  const before = structuredClone(game), fact = Module.resolveSaveIdentity(game, context);
+  assert.equal(fact.identity, "com.vendor.runner"); assert.equal(fact.hostSubstitution, true);
+  const adjusted = applySaveIdentity(game, { games: [], describe: Module.resolveSaveIdentity, context });
+  const directory = path.join(root, "game/saves", game.gameId);
+  assert.equal(adjusted.runtimeData["official-studio"].saveDirOverride, directory);
+  assert.equal(adjusted.runtimeData["official-studio"].version, "selected"); assert.equal(adjusted.runtimeData["official-studio"].keep, true);
+  assert.deepEqual(adjusted.runtimeData.butterscotch, before.runtimeData.butterscotch);
+  assert.deepEqual(adjusted.moduleData, before.moduleData); assert.equal(adjusted.launchArguments, before.launchArguments);
+  assert.equal(OfficialLaunch.saveDirectory(adjusted), directory); assert.deepEqual(game, before);
+  const matching = { ...game, nativeAppPath: runnerAppPath };
+  assert.equal(Module.resolveSaveIdentity(matching, context).hostSubstitution, false);
+  assert.equal(applySaveIdentity(matching, { describe: Module.resolveSaveIdentity, context }), matching);
+  install = null;
+  assert.equal(Module.resolveSaveIdentity(game, context), null);
+  assert.equal(applySaveIdentity(game, { describe: Module.resolveSaveIdentity, context }), game);
+  assert.equal(fs.existsSync(directory), false); assert.equal(fs.existsSync(context.userDataDir), false);
+});
+
+test("GameMaker shared save identity restores the authored native bundle namespace without creating directories", t => {
+  const root = temporary(t, { catalog: false }), { applySaveIdentity } = require("../src/core/save-identity");
+  const home = path.join(root, "authored-home"); t.mock.method(os, "homedir", () => home);
+  const app = (name, identifier) => {
+    const directory = path.join(root, name); fs.mkdirSync(path.join(directory, "Contents"), { recursive: true });
+    fs.writeFileSync(path.join(directory, "Contents/Info.plist"), `<plist><dict><key>CFBundleIdentifier</key><string>${identifier}</string></dict></plist>`); return directory;
+  };
+  const host = app("Host.app", "com.vendor.shared"), original = app("Original.app", "com.creator.authored-game");
+  t.mock.method(Official.manager, "resolveSelection", () => ({ install: { runnerAppPath: host } }));
+  const game = { gameId: "native-authored", runtimeId: "official-studio", nativeAppPath: original,
+    moduleData: { dataPath: path.join(original, "Contents/Resources/game.ios") } };
+  const adjusted = applySaveIdentity(game, { describe: Module.resolveSaveIdentity, context: { userDataDir: path.join(root, "launcher") } });
+  assert.equal(adjusted.runtimeData["official-studio"].saveDirOverride, path.join(home, "Library/Application Support/com.creator.authored-game"));
+  assert.equal(fs.existsSync(home), false); assert.equal(fs.existsSync(path.join(root, "launcher")), false);
+});
+
+test("GameMaker shared save identity preserves explicit override precedence without touching files", t => {
+  const root = temporary(t, { catalog: false }), { applySaveIdentity } = require("../src/core/save-identity");
+  t.mock.method(Official.manager, "resolveSelection", () => assert.fail("explicit overrides need no host lookup"));
+  const context = { userDataDir: path.join(root, "launcher"), runtimeId: "official-studio" };
+  const game = { gameId: "explicit", runtimeId: "official-studio", launchArguments: "--unchanged", moduleData: { dataPath: path.join(root, "game/data.win") },
+    runtimeData: { "official-studio": { version: "selected", saveDirOverride: path.join(root, "runtime-chosen") } } };
+  assert.equal(Module.resolveSaveIdentity(game, context).identity, game.runtimeData["official-studio"].saveDirOverride);
+  assert.equal(applySaveIdentity(game, { games: [{ ...game, gameId: "same-explicit" }], describe: Module.resolveSaveIdentity, context }), game);
+  game.saveDirOverride = path.join(root, "entry-chosen");
+  assert.equal(Module.resolveSaveIdentity(game, context).identity, game.saveDirOverride);
+  assert.equal(OfficialLaunch.saveDirectory(game), game.saveDirOverride);
+  assert.equal(applySaveIdentity(game, { describe: Module.resolveSaveIdentity, context }), game);
+  assert.equal(game.launchArguments, "--unchanged");
+  assert.equal(fs.existsSync(game.saveDirOverride), false); assert.equal(fs.existsSync(context.userDataDir), false);
+});
+
+test("GameMaker shared save identity keeps distinct authored identities on one selected host", t => {
+  const root = temporary(t, { catalog: false }), { applySaveIdentity } = require("../src/core/save-identity");
+  const home = path.join(root, "native-home"); t.mock.method(os, "homedir", () => home);
+  const app = (name, id) => {
+    const directory = path.join(root, name); fs.mkdirSync(path.join(directory, "Contents"), { recursive: true });
+    fs.writeFileSync(path.join(directory, "Contents/Info.plist"), `<plist><dict><key>CFBundleIdentifier</key><string>${id}</string></dict></plist>`); return directory;
+  };
+  const host = app("Host.app", "com.vendor.shared"), lookedUp = [];
+  t.mock.method(Official.manager, "resolveSelection", game => { lookedUp.push(game.gameId); return { install: { runnerAppPath: host } }; });
+  const make = (gameId, identifier) => {
+    const nativeAppPath = app(gameId + ".app", identifier);
+    return { gameId, moduleId: "gamemaker", runtimeId: "official-studio", nativeAppPath,
+      moduleData: { dataPath: path.join(nativeAppPath, "Contents/Resources/game.ios") } };
+  };
+  const first = make("first", "com.creator.first"), second = make("second", "com.creator.second");
+  const originalInfo = [first, second].map(game => fs.readFileSync(path.join(game.nativeAppPath, "Contents/Info.plist")));
+  const context = { userDataDir: path.join(root, "launcher") };
+  for (const [game, other, id] of [[first, second, "com.creator.first"], [second, first, "com.creator.second"]]) {
+    assert.equal(Module.resolveSaveIdentity(game, context).identity, id);
+    const adjusted = applySaveIdentity(game, { games: [other], describe: Module.resolveSaveIdentity, context });
+    assert.equal(adjusted.runtimeData["official-studio"].saveDirOverride, path.join(home, "Library/Application Support", id));
+  }
+  const actualCollision = applySaveIdentity(first, { games: [{ ...second, nativeAppPath: first.nativeAppPath }], describe: Module.resolveSaveIdentity, context });
+  const collisionRoot = actualCollision.runtimeData["official-studio"].saveDirOverride;
+  assert.equal(collisionRoot, path.join(root, "saves/first"));
+  assert.equal(collisionRoot.startsWith(first.nativeAppPath + path.sep), false, "save isolation must stay outside the signed original bundle");
+  assert.equal(fs.existsSync(context.userDataDir), false); assert.equal(fs.existsSync(home), false);
+  fs.mkdirSync(path.join(context.userDataDir, "games/first/modules/gamemaker/official-saves"), { recursive: true });
+  const peer = { gameId: "not-gamemaker", moduleId: "alicesoft", moduleData: { dataPath: path.join(root, "other/System40.ini") } }, delegated = [];
+  lookedUp.length = 0;
+  const descriptors = require("../src/modules/gamemaker/backcompat").legacyGameMirrors(first, { ...context, games: [second, peer],
+    describeSaveIdentity: game => { if (game.moduleId === "alicesoft") { delegated.push(game.gameId); return { namespace: "other-engine", identity: "authored" }; } return null; } });
+  assert.deepEqual(delegated, [peer.gameId]); assert.equal(lookedUp.includes(peer.gameId), false);
+  const official = descriptors.find(row => row.mirrorRoot.endsWith("official-saves"));
+  assert.equal(official.sourceRoot, path.join(home, "Library/Application Support/com.creator.first"));
+  assert.equal(fs.existsSync(home), false);
+  for (const [index, game] of [first, second].entries()) assert.deepEqual(fs.readFileSync(path.join(game.nativeAppPath, "Contents/Info.plist")), originalInfo[index]);
+});
+
+test("official import with an explicit save override preserves vendor bytes and verifies owned staging", async t => {
   const root = temporary(t), version = "2024.14.4.268";
   const runtimeRoot = officialFixture(root, version), userDataDir = path.join(root, "launcher");
   const sourceApp = path.join(runtimeRoot, "mac/YoYo Runner.app");
@@ -800,6 +942,7 @@ test("official import and per-game staging preserve vendor bytes, verify whole b
   assert.equal(installed.version, version); assert.equal(installed.launchReady, true);
   assert.equal(installed.gameplayQualified, false); assert.equal(installed.artifactsPinned, false);
   const game = entry(path.join(root, "game"), { wad: 17 });
+  game.saveDirOverride = path.join(root, "chosen-saves");
   const context = { userDataDir, runtimeSettings: {}, gameArguments: ["--title", "A quoted game", "", "$(literal)"], spawnDetachedChecked: (executable, args, options) => ({ executable, args, options }) };
   const selection = Official.manager.resolveSelection({ runtimeData: { "gamemaker-official": { version } } }, {}, userDataDir);
   const launched = await OfficialLaunch.launchOfficial(game, context, selection, { runProcess, homeDir: path.join(root, "home") });
@@ -808,9 +951,9 @@ test("official import and per-game staging preserve vendor bytes, verify whole b
   assert.equal(launched.executable.startsWith(path.join(userDataDir, "games/tiny-game")), true);
   assert.equal(OfficialLaunch.hashRunnerTree(sourceApp), before);
   assert.equal(operations.filter(item => item.executable === "/usr/bin/codesign").length, 1);
-  const locations = OfficialLaunch.privateSaveLocations(game, context, { homeDir: path.join(root, "home") });
+  const locations = OfficialLaunch.overrideSaveLocations(game, context, { homeDir: path.join(root, "home") });
   assert.equal(fs.readlinkSync(locations.alias), game.defaultSaveDir);
-  assert.equal(game.defaultSaveDir.startsWith(path.join(userDataDir, "games/tiny-game")), true);
+  assert.equal(game.defaultSaveDir, game.saveDirOverride);
   await OfficialLaunch.launchOfficial(game, context, selection, { runProcess, homeDir: path.join(root, "home") });
   assert.equal(operations.filter(item => item.executable === "/usr/bin/codesign").length, 1);
   fs.writeFileSync(path.join(installed.runnerAppPath, "Contents", "injected-resource"), "changed resource");
@@ -821,22 +964,88 @@ test("official import and per-game staging preserve vendor bytes, verify whole b
   assert.equal(fs.existsSync(runtimeRoot), true);
 });
 
-test("official save aliases refuse preexisting user files and preserve unrelated symlinks during cleanup", t => {
+test("official ordinary Play uses the installed runner and its vendor identity without staging or aliases", async t => {
+  const root = temporary(t), version = "2024.14.4.268", runtimeRoot = officialFixture(root, version);
+  const userDataDir = path.join(root, "launcher"), homeDir = path.join(root, "home");
+  const sourceApp = path.join(runtimeRoot, "mac/YoYo Runner.app");
+  const infoFile = path.join(sourceApp, "Contents/Info.plist");
+  fs.writeFileSync(infoFile, "<plist><dict><key>CFBundleExecutable</key><string>Mac_Runner</string><key>CFBundleIdentifier</key><string>com.yoyogames.macyoyorunner</string></dict></plist>");
+  const runProcess = async (command, args) => {
+    if (command === "/usr/bin/ditto") fs.cpSync(args[0], args[1], { recursive: true });
+    else assert.fail(`ordinary runner launch must not sign or rewrite the bundle: ${command}`);
+    return { stdout: "", stderr: "" };
+  };
+  const installed = await Official.importOfficialRuntime({ userDataDir, runtimeRoot, dependencies: { runProcess } });
+  const before = OfficialLaunch.hashRunnerTree(installed.runnerAppPath);
+  const game = entry(path.join(root, "game"), { wad: 17 });
+  const context = { userDataDir, settings: {}, runtimeSettings: { softwareOpenGLFallback: "disabled" },
+    spawnDetachedChecked: (executable, args, options) => ({ executable, args, options }) };
+  const selection = Official.manager.resolveSelection({ runtimeData: { "gamemaker-official": { version } } }, {}, userDataDir);
+  const launch = await OfficialLaunch.launchOfficial(game, context, selection, { runProcess, homeDir });
+  assert.equal(launch.executable, installed.executablePath);
+  assert.deepEqual(launch.args, ["-game", game.moduleData.dataPath]);
+  assert.equal(launch.options.cwd, path.dirname(game.moduleData.dataPath));
+  assert.equal(game.defaultSaveDir, null, "the vendor runner keeps its own save policy");
+  assert.equal(fs.existsSync(path.join(userDataDir, "games/tiny-game/modules/gamemaker")), false);
+  assert.equal(fs.existsSync(homeDir), false, "no bundle-ID alias or default save directory is constructed");
+  assert.equal(OfficialLaunch.hashRunnerTree(installed.runnerAppPath), before);
+  assert.match(fs.readFileSync(infoFile, "utf8"), /com\.yoyogames\.macyoyorunner/);
+});
+
+test("official graphics signing copies preserve the vendor identity without a save alias", async t => {
+  const root = temporary(t), runtimeRoot = officialFixture(root), sourceApp = path.join(runtimeRoot, "mac/YoYo Runner.app");
+  const infoFile = path.join(sourceApp, "Contents/Info.plist"), originalInfo = "<plist><dict><key>CFBundleExecutable</key><string>Mac_Runner</string><key>CFBundleIdentifier</key><string>com.yoyogames.macyoyorunner</string></dict></plist>";
+  fs.writeFileSync(infoFile, originalInfo);
+  const install = { version: "2026.0.0.23", runnerAppPath: sourceApp,
+    executablePath: path.join(sourceApp, "Contents/MacOS/Mac_Runner"), runnerTreeSha256: OfficialLaunch.hashRunnerTree(sourceApp) };
+  install.binarySha256 = Inspect.hashFile(install.executablePath);
+  const game = entry(path.join(root, "game"), { wad: 17 }), context = { userDataDir: path.join(root, "launcher") };
+  const homeDir = path.join(root, "home"), commands = [], runProcess = async (command, args) => {
+    assert.equal(command, "/usr/bin/codesign", "graphics-only staging must not alter the vendor bundle ID");
+    commands.push({ command, args }); return { stdout: "", stderr: "" };
+  };
+  const staged = await OfficialLaunch.stageRunner(game, context, install, { needsSigning: true, runProcess, homeDir });
+  assert.notEqual(staged.appPath, sourceApp);
+  assert.equal(staged.identifier, null); assert.equal(staged.saveAlias, null); assert.equal(staged.saveDir, null);
+  assert.equal(fs.existsSync(homeDir), false);
+  assert.equal(fs.readFileSync(path.join(staged.appPath, "Contents/Info.plist"), "utf8"), originalInfo);
+  assert.equal(OfficialLaunch.hashRunnerTree(sourceApp), install.runnerTreeSha256);
+  await OfficialLaunch.stageRunner(game, context, install, { needsSigning: true, runProcess, homeDir });
+  assert.equal(commands.length, 1, "a verified signing copy is reused");
+  fs.appendFileSync(path.join(staged.appPath, "Contents/MacOS/Mac_Runner"), "tampered");
+  await assert.rejects(OfficialLaunch.stageRunner(game, context, install, { needsSigning: true, runProcess, homeDir }), /staged official runner changed/);
+  assert.equal(OfficialLaunch.hashRunnerTree(sourceApp), install.runnerTreeSha256);
+});
+
+test("official save override aliases refuse preexisting user files and preserve unrelated symlinks during cleanup", t => {
   const root = temporary(t), game = entry(root, { wad: 17 });
+  game.saveDirOverride = path.join(root, "chosen-saves");
   const context = { userDataDir: path.join(root, "launcher") };
   const options = { homeDir: path.join(root, "home") };
-  const locations = OfficialLaunch.privateSaveLocations(game, context, options);
+  const locations = OfficialLaunch.overrideSaveLocations(game, context, options);
+  const releasedIdentifier = "com.maclauncher.gamemaker." + require("node:crypto").createHash("sha256")
+    .update(path.resolve(context.userDataDir) + "\0" + game.gameId).digest("hex").slice(0, 24);
+  assert.notEqual(path.basename(locations.alias), releasedIdentifier, "explicit override identity must not collide with the released default alias");
+  const anotherOverride = OfficialLaunch.overrideSaveLocations({ ...game, saveDirOverride: path.join(root, "another-save-folder") }, context, options);
+  assert.notEqual(anotherOverride.alias, locations.alias, "changing the explicit destination must not reuse a different override's alias");
   fs.mkdirSync(locations.support, { recursive: true });
   fs.mkdirSync(locations.alias);
   fs.writeFileSync(path.join(locations.alias, "user-save"), "preserve");
-  assert.throws(() => OfficialLaunch.ensurePrivateSaves(locations), /belongs to another/);
+  assert.throws(() => OfficialLaunch.ensureSaveOverride(locations), /belongs to another/);
   OfficialLaunch.cleanupGameData(game, context, options);
   assert.equal(fs.readFileSync(path.join(locations.alias, "user-save"), "utf8"), "preserve");
   fs.rmSync(locations.alias, { recursive: true });
   fs.symlinkSync(root, locations.alias);
-  assert.throws(() => OfficialLaunch.ensurePrivateSaves(locations), /belongs to another/);
+  assert.throws(() => OfficialLaunch.ensureSaveOverride(locations), /belongs to another/);
   OfficialLaunch.cleanupGameData(game, context, options);
   assert.equal(fs.readlinkSync(locations.alias), root);
+});
+
+test("official cleanup without a save override performs no filesystem work", t => {
+  for (const name of ["existsSync", "statSync", "lstatSync", "readdirSync", "readFileSync", "mkdirSync", "unlinkSync"]) {
+    t.mock.method(fs, name, () => assert.fail(`ordinary cleanup must not touch save aliases: ${name}`));
+  }
+  OfficialLaunch.cleanupGameData({ gameId: "ordinary" }, { userDataDir: "/unused-profile" });
 });
 
 test("cold decompilation consents before discovery, resumes the installed version and cancels without acquisition", { skip: process.platform !== "darwin" }, async t => {

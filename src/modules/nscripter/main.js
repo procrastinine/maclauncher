@@ -1,9 +1,11 @@
 const { spawnSync } = require("node:child_process");
+const { cloneOrCopySync } = require("../shared/copy-file");
 const fs = require("node:fs");
 const path = require("node:path");
 
 const manifest = require("./manifest.json");
 const GameData = require("../shared/game-data");
+const Writable = require("../shared/writable-input");
 const { detectGame } = require("./detect");
 const {
   extractPackagedExe,
@@ -15,6 +17,8 @@ const OnsyuriRuntime = require("../shared/onsyuri/runtime/onsyuri-runtime");
 const NwjsPatchedLauncher = require("../shared/web/runtime/nwjs-patched-launcher");
 const OnscripterEnManager = require("./runtime/onscripter-en-manager");
 const NativeTools = require("./native-tools");
+const Identity = require("./identity");
+const Font = require("./font");
 const { resolveInstalledEnvironment } = require("../shared/runtime/bundled-native");
 const MachO = require("../shared/runtime/macho-load-commands");
 const { resolveAppBundleExecutablePath } = require("../shared/runtime/app-bundle");
@@ -32,7 +36,6 @@ const ONSYURI_SCRIPT_NAMES = new Set([
 ]);
 const UTF_SCRIPT_NAME = "0.utf";
 const FONT_ALIAS_NAME = "default.ttf";
-const FALLBACK_FONT_NAME = "umeplus-gothic.ttf";
 const JSZIP_FILE_NAME = "jszip.min.js";
 const DYLIB_HINTS = {
   "liblua.dylib": "lua",
@@ -387,17 +390,7 @@ function getScriptInfo(rootDir) {
 }
 
 function resolveFallbackFont(userDataDir) {
-  if (!userDataDir) return null;
-  const sourcePath = path.join(__dirname, "resources", FALLBACK_FONT_NAME);
-  if (!existsFile(sourcePath)) return null;
-  const destDir = path.join(userDataDir, "modules", manifest.id, "assets");
-  const destPath = path.join(destDir, FALLBACK_FONT_NAME);
-  if (existsFile(destPath)) return destPath;
-  try {
-    ensureDir(destDir);
-    fs.copyFileSync(sourcePath, destPath);
-  } catch {}
-  return existsFile(destPath) ? destPath : null;
+  return Font.resolve(userDataDir);
 }
 
 function resolveFontPath({ rootDir, userDataDir, moduleSettings }) {
@@ -423,7 +416,7 @@ function ensureJsZip(wrapperDir) {
   const destPath = path.join(wrapperDir, JSZIP_FILE_NAME);
   if (existsFile(destPath)) return destPath;
   try {
-    fs.copyFileSync(sourcePath, destPath);
+    cloneOrCopySync(sourcePath, destPath);
   } catch {}
   return existsFile(destPath) ? destPath : null;
 }
@@ -456,11 +449,8 @@ function buildMacWrapper({ userDataDir, gameId, gameRootDir, scriptInfo }) {
     GameData.resolveGameRuntimeDir(userDataDir, gameId, "onsyuri_mac"),
     "wrappers"
   );
-  ensureDir(wrappersRoot);
-
   const wrapperDir = path.join(wrappersRoot, "wrapper");
-  safeRm(wrapperDir);
-  ensureDir(wrapperDir);
+  Writable.assertOwnDirectory(userDataDir, wrapperDir);
 
   symlinkDirContents(gameRootDir, wrapperDir);
   ensureScriptAlias(wrapperDir, scriptInfo);
@@ -483,11 +473,8 @@ function buildWebWrapper({
     GameData.resolveGameRuntimeDir(userDataDir, gameId, "onsyuri_web"),
     "wrappers"
   );
-  ensureDir(wrappersRoot);
-
   const wrapperDir = path.join(wrappersRoot, "wrapper");
-  safeRm(wrapperDir);
-  ensureDir(wrapperDir);
+  Writable.assertOwnDirectory(userDataDir, wrapperDir);
 
   symlinkDirContents(runtimeRootDir, wrapperDir);
   patchOnsyuriJs(wrapperDir, runtimeRootDir);
@@ -540,7 +527,7 @@ function buildOnsyuriIndex({
     lazyload: true,
     files: merged.map(p => ({ path: p }))
   };
-  fs.writeFileSync(path.join(wrapperDir, "onsyuri_index.json"), JSON.stringify(payload, null, 2));
+  Writable.atomicWrite(path.join(wrapperDir, "onsyuri_index.json"), JSON.stringify(payload, null, 2), { root: wrapperDir });
 }
 
 function patchOnsyuriJs(wrapperDir, runtimeRootDir) {
@@ -557,12 +544,7 @@ function patchOnsyuriJs(wrapperDir, runtimeRootDir) {
   const patched = raw.replace(ONSYURI_JS_ENV_REGEX, "var ENVIRONMENT_IS_NODE=false;");
   if (patched === raw) return null;
   const target = path.join(wrapperDir, "onsyuri.js");
-  try {
-    if (fs.existsSync(target)) {
-      fs.unlinkSync(target);
-    }
-  } catch {}
-  fs.writeFileSync(target, patched, "utf8");
+  Writable.atomicWrite(target, patched, { root: wrapperDir });
   return target;
 }
 
@@ -598,7 +580,7 @@ function ensureOnsyuriHtml(wrapperDir, runtimeEntryHtml) {
     );
   }
   const target = path.join(wrapperDir, "maclauncher-onsyuri.html");
-  fs.writeFileSync(target, raw, "utf8");
+  Writable.atomicWrite(target, raw, { root: wrapperDir });
   return target;
 }
 
@@ -625,9 +607,12 @@ function cleanupGameData(entry, context) {
 
 function resolveSaveLocations(entry, context = {}) {
   const runtimeId = entry.runtimeId || context.settings?.modules?.nscripter?.defaultRuntime || manifest.runtime.default;
-  if (runtimeId === "onsyuri_web" || runtimeId === "external") return { primaryDirectory: null, directories: [] };
-  const directory = path.join(NativeTools.moduleRoot(entry, context), "saves");
-  return { primaryDirectory: directory, directories: [{ directory, label: "Saves", source: "managed native interpreter" }] };
+  const directory = entry.saveDirOverride || (runtimeId === "onsyuri_mac" ? entry.contentRootDir || entry.gamePath :
+    runtimeId === "onscripter_en" ? Identity.saveDirectory(entry, context) : null);
+  // EN derives its own identifier from the script and uses the native user
+  // application-support directory. Its exact path is not a launcher game ID.
+  return { primaryDirectory: directory || null, directories: directory
+    ? [{ directory, label: "Saves", source: entry.saveDirOverride ? "save-folder override" : "interpreter game root", confidence: "inferred" }] : [] };
 }
 
 function buildNativeLaunchArgs(entry, gameRootDir, managedSaveDir) {
@@ -688,6 +673,7 @@ async function launchRuntime(runtimeId, entry, context) {
   if (!gameRootDir || !existsDir(gameRootDir)) {
     throw new Error("NScripter game root was not found.");
   }
+  if (["onsyuri_mac", "onscripter_en", "onsyuri_web"].includes(runtimeId)) await Font.ensure(gameRootDir, context);
 
   if (runtimeId === "onsyuri_mac") {
     const install = resolveOnsyuriMacInstall(context.userDataDir, context.settings, runtimeData);
@@ -713,9 +699,9 @@ async function launchRuntime(runtimeId, entry, context) {
             scriptInfo
           })
         : gameRootDir;
-    const { saveDir } = NativeTools.prepareNativeSaves(entry, context, gameRootDir);
-    context.onEntryChange?.({ defaultSaveDir: entry.defaultSaveDir });
-    const args = buildNativeLaunchArgs(entry, resolvedRootDir, saveDir);
+    // Yuri needs a filename alias for 0.utf. Keep its ordinary root-based
+    // saves on the original game even when that required adapter is used.
+    const args = buildNativeLaunchArgs(entry, resolvedRootDir, resolvedRootDir !== gameRootDir ? gameRootDir : null);
     const encoding = resolveScriptEncoding(scriptInfo, context.runtimeSettings);
     if (encoding !== "runtime") args.push(`--enc:${encoding}`);
     const fontPath = resolveFontPath({
@@ -728,31 +714,26 @@ async function launchRuntime(runtimeId, entry, context) {
     }
 
     const needsRosetta = require("../shared/runtime/architecture").requiresRosetta(install.variant);
-    const directory = path.join(NativeTools.moduleRoot(entry, context), "yuri");
-    NativeTools.prepareConfig(gameRootDir, directory);
     args.push(...(context.gameArguments || []));
     context.logger?.info?.(`[runtime] launch onsyuri ${binaryPath} ${args.join(" ")}`);
-    return context.spawnDetachedChecked(binaryPath, args, { cwd: directory }, needsRosetta);
+    return context.spawnDetachedChecked(binaryPath, args, { cwd: gameRootDir }, needsRosetta);
   }
 
   if (runtimeId === "onscripter_en") {
     const selection = OnscripterEnManager.resolveSelection(entry, context.settings, context.userDataDir);
     if (!selection.ready) throw new Error(selection.reason);
-    const directory = path.join(NativeTools.moduleRoot(entry, context), "onscripter-en");
-    NativeTools.prepareConfig(gameRootDir, directory);
-    const { saveDir } = NativeTools.prepareNativeSaves(entry, context, gameRootDir);
-    const args = ["--root", gameRootDir, "--save", saveDir + (saveDir.endsWith(path.sep) ? "" : path.sep),
-      "--gameid", entry.gameId, "--" + NativeTools.resolveTextMode(gameRootDir, context.runtimeSettings),
+    const { saveDir } = NativeTools.prepareNativeSaves(entry);
+    const args = ["--root", gameRootDir, ...(saveDir ? ["--save", saveDir + (saveDir.endsWith(path.sep) ? "" : path.sep)] : []),
+      "--" + NativeTools.resolveTextMode(gameRootDir, context.runtimeSettings),
       context.runtimeSettings?.fullscreen === true ? "--fullscreen" : "--window"];
     if (context.runtimeSettings?.enableVariableEditor === true) args.push("--edit");
     const keyExecutable = NativeTools.resolveKeyExecutable(gameRootDir, entry);
     if (keyExecutable) args.push("--key-exe", keyExecutable);
     const fontPath = resolveFontPath({ rootDir: gameRootDir, userDataDir: context.userDataDir, moduleSettings: context.moduleSettings });
     if (fontPath) args.push("--font", fontPath);
-    context.onEntryChange?.({ defaultSaveDir: entry.defaultSaveDir });
     args.push(...(context.gameArguments || []));
     return context.spawnDetachedChecked(selection.install.executablePath, args,
-      { cwd: directory, env: { ...process.env, ...resolveInstalledEnvironment(selection.install) } }, selection.install.needsRosetta);
+      { cwd: gameRootDir, env: { ...process.env, ...resolveInstalledEnvironment(selection.install) } }, selection.install.needsRosetta);
   }
 
   if (runtimeId === "onsyuri_web") {
@@ -854,6 +835,7 @@ module.exports = {
   resolveSaveLocations,
   runtimeManagers: [OnscripterEnManager],
   onImport: (entry, context) => { entry.defaultSaveDir = resolveSaveLocations(entry, context).primaryDirectory; },
+  resolveSaveIdentity: Identity.resolveSaveIdentity,
   actions: {
     exportScript: async (entry, payload, context) => {
       const { gameRootDir } = await resolveGameRoot(entry, context);
@@ -868,6 +850,7 @@ module.exports = {
   },
   cleanupGameData,
   __test: {
+    resolveFontPath,
     parseMissingDylibs,
     listMissingDylibs,
     buildOnsyuriIndex,

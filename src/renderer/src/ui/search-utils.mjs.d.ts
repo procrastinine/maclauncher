@@ -12,7 +12,8 @@ export function matchesGameQuery(
 export function filterGames<T extends GameSearchEntry>(
   games: T[],
   query: string | null | undefined,
-  allowedModuleIds?: Iterable<string> | null
+  allowedModuleIds?: Iterable<string> | null,
+  filterableModuleIds?: Iterable<string> | null
 ): T[];
 
 export function gameTypeOptionsForModules(

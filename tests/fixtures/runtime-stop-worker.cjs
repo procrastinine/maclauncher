@@ -3,12 +3,13 @@ const fs=require('node:fs'),path=require('node:path'),{spawn}=require('node:chil
 const {createBackendOperations}=require('../../src/core/backend-operations');
 const {bindProcessStop}=require('../../src/core/process-lifecycle');
 const {errorRecord}=require('../../src/core/backend-worker-client');
+const {untilTestEnds}=require('../helpers/fixture-process');
 const root=workerData.userDataDir,gamePath=path.join(root,'fixture-game');fs.mkdirSync(gamePath,{recursive:true});
 let entry,child,mode='graceful',release,entered=false,calls=0;
 const info={id:'stop-fixture',label:'Stop fixture',gameType:'native',runtime:{default:'runner',supported:['runner'],entries:{runner:{}}}};
 const mod={id:info.id,manifest:info,launchRuntime:async(_id,_entry,context)=>{
   entered=false;calls=0;
-  child=spawn(process.execPath,['-e',`process.on('SIGTERM',()=>process.stdout.write('UNEXPECTED_TERM\\n'));process.on('SIGINT',()=>process.stdout.write('UNEXPECTED_INT\\n'));process.stdin.on('data',()=>process.exit(0));console.log('ready');setInterval(()=>{},1000)`],{detached:true,stdio:['pipe','pipe','pipe']});
+  child=spawn(process.execPath,['-e',`process.on('SIGTERM',()=>process.stdout.write('UNEXPECTED_TERM\\n'));process.on('SIGINT',()=>process.stdout.write('UNEXPECTED_INT\\n'));process.stdin.on('data',()=>process.exit(0));console.log('ready');${untilTestEnds}`],{detached:true,stdio:['pipe','pipe','pipe']});
   await once(child.stdout,'data');
   if(mode!=='fallback')bindProcessStop(child,async()=>{
     calls++;entered=true;parentPort.postMessage({type:'event',event:'stopEntered',payload:{pid:child.pid,threadId}});

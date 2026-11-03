@@ -6,6 +6,7 @@ const declarations = require("./distribution-supplementals.json"), run = promisi
 const VERSION = "1.0.0-ml1", LIMITS = Object.freeze({ inputBytes: 64 * 1024 * 1024, pcmBytes: 256 * 1024 * 1024, seconds: 600, timeoutMs: 30000 });
 const signatures = new Map();
 
+// Included helper selection defaults to the launcher process CPU, including under Rosetta.
 async function resolveHelper({ resourcesRoot, platform = process.platform, arch = process.arch, dependencies = {} } = {}) {
   if (platform !== "darwin" || !["arm64", "x64"].includes(arch)) throw new Error("Ogg/Vorbis decoding requires an Apple Silicon or Intel Mac.");
   const pin = (dependencies.declarations || declarations).find(item => item.id === "catsystem2-ogg-decode" && item.version === VERSION);

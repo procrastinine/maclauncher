@@ -2,7 +2,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 // Older Tyrano exports derive file saves from the runner executable directory.
-// Preserve their escaped JSON format while using the game's managed directory.
+// Preserve their escaped JSON format at the original game's location when
+// the shared Electron executable supplies the runtime.
+function resolveDirectory(config = {}) {
+  return config.saveDir || config.gameDir || config.contentRootDir || null;
+}
 function install(target, saveDir, fileSystem = fs) {
   if (!target || typeof saveDir !== "string" || !path.isAbsolute(saveDir)) return false;
   const root = path.resolve(saveDir);
@@ -33,4 +37,4 @@ function install(target, saveDir, fileSystem = fs) {
   return true;
 }
 
-module.exports = { install };
+module.exports = { install, resolveDirectory };

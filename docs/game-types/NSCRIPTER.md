@@ -42,7 +42,9 @@ Refresh loads the available Mac packages from [MacLauncher Builds](https://procr
 
 MacLauncher Builds adds its own CMake and Cocoa files, which replace the obsolete nib and QuickTime shell, use the maintained SDL12-compat, enable generic little-endian MPEG code and adapt legacy codec declarations without editing the upstream source. Packages statically include SDL_image, SDL_mixer, SDL_ttf, FreeType, Ogg/Vorbis, PNG, JPEG, bzip2 and the SMPEG codecs. WAV, Vorbis and MP3/MPEG playback are available; legacy QuickTime and native MIDI support are not included.
 
-ONScripter-EN also recognizes the declared UTF formats `0.utf`, `00.utf`, their `.txt` forms and `pscript.dat`. Its native launch uses the original root folder, an automatically chosen original or fallback font, and a small working folder of its own for configuration and log files. For encrypted scripts, ONScripter-EN receives the original executable through its upstream `--key-exe` option.
+ONScripter-EN also recognizes the declared UTF formats `0.utf`, `00.utf`, their `.txt` forms and `pscript.dat`. Its native launch uses the original root and working folder, including the original `ons.cfg`, and an automatically chosen original or fallback font. For encrypted scripts, ONScripter-EN receives the original executable through its upstream `--key-exe` option.
+
+Native players and Yuri Web use the configured **Default font path** or the game's own `default.ttf` first. When neither is supplied, Play downloads the UmePlus Gothic fallback font after consent. Its pinned size and SHA-256 are checked before installation in shared permanent Application Support. Later launches reuse it offline without copying it into the game.
 
 | Setting | Values |
 | --- | --- |
@@ -60,7 +62,11 @@ This runtime also needs the shared NW.js SDK host described in [web runtimes](..
 
 ## Saves
 
-Native players save to `userData/games/<id>/modules/nscripter/saves/`, or to the save-folder override. Known small Windows save files are imported once when they are missing there, without replacing saves already in that folder. ONScripter-EN receives this folder through its `--save` option and ONScripter-Yuri through `--save-dir`. A `savedir` set by the script stays relative to this folder.
+Native players keep their upstream save locations. ONScripter-Yuri uses the original game root unless the script chooses a save directory. ONScripter-EN derives its save identity from the original script and uses `~/Library/Application Support/<gameid>/` on macOS. A save-folder override is passed explicitly through `--save` for EN or `--save-dir` for Yuri. Launch does not scan or import existing saves into MacLauncher data.
+
+EN accepts an authored `game.id`, an initial `;gameid` script directive or the `--gameid` launch argument. Its fallback identifier is the normalized script length. Import keeps that behavior unless the game's save location collides with another game in the library; it then records a distinct game identity as a `--gameid` argument in the ordinary per-game launch settings.
+
+For a game that contains only `0.utf`, Yuri needs a file-name adapter, which keeps the original game as the working folder and default save location. Yuri Web keeps its WebAssembly file-system adapter and browser saves.
 
 ONScripter-Yuri Web saves to its browser file system, separately from native Yuri saves, and these saves are not converted to native saves. The inspector offers save locations and snapshots; there is no general save-data editor for NScripter.
 

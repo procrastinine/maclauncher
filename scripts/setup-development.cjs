@@ -4,21 +4,24 @@ const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
 
+// These inputs target the selected launcher CPU; the default is this Node process, including under Rosetta.
 async function prepareDevelopmentInputs({ repoRoot = ROOT, arch = process.arch, platform = process.platform,
   installElectron = () => require('./ci-macos.cjs').prepareElectron({ repoRoot }),
   readLock = require('./runtime-packages.cjs').readLock,
   preparePython = require('./ci-macos.cjs').preparePython,
   prepareSevenZip = require('./published-inputs.cjs').prepareSevenZip,
   prepareDeclaredPublishers = require('./published-inputs.cjs').prepareDeclaredPublishers,
+  prepareCp932 = require('../src/modules/catsystem2/runtime/stage-cp932.cjs').prepare,
   fetchPackages = require('./runtime-packages.cjs').fetchPackages } = {}) {
   await installElectron();
-  if (platform !== 'darwin') return { electron: true, nativePackages: 0, platform };
+  const cp932 = await prepareCp932({ repoRoot });
+  if (platform !== 'darwin') return { electron: true, nativePackages: 0, platform, cp932 };
   const lock = readLock({ repoRoot, arch });
   const python = await preparePython({ repoRoot, arch });
   const sevenZip = await prepareSevenZip({ repoRoot });
   const publishers = await prepareDeclaredPublishers({ repoRoot });
   const result = await fetchPackages({ repoRoot, lock });
-  return { electron: true, arch, nativePackages: result.packages, ...python, sevenZip, publishers };
+  return { electron: true, arch, nativePackages: result.packages, ...python, sevenZip, publishers, cp932 };
 }
 
 async function main(args = process.argv.slice(2), { env = process.env } = {}) {

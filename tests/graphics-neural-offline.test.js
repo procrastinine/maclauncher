@@ -2,6 +2,7 @@ const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path"), crypto = require("node:crypto");
 const { processVideo } = require("../src/modules/shared/reshade/neural/offline");
 const Source = require("../src/modules/shared/reshade/neural/source.json");
+const { untilTestEnds } = require("./helpers/fixture-process");
 
 function fixture(t, body) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "neural-offline-")));
@@ -119,7 +120,7 @@ test("offline export cancellation stops the owned child and lets its native stag
 const stage = options['--output']+'.partial'; fs.writeFileSync(stage, 'partial');
 process.on('SIGTERM',()=>{fs.rmSync(stage,{force:true});process.stdout.write('{"type":"cancelled"}\\n');process.exit(130);});
 process.stdout.write(${JSON.stringify(JSON.stringify(progress) + "\n")});
-setInterval(()=>{},1000);
+${untilTestEnds}
 `);
   const controller = new AbortController();
   await assert.rejects(processVideo({ ...selected, signal: controller.signal, onProgress: () => controller.abort() }), { name: "AbortError" });
@@ -149,7 +150,7 @@ setTimeout(()=>{
 });
 
 test("offline export rejects older macOS and oversized subprocess messages", async t => {
-  const selected = fixture(t, `process.stdout.write('x'.repeat(70000));setInterval(()=>{},1000);`);
+  const selected = fixture(t, `process.stdout.write('x'.repeat(70000));${untilTestEnds}`);
   await assert.rejects(processVideo({ ...selected, macOSVersion: "15.5" }), /macOS 26/);
   await assert.rejects(processVideo(selected), /oversized progress/);
   assert.equal(fs.existsSync(selected.output), false);

@@ -1,6 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const {resolve}=require('../src/modules/android/art/runtime');
 const definition=require('../src/modules/android/art/supplier.json');
+const {untilTestEnds}=require('./helpers/fixture-process');
 function fixture(t,cleanup){const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-art-'));t.after(()=>{cleanup?.(root);fs.rmSync(root,{recursive:true,force:true});});return root;}
 const componentNames=Object.keys(require('../src/modules/android/art/components.json'));
 test('actual ART native host binds the selected runner identity API before guest execution',{timeout:15000},t=>{
@@ -91,11 +92,11 @@ test('ART native readiness preserves child failures, dependency exits and cancel
  const failed=child('wait-failed','console.error("original Binder transport failure");process.exit(15);');
  await assert.rejects(nativeServiceReady(directory,failed),/wait-failed stopped \(15\): original Binder transport failure/);
  const dependency=child('composer','process.stdin.once("data",()=>{console.error("original composer initialization failure");process.exit(23);});');
- const waiting=child('wait-composer','setInterval(()=>{},1000);');
+ const waiting=child('wait-composer',untilTestEnds);
  const dependencyReady=nativeServiceReady(directory,waiting,{dependency});dependency.stdin.end('stop');
  await assert.rejects(dependencyReady,/composer stopped \(23\): original composer initialization failure/);
  assert.equal(waiting.listenerCount('close'),0);assert.equal(dependency.listenerCount('close'),0);
- const first=child('ready-composer','setInterval(()=>{},1000);'),second=child('surfaceflinger','process.stdin.once("data",()=>{console.error("original SurfaceFlinger failure");process.exit(24);});');
+ const first=child('ready-composer',untilTestEnds),second=child('surfaceflinger','process.stdin.once("data",()=>{console.error("original SurfaceFlinger failure");process.exit(24);});');
  const both=nativeServiceReady(directory,waiting,{dependencies:[first,second]});second.stdin.end('stop');
  await assert.rejects(both,/surfaceflinger stopped \(24\): original SurfaceFlinger failure/);
  assert.equal(first.listenerCount('close'),0);assert.equal(second.listenerCount('close'),0);assert.equal(waiting.listenerCount('close'),0);

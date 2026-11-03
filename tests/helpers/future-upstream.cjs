@@ -47,13 +47,6 @@ UpstreamTransport.downloadToFile = async (url, destination, { onProgress } = {})
 };
 https.request = https.get = http.request = http.get = url => { throw offlineError(url); };
 globalThis.fetch = async url => { throw offlineError(url); };
-// Modules that call undici's fetch directly (for example HEAD lookups) receive
-// routed responses; anything else is offline.
-require("undici").fetch = async (url, { method = "GET" } = {}) => {
-  if (!network.routes || lookup(network.routes, String(url)) === undefined) { network.requests.push(String(url)); throw offlineError(url); }
-  const { status, headers, body } = respond(url);
-  return new Response(method === "HEAD" || [204, 304].includes(status) ? null : body, { status, headers });
-};
 
 // --- GitHub-shaped publishers -------------------------------------------------
 

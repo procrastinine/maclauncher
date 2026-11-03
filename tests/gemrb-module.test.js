@@ -39,28 +39,19 @@ test("GemRB detects GAME format version and family indicators without conflating
   assert.equal(detected.moduleData.gameType, "iwd2"); assert.equal(detected.moduleData.detectedVersion, null);
 });
 
-test("GemRB isolates configurations, caches and saves and rejects unsupported GAME formats", t => {
+test("GemRB uses original game and save paths with only configuration and cache in launcher storage", t => {
   const root = temporary(t), gameRoot = path.join(root, "game"), data = path.join(root, "data");
   const entry = { ...game(gameRoot), gameId: "fixture" };
-  const original = fs.readdirSync(gameRoot);
   fs.writeFileSync(path.join(gameRoot, "baldur.ini"), "Original settings");
-  fs.writeFileSync(path.join(gameRoot, "GemRB.log"), "Original log");
-  fs.writeFileSync(path.join(gameRoot, "gemrb_path.txt"), "Original paths");
-  original.push("baldur.ini", "GemRB.log", "gemrb_path.txt"); original.sort();
   const context = { userDataDir: data, runtimeSettings: { width: 1024, height: 768, enableCheatKeys: true } };
   const prepared = Module.__test.prepareLaunch(entry, context);
-  const config = fs.readFileSync(prepared.configPath, "utf8");
-  assert.match(config, /Width=1024\nHeight=768/); assert.match(config, /EnableCheatKeys=1/);
-  assert.ok(prepared.saveRoot.startsWith(path.join(data, "games", "fixture", "modules", "gemrb")));
-  assert.deepEqual(fs.readdirSync(gameRoot), original);
-  assert.equal(prepared.config.GamePath, prepared.stagedRoot);
-  fs.writeFileSync(path.join(prepared.stagedRoot, "baldur.ini"), "Runtime settings");
-  fs.writeFileSync(path.join(prepared.stagedRoot, "GemRB.log"), "Runtime log");
-  fs.writeFileSync(path.join(prepared.stagedRoot, "gemrb_path.txt"), "Runtime paths");
+  assert.match(fs.readFileSync(prepared.configPath, "utf8"), /Width=1024\nHeight=768/);
+  assert.equal(prepared.config.GamePath, gameRoot);assert.equal(prepared.config.SavePath, gameRoot);
+  assert.equal(entry.defaultSaveDir, gameRoot);assert.equal(prepared.root, gameRoot);
+  assert.deepEqual(fs.readdirSync(prepared.directory).sort(), ["GemRB.cfg", "cache"]);
   assert.equal(fs.readFileSync(path.join(gameRoot, "baldur.ini"), "utf8"), "Original settings");
-  assert.equal(fs.readFileSync(path.join(gameRoot, "GemRB.log"), "utf8"), "Original log");
-  assert.equal(fs.readFileSync(path.join(gameRoot, "gemrb_path.txt"), "utf8"), "Original paths");
-  assert.equal(fs.readFileSync(Module.__test.prepareLaunch(entry, context).stagedRoot + "/baldur.ini", "utf8"), "Runtime settings");
+  const override = path.join(root, "portable-saves");
+  assert.equal(Module.__test.prepareLaunch({...entry, saveDirOverride: override}, context).config.SavePath, override);
   assert.throws(() => Module.__test.configValue("path\nGameType=bad"), /newlines/);
   fs.writeFileSync(path.join(gameRoot, "baldur.gam"), "GAMEV9.9");
   assert.throws(() => Module.__test.prepareLaunch(entry, context), /unsupported/);
@@ -82,7 +73,7 @@ test("GemRB launch uses versioned registered CLI runtime and explicit configurat
   let call;
   await Module.launchRuntime("gemrb", entry, { userDataDir: root, settings: {}, gameArguments: ["--title", "A quoted game", "", "$(literal)"], spawnDetachedChecked: async (...args) => { call = args; return {}; } });
   assert.equal(call[0], executable); assert.equal(call[1][0], "-c");
-  assert.ok(call[1][1].endsWith("GemRB.cfg")); assert.equal(call[2].cwd, path.dirname(call[1][1]));
+  assert.ok(call[1][1].endsWith("GemRB.cfg")); assert.equal(call[2].cwd, gameRoot);
   assert.deepEqual(call[1].slice(2), ["--title", "A quoted game", "", "$(literal)"]);
   assert.equal(call[2].env.PYTHONDONTWRITEBYTECODE, "1");
   assert.equal(call[2].env.SDL_MAC_BACKGROUND_APP, "0");
@@ -116,29 +107,36 @@ test("GemRB imports standalone game folders and prepares their unique bundled pr
   const explicitPrevious = { ...entry, runtimeData: { gemrb: { version: "0.9.5-cli-v4" } } };
   assert.equal(Module.runtimeManagers[0].resolveSelection(explicitPrevious, context.settings, context.userDataDir).version, "0.9.5-cli-v4");
   const launch = Module.__test.prepareLaunch(entry, context);
-  assert.equal(launch.config.GameType, "example"); assert.ok(launch.config.GUIScriptsPath.startsWith(context.userDataDir));
-  assert.equal(fs.lstatSync(path.join(launch.stagedRoot, "assets.bif")).isSymbolicLink(), true);
-  assert.equal(fs.lstatSync(path.join(launch.stagedRoot, "area.png")).isSymbolicLink(), true);
-  fs.writeFileSync(path.join(launch.config.GUIScriptsPath, "GUIScripts", "example", "Start.py"), "# managed write\n");
+  assert.equal(launch.config.GameType, "example"); assert.equal(launch.config.GUIScriptsPath, source);
+  assert.equal(launch.config.GamePath, gameRoot);
+  assert.equal(fs.lstatSync(path.join(gameRoot, "assets.bif")).isSymbolicLink(), false);
   assert.equal(fs.readFileSync(path.join(scripts, "Start.py"), "utf8"), "# author profile\n");
+  assert.equal(fs.existsSync(path.join(launch.directory, "scripts")), false);
   entry.runtimeData = { gemrb: { version: "0.9.5-cli-v1" } };
   assert.throws(() => Module.ensureRuntime(entry, context), /CLI v1 can crash while loading scripts/);
 });
 
-test("GemRB shrinks old resource copies without replacing edited sidecars or player files", t => {
-  const root = temporary(t), gameRoot = path.join(root, "game"), entry = { ...game(gameRoot), gameId: "upgrade" };
-  fs.writeFileSync(path.join(gameRoot, "area.png"), "immutable area image");
-  fs.writeFileSync(path.join(gameRoot, "game.ini"), "original options");
-  const context = { userDataDir: path.join(root, "data") }, launch = Module.__test.prepareLaunch(entry, context);
-  const marker = path.join(launch.directory, "game-root.json");
-  fs.writeFileSync(marker, JSON.stringify({ layoutVersion: 3, source: gameRoot }));
-  const area = path.join(launch.stagedRoot, "area.png");
-  fs.rmSync(area); fs.copyFileSync(path.join(gameRoot, "area.png"), area);
-  fs.writeFileSync(path.join(launch.stagedRoot, "game.ini"), "player options");
-  fs.writeFileSync(path.join(launch.stagedRoot, "player-state.json"), "player state");
-  const upgraded = Module.__test.prepareLaunch(entry, context);
-  assert.equal(fs.lstatSync(area).isSymbolicLink(), true);
-  assert.equal(fs.readFileSync(path.join(upgraded.stagedRoot, "game.ini"), "utf8"), "player options");
-  assert.equal(fs.readFileSync(path.join(upgraded.stagedRoot, "player-state.json"), "utf8"), "player state");
-  assert.equal(fs.readFileSync(path.join(gameRoot, "game.ini"), "utf8"), "original options");
+test("GemRB preparation leaves legacy private views and their player bytes untouched", t => {
+  const root = temporary(t), gameRoot = path.join(root, "game"), entry = { ...game(gameRoot), gameId: "legacy" };
+  const userDataDir = path.join(root, "data"), directory = path.join(userDataDir, "games", entry.gameId, "modules", "gemrb");
+  const old = path.join(directory, "game");fs.mkdirSync(old, {recursive:true});
+  fs.writeFileSync(path.join(old, "player-save.gam"), "private player state");
+  const marker = path.join(directory, "game-root.json"), bytes = JSON.stringify({layoutVersion:3,source:gameRoot});fs.writeFileSync(marker, bytes);
+  const launch = Module.__test.prepareLaunch(entry, {userDataDir});
+  assert.equal(launch.root, gameRoot);assert.equal(fs.readFileSync(marker, "utf8"), bytes);
+  assert.equal(fs.readFileSync(path.join(old, "player-save.gam"), "utf8"), "private player state");
+  const before = fs.readdirSync(gameRoot);Module.onImport(entry, {userDataDir});
+  assert.equal(entry.defaultSaveDir, gameRoot);assert.deepEqual(fs.readdirSync(gameRoot), before);
+});
+
+test("GemRB reuses unchanged generated configuration and resolves old save defaults to the original root", t => {
+  const root = temporary(t), gameRoot = path.join(root, "game"), entry = { ...game(gameRoot), gameId: "warm" };
+  const context = {userDataDir:path.join(root,"data")}, first = Module.__test.prepareLaunch(entry,context);
+  const initial = fs.statSync(first.configPath,{bigint:true});
+  Module.__test.prepareLaunch(entry,context);
+  const repeated = fs.statSync(first.configPath,{bigint:true});
+  assert.equal(repeated.ino,initial.ino);assert.equal(repeated.mtimeNs,initial.mtimeNs);
+  const oldDefault = {...entry,defaultSaveDir:path.join(first.directory,"saves"),saveDirOverride:path.join(root,"override")};
+  assert.equal(Module.resolveSaveLocations(oldDefault).primaryDirectory,gameRoot);
+  Module.__test.prepareLaunch(oldDefault,context);assert.equal(oldDefault.defaultSaveDir,gameRoot);
 });

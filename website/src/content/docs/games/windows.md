@@ -34,11 +34,11 @@ The chosen executable is saved with the game, and the runtime list reads that re
 
 ## What MacLauncher handles
 
-### Private files for each game
+### Original game files and separate Windows environments
 
-Windows games often write settings and saves next to their own files. MacLauncher gives each game a private copy of its folder to write into, using copy-on-write cloning, so the copy takes almost no extra disk space on [APFS](https://en.wikipedia.org/wiki/Apple_File_System). Updates to the original files flow into the private copy without overwriting your saves or mods.
+Play uses the original working directory and reads the game's files there directly. The original Windows executable runs directly unless an app-adjacent DLL adapter requires an executable view; Play does not prepare a private copy of the whole game folder.
 
-Each game also gets its own Windows environment, so one game's tweaks, DLL overrides or registry changes can't break another.
+Each game gets its own Windows environment for its registry, Windows profile and DLL overrides. Camera and XeSS compatibility adapters can require a small executable and DLL view, while the working directory stays original. Files a game writes specifically beside the adapted executable remain in that view. The [runtime reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/CROSSOVER.md) describes the adapters' file handling.
 
 ### Runtime settings
 

@@ -115,6 +115,38 @@ test("Android application entries reuse one signed launcher and retire renamed b
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
+test("native application legacy receipts survive device changes without rewriting, cloning or signing", async t => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "android-entry-reconnect-")));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const executable = path.join(root, "java"), directory = path.join(root, "application");
+  fs.writeFileSync(executable, "owned launcher");
+  const realStat = fs.promises.stat, original = await realStat(executable);
+  let fields = { dev: original.dev, ino: original.ino, size: original.size, mtimeMs: 100, ctimeMs: 200 };
+  t.mock.method(fs.promises, "stat", async (file, ...args) => file === executable
+    ? new Proxy(original, { get: (target, key) => Object.hasOwn(fields, key) ? fields[key] : Reflect.get(target, key) })
+    : realStat(file, ...args));
+  let signs = 0;
+  const options = { executablePath: executable, directory, title: "Reconnect" }, execute = async () => { signs++; };
+  const first = await Application.prepare(options, execute), receiptFile = path.join(directory, "application.json");
+  const receipt = JSON.parse(fs.readFileSync(receiptFile));
+  assert.equal(receipt.basis.executableIdentity, `${original.size}:100:${original.ino}`);
+  receipt.basis.executableIdentity = [fields.dev, fields.ino, fields.size, fields.mtimeMs, fields.ctimeMs];
+  receipt.fingerprint = crypto.createHash("sha256").update(JSON.stringify(receipt.basis)).digest("hex");
+  fs.writeFileSync(receiptFile, JSON.stringify(receipt));
+  const before = fs.readFileSync(receiptFile), inode = fs.statSync(first.executablePath).ino;
+  const CopyFile = require("../src/modules/shared/copy-file"), copy = CopyFile.cloneOrCopy;
+  const copies = t.mock.method(CopyFile, "cloneOrCopy", (...args) => copy(...args));
+  fields = { ...fields, dev: fields.dev + 1, ctimeMs: 900 };
+  assert.deepEqual(await Application.prepare(options, execute), first);
+  assert.deepEqual(fs.readFileSync(receiptFile), before, "Legacy receipt is reused without rewriting its basis or fingerprint");
+  assert.equal(fs.statSync(first.executablePath).ino, inode);
+  assert.equal(signs, 1); assert.equal(copies.mock.callCount(), 0);
+  fields = { ...fields, mtimeMs: 101 };
+  await Application.prepare(options, execute);
+  assert.equal(signs, 2); assert.equal(copies.mock.callCount(), 1);
+  assert.equal(JSON.parse(fs.readFileSync(receiptFile)).basis.executableIdentity, `${original.size}:101:${original.ino}`);
+});
+
 test("Android application executable names stay within the application bundle", async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "android-entry-name-"));
   t.after(() => fs.rmSync(root, {recursive:true, force:true}));

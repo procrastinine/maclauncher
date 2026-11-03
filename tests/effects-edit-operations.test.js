@@ -132,10 +132,10 @@ test("U3: enabling follows ownership; toggling a helper adopts it", () => {
   assert.deepEqual(restored.renderResolution, {height: 720});assert.equal(helpersOf(restored, owner.id).fit.enabled, true);
 });
 
-test("neural defaults reduce to the processing height, fit once and leave with their owner", () => {
+test("neural defaults reduce to 720 pixels, fit once and leave with their owner", () => {
   const ctx = context(), plan = clean(Ops.setSlot(empty(), "image", null, choice("neural:mlx-dlss"), ctx), ctx);
   assert.deepEqual(plan.video.map(row => row.ownedBy?.role || row.kind), ["input", "neural", "fit"]);
-  assert.deepEqual(plan.video[0].extent, {height: 540});assert.equal(plan.video[2].method, "metalfx");assert.equal(plan.video[1].settings.modelPath, null);
+  assert.deepEqual(plan.video[0].extent, {height: 720});assert.equal(plan.video[2].method, "metalfx");assert.equal(plan.video[1].settings.modelPath, null);
   assert.equal(plan.renderResolution, undefined);assert.ok(plan.video.every(row => row.kind !== "frame-generation"));
   const native = context({nativeVideo: true}), video = clean(Ops.setSlot(empty(), "image", null, choice("neural:mlx-dlss"), native), native);
   assert.deepEqual(video.video.map(row => row.ownedBy?.role || row.kind), ["neural", "fit"]);

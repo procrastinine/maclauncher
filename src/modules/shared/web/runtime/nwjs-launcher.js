@@ -11,7 +11,7 @@ const WEB_CHEATS_ROOT = path.resolve(__dirname, "..", "cheats");
 const MVMZ_CHEATS_ROOT = path.resolve(__dirname, "..", "..", "mvmz", "cheats");
 const CHEATS_SCHEMA_PATH = path.join(MVMZ_CHEATS_ROOT, "schema.json");
 const CHEATS_JS_PATH = path.join(MVMZ_CHEATS_ROOT, "cheats.js");
-const CHEATS_RUNTIME_PATH = path.join(MVMZ_CHEATS_ROOT, "runtime.js");
+const { buildCheatsRuntimeSource } = require("../../mvmz/cheats/runtime-source");
 const CHEATS_INJECT_PATH = path.join(WEB_CHEATS_ROOT, "nwjs-inject.js");
 function isDevtoolsEnabled() {
   return process.env.MACLAUNCHER_DEVTOOLS === "1" || process.env.MACLAUNCHER_DEBUG === "1";
@@ -426,7 +426,7 @@ function buildWrapper({
 
     fs.writeFileSync(path.join(maclauncherDir, "schema.json"), fs.readFileSync(CHEATS_SCHEMA_PATH, "utf8"), "utf8");
     fs.writeFileSync(path.join(maclauncherDir, "cheats.js"), fs.readFileSync(CHEATS_JS_PATH, "utf8"), "utf8");
-    fs.writeFileSync(path.join(maclauncherDir, "runtime.js"), fs.readFileSync(CHEATS_RUNTIME_PATH, "utf8"), "utf8");
+    fs.writeFileSync(path.join(maclauncherDir, "runtime.js"), buildCheatsRuntimeSource(), "utf8");
 
     const injectSrc = fs.readFileSync(CHEATS_INJECT_PATH, "utf8");
     fs.writeFileSync(path.join(wrapperDir, "maclauncher-inject.js"), injectSrc, "utf8");

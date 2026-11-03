@@ -121,11 +121,14 @@ test("managed local model imports join shutdown cancellation and settle only aft
   const f = fixture(t), downloads = new DownloadManager(), caller = new AbortController();
   let entered, release, settled = false, combinedSignal;
   const copying = new Promise(resolve => {entered = resolve;}), cleanup = new Promise(resolve => {release = resolve;});
-  const originalCopy = fs.promises.copyFile, originalImport = Models.importModel;
+  const originalLstat = fs.promises.lstat, originalImport = Models.importModel;
   t.mock.method(Models, "importModel", options => {combinedSignal = options.signal;return originalImport(options);});
-  t.mock.method(fs.promises, "copyFile", async (...args) => {
+  // Hold the shared copy helper as it checks the private weights destination.
+  t.mock.method(fs.promises, "lstat", async (...args) => {
+    const result = originalLstat(...args);
+    if (!/[/\\]\.import-[^/\\]+[/\\].*weights\.safetensors$/.test(String(args[0]))) return result;
     assert.equal(downloads.list()[0].kind, "import", "owned task is visible before model copying begins");
-    await originalCopy(...args);entered();await cleanup;
+    await result.catch(() => {});entered();await cleanup;return result;
   });
   const imported = Manager.importRuntime({...f, downloads, signal: caller.signal}).finally(() => {settled = true;});
   const failed = assert.rejects(imported, {name: "AbortError"});await copying;

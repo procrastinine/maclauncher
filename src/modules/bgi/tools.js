@@ -6,7 +6,8 @@ const GameData = require("../shared/game-data");
 const { assertOwnDirectory } = require("../shared/writable-input");
 const { throwIfAborted } = require("../shared/runtime/download-utils");
 const crypto = require("node:crypto");
-const identity = stat => [stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs].join(":");
+const FileSignature = require("../shared/file-signature");
+const identity = stat => FileSignature.signature(stat);
 
 async function exportText(entry, payload, context) {
   const root = fs.realpathSync(entry.contentRootDir), parent = path.join(GameData.resolveGameModuleDir(context.userDataDir, entry.gameId, "bgi"), "text-inputs");
@@ -38,13 +39,13 @@ async function exportText(entry, payload, context) {
           scriptSources.push({ input: output, archive: file, member: member.name, sha256: crypto.createHash("sha256").update(bytes).digest("hex") });
         }
       } finally { fs.closeSync(fd); }
-      if (identity(fs.lstatSync(file)) !== before) throw new Error("A BGI archive changed during script extraction.");
+      if (!FileSignature.same(identity(fs.lstatSync(file)), before)) throw new Error("A BGI archive changed during script extraction.");
       if (used) sources.push({ path: file, identity: before });
     }
     if (!inputs.length) throw new Error("No supported Buriko scenario or BP scripts were found.");
     const result = await MsgTool.exportText(entry, payload, context, { moduleId: "bgi", inputs,
       scriptType: file => /\._bp$/i.test(file) ? "bgi-bp" : "bgi", allowPartial: true });
-    for (const source of sources) if (identity(fs.lstatSync(source.path)) !== source.identity) throw new Error("An original BGI archive changed during text export.");
+    for (const source of sources) if (!FileSignature.same(identity(fs.lstatSync(source.path)), source.identity)) throw new Error("An original BGI archive changed during text export.");
     fs.writeFileSync(path.join(result.outputDir, "archives.json"), JSON.stringify({ sources, skippedArchives,
       scenarioFormat: "BurikoCompiledScriptVer1.00", decodedBytes }, null, 2) + "\n", { flag: "wx", mode: 0o600 });
     result.originalFiles = scriptSources.map(({ input, ...source }) => source);

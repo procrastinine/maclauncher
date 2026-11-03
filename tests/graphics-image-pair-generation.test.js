@@ -90,3 +90,31 @@ test("the editor catalog lists each method in the Frame generation type with its
   // A package without the methods lists none of them.
   assert.equal(Plan.catalog({graphicsCapabilities: {frameGeneration: true, frameGenerationMethods: ["lsfg"]}}).some(value => value.id === "frame-generation:vt-interpolation"), false);
 });
+
+
+test("G11: stored v0.5.1 game multipliers remain readable; explicit catalog multipliers are enforced", async t => {
+  const Stored = require("../src/modules/shared/effects/stored-plan");
+  t.mock.method(require("../src/modules/shared/reshade/generation/fsr3"), "prepare", () => ({}));
+  for (const method of ["lsfg", "metalfx", "fsr3", "xess", "mlx-interpolation", "rife"]) {
+    assert.equal(GENERATION[method].multipliers, undefined);
+    const effects = {schema: 2, mode: "advanced", video: [{...generationRow(method, 3), settings: {frameMultiplier: 3}}]};
+    assert.equal(Plan.validate(effects).video[0].settings.frameMultiplier, 3);
+    assert.equal(Stored.read({effects}).plan.video.length, 1);
+    const environment = await Graphics.prepare({frameGeneration: method, frameMultiplier: 3, modelVersion: "sha256-" + "a".repeat(64)},
+      {graphicsCapabilities: {frameGeneration: true, frameGenerationMethods: [method]}, resolveModel: async () => ({modelPath: "/model"})});
+    assert.equal(environment.RESHADE_FRAME_MULTIPLIER, "3");
+  }
+  for (const [method, multiplier] of [["vt-interpolation", 3], ["metalfx-image", 4]]) {
+    assert.throws(() => Plan.validate({schema: 2, mode: "advanced", video: [generationRow(method, multiplier)]}), /frame multiplier/);
+    await assert.rejects(Graphics.prepare({frameGeneration: method, frameMultiplier: multiplier}, {graphicsCapabilities: {frameGeneration: true, frameGenerationMethods: [method]}}), /frame multiplier/);
+  }
+});
+
+test("G3: optional image-pair frameworks have no eager link or Objective-C class references", () => {
+  const native = path.join(__dirname, "../src/modules/shared/reshade/native");
+  const cmake = fs.readFileSync(path.join(native, "CMakeLists.txt"), "utf8"), source = fs.readFileSync(path.join(native, "image-pair-generation.mm"), "utf8");
+  assert.doesNotMatch(cmake, /target_link_libraries\(reshade-macos[^\n]*-framework (?:Vision|VideoToolbox)/);
+  assert.match(source, /dlopen\("\/System\/Library\/Frameworks\/Vision.framework\/Vision",RTLD_LAZY/);
+  assert.match(source, /dlopen\("\/System\/Library\/Frameworks\/VideoToolbox.framework\/VideoToolbox",RTLD_LAZY/);
+  assert.doesNotMatch(source, /\[(?:VNGenerateOpticalFlowRequest|VNImageRequestHandler|VTLowLatencyFrameInterpolationConfiguration|VTFrameProcessor(?:Frame)?) (?:alloc|new|maximum)/);
+});

@@ -10,6 +10,7 @@ async function ensure(context, minimumJava = 17, dependencies = {}) {
   const lines = [...new Set([config.defaultLine, ...core.LTS_LINES])]
     .filter(line => core.LTS_LINES.includes(line) && line >= minimumJava);
   if (!lines.length) throw new Error(`This tool requires Java ${minimumJava}, which is not available from the managed Java catalog.`);
+  // Default Java selection follows the launcher process CPU, including under Rosetta.
   const resolve = (line, version) => core.resolveBestInstalled({ userDataDir: context.userDataDir, line, version,
     variant: config.lines[line]?.defaultVariant, hostArch: process.arch });
   let host;

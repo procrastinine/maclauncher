@@ -90,5 +90,5 @@ await fs.cp(path.join(out,group),path.join(payload,group),{recursive:true});
 for(const name of [`libmaclauncher-${group}.dylib`,`${group}-build.json`,`${group.toUpperCase()}-LICENSE.txt`])await fs.copyFile(path.join(out,name),path.join(payload,name));
 const methods=[];
 for(const method of ['fsr2','fsr3']){try{await fs.access(path.join(payload,`${method}-build.json`));methods.push(method);}catch{}}
-await fs.writeFile(path.join(payload,'provider.json'),JSON.stringify({providerABI:1,complete:true,methods,minimumMacOS:'13.0',architectures:['arm64','x86_64'],libraries:methods.map(method=>`libmaclauncher-${method}.dylib`),shaders:methods},null,2));
+await fs.writeFile(path.join(payload,'provider.json'),JSON.stringify({providerABI:1,complete:true,methods,minimumMacOS:'13.0',architectures:['arm64','x86_64'],libraries:methods.map(method=>`libmaclauncher-${method}.dylib`),shaders:methods,resolvedPaths:methods.map(method=>method+'/')},null,2));
 console.log(`Built ${group.toUpperCase()} Metal provider: ${out}`);

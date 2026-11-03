@@ -9,6 +9,7 @@ const { selectRuntimeVersion, savedDefaultVersion, usableDefaultVersion } = requ
 const LuaSteam = require("./runtime/luasteam-runtime");
 const LuaSteamConsumer = require("./runtime/luasteam-consumer");
 const GameData = require("../shared/game-data");
+const { fileIdentity } = require("../shared/runtime/verified-identity");
 const GraphicsInputs = require("../shared/runtime/native-graphics-inputs");
 const Metadata = require("./metadata");
 const Archive = require("./archive");
@@ -97,6 +98,13 @@ function updateRuntimeData(entry, runtimeId, patch) {
   entry.runtimeData = { ...runtimeData };
 }
 
+function appImageSourceIdentity(entry) {
+  const source = trimString(entry?.moduleData?.packagedPath) || trimString(entry?.gamePath);
+  if (!source) return null;
+  const identity = fileIdentity(source);
+  return identity ? JSON.stringify([source, identity]) : null;
+}
+
 function mergeEntry(existing, incoming) {
   if (!existing) return incoming;
   const merged = { ...incoming };
@@ -105,6 +113,15 @@ function mergeEntry(existing, incoming) {
       ...(existing.moduleData && typeof existing.moduleData === "object" ? existing.moduleData : {}),
       ...(incoming.moduleData && typeof incoming.moduleData === "object" ? incoming.moduleData : {})
     };
+    const previous = existing.moduleData;
+    if (previous?.sourceKind === "appimage" && merged.moduleData.sourceKind === "appimage") {
+      const reusable = previous.appImageReady === true &&
+        typeof previous.appImageSourceIdentity === "string" && existsFile(previous.launchTargetPath) &&
+        previous.appImageLaunchRelativePath === merged.moduleData.appImageLaunchRelativePath &&
+        previous.appImageSourceIdentity === appImageSourceIdentity(merged);
+      merged.moduleData.appImageReady = reusable;
+      merged.moduleData.launchTargetPath = reusable ? previous.launchTargetPath : null;
+    }
   }
   if (existing.runtimeData || incoming.runtimeData) {
     merged.runtimeData = {
@@ -318,7 +335,9 @@ function ensureAppImageExtracted(entry, context) {
   const extractRoot = trimString(refreshed.appImageExtractRoot);
   const launchRelative = trimString(refreshed.appImageLaunchRelativePath);
   const launchPath = extractRoot && launchRelative ? path.join(extractRoot, launchRelative) : null;
-  if (launchPath && existsFile(launchPath) && refreshed.appImageReady === true) {
+  const sourceIdentity = appImageSourceIdentity(entry);
+  if (launchPath && existsFile(launchPath) && refreshed.appImageReady === true &&
+      sourceIdentity && refreshed.appImageSourceIdentity === sourceIdentity) {
     updateModuleData(entry, { launchTargetPath: launchPath });
     return launchPath;
   }
@@ -332,7 +351,10 @@ function ensureAppImageExtracted(entry, context) {
   safeRm(extractRoot);
   ensureDir(extractRoot);
   context.logger?.info?.(`[love] extracting AppImage ${packagedPath}`);
+  context.signal?.throwIfAborted();
   return SevenZip.extractArchive(packagedPath, extractRoot).then(() => {
+    context.signal?.throwIfAborted();
+    if (sourceIdentity ? appImageSourceIdentity(entry) !== sourceIdentity : !existsFile(packagedPath)) throw new Error("AppImage changed during extraction.");
     const nextLaunchPath = path.join(extractRoot, launchRelative);
     if (!existsFile(nextLaunchPath)) {
       throw new Error("Extracted AppImage is missing the packaged LÖVE binary.");
@@ -340,8 +362,10 @@ function ensureAppImageExtracted(entry, context) {
     updateModuleData(entry, {
       launchTargetPath: nextLaunchPath,
       appImageReady: true,
+      appImageSourceIdentity: sourceIdentity,
       appImageExtractedAt: Date.now()
     });
+    context.onEntryChange?.({ moduleData: entry.moduleData });
     return nextLaunchPath;
   });
 }
@@ -419,6 +443,7 @@ async function launchRuntime(runtimeId, entry, context) {
   }
   const executablePath = selection.install.executablePath || LoveCore.resolveExecutablePath(selection.install.appPath);
   if (!executablePath) throw new Error("LÖVE runtime executable not found.");
+  if (!selection.install.custom) require("../shared/runtime/app-bundle").validateAppBundle(selection.install.appPath, { executablePath });
   const sourceTarget = await resolveLaunchTarget(entry, context);
   if (!sourceTarget) throw new Error("LÖVE launch target was not found.");
   const cwd = existsDir(sourceTarget) ? sourceTarget : path.dirname(sourceTarget);

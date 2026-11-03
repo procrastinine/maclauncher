@@ -673,7 +673,7 @@
       "url": "https://github.com/libsdl-org/SDL"
     },
     {
-      "label": "ANGLE",
+      "label": "ANGLE (BSD-3-Clause)",
       "url": "https://chromium.googlesource.com/angle/angle"
     },
     {

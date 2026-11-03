@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const {spawn} = require('node:child_process');
 const {capture,controlDescriptor} = require('../src/modules/android/providers/aim');
+const {untilTestEnds}=require('./helpers/fixture-process');
 
 test('AIM always uses Android services and normalizes saved app-host selections',()=>{
   const {resolveLaunchMode}=require('../src/modules/android/providers/aim');
@@ -42,13 +43,13 @@ test('AIM control passes literal arguments and stdin without a shell',async()=>{
 });
 
 test('AIM keeper bounds command output and command duration',async()=>{
-  await assert.rejects(capture(process.execPath,['-e','process.stdout.write("x".repeat(65536));setInterval(()=>{},1000)'],{maximum:1024}),/output exceeded/);
-  await assert.rejects(capture(process.execPath,['-e','setInterval(()=>{},1000)'],{timeout:50}),/timed out/);
+  await assert.rejects(capture(process.execPath,['-e','process.stdout.write("x".repeat(65536));'+untilTestEnds],{maximum:1024}),/output exceeded/);
+  await assert.rejects(capture(process.execPath,['-e',untilTestEnds],{timeout:50}),/timed out/);
 });
 
-const keeper=process.env.ANDROID_AIM_CONTROLLER||path.resolve(__dirname,'../src/modules/android/providers/aim/resources/maclauncher-aim');
+const keeper=process.env.ANDROID_AIM_CONTROLLER;
 test('native AIM controller installs base and split APKs with one original PackageInstaller session and preserves its inputs',
-  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!fs.existsSync(keeper)},async()=>{
+  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!keeper||!fs.existsSync(keeper)},async()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-aim-package-'));
   try {
     const runtime=path.join(root,'runtime'),ctl=path.join(runtime,'bin/aimctl'),log=path.join(root,'commands.jsonl'),data=path.join(root,'android');
@@ -113,19 +114,19 @@ test('Android provider isolation retains selected graphics injection and exact f
 });
 
 test('native AIM controller preserves stdout failures and identifies the failed Android tool',
-  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!fs.existsSync(keeper)},async()=>{
+  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!keeper||!fs.existsSync(keeper)},async()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-aim-error-'));
   try {
     const runtime=path.join(root,'runtime'),ctl=path.join(runtime,'bin/aimctl'),profile=path.join(root,'profile');
     fs.mkdirSync(path.dirname(ctl),{recursive:true});fs.mkdirSync(path.join(profile,'runtime'),{recursive:true});
-    fs.writeFileSync(ctl,'#!'+process.execPath+'\nconst a=process.argv.slice(2);if(a[2]==="run")setInterval(()=>{},1000);else if(a.includes("sys.boot_completed"))process.stdout.write("1\\n");else if(a.includes("get-started-user-state"))process.stdout.write("RUNNING_UNLOCKED\\n");else if(a.includes("/system/bin/settings")){process.stdout.write("Unable to change the secure setting\\n");process.exitCode=1;}\n',{mode:0o755});
+    fs.writeFileSync(ctl,'#!'+process.execPath+'\nconst a=process.argv.slice(2);if(a[2]==="run"){'+untilTestEnds+'}else if(a.includes("sys.boot_completed"))process.stdout.write("1\\n");else if(a.includes("get-started-user-state"))process.stdout.write("RUNNING_UNLOCKED\\n");else if(a.includes("/system/bin/settings")){process.stdout.write("Unable to change the secure setting\\n");process.exitCode=1;}\n',{mode:0o755});
     const config=path.join(root,'launch.json');fs.writeFileSync(config,JSON.stringify({schemaVersion:1,runtime,image:root,userdata:root,data:root,root:profile,packageName:'org.example.game',activity:'.Main',key:'example',apks:[path.join(root,'base.apk')]}));
     await assert.rejects(capture(keeper,[config],{timeout:10000}),/Android settings: Unable to change the secure setting/);
   }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
 
 test('native AIM controller waits for the original user unlock state before settings, installation or Activity start',
-  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!fs.existsSync(keeper)},async()=>{
+  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!keeper||!fs.existsSync(keeper)},async()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-aim-unlock-'));
   try {
     const runtime=path.join(root,'runtime'),ctl=path.join(runtime,'bin/aimctl'),profile=path.join(root,'profile');
@@ -166,7 +167,7 @@ else if(a.includes('get-started-user-state')){
 });
 
 test('native AIM controller refuses app startup after a credential unlock refusal or user-state Binder error',
-  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!fs.existsSync(keeper)},async()=>{
+  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!keeper||!fs.existsSync(keeper)},async()=>{
   for(const scenario of ['credential','binder']){
     const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-aim-locked-'));
     try{
@@ -174,7 +175,7 @@ test('native AIM controller refuses app startup after a credential unlock refusa
       fs.mkdirSync(path.dirname(ctl),{recursive:true});fs.mkdirSync(path.join(profile,'runtime'),{recursive:true});
       fs.writeFileSync(ctl,`#!${process.execPath}
 const fs=require('node:fs'),a=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(log)},JSON.stringify(a)+'\\n');
-if(a[2]==='run')setInterval(()=>{},1000);
+if(a[2]==='run'){${untilTestEnds}}
 else if(a.includes('sys.boot_completed'))console.log('1');
 else if(a.includes('get-started-user-state')){
   if(${JSON.stringify(scenario)}==='binder'){console.error('android.os.DeadObjectException: user service unavailable');process.exitCode=1;}
@@ -193,7 +194,7 @@ else{console.error('application work before user unlock');process.exitCode=3;}
 });
 
 test('native AIM controller resolves an ambiguous original unlock refusal using the actual subsequent user state',
-  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!fs.existsSync(keeper)},async()=>{
+  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!keeper||!fs.existsSync(keeper)},async()=>{
   for(const stateAfterRefusal of ['RUNNING_UNLOCKED','RUNNING_UNLOCKING','BOOTING','binder-error','unexpected-stderr']){
     const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-aim-unlock-race-'));
     try{
@@ -238,7 +239,7 @@ else if(a.includes('get-started-user-state')){
 });
 
 test('native AIM controller preserves pending activity waits and ordinary Close with original resident shutdown results',
-  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!fs.existsSync(keeper)},async()=>{
+  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!keeper||!fs.existsSync(keeper)},async()=>{
   for(const activity of ['.Main',''])for(const pending of [false,true])for(const residentExit of [0,7]){
     const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-aim-close-'));
     try{
@@ -248,7 +249,7 @@ test('native AIM controller preserves pending activity waits and ordinary Close 
       fs.writeFileSync(path.join(profile,'runtime/aim-installed.json'),JSON.stringify({key:'example'}));
       fs.writeFileSync(ctl,`#!${process.execPath}
 const fs=require('node:fs'),a=process.argv.slice(2);
-if(a[2]==='run'){process.on('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(stopped)},'SIGTERM');process.exit(${residentExit});});fs.writeFileSync(${JSON.stringify(resident)},String(process.pid));setInterval(()=>{},1000);}
+if(a[2]==='run'){process.on('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(stopped)},'SIGTERM');process.exit(${residentExit});});fs.writeFileSync(${JSON.stringify(resident)},String(process.pid));${untilTestEnds}}
 else if(a.includes('sys.boot_completed'))console.log('1');
 else if(a.includes('get-started-user-state'))console.log('RUNNING_UNLOCKED');
 else if(a.includes('path'))console.log('package:/data/app/base.apk');
@@ -284,7 +285,7 @@ else console.log(a.includes('start')||a[2]==='open'?${JSON.stringify(pending?'St
 });
 
 test('native AIM controller rejects an unsuccessful original ActivityManager wait result even when the command exits zero',
-  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!fs.existsSync(keeper)},async()=>{
+  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!keeper||!fs.existsSync(keeper)},async()=>{
   for(const response of [
     {out:'Status: timeout\nComplete\n',error:'',expected:/activity did not finish starting[\s\S]*Status: timeout/},
     {out:'Status: timeout\nWaitTime: -1\nComplete\n',error:'',expected:/activity did not finish starting[\s\S]*WaitTime: -1/},
@@ -300,7 +301,7 @@ test('native AIM controller rejects an unsuccessful original ActivityManager wai
       fs.writeFileSync(path.join(profile,'runtime/aim-installed.json'),JSON.stringify({key:'example'}));
       fs.writeFileSync(ctl,`#!${process.execPath}
 const fs=require('node:fs'),a=process.argv.slice(2),finished=${JSON.stringify(finished)};
-if(a[2]==='run'){process.on('SIGTERM',()=>{fs.writeFileSync(finished,'SIGTERM');process.exit(0);});setInterval(()=>{},1000);}
+if(a[2]==='run'){process.on('SIGTERM',()=>{fs.writeFileSync(finished,'SIGTERM');process.exit(0);});${untilTestEnds}}
 else if(a.includes('sys.boot_completed'))console.log('1');
 else if(a.includes('get-started-user-state'))console.log('RUNNING_UNLOCKED');
 else if(a.includes('path'))console.log('package:/data/app/base.apk');

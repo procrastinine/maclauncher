@@ -78,7 +78,18 @@
       "lib/python3.12/site-packages/pip",
       "lib/python3.12/site-packages/pip-*.dist-info",
       "lib/python3.12/turtledemo",
-      "lib/tcl9/9.0/tcltest-*.tm"
+      "lib/tcl9/9.0/tcltest-*.tm",
+      "lib/libtcl*.dylib",
+      "lib/libtk*.dylib",
+      "lib/tcl*",
+      "lib/tk*",
+      "lib/itcl*",
+      "lib/thread*",
+      "lib/python3.12/tkinter",
+      "lib/python3.12/lib-dynload/_tkinter*.so",
+      "lib/python3.12/idlelib",
+      "lib/python3.12/lib2to3",
+      "lib/python3.12/pydoc_data"
     ]
   }
 }

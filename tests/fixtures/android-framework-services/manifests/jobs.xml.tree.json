@@ -1,0 +1,58 @@
+{
+  "resourceIds": {
+    "name": 16842755,
+    "permission": 16842758,
+    "exported": 16842768,
+    "minSdkVersion": 16843276,
+    "versionCode": 16843291,
+    "versionName": 16843292,
+    "targetSdkVersion": 16843376,
+    "compileSdkVersion": 16844146,
+    "compileSdkVersionCodename": 16844147
+  },
+  "tree": {
+    "name": "manifest",
+    "attrs": {
+      "versionCode": 1,
+      "versionName": "1",
+      "compileSdkVersion": 36,
+      "compileSdkVersionCodename": "16",
+      ":package": "owned.jobs",
+      ":platformBuildVersionCode": 36,
+      ":platformBuildVersionName": 16
+    },
+    "children": [
+      {
+        "name": "uses-sdk",
+        "attrs": {
+          "minSdkVersion": 21,
+          "targetSdkVersion": 28
+        },
+        "children": []
+      },
+      {
+        "name": "application",
+        "attrs": {},
+        "children": [
+          {
+            "name": "service",
+            "attrs": {
+              "name": "maclauncher.android.fixture.JobSchedulerProbe$Owned",
+              "permission": "android.permission.BIND_JOB_SERVICE",
+              "exported": false
+            },
+            "children": []
+          },
+          {
+            "name": "service",
+            "attrs": {
+              "name": "maclauncher.android.fixture.JobSchedulerProbe$Plain",
+              "exported": false
+            },
+            "children": []
+          }
+        ]
+      }
+    ]
+  }
+}

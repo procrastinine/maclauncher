@@ -2,7 +2,7 @@
   {
     "schemaVersion": 1,
     "id": "steam-ticket-loader",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "sourceKind": "owned",
     "sourceRevision": null,
     "sourceSha256": "5b5604323f8d6a016efb50056403fe504271ddbd70ba738b268eb3b4dc223f00",

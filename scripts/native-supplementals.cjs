@@ -97,7 +97,10 @@ function verifySupplementals({ resourceRoot, arch, maximumMacOS, items, dependen
     validateDeclaration(item);
     if (!item.launcherArchitectures.includes(arch) || !B.versionAtLeast(maximumMacOS, item.minimumMacOS)) throw new Error('Supplemental native CPU or macOS floor differs from the requested release.');
     const directory = path.join(resourceRoot, item.directoryRelative);
-    B.verifyPayload(directory, item);
+    const dependencyContext=item.dependencies?.length ? require('../src/modules/shared/runtime/included-package-dependencies').context(path.dirname(resourceRoot),{verification:'status'}).resolveDependencies(item.dependencies) : null;
+    const resolveDependency=dependencyContext?.resolveDependency;
+    B.verifyPayload(directory,item,resolveDependency);
+    const logicalFiles=item.aliases ? require('../src/modules/shared/runtime/package-contract.cjs').logicalFiles(item,resolveDependency) : item.files;
     const manifest = JSON.parse(B.readRegular(path.join(directory, item.manifestRelative), B.LIMITS.manifestBytes).bytes);
     validatePublicMetadata(manifest);
     if (process.platform === 'darwin') {
@@ -106,7 +109,7 @@ function verifySupplementals({ resourceRoot, arch, maximumMacOS, items, dependen
       const links = dependencies.links || native.links, libraryIds = dependencies.libraryIds || native.libraryIds;
       const resolveLink = dependencies.resolveLink || native.resolveLink;
       const verify = dependencies.verifySignature || (file => execFileSync('/usr/bin/codesign', ['--verify', '--strict', file], { timeout: 30000, stdio: 'pipe' }));
-      const files = new Map(item.files.filter(file => file.architectures).map(file => [fs.realpathSync(path.join(directory, file.path)), file]));
+      const files = new Map(logicalFiles.filter(file => file.architectures).map(file => [fs.realpathSync(path.join(directory, file.path)), file]));
       const commands = new Map(), linked = new Map();
       function closureFloor(full, architecture, seen = new Set()) {
         const key = JSON.stringify([full, architecture]);

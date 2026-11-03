@@ -10,6 +10,7 @@ const { EventEmitter } = require("node:events");
 const { PassThrough } = require("node:stream");
 const { observeGameProcess } = require("../src/core/game-process-events");
 const Provider = require("../src/modules/mac32/provider");
+const Backcompat = require("../src/modules/mac32/backcompat");
 const Payload = require("../src/modules/mac32/runtime/payload");
 const { createManager } = require("../src/modules/mac32/runtime/manager");
 const { stoppedDownloads, assertConsentedDiscovery, assertReceiptOffline } = require("./helpers/catalog-only-runtime.cjs");
@@ -168,7 +169,7 @@ test("mac32 rejects guest-library aliases and non-Intel native hosts", t => {
   assert.throws(() => Payload.preparePayload({ unpacked: root, pin: published("0.1") }, host), /64-bit Intel/);
 });
 
-test("mac32 launches the original app with private data, explicit patch consent and normal runtime leases", async t => {
+test("mac32 launches the original app with upstream cwd and home, explicit patch consent and normal runtime leases", async t => {
   const root = temporary(t), entry = appEntry(root), selected = { ready: true, version: "0.1", install: { installDir: path.join(root, "runtime"), executablePath: "/runtime/mac32", needsRosetta: true } };
   const uses = [], spawns = [], manager = { resolveSelection: () => selected };
   const child = new EventEmitter(); child.pid = 123;
@@ -181,17 +182,27 @@ test("mac32 launches the original app with private data, explicit patch consent 
   assert.equal(spawns[0].needsRosetta, true); assert.equal(uses[0].managerId, "mac32");
   assert.deepEqual(spawns[0].options.stdio, ["ignore", "pipe", "pipe"]);
   const directory = Provider.runtimeDirectory(entry, context);
-  assert.equal(spawns[0].options.cwd, path.join(directory, "work"));
-  assert.equal(spawns[0].options.env.HOME, path.join(directory, "home"));
+  assert.equal(spawns[0].options.cwd, path.dirname(entry.nativeAppPath));
+  assert.equal(spawns[0].options.env.HOME, process.env.HOME);
+  for (const relative of ["work", "home", "tmp"])
+    assert.equal(fs.existsSync(path.join(directory, relative)), false, "Play creates only its log directory");
   assert.equal(spawns[0].options.env.MAC32_NOPATCH, "1");
   assert.deepEqual(fs.readFileSync(entry.runtimeData.mac32.executablePath), before);
   const explicit = Provider.launchOptions({ enableGamePatches: true }, { home: "/private-home", temporary: "/private-tmp" },
-    { MAC32_NOPATCH: "1", OPENAI_API_KEY: "launcher-secret", LANG: "en_US.UTF-8", DYLD_INSERT_LIBRARIES: "/unrelated/library" });
+    { MAC32_NOPATCH: "1", OPENAI_API_KEY: "launcher-secret", LANG: "en_US.UTF-8", DYLD_INSERT_LIBRARIES: "/unrelated/library",
+      HOME: "/normal-home", CFFIXED_USER_HOME: "/normal-home", TMPDIR: "/normal-tmp/", XDG_DATA_HOME: "/normal-data" });
   assert.equal(Object.hasOwn(explicit.env, "MAC32_NOPATCH"), false);
   assert.equal(Object.hasOwn(explicit.env, "OPENAI_API_KEY"), false);
   assert.equal(Object.hasOwn(explicit.env, "DYLD_INSERT_LIBRARIES"), false);
   assert.equal(explicit.env.LANG, "en_US.UTF-8");
-  assert.equal(Provider.resolveSaveLocations(entry, context).primaryDirectory, path.join(directory, "home"));
+  assert.equal(explicit.env.HOME, "/normal-home");
+  assert.equal(explicit.env.CFFIXED_USER_HOME, "/normal-home");
+  assert.equal(explicit.env.TMPDIR, "/normal-tmp/");
+  assert.equal(explicit.env.XDG_DATA_HOME, "/normal-data");
+  assert.equal(explicit.env.XDG_CONFIG_HOME, undefined);
+  assert.deepEqual(Provider.resolveSaveLocations(entry, context), { primaryDirectory: null, directories: [] });
+  assert.equal(provider.supports.saveLocation, false);
+  assert.equal(provider.supports.saveLocationOverride, false);
   assert.throws(() => Provider.launchOptions({ appArgs: ["bad\0arg"] }, {}), /NUL/);
 });
 
@@ -245,7 +256,8 @@ test("generic Mac apps expose mac32 window graphics and shared effects reach the
     assert.deepEqual(invocation.args.slice(-2), [executablePath, entry.nativeAppPath], "The isolated bootstrap executes the selected Intel host and game");
     if (enabled) assert(invocation.args.includes(`DYLD_INSERT_LIBRARIES=${effects.DYLD_INSERT_LIBRARIES}`), "The bootstrap restores graphics injection after applying network policy");
     assert.equal(invocation.options.env.SDL_MAC_BACKGROUND_APP, "0");
-    assert.equal(invocation.options.env.HOME, path.join(Provider.runtimeDirectory(entry, context), "home"));
+    assert.equal(invocation.options.env.HOME, process.env.HOME);
+    assert.equal(invocation.options.cwd, path.dirname(entry.nativeAppPath));
     if (enabled) {
       for (const [key, value] of Object.entries(effects)) assert.equal(invocation.options.env[key], value);
     } else {
@@ -305,6 +317,18 @@ test("mac32 refuses private app data paths redirected inside the original bundle
   fs.symlinkSync(entry.nativeAppPath, data, "dir");
   assert.throws(() => Provider.prepareDirectories(entry, { userDataDir: data }), /separate/);
   assert.equal(fs.existsSync(path.join(entry.nativeAppPath, "games")), false);
+});
+
+test("mac32 declares obsolete home and work only for the shared one-time migration", t => {
+  const root = temporary(t), entry = appEntry(root), context = { userDataDir: root };
+  const directory = Provider.runtimeDirectory(entry, context), before = JSON.stringify(entry);
+  assert.deepEqual(Backcompat.legacyGameMirrors(entry, context), [
+    { mirrorRoot: path.join(directory, "home"), sourceRoot: os.homedir() },
+    { mirrorRoot: path.join(directory, "work"), sourceRoot: path.dirname(entry.nativeAppPath) }
+  ]);
+  assert.equal(JSON.stringify(entry), before);
+  assert.equal(fs.existsSync(directory), false, "Descriptor collection does no preparation or migration");
+  assert.deepEqual(Backcompat.legacyGameMirrors({ gameId: entry.gameId }, context), []);
 });
 
 test("mac32 managed install verifies archives, preserves versions and removes only owned runtime files", { skip: process.platform !== "darwin" }, async t => {

@@ -151,6 +151,37 @@ test("source fingerprints change when the executable or selected app icon change
   write(icon, "changed icon"); assert.notEqual(Icons.sourceFingerprint({ path: app, source: "app" }), before);
 });
 
+test("icon fingerprints reuse legacy receipts after device changes and invalidate modified sources", t => {
+  const f = fixture(t), exe = write(path.join(f.root, "Title.exe"), "old");
+  const realStat = fs.statSync, original = realStat(exe);
+  let fields = { dev: 4, ino: 42, size: 3, mtimeMs: 100, ctimeMs: 200 };
+  t.mock.method(fs, "statSync", (file, ...args) => file === exe
+    ? new Proxy(original, { get: (target, key) => Object.hasOwn(fields, key) ? fields[key] : Reflect.get(target, key) })
+    : realStat(file, ...args));
+  const candidate = { path: exe, source: "exe" }, first = Icons.sourceFingerprint(candidate);
+  assert.deepEqual(JSON.parse(first), ["icon-extract-v2", "exe", [fs.realpathSync(exe), "3:100:42"]]);
+  const legacy = JSON.stringify(["icon-extract-v2", "exe", [fs.realpathSync(exe), 4, 42, 3, 100, 200]]);
+  fields = { ...fields, dev: 9, ctimeMs: 900 };
+  const reconnected = Icons.sourceFingerprint(candidate);
+  assert.equal(reconnected, first, "Device and change time are outside the canonical identity");
+  assert.equal(Icons.sameFingerprint(legacy, reconnected), true);
+  assert.equal(Icons.sameFingerprint(reconnected, legacy), true);
+  fields = { ...fields, mtimeMs: 101 };
+  assert.equal(Icons.sameFingerprint(legacy, Icons.sourceFingerprint(candidate)), false, "Modification time invalidates extraction");
+  assert.equal(Icons.sameFingerprint(first, JSON.stringify(["icon-extract-v2", "exe", [exe + ".other", "3:100:42"]])), false);
+  assert.equal(Icons.sameFingerprint(null, null), false);
+  assert.equal(Icons.sameFingerprint("invalid", "invalid"), false);
+});
+
+test("app icon comparison normalizes both legacy source leaves without hiding icon replacement", () => {
+  const old = JSON.stringify(["icon-extract-v2", "app", ["/Title.app/Contents/Info.plist", 1, 10, 50, 100, 200], ["/Title.app/Contents/Resources/Icon.icns", 1, 20, 70, 300, 400]]);
+  const current = ["icon-extract-v2", "app", ["/Title.app/Contents/Info.plist", "50:100:10"], ["/Title.app/Contents/Resources/Icon.icns", "70:300:20"]];
+  assert.equal(Icons.sameFingerprint(old, JSON.stringify(current)), true);
+  current[3][1] = "70:301:20";
+  assert.equal(Icons.sameFingerprint(old, JSON.stringify(current)), false);
+  assert.equal(Icons.sameFingerprint(old, JSON.stringify(["icon-extract-v3", ...current.slice(1)])), false);
+});
+
 const tuple = values => ({ tuple: values });
 function pickleValue(value) {
   if (value === null) return Buffer.from("N");

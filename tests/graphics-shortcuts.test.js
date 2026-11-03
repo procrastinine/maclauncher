@@ -64,3 +64,17 @@ test("a shortcut acts on the only game, else the frontmost one, else the latest"
   assert.equal(chooseGame([{gamePath: "/a", pid: 5}, {gamePath: "/b", pid: 6}], null), "/b");
   assert.equal(chooseGame([{gamePath: "/w", pid: 7, targetPid: 40}, {gamePath: "/b", pid: 6}], 40), "/w");
 });
+
+test("a shortcut acts on the game whose launched process started the frontmost app", async () => {
+  const {chooseGame} = require("../src/main/graphics-shortcuts"), ProcessTree = require("../src/core/process-tree");
+  // A Wine supervisor shell (100) starts wine (101), which starts a helper (102); another game runs as 200.
+  const ps = "    1     0\n  100     1\n  101   100\n  102   101\n  200     1\n  300     1\n";
+  const processes = await ProcessTree.list({execFile: (file, args, options, done) => { assert.deepEqual([file, args], ["/bin/ps", ["-axo", "pid=,ppid="]]); done(null, ps); }});
+  const running = [{gamePath: "/wine", pid: 100}, {gamePath: "/other", pid: 200}];
+  assert.equal(chooseGame(running, 101, processes), "/wine");
+  assert.equal(chooseGame(running, 102, processes), "/wine");
+  assert.equal(chooseGame(running, 200, processes), "/other");
+  assert.equal(chooseGame(running, 300, processes), "/other");
+  assert.equal(chooseGame(running, 101, []), "/other");
+  assert.deepEqual(await ProcessTree.list({execFile: (file, args, options, done) => done(new Error("ps failed"))}), []);
+});

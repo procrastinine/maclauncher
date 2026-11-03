@@ -6,6 +6,7 @@ const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 const Build = require("../src/modules/shared/runtime/pinned-native-build");
 const { listedManager } = require("./helpers/listed-rows.cjs");
+const { untilTestEnds } = require("./helpers/fixture-process");
 
 function git(root, args) {
   return execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-C", root, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
@@ -114,7 +115,7 @@ test("canceling a native command stops its process and reports AbortError", asyn
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 100);
   try {
-    await assert.rejects(Build.runBuildCommand(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+    await assert.rejects(Build.runBuildCommand(process.execPath, ["-e", untilTestEnds], {
       cwd: root, logPath: path.join(root, "build.log"), signal: controller.signal
     }), error => error.name === "AbortError");
   } finally { clearTimeout(timer); }
@@ -140,7 +141,7 @@ test("a native build timeout cannot succeed when the terminated child exits clea
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-build-timeout-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   await assert.rejects(Build.runBuildCommand(process.execPath,
-    ["-e", "process.on('SIGTERM', () => process.exit(0)); setInterval(() => {}, 1000)"],
+    ["-e", "process.on('SIGTERM', () => process.exit(0)); " + untilTestEnds],
     { cwd: root, logPath: path.join(root, "build.log"), timeout: 300 }), /timed out/);
 });
 

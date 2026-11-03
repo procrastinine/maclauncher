@@ -5,6 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { runToolCommand } = require("../src/modules/shared/runtime/tool-command");
 const { isRuntimeProcessAlive } = require("../src/core/runtime-coordinator");
+const { untilTestEnds } = require("./helpers/fixture-process");
 function options(t) {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-tool-command-"));
   t.after(() => fs.rmSync(cwd, { recursive: true, force: true }));
@@ -33,14 +34,14 @@ test("repeated tool commands rotate full history to one previous log without los
 });
 test("cancelled tool commands stop their owned process before releasing the operation", async t => {
   const opts = options(t), abort = new AbortController(); let pid;
-  await assert.rejects(runToolCommand(process.execPath, ["-e", "setInterval(()=>{},1000)"], {
+  await assert.rejects(runToolCommand(process.execPath, ["-e", untilTestEnds], {
     ...opts, signal: abort.signal, onSpawn: child => { pid = child.pid; abort.abort(); }
   }), { code: "ABORT_ERR" });
   assert.equal(await isRuntimeProcessAlive(pid), false);
 });
 test("failed process ownership stops a tool and returns the original binding error", async t => {
   const opts = options(t); let pid;
-  await assert.rejects(runToolCommand(process.execPath, ["-e", "setInterval(()=>{},1000)"], {
+  await assert.rejects(runToolCommand(process.execPath, ["-e", untilTestEnds], {
     ...opts, onSpawn: child => { pid = child.pid; throw Object.assign(new Error("Binding failed"), { code: "BIND_FAILED" }); }
   }), { code: "BIND_FAILED" });
   assert.equal(await isRuntimeProcessAlive(pid), false);

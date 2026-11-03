@@ -1,4 +1,4 @@
-import {MAX_NODES,RENDER_DIVISORS,DEFAULT_PROCESSING_HEIGHT,DEPTH_INPUT_DEFAULTS,HELPER_ROLES,isResize,ownsHelpers,validate} from "./plan.mjs";
+import {MAX_NODES,RENDER_DIVISORS,NEURAL_INPUT_HEIGHT,DEPTH_INPUT_DEFAULTS,HELPER_ROLES,isResize,ownsHelpers,validate} from "./plan.mjs";
 import {GRAPHICS_TYPES,graphicsType,shaderGeometry,implementationsFor,sameImplementation,bidirectionalFitImplementation,
   orderImplementations,extentEditable,slotExtent,isPresentationFit} from "./contracts.mjs";
 import {effectSelectionKey} from "./selection-key.mjs";
@@ -202,10 +202,10 @@ function derive(plan,ownerId,ctx,create) {
     return row?insertRow(next,next.video.indexOf(owner)+1,row):next;
   }
   if(ctx.nativeVideo)next=dropRow(next,input);
-  else if(input)next=replaceRow(next,input,respec(input,{kind:"downsample",method:"bilinear",extent:{height:DEFAULT_PROCESSING_HEIGHT}}));
+  else if(input)next=replaceRow(next,input,respec(input,{kind:"downsample",method:"bilinear",extent:{height:NEURAL_INPUT_HEIGHT}}));
   else if(create&&!next.video.some(row=>row!==owner&&ctx.type(row)==="downsample"))
     next=insertRow(next,Math.min(slotIndex(next.video,"downsample",ctx),next.video.indexOf(owner)),
-      helperRow(ctx.newId(),ownerId,"input",{kind:"downsample",method:"bilinear",extent:{height:DEFAULT_PROCESSING_HEIGHT}}));
+      helperRow(ctx.newId(),ownerId,"input",{kind:"downsample",method:"bilinear",extent:{height:NEURAL_INPUT_HEIGHT}}));
   if(fit)return replaceRow(next,fit,enable(fit));
   const row=create&&!next.video.some(row=>ctx.type(row)==="upscale")?neuralFit(ownerId,ctx):undefined;
   return row?insertRow(next,Math.max(slotIndex(next.video,"upscale",ctx),next.video.indexOf(owner)+1),row):next;

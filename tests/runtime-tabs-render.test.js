@@ -7,6 +7,22 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { build } = require('vite');
 const { react, componentHarness } = require('./helpers/renderer-component');
 let RuntimesView, SettingsView, CreditsView, GameDetails, ReShadeFilterLibrary;
+test('cached runtime refresh failures show their failure date and redact errors and install tooltips', () => {
+  const failedAt = Date.UTC(2026, 9, 24, 12), fetchedAt = Date.UTC(2026, 9, 20, 12);
+  const error = 'request to https://fixture-user:fixture-password@github.com/example/runtime failed ECONNREFUSED';
+  const runtime = manager('cached-failure', {}, { status: 'error', error, failedAt, fetchedAt,
+    versions: ['1'], installable: false, versionRequirements: { '1': { installReason: error } } });
+  const markup = render([runtime]);
+  assert.ok(markup.includes(`Last refresh failed on ${new Date(failedAt).toLocaleString()}.`));
+  assert.match(markup, /Could not connect to GitHub/);
+  assert.doesNotMatch(markup, /fixture-user|fixture-password/);
+  delete runtime.catalog.failedAt;
+  assert.match(render([runtime]), /Last refresh failed \(date unavailable\)/);
+  runtime.catalog.status = 'loading';
+  assert.doesNotMatch(render([runtime]), /Last refresh failed/);
+  runtime.catalog.status = 'success'; runtime.catalog.error = null;
+  assert.doesNotMatch(render([runtime]), /Last refresh failed/);
+});
 test.before(async () => {
   const bundle = await build({ configFile: false, logLevel: 'silent', build: {
     ssr: path.join(__dirname, 'runtime-tabs-components.tsx'), write: false,
@@ -719,7 +735,10 @@ test('the discovered FVP module exposes its runtime, settings, tools and local i
     showNonDefaultTags: true, onSetLauncherSettings: offline, onSetModuleSettings: offline }));
   assert.match(settings, /class="launcherSidebarItem"[^>]*>FVP<\/button>/);
   assert.doesNotMatch(settings, /launcherSidebarSection|launcherSidebarHeading/, 'Settings keeps one plain section list');
+  // main.js gives a game without artwork of its own the discovered module's icon file.
+  const icon = fs.readFileSync(path.join(registry.getModuleDir('fvp'), moduleInfo.icon.path));
   const game = { ...state.recents[0], moduleId: 'fvp', runtimeId: 'rfvp', nativeAppPath: null,
+    iconUrl: 'data:image/png;base64,' + icon.toString('base64'), iconSource: 'module-default',
     moduleRuntimeSupport: ['rfvp'], moduleSupports: moduleInfo.supports,
     gamePath: '/Games/Title/Title.hcb', moduleData: { scriptName: 'Title.hcb', archiveCount: 2 } };
   const inspector = renderToStaticMarkup(React.createElement(GameDetails, { g: game, state, moduleInfo,

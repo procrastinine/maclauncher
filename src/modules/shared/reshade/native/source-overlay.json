@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "baseSourceHash": "09fc8b9cee287b97546835be04237df5dec1df036e81ac0d8713fc7e38ef2d8c",
+  "baseSourceHash": "e51a17a502fcfbed87bf868c0b555ad160466002f8856c14e4732ed7fc6bba5b",
   "files": [
     {
       "source": "../temporal/command-order.hpp",
@@ -402,7 +402,7 @@
     },
     {
       "path": "CMakeLists.txt",
-      "baseSha256": "445f8fb6b5aa35bc1641eb180e2164a84b1063089c94082b373b4b5467e6c7eb",
+      "baseSha256": "04a61d818c37e51d43b2086b2428a04bf25da710028ce761792ffb62d48ce71c",
       "source": "CMakeLists.txt"
     },
     {
@@ -500,6 +500,11 @@
     {
       "path": "src/temporal-frame.h",
       "source": "../temporal/frame.h",
+      "baseSha256": null
+    },
+    {
+      "source": "../temporal/payload-files.hpp",
+      "path": "src/temporal-payload-files.hpp",
       "baseSha256": null
     },
     {
@@ -607,6 +612,11 @@
       "source": "frame-capture.hpp"
     },
     {
+      "path": "src/capture-file.hpp",
+      "baseSha256": null,
+      "source": "capture-file.hpp"
+    },
+    {
       "path": "src/browser-frame.hpp",
       "source": "browser-frame.hpp",
       "baseSha256": null
@@ -652,6 +662,16 @@
     {
       "path": "src/graphics-window.mm",
       "source": "graphics-window.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "src/graphics-window-catalog.hpp",
+      "source": "graphics-window-catalog.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/graphics-window-catalog.mm",
+      "source": "graphics-window-catalog.mm",
       "baseSha256": null
     },
     {
@@ -1514,6 +1534,56 @@
     {
       "source": "metalduck-MIT.txt",
       "path": "src/metalduck-MIT.txt",
+      "baseSha256": null
+    },
+    {
+      "source": "window-capture-wire.hpp",
+      "path": "src/window-capture-wire.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "window-capture-client.hpp",
+      "path": "src/window-capture-client.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "window-capture-client.mm",
+      "path": "src/window-capture-client.mm",
+      "baseSha256": null
+    },
+    {
+      "source": "graphics-capture-service.hpp",
+      "path": "src/graphics-capture-service.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "graphics-capture-service.mm",
+      "path": "src/graphics-capture-service.mm",
+      "baseSha256": null
+    },
+    {
+      "source": "window-forwarded.hpp",
+      "path": "src/window-forwarded.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "window-forwarded.mm",
+      "path": "src/window-forwarded.mm",
+      "baseSha256": null
+    },
+    {
+      "source": "window-output-policy.hpp",
+      "path": "src/window-output-policy.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "graphics-window-pointer.hpp",
+      "path": "src/graphics-window-pointer.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "graphics-window-pointer.mm",
+      "path": "src/graphics-window-pointer.mm",
       "baseSha256": null
     }
   ]

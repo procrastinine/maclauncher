@@ -33,6 +33,23 @@ test("failed metadata rename preserves the previous file and removes the tempora
   assert.deepEqual(fs.readdirSync(root), ["settings.json"]);
 });
 
+test("metadata bytes are flushed before the rename publishes them, and a failed flush keeps the previous document", t => {
+  const root = fixture(t);
+  const file = path.join(root, "game.json");
+  fs.writeFileSync(file, '{"old":true}');
+  const calls = [];
+  const fsync = t.mock.method(fs, "fsyncSync", fd => { const stat = fs.fstatSync(fd); calls.push(["fsync", stat.isDirectory() ? "directory" : stat.size]); });
+  const renameSync = fs.renameSync;
+  const rename = t.mock.method(fs, "renameSync", (...args) => { calls.push(["rename"]); return renameSync(...args); });
+  writeJsonAtomic(file, { next: 1 });
+  assert.deepEqual(calls, [["fsync", Buffer.byteLength(JSON.stringify({ next: 1 }, null, 2))], ["rename"], ["fsync", "directory"]]);
+  fsync.mock.mockImplementation(() => { throw Object.assign(new Error("flush failure"), { code: "EIO" }); });
+  assert.throws(() => writeJsonAtomic(file, { lost: true }), /flush failure/);
+  fsync.mock.restore(); rename.mock.restore();
+  assert.deepEqual(readJsonObject(file), { next: 1 });
+  assert.deepEqual(fs.readdirSync(root), ["game.json"]);
+});
+
 test("metadata writes reject existing links and non-files without modifying their targets", t => {
   const root = fixture(t);
   const target = path.join(root, "target.json");

@@ -170,11 +170,12 @@ async function prepareLegacy(entry, { userDataDir, app, signal, runtimeId, logge
       ? require("./temporal-controls").write({ ...entry, graphics: graphicsSettings }, userDataDir, { create: true }) : null;
     const sharedState = path.join(directory, "window-state");Writable.atomicWrite(sharedState, Buffer.alloc(4096), { root: directory });
     const launchId = crypto.randomUUID();
+    require("./launch-files").pruneEarlierLaunches(directory);
     if (diagnostics || gpuTiming || trace) require("./diagnostic-retention").pruneDiagnostics(directory);
     // Processed screenshots use the frame capture channel in its final-image
     // mode, which never attaches processing by itself. Diagnostic capture keeps
     // its own pairs. Nothing from an earlier launch stays staged.
-    const screenshotCapture = !(diagnostics && capture) && screenshotSupport(root) ? captureEnvironment(directory, true) : null;
+    const screenshotCapture = Boolean(launcherSettings?.launcher?.graphicsShortcuts?.screenshot) && !(diagnostics && capture) && screenshotSupport(root) ? captureEnvironment(directory, true) : null;
     if (screenshotCapture) require("./screenshots").cleanup(screenshotCapture.RESHADE_CAPTURE_PREFIX);
     Writable.atomicWrite(path.join(directory, "launch.json"), JSON.stringify({ schema: 1, launchId, phase: "prepared", preparedAt: new Date().toISOString(),
       gameId: entry.gameId, runtimeId: runtimeId || entry.runtimeId || null, adapterVersion: state.version,
@@ -187,7 +188,7 @@ async function prepareLegacy(entry, { userDataDir, app, signal, runtimeId, logge
     return { DYLD_INSERT_LIBRARIES: path.join(root, "libreshade-macos.dylib"), ...graphicsEnvironment,
       RESHADE_CONTROL_FILE: controlFile, RESHADE_LIVE_EFFECTS: effects, RESHADE_EFFECT_KEY: Live.effectKey(settings, userDataDir),
       ...(temporalFile ? { RESHADE_TEMPORAL_CONTROL_FILE: temporalFile, RESHADE_TEMPORAL_METHOD: graphicsSettings.temporalMethod } : {}),
-      RESHADE_WINDOW_STATE: sharedState, RESHADE_LAYER_SURFACE: "1", RESHADE_LOG: path.join(directory, "reshade.log"),
+      RESHADE_WINDOW_STATE: sharedState, RESHADE_LAYER_SURFACE: "1", RESHADE_LOG: launchLog(directory),
       ...captureEnvironment(directory, diagnostics && capture), ...(screenshotCapture ? {...screenshotCapture, RESHADE_CAPTURE_FINAL: "1"} : {}),
       ...(trace ? { RESHADE_TRACE: "1" } : {}), ...(diagnostics ? { RESHADE_DIAGNOSTICS: path.join(directory, "diagnostics-" + launchId) } : {}),
       ...(gpuTiming ? { RESHADE_GPU_TIMING: path.join(directory, "gpu-timing-" + launchId) } : {}) };
@@ -246,9 +247,10 @@ async function prepareLegacy(entry, { userDataDir, app, signal, runtimeId, logge
   const controlFile = Live.write({ ...entry, graphics: graphicsSettings, reshade: settings }, userDataDir, { create: true });
   Writable.atomicWrite(sharedState, Buffer.alloc(4096), { root: directory });
   const launchId = crypto.randomUUID();
+  require("./launch-files").pruneEarlierLaunches(directory);
   // An explicit frame producer that keeps a live host's capabilities, such as
   // a window capture session, saves processed screenshots as a live host does.
-  const screenshotCapture = explicitHost && liveHost(graphicsHost) && !(diagnostics && capture) && screenshotSupport(root)
+  const screenshotCapture = Boolean(launcherSettings?.launcher?.graphicsShortcuts?.screenshot) && explicitHost && liveHost(graphicsHost) && !(diagnostics && capture) && screenshotSupport(root)
     ? captureEnvironment(directory, true) : null;
   if (screenshotCapture) require("./screenshots").cleanup(screenshotCapture.RESHADE_CAPTURE_PREFIX);
   // Preparation is distinct from a rendered frame. Keep one small receipt and
@@ -271,7 +273,7 @@ async function prepareLegacy(entry, { userDataDir, app, signal, runtimeId, logge
     ...(effect ? provider ? { RESHADE_EFFECT: effect, [provider.rootEnvironment]: path.dirname(effect) }
       : { RESHADE_EFFECT: effect, RESHADE_PREPARED_EFFECT: prepared, RESHADE_INCLUDE_PATH: includePath, RESHADE_TEXTURE_PATH: texturePath } : {}),
     ...(combined ? { RESHADE_TECHNIQUE: Chain.TECHNIQUE } : {}),
-    RESHADE_WINDOW_STATE: sharedState, RESHADE_LAYER_SURFACE: "1", RESHADE_LOG: path.join(directory, "reshade.log"),
+    RESHADE_WINDOW_STATE: sharedState, RESHADE_LAYER_SURFACE: "1", RESHADE_LOG: launchLog(directory),
     ...captureEnvironment(directory, diagnostics && capture), ...(screenshotCapture ? {...screenshotCapture, RESHADE_CAPTURE_FINAL: "1"} : {}),
     ...(trace ? { RESHADE_TRACE: "1" } : {}),
     ...(diagnostics ? { RESHADE_DIAGNOSTICS: path.join(directory, "diagnostics-" + launchId) } : {}),
@@ -291,6 +293,13 @@ function captureEnvironment(directory, enabled) {
   if (!enabled) return {};
   return { RESHADE_CAPTURE_PREFIX: path.join(directory, "frame-capture"),
     RESHADE_CAPTURE_TRIGGER: path.join(directory, "frame-capture.request") };
+}
+// The native log appends and stops at its size limit, so each preparation
+// starts a new log and keeps the previous launch's beside it.
+function launchLog(directory) {
+  const file = path.join(directory, "reshade.log");
+  try { fs.renameSync(file, file + ".previous"); } catch { /* No earlier log; a log never prevents Play. */ }
+  return file;
 }
 async function prepare(entry, options = {}) {
   const Effects = require("../effects/runtime");
@@ -319,6 +328,7 @@ async function prepare(entry, options = {}) {
     // Adapter identity describes the prepared process even when a future live
     // channel cannot be granted. It must not depend on optional model access.
     Object.assign(launch, {graphicsHost: options.graphicsHost,
+      // Missing adapter metadata defaults to the launcher process ABI, not the hardware CPU.
       graphicsArchitecture: options.graphicsArchitecture || options.graphicsInputs?.architecture || process.arch,
       graphicsInputs: options.graphicsInputs || null});
     // The saved plan revision this launch prepared, for its graphics status.

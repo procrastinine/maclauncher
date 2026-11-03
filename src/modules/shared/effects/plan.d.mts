@@ -17,6 +17,7 @@ export function depthInput(value: unknown): DepthInput;
 export const MAX_NODES: number;
 export const MAX_PARAMETERS: number;
 export const DEFAULT_PROCESSING_HEIGHT: number;
+export const NEURAL_INPUT_HEIGHT: number;
 export const RENDER_DIVISORS: readonly number[];
 export function validRenderDivisor(value: unknown): boolean;
 export function validate(value: unknown): EffectsPlan;

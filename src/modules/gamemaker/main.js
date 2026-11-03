@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const os = require("node:os");
 const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
 const { inspectStudio, LIMITS } = require("./inspect");
@@ -25,6 +26,50 @@ function selectToolVersion(entry, manager, version) {
   const runtimeData = { ...(entry.runtimeData || {}), [runtimeId]: { ...(entry.runtimeData?.[runtimeId] || {}), version } };
   if (runtimeId !== manager.id) delete runtimeData[manager.id];
   entry.runtimeData = runtimeData;
+}
+
+function resolveSaveIdentity(entry, context = {}) {
+  const runtimeId = context.runtimeId || entry.runtimeId || (entry.moduleData?.executionKind === "classic" ? "opengmk" : "butterscotch");
+  const dataPath = entry.moduleData?.dataPath;
+  if (!path.isAbsolute(dataPath || "")) return null;
+  const explicit = entry.saveDirOverride || (runtimeId === "official-studio" ? entry.runtimeData?.["official-studio"]?.saveDirOverride : null);
+  let originalSaveDirectory;
+  const createPatch = ({ entry: current, gameId, reason }) => {
+    if (current.saveDirOverride) return null;
+    const gameDirectory = path.isAbsolute(current.nativeAppPath || "") ? path.dirname(current.nativeAppPath) : path.dirname(dataPath);
+    const directory = reason === "host-substitution" && originalSaveDirectory || path.join(gameDirectory, "saves", gameId);
+    return runtimeId === "official-studio" ? {
+      runtimeData: { "official-studio": { saveDirOverride: directory } },
+      defaultSaveDir: directory, saveLocations: [{ directory, role: "primary", source: "GameMaker save folder", confidence: "declared" }]
+    } : reason === "collision" ? { saveDirOverride: directory, defaultSaveDir: directory,
+      saveLocations: [{ directory, role: "primary", source: "GameMaker save folder", confidence: "declared" }] } : null;
+  };
+  if (explicit) return { namespace: "filesystem", identity: path.resolve(explicit), scope: "game", explicit: true,
+    createPatch: () => null };
+  if (["opengmk", "butterscotch"].includes(runtimeId)) return { namespace: "filesystem", identity: path.dirname(dataPath),
+    scope: "game", explicit: false, hostSubstitution: false, createPatch };
+  if (runtimeId !== "official-studio") return null;
+  // Import-only facts: use the actual selected host's plist, not its filename
+  // or a guessed title. Missing/offline runtime facts leave direct import alone.
+  const selected = Official.manager.resolveSelection(entry, context.settings || {}, context.userDataDir);
+  const appPath = selected.install?.runnerAppPath;
+  if (!appPath) return null;
+  const identifier = AppBundle.readInfoPlist(appPath)?.CFBundleIdentifier;
+  if (typeof identifier !== "string" || !identifier) return null;
+  const originalIdentifier = entry.nativeAppPath && AppBundle.readInfoPlist(entry.nativeAppPath)?.CFBundleIdentifier;
+  if (typeof originalIdentifier === "string" && originalIdentifier && path.basename(originalIdentifier) === originalIdentifier &&
+      ![".", ".."].includes(originalIdentifier)) originalSaveDirectory = path.join(os.homedir(), "Library", "Application Support", originalIdentifier);
+  return { namespace: "gamemaker-macos-bundle", identity: originalIdentifier || identifier, scope: "game", explicit: false,
+    hostSubstitution: !originalIdentifier || originalIdentifier !== identifier, createPatch };
+}
+
+function resolveSaveLocations(entry, context = {}) {
+  const runtimeId = context.runtimeId || entry.runtimeId || (entry.moduleData?.executionKind === "classic" ? "opengmk" : "butterscotch");
+  const dataPath = entry.moduleData?.dataPath;
+  const primaryDirectory = runtimeId === "official-studio" ? OfficialLaunch.saveDirectory(entry) :
+    ["opengmk", "butterscotch"].includes(runtimeId) && path.isAbsolute(dataPath || "") ? entry.saveDirOverride || path.dirname(dataPath) : null;
+  return { primaryDirectory, directories: primaryDirectory ? [{ directory: primaryDirectory, role: "primary",
+    source: "GameMaker save folder", confidence: "declared" }] : [] };
 }
 
 function resolveNativeLaunchPath(entry) {
@@ -63,14 +108,16 @@ async function launchRuntime(runtimeId, entry, context) {
   if (!inspection.butterscotchCandidate) throw new Error(inspection.reasons.join(" "));
   const selection = Butterscotch.manager.resolveSelection(entry, context.settings, context.userDataDir);
   if (!selection.install) throw new Error(selection.reason);
-  const saves = path.join(Exports.resolveOutputRoot(entry, context), "saves");
-  if (fs.existsSync(saves) && fs.lstatSync(saves).isSymbolicLink()) throw new Error("GameMaker save directory is a symlink.");
-  fs.mkdirSync(saves, { recursive: true });
-  entry.defaultSaveDir = saves;
+  const saves = entry.saveDirOverride;
+  if (saves != null && saves !== "") {
+    if (typeof saves !== "string" || !path.isAbsolute(saves) || saves.includes("\0")) throw new Error("Choose an absolute save directory.");
+    fs.mkdirSync(saves, { recursive: true });
+  }
+  entry.defaultSaveDir = path.dirname(dataPath);
   patchModuleData(entry, { lastRuntimeVersion: selection.version, lastRuntimeRevision: selection.install.upstreamRevision,
     lastRuntimeBackend: "appkit", lastRuntimeSha256: selection.install.binarySha256 });
-  context.onEntryChange?.({ defaultSaveDir: saves, moduleData: entry.moduleData });
-  return Native.launchLocalRuntime({ ...nativeOptions(selection), args: [dataPath, "--save-folder", saves, "--renderer", "legacy-gl",
+  context.onEntryChange?.({ defaultSaveDir: entry.defaultSaveDir, moduleData: entry.moduleData });
+  return Native.launchLocalRuntime({ ...nativeOptions(selection), args: [dataPath, ...(saves ? ["--save-folder", saves] : []), "--renderer", "legacy-gl",
     ...(context.gameArguments || []).map(argument => `--game-arg=${argument}`)],
     cwd: path.dirname(dataPath), context });
 }
@@ -116,6 +163,7 @@ async function ensureDecompiler(entry, context, requestedVersion, images = false
 
 module.exports = {
   id: manifest.id, manifest, detectGame, runtimeManagers: [Butterscotch.manager, Umt, Gm8, Official.manager, OpenGMK.manager, GraphicsHelper.manager],
+  resolveSaveIdentity, resolveSaveLocations,
   normalizeRuntimeId: value => ["opengmk", "butterscotch", "official-studio", "native", "inspection"].includes(value) ? value : "butterscotch",
   // Official runners follow the archive's format candidates; Butterscotch
   // recommends the build that repeats launch arguments.
@@ -133,7 +181,7 @@ module.exports = {
     const id = context.runtimeId;
     if (id === "opengmk") {
       const selected = OpenGMK.manager.resolveSelection(entry, context.settings, context.userDataDir);
-      await OpenGMK.preflight(Exports.resolveDataPath(entry), selected, { signal: context.signal });
+      await ClassicLaunch.prepareLaunch(entry, context, selected);
       return selected.ready ? null : { managerId: OpenGMK.manager.id, version: selected.version,
         ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {} };
     }

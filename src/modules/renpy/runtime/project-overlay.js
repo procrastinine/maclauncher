@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../../shared/copy-file");
 const path = require("node:path");
 
 // Ren'Py writes compiled scripts beside their sources and caches below game/.
@@ -40,10 +41,9 @@ function copyPrivateFile(source, destination, oldInput, { preserveExisting = fal
   if (destinationStat?.isSymbolicLink() || (destinationStat && !destinationStat.isFile())) remove(destination);
   const privateFile = destinationStat?.isFile() && !destinationStat.isSymbolicLink();
   if (!privateFile || (!preserveExisting && oldInput?.signature !== sourceSignature)) {
-    fs.copyFileSync(source, destination, fs.constants.COPYFILE_FICLONE || 0);
-    // The script loader compares source/compiled timestamps. Preserve the
-    // game's timestamps instead of making every copied source appear newer.
-    fs.utimesSync(destination, sourceStat.atime, sourceStat.mtime);
+    // The script loader compares source/compiled timestamps. The clone keeps
+    // the game's timestamps instead of making every copied source appear newer.
+    cloneOrCopySync(source, destination);
   }
   return { kind: "private", signature: sourceSignature, preserveExisting };
 }

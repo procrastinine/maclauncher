@@ -144,27 +144,69 @@ test("AI5 loose scripts require independently identified original AI5 PE resourc
   fs.writeFileSync(path.join(root, "START.MES"), Buffer.alloc(0)); assert.equal(detection(root, game.exe), null);
 });
 
-test("AI5 preparation reads original assets, writes only private config and preserves existing saves", t => {
+test("AI5 preparation keeps original saves and screenshot paths without mirroring game data", t => {
   const root = temporary(t), game = gameFixture(path.join(root, "source"), { ini: '[CONFIG]\nTITLE=YU-NO - The Girl that Chants Love at the Edge of the World\n[FILE]\nMES=C:\\old\\Mes.ARC\n' });
   fs.writeFileSync(path.join(game.root, "AI5SDL2.INI"), "[AI5SDL2]\nFONT=C:\\Windows\\Fonts\\old.ttf\nFONTFACE=0\nTEXTHOOKCLIPBOARD=1\n");
   fs.writeFileSync(path.join(game.root, "SAVE00.DAT"), "portable player save");
   const before = hashes(game.root), install = installFixture(path.join(root, "native"));
   const entry = { gameId: "original-data", gamePath: game.root, moduleData: detection(game.root).moduleData };
   const context = { userDataDir: path.join(root, "userData"), runtimeSettings: { textCapture: "console" } };
-  Module.onImport(entry, context); assert.match(entry.defaultSaveDir, /original-data.*saves/);
+  Module.onImport(entry, context); assert.equal(entry.defaultSaveDir, game.root);
   const launch = Module.__test.prepareLaunch(entry, context, install);
   assert.equal(launch.root, game.root); assert.deepEqual(launch.args, ["--game", "yuno-eng", "--texthook-stdout", game.ini]);
   assert.equal(launch.env.MACLAUNCHER_AI5_SAVE_DIR, entry.defaultSaveDir);
+  assert.equal(launch.saves, game.root);
+  assert.equal(launch.env.MACLAUNCHER_AI5_OUTPUT_DIR, path.join(game.root, "Screenshots"));
+  assert.equal(fs.existsSync(path.join(launch.directory, "saves")), false);
+  assert.equal(fs.existsSync(path.join(launch.directory, "screenshots")), false);
   assert.match(fs.readFileSync(launch.configPath, "utf8"), new RegExp("MES=" + game.script.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.ok(!fs.readFileSync(launch.configPath, "utf8").includes("C:\\Windows"));
   assert.equal(Inspect.parseIni(fs.readFileSync(launch.configPath, "utf8")).ai5sdl2.texthookclipboard, "0");
   assert.equal(Inspect.parseIni(fs.readFileSync(launch.configPath, "utf8")).ai5sdl2.texthookstdout, "1");
   assert.deepEqual(files(launch.directory).sort(), ["AI5SDL2.INI", "preparation.json"]);
   assert.deepEqual(hashes(game.root), before);
-  fs.writeFileSync(path.join(launch.saves, "SAVE00.DAT"), "private player progress");
+  fs.writeFileSync(path.join(launch.saves, "SAVE00.DAT"), "original player progress");
+  const progressed = hashes(game.root);
   Module.__test.prepareLaunch(entry, context, install);
-  assert.equal(fs.readFileSync(path.join(launch.saves, "SAVE00.DAT"), "utf8"), "private player progress");
-  assert.deepEqual(hashes(game.root), before);
+  assert.equal(fs.readFileSync(path.join(launch.saves, "SAVE00.DAT"), "utf8"), "original player progress");
+  assert.deepEqual(hashes(game.root), progressed);
+});
+
+test("AI5 warm preparation reuses unchanged owned files and repairs changed configuration", t => {
+  const root = temporary(t), game = gameFixture(path.join(root, "source")), install = installFixture(path.join(root, "native"));
+  const entry = { gameId: "warm", gamePath: game.root }, context = { userDataDir: path.join(root, "userData"), runtimeSettings: {} };
+  const launch = Module.__test.prepareLaunch(entry, context, install), receipt = path.join(launch.directory, "preparation.json");
+  const expectedConfig = fs.readFileSync(launch.configPath), expectedReceipt = fs.readFileSync(receipt);
+  const sentinel = new Date("2001-01-01T00:00:00Z");
+  for (const file of [launch.configPath, receipt]) fs.utimesSync(file, sentinel, sentinel);
+  Module.__test.prepareLaunch(entry, context, install);
+  for (const file of [launch.configPath, receipt]) assert.equal(fs.statSync(file).mtimeMs, sentinel.getTime());
+  fs.writeFileSync(launch.configPath, "changed configuration"); fs.writeFileSync(receipt, "changed receipt");
+  Module.__test.prepareLaunch(entry, context, install);
+  assert.deepEqual(fs.readFileSync(launch.configPath), expectedConfig);
+  assert.deepEqual(fs.readFileSync(receipt), expectedReceipt);
+  fs.appendFileSync(game.ini, "\n; changed original configuration\n");
+  Module.__test.prepareLaunch(entry, context, install);
+  const record = JSON.parse(fs.readFileSync(receipt));
+  assert.equal(record.sourceIniSha256, crypto.createHash("sha256").update(fs.readFileSync(game.ini)).digest("hex"));
+  assert.match(fs.readFileSync(launch.configPath, "utf8"), /changed original configuration/);
+});
+
+test("AI5 preserves explicit save overrides", async t => {
+  const root = temporary(t), game = gameFixture(path.join(root, "source")), install = installFixture(path.join(root, "native"));
+  const entry = { gameId: "override", gamePath: game.root, saveDirOverride: path.join(root, "chosen-saves") };
+  const context = { userDataDir: path.join(root, "userData"), settings: {}, runtimeSettings: {}, gameArguments: ["--fixture-option"] };
+  let spawned;
+  context.spawnDetachedChecked = (...args) => { spawned = args; return "child"; };
+  t.mock.method(Module.runtimeManagers[0], "resolveSelection", () => ({ ready: true, install }));
+  assert.equal(await Module.launchRuntime("ai5", entry, context), "child");
+  assert.deepEqual(spawned[1], ["--game", "yuno-eng", "--fixture-option", game.ini]);
+  assert.equal(spawned[2].cwd, game.root);
+  assert.equal(spawned[2].env.MACLAUNCHER_AI5_SAVE_DIR, entry.saveDirOverride);
+  assert.equal(spawned[2].env.MACLAUNCHER_AI5_OUTPUT_DIR, path.join(game.root, "Screenshots"));
+  assert.equal(entry.defaultSaveDir, game.root);
+  entry.saveDirOverride = "relative-saves";
+  assert.throws(() => Module.__test.prepareLaunch(entry, context, install), /must be absolute/);
 });
 
 test("AI5 Play preflights data and supported profiles before requesting an install", t => {

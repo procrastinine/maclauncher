@@ -116,7 +116,7 @@ function createRtpStore({ catalog = CATALOG, download = (file, destination, opti
         if (Bundled.realDirectory(filesRoot)) {
           try {
             const expected = pointer.files.map(file => ({ path: file.relative, size: file.size, sha256: file.sha256, identity: force ? null : file.identity }));
-            const checked = await Inno.validateOutput(filesRoot, expected, { signal, cached: true });
+            const checked = await Inno.validateOutput(filesRoot, expected, { signal, cached: true, immutable: true });
             const files = checked.map(({ path: relative, ...file }) => ({ relative, ...file })).sort(ordered);
             if (dataset(files) !== pointer.datasetSha256) throw new Error("RTP data checksum changed.");
             if (!readOnly && JSON.stringify(files) !== JSON.stringify(pointer.files)) writeJsonAtomic(path.join(root, "current.json"), { ...pointer, files });

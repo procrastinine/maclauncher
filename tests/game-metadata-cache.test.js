@@ -58,6 +58,43 @@ test("unchanged games reuse detection, icon and save facts across service restar
   assert.deepEqual(f.counts, { detection: 1, save: 1, icon: 1 });
 });
 
+test("metadata caches store a compact profile hash and refresh stale analysis once", async t => {
+  const f = fixture(t), original = fs.statSync, metadataSource = require.resolve("../src/core/game-metadata");
+  f.registry.getModule().metadataSources = ["main.js"];
+  let device = 4, mtimeChange = 0;
+  t.mock.method(fs, "statSync", (file, ...args) => {
+    const stat = original(file, ...args);
+    return new Proxy(stat, { get(target, name) {
+      if (name === "dev") return typeof target.dev === "bigint" ? BigInt(device) : device;
+      if (name === "mtimeMs" && file === metadataSource) return target.mtimeMs + mtimeChange;
+      return Reflect.get(target, name);
+    } });
+  });
+  const service = () => createGameMetadataService({ userDataDir: f.userDataDir, registry: f.registry });
+  let entry = await service().refreshEntry(f.entry, f.settings);
+  const cacheFile = path.join(f.userDataDir, "games", "fixture", "metadata.json");
+  let cache = JSON.parse(fs.readFileSync(cacheFile));
+  assert.match(cache.profile, /^[a-f0-9]{64}$/);
+  const firstProfile = cache.profile;
+  device = 9;
+  entry = await service().refreshEntry(entry, f.settings);
+  assert.equal(f.counts.detection, 1, "Readable source facts ignore the reconnected device number");
+
+  cache.profile = {configuration: "stale analysis", sources: Array.from({length: 150}, (_, id) => ["/old/app/source-" + id, "old identity"])};
+  fs.writeFileSync(cacheFile, JSON.stringify(cache));
+  entry = await service().refreshEntry(entry, f.settings);
+  assert.equal(f.counts.detection, 2, "A stale analysis profile receives one ordinary refresh");
+  cache = JSON.parse(fs.readFileSync(cacheFile));
+  assert.equal(cache.profile, firstProfile);
+  assert.equal(JSON.stringify(cache.profile).length, 66, "The source inventory is represented once by a fixed-size digest");
+  device = 11;
+  entry = await service().refreshEntry(entry, f.settings);
+  assert.equal(f.counts.detection, 2, "The refreshed hash profile survives subsequent reconnects");
+  mtimeChange = 1;
+  await service().refreshEntry(entry, f.settings);
+  assert.equal(f.counts.detection, 3, "A changed source mtime still invalidates the profile");
+});
+
 test("module package metadata is asynchronous, cached and preserves later title edits", async t => {
   const f = fixture(t), mod = f.registry.getModule(); let reads = 0;
   mod.resolveGameMetadata = async entry => { reads++; return { name: "Localized Game", moduleData: { ...entry.moduleData, resolvedLabel: "Localized Game" } }; };
@@ -183,6 +220,49 @@ test("in-place source changes invalidate cached facts even when mtime is restore
   assert.equal(refreshed.moduleData.version, "2.0"); assert.equal(f.counts.detection, 2);
 });
 
+test("coarse observed reads validate bytes and directory names without trusting held timestamps", async t => {
+  const f = fixture(t), source = path.join(f.gamePath, "version.txt"), before = fs.statSync(source);
+  const directoryStat = fs.statSync(f.gamePath), api = { ...fs, promises: { ...fs.promises } };
+  const held = stat => new Proxy(stat, { get(target, key) {
+    if (key === "ctimeMs") return 1000;
+    return Reflect.get(target, key);
+  } });
+  api.statSync = file => held(file === source ? before : file === f.gamePath ? directoryStat : fs.statSync(file));
+  api.lstatSync = file => held(file === source ? before : file === f.gamePath ? directoryStat : fs.lstatSync(file));
+  // Preserve the same mtime in both path and opened-descriptor observations.
+  api.fstatSync = descriptor => {
+    const stat = fs.fstatSync(descriptor);
+    return held(new Proxy(stat, { get(target, key) { return key === "mtimeMs" && target.ino === before.ino ? before.mtimeMs : Reflect.get(target, key); } }));
+  };
+  const filename = require.resolve("../src/core/file-observations"), scoped = { exports: {} };
+  require("node:vm").runInThisContext(require("node:module").wrap(fs.readFileSync(filename, "utf8")), { filename })(scoped.exports,
+    name => name === "node:fs" ? api : require(require("node:module").createRequire(filename).resolve(name)), scoped, filename, path.dirname(filename));
+  const observations = scoped.exports;
+  const first = await observations.recordReads({ roots: [f.gamePath] }, () => api.readFileSync(source, "utf8"));
+  assert.equal(first.value, "1.0"); assert.equal(first.cacheable, true);
+  assert.equal(observations.unchanged(first.files), true);
+  fs.writeFileSync(source, "2.0"); fs.utimesSync(source, before.atime, before.mtime);
+  assert.equal(observations.unchanged(first.files), false, "Equal metadata cannot hide changed bytes");
+  const listed = await observations.recordReads({ roots: [f.gamePath] }, () => api.readdirSync(f.gamePath));
+  assert.equal(listed.cacheable, true);
+  fs.writeFileSync(path.join(f.gamePath, "new.txt"), "new");
+  assert.equal(observations.unchanged(listed.files), false, "Equal directory metadata cannot hide a new child");
+  const typed = await observations.recordReads({ roots: [f.gamePath] }, () => api.readdirSync(f.gamePath, { withFileTypes: true }));
+  fs.unlinkSync(path.join(f.gamePath, "new.txt")); fs.mkdirSync(path.join(f.gamePath, "new.txt"));
+  assert.equal(observations.unchanged(typed.files), false, "Equal names cannot hide a file becoming a directory");
+  const large = path.join(f.gamePath, "large.bin"), descriptor = fs.openSync(large, "w");
+  fs.ftruncateSync(descriptor, 16 * 1024 ** 2 + 1); fs.closeSync(descriptor);
+  const unbounded = await observations.recordReads({ roots: [f.gamePath] }, () => api.statSync(large));
+  assert.equal(unbounded.cacheable, false, "Large coarse files bypass metadata cache instead of unbounded hashing");
+  const many = [1, 2, 3].map(index => {
+    const file = path.join(f.gamePath, `sparse-${index}`), descriptor = fs.openSync(file, "w");
+    fs.ftruncateSync(descriptor, 12 * 1024 ** 2); fs.closeSync(descriptor); return file;
+  });
+  const budgeted = await observations.recordReads({ roots: [f.gamePath] }, () => many.forEach(file => api.statSync(file)));
+  assert.equal(budgeted.cacheable, false, "One observation pass cannot hash more than its shared byte budget");
+  assert.equal(observations.unchanged([[source, first.files[0][1].slice(0, 3)]]), false, "Legacy stat-only receipts refresh once");
+});
+
 test("negative and nested module-owned reads participate in invalidation", async t => {
   const f = fixture(t), first = await f.service.refreshEntry(f.entry, f.settings);
   fs.writeFileSync(path.join(f.gamePath, "optional.txt"), "present");
@@ -230,6 +310,25 @@ test("metadata analysis preserves notes edited while a probe is pending", async 
   assert.equal(GameStore.readGameRecord(f.userDataDir, f.entry.gameId).notes, "Edited while checking");
 });
 
+test("library metadata refresh returns facts without writing a game record", async t => {
+  const f = fixture(t);
+  GameStore.writeGameRecord(f.userDataDir, f.entry);
+  let writes = 0;
+  const write = GameStore.writeGameRecord;
+  t.mock.method(GameStore, "writeGameRecord", (...args) => {writes++; return write(...args);});
+  const {createBackendOperations} = require("../src/core/backend-operations");
+  const operations = createBackendOperations({userDataDir: f.userDataDir, registry: {...f.registry, listSharedRuntimeManagers: () => []}});
+  const result = await operations.libraryEntry(f.entry, f.settings, {availability: {available: true}, refreshMetadata: true});
+  assert.equal(result.metadataError, null);
+  const refreshed = result.entry;
+  assert.equal(refreshed.moduleData.version, "1.0");
+  assert.equal(refreshed.defaultSaveDir, path.join(f.userDataDir, "chapter-one"));
+  assert.equal(writes, 0);
+  assert.deepEqual(GameStore.readGameRecord(f.userDataDir, f.entry.gameId).moduleData, {});
+  assert.equal((await f.service.refreshEntry(refreshed, f.settings, {persist: false})).moduleData.version, "1.0");
+  assert.equal(writes, 0, "A warm library check also leaves record persistence to main");
+});
+
 test("metadata uses asynchronous icon extraction and cancellation does not cache a missing icon", async t => {
   const f = fixture(t), controller = new AbortController();
   const executable = path.join(f.gamePath, "Game.exe"); fs.writeFileSync(executable, "original");
@@ -268,12 +367,13 @@ test("metadata waits for asynchronous module icon discovery", async t => {
 });
 
 test("APK imports resolve uncached resources without Android or Java and reuse them after restart", { skip: process.platform !== "darwin" }, async t => {
+  if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-apk-import-")));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const input = path.join(root, "input"), userDataDir = path.join(root, "data");
   fs.mkdirSync(input); fs.mkdirSync(userDataDir);
   const apk = path.join(input, "metadata.apk");
-  fs.copyFileSync(path.join(__dirname, "fixtures/android-package-metadata/metadata.apk"), apk);
+  fs.copyFileSync(require('./helpers/android-fixture-tools.cjs').metadataApk(t), apk);
   const Runtime = require("../src/modules/android/runtime");
   const Java = require("../src/modules/java/runtime/java-runtime");
   const Reader = require("../src/modules/android/tools/apk-metadata");
@@ -290,8 +390,12 @@ test("APK imports resolve uncached resources without Android or Java and reuse t
   let reads = 0;
   t.mock.method(Reader, "inspect", options => { reads++; return original(options); });
   const settings = { modules: { android: {} }, runtimes: {} };
-  const options = { userDataDir, registry, app: { getLocale: () => "en-US" } };
+  const metadataErrors = [];
+  const options = { userDataDir, registry, app: { getLocale: () => "en-US" }, logger: {
+    debug(message, error) { if (message === "[metadata] module lookup") metadataErrors.push(error); }
+  } };
   const imported = await createGameMetadataService(options).importEntry(apk, settings);
+  assert.deepEqual(metadataErrors, [], "The resource reader must resolve the label instead of silently using the file name");
   assert.equal(imported.moduleId, "android");
   assert.equal(imported.name, "Metadata Game");
   assert.equal(imported.moduleData.packageName, "org.maclauncher.metadata.fixture");

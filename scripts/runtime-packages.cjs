@@ -38,8 +38,18 @@ function validateSelection(value, { plan, dependencies } = {}) {
       throw new Error('The package lock contains an incompatible or repeated runtime.');
     selected.set(key(record), record);
   }
-  if (required.length !== selected.size || required.some(item => !selected.has(key(item))))
-    throw new Error('The package lock must cover exactly the included application packages.');
+  if (required.some(item => !selected.has(key(item)))) throw new Error('The package lock must cover exactly the included application packages.');
+  const reachable=new Set();
+  function include(record,active=new Set()){
+    if(active.has(key(record)))throw new Error('Cyclic included package dependencies.');
+    if(reachable.has(key(record)))return;reachable.add(key(record));const next=new Set(active);next.add(key(record));
+    for(const dep of require('../src/modules/shared/runtime/package-contract.cjs').packageDependencies(record.dependencies)){
+      const target=[...selected.values()].find(row=>row.id===dep.project&&row.version===dep.release&&row.asset.sha256===dep.sha256);
+      if(!target)throw new Error('The package lock is missing an exact included dependency.');include(target,next);
+    }
+  }
+  required.forEach(item=>include(selected.get(key(item))));
+  if(reachable.size!==selected.size)throw new Error('The package lock contains unrelated application packages.');
   for (const item of plan.supplementals) {
     const record = selected.get(key(item));
     if (record.manifestRelative !== item.manifestRelative || record.manifestSha256 !== item.manifestSha256 ||
@@ -91,13 +101,23 @@ function createLock({ catalogs, architectures = ARCHITECTURES, maximumMacOS, rep
       records.set(key(item), record);
     }
   }
+  const visit=record=>{
+    for(const dep of require('../src/modules/shared/runtime/package-contract.cjs').packageDependencies(record.dependencies)){
+      if([...records.values()].some(row=>row.id===dep.project&&row.version===dep.release&&row.asset.sha256===dep.sha256))continue;
+      const catalog=JSON.parse(B.readRegular(path.join(catalogs,dep.project+'.json'),2*1024**2).bytes);
+      const target=Catalog.validateProjectCatalog(catalog,{projectId:dep.project,repository}).packages.find(row=>row.version===dep.release&&row.asset.sha256===dep.sha256);
+      if(!target)throw new Error('Missing exact published included dependency: '+dep.project+'/'+dep.release);
+      records.set(key(target),target);visit(target);
+    }
+  };
+  [...records.values()].forEach(visit);
   maximumMacOS ??= [...records.values()].reduce((value, record) => B.versionAtLeast(record.minimumMacOS, value) ? record.minimumMacOS : value, floor);
   const packages = [...records.values()].sort((a, b) => key(a).localeCompare(key(b)));
   return validateLock({ schemaVersion: 2, repository, architectures: ARCHITECTURES.filter(arch => architectures.includes(arch)),
     maximumMacOS, packages }, { dependencies });
 }
 
-async function extractPackage(archive, destination, record) {
+async function extractPackage(archive, destination, record, {onDeclaration} = {}) {
   const stat = fs.lstatSync(archive);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== record.asset.bytes || await Payload.checksum(archive) !== record.asset.sha256)
     throw new Error('Application package archive checksum or size differs from its lock.');
@@ -118,7 +138,10 @@ async function extractPackage(archive, destination, record) {
       if (!declaration) {
         if (entry.name !== 'runtime-package.json' || entry.mode !== 0o644 || entry.size > B.LIMITS.manifestBytes)
           throw new Error('The package declaration must be the first archive member.');
-        declaration = JSON.parse((await reader.read(entry.size)).toString('utf8'));
+        const bytes=await reader.read(entry.size);declaration=JSON.parse(bytes.toString('utf8'));
+        onDeclaration?.(bytes);
+        try{require('../src/modules/shared/runtime/package-dependencies').assertDeclaration(declaration,record);}
+        catch(error){throw new Error('The archive declaration differs from the locked runtime identity.',{cause:error});}
         if (['id', 'version', 'arch', 'minimumMacOS', 'manifestRelative', 'manifestSha256', 'sourceSha256'].some(field => declaration[field] !== record[field]) ||
             declaration.directoryRelative !== key(record) ||
             declaration.sourceRelative === undefined && !declaration.sourceArtifact ||
@@ -173,15 +196,30 @@ async function removeStaging(staging) {
 }
 
 const PACKAGE_ARCHITECTURES = ['arm64', 'x64', 'universal'], ARCHIVE = /^(.+)-(arm64|x64|universal)\.tar\.gz$/;
+// Local stages name a generation by content hashes: <version>-<source>-<payload>
+// from a graphics stage, or <version>-dev.<hash> for a development package.
+const GENERATION = /^\d+\.\d+\.\d+-(?:[0-9a-f]{8}-[0-9a-f]{8}|dev\.[0-9a-f]{8})$/;
+
+// Directories that the application plans select for every launcher CPU in the
+// lock. An unreadable plan returns null, which keeps every generation.
+function plannedDirectories(lock, dependencies) {
+  try {
+    return lock.architectures.flatMap(arch => {
+      const plan = Model.createPlan({ arch, maximumMacOS: lock.maximumMacOS, dependencies });
+      return [...new Set([...plan.packages, ...plan.supplementals].map(item=>item.directoryRelative).concat(selectArchitecture(lock,arch).packages.map(record=>`${record.id}/${record.version}/${record.arch}`)))];
+    });
+  } catch { return null; }
+}
 
 // Earlier fetched versions of locked package ids that no lock record for any
 // launcher CPU references. A folder is recognized only in the installed layout
 // <id>/<version>/<arch>/<locked manifest> with its downloaded archive
-// <id>-<version>-<arch>.tar.gz beside the current ones. Local stages without an
-// archive, links, dot entries, other files, ids outside the lock, generation
-// caches with leases and folders named by a running command line stay. An
-// archive stays while its unrecognized folder does.
-function unlockedPackages({ lock, selection, repoRoot = ROOT, processes }) {
+// <id>-<version>-<arch>.tar.gz beside the current ones. A locally staged
+// generation of a locked id needs no archive, and goes once no plan selects it.
+// Other local stages, links, dot entries, other files, ids outside the lock,
+// generation caches with leases and folders named by a running command line
+// stay. An archive stays while its unrecognized folder does.
+function unlockedPackages({ lock, selection, repoRoot = ROOT, processes, planned, dependencies }) {
   const root = path.join(repoRoot, 'src/resources/native-runtimes'), cache = path.join(repoRoot, 'dist/runtime-downloads');
   const ids = new Map(), assets = new Set();
   for (const record of [...lock.packages, ...(selection?.packages || [])]) {
@@ -197,14 +235,20 @@ function unlockedPackages({ lock, selection, repoRoot = ROOT, processes }) {
     if (entry.isFile() && id && !assets.has(entry.name)) archived.set(entry.name, path.join(id, match[1].slice(id.length + 1), match[2]));
   }
   const folders = [];
+  const selected = (id, version) => {
+    if (planned === undefined) planned = plannedDirectories(lock, dependencies);
+    return planned === null || planned.some(directory => directory.startsWith(`${id}/${version}/`));
+  };
   for (const [id, { versions, manifests }] of processes === null ? [] : ids) {
     const parent = path.join(root, id), leases = path.join(parent, '.generation-leases');
     if (!B.realDirectory(parent) || fs.existsSync(leases) && (!B.realDirectory(leases) || fs.readdirSync(leases).length)) continue;
     for (const entry of fs.readdirSync(parent, { withFileTypes: true })) {
       if (!entry.isDirectory() || entry.name.startsWith('.') || versions.has(entry.name)) continue;
+      const generation = GENERATION.test(entry.name);
+      if (generation && selected(id, entry.name)) continue;
       const folder = path.join(parent, entry.name), children = fs.readdirSync(folder, { withFileTypes: true });
       if (!children.length || children.some(child => !child.isDirectory() || !PACKAGE_ARCHITECTURES.includes(child.name) ||
-          !archived.has(`${id}-${entry.name}-${child.name}.tar.gz`) ||
+          !generation && !archived.has(`${id}-${entry.name}-${child.name}.tar.gz`) ||
           ![...manifests].some(manifest => regular(path.join(folder, child.name, manifest)))) ||
           processes.includes(folder + path.sep) || processes.split('\n').some(line => line.endsWith(folder)))
         continue;
@@ -228,6 +272,7 @@ async function pruneUnlockedPackages(options) {
 
 // Offline comparison of the installed manifests with the lock for one launcher
 // CPU. It reads only local files and returns one line when anything differs.
+// Package defaults follow the launcher/Node process CPU, including under Rosetta.
 function includedPackagesHint({ repoRoot = ROOT, arch = process.arch } = {}) {
   let packages;
   try { packages = selectArchitecture(JSON.parse(fs.readFileSync(path.join(repoRoot, LOCK), 'utf8')), arch).packages; }
@@ -244,20 +289,36 @@ async function fetchPackages({ lock = readLock({ arch: process.arch }), repoRoot
   lock = validateSelection(lock, { dependencies: dependencies.model });
   const root = path.join(repoRoot, 'src/resources/native-runtimes'), cache = path.join(repoRoot, 'dist/runtime-downloads');
   B.realDirectory(root, { create: true }); B.realDirectory(cache, { create: true });
-  const declarations = [];
-  for (const record of lock.packages) {
-    const archive = path.join(cache, record.asset.filename);
-    if (!fs.existsSync(archive)) await (dependencies.download || Payload.downloadPayload)(record.asset.url, archive);
-    const parent = path.join(root, record.id, record.version), destination = path.join(parent, record.arch);
-    B.realDirectory(parent, { create: true });
-    const staging = fs.mkdtempSync(path.join(parent, '.install-'));
-    try {
-      const declaration = await extractPackage(archive, staging, record);
-      if (fs.existsSync(destination)) B.verifyPayload(destination, declaration);
-      else fs.renameSync(staging, destination);
-      declarations.push(declaration);
-    } finally { await removeStaging(staging); }
+  const declarations = [], installed=new Map(), active=new Set();
+  const P=require('../src/modules/shared/runtime/package-dependencies');
+  B.realDirectory(path.join(root,'.declarations'),{create:true});
+  async function fetch(record){
+    if(installed.has(record.asset.sha256))return installed.get(record.asset.sha256);
+    if(active.has(record.asset.sha256))throw new Error('Cyclic included package dependencies.');active.add(record.asset.sha256);
+    const children=new Map();for(const dep of record.dependencies||[]){
+      const target=lock.packages.find(row=>row.id===dep.project&&row.version===dep.release&&row.asset.sha256===dep.sha256);
+      if(!target)throw new Error('The selected included dependency is missing.');children.set(dep.project,await fetch(target));
+    }
+    const archive=path.join(cache,record.asset.filename);
+    if(!fs.existsSync(archive))await(dependencies.download||Payload.downloadPayload)(record.asset.url,archive);
+    const parent=path.join(root,record.id,record.version),destination=path.join(parent,record.arch);
+    B.realDirectory(parent,{create:true});const staging=fs.mkdtempSync(path.join(parent,'.install-'));
+    try{
+      let outer;const declaration=await extractPackage(archive,staging,record,{onDeclaration:bytes=>{outer=bytes;}}),resolveDependency=P.resolver(children);
+      P.materialize(staging,declaration,resolveDependency);
+      if(fs.existsSync(destination)){P.materialize(destination,declaration,resolveDependency);}
+      else fs.renameSync(staging,destination);
+      const sidecar=path.join(root,'.declarations',record.asset.sha256+'.json');
+      if(fs.existsSync(sidecar)&&!fs.readFileSync(sidecar).equals(outer))throw new Error('An included sealed declaration changed.');
+      if(!fs.existsSync(sidecar))fs.writeFileSync(sidecar,outer,{flag:'wx',mode:0o644});
+      const selected={record,declaration,root:destination,children,resolveDependency};installed.set(record.asset.sha256,selected);active.delete(record.asset.sha256);declarations.push(declaration);return selected;
+    }finally{await removeStaging(staging);}
   }
+  for(const record of lock.packages)await fetch(record);
+  const lockSource=path.join(repoRoot,LOCK),lockTarget=path.join(repoRoot,'src/resources/runtime-packages.json');
+  // Retain the existing lock verbatim; runtime consumers use the same pins.
+  if(fs.existsSync(lockSource))fs.copyFileSync(lockSource,lockTarget);
+
   const config = { arch: lock.arch, maximumMacOS: lock.maximumMacOS };
   const plan = Model.createPlan({ ...config, dependencies: dependencies.model });
   const packages = plan.packages.map(item => {
@@ -277,7 +338,7 @@ async function fetchPackages({ lock = readLock({ arch: process.arch }), repoRoot
   try {
     const processes = (dependencies.processes || (await import('./generation-cache.mjs')).generationProcesses)();
     removed = await pruneUnlockedPackages({ lock: packageLock || readLock({ repoRoot, dependencies: dependencies.model }),
-      selection: lock, repoRoot, processes });
+      selection: lock, repoRoot, processes, dependencies: dependencies.model });
     if (removed.length) console.log('Removed earlier included packages: ' + removed.join(', '));
   } catch (error) { console.warn('Included package cleanup: ' + error.message); }
   return { inventory, packages: declarations.length, removed };

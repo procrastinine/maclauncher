@@ -57,11 +57,17 @@ struct WindowStreamRecovery {
 };
 std::string windowCaptureError(const char *phase,NSError *error);
 bool transientWindowCaptureError(NSError *error);
+// Closed streams of this process whose capture has not finished stopping. A
+// helper waits for zero before it exits, so the system never handles a stop
+// request from a process that has already gone.
+unsigned pendingWindowStreamStops();
 struct WindowStream :std::enable_shared_from_this<WindowStream> {
     // Client identity for logs and reasons, and the image-budget stage.
     const char *label="Window",*admissionStage="window-capture-memory";
     // Stream options; change only before attach() or with the next update().
     bool showsCursor=false,includeChildWindows=false;
+    bool deferStopUntilStarted=true;
+    Class receiverClass=[MacFXWindowStreamReceiver class];
     // Captures closer than 0.75 of this interval to the previous accepted one
     // are dropped (seconds; zero accepts every complete frame).
     std::atomic<double>minimumInterval{0};
@@ -69,10 +75,14 @@ struct WindowStream :std::enable_shared_from_this<WindowStream> {
     id<MTLDevice>device=nil;id<MTLCommandQueue>queue=nil,copyQueue=nil;bool copyQueueAttempted=false;
     SCStream *stream=nil;MacFXWindowStreamReceiver *receiver=nil;
     CVMetalTextureCacheRef cache=nullptr;
-    dispatch_queue_t renderQueue=dispatch_queue_create("org.maclauncher.window-frames",DISPATCH_QUEUE_SERIAL);
-    dispatch_queue_t intakeQueue=dispatch_queue_create("org.maclauncher.window-capture",DISPATCH_QUEUE_SERIAL);
+    dispatch_queue_t renderQueue,intakeQueue;
+    explicit WindowStream(const char*frames="org.maclauncher.window-frames",const char*capture="org.maclauncher.window-capture")
+        :renderQueue(dispatch_queue_create(frames,DISPATCH_QUEUE_SERIAL)),intakeQueue(dispatch_queue_create(capture,DISPATCH_QUEUE_SERIAL)) {}
     std::shared_ptr<FramePresenter>presenter;
     std::atomic<bool>retired{false},closed{false},ready{false},configuring{false},recoverAfterGeometry{false};
+    // Window capture waits for start before stopping; browser sessions stop
+    // immediately. stopRequested belongs to renderQueue.
+    std::atomic<bool>starting{false};bool stopRequested=false;
     std::atomic<double>configurationStarted{0};
     std::atomic<unsigned>width{0},height{0};std::atomic<uint64_t>geometryGeneration{1};std::atomic<double>geometryTime{0};
     std::atomic<uint64_t>completedGeneration{0},acceptedGeneration{0},firstAcceptedFrameId{0};uint64_t revealAfter=0;
@@ -105,6 +115,7 @@ struct WindowStream :std::enable_shared_from_this<WindowStream> {
     bool prepareDevice();
     void prepareLayer(CGFloat scale,bool opaque);
     void preparePresenter(RuntimeFrameSource source,std::optional<bool>sourceOpaque={});
+    bool attach(SCContentFilter *filter,NSError *__autoreleasing *failure);
     NSError *attach(SCContentFilter *filter);
     void startCapture(void (^started)());
     // Main thread: reveals the layer once a frame of the current geometry
@@ -112,6 +123,7 @@ struct WindowStream :std::enable_shared_from_this<WindowStream> {
     bool reveal();
     void fail(const std::string &reason,bool recover=false);
     void close();
+    void stopCapture(); // renderQueue; exactly one stop.
     SCStreamConfiguration *configuration(const BrowserFrameGeometry &g);
     void configureLatest();
     // A nonzero drawable sets the output extent in pixels; the presenter

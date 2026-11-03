@@ -40,7 +40,8 @@ test("Google browser sign-in stays isolated and returns only the verified exchan
   const f = fixture(t); assert.equal(f.sessions.size, 0); assert.equal(f.windows.length, 0);
   const pending = f.auth.signIn({ accountId: "one", androidId: "abcdef123456", remember: true }); await tick();
   const window = f.windows[0], browserSession = [...f.sessions.values()][0], preferences = window.options.webPreferences;
-  assert.equal(window.webContents.getURL(), GOOGLE_SIGN_IN_URL); assert.ok(browserSession.partition.startsWith("persist:external-google-play-"));
+  assert.equal(window.webContents.getURL(), GOOGLE_SIGN_IN_URL); assert.ok(browserSession.partition.startsWith("external-google-play-"));
+  assert.equal(browserSession.partition.startsWith("persist:"), false, "Remembering credentials must not create a second persistent-cookie crypto consumer");
   assert.equal(window.shown, true); assert.ok(window.focusCount > 0, "Sign-in opens and focuses before ready-to-show");
   assert.equal(preferences.contextIsolation, true); assert.equal(preferences.sandbox, true); assert.equal(preferences.nodeIntegration, false);
   assert.equal(preferences.webSecurity, true); assert.equal(Object.hasOwn(preferences, "preload"), false); assert.equal(preferences.webviewTag, false);
@@ -50,7 +51,7 @@ test("Google browser sign-in stays isolated and returns only the verified exchan
   assert.equal(session.email, EMAIL); assert.equal(session.aasToken, AAS); assert.equal(session.androidId, "abcdef123456");
   assert.equal(f.exchanges.length, 1); assert.equal(f.exchanges[0].oauthToken, OAUTH); assert.equal(f.exchanges[0].email, EMAIL);
   assert.ok(window.webContents.scripts.every(source => !/password|\.value\b/.test(source)));
-  assert.equal(window.closed, true); assert.equal(browserSession.cookies.values.length, 0); assert.equal(browserSession.cleared, undefined);
+  assert.equal(window.closed, true); assert.equal(browserSession.cookies.values.length, 0); assert.equal(browserSession.cleared, true);
   assert.equal(f.auth.focus("one"), false);
 });
 

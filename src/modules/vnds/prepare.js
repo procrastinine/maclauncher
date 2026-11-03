@@ -1,11 +1,11 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const os = require("node:os");
 const crypto = require("node:crypto");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const GameData = require("../shared/game-data");
 const Zip = require("../shared/runtime/zip");
-const Save = require("./save");
 const Runtime = require("./runtime/manager");
 const run = promisify(execFile);
 const MAX_AUDIO_BYTES = 32 * 1024 * 1024;
@@ -14,9 +14,24 @@ function moduleRoot(entry, context) {
   if (!path.isAbsolute(context?.userDataDir || "") || !/^[A-Za-z0-9_-]{1,128}$/.test(entry?.gameId || "")) throw new Error("VNDS requires a persisted game and a local data directory.");
   return GameData.resolveGameModuleDir(context.userDataDir, entry.gameId, "vnds");
 }
-function saveLocations(entry, context) {
-  const root = moduleRoot(entry, context), directory = path.join(root, "saves");
+function defaultSaveDirectory(entry) {
+  const root = entry.contentRootDir || entry.gamePath;
+  if (!path.isAbsolute(root || "")) throw new Error("VNDS requires an absolute novel directory.");
+  return path.join(os.homedir(), "Library", "Application Support", "LOVE", "VNDS-LOVE", "novels", path.basename(root));
+}
+function saveLocations(entry) {
+  const directory = defaultSaveDirectory(entry);
   return { primaryDirectory: directory, directories: [{ directory: entry.saveDirOverride || directory, label: "Saves", source: "VNDS-LOVE" }] };
+}
+function resolveSaveIdentity(entry) {
+  return { namespace: "filesystem", identity: entry.saveDirOverride || defaultSaveDirectory(entry),
+    scope: "game", explicit: Boolean(entry.saveDirOverride), hostSubstitution: false,
+    createPatch({ entry: current, gameId }) {
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(gameId || "")) return null;
+      const directory = path.join(path.dirname(defaultSaveDirectory(current)), gameId);
+      const locations = saveLocations({ ...current, saveDirOverride: directory });
+      return { saveDirOverride: directory, defaultSaveDir: locations.primaryDirectory, saveLocations: locations.directories };
+    } };
 }
 function safeName(name) { return typeof name === "string" && name && !path.posix.isAbsolute(name) && !/[\\\x00-\x1f]/.test(name) && !name.split("/").some(part => !part || part === "." || part === ".."); }
 function archiveMounts(root) {
@@ -35,15 +50,6 @@ function archiveMounts(root) {
 }
 function verifyEngine(context, entry) { return Runtime.resolveEngine(entry, context); }
 function resolveEngineRoot(context, entry) { return verifyEngine(context, entry).root; }
-function importSaves(root, directory) {
-  for (const name of fs.readdirSync(root)) {
-    if (!/^(?:save(?:[1-9]|10)|global)\.json$/i.test(name) || fs.existsSync(path.join(directory, name))) continue;
-    const file = path.join(root, name), stat = fs.lstatSync(file);
-    if (!stat.isFile() || stat.size > 8 * 1024 * 1024) throw new Error("Original VNDS save exceeds the import limit.");
-    const bytes = fs.readFileSync(file); Save.validate(bytes.toString("utf8"));
-    fs.writeFileSync(path.join(directory, name), bytes, { flag: "wx" });
-  }
-}
 async function prepareAudio(entry, context, root, directory, dependencies = {}) {
   const source = path.join(root, "sound");
   if (!fs.existsSync(source)) return [];
@@ -72,14 +78,16 @@ async function prepareAudio(entry, context, root, directory, dependencies = {}) 
 }
 async function prepare(entry, context, dependencies = {}) {
   const owned = moduleRoot(entry, context), root = fs.realpathSync(entry.contentRootDir || entry.gamePath);
-  const engine = (dependencies.resolveEngine || verifyEngine)(context, entry), saveRoot = entry.saveDirOverride || path.join(owned, "saves"), saveDirectory = saveRoot;
+  const engine = (dependencies.resolveEngine || verifyEngine)(context, entry), saveRoot = entry.saveDirOverride || defaultSaveDirectory(entry), saveDirectory = saveRoot;
   if (!path.isAbsolute(saveRoot)) throw new Error("VNDS save location must be an absolute directory.");
   fs.mkdirSync(saveDirectory, { recursive: true });
-  importSaves(root, saveDirectory);
-  const working = path.join(owned, "session"); fs.mkdirSync(working, { recursive: true });
+  const session = path.join(owned, "session"); fs.mkdirSync(session, { recursive: true });
   const mounts = [...archiveMounts(root), ...await prepareAudio(entry, context, root, path.join(owned, "audio"), dependencies)];
-  const mountFile = path.join(working, "mounts.json"); fs.writeFileSync(mountFile, JSON.stringify(mounts));
+  const mountFile = path.join(session, "mounts.json"), plan = JSON.stringify(mounts);
+  let previous;
+  try { previous = fs.readFileSync(mountFile, "utf8"); } catch (error) { if (error.code !== "ENOENT") throw error; }
+  if (previous !== plan) fs.writeFileSync(mountFile, plan);
   const locations = saveLocations(entry, context); entry.defaultSaveDir = locations.primaryDirectory; entry.saveLocations = locations.directories;
-  return { engine: engine.root, root, saveRoot, saveDirectory, working, mountFile, profile: engine.profile };
+  return { engine: engine.root, root, saveRoot, saveDirectory, working: root, mountFile, profile: engine.profile };
 }
-module.exports = { moduleRoot, saveLocations, safeName, archiveMounts, resolveEngineRoot, verifyEngine, importSaves, prepareAudio, prepare };
+module.exports = { moduleRoot, defaultSaveDirectory, saveLocations, resolveSaveIdentity, safeName, archiveMounts, resolveEngineRoot, verifyEngine, prepareAudio, prepare };

@@ -131,10 +131,10 @@ export const GameActions = memo(function GameActions({ g, isRunning, actions, in
           aria-valuetext={countLabel || undefined} />}
       </div>}
       {/* Save tools stay usable: saves kept outside the game folder and snapshots remain available. */}
-      {inspector && canLaunch && canEditSaves && <button className="btn small" title="Save tools" onClick={() => onOpenSaveTools(g)} disabled={removing}>
+      {inspector && canLaunch && canEditSaves && !g.ephemeral && <button className="btn small" title="Save tools" onClick={() => onOpenSaveTools(g)} disabled={removing}>
         {g.moduleSupports?.saveEditing === true ? "Edit saves" : "Saves"}
       </button>}
-      {inspector && canLaunch && canUseCheats && <button className="btn small" title={filesUnavailable || "Cheats"} onClick={() => openCheats(g)} disabled={removing || Boolean(filesUnavailable)}>Cheats</button>}
+      {inspector && canLaunch && canUseCheats && !g.ephemeral && <button className="btn small" title={filesUnavailable || "Cheats"} onClick={() => openCheats(g)} disabled={removing || Boolean(filesUnavailable)}>Cheats</button>}
       {/* A session entry is removed when its session ends, never forgotten. */}
       {!g.ephemeral && <button
         className="btn iconOnly danger forgetAction"

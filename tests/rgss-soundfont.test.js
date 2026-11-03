@@ -1,0 +1,42 @@
+const test = require("node:test"), assert = require("node:assert/strict");
+const fs = require("node:fs"), os = require("node:os"), path = require("node:path"), crypto = require("node:crypto");
+const File = require("../src/modules/shared/runtime/pinned-file");
+const Transport = require("../src/modules/shared/runtime/upstream-transport");
+const Soundfont = require("../src/modules/rgss/soundfont");
+const Assets = require("../src/modules/rgss/assets");
+const { buildMkxpConfig } = require("../src/modules/rgss/runtime/mkxpz-launcher");
+
+test("shared soundfont downloads only after consent, verifies bytes, reuses offline and honors overrides", async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "rgss-font-"));
+  t.after(() => { Assets.removeStagedAssets({ userDataDir: root }); fs.rmSync(root, { recursive: true, force: true }); });
+  const bytes = Buffer.from("test soundfont"), digest = crypto.createHash("sha256").update(bytes).digest("hex");
+  const asset = { id: "test-soundfont", label: "Test soundfont", filename: "font.sf2", bytes: bytes.length, sha256: digest, url: "https://example.test/font.sf2" };
+  let downloads = 0, response = bytes;
+  t.mock.method(Transport, "downloadToFile", async (_url, target) => { downloads++; fs.writeFileSync(target, response); });
+  const context = { userDataDir: root, confirmRuntimeInstall: async () => false };
+  assert.equal(File.resolve(asset, root), null); assert.equal(downloads, 0);
+  await assert.rejects(File.ensure(asset, context), /canceled/); assert.equal(downloads, 0);
+  context.confirmRuntimeInstall = async () => true;
+  response = Buffer.from("x"); await assert.rejects(File.ensure(asset, context), /size/);
+  response = Buffer.alloc(bytes.length); await assert.rejects(File.ensure(asset, context), /checksum/);
+  assert.equal(File.resolve(asset, root), null);
+  response = bytes; const installed = await File.ensure(asset, context);
+  assert.equal(fs.readFileSync(installed, "utf8"), bytes.toString()); assert.equal(downloads, 3);
+  context.confirmRuntimeInstall = async () => { throw Error("Already installed assets need no consent"); };
+  assert.equal(await File.ensure(asset, context), installed); assert.equal(downloads, 3);
+  fs.writeFileSync(installed, Buffer.alloc(bytes.length)); assert.equal(File.resolve(asset, root), null);
+  context.confirmRuntimeInstall = async () => true;
+  assert.equal(await File.ensure(asset, context), installed); assert.equal(downloads, 4);
+  assert.deepEqual(fs.readdirSync(path.dirname(installed)), [asset.filename]);
+  assert.equal(Soundfont.asset.bytes, 4140692); assert.match(Soundfont.asset.url, /^https:\/\//);
+  t.mock.method(File, "ensure", () => { throw Error("Explicit soundfonts must not download"); });
+  const custom = path.join(root, "custom.sf2"); fs.writeFileSync(custom, "custom");
+  assert.equal(Soundfont.ensure({ runtimeSettings: { soundfontPath: custom } }), null);
+  const config = buildMkxpConfig({ entry: { contentRootDir: root }, userDataDir: root,
+    runtimeSettings: { soundfontPath: custom }, stagedAssets: {} });
+  assert.equal(config.midiSoundFont, custom);
+  const kawarikiRoot = path.join(root, "source"); fs.mkdirSync(kawarikiRoot); fs.writeFileSync(path.join(kawarikiRoot, "preload.rb"), "# preload");
+  const staged = Assets.ensureAssetsStaged({ userDataDir: root, kawarikiRoot });
+  assert.equal(staged.assetsStaged, true);
+  assert.equal(fs.existsSync(path.join(staged.generationRoot, "soundfont", "GMGSx.SF2")), false);
+});

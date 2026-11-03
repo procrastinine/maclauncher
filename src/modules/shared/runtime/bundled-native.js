@@ -4,6 +4,8 @@ const crypto = require("node:crypto");
 const { execFile, execFileSync } = require("node:child_process");
 const { promisify } = require("node:util");
 const Native = require("./local-native");
+const { hasFineChangeTime } = require("../file-time");
+const { fileDigest } = require("./verified-identity");
 const PE = require("./pe-exports");
 const { versionAtLeast } = require("./host-capabilities");
 const run = promisify(execFile);
@@ -11,16 +13,64 @@ const run = promisify(execFile);
 const LIMITS = Object.freeze({ manifestBytes: 8 * 1024 * 1024, files: 20000, fileBytes: 256 * 1024 * 1024, bytes: 1024 * 1024 * 1024 });
 const digest = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 const SHA = /^[a-f0-9]{64}$/;
-// Display refreshes share parsed manifests, not payload verification results.
-// Full install/launch verification always rereads every payload byte.
+const appBundleContext = new (require('node:async_hooks').AsyncLocalStorage)();
+function appBundleRoot(){
+ const scoped=appBundleContext.getStore();if(scoped)return scoped;
+ const match=/^(.*\.app)\/Contents\/Resources\//.exec(__filename);
+ return match?fs.realpathSync(match[1]):null;
+}
+function withAppBundle(root,operation){
+ const real=fs.realpathSync(root);if(!real.endsWith('.app'))throw new Error('Application verification needs its exact bundle.');
+ return appBundleContext.run(real,operation);
+}
+function dependencyResolver(root,manifest){
+ const P=require('./package-dependencies');
+ const context=P.contextForPayload(root);
+ if(context.declaration)return context.resolveDependency;
+ const bundle=appBundleRoot(),resources=bundle?path.join(bundle,'Contents/Resources'):require('./included-helpers').SOURCE_RESOURCES;
+ if(path.resolve(root).startsWith(path.join(resources,'native-runtimes')+path.sep))
+  return require('./included-package-dependencies').context(resources,{verification:'status'}).resolveDependencies(manifest.dependencies).resolveDependency;
+ throw new Error('A package dependency needs its exact installed sealed file.');
+}
+
+// Display refreshes share parsed manifests. Full verification repeats every
+// policy check; precise unchanged file identities can reuse their digest.
 const manifestCache = new Map();
+const dependencyContexts = new WeakMap();
+function rememberDependencies(declaration,resolveDependency){if(declaration&&resolveDependency)dependencyContexts.set(declaration,resolveDependency);}
 const MANIFEST_CACHE_LIMIT = 128;
+
+// App assembly may share a file between sealed included packages. Only a
+// relative leaf alias inside the same real app bundle is accepted here; the
+// caller still checks the original logical path's sealed bytes and inventory.
+function appAlias(file) {
+  const root = appBundleRoot();
+  if (!root) return null;
+  const absolute = path.join(fs.realpathSync(path.dirname(file)), path.basename(file));
+  if (!absolute.startsWith(path.join(root,'Contents')+path.sep) || !fs.lstatSync(absolute).isSymbolicLink()) return null;
+  let current = absolute;
+  for (let depth = 0; depth < 64; depth++) {
+    realDirectory(path.dirname(current));
+    const stat = fs.lstatSync(current);
+    if (!stat.isSymbolicLink()) {
+      if (!stat.isFile()) throw new Error("Application alias target must be a regular file.");
+      return current;
+    }
+    const target = fs.readlinkSync(current);
+    if (path.isAbsolute(target)) throw new Error("Application aliases must be relative.");
+    current = path.resolve(path.dirname(current), target);
+    if (!current.startsWith(root + path.sep)) throw new Error("Application alias escapes its bundle.");
+  }
+  throw new Error("Application alias is cyclic.");
+}
 
 function fileIdentity(file, { maximum = LIMITS.fileBytes } = {}) {
   if (!realDirectory(path.dirname(file))) throw new Error("Bundled runtime directory is missing.");
-  const stat = fs.lstatSync(file, { bigint: true });
+  const stat = fs.lstatSync(appAlias(file) || file, { bigint: true });
   if (!stat.isFile() || stat.size > BigInt(maximum)) throw new Error("Bundled runtime file is not regular or exceeds its limit.");
-  return [stat.dev, stat.ino, stat.size, stat.mode, stat.mtimeNs, stat.ctimeNs].join(":");
+  const identity = [stat.dev, stat.ino, stat.size, stat.mode, stat.mtimeNs, stat.ctimeNs].join(":");
+  // Coarse change times cannot authorize byte-verification cache reuse.
+  return hasFineChangeTime(stat) ? identity : identity + ":" + readRegular(file, maximum).sha256;
 }
 
 function clearManifestCache(directory) {
@@ -60,11 +110,13 @@ function relativeFile(value) {
   return value;
 }
 
-function realDirectory(directory, { create = false } = {}) {
+function realDirectory(directory, { create = false, verifiedDirectories } = {}) {
   const absolute = path.resolve(directory);
+  if (verifiedDirectories?.has(absolute)) return true;
   let current = path.parse(absolute).root;
   for (const part of absolute.slice(current.length).split(path.sep).filter(Boolean)) {
     current = path.join(current, part);
+    if (verifiedDirectories?.has(current)) continue;
     let stat;
     try { stat = fs.lstatSync(current); } catch (error) {
       if (error.code !== "ENOENT") throw error;
@@ -75,13 +127,20 @@ function realDirectory(directory, { create = false } = {}) {
     // macOS presents its system temporary directories through these aliases.
     if (process.platform === "darwin" && ["/tmp", "/var"].includes(current) && stat.isSymbolicLink()) continue;
     if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("Bundled runtime directories cannot use symlinks.");
+    verifiedDirectories?.add(current);
   }
   return true;
 }
 
-function readRegular(file, maximum) {
-  if (!realDirectory(path.dirname(file))) throw new Error("Bundled runtime directory is missing.");
-  const fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+function readRegular(file, maximum, { digestOnly = false, directories } = {}) {
+  if (!realDirectory(path.dirname(file), { verifiedDirectories: directories })) throw new Error("Bundled runtime directory is missing.");
+  const target = appAlias(file) || file;
+  if (digestOnly) {
+    const stat = fs.lstatSync(target);
+    if (!stat.isFile() || stat.size > maximum) throw new Error("Bundled runtime file is not regular or exceeds its limit.");
+    return fileDigest(target, { maximum, noFollow: true });
+  }
+  const fd = fs.openSync(target, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
   try {
     const stat = fs.fstatSync(fd);
     if (!stat.isFile() || stat.size > maximum) throw new Error("Bundled runtime file is not regular or exceeds its limit.");
@@ -91,6 +150,17 @@ function readRegular(file, maximum) {
       const count = fs.readSync(fd, bytes, offset, bytes.length - offset, offset);
       if (!count) throw new Error("Bundled runtime changed while being read.");
       offset += count;
+    }
+    if (!hasFineChangeTime(stat)) {
+      // Compare another pass through this bounded descriptor; a matching stat
+      // alone can miss a same-sized write during the first read.
+      const check = Buffer.alloc(Math.min(bytes.length, 64 * 1024));
+      for (let offset = 0; offset < bytes.length;) {
+        const count = fs.readSync(fd, check, 0, Math.min(check.length, bytes.length - offset), offset);
+        if (!count || !check.subarray(0, count).equals(bytes.subarray(offset, offset + count)))
+          throw new Error("Bundled runtime changed while being read.");
+        offset += count;
+      }
     }
     const after = fs.fstatSync(fd);
     if (stat.size !== after.size || stat.mtimeMs !== after.mtimeMs || stat.ctimeMs !== after.ctimeMs) throw new Error("Bundled runtime changed while being read.");
@@ -156,37 +226,111 @@ function validateRuntimeManifest(manifest, options = {}) {
   return validateManifest(manifest, {...options, checkSourceIdentity: false});
 }
 
-function fileInventory(root) {
+function fileInventory(root, { allowedAliases = new Set(), directories } = {}) {
   const files = [];
   function walk(relative, depth) {
     if (depth > 32) throw new Error("Bundled runtime directory nesting exceeds its limit.");
     for (const entry of fs.readdirSync(path.join(root, relative), { withFileTypes: true })) {
       const name = relativeFile(path.posix.join(relative, entry.name));
-      if (entry.isSymbolicLink()) throw new Error("Bundled runtime packages cannot contain symlinks.");
-      if (entry.isDirectory()) walk(name, depth + 1);
+      if (entry.isSymbolicLink()) {
+        if (!allowedAliases.has(name) && !appAlias(path.join(root, name))) throw new Error("Bundled runtime packages cannot contain symlinks.");
+        files.push(name);
+      } else if (entry.isDirectory()) walk(name, depth + 1);
       else if (entry.isFile()) files.push(name);
       else throw new Error("Bundled runtimes may contain only regular files and directories.");
       if (files.length > LIMITS.files) throw new Error("Bundled runtime has too many files.");
     }
   }
-  if (!realDirectory(root)) throw new Error("Bundled runtime payload is missing.");
+  if (!realDirectory(root, { verifiedDirectories: directories })) throw new Error("Bundled runtime payload is missing.");
   walk("", 0);
   return files.sort();
 }
 
-function verifyPayload(root, manifest) {
-  const expected = manifest.files.map(file => file.path).sort();
-  if (JSON.stringify(fileInventory(root)) !== JSON.stringify(expected)) throw new Error("Bundled runtime file inventory differs from its manifest.");
-  for (const file of manifest.files) {
-    const full = path.join(root, file.path);
-    const actual = readRegular(full, file.size);
-    if (actual.size !== file.size || actual.sha256 !== file.sha256 || actual.mode !== file.mode) throw new Error(`Bundled runtime checksum or permissions changed: ${file.path}`);
+function localMachO(file){return Boolean(file?.architectures?.length && file.format!=='pe');}
+function validateLocalAlias(root,name,target,declaration,resolveDependency){
+ const stored=declaration.files.find(file=>file.path===target);
+ if(!localMachO(stored)||path.posix.dirname(name)===path.posix.dirname(target))return;
+ const info=require('./macho-load-commands').readMachOLoadCommands(path.join(root,target));
+ const aliases=declaration.aliases?.files||{},files=new Set(declaration.files.map(file=>file.path));
+ function canonical(file){
+  const relative=path.relative(root,file).split(path.sep).join('/'),alias=aliases[relative];
+  if(typeof alias==='string')return path.join(root,alias);
+  if(alias&&typeof alias==='object')return resolveDependency(alias,declaration.dependencies.find(dep=>dep.project===alias.project)).path;
+  if(files.has(relative))return path.join(root,relative);
+  try{return fs.realpathSync(file);}catch{return path.resolve(file);}
+ }
+ for(const image of info.slices){
+  const expand=(value,location)=>value.replace(/^@loader_path(?=\/|$)/,path.dirname(path.join(root,location))).replace(/^@executable_path(?=\/|$)/,image.fileType===2?path.dirname(path.join(root,location)):'@executable_path');
+  const fingerprint=location=>{
+   const paths=image.runPaths.map(value=>expand(value,location)).map(value=>path.isAbsolute(value)?canonical(value):value);
+   const resolve=value=>{
+    const expanded=expand(value,location);
+    if(expanded.startsWith('@rpath/'))return paths.map(runPath=>path.isAbsolute(runPath)?canonical(path.join(runPath,expanded.slice(7))):runPath+'/'+expanded.slice(7));
+    return path.isAbsolute(expanded)?canonical(expanded):expanded;
+   };
+   return JSON.stringify([paths,image.dependencies.map(item=>resolve(item.path)),image.installName?.path.startsWith('@loader_path')?resolve(image.installName.path):null,image.dynamicLinker?resolve(image.dynamicLinker):null,image.dyldEnvironment.map(value=>{const at=value.indexOf('=');return [value.slice(0,at+1),value.slice(at+1).split(':').map(resolve)];})]);
+  };
+  if(fingerprint(name)!==fingerprint(target))throw new Error('Cross-directory Mach-O alias changes load-command resolution: '+name+' -> '+target);
+ }
+}
+
+function verifyPayload(root, manifest, resolveDependency) {
+  const Contract = require("./package-contract.cjs");
+  if (manifest.id && Contract.packageDependencies(manifest.dependencies).length) {
+    resolveDependency ||= dependencyContexts.get(manifest) || dependencyResolver(root,manifest);
+    resolveDependency.verify?.();
+  }
+  const aliases = Contract.packageAliases(manifest.aliases,manifest.files,manifest.dependencies)?.files || {};
+  const allowedAliases = new Set(), resolved = new Map();
+  const dependencyFile = (target, dependency) => {
+    const result = resolveDependency?.(target,dependency);
+    if (!result || !path.isAbsolute(result.path || "") || !SHA.test(result.sha256 || "") ||
+        !Number.isSafeInteger(result.size) || result.size<0 || !Number.isInteger(result.mode))
+      throw new Error("A package dependency needs its exact installed sealed file.");
+    // The resolver binds project/release/archive digest and only returns
+    // canonical stored files from that dependency's verified declaration.
+    if (!fs.lstatSync(result.path).isFile() && !appAlias(result.path)) throw new Error("A dependency target is not a canonical regular file.");
+    return result;
+  };
+  for (const [name,target] of Object.entries(aliases)) {
+    if (typeof target === "string") {
+      const fact=manifest.files.find(file=>file.path===target);if(!localMachO(fact))continue;
+      validateLocalAlias(root,name,target,manifest,resolveDependency);
+      const file=path.join(root,name),canonical=path.join(root,target);
+      if(!fs.lstatSync(file).isSymbolicLink()||fs.readlinkSync(file)!==path.relative(path.dirname(file),canonical)||
+         fs.realpathSync(file)!==fs.realpathSync(canonical)||!fs.realpathSync(canonical).startsWith(fs.realpathSync(root)+path.sep))
+        throw new Error('A local Mach-O alias differs from its canonical stored file.');
+      allowedAliases.add(name);resolved.set(name,{...fact,path:canonical});continue;
+    }
+    const dependency = manifest.dependencies.find(item=>item.project===target.project);
+    const selected = dependencyFile(target,dependency), file = path.join(root,name);
+    if (!fs.lstatSync(file).isSymbolicLink() || fs.readlinkSync(file)!==path.relative(path.dirname(file),selected.path) ||
+        fs.realpathSync(file)!==fs.realpathSync(selected.path))
+      throw new Error("A dependency alias differs from its exact installed dependency.");
+    allowedAliases.add(name); resolved.set(name,selected);
+  }
+  const files = !manifest.aliases ? manifest.files : Contract.logicalFiles(manifest,(target,dependency)=>dependencyFile(target,dependency));
+  const expected = files.map(file=>file.path).sort();
+  const directories = new Set();
+  if (JSON.stringify(fileInventory(root,{allowedAliases,directories})) !== JSON.stringify(expected)) throw new Error("Bundled runtime file inventory differs from its manifest.");
+  for (const file of files) {
+    const full = resolved.get(file.path)?.path || path.join(root,file.path), actual = readRegular(full,file.size, { digestOnly: true, directories });
+    if (actual.size!==file.size || actual.sha256!==file.sha256 ||
+        (actual.mode!==file.mode && !(fs.lstatSync(full).isSymbolicLink() && appAlias(full) &&
+        (actual.mode & ~0o111)===(file.mode & ~0o111) && (actual.mode & file.mode & 0o111)===(file.mode & 0o111))))
+      throw new Error(`Bundled runtime checksum or permissions changed: ${file.path}`);
     if (file.architectures) {
-      const architectures = file.format === "pe" ? [PE.readPeExports(full)?.architecture].filter(Boolean) : Native.readMachOArchitectures(full, { allowLibrary: true });
-      if (JSON.stringify(architectures.sort()) !== JSON.stringify([...file.architectures].sort())) throw new Error(`Bundled runtime ${file.format === "pe" ? "PE" : "Mach-O"} architecture changed: ${file.path}`);
+      const architectures=file.format==="pe" ? [PE.readPeExports(full)?.architecture].filter(Boolean) : Native.readMachOArchitectures(full,{allowLibrary:true});
+      if (JSON.stringify(architectures.sort())!==JSON.stringify([...file.architectures].sort())) throw new Error(`Bundled runtime ${file.format==="pe" ? "PE" : "Mach-O"} architecture changed: ${file.path}`);
     }
   }
   return true;
+}
+function verifyStoredPayload(root, declaration) {
+  const Contract = require("./package-contract.cjs");
+  Contract.packageDependencies(declaration.dependencies);
+  Contract.packageAliases(declaration.aliases,declaration.files,declaration.dependencies);
+  return verifyPayload(root,{...declaration,aliases:undefined,dependencies:undefined});
 }
 
 function bundledManifestPath(install) {
@@ -279,7 +423,7 @@ function createBundledNativeRuntime({ managerId, resourceRoot, platform = proces
     if (!architectures.includes(nativeArch) && !needsRosetta) throw new Error(`Runtime does not support this Mac's ${nativeArch} CPU.`);
     if (verification === "full") {
       verifyPayload(payload, manifest);
-      // Full bytes are still checked before each execution. A successful
+      // Full verification repeats inventory and file checks. A successful
       // signature check can be reused only for those identical native files.
       const signatureKey = JSON.stringify([bundle.manifestSha256,
         manifest.files.filter(file => file.architectures).map(file => fileIdentity(path.join(payload, file.path)))]);
@@ -383,6 +527,11 @@ function resolveInstalledEnvironment(install) {
     if (!directory.startsWith(path.resolve(install.installDir) + path.sep) || !realDirectory(directory)) throw new Error("Installed runtime environment directory is missing or unsafe.");
     result[key] = directory;
   }
+  if (install?.dependencyLibraryPaths?.length) {
+    for (const directory of install.dependencyLibraryPaths) if (!path.isAbsolute(directory) || !realDirectory(directory))
+      throw new Error("A resolved dependency library directory is missing or unsafe.");
+    result.DYLD_FALLBACK_LIBRARY_PATH = [...new Set(install.dependencyLibraryPaths)].join(path.delimiter);
+  }
   return result;
 }
 
@@ -391,9 +540,20 @@ function resolveInstalledAsset(install, name) {
   if (value === undefined) return null;
   if (typeof install?.installDir !== "string" || !path.isAbsolute(install.installDir)) throw new Error("Invalid installed runtime asset root.");
   const file = path.join(install.installDir, relativeFile(value));
-  if (!realDirectory(path.dirname(file)) || !fs.lstatSync(file).isFile()) throw new Error("Installed runtime asset is missing or unsafe.");
+  if (!realDirectory(path.dirname(file))) throw new Error("Installed runtime asset is missing or unsafe.");
+  if (fs.lstatSync(file).isSymbolicLink()) {
+    if (appAlias(file)) return file;
+    const relative = install.root && path.relative(install.root,file).split(path.sep).join('/');
+    const target = install.declaration?.aliases?.files?.[relative];
+    const dependency = install.declaration?.dependencies?.find(item=>item.project===target?.project);
+    const resolveDependency=install.resolveDependency || dependencyContexts.get(install.declaration) || (dependency?dependencyResolver(install.root,install.declaration):null);
+    const selected = typeof target === 'object' && resolveDependency?.(target,dependency);
+    if (!selected || !path.isAbsolute(selected.path || '') || fs.realpathSync(file)!==fs.realpathSync(selected.path) ||
+        fs.readlinkSync(file)!==path.relative(path.dirname(file),selected.path) || readRegular(selected.path,selected.size).sha256!==selected.sha256)
+      throw new Error("Installed runtime asset is outside its declared dependency.");
+  } else if (!fs.lstatSync(file).isFile()) throw new Error("Installed runtime asset is missing or unsafe.");
   return file;
 }
 
-module.exports = { LIMITS, digest, relativeFile, realDirectory, readRegular, fileIdentity, clearManifestCache, validateManifest, validateRuntimeManifest, verifyPayload, verifySignatures,
+module.exports = { localMachO, validateLocalAlias, rememberDependencies, appBundleRoot, withAppBundle, dependencyResolver, LIMITS, appAlias, digest, relativeFile, realDirectory, readRegular, fileIdentity, clearManifestCache, validateManifest, validateRuntimeManifest, verifyStoredPayload, verifyPayload, verifySignatures,
   fileInventory, verifyInstalled, bundledManifestPath, versionAtLeast, systemVersionSync, createBundledNativeRuntime, resolveInstalledEnvironment, resolveInstalledAsset };

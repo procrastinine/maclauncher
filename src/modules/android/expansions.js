@@ -1,4 +1,5 @@
 const fs=require("node:fs"),path=require("node:path"),crypto=require("node:crypto");
+const { cloneOrCopy } = require("../shared/copy-file");
 const {withApk,LIMITS}=require("./apk");
 const Writable=require("../shared/writable-input");
 
@@ -19,7 +20,7 @@ async function copyFile(source,target,signal){
     let bytes=0;const hash=crypto.createHash("sha256");
     for await(const chunk of input.createReadStream({autoClose:false})){signal?.throwIfAborted();bytes+=chunk.length;if(bytes>before.size||bytes>LIMITS.extractedBytes)throw new Error("An Android expansion file changed during import.");hash.update(chunk);}
     const sha256=hash.digest("hex");
-    await fs.promises.copyFile(source,target,fs.constants.COPYFILE_FICLONE|fs.constants.COPYFILE_EXCL);
+    await cloneOrCopy(source,target,{signal,exclusive:true});
     await fs.promises.chmod(target,0o600);
     const copy=crypto.createHash("sha256");for await(const chunk of fs.createReadStream(target)){signal?.throwIfAborted();copy.update(chunk);}
     const after=await input.stat();

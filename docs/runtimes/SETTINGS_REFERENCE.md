@@ -1077,8 +1077,8 @@ Runtimes tabs: mpv player → Player (managed); mpv player → Plugins (managed)
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| uosc controls | On/Off | On | Use uosc for the playback controls and timeline. Install it in Runtimes → mpv player → Plugins to enable the control. Playback uses the standard controls when uosc is missing. |
-| Timeline previews | On/Off | On | Generate thumbnail previews while hovering over the timeline with thumbfast. Install it in Runtimes → mpv player → Plugins to enable the control. Requires uosc or another thumbfast-compatible interface. |
+| uosc controls | On/Off | On | Use uosc for the playback controls and timeline. Play offers a missing plugin as an optional download. Skip continues playback with the standard controls. |
+| Timeline previews | On/Off | On | Generate thumbnail previews while hovering over the timeline with thumbfast. Play offers a missing plugin as an optional download. Skip continues playback without previews. Requires uosc or another thumbfast-compatible interface. |
 | Configuration folder | Path (with picker) |  | Optional mpv configuration folder containing mpv.conf, input.conf, scripts, script-opts, fonts and other mpv resources. The selected folder is read directly. |
 | Additional configuration files | List |  | Absolute paths, one per line. Files load in order after the configuration folder. mpv include entries can reference further configuration and resources. |
 | Additional scripts | List |  | Absolute paths to Lua or JavaScript scripts, or mpv script folders, one per line. The original files stay in place. |
@@ -1145,8 +1145,9 @@ Backends: Window capture (default).
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Output | In place; Scaled to screen | In place | Scaled to screen fills the window's screen with the processed image at the window's aspect ratio and passes clicks to the window. It needs the Accessibility permission. A display is always shown in place. |
-| Include pointer in capture | On/Off | Off | Effects also apply to the pointer. Changes apply while the window has graphics. |
+| Output | In place; Fit screen; 1.5×; 2×; 2.5×; 3×; 4×; 5×; 6×; 8×; 10× | In place | In place draws the processed image over the window. Fit screen fills the window's screen with the processed image at the window's aspect ratio, and a scale factor enlarges the window's image about its center, within the screen's visible frame. A scaled output passes clicks through, keeps the pointer inside the window while its app is active and needs the Accessibility permission. A display is always shown in place. |
+| Show pointer in picture | On/Off | On | Draws the pointer on a scaled output's image. The Toggle pointer in window graphics shortcut turns it off or on in a running session without changing the setting. |
+| Include pointer in capture | On/Off | Off | Captures the pointer with the window, so effects also apply to it. A change takes effect in a running session. |
 
 ## Windows Game
 

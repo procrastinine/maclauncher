@@ -6,6 +6,7 @@ const manifest = require("./manifest.json");
 const { detectGame, GAME_ID } = require("./detect");
 const manager = require("./runtime/manager");
 const toolsManager = require("./runtime/tools-manager");
+const Signing = require("./runtime/signing");
 const Tools = require("./tools");
 const GameData = require("../shared/game-data");
 const { spawnForegroundNativeGame } = require("../shared/runtime/native-focus");
@@ -83,12 +84,14 @@ async function inspectWithRuntime(entry, context, { run = execute } = {}) {
     selection = manager.resolveSelection(entry, context.settings, context.userDataDir);
   }
   if (!selection.ready) throw new Error(selection.reason);
-  if (selection.install.needsRosetta && context.ensureRosetta) await context.ensureRosetta();
+  const cpu = Signing.launchRequirements(selection.install);
+  if (cpu.needsRosetta && context.ensureRosetta) await context.ensureRosetta();
   return withRuntimeUse([{ managerId: manager.id, version: selection.version }], async use => {
     if (!manager.resolveSelection(entry, context.settings, context.userDataDir).ready) throw new Error("ScummVM changed before game identification. Try again.");
     const launch = prepareLaunch(entry, context);
-    const pending = run(selection.install.executablePath,
-      [`--config=${launch.configPath}`, `--logfile=${launch.logPath}`, `--path=${launch.root}`, "--detect"],
+    const args = [`--config=${launch.configPath}`, `--logfile=${launch.logPath}`, `--path=${launch.root}`, "--detect"];
+    const pending = run(cpu.needsRosetta ? "/usr/bin/arch" : selection.install.executablePath,
+      cpu.needsRosetta ? ["-x86_64", selection.install.executablePath, ...args] : args,
       { cwd: launch.directory, signal: context.signal, timeout: 20000, maxBuffer: 2 * 1024 * 1024 });
     let result;
     try {
@@ -108,6 +111,10 @@ async function inspectWithRuntime(entry, context, { run = execute } = {}) {
 
 module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [manager, toolsManager],
   normalizeRuntimeId: () => "scummvm",
+  resolveGraphicsInputs: (entry, context) => {
+    const selection = manager.resolveSelection(entry, context.settings, context.userDataDir);
+    return selection.ready ? {architecture:Signing.launchRequirements(selection.install).architecture} : null;
+  },
   onImport: (entry, context) => { entry.defaultSaveDir = saveDirectory(entry, context); },
   ensureRuntime: (entry, context) => {
     const selection = manager.resolveSelection(entry, context.settings, context.userDataDir);
@@ -117,9 +124,12 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     if (runtimeId !== "scummvm") return null;
     let selection = manager.resolveSelection(entry, context.settings, context.userDataDir);
     if (!selection.ready) throw new Error(selection.reason);
-    const graphics = await context.getGameEffectsEnvironment?.({needsRosetta:selection.install.needsRosetta});
+    let cpu = Signing.launchRequirements(selection.install);
+    context.graphicsInputs = {...context.graphicsInputs,architecture:cpu.architecture};
+    const graphics = await context.getGameEffectsEnvironment?.({needsRosetta:cpu.needsRosetta});
     if (typeof graphics?.DYLD_INSERT_LIBRARIES === "string" && graphics.DYLD_INSERT_LIBRARIES.trim())
       selection = await manager.prepareForGraphics(selection,context);
+    cpu = Signing.launchRequirements(selection.install);
     const launch = prepareLaunch(entry, context), options = runtimeArgs(context.runtimeSettings);
     const gameId = options.gameId || entry.moduleData?.gameId;
     if (gameId && !GAME_ID.test(gameId)) throw new Error("ScummVM game ID is invalid.");
@@ -127,7 +137,7 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     return spawnForegroundNativeGame({ context, executablePath: selection.install.executablePath,
       args: [`--config=${launch.configPath}`, `--logfile=${launch.logPath}`, `--savepath=${launch.saveRoot}`,
         `--path=${launch.root}`, ...options.args, ...(context.gameArguments || []), ...(gameId ? [gameId] : ["--auto-detect"])],
-      options: { cwd: launch.directory }, needsRosetta: selection.install.needsRosetta });
+      options: { cwd: launch.directory }, needsRosetta: cpu.needsRosetta });
   },
   cleanupGameData: (entry, context) => { fs.rmSync(gameDirectory(entry, context), { recursive: true, force: true }); return true; },
   actions: {

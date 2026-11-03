@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../modules/shared/copy-file");
 const path = require("node:path");
 const GameAvailability = require("./game-availability");
 const GameStore = require("./game-store");
@@ -141,7 +142,7 @@ function rebaseStoredRecords({ userDataDir, gameId, from, to, moves = [{ from, t
     const backup = path.join(backupRoot, path.relative(root, file));
     assertOwnDirectory(root, path.dirname(backup));
     if (move) fs.renameSync(file, backup);
-    else { fs.copyFileSync(file, backup + PARTIAL); fs.renameSync(backup + PARTIAL, backup); }
+    else { cloneOrCopySync(file, backup + PARTIAL); fs.renameSync(backup + PARTIAL, backup); }
     originals.push({ file, backup });
   }
   try {

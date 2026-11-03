@@ -227,12 +227,18 @@ test('the fetch step installs the publisher Python build for the app architectur
   t.after(() => fs.rmSync(repoRoot, { recursive: true, force: true }));
   const { embeddedPythonProfile } = require('../src/modules/shared/runtime/python');
   const root = path.join(repoRoot, 'src/resources/python'), metadata = path.join(root, 'runtime.json');
-  fs.mkdirSync(root, { recursive: true }); fs.writeFileSync(metadata, JSON.stringify(embeddedPythonProfile('arm64')));
+  fs.mkdirSync(path.join(root, 'bin'), { recursive: true }); fs.writeFileSync(path.join(root, 'bin/python3'), 'publisher Python');
+  fs.writeFileSync(metadata, JSON.stringify(embeddedPythonProfile('arm64')));
   const calls = [], install = profile => async args => { calls.push(args); fs.writeFileSync(metadata, JSON.stringify(profile)); };
   assert.deepEqual(await preparePython({ arch: 'arm64', repoRoot, install: install(null) }), { python: 'arm64', installed: false });
   assert.deepEqual(calls, []);
   assert.deepEqual(await preparePython({ arch: 'x64', repoRoot, install: install(embeddedPythonProfile('x64')) }), { python: 'x86_64', installed: true });
   assert.deepEqual(calls, [['--arch', 'x64', '--dest', root]]);
+  fs.rmSync(root, { recursive: true });
+  assert.deepEqual(await preparePython({ arch: 'arm64', repoRoot, install: async () => {
+    fs.mkdirSync(path.join(root, 'bin'), { recursive: true }); fs.writeFileSync(path.join(root, 'bin/python3'), 'publisher Python');
+    fs.writeFileSync(metadata, JSON.stringify(embeddedPythonProfile('arm64')));
+  } }), { python: 'arm64', installed: true });
   fs.writeFileSync(metadata, JSON.stringify(embeddedPythonProfile('arm64')));
   await assert.rejects(preparePython({ arch: 'x64', repoRoot, install: install(embeddedPythonProfile('arm64')) }), /not the x64 build/);
 });

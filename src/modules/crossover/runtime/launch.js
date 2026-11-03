@@ -1,6 +1,5 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
 const GameData = require("../../shared/game-data");
 const Writable = require("../../shared/writable-input");
@@ -155,126 +154,6 @@ function buildEnvironment(settings, installation, directory, bottlePath, { baseE
   return { environment, overrides, dll };
 }
 
-async function stageGameFiles(sourceRoot, directory, context = {}) {
-  const source = fs.realpathSync(sourceRoot), gameRoot = path.join(directory, "game"), receiptPath = path.join(directory, "game-files.json");
-  let parent = path.resolve(directory), missing = [];
-  while (!fs.existsSync(parent)) { missing.unshift(path.basename(parent)); parent = path.dirname(parent); }
-  const destination = path.join(fs.realpathSync(parent), ...missing);
-  if (inside(source, destination) || inside(destination, source)) throw new Error("Windows game data must be outside the original game folder.");
-  let receipt;
-  try { receipt = JSON.parse(await fs.promises.readFile(receiptPath, "utf8")); } catch {}
-  Writable.assertOwnDirectory(directory, gameRoot, { create: false });
-  Writable.assertOwnDirectory(directory, gameRoot);
-  const previous = receipt?.layoutVersion === 2 && receipt.files && typeof receipt.files === "object"
-    ? receipt.files : {};
-  // Keep records for removed originals without deleting private files. These
-  // may contain saves or edits even when an upstream update removes the asset.
-  const records = { ...previous };
-  let files = 0;
-  let hashedBytes = 0, lastHashProgress = 0;
-  const stamp = stat => [stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs];
-  const equal = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((value, index) => value === b[index]);
-  async function leafStat(file) {
-    let stat; try { stat = await fs.promises.lstat(file); } catch (error) { if (error.code !== "ENOENT") throw error; }
-    if (stat && (!stat.isFile() || stat.isSymbolicLink())) throw new Error("Windows game files must be private regular files.");
-    return stat || null;
-  }
-  async function hashFile(file) {
-    context.signal?.throwIfAborted();
-    context.onProgress?.({ phase: "prepare", label: "Preparing Windows game…", completed: files, bytesRead: hashedBytes });
-    context.signal?.throwIfAborted();
-    const hash = crypto.createHash("sha256");
-    for await (const chunk of fs.createReadStream(file, { signal: context.signal })) {
-      context.signal?.throwIfAborted();
-      hash.update(chunk); hashedBytes += chunk.length;
-      if (Date.now() - lastHashProgress > 250) {
-        lastHashProgress = Date.now();
-        context.onProgress?.({ phase: "prepare", label: "Preparing Windows game…", completed: files, bytesRead: hashedBytes });
-      }
-    }
-    context.signal?.throwIfAborted();
-    return hash.digest("hex");
-  }
-  async function assertSourceStable(input, resolved, original) {
-    if (await fs.promises.realpath(input) !== resolved || !inside(source, resolved) ||
-      !equal(stamp(await fs.promises.stat(input)), original)) throw new Error("The original Windows game changed during preparation. Try Play again.");
-  }
-  async function assertPrivateStable(output, expected) {
-    const current = await leafStat(output);
-    if (expected ? !current || !equal(stamp(current), expected) : current) {
-      throw new Error("The game's private Windows files changed during preparation. Try Play again.");
-    }
-  }
-  async function reconcile(input, resolved, output, stat, relative) {
-    const original = stamp(stat), old = Object.hasOwn(previous, relative) ? previous[relative] : null;
-    const existing = await leafStat(output);
-    // Every Play checks metadata, without reading unchanged large assets.
-    if (receipt?.sourceRoot === source && old && equal(old.source, original)) return;
-    const privateStamp = existing ? stamp(existing) : null;
-    if (old && !existing) {
-      // Deleting a private asset can itself be an intentional game modification.
-      records[relative] = { ...old, source: original }; return;
-    }
-    let privateHash;
-    if (existing) {
-      privateHash = await hashFile(output);
-      await assertPrivateStable(output, privateStamp);
-      if (!old?.baseline || privateHash !== old.baseline) {
-        const sourceHash = await hashFile(resolved);
-        await assertSourceStable(input, resolved, original);
-        await assertPrivateStable(output, privateStamp);
-        // Older no-hash records and interrupted earlier updates are safe to
-        // adopt only when the current private bytes equal the current original.
-        records[relative] = { source: original, baseline: privateHash === sourceHash ? sourceHash : old?.baseline || null };
-        return;
-      }
-    }
-    const temporary = output + "." + crypto.randomUUID() + ".tmp";
-    try {
-      await assertSourceStable(input, resolved, original);
-      // Arbitrary Windows games may write beside any asset. Copy-on-write clones
-      // preserve that isolation without allocating a second copy when supported.
-      await fs.promises.copyFile(resolved, temporary, fs.constants.COPYFILE_FICLONE);
-      await fs.promises.chmod(temporary, stat.mode | 0o600);
-      await fs.promises.utimes(temporary, stat.atime, stat.mtime);
-      const baseline = await hashFile(temporary);
-      await assertSourceStable(input, resolved, original);
-      await assertPrivateStable(output, privateStamp);
-      context.signal?.throwIfAborted();
-      await fs.promises.rename(temporary, output);
-      records[relative] = { source: original, baseline };
-    } finally { await fs.promises.rm(temporary, { force: true }); }
-  }
-  const ancestors = new Set();
-  async function visit(from, to, depth = 0) {
-    context.signal?.throwIfAborted();
-    if (depth > 64) throw new Error("Windows game directories are too deeply nested.");
-    const real = await fs.promises.realpath(from);
-    if (!inside(source, real) || ancestors.has(real)) throw new Error("Windows game folder contains an external or cyclic alias.");
-    ancestors.add(real);
-    Writable.assertOwnDirectory(directory, to);
-    for (const item of await fs.promises.readdir(real, { withFileTypes: true })) {
-      context.signal?.throwIfAborted();
-      if (item.name === ".DS_Store" || /\.app$/i.test(item.name)) continue;
-      const input = path.join(real, item.name), output = path.join(to, item.name);
-      const resolved = await fs.promises.realpath(input);
-      if (!inside(source, resolved)) throw new Error("Windows game folder contains an alias outside its content folder.");
-      const stat = await fs.promises.stat(input);
-      if (stat.isDirectory()) await visit(resolved, output, depth + 1);
-      else if (stat.isFile()) {
-        if (++files > 250000) throw new Error("Windows game folder contains too many files.");
-        await reconcile(input, resolved, output, stat, path.relative(gameRoot, output));
-        if (files % 128 === 0) context.onProgress?.({ phase: "prepare", label: "Preparing Windows game…", completed: files });
-      } else throw new Error("Windows game files must be regular files or directories.");
-    }
-    ancestors.delete(real);
-  }
-  await visit(source, gameRoot);
-  context.signal?.throwIfAborted();
-  Writable.atomicWrite(receiptPath, JSON.stringify({ sourceRoot: source, files: records, fileCount: files, layoutVersion: 2 }) + "\n", { root: directory });
-  return gameRoot;
-}
-
 async function ensureBottle(installation, bottlePath, directory, settings, context, { run } = {}) {
   const template = bottleTemplate(settings);
   Writable.assertOwnDirectory(directory, bottlePath, { create: false });
@@ -349,11 +228,11 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   if (selectedExecutable.executableArchitecture === "arm64") throw new Error("This Windows ARM64 executable is not supported by the CrossOver backend. Use an x86 or x64 Windows build.");
   const directory = runtimeDirectory(entry, context);
   const GameView = require("../temporal/game-view");GameView.clearWatch(context);
-  GameView.reconcile(entry, context, directory, "crossover");
   const template = bottleTemplate(settings);
-  // Registered applications and environment types retain independent bottles.
-  // Validate all launch settings before copying game files or creating a bottle.
-  const bottlePath = path.join(directory, "bottles", selected.version + "-" + template);
+  // The game and Windows environment own saves; changing the CrossOver
+  // installation does not create another bottle.
+  // Validate all launch settings before creating a bottle.
+  const bottlePath = path.join(directory, "bottles", template);
   let environment, overrides, dll;
   try {
     ({environment, overrides, dll} = buildEnvironment(settings, selected.install, directory, bottlePath,
@@ -371,14 +250,10 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   const argumentsList = (Array.isArray(settings.arguments) ? settings.arguments : []).map(value => safeText(value, "Game arguments"));
   if (selected.install.needsRosetta && !Rosetta.isAvailable()) await Rosetta.ensure(context);
   Writable.assertOwnDirectory(context.userDataDir, directory);
-  const baselineRoot = await stageGameFiles(match.sourceRoot, directory, context);
-  const baselineExecutable = path.join(baselineRoot, path.relative(match.sourceRoot, executable));
-  if (!readWindowsExecutable(baselineExecutable)) throw new Error("The selected Windows executable is unavailable in the game's private files.");
-  const selectedLibraries = [...(cameraBridge?.libraries || []), ...(sceneClosure ? scenePlan.libraries : [])];
-  const legacyLibraries = selectedLibraries.length ? selectedLibraries :
-    (entry.runtimeData?.crossover?.graphicsInputs?.cameraProjection || ["xess","streamline+xess"].includes(entry.runtimeData?.crossover?.graphicsInputs?.source) ? Temporal.libraries(match, executable).map(sourcePath => ({sourcePath, relativePath: path.relative(match.sourceRoot, sourcePath)})) : []);
-  const baseline = await GameView.baseline(entry, context, directory, baselineRoot, baselineExecutable, "crossover", legacyLibraries);
-  let gameRoot = baseline.gameRoot, executablePath = baseline.executablePath, cameraView;
+  // Wine accepts the original Unix executable and working directory. Ordinary
+  // Play needs no game copy, alias projection or old-view reconciliation.
+  const originalRoot = match.sourceRoot, recovery = { overrides: {}, omitted: new Set(), libraries: [] };
+  let gameRoot = originalRoot, executablePath = executable, cameraView;
   const GraphicsLoader = require("./graphics-loader");
   let loader, loaderFailure;
   const restoreScene = cause => {
@@ -409,7 +284,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     if (!loader) { cameraBridge = null;sceneClosure = null; }
     else try {
       const plans = [...(cameraBridge ? [{ kind: "camera", plan: cameraBridge }] : []), ...(sceneClosure ? [{ kind: "scene", plan: scenePlan }] : [])];
-      cameraView = await GameView.camera(directory, baselineRoot, baselineExecutable, { libraries: plans.flatMap(item => item.plan.libraries) }, baseline.recovery, context.signal);
+      cameraView = await GameView.camera(directory, originalRoot, executable, { libraries: plans.flatMap(item => item.plan.libraries) }, recovery, context.signal);
       const preparedLibraries = [];
       for (const item of plans) {
         let ready = false;
@@ -421,7 +296,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
         if (ready) preparedLibraries.push(...item.plan.libraries);
         else { if (item.kind === "camera") cameraBridge = null;else sceneClosure = null;loader = null; }
       }
-      if (preparedLibraries.length) {GameView.prepared(cameraView, { libraries: preparedLibraries });GameView.remember(entry, context, "crossover", cameraView, baseline.recovery);gameRoot = cameraView.gameRoot;executablePath = cameraView.executablePath;}
+      if (preparedLibraries.length) {GameView.prepared(cameraView, { libraries: preparedLibraries });GameView.remember(entry, context, "crossover", cameraView, recovery);gameRoot = cameraView.gameRoot;executablePath = cameraView.executablePath;}
       else {GameView.discard(cameraView);cameraView = null;}
     } catch (error) {
       GameView.discard(cameraView);
@@ -485,21 +360,24 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     context.graphicsBridgeFailure = {provider: "crossover-loader", reason: String(loaderFailure.message || loaderFailure)};
     warnGraphics(context.logger, "CrossOver graphics loader could not be prepared. Using the vendor renderer without shared graphics processing.", context.graphicsBridgeFailure.reason);
   }
-  const args = ["--bottle", bottlePath, "--wait-children", "--workdir", path.dirname(executablePath)];
+  const workingDirectory = path.dirname(executable);
+  const args = ["--bottle", bottlePath, "--wait-children", "--workdir", workingDirectory];
   if (Object.keys(overrides).length) args.push("--env", wineEnvironmentString(overrides));
   if (dll) args.push("--dll", dll);
   if (settings.wineDebug) args.push("--debugmsg", safeText(settings.wineDebug, "Wine debug channels"));
   if (settings.wineDebug) args.push("--cx-log", path.join(directory, "wine.log"));
   args.push("--", executablePath, ...argumentsList, ...(context.gameArguments || []));
-  GameView.remember(entry, context, "crossover", cameraView || baseline, baseline.recovery);
-  GameView.watch(entry, context, directory, "crossover", cameraView || baseline);
+  if (cameraView) {
+    GameView.remember(entry, context, "crossover", cameraView, recovery);
+    GameView.watch(entry, context, directory, "crossover", cameraView);
+  }
   entry.runtimeData = { ...entry.runtimeData, crossover: { ...entry.runtimeData?.crossover,
     windowsExecutablePath: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture,
-    sourceRoot: match.sourceRoot, gameRoot, baselineGameRoot: baselineRoot, bottlePath, applicationPath: selected.install.appPath,
+    sourceRoot: match.sourceRoot, gameRoot, bottlePath, applicationPath: selected.install.appPath,
     graphicsInputs: context.graphicsInputs } };
   context.onEntryChange?.(entry);
-  return { ...selected, directory, gameRoot, bottlePath, executablePath, environment, args };
+  return { ...selected, directory, gameRoot, workingDirectory, bottlePath, executablePath, environment, args };
 }
 
 module.exports = { runtimeDirectory, buildEnvironment, parseEnvironment, wineEnvironmentString, dllOverrides,
-  stageGameFiles, ensureBottle, detachProfileAliases, prepareLaunch, runSupervised, SUPERVISOR };
+  ensureBottle, detachProfileAliases, prepareLaunch, runSupervised, SUPERVISOR };

@@ -12,6 +12,7 @@ const declarations = () => require("../distribution-supplementals.json");
 // The trusted browser broker stays outside this profile: Chromium applies its
 // own GPU/network-service profiles. Publisher Node code executes in a renderer
 // which installs this process-wide policy before reading any game code.
+// This in-process Node addon must match the Electron renderer's CPU, including under Rosetta.
 async function resolveRendererNetwork({ resourcesRoot, platform = process.platform, arch = process.arch,
   dependencies = {} } = {}) {
   if (platform !== "darwin" || !["arm64", "x64"].includes(arch))

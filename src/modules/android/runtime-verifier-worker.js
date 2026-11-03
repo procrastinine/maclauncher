@@ -44,29 +44,45 @@ function remember(key, identity) {
   } catch { /* Cache availability never changes whether a payload can run. */ }
   finally { if (temporary) try { fs.unlinkSync(temporary); } catch {} }
 }
-function snapshot(root, declaration) {
+function snapshot(root, declaration, resolveDependency) {
   if (!Bundled.realDirectory(root)) throw new Error("Bundled runtime payload is missing.");
   const files = [], identities = [];
   function visit(relative, depth) {
     if (depth > 32) throw new Error("Bundled runtime directory nesting exceeds its limit.");
     const full = path.join(root, relative), stat = fs.lstatSync(full, { bigint: true });
-    if (stat.isSymbolicLink()) throw new Error("Bundled runtime packages cannot contain symlinks.");
-    identities.push([relative, stat.dev, stat.ino, stat.size, stat.mode, stat.mtimeNs, stat.ctimeNs].join(":"));
+    if (stat.isSymbolicLink()) {
+      const target=declaration.aliases?.files?.[relative];
+      const selected=target && typeof target==='object' ? resolveDependency(target,declaration.dependencies.find(dep=>dep.project===target.project)) : null;
+      const local=typeof target==='string'&&Bundled.localMachO(declaration.files.find(file=>file.path===target))?path.join(root,target):null;
+      const canonical=selected?.path || local || Bundled.appAlias(full);
+      if(!canonical || path.isAbsolute(fs.readlinkSync(full)) || fs.realpathSync(full)!==fs.realpathSync(canonical) ||
+          (selected || local) && fs.readlinkSync(full)!==path.relative(path.dirname(full),canonical))throw new Error("Bundled runtime has undeclared dependency aliases or symlinks.");
+      files.push(relative);identities.push(relative+':'+fs.readlinkSync(full)+':'+Bundled.fileIdentity(canonical));return;
+    }
     if (stat.isDirectory()) {
+      identities.push([relative, stat.dev, stat.ino, stat.size, stat.mode, stat.mtimeNs, stat.ctimeNs].join(":"));
       for (const name of fs.readdirSync(full).sort()) visit(Bundled.relativeFile(path.posix.join(relative, name)), depth + 1);
     } else if (stat.isFile()) {
+      identities.push(relative + ":" + Bundled.fileIdentity(full));
       files.push(relative);
       if (files.length > Bundled.LIMITS.files) throw new Error("Bundled runtime has too many files.");
     } else throw new Error("Bundled runtimes may contain only regular files and directories.");
   }
   visit("", 0);
-  if (JSON.stringify(files.sort()) !== JSON.stringify(declaration.files.map(file => file.path).sort()))
+  if (JSON.stringify(files.sort()) !== JSON.stringify((declaration.aliases ? require("../shared/runtime/package-contract.cjs").logicalFiles(declaration,resolveDependency) : declaration.files).map(file => file.path).sort()))
     throw new Error("Bundled runtime file inventory differs from its manifest.");
   return JSON.stringify(identities);
 }
-function verify(root, declaration) {
+function verify(root, declaration, dependencyFiles = {}, dependencyPackages=[]) {
+  const resolveDependency=(target,dependency)=>{
+    const selected=dependencyFiles[target.project+':'+target.path];
+    if(!selected||JSON.stringify(selected.dependency)!==JSON.stringify(dependency))throw new Error("Android dependency selection changed.");
+    return selected;
+  };
   root = path.resolve(root);
-  const key = JSON.stringify([root, declaration]), before = snapshot(root, declaration);
+  const dependencyResolve=require('../shared/runtime/package-dependencies').resolverFromFacts(dependencyPackages);
+  const identity=()=>JSON.stringify([snapshot(root,declaration,resolveDependency),...dependencyPackages.map(item=>snapshot(item.root,item.declaration,dependencyResolve))]);
+  const key = JSON.stringify([root, declaration, dependencyFiles,dependencyPackages]), before = identity();
   const persistentKey = digest(key), persistentIdentity = digest(before);
   if (cache.get(key) === before || storedIdentities().some(entry => entry[0] === persistentKey && entry[1] === persistentIdentity)) {
     if (cache.size >= CACHE_LIMIT) cache.delete(cache.keys().next().value);
@@ -76,14 +92,15 @@ function verify(root, declaration) {
   }
   // A failed recheck must not retain an earlier successful verification.
   cache.delete(key);
-  Bundled.verifyPayload(root, declaration);
-  if (snapshot(root, declaration) !== before) throw new Error("Bundled runtime changed during verification.");
+  for(const item of dependencyPackages)Bundled.verifyPayload(item.root,item.declaration,dependencyResolve);
+  Bundled.verifyPayload(root, declaration, resolveDependency);
+  if (identity() !== before) throw new Error("Bundled runtime changed during verification.");
   if (cache.size >= CACHE_LIMIT) cache.delete(cache.keys().next().value);
   cache.set(key, before);
   remember(persistentKey, persistentIdentity);
   return { cacheHit: false };
 }
-parentPort.on("message", ({ id, root, declaration }) => {
-  try { parentPort.postMessage({ id, result: verify(root, declaration) }); }
+parentPort.on("message", ({ id, root, declaration, dependencyFiles,dependencyPackages,appBundle }) => {
+  try { parentPort.postMessage({ id, result: appBundle ? Bundled.withAppBundle(appBundle,()=>verify(root,declaration,dependencyFiles,dependencyPackages)) : verify(root, declaration, dependencyFiles,dependencyPackages) }); }
   catch (error) { parentPort.postMessage({ id, error: { message: error.message, name: error.name, code: error.code } }); }
 });

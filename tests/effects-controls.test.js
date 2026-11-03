@@ -154,6 +154,33 @@ test("shared catalog ranks common choices first and specialised variants and abs
   assert.equal(temporal.find(row => row.id === "temporal:fsr2").inputsAbsent, undefined, "an engine-run method takes its inputs inside the engine");
   assert.equal(temporal.at(-1).inputsAbsent, true);
 });
+test("an image-only video source leaves out scene methods and names a working method, while game sources keep pending inputs", () => {
+  const Plan = require("../src/modules/shared/effects/plan"), Scaling = require("../src/modules/video/scaling"), {implementationsFor} = require("../src/modules/shared/effects/contracts.mjs");
+  const metalfx = Object.fromEntries(["spatial", "temporal", "denoised", "interpolation"].map(key => [key, {supported: true}]));
+  const caps = {spatial: true, spatialMethods: ["bilinear", "metalfx"], temporal: true, temporalMethods: ["metalfx", "fsr2", "fsr3"], frameGeneration: true,
+    frameGenerationMethods: ["lsfg", "metalfx", "metalfx-image", "fsr3", "xess", "vt-interpolation"], hardware: {state: "ready", metalfx, devices: [{registryID: "1", name: "GPU", metalfx}]}};
+  const menu = (catalog, type) => implementationsFor(type, catalog.filter(row => row.available || row.availableWithoutInputs)).map(row => row.id);
+  const video = Plan.catalog({graphicsCapabilities: caps, graphicsInputs: Scaling.inputs([])}), byId = id => video.find(row => row.id === id);
+  for (const id of ["frame-generation:metalfx", "frame-generation:fsr3", "frame-generation:xess", "temporal:metalfx", "temporal:fsr2"]) {
+    const row = byId(id);
+    assert.equal(row.available, false, id);assert.equal(row.sourceUnsupported, true, id);assert.equal(row.availableWithoutInputs, undefined, id);
+    assert.equal(row.inputReason, undefined, id);assert.match(row.reason, /^Video playback cannot supply depth/, id);
+  }
+  assert.equal(byId("frame-generation:metalfx").reason, "Video playback cannot supply depth, motion vectors or camera.");
+  assert.equal(byId("frame-generation:metalfx").replacement, "frame-generation:metalfx-image");
+  assert.equal(byId("frame-generation:xess").replacement, "frame-generation:metalfx-image");
+  assert.equal(byId("temporal:metalfx").replacement, undefined, "no temporal method works without scene inputs");
+  assert.deepEqual(menu(video, "generation").sort(), ["frame-generation:metalfx-image", "frame-generation:vt-interpolation"]);
+  assert.deepEqual(menu(video, "temporal"), []);
+  assert.ok(video.every(row => row.recommendationRank !== 0 || row.available), "an unsupported method is never the suggested default");
+  // A game source that declares its inputs keeps scene methods pending.
+  const game = Plan.catalog({graphicsCapabilities: caps, graphicsInputs: {source: "godot", cameraProjection: true, methods: ["fsr2", "fsr3"]}});
+  assert.ok(game.every(row => !row.sourceUnsupported && row.replacement === undefined));
+  const scene = game.find(row => row.id === "frame-generation:metalfx");
+  assert.equal(scene.available, true);assert.equal(scene.availableWithoutInputs, true);assert.equal(scene.inputsAbsent, true);
+  assert.deepEqual(scene.pendingInputs, ["depth", "motion"]);
+  assert.ok(menu(game, "generation").includes("frame-generation:metalfx") && menu(game, "temporal").includes("temporal:fsr2"));
+});
 test("specialised variants join their group heading, so an expanded menu never repeats a heading", () => {
   const P = require("../src/modules/shared/effects/presentation.mjs");
   const row = (id, method, extra = {}) => ({id, template: {kind: "upscale", method}, ...extra});
@@ -395,12 +422,82 @@ test("video live controls distinguish native shader bindings from shared live se
   } finally { harness.close();global.window = previousWindow; }
 });
 // Hook-free graphics views render through their editor props.
-const views=new Set(['SourceResolutionControls','SourcePolicyControls','SimpleEffectsView','AdvancedEffectsView','EffectRowControls','OutputPolicyControls','GraphicsStatusLabel']);
+const views=new Set(['SourceResolutionControls','SourcePolicyControls','SimpleEffectsView','AdvancedEffectsView','EffectRowControls','OutputPolicyControls','GraphicsStatusLabel','InactiveEffectNotice']);
 function elements(element) {
   if(!React.isValidElement(element))return [];
   const children=typeof element.type==='function'&&views.has(element.type.name)?element.type(element.props):element.props.children;
   return [element,...React.Children.toArray(children).flatMap(elements)];
 }
+test("a saved video row with a scene method reads as inactive and offers MetalFX image interpolation in both views", async () => {
+  const Plan = require("../src/modules/shared/effects/plan"), Scaling = require("../src/modules/video/scaling");
+  const metalfx = Object.fromEntries(["spatial", "temporal", "denoised", "interpolation"].map(key => [key, {supported: true}]));
+  const catalog = Plan.catalog({graphicsCapabilities: {spatial: true, spatialMethods: ["bilinear"], temporal: true, temporalMethods: ["metalfx"], frameGeneration: true,
+    frameGenerationMethods: ["metalfx", "metalfx-image", "fsr3"], hardware: {state: "ready", metalfx, devices: [{registryID: "1", name: "GPU", metalfx}]}}, graphicsInputs: Scaling.inputs([])});
+  const generation = {...catalog.find(row => row.id === "frame-generation:metalfx").template, id: "generate"};
+  const saved = {schema: 2, mode: "advanced", enabled: true, video: [generation]};
+  for (const view of ["Advanced", "Simple"]) {
+    const changes = [], h = viewHarness(view)(EffectsControls, {game: {gamePath: "/Videos/ordinary.mp4", effects: saved}, running: false,
+      editor: {info: {plan: saved, catalog}, onChange: next => changes.push(next)}});
+    try {
+      const markup = renderToStaticMarkup(h.render());
+      assert.ok(markup.includes("Video playback cannot supply depth, motion vectors or camera."), view);
+      if (view === "Advanced") {assert.match(markup, /graphicsState[^>]*>Inactive/);assert.doesNotMatch(markup, />Unavailable</);}
+      else {
+        assert.doesNotMatch(markup, /Temporal upscaling/, "a slot no method can feed is left out");
+        const picker = elements(h.render()).find(node => node.props.id === "simple-effect-generation");
+        const offered = picker.props.options.filter(option => !option.disabled).map(option => option.value);
+        assert.ok(offered.includes("frame-generation:metalfx-image"));
+        assert.ok(!offered.includes("frame-generation:metalfx") && !picker.props.options.some(option => option.value === "frame-generation:fsr3"), "scene methods are not offered");
+      }
+      const use = elements(h.render()).find(node => node.type === "button" && [].concat(node.props.children).join("") === "Use MetalFX image interpolation");
+      assert.ok(use, `${view} offers the working method`);
+      use.props.onClick();await h.settle();
+      const row = changes.at(-1).video.find(node => node.id === "generate");
+      assert.equal(row.method, "metalfx-image");assert.equal(row.enabled, true);
+    } finally {h.close();}
+  }
+});
+test("master Off keeps saved rows without another status line or enable action", async t => {
+  const catalog = [{id: "shader:crt", kind: "shader", label: "CRT", group: "Image filters", available: true, template: {kind: "shader", enabled: true, shader: {enabled: true, preset: "crt"}}}];
+  const kept = {id: "kept", kind: "shader", enabled: true, shader: {enabled: true, preset: "crt"}}, off = {...kept, id: "off", enabled: false};
+  const previous = global.window; t.after(() => {global.window = previous;});
+  for (const view of ["Advanced", "Simple"]) {
+    let stored = {schema: 2, mode: "advanced", enabled: false, video: [kept, off]}, writes = 0;
+    global.window = {MacLauncher: {launcher: {getGameEffects: async () => ({mode: "advanced", plan: stored, catalog}),
+      setGameEffects: async (_path, next) => {writes++;stored = next;return {plan: next};}}}};
+    const h = viewHarness(view)(EffectsControls, {game: {gamePath: "/Game", effects: stored}, running: false, children: null});
+    try {
+      h.render();await h.settle();
+      const markup = renderToStaticMarkup(h.render());
+      assert.doesNotMatch(markup, /graphicsOffNotice|Graphics are off|>Inactive|>Turn On</, view);
+      assert.equal(writes, 0, "opening either view leaves the saved master state alone");
+      assert.equal(stored.enabled, false);assert.deepEqual(stored.video, [kept, off]);
+      const master = elements(h.render()).find(node => node.type === "input" && node.props["aria-label"] === "Enable graphics chain");
+      assert.equal(master.props.checked, false);
+      master.props.onChange({target: {checked: true}});await h.settle();
+      assert.equal(writes, 1, "the ordinary master checkbox remains the explicit enable action");
+      assert.equal(stored.enabled, true);assert.deepEqual(stored.video, [kept, off]);
+    } finally {h.close();}
+  }
+});
+test("running games with the master chain off report Off while frame dimensions are unavailable", async t => {
+  const previous = global.window;t.after(() => {global.window = previous;});global.window = {};
+  const node = {...shader}, saved = {schema: 2, mode: "advanced", enabled: false, video: [node]};
+  const catalog = [{id: "shader:crt", kind: "shader", label: "CRT", group: "Image filters", available: true, template: node}];
+  for (const view of ["Advanced", "Simple"]) {
+    const h = viewHarness(view)(EffectsControls, {game: {gamePath: "/Game", effects: saved}, running: true, visible: true,
+      editor: {info: {plan: saved, catalog}, onChange: () => assert.fail("Inspecting a disabled chain must not save or enable it")}});
+    try {
+      h.render();await h.settle();
+      if (view === "Simple") elements(h.render()).find(item => item.type === "button" && item.props.children === "Options…").props.onClick();
+      const resolutions = elements(h.render()).filter(item => item.type === "div" && item.props.className?.includes("effectObservedResolution"));
+      assert.equal(resolutions.length, 1, `${view} exercises the running row's observed-resolution controls`);
+      assert.match(renderToStaticMarkup(resolutions[0]), /role="status">Off<\/span>/, `${view} shows Off without reported dimensions`);
+      assert.doesNotMatch(renderToStaticMarkup(h.render()), />Inactive<|Waiting for frame dimensions/, view);
+      assert.equal(saved.enabled, false);assert.equal(saved.video[0].enabled, true, "the master switch does not rewrite the saved row");
+    } finally {h.close();}
+  }
+});
 test("changing a Downsample filter keeps its dimensions and shares one method menu", async () => {
   const before = { ...plan, video: [{ ...spatial, method: "downsample", outputSize: { width: 854, height: 480 }, settings: { spatialMultiplier: 0.5 } }] };
   const catalog = [{ id: "downsample:bilinear", kind: "downsample", label: "Downsample", group: "Downscaling", category: "Standard filters", available: true,
@@ -721,11 +818,11 @@ test('Simple composes image filters without node cards and Off hides dependent c
   assert.equal(changes.length,1);
  }finally{harness.close();global.window=oldWindow;}
 });
-test('Simple neural selection uses a literal 540p input and an installed Automatic model without frame generation',async()=>{
+test('Simple neural selection uses a literal 720p input and an installed Automatic model without frame generation',async()=>{
  const before={schema:2,mode:'advanced',enabled:true,video:[]},changes=[],catalog=[{id:'neural:mlx-dlss',kind:'neural',label:'DLSS neural rendering',group:'Image filters',available:true,intrinsicScale:1,template:{kind:'neural',method:'mlx-dlss',enabled:true,settings:{modelPath:null,intensity:1,temporal:false}}},{id:'upscale:metalfx',kind:'upscale',label:'MetalFX',group:'Resize',available:true,template:{kind:'upscale',method:'metalfx',enabled:true,settings:{}}}];
  const harness=simpleHarness(EffectsControls,{game:{gamePath:'preset',effects:before},running:false,status:{neuralModels:[{method:'mlx-dlss',modelPath:'/managed/model.dlssmodel',version:'installed'}]},editor:{info:{plan:before,catalog},onChange:next=>changes.push(next),pickFile:()=>assert.fail('Automatic installed model must not ask for a file')}});
  try{elements(harness.render()).find(n=>n.props.id==='simple-effect-image-new').props.onChange({target:{value:'neural:mlx-dlss'}});await harness.settle();
-  const next=changes.at(-1);assert.deepEqual(next.video.map(n=>n.kind),['downsample','neural','upscale']);assert.deepEqual(next.video[0].extent,{height:540});assert.equal(next.video[1].settings.modelPath,null);assert.equal(next.video[1].settings.temporal,false);assert.equal(next.video[1].settings.intensity,1);
+  const next=changes.at(-1);assert.deepEqual(next.video.map(n=>n.kind),['downsample','neural','upscale']);assert.deepEqual(next.video[0].extent,{height:720});assert.equal(next.video[1].settings.modelPath,null);assert.equal(next.video[1].settings.temporal,false);assert.equal(next.video[1].settings.intensity,1);
  }finally{harness.close();}
 });
 test('Advanced Add exposes fixed I/O types before a searchable method library',()=>{

@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../../shared/copy-file");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
@@ -66,6 +67,7 @@ function archToVariant(arch) {
 }
 
 function defaultVariantForHost() {
+  // Runtime downloads follow the launcher process CPU unless another build is selected.
   return Architecture.selectedArchitecture();
 }
 
@@ -543,14 +545,15 @@ function availableVariantsForVersion(entryAssets) {
 
 // The shared build resolver picks the variant: a build choice made for this
 // call's CPU stays as given, a preferred variant comes next, then the launcher's
-// CPU, then another CPU this Mac runs. Rosetta is needed for an Intel build in
-// the Apple Silicon app.
+// CPU, then another CPU this Mac runs. Apple Silicon hardware needs Rosetta
+// for an Intel JVM, including when the launcher itself uses Rosetta.
 function chooseVariantForHost({ availableVariants, preferredVariant, hostArch = Architecture.selectedArchitecture() }) {
+  const host = Host.getHostCapabilities();
   const offers = architecture => availableVariants.has(architecture);
   const variant = Architecture.chooseArchitecture({ request: hostArch !== Architecture.defaultArchitecture() ? { architecture: hostArch } : null,
-    saved: normalizeVariant(preferredVariant), launcher: hostArch, offers });
+    saved: normalizeVariant(preferredVariant), launcher: hostArch, offers, host });
   if (!offers(variant)) return null;
-  const requiresRosetta = variant === "x64" && hostArch === "arm64";
+  const requiresRosetta = Architecture.requiresRosetta(variant, host);
   return { variant, requiresRosetta, mode: requiresRosetta ? "rosetta" : "native" };
 }
 
@@ -691,7 +694,7 @@ async function installVersion({
     const sourceRoot = path.dirname(path.dirname(extractedJavaPath));
     safeRm(installDir);
     ensureDir(path.dirname(installDir));
-    fs.cpSync(sourceRoot, installDir, { recursive: true, verbatimSymlinks: true });
+    cloneOrCopySync(sourceRoot, installDir);
 
     const installedJavaPath = path.join(installDir, "bin", "java");
     if (!existsFile(installedJavaPath)) {

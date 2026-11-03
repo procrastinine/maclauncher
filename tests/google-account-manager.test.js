@@ -5,7 +5,12 @@ function vault() {
   const records = new Map();
   return { records, saveSession: async value => { records.set(value.accountName, structuredClone(value)); },
     loadSession: async key => records.get(key), listAccounts: async () => [...records.keys()].map(accountName => ({ accountName })),
-    removeSession: async key => records.delete(key) };
+    removeSession: async key => records.delete(key),
+    async updateSessions(change) {
+      const sessions = Object.fromEntries([...records].map(([key, value]) => [key, structuredClone(value)]));
+      await change(sessions); records.clear();
+      for (const [key, value] of Object.entries(sessions)) records.set(key, value);
+    } };
 }
 test("Settings and External share browser registration, save before provider setup and never return secrets to Settings", async () => {
   const storage = vault(), calls = [], email = "account@example.invalid";
@@ -17,7 +22,7 @@ test("Settings and External share browser registration, save before provider set
     list: async options => { assert.equal(options.refresh, false); return { accounts: [{ id: "klepton:actual", accountId: "actual", provider: "klepton", label: email, cached: true }], providers: [] }; }
   } });
   await storage.saveSession({ accountName: "google-play", session: { email: "previous@example.invalid", mode: "browser", aasToken: "previous-private-token", browserAccountId: "previous-browser" } });
-  await assert.rejects(manager.browserLogin({ email: "previous@example.invalid" }), /sign-in was saved/);
+  await assert.rejects(manager.browserLogin({ email: "previous@example.invalid", registerAccount: true }), /sign-in was saved/);
   assert.equal(storage.records.get("google-play").session.aasToken, "private-master-token");
   assert.equal(calls[0].email, undefined);
   assert.equal([...storage.records.values()].some(record => record.session.email === "previous@example.invalid"), true);
@@ -86,6 +91,6 @@ test('browser completion updates the connection phase before Android account reg
     browserAuth: { signIn: async () => { events.push('browser'); return { email: 'account@example.invalid', aasToken: 'private-token' }; } },
     microg: { importBrowserSession: async () => { events.push('register'); return { id: 'klepton:account' }; } }
   });
-  await manager.browserLogin({ onAuthenticated: () => events.push('authorized') });
+  await manager.browserLogin({ registerAccount: true, onAuthenticated: () => events.push('authorized') });
   assert.deepEqual(events, ['browser', 'authorized', 'register']);
 });

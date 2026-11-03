@@ -19,18 +19,13 @@ The inspector shows the detected game type, the GAME format version and the numb
 
 ## Preparation and storage
 
-Play prepares a private configuration, resource aliases and save folders automatically. The generated `GemRB.cfg`, its cache and the saves live in `userData/games/<gameId>/modules/gemrb/`. **Prepare configuration**, in the **Advanced** group, runs this step without starting the game; per-game configuration needs the GemRB command-line runtime, which stock GUI apps cannot use.
-
-GemRB reads the game through a per-game folder of links and copies, which keeps configuration writes out of the imported folder:
-
-- Known static engine resources, including BIF archives, KEY and TLK tables and graphics and audio resources, are linked for reading.
-- INI settings, logs, path files, character exports and unknown extra files are copied privately.
-- New files are written inside the private tree.
-- Symbolic links in the source folder are ignored.
+Play writes a generated `GemRB.cfg` and a rebuildable cache in `userData/games/<gameId>/modules/gemrb/`. `GamePath` and the working directory point directly to the imported game folder. Resources, configuration files beside them and relative writes use their original paths. **Prepare configuration**, in the **Advanced** group, writes the configuration without starting the game.
 
 ## Saves
 
-`SavePath` in the generated configuration points to the game's save folder in launcher data, and GemRB creates its own `save` and `mpsave` folders inside it. A per-game save-folder override is respected. Existing portable saves are not copied from the original game automatically.
+`SavePath` defaults to the original game folder, following GemRB's normal layout. GemRB reads and writes its `save` and `mpsave` folders there. A per-game save-folder override replaces that default.
+
+Earlier MacLauncher versions kept GemRB saves, configuration writes and a copy of the GUI scripts in private folders in launcher data. During the first startup after an upgrade, those files are recovered once into the original game folder, and GUI script files into the selected **Folder containing GUIScripts**, as [Earlier private game folders](../library/GAME_PREPARATION.md#earlier-private-game-folders) describes. Files missing from the original game return to their original relative paths. Existing original files stay unchanged, and private versions that differ are kept beside them as `<filename>.MacLauncher-conflict-<id>`. A script copy made from the runtime's own scripts, and other files the game wrote beside the earlier configuration, have no matching original location, so they stay in place. A private folder that a save-folder override still names stays in use, and Play does not read the other earlier folders.
 
 ## Settings
 
@@ -48,7 +43,7 @@ GemRB reads the game through a per-game folder of links and copies, which keeps 
 
 The cheat keys setting is the upstream engine toggle; it does not patch game scripts or add a save editor.
 
-**Custom game profile** selects a third-party GUIScripts profile by its lowercase identifier, which must be a safe name. **Folder containing GUIScripts** is the parent folder of a `GUIScripts/` folder. The selected scripts run inside the native game process, and the small GUI script tree is copied privately before launch. The resource and plugin paths of the GemRB command-line bundle are supplied automatically, and the optional directory settings replace these default locations.
+**Custom game profile** selects a third-party GUIScripts profile by its lowercase identifier, which must be a safe name. **Folder containing GUIScripts** is the parent folder of a `GUIScripts/` folder. The selected scripts run inside the native game process, and GemRB reads the original script tree directly. The resource and plugin paths of the GemRB command-line bundle are supplied automatically, and the optional directory settings replace these default locations.
 
 ## Near Infinity
 

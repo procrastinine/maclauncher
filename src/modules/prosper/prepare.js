@@ -10,9 +10,59 @@ function gameDirectory(entry, context) {
     throw new Error("Prosper requires a PS5 game in the library.");
   return GameData.resolveGameRuntimeDir(context.userDataDir, entry.gameId, "prosper");
 }
-function resolveSaveLocations(entry, context) {
-  const root = entry.saveDirOverride || path.join(gameDirectory(entry, context), "saves");
-  return { primaryDirectory: root, directories: [{ directory: root, role: "primary", source: "Prosper save data", confidence: "declared" }] };
+function defaultSaveDirectory(entry, environment = process.env) {
+  const data = environment.XDG_DATA_HOME || (environment.HOME && path.join(environment.HOME, ".local", "share"));
+  if (!/^[\w-]+$/.test(entry?.gameId || "") || !path.isAbsolute(data || ""))
+    throw new Error("Prosper saves require a saved game and an absolute user data directory.");
+  return path.join(data, "prosper", "games", entry.gameId);
+}
+function declaredTitleId(entry) {
+  if (/^PPSA\d{5}$/.test(entry.moduleData?.titleId || "")) return entry.moduleData.titleId;
+  const root = entry.contentRootDir || entry.gamePath;
+  if (!path.isAbsolute(root || "")) return null;
+  const file = path.join(root, ...(entry.moduleData?.inputLayout === "anyps5-prepared" ? ["app0"] : []), "sce_sys", "param.json");
+  try {
+    const stat = fs.statSync(file);
+    if (!stat.isFile() || !stat.size || stat.size > 128 * 1024) return null;
+    const bytes = require("../anyps5/detect").readBytes(file, 0, stat.size);
+    const titleId = JSON.parse(bytes.toString("utf8")).titleId;
+    return /^PPSA\d{5}$/.test(titleId || "") ? titleId : null;
+  } catch { return null; }
+}
+function resolveSaveIdentity(entry, _context = {}, environment = process.env) {
+  const active = entry.runtimeId === "prosper";
+  const override = (active && entry.saveDirOverride) || entry.runtimeData?.prosper?.saveDirOverride || null;
+  const titleId = declaredTitleId(entry) || "_unknown-title";
+  const cwd = entry.contentRootDir || entry.gamePath || process.cwd();
+  const roots = saveRoots({ ...entry, saveDirOverride: override }, environment).map(root => path.join(path.resolve(cwd, root), titleId));
+  return { namespace: "prosper-save-data", identity: JSON.stringify(roots), scope: "game", explicit: Boolean(override), hostSubstitution: false,
+    createPatch({ entry: current }) {
+      if (override) return null;
+      const data = environment.XDG_DATA_HOME || (environment.HOME && path.join(environment.HOME, ".local", "share"));
+      if (!path.isAbsolute(data || "")) return null;
+      const saveDirOverride = defaultSaveDirectory(current, environment);
+      return { runtimeData: { ...current.runtimeData, prosper: { ...current.runtimeData?.prosper, saveDirOverride } },
+        ...(current.runtimeId === "prosper" ? { saveDirOverride } : {}) };
+    } };
+}
+function saveRoots(entry, environment = process.env) {
+  if (entry.saveDirOverride) {
+    if (!path.isAbsolute(entry.saveDirOverride) || /[\0\r\n]/.test(entry.saveDirOverride))
+      throw new Error("Prosper saves require an absolute local directory.");
+    return [path.join(entry.saveDirOverride, "savedata0"), path.join(entry.saveDirOverride, "memory")];
+  }
+  const data = environment.XDG_DATA_HOME || (environment.HOME && path.join(environment.HOME, ".local", "share"));
+  return [environment.PROSPER_SAVE0 || (data ? path.join(data, "prosper", "savedata0") : "/tmp/prosper-savedata0"),
+    environment.PROSPER_SAVEDATA_DIR || (data ? path.join(data, "prosper", "savedata-mem") : "/tmp/prosper-savedata-mem")];
+}
+function resolveSaveLocations(entry, _context, environment = process.env) {
+  const roots = saveRoots(entry, environment);
+  return { primaryDirectory: roots[0], directories: roots.map((directory, index) => ({ directory,
+    role: index ? "alternate" : "primary", source: index ? "Prosper save-data memory" : "Prosper save data", confidence: "declared" })) };
+}
+function acceptsOriginalExecutable(executable) {
+  const name = path.basename(executable || "").toLowerCase();
+  return name === "eboot.bin" || name.endsWith(".elf");
 }
 function outside(source, output) {
   let parent = output;
@@ -23,15 +73,26 @@ function outside(source, output) {
     throw new Error("Prosper game data must stay outside the original game folder.");
 }
 async function prepareGame(entry, context) {
-  const program = resolveProgram(entry), root = gameDirectory(entry, context), dump = path.join(root, "app0");
+  throwIfAborted(context.signal);
+  const program = resolveProgram(entry), root = gameDirectory(entry, context);
+  const environment = { PROSPER_GUEST_FS: "1" };
+  const configPath = context.runtimeSettings?.configPath || entry.runtimeSettings?.prosper?.configPath;
+  if (configPath) {
+    if (!path.isAbsolute(configPath) || /[\0\r\n]/.test(configPath)) throw new Error("Prosper configuration must be an absolute local file path.");
+    environment.PROSPER_APP_CONFIG = configPath;
+  }
+  if (entry.saveDirOverride) {
+    const [saves, memory] = saveRoots(entry);
+    environment.PROSPER_SAVE0 = saves; environment.PROSPER_SAVEDATA_DIR = memory;
+  }
+  if (program.programRoot === program.assetRoot && acceptsOriginalExecutable(program.executablePath)) return { root, dump: program.assetRoot, cwd: program.sourceRoot,
+    executable: "/app0/" + path.relative(program.assetRoot, fs.realpathSync(program.executablePath)).split(path.sep).join("/"), environment };
+  // Split AnyPS5 inputs need their programs merged with assets. A SELF with
+  // another filename needs the upstream-required eboot.bin alias as well.
+  const dump = path.join(root, "app0");
   outside(program.sourceRoot, root);
   Writable.assertOwnDirectory(context.userDataDir, root);
-  for (const name of ["app0", "home", "tmp", "captures", "cache"]) Writable.assertOwnDirectory(root, path.join(root, name));
-  const saves = resolveSaveLocations(entry, context).primaryDirectory;
-  if (!path.isAbsolute(saves) || /[\0\r\n]/.test(saves)) throw new Error("Prosper saves require an absolute local directory.");
-  outside(program.sourceRoot, saves); fs.mkdirSync(saves, { recursive: true });
-  const downloads = path.join(saves, "download0");
-  Writable.assertOwnDirectory(saves, downloads);
+  Writable.assertOwnDirectory(root, dump);
   const assets = await sourceFiles(program.assetRoot, context);
   const modules = program.programRoot === program.assetRoot ? assets : await sourceFiles(program.programRoot, context);
   const files = new Map(assets.filter(file => !file.name.endsWith(".guest.prx")).map(file => [file.name, file]));
@@ -58,12 +119,6 @@ async function prepareGame(entry, context) {
     fs.rmSync(path.join(dump, name), { force: true });
   }
   Writable.atomicWrite(path.join(root, "input.json"), JSON.stringify({ schemaVersion: 1, source: program.sourceRoot, files: current }) + "\n", { root });
-  return { root, dump, executable: "/app0/" + executable, saves, environment: {
-    PROSPER_GUEST_FS: "1", PROSPER_SAVE0: path.join(saves, "savedata0"), PROSPER_SAVEDATA_DIR: path.join(saves, "memory"),
-    PROSPER_TEMP0: path.join(root, "tmp"), PROSPER_DOWNLOAD0: downloads,
-    PROSPER_CAPTURE_DIR: path.join(root, "captures"), HOME: path.join(root, "home"), CFFIXED_USER_HOME: path.join(root, "home"),
-    XDG_CONFIG_HOME: path.join(root, "home", ".config"), XDG_DATA_HOME: path.join(root, "home", ".local", "share"),
-    XDG_CACHE_HOME: path.join(root, "cache"), TMPDIR: path.join(root, "tmp") + path.sep
-  } };
+  return { root, dump, cwd: program.sourceRoot, executable: "/app0/" + executable, environment };
 }
-module.exports = { gameDirectory, resolveSaveLocations, prepareGame };
+module.exports = { gameDirectory, defaultSaveDirectory, declaredTitleId, resolveSaveIdentity, resolveSaveLocations, acceptsOriginalExecutable, prepareGame };

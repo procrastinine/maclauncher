@@ -1,5 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const {spawn,spawnSync}=require('node:child_process'),{once}=require('node:events');
+const {testEnvironment}=require('./helpers/fixture-process');
 const wait=async condition=>{const end=Date.now()+4000;while(!condition()){assert.ok(Date.now()<end,'native window reached the requested boundary');await new Promise(resolve=>setTimeout(resolve,5));}};
 test('native window load overlaps authority readiness while credentials follow real enrollment',{timeout:20000},async t=>{
  if(process.platform!=='darwin')return t.skip('Requires the composition owner macOS pipe lifecycle');
@@ -14,7 +15,7 @@ test('native window load overlaps authority readiness while credentials follow r
   const owner={socketPath:path.join(root,'owner.sock'),identity:{pid:process.pid,uid:process.getuid(),securityContext:'u:r:system_server:s0',packageName:'android',processName:'android.system'},ready:new Promise((resolve,reject)=>{ready=()=>resolve(owner);failReady=reject;}),
    async enroll(value){enrollments.push(value);enroll();await new Promise(resolve=>releaseEnrollment=resolve);},async retire(value){retirements.push(value);}};
   const enrolling=new Promise(resolve=>enroll=resolve);
-  const spawnProcess=(name,command,args,options)=>{const child=spawn(process.execPath,[path.join(__dirname,'fixtures/android-art-composition/publisher.mjs'),root,name,JSON.stringify(args)],options);child.closed=once(child,'close');child.closed.catch(()=>{});children.push(child);return child;};
+  const spawnProcess=(name,command,args,options)=>{const child=spawn(process.execPath,[path.join(__dirname,'fixtures/android-art-composition/publisher.mjs'),root,name,JSON.stringify(args)],{...options,env:{...options.env,...testEnvironment}});child.closed=once(child,'close');child.closed.catch(()=>{});children.push(child);return child;};
   const starting=startComposition({directory:root,supplier:{components:c},payload:{root,profile:{}},sharedGraphics:root,binderName:'fixture',env:{...process.env},owner,appUid:10000,appLabel:'Android',application:{executablePath:path.join(root,'presenter')},kernelRuntime:path.join(root,'kernel'),pathMap:'root\t/\t'+c.image+'\n',cache:path.join(root,'cache'),spawnProcess,signal:controller.signal,viewport:{width:64,height:32,densityDpi:160},sensorRoot:path.join(root,'sensors'),networkAllowed:false,allowAds:false});starting.catch(()=>{});
   const marker=name=>path.join(root,'marks',name);
   await wait(()=>fs.existsSync(marker('window-root-loaded')));

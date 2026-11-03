@@ -1,6 +1,6 @@
 const fs = require("node:fs"), path = require("node:path");
 const {promisify} = require("node:util"), run = promisify(require("node:child_process").execFile);
-const Bundled = require("./bundled-native"), Native = require("./local-native");
+const Bundled = require("./bundled-native"), Native = require("./local-native"), MachO = require("./macho-load-commands");
 const caches = new WeakMap();
 
 // Code-signature policy shared with native helper attachment. Missing facts
@@ -12,7 +12,9 @@ function parseSignature(output) {
   const team = /^TeamIdentifier=(.+)$/m.exec(output)?.[1]?.trim();
   return {flags, unsigned: /code object is not signed at all/i.test(output), teamIdentifier: team && team !== "not set" ? team : null,
     allowDyld: entitlement("com.apple.security.cs.allow-dyld-environment-variables"),
-    disableLibraryValidation: entitlement("com.apple.security.cs.disable-library-validation")};
+    disableLibraryValidation: entitlement("com.apple.security.cs.disable-library-validation"),
+    sandbox: entitlement("com.apple.security.app-sandbox"),
+    entitlements: /<\?xml[^]*?<\/plist>|<plist[^]*?<\/plist>/.exec(output)?.[0] || null};
 }
 function evaluate(target, libraries = []) {
   if (target.unsigned) return {available: true};
@@ -68,6 +70,24 @@ async function preflight(executable, libraries, options = {}) {
   const facts = await Promise.all([...new Set(libraries)].map(file => inspect(file, options)));
   return evaluate(target, facts);
 }
+// Every Mach-O executable in an app bundle, or the file itself, whose
+// signature refuses the libraries. Links are not followed.
+async function blockingExecutables(unit, libraries, options = {}) {
+  const found = [];
+  const visit = async file => {
+    options.signal?.throwIfAborted();
+    const stat = await fs.promises.lstat(file);
+    if (stat.isDirectory()) {
+      for (const name of (await fs.promises.readdir(file)).sort()) await visit(path.join(file, name));
+      return;
+    }
+    if (!stat.isFile() || !(stat.mode & 0o111) || stat.size < 28) return;
+    try { if (!MachO.readMachOLoadCommands(file).slices.some(slice => slice.fileType === 2)) return; } catch { return; }
+    if ((await preflight(file, libraries, options)).available === false) found.push(file);
+  };
+  await visit(path.resolve(unit));
+  return found;
+}
 function withoutGraphics(environment, graphics, original = {}) {
   const result = {...environment}, libraries = new Set(String(graphics?.DYLD_INSERT_LIBRARIES || "").split(path.delimiter).filter(Boolean));
   for (const key of ["DYLD_INSERT_LIBRARIES", "STEAM_DYLD_INSERT_LIBRARIES"]) {
@@ -79,4 +99,4 @@ function withoutGraphics(environment, graphics, original = {}) {
   }
   return result;
 }
-module.exports = {parseSignature, evaluate, inspect, preflight, withoutGraphics};
+module.exports = {parseSignature, evaluate, inspect, preflight, blockingExecutables, withoutGraphics};

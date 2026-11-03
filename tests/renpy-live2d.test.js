@@ -66,23 +66,38 @@ function sdk(root, version) {
   return { version, installDir };
 }
 
-test("immutable game imports patch Live2D inside the owned view while source native libraries remain unchanged", async t => {
+test("game Live2D uses an owned library helper while original project and native libraries remain unchanged", async t => {
   const root = fixture(t), game = sdk(root, "8.5.3"), userDataDir = path.join(root, "data");
   fs.mkdirSync(path.join(game.installDir, "game"));
   fs.writeFileSync(path.join(game.installDir, "game/options.rpy"), 'define config.save_directory = ""\n');
   const sourceExecutable = path.join(game.installDir, "lib/py3-mac-universal/renpy"), original = fs.readFileSync(sourceExecutable);
+  const sourceLibrary = path.join(path.dirname(sourceExecutable), "libLive2DCubismCore.dylib"), originalLibrary = Buffer.from("original game library");
+  fs.writeFileSync(sourceLibrary, originalLibrary);
   const sourceStat = fs.statSync(sourceExecutable), entry = { gameId: "immutable-game", moduleId: "renpy", gamePath: game.installDir,
     contentRootDir: game.installDir, containerData: { extractedRoot: game.installDir, key: "fixture" }, moduleData: { version: "8.5.3", major: 8 } };
   const archivePath = archive(root, "5-r.5", Native.requirements("8.5.3").symbols);
   const info = await Module.actions.patchLive2D(entry, { archivePath }, { userDataDir });
   assert.equal(info.ready, true); assert.equal(info.renpyVersion, "8.5.3"); assert.equal(info.version, "5-r.5");
-  assert.ok(info.targetPath.startsWith(entry.moduleData.writableInput.root + path.sep));
+  const helper = path.join(userDataDir, "games/immutable-game/modules/renpy/libraries/live2d");
+  assert.equal(info.targetPath, path.join(helper, "libLive2DCubismCore.dylib"));
+  assert.equal(entry.moduleData.writableInput, undefined);
   assert.equal(entry.contentRootDir, game.installDir);
-  assert.equal(fs.existsSync(path.join(game.installDir, "lib/py3-mac-universal/libLive2DCubismCore.dylib")), false);
+  assert.deepEqual(fs.readFileSync(sourceLibrary), originalLibrary);
   assert.deepEqual(fs.readFileSync(sourceExecutable), original);
   assert.deepEqual([fs.statSync(sourceExecutable).mode, fs.statSync(sourceExecutable).mtimeMs, fs.statSync(sourceExecutable).ctimeMs], [sourceStat.mode, sourceStat.mtimeMs, sourceStat.ctimeMs]);
+  const env = Live2D.launchEnvironment(entry, { userDataDir }, { RENPY_SEARCHPATH: "/existing/helper", KEEP: "original" });
+  assert.equal(env.RENPY_SEARCHPATH, "/existing/helper::" + helper); assert.equal(env.KEEP, "original");
+  const script = fs.readFileSync(path.join(helper, "00_maclauncher_live2d.rpy"), "utf8");
+  const body = script.split("init -1600 python in _maclauncher_live2d:\n")[1].split("\n").map(line => line.startsWith("    ") ? line.slice(4) : line).join("\n");
+  const python = path.resolve(__dirname, "../src/resources/python/bin/python3");
+  const check = `import sys, types, os\nrenpy = types.ModuleType('renpy')\nrenpy.gl2 = types.ModuleType('renpy.gl2')\nrenpy.gl2.live2dmodel = types.ModuleType('renpy.gl2.live2dmodel')\ncalls = []\nrenpy.gl2.live2dmodel.load = lambda name: calls.append(name) or True\nfor module in [renpy, renpy.gl2, renpy.gl2.live2dmodel]: sys.modules[module.__name__] = module\noriginal_executable = sys.executable\noriginal_cwd = os.getcwd()\nexec(${JSON.stringify(body)})\nassert calls == [], 'Core must not load during init'\nrenpy.gl2.live2dmodel.load(b'libLive2DCubismCore.dylib')\nassert calls[-1] == ${JSON.stringify(info.targetPath)}.encode('utf-8')\nrenpy.gl2.live2dmodel.load(b'/original/lib/libLive2DCubismCore.dylib')\nassert calls[-1] == ${JSON.stringify(info.targetPath)}.encode('utf-8')\nrenpy.gl2.live2dmodel.load(b'/original/lib/unrelated.dylib')\nassert calls[-1] == b'/original/lib/unrelated.dylib'\nassert sys.executable == original_executable and os.getcwd() == original_cwd\nprint('lazy Core route preserved')\n`;
+  assert.match(require("node:child_process").execFileSync(python, ["-B", "-c", check], { encoding: "utf8", timeout: 15000 }), /lazy Core route preserved/);
+  assert.deepEqual(fs.readdirSync(helper).sort(), ["00_maclauncher_live2d.rpy", "LICENSE.md", "libLive2DCubismCore.dylib", "record.json"], "The helper contains no game files or runtime forest");
   assert.equal((await Module.actions.removeLive2D(entry, {}, { userDataDir })).removed, true);
   assert.deepEqual(fs.readFileSync(sourceExecutable), original);
+  assert.deepEqual(fs.readFileSync(sourceLibrary), originalLibrary);
+  assert.equal(entry.moduleData.live2dInstalled, undefined);
+  const direct = { KEEP: "original" }; assert.equal(Live2D.launchEnvironment(entry, {}, direct), direct);
 });
 
 test("Ren'Py 8.5.3 changes the Core symbol contract; SDK7 and 8.5.2 retain the old API", t => {

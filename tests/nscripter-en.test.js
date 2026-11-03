@@ -63,21 +63,22 @@ test("ONScripter-EN plans consented discovery and preserves explicit older selec
   assert.equal(Manager.delivery.included, "none");
 });
 
-test("native saves import only known saves and leave originals and edited managed saves intact", t => {
+test("native save defaults leave original and private bytes untouched and prepare only explicit overrides", t => {
   const { source, entry, context } = fixture(t);
   fs.writeFileSync(path.join(source, "save1.dat"), "original save");
   fs.writeFileSync(path.join(source, "envdata"), "original settings");
   fs.writeFileSync(path.join(source, "nscript.dat"), "script is not a save");
   const result = Tools.prepareNativeSaves(entry, context, source);
-  assert.equal(result.saveDir, entry.defaultSaveDir);
-  assert.equal(fs.existsSync(path.join(result.saveDir, "nscript.dat")), false);
-  fs.writeFileSync(path.join(result.saveDir, "save1.dat"), "player edited save");
-  Tools.prepareNativeSaves(entry, context, source);
-  assert.equal(fs.readFileSync(path.join(result.saveDir, "save1.dat"), "utf8"), "player edited save");
+  assert.equal(result.saveDir, null);
+  assert.equal(fs.existsSync(context.userDataDir), false, "ordinary Play creates no private save/config tree");
+  const explicit = path.join(context.userDataDir, "requested-saves");
+  assert.equal(Tools.prepareNativeSaves({ ...entry, saveDirOverride: explicit }).saveDir, explicit);
+  assert.deepEqual(fs.readdirSync(explicit), [], "save selection does not import or scan source saves");
   assert.equal(fs.readFileSync(path.join(source, "save1.dat"), "utf8"), "original save");
   assert.throws(() => Tools.prepareNativeSaves({ ...entry, saveDirOverride: "relative" }, context, source), /absolute/);
   assert.throws(() => Tools.moduleRoot({ gameId: "../escape" }, context), /persisted game id/);
-  assert.equal(Module.resolveSaveLocations(entry, context).primaryDirectory, entry.defaultSaveDir);
+  assert.equal(Module.resolveSaveLocations(entry, context).primaryDirectory, source);
+  assert.equal(Module.resolveSaveLocations({ ...entry, runtimeId: "onscripter_en" }, context).primaryDirectory, null, "EN chooses its own script identity and user save path");
   assert.equal(Module.resolveSaveLocations({ ...entry, runtimeId: "onsyuri_web" }, context).primaryDirectory, null);
   assert.equal(Module.resolveSaveLocations({ ...entry, runtimeId: "external" }, context).primaryDirectory, null);
 });
@@ -163,7 +164,7 @@ test("NScripter plaintext detection validates bounded headers and rejects unrela
   assert.equal(detectGame({ rootDir: source }), null);
 });
 
-test("ONScripter-EN launches from original assets with managed saves/config and optional native variable editor", async t => {
+test("ONScripter-EN launches with original cwd/config and upstream save identity plus optional native variable editor", async t => {
   const { source, entry, context } = fixture(t); fs.writeFileSync(path.join(source, "00.txt"), "*define\ngame\n*start\nend\n");
   fs.writeFileSync(path.join(source, "ons.cfg"), "window\n");
   t.mock.method(Manager, "resolveSelection", () => ({ ready: true, version: Manager.PROFILE, install: { executablePath: "/managed/bin/onscripter-en" } }));
@@ -173,11 +174,26 @@ test("ONScripter-EN launches from original assets with managed saves/config and 
   context.gameArguments = ["--fullscreen", ""];
   const result = await Module.launchRuntime("onscripter_en", entry, context);
   assert.equal(result.native, true); assert.equal(launch[0], "/managed/bin/onscripter-en");
-  assert.deepEqual(launch[1].slice(0, 4), ["--root", source, "--save", entry.defaultSaveDir + path.sep]);
+  assert.deepEqual(launch[1].slice(0, 2), ["--root", source]);
+  assert.equal(launch[1].includes("--save"), false);
+  assert.equal(launch[1].includes("--gameid"), false, "the original script controls its save identity");
   assert.ok(launch[1].includes("--japanese")); assert.ok(launch[1].includes("--edit"));
   assert.deepEqual(launch[1].slice(-2), ["--fullscreen", ""]);
-  assert.equal(launch[2].cwd.startsWith(context.userDataDir + path.sep), true);
+  assert.equal(launch[2].cwd, source);
+  assert.equal(fs.existsSync(path.join(Tools.moduleRoot(entry, context), "onscripter-en")), false);
   assert.equal(fs.readFileSync(path.join(launch[2].cwd, "ons.cfg"), "utf8"), "window\n");
   assert.equal(fs.readFileSync(path.join(source, "ons.cfg"), "utf8"), "window\n");
   assert.equal(Module.ensureRuntime, undefined, "the shared runtime planner must retain Yuri's automatic installation route");
+});
+
+test("ONScripter-EN passes only an explicit save override while retaining original cwd", async t => {
+  const { source, entry, context } = fixture(t);
+  fs.writeFileSync(path.join(source, "0.txt"), "*define\ngame\n*start\nend\n");
+  entry.saveDirOverride = path.join(context.userDataDir, "explicit-save");
+  t.mock.method(Manager, "resolveSelection", () => ({ ready: true, install: { executablePath: "/managed/bin/onscripter-en" } }));
+  let launch;
+  context.spawnDetachedChecked = (...args) => { launch = args; return {}; };
+  await Module.launchRuntime("onscripter_en", entry, context);
+  assert.deepEqual(launch[1].slice(0, 4), ["--root", source, "--save", entry.saveDirOverride + path.sep]);
+  assert.equal(launch[2].cwd, source);
 });

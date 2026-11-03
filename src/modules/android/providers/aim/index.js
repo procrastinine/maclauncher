@@ -15,7 +15,7 @@ function resolveRuntime(context = {}, verification = "full", entry) {
   const selected = manager.resolveSelection(entry, context.settings, context.userDataDir, { nativeResourceRoot: context.nativeResourceRoot, verification });
   if (!selected.ready) throw new Error(selected.reason);
   const install = selected.install;
-  if (verification === "full") Bundled.verifyPayload(install.root, install.declaration);
+  if (verification === "full") Bundled.verifyPayload(install.root, install.declaration, install.resolveDependency);
   const root = install.payloadRoot;
   return { ...install, root, bin: path.join(root, "bin"), version: selected.version };
 }
@@ -70,12 +70,15 @@ async function prepareSystem({ context, storage, policy, runtime = resolveRuntim
     // Runtime versions share image storage; serialize writes across versions.
     if (existing) await existing.operation.catch(() => {});
     require("../../../shared/writable-input").assertOwnDirectory(context.userDataDir, directory);
+    const retireMountTargets = dependencies.retireMountTargets || require("./image-storage").retireMountTargets;
+    retireMountTargets(directory, context);
     const archive = path.join(directory, "system.zip");
     if (!fs.existsSync(path.join(directory, "system.dmg"))) await require("../../system-image").adoptBase({
       context, image: imageSource, destination: path.join(directory, "system.dmg") });
     const prepare = async signal => {
+      retireMountTargets(directory, { ...context, signal });
       await (dependencies.capture || capture)(path.join(runtime.bin, "android-runtime-prepare"), [archive, runtime.root, directory], {
-        signal, timeout: 20 * 60 * 1000, env: { MACLAUNCHER_AIM_ROOT: runtime.root }, maximum: 16 * 1024 * 1024 });
+        signal, timeout: 20 * 60 * 1000, env: { ...Bundled.resolveInstalledEnvironment(runtime), MACLAUNCHER_AIM_ROOT: runtime.root }, maximum: 16 * 1024 * 1024 });
       const image = path.join(directory, "derived", "root");
       if (!fs.existsSync(path.join(image, ".identity"))) throw new Error("Android system image preparation did not complete.");
       fs.rmSync(archive, { force: true });
@@ -108,7 +111,7 @@ async function prepareSystem({ context, storage, policy, runtime = resolveRuntim
 
 function runtimeEnvironment({ runtime, storage, policy }) {
   const hash = crypto.createHash("sha256").update(storage.root).digest("hex").slice(0, 24);
-  return { ...environment(), PATH: systemPath, HOME: storage.home, CFFIXED_USER_HOME: storage.home, TMPDIR: storage.temporary + path.sep,
+  return { ...environment(), ...Bundled.resolveInstalledEnvironment(runtime), PATH: systemPath, HOME: storage.home, CFFIXED_USER_HOME: storage.home, TMPDIR: storage.temporary + path.sep,
     MACLAUNCHER_AIM_ROOT: runtime.root, MACLAUNCHER_AIM_NETWORK: policy?.networkAllowed === true ? "allow" : "deny",
     MACLAUNCHER_AIM_IPC_PREFIX: "org.maclauncher.android.aim." + hash + ".", MACLAUNCHER_AIM_NO_SHIMS: "1", MACLAUNCHER_AIM_MOUNTED_DATA: "1",
     ...(policy?.clipboardSocket ? { MACLAUNCHER_CLIPBOARD_SOCKET: policy.clipboardSocket } : {}) };
@@ -117,7 +120,7 @@ function runtimeEnvironment({ runtime, storage, policy }) {
 function controlDescriptor({ runtime, storage, policy, prepared, args }) {
   const env = runtimeEnvironment({ runtime, storage, policy }), prefix = env.MACLAUNCHER_AIM_IPC_PREFIX;
   return { command: path.join(runtime.bin, "aimctl"), args: ["--data", storage.androidRoot, ...args], env, cwd: storage.root,
-    readDirectories: [runtime.root, ...(prepared ? [prepared.directory] : [])],
+    readDirectories: [runtime.root, ...(runtime.dependencyReadRoots||[]), ...(prepared ? [prepared.directory] : [])],
     executables: ["/bin/ps"],
     executableDirectories: [runtime.bin, storage.androidRoot, ...(prepared ? [prepared.image] : [])], machServicePrefixes: [prefix], machRegistrationPrefixes: [prefix],
     machServices: [],
@@ -159,8 +162,8 @@ async function prepareLaunch({ entry, context, storage, packageSet, policy }) {
   if (context.useRuntime) await context.useRuntime({ managerId: manager.id, version: runtime.version, sourcePath: runtime.installDir });
   const prepared = await prepareSystem({ context, storage, policy, runtime });
   const helper = path.join(runtime.bin, "android-runtime-prepare");
-  await capture(helper, ["--data-attach", storage.androidRoot], { signal: context.signal, timeout: 180000, env: { MACLAUNCHER_AIM_ROOT: runtime.root } });
-  const cleanup = () => capture(helper, ["--data-detach", storage.androidRoot], { timeout: 60000, env: { MACLAUNCHER_AIM_ROOT: runtime.root } });
+  await capture(helper, ["--data-attach", storage.androidRoot], { signal: context.signal, timeout: 180000, env: { ...Bundled.resolveInstalledEnvironment(runtime), MACLAUNCHER_AIM_ROOT: runtime.root } });
+  const cleanup = () => capture(helper, ["--data-detach", storage.androidRoot], { timeout: 60000, env: { ...Bundled.resolveInstalledEnvironment(runtime), MACLAUNCHER_AIM_ROOT: runtime.root } });
   try {
   const descriptor = controlDescriptor({ runtime, storage, policy, prepared, args: [] });
   const application = await require("./identity").prepareIdentity({ entry, context, storage, packageSet, runtime, prepared, descriptor, policy });

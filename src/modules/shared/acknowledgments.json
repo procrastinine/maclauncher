@@ -4,10 +4,10 @@
   { "label": "rz-ghidra (LGPL-3.0-or-later)", "url": "https://github.com/rizinorg/rz-ghidra" },
   { "label": "Ghidra / Sleigh (Apache-2.0)", "url": "https://github.com/NationalSecurityAgency/ghidra" },
   { "label": "Intel XeSS (Intel Simplified Software License)", "url": "https://github.com/intel/xess" },
-  { "label": "undici (MIT)", "url": "https://github.com/nodejs/undici" },
   { "label": "node-steam-user (MIT)", "url": "https://github.com/DoctorMcKay/node-steam-user" },
   { "label": "steam-session (MIT)", "url": "https://github.com/DoctorMcKay/node-steam-session" },
   { "label": "qrcode-generator (MIT)", "url": "https://github.com/kazuhikoarase/qrcode-generator" },
+  { "label": "node-steam-crypto (MIT)", "url": "https://github.com/DoctorMcKay/node-steam-crypto" },
   { "label": "Legendary (GPL-3.0)", "url": "https://github.com/derrod/legendary" },
   { "label": "GOGdl (GPL-3.0)", "url": "https://github.com/Heroic-Games-Launcher/heroic-gogdl" },
   { "label": "ReShade (BSD-3-Clause)", "url": "https://github.com/crosire/reshade" },
@@ -19,6 +19,45 @@
   { "label": "SPIRV-Cross (Apache-2.0 or MIT)", "url": "https://github.com/KhronosGroup/SPIRV-Cross" },
   { "label": "SPIRV-Headers (MIT)", "url": "https://github.com/KhronosGroup/SPIRV-Headers" },
   { "label": "ReShade shader headers (CC0-1.0)", "url": "https://github.com/crosire/reshade-shaders" },
+  {"label":"libplacebo (LGPL-2.1-or-later)","url":"https://code.videolan.org/videolan/libplacebo"},
+  {"label":"librashader (MPL-2.0)","url":"https://github.com/SnowflakePowered/librashader"},
+  {"label":"shaderc (Apache-2.0)","url":"https://github.com/google/shaderc"},
+  {"label":"glslang (BSD-3-Clause, MIT and Apache-2.0)","url":"https://github.com/KhronosGroup/glslang"},
+  {"label":"glslang ISF fork (BSD-3-Clause, MIT and Apache-2.0)","url":"https://github.com/mrRay/glslang"},
+  {"label":"SPIRV-Tools (Apache-2.0)","url":"https://github.com/KhronosGroup/SPIRV-Tools"},
+  {"label":"SPIRV-Cross ISF fork (Apache-2.0 or MIT)","url":"https://github.com/mrRay/SPIRV-Cross"},
+  {"label":"AMD FidelityFX FSR2 (MIT)","url":"https://github.com/GPUOpen-Effects/FidelityFX-FSR2"},
+  {"label":"FSR4 Metal provider (MIT)","url":"https://github.com/UzenUPoZiTiV4ik/fsr4-native-macos"},
+  {"label":"FSR4 shader implementation (MIT)","url":"https://github.com/int3rrobang/fsr4-int8-reverse-engineering"},
+  {"label":"FSR4 Lite 2 trained weights (GPL-2.0-or-later)","url":"https://github.com/zgauthier2000/fsr4-shader-performance-overrides"},
+  {"label":"Halide Local Laplacian (MIT)","url":"https://github.com/halide/Halide"},
+  {"label":"Intel CMAA2 (Apache-2.0; MIT third-party components)","url":"https://github.com/GameTechDev/CMAA2"},
+  {"label":"Intel XeGTAO (MIT)","url":"https://github.com/GameTechDev/XeGTAO"},
+  {"label":"FXShaders (MIT)","url":"https://github.com/luluco250/FXShaders"},
+  {"label":"Real-ESRGAN (BSD-3-Clause)","url":"https://github.com/xinntao/Real-ESRGAN"},
+  {"label":"SRVGG Swift (MIT)","url":"https://github.com/xocialize/mlx-realesrgan-swift"},
+  {"label":"Real-CUGAN (MIT)","url":"https://github.com/bilibili/ailab"},
+  {"label":"NAFNet (MIT)","url":"https://github.com/megvii-research/NAFNet"},
+  {"label":"NAFNet Swift (MIT)","url":"https://github.com/xocialize/mlx-nafnet-swift"},
+  {"label":"RIFE (MIT)","url":"https://github.com/hzwer/Practical-RIFE"},
+  {"label":"RIFE ncnn (MIT)","url":"https://github.com/nihui/rife-ncnn-vulkan"},
+  {"label":"ncnn (BSD-3-Clause)","url":"https://github.com/Tencent/ncnn"},
+  {"label":"Depth Anything V2 Small architecture (Apache-2.0)","url":"https://github.com/DepthAnything/Depth-Anything-V2"},
+  {"label":"ISFMSLKit (MIT; component notices retained)","url":"https://github.com/mrRay/ISFMSLKit"},
+  {"label":"VVMetalKit (MIT and Apple sample-code license)","url":"https://github.com/mrRay/VVMetalKit"},
+  {"label":"ISFGLSLGenerator (BSD-3-Clause)","url":"https://github.com/mrRay/ISFGLSLGenerator"},
+  {"label":"PINCache (Apache-2.0)","url":"https://github.com/mrRay/PINCache"},
+  {"label":"PINOperation (Apache-2.0)","url":"https://github.com/pinterest/PINOperation"},
+  {"label":"MLX-DLSS (Apache-2.0)","url":"https://github.com/iamwavecut/MLX-DLSS"},
+  {"label":"MLX (MIT)","url":"https://github.com/ml-explore/mlx"},
+  {"label":"MLX Swift (MIT)","url":"https://github.com/ml-explore/mlx-swift"},
+  {"label":"Swift Argument Parser (Apache-2.0 WITH Swift-exception)","url":"https://github.com/apple/swift-argument-parser"},
+  {"label":"Swift Numerics (Apache-2.0 WITH Swift-exception)","url":"https://github.com/apple/swift-numerics"},
+  {"label":"MLX C API bindings (MIT)","url":"https://github.com/ml-explore/mlx-c"},
+  {"label":"Real-ESRGAN MLX architecture port (BSD-3-Clause)","url":"https://github.com/xocialize/realesrgan-mlx"},
+  {"label":"NAFNet MLX architecture port (MIT)","url":"https://github.com/xocialize/nafnet-mlx"},
+  {"label":"Hugging Face Transformers Depth Anything checkpoint layout (Apache-2.0)","url":"https://github.com/huggingface/transformers"},
+  {"label":"DINOv2 architecture (Apache-2.0)","url":"https://github.com/facebookresearch/dinov2"},
   {
     "label": "Electron (MIT; Chromium notices included)",
     "url": "https://github.com/electron/electron"
@@ -54,6 +93,18 @@
   {
     "label": "Electron notarize (MIT)",
     "url": "https://github.com/electron/notarize"
+  },
+  {
+    "label": "asar (MIT)",
+    "url": "https://github.com/electron/asar"
+  },
+  {
+    "label": "js-yaml (MIT)",
+    "url": "https://github.com/nodeca/js-yaml"
+  },
+  {
+    "label": "Rolldown (MIT)",
+    "url": "https://github.com/rolldown/rolldown"
   },
   {
     "label": "DefinitelyTyped (MIT)",
@@ -240,7 +291,7 @@
     "url": "https://developers.google.com/speed/webp/"
   },
   {
-    "label": "Little CMS",
+    "label": "Little CMS (MIT)",
     "url": "https://www.littlecms.com/"
   },
   {
@@ -300,7 +351,7 @@
     "url": "https://code.videolan.org/videolan/dav1d"
   },
   {
-    "label": "AOM",
+    "label": "AOM (BSD-2-Clause)",
     "url": "https://aomedia.googlesource.com/aom"
   },
   {
@@ -320,7 +371,7 @@
     "url": "https://github.com/Netflix/vmaf"
   },
   {
-    "label": "Brotli",
+    "label": "Brotli (MIT)",
     "url": "https://github.com/google/brotli"
   },
   {

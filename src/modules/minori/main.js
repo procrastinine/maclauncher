@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const os = require("node:os");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const manifest = require("./manifest.json");
@@ -15,6 +16,44 @@ const verifiedData = new Map();
 function gameDirectory(entry, context) {
   if (!/^[A-Za-z0-9_-]+$/.test(entry.gameId || "") || !path.isAbsolute(context.userDataDir || "")) throw new Error("Minori needs a persisted game id and an absolute launcher data directory.");
   return GameData.resolveGameModuleDir(context.userDataDir, entry.gameId, manifest.id);
+}
+function saveDirectory(entry) {
+  return entry.saveDirOverride || process.env.MACLAUNCHER_MINORI_SAVE_DIR || path.join(path.resolve(entry.contentRootDir || entry.gamePath), "userdata");
+}
+function upstreamSaveDirectory(entry) {
+  const original = path.resolve(entry.contentRootDir || entry.gamePath), besideGame = path.join(original, "userdata");
+  // The managed Rust executable replaces the original executable parent.
+  // These bounded facts reproduce upstream's writable-parent fallback only
+  // during import; ordinary Play reads its stored current save setting.
+  try {
+    let directory = besideGame;
+    try { if (!fs.statSync(directory).isDirectory()) return path.join(os.homedir(), "Documents", "eden", "userdata"); }
+    catch (error) { if (error.code !== "ENOENT") throw error; directory = original; }
+    fs.accessSync(directory, fs.constants.W_OK);
+    return besideGame;
+  } catch (error) {
+    if (["EACCES", "EPERM", "EROFS"].includes(error.code)) return path.join(os.homedir(), "Documents", "eden", "userdata");
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+function resolveSaveIdentity(entry, context = {}) {
+  if (entry.moduleId && entry.moduleId !== manifest.id || (context.runtimeId || entry.runtimeId || "reminori") !== "reminori") return null;
+  const explicit = Boolean(entry.saveDirOverride || process.env.MACLAUNCHER_MINORI_SAVE_DIR);
+  const directory = explicit ? saveDirectory(entry) : upstreamSaveDirectory(entry);
+  if (!directory) return null;
+  return { namespace: "filesystem", identity: directory, scope: "game", explicit, hostSubstitution: !explicit,
+    createPatch({ entry: current, gameId, reason }) {
+      if (current.saveDirOverride || process.env.MACLAUNCHER_MINORI_SAVE_DIR) return null;
+      const destination = reason === "collision" ? path.join(os.homedir(), "Documents", "eden", "games", gameId, "userdata") : directory;
+      const locations = resolveSaveLocations({ ...current, saveDirOverride: destination });
+      return { saveDirOverride: destination, defaultSaveDir: destination, saveLocations: locations.directories };
+    }
+  };
+}
+function resolveSaveLocations(entry) {
+  const directory = saveDirectory(entry);
+  return { primaryDirectory: directory, directories: [{ directory, source: "ReMinori user data", confidence: "exact", label: "Saves" }] };
 }
 function scriptsDirectory(entry, context, { required = false } = {}) {
   const directory = path.join(gameDirectory(entry, context), "scripts");
@@ -105,9 +144,9 @@ async function verifyData(entry, context, distribution, { refresh = false } = {}
 }
 async function prepareLaunch(entry, context, distribution) {
   const original = await verifyData(entry, context, distribution);
-  const directory = gameDirectory(entry, context), saves = entry.saveDirOverride || path.join(directory, "saves");
+  const directory = gameDirectory(entry, context), saves = saveDirectory(entry);
   if (!path.isAbsolute(saves)) throw new Error("Minori save directory must be absolute.");
-  fs.mkdirSync(directory, { recursive: true }); fs.mkdirSync(saves, { recursive: true });
+  fs.mkdirSync(directory, { recursive: true });
   const env = { ...process.env, MACLAUNCHER_MINORI_SAVE_DIR: saves,
     MACLAUNCHER_MINORI_CACHE_DIR: path.join(directory, "cache"), MACLAUNCHER_MINORI_TITLE: entry.name || original.data.title,
     MACLAUNCHER_MINORI_PAZ_XOR: original.data.xorKey.toString(16),
@@ -115,7 +154,7 @@ async function prepareLaunch(entry, context, distribution) {
     ...(distribution.movieDecoder ? { MACLAUNCHER_MINORI_MOVIE_DECODER: distribution.movieDecoder } : {}) };
   if (original.verification.archives.some(archive => archive.group === "mov") && !distribution.movieDecoder) throw new Error("This Minori game needs the native distribution’s movie decoder.");
   entry.defaultSaveDir = saves; context.onEntryChange?.(entry);
-  return { ...original, directory, saves, env, args: ["--game-root", path.resolve(original.root)] };
+  return { ...original, directory, cwd: path.resolve(original.root), saves, env, args: ["--game-root", path.resolve(original.root)] };
 }
 async function extractScripts(entry, context) {
   const { distribution } = selection(entry, context), { root } = await verifyData(entry, context, distribution);
@@ -133,8 +172,8 @@ async function extractScripts(entry, context) {
     return { directory: destination, ...metadata };
   } finally { fs.rmSync(staging, { recursive: true, force: true }); }
 }
-module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [manager], normalizeRuntimeId: () => "reminori",
-  onImport: (entry, context) => { entry.defaultSaveDir = path.join(gameDirectory(entry, context), "saves"); scriptsDirectory(entry, context); },
+module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [manager], normalizeRuntimeId: () => "reminori", resolveSaveLocations, resolveSaveIdentity,
+  onImport: (entry, context) => { entry.defaultSaveDir = saveDirectory(entry); scriptsDirectory(entry, context); },
   ensureRuntime: (entry, context) => {
     originalData(entry);
     const selected = manager.resolveSelection(entry, context.settings, context.userDataDir);
@@ -145,7 +184,7 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     if (runtimeId !== "reminori") return null;
     const { selected, distribution } = selection(entry, context), launch = await prepareLaunch(entry, context, distribution);
     const child = await context.spawnDetachedChecked(selected.install.executablePath, [...launch.args, ...(context.gameArguments || [])],
-      { cwd: launch.directory, env: launch.env, stdio: ["ignore", "pipe", "pipe"] }, selected.install.needsRosetta);
+      { cwd: launch.cwd, env: launch.env, stdio: ["ignore", "pipe", "pipe"] }, selected.install.needsRosetta);
     const log = path.join(launch.directory, "native.log");
     const fd = fs.openSync(log, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | (fs.constants.O_NOFOLLOW || 0), 0o600);
     let written = 0, tail = "", closed = false;
@@ -178,5 +217,5 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
       const registered = manager.core.registerLocal({ userDataDir: context.userDataDir, version, runtimePath });
       context.onRuntimeStateChange?.(); return registered;
     }
-  }, __test: { gameDirectory, readProfile, originalData, validVerification, verifyData, prepareLaunch, extractScripts, verifiedData }
+  }, __test: { gameDirectory, saveDirectory, upstreamSaveDirectory, readProfile, originalData, validVerification, verifyData, prepareLaunch, extractScripts, verifiedData }
 };

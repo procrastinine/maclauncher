@@ -1,3 +1,5 @@
+import { restoreRuntimeState } from "../../../core/runtime-state-snapshot.mjs";
+
 // IPC clones every object, including unchanged games and release catalogs. Keep
 // their identities so React's memoization and effect dependencies remain useful.
 // Only plain launcher data is reconciled; opaque structured-clone values stay new.
@@ -83,10 +85,25 @@ export function subscribeLauncherState(api, receive, fail) {
   let receivedBroadcast = false;
   let current = null;
   let pendingActivity = {};
+  const managerViews = new WeakMap(), collections = new WeakMap();
+  const restore = snapshot => {
+    const managers = snapshot?.runtimeManagers;
+    if (!managers || typeof managers !== "object") return snapshot;
+    if (!collections.has(managers)) {
+      const entries = Object.entries(managers).map(([id, state]) => {
+        if (!state || typeof state !== "object") return [id, state];
+        if (!managerViews.has(state)) managerViews.set(state, restoreRuntimeState(state));
+        return [id, managerViews.get(state)];
+      });
+      collections.set(managers, entries.every(([id, state]) => state === managers[id]) ? managers : Object.fromEntries(entries));
+    }
+    const restored = collections.get(managers);
+    return restored === managers ? snapshot : { ...snapshot, runtimeManagers: restored };
+  };
   const deliver = next => {
     if (Object.is(current, next)) return;
     current = next;
-    receive(next);
+    receive(restore(next));
   };
   const unsubscribe = api.onState(next => {
     if (!active) return;

@@ -75,6 +75,7 @@ test("Android provider selection preserves custom data and uses distinct save ro
 });
 
 test("Android included runtime requires ARM macOS and checks metadata identity before launch", t => {
+  t.mock.method(require("../src/modules/shared/runtime/host-capabilities"), "getHostCapabilities", () => ({ platform: "darwin", hardwareArch: "arm64" }));
   assert.throws(() => Runtime.resolve({ platform: "linux", arch: "arm64" }), /Apple Silicon/);
   assert.throws(() => Runtime.resolve({ platform: "darwin", arch: "x64" }), /Apple Silicon/);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "android-runtime-"));

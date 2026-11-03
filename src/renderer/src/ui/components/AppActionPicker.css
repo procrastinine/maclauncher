@@ -1,0 +1,66 @@
+.appActionPicker .pickerSearch { width: min(260px, 40vw); }
+.pickerNotice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 18px;
+  font-size: var(--font-sm);
+  color: var(--text-notice);
+  background: var(--surface-notice);
+  border-bottom: 1px solid var(--border);
+}
+.pickerNotice > span { flex: 1; min-width: 0; }
+.pickerNotice.pickerError { color: var(--text-danger); background: var(--surface-danger); }
+.pickerBody { display: flex; flex-direction: column; gap: 18px; }
+.pickerSection { display: flex; flex-direction: column; gap: 8px; }
+.pickerSectionTitle { margin: 0; font-size: var(--font-md); font-weight: 650; }
+.pickerEmpty { font-size: var(--font-sm); }
+.pickerGroup { display: flex; flex-direction: column; gap: 6px; }
+.pickerGroupTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-sm);
+  color: var(--muted);
+}
+.pickerGroupTitle img { flex-shrink: 0; }
+.pickerGroupTitle span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pickerGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 10px;
+}
+.pickerTile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  cursor: default;
+}
+.pickerTile:hover { background: var(--surface-3); }
+.pickerTile:focus-visible { outline: none; background: var(--surface-accent-weak); border-color: var(--border-accent-strong); }
+.pickerTile:active { background: var(--surface-accent); }
+.pickerPreview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: var(--surface-code);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.pickerPreview img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.pickerPreviewMany img { max-width: calc(50% - 2px); }
+.pickerPreview .pickerPreviewIcon { width: 40px; height: 40px; }
+.pickerPreviewEmpty { font-size: var(--font-xl); color: var(--muted); }
+.pickerTileLabel { overflow: hidden; font-size: var(--font-sm); text-overflow: ellipsis; white-space: nowrap; }
+.pickerTileDetail { overflow: hidden; font-size: var(--font-xs); color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }

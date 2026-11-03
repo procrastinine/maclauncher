@@ -10,7 +10,11 @@ A folder with one DOS program is detected automatically. In a folder with severa
 
 ## Preparation and saves
 
-Play prepares a private writable copy of the game folder at `games/<gameId>/modules/dosbox/drive-c/`. Saves, configuration and other files the game writes stay in this copy. When a source asset changes, its private copy is refreshed if that copy is unchanged; modified private files, including saves, are kept. The save-location override selects another private game-data folder outside the original game.
+By default, Play opens the selected original program and uses its containing directory as the DOS drive and working directory. The game reads and writes its own files there, including saves, and Play neither copies nor lists the game's files.
+
+With a save-location override, Play uses a writable copy of the complete DOS drive at the chosen location, because DOSBox, as MacLauncher runs it, has no separate save-folder option. Saves and modified files in that copy stay unchanged, while source assets that the copy has not changed are refreshed there. This copy is used only with an override.
+
+Files in the private `drive-c` folders of earlier MacLauncher versions are recovered once into the original game folder, as [Earlier private game folders](../library/GAME_PREPARATION.md#earlier-private-game-folders) describes. An original file that differs stays unchanged, and the recovered version is kept beside it as a separate copy. Drive copies at an active save-location override, including overlapping folders, stay untouched.
 
 Each game gets its own DOSBox configuration and keyboard mapper from MacLauncher, so separate DOSBox preferences and local `dosbox.conf` files are not loaded. The shared network setting controls network access for the game process.
 

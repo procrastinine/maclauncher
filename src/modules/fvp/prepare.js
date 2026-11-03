@@ -11,7 +11,7 @@ function directoryFor(entry, context) {
   return GameData.resolveGameModuleDir(context.userDataDir, entry.gameId, "fvp");
 }
 function saveDirectory(entry, context) {
-  const directory = entry.saveDirOverride || path.join(directoryFor(entry, context), "saves");
+  const directory = entry.saveDirOverride || entry.defaultSaveDir || path.join(entry.contentRootDir || entry.gamePath, "save");
   if (!path.isAbsolute(directory) || /[\0\r\n]/.test(directory)) throw new Error("FVP save location must be an absolute local directory.");
   return path.resolve(directory);
 }
@@ -47,16 +47,30 @@ function readReceipt(file) {
     const result = JSON.parse(fs.readFileSync(file, "utf8")); return result.schema === 1 ? result : null;
   } catch (error) { if (error.code === "ENOENT" || error instanceof SyntaxError) return null; throw error; }
 }
+// The root-only C ABI cannot select another script name or a save folder.
+// Keep the current adapter whenever either boundary still needs translation.
+function originalLayout(entry, root, data) {
+  const key = JSON.stringify([data.sourceRootIdentity, data.scriptPath]);
+  if (entry.moduleData.originalLayoutKey === key) return entry.moduleData.originalLayout;
+  const names = fs.readdirSync(root);
+  const scripts = names.filter(name => /\.(?:hcb|bch)$/i.test(name));
+  const compatible = scripts.length === 1 && /^(?:game\.hcb|game\.bch)$/.test(path.basename(data.scriptPath)) &&
+    names.filter(name => /\.bin$/i.test(name)).every(name => name === name.toLowerCase());
+  entry.moduleData = {...entry.moduleData, originalLayoutKey: key, originalLayout: compatible};
+  return compatible;
+}
 function prepareLaunch(entry, context) {
   const { root, data } = gameData(entry, context), directory = directoryFor(entry, context), saveRoot = saveDirectory(entry, context);
   const gameDirectory = GameData.resolveGameDir(context.userDataDir, entry.gameId), playRoot = path.join(directory, "play"), receiptFile = path.join(directory, "preparation.json");
-  assertOutsideOriginal(root, directory); assertOutsideOriginal(root, saveRoot);
+  assertOutsideOriginal(root, directory);
+  const originalSave = path.join(root, "save"), direct = saveRoot === originalSave && originalLayout(entry, root, data);
+  if (saveRoot !== originalSave) assertOutsideOriginal(root, saveRoot);
   Writable.assertOwnDirectory(context.userDataDir, directory);
   // Explicit custom save folders are allowed, but never aliases back into source data.
   const saveStat = (() => { try { return fs.lstatSync(saveRoot); } catch (error) { if (error.code === "ENOENT") return null; throw error; } })();
   if (saveStat && (!saveStat.isDirectory() || saveStat.isSymbolicLink())) throw new Error("FVP save location must be a real directory.");
-  fs.mkdirSync(saveRoot, { recursive: true, mode: 0o700 });
-  const previous = readReceipt(receiptFile), scriptKind = /\.bch$/i.test(data.scriptName) ? "bch" : "hcb";
+  if (!direct) fs.mkdirSync(saveRoot, { recursive: true, mode: 0o700 });
+  const previous = direct ? null : readReceipt(receiptFile), scriptKind = /\.bch$/i.test(data.scriptName) ? "bch" : "hcb";
   const key = JSON.stringify([root, data.scriptPath, scriptKind, saveRoot]);
   let ready = previous?.key === key && fs.existsSync(playRoot) && fs.lstatSync(playRoot).isDirectory() && !fs.lstatSync(playRoot).isSymbolicLink();
   if (ready) {
@@ -70,7 +84,7 @@ function prepareLaunch(entry, context) {
     try { if (!fs.lstatSync(saveLink).isSymbolicLink() || fs.readlinkSync(saveLink) !== saveRoot) ready = false; }
     catch (error) { if (error.code !== "ENOENT") throw error; ready = false; }
   }
-  if (!ready) {
+  if (!direct && !ready) {
     const staging = fs.mkdtempSync(path.join(directory, ".play-")), directories = [], links = [];
     let count = 0;
     const visit = (source, destination, depth = 0) => {
@@ -109,14 +123,15 @@ function prepareLaunch(entry, context) {
         if (replaced) fs.renameSync(backup, playRoot);
         throw error;
       }
-    } finally { fs.rmSync(staging, { recursive: true, force: true }); fs.rmSync(backup, { recursive: true, force: true }); }
+    } finally { fs.rmSync(staging, { recursive: true, force: true }); /* Replaced views may contain unique user files; one-time backcompat owns retirement. */ }
   }
   const settings = context.runtimeSettings || {}, textEncoding = settings.textEncoding || "sjis";
   if (!["sjis", "gbk", "utf8"].includes(textEncoding)) throw new Error("Choose a supported FVP text encoding.");
-  const env = { ...process.env, FVP_BASE_PATH: playRoot, FVP_HCB_ROOT: playRoot, RFVP_DUMP_DIR: path.join(directory, "frames") };
+  const gameRoot = direct ? root : playRoot;
+  const env = { ...process.env, FVP_BASE_PATH: gameRoot, FVP_HCB_ROOT: gameRoot, RFVP_DUMP_DIR: path.join(directory, "frames") };
   for (const name of ["FVP_TEST", "FVP_TESTCASE", "RFVP_DUMP_FRAMES", "DEBUG"]) delete env[name];
   entry.defaultSaveDir = saveRoot;
-  entry.moduleData = { ...entry.moduleData, preparationDirectory: playRoot, activeTextEncoding: textEncoding };
-  return { directory, root, playRoot, saveRoot, textEncoding, textHiDpi: settings.textHiDpi !== false, env };
+  entry.moduleData = { ...entry.moduleData, preparationDirectory: gameRoot, activeTextEncoding: textEncoding };
+  return { directory, root, gameRoot, playRoot: gameRoot, scriptPath: data.scriptPath, saveRoot, textEncoding, textHiDpi: settings.textHiDpi !== false, env };
 }
 module.exports = { directoryFor, saveDirectory, gameData, prepareLaunch };

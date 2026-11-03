@@ -1,0 +1,66 @@
+{
+  "resourceIds": {
+    "name": 16842755,
+    "minSdkVersion": 16843276,
+    "versionCode": 16843291,
+    "versionName": 16843292,
+    "targetSdkVersion": 16843376,
+    "compileSdkVersion": 16844146,
+    "compileSdkVersionCodename": 16844147
+  },
+  "tree": {
+    "name": "manifest",
+    "attrs": {
+      "versionCode": 1,
+      "versionName": "1",
+      "compileSdkVersion": 36,
+      "compileSdkVersionCodename": "16",
+      ":package": "org.example.permissions",
+      ":platformBuildVersionCode": 36,
+      ":platformBuildVersionName": 16
+    },
+    "children": [
+      {
+        "name": "uses-sdk",
+        "attrs": {
+          "minSdkVersion": 23,
+          "targetSdkVersion": 35
+        },
+        "children": []
+      },
+      {
+        "name": "uses-permission",
+        "attrs": {
+          "name": "android.permission.INTERNET"
+        },
+        "children": []
+      },
+      {
+        "name": "uses-permission",
+        "attrs": {
+          "name": "android.permission.POST_NOTIFICATIONS"
+        },
+        "children": []
+      },
+      {
+        "name": "uses-permission",
+        "attrs": {
+          "name": "android.permission.ACCESS_FINE_LOCATION"
+        },
+        "children": []
+      },
+      {
+        "name": "uses-permission",
+        "attrs": {
+          "name": "android.permission.CAMERA"
+        },
+        "children": []
+      },
+      {
+        "name": "application",
+        "attrs": {},
+        "children": []
+      }
+    ]
+  }
+}

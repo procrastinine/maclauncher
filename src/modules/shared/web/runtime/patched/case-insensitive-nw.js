@@ -2,7 +2,7 @@
     const path = require('path');
     const {URL} = require('url');
     const fs_module = require('fs');
-    const fsp_module = require('fs/promises');
+    const fsp_module = fs_module.promises;
 
     // Keep real functions around since we might patch some of fs below
     const fs = Object.assign({}, fs_module);

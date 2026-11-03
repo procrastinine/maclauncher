@@ -106,26 +106,23 @@ test('live-variable polling has no queued timer while blocked and releases timer
   assert.equal(timers.size, 1); stopBeforeRead(); assert.equal(timers.size, 0);
   assert.equal(calls, 3);
 });
-test('game icons prioritize extracted artwork and provide declared module or generic local fallbacks', () => {
-  const registry = require('../src/modules/registry');
+test('game icons show the artwork main resolves, marking declared module icons, with a local generic fallback', () => {
+  const registry = require('../src/modules/registry'), fs = require('node:fs');
+  assert.deepEqual(components.gameIconCandidates({ iconUrl: 'data:image/png;base64,game', iconSource: 'game-extracted' }),
+    [{ url: 'data:image/png;base64,game', source: 'game-extracted' }]);
+  const generic = renderToStaticMarkup(React.createElement(components.GameIcon, { game: { iconUrl: null, iconSource: null } }));
+  assert.match(generic, /data-icon-source="generic"/);
+  assert.match(generic, /<svg[^>]*viewBox="0 0 24 24"/);
+  assert.doesNotMatch(generic, /<img|https?:\/\/|gameIconText/);
   for (const manifest of registry.listModules()) {
-    const candidates = components.gameIconCandidates({ moduleId: manifest.id, iconUrl: 'data:image/png;base64,game', iconSource: 'game-extracted' }, manifest);
-    assert.equal(candidates[0].url, 'data:image/png;base64,game');
-    assert.equal(candidates[0].source, 'game-extracted');
-    const fallback = renderToStaticMarkup(React.createElement(components.GameIcon, {
-      game: { moduleId: manifest.id, iconUrl: null, iconSource: null }, moduleInfo: manifest
-    }));
-    if (manifest.icon?.path) {
-      assert.equal(candidates[1]?.source, 'module-default', `${manifest.id}: declared bundled fallback`);
-      assert.doesNotMatch(candidates[1].url, /^https?:/);
-      assert.match(fallback, /data-icon-source="module-default"/);
-      assert.match(fallback, /<img[^>]+alt=""/);
-    } else {
-      assert.equal(candidates.length, 1, `${manifest.id}: extracted artwork remains first without a declared module icon`);
-      assert.match(fallback, /data-icon-source="generic"/);
-      assert.match(fallback, /<svg[^>]*viewBox="0 0 24 24"/);
-      assert.doesNotMatch(fallback, /<img|https?:\/\/|gameIconText/);
-    }
+    // A game without usable artwork of its own receives its module's declared icon file from main.js.
+    assert.ok(manifest.icon?.path, `${manifest.id}: declared module icon`);
+    const icon = fs.readFileSync(path.join(registry.getModuleDir(manifest.id), manifest.icon.path));
+    const markup = renderToStaticMarkup(React.createElement(components.GameIcon, {
+      game: { iconUrl: 'data:image/png;base64,' + icon.toString('base64'), iconSource: 'module-default' } }));
+    assert.match(markup, /class="gameIcon gameIconEngine"/, manifest.id);
+    assert.match(markup, /data-icon-source="module-default"/, manifest.id);
+    assert.match(markup, /<img[^>]+src="data:image\/png;base64,[^"]+"[^>]+alt=""/, manifest.id);
   }
 });
 test('Settings uses native-window content with searchable module navigation and a labelled settings region', () => {
@@ -217,16 +214,20 @@ test('Credits opens projects and game port resources only through their explicit
   assert.match(markup, /Platforms and game data requirements vary by project/);
 });
 test('row and inspector icons share artwork without initial-letter boxes', () => {
-  const manifest = require('../src/modules/godot/manifest.json');
-  const game = { moduleId: manifest.id, iconUrl: null, iconSource: null };
-  const markup = renderToStaticMarkup(React.createElement(components.GameIcon, { game, moduleInfo: manifest, inspector: true }));
+  const registry = require('../src/modules/registry'), fs = require('node:fs');
+  const manifest = registry.getModuleInfo('godot');
+  const icon = fs.readFileSync(path.join(registry.getModuleDir(manifest.id), manifest.icon.path));
+  const game = { iconUrl: 'data:image/png;base64,' + icon.toString('base64'), iconSource: 'module-default' };
+  const row = renderToStaticMarkup(React.createElement(components.GameIcon, { game }));
+  const markup = renderToStaticMarkup(React.createElement(components.GameIcon, { game, inspector: true }));
   assert.match(markup, /gameIconInspector gameIconEngine/);
   assert.match(markup, /data-icon-source="module-default"/);
   assert.match(markup, /<img[^>]+alt=""[^>]+loading="eager"/);
-  const unknown = renderToStaticMarkup(React.createElement(components.GameIcon, { game: { ...game, moduleId: 'unknown' }, moduleInfo: null }));
+  assert.equal(/src="([^"]+)"/.exec(row)[1], /src="([^"]+)"/.exec(markup)[1], 'The row and the inspector show the same artwork');
+  const unknown = renderToStaticMarkup(React.createElement(components.GameIcon, { game: { iconUrl: null, iconSource: null } }));
   assert.match(unknown, /data-icon-source="generic"/);
   assert.match(unknown, /<svg/);
-  assert.doesNotMatch(markup + unknown, /gameIconText|>Godot<|>Unknown</);
+  assert.doesNotMatch(row + markup + unknown, /gameIconText|>Godot<|>Unknown</);
 });
 test('tool fields omit missing/sentinel/invalid values and duplicates while retaining false and zero', () => {
   const data = { missing: null, sentinel: '—', count: 0, active: false, hash: 'abc', duplicate: 'abc', bad: Infinity, opaque: { path: 'x' } };

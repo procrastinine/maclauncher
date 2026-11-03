@@ -296,6 +296,7 @@ function resolveInstalledRuntime({ userDataDir, line, runtimeData, lineConfig, e
     version: overrideVersion,
     variant: preferredVariant,
     ...(requiredVariant ? { strictVariant: true } : {}),
+    // Keep the launcher CPU as the JVM preference; hardware checks admit runnable alternatives.
     hostArch: process.arch
   });
 }
@@ -490,6 +491,7 @@ async function ensureDecompilerJavaRuntime(context, requiredJava = 17) {
     line: installLine,
     version,
     variant: lineConfig.defaultVariant,
+    // Keep the launcher CPU as the JVM preference; hardware checks admit runnable alternatives.
     hostArch: process.arch
   });
   if (!installed?.javaPath) {

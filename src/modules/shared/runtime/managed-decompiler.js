@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const Native = require("./local-native");
+const { createVerifiedIdentityCache } = require("./verified-identity");
 const Custom = require("./custom-runtime");
 const { selectRuntimeVersion } = require("./version-choices");
 const GameData = require("../game-data");
@@ -19,7 +20,7 @@ const Manager = require("../../fna/runtime/manager");
 const REQUIRED = ["ilspycmd.dll", "ilspycmd.deps.json", "ilspycmd.runtimeconfig.json", "ICSharpCode.Decompiler.dll"];
 const SAFE_RELATIVE = value => typeof value === "string" && value && !value.includes("\\") && !/[\x00-\x1f]/.test(value) &&
   !path.posix.isAbsolute(value) && value.split("/").every(part => part && part !== "." && part !== "..");
-const verified = new Map();
+const verified = createVerifiedIdentityCache({ maximum: 64 });
 function pinFor(version, userDataDir) { return Catalog.pinFor(version, userDataDir); }
 function listInstalled(userDataDir, verification = "full") {
   if (!path.isAbsolute(userDataDir || "")) return [];
@@ -75,12 +76,11 @@ function resolveTool({ userDataDir, version, verification = "full" }) {
       identities.push([relative, item.dev, item.ino, item.size, item.mtimeMs, item.ctimeMs]);
     }
     const identity = JSON.stringify([stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs, identities]);
-    if (verification !== "status" && verified.get(root) !== identity) {
+    if (verification !== "status" && !verified.verify(root, { identity: () => identity, verify: () => {
       for (const [relative, checksum] of Object.entries(record.files))
-        if (Native.hashFile(path.join(root, "files", relative)) !== checksum) return null;
-      if (verified.size >= 64) verified.delete(verified.keys().next().value);
-      verified.set(root, identity);
-    }
+        if (Native.hashFile(path.join(root, "files", relative)) !== checksum) return false;
+      return true;
+    } })) return null;
     return { ...record, framework, minimumRuntime,
       root, entryPath: path.join(root, "files", "ilspycmd.dll") };
   } catch { return null; }
@@ -323,6 +323,7 @@ function inspectCustomTool(runtimePath, { verification = "full" } = {}) {
       for (const [relative, description] of Object.entries(values || {})) {
         if (++assets > 2000 || !SAFE_RELATIVE(relative)) throw new Error("ILSpy dependency metadata contains an invalid asset path.");
         if (path.basename(relative) === "_._") continue;
+        // Native RID defaults follow the selected launcher/tool process, not the physical Mac.
         if (kind === "runtimeTargets" && description.rid && !["any", "unix", "osx", "unix-" + process.arch,
           "osx-" + (process.arch === "x64" ? "x64" : "arm64")].includes(description.rid)) continue;
         const candidates = [path.join(root, relative), path.join(root, path.basename(relative))];

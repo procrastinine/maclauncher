@@ -4,11 +4,15 @@ function sourceCatalog(catalog, { id, label, source, versions = catalog.versions
   const selected = new Set(versions);
   const pick = values => Object.fromEntries(Object.entries(values || {}).filter(([version]) => selected.has(version)));
   const installableVersions = (catalog.installableVersions || []).filter(version => selected.has(version));
-  const provider = state || catalog.sourceStates?.[id];
+  const provider = state || catalog.sourceStates?.[id] || (catalog.sourceStates ? {} : null);
+  // Aggregate refresh fields can describe another provider's last request.
+  // An absent field in this provider must not inherit that request's failure.
+  const { status, error, failedAt, fetchedAt, mode, ...shared } = catalog;
+  const refresh = { status: "idle", error: null, fetchedAt: null, mode: null, ...(provider || catalog) };
   const reasons = [...new Set(versions.map(version => catalog.versionRequirements?.[version]?.installReason).filter(Boolean))];
   const installReason = installableVersions.length ? null : provider?.error || reasons.join(" · ") ||
     (provider ? provider.fetchedAt ? "No compatible download is available from this source." : "Refresh versions to list available downloads." : catalog.installReason);
-  return { ...catalog, ...provider, sources: undefined, sourceLinks: undefined, sourceStates: undefined, id, label, source, sourceUrl: source,
+  return { ...shared, ...refresh, sources: undefined, sourceLinks: undefined, sourceStates: undefined, id, label, source, sourceUrl: source,
     versions, installableVersions, includedVersions: (catalog.includedVersions || []).filter(version => selected.has(version)),
     buildableVersions: (catalog.buildableVersions || []).filter(version => selected.has(version)),
     ...(catalog.versionDetails ? { versionDetails: catalog.versionDetails.filter(row => selected.has(row.version)) } : {}),

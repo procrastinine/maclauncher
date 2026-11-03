@@ -1,4 +1,5 @@
 const { spawn } = require("node:child_process");
+const { cloneOrCopySync } = require("../shared/copy-file");
 const fs = require("node:fs");
 const path = require("node:path");
 const Custom = require("../shared/runtime/custom-runtime");
@@ -112,7 +113,7 @@ function cacheIconForEntry(entry, userDataDir, iconPath) {
   try {
     if (path.resolve(iconPath) !== path.resolve(cachePath)) {
       ensureDir(path.dirname(cachePath));
-      fs.copyFileSync(iconPath, cachePath);
+      cloneOrCopySync(iconPath, cachePath);
     }
   } catch {
     return null;
@@ -532,9 +533,10 @@ const resolveRuntimeVariant = Custom.createSelector(GodotRuntimeManager, managed
 
 const resolveGodotInstall = Custom.createSelector(GodotRuntimeManager, function managedGodotInstall(userDataDir, version, variant, major) {
   const installed = GodotCore.listInstalled(userDataDir).filter(item => item.ready !== false && item.appPath);
+  const ready = install => require("../shared/runtime/app-bundle").appBundleStatus(install.appPath).ready;
   if (version) {
     const exact = installed.find(item => item.version === version && item.variant === variant);
-    if (exact) return exact;
+    if (exact && ready(exact)) return exact;
     const base = normalizeBaseVersion(version);
     if (base) {
       const matches = installed.filter(
@@ -542,7 +544,7 @@ const resolveGodotInstall = Custom.createSelector(GodotRuntimeManager, function 
       );
       if (matches.length) {
         matches.sort((a, b) => compareVersionsDesc(a.version, b.version));
-        return matches[0] || null;
+        return matches.find(ready) || null;
       }
     }
     return null;
@@ -553,7 +555,7 @@ const resolveGodotInstall = Custom.createSelector(GodotRuntimeManager, function 
     : matches;
   if (!scoped.length) return null;
   scoped.sort((a, b) => compareVersionsDesc(a.version, b.version));
-  return scoped[0] || null;
+  return scoped.find(ready) || null;
 }, { context: ([userDataDir, version, variant, major]) => ({ userDataDir,
     options: { version, variant }, sectionId: Number.isFinite(major) ? String(major) : "*" }),
   sectionId: context => context.sectionId,
@@ -1015,24 +1017,28 @@ function resolveGraphicsInputs(entry, context) {
 
 function prepareOptionalGraphics(context, prepare) {
   context.signal?.throwIfAborted();
-  try { return prepare(); }
+  let failure;
+  try { const result = prepare(); if (result) return result; }
   catch (error) {
     if (context.signal?.aborted || isAbortError(error)) throw error;
-    // Only the camera/source bridge failed. Preserve unrelated frame inputs
-    // and let ordinary shared preparation retain the other selected stages.
-    const inputs = { ...context.graphicsInputs };
-    delete inputs.cameraProjection;
-    delete inputs.methods;
-    delete inputs.sourceResolution;
-    if (inputs.source === "godot") {
-      for(const key of ["source","sceneFrameAPI","sceneDestinationAPI","sceneAovAPI","sceneCopyBoundaryAPI","sceneAovs","noisyColor","depth","motionVectors","jitter","viewMatrix","projectionMatrix"])delete inputs[key];
-    }
-    context.graphicsInputs = inputs;
-    context.graphicsBridgeFailure = { provider: "godot", reason: String(error?.message || error) };
+    failure = error;
+  }
+  // A dormant/unavailable bridge provides no scene inputs for a later live
+  // switch. Preserve independent frame inputs whether it returned null or failed.
+  const inputs = { ...context.graphicsInputs };
+  delete inputs.cameraProjection;
+  delete inputs.methods;
+  delete inputs.sourceResolution;
+  if (inputs.source === "godot") {
+    for(const key of ["source","sceneFrameAPI","sceneDestinationAPI","sceneAovAPI","sceneCopyBoundaryAPI","sceneAovs","noisyColor","depth","motionVectors","jitter","viewMatrix","projectionMatrix"])delete inputs[key];
+  }
+  context.graphicsInputs = inputs;
+  if (failure) {
+    context.graphicsBridgeFailure = { provider: "godot", reason: String(failure?.message || failure) };
     warnGraphics(context.logger, "Godot renderer controls could not be prepared. Using the original game target.",
       context.graphicsBridgeFailure.reason);
-    return null;
-  }
+  } else if (context.graphicsBridgeFailure?.provider === "godot") delete context.graphicsBridgeFailure;
+  return null;
 }
 
 function prepareNativeLaunch(entry, context) {
@@ -1071,6 +1077,7 @@ async function launchRuntime(runtimeId, entry, context) {
 
   const executablePath = (install.executablePath || resolveExecutablePath(install.appPath));
   if (!executablePath) throw new Error("Godot runtime executable not found.");
+  if (!install.custom) require("../shared/runtime/app-bundle").validateAppBundle(install.appPath, { executablePath });
   const runtimeVersion = install.custom ? await require("./runtime/custom-runtime").versionForPlay(install, context) : install.version;
   target = await require("./project").prepare(entry, {
     target, executable: executablePath, version: runtimeVersion,
@@ -1081,7 +1088,7 @@ async function launchRuntime(runtimeId, entry, context) {
     userDataDir: context.userDataDir, signal: context.signal,
     withRuntimeMutation: context.withRuntimeMutation});
   if (mono) target = mono.target;
-  const workingDirectory = mono?.cwd || path.dirname(target.path);
+  const workingDirectory = mono?.cwd || (target.kind === "project" ? target.path : path.dirname(target.path));
 
   const graphics = prepareOptionalGraphics(context, () => require("./graphics").prepare(entry, {
     target, version: runtimeVersion, userDataDir: context.userDataDir,
@@ -1151,6 +1158,7 @@ async function onRuntimeCrash(entry, { runtimeId, signal }, context) {
     return false;
   }
 }
+
 
 module.exports = {
   metadataSources: ["metadata.js", "pack.js", "svg-icon.js"],

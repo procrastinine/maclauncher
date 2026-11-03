@@ -2,6 +2,7 @@
 // real child identities, pipes, readiness dependencies and bounded retirement.
 import fs from 'node:fs';
 import path from 'node:path';
+import {waitForTestEnd} from '../../helpers/fixture-process.js';
 const [root,name,encoded]=process.argv.slice(2),args=JSON.parse(encoded);
 const marks=path.join(root,'marks');fs.mkdirSync(marks,{recursive:true});
 const ready=value=>fs.writeFileSync(path.join(marks,value),'ready');
@@ -35,4 +36,4 @@ else if(name.startsWith('wait-')){
 }else if(name==='system-suspend'){
  setInterval(()=>{if(fs.existsSync(path.join(marks,'release-suspend')))ready(name);},5);
 }else ready(name);
-setInterval(()=>{},1000);
+waitForTestEnd();

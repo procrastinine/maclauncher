@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
 const { prepareForLaunch } = require("../src/core/runtime-preparation");
 const { selectRuntimeVersion, managerDefaultVersion } = require("../src/modules/shared/runtime/version-choices");
 function effectiveSection(section, settings = {}) {
@@ -235,8 +236,17 @@ test("Godot Play prefers the detected recommendation over the global choice, whi
   assert.equal(f.calls.length, 0);
 });
 
+function readyGodotApp(t) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ordinary-ready-godot-")), app = path.join(root, "Godot.app");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(app, "Contents/MacOS"), { recursive: true });
+  fs.writeFileSync(path.join(app, "Contents/Info.plist"), '<plist version="1.0"><dict><key>CFBundleExecutable</key><string>Godot</string></dict></plist>');
+  fs.writeFileSync(path.join(app, "Contents/MacOS/Godot"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  return app;
+}
+
 test("Godot Play reuses a matching x.y runtime for detected x.y.0 without refresh", async t => {
-  const f = godotFixture(t, { installed: [{ version: "3.2-stable", variant: "mono", appPath: "/ready/Godot.app" }] });
+  const f = godotFixture(t, { installed: [{ version: "3.2-stable", variant: "mono", appPath: readyGodotApp(t) }] });
   assert.equal(await Godot.ensureRuntime({ moduleData: { detectedVersion: "3.2.0", detectedMajor: 3 } }, context("godot")), null);
   assert.equal(f.calls.length, 0);
 });
@@ -443,13 +453,14 @@ test("an installed Adobe projector needs no dependency prompt or download", asyn
 
 test("shared headless preparation installs the detected Godot once and skips the legacy installer", async t => {
   const f = godotFixture(t, { versions: ["4.6-stable", "3.2-stable"] });
+  const appPath = readyGodotApp(t);
   const entry = { moduleData: { detectedVersion: "3.2.0", detectedMajor: 3 } }, ctx = context("godot");
   const approvals = [], installs = [], actions = [];
   ctx.confirmRuntimeInstall = async plan => { approvals.push(plan.version); return true; };
   const prepare = () => prepareForLaunch({ entry, mod: Godot, info: Godot.manifest, context: ctx,
     registry: { listModuleIds: () => ["godot"], getModule: () => Godot },
     runAction: async id => { actions.push(id); assert.equal(id, "runtimeStatus"); return Godot.actions[id](entry, {}, ctx); },
-    install: async (manager, payload) => { installs.push(payload.version); f.installed.push({ version: payload.version, variant: payload.variant, appPath: "/ready/Godot.app" }); }
+    install: async (manager, payload) => { installs.push(payload.version); f.installed.push({ version: payload.version, variant: payload.variant, appPath }); }
   });
   assert.equal(await prepare(), true);
   assert.equal(await prepare(), true);

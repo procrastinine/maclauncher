@@ -35,6 +35,14 @@ contextBridge.exposeInMainWorld("MacLauncher", {
     getState: () => ipcRenderer.invoke("launcher:getState"),
     prioritizeGame: gamePath => ipcRenderer.invoke("launcher:prioritizeGame", gamePath),
     openUtilityWindow: request => ipcRenderer.invoke("launcher:openUtilityWindow", request),
+    appActionPickerState: () => ipcRenderer.invoke("launcher:appActionPickerState"),
+    chooseAppActionTarget: targetId => ipcRenderer.invoke("launcher:appActionPickerChoose", targetId),
+    openAppActionPickerLink: () => ipcRenderer.invoke("launcher:appActionPickerLink"),
+    onAppActionPicker: callback => {
+      const handler = (_event, update) => callback(update);
+      ipcRenderer.on("launcher:appActionPicker", handler);
+      return () => ipcRenderer.removeListener("launcher:appActionPicker", handler);
+    },
     steamState: () => ipcRenderer.invoke("launcher:steamState"),
     steamScan: () => ipcRenderer.invoke("launcher:steamScan"),
     steamImport: ids => ipcRenderer.invoke("launcher:steamImport", ids),
@@ -156,6 +164,7 @@ contextBridge.exposeInMainWorld("MacLauncher", {
       ipcRenderer.invoke("launcher:launchGameWithRuntime", gamePath, runtime),
     createGameCommand: gamePath => ipcRenderer.invoke("launcher:createGameCommand", gamePath),
     stopGame: gamePath => ipcRenderer.invoke("launcher:stopGame", gamePath),
+    removeSessionTarget: (gamePath, id) => ipcRenderer.invoke("launcher:removeSessionTarget", gamePath, id),
     setGameRuntime: (gamePath, runtime) =>
       ipcRenderer.invoke("launcher:setGameRuntime", gamePath, runtime),
     setGameRuntimeSettings: (gamePath, runtimeId, settings) =>
@@ -212,7 +221,7 @@ contextBridge.exposeInMainWorld("MacLauncher", {
     confirmAction: request => ipcRenderer.invoke("launcher:confirmAction", request),
     openExternal: url => ipcRenderer.invoke("launcher:openExternal", url),
     onGameImported: callback => {
-      const listener = (_event, gamePath) => callback(gamePath);
+      const listener = (_event, gamePath, options) => callback(gamePath, options && typeof options === "object" ? options : {});
       ipcRenderer.on("launcher:gameImported", listener);
       return () => ipcRenderer.removeListener("launcher:gameImported", listener);
     },
@@ -225,6 +234,12 @@ contextBridge.exposeInMainWorld("MacLauncher", {
       const listener = (_event, state) => callback(state);
       ipcRenderer.on("launcher:state", listener);
       return () => ipcRenderer.removeListener("launcher:state", listener);
+    },
+    getStartupMigration: () => ipcRenderer.invoke("launcher:getStartupMigration"),
+    onStartupMigration: callback => {
+      const listener = (_event, progress) => callback(progress);
+      ipcRenderer.on("launcher:startupMigration", listener);
+      return () => ipcRenderer.removeListener("launcher:startupMigration", listener);
     },
     onActivity: subscribeActivity
   }

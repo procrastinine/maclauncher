@@ -17,7 +17,8 @@ const source = path.resolve(sourceArg),
 const ownedNames =
           [
             'source.json', 'build.mjs', 'adapt-runtime.mjs', 'provider.mm',
-            'index.js', 'NOTICE.md', 'README.md', '../frame.h'
+            'index.js', 'NOTICE.md', 'README.md', '../frame.h',
+            '../payload-files.hpp'
           ],
       ownedSnapshot = new Map(await Promise.all(ownedNames.map(
           async name => [name, await fs.readFile(path.join(here, name))])));
@@ -350,6 +351,7 @@ await fs.writeFile(path.join(payload, 'provider.json'), JSON.stringify({
   colorSpace : 'linear',
   maximumOutput : [ 7680, 4320 ],
   library : 'libmaclauncher-fsr4.dylib',
+  resolvedPaths : [ 'build/fsr411_native_' ],
   sourceInputs : [ {
     path : 'source-inputs/weights_lossy2.npz',
     size : (await fs.stat(options['--lite2-weights'])).size,

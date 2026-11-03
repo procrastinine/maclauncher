@@ -7,6 +7,7 @@ const { remoteRuntimeCoordinator } = require("../../src/core/runtime-coordinator
 const { errorRecord, restoreError } = require("../../src/core/backend-worker-client");
 const { withRuntimeUse } = require("../../src/core/coordinated-runtime-managers");
 const { runToolCommand } = require("../../src/modules/shared/runtime/tool-command");
+const { untilTestEnds } = require("../helpers/fixture-process");
 const callbacks = new Map();
 let nextCallback = 0;
 const callHost = (method, ...args) => new Promise((resolve, reject) => {
@@ -38,7 +39,7 @@ const managers = ["fixture-a", "fixture-b"].map(id => ({
     // Deliberately models a runtime installer that replaces a shared directory.
     fs.rmSync(installDir, { force: true, recursive: true }); fs.mkdirSync(installDir, { recursive: true });
     const executablePath = path.join(installDir, "runner.cjs");
-    fs.writeFileSync(executablePath, "setInterval(() => {}, 1000);\n");
+    fs.writeFileSync(executablePath, untilTestEnds + "\n");
     fs.appendFileSync(path.join(userDataDir, "install-counts"), `${id}:${version}\n`);
     return { version, installDir, executablePath, ready: true };
   },

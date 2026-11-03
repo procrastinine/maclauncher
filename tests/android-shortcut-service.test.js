@@ -1,6 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');
 const {spawnSync}=require('./helpers/android-java');
 test('Original ShortcutService keeps its package policy, quota, icon and durable state',{timeout:90000},async t=>{
+  if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
  const runtime=process.env.KLEPTON_NATIVE_RUNTIME,home=process.env.JAVA_HOME;
  if(process.platform!=='darwin'||!runtime||!home)return t.skip('Requires the built Android runtime and JDK21');
  const dir=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'android-shortcuts-')));let service,child,appChild,storage,lock;
@@ -11,7 +12,7 @@ test('Original ShortcutService keeps its package policy, quota, icon and durable
  run('javac',['--release','21','-cp',cp,'-d',dir,fixture+'/SignApkSet.java']);
  const key=dir+'/signer.p12';run('keytool',['-genkeypair','-alias','owned','-keyalg','RSA','-keysize','2048','-dname','CN=Shortcut Fixture','-validity','2','-storetype','PKCS12','-keystore',key,'-storepass','test-only-password','-keypass','test-only-password','-noprompt']);
  const prepared=path.join(dir,'android/apps/shortcuts/prepared');fs.mkdirSync(prepared,{recursive:true});const apk=path.join(prepared,'base.apk');
- run('java',['-cp',cp,'SignApkSet',key,path.resolve('tests/fixtures/android-package-metadata/metadata.apk'),apk]);
+ run('java',['-cp',cp,'SignApkSet',key,require('./helpers/android-fixture-tools.cjs').metadataApk(t),apk]);
  run('javac',['--release','21','-cp',cp,'-d',dir,source+'/framework/ServicePortability.java',source+'/framework/PendingIntentCalls.java',
   ...['HostShortcuts','HostUserService','HostPackages','HostRemoteServices','HostFilesystem','HostActivityManager','HostAppOps','HostPermissions','HostProcessServices','HostProcessInfo','HostServices','HostServiceDirectory'].map(name=>source+'/java/maclauncher/android/framework/'+name+'.java'),
   source+'/java/com/android/server/am/HostUidObservers.java',

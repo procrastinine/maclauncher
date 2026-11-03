@@ -1,5 +1,6 @@
 // Copyright (c) MacLauncher contributors. MIT license.
 #include "generation-execution.hpp"
+#include "source-timing.hpp"
 #include "image-admission.hpp"
 #include "image-color.hpp"
 #include "color-island.hpp"
@@ -58,7 +59,7 @@ GenerationSequenceResult encodeGenerationSequence(const GenerationSequenceInput&
    auto event=events[position];const bool eligible=!realOnly||!event.synthetic;const unsigned count=eligible?phases.count:0,base=unsigned(index%2)*capacity+used;used+=count+1;
    auto current=input.image(base+count,stage.width,stage.height);if(!current)return fail("Cannot allocate a generation interval image");
    if(index){
-    ShaderFrame frame{input.commands,event.image,current,++stage.state->processingSequence,input.timeMs-input.durationMs*(1-event.phase),float(input.durationMs*(event.phase-previousPhase)),input.origin,spatialColorForDescription(input.color),nullptr,input.opaque};
+    ShaderFrame frame{input.commands,event.image,current,++stage.state->processingSequence,generationPhaseTime(input.timeMs,input.durationMs,event.phase),float(input.durationMs*(event.phase-previousPhase)),input.origin,spatialColorForDescription(input.color),nullptr,input.opaque};
     auto content=input.content;content.contentId=event.synthetic?event.eventId:content.contentId?content.contentId:input.sourceFrameId;content.synthetic=event.synthetic;content.displayMapped=event.displayMapped;content.qualityContentId=input.content.contentId?input.content.contentId:input.sourceFrameId;content.qualityEpoch=input.content.epoch?input.content.epoch:1;
     const auto encoded=input.execution->encodeGenerationSegment(frame,index,event.synthetic,&content,&event.displayMapped);if(!encoded.encoded)return fail(encoded.reason,encoded.busy);
    }else{
@@ -76,7 +77,7 @@ GenerationSequenceResult encodeGenerationSequence(const GenerationSequenceInput&
    const auto previousEvent=stage.state->previousEventId;if(stage.encoder->requiresScene()){const auto scene=input.execution->bindGenerationScene(input.commands,index,current,input.content.scene,input.origin,index?nil:event.image);if(!scene.encoded)return fail(scene.reason,scene.busy);}
    const bool ownCost=costTiming&&stage.encoder->gpuTimingAvailable();
    const auto encoded=stage.encoder->encodeColorTimed(input.commands,current,outputs,++stage.state->sequence,phases,event.displayMapped,input.execution->generationGpuTimingRequested(index)||ownCost);
-   if(input.observe)input.observe(stage,encoded.encoded?RuntimeStatusPhase::Encoded:RuntimeStatusPhase::Bypassed,encoded.reason);
+   if(input.observe&&(!encoded.encoded||!encoded.completion))input.observe(stage,encoded.encoded?RuntimeStatusPhase::Encoded:RuntimeStatusPhase::Bypassed,encoded.reason);
    if(!encoded.encoded)return fail(encoded.reason.empty()?"The generation interval is busy":encoded.reason,encoded.busy);
    if(encoded.ready){auto content=input.content;if(!content.contentId)content.contentId=input.sourceFrameId;if(!content.epoch)content.epoch=1;input.execution->recordGenerationGpuTiming(input.commands,index,content,encoded.gpuTiming);
     if(ownCost&&encoded.gpuTiming){const auto ticket=encoded.gpuTiming;const auto execution=input.execution;const auto stageId=stage.id;[input.commands addCompletedHandler:^(id<MTLCommandBuffer>completed){if(completed.status==MTLCommandBufferStatusCompleted)if(const auto ns=ticket())execution->recordRowCost(stageId,ns/1e6,false,0);}];}

@@ -1,6 +1,7 @@
 // Descriptive metadata only. Original provider parsers remain authoritative for
 // executable shader syntax, resources, parameters and supported input stages.
 const fs = require("node:fs"), path = require("node:path");
+const { hasFineChangeTime } = require("../file-time");
 const VERSION = 19, MAX_FILE_BYTES = 8 * 1024 * 1024, fileCache = new Map();
 const MpvHook=require("./mpv-hook-contract");
 const Resize=require("./shader-resize-contract");
@@ -229,6 +230,11 @@ function analyzeFile(file, format = "libplacebo") {
   if(traits.inputPolicy==="linear-source")traits={...traits,sharedOnly:true};
   const analysis = { parserVersion: VERSION, sourceSize: stat.size, sourceMtimeMs: stat.mtimeMs, sourceCtimeMs: stat.ctimeMs,
     traits, ...(dependencies?.length?{dependencies}:{}) };
+  // Coarse source/include stamps cannot distinguish content revisions. Only
+  // these bounded shader inputs need byte identities, not arbitrary game assets.
+  if (!hasFineChangeTime(stat)) analysis.sourceHash = require("node:crypto").createHash("sha256").update(bytes).digest("hex");
+  if (dependencies?.some(row => row.stamp !== null && !hasFineChangeTime(metadataStat(row.file))))
+    analysis.dependencyHashes = dependencies.map(row => row.stamp === null ? null : require("../runtime/bundled-native").readRegular(fs.realpathSync(row.file), MAX_FILE_BYTES).sha256);
   analysis.sourceRevision=sourceRevision(analysis,stat);
   if (parserIdentity()) analysis.parser = parserIdentity();
   if (fileCache.size >= 4096) fileCache.delete(fileCache.keys().next().value);
@@ -284,13 +290,13 @@ function flush() {
   } catch {}
 }
 function current(analysis,stat){
-  return analysis?.parserVersion===VERSION&&(analysis.parser??null)===parserIdentity()&&analysis.sourceSize===stat.size&&analysis.sourceMtimeMs===stat.mtimeMs&&analysis.sourceCtimeMs===stat.ctimeMs&&
-    (!analysis.dependencies||Array.isArray(analysis.dependencies)&&analysis.dependencies.every(row=>{try{const value=metadataStat(row.file);return [value.dev,value.ino,value.size,value.mtimeMs,value.ctimeMs].join(":")===row.stamp;}catch{return row.stamp===null;}}));
+  return hasFineChangeTime(stat)&&analysis?.parserVersion===VERSION&&(analysis.parser??null)===parserIdentity()&&analysis.sourceSize===stat.size&&analysis.sourceMtimeMs===stat.mtimeMs&&analysis.sourceCtimeMs===stat.ctimeMs&&
+    (!analysis.dependencies||Array.isArray(analysis.dependencies)&&analysis.dependencies.every(row=>{try{const value=metadataStat(row.file);return hasFineChangeTime(value)&&[value.dev,value.ino,value.size,value.mtimeMs,value.ctimeMs].join(":")===row.stamp;}catch{return row.stamp===null;}}));
 }
 function outputContract(traits={}){
   const sizing=traits.requestedOutputExtent?"stage":traits.conditionalGeometry||traits.displayDependentGeometry||traits.unresolvedGeometry?"shader":traits.outputScale?"intrinsic":"preserve";
   // A preserved extent has no requested output unless one is declared.
   return {domain:"image",sizing,...(traits.outputScale?{scale:traits.outputScale}:{}),extentEditable:sizing==="preserve"?traits.outputExtentEditable===true:traits.outputExtentEditable!==false,resizeDirections:Resize.forTraits(traits),...(traits.outputScaleRange?{scaleRange:traits.outputScaleRange}:{}),...(traits.preservesSize===true?{preservesSize:true}:{}),...(traits.compositeTarget?{compositeTarget:true}:{}),...(traits.geometryRules?.length?{geometryRules:traits.geometryRules}:{}),...(traits.resizeContext?{resizeContext:traits.resizeContext}: {})};
 }
-function sourceRevision(analysis,stat){return require("node:crypto").createHash("sha256").update(JSON.stringify([VERSION,stat.dev,stat.ino,stat.size,stat.mtimeMs,stat.ctimeMs,analysis?.dependencies||[]])).digest("hex");}
+function sourceRevision(analysis,stat){return require("node:crypto").createHash("sha256").update(JSON.stringify([VERSION,stat.dev,stat.ino,stat.size,stat.mtimeMs,stat.ctimeMs,analysis?.dependencies||[],analysis?.sourceHash||null,analysis?.dependencyHashes||[]])).digest("hex");}
 module.exports = { VERSION, inspect, inputPolicy, analyzeFile, current, outputContract, sourceRevision, withMetadataSnapshot, group, configure, flush, parserIdentity };

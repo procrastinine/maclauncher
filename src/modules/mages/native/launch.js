@@ -44,6 +44,7 @@ function verifyNativeProfile(install) {
   let manifestPath = Bundle.bundledManifestPath(install), expectedManifestSha256 = install.bundledManifestSha256;
   const runtimeRoot = path.join(install.installDir, downloaded ? "project-payload/files" : "files");
   if (downloaded) {
+    // Catalog identity is scoped to the launcher build, independently of physical hardware.
     const record = ProjectCatalog.validateProjectCatalog({ schemaVersion: 2, projectId: "impacto", updatePolicy: "manual",
       packages: [install.catalogEntry?.projectPackage] }, { projectId: "impacto", repository: "procrastinine/maclauncher-builds",
       architecture: process.arch }).packages[0];

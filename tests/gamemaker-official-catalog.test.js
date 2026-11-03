@@ -124,6 +124,33 @@ function versionDll(version = [2024, 0, 0, 32]) {
   for (const offset of [8, 16]) { bytes.writeUInt32LE(version[0] * 65536 + version[1], fixed + offset); bytes.writeUInt32LE(version[2] * 65536 + version[3], fixed + offset + 4); }
   return bytes;
 }
+test("self-contained Igor normalizes Intel Mach-O slices without changing its x64 RID or records", t => {
+  const { ARM64, X64, image } = require("./fixtures/macho-image");
+  for (const [arch, cpu, other] of [["x64", X64, ARM64], ["arm64", ARM64, X64]]) {
+    const folder = path.join(temporary(t), arch); fs.mkdirSync(folder);
+    const target = `net8.0/osx-${arch}`;
+    fs.writeFileSync(path.join(folder, "Igor.dll"), versionDll());
+    fs.writeFileSync(path.join(folder, "Igor.runtimeconfig.json"), JSON.stringify({runtimeOptions:{includedFrameworks:[{name:"Microsoft.NETCore.App",version:"8.0.0"}]}}));
+    const deps = {runtimeTarget:{name:target},targets:{[target]:{"Igor/1.0.0":{runtime:{"Igor.dll":{}},native:{"libfixture.dylib":{}}}}}};
+    fs.writeFileSync(path.join(folder, "Igor.deps.json"), JSON.stringify(deps));
+    const executable = path.join(folder, "Igor"), library = path.join(folder, "libfixture.dylib");
+    fs.writeFileSync(executable, image({cpu,fileType:2,installName:null}));
+    fs.writeFileSync(library, image({cpu}));
+    const installed = ManagedTools.inspectIgorDirectory(folder, arch);
+    assert.equal(installed.architecture, arch); assert.equal(installed.version, "2024.0.0.32");
+    assert.equal(installed.files.length, 5); assert.match(installed.dependencyTreeSha256, /^[a-f0-9]{64}$/);
+    fs.writeFileSync(library, image({cpu:other}));
+    assert.throws(() => ManagedTools.inspectIgorDirectory(folder, arch), /native dependency for another architecture/);
+    fs.writeFileSync(library, image({cpu}));
+    fs.writeFileSync(executable, image({cpu:other,fileType:2,installName:null}));
+    assert.throws(() => ManagedTools.inspectIgorDirectory(folder, arch), /native executable is for another Mac architecture/);
+    fs.writeFileSync(executable, image({cpu,fileType:2,installName:null}));
+    deps.runtimeTarget.name = "net8.0/osx-" + (arch === "x64" ? "x86_64" : "x64");
+    fs.writeFileSync(path.join(folder, "Igor.deps.json"), JSON.stringify(deps));
+    assert.throws(() => ManagedTools.inspectIgorDirectory(folder, arch), /not a complete self-contained build/);
+  }
+});
+
 test("Igor version comes from bounded PE fixed metadata and is independent of runtime and archive versions", async t => {
   const bytes = versionDll();
   assert.equal(Version.parseIgorVersion(bytes).version, "2024.0.0.32");

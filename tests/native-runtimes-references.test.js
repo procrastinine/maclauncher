@@ -109,14 +109,14 @@ function undeclaredLookups(file, source, known) {
   return problems;
 }
 
-function applicationSources() {
+function applicationSources({ all = false } = {}) {
   const selected = require("../scripts/check-packaging.cjs").applicationFileSelector(require("../package.json"));
   const files = [];
   (function walk(relative) {
     for (const entry of fs.readdirSync(path.join(ROOT, relative), { withFileTypes: true })) {
       const item = relative + "/" + entry.name;
       if (entry.isDirectory()) { if (!["src/external", "src/renderer"].includes(item)) walk(item); }
-      else if (/\.(?:c?js|mjs)$/.test(entry.name) && selected(item)) files.push(item);
+      else if (/\.(?:c?js|mjs)$/.test(entry.name) && (all || selected(item))) files.push(item);
     }
   })("src");
   return files;
@@ -214,4 +214,17 @@ test("included-helper lookups read only declarations that application packaging 
     }
   }
   assert.deepEqual(problems, []);
+});
+
+test("ordinary packaging includes shared helpers and public backcompat source without depending on Git staging", () => {
+  const selected = require("../scripts/check-packaging.cjs").applicationFileSelector(require("../package.json"));
+  const Content = require("../scripts/runtime-content.cjs");
+  const required = new Set(["src/modules/shared/file-time.js", "src/core/runtime-errors.mjs", "src/modules/shared/atomic-file.js"]);
+  for (const file of applicationSources({ all: true }))
+    if (file.includes("/backcompat/") && !Content.excludedReason(file)) required.add(file);
+  assert.ok(required.size > 3, "Isolated public compatibility readers are part of the source closure");
+  for (const file of required) {
+    assert.equal(fs.lstatSync(path.join(ROOT, file)).isFile(), true, file);
+    assert.equal(selected(file), true, `Application archive omits consumed public source: ${file}`);
+  }
 });

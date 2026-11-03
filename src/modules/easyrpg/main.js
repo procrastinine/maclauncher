@@ -3,7 +3,6 @@ const path = require("node:path");
 const manifest = require("./manifest.json");
 const { detectGame, inspectProject } = require("./detect");
 const manager = require("./runtime/manager");
-const { compareVersions } = require("./runtime/catalog");
 const GameData = require("../shared/game-data");
 const Tools = require("./tools");
 
@@ -13,21 +12,17 @@ function gameDirectory(entry, context) {
   return GameData.resolveGameModuleDir(context.userDataDir, entry.gameId, manifest.id);
 }
 
-function saveDirectory(entry, context) {
-  const directory = entry.saveDirOverride || path.join(gameDirectory(entry, context), "saves");
-  if (!path.isAbsolute(directory) || directory.includes("\0")) throw new Error("The EasyRPG save location must be an absolute path.");
+function projectDirectory(entry) {
+  const directory = entry.contentRootDir || entry.gamePath;
+  if (typeof directory !== "string" || !path.isAbsolute(directory) || directory.includes("\0"))
+    throw new Error("The EasyRPG project location must be an absolute path.");
   return directory;
 }
 
-function seedSaves(root, directory, moduleDir) {
-  const marker = path.join(moduleDir, "saves-imported.json");
-  if (fs.existsSync(marker)) return;
-  for (const file of fs.readdirSync(root, { withFileTypes: true })) {
-    if (!file.isFile() || !/^Save\d+\.lsd$/i.test(file.name)) continue;
-    const target = path.join(directory, file.name);
-    if (!fs.existsSync(target)) fs.copyFileSync(path.join(root, file.name), target, fs.constants.COPYFILE_EXCL);
-  }
-  fs.writeFileSync(marker, JSON.stringify({ sourceRoot: root }));
+function saveDirectory(entry) {
+  const directory = entry.saveDirOverride || projectDirectory(entry);
+  if (!path.isAbsolute(directory) || directory.includes("\0")) throw new Error("The EasyRPG save location must be an absolute path.");
+  return directory;
 }
 
 function stringValue(value, label) {
@@ -35,15 +30,15 @@ function stringValue(value, label) {
   return value.trim();
 }
 
-function launchArguments(entry, context, { version } = {}) {
-  const root = entry.contentRootDir || entry.gamePath;
+function launchArguments(entry, context) {
+  const root = projectDirectory(entry);
   if (!inspectProject(root)) throw new Error("The RPG Maker database or map tree is missing or invalid.");
-  const directory = gameDirectory(entry, context);
-  const saves = saveDirectory(entry, context);
-  const config = path.join(directory, "config");
+  const saves = saveDirectory(entry);
   const settings = context.runtimeSettings || {};
-  const args = ["--project-path", root, "--save-path", saves, "--config-path", config, "--no-log-color"];
-  if (version && compareVersions(version, "0.8.1") >= 0) args.push("--log-file", path.join(directory, "easyrpg.log"));
+  // Player configuration follows upstream defaults or visible game arguments.
+  // Save-location overrides remain separate from configuration preferences.
+  const args = ["--project-path", root, "--no-log-color"];
+  if (entry.saveDirOverride) args.push("--save-path", saves);
   if (settings.fullscreen === true) args.push("--fullscreen");
   else args.push("--window");
   const scaling = settings.scaling || "integer";
@@ -73,15 +68,13 @@ function launchArguments(entry, context, { version } = {}) {
   const extra = settings.appArgs || [];
   if (!Array.isArray(extra) || extra.length > 128) throw new Error("Invalid EasyRPG game arguments.");
   for (const arg of [...extra.map(value => stringValue(value, "EasyRPG game argument")), ...(context.gameArguments || [])]) {
-    if (/^(?:--(?:project-path|save-path|config-path|log-file)(?:=|$)|-c(?:=|$))/.test(arg))
-      throw new Error("Game arguments cannot change the EasyRPG project, save, configuration or log paths.");
+    if (/^--(?:project-path|save-path)(?:=|$)/.test(arg))
+      throw new Error("Game arguments cannot change the selected EasyRPG project or save location. Use the save folder setting.");
     args.push(arg);
   }
-  fs.mkdirSync(saves, { recursive: true });
-  fs.mkdirSync(config, { recursive: true });
-  seedSaves(root, saves, directory);
-  entry.defaultSaveDir = saves;
-  return { args, directory, saves };
+  if (entry.saveDirOverride) fs.mkdirSync(saves, { recursive: true });
+  entry.defaultSaveDir = root;
+  return { args, directory: root, saves };
 }
 
 module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [manager],
@@ -91,13 +84,14 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     const selection = manager.resolveSelection(entry, context.settings, context.userDataDir);
     return selection.ready ? null : { managerId: "easyrpg", version: selection.version, ...(selection.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {} };
   },
-  onImport: (entry, context) => { entry.defaultSaveDir = saveDirectory(entry, context); },
-  onRuntimeChange: (entry, context) => { entry.defaultSaveDir = saveDirectory(entry, context); },
+  resolveSaveLocations: entry => ({ primaryDirectory: projectDirectory(entry) }),
+  onImport: entry => { entry.defaultSaveDir = projectDirectory(entry); },
+  onRuntimeChange: entry => { entry.defaultSaveDir = projectDirectory(entry); },
   launchRuntime: async (runtimeId, entry, context) => {
     if (runtimeId !== "easyrpg") return null;
     const selection = manager.resolveSelection(entry, context.settings, context.userDataDir);
     if (!selection.ready) throw new Error(selection.reason);
-    const launch = launchArguments(entry, context, selection);
+    const launch = launchArguments(entry, context);
     context.onEntryChange?.(entry);
     return context.spawnDetachedChecked(selection.install.executablePath, launch.args,
       { cwd: launch.directory }, selection.install.needsRosetta);
@@ -115,5 +109,5 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
       return { ...project, compatibility: project.hasDynRpg ? "DynRPG plug-ins may require the original Windows runtime." : "RPG Maker 2000/2003 data" };
     }
   },
-  __test: { gameDirectory, saveDirectory, launchArguments, seedSaves }
+  __test: { gameDirectory, saveDirectory, launchArguments }
 };

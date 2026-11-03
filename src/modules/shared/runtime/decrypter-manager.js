@@ -17,7 +17,7 @@ function createManager(dependencies = {}) {
         throw new Error("The RPGMakerDecrypter package uses an unsupported tool format.");
     },
     verifyPayload(selected) {
-      Bundled.verifyPayload(selected.root, selected.declaration);
+      Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
       const image = MachO.assertSystemLibraryClosure(MachO.readMachOLoadCommands(selected.executablePath), {
         fileType: 2, maximumMacOS: selected.declaration.minimumMacOS });
       const required = selected.declaration.arch === "universal" ? ["arm64", "x86_64"]

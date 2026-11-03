@@ -2,6 +2,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const GameData = require('../../shared/game-data');
+const ExecutionRequirements = require('../../shared/effects/execution-requirements');
+const SceneDemand = require('../../shared/effects/scene-demand');
 const SOURCE = require('./source.json');
 const SCENE_AOVS = Object.freeze(['normal','roughness','resolvedRadiance','resolvedSpecular','metallic']);
 
@@ -51,21 +53,24 @@ function write(file, text) {
   fs.writeFileSync(temporary, text, { mode: 0o600 });
   fs.renameSync(temporary, file);
 }
+// The helper serves only a plan that consumes what the running Godot renderer
+// alone supplies: scene inputs for an enabled row, or a changed 3D render size.
+// Both Godot runtimes present through the shared window adapter.
+function needed(entry, { userDataDir, root } = {}) {
+  return ExecutionRequirements.analyze(entry).needed.sourceResolution ||
+    SceneDemand.sceneDemand(entry, { userDataDir }, { root, graphicsHost: 'window' }).length > 0;
+}
 function prepare(entry, { target, version, userDataDir, root, platform = process.platform } = {}) {
-  if (platform !== 'darwin' || !supportedVersion(version)) return null;
-  // This module-owned activation bootstrap makes later camera/source selection
-  // possible inside Godot. It is separate from shared frame processing: an
-  // inactive bridge adds no compositor callback or viewport mutation, and an
-  // unavailable helper returns before any private target is prepared.
+  // A launch whose plan does not need the helper uses the original project or
+  // pack, with no private override, link or cache. Godot reads override.cfg
+  // only beside the project or main pack, so the autoload needs this location.
+  if (platform !== 'darwin' || !supportedVersion(version) || !needed(entry, { userDataDir, root })) return null;
   const installed = resolve(root);
-  if (!installed) {
-    if (!['fsr2', 'fsr3'].includes(entry?.graphics?.temporalMethod)) return null;
-    throw new Error('Godot temporal camera support is missing from the graphics runtime.');
-  }
+  if (!installed) throw new Error('The Godot camera helper is missing from the graphics runtime.');
   if (!entry?.gameId || !userDataDir || !target || !['pack', 'project'].includes(target.kind)) throw new Error('Godot graphics preparation requires a game and launch target.');
   const source = path.resolve(target.path);
   const identity = crypto.createHash('sha256').update(target.kind + '\0' + source).digest('hex').slice(0, 16);
-  const directory = path.join(GameData.resolveGameModuleDir(userDataDir, entry.gameId, 'godot'), 'graphics', identity);
+  const directory = path.join(GameData.resolveGameModuleDir(userDataDir, entry.gameId, 'godot'), 'camera', identity);
   fs.mkdirSync(directory, { recursive: true });
   let launchPath;
   const originalDirectory = target.kind === 'pack' ? path.dirname(source) : source;
@@ -73,22 +78,12 @@ function prepare(entry, { target, version, userDataDir, root, platform = process
     launchPath = path.join(directory, path.basename(source));
     link(source, launchPath);
   } else {
+    // Every project entry, the .godot import cache included, is the original;
+    // reads and writes reach the same files as a direct launch.
     launchPath = path.join(directory, 'project');
     fs.mkdirSync(launchPath, { recursive: true });
     for (const item of fs.readdirSync(source, { withFileTypes: true })) {
-      if (item.name === 'override.cfg' || item.name === '.godot') continue;
-      link(path.join(source, item.name), path.join(launchPath, item.name));
-    }
-    const cache = path.join(source, '.godot');
-    if (fs.existsSync(cache)) {
-      const privateCache = path.join(launchPath, '.godot'); fs.mkdirSync(privateCache, { recursive: true });
-      for (const item of fs.readdirSync(cache, { withFileTypes: true })) {
-        if (!['imported', 'uid_cache.bin', 'global_script_class_cache.cfg', 'extension_list.cfg'].includes(item.name)) continue;
-        const destination = path.join(privateCache, item.name);
-        try { if (fs.lstatSync(destination).isSymbolicLink()) fs.unlinkSync(destination); }
-        catch (error) { if (error.code !== 'ENOENT') throw error; }
-        fs.cpSync(path.join(cache, item.name), destination, { recursive: true, mode: fs.constants.COPYFILE_FICLONE });
-      }
+      if (item.name !== 'override.cfg') link(path.join(source, item.name), path.join(launchPath, item.name));
     }
   }
   let original = '';
@@ -100,15 +95,10 @@ function prepare(entry, { target, version, userDataDir, root, platform = process
   write(path.join(target.kind === 'pack' ? directory : launchPath, 'override.cfg'), override);
   const extension = path.join(directory, 'camera.gdextension');
   write(extension, '[configuration]\nentry_symbol="maclauncher_godot_camera_init"\ncompatibility_minimum="4.4"\nreloadable=false\n\n[libraries]\nmacos=' + JSON.stringify(installed.library) + '\n');
-  const graphics = entry.graphics || {};
-  const engineSpatial = installed.sourceResolutionAPI === 1 && !entry.effects &&
-    (!graphics.neuralMethod || graphics.neuralMethod === 'off') && (!graphics.temporalMethod || graphics.temporalMethod === 'off') &&
-    ['bilinear', 'metalfx', 'fsr1'].includes(graphics.spatialMethod) ? graphics.spatialMethod : null;
   return { target: { ...target, path: launchPath }, directory, environment: {
     MACLAUNCHER_GODOT_CAMERA_EXTENSION: extension,
     MACLAUNCHER_GODOT_CAMERA_SCRIPT: path.join(installed.directory, 'camera-effect.gd'),
-    ...(installed.sceneAovAPI?{MACLAUNCHER_GODOT_AOV_SCRIPT:path.join(installed.directory,'aov-effect.gd')}:{ }),
-    ...(engineSpatial ? { MACLAUNCHER_GODOT_SPATIAL_METHOD: engineSpatial } : {})
+    ...(installed.sceneAovAPI?{MACLAUNCHER_GODOT_AOV_SCRIPT:path.join(installed.directory,'aov-effect.gd')}:{ })
   } };
 }
 module.exports = { supportedVersion, resolve, prepare };

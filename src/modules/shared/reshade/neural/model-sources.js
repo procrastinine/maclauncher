@@ -1,4 +1,5 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
+const { cloneOrCopy } = require("../../copy-file");
 const Zip = require("../../runtime/zip"), Models = require("./models");
 const PICKER_EXTENSIONS=Object.freeze([...Models.PACKAGE_EXTENSIONS,"safetensors","pth","dll","so","app","zip"]);
 const LIMITS = {entries: 16384, directory: 16 << 20, packages: 16, notice: 2 << 20, notices: 8 << 20,
@@ -167,7 +168,7 @@ async function materialize(source, destination, {signal, onProgress, modelIdenti
     const extension=nr?'dlssmodel':depth?'depthmodel':restoration?"restorationmodel":source.weights.operation==="mlx-vsr"?"vsrmodel":"fgmodel",modelPath=path.join(destination,"imported."+extension);
     fs.mkdirSync(modelPath);const file="weights.safetensors",target=path.join(modelPath,file);
     const convertedSource=source.weights.adapter?await require('./weight-adapters').convert({...source.weights,file:source.file},target,{signal}):null;
-    if(!convertedSource)await fs.promises.copyFile(source.file,target,fs.constants.COPYFILE_FICLONE);
+    if(!convertedSource)await cloneOrCopy(source.file,target,{signal});
     const hash=crypto.createHash("sha256");for await(const chunk of fs.createReadStream(target,{signal}))hash.update(chunk);
     const tensor=(name,scale=1,channels=3)=>({name,dataType:"float32",layout:"nhwc",shape:scale===1?[1,"height","width",channels]:[1,{symbol:"height",multiplier:scale},{symbol:"width",multiplier:scale},channels]});
     const value={schemaVersion:1,identifier:modelIdentifier||(nr?'org.mlxdlss.external.neural-rendering-transformer':depth?'depth-anything-v2-small':restoration||source.weights.operation==="rife"?source.weights.architecture:source.weights.operation==="mlx-vsr"?"rtx-vsr-1.8.2-highbitrate-low-2x":"mlxdlss-video-frame-generation"),
@@ -177,7 +178,7 @@ async function materialize(source, destination, {signal, onProgress, modelIdenti
     if(source.provenance)value.sourceFiles=source.provenance;
     if(source.denoiseWeights){
       const companion="weights-wdn.safetensors",target=path.join(modelPath,companion),converted=source.denoiseWeights.adapter?await require('./weight-adapters').convert(source.denoiseWeights,target,{signal}):null;
-      if(!converted)await fs.promises.copyFile(source.denoiseWeights.file,target,fs.constants.COPYFILE_FICLONE);
+      if(!converted)await cloneOrCopy(source.denoiseWeights.file,target,{signal});
       if(converted)value.sourceFiles=[...(value.sourceFiles||[]),converted];
       const hash=crypto.createHash("sha256");for await(const chunk of fs.createReadStream(target,{signal}))hash.update(chunk);
       value.denoiseWeights={file:companion,sha256:hash.digest("hex"),tensors:source.denoiseWeights.tensors};

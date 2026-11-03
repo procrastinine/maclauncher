@@ -3,10 +3,11 @@ const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),vm=r
 const {spawn,execFileSync}=require('node:child_process'),{once,EventEmitter}=require('node:events');
 const {bindProcessStop,processStopBinding,requestProcessStop,afterProcessStop}=require('../src/core/process-lifecycle');
 const {createBackendService}=require('../src/core/backend-worker-client');
+const {untilTestEnds}=require('./helpers/fixture-process');
 const workerPath=path.join(__dirname,'fixtures/runtime-stop-worker.cjs');
 const wait=async check=>{const end=Date.now()+5000;while(!check()){if(Date.now()>end)throw Error('Owned Stop fixture timed out');await new Promise(resolve=>setTimeout(resolve,5));}};
 function childFixture(t){
-  const child=spawn(process.execPath,['-e',`process.stdin.on('data',()=>process.exit(0));console.log('ready');setInterval(()=>{},1000)`],{detached:true,stdio:['pipe','pipe','pipe']});
+  const child=spawn(process.execPath,['-e',`process.stdin.on('data',()=>process.exit(0));console.log('ready');${untilTestEnds}`],{detached:true,stdio:['pipe','pipe','pipe']});
   t.after(async()=>{if(child.exitCode==null&&child.signalCode==null){const exited=once(child,'exit');child.kill('SIGKILL');await exited;}});return child;
 }
 test('one actual child uses its runtime Stop once, without group termination, including an early root exit',async t=>{
@@ -62,7 +63,7 @@ test('backend cleanup failures propagate through the real worker proxy',async t=
   assert.equal(child.exitCode,null);await service.request('game:fixture','disposeChild');
 });
 test('direct CLI SIGINT calls the same owner and preserves its clean exit',async t=>{
-  const script=`const{spawn}=require('node:child_process'),{once}=require('node:events');const{bindProcessStop}=require(${JSON.stringify(path.resolve(__dirname,'../src/core/process-lifecycle'))});const{waitForChild}=require(${JSON.stringify(path.resolve(__dirname,'../src/core/game-cli'))});(async()=>{const child=spawn(process.execPath,['-e',"process.stdin.on('data',()=>process.exit(0));console.log('ready');setInterval(()=>{},1000)"],{stdio:['pipe','pipe','pipe']});await once(child.stdout,'data');bindProcessStop(child,async()=>{console.log('owned-stop');const done=once(child,'exit');child.stdin.write('stop');await done;return true});const done=waitForChild(child);console.log('ready');console.log('exit='+await done);})().catch(e=>{console.error(e);process.exitCode=1});`;
+  const script=`const{spawn}=require('node:child_process'),{once}=require('node:events');const{bindProcessStop}=require(${JSON.stringify(path.resolve(__dirname,'../src/core/process-lifecycle'))});const{waitForChild}=require(${JSON.stringify(path.resolve(__dirname,'../src/core/game-cli'))});(async()=>{const child=spawn(process.execPath,['-e',"process.stdin.on('data',()=>process.exit(0));console.log('ready');"+${JSON.stringify(untilTestEnds)}],{stdio:['pipe','pipe','pipe']});await once(child.stdout,'data');bindProcessStop(child,async()=>{console.log('owned-stop');const done=once(child,'exit');child.stdin.write('stop');await done;return true});const done=waitForChild(child);console.log('ready');console.log('exit='+await done);})().catch(e=>{console.error(e);process.exitCode=1});`;
   const host=spawn(process.execPath,['-e',script],{detached:true,stdio:['ignore','pipe','pipe']});
   t.after(()=>{if(host.exitCode==null&&host.signalCode==null)try{process.kill(-host.pid,'SIGKILL');}catch{}});let output='';host.stdout.on('data',bytes=>output+=bytes);
   await wait(()=>output.includes('ready'));const closed=once(host,'close');host.kill('SIGINT');assert.deepEqual(await closed,[0,null]);assert.match(output,/owned-stop/);assert.match(output,/exit=0/);
@@ -137,7 +138,7 @@ test('actual launcher and main retain module, runtime and graphics leases until 
 test('AIM Stop signals only its retained controller and preserves original shutdown status',async t=>{
   const {stopRuntime}=require('../src/modules/android/providers/aim');
   for(const code of [0,7]){
-    const child=spawn(process.execPath,['-e',`process.on('SIGTERM',()=>setTimeout(()=>process.exit(${code}),20));console.log('ready');setInterval(()=>{},1000)`],{detached:true,stdio:['ignore','pipe','pipe']});
+    const child=spawn(process.execPath,['-e',`process.on('SIGTERM',()=>setTimeout(()=>process.exit(${code}),20));console.log('ready');${untilTestEnds}`],{detached:true,stdio:['ignore','pipe','pipe']});
     t.after(()=>{if(child.exitCode==null&&child.signalCode==null)child.kill('SIGKILL');});await once(child.stdout,'data');
     let calls=0;const kill=child.kill.bind(child);t.mock.method(child,'kill',signal=>{calls++;assert.equal(signal,'SIGTERM');return kill(signal);});
     assert.equal(await stopRuntime({child,isCurrent:()=>false}),false);assert.equal(await stopRuntime({child,pid:child.pid+1}),false);assert.equal(calls,0);

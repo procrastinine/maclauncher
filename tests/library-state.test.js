@@ -28,7 +28,8 @@ test("normalizeLibraryState defaults and dedupes", () => {
 });
 
 test("unused version 1 sort metadata migrates to Default without changing manual order or favorites", () => {
-  const legacy = normalizeLibraryState({ version: 1, order: ['b', 'a'], favorites: ['a'], sort: { mode: 'recent', direction: 'desc' } });
+  const { convertLibrarySettings } = require('../src/core/backcompat/settings-conversions');
+  const legacy = normalizeLibraryState(convertLibrarySettings({ version: 1, order: ['b', 'a'], favorites: ['a'], sort: { mode: 'recent', direction: 'desc' } }));
   assert.equal(legacy.version, 2);
   assert.deepEqual(legacy.order, ['b', 'a']);
   assert.deepEqual(legacy.favorites, ['a']);
@@ -52,6 +53,10 @@ test("library view sorts without mutating manual order and groups favorites only
   assert.deepEqual(ids("alphabetical", "desc"), ["a", "b", "c"]);
   assert.deepEqual(ids("type", "asc"), ["b", "c", "a"]);
   assert.deepEqual(entries.map(game => game.gameId), ["a", "b", "c"]);
+  const session = [...entries, { gameId: "s", name: "Zed", createdAt: 1, ephemeral: true }];
+  for (const [mode, direction] of [["recent", "desc"], ["added", "asc"], ["alphabetical", "asc"], ["type", "desc"]])
+    assert.equal(sortLibraryGames(session, { mode, direction }, ["b"])[0].gameId, "s", mode);
+  assert.deepEqual(sortLibraryGames(session, { mode: "custom" }, ["b"]).map(game => game.gameId), ["b", "s", "a", "c"]);
 });
 
 test("library view resolves tied dates by manual order and unknown dates last", () => {

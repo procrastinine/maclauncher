@@ -347,6 +347,8 @@ test("source control follows native renderer capability while unsupported reques
   assert.deepEqual(height.document.nodes[0].outputSize, {height: 480});
   assert.equal(height.environment.RESHADE_RENDER_MAX_HEIGHT, undefined);
   assert.deepEqual(Effects.info(f.entry, {...f.options, graphicsInputs: {nativeVideo: true}}).sourceResolution, {heights: false, multipliers: [], processing: true});
+  // A source declared without resolution control, such as a captured window, keeps its size.
+  assert.deepEqual(Effects.info(f.entry, {...f.options, graphicsInputs: {sourceResolution: false}}).sourceResolution, {heights: false, multipliers: []});
 });
 test("source filters are renderer declared and unavailable launch selections keep working stages", async t => {
   const f = fixture(t), warnings = [];
@@ -1470,10 +1472,10 @@ test("contextual reconstruction templates use installed bindings and report miss
   f.record.features.graphics.frameGenerationMethods = ["lsfg"];f.record.features.graphics.presentation.hosts.window.frameGeneration = true;
   fs.writeFileSync(path.join(f.root, "runtime.json"), JSON.stringify(f.record));
   const entry = {...f.entry, effects: undefined, graphics: {spatialMethod: "metalfx"}}, template = Effects.templates(entry, f.options)[0];
-  assert.equal(template.available, true);assert.equal(template.id, "reconstruction-4x");
+  assert.equal(template.available, true);assert.equal(template.id, "reconstruction-4x");assert.equal(template.name, "DLSS · 720p + LSFG 4×");
   assert.equal(template.plan.video.find(row => row.kind === "neural").settings.modelPath, modelPath);
   assert.equal(template.plan.video.find(row => row.kind === "frame-generation").settings.modelVersion, version);
-  assert.deepEqual(template.plan.video.find(row => row.id === "legacy-neural-input").extent, {height:540});
+  assert.deepEqual(template.plan.video.find(row => row.id === "legacy-neural-input").extent, {height:720});
   assert.equal(fs.existsSync(Effects.file(entry, f.userDataDir)), false);
   models.mock.restore();t.mock.method(Models, "listInstalled", () => []);
   const unavailable = Effects.templates(entry, f.options)[0];

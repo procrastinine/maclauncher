@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const Host = require('../../../runtime/host-capabilities');
 const Requirements = require('../../../runtime/feature-requirements');
+const Payload = require('../../../runtime/payload-files');
 const source = require('./source.json');
 
 function inspect(root) {
@@ -14,7 +15,7 @@ function inspect(root) {
         const metadata = JSON.parse(fs.readFileSync(path.join(directory, `${method}-build.json`), 'utf8'));
         const library = path.join(directory, `libmaclauncher-${method}.dylib`);
         if (metadata.commit !== source[method].commit || metadata.providerABI !== 1 || metadata.shaderVariants !== 16 || !fs.statSync(library).isFile()) continue;
-        if (!fs.statSync(path.join(directory, method)).isDirectory()) continue;
+        if (!Payload.exists(directory, method)) continue;
         methods.push(method); libraries[method] = library;
         minimumMacOSByMethod[method] = metadata.minimumMacOS && Requirements.versionAtLeast(metadata.minimumMacOS, source.minimumMacOS)
           ? metadata.minimumMacOS : source.minimumMacOS;

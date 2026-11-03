@@ -7,6 +7,7 @@ const crypto = require("node:crypto");
 const Header = require("../src/modules/shared/installers/inno-header");
 const Inno = require("../src/modules/shared/installers/inno");
 const Inputs = require("../src/modules/shared/installers");
+const { untilTestEnds } = require("./helpers/fixture-process");
 
 function loader({ external = true } = {}) {
   const bytes = Buffer.alloc(256); bytes.write("MZ");
@@ -34,7 +35,7 @@ if(process.argv[2]==='--inspect-json'){console.log(fs.readFileSync(path.join(roo
 else {const out=process.argv[process.argv.indexOf('--output-dir')+1],info=JSON.parse(fs.readFileSync(path.join(root,'metadata.json')));
  for(const file of info.files){const dest=path.join(out,file.path);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.writeFileSync(dest,Buffer.alloc(mode==='corrupt'?file.size+1:file.size,32));}
  if(mode==='symlink'){fs.symlinkSync(path.join(root,'setup.exe'),path.join(out,'unexpected'));}
- if(mode==='wait')setInterval(()=>{},1000);if(mode==='fail')process.exitCode=1;
+ if(mode==='wait'){${untilTestEnds}}if(mode==='fail')process.exitCode=1;
 }
 `, { mode: 0o755 });
   const helper = { version: metadata.helperVersion, sourceRevision: metadata.sourceRevision, identity: "b".repeat(64), inspector: tool, executable: tool };
@@ -105,7 +106,7 @@ test("local-to-Included same-byte helper adoption ignores install path, timestam
   assert.equal(fs.readdirSync(path.dirname(path.dirname(first.inputPath))).filter(name => /^[a-f0-9]{64}$/.test(name)).length, 1);
 });
 
-test("source and output inode replacement rehashes known bytes once and keeps the same game/cache without extraction", async t => {
+test("source inode replacement verifies archive bytes once without rehashing the mutable game", async t => {
   const f = fixture(t); fs.writeFileSync(f.slice, "installer data");
   const first = await Inputs.prepareInput(f.file, f.options), output = path.join(first.inputPath, "index.html");
   const replaceSameBytes = file => {
@@ -114,39 +115,67 @@ test("source and output inode replacement rehashes known bytes once and keeps th
   };
   replaceSameBytes(f.file); replaceSameBytes(f.slice); replaceSameBytes(output);
   const before = [Inno.identity(f.file), Inno.identity(f.slice), Inno.identity(output)];
+  const streams = [], stream = fs.createReadStream;
+  t.mock.method(fs, "createReadStream", (file, options) => {
+    assert.notEqual(file, output, "Warm reuse never hashes extracted game files");
+    streams.push(file); return stream.call(fs, file, options);
+  });
   const warm = await Inputs.prepareInput(f.file, f.options);
   assert.equal(warm.inputPath, first.inputPath); assert.equal(warm.containerData.key, first.containerData.key);
   assert.equal(warm.containerData.cached, true); assert.deepEqual(f.calls(), ["--inspect-json", "--extract"]);
   assert.deepEqual([Inno.identity(f.file), Inno.identity(f.slice), Inno.identity(output)], before);
-  const stream = fs.createReadStream;
-  t.mock.method(fs, "createReadStream", (file, options) => {
-    assert.ok(![f.file, f.slice, output].includes(file), "An unchanged warm import must not reread large installer/game bytes");
-    return stream.call(fs, file, options);
-  });
+  assert.equal(streams.filter(file => file === f.file).length, 1);
+  assert.equal(streams.filter(file => file === f.slice).length, 1);
+  streams.length = 0;
   assert.equal((await Inputs.prepareInput(f.file, f.options)).inputPath, first.inputPath);
+  assert.ok(!streams.includes(f.file) && !streams.includes(f.slice), "Unchanged installer bytes are not reread");
   assert.deepEqual(f.calls(), ["--inspect-json", "--extract"]);
 });
 
-test("a valid legacy stat cache migrates in place while preserving its original receipt and canonical root", async t => {
-  const f = fixture(t); fs.writeFileSync(f.slice, "installer data");
-  const first = await Inputs.prepareInput(f.file, f.options), originalDirectory = path.dirname(first.inputPath);
-  const receipt = JSON.parse(fs.readFileSync(path.join(originalDirectory, "receipt.json")));
-  const sources = receipt.sources.map(({ path, identity }) => ({ path, identity }));
-  const key = Inno.cacheKey(f.helper.identity, sources), directory = path.join(path.dirname(originalDirectory), key);
-  fs.renameSync(originalDirectory, directory);
-  const legacy = { schemaVersion: 1, key, format: "inno", formatVersion: receipt.formatVersion,
-    helperVersion: f.helper.version, helperIdentity: f.helper.identity, sources,
-    files: receipt.files.map(({ path, size, identity }) => ({ path, size, identity })), extractedBytes: receipt.extractedBytes };
-  const legacyBytes = JSON.stringify(legacy); fs.writeFileSync(path.join(directory, "receipt.json"), legacyBytes);
-  fs.writeFileSync(path.join(path.dirname(directory), "current.json"), JSON.stringify({ schemaVersion: 1, key,
-    helperIdentity: f.helper.identity, sourceIdentity: sources[0].identity, sources }));
-  const warm = await Inputs.prepareInput(f.file, f.options);
-  assert.equal(warm.inputPath, path.join(directory, "files")); assert.equal(warm.containerData.key, key);
-  assert.equal(fs.readFileSync(path.join(directory, "receipt.json"), "utf8"), legacyBytes);
-  const index = JSON.parse(fs.readFileSync(path.join(path.dirname(directory), "current.json")));
-  assert.equal(index.schemaVersion, 2); assert.match(index.receiptFile, /^receipt-[a-f0-9]{64}\.json$/);
-  const migrated = JSON.parse(fs.readFileSync(path.join(directory, index.receiptFile)));
-  assert.ok(migrated.files.every(file => /^[a-f0-9]{64}$/.test(file.sha256)));
+test("warm extracted projects accept added, edited and removed game files without walking or hashing them", async t => {
+  const f = fixture(t, { external: false, files: [
+    { path: "index.html", authoredPath: "{app}\\index.html", size: 16 },
+    { path: "old-asset", authoredPath: "{app}\\old-asset", size: 8 }
+  ] });
+  const first = await Inputs.prepareInput(f.file, f.options), root = first.inputPath;
+  fs.writeFileSync(path.join(root, "index.html"), "patched project source with different bytes and length");
+  fs.unlinkSync(path.join(root, "old-asset"));
+  fs.mkdirSync(path.join(root, "saves")); fs.writeFileSync(path.join(root, "saves/slot1"), "user save");
+  fs.mkdirSync(path.join(root, "mods")); fs.writeFileSync(path.join(root, "mods/extra.js"), "user script");
+  const inside = file => typeof file === "string" && (file === root || file.startsWith(root + path.sep));
+  for (const owner of [fs, fs.promises]) {
+    const name = owner === fs ? "readdirSync" : "readdir", original = owner[name];
+    t.mock.method(owner, name, function (file, ...args) {
+      assert.equal(inside(file), false, "Warm reuse must not enumerate the mutable game");
+      return original.call(this, file, ...args);
+    });
+  }
+  const stream = fs.createReadStream;
+  t.mock.method(fs, "createReadStream", function (file, ...args) {
+    assert.equal(inside(file), false, "Warm reuse must not hash the mutable game");
+    return stream.call(this, file, ...args);
+  });
+  for (const readOnly of [false, true]) {
+    const warm = await Inputs.prepareInput(f.file, { ...f.options, readOnly });
+    assert.equal(warm.inputPath, root); assert.equal(warm.containerData.cached, true);
+  }
+  assert.equal(fs.readFileSync(path.join(root, "saves/slot1"), "utf8"), "user save");
+  assert.equal(fs.readFileSync(path.join(root, "mods/extra.js"), "utf8"), "user script");
+  assert.equal(fs.existsSync(path.join(root, "old-asset")), false);
+  assert.deepEqual(f.calls(), ["--inspect-json", "--extract"]);
+});
+
+test("warm reuse rejects a missing or linked extraction root without replacing preserved game bytes", async t => {
+  const f = fixture(t, { external: false });
+  const first = await Inputs.prepareInput(f.file, f.options), preserved = first.inputPath + "-preserved";
+  fs.renameSync(first.inputPath, preserved);
+  fs.writeFileSync(path.join(preserved, "save.dat"), "user save");
+  await assert.rejects(Inputs.prepareInput(f.file, f.options), error => error.code === "INSTALLER_CACHE_INVALID");
+  assert.equal(fs.existsSync(first.inputPath), false);
+  fs.symlinkSync(preserved, first.inputPath);
+  await assert.rejects(Inputs.prepareInput(f.file, f.options), /symlinks/);
+  assert.equal(fs.lstatSync(first.inputPath).isSymbolicLink(), true);
+  assert.equal(fs.readFileSync(path.join(preserved, "save.dat"), "utf8"), "user save");
   assert.deepEqual(f.calls(), ["--inspect-json", "--extract"]);
 });
 
@@ -208,17 +237,17 @@ test("cancellation terminates the native child before removing its partial stage
   const f = fixture(t, { external: false }); fs.writeFileSync(path.join(f.root, "mode"), "wait");
   const controller = new AbortController(); let nativePid;
   await assert.rejects(Inno.prepareInstaller(f.file, { ...f.options, signal: controller.signal, onSpawn(value) {
-    if (value.args.includes("--extract")) { nativePid = value.pid; setTimeout(() => controller.abort(), 100); }
+    if (value.args.includes("--extract")) { nativePid = value.pid; t.after(() => { try { process.kill(nativePid, "SIGKILL"); } catch {} }); setTimeout(() => controller.abort(), 100); }
   } }), error => error.name === "AbortError");
   assert.ok(nativePid); assert.throws(() => process.kill(nativePid, 0), error => error.code === "ESRCH");
   assert.deepEqual(fs.readdirSync(path.join(f.userDataDir, "games/testgame/containers/inno")), []);
 });
 
-test("source edits invalidate the cached generation and tampering never overwrites data", async t => {
+test("installer source edits select a new generation without overwriting an edited game", async t => {
   const f = fixture(t); fs.writeFileSync(f.slice, "first");
   const first = await Inno.prepareInstaller(f.file, f.options);
   fs.writeFileSync(path.join(first.inputPath, "index.html"), "changed");
-  await assert.rejects(Inno.prepareInstaller(f.file, f.options), /incomplete|changed/);
+  assert.equal((await Inno.prepareInstaller(f.file, f.options)).inputPath, first.inputPath);
   fs.writeFileSync(f.slice, "second");
   const second = await Inno.prepareInstaller(f.file, f.options);
   assert.notEqual(first.containerData.key, second.containerData.key);

@@ -1,7 +1,7 @@
 [
   {
     "id": "love-luasteam",
-    "version": "4.0.2-MCLv2",
+    "version": "4.0.2-MCLv3",
     "arch": "universal",
     "minimumMacOS": "13.0",
     "launcherArchitectures": [
@@ -10,10 +10,28 @@
     ],
     "sourceRelative": null,
     "sourceSha256": "5d78a1e1d39f661727a583e25cfd3d32ab26bcc545374fb3203d51e7c1c3e181",
-    "directoryRelative": "love-luasteam/4.0.2-MCLv2/universal",
+    "directoryRelative": "love-luasteam/4.0.2-MCLv3/universal",
     "manifestRelative": "helper.json",
-    "manifestSha256": "d950934a980b84f909247ed5742e39fd30e554850728cc0de91253cd97cd5322",
+    "manifestSha256": "604c407acc1ab3939dfa3a47688055edf91892b0384fc24bb758c87ee69cdc6f",
     "files": [
+      {
+        "path": "build-definition.json",
+        "size": 17042,
+        "mode": 420,
+        "sha256": "1d4bbfa1e668c5333db5821e30cb21c4eb416b606691a2a2ea6a77b9a8cb3cec"
+      },
+      {
+        "path": "build-inputs.json",
+        "size": 117,
+        "mode": 420,
+        "sha256": "f640aeeaddaa296af2d6b0eb9c64a4c618c111da11e1ddcf7cd022a6fd62de7c"
+      },
+      {
+        "path": "helper.json",
+        "size": 1905,
+        "sha256": "604c407acc1ab3939dfa3a47688055edf91892b0384fc24bb758c87ee69cdc6f",
+        "mode": 420
+      },
       {
         "path": "LuaJIT-MIT.txt",
         "size": 2935,
@@ -27,12 +45,6 @@
         "mode": 420
       },
       {
-        "path": "MacLauncher-MIT.txt",
-        "size": 1081,
-        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
-        "mode": 420
-      },
-      {
         "path": "luasteam.so",
         "size": 309552,
         "sha256": "d9c0bb486e268d79dfcb2b7641159badcb016c5504f5eb3d9b6d859a7623e81a",
@@ -43,9 +55,9 @@
         ]
       },
       {
-        "path": "helper.json",
-        "size": 1905,
-        "sha256": "d950934a980b84f909247ed5742e39fd30e554850728cc0de91253cd97cd5322",
+        "path": "MacLauncher-MIT.txt",
+        "size": 1081,
+        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
         "mode": 420
       }
     ],

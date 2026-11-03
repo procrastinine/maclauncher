@@ -1,4 +1,12 @@
 import type { RuntimeManagerState, RuntimeRefreshOptions } from "../types";
+import { sanitizeErrorMessage } from "../../../../core/runtime-errors.mjs";
+
+export function runtimeRefreshFailure(catalog: Record<string, any> | null | undefined) {
+  const failedAt = catalog?.failedAt;
+  return typeof failedAt === "number" && failedAt > 0 && failedAt <= 8.64e15
+    ? `Last refresh failed on ${new Date(failedAt).toLocaleString()}.`
+    : "Last refresh failed (date unavailable).";
+}
 
 export type RuntimeTabGroup = {
   id: string; label: string; order: number; position?: "last"; managers: RuntimeManagerState[];
@@ -229,5 +237,5 @@ export function runtimeCatalogPresentation(catalog: Record<string, any> | null |
   const reason = text(requirements?.installReason) || text(catalog?.installReason) ||
     (installLabel === "Build" ? "Build the selected version locally." : "");
   return { installLabel, included, sourceUrl, sourceLabel, installHelpUrl,
-    installReason: [reason, minimum ? `Requires macOS ${minimum} or later.` : ""].filter(Boolean).join(" ") };
+    installReason: sanitizeErrorMessage([reason, minimum ? `Requires macOS ${minimum} or later.` : ""].filter(Boolean).join(" ")) };
 }

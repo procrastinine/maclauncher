@@ -4,6 +4,7 @@ const { randomUUID } = require("node:crypto");
 const { execFile } = require("node:child_process");
 const { readJsonDocument, writeJsonAtomic } = require("./json-files");
 const { mergeSettingsChanges, settingsUnreadable, withoutClearedDefaults } = require("./settings-merge");
+const { CURRENT_SETTINGS_MIGRATION } = require("./data-migration-ids");
 
 function coordinationError(code, message) { return Object.assign(new Error(message), { code }); }
 function runtimeIdentity(value) {
@@ -150,7 +151,9 @@ function createRuntimeCoordinator({ userDataDir, isProcessAlive = isRuntimeProce
     const file = path.join(userDataDir, "settings.json");
     // No await between fresh read, merge and atomic commit: one host is the writer.
     const current = currentSettings(file);
-    const next = mergeSettingsChanges(before, after, current);
+    const merged = mergeSettingsChanges(before, after, current);
+    const next = merged?.dataMigrations?.[CURRENT_SETTINGS_MIGRATION]?.complete === true ? merged
+      : require("./backcompat/settings-conversions").completeDeferredSettingsMigration(userDataDir, merged);
     if (next && typeof next === "object" && next.runtimes) next.runtimes = withoutClearedDefaults(next.runtimes);
     writeJsonAtomic(file, next); return next;
   }

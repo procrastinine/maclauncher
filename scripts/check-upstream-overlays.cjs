@@ -146,6 +146,9 @@ function validateInventory(inventory) {
       throw Error("An owned native helper requires exact owned/version evidence and cannot declare upstream Git operations.");
     recipes.add(recipe.id);
     if (recipe.version !== undefined && (typeof recipe.version !== "string" || !recipe.version)) throw Error("An adaptation version must be an explicit string.");
+    for (const ref of recipe.versionRefs || []) if (ref.expectedVersion !== undefined &&
+      (typeof ref.expectedVersion !== "string" || !ref.expectedVersion.trim()))
+      throw Error("A version reference expectedVersion must be a nonempty explicit string.");
     if (recipe.revision && !/^[a-f0-9]{40}$/.test(recipe.revision)) throw Error("A source variant must have a full Git commit.");
     if (recipe.sourceSubdirectory) relativePath(recipe.sourceSubdirectory);
     for (const file of recipe.includePaths || []) relativePath(file);
@@ -289,7 +292,9 @@ async function checkInventory({ root = ROOT, inventory = JSON.parse(fs.readFileS
   for (const recipe of inventory.recipes) {
     for (const ref of recipe.versionRefs || []) {
       if (!fs.existsSync(path.join(root, ref.path)) && optionalEvidence(ref.path, { recipe: recipe.id })) continue;
-      try { if (sourceRef(root, ref) !== recipe.version) errors.push({ code: "adaptation-version-drift", recipe: recipe.id, path: ref.path }); }
+      // A source/API version and its packaged revision can differ. Each
+      // explicitly declared package version still requires exact equality.
+      try { if (sourceRef(root, ref) !== (ref.expectedVersion === undefined ? recipe.version : ref.expectedVersion)) errors.push({ code: "adaptation-version-drift", recipe: recipe.id, path: ref.path }); }
       catch (error) { errors.push({ code: "version-evidence-invalid", recipe: recipe.id, message: error.message }); }
     }
     for (const ref of recipe.pinRefs || []) {

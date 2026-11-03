@@ -9,7 +9,9 @@ for (const unpacked of [false, true]) test(`Electron ${unpacked ? "unpacked" : "
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "graphics-publication-asar-"));
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
   const source = path.join(root, "source"), shared = "src/modules/shared/";
-  for (const relative of ["reshade/publication.js", "graphics-warning.js", "runtime/included-helpers.js", "runtime/package-contract.cjs", "runtime/bundled-native.js", "runtime/host-capabilities.js", "runtime/feature-requirements.js", "effects/operation-contracts.mjs", "reshade/neural/source.json", "reshade/temporal/fsr4/source.json", "runtime/local-native.js", "runtime/pe-exports.js", "runtime/app-bundle.js"]) {
+  const selected = require("../scripts/check-packaging.cjs").applicationFileSelector(require("../package.json"));
+  for (const relative of ["reshade/publication.js", "graphics-warning.js", "runtime/included-helpers.js", "runtime/package-contract.cjs", "runtime/bundled-native.js", "runtime/verified-identity.js", "runtime/host-capabilities.js", "runtime/feature-requirements.js", "effects/operation-contracts.mjs", "reshade/neural/source.json", "reshade/temporal/fsr4/source.json", "runtime/local-native.js", "runtime/pe-exports.js", "runtime/app-bundle.js", "copy-file.js", "file-time.js"]) {
+    assert.equal(selected(shared + relative), true, `ASAR fixture source must be selected by app packaging: ${relative}`);
     const target = path.join(source, shared, relative); fs.mkdirSync(path.dirname(target), {recursive: true});
     fs.copyFileSync(path.join(__dirname, "..", shared, relative), target);
   }

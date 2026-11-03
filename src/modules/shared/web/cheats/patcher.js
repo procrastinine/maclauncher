@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const Writable = require("../../writable-input");
+const { buildCheatsRuntimeSource } = require("../../mvmz/cheats/runtime-source");
 
 const PATCH_MARKER = "maclauncher:cheats-patch";
 const PATCH_START = `// ${PATCH_MARKER}:start`;
@@ -471,6 +472,7 @@ function buildBootstrapSource(options = {}) {
 }
 
 function readBundledCheatsAsset(relPath) {
+  if (relPath === "runtime.js") return buildCheatsRuntimeSource();
   const p = path.resolve(__dirname, "..", "..", "mvmz", "cheats", relPath);
   return readText(p);
 }

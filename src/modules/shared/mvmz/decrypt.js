@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopy } = require("../copy-file");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 
@@ -150,8 +151,7 @@ async function runDecrypter({ sourcePath, outputDir, reconstruct = false, logger
     // performed in place by the upstream tool (its --output is reconstruction-only).
     const flatMv = existsFile(path.join(source, "js", "rpg_core.js")) && !existsDir(path.join(source, "www"));
     const working = flatMv ? path.join(input, "www") : input;
-    await fs.promises.cp(source, working, { recursive: true, dereference: true,
-      mode: fs.constants.COPYFILE_FICLONE, filter: () => { context?.signal?.throwIfAborted(); return true; } });
+    await cloneOrCopy(source, working, { dereference: true, signal: context?.signal });
     const args = [input, "--overwrite"];
     if (reconstruct) args.push("--reconstruct-project", `--output=${destination}`);
     logger?.info?.("[mvmz] running RPGMakerDecrypter", { cli, args });

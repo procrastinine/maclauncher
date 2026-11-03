@@ -98,7 +98,7 @@ async function extractArchives(entry, _payload, context, dependencies = {}) {
         const destination = path.join(temporary, archive.name); fs.mkdirSync(destination);
         await (dependencies.runCommand || runToolCommand)(selected.install.executablePath,
           ["--tool", archive.tool, "-o", destination + path.sep, path.join(root, archive.name)],
-          { cwd: temporary, logPath, signal: context.signal, timeout: 300000,
+          { cwd: temporary, env:require("../shared/runtime/dependency-environment").environment(selected.install), logPath, signal: context.signal, timeout: 300000,
             onSpawn: child => Promise.all([use.bind(child.pid), context.onToolProcessSpawn?.(child)]) });
       }
       const result = { outputRoot, toolVersion: selected.version, archiveCount: archives.length, archives: archives.map(item => item.name) };

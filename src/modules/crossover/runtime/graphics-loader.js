@@ -1,4 +1,5 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
+const { cloneOrCopy } = require("../../shared/copy-file");
 const { execFile } = require("node:child_process"), { promisify } = require("node:util");
 const Writable = require("../../shared/writable-input");
 const executeFile = promisify(execFile), MAXIMUM = 16 * 1024 * 1024;
@@ -136,7 +137,7 @@ async function prepare(installation, directory, { signal, execute = executeFile,
       signal?.throwIfAborted();
       const copy = path.join(temporary, name);
       await fs.promises.mkdir(path.dirname(copy), { recursive: true });
-      await fs.promises.copyFile(source, copy, fs.constants.COPYFILE_FICLONE | fs.constants.COPYFILE_EXCL);
+      await cloneOrCopy(source, copy, { signal, exclusive: true });
       await fs.promises.chmod(copy, mode);
       if (sign) {
         const metadata = await execute("/usr/bin/codesign", ["-d", "--entitlements", ":-", source], options);

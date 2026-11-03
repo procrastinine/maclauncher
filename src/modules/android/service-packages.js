@@ -335,8 +335,18 @@ async function retainApplications(userDataDir, signal) {
 }
 
 async function removeApplication(userDataDir, gameId, {retire} = {}) {
-  const packages=read(userDataDir).packages.filter(item=>item.scope==="application"&&item.gameId===gameId).map(item=>item.packageName);
+  const catalog=read(userDataDir);
+  const packages=catalog.packages.filter(item=>item.scope==="application"&&item.gameId===gameId).map(item=>item.packageName);
   if(packages.length&&retire)await retire(packages);
+  // Identities retain removed/disabled providers too. Compute only this caller's
+  // roots; shared service code and another game's provider data stay installed.
+  const cleanup=require("../../core/storage-maintenance");
+  for(const packageName of Object.keys(catalog.identities)){
+    const directory=Storage.storagePaths(userDataDir,dataId(packageName,gameId)).root;
+    try{fs.lstatSync(directory);}catch(error){if(error.code==="ENOENT")continue;throw error;}
+    Writable.assertOwnDirectory(userDataDir,directory,{create:false});
+    await cleanup.removeTrash(cleanup.moveToTrash(directory));
+  }
   await mutate(userDataDir,catalog=>{
     catalog.packages=catalog.packages.filter(item=>item.scope!=="application"||item.gameId!==gameId);
   });

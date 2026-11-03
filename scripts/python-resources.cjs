@@ -81,7 +81,8 @@ function assertPackagedPython({ resourceRoot, arch }) {
       if (excluded(name)) throw new Error('Packaged Python contains a build, installation or demonstration resource: ' + name);
       if (entry.isDirectory()) walk(file, name);
       else if (entry.isSymbolicLink()) {
-        if (!Object.hasOwn(selected.aliases, name)) throw new Error('Packaged Python contains an unregistered symbolic link.');
+        if (!Object.hasOwn(selected.aliases, name) && !require('../src/modules/shared/runtime/bundled-native').appAlias(file))
+          throw new Error('Packaged Python contains an unregistered symbolic link.');
       } else if (!entry.isFile()) throw new Error('Packaged Python contains a special file.');
       else files++;
     }

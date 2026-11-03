@@ -51,6 +51,12 @@ test("native startup snapshot admits namespace and selected locale without host 
   assert.equal(decode(result[variable]).includes("ANDROID_DATA=/changed"), false);
 });
 
+test("native startup carries the verified package loader path through its existing environment hook", () => {
+  const result=Startup.environment({androidEnvironment:{},systemEnvironment:{DYLD_FALLBACK_LIBRARY_PATH:"/owned/dependency/lib",DYLD_INSERT_LIBRARIES:"/host/injection"},home:"/owned/home",temporary:"/owned/tmp"});
+  assert.ok(decode(result[variable]).includes("DYLD_FALLBACK_LIBRARY_PATH=/owned/dependency/lib"));
+  assert.equal(decode(result[variable]).some(value=>value.startsWith("DYLD_INSERT_LIBRARIES=")),false);
+});
+
 test("ordinary app, service and account sandbox preparation automatically snapshots before process and graphics additions", {
   skip: process.platform !== "darwin",
 }, async t => {

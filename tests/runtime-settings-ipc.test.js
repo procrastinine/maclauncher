@@ -52,12 +52,15 @@ test('network IPC persists one concrete choice and broadcasts the same legacy/de
   const os=require('node:os'),GameStore=require('../src/core/game-store');
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'network-ipc-'));
   t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
-  const saved={gameId:'network-ipc',gamePath:'/Games/Network',runtimeId:'player',moduleId:'web',
+  let saved={gameId:'network-ipc',gamePath:'/Games/Network',runtimeId:'player',moduleId:'web',
     runtimeSettings:{player:{enableProtections:false}},notes:'Keep',moduleData:{retained:true}};
   GameStore.writeGameRecord(root,saved);
+  saved=GameStore.readGameRecord(root,saved.gameId);
+  assert.equal(saved.schemaVersion,GameStore.CURRENT_RECORD_SCHEMA_VERSION);
+  assert.equal(saved.networkAccess,true,'The ordinary record read converts and persists the old explicit choice before serialization');
   const handlers=new Map();let broadcasts=0;
   const source=fs.readFileSync(path.join(__dirname,'../src/main/main.js'),'utf8');
-  const context={NetworkAccess:require('../src/core/network-access'),GAME_SCHEMA_VERSION:1,
+  const context={NetworkAccess:require('../src/core/network-access'),GAME_SCHEMA_VERSION:GameStore.CURRENT_RECORD_SCHEMA_VERSION,
     StoredPlan:{serialize:value=>value??null},
     loadSettings:()=>({launcher:{networkAccess:false}}),loadGamesHydrated:options=>{
       assert.equal(options.persist,false);return [GameStore.readGameRecord(root,saved.gameId)];},

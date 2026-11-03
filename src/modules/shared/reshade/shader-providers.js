@@ -80,6 +80,7 @@ function sourceMetadata(file,format,metadata){
   if(traits.inputPolicy==="linear-source")traits.sharedOnly=true;
   return {...metadata,traits,outputContract:Traits.outputContract(traits),...(traits.inputPolicy?{inputPolicy:traits.inputPolicy}:{}),...(traits.sceneBindings?{sceneBindings:traits.sceneBindings}:{})};
 }
+// Shader libraries match the game ABI, and included compilers default to the launcher-selected CPU.
 function availability(format, { features = {}, graphicsArchitecture = process.arch, compilerArchitecture=process.arch, macOSVersion,sceneHistory,inputPolicy } = {}) {
   const historyReason=require("./shader-input-policy").availability(inputPolicy,{features})||sceneHistoryAvailability(format,sceneHistory,{features});if(historyReason)return historyReason;
   if (format === "slang") format = "slangp";

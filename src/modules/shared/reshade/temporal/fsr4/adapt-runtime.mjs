@@ -116,6 +116,11 @@ ${prepare}
   replace(
       '"fsr411_snapshot","fsr411_exposure","fsr411_init_exposure","fsr411_retire"',
       '"fsr411_snapshot","fsr411_exposure","fsr411_init_exposure","fsr411_retire","fsr411_compose"');
+  // A graphics package stores identical native model files once.
+  replace('json(dir+"/fsr411_native_manifest.json",error)',
+          'json(maclauncher::payloadFile(dir+"/fsr411_native_manifest.json"),error)');
+  for (const file of ['"/fsr411_native_weights.bin"', '"/fsr411_native_params.bin"'])
+    replace('ns(dir+' + file + ')', 'ns(maclauncher::payloadFile(dir+' + file + '))');
   return {
     source : value,
     adaptations : changes,

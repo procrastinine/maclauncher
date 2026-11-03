@@ -87,16 +87,6 @@
                   "label": "Disabled"
                 }
               ],
-              "legacyValues": [
-                {
-                  "value": true,
-                  "replacement": "enabled"
-                },
-                {
-                  "value": false,
-                  "replacement": "disabled"
-                }
-              ],
               "description": "Uses software rendering when hardware OpenGL is unavailable."
             },
             {

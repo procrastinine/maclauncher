@@ -155,3 +155,26 @@ test("conditional and analyzed-unresolved shaders count as resizing; unanalyzed 
     [{unresolvedGeometry: true}, true], [{displayDependentGeometry: true}, true], [{outputScale: {x: 2, y: 2}}, true]];
   for (const [traits, resizes] of cases) assert.equal(Contracts.shaderResizes({traits}), resizes, JSON.stringify(traits));
 });
+
+
+test("held coarse Slang program times refresh authored annotations and include graphs", t => {
+  const fs = require("node:fs"), os = require("node:os"), path = require("node:path"), {holdFileTimes} = require("./helpers/held-file-times.cjs");
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "slang-coarse-program-")));t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const preset = path.join(root, "effect.slangp"), program = path.join(root, "effect.slang"), oldInclude = path.join(root, "old.inc"), newInclude = path.join(root, "new.inc");
+  const source = (role, include) => ('//!SCENE_INPUT Main ' + role + '\n#include "' + include + '"\n').padEnd(128, " ");
+  const child = role => ('//!SCENE_INPUT Aux ' + role + '\n').padEnd(128, " ");
+  fs.writeFileSync(preset, 'shaders = 1\nshader0 = "effect.slang"\n');
+  fs.writeFileSync(program, source("depth", "old.inc"));fs.writeFileSync(oldInclude, child("motion"));fs.writeFileSync(newInclude, child("depth"));
+  holdFileTimes(t, [preset, program, oldInclude, newInclude]);
+  const first = Traits.analyzeFile(preset, "slangp");assert.deepEqual(first.traits.sceneBindings, {Main: "depth", Aux: "motion"});
+  fs.writeFileSync(program, source("normal", "old.inc"));
+  const annotation = Traits.analyzeFile(preset, "slangp");assert.deepEqual(annotation.traits.sceneBindings, {Main: "normal", Aux: "motion"});
+  assert.notEqual(annotation.sourceRevision, first.sourceRevision);
+  fs.writeFileSync(program, source("normal", "new.inc"));
+  const graph = Traits.analyzeFile(preset, "slangp");assert.deepEqual(graph.traits.sceneBindings, {Main: "normal", Aux: "depth"});
+  assert.ok(graph.dependencies.some(row => row.file === newInclude));assert.ok(!graph.dependencies.some(row => row.file === oldInclude));
+  assert.notEqual(graph.sourceRevision, annotation.sourceRevision);
+  fs.writeFileSync(newInclude, child("motion"));
+  const includedAnnotation = Traits.analyzeFile(preset, "slangp");assert.deepEqual(includedAnnotation.traits.sceneBindings, {Main: "normal", Aux: "motion"});
+  assert.notEqual(includedAnnotation.sourceRevision, graph.sourceRevision);
+});

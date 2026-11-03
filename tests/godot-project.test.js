@@ -22,96 +22,85 @@ function imported(project) {
   fs.writeFileSync(path.join(project, '.godot', 'imported', 'asset.ctex'), fs.readFileSync(path.join(project, 'asset.png')));
 }
 
-test('source project imports use a writable private clone, preserve originals and reuse the completed cache', async t => {
-  const f = fixture(t); let calls = 0;
-  const run = async (_executable, project, options) => {
-    calls++; assert.notEqual(project, f.source); assert.ok(options.env.HOME.startsWith(fs.realpathSync(f.options.userDataDir) + path.sep));
-    imported(project); fs.writeFileSync(path.join(project, 'asset.png.import'), 'generated import');
+test('fresh source projects import in place with their original data and ordinary environment', async t => {
+  const f = fixture(t);let calls = 0;
+  const run = async (executable, project, options) => {
+    calls++;assert.equal(executable, f.options.executable);assert.equal(project, f.source);
+    assert.equal(options.env.HOME, process.env.HOME);assert.equal(options.env.XDG_DATA_HOME, process.env.XDG_DATA_HOME);assert.equal(options.env.XDG_CONFIG_HOME, process.env.XDG_CONFIG_HOME);
+    assert.equal(options.logFile, undefined);imported(project);fs.writeFileSync(path.join(project, 'asset.png.import'), 'upstream generated import');
   };
-  const first = await Project.prepare(f.entry, {...f.options, run});
-  assert.notEqual(first.path, f.source);
-  assert.equal(fs.readFileSync(path.join(f.source, 'asset.png.import'), 'utf8'), 'original import options');
-  assert.equal(fs.existsSync(path.join(f.source, '.godot')), false);
-  assert.equal(fs.readFileSync(path.join(first.path, '.godot', 'imported', 'asset.ctex'), 'utf8'), 'original asset');
-  assert.deepEqual(await Project.prepare(f.entry, {...f.options, run}), first);
-  assert.equal(calls, 1, 'warm launch must not run another editor');
+  assert.equal(await Project.prepare(f.entry, {...f.options, run}), f.options.target);
+  assert.equal(fs.readFileSync(path.join(f.source, 'asset.png'), 'utf8'), 'original asset');
+  assert.equal(fs.readFileSync(path.join(f.source, 'asset.png.import'), 'utf8'), 'upstream generated import');
+  assert.equal(fs.readFileSync(path.join(f.source, '.godot/imported/asset.ctex'), 'utf8'), 'original asset');
+  assert.equal(await Project.prepare(f.entry, {...f.options, run}), f.options.target);assert.equal(calls, 1);
+  assert.equal(fs.existsSync(f.options.userDataDir), false, 'no private game, editor home or receipt is created');
 });
-
-test('asset updates reimport; failed replacements retain the previous complete cache and can retry', async t => {
-  const f = fixture(t);
-  const first = await Project.prepare(f.entry, {...f.options, run: async (_, project) => imported(project)});
-  fs.writeFileSync(path.join(f.source, 'asset.png'), 'updated asset bytes');
-  const failure = new Error('import failed');
-  await assert.rejects(Project.prepare(f.entry, {...f.options, run: async () => {throw failure;}}), error => error === failure);
-  assert.equal(fs.readFileSync(path.join(first.path, '.godot', 'imported', 'asset.ctex'), 'utf8'), 'original asset');
-  const updated = await Project.prepare(f.entry, {...f.options, run: async (_, project) => imported(project)});
-  assert.equal(updated.path, first.path);
-  assert.equal(fs.readFileSync(path.join(updated.path, '.godot', 'imported', 'asset.ctex'), 'utf8'), 'updated asset bytes');
+test('warm original-path preparation reads no assets, walks no tree and copies nothing', async t => {
+  const f = fixture(t);imported(f.source);
+  const read = fs.readFileSync, walk = fs.readdirSync, asyncWalk = fs.promises.readdir, copy = fs.copyFileSync, realpath = fs.realpathSync, open = fs.opendirSync;let opened = 0;
+  try {
+    fs.readFileSync = () => assert.fail('Warm Play must not read source resources or mirror receipts');
+    fs.readdirSync = () => assert.fail('Warm Play must not enumerate a complete asset/cache directory');
+    fs.promises.readdir = async () => assert.fail('Warm Play must not walk source resources');
+    fs.copyFileSync = () => assert.fail('Warm Play must not copy assets');fs.realpathSync = () => assert.fail('Selected original paths must remain unchanged');
+    fs.opendirSync = function(file, ...args) {assert.equal(file, path.join(f.source, '.godot/imported'));opened++;return open.call(this, file, ...args);};
+    assert.equal(await Project.prepare(f.entry, {...f.options, run: () => assert.fail('Warm Play must not run an editor')}), f.options.target);
+  } finally {fs.readFileSync = read;fs.readdirSync = walk;fs.promises.readdir = asyncWalk;fs.copyFileSync = copy;fs.realpathSync = realpath;fs.opendirSync = open;}
+  assert.equal(opened, 1);
 });
-
-test('already imported source projects and exported packs skip preparation and tool work', async t => {
-  const f = fixture(t), forbidden = () => {throw Error('unexpected import');};
-  imported(f.source);
-  assert.equal(await Project.prepare(f.entry, {...f.options, run: forbidden}), f.options.target);
+test('failed imports preserve existing original data and all old private generations', async t => {
+  const f = fixture(t), old = path.join(f.options.userDataDir, 'games/project/modules/godot/source-projects/01234567890123456789');
+  for (const directory of ['project', 'previous', 'preparing-1234567890123456', 'editor-home']) {fs.mkdirSync(path.join(old, directory), {recursive: true});fs.writeFileSync(path.join(old, directory, 'Save.cfg'), directory + ' retained save');}
+  fs.writeFileSync(path.join(old, 'prepared.json'), JSON.stringify({schema: 1, source: f.source, input: 'legacy', version: f.options.version}));fs.writeFileSync(path.join(old, 'import.log'), 'legacy log');
+  const error = Error('upstream import failed'), read = fs.readFileSync, walk = fs.readdirSync;
+  try {
+    fs.readFileSync = function(file, ...args) {assert.ok(!String(file).includes('source-projects'));return read.call(this, file, ...args);};
+    fs.readdirSync = function(file, ...args) {assert.ok(!String(file).includes('source-projects'));return walk.call(this, file, ...args);};
+    await assert.rejects(Project.prepare(f.entry, {...f.options, run: async (_executable, project) => {assert.equal(project, f.source);throw error;}}), value => value === error);
+  } finally {fs.readFileSync = read;fs.readdirSync = walk;}
+  assert.equal(fs.readFileSync(path.join(f.source, 'asset.png'), 'utf8'), 'original asset');assert.equal(fs.readFileSync(path.join(f.source, 'asset.png.import'), 'utf8'), 'original import options');
+  for (const directory of ['project', 'previous', 'preparing-1234567890123456', 'editor-home']) assert.equal(fs.readFileSync(path.join(old, directory, 'Save.cfg'), 'utf8'), directory + ' retained save');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(old, 'prepared.json'))).input, 'legacy');assert.equal(fs.readFileSync(path.join(old, 'import.log'), 'utf8'), 'legacy log');
+  assert.equal(await Project.prepare(f.entry, {...f.options, run: async (_executable, project) => imported(project)}), f.options.target);
+});
+test('packed games and other major versions never inspect or prepare source projects', async t => {
+  const f = fixture(t), forbidden = () => assert.fail('No importer should run');
   const pack = {kind: 'pack', path: '/unchanged.pck'};
   assert.equal(await Project.prepare(f.entry, {target: pack, run: forbidden}), pack);
+  assert.equal(await Project.prepare(f.entry, {...f.options, version: '3.5.2-stable', run: forbidden}), f.options.target);
   assert.equal(fs.existsSync(f.options.userDataDir), false);
 });
-
-test('empty resource directories are imported again and cannot be accepted as a completed cache', async t => {
-  const f = fixture(t); let calls = 0;
-  fs.mkdirSync(path.join(f.source, '.godot', 'imported'), {recursive: true});
-  fs.writeFileSync(path.join(f.source, '.godot', 'global_script_class_cache.cfg'), 'list=Array[Dictionary]([])\n');
-  await assert.rejects(Project.prepare(f.entry, {...f.options, run: async (_, project) => {
-    calls++; fs.mkdirSync(path.join(project, '.godot', 'imported'), {recursive: true});
-  }}), /did not create the project resource cache/);
-  const prepared = await Project.prepare(f.entry, {...f.options, run: async (_, project) => {calls++; imported(project);}});
-  fs.rmSync(path.join(prepared.path, '.godot', 'imported', 'asset.ctex'));
-  await Project.prepare(f.entry, {...f.options, run: async (_, project) => {calls++; imported(project);}});
-  assert.equal(calls, 3, 'an empty source or previously accepted cache must not skip import');
-  assert.deepEqual(fs.readdirSync(path.join(f.source, '.godot', 'imported')), []);
+test('script-only projects reuse the upstream completed editor index, not a lone class index', async t => {
+  const f = fixture(t);let calls = 0;
+  fs.mkdirSync(path.join(f.source, '.godot'), {recursive: true});fs.writeFileSync(path.join(f.source, '.godot/global_script_class_cache.cfg'), 'list=Array[Dictionary]([])\n');
+  const run = async (_executable, project) => {calls++;fs.mkdirSync(path.join(project, '.godot/editor'), {recursive: true});fs.writeFileSync(path.join(project, '.godot/editor/filesystem_cache10'), 'completed upstream index\n');};
+  assert.equal(await Project.prepare(f.entry, {...f.options, run}), f.options.target);
+  assert.equal(await Project.prepare(f.entry, {...f.options, run}), f.options.target);assert.equal(calls, 1);
 });
-
-test('contained source links become writable regular private files without changing source modes', async t => {
-  const f = fixture(t);
-  fs.mkdirSync(path.join(f.source, 'assets'));
-  const original = path.join(f.source, 'assets', 'image.png');
-  fs.writeFileSync(original, 'linked image', {mode: 0o444});
-  fs.symlinkSync('assets', path.join(f.source, 'alias'));
-  const mode = fs.statSync(original).mode;
-  const prepared = await Project.prepare(f.entry, {...f.options, run: async (_, project) => {
-    assert.equal(fs.lstatSync(path.join(project, 'alias')).isSymbolicLink(), false);
-    assert.equal(fs.readFileSync(path.join(project, 'alias', 'image.png'), 'utf8'), 'linked image');
-    fs.writeFileSync(path.join(project, 'alias', 'image.png'), 'private update');
-    imported(project);
-  }});
-  assert.equal(fs.statSync(original).mode, mode);
-  assert.equal(fs.readFileSync(original, 'utf8'), 'linked image');
-  assert.equal(fs.readFileSync(path.join(prepared.path, 'alias', 'image.png'), 'utf8'), 'private update');
+test('an empty imported directory still triggers import without requiring invented output files', async t => {
+  const f = fixture(t);fs.mkdirSync(path.join(f.source, '.godot/imported'), {recursive: true});let calls = 0;
+  assert.equal(await Project.prepare(f.entry, {...f.options, run: async () => {calls++;}}), f.options.target, 'a successful upstream import is authoritative');
+  assert.equal(calls, 1);
 });
-
-test('cyclic and external source links fail before copying or starting the editor', async t => {
-  const f = fixture(t), forbidden = () => {throw Error('editor must not start');};
-  const link = path.join(f.source, 'linked');
-  fs.symlinkSync('.', link);
-  await assert.rejects(Project.prepare(f.entry, {...f.options, run: forbidden}), /cyclic directory link/);
-  fs.unlinkSync(link);
-  const outside = path.join(f.directory, 'outside'); fs.mkdirSync(outside);
-  fs.writeFileSync(path.join(outside, 'preserved'), 'outside project');
-  fs.symlinkSync(outside, link);
-  await assert.rejects(Project.prepare(f.entry, {...f.options, run: forbidden}), /links must stay inside the project/);
+test('original selected paths and publisher links remain intact without a private projection', async t => {
+  const f = fixture(t), selected = path.join(f.directory, 'selected-project'), outside = path.join(f.directory, 'outside');
+  fs.symlinkSync(f.source, selected);fs.mkdirSync(outside);fs.writeFileSync(path.join(outside, 'asset.txt'), 'external publisher asset');
+  fs.symlinkSync(outside, path.join(f.source, 'publisher-link'));fs.symlinkSync('.', path.join(f.source, 'cycle'));
+  const target = {kind: 'project', path: selected};
+  assert.equal(await Project.prepare(f.entry, {...f.options, target, run: async (_executable, project) => {
+    assert.equal(project, selected);assert.equal(fs.lstatSync(path.join(project, 'publisher-link')).isSymbolicLink(), true);imported(project);
+  }}), target);
+  assert.equal(fs.readFileSync(path.join(outside, 'asset.txt'), 'utf8'), 'external publisher asset');
+  assert.equal(fs.readlinkSync(path.join(f.source, 'cycle')), '.');assert.equal(fs.existsSync(f.options.userDataDir), false);
+});
+test('original-path preparation respects cancellation before and after its owned importer', async t => {
+  const f = fixture(t), controller = new AbortController(), reason = Error('cancelled');controller.abort(reason);
+  await assert.rejects(Project.prepare(f.entry, {...f.options, signal: controller.signal, run: () => assert.fail('must not start')}), value => value === reason);
+  const during = new AbortController();
+  await assert.rejects(Project.prepare(f.entry, {...f.options, signal: during.signal, run: async (_executable, project) => {assert.equal(project, f.source);during.abort(reason);}}), value => value === reason);
   assert.equal(fs.existsSync(f.options.userDataDir), false);
-  assert.equal(fs.readFileSync(path.join(outside, 'preserved'), 'utf8'), 'outside project');
 });
-
-test('a private storage alias into the original project is rejected before any write', async t => {
-  const f = fixture(t);
-  fs.symlinkSync(f.source, f.options.userDataDir);
-  await assert.rejects(Project.prepare(f.entry, {...f.options, run: () => assert.fail('unexpected import')}),
-    /storage must be outside the original project/);
-  assert.deepEqual(fs.readdirSync(f.source).sort(), ['asset.png', 'asset.png.import', 'project.godot']);
-});
-
 test('actual import subprocess receives no graphics injection and is registered as a temporary tool', async t => {
   const f = fixture(t), executable = path.join(f.directory, 'importer');
   fs.writeFileSync(executable, '#!/usr/bin/env node\nconst fs=require("fs"),path=require("path");const p=process.argv[process.argv.indexOf("--path")+1];fs.mkdirSync(path.join(p,".godot"),{recursive:true});fs.writeFileSync(path.join(p,"tool.json"),JSON.stringify({args:process.argv.slice(2),env:process.env}));\n', {mode: 0o755});

@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../../copy-file");
 const path = require("node:path");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
@@ -40,14 +41,14 @@ function selectPayload(unpacked) {
     if (stat.isDirectory()) {
       fs.mkdirSync(target, { recursive: true });
       for (const name of fs.readdirSync(real)) if (!excludedReason(relative + "/" + name)) copy(relative + "/" + name);
-    } else if (stat.isFile()) { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.copyFileSync(real, target); }
+    } else if (stat.isFile()) { fs.mkdirSync(path.dirname(target), { recursive: true }); cloneOrCopySync(real, target); }
   };
   for (const relative of ["bin/rizin", "bin/rz-bin", PLUGIN, "lib/rizin/plugins/rz_ghidra_sleigh", "share/rizin"]) copy(relative);
   for (const name of fs.readdirSync(path.join(source, "lib"))) if (/^librz_.*\.\d+\.\d+\.dylib$/.test(name)) copy("lib/" + name);
   for (const name of fs.readdirSync(unpacked)) if (path.join(unpacked, name) !== payload) fs.rmSync(path.join(unpacked, name), { recursive: true, force: true });
   for (const name of fs.readdirSync(payload)) fs.renameSync(path.join(payload, name), path.join(unpacked, name));
   fs.rmdirSync(payload);
-  fs.cpSync(path.join(__dirname, "..", "resources", "native-notices"), path.join(unpacked, "notices"), { recursive: true });
+  cloneOrCopySync(path.join(__dirname, "..", "resources", "native-notices"), path.join(unpacked, "notices"));
 }
 
 function inventory(root) {

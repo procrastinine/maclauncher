@@ -5,20 +5,20 @@ const savedKey = session => "google-play:" + crypto.createHash("sha256").update(
 
 /** One host entry point for Google browser sign-in and the real Android account manager. */
 function createGoogleAccountManager({ browserAuth, microg, vault, onChanged = async () => {}, onRemoved = async () => {} } = {}) {
-  async function persist(session, { active = true } = {}) {
+  async function persist(session, { active = true, removeKey } = {}) {
     if (session.remember === false) return;
-    if (active) {
-      const previous = (await vault.loadSession("google-play"))?.session;
-      if (previous?.email) await vault.saveSession({ accountName: savedKey(previous), session: previous });
-    }
-    await vault.saveSession({ accountName: savedKey(session), session });
-    if (active) await vault.saveSession({ accountName: "google-play", session });
+    await vault.updateSessions(sessions => {
+      const previous = active && sessions["google-play"]?.session;
+      if (previous?.email) sessions[savedKey(previous)] = { accountName: savedKey(previous), session: previous };
+      sessions[savedKey(session)] = { accountName: savedKey(session), session };
+      if (active) sessions["google-play"] = { accountName: "google-play", session };
+      if (removeKey && removeKey !== savedKey(session)) delete sessions[removeKey];
+    });
   }
   async function register(session, { signal, provider = session.accountProvider || session.sharedAccountId?.split(":")[0] || "klepton" } = {}) {
     const account = await microg.importBrowserSession(session, { signal, provider });
     const registered = { ...session, accountProvider: provider, sharedAccountId: account.id };
-    await persist(registered);
-    if (!session.sharedAccountId && session.remember !== false) await vault.removeSession(savedKey(session));
+    await persist(registered, { removeKey: !session.sharedAccountId ? savedKey(session) : null });
     await onChanged(); return registered;
   }
   async function browserLogin(options = {}) {
@@ -30,6 +30,9 @@ function createGoogleAccountManager({ browserAuth, microg, vault, onChanged = as
     const session = { ...login, mode: "browser", accountProvider: provider, browserAccountId, remember: options.remember !== false };
     // A completed Google challenge must remain recoverable if provider setup fails.
     await persist(session);
+    // External's Play protocol uses the browser token directly. Starting an
+    // Android account provider is reserved for its explicit Settings action.
+    if (!options.registerAccount) { await onChanged(); return session; }
     try { return await register(session, options); }
     catch (error) {
       if (error.name === "AbortError") throw error;
@@ -79,9 +82,12 @@ function createGoogleAccountManager({ browserAuth, microg, vault, onChanged = as
     }
   }
   return { browserLogin, prepareSavedSession, state, remove, clearBrowserAccount,
-    loadActiveSession: async () => (await vault.loadSession("google-play"))?.session || null,
+    loadActiveSession: async () => {
+      try { return (await vault.loadSession("google-play"))?.session || null; }
+      catch (error) { if (error.code !== "SESSION_UNLOCK_FAILED") throw error; throw publicError("Saved Google sign-in could not be unlocked. Allow Keychain access and retry; the saved session has been kept."); }
+    },
     saveActiveSession: session => session ? persist(session) : vault.removeSession("google-play"),
-    signIn: async options => { const result = await browserLogin({ remember: true, ...options }); return { completed: true, accountId: result.sharedAccountId }; },
+    signIn: async options => { const result = await browserLogin({ remember: true, ...options, registerAccount: true }); return { completed: true, accountId: result.sharedAccountId }; },
     focus: accountId => browserAuth.focus(accountId) };
 }
 module.exports = { createGoogleAccountManager };

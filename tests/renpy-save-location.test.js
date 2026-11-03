@@ -195,7 +195,7 @@ test("archive-cache invalidation and normalized module hydration repair stale bl
   assert.equal(entry.saveDirOverride, "/explicit-user-choice"); assert.deepEqual(entry.moduleData.saveDirectories, result.directories);
 });
 
-test("SDK save discovery uses the selected private mirror and keeps original existing saves visible", t => {
+test("SDK save discovery follows original paths and leaves previous private saves untouched", t => {
   const f = fixture(t), userDataDir = path.join(f.root, "userdata");
   fs.writeFileSync(f.options, 'define config.save_directory = "PrivateMirror"\n');
   fs.mkdirSync(path.join(f.gameDir, "saves"));
@@ -204,12 +204,16 @@ test("SDK save discovery uses the selected private mirror and keeps original exi
   const location = Renpy.resolveSaveLocations(entry, { userDataDir, homeDir: f.home, env: {} });
   const mirror = path.join(RuntimeSdk.resolveWrapperDir(userDataDir, entry.gameId, "8.5.3"), "game", "saves");
   assert.equal(location.primaryDirectory, path.join(f.home, "Library", "RenPy", "PrivateMirror"));
-  assert.deepEqual(location.directories.map(item => item.directory), [location.primaryDirectory, mirror, path.join(f.gameDir, "saves")]);
-  assert.equal(location.directories.at(-1).role, "original");
+  assert.deepEqual(location.directories.map(item => item.directory), [location.primaryDirectory, path.join(f.gameDir, "saves")]);
   assert.equal(fs.existsSync(mirror), false);
   fs.writeFileSync(f.options, "define config.save_directory = None\n");
   const local = Renpy.resolveSaveLocations(entry, { userDataDir, homeDir: f.home, env: {} });
-  assert.equal(local.primaryDirectory, mirror);
-  assert.deepEqual(local.directories.map(item => item.directory), [mirror, path.join(f.gameDir, "saves")]);
+  assert.equal(local.primaryDirectory, path.join(f.gameDir, "saves"));
+  assert.deepEqual(local.directories.map(item => item.directory), [path.join(f.gameDir, "saves")]);
   assert.equal(fs.existsSync(userDataDir), false);
+  fs.mkdirSync(mirror, { recursive: true });fs.writeFileSync(path.join(mirror, "retained.save"), "previous bytes");
+  const previous = Renpy.resolveSaveLocations(entry, { userDataDir, homeDir: f.home, env: {} });
+  assert.equal(previous.primaryDirectory, path.join(f.gameDir, "saves"));
+  assert.deepEqual(previous.directories.map(item => item.directory), [path.join(f.gameDir, "saves")]);
+  assert.equal(fs.readFileSync(path.join(mirror, "retained.save"), "utf8"), "previous bytes");
 });

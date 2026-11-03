@@ -16,6 +16,9 @@ function createManager(dependencies = {}) {
     memberOrder: 100, management: "managed" };
   manager.payloadPolicy = require("./innoextract-payload-policy.json");
   manager.distributionRequired = false;
+  // Profile migration only; ordinary installer preparation reads current data.
+  manager.migrateLegacyGameData = (entry, context = {}) =>
+    require("../backcompat/inno-receipts").migrateLegacyGameData(entry, { ...context, manager });
   manager.ensure = async (entry = {}, payload = {}, context = {}) => {
     if (!context.userDataDir) throw installerError("The installer reader requires the launcher profile directory.", "INSTALLER_TOOL_MISSING");
     let selected = manager.resolveSelection(entry, context.settings, context.userDataDir, { version: payload.toolVersion });

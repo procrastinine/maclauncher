@@ -8,12 +8,13 @@ const Zip = require("../shared/runtime/zip");
 const Storage = require("./storage");
 const Cache = require("./prepared-cache");
 const Digests = require("./preparation-digests");
+const { hasFineChangeTime } = require("../shared/file-time");
 const { generationKey, generationPaths, retainPrepared, prunePrepared } = Cache;
 const PREPARATION_SCHEMA = 2;
 const NATIVE_INSTALL_VERSION = 1;
 const nativeLibrary = name => /^lib\/[^/]+\/[^/]+\.so$/.test(name);
 // Memory reuse complements the launcher-owned persistent index. Both use the
-// same current nanosecond file identity, never a time-based freshness window.
+// same fine-precision file identity, never a time-based freshness window.
 const fileHashes = new Map(), FILE_HASH_CACHE_LIMIT = 8192;
 const fileIdentity = Digests.identity;
 const hash = value => crypto.createHash("sha256").update(value).digest("hex");
@@ -62,12 +63,19 @@ function applicationPaths(entry, userDataDir) {
   return { filesRoot, cacheRoot };
 }
 
+async function readHash(input, signal) {
+  signal?.throwIfAborted();
+  const digest = crypto.createHash("sha256");
+  for await (const chunk of input.createReadStream({ start: 0, autoClose: false, signal })) digest.update(chunk);
+  return digest.digest("hex");
+}
+
 async function fileHash(file, signal, digests) {
   signal?.throwIfAborted();
   const key=path.resolve(file),current=fs.lstatSync(file,{bigint:true});
   if(!current.isFile())throw new Error("Android preparation inputs must be regular files.");
   const cached=fileHashes.get(key) || digests?.get(key);
-  if(cached?.identity===fileIdentity(current)){
+  if(Digests.reusable(current,cached)){
     fileHashes.delete(key);fileHashes.set(key,cached);digests?.set(key,cached);
     if(fileHashes.size>FILE_HASH_CACHE_LIMIT)fileHashes.delete(fileHashes.keys().next().value);
     return cached.sha256;
@@ -79,14 +87,16 @@ async function fileHash(file, signal, digests) {
     const identity=fileIdentity(before);
     signal?.throwIfAborted();
     fileHashes.delete(key);
-    const digest=crypto.createHash("sha256");
-    for await(const chunk of input.createReadStream({autoClose:false,signal}))digest.update(chunk);
+    const sha256=await readHash(input,signal);
+    // Whole-second change times cannot prove stability during a read either.
+    // Re-read the same descriptor from byte zero, without buffering the file.
+    const consistent=hasFineChangeTime(before) || await readHash(input,signal)===sha256;
     const descriptorAfter=fileIdentity(await input.stat({bigint:true})),pathAfter=fileIdentity(fs.lstatSync(file,{bigint:true}));
-    if(descriptorAfter!==identity || pathAfter!==identity)
+    if(!consistent || descriptorAfter!==identity || pathAfter!==identity)
       throw Object.assign(new Error("An Android preparation file changed while being read."),{
         code:"ANDROID_PREPARATION_INPUT_CHANGED",path:key,identityBefore:identity,identityDescriptorAfter:descriptorAfter,identityPathAfter:pathAfter
       });
-    signal?.throwIfAborted();const sha256=digest.digest("hex");
+    signal?.throwIfAborted();
     if(fileHashes.size>=FILE_HASH_CACHE_LIMIT)fileHashes.delete(fileHashes.keys().next().value);
     const value={identity,sha256};fileHashes.set(key,value);digests?.set(key,value);return sha256;
   } catch(error) {fileHashes.delete(key);throw error;}
@@ -104,8 +114,11 @@ async function copyOriginal(input, output, expected, signal) {
       throw new Error("Android preparation inputs must be regular files.");
     await copyFileExclusive(input, output, { signal, mode: 0o600, validate: async staged => {
       const digest = await fileHash(staged, signal);
+      // A clone may still contain the original bytes after its source changed.
+      // Coarse source metadata therefore needs its own current byte validation.
+      const sourceMatches = hasFineChangeTime(before) || await fileHash(input, signal) === expected;
       if (fileIdentity(await source.stat({ bigint: true })) !== fileIdentity(before) ||
-          fileIdentity(fs.lstatSync(input, { bigint: true })) !== fileIdentity(before) || digest !== expected)
+          fileIdentity(fs.lstatSync(input, { bigint: true })) !== fileIdentity(before) || !sourceMatches || digest !== expected)
         throw new Error("An Android package changed during preparation. Try Play again.");
     } });
   } finally { await source.close(); }

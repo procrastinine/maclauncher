@@ -28,7 +28,7 @@ A `package.nw` folder is already readable and runs from its original location; s
 
 Some Tyrano exports expect a `$.userenv` object that their runtime does not provide. MacLauncher injects that compatibility fallback into the game process without editing the author's `libs.js`.
 
-Older Tyrano exports save files next to the runner executable. In Electron, Tyrano's file-save functions write the original escaped JSON format to the game's own storage in MacLauncher instead.
+Older Tyrano exports save files next to the runner executable. In Electron, Tyrano's file-save functions write the original escaped JSON format to the original game folder, or to the save-folder override. The shared Electron executable does not become the game's save location. Browser storage stays in the selected browser profile.
 
 ## Tools
 

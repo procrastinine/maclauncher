@@ -45,7 +45,9 @@ function inspectApplication(runtimePath) {
   const signature = [path.join(appPath, "Contents", "Info.plist"), ...commands]
     .map(file => { const stat = fs.statSync(file); return [fs.realpathSync(file), stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs, stat.mode]; });
   const key = JSON.stringify(signature), cached = applicationCache.get(appPath);
-  if (cached?.key === key) return { ...cached.install, architectures: [...cached.install.architectures] };
+  // Whole-second ctime cannot distinguish same-size HFS+ updates. Re-read the
+  // bounded plist and executable headers instead of reusing metadata alone.
+  if (cached?.key === key && signature.every(row => row[4] % 1000 !== 0)) return { ...cached.install, architectures: [...cached.install.architectures] };
   for (const file of commands) {
     if (!fs.statSync(file).isFile() || !(fs.statSync(file).mode & 0o111)) throw new Error("The selected application has no usable CrossOver command-line runtime.");
     const relative = path.relative(appPath, fs.realpathSync(file));
@@ -93,6 +95,13 @@ function listInstalled(userDataDir, { automaticPaths = AUTOMATIC_PATHS } = {}) {
   for (const row of installed) repeated.set(row.versionLabel, (repeated.get(row.versionLabel) || 0) + 1);
   return installed.map(row => repeated.get(row.versionLabel) > 1
     ? { ...row, versionLabel: `${row.versionLabel} · ${path.dirname(row.appPath)}` } : row);
+}
+// Every CrossOver location Runtimes knows, present or not: added applications
+// and the standard locations that were not removed. Nothing is inspected.
+function knownApplications(userDataDir) {
+  const registry = userDataDir ? readRegistry(userDataDir) : { applications: [], ignoredPaths: [] };
+  return [...new Set([...registry.applications.map(item => item.appPath), ...AUTOMATIC_PATHS.filter(file => !registry.ignoredPaths.includes(file))])]
+    .filter(file => typeof file === "string" && path.isAbsolute(file));
 }
 function normalizeSettings(value) {
   return { defaultVersion: typeof value?.defaultVersion === "string" && /^local-[a-f0-9]{16}$/.test(value.defaultVersion) ? value.defaultVersion : null };
@@ -161,7 +170,7 @@ const manager = { id: "crossover", label: "CrossOver", ui: { groupId: "crossover
     return listInstalled(userDataDir).some(item => item.version === current) ? settings : { ...settings, defaultVersion: null };
   },
   isAvailable: userDataDir => listInstalled(userDataDir).some(item => item.ready),
-  core: { listInstalled, inspectApplication, identity },
+  core: { listInstalled, inspectApplication, identity, knownApplications },
   __test: { AUTOMATIC_PATHS, readRegistry, writeRegistry, registryPath, compareApplications } };
 require("../../shared/runtime/custom-runtime").configure(manager, { inspect: inspectApplication });
 module.exports = manager;

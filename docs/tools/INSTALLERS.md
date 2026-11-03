@@ -8,7 +8,7 @@ MacLauncher's installer reader is [innoextract](https://github.com/dscharrer/inn
 
 The reader accepts unencrypted Inno Setup installers. An installer consists of its `.exe` and the numbered `.bin` data parts in the same folder, and if a part is missing, the error names the required files.
 
-A successful extraction is stored once in private launcher data. Later imports reuse it when the installer and reader bytes match, even if filesystem metadata has changed: unchanged metadata takes a quick path, and any change requires checksum verification. Separate library entries keep separate game data. [Installer extraction](../library/GAME_PREPARATION.md#installer-extraction) describes the cache in full.
+A successful extraction is stored once in launcher data and becomes the game's writable source folder. Later imports reuse it when the installer and reader bytes match. Saves, patches and added assets remain in that folder; reuse does not scan or checksum its contents. Separate library entries keep separate game data. [Installer extraction](../library/GAME_PREPARATION.md#installer-extraction) describes reuse in full.
 
 ## Packages
 

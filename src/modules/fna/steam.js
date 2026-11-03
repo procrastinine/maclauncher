@@ -9,9 +9,12 @@ function consumerImports(info) {
   const imports = (info.nativeImportEvidence || []).filter(item => LIBRARY.test(item.library || ""));
   return imports.some(item => POSITIVE.test(item.name || "")) ? imports : [];
 }
-function originalLibraries(source) {
-  return fs.readdirSync(source, { withFileTypes: true }).filter(item => item.isFile() && LIBRARY.test(item.name))
-    .slice(0, 32).map(item => path.join(source, item.name));
+function originalLibraries(source, imports) {
+  const names = new Set([...imports.map(item => item.library), ...["steam_api", "steam_api64", "libsteam_api", "libsteam_api64"]
+    .flatMap(stem => [stem, ...["dll", "dylib", "so", "bundle"].map(extension => stem + "." + extension)])]);
+  return [...names].slice(0, 32).map(name => path.join(source, name)).filter(file => {
+    try {return fs.statSync(file).isFile();} catch {return false;}
+  });
 }
 function clrAliases(imports) {
   return [...new Set(imports.flatMap(item => {
@@ -26,7 +29,7 @@ function clrAliases(imports) {
     return names;
   }))].sort();
 }
-async function prepareLaunch({ info, context, gameRoot, baseEnvironment, arch = "arm64" }) {
+async function prepareLaunch({ info, context, ownedDirectory, baseEnvironment, arch = "arm64" }) {
   const imports = consumerImports(info);
   if (!imports.length) return null;
   if (info.dependencyInspection?.complete === false) throw new Error("The game's managed Steam API requirements could not be inspected completely.");
@@ -35,8 +38,8 @@ async function prepareLaunch({ info, context, gameRoot, baseEnvironment, arch = 
   const managed = await Managed.selectManagedProfile({ imports, architecture: arch, signal: context.signal });
   const request = { required: true, appId, arch, symbols: [...new Set(imports.map(item => item.name))],
     ...managed,
-    nativeLibraryPaths: originalLibraries(source), aliases: clrAliases(imports),
-    ownedDirectory: path.join(path.dirname(path.dirname(gameRoot)), "steam-api") };
+    nativeLibraryPaths: originalLibraries(source, imports), aliases: clrAliases(imports),
+    ownedDirectory };
   const prepared = context.prepareSteamApi ? await context.prepareSteamApi(request, { baseEnvironment }) :
     await require("../shared/runtime/steamworks/automatic").prepareAutomaticLaunch(request, { ...context, baseEnvironment });
   if (!prepared?.libraryPath) throw new Error("The native Steam API library is unavailable.");

@@ -38,6 +38,25 @@ test("patchOnsyuriJs forces web environment", () => {
   }
 });
 
+test("generated Yuri scripts and HTML replace staged links without modifying runtime inputs", t => {
+  const root = makeTempDir("maclauncher-onsyuri-linked-inputs-");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const runtimeRoot = path.join(root, "runtime"), wrapperDir = path.join(root, "wrapper");
+  fs.mkdirSync(wrapperDir);
+  const source = 'var ENVIRONMENT_IS_NODE=globalThis.process?.versions?.node&&globalThis.process?.type!="renderer";';
+  const html = '<html><head><script src="onsyuri.js"></script></head><body></body></html>';
+  writeFile(path.join(runtimeRoot, "onsyuri.js"), source);
+  writeFile(path.join(runtimeRoot, "onsyuri.html"), html);
+  fs.symlinkSync(path.join(runtimeRoot, "onsyuri.js"), path.join(wrapperDir, "onsyuri.js"));
+  fs.symlinkSync(path.join(runtimeRoot, "onsyuri.html"), path.join(wrapperDir, "maclauncher-onsyuri.html"));
+  NscripterModule.__test.patchOnsyuriJs(wrapperDir, runtimeRoot);
+  NscripterModule.__test.ensureOnsyuriHtml(wrapperDir, path.join(runtimeRoot, "onsyuri.html"));
+  assert.equal(fs.readFileSync(path.join(runtimeRoot, "onsyuri.js"), "utf8"), source);
+  assert.equal(fs.readFileSync(path.join(runtimeRoot, "onsyuri.html"), "utf8"), html);
+  assert.equal(fs.lstatSync(path.join(wrapperDir, "onsyuri.js")).isSymbolicLink(), false);
+  assert.equal(fs.lstatSync(path.join(wrapperDir, "maclauncher-onsyuri.html")).isSymbolicLink(), false);
+});
+
 test("ensureOnsyuriHtml uses local JSZip when available", () => {
   const root = makeTempDir("maclauncher-onsyuri-html-");
   const wrapperDir = path.join(root, "wrapper");

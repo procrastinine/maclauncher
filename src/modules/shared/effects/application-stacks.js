@@ -2,9 +2,9 @@ const fs = require("node:fs"), path = require("node:path");
 const Writable = require("../writable-input");
 const { readJsonDocument } = require("../../../core/json-files");
 
-// The graphics stack of each app that received window graphics: its plan and
-// its capture settings. A session starts from its app's stack and saves the
-// stack back when it ends. The file holds JSON settings only and stays
+// The graphics stack of each app or display that received window graphics:
+// its plan and its capture settings. A session starts from its stack and
+// saves the stack back when it ends. The file holds JSON settings only and stays
 // bounded: a stack equal to the default is not stored, the least recently
 // used app goes first beyond 50 apps or 2 MiB, a stack over 64 KiB is not
 // saved, and apps that are no longer installed are removed.
@@ -19,9 +19,12 @@ function location(root) {
   return path.join(root, "graphics", "application-stacks.json");
 }
 // Bundle identifier, else executable path and name for a process without a
-// bundle, else the display.
+// bundle. A display by its stable identifier, else its name; All Displays
+// has one stack.
 function key(identity) {
-  if (identity?.target === "display") return "display";
+  if (identity?.target === "all-displays") return "all-displays";
+  if (identity?.target === "display")
+    return validName(identity.uuid) ? "display:" + identity.uuid : validName(identity.name) ? "display-name:" + identity.name : null;
   if (validName(identity?.bundleIdentifier)) return "bundle:" + identity.bundleIdentifier;
   if (path.isAbsolute(identity?.executablePath || "") && validName(identity.name)) return "executable:" + JSON.stringify([identity.executablePath, identity.name]);
   return null;
@@ -41,10 +44,10 @@ function stored(root) {
   } catch { return {}; }
 }
 // The saved stack for an app, or null. A plan that cannot be read is left out.
-function lookup(root, identity) {
+function lookup(root, identity, { prepareEffects = value => value } = {}) {
   const name = key(identity), stacks = name ? stored(root) : {}, value = Object.hasOwn(stacks, name) ? stacks[name] : null;
   if (!object(value)) return null;
-  const StoredPlan = require("./stored-plan"), inspected = value.effects == null ? null : StoredPlan.inspect(value.effects);
+  const StoredPlan = require("./stored-plan"), inspected = value.effects == null ? null : StoredPlan.inspect(prepareEffects(value.effects));
   const effects = inspected && !inspected.error ? StoredPlan.serialize(inspected.plan) : null, runtimeSettings = settingsValue(value.runtimeSettings);
   return effects || runtimeSettings ? { ...(effects ? { effects } : {}), ...(runtimeSettings ? { runtimeSettings } : {}) } : null;
 }

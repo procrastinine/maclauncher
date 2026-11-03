@@ -55,6 +55,7 @@ async function installed(parent, arch) {
 // is checked against GitHub's current digest; without one, the download's own
 // SHA-256 is recorded. When the release list is unavailable, the newest
 // installed helper is used.
+// The default publisher build follows the launcher CPU, independently of physical hardware.
 async function ensureGogdl({ userDataDir, signal, onProgress, arch = process.arch, platform = process.platform, logger } = {}) {
   if (platform !== 'darwin' || !['arm64', 'x64'].includes(arch) || !path.isAbsolute(userDataDir || '')) throw new Error('The GOG game download helper requires a supported Mac.');
   const parent = path.join(userDataDir, 'external/tools');
@@ -101,4 +102,4 @@ async function ensureGogdl({ userDataDir, signal, onProgress, arch = process.arc
   pending.set(key, operation);
   try { return await operation; } finally { if (pending.get(key) === operation) pending.delete(key); }
 }
-module.exports = { GOGDL, ensureGogdl, macExecutable, source };
+module.exports = { GOGDL, ensureGogdl, installed, macExecutable, source };

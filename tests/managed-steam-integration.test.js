@@ -80,7 +80,7 @@ test("FNA automatically supplies the shared dependency and preserves original Wi
   const windowsSdk = path.join(source, "steam_api64.dll"); fs.writeFileSync(windowsSdk, "MZ original SDK bytes");
   const original = Native.hashFile(windowsSdk), calls = [], context = trustedContext(root, calls), selected = selectedFna(root);
   t.mock.method(FnaManager, "resolveSelection", () => selected);
-  let launched; context.spawnDetachedChecked = (...args) => { launched = args; return { pid: 1 }; };
+  let launched; context.spawnDetachedChecked = (...args) => { launched = args; return { pid: 1, exitCode: 0 }; };
   await Fna.launchRuntime("fna", entry, context);
   assert.equal(calls.length, 1); assert.equal(calls[0].appId.value, 480); assert.equal(calls[0].arch, "arm64");
   assert.deepEqual(calls[0].symbols, ["SteamAPI_Init", "GetHSteamUser"]);
@@ -88,6 +88,8 @@ test("FNA automatically supplies the shared dependency and preserves original Wi
   assert.equal(calls[0].nativeLibraryPaths.includes(windowsSdk), true);
   assert.ok(calls[0].ownedDirectory.startsWith(path.join(context.userDataDir, "games", entry.gameId)));
   assert.equal(launched[2].env.SteamAppId, "480"); assert.equal(launched[2].env.DOTNET_ROOT, selected.profile.root);
+  assert.equal(launched[2].cwd, source, "Steam helpers do not redirect the game's working directory");
+  assert.equal(launched[2].env.MACLAUNCHER_FNA_GAME_ROOT, source);
   assert.equal(Native.hashFile(windowsSdk), original);
   assert.equal(fs.readFileSync(path.join(launched[2].cwd, "steam_api64.dll"), "utf8"), "MZ original SDK bytes");
 });
@@ -96,7 +98,7 @@ test("Steam-looking DLL names without actual Steam consumer symbols do no depend
   const { root, entry } = fnaGame(t, [{ library: "steam_api.dll", name: "UnrelatedFunction" }]);
   const selected = selectedFna(root); t.mock.method(FnaManager, "resolveSelection", () => selected);
   const context = { userDataDir: path.join(root, "launcher"), settings: {}, runtimeSettings: {},
-    prepareSteamApi: () => { throw new Error("No Steam consumer"); }, spawnDetachedChecked: () => ({ pid: 1 }) };
+    prepareSteamApi: () => { throw new Error("No Steam consumer"); }, spawnDetachedChecked: () => ({ pid: 1, exitCode: 0 }) };
   await Fna.launchRuntime("fna", entry, context);
   assert.equal(fs.existsSync(path.join(context.userDataDir, "games", entry.gameId, "modules", "fna", "steam-api")), false);
   assert.deepEqual(UnitySteam.consumerImports({ nativeImportEvidence: [{ library: "steam_api", name: "UnrelatedFunction" }] }), []);
@@ -153,7 +155,7 @@ test("FNA and Unity forward a measured consumer identity without changing origin
   t.mock.method(ManagedSteam, "selectManagedProfile", async request => { selected.push(request); return managed; });
   const original = Native.hashFile(fna.assembly);
   await FnaSteam.prepareLaunch({ info: fna.entry.moduleData, context: ctx,
-    gameRoot: path.join(ctx.userDataDir, "games", "fna-game", "modules", "fna", "overlays", "runtime"), baseEnvironment: {} });
+    ownedDirectory: path.join(ctx.userDataDir, "games", "fna-game", "modules", "fna", "steam-api"), baseEnvironment: {} });
   assert.equal(calls[0].abiProfile, managed.abiProfile); assert.equal(calls[0].version, managed.version);
   assert.deepEqual(calls[0].managedConsumers, managed.managedConsumers); assert.equal(selected[0].architecture, "arm64");
   const dataRoot = path.join(root, "unity-original", "Game_Data"); fs.mkdirSync(dataRoot, { recursive: true });

@@ -138,7 +138,8 @@ test('launcher packages link their installed upstream metadata without enumerati
     const metadata = JSON.parse(fs.readFileSync(path.join(root, 'node_modules', name, 'package.json'), 'utf8'));
     const repository = typeof metadata.repository === 'string' ? metadata.repository : metadata.repository?.url;
     assert.ok(repository, `${name}: upstream metadata required`);
-    const url = repository.replace(/^git\+/, '').replace(/^git:\/\/github.com\//, 'https://github.com/').replace(/\.git$/, '');
+    // npm reads a bare owner/name repository as a GitHub project.
+    const url = repository.replace(/^git\+/, '').replace(/^git:\/\/github.com\//, 'https://github.com/').replace(/^(?:github:)?([\w.-]+\/[\w.-]+)$/, 'https://github.com/$1').replace(/\.git$/, '');
     assert.ok(allProjects.has(normalized(url)), `${name}: ${url}`);
   }
 });

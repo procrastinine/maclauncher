@@ -293,6 +293,17 @@ test("native diagnostics and GPU timing are independent and use per-launch owned
   assert.equal(next.phase, "prepared", "preparation never claims successful presentation");
   assert.equal(JSON.stringify(next).includes("PATH"), false);
 });
+test("each preparation starts a new native log and keeps the previous launch's", { skip: process.platform !== "darwin" }, async t => {
+  const options = { ...fixture(t, ORDERED), graphicsHost: "window", execute: compiled() };
+  const entry = { gameId: "game-1", effects: plan(shader()) };
+  const log = path.join(options.userDataDir, "games/game-1/effects/reshade/reshade.log");
+  assert.equal((await ReShade.prepare(entry, options)).RESHADE_LOG, log);
+  assert.equal(fs.existsSync(log + ".previous"), false, "a first launch has no earlier log");
+  fs.writeFileSync(log, "first launch"); fs.writeFileSync(log + ".previous", "older launch");
+  assert.equal((await ReShade.prepare(entry, options)).RESHADE_LOG, log);
+  assert.equal(fs.existsSync(log), false);
+  assert.equal(fs.readFileSync(log + ".previous", "utf8"), "first launch");
+});
 test("an invalid custom shader is skipped at launch without replacing a prior prepared effect", { skip: process.platform !== "darwin" }, async t => {
   const options = { ...fixture(t, ORDERED), graphicsHost: "window" };
   const selection = path.join(options.userDataDir, "games/game-1/effects/reshade/plan-nodes/shader/live-selection.json");

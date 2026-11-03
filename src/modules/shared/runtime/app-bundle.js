@@ -1,6 +1,9 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../copy-file");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { hasFineChangeTime } = require("../file-time");
+const { createVerifiedIdentityCache } = require("./verified-identity");
 
 function existsFile(p) {
   try {
@@ -39,7 +42,27 @@ function readBundleBytes(filePath, detection, maximum) {
   } finally { if (fd !== undefined) fs.closeSync(fd); }
 }
 
+const plistCache = createVerifiedIdentityCache({ maximum: 64 });
+function plistIdentity(appPath) {
+  try {
+    return JSON.stringify([appPath, plistPath(appPath)].map((file, index) => {
+      const stat = fs.statSync(file, { bigint: true }), link = fs.lstatSync(file, { bigint: true });
+      if (index && !hasFineChangeTime(stat)) throw new Error("Coarse plist identity cannot be reused.");
+      const facts = value => [value.dev, value.ino, value.mode, value.size, value.mtimeNs, value.ctimeNs].map(String);
+      return [fs.realpathSync(file), facts(stat), facts(link)];
+    }));
+  } catch { return null; }
+}
+
 function readInfoPlist(appPath, { detection } = {}) {
+  if (detection) return readInfoPlistUncached(appPath, { detection });
+  return structuredClone(plistCache.verify(appPath, {
+    identity: () => plistIdentity(appPath),
+    verify: () => readInfoPlistUncached(appPath)
+  }));
+}
+
+function readInfoPlistUncached(appPath, { detection } = {}) {
   const infoPath = plistPath(appPath);
   const raw = readBundleBytes(infoPath, detection, MAX_PLIST_BYTES);
   if (!raw || raw.length < 16) return null;
@@ -159,7 +182,7 @@ function isContained(root, target) {
   return !relative || (!path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(`..${path.sep}`));
 }
 
-function validateAppBundle(appPath, { executablePath, allowContainedAbsoluteSymlinks = false } = {}) {
+function validateAppBundleEntry(appPath, { executablePath } = {}) {
   const requestedRoot = path.resolve(String(appPath || ""));
   if (!appPath || !existsDir(requestedRoot) || !fs.lstatSync(requestedRoot).isDirectory()) {
     throw new Error("App bundle directory is missing or is a symlink.");
@@ -179,11 +202,19 @@ function validateAppBundle(appPath, { executablePath, allowContainedAbsoluteSyml
     throw new Error("App bundle executable escapes Contents/MacOS or the bundle.");
   }
   if (!(fs.statSync(executable).mode & 0o111)) throw new Error("App bundle executable has no execute permission.");
+  return { appPath: root, executableRelative };
+}
 
+function validateAppBundle(appPath, { executablePath, allowContainedAbsoluteSymlinks = false } = {}, observations) {
+  const { appPath: root, executableRelative } = validateAppBundleEntry(appPath, { executablePath });
+  const observe = file => { if (observations) observations.push([file, bundlePathFacts(file)]); };
+  observe(root); observe(plistPath(root)); observe(path.join(root, executableRelative));
+  const requestedRoot = path.resolve(appPath);
   const symlinks = [];
   const directories = [root];
   while (directories.length) {
     const directory = directories.pop();
+    observe(directory);
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
       const full = path.join(directory, entry.name);
       const relativePath = path.relative(root, full);
@@ -216,6 +247,7 @@ function validateAppBundle(appPath, { executablePath, allowContainedAbsoluteSyml
           normalizedTarget = path.relative(directory, targetInRoot) || ".";
         }
         symlinks.push({ relativePath, target, normalizedTarget });
+        observe(full);
       } else if (entry.isDirectory()) {
         directories.push(full);
       } else if (!entry.isFile()) {
@@ -226,13 +258,42 @@ function validateAppBundle(appPath, { executablePath, allowContainedAbsoluteSyml
   return { appPath: root, executableRelative, symlinks };
 }
 
-function appBundleStatus(appPath, options) {
+function bundlePathFacts(file) {
   try {
-    validateAppBundle(appPath, options);
-    return { ready: true, reason: null };
-  } catch (error) {
-    return { ready: false, reason: String(error?.message || error) };
+    const own = fs.lstatSync(file, { bigint: true }), target = fs.statSync(file, { bigint: true });
+    if (!hasFineChangeTime(own) || !hasFineChangeTime(target)) return null;
+    const facts = stat => [stat.dev, stat.ino, stat.mode, stat.size, stat.mtimeNs, stat.ctimeNs].map(String);
+    return [fs.realpathSync(file), facts(own), facts(target), own.isSymbolicLink() ? fs.readlinkSync(file) : null];
+  } catch { return null; }
+}
+
+function bundleObservationIdentity(record) {
+  if (!record) return null;
+  for (const [file, previous] of record.observations) {
+    if (!previous || JSON.stringify(bundlePathFacts(file)) !== JSON.stringify(previous)) return null;
   }
+  return JSON.stringify(record.observations);
+}
+
+const bundleStatuses = createVerifiedIdentityCache({ maximum: 64 });
+function appBundleStatus(appPath, options = {}) {
+  try {
+    let inspected;
+    bundleStatuses.verify(JSON.stringify([appPath, options.executablePath, Boolean(options.allowContainedAbsoluteSymlinks)]), {
+      identity(previous) {
+        if (inspected) return bundleObservationIdentity(inspected);
+        const unchanged = bundleObservationIdentity(previous);
+        if (unchanged) return unchanged;
+        // Discover and validate changed structure once, retaining observations
+        // from before each directory walk. Warm reuse only stats these paths.
+        inspected = { observations: [] };
+        validateAppBundle(appPath, options, inspected.observations);
+        return bundleObservationIdentity(inspected);
+      },
+      verify: () => inspected
+    });
+    return { ready: true, reason: null };
+  } catch (error) { return { ready: false, reason: String(error?.message || error) }; }
 }
 
 function appBundleLaunchCommand(appPath, args, { executablePath, preferredName } = {}) {
@@ -268,12 +329,7 @@ function copyAppBundle(sourceAppPath, destAppPath) {
   const previous = path.join(temporary, "previous.app");
   let keepTemporary = false;
   try {
-    fs.cpSync(source.appPath, staged, {
-      recursive: true,
-      dereference: false,
-      verbatimSymlinks: true,
-      preserveTimestamps: true
-    });
+    cloneOrCopySync(source.appPath, staged);
     for (const link of source.symlinks) {
       if (link.target === link.normalizedTarget) continue;
       const copiedLink = path.join(staged, link.relativePath);

@@ -1,0 +1,34 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const Renpy=require('../src/modules/renpy/main');
+test('URM selection remembers a private RPA, reuses it offline and replaces only after a valid choice',async t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'renpy-user-mod-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const userDataDir=path.join(root,'profile');
+ const game=name=>{const folder=path.join(root,name);fs.mkdirSync(path.join(folder,'game'),{recursive:true});return{gamePath:folder,contentRootDir:folder};};
+ const firstGame=game('first-game'),secondGame=game('second-game');
+ const supplied=path.join(root,'supplied.rpa'),replacement=path.join(root,'replacement.rpa'),invalid=path.join(root,'invalid.rpa');
+ const firstBytes=Buffer.from('RPA-3.0 000000000000002e 00000000\nfirst supplied content');
+ const secondBytes=Buffer.from('RPA-3.0 000000000000002e 00000000\nreplacement supplied content');
+ fs.writeFileSync(supplied,firstBytes);fs.writeFileSync(replacement,secondBytes);fs.writeFileSync(invalid,'not an RPA file');
+ const replies=[{canceled:true,filePaths:[]},{canceled:false,filePaths:[supplied]},{canceled:true,filePaths:[]}];let prompts=0;
+ const context={userDataDir,ui:{dialog:{showOpenDialog:async options=>{prompts++;assert.deepEqual(options.properties,['openFile']);return replies.shift();}}},
+  confirmRuntimeInstall:()=>assert.fail('User-supplied Mod has no download consent or network path')};
+ t.mock.method(globalThis,'fetch',()=>assert.fail('No Mod download'));
+ const remembered=path.join(userDataDir,'renpy/user-tools/universal-mod/0x52_URM.rpa');
+ const installed=entry=>path.join(entry.gamePath,'game/0x52_URM.rpa');
+ assert.equal((await Renpy.actions.addRenpyMod(firstGame,{},context)).canceled,true);
+ assert.equal(fs.existsSync(remembered),false);assert.equal(fs.existsSync(installed(firstGame)),false);
+ assert.equal((await Renpy.actions.addRenpyMod(firstGame,{},context)).urmInstalled,true);
+ assert.deepEqual(fs.readFileSync(remembered),firstBytes);assert.equal(fs.statSync(remembered).mode&0o777,0o600);
+ fs.unlinkSync(supplied);
+ assert.equal((await Renpy.actions.addRenpyMod(secondGame,{},context)).urmInstalled,true);
+ assert.equal(prompts,2);assert.deepEqual(fs.readFileSync(installed(secondGame)),firstBytes);
+ await assert.rejects(Renpy.actions.chooseRenpyMod(secondGame,{filePaths:[invalid]},context),/not an RPA/);
+ assert.deepEqual(fs.readFileSync(remembered),firstBytes);assert.deepEqual(fs.readFileSync(installed(secondGame)),firstBytes);
+ assert.equal((await Renpy.actions.chooseRenpyMod(secondGame,{},context)).canceled,true);
+ assert.deepEqual(fs.readFileSync(remembered),firstBytes);
+ await Renpy.actions.chooseRenpyMod(secondGame,{filePaths:[replacement]},context);
+ assert.deepEqual(fs.readFileSync(remembered),secondBytes);assert.deepEqual(fs.readFileSync(installed(secondGame)),secondBytes);
+ assert.deepEqual(fs.readFileSync(installed(firstGame)),firstBytes);
+ assert.deepEqual(fs.readdirSync(path.dirname(remembered)),['0x52_URM.rpa']);
+});

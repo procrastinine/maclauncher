@@ -29,10 +29,14 @@ test("runtime metadata has no duplicate network control and preserves independen
 
 test("network normalization preserves legacy choices, initial defaults and fixed capability limits", () => {
   const Policy = require("../src/core/network-access");
+  const {convertLegacyRecord} = require("../src/core/backcompat/record-conversions");
   const info = { runtime: { entries: { runner: {}, fixed: { networkAccess: false } } } };
-  const entry = { runtimeId: "runner", runtimeSettings: {
+  const registry = {getModuleInfo: () => info};
+  const old = { runtimeId: "runner", runtimeSettings: {
     runner: { networkIsolation: false, enableProtections: true },
     other: { networkIsolation: true } } };
+  const entry = convertLegacyRecord(old, {registry});
+  assert.equal(Policy.overrideForEntry(old), null, "current launch policy never reinterprets old fields");
   assert.equal(Policy.overrideForEntry(entry, "other"), true);
   assert.equal(Policy.allowedForEntry(entry, {}, info, "runner"), true);
   assert.equal(Policy.allowedForEntry({ ...entry, networkAccess: false }, { launcher: { networkAccess: true } }, info, "runner"), false);
@@ -41,7 +45,7 @@ test("network normalization preserves legacy choices, initial defaults and fixed
   assert.equal(Policy.allowedForEntry({ networkAccess: true }, { launcher: { networkAccess: true } }, info, "fixed"), false);
   assert.equal(Policy.allowedForEntry({}, {}, info, "runner"), false);
   assert.equal(Policy.allowedForEntry({}, { launcher: { networkAccess: "true" } }, info, "runner"), false);
-  assert.equal(Policy.overrideForEntry({ runtimeSettings: { runner: { enableProtections: false } } }, "runner"), true);
+  assert.equal(Policy.overrideForEntry(convertLegacyRecord({runtimeId: "runner", runtimeSettings: { runner: { enableProtections: false } } }, {registry})), true);
   assert.equal(Policy.overrideForEntry({ runtimeId: "runner", runtimeSettings: { other: { networkIsolation: false } } }), null);
   const android = Isolation.withNetworkSettings(require("../src/modules/android/manifest.json"));
   for (const [id, entry] of Object.entries(android.runtime.entries)) {

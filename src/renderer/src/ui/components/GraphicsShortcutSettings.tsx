@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import type { LauncherApi, LauncherSettings } from "../types";
-import { fromKeyboardEvent, validate } from "../../../../modules/shared/graphics-shortcuts.mjs";
+import { fromKeyboardEvent, validate, ACTION_HELP } from "../../../../modules/shared/graphics-shortcuts.mjs";
 import { HelpTip } from "./HelpTip";
 
 type ShortcutStatus = {action: string; label: string; accelerator: string | null; reason?: string};
@@ -49,6 +49,7 @@ export function GraphicsShortcutSettings({api, settings, onSetLauncherSettings}:
   return <>
     {actions.map(item => <div className="settingsRow" key={item.action}>
       <div className="settingsLabel">{item.label}{item.action === "bypass" && <HelpTip label="About the bypass shortcut">Turns the frontmost game's graphics off or back on, like the Graphics checkbox.</HelpTip>}
+        {(ACTION_HELP as Record<string, string>)[item.action] && <HelpTip label={"About " + item.label}>{(ACTION_HELP as Record<string, string>)[item.action]}</HelpTip>}
         {item.action === "screenshot" && <HelpTip label="About the screenshot shortcut">Saves the frontmost game's final processed image as a PNG file. The performance overlay is not included.</HelpTip>}</div>
       <div className="settingsControl">
         <button type="button" className="btn small" aria-pressed={recording === item.action}

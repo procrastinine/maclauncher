@@ -7,6 +7,19 @@ const test = require("node:test");
 const ChildProcessGuard = require("../src/modules/shared/web/runtime/child-process-guard");
 const Patched = require("../src/modules/shared/web/runtime/nwjs-patched-launcher");
 
+test("case-insensitive NW helpers use the existing fs promises API without a Node14 module path",async t=>{
+  const root=makeTempDir("nwjs-current-cifs-");t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  fs.mkdirSync(path.join(root,"Assets"));fs.writeFileSync(path.join(root,"Assets","MixedCase.txt"),"original");
+  const file=path.join(__dirname,"../src/modules/shared/web/runtime/patched/case-insensitive-nw.js"), exported={};
+  const fsModule={...fs,promises:{...fs.promises}};
+  require("node:vm").runInNewContext(fs.readFileSync(file,"utf8"),{exports:exported,process:{env:{}},console:{log(){},warn(){},error(){}},
+    require:request=>{assert.notEqual(request,"fs/promises");return request==="fs"?fsModule:require(request);}});
+  await exported.loadCasemapFile(root);
+  assert.equal(await exported.findFileNameCI(root,"assets",true),"Assets");
+  assert.equal(await exported.findFileNameCI(path.join(root,"Assets"),"mixedcase.txt",false),"MixedCase.txt");
+  assert.equal(fs.readFileSync(path.join(root,"Assets","MixedCase.txt"),"utf8"),"original");
+});
+
 function makeTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }

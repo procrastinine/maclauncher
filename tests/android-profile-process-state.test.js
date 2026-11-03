@@ -7,6 +7,7 @@ const {frameworkJvmOptions}=require('../src/modules/android/jvm-options');
 const {paths}=require('../src/modules/android/platform-services/paths');
 
 test('profile process-info follows authenticated lifecycle and retirement across controllers',{timeout:90000},async t=>{
+  if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
  const runtime=process.env.KLEPTON_NATIVE_RUNTIME,home=process.env.JAVA_HOME;
  if(process.platform!=='darwin'||!runtime||!home)return t.skip('Requires built Android runtime and Java21');
  const root=await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(),'android-process-state-'))),children=new Set(),owners=[];
@@ -28,8 +29,8 @@ test('profile process-info follows authenticated lifecycle and retirement across
  async function application(uid,name='org.example.window'){
   const data=path.join(root,'app-'+uid),files=path.join(data,'files'),cache=path.join(data,'cache');await fs.mkdir(files,{recursive:true});await fs.mkdir(cache,{recursive:true});
   const prepared=path.join(root,'android/apps','app-'+uid,'prepared'),apk=path.join(prepared,'app.apk');await fs.mkdir(prepared,{recursive:true});
-  if(name==='org.maclauncher.metadata.fixture')await fs.copyFile(path.resolve('tests/fixtures/android-package-metadata/metadata.apk'),apk);
-  else {const manifest=path.join(prepared,'AndroidManifest.xml');await fs.copyFile(path.resolve('tests/fixtures/android-framework-services/manifests/window.xml.bin'),manifest);execFileSync(home+'/bin/jar',['--create','--file',apk,'-C',prepared,'AndroidManifest.xml']);}
+  if(name==='org.maclauncher.metadata.fixture')await fs.copyFile(require('./helpers/android-fixture-tools.cjs').metadataApk(t),apk);
+  else {const manifest=path.join(prepared,'AndroidManifest.xml');await fs.copyFile(require('./helpers/manifest-fixtures').file(t,'android-framework-services/manifests/window'),manifest);execFileSync(home+'/bin/jar',['--create','--file',apk,'-C',prepared,'AndroidManifest.xml']);}
   await fs.rename(apk,apk+'.unsigned');execFileSync(home+'/bin/java',['-cp',signerClasspath,'SignApkSet',key,apk+'.unsigned',apk]);await fs.rm(apk+'.unsigned');
   await fs.copyFile(apk,path.join(data,'app.apk'));
   const config={runtimeRoot:privateRuntime,packageName:name,filesRoot:files,cacheRoot:cache};

@@ -2,6 +2,7 @@
 #include "thread-identity.h"
 #include <assert.h>
 #include <errno.h>
+#include <dirent.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -92,5 +93,21 @@ int main(int argc,char **argv){
     assert(!klj_process_child_host(child_pid));
     assert(!klj_process_child_id(child));
     close(messages[0]);close(ack[1]);pthread_key_delete(late_key);
+    // A burst determines the high-water mark. Sequential short-lived threads
+    // reuse it instead of creating one disk block for every historical ID.
+    DIR *entries=opendir(directory);assert(entries);size_t before=0,after=0;struct dirent *entry;
+    while((entry=readdir(entries)))if(entry->d_name[0]>='0'&&entry->d_name[0]<='9')before++;
+    closedir(entries);
+    for(int i=0;i<4096;i++){int id=klj_thread_id_allocate();assert(id>0);klj_thread_id_release(id);}
+    entries=opendir(directory);assert(entries);
+    while((entry=readdir(entries)))if(entry->d_name[0]>='0'&&entry->d_name[0]<='9')after++;
+    closedir(entries);assert(after==before&&after<=35);
+    // Kernel locks release on abrupt process death, without user-space
+    // cleanup. A new physical owner can reclaim the same stable inode.
+    int released=klj_thread_id_allocate();klj_thread_id_release(released);
+    child=fork();assert(child>=0);
+    if(!child){assert(klj_process_id()==released);_exit(0);}
+    assert(waitpid(child,&status,0)==child&&WIFEXITED(status));
+    assert(klj_thread_id_allocate()==released);klj_thread_id_release(released);
     puts("PASS shared compact process/thread leases, reserved adoption, late TLS identity, Mach-death retirement, repeated reverse lookup and retained child wait");
 }

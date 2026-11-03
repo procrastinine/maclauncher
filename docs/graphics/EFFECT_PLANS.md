@@ -88,7 +88,7 @@ Preparation validates the model package and the installed provider before it pub
 | `vt-interpolation` | 2 or 4 |
 | `metalfx-image`, and the scene methods `metalfx`, `fsr3` and `xess` | 2 |
 
-`keepStaticContent` defaults to `true` and applies the [static-content step](PROVIDERS.md#static-content) after an image-pair method; it has no effect on scene methods. An LSFG row also holds `lsfgMode` (`quality` or `performance`), `lsfgFp16` and `lsfgFlowScale` (0.25 to 1).
+`keepStaticContent` is off by default for games and on by default for window graphics and applies the [static-content step](PROVIDERS.md#static-content) after an image-pair method; it has no effect on scene methods. An LSFG row also holds `lsfgMode` (`quality` or `performance`), `lsfgFp16` and `lsfgFlowScale` (0.25 to 1).
 
 ### Model inputs for image filters
 
@@ -125,7 +125,7 @@ Validation reports a helper whose owner is missing, is itself a helper or cannot
 Helpers are derived only from the shared geometry classifier:
 
 - An Upscale owner receives an input reduction and, at a fixed scale, a fit after it. Another source request, an explicit owner size or another reduction makes the sizing manual instead.
-- A neural image row receives the 540-pixel processing input, except for decoded video. It also receives a fit when the chain has no other reduction or upscaler.
+- A neural image row receives the 720-pixel processing input, except for decoded video. It also receives a fit when the chain has no other reduction or upscaler.
 - A fixed pixel size is a Downsample and derives no helpers.
 - A shader that replaces a row keeps the row's explicit factor or pixel size, even when that size gives the shader another resize type. A presentation fit or an automatic size takes the new slot's default instead.
 - A fixed-scale model's fit uses a filter that works in both directions, so it follows the window whether the model's output is larger or smaller.
@@ -205,7 +205,7 @@ The plan model underneath checks whole plans. `inspect(value)` returns `{plan: n
 
 ### Upgrading v0.4.0 settings
 
-MacLauncher v0.4.0 saved Simple settings in the record's `reshade` and `graphics` fields, and Advanced settings as schema 1 plans. A record that still holds them is upgraded wherever records are read (`src/core/graphics-record-upgrade.js`), so the app, its backend, shortcuts and command-line launches all see only `effects`. One atomic write stores the equivalent plan and removes the old fields; when that write fails, the next read upgrades the record again. The upgrade never prevents a record from loading. Each selection converts on its own, and a missing file or retired method leaves its row off with a notice, or produces only a notice when no row can hold it.
+MacLauncher v0.4.0 saved Simple settings in the record's `reshade` and `graphics` fields, and Advanced settings as schema 1 plans. Older records convert at their initial read through `src/core/backcompat/record-conversions.js` and `graphics-record-upgrade.js`, so the app, its backend, shortcuts and command-line launches use the same `effects` plan. One atomic write stores the equivalent plan and removes the old fields. If the write fails, converted choices remain active in memory and identical reads do not repeat the conversion or write in that process. Current-format records skip the conversion. Each selection converts on its own, and a missing file or retired method leaves its row off with a notice, or produces only a notice when no row can hold it.
 
 A schema 1 plan is kept when it validates, and otherwise rebuilt from the fields and rows that still validate. Known reduction and enlargement rows migrate to schema 2 without being reordered, and ambiguous fit rows keep their fit meaning. The old `method: "downsample"` becomes an explicit Downsample row that uses Bilinear.
 
@@ -252,7 +252,7 @@ Each catalog row's `recommendationRank` sets its tier in menus:
 | 2 | Ordinary rows. |
 | 3 | Specialized variants: libplacebo kernels other than Lanczos, EWA Lanczos, Spline (3 taps), Mitchell-Netravali and Catmull-Rom, and installed collection files that their collection does not name. |
 
-Ranks 0 and 1 appear first, under **Recommended**. Rank 3 appears after **More**, or in search results, under its group's heading after the group's other rows. A selected row is always listed. When a game's frame source declares its inputs, a row that needs an input the source omits carries `inputsAbsent`, a reason that names the missing inputs. It is listed under **Needs scene inputs** after the ordinary groups and stays selectable. Methods that the engine runs itself are exempt.
+Ranks 0 and 1 appear first, under **Recommended**. Rank 3 appears after **More**, or in search results, under its group's heading after the group's other rows. A selected row is always listed. When a game's frame source declares its inputs, a row that needs an input the source omits carries `inputsAbsent`, a reason that names the missing inputs. It is listed under **Needs scene inputs** after the ordinary groups and stays selectable. Methods that the engine runs itself are exempt. A frame source that also declares `imageOnly`, such as video playback, never supplies scene inputs. There, a row that needs one is unavailable, carries `sourceUnsupported` and a reason naming the missing inputs, and is left out of the menus. A built-in method also names a working method of its kind in `replacement` when one exists, MetalFX image interpolation first for frame generation. A Simple slot whose every method is left out is hidden unless the plan already holds a row for it.
 
 Shader packs and built-in presets declare a `purpose` for ordinary shaders: Sharpen, Colour and tone, CRT and retro, Anti-aliasing and blur, Lighting and lens, Restoration, Depth, Accessibility or Artistic. Effects that read renderer depth take Depth. Menus group ordinary shaders by purpose in that order. A pack effect whose label begins with the pack's name carries that name as its `family`. Menus leave the family out of the displayed name when the effect type or menu heading already names it, and search still matches it. Stored identifiers, library names and preset references keep the full label. Availability reasons appear as a secondary note beside the name.
 

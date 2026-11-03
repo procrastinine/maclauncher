@@ -229,7 +229,7 @@ function buildMkxpConfig({ entry, userDataDir, runtimeSettings, logger, stagedAs
 
   const soundfontPath = resolveFilePath(
     "soundfont",
-    normalizePathValue(runtimeSettings?.soundfontPath) || staged.soundfontPath,
+    normalizePathValue(runtimeSettings?.soundfontPath) || require("../soundfont").resolve(userDataDir) || staged.soundfontPath,
     logger,
     gameFolder
   );

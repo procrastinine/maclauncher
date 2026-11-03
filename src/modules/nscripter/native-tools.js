@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../shared/copy-file");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const GameData = require("../shared/game-data");
@@ -6,7 +7,6 @@ const GameData = require("../shared/game-data");
 const SCRIPT_NAMES = ["0.txt", "00.txt", "0.utf", "0.utf.txt", "00.utf", "00.utf.txt", "nscr_sec.dat", "nscript.___", "nscript.dat", "pscript.dat"];
 const MAX_SCRIPT_BYTES = 32 * 1024 * 1024;
 const MAX_KEY_EXE_BYTES = 64 * 1024 * 1024;
-const SAVE_FILE = /^(?:envdata|gloval\.sav|global\.sav|kidoku\.dat|nscr[fl]log\.dat|save\d+\.(?:dat|sav))$/i;
 const sha256 = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 function moduleRoot(entry, context) {
   if (!path.isAbsolute(context?.userDataDir || "") || !/^[A-Za-z0-9_-]{1,128}$/.test(entry?.gameId || "")) {
@@ -84,37 +84,16 @@ function resolveTextMode(root, settings = {}) {
   // Japanese/Shift-JIS mode; their own backtick/english commands still apply.
   return selected === "auto" ? scriptInfo(root)?.declaredUtf8 ? "english" : "japanese" : selected;
 }
-function prepareNativeSaves(entry, context, gameRoot) {
-  const defaultSaveDir = path.join(moduleRoot(entry, context), "saves");
+function prepareNativeSaves(entry) {
   const override = entry.saveDirOverride;
   if (override !== null && override !== undefined && override !== "" && (typeof override !== "string" || !path.isAbsolute(override))) {
     throw new Error("NScripter save directory override must be an absolute directory path.");
   }
-  const saveDir = override || defaultSaveDir;
+  if (!override) return { saveDir: null };
+  const saveDir = override;
   fs.mkdirSync(saveDir, { recursive: true });
   if (!fs.statSync(saveDir).isDirectory()) throw new Error("NScripter save location is not a directory.");
-  // Reuse existing Windows/native saves without modifying their originals.
-  // Only known small save files are imported; script/archive assets stay put.
-  if (!override && gameRoot) {
-    let total = 0, count = 0;
-    for (const name of fs.readdirSync(gameRoot)) {
-      if (!SAVE_FILE.test(name) || fs.existsSync(path.join(saveDir, name))) continue;
-      const file = path.join(gameRoot, name), stat = fs.lstatSync(file);
-      if (!stat.isFile()) continue;
-      if (++count > 64 || stat.size > 16 * 1024 * 1024 || (total += stat.size) > 64 * 1024 * 1024) throw new Error("Original NScripter saves exceed the import size limit.");
-      fs.copyFileSync(file, path.join(saveDir, name), fs.constants.COPYFILE_EXCL);
-    }
-  }
-  entry.defaultSaveDir = defaultSaveDir;
-  return { saveDir, defaultSaveDir };
-}
-function prepareConfig(gameRoot, directory) {
-  fs.mkdirSync(directory, { recursive: true });
-  const from = path.join(gameRoot, "ons.cfg"), to = path.join(directory, "ons.cfg");
-  if (!fs.existsSync(from)) return;
-  const stat = fs.lstatSync(from);
-  if (!stat.isFile() || stat.size > 64 * 1024) throw new Error("NScripter configuration is not a supported regular file.");
-  fs.copyFileSync(from, to);
+  return { saveDir };
 }
 function exportScript(entry, context, root, payload = {}) {
   const source = readScript(root, entry), selected = payload.encoding || (source.declaredUtf8 ? "utf8" : "sjis");
@@ -136,4 +115,4 @@ function exportScript(entry, context, root, payload = {}) {
 }
 
 module.exports = { SCRIPT_NAMES, MAX_SCRIPT_BYTES, MAX_KEY_EXE_BYTES, moduleRoot, scriptInfo, readScript, readKeyTable, resolveKeyExecutable, resolveTextMode,
-  prepareNativeSaves, prepareConfig, exportScript };
+  prepareNativeSaves, exportScript };

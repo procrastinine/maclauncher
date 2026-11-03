@@ -28,7 +28,7 @@ In the same view, the **Save files** tab lets you import and export save files, 
 
 [RPG Maker](https://www.rpgmakerweb.com/) MV and MZ saves get a full editor. **Edit values** shows switches, variables, gold, inventory, and each party member's HP, MP, TP and level, with names taken from the game's own database where it has them. Nothing from the game runs while you edit, and the original encoding is preserved.
 
-For other game types, the right tool depends on the format. RPG Maker XP, VX and VX Ace saves can be inspected as a data graph, and [Ren'Py](https://www.renpy.org/) saves through their metadata; to change a Ren'Py game's state, use the [console](#renpy) instead. Games played with Sikarugir keep their saves in a private copy of the game folder or in their Windows profile, and the save tools show both.
+For other game types, the right tool depends on the format. RPG Maker XP, VX and VX Ace saves can be inspected as a data graph, and [Ren'Py](https://www.renpy.org/) saves through their metadata; to change a Ren'Py game's state, use the [console](#renpy) instead. Sikarugir keeps the original working directory. Saves can live in the original game folder or the game's Windows profile, and the save tools show both. An app-adjacent DLL adapter can also leave executable-relative files in its retained [adapter view](/maclauncher/games/windows/#original-game-files-and-separate-windows-environments).
 
 Guides: [Save snapshots](https://github.com/procrastinine/maclauncher/blob/master/docs/tools/SAVE_SNAPSHOTS.md), [RPG Maker MV and MZ save editor](https://github.com/procrastinine/maclauncher/blob/master/docs/game-types/RPGMAKER_MV_MZ.md#structured-save-editing)
 

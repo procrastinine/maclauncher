@@ -72,7 +72,7 @@ test("fresh video Play obtains ordinary download consent before installing mpv",
   t.mock.method(Manager, "resolveForPlay", () => events.some(event => event[0] === "refresh")
     ? { ready: false, version } : { ready: false, version: null, discoveryRequired: true });
   const context = { runtimeId: "mpv", userDataDir: temporary(t), settings: { runtimes: {} },
-    confirmRuntimeInstall: async request => { events.push(["consent", request.version, request.requiresDownload]);return true; } };
+    confirmRuntimeInstall: async request => { if (request.optional) return false; events.push(["consent", request.version, request.requiresDownload]);return true; } };
   const ready = await prepareForLaunch({ entry: {}, mod, context, info: mod.manifest,
     registry: { listModuleIds: () => ["video"], getModule: () => mod },
     install: async (_manager, request) => { events.push(["install", request.version]); } });

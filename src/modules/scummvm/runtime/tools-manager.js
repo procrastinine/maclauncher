@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../../shared/copy-file");
 const path = require("node:path");
 const { createPinnedNativeManager } = require("../../shared/runtime/pinned-native-manager");
 const { createSource } = require("./catalog");
@@ -9,11 +10,11 @@ const SOURCE_URL = "https://downloads.scummvm.org/frs/scummvm-tools/";
 // The command-line tool and the license files beside it, from any archive format or folder.
 async function extractTools(archive, destination, signal) {
   return extractPayload(archive, destination, signal, { payloadName: "scummvm-tools-cli", project: "ScummVM Tools", copy: (source, target) => {
-    fs.copyFileSync(source, target); fs.chmodSync(target, fs.statSync(source).mode);
+    cloneOrCopySync(source, target);
     const folder = path.dirname(source);
     for (const file of fs.readdirSync(folder).filter(name => /^(?:License|ScummVM ReadMe|News)/i.test(name))) {
       const candidate = path.join(folder, file);
-      if (fs.lstatSync(candidate).isFile()) fs.copyFileSync(candidate, path.join(destination, file));
+      if (fs.lstatSync(candidate).isFile()) cloneOrCopySync(candidate, path.join(destination, file));
     }
   } });
 }

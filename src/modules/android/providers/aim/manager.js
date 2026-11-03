@@ -9,7 +9,7 @@ function createManager(dependencies = {}) {
       if (record.arch !== "arm64") throw new Error("The selected AIM runtime requires Apple Silicon.");
       return Bundled.validateManifest(manifest, { managerId: "android-aim", version: record.version, arch: record.arch });
     },
-    verifyPayload: selected => Bundled.verifyPayload(selected.root, selected.declaration), dependencies });
+    verifyPayload: selected => Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency), dependencies });
 }
 module.exports = createManager();
 module.exports.createManager = createManager;

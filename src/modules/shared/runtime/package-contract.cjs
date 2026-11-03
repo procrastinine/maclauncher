@@ -5,7 +5,7 @@ const SHA = SHA256, FLOOR = /^\d{1,2}\.\d{1,2}(?:\.\d{1,2})?$/;
 const ARCHITECTURES = new Set(["arm64", "x64", "universal"]);
 const LAUNCHER_ARCHITECTURES = new Set(["arm64", "x64"]);
 const MAX_ARCHIVE_BYTES = 4 * 1024 * 1024 * 1024;
-const RECORD_KEYS = ["schemaVersion","id","version","arch","launcherArchitectures","minimumMacOS","manifestRelative","manifestSha256","sourceSha256","updatePolicy","tag","asset","sourceAsset","source","launcherContract","capabilities"];
+const RECORD_KEYS = ["schemaVersion","id","version","arch","launcherArchitectures","minimumMacOS","manifestRelative","manifestSha256","sourceSha256","updatePolicy","tag","asset","sourceAsset","source","launcherContract","capabilities","dependencies"];
 const ARCHITECTURE_NAME = /^[a-z][a-z0-9_]{0,31}$/, CAPABILITY_NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 
 function object(value) {
@@ -36,6 +36,53 @@ function relativeFile(value) {
     part !== "." && part !== ".." && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(part));
 }
 
+function packageDependencies(value) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 128) throw new Error("Invalid package dependencies.");
+  const projects = new Set();
+  return value.map(item => {
+    if (!object(item) || Object.keys(item).sort().join(',') !== 'project,release,sha256' ||
+        !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(item.project || '') || !version(item.release) || !checksum(item.sha256) || projects.has(item.project))
+      throw new Error("Package dependencies require one exact release and archive digest per project.");
+    projects.add(item.project); return Object.freeze({...item});
+  });
+}
+function packageAliases(value, files, dependencies) {
+  if (value === undefined) return undefined;
+  if (!object(value) || value.schema !== 1 || Object.keys(value).sort().join(',') !== 'files,schema' || !object(value.files) ||
+      Object.keys(value.files).length > B.LIMITS.files) throw new Error("Invalid package alias index.");
+  const stored = new Set(files.map(file => B.relativeFile(file.path))), projects = new Set(packageDependencies(dependencies).map(item => item.project));
+  const names = new Set([...stored].map(name=>name.normalize('NFC').toLowerCase()));
+  for (const [name, target] of Object.entries(value.files)) {
+    if (B.relativeFile(name) !== name || names.has(name.normalize('NFC').toLowerCase())) throw new Error("A package alias collides with a stored or logical path.");
+    names.add(name.normalize('NFC').toLowerCase());
+    if (typeof target === 'string') {
+      if (B.relativeFile(target) !== target || !stored.has(target)) throw new Error("A local alias must name a canonical stored file.");
+    } else if (!object(target) || Object.keys(target).sort().join(',') !== 'path,project' || !projects.has(target.project) || B.relativeFile(target.path) !== target.path)
+      throw new Error("A dependency alias must name a canonical file in a declared dependency.");
+  }
+  for (const name of names) {
+    let slash = name.lastIndexOf('/');
+    while (slash !== -1) {
+      if (names.has(name.slice(0,slash))) throw new Error("Package alias paths cannot cross a file.");
+      slash = name.lastIndexOf('/',slash-1);
+    }
+  }
+  return value;
+}
+function logicalFiles(declaration, resolveDependency) {
+  packageDependencies(declaration.dependencies);
+  const aliases = packageAliases(declaration.aliases, declaration.files, declaration.dependencies);
+  const stored = new Map(declaration.files.map(file=>[file.path,file]));
+  const output = [...declaration.files];
+  for (const [name,target] of Object.entries(aliases?.files || {})) {
+    const source = typeof target === 'string' ? stored.get(target) : resolveDependency?.(target, declaration.dependencies.find(item=>item.project===target.project));
+    if (!source) throw new Error("A package alias target is absent from its exact dependency inventory.");
+    output.push({...source,path:name});
+  }
+  return output;
+}
+
 // The declaration supplies the default; an explicit version never falls back.
 function selectPackageRecord(records, { id, version: selectedVersion, arch = process.arch } = {}) {
   if (!Array.isArray(records)) throw new Error("Package declarations must be an array.");
@@ -49,7 +96,7 @@ function selectPackageRecord(records, { id, version: selectedVersion, arch = pro
   return eligible.sort((left, right) => rank(left) - rank(right))[0] || null;
 }
 
-function manifestPayload(manifest, record, { executableRelative, filesPrefix = "", dataOnly = false } = {}) {
+function manifestPayload(manifest, record, { executableRelative, filesPrefix = "", dataOnly = false, resolveDependency } = {}) {
   if (!object(manifest) || manifest.schemaVersion !== 1 || (manifest.packageVersion ?? manifest.version) !== record.version ||
       manifest.minimumMacOS !== record.minimumMacOS || manifest.id !== undefined && manifest.id !== record.id)
     throw new Error("The runtime package differs from its selected catalog entry.");
@@ -59,7 +106,7 @@ function manifestPayload(manifest, record, { executableRelative, filesPrefix = "
   const executable = B.relativeFile(typeof executableRelative === "function" ? executableRelative(manifest, record) : executableRelative);
   // Included packages seal their inventory in runtime-package.json; the helper
   // manifest describes its protocol and need not repeat that inventory.
-  const sealed = Array.isArray(record.files), inventory = sealed ? record.files.filter(file => file.path !== record.manifestRelative) : manifest.files;
+  const sealed = Array.isArray(record.files), inventory = sealed ? logicalFiles(record, resolveDependency).filter(file => file.path !== record.manifestRelative) : manifest.files;
   if (!Array.isArray(inventory) || !inventory.length || inventory.length > B.LIMITS.files)
     throw new Error("The runtime package differs from its selected catalog entry.");
   const names = new Set(), files = inventory.map(file => {
@@ -178,6 +225,8 @@ function packageRecord(record, { projectId, repository, launcherContract = 1, pu
       !checksum(record.manifestSha256) || !checksum(record.sourceSha256) || !object(record.asset))
     throw new Error("The runtime catalog contains an invalid package record.");
 
+  const dependencies = packageDependencies(record.dependencies);
+  if (dependencies.some(item=>item.project===projectId)) throw new Error("A package cannot depend on itself.");
   const tag = `${projectId}/v${record.version}/${record.arch}`;
   const filename = `${projectId}-${record.version}-${record.arch}.tar.gz`;
   const url = `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}/${filename}`;
@@ -208,11 +257,12 @@ function packageRecord(record, { projectId, repository, launcherContract = 1, pu
     sourceSha256: record.sourceSha256, updatePolicy: "manual", tag,
     asset: Object.freeze({ filename, sha256: record.asset.sha256, bytes: record.asset.bytes, url }),
     ...(sourceAsset ? { sourceAsset } : {}), ...(source ? { source } : {}),
-    ...(record.launcherContract === undefined ? {} : { launcherContract: record.launcherContract }), ...compatibility });
+    ...(record.launcherContract === undefined ? {} : { launcherContract: record.launcherContract }),
+    ...(record.dependencies === undefined ? {} : { dependencies: Object.freeze(dependencies) }), ...compatibility });
 }
 
 function validateDeclaration(item) {
-  const keys = ['id', 'version', 'arch', 'launcherArchitectures', 'minimumMacOS', 'sourceRelative', 'sourceSha256', 'sourceArtifact', 'directoryRelative', 'manifestRelative', 'manifestSha256', 'files', 'notices', 'redistribution'];
+  const keys = ['id', 'version', 'arch', 'launcherArchitectures', 'minimumMacOS', 'sourceRelative', 'sourceSha256', 'sourceArtifact', 'directoryRelative', 'manifestRelative', 'manifestSha256', 'files', 'notices', 'redistribution', 'aliases', 'dependencies'];
   if (!item || Object.keys(item).some(key => !keys.includes(key)) || !/^[a-z0-9-]+$/.test(item.id || '') ||
     !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(item.version || '') || !['arm64', 'x64', 'universal'].includes(item.arch) ||
     !FLOOR.test(item.minimumMacOS || '') || !SHA.test(item.sourceSha256 || '') || !SHA.test(item.manifestSha256 || '') ||
@@ -250,6 +300,8 @@ function validateDeclaration(item) {
     }
     names.add(file.path); bytes += file.size;
   }
+  packageDependencies(item.dependencies);
+  packageAliases(item.aliases,item.files,item.dependencies);
   if (item.sourceArtifact !== undefined) {
     const source = validateSourceArtifact({ managerId: item.id, version: item.version, ...item.sourceArtifact });
     if (source.managerId !== item.id || source.version !== item.version) throw new Error('Supplemental corresponding source must match its package identity.');
@@ -267,4 +319,4 @@ function validateDeclaration(item) {
   return item;
 }
 
-module.exports = { packageRecord, compatibilityMetadata, sourceMetadata, validatePublicMetadata, validateSourceArtifact, validateDeclaration, object, checksum, identity, version, relativeFile, contract, selectPackageRecord, manifestPayload };
+module.exports = { packageDependencies, packageAliases, logicalFiles, packageRecord, compatibilityMetadata, sourceMetadata, validatePublicMetadata, validateSourceArtifact, validateDeclaration, object, checksum, identity, version, relativeFile, contract, selectPackageRecord, manifestPayload };

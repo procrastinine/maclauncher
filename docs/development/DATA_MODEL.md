@@ -16,6 +16,7 @@ Each game's record and launcher data live under `games/<gameId>/`. Android runti
 | `modules/<moduleId>/` | Module assets shared by all games |
 | `runtimes/<managerId>/` | Shared runtime installations |
 | `runtimes/<runtimeId>/settings.json` | Global runtime defaults |
+| `runtimes/automatic-installs.json` | Runtime versions that Play installed on its own, for [derived data upkeep](#derived-data-upkeep) |
 | `logs/main.log` | Launcher log |
 | `updates/` | The latest update check, a downloaded update waiting to be installed, and the installation script and its log; see [app updates](../UPDATES.md#files) |
 | `graphics/reshade-filters.json` | Registered local shader files, with their names, paths and cached classification |
@@ -45,9 +46,16 @@ MacLauncher links each game's Electron partition to `games/<gameId>/partition/`,
 | `save-snapshots/` | Immutable, checksummed recovery snapshots and their manifests, kept until the game itself is removed; see [save snapshots](../tools/SAVE_SNAPSHOTS.md) |
 | `logs/` | Tool and host logs |
 | `effects/reshade/` | Prepared effects, the ordered runtime plan, launch bindings, window selection state and the effect log |
+| `effects/reshade/reshade.log`, `effects/reshade/reshade.log.previous` | The current and previous launch's native graphics logs, each limited to 512 KiB |
+| `effects/app-copy/` | A [private copy](../graphics/INPUTS_AND_ADAPTERS.md#private-copies-of-restricted-apps) of a Mac app whose code signature refuses the graphics processor, with its ownership record. Files and folders that the game creates in the copy's real directories, and links that it replaces, survive refreshes and keep the copy from being removed automatically |
+| `effects/app-copy/recovered/<snapshot-id>/` | Copied executables or `Info.plist` files that had changed when the copy was refreshed, under `files/` at their relative paths, with `record.json`. These snapshots are never launched, rewritten or removed automatically |
 | `modules/<moduleId>/` | Module-specific data |
 | `runtimes/<runtimeId>/` | Runtime-specific data, such as wrappers, profiles and staging |
 | `partition/` | Target of the game's Electron storage partition link |
+
+File-change records compare a file's size, modification time and inode. They leave out the device number, so unchanged game files on a reconnected volume still match. Records from earlier MacLauncher versions that list the device number are compared without it. Metadata and archive hashes from earlier versions stay usable while they match; a hash that does not match leads to one ordinary refresh, which records the file's size, modification time and inode instead. Existing archive folders stay in place.
+
+Cached metadata observations also record the change time. Where change times have only whole-second precision, an observation also needs a content hash of each regular file up to 16 MB and a list of each directory's entries with their types. Each observation or validation pass reads at most 32 MB of file contents and 8,192 directory entries. Inputs beyond those limits, and coarse-timestamp inputs that cannot be read, are never reused from the cache. Observations from earlier versions that recorded only file status are refreshed once; original game files and extracted archive folders stay in place.
 
 ### Per-game module data
 
@@ -55,7 +63,7 @@ Examples of `games/<gameId>/modules/<moduleId>/` contents:
 
 | Module | Contents |
 | --- | --- |
-| `renpy` | `builds/`, `projects/`, `patches/`, `extracted/` and `icons/` |
+| `renpy` | Application builds made on request, patch and export work, extraction where a game needs it, icons and the helper scripts used only for Steam. Ordinary SDK launches use the original project directory. |
 | `godot` | `extracted/` and `gdre-detect/` |
 | `java` | `extracted/` (Vineflower output) and `icons/` (the cached JAR icon) |
 | `flash` | `exports/`: FFDec script and asset exports |
@@ -66,12 +74,14 @@ Examples of `games/<gameId>/modules/<moduleId>/` contents:
 | `mv`, `mz` | `extracted/`: decrypted assets |
 | `construct`, `tyrano` | `extracted/`: extracted NW.js bundles |
 | `nscripter` | `extracted/`: extracted packaged assets |
-| `easyrpg` | Private saves, player configuration and logs |
+| `easyrpg` | Exports made on request. Ordinary Play uses the original project, which is also where saves go by default, and the player's default configuration and log locations. An explicit save folder is passed to the player with `--save-path` and changes only where saves go; the project and working folder stay the same, and the folder is created at launch if it is missing. |
 | `scummvm` | Private ScummVM configuration, saves and logs |
-| `dosbox` | Private DOS game files and saves in `drive-c/`, the DOSBox configuration, the mapper file and program exports. Source fingerprints in `files.json` keep modified private files when the source is updated. |
-| `anyps5` | Private `launch/app0/` resources, the converted Mach-O program and modules with their import registries, `saves/`, the conversion cache and Rizin and Ghidra exports. `launch/data` points to the selected save folder and `launch/libs` to the installed AnyPS5 runtime. |
+| `dosbox` | DOSBox configuration, mapper, runtime application wrapper and program exports. By default, the DOS drive is the selected program's original directory; with a save-folder override, the writable copy of the complete drive is kept at the chosen location. |
+| `anyps5` | The PS5 runtime container: `launch/app0/` assets, the converted Mach-O program and modules with their import registries, the `launch/libs` alias to the runtime, conversion records, and Rizin and Ghidra exports. `launch/data` and `launch/_sd` use the game's selected save folder, and `_sd_mem` stays in the container. |
 | `nxnative` | Preparation specific to the input and runtime, native launch metadata, extracted resources and shader caches, separate `saves/` and `temp/` folders, and inspection and NSO ELF exports. Runtime settings keep the key paths without copying the key contents. |
-| `fvp` | A private game view, RFVP saves and logs, and asset exports |
+| `fvp` | Host logs, diagnostic frame output, asset exports and, for nonstandard layouts or an existing selected save location, the script and archive adapter. A game whose original folder has a compatible layout runs from it directly. |
+| `gemrb` | The generated `GemRB.cfg`, an engine cache that can be rebuilt, and exports made on request. Game resources and default saves stay in the original game folder. |
+| `hashlink` | Tool outputs made on request. Ordinary Play reads the original bytecode and uses the directory that contains it as the working directory. |
 | `wolfrpg` | Prepared WOLF data and browser-player state |
 
 ### Per-game runtime data
@@ -126,6 +136,32 @@ Local CrossOver applications stay at their registered paths, which `runtimes/cro
 ### Removing a game
 
 Forgetting a game deletes all of its launcher data: its `games/<gameId>/` directory, including any unpacked or staged assets stored outside the original game directory, and any module-owned application storage, such as `android/apps/<gameId>/`. The original game files stay unchanged. If module or runtime cleanup fails, the library entry stays available so that removal can be retried.
+
+### Derived data upkeep
+
+Some files under `userData` are derived: the app writes them for a single launch or download and either rebuilds them when needed or never reads them again. The launcher runs one upkeep pass each time it starts, in a backend worker, about two minutes after startup. While a game is running or being prepared, or a download is in progress, the pass waits until the launcher is idle; it then runs once, and nothing repeats until the next start. The pass records only what it removed, in `logs/main.log`, and shows nothing in the interface. Before every removal it checks again whether the launcher is busy: if a game starts preparing or running, or a download starts, the pass stops before its next removal.
+
+A pass reads only the folders listed below and the entries it removes. It does not read the entries it keeps or the whole data folder, and it computes no hashes. It never removes an entry modified within the last hour or anything on another volume, such as a mounted disk image. Each entry is first renamed to a hidden `.maclauncher-trash-<id>` name in the same folder, so the store never shows a partly removed entry, and then deleted. Deletion never follows symbolic links or enters another volume, and directories that the app made read-only are made writable first. If the app quits or becomes busy during a pass, or a deletion fails, the trash entry stays and the next pass finishes it before anything else. An error keeps the entry, is recorded once per store in `logs/main.log`, and does not affect the other stores or the launcher.
+
+| Store | Kept | Removed |
+| --- | --- | --- |
+| Per-launch graphics channels in `games/<gameId>/effects/reshade/`: `source-control-<launch>.json`, `source-status-<launch>.json`, `presentation-control-<launch>.json`, `presentation-status-<launch>.json`, `runtime-status-<launch>.bin` and `browser-source-<launch>.state` | The files of the launch that the game's `launch.json` names | The files of earlier launches. Each new launch of the game removes them before it starts, unless the earlier launch's process is still running. |
+| `graphics/payload-bindings/<hash>.json` | Bindings for the launches that games' `launch.json` files name, and bindings whose process is still running | Bindings for ended launches |
+| `graphics/payload-bindings/snapshots/` | Snapshots that a kept binding names | All other snapshots |
+| `graphics/compute-sessions/<launch-hash>/` | Sessions for the launches that games' `launch.json` files name | Sessions for earlier launches |
+| `runtimes/graphics-neural-models/.source-archives/` | Nothing | Model source archives, which are kept only until the model inside has been extracted and verified. Installing another model from the same archive downloads it again, with the usual consent. |
+| `games/<gameId>/runtimes/mkxpz/<version>/sessions/` | The two newest sessions of each version, with their logs | Older sessions |
+| `graphics/compute-hosts/<identity>/`, the Windows environment, loaders and graphics views that a GPU compute helper uses with one CrossOver application location or Sikarugir version | Hosts of every CrossOver location that Runtimes knows, including an application that is missing or on a disconnected drive, hosts of every installed Sikarugir version, including damaged ones, and any host changed within the last day | Hosts of CrossOver locations and Sikarugir versions removed from Runtimes. Adding or installing one again rebuilds its host at the next launch that needs it. |
+| `runtimes/.maclauncher-trash-<id>` | Nothing | A runtime version folder that a removal in Runtimes moved to trash and did not finish deleting |
+| `games/<gameId>/effects/.maclauncher-trash-<id>` | Nothing | A private graphics copy of a Mac app that Play removed or replaced and did not finish deleting |
+| `runtimes/.maclauncher-removing-<id>` and its `.json` record: a runtime version folder set aside while its manager decides on a removal | Folders whose removing process still runs. After an exit, a folder whose version its manager still lists returns to its place | After an exit, a folder whose version its manager no longer lists takes the trash name |
+| `graphics-loader/<identity>/` under `games/<gameId>/runtimes/crossover/` and `graphics/compute-hosts/<identity>/` | The two newest signed loaders in each folder, and any loader created within the last day | Older loaders. A loader that is needed again is rebuilt at the next launch. |
+| Temporary folders that an interrupted launch or download left: `modules/rgss/assets/generations/.prepare-<random>`, `.stage-<random>` and `.game-<random>` under `games/<gameId>/modules/hashlink/` and `games/<gameId>/modules/gemrb/`, `prepare-<random>` beside CrossOver graphics loaders, and `runtimes/graphics-neural-models/.download-<random>` | Folders changed within the last day | Older folders. The next launch or download creates a new one. |
+| `external/tools/` | The newest GOG download helper for each CPU, the newest Legendary version and the newest Legendary version that can confirm Epic builds | Earlier helper versions that pass verification. Folders that are not recognized as complete helpers stay. |
+
+Two other kinds of data have their own limits. When graphics are prepared for a launch, the game's diagnostic streams (`diagnostics-<launch>.<pid>.jsonl`, `diagnostics-<launch>.neural.<pid>.jsonl` and `gpu-timing-<launch>.<pid>.jsonl`) are pruned to the 32 most recent completed streams, up to 8 MB in total, and streams that a running process is still writing stay. `logs/main.log` holds at most 2 MB, and one earlier segment of up to 2 MB stays in `main.log.previous`. Electron's caches (`Cache`, `Code Cache`, `GPUCache` and each game partition's cache) are limited by Chromium.
+
+Upkeep never touches game records, saves, save snapshots, settings, imported or downloaded games, games' Wine bottles and prefixes, browser profiles or [private game folders from earlier MacLauncher versions](../library/GAME_PREPARATION.md#earlier-private-game-folders), such as earlier FNA overlays. Missing game files, such as those on a disconnected drive, never make a game's data removable; that data stays while the game is in the library. Upkeep works only inside `userData` and never follows symbolic links. Installed runtime versions are removed only through the same removal as **Uninstall** in Runtimes: by the user, or for a version that Play installed as the runtime's own default, recorded in `runtimes/automatic-installs.json`, once the section's current default is a newer usable installed version and nothing names or resolves to the recorded one, as [Runtimes](../runtimes/README.md) describes. Explicit **Install**, **Set default** and removal clear a version's record. The [module system](MODULES.md#standard-module-layout) describes how modules declare their derived stores.
 
 ## settings.json
 
@@ -239,11 +275,13 @@ Runtime manager settings are stored under `settings.runtimes[<managerId>]`, and 
 
 Each game receives a unique `gameId` on import, and its directory `games/<gameId>/` holds its record, `game.json`.
 
+The current game-record schema version is 2. A record in an older format is converted once and saved in the current format; records in the current or a newer format skip the conversion.
+
 Example:
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "gameId": "e4f0f1e2c7f24b6aa1b4d6b1c9e5a8f2",
   "order": 0,
   "createdAt": 1717000000000,
@@ -326,6 +364,7 @@ Icons, cheats and timestamps:
 - `createdAt`, `updatedAt`: timestamps for record maintenance.
 - `lastPlayedAt`: when the game was last played.
 - `lastBuiltAt`: when the last build or patch action ran.
+- `ephemeral`: `true` for a session entry that exists only while its session runs, such as a window that receives graphics. The library shows such an entry first, with only the controls of its session. An `ephemeral` marker file in its directory marks the entry and its directory for removal when the session ends, or at the next start after a crash.
 - `order`: the legacy UI order. The library order in the launcher settings decides the list, and this field places only games that order does not include. Reordering or removing a game copies the library order into every record. A new game gets a value below every other record, and the other records are not rewritten.
 
 ### Display names

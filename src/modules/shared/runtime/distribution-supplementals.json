@@ -1,7 +1,7 @@
 [
   {
     "id": "steam-api-helper",
-    "version": "0.5.1",
+    "version": "0.5.2",
     "arch": "universal",
     "launcherArchitectures": [
       "arm64",
@@ -10,20 +10,26 @@
     "minimumMacOS": "13.0",
     "sourceRelative": null,
     "sourceSha256": "40597e2596bf3df91e7a8d1be6939f75d2d427bbeb91d0ac2316420c1c0cb23e",
-    "directoryRelative": "steam-api-helper/0.5.1/universal",
+    "directoryRelative": "steam-api-helper/0.5.2/universal",
     "manifestRelative": "helper.json",
-    "manifestSha256": "6f021a0486dea0415518823556e240c6de614ac333b667e701375bfe6864f8b5",
+    "manifestSha256": "98dfa9f48c6ccf0efa14deb3080abb47e255b83bb109326faa19f3bec2d46ade",
     "files": [
       {
-        "path": "LICENSE",
-        "size": 1081,
-        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
-        "mode": 420
+        "path": "build-definition.json",
+        "size": 15796,
+        "mode": 420,
+        "sha256": "1a41ef8493749546db259e3ac26b04cc957c81561632546472950fd66dd4af40"
+      },
+      {
+        "path": "build-inputs.json",
+        "size": 117,
+        "mode": 420,
+        "sha256": "df05fd8030d8938859eec5464fd81c7b5f1b45e8cf1c917ebc79ee9f7c6058cc"
       },
       {
         "path": "helper.json",
         "size": 3435,
-        "sha256": "6f021a0486dea0415518823556e240c6de614ac333b667e701375bfe6864f8b5",
+        "sha256": "98dfa9f48c6ccf0efa14deb3080abb47e255b83bb109326faa19f3bec2d46ade",
         "mode": 420
       },
       {
@@ -35,6 +41,12 @@
           "arm64",
           "x86_64"
         ]
+      },
+      {
+        "path": "LICENSE",
+        "size": 1081,
+        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
+        "mode": 420
       }
     ],
     "notices": [
@@ -47,7 +59,7 @@
   },
   {
     "id": "steam-ticket-loader",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "arch": "universal",
     "launcherArchitectures": [
       "arm64",
@@ -56,20 +68,26 @@
     "minimumMacOS": "13.0",
     "sourceRelative": null,
     "sourceSha256": "5b5604323f8d6a016efb50056403fe504271ddbd70ba738b268eb3b4dc223f00",
-    "directoryRelative": "steam-ticket-loader/0.1.1/universal",
+    "directoryRelative": "steam-ticket-loader/0.1.2/universal",
     "manifestRelative": "helper.json",
-    "manifestSha256": "f45f13523cd1a3abac93d76f0d1037f5f722db5fe30a7230eac46b315e4099c2",
+    "manifestSha256": "7b0acef06b820d19d188471b99a52f28e4d76e4cdbf6d4b9b062cfeef1b2a3bc",
     "files": [
       {
-        "path": "LICENSE",
-        "size": 1081,
-        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
-        "mode": 420
+        "path": "build-definition.json",
+        "size": 15799,
+        "mode": 420,
+        "sha256": "d21a75293cdb3afbe0d00a928949003f1edfc51d87d80ce40218703e48a1dd02"
+      },
+      {
+        "path": "build-inputs.json",
+        "size": 117,
+        "mode": 420,
+        "sha256": "1529d31905f33ce181f7f8fb9cfea5ac9e6e21013c301cf7c5d63b1b9e5e3bc3"
       },
       {
         "path": "helper.json",
         "size": 1011,
-        "sha256": "f45f13523cd1a3abac93d76f0d1037f5f722db5fe30a7230eac46b315e4099c2",
+        "sha256": "7b0acef06b820d19d188471b99a52f28e4d76e4cdbf6d4b9b062cfeef1b2a3bc",
         "mode": 420
       },
       {
@@ -81,6 +99,12 @@
           "arm64",
           "x86_64"
         ]
+      },
+      {
+        "path": "LICENSE",
+        "size": 1081,
+        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
+        "mode": 420
       }
     ],
     "notices": [

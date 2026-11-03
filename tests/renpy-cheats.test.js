@@ -13,9 +13,11 @@ function createTempGameRoot() {
   return { root, gameDir };
 }
 
-test("renpy cheat patch actions install and remove files", () => {
+test("renpy cheat patch actions install and remove files", async t => {
   const { root, gameDir } = createTempGameRoot();
   try {
+    const mod = path.join(root, 'selected-mod.rpa'); fs.writeFileSync(mod, 'user-supplied mod fixture');
+    t.mock.method(require('../src/modules/renpy/urm-file'), 'resolve', async () => mod);
     const entry = { gamePath: root, contentRootDir: root, renpyGameOnly: false };
 
     let status = RenpyModule.actions.renpyCheatsStatus(entry, {}, {});
@@ -48,7 +50,7 @@ test("renpy cheat patch actions install and remove files", () => {
       true
     );
 
-    status = RenpyModule.actions.addRenpyMod(entry, {}, {});
+    status = await RenpyModule.actions.addRenpyMod(entry, {}, {});
     assert.equal(status.urmInstalled, true);
     assert.equal(
       fs.existsSync(path.join(gameDir, "0x52_URM.rpa")),

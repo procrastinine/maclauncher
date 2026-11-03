@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
 const { once } = require("node:events");
 const { stopProcessTree, normalizeShutdownGraceMs, TEMPORARY_PROCESS_MAX_GRACE_MS } = require("../src/core/process-stop");
+const { untilTestEnds } = require("./helpers/fixture-process");
 test("temporary cleanup budgets are bounded and ordinary stop keeps its two-second default", () => {
   assert.equal(TEMPORARY_PROCESS_MAX_GRACE_MS, 15000);
   assert.equal(normalizeShutdownGraceMs(15000), 15000);
@@ -41,7 +42,7 @@ test("an exited child and invalid process identities never schedule or force ano
 });
 
 test("a real piped child sharing the test host group is stopped without signaling its host", async t => {
-  const child = spawn(process.execPath, ["-e", "process.on('SIGTERM',()=>{}); process.stdout.write('ready'); setInterval(()=>{},1000)"],
+  const child = spawn(process.execPath, ["-e", "process.on('SIGTERM',()=>{}); process.stdout.write('ready'); " + untilTestEnds],
     { detached: false, stdio: ["ignore", "pipe", "pipe"] });
   t.after(() => { if (child.exitCode == null && child.signalCode == null) child.kill("SIGKILL"); });
   await once(child.stdout, "data");

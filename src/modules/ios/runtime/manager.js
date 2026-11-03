@@ -1,7 +1,6 @@
 const fs = require("node:fs");
+const { cloneOrCopy } = require("../../shared/copy-file");
 const path = require("node:path");
-const { promisify } = require("node:util");
-const execFile = promisify(require("node:child_process").execFile);
 const { createPinnedNativeManager } = require("../../shared/runtime/pinned-native-manager");
 const Catalog = require("./catalog");
 const Native = require("../../shared/runtime/local-native");
@@ -15,7 +14,7 @@ async function extractArchive(file, destination, signal) {
     await Release.extractArchive(file, download, signal);
     const inventory = inspectPlayTools(download), directory = frameworks(fs.realpathSync(download));
     for (const name of ["PlayTools.framework", ...inventory.playToolsDependencies.map(item => item.name)])
-      await execFile("/usr/bin/ditto", [path.join(directory, name), path.join(destination, name)], { signal, timeout: 60000 });
+      await cloneOrCopy(path.join(directory, name), path.join(destination, name), { signal });
   } finally { fs.rmSync(download, { recursive: true, force: true }); }
 }
 const frameworks = root => path.dirname(Release.locatePackaged(root, ["PlayTools.framework", "PlayCover.app/Contents/Frameworks/PlayTools.framework"]) ||

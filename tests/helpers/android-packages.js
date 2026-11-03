@@ -8,8 +8,12 @@ function manifest(appChildren = [activity()], app = {}, root = {}) {
     node("uses-sdk", { minSdkVersion: 21, targetSdkVersion: 36 }), node("uses-permission", { name: "android.permission.INTERNET" }),
     node("application", { label: "Example ゲーム", ...app }, appChildren)]);
 }
-function binaryXml(tree, utf8 = true) {
+function binaryXml(tree, utf8 = true, resourceIds = null) {
   const strings = [], index = value => { if (!strings.includes(value)) strings.push(value); return strings.indexOf(value); };
+  if (resourceIds) {
+    for (const name of Object.keys(resourceIds).sort((a,b)=>resourceIds[a]-resourceIds[b])) index(name);
+    index('android'); index(ANDROID);
+  }
   function visit(item) { index(item.name); if (item.namespace) index(item.namespace); if (item.endNamespace) index(item.endNamespace); for (const [key, value] of Object.entries(item.attrs)) {
     if (!key.startsWith(":")) index(ANDROID); index(key.replace(/^:/, "")); if (typeof value === "string") index(value);
   } item.children.forEach(visit); }
@@ -22,11 +26,22 @@ function binaryXml(tree, utf8 = true) {
   });
   const table = Buffer.alloc(strings.length * 4); let offset = 0;
   pieces.forEach((piece, i) => { table.writeUInt32LE(offset, i * 4); offset += piece.length; });
-  const pool = chunk(1, 28, Buffer.concat([table, ...pieces])); pool.writeUInt32LE(strings.length, 8);
+  const padding = resourceIds ? Buffer.alloc((4 - (28 + table.length + offset) % 4) % 4) : Buffer.alloc(0);
+  const pool = chunk(1, 28, Buffer.concat([table, ...pieces, padding])); pool.writeUInt32LE(strings.length, 8);
   pool.writeUInt32LE(utf8 ? 0x100 : 0, 16); pool.writeUInt32LE(28 + table.length, 20);
   const xml = [pool];
+  function namespace(kind) {
+    const body = Buffer.alloc(8); body.writeUInt32LE(index('android')); body.writeUInt32LE(index(ANDROID),4);
+    return chunk(kind,16,body);
+  }
+  if (resourceIds) {
+    const map = Buffer.alloc(strings.length*4);
+    for (const [name,id] of Object.entries(resourceIds)) map.writeUInt32LE(id,index(name)*4);
+    xml.push(chunk(0x180,8,map),namespace(0x100));
+  }
   function emit(item) {
     const ext = Buffer.alloc(20), attrs = Object.entries(item.attrs);
+    if (resourceIds) attrs.sort(([a],[b])=>(a.startsWith(':')?0:resourceIds[a]||0)-(b.startsWith(':')?0:resourceIds[b]||0));
     ext.writeUInt32LE(item.namespace ? index(item.namespace) : NONE); ext.writeUInt32LE(index(item.name), 4); ext.writeUInt16LE(20, 8); ext.writeUInt16LE(20, 10); ext.writeUInt16LE(attrs.length, 12);
     const data = attrs.map(([key, value]) => { const a = Buffer.alloc(20); a.writeUInt32LE(key.startsWith(":") ? NONE : index(ANDROID));
       a.writeUInt32LE(index(key.replace(/^:/, "")), 4); a.writeUInt32LE(NONE, 8); a.writeUInt16LE(8, 12);
@@ -37,7 +52,8 @@ function binaryXml(tree, utf8 = true) {
     const end = Buffer.alloc(8), endNamespace = item.endNamespace ?? item.namespace;
     end.writeUInt32LE(endNamespace ? index(endNamespace) : NONE); end.writeUInt32LE(index(item.name), 4); xml.push(chunk(0x103, 16, end));
   }
-  emit(tree); return chunk(3, 8, Buffer.concat(xml));
+  emit(tree); if (resourceIds) xml.push(namespace(0x101));
+  return chunk(3, 8, Buffer.concat(xml));
 }
 function zip(entries, { descriptor = false, method = 8 } = {}) {
   const locals = [], central = []; let offset = 0;
@@ -58,4 +74,11 @@ function zip(entries, { descriptor = false, method = 8 } = {}) {
 }
 function directory(t) { const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-apk-")); t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root; }
 
-module.exports={node,activity,manifest,binaryXml,zip,directory};
+function foreignMetadataApk(root) {
+  const file = path.join(root, 'foreign.apk');
+  fs.writeFileSync(file, zip([['AndroidManifest.xml', binaryXml(manifest([], { hasCode: false }, {
+    ':package': 'org.maclauncher.foreign.fixture', ':split': 'config.foreign'
+  }))]]));
+  return file;
+}
+module.exports={node,activity,manifest,binaryXml,zip,directory,foreignMetadataApk};

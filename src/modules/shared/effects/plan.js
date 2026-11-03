@@ -23,7 +23,7 @@ function validate(value) {
     if (node.kind !== "shader") {
       const settings=Graphics.updateStageSettings({}, { ...node.settings,
         [Model.isResize(node) ? "spatialMethod" : node.kind === "temporal" ? "temporalMethod" : "frameGeneration"]: node.method });
-      if(node.kind==="frame-generation"&&!generationMultipliers(node.method).includes(settings.frameMultiplier))
+      if(node.kind==="frame-generation"&&GENERATION[node.method]?.multipliers&&!generationMultipliers(node.method).includes(settings.frameMultiplier))
         throw new Error("Choose a frame multiplier that the selected generation method produces.");
       return { ...node, settings };
     }
@@ -206,11 +206,28 @@ function catalog({ reshadeState = {}, graphicsCapabilities = {}, graphicsInputs 
     available,availableWithoutModel:providerAvailable, ...(pendingInputs.length?{pendingInputs,availableWithoutInputs:available,inputReason:"This row waits for matching depth and motion inputs from the frame source."}:{}), ...(provider.kind==="frame-generation"?{acceptsSynthetic:true}:{}), ...(!available ? {reason: !providerAvailable?neuralProvider ? "Requires an updated neural provider for this operation." : "Requires the Apple Silicon neural rendering provider and a compatible model.":"Import a compatible model in Runtimes."} : {}), requirements: ["neural-model",...(provider.kind==="temporal"?["temporal-inputs"]:[])]});
   }
   // A declared frame source lists every input it supplies. Other inputs are
-  // absent rather than pending, except for methods the engine runs itself.
+  // absent rather than pending, except for methods the engine runs itself. An
+  // image-only source, such as decoded video, never supplies scene inputs, so a
+  // method that needs them is unavailable there and leaves the menus.
   const absent=row=>row.pendingInputs?.length&&typeof graphicsInputs?.source==="string"&&
     !(Array.isArray(graphicsInputs.methods)&&graphicsInputs.methods.includes(row.template.method));
-  const ranked=rows.map(row=>({...row,transformType:require("./contracts.mjs").graphicsType(row.template,row),...recommendation(row,support),
-    ...(absent(row)?{inputsAbsent:true,inputReason:"The frame source does not supply "+absentLabel(row.pendingInputs)+"."}:{})}));
+  const unsupported=row=>{
+    if(graphicsInputs?.imageOnly!==true||!absent(row))return row;
+    const {inputReason:_inputReason,availableWithoutInputs:_availableWithoutInputs,...rest}=row;
+    return {...rest,available:false,...Object.fromEntries(["availableWithoutModel","availableWithoutRuntime"].filter(key=>row[key]!==undefined).map(key=>[key,false])),
+      sourceUnsupported:true,reason:(graphicsInputs.sourceLabel||"This frame source")+" cannot supply "+absentLabel(row.pendingInputs)+"."};
+  };
+  const ranked=rows.map(unsupported).map(row=>({...row,
+    ...(row.kind==="frame-generation"&&graphicsInputs?.generationDefaults?{template:{...row.template,settings:{...row.template.settings,...graphicsInputs.generationDefaults}}}:{}),transformType:require("./contracts.mjs").graphicsType(row.template,row),...recommendation(row,support),
+    ...(!row.sourceUnsupported&&absent(row)?{inputsAbsent:true,inputReason:"The frame source does not supply "+absentLabel(row.pendingInputs)+"."}:{})}));
+  // An unsupported built-in method names a working method of its kind,
+  // MetalFX image interpolation first for frame generation.
+  for(const row of ranked){
+    if(!row.sourceUnsupported||row.template.kind==="shader")continue;
+    const working=ranked.filter(other=>other.kind===row.kind&&other.template.kind!=="shader"&&other.available&&!other.pendingInputs?.length);
+    const replacement=working.find(other=>other.template.method==="metalfx-image")||working[0];
+    if(replacement)row.replacement=replacement.id;
+  }
   // Only suggested defaults move; menus order the other ranks.
   return ranked.sort((a,b)=>(a.recommendationRank!==0)-(b.recommendationRank!==0));
 }
@@ -232,7 +249,7 @@ function recommendation(row,support){
   if(shader?described?.recommended===true:described?.recommended?.includes(row.template.kind))return {recommendationRank:1};
   return typeof method==="string"&&method.startsWith("libplacebo:")&&described?.general!==true?{recommendationRank:3}:{};
 }
-module.exports = { MAX_NODES: Model.MAX_NODES, MAX_PARAMETERS: Model.MAX_PARAMETERS, DEFAULT_PROCESSING_HEIGHT: Model.DEFAULT_PROCESSING_HEIGHT, validate, normalize, inspect, salvage, fromLegacy, composeSimple, reconstructionPreset, catalog,
+module.exports = { MAX_NODES: Model.MAX_NODES, MAX_PARAMETERS: Model.MAX_PARAMETERS, DEFAULT_PROCESSING_HEIGHT: Model.DEFAULT_PROCESSING_HEIGHT, NEURAL_INPUT_HEIGHT: Model.NEURAL_INPUT_HEIGHT, validate, normalize, inspect, salvage, fromLegacy, composeSimple, reconstructionPreset, catalog,
   PLAN_INVALID: Model.PLAN_INVALID, PLAN_NEWER: Model.PLAN_NEWER, HELPER_ROLES: Model.HELPER_ROLES, ownsHelpers: Model.ownsHelpers,
   isResize: Model.isResize, leading: Model.leading, migrate: value => validate(Model.migrate(value)), execution: value => Model.execution(validate(value)),
   orderSimple: (value, options) => Model.orderSimple(validate(value), options),

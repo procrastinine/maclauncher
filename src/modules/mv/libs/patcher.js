@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../../shared/copy-file");
 const path = require("node:path");
 
 const Catalog = require("./catalog");
@@ -46,7 +47,7 @@ function layoutForGame(detected) {
 
 function copyOutput(layout, source, destination) {
   if (layout.writableRoot) Writable.atomicCopy(source, destination, { root: layout.writableRoot });
-  else fs.copyFileSync(source, destination);
+  else cloneOrCopySync(source, destination);
 }
 
 function readPatchMeta(layout) {

@@ -139,15 +139,14 @@ test("late root FileSet exclusions survive Builder merging and npm filters retai
     for (const relative of ['src/modules/flash/resources/flash-player', 'src/modules/flash/resources/flash-player/Flash Player.app/Contents/MacOS/Flash Player'])
       assert.equal(matchers.some(m => selectedBy(m, relative)), false, relative);
     const modules = getNodeModuleFileMatcher(projectRoot, '/stage', value => value, build.mac, info);
-    for (const relative of ['node_modules/undici/docs/docs/api/Socks5ProxyAgent.md', 'node_modules/smart-buffer/docs/README_v3.md', 'node_modules/steam-session/src/LoginSession.ts',
+    for (const relative of ['node_modules/smart-buffer/docs/README_v3.md', 'node_modules/steam-session/src/LoginSession.ts',
       'node_modules/bytebuffer/dist/bytebuffer.min.js.gz', 'node_modules/bytebuffer/dist/bytebuffer-dataview.min.js.gz', 'node_modules/long/dist/long.min.js.gz',
       'node_modules/react/index.js', 'node_modules/react/cjs/react.production.js', 'node_modules/react-dom/client.js', 'node_modules/scheduler/cjs/scheduler.production.js'])
       assert.equal(selectedBy(modules, relative), false, relative);
     for (const relative of ['src/modules/flash/runtime/projector-manager.js', 'src/modules/flash/resources/icon.png'])
       assert.equal(matchers.some(m => selectedBy(m, relative)), true, relative);
     for (const relative of ['node_modules/steam-session/dist/index.js', 'node_modules/steam-session/dist/LoginSession.js', 'node_modules/steam-session/package.json',
-      'node_modules/steam-session/LICENSE', 'node_modules/undici/index.js', 'node_modules/undici/lib/dispatcher/client.js', 'node_modules/undici/lib/llhttp/llhttp_simd.wasm',
-      'node_modules/undici/LICENSE', 'node_modules/smart-buffer/build/smartbuffer.js', 'node_modules/bytebuffer/dist/bytebuffer-node.js',
+      'node_modules/steam-session/LICENSE', 'node_modules/smart-buffer/build/smartbuffer.js', 'node_modules/bytebuffer/dist/bytebuffer-node.js',
       'node_modules/long/dist/long.js', ...['react','react-dom','scheduler'].flatMap(name => ['LICENSE','package.json'].map(file => 'node_modules/'+name+'/'+file))])
       assert.equal(selectedBy(modules, relative), true, relative);
   }
@@ -173,19 +172,23 @@ test('source-only helper producers and Python SDK inputs are omitted while consu
   for (const file of ['src/modules/rgss/overlays/mkxpz-config.c', 'src/modules/rgss/overlays/mkxpz-identity.m',
     'src/modules/rgss/overlays/mkxpz-filename-nfc/macos-filename-nfc.c', 'src/modules/rgss/overlays/mkxpz-filename-nfc/macos-filename-nfc.h',
     'src/modules/shared/runtime/steamworks/native/offline-0.5.0/source/offline.cpp', 'src/modules/shared/runtime/steamworks/native/ticket-0.1.0/source/ticket.cpp',
-    'src/modules/shared/runtime/steamworks/native/offline-0.5.0/build.cjs', 'src/modules/shared/runtime/steamworks/native/ticket-0.1.0/build.cjs'])
+    'src/modules/shared/runtime/steamworks/native/offline-0.5.0/build.cjs', 'src/modules/shared/runtime/steamworks/native/ticket-0.1.0/build.cjs',
+    'src/modules/mages/native/ffmpeg-probe.c'])
     assert.equal(matchers.some(m => selectedBy(m, file)), false, file);
   for (const file of ['src/modules/siglus/native/adapter.m', 'src/modules/siglus/native-host/host.m',
     'src/modules/nscripter/runtime/portable-native/CMakeLists.txt', 'src/modules/shared/runtime/steamworks/native/offline-0.5.0/contracts.json',
-    'src/modules/minori/runtime/probe.rs', 'src/modules/mages/native/ffmpeg-probe.c'])
+    'src/modules/minori/runtime/probe.rs'])
     assert.equal(matchers.some(m => selectedBy(m, file)), true, file);
   const resource = require('../scripts/distribution-model.cjs').resourceRules(plan).find(r => r.from === 'src/resources');
   const matcher = new FileMatcher(path.join(projectRoot, resource.from), '/resources', value => value, resource.filter);
   for (const file of ['python/bin/python3', 'python/lib/python3.12/ctypes/__init__.py',
-    'python/lib/python3.12/site-packages/pefile.py', 'python/lib/python3.12/lib-dynload/_tkinter.cpython-312-darwin.so', '7zip/7zz'])
+    'python/lib/python3.12/site-packages/pefile.py', '7zip/7zz'])
     assert.equal(selectedBy(matcher,file),true,'Original stock helper input excluded: '+file);
   for (const file of ['python/bin/python', 'python/bin/python3.12', 'python/lib/libpython3.12.dylib',
     'python/include/Python.h', 'python/lib/python3.12/ensurepip/__init__.py', 'python/lib/python3.12/site-packages/pip/__main__.py',
+    'python/lib/python3.12/lib-dynload/_tkinter.cpython-312-darwin.so', 'python/lib/libtcl9tk9.0.dylib',
+    'python/lib/tk9.0/tk.tcl', 'python/lib/python3.12/idlelib/__init__.py',
+    'python/lib/python3.12/lib2to3/refactor.py', 'python/lib/python3.12/pydoc_data/topics.py',
     'RPGMakerDecrypter/RPGMakerDecrypter-cli'])
     assert.equal(selectedBy(matcher,file),false,'Development input or raw custom helper selected: '+file);
   const B = require('../src/modules/shared/runtime/bundled-native');
@@ -214,9 +217,11 @@ test("first-party fixtures and managed engines stay out of ASAR while declared h
   const matchers=getMainFileMatchers(projectRoot,"/packaged-app",value=>value,build.mac,packager,
     path.join(projectRoot,build.directories.output),false);
   const selected=relative=>matchers.some(matcher=>selectedBy(matcher,relative));
+  // Synthetic root-level native canaries cover filename exclusions separately
+  // from the existing fixture-directory canary.
   for(const file of ["tests/core-launcher.test.js","tests/fixtures/graphics/probe.mm",
-    "src/modules/shared/reshade/native/test/temporal-plan.mm","src/modules/shared/reshade/native/opengl-test.mm",
-    "src/modules/shared/reshade/native/depth-opengl-test.fx","src/modules/shared/reshade/temporal/fsr/projection-test.mjs",
+    "src/modules/shared/reshade/native/test/temporal-plan.mm","src/modules/shared/reshade/native/packaging-canary-test.mm",
+    "src/modules/shared/reshade/native/packaging-canary-test.fx","src/modules/shared/reshade/temporal/fsr/projection-test.mjs",
     "src/modules/crossover/temporal/dxmt/forwarder-test.c","src/modules/crossover/temporal/dxmt/test.mjs",
     "src/modules/crossover/temporal/streamline/test-forwarders.mjs","src/modules/crossover/temporal/streamline/camera-test.cpp",
     "src/modules/shared/reshade/native/effects-plan.mm","src/modules/shared/reshade/native/build.mjs",
@@ -319,7 +324,8 @@ test("application packaging preserves code and artwork while excluding local fil
   for (const file of ["src/main/bootstrap.js", "src/modules/core/launcher.js", "src/runtime/electron-game.js",
     "src/modules/bgi/main.js", "src/modules/bgi/archive.js", "src/modules/bgi/inspect.js",
     "src/modules/rgss/resources/icon.png", "src/modules/rgss/runtime/mkxpz-builds.js",
-    "src/modules/rgss/resources/soundfont/GMGSx.SF2", "src/modules/rgss/assets.js", "src/modules/rgss/rtp.js",
+    "src/modules/rgss/soundfont.js", "src/modules/nscripter/font.js", "src/modules/kirikiri/font.js",
+    "src/modules/shared/runtime/pinned-file.js", "src/modules/rgss/assets.js", "src/modules/rgss/rtp.js",
     "dist/renderer/index.html", "package.json", "LICENSE"])
     assert.equal(selected(file), true, `Application file excluded: ${file}`);
   for (const file of [".local/example/private.json", "src/modules/example/.local/private.json", "src/modules/example/.env.local",
@@ -345,6 +351,26 @@ test("all directory resource rules exclude local configuration and generated dia
   }
 });
 
+test("Claude Code folders stay out of application files and resources", () => {
+  const build = Content.applyBuildPolicy(doMergeConfigs([packageConfig().build]));
+  const packager = { info: { projectDir: projectRoot, buildResourcesDir: "build", config: build,
+    isPrepackedAppAsar: false, debugLogger: { isEnabled: false } } };
+  const matchers = getMainFileMatchers(projectRoot, "/packaged-app", value => value, build.mac, packager,
+    path.join(projectRoot, build.directories.output), false);
+  for (const file of ["src/modules/.claude/.cc-writes/entry", "src/modules/shared/reshade/.claude/settings.local.json", "src/main/.claude/.cc-writes/entry"]) {
+    assert.equal(Content.excludedReason(file), "private development directory", file);
+    for (const directory of [false, true])
+      assert.equal(matchers.some(matcher => matcher.createFilter()(path.join(projectRoot, file), { isDirectory: () => directory })), false, file);
+  }
+  assert.equal(matchers.some(matcher => matcher.createFilter()(path.join(projectRoot, "src/modules/.claude"), { isDirectory: () => true })), false);
+  for (const resource of build.extraResources) {
+    const matcher = new FileMatcher(path.join(projectRoot, resource.from), "/packaged-resources", value => value, resource.filter);
+    const base = resource.from === "src/resources" ? "native-runtimes/engine" :
+      resource.from === "src/external" ? "evbunpack" : resource.from.endsWith("unren") ? "third_party/rpatool" : "__urw";
+    assert.equal(selectedBy(matcher, `${base}/.claude/.cc-writes/entry`), false, `Claude Code folder selected by ${resource.from}`);
+  }
+});
+
 test("MVMZ and Kawariki patch inputs are bundled without a separate runtime manager", () => {
   const pkg=packageConfig(),external=pkg.build.extraResources.find(rule=>rule.from==='src/external');
   assert.ok(external);
@@ -353,7 +379,7 @@ test("MVMZ and Kawariki patch inputs are bundled without a separate runtime mana
     'rpgmakermlinux-cicpoffs/Kawariki-patches/preload.rb',
     'rpgmakermlinux-cicpoffs/nwjs/packagefiles/rpgmaker-mv-pixi5/js/rpg_core.js',
     'rpgmakermlinux-cicpoffs/nwjs/packagefiles/filestoexport/plugins/Clipboard_llule.js',
-    'rpgmakermlinux-cicpoffs/nwjs/nwjs/packagefiles/plugins/CustomizeMaxSaveFile.js'])
+    'rpgmakermlinux-cicpoffs/nwjs/packagefiles/filestoexport/plugins/CustomizeMaxSaveFile.js'])
     assert.equal(selectedBy(matcher,file),true,file);
   assert.ok(!pkg.build.files.includes('!src/modules/rgss/overlays/kawariki{,/**}'));
   assert.ok(!pkg.build.files.includes('!src/modules/shared/mvmz/plugins{,/**}'));

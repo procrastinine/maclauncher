@@ -13,7 +13,7 @@ function createManager(dependencies = {}) {
           !/^[a-f0-9]{40}$/.test(manifest.upstreamRevision || ""))
         throw new Error("The Prosper runtime has an unsupported layout or source revision.");
     },
-    verifyPayload: async selected => Bundled.verifyPayload(selected.root, selected.declaration), dependencies });
+    verifyPayload: async selected => Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency), dependencies });
   const inspectPackage = manager.customRuntime.inspect;
   Custom.configure(manager, { inspect(runtimePath, options) {
     const start = fs.statSync(runtimePath).isDirectory() ? runtimePath : path.dirname(runtimePath);

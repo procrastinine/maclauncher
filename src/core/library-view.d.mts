@@ -2,7 +2,7 @@ export type LibrarySortMode = "custom" | "recent" | "added" | "alphabetical" | "
 export type LibrarySort = { mode: LibrarySortMode; direction: "asc" | "desc" };
 export type LibraryViewGame = {
   gameId?: string; gamePath: string; name?: string; moduleLabel?: string; moduleId?: string;
-  lastPlayedAt?: number | null; createdAt?: number | null;
+  lastPlayedAt?: number | null; createdAt?: number | null; ephemeral?: boolean;
 };
 export const DEFAULT_LIBRARY_SORT: LibrarySort;
 export const LIBRARY_SORT_MODES: LibrarySortMode[];

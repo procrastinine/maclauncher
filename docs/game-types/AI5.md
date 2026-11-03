@@ -9,7 +9,7 @@ AI5WIN is a Windows visual novel engine. Its games are configured by an INI file
 
 ## Importing games
 
-Import accepts an original Windows game folder, its executable or its AI5 INI file. Preparation writes one small configuration file, and saves and screenshots are kept in the game's launcher data.
+Import accepts an original Windows game folder, its executable or its AI5 INI file. The interpreter runs from that folder, where saves stay and screenshots go to `Screenshots/`. Preparation keeps one small adapted configuration file in the game's launcher data.
 
 ## Detection and versions
 
@@ -26,7 +26,7 @@ The inspector shows the game profile, the original file version, the version sou
 
 ## Original data and private state
 
-The interpreter runs in the original game folder and reads archives and loose assets directly. A single private UTF-8 INI file normalizes the Windows references written in the game's configuration, and the interpreter receives that file's absolute path. Portable font paths replace the build machine's path prefix.
+The interpreter runs in the original game folder and reads archives and loose assets directly. A single private UTF-8 INI file normalizes the Windows references written in the game's configuration. The interpreter receives the original INI as its game argument and reads the adapted configuration through its configuration setting. Unchanged preparation files are reused. Portable font paths replace the build machine's path prefix.
 
 ### Disc images
 
@@ -35,13 +35,13 @@ Interpreters with original-disc support also read original ISO9660 and MODE1/235
 - A disc's INI files must declare the same game profile as the game. Several matching disc folders are rejected as ambiguous.
 - Disc metadata is read according to [ECMA-119](https://ecma-international.org/publications-and-standards/standards/ecma-119/), with size-limited volume and directory reads, paired endian checks, extent validation and cycle limits. The reader accepts single-extent, non-interleaved records in these disc formats.
 
-English translation layouts can keep the base graphics and music inside an original disc image. Automatic preparation then writes small range descriptors to `modules/ai5/disc/`, and a native `funopen` stream reads those ranges across raw sectors without copying the archives or the game folder. Translation archives take precedence, and missing members fall back to validated base archives. Nested voice containers are read only. Missing save slots can be filled from the disc's default saves; original portable saves and existing private saves take precedence.
+English translation layouts can keep the base graphics and music inside an original disc image. Automatic preparation then writes small range descriptors to `modules/ai5/disc/`, and a native `funopen` stream reads those ranges across raw sectors without copying the archives or the game folder. Translation archives take precedence, and missing members fall back to validated base archives. Nested voice containers are read only. Missing save slots can be filled from the disc's default saves; existing saves take precedence.
 
 ## Saves
 
-Saves are stored in `~/Library/Application Support/maclauncher/games/<game-id>/modules/ai5/saves/`, or in an explicit save-folder override. The inspector opens the game's save folder.
+Saves are stored in the original game folder, or in an explicit save-folder override. The inspector opens the game's save folder.
 
-On first access, an empty save slot can be filled from an existing portable save in the original game, which is read through a size-limited read-only handle; after that, the private save always wins. Screenshots and debugger image exports go to the private `screenshots/` folder beside the saves. If the private folders are missing, the interpreter fails instead of writing next to the original assets.
+When an override is selected, an absent save slot can be filled from an existing save in the original game through a size-limited read-only handle. Existing saves in the override folder take precedence. Screenshots and debugger image exports go to `Screenshots/` in the original game folder.
 
 ## Settings
 
@@ -55,7 +55,7 @@ On first access, an empty save slot can be filled from an existing portable save
 
 ### AI5-SDL2
 
-AI5-SDL2 is the default runtime. MacLauncher Builds publishes Mac packages built from [AI5-SDL2](https://github.com/nunuhara/ai5-sdl2) with libai5 and nulib, libsndfile audio and FFmpeg movie playback. Each package contains the interpreter, all of its native dependencies, fonts and license notices, and Runtimes lists its architectures and minimum macOS version. The Mac packages add recognition of the Japanese YU-NO voice-patch title, direct reading of original data and disc images, and separate save storage.
+AI5-SDL2 is the default runtime. MacLauncher Builds publishes Mac packages built from [AI5-SDL2](https://github.com/nunuhara/ai5-sdl2) with libai5 and nulib, libsndfile audio and FFmpeg movie playback. Each package contains the interpreter, all of its native dependencies, fonts and license notices, and Runtimes lists its architectures and minimum macOS version. The Mac packages add recognition of the Japanese YU-NO voice-patch title, direct reading of original data and disc images, and explicit save-folder selection.
 
 **Runtimes → AI5WIN** lists these packages. They need no Wine or Windows fonts, and installed versions are stored in `~/Library/Application Support/maclauncher/runtimes/ai5/<arm64|x64>/<version>/`. Their source, patches and build scripts are in the MacLauncher Builds repository.
 

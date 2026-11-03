@@ -245,26 +245,26 @@ function executableEvidence(entry, settings = {}) {
 }
 function mapGameDrive(directory, prefixPath, gameRoot, executablePath) {
   Writable.assertOwnDirectory(directory, prefixPath, { create: false });
-  Writable.assertOwnDirectory(directory, gameRoot, { create: false });
   const root = fs.realpathSync(gameRoot), executable = fs.realpathSync(executablePath);
-  if (!Detection.inside(root, executable)) throw new Error("The selected Windows executable escapes the game's private files.");
+  if (!Detection.inside(root, executable)) throw new Error("The selected Windows executable escapes the selected game folder.");
   const relative = path.relative(root, executable);
   if (!relative || relative.split(path.sep).some(name => /[\\:\0\r\n]/.test(name))) {
     throw new Error("The Windows executable path contains unsupported filename characters.");
   }
   const dosdevices = path.join(prefixPath, "dosdevices");
   Writable.assertOwnDirectory(directory, dosdevices);
-  const mapping = path.join(dosdevices, "g:");
-  let stat; try { stat = fs.lstatSync(mapping); } catch (error) { if (error.code !== "ENOENT") throw error; }
-  if (stat) {
-    let target; try { if (stat.isSymbolicLink()) target = fs.realpathSync(mapping); } catch {}
-    if (target !== root) throw new Error("The game's G: drive mapping conflicts with an existing file or folder.");
-  } else {
-    // Relative links preserve the per-game mapping when the library moves.
-    // This drive exposes only the private copy, never the imported source.
-    fs.symlinkSync(path.relative(dosdevices, gameRoot), mapping, "dir");
+  // A short drive path preserves Windows MAX_PATH compatibility without a
+  // game mirror. Existing mappings, including old private G: links, stay.
+  for (const drive of "ghijklmnopqrstuvwxy") {
+    const mapping = path.join(dosdevices, drive + ":");
+    let stat; try { stat = fs.lstatSync(mapping); } catch (error) { if (error.code !== "ENOENT") throw error; }
+    if (stat) {
+      let target; try { if (stat.isSymbolicLink()) target = fs.realpathSync(mapping); } catch {}
+      if (target !== root) continue;
+    } else fs.symlinkSync(path.relative(fs.realpathSync(dosdevices), root), mapping, "dir");
+    return drive.toUpperCase() + ":\\" + relative.split(path.sep).join("\\");
   }
-  return "G:\\" + relative.split(path.sep).join("\\");
+  return executablePath;
 }
 async function prepareLaunch(entry, context, dependencies = {}) {
   const manager = dependencies.manager || require("./runtime/manager");
@@ -288,21 +288,15 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   context.signal?.throwIfAborted();
   const directory = runtimeDirectory(entry, context);
   const GameView = require("../temporal/game-view");GameView.clearWatch(context);
-  GameView.reconcile(entry, context, directory, "sikarugir");
   Writable.assertOwnDirectory(context.userDataDir, directory);
   for (const name of ["home", "tmp", "prefixes", "runtime-view"]) Writable.assertOwnDirectory(directory, path.join(directory, name));
-  const baselineRoot = await WindowsFiles.stageGameFiles(match.sourceRoot, directory, context);
-  const baselineExecutable = path.join(baselineRoot, path.relative(match.sourceRoot, match.windowsExecutablePath));
-  if (!Detection.readWindowsExecutable(baselineExecutable)) throw new Error("The selected Windows executable is unavailable in the game's private files.");
-  const legacyLibraries = cameraBridge?.libraries ||
-    (entry.runtimeData?.sikarugir?.graphicsInputs?.cameraProjection || ["xess","streamline+xess"].includes(entry.runtimeData?.sikarugir?.graphicsInputs?.source) ? Temporal.libraries(match, match.windowsExecutablePath).map(sourcePath => ({sourcePath, relativePath: path.relative(match.sourceRoot, sourcePath)})) : []);
-  const baseline = await GameView.baseline(entry, context, directory, baselineRoot, baselineExecutable, "sikarugir", legacyLibraries);
-  let gameRoot = baseline.gameRoot, executablePath = baseline.executablePath, cameraView;
+  const originalRoot = match.sourceRoot, recovery = { overrides: {}, omitted: new Set(), libraries: [] };
+  let gameRoot = originalRoot, executablePath = match.windowsExecutablePath, cameraView;
   if (cameraBridge) {
     try {
-      cameraView = await GameView.camera(directory, baselineRoot, baselineExecutable, cameraBridge, baseline.recovery, context.signal);
+      cameraView = await GameView.camera(directory, originalRoot, match.windowsExecutablePath, cameraBridge, recovery, context.signal);
       if (!Temporal.prepareGame(cameraBridge, cameraView.gameRoot, context.signal)) cameraBridge = null;
-      else {GameView.prepared(cameraView, cameraBridge);GameView.remember(entry, context, "sikarugir", cameraView, baseline.recovery);gameRoot = cameraView.gameRoot;executablePath = cameraView.executablePath;}
+      else {GameView.prepared(cameraView, cameraBridge);GameView.remember(entry, context, "sikarugir", cameraView, recovery);gameRoot = cameraView.gameRoot;executablePath = cameraView.executablePath;}
     }
     catch (error) {
       GameView.discard(cameraView);
@@ -317,7 +311,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
     selected.install.sha256 || selected.install.digest || null])).digest("hex").slice(0, 20);
   const windowsVersion = settings.windowsVersion || "win10";
   if (!WINDOWS_VERSIONS.has(windowsVersion)) throw new Error("Unsupported Wine Windows version.");
-  const prefixPath = path.join(directory, "prefixes", `${identity}-${windowsVersion}`);
+  const prefixPath = path.join(directory, "prefixes", windowsVersion);
   // Version the loader layout independently of the persistent prefix/saves.
   const variant = crypto.createHash("sha256").update(JSON.stringify([2, settings.graphicsBackend || "auto", settings.vulkanBackend || "auto",
     settings.cncDdraw === true, match.executableArchitecture, ...(settings.dlss === true ? ["dlss"] : []),
@@ -329,21 +323,26 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   WindowsFiles.detachProfileAliases(prefixPath);
   await graphics.applyPrefix?.();
   context.signal?.throwIfAborted();
-  const windowsExecutablePath = mapGameDrive(directory, prefixPath, gameRoot, executablePath);
+  // Wine accepts Unix absolute paths. Long paths retain a short Windows drive
+  // rooted at the original game; mappings from earlier Plays stay untouched.
+  const windowsExecutablePath = executablePath.length >= 240 ? mapGameDrive(directory, prefixPath, gameRoot, executablePath) : executablePath;
+  const workingDirectory = path.dirname(match.windowsExecutablePath);
   let { environment } = buildEnvironment(settings, selected.install, directory, prefixPath, graphics, dependencies);
   // Apply launcher-owned optional effects only to the game, after stock Wine
   // finishes prefix initialization. User-supplied loader paths remain blocked.
   if (context.applyGameEnvironment) environment = await context.applyGameEnvironment(environment);
   const args = [windowsExecutablePath, ...(Array.isArray(settings.arguments) ? settings.arguments : []).map(value => safeText(value, "Game arguments")),
     ...(context.gameArguments || [])];
-  GameView.remember(entry, context, "sikarugir", cameraBridge ? cameraView : baseline, baseline.recovery);
-  GameView.watch(entry, context, directory, "sikarugir", cameraBridge ? cameraView : baseline);
+  if (cameraBridge && cameraView) {
+    GameView.remember(entry, context, "sikarugir", cameraView, recovery);
+    GameView.watch(entry, context, directory, "sikarugir", cameraView);
+  }
   entry.runtimeData = { ...entry.runtimeData, sikarugir: { ...entry.runtimeData?.sikarugir, installedVersion: selected.version,
-    sourceRoot: match.sourceRoot, gameRoot, baselineGameRoot: baselineRoot, prefixPath, viewRoot, graphicsBackend: graphics.graphicsBackend,
+    sourceRoot: match.sourceRoot, gameRoot, prefixPath, viewRoot, graphicsBackend: graphics.graphicsBackend,
     vulkanBackend: graphics.vulkanBackend, dlss: graphics.dlss?.enabled === true, componentVersions: graphics.componentVersions,
     graphicsInputs: context.graphicsInputs } };
   context.onEntryChange?.(entry);
-  return { ...selected, directory, gameRoot, prefixPath, viewRoot, executablePath, windowsExecutablePath, graphics, environment, args,
+  return { ...selected, directory, gameRoot, workingDirectory, prefixPath, viewRoot, executablePath, windowsExecutablePath, graphics, environment, args,
     winePath: graphics.executablePath || selected.install.executablePath, serverPath: graphics.serverPath || selected.install.serverPath };
 }
 

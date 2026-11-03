@@ -47,7 +47,7 @@ module.exports = {
     if (context.runtimeId && context.runtimeId !== "klepton") return [];
     return [
       ...(LaunchPolicy.execution(context) === "art" ? ArtRuntime.requirements(entry, context) : []),
-      ...require("../shared/vulkan").requirements(context)
+      ...require("../shared/vulkan").requirements(context, { required: context.runtimeSettings?.angleBackend === "vulkan" })
     ];
   },
   async launchRuntime(runtimeId, entry, context) {

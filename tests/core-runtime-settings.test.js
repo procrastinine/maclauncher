@@ -116,9 +116,14 @@ test("select-field migrations preserve explicit legacy preferences when automati
     legacyValues: [{ value: true, replacement: "enabled" }, { value: false, replacement: "disabled" },
       { value: "invalid", replacement: "not-an-option" }] };
   const schema = { defaults: { fallback: "auto" }, fields: [field] };
+  const { convertLegacyRuntimeSettings } = require('../src/core/backcompat/settings-conversions');
+  const info = moduleWithSchema('choice-fixture', [field], {fallback: 'auto'});
+  const registry = { getLegacyRuntimeSettingAliases: () => [{runtimeId: 'shared', key: 'fallback', values: field.legacyValues}] };
+  const converted = value => convertLegacyRuntimeSettings(info, 'shared', {fallback: value}, registry);
   assert.deepEqual(buildRuntimeSettingsDefaults(schema), { fallback: "auto" });
-  assert.deepEqual(normalizeRuntimeSettings(schema, { fallback: false }), { fallback: "disabled" });
-  assert.deepEqual(normalizeRuntimeSettings(schema, { fallback: true }), { fallback: "enabled" });
+  assert.deepEqual(normalizeRuntimeSettings(schema, converted(false)), { fallback: "disabled" });
+  assert.deepEqual(normalizeRuntimeSettings(schema, converted(true)), { fallback: "enabled" });
+  assert.deepEqual(normalizeRuntimeSettings(schema, { fallback: false }), { fallback: "auto" }, 'current normalization has no old-type reader');
   assert.deepEqual(normalizeRuntimeSettings(schema, { fallback: "auto" }), { fallback: "auto" });
   assert.deepEqual(normalizeRuntimeSettings(schema, { fallback: "false" }), { fallback: "auto" });
   assert.deepEqual(normalizeRuntimeSettings(schema, { fallback: "invalid" }), { fallback: "auto" });

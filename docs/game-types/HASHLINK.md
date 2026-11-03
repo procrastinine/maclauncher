@@ -33,9 +33,11 @@ The names of the native libraries the bytecode needs are read without loading th
 
 ## Preparation and saves
 
-HashLink runs from a per-game folder in launcher data. Known static images, audio and resource packs are linked into it, and the VM reads the original bytecode directly. Configuration files and unknown writable files are copied, and Windows executables, DLLs and HDLL files are left out.
+HashLink reads the original bytecode and runs with its containing directory as the working directory. Resources, relative saves and configuration remain at the game's own paths; Play creates no copy of the game or links to its resources in launcher storage.
 
-Files the game writes, including saves and configuration files at relative paths, stay in the game's private launcher data, and existing player files persist between launches. If the source bytecode's digest changes, launch and rebuilding of that folder are blocked so that unknown game saves are not discarded silently. A migration removes unchanged, obsolete copies of bytecode and native modules and keeps relative player saves. HashLink games have no common save format, so MacLauncher infers no save path or save file name.
+Compatible macOS native modules are searched in a fixed order: a custom module directory, the runtime directory, then the game directory. Windows HDLL files cannot replace the required native modules. HashLink games have no common save format, so MacLauncher infers no save file name.
+
+Earlier MacLauncher versions ran HashLink games from a private folder in launcher data, where saves and configuration written at relative paths were kept. During the first startup after an upgrade, those files are recovered once into the folder that holds the original bytecode, as [Earlier private game folders](../library/GAME_PREPARATION.md#earlier-private-game-folders) describes. Files missing from the original game return to their original relative paths. Existing original files stay unchanged, and private versions that differ are kept beside them as `<filename>.MacLauncher-conflict-<id>`. A private folder that a save-folder override still names stays in use, and Play does not read the other earlier folders.
 
 ## Settings
 

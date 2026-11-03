@@ -1,4 +1,5 @@
 const Included = require("../modules/shared/runtime/included-helpers");
+const Host = require("../modules/shared/runtime/host-capabilities");
 
 function resolveRuntimeSupportForEntry(mod, info, entry, moduleSettings, context = {}) {
   const supported = Array.isArray(info?.runtime?.supported) ? [...info.runtime.supported] : [];
@@ -9,7 +10,7 @@ function resolveRuntimeSupportForEntry(mod, info, entry, moduleSettings, context
 
 // A module whose included helpers have no build for this Mac's CPU cannot play
 // here. The helpers' package records name the Mac it needs.
-function hostRequirement(mod, arch = process.arch) {
+function hostRequirement(mod, arch = Host.getHostCapabilities().hardwareArch) {
   let declarations;
   try { declarations = mod?.distributionSupplementals; } catch { return null; }
   return Array.isArray(declarations) && declarations.length ? Included.hostRequirement(declarations, { arch }) : null;

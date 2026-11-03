@@ -1,7 +1,9 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
+const { cloneOrCopy } = require("../copy-file");
 const { execFile } = require("node:child_process"), { promisify } = require("node:util");
 const Writable = require("../writable-input");
 const Native = require("../runtime/bundled-native");
+const { hasFineChangeTime } = require("../file-time");
 const Publication = require("./publication");
 const { withRuntimeMutation, withRuntimeUse } = require("../../../core/coordinated-runtime-managers");
 const run = promisify(execFile);
@@ -40,13 +42,13 @@ async function hashFile(file, signal) {
 // Installed copies checked by resolveModel, keyed by file identity: a rewrite,
 // replacement or touch changes the stamp and hashes the file again.
 const resolvedHashes = new Map();
-const fileStamp = file => {const stat = fs.lstatSync(file, {bigint: true});return [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":");};
+const fileStamp = file => {const stat = fs.lstatSync(file, {bigint: true});return hasFineChangeTime(stat) ? [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":") : null;};
 async function stampedHash(file, signal) {
   const stamp = fileStamp(file), cached = resolvedHashes.get(file);
-  if (cached?.stamp === stamp) return cached.hash;
+  if (stamp !== null && cached?.stamp === stamp) return cached.hash;
   const hash = await hashFile(file, signal);
   resolvedHashes.delete(file);
-  if (fileStamp(file) === stamp) {
+  if (stamp !== null && fileStamp(file) === stamp) {
     if (resolvedHashes.size >= 64) resolvedHashes.delete(resolvedHashes.keys().next().value);
     resolvedHashes.set(file, {stamp, hash});
   }
@@ -119,7 +121,7 @@ async function importModel({ userDataDir, runtimePath, signal, inspect = inspect
   const temporary = await fs.promises.mkdtemp(path.join(root, ".import-"));
   try {
     const copied = path.join(temporary, "Lossless.dll");
-    await fs.promises.copyFile(runtimePath, copied, fs.constants.COPYFILE_FICLONE);
+    await cloneOrCopy(runtimePath, copied, { signal });
     await fs.promises.chmod(copied, 0o600);
     const inspection = checkInspection(await inspect(copied, { signal }), fs.statSync(copied).size);
     if (await hashFile(copied, signal) !== inspection.contentHash) throw new Error("Lossless Scaling resources changed during import.");
@@ -168,7 +170,7 @@ function inspectCustom(runtimePath, { data, verification = "full" } = {}) {
   if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("Select a compatible Lossless Scaling DLL.");
   if (verification === "full") {
     const stamp = [stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs].join(":"), cached = localChecks.get(file);
-    if (cached !== stamp && require("../runtime/local-native").hashFile(file) !== inspection.contentHash) throw new Error("The registered Lossless Scaling DLL changed. Register its current version again.");
+    if ((!hasFineChangeTime(stat) || cached !== stamp) && require("../runtime/local-native").hashFile(file) !== inspection.contentHash) throw new Error("The registered Lossless Scaling DLL changed. Register its current version again.");
     if (localChecks.size >= 64) localChecks.delete(localChecks.keys().next().value);
     localChecks.set(file, stamp);
   }

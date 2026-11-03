@@ -26,17 +26,13 @@ Mods with only Windows game libraries do not match this game type, because an Ap
 
 ## Preparation and saves
 
-Xash3D FWGS reads the imported folder as a read-only game root and never writes to it. Configuration, logs, downloaded content and saves go to a private game root at `games/<gameId>/modules/xash3d/data/`. Play prepares this root before each launch:
+Xash3D FWGS uses the original Half-Life folder as its writable game root and working directory. Configuration, logs and downloaded content use the engine's ordinary locations in that tree; saves use `<game folder>/save/`. Ordinary Play creates no private game tree or save links. The engine receives the selected runtime's native server and client library paths through its `-dll` and `-clientlib` options. Native mod libraries remain in their original folders. The runtime's `extras.pk3` archive supplies menu graphics, fonts and controller mappings at the lowest priority, so game files take precedence.
 
-- Its `valve` folder links the game library folders of the selected Xash3D FWGS installation, so the engine loads Half-Life's libraries from that installation.
-- The game's `save` folder links the save location, `games/<gameId>/modules/xash3d/saves/` or the save-location override.
-- The engine's `extras.pk3` archive, with its menu graphics, fonts and controller mappings, is added at the lowest priority, so game files take precedence.
-
-Removing the game deletes this data and keeps an explicit custom save folder.
+Because the engine's save subdirectory is fixed, a custom save folder needs a private writable game root. That root reads the original content without writing to it and links only the chosen save folder. Files already in the private root are kept. Removing the library entry keeps the original game files and an explicit custom save folder.
 
 ## Settings
 
-The Xash3D FWGS runtime has no settings of its own. Video, audio, controls and multiplayer options are in the engine's own menu, which stores them in the private game root. Play starts the engine with `-game <folder>`, followed by the shared game arguments.
+The Xash3D FWGS runtime has no settings of its own. Video, audio, controls and multiplayer options are in the engine's own menu, which stores them in the game root. Play starts the engine with `-game <folder>` and the native library options, followed by the shared game arguments.
 
 ## Graphics
 

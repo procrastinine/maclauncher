@@ -35,9 +35,9 @@ SDK versions are listed from [renpy.org/dl](https://www.renpy.org/dl/), with lat
 
 Runtime discovery tries known Mac library folders in version order, including older `darwin-x86_64` layouts. If those names are absent, a bounded search under `lib/` finds the Mac Python and Ren'Py executables by their contents. SDK installations record the selected folder for later launches.
 
-Each SDK version runs the game from its own private project. The project has real directories with private scripts, Python files, compiled bytecode, configuration, caches, logs and local saves, while archives, images, music and other immutable assets are linked to the original game. Each SDK version keeps separate compiled scripts and caches, and the original game receives no compilation, cache or save writes. Existing local saves are copied into the private save folder once.
+SDK Play passes the selected original project directly to `renpy.sh` and uses that project as the working directory. A game-only import uses its selected game directory directly. Scripts, assets, compiled files, caches, logs and saves follow Ren'Py's original project paths and configuration; ordinary Play creates no private copy of the game or links to its assets.
 
-Synchronizing the project with the game compares source file metadata and reuses private files whose sources have not changed. The original timestamps of source and compiled scripts are kept, and generated caches persist between launches. A project made by an earlier launcher version that linked the whole `game/` folder is replaced automatically. If an asset cannot be linked, preparation fails instead of quietly copying the entire game.
+Play never reads or updates the private projects of earlier MacLauncher versions. Files found only in such a project are recovered once to their original paths, as [Earlier private game folders](../library/GAME_PREPARATION.md#earlier-private-game-folders) describes; a file that differs from the original is kept beside it as a conflict copy, and an unsafe layout stays unchanged with its reason recorded. Package builds use a separate build workspace and do not change how Play runs the game.
 
 ### Ren'Py Patch
 
@@ -61,7 +61,7 @@ The application ID must come from literal game configuration or from Steam metad
 
 For a game that uses Steam, MacLauncher runs the selected runtime's own `steamapi` module against stub function objects to list every native symbol it requires. The shared Steam API support checks the game process's architecture and these exact exports, then uses a compatible library from the game or the included helper. Requirements are cached by the contents of the `steamapi` module, and each Python generation and SDK release is inspected separately.
 
-An init script in the per-game project redirects only the runtime's exact `libsteam_api.dylib` and `steam_appid.txt` paths. The SDK's Steam provider initializes normally, while development writes and deletions of the app ID stay in per-game state. Ordinary path joins, existence checks and ctypes loading behave as before. Assets stay linked to the original game, and the SDK and its global libraries are unchanged. Patched launches use this private project only for a game that uses Steam. [Steam support](../runtimes/STEAM_API.md) describes the helper versions.
+A MacLauncher init script redirects only the runtime's exact `libsteam_api.dylib` and `steam_appid.txt` paths. Ren'Py loads it from an extra `RENPY_SEARCHPATH` directory, which holds only the helper script and its state, with no game copies or links. The original project remains the base, game and working directory. The SDK's Steam provider initializes normally, while development writes and deletions of the app ID stay in the helper's state. Ordinary path joins, existence checks and ctypes loading behave as before, and the SDK and its global libraries are unchanged. [Steam support](../runtimes/STEAM_API.md) describes the helper versions.
 
 ## Saves
 
@@ -77,7 +77,7 @@ A literal `config.save_directory` selects its exact save path, even before the f
 
 For example, `config.save_directory = "MyGame-1234"` resolves to `~/Library/RenPy/MyGame-1234` when no environment variable or portable folder overrides it. A `None` or empty name uses the running project's `game/saves`. A safe absolute literal `config.savedir` overrides this calculation, and literal absolute lists or tuples in `config.extra_savedirs` add further save locations.
 
-For SDK launches, the local `game/saves` mirror is `userData/games/<gameId>/modules/renpy/projects/<sdkVersion>/game/saves`. The original game's `game/saves` stays discoverable for earlier saves. Native Mac bundles have no engine mirror. **Save tools** can choose between the detected folders without moving or rewriting saves.
+SDK and patched launches use the original game's `game/saves` when no save-directory name is configured, and Ren'Py's configured location otherwise. Native Mac bundles keep their own save locations. Save discovery reads the original game's configuration without probing earlier private projects. **Save tools** can choose between the detected folders without moving or rewriting saves.
 
 Some configurations cannot be resolved: dynamic expressions, conditional or deferred assignments, conflicting settings, paths that leave the game and malformed literals. These stay unresolved with a warning. An existing `game/saves` mirror can still be offered as an inferred location, but an unknown configured location is not replaced with a guess from the title. Without any setting, `game/saves` is the inferred location. A custom configuration outside the inspected scope may need an explicit save-folder override. Options read from extracted sources follow the same rules. The same refresh repairs stale blank or title-based paths in existing library entries and keeps explicit overrides.
 
@@ -124,7 +124,7 @@ Live2D installation reads the dylib's Mach-O headers and symbol tables for every
 
 Downloads use the shared progress and cancellation manager, validated official HTTPS URLs and limited archive sizes. Published digests are checked when supplied, and each downloaded ZIP gets a recorded SHA-256 checksum that it must match before reuse. Downloaded ZIPs stay in `userData/runtimes/live2d/<version>` for installation into another compatible SDK. The versioned download URLs come from the [download page and license terms](https://www.live2d.com/en/sdk/download/native/): its direct links and the download scripts it loads from live2d.com, such as the [Native SDK download script](https://cubism.live2d.com/sdk-native/js/download.js). Any live2d.com link to a `CubismSdkForNative-<version>.zip` archive is accepted, whatever its path. MacLauncher parses the published metadata without running the scripts. One confirmation covers both looking up and downloading the archive. Live2D binaries and archives are not bundled with MacLauncher.
 
-The game inspector's **Libraries** group installs Live2D into the game's own macOS runtime instead. It changes only that runtime's existing library folder and keeps the record needed to undo it in the launcher's game data. A runtime copied by **Patch** uses the recorded SDK version, and a macOS runtime that was already in the game uses its detected version. Unknown versions and signed app bundles are refused. Installing Live2D never rewrites a model, script, archive or runtime executable.
+The game inspector's **Libraries** group installs Live2D in the game's launcher data, at `userData/games/<gameId>/modules/renpy/libraries/live2d/`. An init script loaded through `RENPY_SEARCHPATH` redirects only the native Core loader to that verified absolute library path. Core loads when the game first requests it; the original project's files, working directory, interpreter and native libraries stay unchanged. A runtime copied by **Patch** uses the recorded SDK version, and a macOS runtime that was already in the game uses its detected version. Unknown versions and signed app bundles are refused.
 
 ## Tools
 
@@ -150,7 +150,7 @@ The console runs Python inside the running game, which the user has chosen to tr
 
 ### Cheat add-ons
 
-The cheats panel can also install two community add-ons: the Universal Ren'Py Walkthrough System and 0x52's Universal Ren'Py Mod (URM). [Cheats](../tools/CHEATS.md#renpy-cheat-add-ons) describes what each one installs.
+The cheats panel can also install two community add-ons: the Universal Ren'Py Walkthrough System and 0x52's Universal Ren'Py Mod (URM). URM installs from a `0x52_URM.rpa` file chosen in a file dialog. MacLauncher checks the file's RPA header and keeps a private copy, so later installations need no new selection and no download. **Choose another Universal Ren'Py Mod file…** replaces that copy with the newly chosen file and installs it into the selected game. Canceling, or choosing an invalid file, keeps the previous copy. [Cheats](../tools/CHEATS.md#renpy-cheat-add-ons) describes what each one installs.
 
 ## Backend API
 

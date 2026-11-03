@@ -138,3 +138,26 @@ test("launch preparation reuses an unchanged compiled custom shader and recompil
   touch(source);await ReShade.prepare(entry, options);
   assert.equal(compiles, 2, "an edited source is compiled again");assert.notEqual(revision(), first);
 });
+
+
+test("coarse file times revalidate runtime records, launch bytes and Lossless models without changing edit reuse", async t => {
+  const {holdFileTimes} = require("./helpers/held-file-times.cjs"), Models = require("../src/modules/shared/reshade/models");
+  const root = temporary(t, "graphics-coarse-caches-"), file = path.join(root, "runtime.json"), shader = path.join(root, "effect.fx");
+  fs.writeFileSync(file, JSON.stringify({version: "a"}));fs.writeFileSync(shader, "original");
+  const original = path.join(root, "Lossless.dll"), bytes = Buffer.alloc(128, 65);fs.writeFileSync(original, bytes);
+  const inspection = {schema: 1, version: "3.2.2.0", contentHash: sha(bytes), resourceLayoutHash: "a".repeat(64), size: 128, resourceCount: 300,
+    capabilities: Object.fromEntries(Models.CAPABILITIES.map(key => [key, {compatible: true, reason: ""}]))};
+  const options = {userDataDir: path.join(root, "profile"), runtimePath: original, inspect: async () => inspection}, installed = await Models.importModel(options);
+  holdFileTimes(t, [file, shader, installed.modelPath]);t.after(() => {RuntimeRecord.clear();Verify.clear();});
+  const record = RuntimeRecord.read(root);assert.equal(RuntimeRecord.read(root), record, "unchanged coarse content shares its parsed record");
+  fs.writeFileSync(file, JSON.stringify({version: "b"}));assert.equal(RuntimeRecord.read(root).version, "b");
+  const row = {path: "effect.fx", size: 8, mode: 0o644, sha256: sha("original")};
+  Verify.verifyFile(root, row);Verify.verifyFile(root, row);
+  fs.writeFileSync(shader, "modified");Verify.verifyFile(root, row, {reuse: true});
+  assert.throws(() => Verify.verifyFile(root, row), /checksum/);
+  assert.throws(() => Verify.verifyFile(root, row, {reuse: true}), /checksum/, "rejected bytes never authorize later edit reuse");
+  await Models.resolveModel(options.userDataDir, installed.version, "ls1Quality");
+  await Models.resolveModel(options.userDataDir, installed.version, "ls1Quality");
+  fs.chmodSync(installed.modelPath, 0o644);fs.writeFileSync(installed.modelPath, Buffer.alloc(128, 66));
+  await assert.rejects(Models.resolveModel(options.userDataDir, installed.version, "ls1Quality"), /has changed/);
+});

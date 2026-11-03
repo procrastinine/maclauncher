@@ -193,6 +193,7 @@ module.exports = Custom.configure({
   getState,
   installRuntime,
   uninstallRuntime,
+  trashFirst: true,
   updateSettingsAfterInstall,
   updateSettingsAfterUninstall,
   core: Core,

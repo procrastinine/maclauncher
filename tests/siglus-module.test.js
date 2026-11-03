@@ -1,3 +1,4 @@
+const Backcompat = require("../src/modules/siglus/backcompat");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -68,30 +69,84 @@ test("Siglus requires a bounded scene directory, not the Scene.pck filename", t 
   assert.equal(Detect.inspectGame(root), null);
   fs.writeFileSync(file, Buffer.alloc(120)); assert.equal(Detect.inspectGame(root), null);
 });
-test("private Siglus keys and saves use small owned files while assets remain original", t => {
+test("explicit Siglus key adaptation keeps original saves and leaves old private state untouched", t => {
   const root = fixture(t), game = path.join(root, "game"), userDataDir = path.join(root, "launcher"); fs.mkdirSync(game);
   fs.writeFileSync(path.join(game, "Scene.pck"), siglusPack()); fs.mkdirSync(path.join(game, "g00")); fs.writeFileSync(path.join(game, "g00", "picture.g00"), "original");
   fs.writeFileSync(path.join(game, "key.toml"), "key = [1,2,3]\n"); fs.mkdirSync(path.join(game, "savedata")); fs.writeFileSync(path.join(game, "savedata", "0000.sav"), "original save");
   const before = Native.hashFile(path.join(game, "Scene.pck")), keyBefore = Native.hashFile(path.join(game, "key.toml"));
   const entry = { gameId: "test-story", gamePath: game }, context = { userDataDir, runtimeSettings: { stringEncryption: "mdl" } };
+  const legacy = path.join(Launch.moduleRoot(entry, context), "project");
+  fs.mkdirSync(path.join(legacy, "savedata"), { recursive: true });
+  fs.writeFileSync(path.join(legacy, "savedata", "old.sav"), "private progress");
   const prepared = Launch.prepareLaunch(entry, context, { libraryPath: "/native/libsiglus.dylib" });
+  assert.equal(prepared.directory, game);
+  assert.equal(prepared.saves, path.join(game, "savedata"));
   assert(fs.lstatSync(path.join(prepared.root, "Scene.pck")).isSymbolicLink());
   assert(fs.lstatSync(path.join(prepared.root, "g00")).isSymbolicLink());
   assert(!fs.lstatSync(path.join(prepared.root, "key.toml")).isSymbolicLink());
   assert(!fs.lstatSync(prepared.saves).isSymbolicLink());
-  fs.writeFileSync(path.join(prepared.saves, "0000.sav"), "new private save");
-  assert.equal(fs.readFileSync(path.join(game, "savedata", "0000.sav"), "utf8"), "original save");
+  assert.equal(fs.realpathSync(path.join(prepared.root, "savedata")), fs.realpathSync(path.join(game, "savedata")));
+  fs.writeFileSync(path.join(prepared.root, "savedata", "new.sav"), "upstream progress");
+  assert.equal(fs.readFileSync(path.join(game, "savedata", "new.sav"), "utf8"), "upstream progress");
+  assert.equal(fs.readFileSync(path.join(legacy, "savedata", "old.sav"), "utf8"), "private progress");
   assert.equal(Native.hashFile(path.join(game, "Scene.pck")), before); assert.equal(Native.hashFile(path.join(game, "key.toml")), keyBefore);
   assert.match(fs.readFileSync(path.join(prepared.root, "key.toml"), "utf8"), /override_string_encryption = "mdl"/);
   assert.equal(Launch.resolveSaveLocations(entry, context).primaryDirectory, prepared.saves);
+  const key = path.join(prepared.root, "key.toml"), stamp = new Date(1000000000000);
+  fs.utimesSync(key, stamp, stamp);
+  Launch.prepareLaunch(entry, context, { libraryPath: "/native/libsiglus.dylib" });
+  assert.equal(fs.statSync(key).mtimeMs, stamp.getTime(), "warm preparation does not rewrite unchanged configuration");
+  entry.saveDirOverride = path.join(root, "chosen-saves");
+  context.runtimeSettings.stringEncryption = "automatic";
+  const automatic = Launch.prepareLaunch(entry, context, { libraryPath: "/native/libsiglus.dylib" });
+  assert.equal(fs.realpathSync(path.join(automatic.root, "savedata")), fs.realpathSync(entry.saveDirOverride));
+  assert.equal(fs.readFileSync(path.join(automatic.root, "key.toml"), "utf8"), "key = [1,2,3]\n", "an earlier explicit decoding choice cannot leak into Automatic");
+  assert.equal(fs.statSync(key).mtimeMs, stamp.getTime(), "changing decoding mode preserves the prior adapter's runtime-created state");
 });
-test("RealLive reads the original in place and directs saves through the upstream environment API", t => {
+test("automatic Siglus launches the original root without visiting or replacing a legacy project", t => {
+  const root = fixture(t), game = path.join(root, "game"), context = { userDataDir: path.join(root, "profile"), runtimeSettings: {} };
+  fs.mkdirSync(game); fs.writeFileSync(path.join(game, "Scene.pck"), siglusPack());
+  const entry = { gameId: "automatic", gamePath: game };
+  const legacy = path.join(Launch.moduleRoot(entry, context), "project");
+  fs.mkdirSync(legacy, { recursive: true }); fs.writeFileSync(path.join(legacy, "key.toml"), "old key");
+  const prepared = Launch.prepareLaunch(entry, context, { libraryPath: "/native/libsiglus.dylib" });
+  assert.equal(prepared.root, game); assert.equal(prepared.directory, game);
+  assert.equal(prepared.saves, path.join(game, "savedata"));
+  assert.deepEqual(prepared.args, ["--run", "/native/libsiglus.dylib", game]);
+  assert.equal(fs.existsSync(path.join(game, "savedata")), false, "the engine owns creation of its default saves");
+  assert.equal(fs.existsSync(path.join(Launch.moduleRoot(entry, context), "configured-project")), false);
+  assert.equal(fs.readFileSync(path.join(legacy, "key.toml"), "utf8"), "old key");
+});
+test("RealLive uses original cwd and upstream save defaults while explicit overrides still work", t => {
   const root = fixture(t), game = path.join(root, "game"); fs.mkdirSync(game); realLive(game);
   const entry = { gameId: "reallive", gamePath: game }, context = { userDataDir: path.join(root, "data"), runtimeSettings: {} };
   const prepared = Launch.prepareLaunch(entry, context, { libraryPath: "/native/libsiglus.dylib" });
-  assert.equal(prepared.root, game); assert.equal(prepared.env.REALLIVE_SAVE_DIR, prepared.saves);
+  assert.equal(prepared.root, game); assert.equal(prepared.directory, game);
+  assert.equal(prepared.env.REALLIVE_SAVE_DIR, process.env.REALLIVE_SAVE_DIR);
+  assert.equal(prepared.env.HOME, process.env.HOME);
+  assert.equal(prepared.saves, process.env.REALLIVE_SAVE_DIR || path.join(game, "savedata_rs"));
   assert.deepEqual(prepared.args, ["--run", "/native/libsiglus.dylib", game, "auto"]);
   assert.equal(fs.existsSync(path.join(game, "savedata_rs")), false);
+  entry.saveDirOverride = path.join(root, "chosen-saves");
+  const override = Launch.prepareLaunch(entry, context, { libraryPath: "/native/libsiglus.dylib" });
+  assert.equal(override.env.REALLIVE_SAVE_DIR, entry.saveDirOverride);
+  assert.equal(override.root, game); assert.equal(override.directory, game);
+  assert.equal(Launch.saveDirectory({ gamePath: game, moduleData: { engineKind: "avg32" } }), process.env.AVG32_SAVE_DIR || game);
+});
+test("Siglus declares obsolete views only for one-time migration and protects explicit private overrides", t => {
+  const root = fixture(t), game = path.join(root, "game"), context = { userDataDir: path.join(root, "profile") };
+  fs.mkdirSync(game);
+  const mod = Backcompat, entry = { gameId: "migration", gamePath: game, moduleData: { engineKind: "reallive" } };
+  const directory = Launch.moduleRoot(entry, context);
+  assert.deepEqual(mod.legacyGameMirrors(entry, context), [
+    { mirrorRoot: path.join(directory, "project"), sourceRoot: game },
+    { mirrorRoot: path.join(directory, "saves"), sourceRoot: path.join(game, "savedata_rs"), createSourceWithin: game,
+      entryPatch: { defaultSaveDir: path.join(game, "savedata_rs"), saveLocations: [{ directory: path.join(game, "savedata_rs"), source: "Native interpreter saves", confidence: "exact", label: "Saves" }] } }
+  ]);
+  assert.equal(fs.existsSync(context.userDataDir), false, "descriptor discovery has no filesystem writes");
+  const protectedRows = mod.legacyGameMirrors({ ...entry, saveDirOverride: path.join(directory, "project", "savedata") }, context);
+  assert.deepEqual(protectedRows.map(row => row.mirrorRoot), [path.join(directory, "saves")]);
+  assert.deepEqual(mod.legacyGameMirrors({ ...entry, saveDirOverride: directory }, context), []);
 });
 test("the launcher keeps only the exact host identity and installs no resource copy", () => {
   assert.equal(Profile.hostResource, undefined);

@@ -3,6 +3,7 @@ const path = require("node:path");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const Native = require("./local-native");
+const { createVerifiedIdentityCache } = require("./verified-identity");
 const Architecture = require("./architecture");
 const MachO = require("./macho-load-commands");
 const Upstream = require("./upstream");
@@ -20,7 +21,7 @@ const supported = framework => Number(/^net(\d+)\.0$/.exec(framework || "")?.[1]
 const matchingVersion = (framework, version) => supported(framework) && VERSION.test(version || "") && version.split(".").slice(0, 2).join(".") === framework.slice(3);
 // A host's minimum macOS is read from its own binaries at installation and
 // recorded with it; nothing fixes it in advance.
-const verified = new Map();
+const verified = createVerifiedIdentityCache({ maximum: 64 });
 function root(userDataDir) {
   if (!path.isAbsolute(userDataDir || "") || userDataDir.includes("\0")) throw new Error("A launcher data directory is required for the tool host.");
   return path.join(userDataDir, "runtimes", "dotnet-tools");
@@ -94,11 +95,10 @@ function resolve({ userDataDir, framework, minimumVersion = framework?.replace(/
         identities.push([relative, fileStat.dev, fileStat.ino, fileStat.size, fileStat.mtimeMs, fileStat.ctimeMs]);
       }
       const identity = JSON.stringify([stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs, identities]);
-      if (verification !== "status" && verified.get(target) !== identity) {
+      if (verification !== "status") verified.verify(target, { identity: () => identity, verify: () => {
         for (const [relative, data] of Object.entries(record.files)) if (Native.hashFile(path.join(target, "files", relative)) !== data.sha256) throw new Error("Changed host");
-        if (verified.size >= 64) verified.delete(verified.keys().next().value);
-        verified.set(target, identity);
-      }
+        return true;
+      } });
       return { ready: true, version: record.version, install: { executablePath: path.join(target, "files", "dotnet"), installDir: target },
         profile: { root: path.join(target, "files"), dotnetVersion: record.version, minimumMacOS: record.minimumMacOS },
         runtimeIdentity: { managerId: "dotnet-tools", version: record.version, variant: architecture, sourcePath: target }, record };

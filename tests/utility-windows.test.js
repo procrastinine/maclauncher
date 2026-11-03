@@ -230,14 +230,26 @@ test("the production launcher preload forwards utility opens and state edits thr
   assert.equal(api.onOpenSettings, undefined, "Native menu routing needs no HTML view-switch event");
 });
 
+function productionMenuSource(source) {
+  // The menu also builds Stop items from running ephemeral entries. Load that
+  // production closure rather than replacing the session menu with a stub.
+  return ["findGameByPath", "runningEphemeralEntries", "ephemeralStopItems", "setupAppMenu"].map(name => {
+    const start = source.indexOf("function " + name + "("), end = source.indexOf("\n}", start);
+    assert.ok(start >= 0 && end > start, "The production menu function exists: " + name);
+    return source.slice(start, end + 2);
+  }).join("\n");
+}
+
 test("the production menu opens native utility windows from any focused view and retains native Library and Cmd-W actions", () => {
   const source = fs.readFileSync(path.join(__dirname, "../src/main/main.js"), "utf8");
-  const menu = source.slice(source.indexOf("function setupAppMenu()"), source.indexOf("\nfunction upsertGame", source.indexOf("function setupAppMenu()")));
+  const menu = productionMenuSource(source);
   let template;
   const opened = [];
   const library = {};
   vm.runInNewContext(menu + "\nsetupAppMenu();", { process: { platform: "darwin" }, app: { name: "MacLauncher" },
     moduleAppActions: require("../src/main/module-app-actions").createModuleAppActions({registry: {listModules: () => []}}), appActionIcon: () => null,
+    gameRecordsCache: [], runningGameSessions: new Map(), userDataDir: "/fixture-profile",
+    EphemeralEntries: require("../src/core/ephemeral-entries"),
     devtoolsEnabled: false, sendToolsMenuEvent() {}, openGamesFromMenu() {}, openUtilityFromMenu: view => opened.push(view),
     ensureLauncherWindow: () => { opened.push("library"); return Promise.resolve(); }, isChildGame: false,
     launcherWindows: new Set([library]), logger: { error() {} },
@@ -284,11 +296,13 @@ test("renderer confirmations become native alerts with Cancel as the default and
 
 test("fullscreen keeps the Mac shortcut hidden beside the native command and retains the native role elsewhere", () => {
   const source = fs.readFileSync(path.join(__dirname, "../src/main/main.js"), "utf8");
-  const menu = source.slice(source.indexOf("function setupAppMenu()"), source.indexOf("\nfunction upsertGame", source.indexOf("function setupAppMenu()")));
+  const menu = productionMenuSource(source);
   function templateFor(platform) {
     let template;
     vm.runInNewContext(menu + "\nsetupAppMenu();", { process: { platform }, app: { name: "MacLauncher" },
       moduleAppActions: require("../src/main/module-app-actions").createModuleAppActions({registry: {listModules: () => []}}), appActionIcon: () => null,
+      gameRecordsCache: [], runningGameSessions: new Map(), userDataDir: "/fixture-profile",
+      EphemeralEntries: require("../src/core/ephemeral-entries"),
       devtoolsEnabled: false, sendToolsMenuEvent() {}, openGamesFromMenu() {}, openUtilityFromMenu() {}, isChildGame: false,
       Menu: { buildFromTemplate: value => { template = value; return value; }, setApplicationMenu() {} } });
     return template;

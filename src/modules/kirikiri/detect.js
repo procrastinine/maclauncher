@@ -97,6 +97,10 @@ function inspectRoot(rootDir, selectedArchive, selectedIndex) {
   return null;
 }
 
+function scriptVersionSource(archivePath, relative) {
+  return `${archivePath ? `${fs.realpathSync(archivePath)}!/` : ""}${relative} explicit script version constant`;
+}
+
 function detectScriptVersion(rootDir, sourceKind, archivePath) {
   const unknown = {
     detectedVersion: "unknown", detectedVersionConfidence: "unknown",
@@ -109,11 +113,12 @@ function detectScriptVersion(rootDir, sourceKind, archivePath) {
   }
   for (const relative of ["system/Initialize.tjs", "Initialize.tjs", "startup.tjs"]) {
     try {
-      let data;
+      let data, source = relative;
       if (archive) {
         const member = archive.members.get(relative.toLowerCase());
         if (!member || member.size > 512 * 1024) continue;
         data = readScript(archive, member, { allowPlainProtected: true });
+        source = member.name;
       } else {
         const file = path.join(rootDir, relative);
         if (!fs.statSync(file).isFile() || fs.statSync(file).size > 512 * 1024) continue;
@@ -122,7 +127,7 @@ function detectScriptVersion(rootDir, sourceKind, archivePath) {
       const { kag, tjs } = declaredVersion(data) || {};
       if (kag || tjs) return {
         ...unknown, detectedVersion: kag ? `KAG ${kag}` : `TJS ${tjs}`,
-        detectedVersionConfidence: "declared", detectedVersionSource: `${archive ? `${path.basename(archive.file)}!/` : ""}${relative} explicit script version constant`,
+        detectedVersionConfidence: "declared", detectedVersionSource: scriptVersionSource(archive?.file, source),
         engineGeneration: kag ? `KAG ${kag[0]} on KiriKiri/TJS (host generation unknown)` : `TJS ${tjs} (KiriKiri host generation unknown)`,
         kagVersion: kag || null, tjsVersion: tjs || null,
         requiredNativeFeatures: requiredNativeFeatures(decode(data)),
@@ -196,4 +201,4 @@ function detectGame(context) {
   return null;
 }
 
-module.exports = { detectGame, readXp3Index, XP3_MAGIC };
+module.exports = { detectGame, readXp3Index, scriptVersionSource, XP3_MAGIC };

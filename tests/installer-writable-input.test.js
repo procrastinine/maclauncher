@@ -38,7 +38,7 @@ function tree(root) {
   visit(root); return values;
 }
 async function fixture(t, files) {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-input-view-")));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-direct-input-")));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const file = path.join(root, "setup.exe"), userDataDir = path.join(root, "data"), tool = path.join(root, "reader.cjs");
   fs.writeFileSync(file, loader());
@@ -73,15 +73,18 @@ function webFiles(engine) {
 }
 
 for (const engine of ["mv", "mz"]) test(`${engine}: script/plugin patches and edited portable saves survive a warm original-installer retry`, async t => {
-  const f = await fixture(t, webFiles(engine)), before = tree(f.extracted.inputPath);
+  const f = await fixture(t, webFiles(engine));
   const launcher = createLauncher({ userDataDir: f.userDataDir, logger: {}, inputPreparation: (input, options) =>
     Inno.prepareInstaller(input, { ...options, helper: f.helper }) });
   const entry = await launcher.resolveEntry(f.file), canonical = [entry.gameId, entry.gamePath, entry.importPath, entry.contentRootDir, entry.indexHtml];
   assert.equal(entry.moduleId, engine); assert.equal(entry.gameId, f.options.gameId);
   const mod = Modules.getModule(engine), input = Writable.runtimeEntry(entry);
-  assert.notEqual(input.contentRootDir, entry.contentRootDir);
+  assert.equal(input, entry);
+  assert.equal(input.contentRootDir, f.extracted.inputPath);
+  assert.equal(entry.moduleData?.writableInput, undefined);
   assert.equal(fs.lstatSync(path.join(input.indexDir, "js/main.js")).isSymbolicLink(), false);
-  assert.equal(fs.realpathSync(path.join(input.indexDir, "img/asset.bin")), path.join(f.extracted.inputPath, "www/img/asset.bin"));
+  assert.equal(fs.lstatSync(path.join(input.indexDir, "img/asset.bin")).isSymbolicLink(), false);
+  assert.equal(input.indexDir, path.join(f.extracted.inputPath, "www"));
   assert.equal(mod.cheats.patcher.patchGame(entry).patched, true);
   assert.equal((await launcher.runAction(entry, "refreshDecryptionStatus")).sourcePath, entry.contentRootDir);
   await launcher.runAction(entry, "installSaveSlotsPlugin");
@@ -96,77 +99,86 @@ for (const engine of ["mv", "mz"]) test(`${engine}: script/plugin patches and ed
   assert.equal(document.json, '{"chapter":2}');
   await service.runAction(entry, "writeSaveDocument", { fileName, expectedHash: document.sourceHash, json: '{"chapter":3}' });
   assert.equal((await service.runAction(entry, "readSaveDocument", { fileName })).json, '{"chapter":3}');
-  assert.deepEqual(tree(f.extracted.inputPath), before);
-  const privateMain = fs.readFileSync(path.join(input.indexDir, "js/main.js")), beforeView = tree(entry.moduleData.writableInput.root);
+  assert.equal(entry.defaultSaveDir, path.join(f.extracted.inputPath, "www/save"));
+  assert.equal(mod.save.decode(fs.readFileSync(path.join(entry.defaultSaveDir, fileName), "utf8")), '{"chapter":3}');
+  const patchedMain = fs.readFileSync(path.join(input.indexDir, "js/main.js")), prepared = tree(f.extracted.inputPath);
   t.mock.method(fs, "copyFileSync", () => assert.fail("Warm input resolution must not recopy files"));
   const retry = await launcher.resolveEntry(f.file);
   assert.deepEqual([retry.gameId, retry.gamePath, retry.importPath, retry.contentRootDir, retry.indexHtml], canonical);
-  assert.deepEqual(tree(retry.moduleData.writableInput.root), beforeView);
-  assert.deepEqual(fs.readFileSync(path.join(Writable.runtimeEntry(retry).indexDir, "js/main.js")), privateMain);
-  assert.deepEqual(tree(f.extracted.inputPath), before); assert.deepEqual(f.calls(), ["--inspect-json", "--extract"]);
+  assert.equal(retry.moduleData?.writableInput, undefined);
+  assert.equal(fs.existsSync(path.join(f.userDataDir, "games", entry.gameId, "modules", engine, "writable-input")), false);
+  assert.deepEqual(fs.readFileSync(path.join(Writable.runtimeEntry(retry).indexDir, "js/main.js")), patchedMain);
+  assert.deepEqual(tree(f.extracted.inputPath), prepared); assert.deepEqual(f.calls(), ["--inspect-json", "--extract"]);
   assert.equal((await Inno.prepareInstaller(f.file, f.options)).containerData.cached, true);
 });
 
-test("read-only installer resolution computes private save paths without allocating a writable view", async t => {
+test("read-only installer resolution keeps original content and portable save paths without a mirror", async t => {
   const f = await fixture(t, webFiles("mv"));
   const launcher = createLauncher({ userDataDir: f.userDataDir, logger: {}, inputPreparation: (input, options) =>
     Inno.prepareInstaller(input, { ...options, helper: f.helper }) });
   const before = tree(f.userDataDir), entry = await launcher.resolveEntry(f.file, { persist: false });
-  assert.equal(entry.moduleData.writableInput.ready, false);
-  assert.equal(fs.existsSync(entry.moduleData.writableInput.root), false);
+  assert.equal(entry.moduleData?.writableInput, undefined);
+  assert.equal(entry.defaultSaveDir, path.join(f.extracted.inputPath, "www/save"));
   assert.equal(entry.contentRootDir, f.extracted.inputPath);
   assert.deepEqual(tree(f.userDataDir), before);
 });
 
-test("metadata import and cached refresh keep icon/detection roots canonical while selecting writable inputs", async t => {
+test("metadata import and cached refresh keep original paths and edited scripts", async t => {
   const f = await fixture(t, webFiles("mv")), service = createGameMetadataService({ userDataDir: f.userDataDir, registry: Modules,
     logger: {}, inputPreparation: (input, options) => Inno.prepareInstaller(input, { ...options, helper: f.helper }) });
   const entry = await service.importEntry(f.file, {}); GameStore.writeGameRecord(f.userDataDir, entry);
   assert.equal(entry.contentRootDir, f.extracted.inputPath);
   assert.equal(entry.indexHtml, path.join(f.extracted.inputPath, "www/index.html"));
-  assert.equal(entry.moduleData.writableInput.ready, true);
-  fs.writeFileSync(path.join(entry.moduleData.writableInput.indexRoot, "js/main.js"), "private modification");
+  assert.equal(entry.moduleData?.writableInput, undefined);
+  fs.writeFileSync(path.join(entry.indexDir, "js/main.js"), "original project modification");
   t.mock.method(fs, "copyFileSync", () => assert.fail("Metadata refresh must not recopy input"));
   const warm = await service.refreshEntry(entry, {});
   assert.equal(warm.gameId, entry.gameId); assert.equal(warm.contentRootDir, entry.contentRootDir);
-  assert.equal(fs.readFileSync(path.join(warm.moduleData.writableInput.indexRoot, "js/main.js"), "utf8"), "private modification");
+  assert.equal(warm.moduleData?.writableInput, undefined);
+  assert.equal(fs.readFileSync(path.join(warm.indexDir, "js/main.js"), "utf8"), "original project modification");
   assert.deepEqual(f.calls(), ["--inspect-json", "--extract"]);
 });
 
-test("backend patch actions repair a missing writable view while status remains read-only", async t => {
+test("backend patch actions edit the original project while status remains read-only", async t => {
   const f = await fixture(t, webFiles("mv")), before = tree(f.extracted.inputPath);
   t.mock.method(Inputs, "prepareInput", (input, options) => Inno.prepareInstaller(input, { ...options, helper: f.helper }));
   const operations = createBackendOperations({ userDataDir: f.userDataDir });
   const entry = await operations.importEntry(f.file, {}); GameStore.writeGameRecord(f.userDataDir, entry);
-  const directory = entry.moduleData.writableInput.directory; fs.rmSync(directory, { recursive: true });
-  delete entry.moduleData.writableInput; GameStore.writeGameRecord(f.userDataDir, entry);
+  const directory = path.join(f.userDataDir, "games", entry.gameId, "modules/mv/writable-input");
+  assert.equal(entry.moduleData?.writableInput, undefined);
   assert.equal((await operations.patcher(entry, "cheats", "status")).patched, false);
   assert.equal(fs.existsSync(directory), false);
+  assert.deepEqual(tree(f.extracted.inputPath), before);
   assert.equal((await operations.patcher(entry, "cheats", "patch")).patched, true);
   const saved = GameStore.readGameRecord(f.userDataDir, entry.gameId);
   assert.equal(saved.contentRootDir, f.extracted.inputPath);
   assert.equal(saved.indexHtml, path.join(f.extracted.inputPath, "www/index.html"));
-  assert.equal(saved.moduleData.writableInput.ready, true);
-  assert.deepEqual(Modules.getModule("mv").getContentReadRoots(saved), [f.extracted.inputPath]);
-  assert.deepEqual(tree(f.extracted.inputPath), before);
+  assert.equal(saved.moduleData?.writableInput, undefined);
+  assert.equal(fs.existsSync(directory), false);
+  assert.deepEqual(Modules.getModule("mv").getContentReadRoots(saved), []);
+  assert.equal(Modules.getModule("mv").cheats.patcher.getPatchStatus(saved).patched, true);
   assert.equal((await Inno.prepareInstaller(f.file, f.options)).containerData.cached, true);
 });
 
-test("dynamic plugin assets detach source links before replacement and remain private on warm reuse", async t => {
+test("explicit plugin asset replacement edits only the selected original asset and survives warm reuse", async t => {
   const f = await fixture(t, webFiles("mv")), entry = { gameId: f.options.gameId, moduleId: "mv", engine: "mv",
     gamePath: f.extracted.inputPath, contentRootDir: f.extracted.inputPath, indexDir: path.join(f.extracted.inputPath, "www"),
     indexHtml: path.join(f.extracted.inputPath, "www/index.html"), containerData: f.extracted.containerData };
   const mod = Modules.getModule("mv"), input = mod.prepareInput(entry, { userDataDir: f.userDataDir });
-  const asset = path.join(input.indexDir, "img/asset.bin"), original = tree(f.extracted.inputPath), replacement = path.join(f.root, "replacement.bin");
+  const asset = path.join(input.indexDir, "img/asset.bin"), main = fs.readFileSync(path.join(input.indexDir, "js/main.js")), replacement = path.join(f.root, "replacement.bin");
+  assert.equal(input, entry);
   fs.writeFileSync(replacement, "edited plugin asset");
   Writable.atomicCopy(replacement, asset, { root: input.contentRootDir });
   assert.equal(fs.lstatSync(asset).isSymbolicLink(), false); assert.equal(fs.readFileSync(asset, "utf8"), "edited plugin asset");
   mod.prepareInput(entry, { userDataDir: f.userDataDir });
-  assert.equal(fs.readFileSync(asset, "utf8"), "edited plugin asset"); assert.deepEqual(tree(f.extracted.inputPath), original);
+  assert.equal(fs.readFileSync(asset, "utf8"), "edited plugin asset");
+  assert.equal(asset, path.join(f.extracted.inputPath, "www/img/asset.bin"));
+  assert.deepEqual(fs.readFileSync(path.join(input.indexDir, "js/main.js")), main);
+  assert.equal(entry.moduleData?.writableInput, undefined);
   assert.equal((await Inno.prepareInstaller(f.file, f.options)).containerData.cached, true);
 });
 
-test("MV library replacement uses COW for dynamically selected non-script assets and backups", async t => {
+test("MV explicit library replacement backs up and restores the selected original asset", async t => {
   const files = webFiles("mv"); files["www/js/libs/test.js.map"] = "original map";
   const f = await fixture(t, files), entry = { gameId: f.options.gameId, moduleId: "mv", engine: "mv", gamePath: f.extracted.inputPath,
     contentRootDir: f.extracted.inputPath, indexDir: path.join(f.extracted.inputPath, "www"), containerData: f.extracted.containerData };
@@ -175,24 +187,28 @@ test("MV library replacement uses COW for dynamically selected non-script assets
   fs.mkdirSync(path.dirname(path.join(bundle, relPath)), { recursive: true }); fs.writeFileSync(path.join(bundle, relPath), "replacement map");
   t.mock.method(mod.libs.catalog, "listDependencies", () => [{ id: "test", engine: "mv" }]);
   t.mock.method(mod.libs.catalog, "getVersion", () => ({ id: "v1", files: [relPath], bundleRoot: bundle }));
-  const before = tree(f.extracted.inputPath);
+  const main = fs.readFileSync(path.join(input.indexDir, "js/main.js"));
+  assert.equal(input, entry);
   assert.equal(mod.libs.patcher.patchGame(entry, { selections: { test: "v1" } }).patched, true);
   assert.equal(fs.readFileSync(path.join(input.indexDir, relPath), "utf8"), "replacement map");
   assert.equal(fs.lstatSync(path.join(input.indexDir, relPath)).isSymbolicLink(), false);
   mod.libs.patcher.unpatchGame(entry);
   assert.equal(fs.readFileSync(path.join(input.indexDir, relPath), "utf8"), "original map");
-  assert.deepEqual(tree(f.extracted.inputPath), before);
+  assert.deepEqual(fs.readFileSync(path.join(input.indexDir, "js/main.js")), main);
+  assert.equal(entry.moduleData?.writableInput, undefined);
   assert.equal((await Inno.prepareInstaller(f.file, f.options)).containerData.cached, true);
 });
 
-test("Ren'Py runtime patching, developer tools and local saves use its existing project overlay", async t => {
+test("Ren'Py explicit patches, developer tools and portable saves use the original project", async t => {
   const f = await fixture(t, { "Game.sh": "#!/bin/sh\n", "Game.py": "# launcher\n", "game/options.rpy": 'define config.save_directory = ""\n',
     "game/script.rpy": "label start:\n    'Hello'\n", "game/script.rpyc": "original bytecode", "game/saves/1-1.save": "original save",
     "game/archive.rpa": Buffer.alloc(256 * 1024, 7), "lib/windows-x86_64/Game.exe": "Windows executable" });
-  const before = tree(f.extracted.inputPath), entry = { gameId: f.options.gameId, moduleId: "renpy", engine: "renpy", runtimeId: "patched",
+  const entry = { gameId: f.options.gameId, moduleId: "renpy", engine: "renpy", runtimeId: "patched",
     gamePath: f.extracted.inputPath, importPath: f.file, contentRootDir: f.extracted.inputPath, containerData: f.extracted.containerData,
     moduleData: { baseName: "Game", version: "8.5.2", major: 8 } };
   const context = { userDataDir: f.userDataDir, settings: {}, logger: {}, confirmRuntimeInstall: async () => true }, input = Renpy.prepareInput(entry, context);
+  assert.equal(input, entry);
+  assert.equal(entry.moduleData.writableInput, undefined);
   const extractionRoot = path.join(f.userDataDir, "games", entry.gameId, "modules/renpy/extracted");
   fs.mkdirSync(extractionRoot, { recursive: true });
   require("../src/modules/renpy/extract").writeExtractionMeta(extractionRoot, { sourcePath: path.join(f.extracted.inputPath, "game"), extractedAt: 1 });
@@ -206,25 +222,29 @@ test("Ren'Py runtime patching, developer tools and local saves use its existing 
   assert.ok(fs.existsSync(path.join(input.contentRootDir, "game/zz_maclauncher_console.rpy")));
   const location = Renpy.resolveSaveLocations(entry, context);
   assert.equal(location.primaryDirectory, path.join(input.contentRootDir, "game/saves"));
-  assert.ok(location.directories.every(item => !item.directory.startsWith(f.extracted.inputPath + path.sep)));
+  assert.ok(location.directories.some(item => item.directory === path.join(f.extracted.inputPath, "game/saves")));
   fs.writeFileSync(path.join(location.primaryDirectory, "1-1.save"), "updated save");
   fs.writeFileSync(path.join(input.contentRootDir, "game/script.rpyc"), "compiled output");
-  assert.equal(fs.lstatSync(path.join(input.contentRootDir, "game/archive.rpa")).isSymbolicLink(), true);
-  assert.deepEqual(tree(f.extracted.inputPath), before);
+  assert.equal(fs.lstatSync(path.join(input.contentRootDir, "game/archive.rpa")).isSymbolicLink(), false);
+  assert.deepEqual(fs.readFileSync(path.join(input.contentRootDir, "game/archive.rpa")), Buffer.alloc(256 * 1024, 7));
+  const prepared = tree(f.extracted.inputPath);
   t.mock.method(fs, "copyFileSync", () => assert.fail("Warm Ren'Py inputs must not be recopied"));
   Renpy.prepareInput(entry, context);
   assert.equal(fs.readFileSync(path.join(location.primaryDirectory, "1-1.save"), "utf8"), "updated save");
   assert.equal(fs.readFileSync(path.join(input.contentRootDir, "game/script.rpyc"), "utf8"), "compiled output");
   assert.equal((await Inno.prepareInstaller(f.file, f.options)).containerData.cached, true);
-  assert.deepEqual(tree(f.extracted.inputPath), before);
+  assert.deepEqual(tree(f.extracted.inputPath), prepared);
 });
 
-test("RGSS portable saves ignore immutable assets/databases but reject matching save aliases", async t => {
+test("RGSS saves stay in the original project while snapshots reject matching save aliases", async t => {
   const f = await fixture(t, { "Game.ini": "[Game]\nTitle=Fixture\n", "Game.rgss3a": "packed data", "Game.exe": "Windows executable",
     "Data/Actors.rvdata2": "database", "Save01.rvdata2": "original save" });
-  const original = tree(f.extracted.inputPath), entry = { gameId: f.options.gameId, moduleId: "rgss", gamePath: f.extracted.inputPath,
-    contentRootDir: f.extracted.inputPath, containerData: f.extracted.containerData, moduleData: {} };
+  const entry = { gameId: f.options.gameId, moduleId: "rgss", gamePath: f.extracted.inputPath,
+    contentRootDir: f.extracted.inputPath, defaultSaveDir: f.extracted.inputPath, containerData: f.extracted.containerData, moduleData: {} };
   const mod = Modules.getModule("rgss"), input = mod.prepareInput(entry, { userDataDir: f.userDataDir });
+  assert.equal(input, entry);
+  assert.equal(entry.moduleData.writableInput, undefined);
+  assert.equal(fs.lstatSync(path.join(input.contentRootDir, "Data/Actors.rvdata2")).isSymbolicLink(), false);
   const service = createSaveService({ userDataDir: f.userDataDir, registry: Modules });
   assert.deepEqual(service.listFiles(entry).map(item => item.name), ["Save01.rvdata2"]);
   fs.writeFileSync(path.join(input.contentRootDir, "Save02.rvdata2"), "new native save");
@@ -234,7 +254,8 @@ test("RGSS portable saves ignore immutable assets/databases but reject matching 
   const preview = await service.runAction(entry, "previewSaveSnapshot", { snapshotId: snapshot.id });
   await service.runAction(entry, "restoreSaveSnapshot", { snapshotId: snapshot.id, expectedStateHash: preview.expectedStateHash });
   assert.equal(fs.readFileSync(path.join(input.contentRootDir, "Save02.rvdata2"), "utf8"), "new native save");
-  assert.deepEqual(tree(f.extracted.inputPath), original);
+  assert.equal(fs.readFileSync(path.join(f.extracted.inputPath, "Save02.rvdata2"), "utf8"), "new native save");
+  assert.equal(fs.readFileSync(path.join(f.extracted.inputPath, "Data/Actors.rvdata2"), "utf8"), "database");
   fs.symlinkSync(path.join(f.extracted.inputPath, "Save01.rvdata2"), path.join(input.contentRootDir, "Save03.rvdata2"));
   assert.throws(() => service.listFiles(entry), /symlink/);
   assert.throws(() => Snapshots.collectFiles(input.contentRootDir, { extensions: ["rvdata2"] }), /symlink/);
@@ -242,30 +263,58 @@ test("RGSS portable saves ignore immutable assets/databases but reject matching 
   assert.equal((await Inno.prepareInstaller(f.file, f.options)).containerData.cached, true);
 });
 
-test("a cancelled view does not publish readiness or alter original inputs and can resume safely", async t => {
-  const files = webFiles("mv"); for (let i = 0; i < 150; i++) files[`www/img/asset-${i}.bin`] = "immutable";
+test("cancelled preparation is inert and direct preparation never walks or writes the project", async t => {
+  const files = webFiles("mv"); for (let i = 0; i < 150; i++) files[`www/img/asset-${i}.bin`] = "original asset";
   const f = await fixture(t, files), before = tree(f.extracted.inputPath), mod = Modules.getModule("mv");
   const entry = { gameId: f.options.gameId, moduleId: "mv", engine: "mv", gamePath: f.extracted.inputPath,
     contentRootDir: f.extracted.inputPath, indexDir: path.join(f.extracted.inputPath, "www"), containerData: f.extracted.containerData };
-  const controller = new AbortController();
-  assert.throws(() => mod.prepareInput(entry, { userDataDir: f.userDataDir, signal: controller.signal, onProgress: () => controller.abort() }), { name: "AbortError" });
-  const description = Writable.describeView(entry, { userDataDir: f.userDataDir, moduleId: "mv", policyId: "mvmz-scripts-v1" });
-  assert.equal(fs.existsSync(path.join(description.directory, "input.json")), false);
+  const controller = new AbortController(); controller.abort();
+  const methods = ["readdirSync", "statSync", "lstatSync", "realpathSync", "existsSync", "readFileSync", "mkdirSync", "writeFileSync", "copyFileSync", "symlinkSync"];
+  const mocks = methods.map(name => t.mock.method(fs, name, () => assert.fail(`Preparation must not call fs.${name}`)));
+  try {
+    assert.throws(() => mod.prepareInput(entry, { userDataDir: f.userDataDir, signal: controller.signal }), { name: "AbortError" });
+    assert.equal(mod.prepareInput(entry, { userDataDir: f.userDataDir, onProgress: () => assert.fail("No asset traversal") }), entry);
+    assert.deepEqual(Writable.contentReadRoots(entry), []);
+  } finally { for (const mock of mocks) mock.mock.restore(); }
   assert.deepEqual(tree(f.extracted.inputPath), before);
-  assert.equal(mod.prepareInput(entry, { userDataDir: f.userDataDir }).moduleData.writableInput.ready, true);
-  assert.equal((await Inno.prepareInstaller(f.file, f.options)).containerData.cached, true);
+  assert.equal(fs.existsSync(path.join(f.userDataDir, "games", entry.gameId, "modules")), false);
 });
 
-test("source aliases, cancelled preparation and original save overrides cannot mutate container data", async t => {
-  const f = await fixture(t, webFiles("mv")), mod = Modules.getModule("mv"), entry = { gameId: f.options.gameId, moduleId: "mv", engine: "mv",
-    gamePath: f.extracted.inputPath, contentRootDir: f.extracted.inputPath, indexDir: path.join(f.extracted.inputPath, "www"),
-    containerData: f.extracted.containerData, saveDirOverride: path.join(f.extracted.inputPath, "www/save") };
-  const controller = new AbortController(); controller.abort();
-  assert.throws(() => mod.prepareInput(entry, { userDataDir: f.userDataDir, signal: controller.signal }), { name: "AbortError" });
-  assert.equal(fs.existsSync(path.join(f.userDataDir, "games", entry.gameId, "modules")), false);
-  const view = mod.prepareInput(entry, { userDataDir: f.userDataDir });
-  assert.equal(entry.saveDirOverride, path.join(view.indexDir, "save"));
-  const previous = tree(f.extracted.inputPath), alias = path.join(f.root, "source-alias"); fs.symlinkSync(f.extracted.inputPath, alias);
-  assert.throws(() => mod.prepareInput({ ...entry, gameId: "another-game", moduleData: {} }, { userDataDir: path.join(alias, "output") }), /outside its source/);
-  assert.deepEqual(tree(f.extracted.inputPath), previous);
+test("direct preparation preserves selected path aliases and explicit save overrides without creating output", async t => {
+  const f = await fixture(t, webFiles("mv")), mod = Modules.getModule("mv"), alias = path.join(f.root, "source-alias");
+  fs.symlinkSync(f.extracted.inputPath, alias);
+  const entry = { gameId: f.options.gameId, moduleId: "mv", engine: "mv", gamePath: alias,
+    contentRootDir: alias, indexDir: path.join(alias, "www"), containerData: f.extracted.containerData,
+    saveDirOverride: path.join(f.root, "chosen-saves") };
+  const before = tree(f.extracted.inputPath), input = mod.prepareInput(entry, { userDataDir: path.join(alias, "output") });
+  assert.equal(input, entry);
+  assert.equal(input.contentRootDir, alias);
+  assert.equal(input.saveDirOverride, path.join(f.root, "chosen-saves"));
+  assert.equal(fs.existsSync(path.join(alias, "output")), false);
+  assert.equal(fs.existsSync(entry.saveDirOverride), false);
+  assert.deepEqual(tree(f.extracted.inputPath), before);
+});
+
+test("current input preparation never reads obsolete metadata or loads backcompat", t => {
+  const Module = require("node:module"), load = Module._load;
+  const file = require.resolve("../src/modules/shared/writable-input"), cached = require.cache[file];
+  const preparations = [require("../src/modules/rgss/writable-input"), require("../src/modules/shared/mvmz/writable-input")];
+  t.mock.method(Module, "_load", (request, ...args) => {
+    assert.doesNotMatch(request, /(?:^|[/\\])backcompat(?:[/\\]|$)/, "Current input code must not load legacy readers");
+    return load(request, ...args);
+  });
+  let current;
+  try { delete require.cache[file]; current = require(file); }
+  finally { require.cache[file] = cached; }
+  const entry = {gameId: "current", gamePath: path.join(os.tmpdir(), "selected-game"), contentRootDir: path.join(os.tmpdir(), "current-project")};
+  Object.defineProperty(entry, "moduleData", {get() { assert.fail("Current preparation must not inspect legacy metadata"); }});
+  const mocks = ["lstatSync", "statSync", "readFileSync", "realpathSync", "existsSync", "mkdirSync", "readdirSync", "writeFileSync"]
+    .map(name => t.mock.method(fs, name, () => assert.fail(`Current preparation must not call fs.${name}`)));
+  try {
+    assert.equal(current.sourceEntry(entry), entry); assert.equal(current.runtimeEntry(entry), entry);
+    assert.equal(current.sourceRoot(entry), entry.contentRootDir);
+    assert.equal(current.sourceRoot({gamePath: entry.gamePath}), entry.gamePath);
+    assert.equal(Object.hasOwn(current, "legacyGameMirrors"), false);
+    for (const preparation of preparations) assert.equal(preparation.prepareInput(entry, {}), entry);
+  } finally { for (const mock of mocks) mock.mock.restore(); }
 });

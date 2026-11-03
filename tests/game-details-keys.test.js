@@ -125,3 +125,18 @@ test("inspector stateful sections have separate sibling identities during repeat
     priorGame = game.gamePath; priorKeys = keys;
   }
 });
+
+test("a session entry's inspector holds its actions and Graphics only", t => {
+  const state = createLibraryFixture(), moduleInfo = structuredClone(state.modules[0]);
+  const actions = new Proxy({}, { get: () => async () => {} });
+  const render = g => {
+    const harness = componentHarness(GameDetails, { g, state, moduleInfo, actions, moduleActionResults: {}, moduleActionBusy: {}, moduleActionError: null });
+    t.after(() => harness.close());
+    const nodes = elements(harness.render());
+    return { headings: nodes.filter(n => n.props?.className === "detailSectionHeading").length, graphics: nodes.some(n => n.type?.name === "EffectsControls"),
+      notes: nodes.some(n => n.type?.name === "GameNotes"), actions: nodes.some(n => n.type?.type?.name === "GameActions" || n.type?.name === "GameActions") };
+  };
+  const ordinary = render(state.recents[0]), session = render({ ...state.recents[0], ephemeral: true });
+  assert.ok(ordinary.headings > 0 && ordinary.notes && ordinary.graphics);
+  assert.deepEqual(session, { headings: 0, graphics: true, notes: false, actions: true });
+});

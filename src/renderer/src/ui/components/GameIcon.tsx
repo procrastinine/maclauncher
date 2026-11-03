@@ -1,28 +1,18 @@
 import React, { useState } from "react";
-import type { ModuleManifest, RecentGame } from "../types";
+import type { RecentGame } from "../types";
 
-// Vite bundles module-owned images locally; rendering never fetches engine art.
-const moduleIcons = import.meta.glob<string>("../../../../modules/*/resources/icon.png", {
-  eager: true, query: "?url", import: "default"
-});
-
-export function gameIconCandidates(game: Pick<RecentGame, "moduleId" | "iconUrl" | "iconSource">, moduleInfo: ModuleManifest | null) {
-  const id = moduleInfo?.id || game.moduleId;
-  const path = moduleInfo?.icon?.path || "resources/icon.png";
-  const bundled = /^[a-z][a-z0-9-]*$/.test(id) ? moduleIcons[`../../../../modules/${id}/${path}`] : null;
-  const candidates: { url: string; source: string }[] = [];
-  if (game.iconUrl) candidates.push({ url: game.iconUrl, source: game.iconSource || "game" });
-  if (bundled && !candidates.some(candidate => candidate.url === bundled)) candidates.push({ url: bundled, source: "module-default" });
-  return candidates;
+// The main process resolves each game's icon and falls back to the module's own
+// icon file, so the renderer bundles no copies of module artwork.
+export function gameIconCandidates(game: Pick<RecentGame, "iconUrl" | "iconSource">) {
+  return game.iconUrl ? [{ url: game.iconUrl, source: game.iconSource || "game" }] : [];
 }
 
-export function GameIcon({ game, moduleInfo, inspector = false }: {
-  game: Pick<RecentGame, "moduleId" | "iconUrl" | "iconSource">;
-  moduleInfo: ModuleManifest | null;
+export function GameIcon({ game, inspector = false }: {
+  game: Pick<RecentGame, "iconUrl" | "iconSource">;
   inspector?: boolean;
 }) {
   const [failedSources, setFailedSources] = useState<string[]>([]);
-  const selected = gameIconCandidates(game, moduleInfo).find(candidate => !failedSources.includes(candidate.url));
+  const selected = gameIconCandidates(game).find(candidate => !failedSources.includes(candidate.url));
   return <span className={["gameIcon", inspector ? "gameIconInspector" : "",
     selected?.source === "module-default" ? "gameIconEngine" : "", !selected ? "gameIconGeneric" : ""].filter(Boolean).join(" ")}
     aria-hidden="true" data-icon-source={selected?.source || "generic"}>

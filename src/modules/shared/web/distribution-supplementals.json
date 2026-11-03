@@ -1,7 +1,7 @@
 [
   {
     "id": "web-renderer-network",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "arch": "arm64",
     "launcherArchitectures": [
       "arm64"
@@ -9,14 +9,26 @@
     "minimumMacOS": "11.0",
     "sourceRelative": null,
     "sourceSha256": "9d1a5fb91b8ea207ec117aaabb62a1b7925637cec958bd0b443b03f9eaa0631c",
-    "directoryRelative": "web-renderer-network/1.1.0/arm64",
+    "directoryRelative": "web-renderer-network/1.1.1/arm64",
     "manifestRelative": "helper.json",
-    "manifestSha256": "01c7495c2080eb0e213455533c16385f8233d105d444a8e5e1dab2c448e4b98d",
+    "manifestSha256": "bda6a49eee8f49cab42480df97bf06eab80a25676de73dcd57fda4b1ce090227",
     "files": [
+      {
+        "path": "build-definition.json",
+        "size": 15864,
+        "mode": 420,
+        "sha256": "3a3b60ec8e537bece921fe98f934f5ec783b4f58ed98f2bd96c91f1b6fe0b199"
+      },
+      {
+        "path": "build-inputs.json",
+        "size": 117,
+        "mode": 420,
+        "sha256": "a404fa1753759235929a69280ff1b1eff3c0990418906e77283e9034052321b1"
+      },
       {
         "path": "helper.json",
         "size": 769,
-        "sha256": "01c7495c2080eb0e213455533c16385f8233d105d444a8e5e1dab2c448e4b98d",
+        "sha256": "bda6a49eee8f49cab42480df97bf06eab80a25676de73dcd57fda4b1ce090227",
         "mode": 420
       },
       {
@@ -45,7 +57,7 @@
   },
   {
     "id": "web-renderer-network",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "arch": "x64",
     "launcherArchitectures": [
       "x64"
@@ -53,14 +65,26 @@
     "minimumMacOS": "11.0",
     "sourceRelative": null,
     "sourceSha256": "9d1a5fb91b8ea207ec117aaabb62a1b7925637cec958bd0b443b03f9eaa0631c",
-    "directoryRelative": "web-renderer-network/1.1.0/x64",
+    "directoryRelative": "web-renderer-network/1.1.1/x64",
     "manifestRelative": "helper.json",
-    "manifestSha256": "858f2dee94f13c60171e6ffd5341826c9a51bd8d2a79e0f2369bca143dea479a",
+    "manifestSha256": "5355cb902e6b5ecf28144bee4dbf52c869e11515378e71ec1af4bda2c33fc79d",
     "files": [
+      {
+        "path": "build-definition.json",
+        "size": 15864,
+        "mode": 420,
+        "sha256": "3a3b60ec8e537bece921fe98f934f5ec783b4f58ed98f2bd96c91f1b6fe0b199"
+      },
+      {
+        "path": "build-inputs.json",
+        "size": 117,
+        "mode": 420,
+        "sha256": "a404fa1753759235929a69280ff1b1eff3c0990418906e77283e9034052321b1"
+      },
       {
         "path": "helper.json",
         "size": 771,
-        "sha256": "858f2dee94f13c60171e6ffd5341826c9a51bd8d2a79e0f2369bca143dea479a",
+        "sha256": "5355cb902e6b5ecf28144bee4dbf52c869e11515378e71ec1af4bda2c33fc79d",
         "mode": 420
       },
       {

@@ -1,0 +1,69 @@
+{
+  "resourceIds": {
+    "theme": 16842752,
+    "name": 16842755,
+    "exported": 16842768,
+    "minSdkVersion": 16843276,
+    "versionCode": 16843291,
+    "versionName": 16843292,
+    "targetSdkVersion": 16843376,
+    "compileSdkVersion": 16844146,
+    "compileSdkVersionCodename": 16844147
+  },
+  "tree": {
+    "name": "manifest",
+    "attrs": {
+      "versionCode": 1,
+      "versionName": "1",
+      "compileSdkVersion": 36,
+      "compileSdkVersionCodename": "16",
+      ":package": "org.example.window",
+      ":platformBuildVersionCode": 36,
+      ":platformBuildVersionName": 16
+    },
+    "children": [
+      {
+        "name": "uses-sdk",
+        "attrs": {
+          "minSdkVersion": 21,
+          "targetSdkVersion": 28
+        },
+        "children": []
+      },
+      {
+        "name": "uses-permission",
+        "attrs": {
+          "name": "android.permission.MANAGE_EXTERNAL_STORAGE"
+        },
+        "children": []
+      },
+      {
+        "name": "application",
+        "attrs": {
+          "theme": {
+            "type": 1,
+            "data": 16974401
+          }
+        },
+        "children": [
+          {
+            "name": "activity",
+            "attrs": {
+              "name": "maclauncher.android.HostWindowProbe$OwnedActivity",
+              "exported": false
+            },
+            "children": []
+          },
+          {
+            "name": "activity",
+            "attrs": {
+              "name": "maclauncher.android.HostWindowProbe$NextActivity",
+              "exported": false
+            },
+            "children": []
+          }
+        ]
+      }
+    ]
+  }
+}

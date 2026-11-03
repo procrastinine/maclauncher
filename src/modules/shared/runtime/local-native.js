@@ -1,6 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const crypto = require("node:crypto");
+const { fileDigest } = require("./verified-identity");
 const AppBundle = require("./app-bundle");
 
 const CPU_NAMES = new Map([[0x01000007, "x86_64"], [0x0100000c, "arm64"]]);
@@ -62,16 +62,7 @@ function readMachOArchitectures(executablePath, { allowLibrary = false } = {}) {
 }
 
 function hashFile(filePath) {
-  const hash = crypto.createHash("sha256");
-  const buffer = Buffer.alloc(64 * 1024);
-  const fd = fs.openSync(filePath, "r");
-  try {
-    let size;
-    while ((size = fs.readSync(fd, buffer, 0, buffer.length, null)) > 0) hash.update(buffer.subarray(0, size));
-    return hash.digest("hex");
-  } finally {
-    fs.closeSync(fd);
-  }
+  return fileDigest(filePath).sha256;
 }
 
 function resolveLocalRuntime({ runtimePath, runtimeVersion, upstreamRevision, expectedSha256, preferredExecutable, requiredArchitecture, runtimeLabel = "Runtime", allowLibrary = false, platform = process.platform, arch, hostArchitecture } = {}) {
@@ -119,7 +110,7 @@ function getLocalRuntimeStatus(options) {
   }
 }
 
-async function launchLocalRuntime({ runtimePath, runtimeVersion, upstreamRevision, expectedSha256, preferredExecutable, args = [], cwd, context, focusOnLaunch = false }) {
+async function launchLocalRuntime({ runtimePath, runtimeVersion, upstreamRevision, expectedSha256, preferredExecutable, args = [], cwd, env, context, focusOnLaunch = false }) {
   if (!Array.isArray(args) || args.some(arg => typeof arg !== "string" || arg.includes("\0"))) {
     throw new Error("Runtime arguments must be a list of strings without NUL bytes.");
   }
@@ -130,7 +121,7 @@ async function launchLocalRuntime({ runtimePath, runtimeVersion, upstreamRevisio
   const runtime = resolveLocalRuntime({ runtimePath, runtimeVersion, upstreamRevision, expectedSha256, preferredExecutable });
   context.logger?.info?.(`[runtime] native ${runtime.executablePath}`);
   const launchedAt = Date.now();
-  const child = await context.spawnDetachedChecked(runtime.executablePath, args, { cwd }, runtime.needsRosetta);
+  const child = await context.spawnDetachedChecked(runtime.executablePath, args, { cwd, ...(env?{env}:{}) }, runtime.needsRosetta);
   if (focusOnLaunch) {
     // This is opt-in for games, never native command-line tools. Registration
     // and activation occur independently of the launch/launcher response.

@@ -1,4 +1,5 @@
 const { parentPort, workerData } = require("node:worker_threads");
+const { untilTestEnds } = require("../helpers/fixture-process");
 parentPort.on("message", async message => {
   if (message.type === "callbackResult") {
     parentPort.postMessage({ type: "result", id: message.id, result: message.result, error: message.error }); return;
@@ -17,7 +18,7 @@ parentPort.on("message", async message => {
     parentPort.postMessage({ type: "result", id: message.id, result: process });
   } else if (message.method === "inspectorProcess" || message.method === "delayedInspectorProcess") {
     const launch = () => {
-    const child = require("node:child_process").spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore" });
+    const child = require("node:child_process").spawn(process.execPath, ["-e", untilTestEnds], { detached: true, stdio: "ignore" });
     child.unref();
     const record = { id: String(message.id), pid: child.pid };
     parentPort.postMessage({ type: "event", event: "toolProcess", payload: { process: record, stopOnLauncherExit: message.args[0] === true } });

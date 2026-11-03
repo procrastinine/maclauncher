@@ -1,6 +1,7 @@
 // Copyright (c) MacLauncher contributors. MIT license.
 // Native original FSR4.1.1 profiles; borrowed commands remain unsubmitted.
 #include "../frame.h"
+#include "../payload-files.hpp"
 #include "fsr411_runtime.h"
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>

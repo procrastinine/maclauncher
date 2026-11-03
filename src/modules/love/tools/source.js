@@ -1,4 +1,5 @@
 const fs = require("node:fs"), path = require("node:path");
+const { cloneOrCopySync } = require("../../shared/copy-file");
 const Archive = require("../archive");
 const Zip = require("../../shared/runtime/zip");
 const GameData = require("../../shared/game-data");
@@ -7,9 +8,10 @@ const Native = require("../../shared/runtime/local-native");
 const { throwIfAborted } = require("../../shared/runtime/download-utils");
 const Ljd = require("./ljd-manager");
 const Unluac = require("./unluac-manager");
+const FileSignature = require("../../shared/file-signature");
 const pending = new Set(), MAX_SCRIPT = 16 * 1024 ** 2, MAX_TOTAL = 256 * 1024 ** 2;
 const scriptName = name => /\.(?:lua|luac|lj|ljbc)$/i.test(name);
-const identity = file => { const s = fs.statSync(file); return [s.dev, s.ino, s.size, s.mtimeMs, s.ctimeMs].join(":"); };
+const identity = file => FileSignature.signature(fs.statSync(file));
 
 async function collect(input, temporary, signal) {
   const scripts = [], sourceIdentities = [];
@@ -74,8 +76,8 @@ async function exportSource(entry, payload = {}, context = {}, dependencies = {}
       if (targets.has(targetKey)) throw new Error("Lua export contains conflicting source filenames.");
       targets.add(targetKey); fs.mkdirSync(path.dirname(target), { recursive: true });
       const sha256 = Native.hashFile(script.file);
-      if (!bytecode) { fs.copyFileSync(script.file, target); copied++; files.push({ path: script.relative, sha256, output: relative, status: "copied" }); continue; }
-      const original = path.join(temporary, "bytecode", script.relative); fs.mkdirSync(path.dirname(original), { recursive: true }); fs.copyFileSync(script.file, original);
+      if (!bytecode) { cloneOrCopySync(script.file, target); copied++; files.push({ path: script.relative, sha256, output: relative, status: "copied" }); continue; }
+      const original = path.join(temporary, "bytecode", script.relative); fs.mkdirSync(path.dirname(original), { recursive: true }); cloneOrCopySync(script.file, original);
       try {
         if (bytecode === "luajit") {
           const tool = dependencies.ljd || Ljd;
@@ -96,7 +98,7 @@ async function exportSource(entry, payload = {}, context = {}, dependencies = {}
         fs.rmSync(target, { force: true });
       }
     }
-    if (sourceIdentities.some(([file, before]) => identity(file) !== before)) throw new Error("The LÖVE source changed during export.");
+    if (sourceIdentities.some(([file, before]) => !FileSignature.same(identity(file), before))) throw new Error("The LÖVE source changed during export.");
     fs.rmSync(path.join(temporary, "inputs"), { recursive: true, force: true });
     const outputDir = path.join(parent, "export");
     failures.forEach(failure => { failure.reason = failure.reason.replaceAll(temporary, outputDir); });

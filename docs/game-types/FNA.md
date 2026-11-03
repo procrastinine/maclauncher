@@ -24,13 +24,15 @@ The game's assembly versions, FNA references, target frameworks and CLR metadata
 
 ## Preparation
 
-Play replaces a legacy FNA framework, or supplies the supported XNA 4 facades, in a small per-game overlay: a folder under `userData/games/<gameId>/modules/fna/overlays/` that holds only the files MacLauncher replaces or copies and is used in front of the original game. Content, Images, Audio, Fonts, Resources and other files that never change are referenced from the original game. Linked asset trees are not rescanned file by file on each launch, so new and changed assets are visible directly. Files that need conversion, and configuration the game can change, are copied into the overlay.
+Play uses the original game directory for content, configuration, relative file access and working data. Portable assemblies run from their original paths. The installed FNA host and the selected framework stay in the managed runtime package; preparation neither copies them into a game folder nor links game assets.
 
-Copied inputs use cached content checksums. Unchanged files are not hashed or copied again, and identical bytes keep the existing overlay even when filesystem metadata changes. Changed configuration or converted assemblies refresh only the affected game. If a copied input changes while it is being hashed or copied, preparation stops before replacing the current overlay.
+Portable x64 PE32+ assemblies need conversion only for the ARM64 host. Their CLR metadata must be IL-only, allow a 64-bit host and contain neither a native entry point nor managed native or ReadyToRun code. Only the PE machine field changes, in a converted copy under `userData/games/<gameId>/modules/fna/assemblies/`. Preparation examines the entry assembly and the managed dependencies it reaches, not the game’s assets. Intel hosts use compatible x64 assemblies directly.
 
-Portable x64 PE32+ assemblies are converted automatically when their CLR metadata is IL-only, allows a 64-bit host and has no native entry point and no managed native or ReadyToRun code. Only the PE machine field changes, in MacLauncher's own copy. Updated overlays keep earlier local writes under `previous-overlays/`, and forgetting a game removes its module data.
+When conversion is needed, the host looks among the converted assemblies first, then in the original game directory. The original directory remains the working directory and application base directory even when the entry assembly needs conversion. Selected FNA and XNA facades load from the runtime package. The host’s .NET configuration disables roll-forward.
 
-MacLauncher's FNA host, a .NET program included in each runtime package, resolves game assemblies from the overlay and native dependencies from the installed package. It prefers canonical ABI library names, so SDL is loaded once across the host, FNA3D and FAudio. The host's .NET configuration disables roll-forward.
+Conversion inputs and outputs are checked before reuse. A file whose precise identity is unchanged reuses its recorded checksum, and a file with only coarse timestamps is checked byte by byte. Unchanged inputs are not copied again. When a source changes during hashing or copying, the earlier converted files stay intact, and a converted copy that was modified is kept rather than overwritten.
+
+Files in the private overlays of earlier MacLauncher versions are recovered once into the original game directory, as [Earlier private game folders](../library/GAME_PREPARATION.md#earlier-private-game-folders) describes. Missing files are restored; an original file that differs stays unchanged, and the private version is kept beside it as a separate copy. When recovery would be unsafe or the original folder is unavailable, the private data stays intact. Play does not read these earlier overlays.
 
 ### Steam API
 
@@ -75,6 +77,8 @@ The same action is available through the core API and as `pnpm launch --game <pa
 FNA is the default runtime. MacLauncher Builds supplies complete runtime packages, and **Runtimes → FNA** lists them separately from the upstream FNA source releases, which appear for reference.
 
 Each package contains .NET, FNA, the managed host, the supported XNA type-forwarding facades and the native graphics and audio libraries. It also includes the stock shader resources declared by upstream `FNA.Core.csproj`, and the host resolves native libraries by their canonical ABI names. Runtime packages contain no game assets, and Runtimes lists each package's architectures and minimum macOS.
+
+The selected host must declare support for original game paths in its runtime profile. When the installed host lacks it, Play offers a compatible package and installs it after download consent. The host uses the game's entry assembly identity for FNA storage and content discovery.
 
 Packages install under `~/Library/Application Support/maclauncher/runtimes/fna/<profile>/`, and a downloaded package is checked against its complete file list before it runs. Each installation records its FNA, .NET, host, package and native versions, the upstream source and MacLauncher changes it was built from, and the hashes of critical dependencies.
 

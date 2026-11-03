@@ -60,6 +60,7 @@ export const GameRow = memo(function GameRow({
   const runtimeSettingsModified = runtimeSchema && moduleRuntimeSettings && normalizedGameOverride
     ? !runtimeSettingsEqual(runtimeSchema, normalizedGameOverride, moduleRuntimeSettings)
     : false;
+  const targetSummary = g.sessionTargets?.map(target => target.detail ? target.label + " (" + target.detail + ")" : target.label).join(" · ") || g.name;
   function activate(event: React.MouseEvent) {
     const action = gameRowSelectionAction({ selectionMode, selectionDisabled, metaKey: event.metaKey, shiftKey: event.shiftKey });
     if (action.kind === "none") return;
@@ -120,7 +121,7 @@ export const GameRow = memo(function GameRow({
           data-game-path={g.gamePath}
           onClick={activate}
         >
-          {showIcons && <GameIcon game={g} moduleInfo={moduleInfo} />}
+          {showIcons && <GameIcon game={g} />}
           <span className="gameMain">
             <span className="gameTopLine">
               <span className="gameName" title={g.name}>{g.name}</span>
@@ -140,7 +141,8 @@ export const GameRow = memo(function GameRow({
               <span className="dot" aria-hidden="true">·</span>
               {g.availability ? <span className="missingLabel" title={g.availability.message}>Unavailable</span>
                 : missing && <span className="missingLabel">Missing</span>}
-              <span className="mono gameRowPath"><PathDisplay path={g.gamePath} /></span>
+              {g.ephemeral ? <span className="gameRowPath" title={targetSummary}>{targetSummary}</span>
+                : <span className="mono gameRowPath"><PathDisplay path={g.gamePath} /></span>}
             </span>
           </span>
         </button>

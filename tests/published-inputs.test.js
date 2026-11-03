@@ -60,7 +60,15 @@ test('declared binary suppliers are compared with checksum-verified publisher do
   let calls = 0;
   const download = async (_url, target) => { calls++; fs.writeFileSync(target, bytes); };
   assert.deepEqual(await Published.prepareDeclaredPublishers({ repoRoot: f.root, download }), { files: 1 });
+  const installed = path.join(folder, file.path), before = fs.statSync(installed);
+  assert.deepEqual(fs.readFileSync(installed), bytes);
   await Published.prepareDeclaredPublishers({ repoRoot: f.root, download }); assert.equal(calls, 1);
+  assert.equal(fs.statSync(installed).ino, before.ino);
+  fs.writeFileSync(installed, 'damaged');
+  await Published.prepareDeclaredPublishers({ repoRoot: f.root, download });
+  assert.deepEqual(fs.readFileSync(installed), bytes);
+  fs.unlinkSync(path.join(f.root, 'dist/upstream-downloads', file.sha256 + '.bin'));
+  await Published.prepareDeclaredPublishers({ repoRoot: f.root, download: () => assert.fail('Pinned installed bytes refill the cache offline') });
   const record = { owner: 'upstream', binary: 'archive', sha256: file.sha256, supplier: { name: 'declared-upstream', file } };
   const selected = { repoRoot: f.root, sources: new Map([['tool', record]]) };
   assert.deepEqual(Published.verifyPublisherNativeInputs(selected), { nativeFiles: 1 });
@@ -68,7 +76,9 @@ test('declared binary suppliers are compared with checksum-verified publisher do
   assert.throws(() => Published.verifyPublisherNativeInputs(selected), /differs from its publisher download/);
   fs.unlinkSync(path.join(f.root, 'dist/upstream-downloads', file.sha256 + '.bin'));
   assert.throws(() => Published.verifyPublisherNativeInputs(selected), /archive is missing/);
+  fs.unlinkSync(installed);
   await assert.rejects(Published.prepareDeclaredPublishers({ repoRoot: f.root, download: async (_url, target) => fs.writeFileSync(target, 'wrong') }), /differs from its pinned archive/);
+  assert.equal(fs.existsSync(installed), false);
 });
 
 test('7-Zip setup preserves a verified executable inode and replaces changed inputs atomically', async t => {
@@ -94,4 +104,17 @@ test('7-Zip setup preserves a verified executable inode and replaces changed inp
   assert.deepEqual(fs.readFileSync(target), executable);
   assert.equal(fs.statSync(target).mode & 0o777, 0o755);
   assert.deepEqual(fs.readdirSync(root).sort(), ['7zz', 'LICENSE.txt', 'source.json']);
+});
+
+test('Android producer tool pins restore their declared tools directory without fetching installed publisher bytes', async t => {
+  const f = fixture(t), native = path.join(f.root, 'src/modules/android/native');
+  fs.mkdirSync(path.join(native, 'tools'), { recursive: true });
+  const bytes = Buffer.from('exact publisher ASM'), entry = { path: 'asm-example.jar', size: bytes.length, sha256: sha(bytes) };
+  fs.writeFileSync(path.join(native, 'asm-binary.json'), JSON.stringify({ url: 'https://publisher.example/asm.jar', files: [entry] }));
+  fs.writeFileSync(path.join(native, 'tools', entry.path), bytes);
+  const options = { repoRoot: f.root, download: () => assert.fail('Installed pin stays offline') };
+  assert.deepEqual(await Published.prepareDeclaredPublishers(options), { files: 1 });
+  fs.unlinkSync(path.join(native, 'tools', entry.path));
+  await Published.prepareDeclaredPublishers(options);
+  assert.deepEqual(fs.readFileSync(path.join(native, 'tools', entry.path)), bytes);
 });

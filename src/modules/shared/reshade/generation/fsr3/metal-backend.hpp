@@ -5,6 +5,7 @@
 #include <FidelityFX/host/ffx_opticalflow.h>
 #include <FidelityFX/host/ffx_frameinterpolation.h>
 #include "generation-provider.h"
+#include "../../temporal/payload-files.hpp"
 #include <algorithm>
 #include <cstring>
 #include <memory>
@@ -71,7 +72,7 @@ class Backend {
   const bool optical=effect==FFX_EFFECT_OPTICALFLOW;if(!optical&&effect!=FFX_EFFECT_FRAMEINTERPOLATION)return fail("The shader belongs to another FidelityFX effect");
   const unsigned variant=optical?(permutation>>2)&1:permutation&7;
   NSString*base=[NSString stringWithFormat:@"%s/%s/%u/%u",directory.c_str(),optical?"opticalflow":"frameinterpolation",variant,unsigned(pass)];NSError*issue=nil;
-  NSString*source=[NSString stringWithContentsOfFile:[base stringByAppendingString:@".metal"] encoding:NSUTF8StringEncoding error:&issue];NSData*data=[NSData dataWithContentsOfFile:[base stringByAppendingString:@".json"]];NSDictionary*metadata=data?[NSJSONSerialization JSONObjectWithData:data options:0 error:&issue]:nil;if(!source||!metadata)return fail("The FidelityFX shader resources are missing");
+  NSString*source=[NSString stringWithContentsOfFile:maclauncher::payloadFile([base stringByAppendingString:@".metal"]) encoding:NSUTF8StringEncoding error:&issue];NSData*data=[NSData dataWithContentsOfFile:maclauncher::payloadFile([base stringByAppendingString:@".json"])];NSDictionary*metadata=data?[NSJSONSerialization JSONObjectWithData:data options:0 error:&issue]:nil;if(!source||!metadata)return fail("The FidelityFX shader resources are missing");
   MTLCompileOptions*options=[MTLCompileOptions new];options.languageVersion=MTLLanguageVersion2_3;auto library=[device newLibraryWithSource:source options:options error:&issue];if(!library)return fail(issue.localizedDescription.UTF8String?:"Metal shader compilation failed");
   auto values=[MTLFunctionConstantValues new];const uint32_t alignment=[device minimumLinearTextureAlignmentForPixelFormat:MTLPixelFormatR32Uint];[values setConstantValue:&alignment type:MTLDataTypeUInt atIndex:65535];auto function=[library newFunctionWithName:metadata[@"entry"] constantValues:values error:&issue];if(!function)return fail(issue.localizedDescription.UTF8String?:"Metal shader specialization failed");
   auto value=std::make_unique<Pipeline>();value->state=[device newComputePipelineStateWithFunction:function error:&issue];if(!value->state)return fail(issue.localizedDescription.UTF8String?:"Metal pipeline creation failed");NSArray*threads=metadata[@"threads"];value->threads=MTLSizeMake([threads[0] unsignedIntegerValue],[threads[1] unsignedIntegerValue],[threads[2] unsignedIntegerValue]);if(value->threads.width*value->threads.height*value->threads.depth>value->state.maxTotalThreadsPerThreadgroup)return fail("The SDK thread group exceeds this device's capacity");

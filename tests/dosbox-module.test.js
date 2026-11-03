@@ -7,7 +7,7 @@ const { detectGame, inspectDosProgram } = require("../src/modules/dosbox/detect"
 const { prepareGame, driveDirectory } = require("../src/modules/dosbox/prepare");
 
 function temporary(t) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "dosbox-module-"));
+  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "dosbox-module-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root;
 }
 function mz(signature) {
@@ -40,31 +40,69 @@ test("DOS imports COM/BAT directly and explains ambiguous folders without select
   assert.equal(detect(bat), null, "A batch file needs a matching DOS program rather than a Windows-style script alone");
   fs.writeFileSync(bat, "#!/bin/sh\necho hello"); assert.equal(detect(bat), null);
 });
-test("DOS preparation preserves originals and private saves while refreshing unchanged game assets", async t => {
+test("DOS preparation uses the original program directory without walking or copying game files", async t => {
   const root = temporary(t), source = path.join(root, "Game original"); fs.mkdirSync(source);
   fs.writeFileSync(path.join(source, "GAME.EXE"), mz()); fs.writeFileSync(path.join(source, "DATA.DAT"), "old");
   fs.writeFileSync(path.join(source, "GAME.SAV"), "original save");
   const entry = { ...detect(path.join(source, "GAME.EXE")), gameId: "game-1" }, context = { userDataDir: path.join(root, "profile") };
   assert.equal(fs.existsSync(context.userDataDir), false);
-  assert.ok(driveDirectory(entry, context).endsWith(path.join("dosbox", "drive-c")));
+  assert.equal(driveDirectory(entry, context), source);
+  const readdir = t.mock.method(fs, "readdirSync", () => assert.fail("Play does not enumerate the game or old mirrors"));
   const launch = await prepareGame(entry, context);
+  assert.equal(launch.executable, path.join(source, "GAME.EXE"));
+  assert.equal(launch.drive, source);
+  assert.equal(fs.existsSync(path.join(launch.directory, "drive-c")), false);
+  assert.equal(fs.existsSync(path.join(launch.directory, "files.json")), false);
   fs.writeFileSync(path.join(launch.drive, "GAME.SAV"), "new save");
   fs.writeFileSync(path.join(source, "DATA.DAT"), "updated game data");
-  fs.writeFileSync(path.join(source, "GAME.SAV"), "replacement source save");
   await prepareGame(entry, context);
   assert.equal(fs.readFileSync(path.join(launch.drive, "DATA.DAT"), "utf8"), "updated game data");
   assert.equal(fs.readFileSync(path.join(launch.drive, "GAME.SAV"), "utf8"), "new save");
-  assert.equal(fs.readFileSync(path.join(source, "GAME.SAV"), "utf8"), "replacement source save");
   assert.equal(entry.defaultSaveDir, launch.drive);
-  assert.notEqual(fs.statSync(launch.executable).ino, fs.statSync(path.join(source, "GAME.EXE")).ino);
+  assert.equal(fs.statSync(launch.executable).ino, fs.statSync(path.join(source, "GAME.EXE")).ino);
+  readdir.mock.restore();
 });
-test("DOS preparation rejects destination overlap and source aliases escaping the imported game", async t => {
+test("DOS helper preparation rejects linked module ancestors before writing outside the profile", async t => {
+  const root = temporary(t), source = path.join(root, "game"), outside = path.join(root, "outside");
+  fs.mkdirSync(source); fs.mkdirSync(outside); fs.writeFileSync(path.join(source, "GAME.EXE"), mz());
+  fs.writeFileSync(path.join(outside, "keep.txt"), "unchanged");
+  const entry = { ...detect(path.join(source, "GAME.EXE")), gameId: "linked-modules" };
+  const userDataDir = path.join(root, "profile"), gameRoot = path.join(userDataDir, "games", entry.gameId);
+  fs.mkdirSync(gameRoot, { recursive: true }); fs.symlinkSync(outside, path.join(gameRoot, "modules"));
+  await assert.rejects(prepareGame(entry, { userDataDir }), /alias|symbolic|link/i);
+  assert.deepEqual(fs.readdirSync(outside), ["keep.txt"]);
+  assert.equal(fs.readFileSync(path.join(outside, "keep.txt"), "utf8"), "unchanged");
+  assert.equal(fs.existsSync(path.join(outside, "dosbox")), false);
+  assert.equal(fs.existsSync(path.join(source, "dosbox.conf")), false);
+});
+test("DOS explicit override preserves the released writable drive and excludes active migration trees", async t => {
   const root = temporary(t), source = path.join(root, "game"); fs.mkdirSync(source); fs.writeFileSync(path.join(source, "GAME.EXE"), mz());
   const entry = { ...detect(path.join(source, "GAME.EXE")), gameId: "game-2" }, context = { userDataDir: path.join(root, "profile") };
-  await assert.rejects(prepareGame({ ...entry, saveDirOverride: path.join(source, "output") }, context), /outside/);
-  const outside = path.join(root, "outside.txt"); fs.writeFileSync(outside, "preserve"); fs.symlinkSync(outside, path.join(source, "linked.sav"));
-  await assert.rejects(prepareGame(entry, context), /inside/);
-  assert.equal(fs.readFileSync(outside, "utf8"), "preserve");
+  entry.saveDirOverride = path.join(root, "selected-saves");
+  fs.mkdirSync(entry.saveDirOverride); fs.writeFileSync(path.join(entry.saveDirOverride, "GAME.SAV"), "selected save");
+  const legacy = path.join(context.userDataDir, "games", entry.gameId, "modules", "dosbox", "drive-c");
+  fs.mkdirSync(legacy, { recursive: true }); fs.writeFileSync(path.join(legacy, "GAME.SAV"), "legacy save");
+  fs.writeFileSync(path.join(source, "DATA.DAT"), "old asset");
+  const launch = await prepareGame(entry, context);
+  assert.equal(launch.drive, entry.saveDirOverride);
+  assert.equal(launch.executable, path.join(entry.saveDirOverride, "GAME.EXE"));
+  assert.deepEqual(fs.readFileSync(launch.executable), mz());
+  assert.equal(entry.saveDirOverride, path.join(root, "selected-saves"));
+  assert.equal(fs.readFileSync(path.join(entry.saveDirOverride, "GAME.SAV"), "utf8"), "selected save");
+  assert.equal(fs.readFileSync(path.join(legacy, "GAME.SAV"), "utf8"), "legacy save");
+  assert.equal(require("../src/modules/dosbox/main").resolveSaveLocations(entry).primaryDirectory, entry.saveDirOverride);
+  fs.writeFileSync(path.join(source, "DATA.DAT"), "updated asset bytes");
+  await prepareGame(entry, context);
+  assert.equal(fs.readFileSync(path.join(launch.drive, "DATA.DAT"), "utf8"), "updated asset bytes");
+  assert.equal(fs.readFileSync(path.join(launch.drive, "GAME.SAV"), "utf8"), "selected save");
+  assert.equal(fs.existsSync(path.join(source, "GAME.SAV")), false);
+  const Backcompat = require("../src/modules/dosbox/backcompat");
+  assert.deepEqual(Backcompat.legacyGameMirrors(entry, context).map(row => row.mirrorRoot), [legacy]);
+  for (const override of [legacy, path.dirname(legacy), path.join(legacy, "nested")])
+    assert.deepEqual(Backcompat.legacyGameMirrors({ ...entry, saveDirOverride: override }, context), []);
+  const Module = require("../src/modules/dosbox/main"), command = Module.__test.launchArguments(entry, { ...context, gameArguments: ["-test"] }, launch, "0.83.0");
+  assert.ok(command.args.includes(`mount c "${entry.saveDirOverride}"`));
+  await assert.rejects(prepareGame({ ...entry, saveDirOverride: path.join(source, "output") }, context), /outside the original/);
 });
 test("DOS launch keeps configuration private and transports game arguments without runtime flag injection", t => {
   const Module = require("../src/modules/dosbox/main"), root = temporary(t);
@@ -75,6 +113,7 @@ test("DOS launch keeps configuration private and transports game arguments witho
   const command = Module.__test.launchArguments({}, { runtimeSettings: { cycles: "5000" }, gameArguments: ["--conf", "space value"] }, launch, "0.78.0");
   assert.equal(command.args.filter(arg => arg === "--conf").length, 0);
   assert.ok(command.args.includes('GAME.EXE --conf "space value"'));
+  assert.ok(command.args.includes(`mount c "${path.dirname(launch.executable)}"`));
   assert.throws(() => Module.__test.launchArguments({}, { runtimeSettings: { cycles: "auto\n[autoexec]" } }, launch, "0.83.0"), /cycles/);
   assert.throws(() => Module.__test.dosArgument("arg > output"), /redirection/);
 });

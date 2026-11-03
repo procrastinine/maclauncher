@@ -9,6 +9,7 @@ const manager = require("./runtime/manager");
 const Native = require("../shared/runtime/local-native");
 const Bundle = require("../shared/runtime/bundled-native");
 const GameData = require("../shared/game-data");
+const Writable = require("../shared/writable-input");
 const Output = require("./native-output");
 const run = promisify(execFile);
 
@@ -81,11 +82,18 @@ function prepareLaunch(entry, context, install) {
     GST_PLUGIN_PATH_1_0: runtime.plugins, GST_PLUGIN_SYSTEM_PATH_1_0: "", GST_REGISTRY_1_0: path.join(directory, "gstreamer-registry.bin"),
     GST_REGISTRY_FORK: "no", FONTCONFIG_FILE: path.join(runtime.root, "fontconfig.conf"), XDG_CACHE_HOME: path.join(directory, "cache") };
   for (const key of Object.keys(env)) if (key.startsWith("DYLD_")) delete env[key];
-  fs.writeFileSync(path.join(directory, "preparation.json"), JSON.stringify({ runtimeVersion: install.version,
+  Object.assign(env,require("../shared/runtime/dependency-environment").environment(install,env));
+  const preparationFile = path.join(directory, "preparation.json"), preparation = JSON.stringify({ runtimeVersion: install.version,
     engineRevision: install.upstreamRevision, npaRevision: runtime.profile.npaRevision, originalDataRoot: path.resolve(root),
     archives: data.archives.map(archive => ({ path: path.resolve(archive.path), bytes: archive.bytes, indexBytes: archive.indexBytes })),
-    bootScript: data.bootScript, saves, copies: [] }, null, 2) + "\n", { mode: 0o600 });
-  return { root, data, directory, saves, args, env };
+    bootScript: data.bootScript, saves, copies: [] }, null, 2) + "\n";
+  let previous;
+  try {
+    const stat = fs.lstatSync(preparationFile);
+    if (stat.isFile() && stat.size === Buffer.byteLength(preparation)) previous = fs.readFileSync(preparationFile, "utf8");
+  } catch (error) { if (error.code !== "ENOENT") throw error; }
+  if (previous !== preparation) Writable.atomicWrite(preparationFile, preparation, { root: directory });
+  return { root, data, directory, cwd: path.resolve(root), saves, args, env };
 }
 
 function extractScripts(entry, context) {
@@ -109,7 +117,10 @@ function extractScripts(entry, context) {
 }
 
 module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [manager], normalizeRuntimeId: () => "npengine",
-  onImport: (entry, context) => { entry.defaultSaveDir = path.join(directoryFor(entry, context), "saves"); },
+  onImport: (entry, context) => {
+    const directory = directoryFor(entry, context);
+    entry.defaultSaveDir = entry.saveDirOverride || path.join(directory, "saves");
+  },
   ensureRuntime: (entry, context) => {
     const { data } = refreshGame(entry); requireFormat(data);
     const selected = manager.resolveSelection(entry, context.settings, context.userDataDir);
@@ -123,7 +134,7 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     if (!selected.ready) throw new Error(selected.reason);
     const launch = prepareLaunch(entry, context, selected.install); context.onEntryChange?.(entry);
     const child = await context.spawnDetachedChecked(selected.install.executablePath, [...launch.args, ...(context.gameArguments || [])],
-      { cwd: launch.directory, env: launch.env, stdio: ["ignore", "pipe", "pipe"] }, selected.install.needsRosetta);
+      { cwd: launch.cwd, env: launch.env, stdio: ["ignore", "pipe", "pipe"] }, selected.install.needsRosetta);
     return Output.retainNativeOutput(child, { directory: launch.directory, entry, context, version: selected.version });
   },
   cleanupGameData: (entry, context) => { fs.rmSync(directoryFor(entry, context), { recursive: true, force: true }); return true; },
@@ -137,7 +148,7 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
       if (!selected.ready) throw new Error(selected.reason);
       const launch = prepareLaunch(entry, context, selected.install);
       const result = await run(selected.install.executablePath, [...launch.args, payload?.scope === "bootstrap" ? "--check-bootstrap" : "--check-scripts"],
-        { cwd: launch.directory, env: launch.env, timeout: 30000, maxBuffer: 128 * 1024 });
+        { cwd: launch.cwd, env: launch.env, timeout: 30000, maxBuffer: 128 * 1024 });
       return { version: selected.version, output: result.stdout.trim() };
     },
     runtimeStatus: (entry, _payload, context) => manager.resolveSelection(entry, context.settings, context.userDataDir),

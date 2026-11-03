@@ -51,7 +51,11 @@ module.exports = {
         context.recordRuntimeUse?.({ managerId: Plugins.manager.id, sectionId: pkg.id, version: install.version, sourcePath: install.installDir });
         return [];
       }
-      return [];
+      const section = Plugins.manager.getState({ userDataDir: context.userDataDir }).sections.find(section => section.id === pkg.id);
+      const version = section?.plugin?.version || null;
+      return [{ managerId: Plugins.manager.id, version, ...(!version ? { discoveryRequired: true } : {}),
+        requiresDownload: true, installOptions: { sectionId: pkg.id }, optional: true, label: pkg.label, cancelLabel: "Skip",
+        detail: "Optional playback controls and timeline previews. Declining continues playback without this plugin." }];
     });
     if (host && Configuration.available(context.runtimeSettings, context.userDataDir).thumbfast) {
       const worker = thumbnailPlayer(selected, context, host);

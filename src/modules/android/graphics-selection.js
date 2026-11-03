@@ -29,11 +29,11 @@ async function moltenVk(context, dependencies) {
   const manager = dependencies.moltenVkManager || managers.find(provider => provider.backend === "moltenvk");
   const selection = manager.resolveSelection({}, context.settings, context.userDataDir, { verification: "status" });
   await (dependencies.confirmGraphicsInstall || confirmToolInstall)(context, { manager, version: selection.version,
-    requiresDownload: true, label: "MoltenVK " + selection.version,
+    requiresDownload: true, label: selection.version ? "MoltenVK " + selection.version : "MoltenVK",
     detail: "Required for this game's OpenGL ES version." });
-  await manager.installRuntime({ ...context, version: selection.version });
+  const resultInstall = await manager.installRuntime({ ...context, version: selection.version });
   context.onRuntimeStateChange?.();
-  const result = await resolve(selectedContext("moltenvk:" + selection.version));
+  const result = await resolve(selectedContext("moltenvk:" + (resultInstall?.version || selection.version || "auto")));
   if (!result || result.backend !== "moltenvk") throw new Error("MoltenVK is unavailable after installation.");
   return result;
 }

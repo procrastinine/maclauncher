@@ -56,5 +56,6 @@ module.exports = async function afterPack(context, { dependencies = {} } = {}) {
     if (!selected) throw new Error('Application packaging requires the source, supplier and Builds input map from beforePack.');
     inputs.verifyContents(selected, { archive: path.join(resourcesPath, 'app.asar'), resources: resourcesPath, appPath });
   }
+  require('./app-deduplication.cjs').collapse(appPath);
   inputs.pending.get(context.packager)?.delete(arch);
 };

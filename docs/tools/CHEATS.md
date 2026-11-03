@@ -54,7 +54,7 @@ A conditional feature appears only when the game's engine scripts have the liste
 The Ren'Py Cheats window installs two optional community add-ons into the game folder:
 
 - Universal Ren'Py Walkthrough System copies the five v2 `__urw/urw_*.rpy` scripts into `<game>/game/__urw/`.
-- Universal Ren'Py Mod copies `0x52_URM.rpa` into `<game>/game/`.
+- Universal Ren'Py Mod uses a supplied `0x52_URM.rpa`. The native file dialog selects the first copy; its RPA header is checked before a private copy is remembered. Installations copy it into `<game>/game/` and reuse the remembered file offline. **Choose another Universal Ren'Py Mod file…** replaces the remembered copy.
 
 Installing the v2 walkthrough system removes the legacy `_urw` and `_urwdisp` scripts and their compiled files, so hooks are not installed twice. MacLauncher replaces the add-on's own updater with an update notice. This keeps MacLauncher's compatibility patches and avoids the updater's TLS bypass and unchecked archive extraction. A remove button is enabled only when the add-on's files are present in the game folder.
 

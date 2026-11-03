@@ -122,7 +122,7 @@ function catalog(stage, options) {
       return { ...row, available: false, availableWithoutModel: false, reason: row.reason || "The included processor cannot place this method in an ordered chain. Use Simple controls for this method." };
     const scope = graphics.effectPlanTemporal, input = options.graphicsInputs;
     const sharedScene=input?.sceneFrameAPI===1&&(!input.sceneDestinationAPI||graphics.sceneWindowContinuationAPI===1);
-    if (row.kind === "temporal" && !sharedScene && scope && (!["source", "output", "commandBuffer"].every(key => typeof scope[key] === "string") ||
+    if (row.kind === "temporal" && !row.sourceUnsupported && !sharedScene && scope && (!["source", "output", "commandBuffer"].every(key => typeof scope[key] === "string") ||
         scope.source !== input?.temporalSource || scope.output !== input?.temporalOutput || scope.commandBuffer !== input?.commandBuffer ||
         Array.isArray(scope.hosts) && !scope.hosts.includes(options.graphicsHost)))
       return { ...row,availableWithoutInputs:row.available===true,pendingInputs:[...new Set([...(row.pendingInputs||[]),"scene-frame"])],inputReason:"This source does not expose a matching scene frame; this row remains pending while other effects run." };
@@ -208,7 +208,7 @@ function reconstructionTemplates(current, ctx) {
     if (!modelPath) throw new Error("Choose a compatible neural rendering model before applying this preset.");
     Neural.model(modelPath,"mlx-dlss");
   } catch (error) { reason = error.message; }
-  return [{id: "reconstruction-4x", name: "DLSS · 540p + LSFG 4×", plan, available: !reason, ...(reason ? {reason} : {})}];
+  return [{id: "reconstruction-4x", name: "DLSS · 720p + LSFG 4×", plan, available: !reason, ...(reason ? {reason} : {})}];
 }
 function sourceResolution(ctx, launch) {
   const support = SourceResolution.capabilities(ctx.graphicsHost, ctx.graphicsInputs, ctx.graphicsCapabilities.resolutionMultipliers, ctx.graphicsCapabilities.virtualWindow);
@@ -218,7 +218,9 @@ function sourceResolution(ctx, launch) {
   // live even when this core cannot activate one from an initially-off launch.
   const live = ctx.running ? require("../reshade/source-controls").bindings(launch).some(binding => binding.support?.live === true) : support.live === true;
   return { heights, multipliers, ...(percentages ? {percentages: true} : {}),
-    ...(ctx.graphicsCapabilities.spatial && ctx.graphicsCapabilities.spatialMethods.includes("bilinear") ? {processing: true} : {}),
+    // A source whose module declares no resolution control, such as a
+    // captured window, keeps its own size: no completed-frame resizing either.
+    ...(ctx.graphicsInputs?.sourceResolution !== false && ctx.graphicsCapabilities.spatial && ctx.graphicsCapabilities.spatialMethods.includes("bilinear") ? {processing: true} : {}),
     ...(live ? {live: true} : {}), ...(methods ? {methods} : {}), ...(methodLabels ? {methodLabels} : {}),
     ...(filterExclusiveWithTemporal ? {filterExclusiveWithTemporal: true} : {}) };
 }
@@ -332,6 +334,7 @@ async function prepare(entry, options = {}) {
   if (requested.error || !requested.plan) throw Object.assign(new Error(requested.error?.message || "Choose a valid ordered effects plan."), requested.error ? {code: requested.error.code} : {});
   const requestedPlan = requested.plan, dropped = requested.dropped.filter(row => row.part === "row").map(droppedNode);
   let savedPlan = Plan.execution(requestedPlan);
+  await require("../reshade/shader-preparation").prepare(savedPlan, options);
   const modelPreparation=await require('../reshade/neural/model-preparation').prepare(savedPlan,options),modelPending=[...modelPreparation.pending];
   options={...options,modelOperations:modelPreparation.modelOperations||options.modelOperations};
   if(options.userDataDir&&savedPlan.video.some(node=>node.enabled&&Providers.modelOperation(node,options)&&!node.settings?.modelPath)){

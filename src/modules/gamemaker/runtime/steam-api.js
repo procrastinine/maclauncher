@@ -27,6 +27,7 @@ function required(inspection) {
 function resolveDependency(inspection, dataPath, install, { runnerVersion = install?.version, resourcesRoot, offline = true } = {}) {
   if (!required(inspection)) return null;
   const legacy = runnerVersion === LEGACY_RUNNER && (!install || install.binarySha256 === LEGACY_SHA256);
+  // Steam ABI selection follows the selected runner, defaulting to the launcher CPU for native runners.
   const architecture = legacy ? "x86_64" : install?.architectures?.includes(process.arch === "x64" ? "x86_64" : process.arch)
     ? (process.arch === "x64" ? "x86_64" : process.arch) : install?.architectures?.[0];
   const locations = [path.join(path.dirname(dataPath), "libsteam_api.dylib"),
@@ -36,6 +37,7 @@ function resolveDependency(inspection, dataPath, install, { runnerVersion = inst
     try {
       const architectures = Native.readMachOArchitectures(file, { allowLibrary: true });
       if (!architecture || architectures.includes(architecture)) return { ready: true, mode: "native", libraryPath: file,
+        // With no runner-specific ABI, the native library default follows the launcher process.
         architectures, architecture: architecture || architectures.find(arch => arch === process.arch) || architectures[0],
         appId, sha256: Native.hashFile(file), version: "game-library", sourceRevision: null,
         consumerPath: install?.runnerAppPath && path.join(install.runnerAppPath, "Contents/MacOS/Mac_Runner"),

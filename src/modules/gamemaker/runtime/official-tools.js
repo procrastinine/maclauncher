@@ -11,6 +11,7 @@ function json(file) {
   if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 4 * 1024 ** 2) throw new Error("Igor dependency metadata is missing or oversized.");
   return JSON.parse(fs.readFileSync(file, "utf8"));
 }
+// Igor defaults and local-tool inventories follow the launcher process CPU, not the physical hardware.
 function inspectIgorDirectory(folder, arch = process.arch) {
   const files = []; let bytes = 0;
   function walk(directory, depth = 0) {
@@ -40,11 +41,12 @@ function inspectIgorDirectory(folder, arch = process.arch) {
       }
     }
   }
+  const nativeArch = arch === "x64" ? "x86_64" : arch;
   for (const file of files.filter(item => item.relative.endsWith(".dylib"))) {
-    if (!Native.readMachOArchitectures(path.join(folder, file.relative), { allowLibrary: true }).includes(arch)) throw new Error("Igor contains a native dependency for another architecture.");
+    if (!Native.readMachOArchitectures(path.join(folder, file.relative), { allowLibrary: true }).includes(nativeArch)) throw new Error("Igor contains a native dependency for another architecture.");
   }
   const toolPath = path.join(folder, "Igor");
-  if (!Native.readMachOArchitectures(toolPath).includes(arch)) throw new Error("Igor native executable is for another Mac architecture.");
+  if (!Native.readMachOArchitectures(toolPath).includes(nativeArch)) throw new Error("Igor native executable is for another Mac architecture.");
   return { ...build, architecture: arch, files, dependencyTreeSha256: digest(files), binarySha256: hashFile(toolPath), toolPath, folder };
 }
 function toolRoot(userDataDir) { return path.join(userDataDir, "runtimes", "gamemaker-official", "tools"); }
@@ -61,6 +63,7 @@ function selectIgorVersion(userDataDir, version) {
   try { fs.writeFileSync(temporary, JSON.stringify({ version }) + "\n", { flag: "wx" }); fs.renameSync(temporary, path.join(root, "selected.json")); }
   finally { fs.rmSync(temporary, { force: true }); }
 }
+// A local Igor choice retains the launcher-selected tool ABI, including Intel under Rosetta.
 function getLocalIgorStatus({ userDataDir, toolVersion, arch = process.arch }) {
   let directory;
   try {
@@ -74,6 +77,7 @@ function getLocalIgorStatus({ userDataDir, toolVersion, arch = process.arch }) {
   } catch (error) { return { version: toolVersion, architecture: arch, ready: false, installed: false,
     status: directory && fs.existsSync(directory) ? "damaged" : "missing", reason: error.message }; }
 }
+// Local tool discovery lists the launcher CPU namespace; it does not infer physical hardware.
 function listLocalIgors({ userDataDir, arch = process.arch } = {}) {
   if (!path.isAbsolute(userDataDir || "")) return [];
   const choices = new Map();
@@ -102,6 +106,7 @@ function listLocalIgors({ userDataDir, arch = process.arch } = {}) {
   } catch {}
   return [...choices.values()];
 }
+// Local Igor acquisition defaults to the launcher CPU and preserves an explicit tool ABI.
 async function installLocalIgor({ userDataDir, toolVersion, arch = process.arch, runProcess, signal }) {
   const existing = getLocalIgorStatus({ userDataDir, toolVersion, arch });
   if (existing.ready) { selectIgorVersion(userDataDir, toolVersion); return existing; }

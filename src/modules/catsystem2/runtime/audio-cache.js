@@ -16,6 +16,7 @@ function inspectWave(bytes) {
 }
 
 /** Immutable, content-addressed derived audio under one game's own cache. */
+// Cache identity follows the selected helper CPU, defaulting to the launcher process even under Rosetta.
 async function createAudioCache({ cacheRoot, helper, arch = process.arch, signal, decode = Audio.decodeOgg, spawnChild } = {}) {
   if (!path.isAbsolute(cacheRoot || "") || !["arm64", "x64"].includes(arch) || helper?.version !== Audio.VERSION || helper.protocolVersion !== 1 || !SHA.test(helper.binarySha256 || ""))
     throw new Error("A bounded per-game cache and exact Ogg/Vorbis helper are required.");

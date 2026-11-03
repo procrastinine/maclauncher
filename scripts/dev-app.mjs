@@ -20,6 +20,7 @@ export function pruneDevelopmentApps(cacheRoot,current,{processes=generationProc
     if(!entry.isDirectory())continue;
     const file=path.join(cacheRoot,entry.name),staging=/^\.prepare-(\d+)-/.exec(entry.name);
     if(staging){if(!alive(Number(staging[1])))fs.rmSync(file,{recursive:true,force:true});continue;}
+    if(path.basename(current)==='stable')continue;
     if(!/^[a-f0-9]{24}$/.test(entry.name)||!fs.existsSync(path.join(file,'ready.json')))continue;
     generations.push({file,at:fs.statSync(path.join(file,'ready.json')).mtimeMs});
   }
@@ -34,6 +35,8 @@ export async function prepareDevelopmentApp({ electronBinary, platform = process
   iconPath = path.join(projectRoot, "build", "icon.icns"),
   rasterIconPath = path.join(projectRoot, "src", "resources", "maclauncher.png"),
   entitlementsPath = path.join(projectRoot, "build", "entitlements.mac.plist"),
+  signingKeychain = path.join(projectRoot, ".local", "dev-signing", "development.keychain-db"),
+  inUse = cache => { const processes=generationProcesses();return processes===null||generationReferenced(cache,liveGenerationPaths(cacheRoot),processes); },
   run = execFileSync } = {}) {
   if (platform !== "darwin" || process.env.MACLAUNCHER_ELECTRON_PATH) return electronBinary;
   const marker = path.sep + "Contents" + path.sep + "MacOS" + path.sep;
@@ -43,27 +46,38 @@ export async function prepareDevelopmentApp({ electronBinary, platform = process
   const infoPath = path.join(source, "Contents", "Info.plist");
   const info = await parsePlistFile(infoPath);
   const documentTypes = applicationDocumentTypes(Modules.listSupportedInputExtensions());
-  const digest = crypto.createHash("sha256").update("maclauncher-development-v3-raster");
+  const digest = crypto.createHash("sha256").update("maclauncher-development-v5-stable-certificate");
   for (const file of [infoPath, iconPath, rasterIconPath, entitlementsPath, path.join(source, "Contents", "_CodeSignature", "CodeResources")]) {
     if (fs.existsSync(file)) digest.update(fs.readFileSync(file));
   }
   digest.update(JSON.stringify(documentTypes));
+  const keychain = signingKeychain && fs.existsSync(signingKeychain) ? path.resolve(signingKeychain) : null;
+  let certificate = null;
+  if(keychain){
+    const identities=String(run("/usr/bin/security", ["find-identity", "-p", "codesigning", keychain], {encoding:"utf8",stdio:"pipe",timeout:10000}));
+    certificate=identities.match(/\b([A-Fa-f0-9]{40}) "MacLauncher Development"/)?.[1]?.toUpperCase();
+    if(!certificate)throw Error("MacLauncher Development signing identity is missing from the local keychain.");
+  }
+  digest.update(certificate || "ad-hoc");
   const identity = digest.digest("hex").slice(0, 24);
-  const cache = path.join(cacheRoot, identity);
+  const cache = path.join(cacheRoot, "stable");
   const destination = path.join(cache, "MacLauncher.app");
   const executable = path.join(destination, "Contents", "MacOS", "MacLauncher");
   return withGenerationCache(cacheRoot,async()=>{
   const prune=()=>{try{pruneDevelopmentApps(cacheRoot,cache);}catch(error){console.warn('Development cache cleanup: '+error.message);}};
   // The launcher stays alive for its Electron child's lifetime, including the
   // interval between preparing the executable and spawning that child.
+  const active=fs.existsSync(destination)&&inUse(cache);
   retainGeneration(cacheRoot,[cache]);
   if (fs.existsSync(path.join(cache, "ready.json"))) {
     let valid=true;
     try { validateAppBundle(destination, { executablePath: executable }); } catch(error) {
       valid=false;const processes=generationProcesses();if(processes===null||processes.includes(cache+path.sep))throw error;
     }
-    if(valid){prune();return executable;}
+    const ready=JSON.parse(fs.readFileSync(path.join(cache,"ready.json"),"utf8"));
+    if(valid&&(ready.identity===identity||active)){prune();return executable;}
   }
+  if(active)throw Error("The active development bundle cannot be replaced.");
   fs.mkdirSync(cacheRoot, { recursive: true, mode: 0o700 });
   const staging = fs.mkdtempSync(path.join(cacheRoot, ".prepare-"+process.pid+"-"));
   const stagedApp = path.join(staging, "MacLauncher.app");
@@ -100,11 +114,17 @@ export async function prepareDevelopmentApp({ electronBinary, platform = process
     fs.copyFileSync(rasterIconPath, path.join(contents, "Resources", "maclauncher.png"));
     await savePlistFile(path.join(contents, "Info.plist"), info);
     run("/usr/bin/codesign", ["--force", "--deep", "--sign", "-", "--entitlements", entitlementsPath, stagedApp], { stdio: "pipe", timeout: 120000 });
+    const requirement='designated => identifier "com.maclauncher.launcher.development"'+(certificate ? ' and certificate leaf = H"'+certificate+'"' : '');
+    if(keychain)run("/usr/bin/security", ["unlock-keychain", "-p", fs.readFileSync(path.join(path.dirname(keychain),"keychain-password"),"utf8").trim(), keychain], {stdio:"pipe",timeout:10000});
+    // An explicit outer requirement preserves macOS privacy grants across development bundle generations.
+    run("/usr/bin/codesign", ["--force", "--sign", certificate || "-", ...(keychain ? ["--keychain",keychain] : []), "--entitlements", entitlementsPath, "-r="+requirement, stagedApp], { stdio: "pipe", timeout: 120000 });
     run("/usr/bin/codesign", ["--verify", "--deep", "--strict", stagedApp], { stdio: "pipe", timeout: 60000 });
     validateAppBundle(stagedApp);
     fs.writeFileSync(path.join(staging, "ready.json"), JSON.stringify({ identity, electronVersion: info.CFBundleShortVersionString }) + "\n", { mode: 0o600 });
-    if (fs.existsSync(cache)) fs.rmSync(cache, { recursive: true, force: true });
-    fs.renameSync(staging, cache);
+    if (fs.existsSync(cache)) {
+      // RENAME_SWAP publishes both the app and its receipt without a missing-path interval.
+      execFileSync("/usr/bin/osascript", ["-l", "JavaScript", "-e", "function run(a){ObjC.bindFunction('renamex_np',['int',['string','string','unsigned int']]);if($.renamex_np(a[0],a[1],2)!==0)throw Error('Development bundle swap failed');}", staging, cache], {stdio:"pipe",timeout:10000});
+    } else fs.renameSync(staging, cache);
     prune();
     return executable;
   } finally {

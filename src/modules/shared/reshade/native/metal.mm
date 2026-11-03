@@ -18,6 +18,7 @@
 #include "isf-node.hpp"
 #include "temporal-plan.hpp"
 #include "frame-capture.hpp"
+#include "capture-file.hpp"
 #include "screenshot-image.hpp"
 #include "metal4-diagnostics.hpp"
 #include "source-texture.hpp"
@@ -263,17 +264,6 @@ std::string colorFormatDiagnostic(MTLPixelFormat value) {
         default:break;
     }
     return " colorFormat="+std::string(name)+"("+std::to_string(static_cast<unsigned long long>(value))+")";
-}
-void savePNG(const std::string &file,const void *bytes,unsigned w,unsigned h,bool bgra,bool flip,unsigned stride) {
-    NSBitmapImageRep *image=[[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nullptr pixelsWide:w pixelsHigh:h bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:w*4 bitsPerPixel:32];
-    if(!image||!image.bitmapData)throw std::runtime_error("Cannot allocate the frame capture image");
-    const auto *src=static_cast<const unsigned char*>(bytes); auto *dst=image.bitmapData;
-    for(unsigned y=0;y<h;++y) for(unsigned x=0;x<w;++x) {
-        const auto *p=src+(flip?h-1-y:y)*stride+x*4; auto *q=dst+(y*w+x)*4;
-        q[0]=p[bgra?2:0]; q[1]=p[1]; q[2]=p[bgra?0:2]; q[3]=255;
-    }
-    if(![[image representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:@(file.c_str()) atomically:YES])
-        throw std::runtime_error("Cannot write frame capture: "+file);
 }
 MTLPixelFormat format(reshadefx::texture_format value) {
     using F=reshadefx::texture_format;
@@ -1733,7 +1723,7 @@ void installMetalDeviceHooks(id<MTLDevice> device) {
     log("Metal presentation hooks installed: "+std::string(object_getClassName(buffer))+" device="+device.name.UTF8String);
 }
 }
-void macfx::writeCapturedFrame(const std::string &file,const void *bytes,unsigned width,unsigned height,bool bgra,bool flip,unsigned stride){savePNG(file,bytes,width,height,bgra,flip,stride);}
+void macfx::writeCapturedFrame(const std::string &file,const void *bytes,unsigned width,unsigned height,bool bgra,bool flip,unsigned stride){writeCaptureFile(file,bytes,width,height,bgra,flip,stride);}
 __attribute__((constructor)) static void loadMetal() { @autoreleasepool {
     if(explicitHost()) return;
     macfx::DiagnosticScope diagnostics(macfx::DiagnosticStage::Hooks,1);

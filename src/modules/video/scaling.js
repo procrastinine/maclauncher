@@ -31,9 +31,11 @@ function legacyGraphics(graphics) {
   if (!filterName(graphics?.spatialMethod)) return graphics;
   return { ...graphics, spatialMethod: "off", ...(graphics.spatialShader ? {} : { spatialMultiplier: null }) };
 }
+// Decoded video is an image-only frame source: it never supplies renderer
+// depth, motion or camera, so methods that need them are not offered.
 function inputs(filters) {
   const names = [...new Set(filters)], methods = [...STANDARD.filter(name => names.includes(name)), ...names.filter(name => !STANDARD.includes(name)).map(name => "libplacebo:" + name)];
-  return { source: "mpv-video", nativeVideo: true, presentationHold: true, shaderBindingsNextLaunch: false, spatialBindingsNextLaunch: false,
+  return { source: "mpv-video", imageOnly: true, sourceLabel: "Video playback", nativeVideo: true, presentationHold: true, shaderBindingsNextLaunch: false, spatialBindingsNextLaunch: false,
     sourceResolution: false, nativeSpatialMethods: methods, nativeSpatialMethodLabels: Object.fromEntries(methods.filter(method => method.startsWith("libplacebo:"))
       .map(method => [method, method === DEFAULT_METHOD ? "Lanczos · Sharp" : method.slice(11).replace(/_/g, " ")])), cameraProjection: false, methods: [] };
 }

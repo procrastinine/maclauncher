@@ -5,10 +5,11 @@ const { execFile, execFileSync } = require('node:child_process');
 const { promisify } = require('node:util');
 const { readAppBundleVersion } = require('../../shared/runtime/app-bundle');
 const Native = require('../../shared/runtime/local-native');
+const Host = require('../../shared/runtime/host-capabilities');
 const MachO = require('../../shared/runtime/macho-load-commands');
 const { versionAtLeast } = require('../../shared/runtime/bundled-native');
 const { throwIfAborted } = require('../../shared/runtime/download-utils');
-const { prepareClones } = require('../../shared/runtime/clone-file');
+const { cloneOrCopy } = require('../../shared/copy-file');
 const execute = promisify(execFile);
 const POLICY = 'ad-hoc-no-hardened-runtime-v1';
 const order = (a,b) => a < b ? -1 : a > b ? 1 : 0;
@@ -59,16 +60,42 @@ function signatureFlags(stderr) {
   return '0x' + match[1];
 }
 
+function commonArchitectures(natives) {
+  const primary = natives.find(image => image.path === 'Contents/MacOS/scummvm');
+  if (!primary) throw new Error('The selected ScummVM executable is missing.');
+  return primary.architectures.filter(cpu => natives.every(image => image.architectures.includes(cpu)));
+}
+
+function launchRequirements(install, host = Host.getHostCapabilities()) {
+  const app = appRoot(install.executablePath);
+  // Re-read the closure, including installations recorded before closure CPUs
+  // were retained. Primary-executable metadata alone cannot describe companions.
+  const natives = app ? inventory(app,{hashFiles:false,inspectNative:true}).natives
+    : [{path:'Contents/MacOS/scummvm',architectures:Native.readMachOArchitectures(install.executablePath)}];
+  const primary = natives.find(image => image.path === 'Contents/MacOS/scummvm');
+  const supported = commonArchitectures(natives).filter(cpu => Host.architectureSupport(cpu,host).supported);
+  const parent = process.arch === 'x64' ? 'x86_64' : process.arch;
+  // A Universal direct child follows the parent CPU. Thin children select their
+  // only slice. The generic checked launcher can explicitly force Intel only.
+  const direct = primary.architectures.includes(parent) ? parent : primary.architectures.length === 1 ? primary.architectures[0] : null;
+  const cpu = supported.includes(direct) ? direct : supported.includes('x86_64') ? 'x86_64' : null;
+  if (!cpu) throw new Error('The ScummVM native components do not support the child process architecture.');
+  return {architecture:cpu === 'x86_64' ? 'x64' : cpu,
+    needsRosetta:require('../../shared/runtime/architecture').requiresRosetta(cpu,host)};
+}
+
 async function prepareInstall({ unpacked, pin, signal }, { run = execute } = {}) {
   throwIfAborted(signal);
   const app = path.join(unpacked,'ScummVM.app');
   // The app's own version is recorded; a build that names itself differently
   // from the release list still installs.
   const appVersion = readAppBundleVersion(app) || pin.version;
-  const before = inventory(app,{inspectNative:true}), arch = process.arch === 'x64' ? 'x86_64' : process.arch;
+  const before = inventory(app,{inspectNative:true}), host = Host.getHostCapabilities();
+  const architectures = commonArchitectures(before.natives);
+  const supported = architectures.some(cpu => Host.architectureSupport(cpu,host).supported);
   let minimumMacOS = '0.0';
   for (const image of before.natives) {
-    if (!image.architectures.includes(arch) || image.slices.some(slice => slice.platform !== 1 || !slice.minimumMacOS))
+    if (!supported || image.slices.some(slice => slice.platform !== 1 || !slice.minimumMacOS))
       throw new Error('A ScummVM component does not support this Mac architecture or platform.');
     for (const slice of image.slices) if (versionAtLeast(slice.minimumMacOS,minimumMacOS)) minimumMacOS = slice.minimumMacOS;
   }
@@ -103,7 +130,7 @@ async function prepareInstall({ unpacked, pin, signal }, { run = execute } = {})
   if (after.files.some(file=>!originalPaths.has(file.path) && !file.path.includes('/_CodeSignature/')))
     throw new Error('ScummVM signing added a non-signature file.');
   throwIfAborted(signal);
-  return { appVersion, architectures:before.natives.find(image=>image.path==='Contents/MacOS/scummvm').architectures,
+  return { appVersion, architectures,
     minimumMacOS, publisherTreeSha256:before.sha256, signedTreeSha256:after.sha256,
     signing:{policy:POLICY,identity:'-',hardenedRuntime:false,nativeFiles} };
 }
@@ -145,7 +172,7 @@ async function repairLegacyInstallation(install, { signal, pin: selectedPin, pre
       else throw new Error('ScummVM contains an unsupported file.');
     }
     copyLayout(app,candidate);
-    await prepareClones(clones,signal);
+    for (const [input,output] of clones) await cloneOrCopy(input,output,{signal,exclusive:true});
     const metadata = await prepare({unpacked:stage,pin,signal});
     throwIfAborted(signal);
     if (digest(fs.readFileSync(recordPath)) !== recordHash || inventory(app,{hashFiles:false}).identity !== original.identity)
@@ -201,4 +228,4 @@ function createVerifier() {
     return install;
   };
 }
-module.exports = { POLICY, appRoot, inventory, prepareInstall, repairLegacyInstallation, createVerifier };
+module.exports = { POLICY, appRoot, inventory, launchRequirements, prepareInstall, repairLegacyInstallation, createVerifier };

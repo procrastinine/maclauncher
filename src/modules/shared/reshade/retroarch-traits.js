@@ -1,6 +1,7 @@
 // Descriptive preset sizing only. The original librashader parser/compiler
 // remains responsible for executable syntax, resources, history and feedback.
 const fs=require("node:fs"),path=require("node:path");
+const {hasFineChangeTime}=require("../file-time");
 const programCache=new Map(),stamp=stat=>[stat.dev,stat.ino,stat.size,stat.mtimeMs,stat.ctimeMs].join(":");
 const base={category:"effects",neural:false,rgbCompatible:true,inputPlanes:["rgb"],preservesCoordinates:false};
 const unknown=()=>({...base,geometryKnown:false,unresolvedGeometry:true,outputExtentEditable:true});
@@ -61,7 +62,7 @@ function analyze(file,text,format){
   function program(candidate){
     const {target,stat}=dependency(candidate);if(programs.has(target))return;programs.add(target);
     let facts=programCache.get(target);const identity=stamp(stat);
-    if(facts?.identity!==identity){
+    if(!hasFineChangeTime(stat)||facts?.identity!==identity){
       const source=fs.readFileSync(target,"utf8");facts={identity,annotations:source.split(/\r?\n/).filter(line=>/^\s*\/\/!?\s*(?:@OUTPUT_RESIZE|INPUT_POLICY|SCENE_INPUT|SCENE_HISTORY|SCENE_COORDINATES)\b/.test(line)).join("\n"),
         includes:[...source.matchAll(/^\s*#\s*include\s*"([^"\r\n]+)"/gm)].map(match=>match[1])};
       if(programCache.size>=4096)programCache.delete(programCache.keys().next().value);programCache.set(target,facts);

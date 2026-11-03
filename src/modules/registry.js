@@ -60,8 +60,23 @@ function loadModules() {
     const mainPath = path.join(dir, "main.js");
     if (!fs.existsSync(manifestPath) || !fs.existsSync(mainPath)) continue;
     try {
-      const mod = require(mainPath);
-      if (mod && mod.id) {
+      const current = require(mainPath);
+      if (current && current.id) {
+        const mod = { ...current };
+        const backcompatPath = path.join(dir, "backcompat", "index.js");
+        let backcompat;
+        const migrationPart = () => {
+          if (backcompat !== undefined) return backcompat;
+          try {
+            return backcompat = require(backcompatPath);
+          } catch (error) {
+            if (error.code === "MODULE_NOT_FOUND" && error.message.split("\n")[0] === `Cannot find module '${backcompatPath}'`) return backcompat = null;
+            throw error;
+          }
+        };
+        // Parts load only for the once-only runner, never normal import or Play.
+        mod.legacyGameMirrors = (entry, context) => migrationPart()?.legacyGameMirrors?.(entry, context) || [];
+        mod.migrateLegacyGameData = (entry, context) => migrationPart()?.migrateLegacyGameData?.(entry, context) || null;
         mod.__moduleDir = dir;
         modules.push(mod);
       }
@@ -180,6 +195,31 @@ function listGraphicsComputeHosts(){
   return moduleList.flatMap(module=>(module.graphicsComputeHosts||[]).map(host=>({...host,moduleId:module.id})));
 }
 
+// A module directory or shared namespace declares the derived data it owns in
+// an optional derived-stores.js, an array of store declarations applied by
+// core/storage-maintenance.js. Loaded only when storage upkeep asks.
+let derivedStores = null;
+function listDerivedStores() {
+  if (!derivedStores) {
+    derivedStores = [];
+    const owners = [...MODULES.map(mod => ({ id: mod.id, dir: mod.__moduleDir })),
+      ...SHARED_SUBMODULES.map(sub => ({ id: `${SHARED_DIR_NAME}/${sub.id}`, dir: sub.dir }))];
+    for (const owner of owners) {
+      const file = path.join(owner.dir, "derived-stores.js");
+      if (!fs.existsSync(file)) continue;
+      try {
+        const declared = require(file);
+        for (const store of Array.isArray(declared) ? declared : []) {
+          if (store && typeof store.id === "string") derivedStores.push({ ...store, owner: owner.id });
+        }
+      } catch {
+        // A failing declaration only leaves its owner's stores unmaintained.
+      }
+    }
+  }
+  return derivedStores.slice();
+}
+
 function listSupportedModules() {
   return moduleList.map(mod => mod.manifest?.label || mod.id);
 }
@@ -220,6 +260,10 @@ function getModule(id) {
   return moduleIndex.get(id) || null;
 }
 
+function listRuntimeProviderModules() {
+  return moduleList.filter(mod => mod.runtimeProvider || mod.runtimeProviders?.length);
+}
+
 function getModuleInfo(id) {
   const mod = getModule(id);
   if (mod?.manifest) return mod.manifest;
@@ -253,10 +297,12 @@ module.exports = {
   getModuleDir,
   getModuleInfo,
   getRuntimeManagerUi,
+  listDerivedStores,
   listModuleIds,
   listModules,
   listSharedSubmodules,
   listSharedRuntimeManagers,
+  listRuntimeProviderModules,
   listGraphicsComputeHosts,
   listSupportedInputExtensions,
   listSupportedModules,

@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopy } = require("../modules/shared/copy-file");
 const path = require("node:path");
 const os = require("node:os");
 const crypto = require("node:crypto");
@@ -218,16 +219,27 @@ async function copyDepot(source, destination, signal) {
   if (!fs.lstatSync(source).isDirectory()) throw publicError("Steam did not create the selected depot folder.");
   const root = fs.realpathSync(source);
   if (!fs.lstatSync(root).isDirectory()) throw publicError("Steam did not create the selected depot folder.");
-  await fs.promises.cp(root, destination, { recursive: true, force: true, dereference: false, verbatimSymlinks: true,
-    filter: async file => {
-      signal.throwIfAborted();
-      const stat = await fs.promises.lstat(file);
-      if (stat.isSymbolicLink()) {
-        const target = await fs.promises.readlink(file);
-        if (path.isAbsolute(target) || /^[a-z]:/i.test(target) || !inside(root, path.resolve(path.dirname(file), target))) throw publicError("Steam supplied an unsafe symbolic link.");
-      } else if (!stat.isFile() && !stat.isDirectory()) throw publicError("Steam supplied an unsupported file type.");
-      return true;
-    } });
+  // Each entry is checked as it is copied, and files are cloned. Depots merge
+  // into one destination, replacing files an earlier depot supplied.
+  const copy = async (file, target) => {
+    signal.throwIfAborted();
+    const stat = await fs.promises.lstat(file), existing = await fs.promises.lstat(target).catch(() => null);
+    if (stat.isSymbolicLink()) {
+      const link = await fs.promises.readlink(file);
+      if (path.isAbsolute(link) || /^[a-z]:/i.test(link) || !inside(root, path.resolve(path.dirname(file), link))) throw publicError("Steam supplied an unsafe symbolic link.");
+      if (existing) await fs.promises.rm(target, { recursive: true, force: true });
+      await fs.promises.symlink(link, target);
+    } else if (stat.isDirectory()) {
+      const created = !existing?.isDirectory();
+      if (existing && created) await fs.promises.rm(target, { force: true });
+      if (created) await fs.promises.mkdir(target);
+      for (const name of await fs.promises.readdir(file)) await copy(path.join(file, name), path.join(target, name));
+      if (created) await fs.promises.chmod(target, stat.mode & 0o7777);
+    } else if (stat.isFile()) await cloneOrCopy(file, target, { signal });
+    else throw publicError("Steam supplied an unsupported file type.");
+  };
+  await fs.promises.mkdir(path.dirname(destination), { recursive: true });
+  await copy(root, destination);
 }
 
 function createSteamClientSession(options = {}) {

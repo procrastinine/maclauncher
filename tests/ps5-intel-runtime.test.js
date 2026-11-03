@@ -85,8 +85,9 @@ test('PS5 launch uses shared physical-host translation policy and keeps Intel Vu
     let prompts = 0;
     for (const runtimeId of ['anyps5', 'prosper']) {
       assert.equal(canLaunchEntry({mod: composed, info: composed.manifest, entry, runtimeId, context: {arch: hardwareArch}}), true);
-      await composed.launchRuntime(runtimeId, entry, {runtimeId, settings: {}, runtimeSettings: {}, ensureRosetta: async () => {prompts++;}});
+      await composed.launchRuntime(runtimeId, entry, {runtimeId, userDataDir: root, settings: {}, runtimeSettings: {}, ensureRosetta: async () => {prompts++;}});
       assert.equal(launched.at(-1).needsRosetta, hardwareArch === 'arm64');
+      if(runtimeId==='anyps5')assert.equal(launched.at(-1).options.cwd,root);
       assert.equal(options.at(-1).architecture, 'x64');
     }
     assert.equal(prompts, hardwareArch === 'arm64' ? 2 : 0);

@@ -31,6 +31,8 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
+      - name: Check source-only payloads
+        run: node --test tests/source-binaries.test.js
       - name: Detect a version increment on the default branch
         id: version
         run: node scripts/release.cjs plan
@@ -80,6 +82,8 @@ jobs:
         run: node scripts/ci-macos.cjs configure
       - name: Fetch included packages and the embedded Python for this architecture
         run: node scripts/ci-macos.cjs fetch
+      - name: Prepare pinned Unicode CP932 data
+        run: node src/modules/catsystem2/runtime/stage-cp932.cjs
       - name: Build MacLauncher.app
         run: pnpm run package:mac -- --dir "--$MACLAUNCHER_NATIVE_PAYLOAD_ARCH" --runtime-maximum-macos "$MACLAUNCHER_NATIVE_MAXIMUM_MACOS" --runtime-inventory dist/ci/native-payload-inventory.json
       - name: Verify and archive MacLauncher.app

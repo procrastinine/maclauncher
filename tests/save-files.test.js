@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const ChildProcess = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -27,8 +28,23 @@ test("save replacement backs up original bytes and preserves MZ's on-disk string
 test("failed backup aborts save replacement and cleans temporary data", t => {
   const file = fixture(t);
   fs.writeFileSync(file, "original");
-  t.mock.method(fs, "copyFileSync", () => { throw new Error("Backup failed"); });
-  assert.throws(() => writeSaveWithBackup(file, "new"), /Backup failed/);
+  const failure = new Error("Backup failed");
+  let copies = 0;
+  const partialCopy = (source, destination) => {
+    assert.equal(source, file);
+    copies++;
+    fs.writeFileSync(destination, "partial copy");
+    return failure;
+  };
+  t.mock.method(fs, "copyFileSync", (source, destination) => { throw partialCopy(source, destination); });
+  // Darwin preserves metadata through cp; other platforms use Node's copy.
+  const spawnSync = ChildProcess.spawnSync;
+  t.mock.method(ChildProcess, "spawnSync", (command, args, options) =>
+    command === "/bin/cp" && args[0] === "-p"
+      ? { error: partialCopy(args[1], args[2]) }
+      : spawnSync(command, args, options));
+  assert.throws(() => writeSaveWithBackup(file, "new"), error => error === failure && /Backup failed/.test(error.message));
+  assert.equal(copies, 1);
   assert.equal(fs.readFileSync(file, "utf8"), "original");
   assert.deepEqual(fs.readdirSync(path.dirname(file)), [path.basename(file)]);
 });

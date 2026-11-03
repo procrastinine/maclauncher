@@ -18,6 +18,8 @@ function restoreCopiedNativePayload({ sourceRoot, resourceRoot, architectures = 
   function add(name, record) {
     const relative = B.relativeFile(name);
     if (expected.has(relative)) throw new Error('Overlapping native copy inventories.');
+    const original=path.join(source,relative);
+    if(fs.existsSync(original)&&fs.lstatSync(original).isSymbolicLink())record={...record,aliasTarget:fs.readlinkSync(original)};
     expected.set(relative, record);
     for (let directory = path.posix.dirname(relative); directory !== '.'; directory = path.posix.dirname(directory)) directories.add(directory);
   }
@@ -45,6 +47,18 @@ function restoreCopiedNativePayload({ sourceRoot, resourceRoot, architectures = 
   }
   for (const arch of architectures) S.verifySupplementals({ resourceRoot: source, arch, maximumMacOS,
     items: preferredIncludedBuilds(supplementals, arch), dependencies });
+  const lockFile=path.join(path.dirname(source),'runtime-packages.json');
+  if(fs.existsSync(lockFile)){
+    const Lock=require('./runtime-packages.cjs'),lock=JSON.parse(B.readRegular(lockFile,B.LIMITS.manifestBytes).bytes);
+    const records=[...new Map(architectures.flatMap(arch=>Lock.selectArchitecture(lock,arch).packages).map(record=>[record.asset.sha256,record])).values()];
+    const context=require('../src/modules/shared/runtime/included-package-dependencies').context(path.dirname(source),{lock:{...lock,packages:records}});
+    for(const record of records){
+      const selected=context.visit(record),logical=require('../src/modules/shared/runtime/package-contract.cjs').logicalFiles(selected.declaration,selected.resolveDependency);
+      for(const file of logical){const name=selected.declaration.directoryRelative+'/'+file.path;if(!expected.has(name))add(name,file);}
+      const name='.declarations/'+record.asset.sha256+'.json',stored=B.readRegular(path.join(source,name),B.LIMITS.manifestBytes);
+      if(!expected.has(name))add(name,{size:stored.size,mode:stored.mode,sha256:stored.sha256});
+    }
+  }
   if (!expected.size) throw new Error('There are no sealed native files to copy.');
   function inspect(root, allowMissing) {
     const seen = new Set();
@@ -53,8 +67,10 @@ function restoreCopiedNativePayload({ sourceRoot, resourceRoot, architectures = 
       for (const item of fs.readdirSync(directory, { withFileTypes: true })) {
         const name = relative ? `${relative}/${item.name}` : item.name;
         if (item.isDirectory() && directories.has(name)) walk(name);
-        else if (item.isFile() && expected.has(name)) {
-          const sealed = expected.get(name), actual = B.readRegular(path.join(root, name), sealed.size);
+        else if ((item.isFile() || item.isSymbolicLink()) && expected.has(name)) {
+          const sealed=expected.get(name),full=path.join(root,name);
+          if(item.isSymbolicLink()&&(!sealed.aliasTarget||fs.readlinkSync(full)!==sealed.aliasTarget))throw new Error('Native copy alias differs from its sealed source.');
+          const actual=B.readRegular(item.isSymbolicLink()?fs.realpathSync(full):full,sealed.size);
           if (actual.size !== sealed.size || actual.sha256 !== sealed.sha256 || !allowMissing && actual.mode !== sealed.mode) throw new Error('Native copy bytes or source permissions differ from their sealed inventory.');
           seen.add(name);
         } else throw new Error('Native copy contains a path outside its sealed inventory.');
@@ -72,12 +88,13 @@ function restoreCopiedNativePayload({ sourceRoot, resourceRoot, architectures = 
   for (const [relative, sealed] of expected) {
     const target = path.join(destination, relative);
     if (!fs.existsSync(target)) {
-      const original = B.readRegular(path.join(source, relative), sealed.size);
+      const original = B.readRegular(fs.realpathSync(path.join(source, relative)), sealed.size);
       if (original.size !== sealed.size || original.sha256 !== sealed.sha256) throw new Error('Native source changed during copy restoration.');
       B.realDirectory(path.dirname(target), { create: true });
-      fs.writeFileSync(target, original.bytes, { flag: 'wx', mode: sealed.mode });
-      fs.chmodSync(target, sealed.mode); restoredFiles++;
-    } else if ((fs.lstatSync(target).mode & 0o777) !== sealed.mode) {
+      if(sealed.aliasTarget)fs.symlinkSync(sealed.aliasTarget,target);
+      else{fs.writeFileSync(target, original.bytes, { flag: 'wx', mode: sealed.mode });fs.chmodSync(target, sealed.mode);}
+      restoredFiles++;
+    } else if (!fs.lstatSync(target).isSymbolicLink() && (fs.lstatSync(target).mode & 0o777) !== sealed.mode) {
       fs.chmodSync(target, sealed.mode); restoredModes++;
     }
   }

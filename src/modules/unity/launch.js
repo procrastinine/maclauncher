@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../shared/copy-file");
 const path = require("node:path");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
@@ -68,7 +69,7 @@ async function prepareLaunch(entry, context, selection, { run = exec, steam = nu
       if (item.name === "MacOS" && item.isDirectory()) {
         fs.mkdirSync(to);
         for (const native of fs.readdirSync(from, { withFileTypes: true })) {
-          if (native.name === "UnityPlayer") fs.copyFileSync(path.join(from, native.name), path.join(to, native.name), fs.constants.COPYFILE_FICLONE);
+          if (native.name === "UnityPlayer") cloneOrCopySync(path.join(from, native.name), path.join(to, native.name));
           else linkFile(path.join(from, native.name), path.join(to, native.name));
         }
       } else if (item.name === "Resources" && item.isDirectory()) {
@@ -92,7 +93,7 @@ async function prepareLaunch(entry, context, selection, { run = exec, steam = nu
           if (assembly.name !== "etc" && (assembly.isFile() || assembly.isDirectory())) linkFile(path.join(from, assembly.name), path.join(to, assembly.name));
         }
         linkFile(path.join(sourceContents, "Data", "Managed", "etc"), path.join(to, "etc"));
-      } else if (item.isFile() && /^(?:boot\.config|app\.info)$/i.test(item.name)) fs.copyFileSync(from, to);
+      } else if (item.isFile() && /^(?:boot\.config|app\.info)$/i.test(item.name)) cloneOrCopySync(from, to);
       else if (item.isFile() || item.isDirectory()) linkFile(from, to);
     }
     Steam.stagePlugins(contents, data, sourceContents, steam);

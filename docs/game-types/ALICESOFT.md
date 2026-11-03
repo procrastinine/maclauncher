@@ -37,9 +37,9 @@ The detected family limits runtime selection to the matching interpreter: `syste
 
 ## Saves
 
-New saves go to `userData/games/<gameId>/modules/alicesoft/saves/`, and the inspector shows this location before the first launch. A per-game save-folder override is honored by the native runtime, so save browsing and snapshots use the same active folder. Files in the original game folder are left alone unless that folder is chosen as the override.
+Ordinary Play uses the original game folder as its working directory and leaves the default save location to the native interpreter. System 1–3 and System 3.5–3.9 use their original relative save paths and game configuration. System 4 uses its native home directory: `XSYSTEM4_HOME`, `XDG_DATA_HOME/xsystem4`, or `HOME/.xsystem4`, followed by the game's name and configured save folder. Native configuration can change these locations.
 
-Existing portable saves are not migrated automatically; they must be imported into the chosen save folder. Removing a game deletes its per-game launcher data, including the default saves, but keeps runtime registrations and saves in an external override folder. There is no general save editor for AliceSoft games; [live variables](#live-variables) edit a running System 3.5–3.9 game instead.
+A per-game save-folder override passes that explicit absolute folder to the interpreter. Save browsing and snapshots use the native default or the effective configured folder, including authored INI settings, home-directory configuration and save-folder arguments. When the configuration is ambiguous or unsupported, the save location stays unknown to these tools, and the native launch is unchanged. Removing launcher data leaves ordinary native saves in their original locations. There is no general save editor for AliceSoft games; [live variables](#live-variables) edit a running System 3.5–3.9 game instead.
 
 ## Settings
 
@@ -64,6 +64,8 @@ Each interpreter has its own settings.
 Opening the editor starts a stopped game with the selected package's debugger, or pauses the debugger session that is already running. A game started through ordinary Play must be stopped before the live tools can open. Closing the editor resumes the game, and Stop in the inspector ends the game process with a native debugger disconnect. After the game exits, status queries still report its final result, and closing the editor of an ended game does no harm. Edits and the other controls work only on the exact session that is still active.
 
 The editor works with xsystem35 packages that declare the `dap-terminal-nul-v1` debug adapter. The Node modules `dap.js` and `live-variables.js` provide browsing of variables and strings while paused, strict value validation, confirmed writes, and Pause and Continue. Ordinary Play never enables the debugger. The private debugger folder holds only generated variable-symbol metadata and links to the original files. Scenario archives are never changed, and changes the debugger makes to instructions exist only in memory. The same backend actions are available to hosts without a user interface.
+
+Live-variable sessions use the explicit save-folder override when present, otherwise `userData/games/<gameId>/modules/alicesoft/saves/`. Only the live-variable tool uses this folder; ordinary Play keeps the native save location.
 
 ## Source export
 

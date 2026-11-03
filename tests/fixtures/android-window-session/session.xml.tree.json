@@ -1,0 +1,65 @@
+{
+  "resourceIds": {
+    "theme": 16842752,
+    "name": 16842755,
+    "exported": 16842768,
+    "authorities": 16842776,
+    "minSdkVersion": 16843276,
+    "versionCode": 16843291,
+    "versionName": 16843292,
+    "targetSdkVersion": 16843376,
+    "compileSdkVersion": 16844146,
+    "compileSdkVersionCodename": 16844147
+  },
+  "tree": {
+    "name": "manifest",
+    "attrs": {
+      "versionCode": 1,
+      "versionName": "1",
+      "compileSdkVersion": 36,
+      "compileSdkVersionCodename": "16",
+      ":package": "owned.session.fixture",
+      ":platformBuildVersionCode": 36,
+      ":platformBuildVersionName": 16
+    },
+    "children": [
+      {
+        "name": "uses-sdk",
+        "attrs": {
+          "minSdkVersion": 21,
+          "targetSdkVersion": 36
+        },
+        "children": []
+      },
+      {
+        "name": "application",
+        "attrs": {
+          "theme": {
+            "type": 1,
+            "data": 16974401
+          },
+          "name": "maclauncher.android.SessionHostProbe$App"
+        },
+        "children": [
+          {
+            "name": "activity",
+            "attrs": {
+              "name": "maclauncher.android.SessionHostProbe$Screen",
+              "exported": false
+            },
+            "children": []
+          },
+          {
+            "name": "provider",
+            "attrs": {
+              "name": "maclauncher.android.SessionHostProbe$Provider",
+              "exported": false,
+              "authorities": "owned.provider"
+            },
+            "children": []
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../../shared/copy-file");
 const path = require("node:path");
 const { createPinnedNativeManager, hashFile } = require("../../shared/runtime/pinned-native-manager");
 const Upstream = require("../../shared/runtime/upstream");
@@ -37,13 +38,13 @@ const upstream = Upstream.github({ repository: "openkakutou/sff", recognize });
 function createManager(dependencies = {}) {
   const core = createPinnedNativeManager({ id: "sff-tools", label: "SFF Tools", supportsDefault: true, upstream,
     sourceUrl: SOURCE, resolveExecutable: root => path.join(root, "sff.wasm"), inspectRuntime,
-    dependencies: { ...dependencies, extractArchive: async (archive, root) => fs.copyFileSync(archive, path.join(root, "sff.wasm")) },
+    dependencies: { ...dependencies, extractArchive: async (archive, root) => cloneOrCopySync(archive, path.join(root, "sff.wasm")) },
     prepareInstall: async ({ unpacked, pin, signal, onProgress }) => {
       const listed = pin.glue && Upstream.listedFile(pin.glue);
       if (!listed) throw new Error("Refresh SFF Tools versions to obtain its matching runtime glue.");
       const file = path.join(unpacked, "wasm_exec.js"), fetched = await upstream.download(listed, file, { signal, onProgress });
       const runtimeGlue = { ...pin.glue, filename: "wasm_exec.js", bytes: fetched.bytes, sha256: fetched.sha256 };
-      for (const name of ["sff-MIT.txt", "Go-BSD.txt"]) fs.copyFileSync(path.join(__dirname, "licenses", name), path.join(unpacked, name));
+      for (const name of ["sff-MIT.txt", "Go-BSD.txt"]) cloneOrCopySync(path.join(__dirname, "licenses", name), path.join(unpacked, name));
       return { runtimeGlue, sourceRevision: pin.upstreamRevision, licenses: ["sff-MIT.txt", "Go-BSD.txt"] };
     } });
   function verifyInstall(install) {

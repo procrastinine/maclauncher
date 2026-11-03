@@ -38,6 +38,7 @@ public final class MacLauncherSteamAgent {
         final String required = properties.getProperty("version");
         final String helper = properties.getProperty("helper");
         final String jni = properties.getProperty("jni");
+        // JNI must match the running JVM's CPU, independently of the physical Mac.
         String cpu = System.getProperty("os.arch");
         String actualCpu = (cpu.equals("aarch64") || cpu.equals("arm64")) ? "arm64"
             : (cpu.equals("amd64") || cpu.equals("x86_64")) ? "x64" : "unknown";

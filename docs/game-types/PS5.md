@@ -37,9 +37,9 @@ AnyPS5 versions are supplied by MacLauncher Builds, whose catalog **Refresh** re
 
 #### Preparation and saves
 
-Preparation copies the game resources into the game's private launcher data and keeps the original `eboot.bin`. It converts the original PS5 programs and nested modules; converted outputs already present in the input stay separate from those programs. The conversion is cached by game input and runtime version, and edits to the private resources and saves survive conversion updates.
+AnyPS5 supplies a PS5 runtime rather than a native macOS game engine. Preparation builds the per-game runtime container that it needs: game resources are copied into its `app0/` folder, and PS5 executables and nested modules are converted into Mach-O files. Original programs stay unchanged. The conversion is cached by game input and runtime version, and changes to private resources are preserved during conversion updates. Shared runtime libraries are linked rather than copied.
 
-The save-location setting redirects `/data` and the `_sd` save-data tree into the chosen save folder, while other runtime files stay in the game's launcher data.
+The container is the runtime's working directory. Its `/data` path uses the game's private save directory and `_sd` uses a subfolder there. An explicit save-location setting redirects both paths into the chosen save folder. Save-data memory stays in the per-game container's `launch/_sd_mem/`, keyed by user and slot, separate from the original game files.
 
 #### Vulkan
 
@@ -92,9 +92,10 @@ Prosper packages come from MacLauncher Builds. Its shared Runtime build compiles
 
 When Prosper is missing, Play asks for download consent, installs a compatible package and continues preparation. Saved runtime choices are preserved, and installed packages remain usable offline. The Runtimes view also accepts a local Prosper executable, app bundle or complete runtime directory. Packaged builds record their exact source revision in the runtime manifest. Launching an already built runtime needs no compiler or SDK. MacLauncher Builds' [verification guide](https://github.com/procrastinine/maclauncher-builds/blob/main/VERIFYING.md) describes the GitHub build records and rebuild comparison.
 
-Play prepares the original PS5 executable, modules, metadata and assets in the game's private Prosper directory and leaves any AnyPS5 preparation unchanged. Prosper saves have their own per-game storage, inside which the runtime keeps a separate namespace for each title. The save-location override remains available.
+Prosper opens an ordinary dump and its selected executable directly from the original game folder, which is also its working directory. A prepared AnyPS5 input with separate program and asset folders requires a merged Prosper input; a SELF file with a different name requires the runtime's `eboot.bin` alias. AnyPS5 preparation stays unchanged. Saves use Prosper's upstream per-user locations under `$XDG_DATA_HOME/prosper`, or `$HOME/.local/share/prosper`: `savedata0` and `savedata-mem`, each with a namespace from the game's declared `PPSA` title ID. Missing or invalid title IDs use upstream's `_unknown-title` namespace. Save-location overrides select separate roots for both save APIs. When games in the library share a save location, import can assign an ordinary save-location override; explicit choices stay unchanged.
 
-Prosper has two settings, with defaults in Settings and overrides in each game's runtime settings:
+Prosper has three settings, with defaults in Settings and overrides in each game's runtime settings:
 
 - **Vulkan** lists installed implementations. Automatic prefers KosmicKrisp.
 - **Frame rate** turns on the runtime's frame-rate display.
+- **Configuration file** selects an explicit Prosper configuration file through upstream's `PROSPER_APP_CONFIG` input. With no override, Prosper uses its ordinary shared player preferences under `$XDG_CONFIG_HOME/prosper` or `$HOME/.config/prosper`. A private configuration from MacLauncher 0.5.1 can be recovered once into a separate file, whose path is kept as an ordinary per-game setting.

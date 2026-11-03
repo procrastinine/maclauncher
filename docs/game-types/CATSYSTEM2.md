@@ -31,7 +31,7 @@ Encrypted KIF archives are read with the MacLauncher KIF cipher helper 1.0.0, a 
 
 - The reader supports the published KIF layout with 64-byte names, the 1999 Mersenne Twister seed recurrence, Beaufort-encoded names and little-endian Blowfish blocks. The final incomplete block of an encrypted member stays plaintext.
 - CatScene tables and zlib lengths are checked. CSTL files need their zero reserved header and valid UTF-8 language records.
-- Text is decoded with the included `cp932-2.01-eudc-ml1` mapping, independent of Node's ICU version. FES text is decoded as strict CP932 by default; when CP932 rejects the bytes, the reader falls back to strict UTF-8 and records which encoding it used.
+- Text is decoded with the included `cp932-2.01-eudc-ml1` mapping, independent of Node's ICU version. App builds, checkout setup and local packaging generate this table with one preparation step, from public Unicode mapping text with a recorded checksum. FES text is decoded as strict CP932 by default; when CP932 rejects the bytes, the reader falls back to strict UTF-8 and records which encoding it used.
 - Unknown key resources and archive variants fail with a specific format error.
 - Index reading, decompression and exports have overall byte and count limits, and an operation stops if a source file changes while it runs.
 
@@ -41,7 +41,7 @@ The included HG-3 image reader supports lossless 24-bit and 32-bit frames within
 
 ### Archive and script tools
 
-Archive and script tools, the default runtime, provides detection, the engine version and the inspector tools but cannot launch the game. [FelineSystem2](https://github.com/kokseen1/FelineSystem2) is used only as a reference. MacLauncher neither runs nor distributes it, because it does not play CatSystem2 games.
+Archive and script tools, the default runtime, provides detection, the engine version and the inspector tools but cannot launch the game. [FelineSystem2](https://github.com/kokseen1/FelineSystem2) does not play CatSystem2 games, so MacLauncher uses it only as a reference and neither runs nor distributes it.
 
 ### CrossOver and Sikarugir (Wine)
 

@@ -44,7 +44,7 @@ test('UnRen uses the declared extraResources root or the exact development sourc
   assert.equal(command.env.PYTHONPATH.split(path.delimiter)[0], path.join(sourceDirectory, 'resources'));
 });
 
-test('walkthrough uses its declared app route and Mod keeps its packaged launcher-source route', t => {
+test('walkthrough uses its declared app route and Mod uses its remembered user-supplied file', async t => {
   const root = fixture(t), resources = path.join(root, 'Resources');
   const moduleDirectory = path.join(resources, 'app.asar', 'src/modules/renpy');
   const sourceResources = path.join(moduleDirectory, 'resources');
@@ -55,7 +55,8 @@ test('walkthrough uses its declared app route and Mod keeps its packaged launche
   fs.mkdirSync(path.join(moduleDirectory, 'overlays'), { recursive: true });
   const updater = fs.readFileSync(path.join(sourceDirectory, 'overlays/urw_updater.rpy'));
   fs.writeFileSync(path.join(moduleDirectory, 'overlays/urw_updater.rpy'), updater);
-  fs.writeFileSync(path.join(sourceResources, '0x52_URM.rpa'), 'exact packaged Mod');
+  const mod = path.join(root, 'selected-mod.rpa'); fs.writeFileSync(mod, 'exact supplied Mod');
+  t.mock.method(require('../src/modules/renpy/urm-file'), 'resolve', async () => mod);
   const renpy = load('main.js', { packaged: true, resourcesPath: resources, moduleDirectory });
   const game = path.join(root, 'game'); fs.mkdirSync(game);
   const entry = { contentRootDir: root, gamePath: root, renpyGameOnly: false };
@@ -66,6 +67,6 @@ test('walkthrough uses its declared app route and Mod keeps its packaged launche
   assert.equal(status.urwInstalled, true);
   assert.equal(fs.readFileSync(path.join(game, '__urw/urw_core.rpy'), 'utf8'), 'exact packaged walkthrough:urw_core.rpy');
   assert.deepEqual(fs.readFileSync(path.join(game, '__urw/urw_updater.rpy')), updater);
-  renpy.actions.addRenpyMod(entry, {}, {});
-  assert.equal(fs.readFileSync(path.join(game, '0x52_URM.rpa'), 'utf8'), 'exact packaged Mod');
+  await renpy.actions.addRenpyMod(entry, {}, {});
+  assert.equal(fs.readFileSync(path.join(game, '0x52_URM.rpa'), 'utf8'), 'exact supplied Mod');
 });

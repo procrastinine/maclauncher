@@ -38,6 +38,7 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
   normalizeRuntimeId: () => "dosbox-staging",
   onImport: (entry, context) => { entry.defaultSaveDir = driveDirectory(entry, context); },
   onRuntimeChange: (entry, context) => { entry.defaultSaveDir = driveDirectory(entry, context); },
+  resolveSaveLocations: entry => ({ primaryDirectory: driveDirectory(entry), directories: [{ directory: driveDirectory(entry), role: "primary" }] }),
   ensureRuntime: (entry, context) => {
     const selected = manager.resolveSelection(entry, context.settings, context.userDataDir);
     return selected.ready ? null : { managerId: manager.id, version: selected.version, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {} };

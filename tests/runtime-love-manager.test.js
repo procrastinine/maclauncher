@@ -259,6 +259,7 @@ test("damaged stable and nightly LÖVE bundles cannot satisfy runtime selection"
   assert.equal(Manager.core.resolveInstalled({userDataDir, channel:"nightly", version:"not-a-build"}), null);
   const state = Manager.getState({ userDataDir, settings: {} });
   assert.deepEqual(state.sections.slice(0, 2).map(section => section.installed.filter(row => row.ready !== false).map(row => row.version)), [["11.4"], []]);
+  assert.equal(state.sections.find(section => section.id === "stable").catalog.latestInstalledVersion, "11.4");
 });
 
 test("LÖVE excludes old 32-bit releases and checks the actual downloaded CPU before installation", async t => {

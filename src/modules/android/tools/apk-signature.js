@@ -1,32 +1,23 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
-const Writable = require("../../shared/writable-input");
 const Binary = require("./apksig/binary.json");
 const pin = Binary.files[0];
 const digest = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 
 function createResolver(resourceRoot = path.join(__dirname, "apksig")) {
-  return function resolve(userDataDir) {
-    const source = path.join(resourceRoot, pin.path);
+  return function resolve() {
+    const parts = path.resolve(resourceRoot).split(path.sep);
+    const archive = parts.indexOf("app.asar");
+    if (archive !== -1) parts[archive] = "app.asar.unpacked";
+    const source = path.join(parts.join(path.sep), pin.path);
     let bytes;
     try {
-      const stat = fs.lstatSync(source);
+      const physical = require("../../shared/runtime/bundled-native").appAlias(source) || source;
+      const stat = fs.lstatSync(physical);
       if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== pin.size) throw Error();
-      bytes = fs.readFileSync(source);
+      bytes = fs.readFileSync(physical);
       if (digest(bytes) !== pin.sha256) throw Error();
     } catch { throw new Error("The included Android package signature verifier is unavailable. Reinstall MacLauncher."); }
-    if (!path.resolve(source).split(path.sep).some(part => part.endsWith(".asar"))) return source;
-    if (!path.isAbsolute(userDataDir || "")) throw new Error("Android package verification requires private launcher storage.");
-    // Java cannot read Electron's virtual ASAR entries. Reuse one authenticated
-    // physical helper, independently of any installed Android game runtime.
-    const directory = path.join(userDataDir, "internal-tools/apksig", pin.sha256);
-    Writable.assertOwnDirectory(userDataDir, directory);
-    const file = path.join(directory, pin.path);
-    if (fs.existsSync(file)) {
-      const stat = fs.lstatSync(file);
-      if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== pin.size || digest(fs.readFileSync(file)) !== pin.sha256)
-        throw new Error("The Android package signature verifier changed on disk.");
-    } else Writable.atomicWrite(file, bytes, { root: directory });
-    return file;
+    return source;
   };
 }
 

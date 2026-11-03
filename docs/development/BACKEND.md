@@ -116,7 +116,7 @@ Settings changes use a short transaction in the same host: read the current file
 
 ## Electron worker adapter
 
-`src/core/backend-worker-client.js` provides asynchronous RPC and independent worker lanes for each game and each runtime. `backend-operations.js` handles metadata, launches, runtime actions, module tools, patching and save work in plain Node, and `backend-worker.js` dispatches the requests. None of the three imports Electron. Native dialogs, consent and reveal actions go back to the host through asynchronous callbacks.
+`src/core/backend-worker-client.js` provides asynchronous RPC and independent worker lanes for each game and each runtime. `backend-operations.js` handles metadata, launches, runtime actions, module tools, patching, save work and [derived data upkeep](DATA_MODEL.md#derived-data-upkeep) (`maintainStorage`, on its own lane) in plain Node, and `backend-worker.js` dispatches the requests. None of the three imports Electron. Native dialogs, consent and reveal actions go back to the host through asynchronous callbacks.
 
 Running-process and save-root state is shared across workers. A game's worker stays alive until the processes it started exit. Pending completion diagnostics can keep an exited process's worker for up to 1.5 seconds while its output drains, and the game's running state clears immediately. The number of idle workers is limited, and idle workers are disposed. A manager that fails produces an error snapshot for that manager instead of failing the whole library state.
 

@@ -8,6 +8,10 @@ const Graphics = require('../src/modules/godot/graphics');
 const crypto = require('node:crypto');
 const Godot = require('../src/modules/godot/main');
 const source = require('../src/modules/godot/graphics/source.json');
+const GameData = require('../src/modules/shared/game-data');
+const StoredPlan = require('../src/modules/shared/effects/stored-plan');
+// A selected temporal row consumes the scene inputs that only the helper supplies.
+const scenePlan = () => ({ schema: 2, mode: 'advanced', enabled: true, video: [{ id: 'temporal', kind: 'temporal', enabled: true, method: 'fsr2', settings: {} }] });
 
 function fixture(t) {
   const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'godot-graphics-')));
@@ -18,7 +22,7 @@ function fixture(t) {
   fs.writeFileSync(path.join(root, 'godot', 'libmaclauncher-godot-camera.dylib'), 'library');
   for (const script of ['autoload.gd', 'camera-effect.gd']) fs.writeFileSync(path.join(root, 'godot', script), 'extends Node\n');
   const userDataDir = path.join(directory, 'data');
-  const entry = { gameId: 'camera-game', graphics: { temporalMethod: 'off' } };
+  const entry = { gameId: 'camera-game', effects: scenePlan() };
   return { directory, root, userDataDir, entry };
 }
 function pack(file, minor = 4) {
@@ -47,14 +51,53 @@ function managedLaunch(t) {
   return {...f, input, executable, warnings, calls, child, context};
 }
 
-test('Godot managed launches retain the dormant bridge and original working directory', async t => {
-  const f = managedLaunch(t);
-  assert.equal(await Godot.launchRuntime('godot', f.entry, f.context), f.child);
-  const [command, args, options] = f.calls[0];
-  assert.equal(command, f.executable);assert.equal(args[0], '--main-pack');
-  assert.notEqual(args[1], f.input);assert.equal(fs.realpathSync(args[1]), f.input);
-  assert.equal(options.cwd, path.dirname(f.input));assert.ok(options.env.MACLAUNCHER_GODOT_CAMERA_EXTENSION);
+test('Godot Play uses the original pack or project unless the saved plan needs the helper', async t => {
+ for (const kind of ['pack', 'project']) await t.test(kind, async t => {
+  const f = managedLaunch(t), project = path.join(f.directory, 'project');
+  if (kind === 'project') {
+    fs.mkdirSync(path.join(project, '.godot', 'imported'), {recursive: true});
+    fs.writeFileSync(path.join(project, 'project.godot'), '[application]\nconfig/name="Original"\n');
+    fs.writeFileSync(path.join(project, '.godot', 'imported', 'asset.ctex'), 'original cache');
+    f.entry.moduleData.projectRoot = project;
+  }
+  const original = kind === 'pack' ? ['--main-pack', f.input] : ['--path', project];
+  const cwd = kind === 'pack' ? path.dirname(f.input) : project;
+  const adapters = path.join(GameData.resolveGameModuleDir(f.userDataDir, f.entry.gameId, 'godot'), 'camera');
+  const launch = async effects => {
+    f.entry.effects = effects;f.calls.length = 0;
+    assert.equal(await Godot.launchRuntime('godot', f.entry, f.context), f.child);
+    return f.calls[0];
+  };
+  // No selected row: the original target, working directory and environment.
+  for (const effects of [null, {...scenePlan(), enabled: false}, {...scenePlan(), video: [{...scenePlan().video[0], enabled: false}]}]) {
+    const [command, args, options] = await launch(effects);
+    assert.equal(command, f.executable);assert.deepEqual(args, original);
+    assert.equal(options.cwd, cwd);assert.equal(options.env, undefined);
+    assert.equal(fs.existsSync(adapters), false, 'no adapter folder is created');
+  }
+  // A selected scene method routes through the per-game override location.
+  let [, args, options] = await launch(scenePlan());
+  assert.equal(args[0], original[0]);assert.notEqual(args[1], original[1]);
+  assert.ok(args[1].startsWith(adapters + path.sep));assert.equal(options.cwd, cwd);
+  assert.ok(options.env.MACLAUNCHER_GODOT_CAMERA_EXTENSION);
+  assert.equal(fs.realpathSync(kind === 'pack' ? args[1] : path.join(args[1], 'project.godot')),
+    kind === 'pack' ? f.input : path.join(project, 'project.godot'));
+  // Switching back leaves the earlier adapter unused.
+  [, args, options] = await launch(null);
+  assert.deepEqual(args, original);assert.equal(options.cwd, cwd);assert.equal(options.env, undefined);
   assert.equal(f.warnings.length, 0);assert.equal(f.context.graphicsBridgeFailure, undefined);
+ });
+});
+
+test('Godot helper demand follows the shared plan analysis', t => {
+  const f = fixture(t), input = path.join(f.directory, 'game.pck');pack(input);
+  const prepare = effects => Graphics.prepare({...f.entry, effects}, {...f, platform: 'darwin', version: '4.4', target: {kind: 'pack', path: input}});
+  const plan = video => ({schema: 2, mode: 'advanced', enabled: true, video});
+  for (const effects of [plan([{id: 'generation', kind: 'frame-generation', enabled: true, method: 'metalfx', settings: {frameMultiplier: 2}}]),
+    {...plan([]), renderResolution: {multiplier: 2}}]) assert.ok(prepare(effects), JSON.stringify(effects));
+  for (const effects of [plan([{id: 'generation', kind: 'frame-generation', enabled: true, method: 'lsfg', settings: {frameMultiplier: 2}}]),
+    plan([{id: 'spatial', kind: 'spatial', enabled: true, method: 'bilinear', settings: {}}]), {...plan([]), renderResolution: {multiplier: 1}}])
+    assert.equal(prepare(effects), null, JSON.stringify(effects));
 });
 
 test('Godot overlay failure launches the original target and preserves independent shared stages', async t => {
@@ -68,7 +111,7 @@ test('Godot overlay failure launches the original target and preserves independe
     if (sink === 'reject') return Promise.reject(new Error('Warning observer failed'));
   };
   f.context.graphicsInputs = selected;
-  Object.assign(f.entry, {reshade: {enabled: true, preset: 'crt'}, graphics: {temporalMethod: 'fsr2', spatialMethod: 'bilinear'}});
+  f.entry.effects = StoredPlan.upgradeLegacy({reshade: {enabled: true, preset: 'crt'}, graphics: {temporalMethod: 'fsr2', spatialMethod: 'bilinear'}}).effects;
   const before = structuredClone(f.entry);
   const privateTarget = Graphics.prepare(f.entry, {...f, platform: 'darwin', version: '4.4', target: {kind: 'pack', path: f.input}}).target.path;
   fs.unlinkSync(privateTarget);fs.writeFileSync(privateTarget, 'unrelated existing file');
@@ -107,11 +150,11 @@ test('Godot overlay failure launches the original target and preserves independe
 });
 
 test('Godot missing temporal helper and project-cache preparation failures are optional at launch', async t => {
-  const off = managedLaunch(t);fs.rmSync(path.join(off.root, 'godot'), {recursive: true});
+  const off = managedLaunch(t);fs.rmSync(path.join(off.root, 'godot'), {recursive: true});off.entry.effects = null;
   await Godot.launchRuntime('godot', off.entry, off.context);
   assert.deepEqual(off.calls[0][1], ['--main-pack', off.input]);assert.equal(off.warnings.length, 0);
-  assert.equal(fs.existsSync(path.join(off.userDataDir, 'games')), false, 'no unavailable dormant bridge is staged for All off');
-  const missing = managedLaunch(t);missing.entry.graphics.temporalMethod = 'fsr2';
+  assert.equal(fs.existsSync(path.join(off.userDataDir, 'games')), false, 'nothing is staged for All off');
+  const missing = managedLaunch(t);
   fs.rmSync(path.join(missing.root, 'godot'), {recursive: true});
   assert.equal(await Godot.launchRuntime('godot', missing.entry, missing.context), missing.child);
   assert.deepEqual(missing.calls[0][1], ['--main-pack', missing.input]);
@@ -143,7 +186,7 @@ test('Godot optional graphics fallback preserves cancellation and unrelated laun
   await assert.rejects(Godot.launchRuntime('godot', f.entry, f.context), /Godot runtime v4\.4-stable is not installed/);
 });
 
-test('Godot pack bootstrap preserves the original pack and overrides, ready for live selection from off', t => {
+test('Godot pack bootstrap for a scene plan preserves the original pack and overrides', t => {
   const f = fixture(t), input = path.join(f.directory, 'Original " game.pck');
   pack(input);
   const original = '[autoload]\nGameState="*res://state.gd"\n[application]\nconfig/name="Original"\n';
@@ -159,37 +202,22 @@ test('Godot pack bootstrap preserves the original pack and overrides, ready for 
   assert.deepEqual(Graphics.prepare(f.entry, { ...f, platform: 'darwin', version: '4.4-stable', target: { kind: 'pack', path: input } }), prepared);
 });
 
-test('Godot project bootstrap isolates writable caches and preserves resources and autoloads', t => {
+test('Godot project bootstrap links the original resources and import cache and keeps autoloads', t => {
   const f = fixture(t), project = path.join(f.directory, 'project');
   fs.mkdirSync(path.join(project, '.godot', 'imported'), { recursive: true });
-  fs.writeFileSync(path.join(project, 'project.godot'), '[autoload]\nState="*res://state.gd"\n');
+  const autoloads = '[autoload]\nState="*res://state.gd"\n';
+  fs.writeFileSync(path.join(project, 'project.godot'), autoloads);
+  fs.writeFileSync(path.join(project, 'override.cfg'), autoloads);
   fs.writeFileSync(path.join(project, 'state.gd'), 'extends Node\n');
-  fs.writeFileSync(path.join(project, '.godot', 'uid_cache.bin'), 'original');
   fs.writeFileSync(path.join(project, '.godot', 'imported', 'asset.ctex'), 'asset');
   const prepared = Graphics.prepare(f.entry, { ...f, platform: 'darwin', version: '4.5', target: { kind: 'project', path: project } });
-  assert.equal(fs.realpathSync(path.join(prepared.target.path, 'project.godot')), path.join(project, 'project.godot'));
-  const cache = path.join(prepared.target.path, '.godot', 'uid_cache.bin');
-  assert.equal(fs.lstatSync(cache).isSymbolicLink(), false);
-  fs.writeFileSync(cache, 'updated');
-  assert.equal(fs.readFileSync(path.join(project, '.godot', 'uid_cache.bin'), 'utf8'), 'original');
-  assert.equal(fs.readFileSync(path.join(prepared.target.path, '.godot', 'imported', 'asset.ctex'), 'utf8'), 'asset');
-  assert.equal(fs.existsSync(path.join(project, 'override.cfg')), false);
-});
-
-test('Godot Simple spatial scaling selects its engine filter without changing Advanced or neural ordering', t => {
-  const f = fixture(t), input = path.join(f.directory, 'game.pck'); pack(input);
-  const metadataFile = path.join(f.root, 'godot', 'provider.json'), metadata = JSON.parse(fs.readFileSync(metadataFile, 'utf8'));
-  fs.writeFileSync(metadataFile, JSON.stringify({ ...metadata, sourceResolutionAPI: 1 }));
-  const prepare = (graphics, effects) => Graphics.prepare({ ...f.entry, graphics, effects },
-    { ...f, platform: 'darwin', version: '4.6.3', target: { kind: 'pack', path: input } });
-  for (const spatialMethod of ['bilinear', 'metalfx', 'fsr1'])
-    assert.equal(prepare({ spatialMethod }).environment.MACLAUNCHER_GODOT_SPATIAL_METHOD, spatialMethod);
-  for (const [graphics, effects] of [[{ spatialMethod: 'metalfx', neuralMethod: 'mlx-dlss' }],
-    [{ spatialMethod: 'metalfx', temporalMethod: 'fsr2' }], [{ spatialMethod: 'nearest' }],
-    [{ spatialMethod: 'metalfx' }, { version: 1, rows: [] }]])
-    assert.equal(prepare(graphics, effects).environment.MACLAUNCHER_GODOT_SPATIAL_METHOD, undefined);
-  fs.writeFileSync(metadataFile, JSON.stringify(metadata));
-  assert.equal(prepare({ spatialMethod: 'metalfx' }).environment.MACLAUNCHER_GODOT_SPATIAL_METHOD, undefined);
+  for (const name of ['project.godot', 'state.gd', '.godot'])
+    assert.equal(fs.readlinkSync(path.join(prepared.target.path, name)), path.join(project, name));
+  fs.writeFileSync(path.join(prepared.target.path, '.godot', 'uid_cache.bin'), 'written through');
+  assert.equal(fs.readFileSync(path.join(project, '.godot', 'uid_cache.bin'), 'utf8'), 'written through', 'the cache is the original one');
+  assert.ok(fs.readFileSync(path.join(prepared.target.path, 'override.cfg'), 'utf8').startsWith(autoloads));
+  assert.equal(fs.readFileSync(path.join(project, 'override.cfg'), 'utf8'), autoloads);
+  assert.deepEqual(Graphics.prepare(f.entry, { ...f, platform: 'darwin', version: '4.5', target: { kind: 'project', path: project } }), prepared);
 });
 
 test('Godot preparation leaves unsupported runtimes alone and requires the helper for a selected temporal method', t => {
@@ -197,8 +225,7 @@ test('Godot preparation leaves unsupported runtimes alone and requires the helpe
   assert.equal(Graphics.prepare(f.entry, { ...f, version: '4.3', platform: 'darwin' }), null);
   assert.equal(Graphics.prepare(f.entry, { ...f, version: '4.4', platform: 'linux' }), null);
   fs.rmSync(path.join(f.root, 'godot'), { recursive: true });
-  assert.equal(Graphics.prepare(f.entry, { ...f, version: '4.4', platform: 'darwin' }), null);
-  f.entry.graphics.temporalMethod = 'fsr2';
+  assert.equal(Graphics.prepare({ ...f.entry, effects: null }, { ...f, version: '4.4', platform: 'darwin' }), null);
   assert.throws(() => Graphics.prepare(f.entry, { ...f, version: '4.4', platform: 'darwin' }), /missing from the graphics runtime/);
 });
 

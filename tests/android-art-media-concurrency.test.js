@@ -1,5 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const {spawn}=require('node:child_process'),{once}=require('node:events');
+const {testEnvironment}=require('./helpers/fixture-process');
 
 test('independent original media publishers share readiness and retain owned failure/cancellation cleanup',{timeout:20000},async t=>{
  if(process.platform!=='darwin')return t.skip('Requires the composition owner\'s macOS pipe lifecycle');
@@ -20,7 +21,7 @@ test('independent original media publishers share readiness and retain owned fai
   const enrollments=[],retirements=[];
   const owner={socketPath:path.join(root,'owner.sock'),identity:{pid:process.pid,uid:process.getuid(),securityContext:'u:r:system_server:s0',packageName:'android',processName:'android.system'},async enroll(value){enrollments.push(value);},async retire(value){retirements.push(value);}};
   const spawnProcess=(name,command,args,options)=>{
-   const p=spawn(process.execPath,[path.join(__dirname,'fixtures/android-art-composition/publisher.mjs'),root,name,JSON.stringify(args)],options);
+   const p=spawn(process.execPath,[path.join(__dirname,'fixtures/android-art-composition/publisher.mjs'),root,name,JSON.stringify(args)],{...options,env:{...options.env,...testEnvironment}});
    p.closed=once(p,'close');p.closed.catch(()=>{});children.push({name,args,process:p});return p;
   };
   composition=await startComposition({directory:root,supplier:{components:c},payload:{root,profile:{}},sharedGraphics:root,binderName:'fixture',env:{...process.env},owner,appUid:10000,appLabel:'Android',application:{executablePath:path.join(root,'presenter')},kernelRuntime:path.join(root,'kernel'),pathMap:'root\t/\t'+c.image+'\n',cache:path.join(root,'cache'),spawnProcess,signal:controller.signal,viewport:{width:64,height:32,densityDpi:160},sensorRoot:path.join(root,'sensors'),networkAllowed:false,allowAds:false});

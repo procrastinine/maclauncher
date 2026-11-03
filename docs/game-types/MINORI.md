@@ -24,7 +24,7 @@ Each profile selects its own archive and VM implementation.
 
 ## Saves
 
-Saves go to `games/<gameId>/modules/minori/saves/` in the launcher data, or to the normal per-game save-folder override. Save editing and cheats are not available.
+Saves use `userdata/` in the original game directory when it is writable, with ReMinori's `~/Documents/eden/userdata/` location as the fallback. Import records the supported save-folder setting so the managed interpreter uses the original executable's directory instead of its runtime installation directory. When another game in the library uses the same save location, import gives a game without an explicit save-folder setting a separate `~/Documents/eden/games/<gameId>/userdata/` override. Explicit save-folder settings stay unchanged. The game reads its original PAZ archives directly and uses the original game directory as its working directory. Interpreter caches, verification records and native logs remain in launcher data. Save editing and cheats are not available.
 
 ## Script tools
 

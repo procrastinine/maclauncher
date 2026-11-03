@@ -223,6 +223,7 @@ function verifyApp({ appPath, arch, maximumMacOS, inventory, packageConfig = req
   configurationCheck(plan, packageConfig);
   const app = path.resolve(appPath), stat = fs.lstatSync(app);
   if (!stat.isDirectory() || stat.isSymbolicLink() || path.basename(app) !== `${plan.product}.app`) throw new Error('Choose the real MacLauncher.app bundle.');
+  return B.withAppBundle(app,()=>{
   const tree = appTree(app), resources = path.join(app, 'Contents/Resources');
   assertRuntimeBoundary(app, { arch, packageConfig });
   for (const file of tree.files) if (/^Contents\/Resources\/(?:native-runtime-sources|Z-universal\.app|external\/.+\/\.git)(?:\/|$)|^Contents\/Resources\/app\.asar\.unpacked\/src\/modules\/rgss\/resources\/mkxpz(?:\/|$)/.test(file)) {
@@ -245,9 +246,11 @@ function verifyApp({ appPath, arch, maximumMacOS, inventory, packageConfig = req
     managerIds: [...new Set(plan.packages.map(item => item.managerId))], requiredOnly: true, maximumMacOS, dependencies });
   S.verifySupplementals({ resourceRoot: nativeRoot, arch, maximumMacOS, items: plan.supplementals, dependencies });
   require('./ci-macos.cjs').assertCopiedPayload(nativeRoot, inventory, packages);
+  require('./app-deduplication.cjs').assertUnique(app);
   return { passed: true, mode: 'app', product: plan.product, version: plan.version, arch,
     maximumNativeMacOS: maximumMacOS, files: tree.files.length, bytes: tree.bytes, nativePackages: packages.length,
     supplementalCount: plan.supplementals.length, deliveryPlanSha256: B.digest(Buffer.from(JSON.stringify(plan))), ...archived };
+  });
 }
 function releaseZipEntries(archive) {
   const { readZipEntries } = require('../src/modules/shared/runtime/zip'), parsed = readZipEntries(archive);

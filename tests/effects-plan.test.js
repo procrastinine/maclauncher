@@ -240,7 +240,7 @@ test("historical Automatic processing input becomes a fixed 540-pixel height and
  const Requirements=require("../src/modules/shared/effects/execution-requirements");
  const auto={relativeTo:"presentation",automatic:true},fixed={height:540};
  const value={schema:2,mode:"advanced",video:[{id:"nr-input",kind:"downsample",enabled:true,method:"area",extent:auto,settings:{}}]};
- assert.equal(Plan.DEFAULT_PROCESSING_HEIGHT,540);
+ assert.equal(Plan.DEFAULT_PROCESSING_HEIGHT,540);assert.equal(Plan.NEURAL_INPUT_HEIGHT,720);
  assert.deepEqual(Plan.validate(value).video[0].extent,fixed);assert.deepEqual(Plan.migrate(value).video[0].extent,fixed);
  assert.deepEqual(Plan.validate({...value,enabled:false}).video[0].extent,fixed);
  assert.equal(Requirements.analyze({effects:value}).source,null,"a processing height is not a window-dependent source request");

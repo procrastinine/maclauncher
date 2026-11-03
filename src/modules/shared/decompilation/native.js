@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../copy-file");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const manager = require("./runtime/native-manager");
@@ -83,7 +84,7 @@ async function inspect(entry, payload, context, { moduleId = entry.engine || ent
     return result;
   } catch (error) {
     const log = path.join(temporary, "inspect.log");
-    if (fs.existsSync(log)) { fs.copyFileSync(log, path.join(parent, "inspect.log")); error.message += " See " + path.join(parent, "inspect.log") + "."; }
+    if (fs.existsSync(log)) { cloneOrCopySync(log, path.join(parent, "inspect.log")); error.message += " See " + path.join(parent, "inspect.log") + "."; }
     throw error;
   } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
 }

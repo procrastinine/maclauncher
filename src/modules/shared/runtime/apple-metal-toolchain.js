@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../copy-file");
 const path = require("node:path");
 const { execFile, execFileSync } = require("node:child_process");
 const { promisify } = require("node:util");
@@ -95,8 +96,7 @@ function createManager(dependencies = {}) {
         await run("/usr/bin/aa", ["patch", "-i", archive, "-key-value", "base64:" + selected.component.archiveDecryptionKey, "-src", empty, "-dst", component],
           { signal, timeout: 10 * 60 * 1000, maxBuffer: 1024 * 1024 });
         await extractDmg(diskImage(component), destination, signal, { payloadName: TOOLCHAIN, project: "Apple Metal", run,
-          copy(source, target) { fs.cpSync(source, target, { recursive: true, verbatimSymlinks: true, preserveTimestamps: true,
-            filter() { throwIfAborted(signal); return true; } }); } });
+          copy(source, target) { cloneOrCopySync(source, target); } });
       } finally { fs.rmSync(empty, { recursive: true, force: true }); fs.rmSync(component, { recursive: true, force: true }); }
     }) } });
   Custom.configure(base, { inspect(runtimePath) {

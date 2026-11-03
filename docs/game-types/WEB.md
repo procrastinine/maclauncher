@@ -30,6 +30,8 @@ Library titles and icons come from the local NW.js `window.title`, `productName`
 
 [Web runtimes](../runtimes/WEB_RUNTIMES.md) describes the hosts and their settings.
 
+The hosts load HTML, scripts and assets from the original game folder. NW.js uses a small launcher package for host settings and compatibility helpers; it does not copy the game's files. Browser profiles remain separate from file-based game data.
+
 ## Tools
 
 Web has no separate source-export action. The supplied HTML, JavaScript, CSS and data files can be read directly, so source visibility depends on those files. Minified, obfuscated or WebAssembly code does not restore an original authoring project. The selected runtime determines the live debugging tools available, such as [DevTools](../runtimes/WEB_RUNTIMES.md#devtools).

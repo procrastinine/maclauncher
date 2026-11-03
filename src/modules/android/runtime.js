@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const Bundled = require("../shared/runtime/bundled-native");
+const HostCapabilities = require("../shared/runtime/host-capabilities");
 const declarationFile = path.join(__dirname, "managed-packages.json");
 const platformHashes = new Map();
 function canonical(value) {
@@ -49,9 +50,13 @@ function runtimeRoot(declaration) {
 
 // Metadata resolution is used by status/UI. Only resolveForLaunch authorizes
 // execution after verifying the complete payload outside the calling thread.
-function resolve({ root, platform = process.platform, arch = process.arch,
-  macOSVersion } = {}, declaration = readDeclaration()) {
-  if (platform !== "darwin" || arch !== "arm64") throw new Error("MacLauncher Android requires Apple Silicon macOS.");
+function resolve({ root, platform = process.platform, arch,
+  macOSVersion, dependencyLibraryPaths, dependencyReadRoots } = {}, declaration = readDeclaration()) {
+  // Hardware admits the runtime even when the launcher runs through Rosetta;
+  // an explicit runtime CPU remains a separate constraint on its ARM build.
+  const host = platform === "darwin" && HostCapabilities.getHostCapabilities();
+  if (!host || host.platform !== "darwin" || host.hardwareArch !== "arm64" || arch !== undefined && arch !== "arm64")
+    throw new Error("MacLauncher Android requires Apple Silicon macOS.");
   if (!path.isAbsolute(root || "")) throw new Error("Select an installed Android runtime in Runtimes.");
   const stored = Bundled.readRegular(path.join(root, "runtime.json"), Bundled.LIMITS.manifestBytes);
   if (stored.sha256 !== declaration.manifestSha256) throw new Error("The Android runtime metadata has changed. Reinstall this version in Runtimes.");
@@ -73,17 +78,19 @@ function resolve({ root, platform = process.platform, arch = process.arch,
     ...(manifest.sourceHash?{sourceHash:manifest.sourceHash}:{}),
     ...(manifest.inputHash?{inputHash:manifest.inputHash}:{}) };
   return { ...require("./conversion").payload(root, manifest.profile), version: manifest.version,
-    runtimeIdentity, runtimeDeclaration: declaration };
+    runtimeIdentity, runtimeDeclaration: declaration,
+    ...(dependencyLibraryPaths?.length?{dependencyLibraryPaths}:{}), ...(dependencyReadRoots?.length?{dependencyReadRoots}:{}) };
 }
 
 async function resolveForLaunch(options = {}, declaration = readDeclaration()) {
   options.signal?.throwIfAborted();
   const payload = resolve(options, declaration);
-  await require("./runtime-verifier").verifyPayload(payload.root, declaration, { signal: options.signal });
+  const dependencyContext=options.resolveDependency ? options : require('../shared/runtime/package-dependencies').contextForPayload(payload.root,options.userDataDir);
+  await require("./runtime-verifier").verifyPayload(payload.root,declaration,{signal:options.signal,resolveDependency:dependencyContext.resolveDependency});
   options.signal?.throwIfAborted();
   // Re-read the small declaration after the worker completes so a replaced
   // runtime.json cannot supply unchecked launch metadata.
-  return resolve({ ...options, root: payload.root }, declaration);
+  return resolve({ ...options, ...dependencyContext, root: payload.root }, declaration);
 }
 
 function status(options = {}) {
@@ -95,13 +102,13 @@ function status(options = {}) {
 
 function resolveSelected(entry, context = {}) {
   const selected = require("./runtime-manager").resolveSelection(entry, context.settings, context.userDataDir, { verification: "status" });
-  return selected.ready ? resolve({ root: selected.install.root }, selected.install.declaration) : null;
+  return selected.ready ? resolve({ root:selected.install.root, dependencyLibraryPaths:selected.install.dependencyLibraryPaths, dependencyReadRoots:selected.install.dependencyReadRoots },selected.install.declaration) : null;
 }
 
 async function resolveSelectedForLaunch(entry, context = {}) {
   const selected = require("./runtime-manager").resolveSelection(entry, context.settings, context.userDataDir);
   if (!selected.ready) throw new Error(selected.reason || "Install MacLauncher Android in Runtimes.");
-  return module.exports.resolveForLaunch({ root: selected.install.root, signal: context.signal }, selected.install.declaration);
+  return module.exports.resolveForLaunch({root:selected.install.root,signal:context.signal,userDataDir:context.userDataDir,resolveDependency:selected.install.resolveDependency,dependencyLibraryPaths:selected.install.dependencyLibraryPaths,dependencyReadRoots:selected.install.dependencyReadRoots},selected.install.declaration);
 }
 
 module.exports = { runtimeRoot, resolve, resolveForLaunch, resolveSelected, resolveSelectedForLaunch, status, readDeclaration };

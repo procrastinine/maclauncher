@@ -16,11 +16,11 @@ The MacLauncher app mark is an open doorway with a warm launch arrow on a teal t
 
 ## Icons in the launcher
 
-The library and the inspector both use the `GameIcon` component. It shows the artwork extracted from the game, executable or app first. When there is none, or it cannot load, the component shows the game's bundled engine icon, and unknown game types show a gamepad symbol. Images keep their aspect ratio, and the renderer never fetches artwork from the network. Bundled engine artwork sits directly on the launcher surface, without an extra background tile or inset, and monochrome engine logos use a light foreground for the dark interface.
+The library and the inspector both use the `GameIcon` component. It shows the artwork extracted from the game, executable or app first. When there is none, or it cannot be decoded, the main process supplies the game's bundled engine icon instead, and unknown game types show a gamepad symbol. Images keep their aspect ratio, and the renderer never fetches artwork from the network. Bundled engine artwork sits directly on the launcher surface, without an extra background tile or inset, and monochrome engine logos use a light foreground for the dark interface.
 
 ## Engine icons
 
-Every registered module declares `icon.path` and `icon.kind` in its manifest. The icons are stored at `resources/icon.png` in each module, so the backend's existing default-icon lookup also uses them for normalized game records. Vite includes these module images as local renderer assets, which keeps the fallbacks available before the backend has extracted an image. The module's `resources/icon.json` records the artwork's source, license, modifications and exact SHA-256. Upstream artwork is copied into the module resources, and the app reads its included resources to display icons.
+Every registered module declares `icon.path` and `icon.kind` in its manifest. The icons are stored at `resources/icon.png` in each module, so the backend's existing default-icon lookup also uses them for normalized game records. The main process reads these files whenever a game has no usable artwork of its own, so each module image ships once and the renderer bundle holds no copies. The module's `resources/icon.json` records the artwork's source, license, modifications and exact SHA-256. Upstream artwork is copied into the module resources, and the app reads its included resources to display icons.
 
 | Game types | Artwork source |
 | --- | --- |

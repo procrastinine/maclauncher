@@ -24,6 +24,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+@interface MacFXBrowserStream : MacFXWindowStreamReceiver @end
+@implementation MacFXBrowserStream @end
+
 namespace {
 using Recovery=macfx::WindowStreamRecovery;
 using Sample=macfx::WindowStreamSample;
@@ -108,7 +111,7 @@ struct Session :macfx::WindowStream {
     uint32_t claimTicket=0;
     unsigned readinessRecords=0;double readinessStarted=CACurrentMediaTime(),readinessLast=0;
     uintptr_t visibilityView=0;bool visibilityActive=false;
-    Session(){label="Browser completed-window";admissionStage="browser-snapshot-memory";}
+    Session():WindowStream("org.maclauncher.browser-frames","org.maclauncher.browser-capture"){label="Browser completed-window";admissionStage="browser-snapshot-memory";deferStopUntilStarted=false;receiverClass=[MacFXBrowserStream class];}
     void publishVisibility(bool inactive=false){ // Main thread; state edges only.
         if(!NSThread.isMainThread)return;
         NSWindow *windowSource=source;
@@ -200,7 +203,7 @@ bool start(NSWindow *window){
                 self->preparePresenter(macfx::RuntimeFrameSource::BrowserWindow);
                 self->reportReadiness("created");
                 auto filter=[[SCContentFilter alloc]initWithDesktopIndependentWindow:selected];
-                if(NSError *failure=self->attach(filter)){
+                NSError *failure=nil;if(!self->attach(filter,&failure)){
                     self->close();failAttempt(identifier,"Browser completed-window graphics unavailable: "+windowCaptureError("output",failure)+"; original window retained");return;}
                 current()=self;pending.ticket=0;
                 // Publish a transparent native host before acquiring its first

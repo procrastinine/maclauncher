@@ -228,6 +228,25 @@ test("offline audit checks adaptation versions and source archive pins independe
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(current.root, "scripts/profile.json"))), pins);
 });
 
+test("explicit package revisions stay exact without changing the source adaptation version", async t => {
+  const current = fixture(t), recipe = current.inventory.recipes[0];
+  recipe.version = "0.5.0";
+  write(current.root, "scripts/source-version.json", JSON.stringify({ version: "0.5.0" }));
+  write(current.root, "scripts/package-versions.json", JSON.stringify([{ version: "0.5.0-MCLv2" }]));
+  const packageRef = { kind: "json", path: "scripts/package-versions.json", select: { version: "0.5.0-MCLv2" }, property: "version" };
+  recipe.versionRefs = [{ kind: "json", path: "scripts/source-version.json", property: "version" }, packageRef];
+  assert.ok((await Check.checkInventory(current)).errors.some(issue => issue.code === "adaptation-version-drift"));
+  packageRef.expectedVersion = "0.5.0-MCLv2";
+  assert.equal((await Check.checkInventory(current)).passed, true);
+  assert.equal(recipe.version, "0.5.0");
+  packageRef.expectedVersion = "0.5.0-MCLv1";
+  assert.ok((await Check.checkInventory(current)).errors.some(issue => issue.code === "adaptation-version-drift"));
+  for (const invalid of ["", "   ", 2]) {
+    packageRef.expectedVersion = invalid;
+    assert.throws(() => Check.validateInventory(current.inventory), /expectedVersion.*nonempty explicit string/);
+  }
+});
+
 test("JSON version references select exact records independently of catalog order", async t => {
   const current = fixture(t), filename = "scripts/versions.json";
   const versions = [{ version: "profile-v2", source: "b".repeat(64) }, { version: "profile-v1", source: "a".repeat(64) }];

@@ -36,3 +36,20 @@ test("a game type whose included helpers have no build for this Mac's CPU explai
   assert.equal(hostRequirement({ distributionSupplementals: [helper("tool", ["x64"])] }, "arm64").message, "Requires an Intel Mac.");
   assert.equal(hostRequirement({}, "x64"), null);
 });
+test("host requirements use physical Apple Silicon when the launcher runs through Rosetta", t => {
+  const Host = require("../src/modules/shared/runtime/host-capabilities");
+  const translated = Host.getHostCapabilities({ platform: "darwin", launcherArch: "x64", hardwareArch: "arm64",
+    macOSVersion: "26.0", rosettaAvailable: true });
+  const descriptor = Object.getOwnPropertyDescriptor(process, "arch");
+  Object.defineProperty(process, "arch", { ...descriptor, value: "x64" });
+  t.after(() => Object.defineProperty(process, "arch", descriptor));
+  let hardwareArch = translated.hardwareArch;
+  t.mock.method(Host, "getHostCapabilities", () => ({ ...translated, hardwareArch }));
+  const mod = { distributionSupplementals: [{ id: "reader", version: "1.0", launcherArchitectures: ["arm64"] }] };
+  assert.equal(process.arch, "x64");
+  assert.equal(hostRequirement(mod), null);
+  assert.equal(canLaunchEntry({ mod, info, entry: {}, runtimeId: "runner" }), true);
+  hardwareArch = "x64";
+  assert.match(hostRequirement(mod).message, /Apple Silicon/);
+  assert.equal(canLaunchEntry({ mod, info, entry: {}, runtimeId: "runner" }), false);
+});

@@ -4,6 +4,7 @@ const os = require("node:os");
 const http = require("node:http");
 const crypto = require("node:crypto");
 const Native = require("../../shared/runtime/local-native");
+const Host = require("../../shared/runtime/host-capabilities");
 const { throwIfAborted } = require("../../shared/runtime/download-utils");
 const Upstream = require("../../shared/runtime/upstream");
 const { extractDmg } = require("../../shared/runtime/dmg");
@@ -36,11 +37,13 @@ function checkArtifact(file, pin) {
   }
   return file;
 }
+// Igor packages and tools default to the launcher CPU, including an Intel launcher under Rosetta.
 function bootstrapForArch(arch = process.arch) {
   const bootstrap = BOOTSTRAPS[arch];
   if (!bootstrap) throw new Error("Official Igor installation supports Apple Silicon and Intel Macs.");
   return bootstrap;
 }
+// The default vendor package CPU follows this launcher; hardware eligibility is checked separately.
 function resolveBuild({ userDataDir, version, arch = process.arch }) {
   const Catalog = require("./official-catalog");
   const discovered = Catalog.cachedCatalog(userDataDir)?.entries.find(entry => entry.version === version);
@@ -102,6 +105,7 @@ function bootstrapStatus(directory, arch) {
     upstreamRevision: record.archiveSha256, expectedSha256: record.binarySha256, arch });
   return { ...record, ready: true, installed: true, status: "ready", toolPath: native.executablePath, installDir: directory };
 }
+// Cached bootstrap tools stay in their launcher-selected CPU namespace.
 function listBootstrapIgors({ userDataDir, arch = process.arch } = {}) {
   if (!path.isAbsolute(userDataDir || "")) return [];
   const root = path.join(userDataDir, "runtimes", "gamemaker-official", "tools"), sourceUrl = bootstrapForArch(arch).location;
@@ -118,6 +122,7 @@ function listBootstrapIgors({ userDataDir, arch = process.arch } = {}) {
     }
   });
 }
+// Igor status follows the chosen launcher tool ABI rather than the physical Mac.
 function getIgorStatus({ userDataDir, arch = process.arch, toolVersion } = {}) {
   const bootstrap = bootstrapForArch(arch), Tools = require("./official-tools");
   const installs = listBootstrapIgors({ userDataDir, arch });
@@ -133,6 +138,7 @@ function getIgorStatus({ userDataDir, arch = process.arch, toolVersion } = {}) {
   return installs.filter(item => item.ready).sort((a, b) => versionCompare(b.version, a.version))[0] ||
     { version: null, architecture: arch, ready: false, installed: false, status: "missing", sourceUrl: bootstrap.location, reason: "Igor is not installed." };
 }
+// Missing Igor tools download for the launcher CPU, including an Intel launcher on Apple Silicon.
 async function ensureIgor({ userDataDir, arch = process.arch, toolVersion, signal, onProgress, runProcess,
   prerequisiteContext, confirmRuntimeInstall, logger } = {}) {
   if (process.platform !== "darwin") throw new Error("Official native Igor requires macOS.");
@@ -173,6 +179,7 @@ async function ensureIgor({ userDataDir, arch = process.arch, toolVersion, signa
 // Feed packages download once per feed identity (URL, size and signature). The
 // first download's SHA-256 is recorded, and a package YoYo Games replaced
 // downloads again.
+// Each artifact cache records the launcher-selected package CPU independently of the hardware.
 async function cacheArtifacts({ userDataDir, build, arch = process.arch, signal, onProgress }) {
   const root = ownedDirectory(userDataDir, path.join("runtimes", "gamemaker-official", "artifacts", build.version));
   const pins = build.packages;
@@ -265,7 +272,7 @@ async function extractRunnerApp(diskImage, destination, { runProcess = runTool, 
 
 async function installOfficialVersion({ userDataDir, version, signal, onProgress, dependencies = {},
   prerequisiteContext, confirmRuntimeInstall, logger }) {
-  if (process.platform !== "darwin" || !BOOTSTRAPS[process.arch]) throw new Error("Official native installation requires an Apple Silicon or Intel Mac.");
+  if (process.platform !== "darwin" || !BOOTSTRAPS[Host.getHostCapabilities().hardwareArch]) throw new Error("Official native installation requires an Apple Silicon or Intel Mac.");
   if (!require("./official-catalog").VERSION.test(version || "")) throw new Error("Select an exact official runtime version.");
   const build = resolveBuild({ userDataDir, version });
   const root = ownedDirectory(userDataDir, path.join("runtimes", "gamemaker-official"));

@@ -126,7 +126,11 @@ function createRuntimeSettingsStore({ userDataDir } = {}) {
     if (!schemas.has(identity)) {
       let unreadable = false;
       const stored = readStoredDefaults(runtimeId, () => {unreadable = true;});
-      const normalized = normalizeRuntimeSettings(schema, stored);
+      // Only genuinely noncurrent select input enters the once/default-cache
+      // compatibility boundary; current booleans and dynamic choices stay here.
+      const input = schema.fields.some(field => field.type === "select" && typeof stored[field.key] === "boolean")
+        ? require("./backcompat/settings-conversions").convertLegacyRuntimeSettings(moduleInfo, runtimeId, stored) : stored;
+      const normalized = normalizeRuntimeSettings(schema, input);
       // A transient read or incomplete document is not a permanent default.
       // Retry only on the next ordinary read; valid and absent files stay cached.
       if (unreadable) return cloneSettings(normalized);

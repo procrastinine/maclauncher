@@ -18,7 +18,7 @@ function supportsSpatialMethod(support, method, direction) {
 const unavailable = message => Object.assign(new Error(message), {code: "GRAPHICS_OPTIONAL_UNAVAILABLE"});
 const DEFAULTS = Object.freeze({ spatialMethod: "off", spatialShader: null, spatialMultiplier: null, spatialSharpness: 0.5, temporalMethod: "off", temporalSharpness: 0.5, asrQuality:"quality", fsr4Profile:"exact-fast", xessBackend:"auto", effectPlacement: "before", ls1Mode: "quality", frameGeneration: "off",
   frameMultiplier: 2, framePacing: "fixed", targetFps: 120, smoothCadence: false,
-  lsfgMode: "quality", lsfgFp16: true, lsfgFlowScale: 1, keepStaticContent: true, modelVersion: null,
+  lsfgMode: "quality", lsfgFp16: true, lsfgFlowScale: 1, keepStaticContent: false, modelVersion: null,
   neuralMethod: "off", neuralModelPath: null, neuralInputHeight: null, neuralInputScale: null, neuralIntensity: 1, neuralTemporal: false });
 const within = (value, minimum, maximum) => typeof value === "number" && Number.isFinite(value) && value >= minimum && value <= maximum;
 function normalizeSpatialShader(value) {
@@ -217,7 +217,7 @@ async function prepare(value, { root, userDataDir, signal, graphicsHost = null, 
   }
   if (settings.frameGeneration !== "off" && !(support.frameGeneration&&support.frameGenerationMethods.includes(settings.frameGeneration)||allowPendingInputs&&support.providerGenerationMethods?.includes(settings.frameGeneration)))
     throw unavailable("Frame generation cannot be presented by this graphics runtime. Disable frame generation.");
-  if (settings.frameGeneration !== "off" && !generationMultipliers(settings.frameGeneration).includes(settings.frameMultiplier))
+  if (GENERATION[settings.frameGeneration]?.multipliers && !generationMultipliers(settings.frameGeneration).includes(settings.frameMultiplier))
     throw unavailable("The selected frame-generation method does not produce this frame multiplier. Choose a supported multiplier.");
   if (settings.frameGeneration !== "off" && settings.framePacing === "adaptive" && !support.adaptive)
     throw unavailable("Adaptive frame generation is unavailable for this runtime. Choose Fixed.");

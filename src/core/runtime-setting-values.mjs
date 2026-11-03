@@ -42,9 +42,6 @@ export function normalizeRuntimeSettingValue(field, value, fallback) {
   if (type === "select" || dynamic) {
     const values = (Array.isArray(field.options) ? field.options : []).map(opt => opt?.value ?? opt?.id)
       .filter(value => typeof value === "string" && value.length > 0);
-    const aliases = Array.isArray(field.legacyValues) ? field.legacyValues : [];
-    const migrated = aliases.find(alias => isRecord(alias) && Object.is(alias.value, value));
-    if (typeof migrated?.replacement === "string" && values.includes(migrated.replacement)) return migrated.replacement;
     // Local choices can be unavailable while loading or between launches. Keep
     // the exact saved identity; its provider validates availability when used.
     if (dynamic && isRuntimeSettingChoiceValue(value)) return value;

@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const Native = require("./local-native");
+const { createVerifiedIdentityCache } = require("./verified-identity");
 const Python = require("./python");
 const Content = require("./runtime-content");
 const { assertOwnDirectory } = require("../writable-input");
@@ -45,7 +46,7 @@ function createManagedPythonTool({ id, label, moduleName, scriptName, requiredFi
   const required = requiredFiles || [scriptName || moduleName.replace(/\./g, "/") + "/__main__.py"];
   if (!required.every(safeRelative)) throw new Error("Managed Python tool paths are invalid.");
   const source = sourceUrl;
-  const states = new Map(), pending = new Map(), verified = new Map();
+  const states = new Map(), pending = new Map(), verified = createVerifiedIdentityCache({ maximum: 64 });
   const compare = (a, b) => String(b).localeCompare(String(a), "en", { numeric: true });
   function normalizeVersion(value) {
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(value || "")) throw new Error(`Invalid ${label} version.`);
@@ -93,11 +94,10 @@ function createManagedPythonTool({ id, label, moduleName, scriptName, requiredFi
         identities.push([relative, itemStat.dev, itemStat.ino, itemStat.size, itemStat.mtimeMs, itemStat.ctimeMs]);
       }
       const identity = JSON.stringify([stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs, identities]);
-      if (verification !== "status" && verified.get(root) !== identity) {
-        for (const [relative, item] of Object.entries(record.files)) if (Native.hashFile(path.join(root, "files", relative)) !== item.sha256) return null;
-        if (verified.size >= 64) verified.delete(verified.keys().next().value);
-        verified.set(root, identity);
-      }
+      if (verification !== "status" && !verified.verify(root, { identity: () => identity, verify: () => {
+        for (const [relative, item] of Object.entries(record.files)) if (Native.hashFile(path.join(root, "files", relative)) !== item.sha256) return false;
+        return true;
+      } })) return null;
       return { ...record, root, installDir: root, filesRoot: path.join(root, "files"), ready: true, removable: true, sectionId: "default" };
     } catch { return null; }
   }

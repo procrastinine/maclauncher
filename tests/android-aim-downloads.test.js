@@ -21,7 +21,7 @@ function fixture(t){
     signal?.throwIfAborted();transfers++;fs.writeFileSync(file,archive);onProgress({downloaded:archive.length,total:archive.length});
   }};
   t.mock.method(Transport,'downloadToFile',(...args)=>network.transfer(...args));
-  const dependencies={image,capture:async(_file,_args,{signal})=>{
+  const dependencies={image,retireMountTargets(){},capture:async(_file,_args,{signal})=>{
     signal?.throwIfAborted();preparations++;const target=path.join(directory,'derived/root');fs.mkdirSync(target,{recursive:true});
     fs.writeFileSync(path.join(directory,'system.dmg'),'original image');fs.writeFileSync(path.join(target,'.identity'),'verified');return '';
   }};

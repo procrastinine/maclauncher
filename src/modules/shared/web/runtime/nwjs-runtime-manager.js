@@ -158,6 +158,7 @@ function availability(row, arch) {
   return { nativeAvailable, rosettaFallback, unavailable, mode: unavailable ? "unavailable" : rosettaFallback ? "rosetta" : "native" };
 }
 
+// Catalog defaults follow the launcher CPU; alternate CPU catalogs are calculated separately.
 async function fetchAvailableVersions({ logger, latestOnly, signal, arch = process.arch } = {}) {
   logger?.info?.("[nwjs] fetching versions");
   const rows = (await source.discover({ logger, signal })).slice(0, latestOnly === true ? 1 : 500);
@@ -194,6 +195,11 @@ async function publishedFile(listed, { version, key, signal, logger }) {
 }
 
 function listInstalled(userDataDir) {
+  return structuredClone(require("../../../../core/coordinated-runtime-managers").memoizeRuntimeResolution(module.exports,
+    JSON.stringify(["listInstalled", userDataDir]), () => listInstalledUncached(userDataDir)));
+}
+
+function listInstalledUncached(userDataDir) {
   const out = [];
   const seen = new Set();
   const roots = getInstallRoots(userDataDir);
@@ -270,6 +276,7 @@ async function installVersion({
   const v = normalizeVersion(version);
   const kind = normalizeVariant(variant);
   const resolvedPlatform = platform || process.platform;
+  // Keep the requested/default runtime CPU rather than replacing it with the physical Mac's CPU.
   const resolvedArch = arch || process.arch;
 
   if (resolvedPlatform !== "darwin") {
@@ -367,6 +374,7 @@ function resolveBestInstalled({ userDataDir, version, variant, platform, arch, v
   const kind = normalizeVariant(variant);
 
   const resolvedPlatform = platform || process.platform;
+  // Installed-runtime preference follows the requested/default launcher CPU.
   const resolvedArch = arch || process.arch;
 
   if (resolvedPlatform !== "darwin") {
@@ -378,7 +386,8 @@ function resolveBestInstalled({ userDataDir, version, variant, platform, arch, v
     return listInstalled(userDataDir).filter(item => item.ready !== false && item.variant === kind &&
       keys.includes(item.platformKey) && (!Array.isArray(versions) || versions.includes(item.version)))
       .sort((a, b) => b.version.localeCompare(a.version, undefined, { numeric: true }) ||
-        keys.indexOf(a.platformKey) - keys.indexOf(b.platformKey))[0] || null;
+        keys.indexOf(a.platformKey) - keys.indexOf(b.platformKey))
+      .find(item => AppBundle.appBundleStatus(path.join(item.installDir, "nwjs.app"), { executablePath: item.executablePath }).ready) || null;
   }
   const roots = getInstallRoots(userDataDir);
   for (const platformKey of keys) {

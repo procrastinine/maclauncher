@@ -6,6 +6,13 @@ const Catalog=require("./catalog"),{versionAtLeast,systemVersionSync}=require(".
 const {confirmToolInstall}=require("../../../shared/runtime/tool-install"),{withRuntimeMutation}=require("../../../../core/coordinated-runtime-managers");
 const architecture=()=>require("../../../shared/runtime/host-capabilities").getHostCapabilities().hardwareArch;
 const digest=value=>crypto.createHash("sha256").update(value).digest("hex");
+// Each Sikarugir version has one reusable host folder per backend. Every
+// version with an installation folder, usable or damaged, keeps its hosts;
+// listing them reads no runtime files.
+const hostName=(version,backend)=>digest(JSON.stringify([1,version,backend])).slice(0,24);
+const hostNames=userDataDir=>{Manager.core.listCatalog({userDataDir});
+  return Manager.core.catalog.filter(pin=>fs.existsSync(Manager.core.getInstallDir({userDataDir,version:pin.version})))
+    .flatMap(pin=>["d3d12","vulkan"].map(backend=>hostName(pin.version,backend)));};
 function capabilities(install){
   try{return Graphics.capabilitiesFor(install,install.templateRoot||install.supportRoot||path.join(install.installDir,"support"),{hardwareArch:architecture()});}
   catch{return {};}
@@ -50,7 +57,7 @@ async function prepare(request,context={}){
   const originalLibraries=request.originalLibraries?.map(regular);
   if(originalLibraries&&(originalLibraries[0]!==originalLibrary||new Set(originalLibraries).size!==originalLibraries.length))throw Error("The GPU helper library identities are invalid.");
   if(!fs.statSync(nativeRoot).isDirectory())throw Error("The GPU helper directory is unavailable.");
-  const identity=digest(JSON.stringify([1,install.version,request.backend])),directory=path.join(userDataDir,"graphics/compute-hosts",identity.slice(0,24));
+  const directory=path.join(userDataDir,"graphics/compute-hosts",hostName(install.version,request.backend));
   Writable.assertOwnDirectory(userDataDir,directory);
   for(const name of ["home","tmp"])Writable.assertOwnDirectory(directory,path.join(directory,name));
   const prefix=request.prefixDirectory?fs.realpathSync(request.prefixDirectory):path.join(directory,"prefix");
@@ -68,4 +75,4 @@ async function prepare(request,context={}){
       codeDirectories:[install.installDir,graphics.viewRoot],writableDirectories:[directory,prefix],
       executables:[graphics.executablePath,path.join(graphics.wineRoot,"lib/wine/x86_64-unix/wine"),graphics.serverPath],runtimeVersion:install.version,ownsPrefix:!request.prefixDirectory}};
 }
-module.exports={id:"sikarugir-gpu",label:"Sikarugir",backends:["d3d12","vulkan"],getState:state,prepare};
+module.exports={id:"sikarugir-gpu",label:"Sikarugir",backends:["d3d12","vulkan"],getState:state,prepare,hostNames};

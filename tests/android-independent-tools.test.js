@@ -16,6 +16,7 @@ function temporary(t) {
 }
 
 test("uncached package inspection retains x86 and both ARM ABIs without any game runtime", async t => {
+  if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
   const root = temporary(t), userDataDir = path.join(root, "empty-profile");
   fs.mkdirSync(userDataDir);
   for (const name of ["runtimeRoot", "resolveSelected", "resolveSelectedForLaunch", "resolveForLaunch"])
@@ -42,12 +43,12 @@ test("uncached package inspection retains x86 and both ARM ABIs without any game
   writeZipArchive(archive, fs.readdirSync(input).map(name => ({ name, data: fs.readFileSync(path.join(input, name)) })));
   const archived = await Android.actions.inspectGame({ gameId: "inspection", gamePath: archive, runtimeId: "aim" }, {}, { userDataDir });
   assert.deepEqual(archived.architectures, ["arm64-v8a", "armeabi-v7a", "x86_64"]);
-  const noVersion = await Android.actions.inspectGame({ gameId: "inspection", gamePath: path.join(__dirname, "fixtures/android-package-metadata/metadata.apk") }, {}, { userDataDir });
+  const noVersion = await Android.actions.inspectGame({ gameId: "inspection", gamePath: require('./helpers/android-fixture-tools.cjs').metadataApk(t) }, {}, { userDataDir });
   assert.equal(noVersion.versionCode, null, "Read-only inspection preserves an absent version without installer normalization");
   assert.deepEqual(fs.readdirSync(userDataDir), [], "Inspection installs no runtime, cache or profile service");
 });
 
-test("included APK signer is independent and ASAR resources become a verified physical Java input", t => {
+test("included APK signer uses its single unpacked app file without a profile copy", t => {
   const root = temporary(t), userDataDir = path.join(root, "empty-profile"); fs.mkdirSync(userDataDir);
   t.mock.method(Runtime, "runtimeRoot", () => assert.fail("Mac.apk signature verification must not resolve MacLauncher Android"));
   t.mock.method(require("../src/modules/android/included-files"), "file", () => assert.fail("Stock apksig must not resolve a custom Builds helper"));
@@ -55,15 +56,14 @@ test("included APK signer is independent and ASAR resources become a verified ph
   assert.equal(source, path.resolve(__dirname, "../src/modules/android/tools/apksig/apksig.jar"));
   assert.equal(sha(source), binary.files[0].sha256);
   assert.equal(source, Signatures.resolve());
-  const packaged = path.join(root, "MacLauncher.app/Contents/Resources/app.asar/src/modules/android/tools/apksig");
-  fs.mkdirSync(packaged, { recursive: true }); fs.copyFileSync(source, path.join(packaged, "apksig.jar"));
-  const resolve = Signatures.createResolver(packaged), materialized = resolve(userDataDir);
-  assert.ok(materialized.startsWith(path.join(userDataDir, "internal-tools/apksig") + path.sep));
-  assert.ok(!materialized.split(path.sep).some(part => part.endsWith(".asar")));
-  assert.equal(fs.lstatSync(materialized).isFile(), true); assert.equal(sha(materialized), binary.files[0].sha256);
-  const original = fs.statSync(materialized); assert.equal(resolve(userDataDir), materialized);
-  assert.equal(fs.statSync(materialized).ino, original.ino, "Warm verification reuses the same physical helper");
-  assert.deepEqual(fs.readdirSync(userDataDir), ["internal-tools"]);
-  fs.writeFileSync(materialized, "changed"); assert.throws(() => resolve(userDataDir), /changed on disk/);
-  assert.throws(() => resolve(), /private launcher storage/);
+  const virtual = path.join(root, "MacLauncher.app/Contents/Resources/app.asar/src/modules/android/tools/apksig");
+  const unpacked = path.join(root, "MacLauncher.app/Contents/Resources/app.asar.unpacked/src/modules/android/tools/apksig");
+  fs.mkdirSync(unpacked, { recursive: true }); fs.copyFileSync(source, path.join(unpacked, "apksig.jar"));
+  const resolve = Signatures.createResolver(virtual), selected = resolve(userDataDir);
+  assert.equal(selected, path.join(unpacked,"apksig.jar"));
+  assert.equal(sha(selected), binary.files[0].sha256);
+  const original=fs.statSync(selected);assert.equal(resolve(),selected);assert.equal(fs.statSync(selected).ino,original.ino);
+  assert.deepEqual(fs.readdirSync(userDataDir),[],"No profile copy is written");
+  assert.ok(require('../package.json').build.asarUnpack.includes('src/modules/android/tools/apksig/apksig.jar'));
+  fs.writeFileSync(selected,"changed");assert.throws(()=>resolve(),/unavailable/);
 });

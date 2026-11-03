@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../../shared/copy-file");
 const path = require("node:path");
 const { createPinnedNativeManager, upstreamPins } = require("../../shared/runtime/pinned-native-manager");
 const { runDownloadTask } = require("../../shared/runtime/download-manager");
@@ -81,7 +82,7 @@ function createManager({ dependencies = {} } = {}) {
     const version = match[1], pin = await ensureCatalogVersion({ ...options, version });
     const importer = createManager({ dependencies: { ...dependencies, downloadToFile: async (url, output) => {
       if (url !== pin.asset.url) throw new Error("Imported Unity package does not match the selected release.");
-      fs.copyFileSync(source, output);
+      cloneOrCopySync(source, output);
     } } });
     return runDownloadTask(options.downloads, buildRuntimeDownloadMeta({ label: "Import Unity player", managerId: "unity", sectionId: "default", version, kind: "runtime-import" }), task =>
       importer.installRuntime({ ...options, version, downloads: null, signal: task.signal && options.signal ? AbortSignal.any([task.signal, options.signal]) : task.signal || options.signal, onProgress: task.onProgress }));

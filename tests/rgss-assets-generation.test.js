@@ -8,6 +8,7 @@ const Assets = require("../src/modules/rgss/assets");
 const Launcher = require("../src/modules/rgss/runtime/mkxpz-launcher");
 const { createRuntimeCoordinator } = require("../src/core/runtime-coordinator");
 const { createLauncher } = require("../src/core/launcher");
+const { hasFineChangeTime } = require("../src/modules/shared/file-time");
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-immutable-rgss-"));
@@ -59,14 +60,17 @@ test("unchanged source observations reuse hashes and metadata-only updates keep 
   t.mock.method(fs, "openSync", (file, ...args) => { const fd = open(file, ...args); if (file === font) descriptors.add(fd); return fd; });
   t.mock.method(fs, "readSync", (fd, ...args) => { if (descriptors.has(fd)) sourceReads++; return read(fd, ...args); });
   const warm = Assets.ensureAssetsStaged(f.options);
-  assert.equal(warm.generationRoot, first.generationRoot); assert.equal(sourceReads, 0);
+  assert.equal(warm.generationRoot, first.generationRoot);
+  if (hasFineChangeTime(fs.lstatSync(font, { bigint: true }))) assert.equal(sourceReads, 0);
+  else assert.ok(sourceReads > 0, "Coarse change times must recheck source bytes");
   fs.utimesSync(font, new Date(1000), new Date(2000));
   const refreshed = Assets.ensureAssetsStaged(f.options);
   assert.equal(refreshed.generationRoot, first.generationRoot); assert.equal(refreshed.stagedNow, false);
   assert.ok(sourceReads > 0, "Changed real-file metadata must recheck its bytes");
   sourceReads = 0;
   assert.equal(Assets.ensureAssetsStaged(f.options).generationRoot, first.generationRoot);
-  assert.equal(sourceReads, 0);
+  if (hasFineChangeTime(fs.lstatSync(font, { bigint: true }))) assert.equal(sourceReads, 0);
+  else assert.ok(sourceReads > 0, "Coarse change times must recheck source bytes");
 });
 
 test("real source mutation and file replacement during hashing fail without publishing assets", t => {
@@ -78,15 +82,62 @@ test("real source mutation and file replacement during hashing fail without publ
     if (fd === descriptor && !changed) { changed = true; fs.writeFileSync(font, "FONT"); }
     return bytes;
   });
-  assert.throws(() => Assets.ensureAssetsStaged(f.options), /source changed while reading/);
+  assert.throws(() => Assets.ensureAssetsStaged(f.options), {
+    message: /^(?:RGSS asset source changed while reading\.|RGSS asset bytes changed during staging: soundfont\/GMGSx\.SF2)$/
+  });
   assert.equal(fs.existsSync(path.join(f.userDataDir, "modules", "rgss", "assets")), false);
   t.mock.restoreAll();
   t.mock.method(fs, "openSync", (file, ...args) => {
     if (file === font) { fs.renameSync(font, font + ".previous"); fs.writeFileSync(font, "font"); }
     return open(file, ...args);
   });
-  assert.throws(() => Assets.ensureAssetsStaged(f.options), /source changed while reading/);
+  assert.throws(() => Assets.ensureAssetsStaged(f.options), { message: /^RGSS asset source changed while reading\.$/ });
   assert.equal(fs.existsSync(path.join(f.userDataDir, "modules", "rgss", "assets")), false);
+});
+
+test("staging byte changes with held metadata preserve the previous generation and marker", t => {
+  const f = fixture(t), first = Assets.ensureAssetsStaged(f.options);
+  const font = path.join(f.resourceRoot, "soundfont", "GMGSx.SF2");
+  const generations = path.dirname(first.generationRoot), assets = path.dirname(generations);
+  const marker = path.join(assets, ".maclauncher-assets.json"), record = path.join(first.generationRoot, ".maclauncher-generation.json");
+  const markerBytes = fs.readFileSync(marker), recordBytes = fs.readFileSync(record);
+  const previousFont = fs.readFileSync(path.join(first.generationRoot, "soundfont", "GMGSx.SF2"));
+  const previousPreload = fs.readFileSync(path.join(first.generationRoot, "kawariki", "preload.rb"));
+  const previousGenerations = fs.readdirSync(generations).sort();
+  fs.writeFileSync(path.join(f.kawarikiRoot, "patches.rb"), "# changed patches requiring a new generation");
+
+  const rename = fs.renameSync, lstat = fs.lstatSync, fstat = fs.fstatSync;
+  let held, changed = false, heldObservations = 0;
+  const observe = stat => {
+    if (!held || String(stat.dev) !== String(held.bigint.dev) || String(stat.ino) !== String(held.bigint.ino)) return stat;
+    heldObservations++;
+    return typeof stat.ino === "bigint" ? held.bigint : held.number;
+  };
+  t.mock.method(fs, "lstatSync", (...args) => observe(lstat(...args)));
+  t.mock.method(fs, "fstatSync", (...args) => observe(fstat(...args)));
+  t.mock.method(fs, "renameSync", (source, destination, ...args) => {
+    const result = rename(source, destination, ...args);
+    const relative = path.relative(generations, destination).split(path.sep);
+    if (relative.length === 3 && relative[0].startsWith(".prepare-") && relative[1] === "soundfont" && relative[2] === "GMGSx.SF2") {
+      // Observe the real copied destination after publication within staging,
+      // regardless of the copy implementation. Hold its metadata during the
+      // equal-sized write so only staged-byte verification can reject it.
+      held = { bigint: lstat(destination, { bigint: true }), number: lstat(destination) };
+      fs.writeFileSync(destination, "FONT"); changed = true;
+    }
+    return result;
+  });
+  assert.throws(() => Assets.ensureAssetsStaged(f.options), {
+    message: /^RGSS asset bytes changed during staging: soundfont\/GMGSx\.SF2$/
+  });
+  assert.equal(changed, true); assert.ok(heldObservations > 0);
+  t.mock.restoreAll();
+  assert.deepEqual(fs.readFileSync(marker), markerBytes);
+  assert.deepEqual(fs.readFileSync(record), recordBytes);
+  assert.deepEqual(fs.readFileSync(path.join(first.generationRoot, "soundfont", "GMGSx.SF2")), previousFont);
+  assert.deepEqual(fs.readFileSync(path.join(first.generationRoot, "kawariki", "preload.rb")), previousPreload);
+  assert.deepEqual(fs.readdirSync(generations).sort(), previousGenerations);
+  assert.equal(fs.readFileSync(font, "utf8"), "font");
 });
 
 test("a real directory named .asar retains normal source mutation and symlink checks", t => {

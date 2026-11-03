@@ -17,13 +17,17 @@ Detection chooses the motif declared in `data/mugen.cfg`, then `data/system.def`
 
 ## Preparation and storage
 
-Play builds a per-game folder that combines the engine's default files with the game's assets, then starts the engine with `-r <motif>`.
+When the selected runtime belongs to the imported complete Ikemen distribution, Play starts its original executable in that original directory. Game resources, configuration and the default `save/` folder remain there, with no private game view. With an explicit save-folder override, Play uses the per-game folder described below.
 
-- Asset files are linked for reading, including static resources such as large 3D GLB and GLTF files. Edits to an existing linked file show up immediately; adding or removing files requires the folder to be rebuilt.
+With a separate runtime, Play builds a per-game folder that combines the engine's default files with the game's assets, then starts the engine with `-r <motif>`.
+
+- Asset files are linked for reading, including static resources such as large 3D GLB and GLTF files. Edits to a linked file show up immediately.
+- Configuration and other files are private copies that engine scripts may update. A changed original replaces its copy at the next launch, and a removed original takes its copy with it unless the game wrote to that copy.
+- Each launch adds new files and removes deleted ones. Unchanged files are not read again.
 - The selected engine supplies its own Lua support scripts. Lua scripts from the imported game are not injected silently.
 - The complete runtime app is kept unchanged beside the per-game assets, because the Mac runner resets its working folder to the app's parent folder.
 - Symbolic links to folders in the source game are skipped.
-- Changing the runtime rebuilds the folder and keeps the saves.
+- Changing the runtime replaces the app and the engine's files in the folder and keeps the saves.
 
 Automatic preparation also repairs two kinds of content problems inside that folder:
 
@@ -32,7 +36,7 @@ Automatic preparation also repairs two kinds of content problems inside that fol
 
 ## Saves
 
-Configuration, statistics, replays, logs and game-defined saves are written to the game's save folder in launcher data, through the `save` link in the per-game folder. The author's initial configuration is copied there only when no player configuration exists yet.
+For an original complete distribution with its own selected runtime, configuration, statistics, replays, logs and game-defined saves use the original `save/` folder. With a separate runtime, they go to the game's save folder in launcher data, through the `save` link in its per-game folder. The author's initial configuration is copied there only when no player configuration exists yet.
 
 ## Settings
 

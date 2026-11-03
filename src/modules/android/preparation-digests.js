@@ -1,10 +1,12 @@
 const fs = require("node:fs"), path = require("node:path");
 const Writable = require("../shared/writable-input");
+const { hasFineChangeTime } = require("../shared/file-time");
 
 // This index belongs to the launcher, beside (not inside) writable Android data.
 // A digest is reusable only for the same current filesystem object and times.
 // ctime also detects same-size edits whose original mtime was restored.
 const identity = stat => [stat.dev, stat.ino, stat.size, stat.mode, stat.mtimeNs, stat.ctimeNs].join(":");
+const reusable = (stat, value) => hasFineChangeTime(stat) && value?.identity === identity(stat);
 function open(root) {
   const file = path.join(root, ".preparation-digests.json");
   let previous = {};
@@ -30,4 +32,4 @@ function open(root) {
     }
   };
 }
-module.exports = { open, identity };
+module.exports = { open, identity, reusable };

@@ -40,7 +40,8 @@ async function prepareSandbox({ javaPath, config, configFile, dataRoot, userData
   const androidEnvironment = Namespace.environment({ dataRoot: data, ...directories, partitionsRoot: path.join(runtime, "android-root") });
   const home = path.join(data, "home"), temporary = path.join(data, "cache", "tmp"), graphicsOutput = path.join(data, "cache", "graphics");
   for (const directory of [home, temporary, graphicsOutput]) Writable.assertOwnDirectory(data, directory);
-  const systemEnvironment = environment();
+  const dependencyContext=require('../shared/runtime/package-dependencies').contextForPayload(runtime,userDataDir);
+  const systemEnvironment = { ...environment(), ...require('../shared/runtime/bundled-native').resolveInstalledEnvironment(dependencyContext) };
   const javaArguments = ["-Djava.home=" + jdk, "-Duser.home=" + home, "-Djava.io.tmpdir=" + temporary, "-XX:-UsePerfData"];
   javaArguments.push(...require("./jvm-options").cryptoJvmOptions({ javaHome: jdk, runtimeRoot: runtime, cacheRoot: directories.cacheRoot, javaArguments }));
   const nativeStartupEnvironment = NativeStartup.environment({ androidEnvironment, systemEnvironment, home, temporary: temporary + path.sep });
@@ -55,6 +56,7 @@ async function prepareSandbox({ javaPath, config, configFile, dataRoot, userData
   const selectedJvm = jvmProcess ? await canonical(path.join(jdk, "lib/server/libjvm.dylib"), "file") : null;
   const identities = await require("./process-channel").processNamespace(userDataDir, processIdentityVersion);
   const readDirectories = [...(bionic?.readDirectories || []), jdk, runtime, await canonical(graphicsDirectory, "directory"), ...scoped.readableDirectories];
+  for(const directory of dependencyContext.dependencyReadRoots)readDirectories.push(await canonical(directory,'directory'));
   const nativeDirectories = config.nativeRoot ? [config.nativeRoot] : [];
   if (application) readDirectories.push(await canonical(application.app, "directory"));
   for (const key of ["nativeRoot", "assetsRoot", "resourcesRoot"])

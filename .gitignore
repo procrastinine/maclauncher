@@ -4,8 +4,6 @@
 **/._.DS_Store
 Thumbs.db
 **/Thumbs.db
-macgame-nwjs-inject.log
-.tmp-nwjs-inject
 AGENTS.md
 *.log
 
@@ -14,6 +12,7 @@ AGENTS.md
 .vscode/
 .idea/
 *.iml
+**/.claude/.cc-writes/
 
 .vite/
 __pycache__/
@@ -34,7 +33,6 @@ build/included-helper-packages/
 build/builds-separation-inputs/
 build/managed-packages/
 build/android-launcher-jars/
-build/app-candidate-r6/
 
 .local/
 /private-tests/
@@ -49,3 +47,27 @@ game_tests
 
 # SwiftPM edit-mode packages are materialized at build time.
 src/modules/shared/reshade/neural/native/Packages/
+
+# Generated from pinned public Unicode text by checkout and app preparation.
+/src/modules/catsystem2/resources/encoding/cp932.bin
+
+# Publisher payloads are restored from their pinned source records.
+/src/resources/python/
+/src/resources/7zip/7zz
+/src/modules/android/native/tools/asm-*.jar
+/src/modules/android/native/tools/apksig.jar
+/src/modules/android/tools/apksig/apksig.jar
+
+# The foreign-package APK fixture is generated in each test's temporary tree.
+/tests/fixtures/android-apk-metadata-standalone/foreign.apk
+
+# Publisher Mod and Android fixtures are acquired or generated outside Git.
+/src/modules/renpy/resources/0x52_URM.rpa
+/tests/fixtures/android-apk-metadata-standalone/*.apk
+/tests/fixtures/android-package-metadata/metadata.apk
+/tests/fixtures/android-converter-super/classes.dex
+/tests/fixtures/android-framework-services/manifests/*.xml.bin
+/tests/fixtures/android-window-session/*.xml.bin
+
+# Prepared copy of the existing app package lock.
+/src/resources/runtime-packages.json

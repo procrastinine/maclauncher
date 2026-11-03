@@ -1,8 +1,6 @@
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os"), test = require("node:test"), assert = require("node:assert/strict");
 const Mono = require("../src/modules/godot/mono"), Pack = require("../src/modules/godot/pack"), Godot = require("../src/modules/godot/main");
 const {pack, settings} = require("./helpers/godot-pack");
-const {createRuntimeCoordinator} = require("../src/core/runtime-coordinator");
-const {EventEmitter} = require("node:events");
 function fixture(t, files = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "godot-mono-")));t.after(() => fs.rmSync(root, {recursive: true, force: true}));
   const sourceRoot = path.join(root, "game"), userDataDir = path.join(root, "data");fs.mkdirSync(sourceRoot);
@@ -17,129 +15,129 @@ function fixture(t, files = {}) {
   return {root, sourceRoot, source, userDataDir, appPath, api, entry, value,
     options: {target: {kind: "pack", path: source}, install: {version: "3.5.2-stable", appPath}, variant: "mono", userDataDir}};
 }
-test("Mono3 pack preparation preloads exact API DLLs through private filesystem fallback with no extraction or hook", async t => {
-  const f = fixture(t), source = fs.readFileSync(f.source), prepared = await Mono.prepare(f.entry, f.options);
-  assert.equal(prepared.target.path, f.source, "the original pack and payload offsets remain intact");assert.notEqual(prepared.cwd, f.sourceRoot);
-  for (const name of ["GodotSharp.dll", "GodotSharpEditor.dll"]) assert.deepEqual(fs.readFileSync(path.join(prepared.cwd, ".mono/assemblies/Debug", name)), fs.readFileSync(path.join(f.api, name)));
-  assert.equal(fs.readFileSync(path.join(prepared.cwd, "external.cfg"), "utf8"), "publisher config", "ordinary relative external reads still resolve");
-  fs.writeFileSync(path.join(prepared.cwd, "external.cfg"), "private change");assert.equal(fs.readFileSync(path.join(f.sourceRoot, "external.cfg"), "utf8"), "publisher config");
-  assert.equal(fs.existsSync(path.join(f.sourceRoot, ".mono")), false);assert.deepEqual(fs.readFileSync(f.source), source);
-  const mtime = fs.statSync(path.join(prepared.cwd, ".mono/assemblies/Debug/GodotSharp.dll")).mtimeMs;
-  assert.deepEqual(await Mono.prepare(f.entry, f.options), prepared);assert.equal(fs.statSync(path.join(prepared.cwd, ".mono/assemblies/Debug/GodotSharp.dll")).mtimeMs, mtime);
+test("Mono3 packs retain the original target, working directory and ordinary relative data", async t => {
+  const f = fixture(t), prepared = await Mono.prepare(f.entry, f.options);
+  assert.deepEqual(prepared, {target: f.options.target, cwd: f.sourceRoot});
+  assert.equal(prepared.retire, undefined, "Play registers no cleanup of old private games");
+  assert.equal(fs.existsSync(f.userDataDir + "/games"), false);
+  assert.equal(fs.existsSync(path.join(f.sourceRoot, ".mono")), false, "Godot itself owns API refresh");
+  fs.writeFileSync(path.join(prepared.cwd, "external.cfg"), "ordinary game write");
+  assert.equal(fs.readFileSync(path.join(f.sourceRoot, "external.cfg"), "utf8"), "ordinary game write");
+  assert.deepEqual(fs.readFileSync(f.source), f.value.buffer);
 });
-test("Mono3 C# assemblies retain IL and dependencies while packed stale API rows use the selected runtime", async t => {
-  const game = Buffer.from("MZgame managed IL"), dependency = Buffer.from("MZdependency IL"), stale = Buffer.from("MZold API");
-  const f = fixture(t, {".mono/assemblies/Release/Game.dll": game, ".mono/assemblies/Debug/GodotSharp.dll": stale});
-  const external = path.join(f.sourceRoot, "data_Game/Assemblies");fs.mkdirSync(external, {recursive: true});fs.writeFileSync(path.join(external, "Dependency.dll"), dependency);
-  const unrelated = path.join(f.sourceRoot, "data_Unrelated/Assemblies");fs.mkdirSync(unrelated, {recursive: true});fs.writeFileSync(path.join(unrelated, "Unrelated.dll"), "MZunrelated IL");
-  const before = fs.readFileSync(f.source), prepared = await Mono.prepare(f.entry, f.options);assert.notEqual(prepared.target.path, f.source);
-  Pack.open(prepared.target.path, {offset: f.value.offset, size: f.value.size}, (fd, value) => {
-    assert.equal(value.entries.has(".mono/assemblies/Debug/GodotSharp.dll"), false);
-    assert.deepEqual(Pack.readEntry(fd, value.entries.get(".mono/assemblies/Release/Game.dll"), 1024), game);
-    assert.ok(value.entries.has("project.binary"));
-  });
-  assert.equal(Pack.hasTrailer(prepared.target.path, {offset: f.value.offset, size: f.value.size}), true);
-  assert.deepEqual(fs.readFileSync(path.join(prepared.cwd, ".mono/temp/bin/Debug/Game.dll")), game);
-  assert.deepEqual(fs.readFileSync(path.join(prepared.cwd, ".mono/temp/bin/Debug/Dependency.dll")), dependency);
-  assert.equal(fs.existsSync(path.join(prepared.cwd, ".mono/temp/bin/Debug/Unrelated.dll")), false);
-  assert.deepEqual(fs.readFileSync(f.source), before);assert.deepEqual(fs.readFileSync(path.join(external, "Dependency.dll")), dependency);
-});
-test("Mono3 project preparation preserves imported resources and publisher files in a private writable projection", async t => {
-  const f = fixture(t), project = path.join(f.sourceRoot, "source");fs.mkdirSync(path.join(project, ".import"), {recursive: true});
-  fs.writeFileSync(path.join(project, "project.godot"), '[application]\nconfig/name="Game"\n');fs.writeFileSync(path.join(project, ".import/texture.stex"), "imported texture");
-  const managed = path.join(project, ".mono/temp/bin/Debug");fs.mkdirSync(managed, {recursive: true});fs.writeFileSync(path.join(managed, "Game.dll"), "MZsource game IL");
+test("Mono3 source projects use their original imported assets and managed build outputs", async t => {
+  const f = fixture(t), project = path.join(f.sourceRoot, "source"), imported = path.join(project, ".import/texture.stex");
+  fs.mkdirSync(path.dirname(imported), {recursive: true});fs.writeFileSync(imported, "imported texture");
+  fs.writeFileSync(path.join(project, "project.godot"), '[application]\nconfig/name="Game"\n');
+  const assembly = path.join(project, ".mono/temp/bin/Debug/Game.dll");fs.mkdirSync(path.dirname(assembly), {recursive: true});fs.writeFileSync(assembly, "MZoriginal IL");
   const prepared = await Mono.prepare(f.entry, {...f.options, target: {kind: "project", path: project}});
-  assert.notEqual(prepared.target.path, project);assert.equal(prepared.cwd, prepared.target.path);
-  assert.equal(fs.readFileSync(path.join(prepared.cwd, ".import/texture.stex"), "utf8"), "imported texture");
-  assert.equal(fs.readFileSync(path.join(prepared.cwd, ".mono/temp/bin/Debug/Game.dll"), "utf8"), "MZsource game IL");
-  fs.writeFileSync(path.join(prepared.cwd, "project.godot"), "private write");assert.match(fs.readFileSync(path.join(project, "project.godot"), "utf8"), /config\/name/);
+  assert.deepEqual(prepared, {target: {kind: "project", path: project}, cwd: project});
+  assert.equal(fs.readFileSync(assembly, "utf8"), "MZoriginal IL");assert.equal(fs.readFileSync(imported, "utf8"), "imported texture");
   assert.equal(fs.existsSync(path.join(project, ".mono/assemblies")), false);
 });
-test("Mono3 optional preparation is dormant for Standard and Godot4, and rejects cancellation and escaping assemblies", async t => {
-  const f = fixture(t);assert.equal(await Mono.prepare({}, {variant: "standard"}), null);assert.equal(await Mono.prepare({}, {variant: "mono", install: {version: "4.6.3-stable"}}), null);
-  const controller = new AbortController(), reason = Error("stopped");controller.abort(reason);await assert.rejects(Mono.prepare(f.entry, {...f.options, signal: controller.signal}), value => value === reason);
-  const external = path.join(f.sourceRoot, "data_Game/Assemblies");fs.mkdirSync(external, {recursive: true});const outside = path.join(f.root, "outside.dll");fs.writeFileSync(outside, "MZoutside");fs.symlinkSync(outside, path.join(external, "escaped.dll"));
-  await assert.rejects(Mono.prepare(f.entry, f.options), /assembly links/);assert.equal(fs.existsSync(path.join(f.sourceRoot, ".mono")), false);
-});
-test("ordinary Mono3 launch uses the existing selected Mono executable and private bootstrap cwd", async t => {
+test("ordinary Mono3 launch keeps the selected executable and the game's original cwd", async t => {
   const f = fixture(t);let call;
   await Godot.launchRuntime("godot", f.entry, {userDataDir: f.userDataDir, settings: {runtimes: {godot: {defaultVariant: "mono"}}}, platform: "darwin",
     spawnDetachedChecked: (executable, args, options) => {call = {executable, args, options};return {pid: 42};}});
-  assert.match(call.executable, /Godot_mono\.app\/Contents\/MacOS\/Godot$/);assert.deepEqual(call.args, ["--main-pack", f.source]);
-  assert.ok(fs.existsSync(path.join(call.options.cwd, ".mono/assemblies/Debug/GodotSharp.dll")));assert.equal(call.options.env, undefined, "the adapter adds no process hook or graphics environment");
+  assert.match(call.executable, /Godot_mono\.app\/Contents\/MacOS\/Godot$/);
+  assert.deepEqual(call.args, ["--main-pack", f.source]);assert.equal(call.options.cwd, f.sourceRoot);assert.equal(call.options.env, undefined);
 });
-test("Mono3 cached API repair and runtime changes preserve publisher bytes and prior prepared generations", async t => {
-  const f = fixture(t), prepared = await Mono.prepare(f.entry, f.options), api = path.join(prepared.cwd, ".mono/assemblies/Debug/GodotSharp.dll");
-  fs.writeFileSync(path.join(prepared.cwd, "Save.cfg"), "retained game state");
-  fs.writeFileSync(api, "MZdamaged API");assert.deepEqual(await Mono.prepare(f.entry, f.options), prepared);
-  assert.equal(fs.readFileSync(path.join(prepared.cwd, "Save.cfg"), "utf8"), "retained game state");
-  assert.deepEqual(fs.readFileSync(api), fs.readFileSync(path.join(f.api, "GodotSharp.dll")));
-  const accepted = fs.readFileSync(api);fs.writeFileSync(path.join(f.api, "GodotSharp.dll"), "MZupdated selected runtime API");
-  const updated = await Mono.prepare(f.entry, f.options);assert.notEqual(updated.cwd, prepared.cwd);assert.deepEqual(fs.readFileSync(api), accepted);
-  assert.equal(fs.readFileSync(path.join(updated.cwd, ".mono/assemblies/Debug/GodotSharp.dll"), "utf8"), "MZupdated selected runtime API");
-  fs.writeFileSync(path.join(updated.cwd, "Save.cfg"), "working data with lost cache receipt");
-  const directory = path.dirname(updated.cwd);fs.writeFileSync(path.join(directory, "prepared.json"), "interrupted receipt");
-  await Mono.prepare(f.entry, f.options);
-  const preserved = fs.readdirSync(directory).find(name => name.startsWith("preserved-"));assert.ok(preserved);
-  assert.equal(fs.readFileSync(path.join(directory, preserved, "Save.cfg"), "utf8"), "working data with lost cache receipt");
-  assert.deepEqual(fs.readFileSync(f.source), f.value.buffer);assert.equal(fs.existsSync(path.join(f.sourceRoot, ".mono")), false);
-});
-test("a publisher game.pck cannot collide with the private API-filtered pack or be modified through an alias", async t => {
-  const f = fixture(t, {".mono/assemblies/Debug/GodotSharp.dll": Buffer.from("MZold API")});
-  const source = path.join(f.sourceRoot, "game.pck");fs.renameSync(f.source, source);f.entry.moduleData.packPath = source;f.entry.gamePath = source;
-  const prepared = await Mono.prepare(f.entry, {...f.options, target: {kind: "pack", path: source}});
-  assert.notEqual(path.basename(prepared.target.path), "game.pck");assert.equal(fs.lstatSync(path.join(prepared.cwd, "game.pck")).isSymbolicLink(), false);
-  fs.writeFileSync(path.join(prepared.cwd, "game.pck"), "private relative write");
-  assert.deepEqual(fs.readFileSync(source), f.value.buffer);
-  Pack.open(prepared.target.path, {offset: f.value.offset, size: f.value.size}, (_fd, parsed) => {
-    assert.equal(parsed.entries.has(".mono/assemblies/Debug/GodotSharp.dll"), false);assert.ok(parsed.entries.has("project.binary"));
-  });
-});
-test("unchanged Mono Play reads no API DLL bytes or recopies assets; changed external sibling input gets a fresh cache", async t => {
-  const f = fixture(t), prepared = await Mono.prepare(f.entry, f.options), read = fs.readFileSync, copy = fs.copyFileSync;
+test("warm original-path preparation never walks assets, copies siblings, reads API DLLs or hashes a full pack", async t => {
+  const f = fixture(t, {"large.asset": Buffer.alloc(4 * 1024 * 1024)}), read = fs.readFileSync, walk = fs.readdirSync, copy = fs.copyFileSync, readChunk = fs.readSync;
+  await Mono.prepare(f.entry, f.options);let bytesRead = 0;
   try {
-    fs.readFileSync = function (file, ...args) {if (/GodotSharp(?:Editor)?\.dll$/.test(String(file))) assert.fail("Warm preparation must use validated file identities");return read.call(this, file, ...args);};
-    fs.copyFileSync = () => assert.fail("Warm preparation must not copy game assets");
-    assert.deepEqual(await Mono.prepare(f.entry, f.options), prepared);
-  } finally {fs.readFileSync = read;fs.copyFileSync = copy;}
-  fs.writeFileSync(path.join(f.sourceRoot, "external.cfg"), "publisher changed config");
-  const updated = await Mono.prepare(f.entry, f.options);assert.notEqual(updated.cwd, prepared.cwd);
-  assert.equal(fs.readFileSync(path.join(updated.cwd, "external.cfg"), "utf8"), "publisher changed config");
+    fs.readFileSync = function(file, ...args) {assert.doesNotMatch(String(file), /GodotSharp(?:Editor)?\.dll$|external\.cfg$/);return read.call(this, file, ...args);};
+    fs.readdirSync = function(file, ...args) {assert.notEqual(String(file), f.sourceRoot);assert.ok(String(file).includes("Assemblies") || String(file).includes(".mono"));return walk.call(this, file, ...args);};
+    fs.copyFileSync = () => assert.fail("No game asset copy is necessary");
+    fs.readSync = function(fd, buffer, offset, length, position) {const count = readChunk.call(this, fd, buffer, offset, length, position);bytesRead += count;return count;};
+    assert.equal((await Mono.prepare(f.entry, f.options)).cwd, f.sourceRoot);
+    assert.ok(bytesRead < 1024 * 1024, `Only bounded pack metadata should be read, got ${bytesRead}`);
+  } finally {fs.readFileSync = read;fs.readdirSync = walk;fs.copyFileSync = copy;fs.readSync = readChunk;}
 });
-test("existing Godot coordinator ownership protects active caches; retirement keeps current, fallback and modified data", async t => {
-  const f = fixture(t), coordinator = createRuntimeCoordinator(), owner = coordinator.client("mono-game"), writer = coordinator.client("mono-cleanup");
-  const withRuntimeMutation = async (identity, work) => {const token = await writer.acquireMutation(identity);try {return await work();} finally {await writer.release(token);}};
-  const options = {...f.options, withRuntimeMutation};
-  const first = await Mono.prepare(f.entry, options), active = await owner.acquireUse({managerId: "godot", version: "3.5.2-stable", variant: "mono", sourcePath: f.appPath});
-  await owner.bindUse(active, process.pid);t.after(() => owner.release(active));
-  fs.writeFileSync(path.join(f.sourceRoot, "external.cfg"), "second publisher revision");const second = await Mono.prepare(f.entry, options);
-  fs.writeFileSync(path.join(f.sourceRoot, "external.cfg"), "third publisher revision");const third = await Mono.prepare(f.entry, options);
-  await third.retire();assert.equal(fs.existsSync(first.cwd), true, "an actual bound Godot runtime protects its derived caches");
-  await owner.release(active);await third.retire();assert.equal(fs.existsSync(first.cwd), false);assert.ok(fs.existsSync(second.cwd));assert.ok(fs.existsSync(third.cwd));
-  fs.writeFileSync(path.join(second.cwd, "Save.cfg"), "actual game state");
-  fs.writeFileSync(path.join(f.sourceRoot, "external.cfg"), "fourth publisher revision");const fourth = await Mono.prepare(f.entry, options);await fourth.retire();
-  assert.equal(fs.readFileSync(path.join(second.cwd, "Save.cfg"), "utf8"), "actual game state");assert.ok(fs.existsSync(third.cwd));assert.ok(fs.existsSync(fourth.cwd));
-  let calls = 0;fs.writeFileSync(path.join(f.sourceRoot, "external.cfg"), "fifth publisher revision");
-  const fifth = await Mono.prepare(f.entry, {...f.options, withRuntimeMutation: () => {calls++;throw Error("Cleanup unavailable");}});
-  assert.equal(calls, 0, "optional cleanup cannot wait or reject before Play");await fifth.retire();assert.ok(calls > 0);assert.ok(fs.existsSync(fifth.cwd));
+test("only Release and exported managed IL missing from the original Debug folders is prepared", async t => {
+  const game = Buffer.from("MZgame managed IL"), dependency = "MZdependency IL";
+  const f = fixture(t, {".mono/assemblies/Release/Game.dll": game});
+  const external = path.join(f.sourceRoot, "data_Game/Assemblies");fs.mkdirSync(external, {recursive: true});fs.writeFileSync(path.join(external, "Dependency.dll"), dependency);
+  fs.writeFileSync(path.join(external, "GodotSharp.dll"), "MZpublisher API");
+  const unrelated = path.join(f.sourceRoot, "data_Unrelated/Assemblies");fs.mkdirSync(unrelated, {recursive: true});fs.writeFileSync(path.join(unrelated, "Unrelated.dll"), "MZunrelated IL");
+  const prepared = await Mono.prepare(f.entry, f.options), debug = path.join(f.sourceRoot, ".mono/temp/bin/Debug");
+  assert.equal(prepared.target.path, f.source);assert.equal(prepared.cwd, f.sourceRoot);
+  assert.deepEqual(fs.readFileSync(path.join(debug, "Game.dll")), game);assert.equal(fs.readFileSync(path.join(debug, "Dependency.dll"), "utf8"), dependency);
+  assert.equal(fs.existsSync(path.join(debug, "GodotSharp.dll")), false);assert.equal(fs.existsSync(path.join(debug, "Unrelated.dll")), false);
+  fs.writeFileSync(path.join(debug, "Dependency.dll"), "authoritative existing output");
+  fs.writeFileSync(path.join(external, "Dependency.dll"), "new export input");await Mono.prepare(f.entry, f.options);
+  assert.equal(fs.readFileSync(path.join(debug, "Dependency.dll"), "utf8"), "authoritative existing output");
+  assert.equal(fs.readFileSync(path.join(external, "Dependency.dll"), "utf8"), "new export input");
 });
-test("ordinary launch defers optional cache cleanup until the owned child's retirement finishes", async t => {
-  const f = fixture(t);let mutations = 0;
-  const withRuntimeMutation = async (_identity, work) => {mutations++;return work();};
-  const options = {...f.options, withRuntimeMutation};
-  await Mono.prepare(f.entry, options);
-  fs.writeFileSync(path.join(f.sourceRoot, "external.cfg"), "second");await Mono.prepare(f.entry, options);
-  fs.writeFileSync(path.join(f.sourceRoot, "external.cfg"), "third");
-  const child = new EventEmitter();child.pid = process.pid;child.exitCode = null;child.signalCode = null;
-  let finish;child.runtimeRetirement = new Promise(resolve => {finish = resolve;});
-  let bound=false,published=false;
-  const {bindProcessStop,processStopBinding}=require("../src/core/process-lifecycle");
-  t.mock.method(require("../src/modules/shared/runtime/native-app-stop"),"bindNativeAppStop",(value,options)=>{assert.equal(value,child);assert.equal(options.graceMs,10000);bound=true;return bindProcessStop(value,async()=>true);});
-  const context={userDataDir:f.userDataDir,settings:{runtimes:{godot:{defaultVariant:"mono"}}},withRuntimeMutation,
-    onProcessSpawn:async value=>{assert.equal(value,child);assert.equal(bound,true,"native Stop is bound before publication");assert.ok(processStopBinding(value)?.token,"backend publication sees the Stop token");published=true;},
-    spawnDetachedChecked:async()=>{await context.onProcessSpawn(child);return child;}};
-  const originalSpawn=context.onProcessSpawn,launched=await Godot.launchRuntime("godot",f.entry,context);
-  assert.equal(launched,child);assert.equal(published,true);assert.equal(context.onProcessSpawn,originalSpawn);assert.equal(mutations,0);
-  child.exitCode = 0;child.emit("close", 0);await new Promise(setImmediate);assert.equal(mutations, 0, "root close alone is not permission to retire still-consumed resources");
-  finish();await new Promise(setImmediate);assert.ok(mutations > 0);
+test("existing loose and packed Debug assemblies win over alternate Release inputs", async t => {
+  const f = fixture(t, {".mono/assemblies/Debug/Game.dll": Buffer.from("MZoriginal Debug"), ".mono/assemblies/Release/Game.dll": Buffer.from("MZRelease")});
+  const release = path.join(f.sourceRoot, ".mono/assemblies/Release"), debug = path.join(f.sourceRoot, ".mono/assemblies/Debug");
+  fs.mkdirSync(release, {recursive: true});fs.mkdirSync(debug);fs.writeFileSync(path.join(release, "Dependency.dll"), "MZRelease dependency");fs.writeFileSync(path.join(debug, "Dependency.dll"), "MZDebug dependency");
+  await Mono.prepare(f.entry, f.options);
+  assert.equal(fs.existsSync(path.join(f.sourceRoot, ".mono/temp")), false);
+  assert.equal(fs.readFileSync(path.join(debug, "Dependency.dll"), "utf8"), "MZDebug dependency");
+});
+test("an assembly destination created concurrently is kept instead of overwritten", async t => {
+  const f = fixture(t, {".mono/assemblies/Release/Game.dll": Buffer.from("MZexport IL")}), link = fs.linkSync;
+  try {
+    fs.linkSync = function(from, to) {fs.writeFileSync(to, "concurrent authoritative IL");return link.call(this, from, to);};
+    await Mono.prepare(f.entry, f.options);
+  } finally {fs.linkSync = link;}
+  const debug = path.join(f.sourceRoot, ".mono/temp/bin/Debug");
+  assert.equal(fs.readFileSync(path.join(debug, "Game.dll"), "utf8"), "concurrent authoritative IL");assert.deepEqual(fs.readdirSync(debug), ["Game.dll"]);
+});
+test("a coarse-stamped assembly mutation during preparation publishes no partial output", async t => {
+  const f = fixture(t), file = path.join(f.sourceRoot, "GodotSharp/Assemblies/Game.dll");fs.mkdirSync(path.dirname(file), {recursive: true});fs.writeFileSync(file, "MZold IL");
+  const read = fs.readFileSync, stat = fs.statSync;let changed = false;
+  try {
+    fs.statSync = function(input, ...args) {const value = stat.call(this, input, ...args);if (String(input) === file) return Object.assign(Object.create(Object.getPrototypeOf(value)), value, {mtimeMs: 2000, ctimeMs: 2000});return value;};
+    fs.readFileSync = function(input, ...args) {const bytes = read.call(this, input, ...args);if (String(input) === file && !changed) {changed = true;fs.writeFileSync(file, "MZnew IL");}return bytes;};
+    await assert.rejects(Mono.prepare(f.entry, f.options), /source changed/);
+  } finally {fs.readFileSync = read;fs.statSync = stat;}
+  assert.equal(fs.existsSync(path.join(f.sourceRoot, ".mono/temp/bin/Debug/Game.dll")), false);
+});
+test("damaged packed managed IL is rejected without replacing existing original data", async t => {
+  const f = fixture(t, {".mono/assemblies/Release/Game.dll": Buffer.from("MZexport IL")});
+  Pack.open(f.source, {offset: f.value.offset, size: f.value.size}, (_fd, value) => {const fd = fs.openSync(f.source, "r+");try {fs.writeSync(fd, Buffer.from("X"), 0, 1, value.entries.get(".mono/assemblies/Release/Game.dll").offset);} finally {fs.closeSync(fd);}});
+  await assert.rejects(Mono.prepare(f.entry, f.options), /packed assemblies/);
+  assert.equal(fs.existsSync(path.join(f.sourceRoot, ".mono/temp/bin/Debug/Game.dll")), false);assert.equal(fs.readFileSync(path.join(f.sourceRoot, "external.cfg"), "utf8"), "publisher config");
+});
+test("packed stale API rows alone require a filtered pack, with original cwd and override config", async t => {
+  const f = fixture(t, {".mono/assemblies/Debug/GodotSharp.dll": Buffer.from("MZold API")});
+  fs.writeFileSync(path.join(f.sourceRoot, "override.cfg"), "[application]\nconfig/name=\"Override\"\n");
+  const prepared = await Mono.prepare(f.entry, f.options);assert.notEqual(prepared.target.path, f.source);assert.equal(prepared.cwd, f.sourceRoot);
+  assert.match(prepared.target.path, /mono-packs/);assert.equal(fs.existsSync(path.join(f.sourceRoot, ".mono/assemblies")), false);
+  Pack.open(prepared.target.path, {offset: f.value.offset, size: f.value.size}, (_fd, value) => {assert.equal(value.entries.has(".mono/assemblies/Debug/GodotSharp.dll"), false);assert.ok(value.entries.has("project.binary"));});
+  assert.equal(Pack.hasTrailer(prepared.target.path, {offset: f.value.offset, size: f.value.size}), true);
+  assert.equal(fs.readFileSync(path.join(path.dirname(prepared.target.path), "override.cfg"), "utf8"), fs.readFileSync(path.join(f.sourceRoot, "override.cfg"), "utf8"));
+  assert.deepEqual(fs.readdirSync(path.dirname(prepared.target.path)).sort(), ["main.pck", "override.cfg"]);
+  assert.deepEqual(fs.readFileSync(f.source), f.value.buffer);assert.deepEqual(await Mono.prepare(f.entry, f.options), prepared);
+});
+test("modified derived packs are preserved while a fresh necessary transformation is prepared", async t => {
+  const f = fixture(t, {".mono/assemblies/Debug/GodotSharp.dll": Buffer.from("MZold API")});
+  const first = await Mono.prepare(f.entry, f.options);fs.writeFileSync(first.target.path, "private retained bytes");
+  const next = await Mono.prepare(f.entry, f.options);assert.notEqual(next.target.path, first.target.path);
+  assert.equal(fs.readFileSync(first.target.path, "utf8"), "private retained bytes");assert.equal(next.cwd, f.sourceRoot);
+});
+test("legacy private games, saves and receipts are neither read, migrated, repaired nor retired", async t => {
+  const f = fixture(t), old = path.join(f.userDataDir, "games/game/modules/godot/mono-projects/000000000000000000000000/project");
+  fs.mkdirSync(old, {recursive: true});fs.writeFileSync(path.join(old, "Save.cfg"), "private save");fs.writeFileSync(path.join(path.dirname(old), "prepared.json"), "legacy receipt");
+  const before = fs.statSync(path.join(old, "Save.cfg")), read = fs.readFileSync, walk = fs.readdirSync;
+  try {
+    fs.readFileSync = function(file, ...args) {assert.ok(!String(file).includes("mono-projects"));return read.call(this, file, ...args);};
+    fs.readdirSync = function(file, ...args) {assert.ok(!String(file).includes("mono-projects"));return walk.call(this, file, ...args);};
+    const prepared = await Mono.prepare(f.entry, {...f.options, withRuntimeMutation: () => assert.fail("No retirement/migration is permitted")});
+    assert.equal(prepared.retire, undefined);assert.equal(prepared.cwd, f.sourceRoot);
+  } finally {fs.readFileSync = read;fs.readdirSync = walk;}
+  assert.equal(fs.readFileSync(path.join(old, "Save.cfg"), "utf8"), "private save");assert.equal(fs.readFileSync(path.join(path.dirname(old), "prepared.json"), "utf8"), "legacy receipt");assert.equal(fs.statSync(path.join(old, "Save.cfg")).mtimeMs, before.mtimeMs);
+});
+test("optional preparation stays dormant for Standard and Godot4, and respects cancellation", async t => {
+  const f = fixture(t);assert.equal(await Mono.prepare({}, {variant: "standard"}), null);assert.equal(await Mono.prepare({}, {variant: "mono", install: {version: "4.6.3-stable"}}), null);
+  const controller = new AbortController(), reason = Error("stopped");controller.abort(reason);await assert.rejects(Mono.prepare(f.entry, {...f.options, signal: controller.signal}), value => value === reason);
+  assert.equal(fs.existsSync(path.join(f.sourceRoot, ".mono")), false);
+});
+test("assembly adaptation never writes through a source-side output-directory alias", async t => {
+  const f = fixture(t, {".mono/assemblies/Release/Game.dll": Buffer.from("MZexport IL")}), outside = path.join(f.root, "outside");
+  fs.mkdirSync(outside);fs.symlinkSync(outside, path.join(f.sourceRoot, ".mono"));
+  await assert.rejects(Mono.prepare(f.entry, f.options), /must not be aliases/);assert.deepEqual(fs.readdirSync(outside), []);
 });

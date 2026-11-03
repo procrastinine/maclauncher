@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../../copy-file");
 const path = require("node:path");
 const { pathToFileURL, fileURLToPath } = require("node:url");
 const { launchHostedProcess } = require("../../../../core/hosted-process");
@@ -46,7 +47,7 @@ function installStartupReporter(wrapperDir, { readinessFrame } = {}) {
       if (error.code !== "ENOENT") throw error;
     }
   }
-  fs.copyFileSync(REPORTER_SOURCE, path.join(ownedRoot, "hosted-startup-reporter.js"));
+  cloneOrCopySync(REPORTER_SOURCE, path.join(ownedRoot, "hosted-startup-reporter.js"));
   fs.writeFileSync(path.join(ownedRoot, "nwjs-startup-inject.js"), `// maclauncher:nwjs-startup
 (() => {
   const path = require("path");

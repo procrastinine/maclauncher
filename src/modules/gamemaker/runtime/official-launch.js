@@ -6,6 +6,7 @@ const Native = require("../../shared/runtime/local-native");
 const Exports = require("../export");
 const { inspectStudio, hashFile } = require("../inspect");
 const { runTool } = require("../tools");
+const { cloneOrCopy } = require("../../shared/copy-file");
 
 function hashRunnerTree(appPath) {
   const root = path.resolve(appPath);
@@ -34,16 +35,21 @@ function hashRunnerTree(appPath) {
   return digest.digest("hex");
 }
 
-function privateSaveLocations(entry, context, { homeDir = os.homedir() } = {}) {
+function saveDirectory(entry) {
+  return entry.saveDirOverride || entry.runtimeData?.["official-studio"]?.saveDirOverride || null;
+}
+
+function overrideSaveLocations(entry, context, { homeDir = os.homedir() } = {}) {
   const gameRoot = Exports.resolveOutputRoot(entry, context);
-  const identifier = `com.maclauncher.gamemaker.${crypto.createHash("sha256").update(path.resolve(context.userDataDir) + "\0" + entry.gameId).digest("hex").slice(0, 24)}`;
-  const saveDir = path.join(gameRoot, "official-saves");
+  const saveDir = saveDirectory(entry);
+  if (typeof saveDir !== "string" || !path.isAbsolute(saveDir) || saveDir.includes("\0")) throw new Error("Choose an absolute save directory.");
+  const identifier = `com.maclauncher.gamemaker.${crypto.createHash("sha256").update(path.resolve(context.userDataDir) + "\0" + entry.gameId + "\0" + path.resolve(saveDir)).digest("hex").slice(0, 24)}`;
   const support = path.join(homeDir, "Library", "Application Support");
   if (!path.isAbsolute(homeDir)) throw new Error("An absolute macOS home directory is required.");
   const alias = path.join(support, identifier);
   return { gameRoot, identifier, saveDir, support, alias };
 }
-function ensurePrivateSaves(locations) {
+function ensureSaveOverride(locations) {
   for (const dir of [locations.saveDir, path.dirname(locations.support), locations.support]) {
     if (fs.existsSync(dir) && fs.lstatSync(dir).isSymbolicLink()) throw new Error("Official GameMaker save path contains an unexpected symlink.");
     fs.mkdirSync(dir, { recursive: true });
@@ -57,12 +63,19 @@ function ensurePrivateSaves(locations) {
   } else fs.symlinkSync(locations.saveDir, locations.alias, "dir");
 }
 
-async function stageRunner(entry, context, install, { runProcess = runTool, homeDir } = {}) {
-  const locations = privateSaveLocations(entry, context, { ...(homeDir ? { homeDir } : {}) });
+async function stageRunner(entry, context, install, { runProcess = runTool, homeDir, needsSigning = false } = {}) {
+  // The installed runner keeps its native save identity. Only an explicit save
+  // override or a helper requiring a re-signed app needs an owned runtime copy.
+  const saveDir = saveDirectory(entry);
+  if (!saveDir && !needsSigning) return { appPath: install.runnerAppPath,
+    executablePath: install.executablePath, stagedBinarySha256: install.binarySha256, saveDir: null };
+  const locations = saveDir ? overrideSaveLocations(entry, context, { ...(homeDir ? { homeDir } : {}) })
+    : { gameRoot: Exports.resolveOutputRoot(entry, context), identifier: null, saveDir: null, alias: null };
   const sourceTree = hashRunnerTree(install.runnerAppPath);
   if (sourceTree !== install.runnerTreeSha256) throw new Error("Official source runner changed after registration.");
   const runtimeKey = require("../../shared/runtime/custom-runtime").storageKey(install.version, { prefix: "", length: 20 });
-  const destination = path.join(locations.gameRoot, `official-runner-${runtimeKey}`);
+  const purpose = saveDir ? "save-" + crypto.createHash("sha256").update(locations.saveDir).digest("hex").slice(0, 16) : "graphics";
+  const destination = path.join(locations.gameRoot, `official-${purpose}-runner-${runtimeKey}`);
   const recordPath = path.join(destination, "staged.json");
   const appPath = path.join(destination, "Runner.app");
   let record;
@@ -77,10 +90,10 @@ async function stageRunner(entry, context, install, { runProcess = runTool, home
     const temporary = fs.mkdtempSync(path.join(locations.gameRoot, ".official-stage-"));
     try {
       const app = path.join(temporary, "Runner.app");
-      await runProcess("/usr/bin/ditto", [install.runnerAppPath, app], { timeout: 60000 });
-      await runProcess("/usr/libexec/PlistBuddy", ["-c", `Set :CFBundleIdentifier ${locations.identifier}`, path.join(app, "Contents", "Info.plist")], { timeout: 15000 });
-      // Bundle ID controls the native runner's Application Support save root.
-      // Re-sign only the owned copy after changing its plist. Preserve JIT rights.
+      await cloneOrCopy(install.runnerAppPath, app, { signal: context.signal, exclusive: true });
+      if (locations.identifier) await runProcess("/usr/libexec/PlistBuddy", ["-c", `Set :CFBundleIdentifier ${locations.identifier}`, path.join(app, "Contents", "Info.plist")], { timeout: 15000 });
+      // Preserve the vendor bundle ID for graphics; only an explicit save
+      // override needs a different identity. Preserve the runtime's JIT rights.
       await runProcess("/usr/bin/codesign", ["--force", "--deep", "--sign", "-", "--options", "0", "--preserve-metadata=entitlements", app], { timeout: 60000 });
       if (hashRunnerTree(install.runnerAppPath) !== sourceTree) throw new Error("Official source runner changed during staging.");
       record = { version: install.version, upstreamRevision: install.upstreamRevision, identifier: locations.identifier,
@@ -91,7 +104,7 @@ async function stageRunner(entry, context, install, { runProcess = runTool, home
       fs.renameSync(temporary, destination);
     } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
   }
-  ensurePrivateSaves(locations);
+  if (locations.alias) ensureSaveOverride(locations);
   return { ...record, appPath, executablePath: path.join(appPath, "Contents", "MacOS", "Mac_Runner") };
 }
 
@@ -128,7 +141,7 @@ async function launchOfficial(entry, context, selection, dependencies = {}) {
     { context, runnerVersion: runtimeVersion, resourcesRoot: dependencies.resourcesRoot });
   let environment, graphicsHelper;
   const setting = context.runtimeSettings?.softwareOpenGLFallback;
-  const mode = setting === false || setting === "disabled" ? "disabled" : setting === true || setting === "enabled" ? "enabled" : "auto";
+  const mode = setting === "disabled" ? "disabled" : setting === "enabled" ? "enabled" : "auto";
   if (mode !== "disabled") {
     const graphics = require("./opengl-fallback");
     const selectedHelper = graphics.selection(entry, context);
@@ -144,7 +157,7 @@ async function launchOfficial(entry, context, selection, dependencies = {}) {
       }
     }
   }
-  const staged = await stageRunner(entry, context, selection.install, dependencies);
+  const staged = await stageRunner(entry, context, selection.install, { ...dependencies, needsSigning: !!graphicsHelper });
   const steam = await require("./steam-api").prepareDependency(steamDependency, entry, context, environment);
   if (steam?.environment) environment = steam.environment;
   entry.defaultSaveDir = staged.saveDir;
@@ -165,10 +178,11 @@ async function launchOfficial(entry, context, selection, dependencies = {}) {
 }
 
 function cleanupGameData(entry, context, dependencies = {}) {
-  const locations = privateSaveLocations(entry, context, dependencies);
+  if (!saveDirectory(entry)) return;
+  const locations = overrideSaveLocations(entry, context, dependencies);
   let stat;
   try { stat = fs.lstatSync(locations.alias); } catch (error) { if (error.code === "ENOENT") return; throw error; }
   if (stat.isSymbolicLink() && path.resolve(path.dirname(locations.alias), fs.readlinkSync(locations.alias)) === locations.saveDir) fs.unlinkSync(locations.alias);
 }
 
-module.exports = { hashRunnerTree, privateSaveLocations, ensurePrivateSaves, stageRunner, preflight, validateNativeDependencies, launchOfficial, cleanupGameData };
+module.exports = { hashRunnerTree, saveDirectory, overrideSaveLocations, ensureSaveOverride, stageRunner, preflight, validateNativeDependencies, launchOfficial, cleanupGameData };

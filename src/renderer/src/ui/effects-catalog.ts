@@ -34,6 +34,12 @@ export function effectAvailability(row: EffectCatalogRow): string {
   return row.pendingInputs?.length ? inputsLabel(row.pendingInputs) : "";
 }
 
+// A saved row whose frame source can never supply its method's inputs stays
+// visible with its reason; the catalog names a working method of its kind.
+export function replacementFor(choice: EffectCatalogRow | undefined, catalog: readonly EffectCatalogRow[]) {
+  return choice?.sourceUnsupported && choice.replacement ? catalog.find(row => row.id === choice.replacement && !row.nodeId && selectable(row)) : undefined;
+}
+
 /**
  * A picker entry's size tag. A tag the slot already implies is omitted: every
  * image filter keeps its input size.

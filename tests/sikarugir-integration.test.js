@@ -5,6 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const { EventEmitter } = require("node:events");
+const { untilTestEnds } = require("./helpers/fixture-process");
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-sikarugir-integration-"));
@@ -262,7 +263,7 @@ test("adding managed Wine retains existing CrossOver choices, local versions and
   assert.equal(fs.existsSync(path.join(userDataDir, "runtimes", "sikarugir")), false);
 });
 
-test("ordinary Play obtains one consent, installs the complete backend and prepares private graphics and Windows files", async t => {
+test("ordinary Play obtains one consent, prepares the Windows environment and runs original game files", async t => {
   const { root, userDataDir, core, calls } = managedFixture(t);
   const source = path.join(root, "Unknown64"), original = pe(path.join(source, "Game.exe"), 0x8664);
   write(path.join(source, "settings.ini"), "original settings");
@@ -286,12 +287,12 @@ test("ordinary Play obtains one consent, installs the complete backend and prepa
   assert.equal(spawned.options.env.WINEMSYNC, "1");
   assert.match(spawned.options.env.WINEDLLOVERRIDES, /winhttp=n,b/);
   assert.match(spawned.options.env.WINEDLLOVERRIDES, /d3d10core,d3d11,dxgi,winemetal=b/);
-  assert.equal(spawned.args.at(-2), "G:\\Game.exe");
+  assert.equal(fs.realpathSync(spawned.args.at(-2)), fs.realpathSync(original));
   assert.equal(spawned.args.at(-1), "--windowed");
   const gameDrive = path.join(state.prefixPath, "dosdevices", "g:");
-  assert.ok(fs.lstatSync(gameDrive).isSymbolicLink());
-  assert.equal(fs.realpathSync(gameDrive), fs.realpathSync(state.gameRoot));
-  assert.deepEqual(fs.readFileSync(path.join(gameDrive, "Game.exe")), before);
+  assert.equal(fs.existsSync(gameDrive), false);
+  assert.equal(fs.realpathSync(state.gameRoot), fs.realpathSync(source));
+  assert.deepEqual(fs.readFileSync(path.join(state.gameRoot, "Game.exe")), before);
   const privateWine = path.join(state.viewRoot, "wine"), installedWine = path.join(root, "runtime-payloads", "engine-12");
   assert.equal(spawned.args[3], path.join(privateWine, "bin", "wine"));
   assert.equal(spawned.args[4], path.join(privateWine, "bin", "wineserver"));
@@ -302,9 +303,9 @@ test("ordinary Play obtains one consent, installs the complete backend and prepa
   assert.equal(spawned.options.env.WINEDLLPATH, fs.realpathSync(path.join(installedWine, "lib", "wine")));
   assert.equal(JSON.parse(fs.readFileSync(spawned.options.env.VK_DRIVER_FILES)).ICD.library_path,
     fs.realpathSync(path.join(root, "runtime-payloads", "engine-12", "support", "Frameworks", "libMoltenVK.dylib")));
-  assert.notEqual(state.gameRoot, source);
+  assert.equal(fs.realpathSync(state.gameRoot), fs.realpathSync(source));
   fs.writeFileSync(path.join(state.gameRoot, "settings.ini"), "private settings");
-  assert.equal(fs.readFileSync(path.join(source, "settings.ini"), "utf8"), "original settings");
+  assert.equal(fs.readFileSync(path.join(source, "settings.ini"), "utf8"), "private settings");
   assert.deepEqual(fs.readFileSync(original), before);
   assert.equal(entry.gamePath, source); assert.equal(entry.contentRootDir, source);
   assert.equal(core.getLaunchContext(entry).isGameRunning(), true);
@@ -359,7 +360,7 @@ test("offline replay retains selected versions, global and game settings, privat
   assert.equal(rediscovered.runtimeData.sikarugir.prefixPath, initial.prefixPath);
   assert.equal(fs.readFileSync(path.join(initial.gameRoot, "Save01.dat"), "utf8"), "private game save");
   assert.equal(fs.readFileSync(path.join(initial.prefixPath, "drive_c", "users", "wine", "Documents", "save.dat"), "utf8"), "private Windows save");
-  assert.equal(fs.existsSync(path.join(path.dirname(original), "Save01.dat")), false);
+  assert.equal(fs.readFileSync(path.join(path.dirname(original), "Save01.dat"), "utf8"), "private game save");
   assert.deepEqual(fs.readFileSync(settingsPath), settingsBytes);
   assert.deepEqual(fs.readFileSync(defaultsPath), defaultsBytes);
 });
@@ -374,7 +375,7 @@ test("Stop ends only the selected private prefix and keeps independently spawned
     process.on('SIGTERM',()=>{fs.writeFileSync(path.join(root,'windows-closed'),'yes');process.exit(0)});
     fs.writeFileSync(path.join(root,'windows-environment.json'),JSON.stringify({dlls:process.env.WINEDLLPATH,
       libraries:process.env.DYLD_LIBRARY_PATH,frameworks:process.env.DYLD_FRAMEWORK_PATH}));
-    fs.writeFileSync(path.join(root,'windows-ready'),'yes');setInterval(()=>{},1000);`;
+    fs.writeFileSync(path.join(root,'windows-ready'),'yes');${untilTestEnds}`;
   write(install.executablePath, `#!${process.execPath}\nconst fs=require('node:fs'),path=require('node:path'),{spawn}=require('node:child_process');
     fs.writeFileSync(path.join(process.env.WINEPREFIX,'wine-arguments.json'),JSON.stringify(process.argv.slice(2)));
     const child=spawn(process.execPath,['-e',${JSON.stringify(childProgram)}],{detached:true,stdio:'ignore'});
@@ -410,8 +411,8 @@ test("Stop ends only the selected private prefix and keeps independently spawned
       const prefix = entry.runtimeData.sikarugir.prefixPath;
       await waitUntil(() => fs.existsSync(path.join(prefix, "windows-ready")));
       windowsPids.push(Number(fs.readFileSync(path.join(prefix, "windows.pid"), "utf8")));
-      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(prefix, "wine-arguments.json"))), ["G:\\Game.exe"]);
-      assert.equal(fs.realpathSync(path.join(prefix, "dosdevices", "g:")), fs.realpathSync(entry.runtimeData.sikarugir.gameRoot));
+      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(prefix, "wine-arguments.json"))), [path.join(entry.runtimeData.sikarugir.gameRoot, "Game.exe")]);
+      assert.equal(fs.existsSync(path.join(prefix, "dosdevices", "g:")), false);
       const environment = JSON.parse(fs.readFileSync(path.join(prefix, "windows-environment.json")));
       assert.equal(environment.dlls, fs.realpathSync(path.join(install.engineRoot, "lib", "wine")));
       assert.ok(environment.libraries?.includes(path.join(entry.runtimeData.sikarugir.viewRoot, "wine", "lib", "wine", "x86_64-unix")),

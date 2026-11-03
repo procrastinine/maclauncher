@@ -233,6 +233,7 @@ async function refreshCatalog({ userDataDir, sourceId, signal, logger, onProgres
   if (results.every(result => result.status === "rejected")) throw results[0].reason;
   return cachedCatalog(userDataDir);
 }
+// Package defaults follow the launcher CPU, preserving the Intel app’s saved tool/package choices.
 function selectPackages(release, arch = process.arch) {
   if (!["arm64", "x64"].includes(arch)) throw new Error("Official runtime installation supports Apple Silicon and Intel Macs.");
   if (release.family === "studio-1.4") return require("./official-legacy").resolveBuild(release.version, release).packages;

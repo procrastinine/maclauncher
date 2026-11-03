@@ -51,6 +51,74 @@ test('saved and per-game separate ART versions remain usable offline', () => {
   assert.deepEqual(legacy.calls, []);
 });
 
+test('missing legacy ART choices select the ART-capable combined runtime offline', () => {
+  for (const ready of [false, true]) {
+    const common = manager('android', {installed:[installed('jvm', '/android/jvm', {}),
+      ...(ready ? [installed('new', '/android/new')] : [])], catalog:[pin('jvm', {}), pin('new')]}),
+      legacy = manager('android-art', {installed:[installed('kept', '/android-art/kept')], catalog:[pin('missing'), pin('kept')]}),
+      art = Art.createManager({commonManager:common, legacyManager:legacy});
+    const choices = [
+      {entry:{}, settings:{runtimes:{'android-art':{defaultVersion:'missing'}, android:{defaultVersion:'jvm'}}}, options:{}},
+      {entry:{}, settings:{runtimes:{'android-art':{customDefaults:{default:'missing'}}}}, options:{}},
+      {entry:{runtimeData:{'android-art':{version:'missing'}}}, settings:{}, options:{}},
+      {entry:{}, settings:{}, options:{version:'missing'}}
+    ];
+    for (const choice of choices) {
+      const original = structuredClone(choice);
+      const selected = art.resolveSelection(choice.entry, choice.settings, '/profile', choice.options);
+      assert.equal(selected.managerId, 'android');
+      assert.equal(selected.version, 'new');
+      assert.equal(selected.ready, ready);
+      assert.deepEqual(choice, original);
+    }
+    assert.deepEqual(common.calls, []);
+    assert.deepEqual(legacy.calls, []);
+  }
+});
+
+test('ART installation never downloads a standalone adapter and preserves installed adapters', async () => {
+  const kept = installed('kept', '/android-art/kept'),
+    common = manager('android', {catalog:[pin('jvm', {}), pin('new')]}),
+    legacy = manager('android-art', {installed:[kept], catalog:[pin('missing'), pin('kept')]}),
+    art = Art.createManager({commonManager:common, legacyManager:legacy});
+  assert.equal(await art.installRuntime({userDataDir:'/profile', version:'kept', legacyAdapter:true}), kept);
+  assert.deepEqual(legacy.calls, []);
+  assert.deepEqual(common.calls, []);
+  const options = {userDataDir:'/profile', version:'missing', legacyAdapter:true};
+  const result = await art.installRuntime(options);
+  assert.equal(result.version, 'new');
+  assert.equal(common.calls.length, 1);
+  assert.equal(common.calls[0][0], 'install');
+  const forwarded = common.calls[0][1];
+  assert.equal(forwarded.version, 'new');
+  assert.equal(Object.hasOwn(forwarded, 'legacyAdapter'), false);
+  assert.equal(forwarded.compatible(pin('new')), true);
+  assert.equal(forwarded.compatible(pin('jvm', {})), false);
+  assert.deepEqual(options, {userDataDir:'/profile', version:'missing', legacyAdapter:true});
+  assert.deepEqual(legacy.calls, []);
+  const state = art.getState({userDataDir:'/profile', settings:{defaultVersion:'kept'}});
+  assert.equal(state.defaultVersion, 'kept');
+  assert.equal(state.installed.find(row => row.version === 'kept'), kept);
+  await art.uninstallRuntime({userDataDir:'/profile', version:'kept'});
+  assert.equal(legacy.calls[0][0], 'remove');
+});
+
+test('missing legacy ART requirements use combined Android and never request a legacy install', t => {
+  const common = manager('android', {catalog:[pin('new')]}),
+    legacy = manager('android-art', {catalog:[pin('missing')]}),
+    art = Art.createManager({commonManager:common, legacyManager:legacy});
+  t.mock.method(Art.manager, 'resolveSelection', (...args) => art.resolveSelection(...args));
+  const entry = {runtimeData:{'android-art':{version:'missing'}}};
+  assert.deepEqual(Art.requirements(entry, {settings:{}, userDataDir:'/profile'}),
+    [{managerId:'android', version:'new', label:Art.manager.label}]);
+  common.core.listDiscoveredCatalog = () => [];
+  const absent = art.resolveSelection(entry, {}, '/profile');
+  assert.equal(absent.managerId, 'android');
+  assert.equal(absent.version, null);
+  assert.equal(absent.discoveryRequired, true);
+  assert.deepEqual(legacy.calls, []);
+});
+
 test('an installed unified ART profile works without optional catalog capability metadata', () => {
   const common = manager('android', {installed:[installed('future', '/android/future')], catalog:[pin('future', {})]}),
     legacy = manager('android-art'), art = Art.createManager({commonManager:common, legacyManager:legacy});

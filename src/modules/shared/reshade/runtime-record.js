@@ -1,4 +1,5 @@
 const fs = require("node:fs"), path = require("node:path");
+const { hasFineChangeTime } = require("../file-time");
 
 // runtime.json of a graphics root, parsed once per file identity. Preparation
 // and catalog builds read it many times; a reinstalled or replaced payload has
@@ -14,11 +15,14 @@ function freeze(value) {
 function read(root) {
   const file = path.join(root, "runtime.json"), stat = fs.statSync(file, {bigint: true});
   const stamp = [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":"), cached = records.get(file);
-  if (cached?.stamp === stamp) return cached.record;
-  const record = freeze(JSON.parse(fs.readFileSync(file, "utf8")));
+  const fine = hasFineChangeTime(stat);
+  if (fine && cached?.stamp === stamp) return cached.record;
+  const source = fs.readFileSync(file, "utf8");
+  if (cached?.stamp === stamp && cached.source === source) return cached.record;
+  const record = freeze(JSON.parse(source));
   records.delete(file);
   if (records.size >= LIMIT) records.delete(records.keys().next().value);
-  records.set(file, {stamp, record});
+  records.set(file, {stamp, record, source});
   return record;
 }
 module.exports = {read, clear: () => records.clear()};

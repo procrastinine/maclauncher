@@ -32,13 +32,11 @@ function arraysEqual(a, b) {
 
 function normalizeLibraryState(input) {
   const raw = input && typeof input === "object" ? input : {};
-  const legacySort = Number.isFinite(raw.version) && raw.version < 2;
 
   return {
     version: Math.max(DEFAULT_LIBRARY_STATE.version, Number.isFinite(raw.version) ? raw.version : DEFAULT_LIBRARY_STATE.version),
     order: dedupeStrings(raw.order),
-    // Version 1 reserved an unused "recent" sort; first use keeps the manual view.
-    sort: normalizeLibrarySort(legacySort ? null : raw.sort),
+    sort: normalizeLibrarySort(raw.sort),
     favorites: dedupeStrings(raw.favorites)
   };
 }

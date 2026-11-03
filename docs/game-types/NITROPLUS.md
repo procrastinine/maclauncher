@@ -24,7 +24,7 @@ A game's product or script version is never reported as the version of the origi
 
 ## Game data and saves
 
-Normal launch extracts nothing and reads the original archives directly. The player writes saves, configuration output and its GStreamer registry to `userData/games/<gameId>/modules/nitroplus/`. Its file writes and deletions reject paths outside the private save folder and refuse to follow symbolic links. Save editing and cheats are not available.
+Normal launch extracts nothing, reads the original archives directly and uses the original game directory as its working directory. The managed runner requires an explicit save directory; the default is `userData/games/<gameId>/modules/nitroplus/saves/`, and a per-game save-folder override selects another location. Its file writes and deletions reject paths outside the selected save folder and refuse to follow symbolic links. GStreamer registries, font caches, preparation metadata and native logs remain in launcher data. Unchanged preparation metadata is reused. Save editing and cheats are not available.
 
 ## Inspector tools
 

@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {spawn} from 'node:child_process';import {fileURLToPath} from 'node:url';
-const controller=process.env.ANDROID_AIM_CONTROLLER_EXECUTABLE||fileURLToPath(new URL('../src/modules/android/providers/aim/resources/maclauncher-aim',import.meta.url));
-const supported=process.platform==='darwin'&&process.arch==='arm64'&&fs.existsSync(controller);
+import {testEnvironment} from './helpers/fixture-process.js';
+const controller=process.env.ANDROID_AIM_CONTROLLER_EXECUTABLE;
+const supported=process.platform==='darwin'&&process.arch==='arm64'&&Boolean(controller)&&fs.existsSync(controller);
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function scenario(options={}){
  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'aim-controller-phases-')),runtime=path.join(directory,'runtime'),root=path.join(directory,'profile'),data=path.join(directory,'android'),userdata=path.join(directory,'userdata.asif');
@@ -11,7 +12,7 @@ async function scenario(options={}){
  const apks=['base.apk','split.apk'].map((name,index)=>{const f=path.join(directory,name);fs.writeFileSync(f,'original-apk-'+index);return f;});
  const configuration={schemaVersion:1,runtime,root,data,userdata,image,originalImage:image,appHostImage,packageName:'org.example.game',activity:'.Launcher',key:'new',apks,launchMode:'app-host',...options.launch};
  const file=path.join(directory,'launch.json');fs.writeFileSync(file,JSON.stringify(configuration));
- const child=spawn(controller,[file],{stdio:['ignore','pipe','pipe']});let stdout='',stderr='';child.stdout.on('data',d=>stdout+=d);child.stderr.on('data',d=>stderr+=d);
+ const child=spawn(controller,[file],{stdio:['ignore','pipe','pipe'],env:{...process.env,...testEnvironment}});let stdout='',stderr='';child.stdout.on('data',d=>stdout+=d);child.stderr.on('data',d=>stderr+=d);
  const completion=new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',(code,signal)=>resolve({code,signal}));});
  const timeout=setTimeout(()=>{fs.writeFileSync(path.join(directory,'force-close'),'1');child.kill('SIGTERM');},12000);
  try{

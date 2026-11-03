@@ -1,0 +1,32 @@
+{
+  "darwin": {
+    "url": "https://dl.google.com/dl/android/maven2/com/android/tools/build/aapt2/9.5.0-16666295/aapt2-9.5.0-16666295-osx.jar",
+    "sha256": "a43df4c45549e8a877a8d61b130ee255669eec8a36064f2fc8cd58206457f2a3",
+    "bytes": 4611291
+  },
+  "linux": {
+    "url": "https://dl.google.com/dl/android/maven2/com/android/tools/build/aapt2/9.5.0-16666295/aapt2-9.5.0-16666295-linux.jar",
+    "sha256": "fa1014cb1431622d292ef55ba870e75882ea19987bec541698b912f446a2d08f",
+    "bytes": 2451278
+  },
+  "sdkPlatform": {
+    "url": "https://dl.google.com/android/repository/platform-36_r02.zip",
+    "version": "36_r02",
+    "apiLevel": 36,
+    "revision": 2,
+    "bytes": 65878410,
+    "sha1": "2c1a80dd4d9f7d0e6dd336ec603d9b5c55a6f576",
+    "sha256": "37607369a28c5b640b3a7998868d45898ebcb777565a0e85f9acf36f29631d2e",
+    "entry": "android-36/core-for-system-modules.jar",
+    "entryBytes": 1464749,
+    "entrySha256": "4afd3df39082ca1ca32a1effeaff7971d878e75bd01a68a4205c105deec4c559"
+  },
+  "r8": {
+    "url": "https://dl.google.com/dl/android/maven2/com/android/tools/r8/9.5.23/r8-9.5.23.jar",
+    "version": "9.5.23",
+    "revision": "d4479de6af1586fc1f6911964542da8d442549db",
+    "bytes": 21182718,
+    "sha256": "748ab0ef66e85b54cec5ad83d168999db9e3dad8c8f63170e836eff195cbd09b"
+  },
+  "version": "9.5.0-16666295"
+}

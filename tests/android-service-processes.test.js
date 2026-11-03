@@ -1,6 +1,7 @@
 const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
 const Catalog = require("../src/modules/android/service-packages");
+const { untilTestEnds } = require("./helpers/fixture-process");
 
 // These transport fixtures supply synthetic profile endpoints explicitly.
 // Existing-owner authentication is covered by the platform client fixtures.
@@ -117,7 +118,7 @@ test("Cancellation joins pending main enrollment before releasing profile leases
     installed:{uid:10000,services:[],release:async()=>{released++;}},platformOwners:{system},accountOptions:{userDataDir:root,account:null}});
   // Hold the real child alive after authority EOF to model native cleanup while
   // its original system registration is still completing.
-  const child=spawn(process.execPath,['-e',"require('fs').createReadStream(null,{fd:5}).resume();setInterval(()=>{},1000)"],{stdio:supervisor.stdio(['ignore','ignore','ignore'])});
+  const child=spawn(process.execPath,['-e',"require('fs').createReadStream(null,{fd:5}).resume();"+untilTestEnds],{stdio:supervisor.stdio(['ignore','ignore','ignore'])});
   t.after(async()=>{permit();await supervisor.close();if(child.exitCode==null&&child.signalCode==null){const ended=once(child,'exit');child.kill('SIGKILL');await ended;}fs.rmSync(root,{recursive:true,force:true});});
   const connecting=supervisor.connect(child);connecting.catch(()=>{});await started;
   controller.abort(reason);await new Promise(resolve=>setImmediate(resolve));

@@ -18,6 +18,7 @@ test("Android runtime choices expose managed packages and preserve the default e
 });
 
 test("Android development runtime paths are unavailable to packaged applications", t => {
+  t.mock.method(require("../src/modules/shared/runtime/host-capabilities"), "getHostCapabilities", () => ({ platform: "darwin", hardwareArch: "arm64" }));
   const declaration = { directoryRelative: "android/development/arm64" };
   assert.equal(Runtime.runtimeRoot(declaration), path.resolve(__dirname,
     "../build/managed-runtimes/android/development/arm64"));
@@ -55,6 +56,7 @@ function fixture(directory, name) {
 }
 
 test("Platform supplier identity covers complete common and image metadata without reading payload files", t => {
+  t.mock.method(require("../src/modules/shared/runtime/host-capabilities"), "getHostCapabilities", () => ({ platform: "darwin", hardwareArch: "arm64" }));
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),"android-platform-identity-"));
   t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
   const base={schemaVersion:1,version:"common",minimumMacOS:"13.0",architectures:["arm64"],sourceHash:"a".repeat(64),inputHash:"b".repeat(64),
@@ -112,6 +114,41 @@ test("Android verification runs off-thread and invalidates cached bytes on file,
   assert.equal((await check()).cacheHit, false, "Only four payload identities are cached");
 });
 
+test("Android worker snapshots invalidate coarse regular payload and dependency bytes across the real message boundary", async t => {
+  const {Worker}=require('node:worker_threads');
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'android-coarse-worker-'));
+  const entry=fixture(directory,'runtime'),dependency=fixture(directory,'dependency');
+  const pin={project:'fixture-dependency',release:'1.0.0',sha256:'a'.repeat(64)};
+  entry.declaration.dependencies=[pin];
+  const packages=[{root:dependency.root,declaration:dependency.declaration,record:{id:pin.project,version:pin.release,asset:{sha256:pin.sha256}}}];
+  let worker;
+  t.after(async()=>{await worker?.terminate();fs.rmSync(directory,{recursive:true,force:true});});
+  const start=()=>new Worker(`
+    const fs=require('node:fs'),path=require('node:path'),{workerData}=require('node:worker_threads');
+    const lstat=fs.lstatSync.bind(fs),held=new Map(workerData.files.map(file=>{
+      const stat=lstat(file,{bigint:true});
+      return [file,Object.assign(Object.create(Object.getPrototypeOf(stat)),stat,{mtimeNs:2000000000n,ctimeNs:1000000000n})];
+    }));
+    fs.lstatSync=(file,...args)=>args[0]?.bigint&&held.get(path.resolve(String(file)))||lstat(file,...args);
+    require(workerData.module);
+  `,{eval:true,workerData:{files:[entry.file,dependency.file],module:require.resolve('../src/modules/android/runtime-verifier-worker')}});
+  let id=0;
+  const check=()=>new Promise((resolve,reject)=>{
+    const receive=message=>{worker.removeListener('error',failed);message.error?reject(Object.assign(new Error(message.error.message),message.error)):resolve(message.result);};
+    const failed=error=>{worker.removeListener('message',receive);reject(error);};
+    worker.once('message',receive);worker.once('error',failed);
+    worker.postMessage({id:++id,root:entry.root,declaration:entry.declaration,dependencyPackages:packages});
+  });
+  worker=start();assert.equal((await check()).cacheHit,false);assert.equal((await check()).cacheHit,true);
+  fs.writeFileSync(entry.file,Buffer.alloc(entry.bytes.length,19));
+  await assert.rejects(check(),/checksum or permissions/,'Warm worker must not trust equal coarse metadata');
+  fs.writeFileSync(entry.file,entry.bytes);await check();
+  await worker.terminate();
+  fs.writeFileSync(dependency.file,Buffer.alloc(dependency.bytes.length,19));
+  worker=start();
+  await assert.rejects(check(),/checksum or permissions/,'Persistent worker cache must recheck regular dependency bytes too');
+});
+
 test("Android verification cancellation retires callers without canceling a separate launch", async t => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "android-verify-cancel-"));
   t.after(async () => { await Verifier.close(); fs.rmSync(directory, { recursive: true, force: true }); });
@@ -167,6 +204,7 @@ test("Android launch awaits full verification before preparation or spawning", a
 });
 
 test("Retained Android backends observe newly activated runtimes and keep in-flight launches coherent", async t => {
+  t.mock.method(require("../src/modules/shared/runtime/host-capabilities"), "getHostCapabilities", () => ({ platform: "darwin", hardwareArch: "arm64" }));
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),"android-activation-"));
   t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
   const declarationFile=path.resolve(__dirname,"../src/modules/android/managed-packages.json");

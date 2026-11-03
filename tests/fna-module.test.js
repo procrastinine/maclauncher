@@ -25,10 +25,52 @@ function selection(t) {
   const root = path.join(fixture(t), "runtime"); fs.mkdirSync(root);
   for (const name of ["FNA.dll", "MacLauncherFnaHost.dll", "MacLauncherFnaHost.runtimeconfig.json"]) fs.writeFileSync(path.join(root, name), "reviewed " + name);
   return { ready: true, version: FNA_VERSION, install: { executablePath: path.join(root, "dotnet") }, profile: {
-    root, frameworkVersion: "26.10.0.0", dotnetVersion: DOTNET_VERSION, files: { "FNA.dll": Native.hashFile(path.join(root, "FNA.dll")) }
+    root, architecture: "arm64", frameworkVersion: "26.10.0.0", dotnetVersion: DOTNET_VERSION, files: { "FNA.dll": Native.hashFile(path.join(root, "FNA.dll")) }
   } };
 }
 
+// Hold complete stat observations across in-place writes, including descriptor
+// stats, as a coarse filesystem can do. File contents remain real.
+function heldCoarseTimes(t) {
+  const stamps = new Map(), originals = Object.fromEntries(["statSync", "lstatSync", "fstatSync"].map(name => [name, fs[name]]));
+  const wrap = stat => {
+    if (!stat) return stat;
+    const key = `${stat.dev}:${stat.ino}:${typeof stat.ino}`;
+    if (!stamps.has(key)) {
+      const fields = {};
+      for (const name of ["dev", "ino", "mode", "size", "mtimeMs", "ctimeMs", "mtimeNs", "ctimeNs"]) {
+        if (stat[name] !== undefined) fields[name] = name.endsWith("Ns") ? stat[name] / 1000000000n * 1000000000n :
+          name.endsWith("Ms") ? Math.floor(Number(stat[name]) / 1000) * 1000 : stat[name];
+      }
+      stamps.set(key, fields);
+    }
+    const fields = stamps.get(key);
+    return new Proxy(stat, { get: (target, name) => Object.hasOwn(fields, name) ? fields[name] : Reflect.get(target, name) });
+  };
+  for (const name of Object.keys(originals)) t.mock.method(fs, name, (...args) => wrap(originals[name](...args)));
+  return { touch(file) {
+    for (const bigint of [false, true]) {
+      const stat = originals.lstatSync(file, { bigint }), key = `${stat.dev}:${stat.ino}:${typeof stat.ino}`, fields = stamps.get(key);
+      if (fields) for (const name of ["mtimeMs", "ctimeMs", "mtimeNs", "ctimeNs"]) if (fields[name] !== undefined)
+        fields[name] += name.endsWith("Ns") ? 1000000000n : 1000;
+    }
+  } };
+}
+// Observe the real copy route: Darwin preserves metadata through cp, while
+// other hosts may use Node's copyFile fallback. Neither route is stubbed.
+function afterRealCopy(t, source, callback) {
+  const ChildProcess = require("node:child_process"), spawn = ChildProcess.spawnSync, copy = fs.copyFileSync, expected = fs.realpathSync(source);
+  t.mock.method(ChildProcess, "spawnSync", (command, args, ...options) => {
+    const result = spawn(command, args, ...options);
+    if (result.status === 0 && Array.isArray(args) && args.includes(expected)) callback();
+    return result;
+  });
+  t.mock.method(fs, "copyFileSync", (from, ...args) => {
+    const result = copy(from, ...args);
+    if (path.resolve(from) === expected) callback();
+    return result;
+  });
+}
 test("FNA reads structural assembly identity, references and target framework without execution", t => {
   const { assembly } = game(t), info = inspectManagedAssembly(assembly);
   assert.equal(info.assemblyName, "Game"); assert.equal(info.assemblyVersion, "1.2.3.4");
@@ -130,165 +172,114 @@ test("FNA preflight prepares qualified legacy conversion by default and preserve
   assert.equal(Fna.__test.runtimeStatus(entry, context).version, "missing-version");
 });
 
-test("FNA overlays preserve originals and retain private saves on updates", t => {
-  const { entry, root, source, assembly } = game(t), selected = selection(t);
-  t.mock.method(Manager, "resolveSelection", () => selected);
-  const context = { userDataDir: path.join(root, "userData"), settings: {}, runtimeSettings: { useRuntimeFramework: true } };
-  const original = Native.hashFile(path.join(source, "FNA.dll")), first = Fna.__test.prepareGame(entry, context);
-  assert.equal(Native.hashFile(path.join(source, "FNA.dll")), original);
-  assert.equal(Native.hashFile(path.join(first.gameRoot, "FNA.dll")), selected.profile.files["FNA.dll"]);
-  fs.writeFileSync(path.join(first.gameRoot, "save.dat"), "private save");
-  assert.equal(Fna.__test.prepareGame(entry, context).gameRoot, first.gameRoot);
-  assert.equal(fs.readFileSync(path.join(first.gameRoot, "save.dat"), "utf8"), "private save");
-  writeAssembly(assembly, { version: [2, 0, 0, 0] }); Fna.__test.prepareGame(entry, context);
-  const previous = path.join(context.userDataDir, "games", entry.gameId, "modules", "fna", "previous-overlays");
-  assert.equal(fs.readdirSync(previous).length, 1); assert.equal(fs.readFileSync(path.join(previous, fs.readdirSync(previous)[0], "save.dat"), "utf8"), "private save");
+test("FNA ordinary preparation keeps original assembly, data and cwd without a private tree or asset walk", t => {
+  const f = game(t), selected = selection(t);t.mock.method(Manager, "resolveSelection", () => selected);
+  const assetRoot = path.join(f.source, "UnusualAssets");fs.mkdirSync(assetRoot);fs.writeFileSync(path.join(assetRoot, "data.bin"), "original data");
+  fs.symlinkSync(assetRoot, path.join(f.source, "ExistingLink"));fs.writeFileSync(path.join(f.source, "game.cfg"), "original settings");
+  const context = {userDataDir: path.join(f.root, "data"), settings: {}, runtimeSettings: {}};
+  t.mock.method(fs, "readdirSync", () => assert.fail("Ordinary FNA Play must not enumerate game assets"));
+  t.mock.method(fs, "symlinkSync", () => assert.fail("Ordinary FNA Play must not create game links"));
+  t.mock.method(fs, "copyFileSync", () => assert.fail("Ordinary FNA Play must not copy game files"));
+  const result = Fna.__test.prepareGame(f.entry, context);
+  assert.equal(result.gameRoot, f.source);assert.equal(result.assemblyPath, f.assembly);assert.equal(result.assemblyRoot, null);
+  assert.equal(result.hostPath, path.join(selected.profile.root, "MacLauncherFnaHost.dll"));
+  assert.equal(fs.existsSync(context.userDataDir), false);assert.equal(fs.readFileSync(path.join(f.source, "game.cfg"), "utf8"), "original settings");
 });
 
-test("FNA overlays link original assets and refresh without scanning linked content", t => {
-  const { entry, root, source } = game(t), selected = selection(t);
-  t.mock.method(Manager, "resolveSelection", () => selected);
-  const content = path.join(source, "Content"); fs.mkdirSync(content);
-  const asset = path.join(content, "level.bin"); fs.writeFileSync(asset, "original asset");
-  const context = { userDataDir: path.join(root, "userData"), settings: {}, runtimeSettings: {} };
-  const first = Fna.__test.prepareGame(entry, context), fingerprint = Fna.__test.sourceInventory(source);
-  assert.equal(fs.lstatSync(path.join(first.gameRoot, "Content")).isSymbolicLink(), true);
-  assert.equal(fs.lstatSync(path.join(first.gameRoot, "Game.dll")).isSymbolicLink(), false);
-  fs.writeFileSync(asset, "updated asset"); fs.writeFileSync(path.join(content, "new.bin"), "new asset");
-  assert.equal(Fna.__test.sourceInventory(source), fingerprint);
-  assert.equal(Fna.__test.prepareGame(entry, context).gameRoot, first.gameRoot);
-  assert.equal(fs.readFileSync(path.join(first.gameRoot, "Content", "level.bin"), "utf8"), "updated asset");
-  assert.equal(fs.readFileSync(path.join(first.gameRoot, "Content", "new.bin"), "utf8"), "new asset");
-  const previous = path.join(context.userDataDir, "games", entry.gameId, "modules", "fna", "previous-overlays");
-  assert.equal(fs.existsSync(previous), false);
-});
-
-test("FNA refreshes copied dependencies when equal-sized bytes change with restored mtime", t => {
-  const { entry, root, source } = game(t), selected = selection(t);
-  const dependency = path.join(source, "Shared.dll");
-  const original = Buffer.concat([managedAssembly({ name: "Shared", entryPoint: false, references: [], machine: 0x8664, pe64: true }), Buffer.from([1])]);
-  fs.writeFileSync(dependency, original); fs.utimesSync(dependency, 1700000000, 1700000000);
-  t.mock.method(Manager, "resolveSelection", () => selected);
-  const context = { userDataDir: path.join(root, "userData"), settings: {}, runtimeSettings: {} };
-  const first = Fna.__test.prepareGame(entry, context), privateDependency = path.join(first.gameRoot, "Shared.dll");
-  assert.equal(inspectManagedAssembly(privateDependency).peMachine, 0xaa64);
-  fs.writeFileSync(path.join(first.gameRoot, "save.dat"), "private save");
-  const updated = Buffer.from(original); updated[updated.length - 1] = 2;
-  fs.writeFileSync(dependency, updated); fs.utimesSync(dependency, 1700000000, 1700000000);
-  const second = Fna.__test.prepareGame(entry, context), expected = Buffer.from(updated); expected.writeUInt16LE(0xaa64, 132);
-  assert.equal(second.gameRoot, first.gameRoot);
-  assert.deepEqual(fs.readFileSync(privateDependency), expected);
-  assert.deepEqual(fs.readFileSync(dependency), updated, "Architecture conversion must preserve source bytes");
-  const retained = path.join(context.userDataDir, "games", entry.gameId, "modules", "fna", "previous-overlays");
-  assert.equal(fs.readdirSync(retained).length, 1);
-  assert.equal(fs.readFileSync(path.join(retained, fs.readdirSync(retained)[0], "save.dat"), "utf8"), "private save");
-});
-
-test("FNA source identity drift with identical bytes keeps the overlay and local writes without copying", t => {
-  const { entry, root, source } = game(t), selected = selection(t);
-  const config = path.join(source, "game.cfg"); fs.writeFileSync(config, "original config");
-  t.mock.method(Manager, "resolveSelection", () => selected);
-  const context = { userDataDir: path.join(root, "userData"), settings: {}, runtimeSettings: {} };
-  const first = Fna.__test.prepareGame(entry, context), marker = path.join(first.gameRoot, ".maclauncher-fna.json");
-  const cacheRoot = path.join(context.userDataDir, "games", entry.gameId, "modules", "fna", "source-inventories");
-  const cacheFile = path.join(cacheRoot, fs.readdirSync(cacheRoot)[0]);
-  const cachedBefore = JSON.parse(fs.readFileSync(cacheFile, "utf8")).files.find(file => file.path === "game.cfg");
-  const stamp = fs.readFileSync(marker, "utf8"), privateConfig = path.join(first.gameRoot, "game.cfg");
-  fs.writeFileSync(privateConfig, "local game config");
-  const before = fs.statSync(config, { bigint: true }), replacement = path.join(root, "identical.cfg");
-  fs.copyFileSync(config, replacement); fs.renameSync(replacement, config);
-  fs.utimesSync(config, Number(before.atimeNs) / 1e9, Number(before.mtimeNs) / 1e9);
-  assert.notEqual(fs.statSync(config, { bigint: true }).ino, before.ino);
-  const copy = fs.copyFileSync; let copies = 0;
-  t.mock.method(fs, "copyFileSync", (...args) => { copies++; return copy(...args); });
-  const second = Fna.__test.prepareGame(entry, context);
-  assert.equal(copies, 0);
-  assert.equal(second.gameRoot, first.gameRoot); assert.equal(fs.readFileSync(marker, "utf8"), stamp);
-  const cachedAfter = JSON.parse(fs.readFileSync(cacheFile, "utf8")).files.find(file => file.path === "game.cfg");
-  assert.notEqual(cachedAfter.identity, cachedBefore.identity);
-  assert.equal(cachedAfter.sha256, cachedBefore.sha256);
-  assert.equal(cachedAfter.sha256, Native.hashFile(config));
-  assert.equal(fs.readFileSync(privateConfig, "utf8"), "local game config");
-  assert.equal(fs.existsSync(path.join(context.userDataDir, "games", entry.gameId, "modules", "fna", "previous-overlays")), false);
-});
-
-test("FNA warm source checks reuse hashes and ignore live linked content changes", t => {
-  const { root, source, assembly } = game(t), content = path.join(source, "Content"); fs.mkdirSync(content);
-  fs.writeFileSync(path.join(content, "large-asset.bin"), Buffer.alloc(1024));
-  const linked = path.join(source, "extra.bin"); fs.writeFileSync(linked, "one");
-  const options = { assemblyPath: assembly, converted: true, retargeted: true, cacheFile: path.join(root, "cache", "inputs.json") };
-  const readdir = fs.readdirSync;
-  t.mock.method(fs, "readdirSync", (file, ...args) => { assert.notEqual(file, content, "Linked asset trees must not be scanned"); return readdir(file, ...args); });
-  const cold = SourceInventory.inspectSources(source, options);
-  assert.equal(cold.statistics.hashedFiles, 2);
-  const stamp = fs.readFileSync(options.cacheFile, "utf8"), warm = SourceInventory.inspectSources(source, options);
-  assert.equal(warm.digest, cold.digest); assert.equal(warm.statistics.hashedFiles, 0); assert.equal(warm.statistics.reusedFiles, 2);
-  assert.equal(fs.readFileSync(options.cacheFile, "utf8"), stamp);
-  fs.writeFileSync(path.join(content, "large-asset.bin"), "updated live asset"); fs.writeFileSync(linked, "new linked bytes");
-  const refreshed = SourceInventory.inspectSources(source, options);
-  assert.equal(refreshed.digest, cold.digest); assert.equal(refreshed.statistics.hashedFiles, 0);
-});
-
-test("FNA source-directory aliases reuse the same physical input inventory and overlay", t => {
-  const { entry, root, source } = game(t), selected = selection(t);
-  t.mock.method(Manager, "resolveSelection", () => selected);
-  const context = { userDataDir: path.join(root, "userData"), settings: {}, runtimeSettings: {} };
-  const first = Fna.__test.prepareGame(entry, context), alias = path.join(root, "Game Alias"); fs.symlinkSync(source, alias, "dir");
-  const alternate = { ...entry, gamePath: path.join(alias, "Game.dll"), moduleData: { ...entry.moduleData, assemblyPath: path.join(alias, "Game.dll") } };
-  const copy = fs.copyFileSync; let copies = 0;
-  t.mock.method(fs, "copyFileSync", (...args) => { copies++; return copy(...args); });
-  assert.equal(Fna.__test.prepareGame(alternate, context).gameRoot, first.gameRoot);
-  assert.equal(copies, 0);
-  assert.equal(fs.lstatSync(path.join(first.gameRoot, "FNA.dll")).isSymbolicLink(), false);
-});
-
-test("FNA rejects source mutation during streaming hashes without publishing a ready overlay", t => {
-  const { entry, root, source } = game(t), selected = selection(t), config = path.join(source, "game.cfg");
-  fs.writeFileSync(config, Buffer.alloc(SourceInventory.LIMITS.chunkBytes + 32, 1));
-  const inode = fs.statSync(config, { bigint: true }).ino, before = fs.statSync(config);
-  const read = fs.readSync; let mutated = false;
-  t.mock.method(fs, "readSync", (descriptor, ...args) => {
-    const count = read(descriptor, ...args);
-    if (!mutated && fs.fstatSync(descriptor, { bigint: true }).ino === inode) {
-      mutated = true; fs.writeFileSync(config, Buffer.alloc(SourceInventory.LIMITS.chunkBytes + 32, 2)); fs.utimesSync(config, before.atime, before.mtime);
-    }
-    return count;
-  });
-  t.mock.method(Manager, "resolveSelection", () => selected);
-  const context = { userDataDir: path.join(root, "userData"), settings: {}, runtimeSettings: {} };
-  assert.throws(() => Fna.__test.prepareGame(entry, context), { code: "SOURCE_CHANGED" });
-  assert.equal(mutated, true);
-  assert.equal(fs.existsSync(path.join(context.userDataDir, "games", entry.gameId, "modules", "fna", "overlays")), false);
-});
-
-test("FNA cancelled source checks do not create an inventory or overlay", t => {
-  const { entry, root } = game(t), selected = selection(t), controller = new AbortController();
-  controller.abort(); t.mock.method(Manager, "resolveSelection", () => selected);
-  const context = { userDataDir: path.join(root, "userData"), settings: {}, runtimeSettings: {}, signal: controller.signal };
-  assert.throws(() => Fna.__test.prepareGame(entry, context), { code: "ABORT_ERR" });
+test("FNA launches the installed host with original working data and explicit framework selection", async t => {
+  const f = game(t), selected = selection(t);t.mock.method(Manager, "resolveSelection", () => selected);
+  writeAssembly(path.join(f.source, "FNA.dll"), {name: "FNA", version: [26, 10, 0, 0], entryPoint: false, references: []});
+  let call;const context = {userDataDir: path.join(f.root, "data"), settings: {}, runtimeSettings: {}, gameArguments: ["--original"], spawnDetachedChecked: (...args) => {call = args;return {pid: 1, exitCode: 0};}};
+  await Fna.launchRuntime("fna", f.entry, context);
+  assert.deepEqual(call[1], ["exec", path.join(selected.profile.root, "MacLauncherFnaHost.dll"), f.assembly, selected.profile.root, "--original"]);
+  assert.equal(call[2].cwd, f.source);assert.equal(call[2].env.MACLAUNCHER_FNA_GAME_ROOT, f.source);
+  assert.equal(call[2].env.MACLAUNCHER_FNA_ASSEMBLY_ROOT, "");assert.equal(call[2].env.MACLAUNCHER_FNA_USE_RUNTIME_FRAMEWORK, "1");
+  context.runtimeSettings.useRuntimeFramework = false;await Fna.launchRuntime("fna", f.entry, context);
+  assert.equal(call[2].env.MACLAUNCHER_FNA_USE_RUNTIME_FRAMEWORK, "0");assert.equal(call[2].cwd, f.source);
   assert.equal(fs.existsSync(context.userDataDir), false);
 });
 
-test("FNA rejects mutation during copying and preserves the previous valid overlay", t => {
-  const { entry, root, source, assembly } = game(t), selected = selection(t), config = path.join(source, "game.cfg");
-  fs.writeFileSync(config, "original config"); t.mock.method(Manager, "resolveSelection", () => selected);
-  const context = { userDataDir: path.join(root, "userData"), settings: {}, runtimeSettings: {} };
-  const first = Fna.__test.prepareGame(entry, context), marker = path.join(first.gameRoot, ".maclauncher-fna.json");
-  const stamp = fs.readFileSync(marker, "utf8"), privateConfig = fs.readFileSync(path.join(first.gameRoot, "game.cfg"), "utf8");
-  writeAssembly(assembly, { version: [2, 0, 0, 0] });
-  const canonicalAssembly = fs.realpathSync(assembly);
-  const copy = fs.copyFileSync; let mutated = false;
-  t.mock.method(fs, "copyFileSync", (from, ...args) => {
-    const result = copy(from, ...args);
-    if (!mutated && from === canonicalAssembly) { mutated = true; fs.writeFileSync(config, "changed config!"); }
-    return result;
+function convertedGame(t) {
+  const f = game(t, {references: [{name: "Shared", version: [1, 0, 0, 0]}]}), selected = selection(t);
+  const dependency = path.join(f.source, "Shared.dll");
+  const bytes = Buffer.concat([managedAssembly({name: "Shared", entryPoint: false, machine: 0x8664, pe64: true}), Buffer.from([1])]);
+  fs.writeFileSync(dependency, bytes);t.mock.method(Manager, "resolveSelection", () => selected);
+  return {...f, selected, dependency, bytes, context: {userDataDir: path.join(f.root, "data"), settings: {}, runtimeSettings: {}}};
+}
+
+test("FNA derives only reachable CPU-pinned assemblies and leaves original search and data paths authoritative", t => {
+  const f = convertedGame(t);fs.writeFileSync(path.join(f.source, "game.cfg"), "original config");
+  fs.mkdirSync(path.join(f.source, "Assets"));fs.writeFileSync(path.join(f.source, "Assets", "big.bin"), "live asset");
+  writeAssembly(path.join(f.source, "Unreferenced.dll"), {entryPoint: false, machine: 0x8664, pe64: true});
+  const result = Fna.__test.prepareGame(f.entry, f.context);
+  assert.equal(result.gameRoot, f.source);assert.equal(result.assemblyPath, f.assembly);
+  assert.deepEqual(fs.readdirSync(result.assemblyRoot), ["Shared.dll"]);
+  assert.equal(inspectManagedAssembly(path.join(result.assemblyRoot, "Shared.dll")).peMachine, 0xaa64);
+  assert.deepEqual(fs.readFileSync(f.dependency), f.bytes);assert.equal(fs.existsSync(path.join(f.source, "Unreferenced.dll")), true);
+  assert.equal(fs.existsSync(path.join(result.assemblyRoot, "FNA.dll")), false);assert.equal(fs.existsSync(path.join(result.assemblyRoot, "game.cfg")), false);
+});
+
+test("FNA uses a required derived entry assembly with original cwd and leaves Intel portable x64 games direct", async t => {
+  const f = game(t, {machine: 0x8664, pe64: true}), selected = selection(t);t.mock.method(Manager, "resolveSelection", () => selected);
+  let call;const context = {userDataDir: path.join(f.root, "data"), settings: {}, runtimeSettings: {}, spawnDetachedChecked: (...args) => {call = args;return {pid: 1, exitCode: 0};}};
+  const original = fs.readFileSync(f.assembly);await Fna.launchRuntime("fna", f.entry, context);
+  assert.notEqual(call[1][2], f.assembly);assert.equal(call[2].cwd, f.source);assert.equal(call[2].env.MACLAUNCHER_FNA_GAME_ROOT, f.source);
+  assert.equal(call[2].env.MACLAUNCHER_FNA_ASSEMBLY_ROOT, path.dirname(call[1][2]));assert.deepEqual(fs.readFileSync(f.assembly), original);
+  selected.profile.architecture = "x64";context.runtimeSettings.retargetIlArchitecture = false;
+  const direct = Fna.__test.prepareGame(f.entry, context);assert.equal(direct.assemblyPath, f.assembly);assert.equal(direct.assemblyRoot, null);
+});
+
+test("FNA warm conversion reuses validated assembly bytes without hashing, copying or walking assets", t => {
+  const f = convertedGame(t), first = Fna.__test.prepareGame(f.entry, f.context), read = fs.readSync;
+  t.mock.method(fs, "readSync", (fd, buffer, ...args) => {assert.notEqual(buffer.length, SourceInventory.LIMITS.chunkBytes, "warm precise conversion inputs need no streaming digest");return read(fd, buffer, ...args);});
+  t.mock.method(fs, "readdirSync", () => assert.fail("Warm Play must not enumerate assets"));
+  t.mock.method(fs, "copyFileSync", () => assert.fail("Warm Play must not recopy assemblies"));
+  assert.equal(Fna.__test.prepareGame(f.entry, f.context).assemblyRoot, first.assemblyRoot);
+});
+
+test("FNA conversion content keys refresh held-coarse-stat inputs and retain previous derived bytes", t => {
+  const f = convertedGame(t);heldCoarseTimes(t);const first = Fna.__test.prepareGame(f.entry, f.context);
+  const old = fs.readFileSync(path.join(first.assemblyRoot, "Shared.dll")), updated = Buffer.from(f.bytes);updated[updated.length - 1] = 2;fs.writeFileSync(f.dependency, updated);
+  const second = Fna.__test.prepareGame(f.entry, f.context);assert.notEqual(second.assemblyRoot, first.assemblyRoot);
+  const expected = Buffer.from(updated);expected.writeUInt16LE(0xaa64, 132);
+  assert.deepEqual(fs.readFileSync(path.join(second.assemblyRoot, "Shared.dll")), expected);assert.deepEqual(fs.readFileSync(f.dependency), updated);
+  assert.deepEqual(fs.readFileSync(path.join(first.assemblyRoot, "Shared.dll")), old);
+});
+
+test("FNA rejects held-stat conversion-input mutation during hashing without publishing a derived cache", t => {
+  const f = convertedGame(t);heldCoarseTimes(t);const inode = fs.statSync(f.dependency, {bigint: true}).ino, read = fs.readSync;let mutated = false;
+  t.mock.method(fs, "readSync", (fd, buffer, ...args) => {
+    const result = read(fd, buffer, ...args);
+    if (!mutated && buffer.length === SourceInventory.LIMITS.chunkBytes && fs.fstatSync(fd, {bigint: true}).ino === inode) {mutated = true;const bytes = Buffer.from(f.bytes);bytes[bytes.length - 1] = 2;fs.writeFileSync(f.dependency, bytes);}return result;
   });
-  assert.throws(() => Fna.__test.prepareGame(entry, context), { code: "SOURCE_CHANGED" });
-  assert.equal(mutated, true); assert.equal(fs.readFileSync(marker, "utf8"), stamp);
-  assert.equal(fs.readFileSync(path.join(first.gameRoot, "game.cfg"), "utf8"), privateConfig);
-  const module = path.join(context.userDataDir, "games", entry.gameId, "modules", "fna");
-  assert.equal(fs.existsSync(path.join(module, "previous-overlays")), false);
-  assert.ok(fs.readdirSync(path.join(module, "overlays")).every(name => !name.startsWith(".prepare-")));
+  assert.throws(() => Fna.__test.prepareGame(f.entry, f.context), {code: "SOURCE_CHANGED"});assert.equal(mutated, true);assert.equal(fs.existsSync(f.context.userDataDir), false);
+});
+
+test("FNA conversion copy races preserve original data and the previous cache receipt", t => {
+  const f = convertedGame(t);heldCoarseTimes(t);const first = Fna.__test.prepareGame(f.entry, f.context), marker = path.join(path.dirname(first.assemblyRoot), "prepared.json"), receipt = fs.readFileSync(marker);
+  const updated = Buffer.from(f.bytes);updated[updated.length - 1] = 2;fs.writeFileSync(f.dependency, updated);let mutated = false;
+  afterRealCopy(t, f.dependency, () => {if (!mutated) {mutated = true;const changed = Buffer.from(updated);changed[changed.length - 1] = 3;fs.writeFileSync(f.dependency, changed);}});
+  assert.throws(() => Fna.__test.prepareGame(f.entry, f.context), {code: "SOURCE_CHANGED"});assert.equal(mutated, true);
+  assert.deepEqual(fs.readFileSync(marker), receipt);assert.equal(fs.existsSync(path.join(first.assemblyRoot, "Shared.dll")), true);
+  assert.ok(fs.readdirSync(path.dirname(first.assemblyRoot)).every(name => !name.startsWith(".prepare-")));
+});
+
+test("FNA preserves modified derived assemblies instead of overwriting their only copy", t => {
+  const f = convertedGame(t), first = Fna.__test.prepareGame(f.entry, f.context), file = path.join(first.assemblyRoot, "Shared.dll");
+  fs.writeFileSync(file, "private edited bytes");const second = Fna.__test.prepareGame(f.entry, f.context);
+  assert.notEqual(second.assemblyRoot, first.assemblyRoot);assert.equal(fs.readFileSync(file, "utf8"), "private edited bytes");
+  assert.equal(inspectManagedAssembly(path.join(second.assemblyRoot, "Shared.dll")).peMachine, 0xaa64);
+});
+
+test("FNA original Play never touches or retires legacy private game data", async t => {
+  const f = game(t), selected = selection(t);t.mock.method(Manager, "resolveSelection", () => selected);
+  const context = {userDataDir: path.join(f.root, "data"), settings: {}, runtimeSettings: {}};
+  const previous = path.join(context.userDataDir, "games", f.entry.gameId, "modules/fna/previous-overlays", "runtime-1700000000000");
+  fs.mkdirSync(previous, {recursive: true});const save = path.join(previous, "save.dat");fs.writeFileSync(save, "retained private progress");
+  fs.writeFileSync(path.join(previous, ".maclauncher-fna-carried-forward.json"), JSON.stringify({schemaVersion: 2, carriedForward: true, outputFingerprint: "a".repeat(64)}));
+  const result = Fna.__test.prepareGame(f.entry, context);assert.equal(result.gameRoot, f.source);assert.equal(Fna.cleanupGameData(f.entry, context), false);
+  const cleanup = await require("../src/core/storage-maintenance").maintainStorage({userDataDir: context.userDataDir, stores: require("../src/modules/fna/derived-stores"), now: Date.now() + 30 * 24 * 60 * 60 * 1000});
+  assert.equal(cleanup.removed, 0);assert.equal(fs.readFileSync(save, "utf8"), "retained private progress");
 });
 
 test("FNA rejects incompatible managed games before requesting runtime installation", async t => {
@@ -318,22 +309,20 @@ test("FNA reports native import names and original PE requirements without execu
   assert.equal(entry.moduleData.peFormat, "PE32"); assert.equal(entry.moduleData.requires32Bit, true);
 });
 
-test("FNA staging rejects recursive user data and symbolic links", t => {
-  const { entry, root, source } = game(t), selected = selection(t); t.mock.method(Manager, "resolveSelection", () => selected);
-  const context = { userDataDir: path.join(source, "launcher-data"), settings: {}, runtimeSettings: { useRuntimeFramework: true } };
-  assert.throws(() => Fna.__test.prepareGame(entry, context), /separate/);
-  context.userDataDir = path.join(root, "userData"); fs.symlinkSync(entry.gamePath, path.join(source, "linked.dll"));
-  assert.throws(() => Fna.__test.prepareGame(entry, context), /symbolic links/);
+test("FNA rejects a required conversion cache inside the original game", t => {
+  const f = convertedGame(t);f.context.userDataDir = path.join(f.source, "launcher-data");
+  assert.throws(() => Fna.__test.prepareGame(f.entry, f.context), /separate/);assert.equal(fs.existsSync(f.context.userDataDir), false);
 });
 
-test("XNA conversion replaces bundled Windows framework facades only in the private copy", t => {
+test("XNA conversion uses selected runtime facades without copying them over original game files", t => {
   const { entry, root, source } = game(t, { references: [{ name: "Microsoft.Xna.Framework", version: [4, 0, 0, 0] }] }), selected = selection(t);
   const abi = path.join(selected.profile.root, "abi"); fs.mkdirSync(abi);
   fs.writeFileSync(path.join(abi, "Microsoft.Xna.Framework.dll"), "reviewed type forwarders");
   fs.writeFileSync(path.join(source, "Microsoft.Xna.Framework.dll"), "original Windows framework");
   t.mock.method(Manager, "resolveSelection", () => selected);
   const prepared = Fna.__test.prepareGame(entry, { userDataDir: path.join(root, "userData"), settings: {}, runtimeSettings: { useRuntimeFramework: true } });
-  assert.equal(fs.readFileSync(path.join(prepared.gameRoot, "Microsoft.Xna.Framework.dll"), "utf8"), "reviewed type forwarders");
+  assert.equal(prepared.gameRoot, source);assert.equal(prepared.hostPath, path.join(selected.profile.root, "MacLauncherFnaHost.dll"));
+  assert.equal(fs.readFileSync(path.join(prepared.runtimeRoot, "abi", "Microsoft.Xna.Framework.dll"), "utf8"), "reviewed type forwarders");
   assert.equal(fs.readFileSync(path.join(source, "Microsoft.Xna.Framework.dll"), "utf8"), "original Windows framework");
 });
 
@@ -341,7 +330,7 @@ test("FNA launches a separate host and passes opt-in graphics and argument setti
   const { entry, root } = game(t), selected = selection(t); t.mock.method(Manager, "resolveSelection", () => selected);
   const focus = require("../src/modules/shared/runtime/native-focus"), spawnForeground = focus.spawnForegroundNativeGame;
   t.mock.method(focus, "spawnForegroundNativeGame", options => spawnForeground(options, { focus: async () => ({ activated: true }) }));
-  let call; const context = { userDataDir: path.join(root, "userData"), settings: {}, gameArguments: ["--title", "  A quoted game  ", "", "$(literal)", "first\nsecond"], runtimeSettings: { useRuntimeFramework: true, softwareOpenGL: true, appArgs: ["--level", "a b"] }, spawnDetachedChecked: (...args) => { call = args; return { pid: 1 }; } };
+  let call; const context = { userDataDir: path.join(root, "userData"), settings: {}, gameArguments: ["--title", "  A quoted game  ", "", "$(literal)", "first\nsecond"], runtimeSettings: { useRuntimeFramework: true, softwareOpenGL: true, appArgs: ["--level", "a b"] }, spawnDetachedChecked: (...args) => { call = args; return { pid: 1, exitCode: 0 }; } };
   await Fna.launchRuntime("fna", entry, context);
   assert.equal(call[0], selected.install.executablePath); assert.equal(call[1][0], "exec");
   assert.deepEqual(call[1].slice(3), [selected.profile.root, "--level", "a b", ...context.gameArguments]);

@@ -4,6 +4,7 @@ const LIMITS = Object.freeze({ records: 512, bytes: 256 * 1024 * 1024, metadataB
 const digest = bytes => crypto.createHash("sha256").update(bytes).digest("hex"), SHA = /^[a-f0-9]{64}$/;
 
 /** Shared helper, original fonts in memory, and only derived per-game pixels. */
+// Cache identity follows the selected helper CPU, defaulting to the launcher process even under Rosetta.
 async function createTextCache({ cacheRoot, helper, arch = process.arch, signal, render = Text.renderText, spawnChild } = {}) {
   if (!path.isAbsolute(cacheRoot || "") || !["arm64", "x64"].includes(arch) || helper?.version !== Text.VERSION || helper.protocolVersion !== 1 ||
       !SHA.test(helper.binarySha256 || "") || typeof helper.systemVersion !== "string" || !/^\d+\.\d+(?:\.\d+)?$/.test(helper.systemVersion))

@@ -9,6 +9,7 @@ import {spatialMenuMethods, spatialMethodLabel} from "../spatial-options";
 import {acceptsShaders, choiceDetail, customShader, effectAvailability, effectTypes, inputsLabel, kindLabels, resizeKind, selectable} from "../effects-catalog";
 import {ImplementationPicker, type ImplementationOption} from "./ImplementationPicker";
 import {EffectRowControls} from "./EffectRowControls";
+import {InactiveEffectNotice} from "./InactiveEffectNotice";
 import {HelpTip} from "./HelpTip";
 import {isolatedItem} from "./ItemBoundary";
 import {StatusBadge} from "./StatusBadge";
@@ -92,7 +93,11 @@ function advancedRow(editor: EffectsEditor, node: VideoEffectNode, index: number
   const actualReason = actualLabel ? stage?.reason || `This stage uses ${actualLabel}. ${methodName} remains the saved choice.` : undefined;
   const inputPending = !stage?.completed && choice?.pendingInputs?.length && (choice.available || !choice.reason && selectable(choice));
   const unavailable = !stage?.completed && choice?.available === false && choice.reason;
-  const state = plan.enabled === false ? "" : !node.enabled ? "Off" : unavailable ? "Unavailable" : inputPending ? inputsLabel(choice.pendingInputs!) : !running ? "" : pending ? pending.retained ? "Using previous" : "Pending"
+  // Source-incompatible saved methods retain their explanation. Master Off
+  // keeps the existing row presentation without adding another state label.
+  const chainOff = plan.enabled === false, sourceUnsupported = node.enabled && choice?.sourceUnsupported === true;
+  const inactiveReason = sourceUnsupported ? choice?.reason : undefined;
+  const state = chainOff ? "" : !node.enabled ? "Off" : sourceUnsupported ? "Inactive" : unavailable ? "Unavailable" : inputPending ? inputsLabel(choice.pendingInputs!) : !running ? "" : pending ? pending.retained ? "Using previous" : "Pending"
     : stage?.phase === "preparing" ? "Preparing…" : stage && ["failed", "bypassed", "stopped"].includes(stage.phase) ? "Fallback" : stage && stage.completed > 0 ? "Active" : "";
   const moveBy = (offset: number) => void editor.move(node.id, index + offset);
   return <li key={node.id} draggable onDragStart={event => {
@@ -116,8 +121,9 @@ function advancedRow(editor: EffectsEditor, node: VideoEffectNode, index: number
       {state && <span className="graphicsState" title={pending?.reason || stage?.reason || actualReason || undefined}>{state}{state === "Active" && actualLabel ? ` · ${actualLabel}` : ""}
         {state === "Active" && actualReason && <HelpTip label={`About the active ${name} method`}>{actualReason}</HelpTip>}
         {(state === "Using previous" || state === "Pending") && pending?.reason && <HelpTip label={`Why ${name} is ${state.toLowerCase()}`}>{pending.reason}</HelpTip>}
-        {inputPending && choice.inputReason && <HelpTip label={`About ${name} inputs`}>{choice.inputReason}</HelpTip>}</span>}
-      {choice?.available === false && <span className="graphicsState"><HelpTip label={`About ${name} availability`}>{choice.reason || "Unavailable for the current inputs."}</HelpTip></span>}
+        {inputPending && choice.inputReason && <HelpTip label={`About ${name} inputs`}>{choice.inputReason}</HelpTip>}
+        {state === "Inactive" && inactiveReason && <HelpTip label={`Why ${name} is inactive`}>{inactiveReason}</HelpTip>}</span>}
+      {choice?.available === false && !(sourceUnsupported && !chainOff) && <span className="graphicsState"><HelpTip label={`About ${name} availability`}>{choice.reason || "Unavailable for the current inputs."}</HelpTip></span>}
       {attention && <span className="graphicsState"><StatusBadge tone="warning">Needs attention</StatusBadge>
         <HelpTip label={`Why ${name} needs attention`}>{attention}</HelpTip></span>}
       <div className="effectNodeActions" onClick={event => event.stopPropagation()}>
@@ -127,6 +133,7 @@ function advancedRow(editor: EffectsEditor, node: VideoEffectNode, index: number
       </div>
     </summary>
     <div className="effectNodeSettings">
+      <InactiveEffectNotice editor={editor} node={node} choice={choice} />
       <div className="detailRow detailControlRow effectMethodRow" onDrop={event => editor.dropShaders(event, node, type)}><label className="detailLabel" htmlFor={`effect-choice-${node.id}`}>Method
         {node.kind === "temporal" && <HelpTip label="About temporal inputs">Requires renderer motion vectors, depth and jitter. Render resolution follows game settings.</HelpTip>}
         {node.kind === "shader" && (filter || node.shader.preset === "custom" && node.shader.effectPath) && <HelpTip label="About shader format">{shaderFormatLabel(filter ? filter.format === undefined ? shaderFormat(filter.path) : filter.format : shaderFormat(node.shader.effectPath))}</HelpTip>}</label>

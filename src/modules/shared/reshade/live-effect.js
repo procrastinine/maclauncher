@@ -1,4 +1,5 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
+const { cloneOrCopy } = require("../copy-file");
 const Live = require("./live-controls"), Chain = require("./effect-chain"), Packs = require("./shader-packs"), Writable = require("../writable-input");
 const Filters = require("./filter-library");
 const Managed = require("./managed-shaders");
@@ -73,7 +74,7 @@ async function prepare(entry, { root, userDataDir, features, graphicsHost, graph
       for (const name of [...prepared.files.map(row => row.path), "metadata.json"]) {
         const target = path.join(bundle, name);await fs.promises.mkdir(path.dirname(target), { recursive: true });
         try { await fs.promises.link(path.join(prepared.directory, name), target); }
-        catch (error) { if (error.code !== "EXDEV") throw error;await fs.promises.copyFile(path.join(prepared.directory, name), target, fs.constants.COPYFILE_FICLONE); }
+        catch (error) { if (error.code !== "EXDEV") throw error;await cloneOrCopy(path.join(prepared.directory, name), target, { signal }); }
       }
       await fs.promises.rename(bundle, path.join(effects, revision));
       const requirements=require("../effects/operation-contracts.mjs").sceneInputRequirements(prepared.metadata.requirements);
@@ -118,7 +119,7 @@ async function prepare(entry, { root, userDataDir, features, graphicsHost, graph
       if (!source) throw new Error(`Shader image texture was not found: ${name}`);
       const stat = await fs.promises.stat(source);size += stat.size;
       if (stat.size > 64 * 1024 * 1024 || size > 256 * 1024 * 1024) throw new Error("Shader image textures exceed the supported size.");
-      const filename = "texture-" + i;await fs.promises.copyFile(source, path.join(bundle, filename));mapping.push(normalized, filename);
+      const filename = "texture-" + i;await cloneOrCopy(source, path.join(bundle, filename), { signal });mapping.push(normalized, filename);
     }
     await fs.promises.writeFile(path.join(bundle, "texture-sources"), mapping.join("\n") + "\n");
     await fs.promises.rename(bundle, path.join(effects, revision));

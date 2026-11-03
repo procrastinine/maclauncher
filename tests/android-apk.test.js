@@ -684,6 +684,31 @@ test("APK preparation converts once, verifies cache content and keeps saves acro
   assert.deepEqual(fs.readFileSync(entry.gamePath), original);
   assert.ok(fs.existsSync(root));
 });
+test("APK preparation revalidates same-size APK and converter rewrites with identical coarse timestamps", async t => {
+  const {entry,options}=preparationFixture(t),file=options.payload.converterClasspath[0];let calls=0;
+  const apk=asset=>zip([['AndroidManifest.xml',binaryXml(manifest())],['classes.dex',Buffer.from('dex')],['assets/text.txt',Buffer.from(asset)]],{method:0});
+  fs.writeFileSync(entry.gamePath,apk('original'));
+  const lstat=fs.lstatSync.bind(fs),open=fs.promises.open.bind(fs.promises),held=new Map([file,entry.gamePath].map(name=>{
+    const stat=lstat(name,{bigint:true});return[name,Object.assign(Object.create(Object.getPrototypeOf(stat)),stat,{ctimeNs:1000000000n,ctimeMs:1000n})];
+  }));
+  t.mock.method(fs,'lstatSync',(...args)=>held.get(path.resolve(String(args[0])))||lstat(...args));
+  t.mock.method(fs.promises,'open',async(...args)=>{const handle=await open(...args),stat=held.get(path.resolve(String(args[0])));if(stat)handle.stat=async()=>stat;return handle;});
+  const execute=async(_command,args)=>{calls++;fs.writeFileSync(args[args.indexOf('io.github.kksimp.dex2jvm.ConvertApkSet')+2],zip([['Game.class',Buffer.from('class')]]));};
+  const first=await prepareApk(entry,{...options,execute});
+  fs.writeFileSync(path.join(first.filesRoot,'save'),'preserved save');
+  assert.equal((await prepareApk(entry,{...options,execute})).key,first.key);assert.equal(calls,1);
+  const changed=Buffer.from(fs.readFileSync(file));changed[0]^=1;fs.writeFileSync(file,changed);fs.utimesSync(file,held.get(file).atime,held.get(file).mtime);
+  const second=await prepareApk(entry,{...options,execute});
+  assert.notEqual(second.key,first.key);assert.equal(calls,2);
+  assert.equal(second.filesRoot,first.filesRoot);assert.equal(fs.readFileSync(path.join(second.filesRoot,'save'),'utf8'),'preserved save');
+  const rewritten=apk('modified');assert.equal(rewritten.length,Number(held.get(entry.gamePath).size));
+  fs.writeFileSync(entry.gamePath,rewritten);fs.utimesSync(entry.gamePath,held.get(entry.gamePath).atime,held.get(entry.gamePath).mtime);
+  const third=await prepareApk(entry,{...options,execute});
+  assert.notEqual(third.key,second.key);assert.equal(calls,3);
+  assert.equal(fs.readFileSync(path.join(third.assetsRoot,'text.txt'),'utf8'),'modified');
+  assert.equal(fs.readFileSync(path.join(third.filesRoot,'save'),'utf8'),'preserved save');
+});
+
 test("APK failed or cancelled preparation publishes no cache and never accepts a foreign Java ABI", async t => {
   const { entry, options } = preparationFixture(t), controller = new AbortController();
   await assert.rejects(prepareApk(entry, { ...options, java: { ...options.java, variant: "x64" } }), /Apple Silicon Java 21/);

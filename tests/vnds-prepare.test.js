@@ -72,15 +72,122 @@ for (const name of ["lib/json.lua", "main.lua", "conf.lua"]) test(`VNDS rejects 
 });
 test("VNDS preparations share one immutable managed interpreter and preserve original games", { skip }, async t => {
   const f = await fixture(t), beforeEngine = inventory(f.engine), prepared = [];
+  t.mock.method(os, "homedir", () => path.join(f.root, "home"));
   for (const gameId of ["first", "second"]) {
     const gamePath = path.join(f.root, gameId); fs.mkdirSync(path.join(gamePath, "script"), { recursive: true });
     fs.writeFileSync(path.join(gamePath, "script", "main.scr"), "text Example\n"); fs.writeFileSync(path.join(gamePath, "global.json"), JSON.stringify({ flag: gameId }));
     const before = inventory(gamePath); prepared.push(await Preparation.prepare({ gameId, gamePath }, f.context));
     assert.deepEqual(inventory(gamePath), before);
-    assert.equal(fs.readFileSync(path.join(prepared.at(-1).saveDirectory, "global.json"), "utf8"), fs.readFileSync(path.join(gamePath, "global.json"), "utf8"));
+    assert.equal(prepared.at(-1).working, gamePath);
+    assert.equal(prepared.at(-1).saveDirectory, path.join(os.homedir(), "Library", "Application Support", "LOVE", "VNDS-LOVE", "novels", gameId));
+    assert.equal(fs.existsSync(path.join(prepared.at(-1).saveDirectory, "global.json")), false, "Play does not import original saves into a private tree");
   }
   assert.deepEqual(prepared.map(item => item.engine), [f.engine, f.engine]);
   assert.notEqual(prepared[0].working, prepared[1].working); assert.notEqual(prepared[0].saveDirectory, prepared[1].saveDirectory);
   assert.deepEqual(inventory(f.engine), beforeEngine);
   assert.equal(inventory(path.join(f.userDataDir, "games")).some(([name]) => name.endsWith(".lua")), false);
+});
+
+function scratch(t) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-vnds-paths-")));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  t.mock.method(os, "homedir", () => path.join(root, "home"));
+  const gamePath = path.join(root, "Original Novel"), context = { userDataDir: path.join(root, "profile") };
+  fs.mkdirSync(gamePath);
+  return { root, gamePath, context, entry: { gameId: "novel", gamePath },
+    engine: () => ({ root: path.join(root, "shared-interpreter"), profile: { version: "fixture" } }) };
+}
+
+test("VNDS uses upstream user saves and original cwd without a root save scan or warm mount rewrite", async t => {
+  const f = scratch(t), original = fs.readdirSync;
+  fs.writeFileSync(path.join(f.gamePath, "global.json"), "original bytes need no eager validation");
+  t.mock.method(fs, "readdirSync", function(directory, ...args) {
+    assert.notEqual(path.resolve(directory), f.gamePath, "Preparation must not enumerate original root saves");
+    return original.call(this, directory, ...args);
+  });
+  const first = await Preparation.prepare(f.entry, f.context, { resolveEngine: f.engine });
+  assert.equal(first.working, f.gamePath);
+  assert.equal(first.saveRoot, Preparation.defaultSaveDirectory(f.entry));
+  assert.equal(first.saveRoot.startsWith(f.context.userDataDir + path.sep), false);
+  assert.equal(fs.existsSync(path.join(first.saveRoot, "global.json")), false);
+  assert.equal(fs.existsSync(path.join(Preparation.moduleRoot(f.entry, f.context), "saves")), false);
+  const held = new Date("2020-01-01T00:00:00Z"); fs.utimesSync(first.mountFile, held, held);
+  const before = fs.statSync(first.mountFile).mtimeMs;
+  const second = await Preparation.prepare(f.entry, f.context, { resolveEngine: f.engine });
+  assert.equal(fs.statSync(second.mountFile).mtimeMs, before);
+  assert.equal(fs.readFileSync(path.join(f.gamePath, "global.json"), "utf8"), "original bytes need no eager validation");
+});
+
+test("VNDS retains validated ZIP mounts, audio conversion deduplication and explicit saves", async t => {
+  const f = scratch(t), { writeZipArchive } = require("./helpers/zip-fixture");
+  writeZipArchive(path.join(f.gamePath, "script.zip"), [{ name: "main.scr", data: "text Original" }]);
+  const sound = path.join(f.gamePath, "sound"); fs.mkdirSync(sound); fs.writeFileSync(path.join(sound, "voice.m4a"), "AAC bytes");
+  f.entry.saveDirOverride = path.join(f.root, "Custom Saves"); let conversions = 0;
+  const dependencies = { resolveEngine: f.engine, run: async (_executable, args) => {
+    conversions++; fs.writeFileSync(args.at(-1), "fLaC fixture");
+  } };
+  const first = await Preparation.prepare(f.entry, f.context, dependencies);
+  assert.equal(first.saveRoot, f.entry.saveDirOverride);
+  const mounts = JSON.parse(fs.readFileSync(first.mountFile, "utf8"));
+  assert.equal(mounts[0].path, path.join(f.gamePath, "script.zip"));
+  assert.equal(mounts[0].point, "novels/game/script");
+  assert.equal(mounts[1].point, "novels/game/sound");
+  await Preparation.prepare(f.entry, f.context, dependencies);
+  assert.equal(conversions, 1, "Matching source and converted bytes reuse the real conversion");
+  writeZipArchive(path.join(f.gamePath, "script.zip"), [{ name: "../escape.scr", data: "text Invalid" }]);
+  await assert.rejects(Preparation.prepare(f.entry, f.context, dependencies), /unsupported paths/);
+});
+
+test("VNDS old private saves migrate once without replacing upstream conflicts or active overrides", async t => {
+  const f = scratch(t), mod = require("../src/modules/vnds/backcompat");
+  const [descriptor] = mod.legacyGameMirrors(f.entry, f.context);
+  assert.equal(descriptor.sourceRoot, Preparation.defaultSaveDirectory(f.entry));
+  assert.equal(fs.existsSync(Preparation.moduleRoot(f.entry, f.context)), false, "Descriptors do no disk work");
+  fs.mkdirSync(descriptor.mirrorRoot, { recursive: true }); fs.mkdirSync(descriptor.sourceRoot, { recursive: true });
+  fs.writeFileSync(path.join(descriptor.mirrorRoot, "save1.json"), "private slot");
+  fs.writeFileSync(path.join(descriptor.sourceRoot, "save1.json"), "upstream slot");
+  fs.writeFileSync(path.join(descriptor.mirrorRoot, "global.json"), "unique globals");
+  const result = await require("../src/core/backcompat/legacy-game-mirrors").retireLegacyGameMirror(descriptor, f.context);
+  assert.equal(result.complete, true);
+  assert.equal(fs.readFileSync(path.join(descriptor.sourceRoot, "save1.json"), "utf8"), "upstream slot");
+  assert.equal(fs.readFileSync(path.join(descriptor.sourceRoot, "global.json"), "utf8"), "unique globals");
+  const conflicts = fs.readdirSync(descriptor.sourceRoot).filter(name => name.startsWith("save1.json.MacLauncher-conflict-"));
+  assert.equal(conflicts.length, 1); assert.equal(fs.readFileSync(path.join(descriptor.sourceRoot, conflicts[0]), "utf8"), "private slot");
+  assert.equal(fs.existsSync(descriptor.mirrorRoot), false);
+  for (const saveDirOverride of [descriptor.mirrorRoot, path.join(descriptor.mirrorRoot, "nested"), path.dirname(descriptor.mirrorRoot)])
+    assert.deepEqual(mod.legacyGameMirrors({ ...f.entry, saveDirOverride }, f.context), [], "Explicit overrides keep their live trees");
+});
+
+
+test("VNDS shared import policy changes only an actual same-basename save collision", async t => {
+  const f = scratch(t), mod = require("../src/modules/vnds/main");
+  const { applySaveIdentity } = require("../src/core/save-identity");
+  const describe = entry => mod.resolveSaveIdentity(entry, f.context);
+  const make = (gameId, folder) => {
+    const entry = { gameId, gamePath: path.join(f.root, gameId, folder) };
+    fs.mkdirSync(entry.gamePath, { recursive: true }); mod.onImport(entry, f.context); return entry;
+  };
+  const first = make("first-novel", "game"), firstBefore = structuredClone(first);
+  assert.equal(first.saveDirOverride, undefined, "onImport leaves the upstream default alone");
+  assert.equal(applySaveIdentity(first, { games: [], describe, context: f.context }), first);
+  assert.deepEqual(first, firstBefore);
+  const firstPlan = await Preparation.prepare(first, f.context, { resolveEngine: f.engine });
+  fs.writeFileSync(path.join(firstPlan.saveRoot, "global.json"), '{"owner":"upstream-first"}');
+  const second = make("second-novel", "game");
+  assert.equal(describe(first).identity, describe(second).identity, "The two actual defaults collide");
+  const secondPatched = applySaveIdentity(second, { games: [first], describe, context: f.context });
+  assert.equal(second.saveDirOverride, undefined, "The shared core returns an ordinary setting delta without mutating the source");
+  assert.equal(secondPatched.saveDirOverride, path.join(path.dirname(firstPlan.saveRoot), second.gameId));
+  assert.equal(describe(secondPatched).explicit, true);
+  const secondPlan = await Preparation.prepare(secondPatched, f.context, { resolveEngine: f.engine });
+  assert.notEqual(secondPlan.saveRoot, firstPlan.saveRoot);
+  assert.equal(fs.existsSync(path.join(secondPlan.saveRoot, "global.json")), false, "No shared saves are guessed or copied");
+  assert.equal(fs.readFileSync(path.join(firstPlan.saveRoot, "global.json"), "utf8"), '{"owner":"upstream-first"}');
+  const third = make("third-novel", "another-game"), thirdBefore = structuredClone(third);
+  assert.equal(applySaveIdentity(third, { games: [first, secondPatched], describe, context: f.context }), third);
+  assert.deepEqual(third, thirdBefore, "A noncolliding default remains exactly unchanged");
+  const explicit = { ...third, gameId: "explicit-novel", saveDirOverride: path.join(f.root, "Chosen Saves") };
+  mod.onImport(explicit, f.context);
+  assert.equal(describe(explicit).identity, explicit.saveDirOverride);
+  assert.equal(applySaveIdentity(explicit, { games: [first, secondPatched], describe, context: f.context }), explicit);
 });

@@ -10,6 +10,7 @@ const Source = require("../src/modules/android/runtime-source");
 const RuntimePackages = require("../scripts/runtime-packages.cjs");
 
 test("the Android included package installs offline, loads physical interfaces and rejects corruption", async t => {
+  if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
   const pin = require("../src/modules/android/distribution-included.json").find(item => item.id === "android-launcher");
   assert.ok(pin);
   const archive = path.resolve(__dirname, "../build/included-helper-packages", `${pin.id}-${pin.version}-${pin.arch}.tar.gz`);
@@ -29,7 +30,7 @@ test("the Android included package installs offline, loads physical interfaces a
   for (const member of sourceMembers) assert.equal(B.readRegular(path.join(directory, member.path), B.LIMITS.fileBytes).sha256, member.sha256);
   const apkPath = Source.file("apk.js", { sourceRoot });
   assert.equal(fs.realpathSync(apkPath), apkPath, "Node loads an ordinary physical file");
-  const Apk = require(apkPath), manifest = Apk.inspectApk(path.join(__dirname, "fixtures/android-package-metadata/metadata.apk"));
+  const Apk = require(apkPath), manifest = Apk.inspectApk(require('./helpers/android-fixture-tools.cjs').metadataApk(t));
   assert.equal(manifest.packageName, "org.maclauncher.metadata.fixture");
   assert.equal(typeof require(Source.file("profile.js", { sourceRoot })).runtimeProfile, "function");
   assert.equal(typeof require(Source.file("art/runtime.js", { sourceRoot })).attachSupplier, "function");

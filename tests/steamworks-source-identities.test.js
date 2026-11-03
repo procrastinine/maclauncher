@@ -33,6 +33,7 @@ function fixture(t, identity = { sourceKind: "owned", sourceSha256: SHA }) {
     const content = JSON.stringify(manifest);
     fs.writeFileSync(path.join(directory, "helper.json"), content, { mode: 0o644 });
     declaration.manifestSha256 = hash(content);
+    declaration.files = [...manifest.files, { path: "helper.json", size: Buffer.byteLength(content), mode: 0o644, sha256: declaration.manifestSha256 }];
   };
   sealManifest();
   return { root, directory, library, interfaces, manifest, pin, sealManifest, declarations,

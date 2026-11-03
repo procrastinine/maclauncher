@@ -48,6 +48,9 @@ function fixture(t, { webReady = false, hostReady = false, decline = null, hostD
 
 test("original Yuri web declaration prepares its payload and NW host through the Node launcher", async t => {
   const f = fixture(t);
+  const settingsFile = path.join(f.userDataDir, "settings.json");
+  const originalBytes = fs.readFileSync(settingsFile);
+  const originalStat = fs.statSync(settingsFile, { bigint: true });
   assert.deepEqual(Nscripter.runtime.prerequisites.onsyuri_web,
     [{ managerId: "nwjs", runtimeId: "nwjs-patched", sectionId: "default" }]);
   assert.equal((await f.launcher.launchEntry(f.entry)).kind, "process");
@@ -55,7 +58,11 @@ test("original Yuri web declaration prepares its payload and NW host through the
     ["consent", "onsyuri", "0.7.7beta"], ["consent", "nwjs", "0.117.0"],
     ["install", "onsyuri", "0.7.7beta", "web"], ["install", "nwjs", "0.117.0", "default", "sdk"], ["launch"]
   ]);
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.userDataDir, "settings.json"))), f.settings);
+  assert.deepEqual(JSON.parse(fs.readFileSync(settingsFile)), f.settings);
+  assert.deepEqual(fs.readFileSync(settingsFile), originalBytes, "a current settings document stays byte-identical during consented Play");
+  const currentStat = fs.statSync(settingsFile, { bigint: true });
+  assert.deepEqual([currentStat.ino, currentStat.mtimeNs, currentStat.ctimeNs],
+    [originalStat.ino, originalStat.mtimeNs, originalStat.ctimeNs], "reading current settings must not rewrite the file");
 });
 
 test("an installed Yuri web payload still prepares a missing NW host using its exact separate override", async t => {

@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
 
 function run(cmd, args, env) {
   const res = spawnSync(cmd, args, { stdio: "inherit", env });
@@ -56,6 +58,13 @@ const nativeIdentity = nativeOptions["--runtime-sign-identity"] || env.MACLAUNCH
 if (signedBuild && !nativeIdentity) {
   throw new Error("Set MACLAUNCHER_RUNTIME_SIGN_IDENTITY to the identity used by stage-native-runtimes.cjs before a signed package build. See docs/runtimes/RUNTIME_DISTRIBUTION.md.");
 }
+run(process.execPath, ["src/modules/catsystem2/runtime/stage-cp932.cjs"], env);
+
+const require = createRequire(import.meta.url), repoRoot = path.resolve(import.meta.dirname, "..");
+await require("./published-inputs.cjs").prepareSevenZip({ repoRoot });
+await require("./published-inputs.cjs").prepareDeclaredPublishers({ repoRoot });
+for (const arch of architectures) await require("./ci-macos.cjs").preparePython({ repoRoot, arch });
+
 // Verify published resources before starting an expensive app build. Missing
 // architectures, dependencies or stale post-sign hashes fail with setup guidance.
 for (const arch of architectures) {

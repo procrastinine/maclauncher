@@ -59,11 +59,12 @@ technique Grayscale { pass { VertexShader=VS; PixelShader=PS; } }
 )FX";
         if(owned)for(const auto &file:{effect,srgb}){std::ofstream out(file);out<<first<<(file==srgb?"SRGBTexture = true;":"")<<last;require(out.good(),"Cannot write shader");}
     }
-    // The trigger is admitted off the frame path within about 250 ms; the
-    // next frame that captures then consumes exactly that request.
+    // The timer drains each trigger within about 250 ms. An unsupported frame
+    // leaves its request pending, so pending alone cannot acknowledge a new
+    // trigger; successful publication, rather than admission, consumes it.
     void requestCapture(){
         {std::ofstream out(trigger);out<<"capture\n";require(out.good(),"Cannot request capture");}
-        for(unsigned attempt=0;attempt<200&&!macfx::FrameCapture::pending(0);++attempt)std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        for(unsigned attempt=0;attempt<200&&(!macfx::FrameCapture::pending(0)||std::filesystem::exists(trigger));++attempt)std::this_thread::sleep_for(std::chrono::milliseconds(10));
         require(macfx::FrameCapture::pending(0)&&!std::filesystem::exists(trigger),"The capture request was not admitted");
     }
     ~Files(){std::error_code ignored;if(owned)std::filesystem::remove_all(directory,ignored);}
@@ -328,12 +329,12 @@ int main(int argc,char **argv){@autoreleasepool{try{
 
     // Ordered capture already declines FP16. Exercise the actual legacy path
     // too: width35 requires280 bytes/row, exceeding its old256-byte buffer row.
-    files.requestCapture();require(!macfx::FrameCapture::begin(commands,input,1),"PNG capture accepted FP16 byte storage");
-    require(!std::filesystem::exists(files.trigger),"Unsupported capture did not consume its request");
+    files.requestCapture();require(!macfx::FrameCapture::begin(commands,input,1),"raw capture accepted FP16 byte storage");
+    require(macfx::FrameCapture::pending(0)&&!std::filesystem::exists(files.trigger),"Unsupported capture lost its pending request");
     files.requestCapture();int owner=0;commands=[queue commandBuffer];
     const auto encoded=macfx::processFrameWithDepth(&owner,commands,{input,output,1,macfx::SpatialColor::Linear,macfx::FrameOrigin::TopLeft},macfx::SpatialMethod::Bilinear,nullptr,false);
     require(encoded.encoded&&encoded.effects&&!encoded.scaled,encoded.reason.c_str());complete(commands);verify(input,output,source);
-    require(!std::filesystem::exists(files.trigger)&&!std::filesystem::exists(files.capture+"-before.png")&&!std::filesystem::exists(files.capture+"-after.png"),"Unsupported FP16 PNG capture published a false byte image");
+    require(macfx::FrameCapture::pending(0)&&!std::filesystem::exists(files.trigger)&&!std::filesystem::exists(files.capture+"-before.rgba")&&!std::filesystem::exists(files.capture+"-after.rgba"),"Unsupported FP16 raw capture lost its request or published a false byte image");
 
     for(auto format:{MTLPixelFormatRGB10A2Unorm,MTLPixelFormatBGR10A2Unorm}){
         const bool bgr=format==MTLPixelFormatBGR10A2Unorm;
@@ -341,11 +342,11 @@ int main(int argc,char **argv){@autoreleasepool{try{
         files.requestCapture();commands=[queue commandBuffer];
         const auto ten=macfx::processFrameWithDepth(&owner,commands,{packed,filtered,2,macfx::SpatialColor::Perceptual,macfx::FrameOrigin::TopLeft},macfx::SpatialMethod::Bilinear,nullptr,false);
         require(ten.encoded&&ten.effects&&!ten.scaled,ten.reason.c_str());complete(commands);verifyTenBit(packed,filtered,pixels,bgr);
-        require(!std::filesystem::exists(files.trigger)&&!std::filesystem::exists(files.capture+"-before.png")&&!std::filesystem::exists(files.capture+"-after.png"),"Packed10-bit capture was misread as RGBA8 bytes");
+        require(macfx::FrameCapture::pending(0)&&!std::filesystem::exists(files.trigger)&&!std::filesystem::exists(files.capture+"-before.rgba")&&!std::filesystem::exists(files.capture+"-after.rgba"),"Packed10-bit capture lost its request or was misread as RGBA8 bytes");
     }
 
     // The same owner may later receive ordinary 8-bit content. Keep its actual
-    // format switch and supported PNG capture working rather than disabling
+    // format switch and supported raw capture working rather than disabling
     // capture or effects for the entire owner after an FP16 request.
     auto input8=image(device,35,19,MTLPixelFormatRGBA8Unorm),output8=image(device,35,19,MTLPixelFormatRGBA8Unorm);
     std::vector<std::array<unsigned char,4>> bytes(35*19,{204,51,102,82});
@@ -355,12 +356,13 @@ int main(int argc,char **argv){@autoreleasepool{try{
     require(eight.encoded&&eight.effects&&!eight.scaled,eight.reason.c_str());
     auto completed=dispatch_semaphore_create(0);[commands addCompletedHandler:^(id<MTLCommandBuffer>){dispatch_semaphore_signal(completed);}];
     complete(commands);require(dispatch_semaphore_wait(completed,dispatch_time(DISPATCH_TIME_NOW,3*NSEC_PER_SEC))==0,"8-bit capture completion timed out");
-    require(std::filesystem::exists(files.capture+"-before.png")&&std::filesystem::exists(files.capture+"-after.png"),"Supported 8-bit PNG capture was lost");
+    for(unsigned i=0;i<100&&(macfx::FrameCapture::pending(0)||!std::filesystem::exists(files.capture+"-after.rgba"));++i)[NSThread sleepForTimeInterval:.02];
+    require(!macfx::FrameCapture::pending(0)&&std::filesystem::exists(files.capture+"-before.rgba")&&std::filesystem::exists(files.capture+"-after.rgba"),"Supported 8-bit raw capture was lost or its published request stayed pending");
     std::vector<std::array<unsigned char,4>> actual8(bytes.size()),source8(bytes.size());
     [output8 getBytes:actual8.data() bytesPerRow:35*4 fromRegion:MTLRegionMake2D(0,0,35,19) mipmapLevel:0];
     [input8 getBytes:source8.data() bytesPerRow:35*4 fromRegion:MTLRegionMake2D(0,0,35,19) mipmapLevel:0];
     require(source8==bytes,"8-bit format switch modified source");
     for(const auto &p:actual8)require(std::abs(int(p[0])-87)<=1&&p[0]==p[1]&&p[1]==p[2]&&p[3]==82,"8-bit format switch changed shader output or alpha");
     macfx::releaseFrameOwner(&owner);
-    puts("FP16 and normalized10-bit FX: grayscale, range, channel order, alpha, source, resize, caller submission and supported8-bit capture preserved; unsupported sRGB/PNG capture rejected safely");return 0;
+    puts("FP16 and normalized10-bit FX: grayscale, range, channel order, alpha, source, resize, caller submission and supported8-bit capture preserved; unsupported sRGB/raw capture rejected safely");return 0;
 }catch(const std::exception &error){fprintf(stderr,"%s\n",error.what());return 1;}}}

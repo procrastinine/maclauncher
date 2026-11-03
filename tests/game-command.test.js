@@ -4,6 +4,7 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const { spawnSync } = require("node:child_process");
+const { finished } = require("node:stream/promises");
 const { writeGameCommand } = require("../src/main/game-command");
 const { createLauncher } = require("../src/core/launcher");
 const GameStore = require("../src/core/game-store");
@@ -95,13 +96,21 @@ require('node:fs').writeFileSync(process.env.CAPTURE, JSON.stringify({
 }));
 `);
   const asar = await import("@electron/asar");
-  await asar.createPackage(source, path.join(resources, "app.asar"));
+  const archive = path.join(resources, "app.asar");
+  await finished(await asar.createPackage(source, archive));
+  assert.deepEqual(asar.extractFile(archive, "src/core/game-cli.js"), fs.readFileSync(path.join(source, "src/core/game-cli.js")),
+    "The archived entry point must be fully published before the synchronous command starts");
   const options = { gamePath: path.join(root, "A game ' ✨"), userDataDir: path.join(root, "Data ' ✨"),
     executablePath: binary, appBundlePath: app, packaged: true };
   const command = writeGameCommand(path.join(root, "Custom.COMMAND"), options);
   assert.equal(command, path.join(root, "Custom.COMMAND"));
   const result = runCommand(command, { CAPTURE: capture, MACLAUNCHER_ELECTRON_PATH: "" });
-  assert.equal(result.status, 0, result.stderr);
+  const diagnostics = JSON.stringify({ status: result.status, signal: result.signal, error: result.error?.message,
+    stdout: result.stdout, stderr: result.stderr });
+  assert.ifError(result.error);
+  assert.equal(result.signal, null, diagnostics);
+  assert.equal(result.status, 0, diagnostics);
+  assert.ok(fs.existsSync(capture), `The archived command did not publish its result: ${diagnostics}`);
   const observed = JSON.parse(fs.readFileSync(capture));
   assert.deepEqual(observed.args, ["--game", options.gamePath, "--user-data", options.userDataDir]);
   assert.ok(observed.electron);

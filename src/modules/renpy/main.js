@@ -1,4 +1,5 @@
 const { spawn } = require("node:child_process");
+const { cloneOrCopySync } = require("../shared/copy-file");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -194,7 +195,7 @@ function patchedProjectVersion(entry) {
 }
 
 function resolveSaveLocations(entry, context = {}) {
-  const input = context.userDataDir ? prepareInput(entry, { ...context, readOnly: true }) : Writable.runtimeEntry(entry);
+  const input = prepareInput(entry);
   const root = Writable.sourceRoot(entry), gameDir = root ? resolveGameOnly(entry) ? root : path.join(root, "game") : null;
   if (!gameDir) return { primaryDirectory: null, directories: [], confidence: "unknown", source: null, error: "Game content directory is unavailable." };
   const runtimeId = context.runtimeId || entry.runtimeId || "sdk";
@@ -202,43 +203,18 @@ function resolveSaveLocations(entry, context = {}) {
   const sdk = runtimeId === "sdk" && major && context.userDataDir
     ? findInstalledSdk(context.userDataDir, major, resolveEntrySdkVersion(entry, context.settings, context.userDataDir)) : null;
   const sdkVersion = sdk?.version || resolveEntrySdkVersion(entry, context.settings, context.userDataDir);
-  let wrapper = runtimeId === "sdk" && sdkVersion && context.userDataDir && entry.gameId
-    ? RuntimeSdk.resolveWrapperDir(context.userDataDir, entry.gameId, sdkVersion) : null;
-  if (runtimeId === "patched" && context.userDataDir && entry.gameId) {
-    const project = RuntimeSdk.resolveWrapperDir(context.userDataDir, entry.gameId, patchedProjectVersion(entry));
-    if (SteamConsumer.hasPreparedBootstrap(project)) wrapper = project;
-  }
-  const privateRoot = entry.moduleData?.writableInput?.root;
-  const runtimeGameDir = wrapper ? path.join(wrapper, "game") : privateRoot
-    ? resolveGameOnly(entry) ? privateRoot : path.join(privateRoot, "game") : resolveGameDir(input);
   const extracted = entry.moduleData?.extractedReady && entry.moduleData?.extractedRoot && existsDir(entry.moduleData.extractedRoot)
     ? entry.moduleData.extractedRoot : null;
   const location = resolveConfiguredSaveLocation([extracted, gameDir].filter(Boolean), {
-    gameDir: runtimeGameDir, renpyBaseDir: sdk?.installDir || (entry.moduleData?.writableInput?.ready ? privateRoot : root),
+    gameDir: resolveGameDir(input), renpyBaseDir: sdk?.installDir || root,
     isMacApp: runtimeId === "native" && String(entry.nativeAppPath || entry.gamePath).toLowerCase().endsWith(".app"),
     ...(context.homeDir ? { homeDir: context.homeDir } : {}),
     ...(context.env ? { env: context.env } : {})
   });
-  if (privateRoot) {
-    const remap = directory => typeof directory === "string" && (directory === root || directory.startsWith(root + path.sep))
-      ? path.join(privateRoot, path.relative(root, directory)) : directory;
-    location.directory = remap(location.directory);
-    location.primaryDirectory = remap(location.primaryDirectory);
-    location.directories = location.directories.map(item => ({ ...item, directory: remap(item.directory) }));
-  }
-  const originalSaves = path.join(gameDir, "saves");
-  if (wrapper && !Writable.immutableRoot(entry) && existsDir(originalSaves) && !location.directories.some(item => item.directory === originalSaves)) {
-    location.directories.push({ directory: originalSaves, role: "original", source: "Existing original game saves", confidence: "exact" });
-  }
   entry.defaultSaveDir = location.primaryDirectory;
   updateModuleData(entry, { saveDirectorySource: location.source, saveDirectoryConfidence: location.confidence,
     saveDirectoryWarning: location.error, saveDirectories: location.directories, configuredSaveDirectory: location.name });
   return location;
-}
-
-function resolveCheatResourceFile(relPath) {
-  const candidate = path.join(__dirname, "resources", relPath);
-  return existsFile(candidate) ? candidate : null;
 }
 
 function resolveCheatResourceDir(relDir, files) {
@@ -317,10 +293,10 @@ function removeRenpyWalkthrough(entry) {
   return getRenpyCheatsStatus(entry);
 }
 
-function installRenpyMod(entry) {
+async function installRenpyMod(entry, context, payload = {}) {
   const gameDir = resolveCheatsGameDir(entry);
-  const sourcePath = resolveCheatResourceFile(URM_FILE);
-  if (!sourcePath) throw new Error("Universal Ren'Py Mod file not found.");
+  const sourcePath = await require("./urm-file").resolve(context, payload);
+  if (!sourcePath) return { ...getRenpyCheatsStatus(entry), canceled: true };
   Writable.atomicCopy(sourcePath, path.join(gameDir, URM_FILE));
   return getRenpyCheatsStatus(entry);
 }
@@ -378,7 +354,7 @@ function cacheIconForEntry(entry, userDataDir, iconPath, context) {
       if (!convertIconToPng(iconPath, cachePath, context)) return null;
     } else if (path.resolve(iconPath) !== path.resolve(cachePath)) {
       ensureDir(path.dirname(cachePath));
-      fs.copyFileSync(iconPath, cachePath);
+      cloneOrCopySync(iconPath, cachePath);
     }
   } catch {
     return null;
@@ -703,6 +679,11 @@ function resolveGraphicsInputs(entry, context = {}) {
   });
 }
 
+function steamBootstrapEnvironment(steam) {
+  const directory = path.dirname(steam.bootstrap.script);
+  return { ...steam.environment, RENPY_SEARCHPATH: [steam.environment.RENPY_SEARCHPATH, directory].filter(Boolean).join("::") };
+}
+
 async function launchPatched(entry, context) {
   const status = await ensurePatched(entry, {
     userDataDir: context.userDataDir,
@@ -722,26 +703,22 @@ async function launchPatched(entry, context) {
   await ensureTranslation({ dir: path.join(contentRootDir, "lib", status.macLibDir), platform }, context, baseName);
   const source = Writable.sourceEntry(entry);
   const consumer = SteamConsumer.inspectGameSteamConsumer({ gameRoot: source.contentRootDir || source.gamePath, gameDir: resolveGameDir(source) });
-  let wrapperDir = null;
   if (consumer.required && env.RENPY_NO_STEAM === undefined) {
     const libDir = path.join(contentRootDir, "lib", status.macLibDir);
     const runtimeExecutable = fs.existsSync(path.join(libDir, baseName)) ? path.join(libDir, baseName) : path.join(libDir, "renpy");
     const architectures = readMachOArchitectures(runtimeExecutable);
+    // Steam libraries match the selected child interpreter ABI, whose default follows the launcher CPU.
     const arch = architectures.includes(process.arch) ? process.arch : "x86_64";
-    wrapperDir = RuntimeSdk.ensureWrapper({ userDataDir: context.userDataDir, gameId: entry.gameId,
-      gamePath: entry.gamePath, contentRootDir, sdkVersion: patchedProjectVersion(entry) });
+    const wrapperDir = RuntimeSdk.resolveBootstrapDir(context.userDataDir, entry.gameId, patchedProjectVersion(entry));
     const steam = await SteamConsumer.prepareGameSteam({ consumer, gameRoot: source.contentRootDir || source.gamePath,
       python: path.join(libDir, "python"), runtimeExecutable, major: resolveMajor(entry), arch, wrapperDir, context, baseEnvironment: env });
-    if (steam) env = steam.environment;
-    else wrapperDir = null;
-  } else if (context.userDataDir && entry.gameId) {
-    const previous = RuntimeSdk.resolveWrapperDir(context.userDataDir, entry.gameId, patchedProjectVersion(entry));
-    if (SteamConsumer.hasPreparedBootstrap(previous)) SteamConsumer.removeBootstrap(previous);
+    if (steam) env = steamBootstrapEnvironment(steam);
   }
   resolveSaveLocations(entry, { ...context, runtimeId: "patched" });
+  env = Live2D.launchEnvironment(entry, context, env);
   context.logger?.info?.(`[runtime] launch patched ${shPath}`);
-  return launchScript(shPath, [...(wrapperDir ? [wrapperDir, "run"] : []), ...(context.gameArguments || [])],
-    { cwd: wrapperDir || contentRootDir, env }, needsRosetta, context);
+  return launchScript(shPath, context.gameArguments || [],
+    { cwd: contentRootDir, env }, needsRosetta, context);
 }
 
 async function launchSdk(entry, context) {
@@ -763,14 +740,6 @@ async function launchSdk(entry, context) {
     downloads: context.downloads
   });
 
-  const wrapperDir = RuntimeSdk.ensureWrapper({
-    userDataDir: context.userDataDir,
-    gameId: entry.gameId,
-    gamePath: entry.gamePath,
-    contentRootDir,
-    sdkVersion: sdkInstall.version
-  });
-
   const renpySh = path.join(sdkInstall.installDir, "renpy.sh");
   if (!fs.existsSync(renpySh)) throw new Error("Ren'Py SDK missing launcher script.");
 
@@ -784,15 +753,20 @@ async function launchSdk(entry, context) {
   const consumer = SteamConsumer.inspectGameSteamConsumer({ gameRoot: source.contentRootDir || source.gamePath, gameDir: resolveGameDir(source) });
   const runtimeExecutable = path.join(libInfo.dir, "renpy");
   const architectures = consumer.required ? readMachOArchitectures(runtimeExecutable) : [];
+  // Steam libraries match the selected SDK interpreter ABI, whose default follows the launcher CPU.
   const arch = architectures.includes(process.arch) ? process.arch : "x86_64";
-  const steam = await SteamConsumer.prepareGameSteam({
-    consumer,
-    gameRoot: source.contentRootDir || source.gamePath, python: path.join(libInfo.dir, "python"), runtimeExecutable, major, arch,
-    wrapperDir, context, baseEnvironment: env
-  });
-  if (steam) env = steam.environment;
-  context.logger?.info?.(`[runtime] launch sdk ${renpySh} ${wrapperDir}`);
-  return launchScript(renpySh, [wrapperDir, "run", ...(context.gameArguments || [])], { cwd: wrapperDir, env }, needsRosetta, context);
+  if (consumer.required && env.RENPY_NO_STEAM === undefined) {
+    const wrapperDir = RuntimeSdk.resolveBootstrapDir(context.userDataDir, entry.gameId, sdkInstall.version);
+    const steam = await SteamConsumer.prepareGameSteam({
+      consumer,
+      gameRoot: source.contentRootDir || source.gamePath, python: path.join(libInfo.dir, "python"), runtimeExecutable, major, arch,
+      wrapperDir, context, baseEnvironment: env
+    });
+    if (steam) env = steamBootstrapEnvironment(steam);
+  }
+  env = Live2D.launchEnvironment(entry, { ...context, runtimeVersion: sdkInstall.version }, env);
+  context.logger?.info?.(`[runtime] launch sdk ${renpySh} ${contentRootDir}`);
+  return launchScript(renpySh, [contentRootDir, "run", ...(context.gameArguments || [])], { cwd: contentRootDir, env }, needsRosetta, context);
 }
 
 module.exports = {
@@ -1134,7 +1108,8 @@ module.exports = {
     renpyCheatsStatus: (entry, _payload, _context) => getRenpyCheatsStatus(entry),
     patchRenpyWalkthrough: (entry, _payload, _context) => installRenpyWalkthrough(entry),
     removeRenpyWalkthrough: (entry, _payload, _context) => removeRenpyWalkthrough(entry),
-    addRenpyMod: (entry, _payload, _context) => installRenpyMod(entry),
+    addRenpyMod: (entry, payload, context) => installRenpyMod(entry, context, payload),
+    chooseRenpyMod: (entry, payload, context) => installRenpyMod(entry, context, { ...payload, choose: true }),
     removeRenpyMod: (entry, _payload, _context) => removeRenpyMod(entry)
   },
   runtime: {

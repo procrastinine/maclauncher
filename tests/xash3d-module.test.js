@@ -6,6 +6,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const Module = require("../src/modules/xash3d/main");
+const {legacyGameMirrors} = require("../src/modules/xash3d/backcompat");
 const Catalog = require("../src/modules/xash3d/runtime/catalog");
 const Manager = require("../src/modules/xash3d/runtime/manager");
 const Registry = require("../src/modules/registry");
@@ -102,28 +103,64 @@ test("native mod libraries are regular Mach-O files containing the selected CPU"
   }
 });
 
-test("Play reads the original folder and writes to a private root with the runtime's game libraries", t => {
+test("ordinary Play uses original writable paths and explicit runtime libraries without creating a private root", t => {
   const base = temporary(t), root = halfLife(path.join(base, "Half-Life")), userDataDir = path.join(base, "data");
   write(path.join(root, "mod", "liblist.gam"), 'game "Mod"\n');
   const engine = path.join(base, "runtime"), executablePath = path.join(engine, "xash3d");
-  write(executablePath); write(path.join(engine, "valve", "dlls", "hl_arm64.dylib")); write(path.join(engine, "valve", "cl_dlls", "client_arm64.dylib"));
+  write(executablePath);
+  for (const [suffix, cpu] of [["arm64", MachO.ARM64], ["amd64", MachO.X64]]) {
+    write(path.join(engine, "valve", "dlls", `hl_${suffix}.dylib`), MachO.image({cpu}));
+    write(path.join(engine, "valve", "cl_dlls", `client_${suffix}.dylib`), MachO.image({cpu}));
+  }
   write(path.join(engine, "valve", "extras.pk3"));
   const before = fs.readdirSync(root, { recursive: true }).sort();
   const entry = { gameId: "game1", ...detect(path.join(root, "mod")) };
   const launch = Module.__test.prepareLaunch(entry, { userDataDir }, { executablePath });
   assert.equal(launch.gameFolder, "mod");
-  assert.equal(launch.environment.XASH3D_RODIR, root);
-  assert.equal(launch.environment.XASH3D_BASEDIR, launch.dataRoot);
+  assert.equal(launch.environment.XASH3D_RODIR, undefined);
+  assert.equal(launch.environment.XASH3D_BASEDIR, root);
+  assert.equal(launch.dataRoot, root);
+  assert.equal(launch.directory, root);
   assert.equal(launch.environment.XASH3D_EXTRAS_PAK1, path.join(engine, "valve", "extras.pk3"));
-  assert.equal(fs.readlinkSync(path.join(launch.dataRoot, "valve", "dlls")), path.join(engine, "valve", "dlls"));
-  assert.equal(fs.readlinkSync(path.join(launch.dataRoot, "mod", "save")), launch.saveRoot);
+  const suffix = Architecture.selectedArchitecture() === 'x64' ? 'amd64' : 'arm64';
+  assert.deepEqual(launch.args, ['-game', 'mod', '-dll', path.join(engine, 'valve', 'dlls', `hl_${suffix}.dylib`),
+    '-clientlib', path.join(engine, 'valve', 'cl_dlls', `client_${suffix}.dylib`)]);
+  assert.equal(launch.saveRoot, path.join(root, 'mod', 'save'));
+  assert.equal(fs.existsSync(userDataDir), false, 'Ordinary Play creates no private folders or aliases');
   assert.equal(entry.defaultSaveDir, launch.saveRoot);
+  assert.deepEqual(fs.readdirSync(root, { recursive: true }).sort(), before, "Preparation leaves the original folder unchanged");
+  const descriptors = legacyGameMirrors(entry, {userDataDir});
+  assert.deepEqual(descriptors, [
+    {mirrorRoot: path.join(userDataDir, 'games', 'game1', 'modules', 'xash3d', 'saves'), sourceRoot: launch.saveRoot},
+    {mirrorRoot: path.join(userDataDir, 'games', 'game1', 'modules', 'xash3d', 'data'), sourceRoot: root}
+  ]);
   entry.saveDirOverride = path.join(base, "saves elsewhere");
   write(path.join(launch.saveRoot, "kept.sav"));
   const moved = Module.__test.prepareLaunch(entry, { userDataDir }, { executablePath });
+  assert.equal(moved.environment.XASH3D_RODIR, root);
+  assert.notEqual(moved.dataRoot, root, 'Only an explicit custom save route needs a writable-root adapter');
   assert.equal(fs.readlinkSync(path.join(moved.dataRoot, "mod", "save")), entry.saveDirOverride);
   assert.ok(fs.existsSync(path.join(launch.saveRoot, "kept.sav")), "Earlier saves stay in place");
-  assert.deepEqual(fs.readdirSync(root, { recursive: true }).sort(), before, "The original folder is unchanged");
+  assert.deepEqual(legacyGameMirrors(entry, {userDataDir}), [], 'The explicitly requested adapter remains active');
+  fs.unlinkSync(path.join(moved.dataRoot, 'mod', 'save'));
+  write(path.join(moved.dataRoot, 'mod', 'save', 'unique.sav'), 'private save');
+  assert.doesNotThrow(() => Module.__test.prepareLaunch(entry, {userDataDir}, {executablePath}));
+  assert.equal(fs.readFileSync(path.join(moved.dataRoot, 'mod', 'save', 'unique.sav'), 'utf8'), 'private save');
+});
+
+test('native mod libraries use original paths and preserve an original client override', t => {
+  const base = temporary(t), root = halfLife(path.join(base, 'Half-Life')), game = path.join(root, 'ported');
+  write(path.join(game, 'liblist.gam'), 'game "Ported"\ngamedll "dlls/ported.dll"\n');
+  const engine = path.join(base, 'runtime'); write(path.join(engine, 'xash3d'));
+  for (const [arch, suffix, cpu] of [['arm64', 'arm64', MachO.ARM64], ['x64', 'amd64', MachO.X64]]) {
+    const server = path.join(game, 'dlls', `ported_${suffix}.dylib`), client = path.join(game, 'cl_dlls', `client_${suffix}.dylib`);
+    write(server, MachO.image({cpu})); write(client, MachO.image({cpu}));
+    const launch = Architecture.withArchitecture(arch, () => Module.__test.prepareLaunch({gameId: 'mod', ...detect(game)},
+      {userDataDir: path.join(base, 'profile')}, {executablePath: path.join(engine, 'xash3d')}));
+    assert.deepEqual(launch.args, ['-game', 'ported', '-dll', server, '-clientlib', client]);
+    assert.equal(launch.environment.XASH3D_BASEDIR, root);
+  }
+  assert.equal(fs.existsSync(path.join(base, 'profile')), false);
 });
 
 test("the catalog lists the rolling main-branch Apple builds for each CPU and leaves out branch builds", async t => {

@@ -93,9 +93,11 @@ function assertPublishable(plan) {
   if (plan.distributionBlockers.length) throw new Error(`Native resources restricted to local use cannot be packaged: ${plan.distributionBlockers.map(item => item.resource).join(', ')}.`);
   return plan;
 }
-function resourceRules(plan, rules = plan.resourceRules) {
+function resourceRules(plan, rules = plan.resourceRules, {packages} = {}) {
   const selected = [...plan.packages.map(item => item.directoryRelative), ...plan.supplementals.map(item => item.directoryRelative)]
     .sort().map(directory => `native-runtimes/${directory}/**`);
+  if(packages?.length)selected.push('runtime-packages.json',...packages.flatMap(record=>[
+    `native-runtimes/${record.id}/${record.version}/${record.arch}/**`, `native-runtimes/.declarations/${record.asset.sha256}.json`]));
   let found = false;
   const result = rules.map(rule => {
     rule = { ...rule, filter: Content.withExclusions(rule.filter) };

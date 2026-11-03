@@ -28,7 +28,7 @@ export function stageFSR4Provider({directory,upstream,ownedRoot}){
   const owned=new Map();
   for(const required of ["source.json","build.mjs","adapt-runtime.mjs","provider.mm","index.js","NOTICE.md","../frame.h"])if(!Object.hasOwn(metadata.owned,required))throw Error("An FSR 4 build input is undeclared: "+required);
   for(const [relative,expected]of Object.entries(metadata.owned)){
-    if((!safe(relative)&&relative!=="../frame.h")||!/^[a-f0-9]{64}$/.test(expected))throw Error("Invalid owned FSR 4 build input.");
+    if((!safe(relative)&&!["../frame.h","../payload-files.hpp"].includes(relative))||!/^[a-f0-9]{64}$/.test(expected))throw Error("Invalid owned FSR 4 build input.");
     const file=path.resolve(ownedRoot,relative);if(!fs.lstatSync(file).isFile()||hash(file)!==expected)throw Error("An FSR 4 build input changed: "+relative);
     owned.set(path.posix.normalize("maclauncher/temporal/fsr4/"+relative),file);
   }

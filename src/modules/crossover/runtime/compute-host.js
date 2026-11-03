@@ -3,6 +3,11 @@ const fs=require("node:fs"),path=require("node:path"),crypto=require("node:crypt
 const Manager=require("./manager"),Launch=require("./launch"),Loader=require("./graphics-loader");
 const Writable=require("../../shared/writable-input"),Rosetta=require("../../shared/runtime/rosetta");
 const digest=value=>crypto.createHash("sha256").update(value).digest("hex");
+// Each CrossOver application location has one reusable host folder under
+// graphics/compute-hosts. A host stays while Runtimes knows its location,
+// including while the application is missing, so it is not rebuilt later.
+const hostName=version=>digest(JSON.stringify([1,version,"d3d12"])).slice(0,24);
+const hostNames=userDataDir=>Manager.core.knownApplications(userDataDir).map(appPath=>hostName(Manager.core.identity(appPath)));
 function supports(install,host){return Boolean(install?.ready&&!require("./backend-support").reason(install,"d3dmetal",host)&&fs.existsSync(path.join(install.crossoverRoot,"lib64/apple_gptk/wine/x86_64-windows/d3d12.dll")));}
 function state({userDataDir,settings,host}={}){
   const selected=Manager.resolveSelection(null,settings,userDataDir,{version:null});
@@ -22,8 +27,7 @@ async function prepare(request,context={}){
   const originalLibraries=request.originalLibraries?.map(regular);
   if(originalLibraries&&(originalLibraries[0]!==originalLibrary||new Set(originalLibraries).size!==originalLibraries.length))throw Error("The GPU helper library identities are invalid.");
   if(!fs.statSync(nativeRoot).isDirectory())throw Error("The graphics compute helper directory is unavailable.");
-  const identity=digest(JSON.stringify([1,install.version,"d3d12"]));
-  const directory=path.join(userDataDir,"graphics/compute-hosts",identity.slice(0,24));Writable.assertOwnDirectory(userDataDir,directory);
+  const directory=path.join(userDataDir,"graphics/compute-hosts",hostName(install.version));Writable.assertOwnDirectory(userDataDir,directory);
   // Existing user-selected environments are reused in place. Ordinary
   // preparation otherwise owns a reusable environment shared by its helpers.
   const bottlePath=request.prefixDirectory?fs.realpathSync(request.prefixDirectory):path.join(directory,"bottle");
@@ -50,4 +54,4 @@ async function prepare(request,context={}){
       codeDirectories:[install.appPath,path.dirname(path.dirname(loader))],writableDirectories:[directory,bottlePath],
       executables:[install.executablePath,loader,install.serverPath],runtimeVersion:install.version,ownsPrefix:!request.prefixDirectory}};
 }
-module.exports={id:"crossover-d3d12",label:"D3D12",backends:["d3d12"],getState:state,prepare};
+module.exports={id:"crossover-d3d12",label:"D3D12",backends:["d3d12"],getState:state,prepare,hostNames};

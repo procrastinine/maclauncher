@@ -7,36 +7,49 @@ const Custom = require("./custom-runtime");
 const Architecture = require("./architecture");
 
 const Contract = require("./package-contract.cjs");
-function inspectPackage(root, record, { projectId, manifestRelative, sourceRelative, executableRelative, filesPrefix = "", dataOnly = false, validateManifest, validatePayload }) {
+function inspectPackage(root, record, { projectId, manifestRelative, sourceRelative, executableRelative, filesPrefix = "", dataOnly = false, validateManifest, validatePayload, resolveDependency, declaration, metadataOnly = false }) {
   if (record.id !== projectId || record.manifestRelative !== manifestRelative) throw new Error("The runtime package belongs to a different project or format.");
   const stored = Bundled.readRegular(path.join(root, manifestRelative), Bundled.LIMITS.manifestBytes);
   if (stored.sha256 !== record.manifestSha256 || stored.mode !== 0o644) throw new Error("The runtime package manifest changed.");
   const manifest = JSON.parse(stored.bytes);
   validateManifest?.(manifest, record);
-  const { prefix, executable, files, primary } = Contract.manifestPayload(manifest, record, { executableRelative, filesPrefix, dataOnly });
+  const { prefix, executable, files, primary } = Contract.manifestPayload(manifest, record, { executableRelative, filesPrefix, dataOnly, resolveDependency });
   validatePayload?.(manifest, record, { primary, files });
   const sourcePath = typeof sourceRelative === "function" ? sourceRelative(manifest, record) : sourceRelative;
-  for (const file of [primary]) {
+  for (const file of metadataOnly ? [] : [primary]) {
     const full = path.join(root, file.path);
-    Bundled.fileIdentity(full, { maximum: file.size });
-    const stat = fs.lstatSync(full);
-    if (stat.size !== file.size || (stat.mode & 0o777) !== file.mode)
+    const alias = declaration?.aliases?.files?.[file.path];
+    const physical = alias && typeof alias === 'object' ? resolveDependency(alias,declaration.dependencies.find(dep=>dep.project===alias.project)).path : full;
+    Bundled.fileIdentity(physical, { maximum: file.size });
+    const stat = fs.statSync(full);
+    const mode=stat.mode&0o777;
+    if (stat.size !== file.size || (alias ? (mode&~0o111)!==(file.mode&~0o111)||(mode&file.mode&0o111)!==(file.mode&0o111) : mode!==file.mode))
       throw new Error("The runtime package source or executable differs from its manifest.");
   }
   files.push({ path: manifestRelative, size: stored.size, mode: 0o644, sha256: stored.sha256 });
-  return { root, primary, payloadRoot: path.join(root, prefix), manifest,
+  return require('./package-dependencies').attach({ root, primary, payloadRoot: path.join(root, prefix), manifest,
     declaration: { ...record, files }, executablePath: path.join(root, prefix, executable),
-    sourceIdentity: Catalog.sourceIdentity(record, {manifest, sourceRelative: sourcePath}) };
+    sourceIdentity: Catalog.sourceIdentity(record, {manifest, sourceRelative: sourcePath}) },{resolveDependency});
 }
 
 /** Project catalogs are queried only by Refresh. Included packages remain in
  * place; downloaded packages use the ordinary immutable version installation.
  * Runtimes offers Set default unless a module declares otherwise. */
 function createProjectBuildManager({ projectId, runtimeId = projectId, label, repository, upstreamUrl, upstreamLabel, included, retainedIncluded, manifestRelative, sourceRelative,
-  executableRelative, filesPrefix = "", validateManifest, verifyPayload, inspectRuntime, dataOnly = false, nativeLibrary = false, supportsDefault = true, launcherContract = 1, dependencies = {} }) {
+  executableRelative, filesPrefix = "", validateManifest, verifyPayload, inspectRuntime, dataOnly = false, nativeLibrary = false, supportsDefault = true, launcherContract = 2, dependencies = {} }) {
   if (typeof dataOnly !== "boolean" || dataOnly && inspectRuntime) throw new Error("Data packages use sealed regular-file inspection.");
   const format = { projectId, manifestRelative, sourceRelative, executableRelative, filesPrefix, dataOnly, validateManifest };
-  const inspect = (root, record) => inspectPackage(root, record, format);
+  const inspect = (root, record, {userDataDir,verification='status',resolveDependency,installedDependencies,metadataOnly=false} = {}) => {
+    const P = require('./package-dependencies'), wrapper = path.join(path.dirname(root),'project-package.json');
+    const outer = fs.existsSync(wrapper) ? JSON.parse(Bundled.readRegular(wrapper,Bundled.LIMITS.manifestBytes).bytes) : null;
+    if (outer && !installedDependencies) installedDependencies = P.load(userDataDir || (outer.dependencies?.length?P.userDataForPayload(root):undefined),outer.dependencies,{verification:'status'});
+    resolveDependency ||= P.resolver(installedDependencies || new Map());
+    const selected = inspectPackage(root,record,{...format,resolveDependency,declaration:outer,metadataOnly});
+    if (outer) selected.declaration=P.bind(root,record,selected.declaration,resolveDependency,wrapper);
+    selected.dependencyLibraryPaths=P.loaderPaths(selected.declaration,installedDependencies||new Map());
+    selected.dependencyReadRoots=P.readRoots(installedDependencies||new Map());
+    return P.attach(selected,{resolveDependency,sealedDeclaration:outer});
+  };
   const sourceUrl = `https://github.com/${repository}`;
   const compatible = pin => {
     const record = pin.projectPackage || pin;
@@ -67,21 +80,21 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, label, re
       const catalog = await Catalog.fetchProjectCatalog({ ...recordOptions, signal }, dependencies);
       return publishedPins(catalog);
     },
-    resolveExecutable: (root, pin) => typeof executableRelative === "function" || typeof filesPrefix === "function"
-      ? inspect(path.join(root, "payload"), pin.projectPackage).executablePath
+    resolveExecutable: (root, pin, options) => typeof executableRelative === "function" || typeof filesPrefix === "function"
+      ? inspect(path.join(root, "payload"), pin.projectPackage, options).executablePath
       : path.join(root, "payload", filesPrefix, executableRelative),
-    prepareInstall: async ({ unpacked, pin, signal }) => {
+    prepareInstall: async ({ unpacked, pin, signal, userDataDir, resolveDependency, installedDependencies }) => {
       const record = Catalog.validateProjectRecord(pin.projectPackage, recordOptions);
-      const selected = inspect(path.join(unpacked, "payload"), record);
       const wrapper = JSON.parse(Bundled.readRegular(path.join(unpacked, "project-package.json"), Bundled.LIMITS.manifestBytes).bytes);
-      const sourcePath = typeof sourceRelative === "function" ? sourceRelative(selected.manifest, record) : sourceRelative;
       if (["id", "version", "arch", "minimumMacOS", "manifestRelative", "manifestSha256"].some(key => wrapper[key] !== record[key]) ||
           JSON.stringify(wrapper.launcherArchitectures) !== JSON.stringify(record.launcherArchitectures))
         throw new Error("The runtime archive belongs to a different project or version.");
-      const inventory = files => files.map(file => [file.path, file.size, file.mode, file.sha256, file.architectures?.slice().sort() || null,
-        file.executionArchitecture || null, file.format || null]).sort((a, b) => a[0].localeCompare(b[0]));
-      if (!Array.isArray(wrapper.files) || JSON.stringify(inventory(wrapper.files)) !== JSON.stringify(inventory(selected.declaration.files)))
-        throw new Error("The runtime archive inventory differs from its sealed manifest.");
+      const P=require('./package-dependencies');
+      const selected = inspect(path.join(unpacked, "payload"), record, {userDataDir,resolveDependency,installedDependencies,verification:"status",metadataOnly:true});
+      if(wrapper.aliases)Bundled.verifyStoredPayload(selected.root,wrapper);
+      P.materialize(selected.root,wrapper,resolveDependency,{verify:false});
+      inspectPackage(selected.root,record,{...format,resolveDependency,declaration:wrapper});
+      const sourcePath = typeof sourceRelative === "function" ? sourceRelative(selected.manifest, record) : sourceRelative;
       await verifyPayload(selected, { signal });
       return { manifestSha256: record.manifestSha256,
         sourceIdentity: Catalog.sourceIdentity(record, {manifest: selected.manifest, wrapper, sourceRelative: sourcePath}) };
@@ -115,7 +128,15 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, label, re
     if (present && !core.core.catalog.some(row => row.version === pin.version)) core.core.rememberResolvedVersion({ entry: pin });
     let selected, error;
     if (!present) error = `${label} ${pin.version} is not installed. Install this version in Runtimes.`;
-    else try { selected = inspect(item.root, item.record); } catch (failure) { error = failure.message; }
+    else try {
+      const relative=item.record.directoryRelative;
+      const resources=relative&&path.resolve(item.root,...Array(Bundled.relativeFile(relative).split('/').length+1).fill('..'));
+      if(resources&&fs.existsSync(path.join(resources,'runtime-packages.json'))){
+        const included=require('./included-helpers').resolveIncluded([item.record],{id:projectId,version:pin.version,resourcesRoot:resources});
+        selected=inspectPackage(item.root,included.item,{...format,resolveDependency:included.resolveDependency,declaration:included.item});
+        require('./package-dependencies').attach(Object.assign(selected,{declaration:included.item}),included);
+      }else selected = inspect(item.root, item.record);
+    } catch (failure) { error = failure.message; }
     return { ...selected, version: pin.version, source: "bundled", bundledExecution: "direct", readOnly: true, removable: false,
       root: item.root, declaration: selected?.declaration || item.record, installDir: item.root,
       runtimePath: selected?.executablePath, upstreamRevision: pin.upstreamRevision, present, ready: !error && compatible(pin), ...(error ? { error } : {}) };
@@ -158,7 +179,8 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, label, re
       if (selected.install) {
         try {
           const record = Catalog.validateProjectRecord(selected.install.catalogEntry.projectPackage, recordOptions);
-          Object.assign(selected.install, inspect(path.join(selected.install.installDir, "payload"), record));
+          const inspected=inspect(path.join(selected.install.installDir, "payload"), record, {userDataDir,verification:options.verification});
+          require('./package-dependencies').attach(Object.assign(selected.install,inspected),inspected);
         } catch (error) { return { version, ready: false, install: null, reason: error.message }; }
       }
       return bundled && !selected.ready ? { ...selected, version, install: null, reason: bundled.error } : selected;
@@ -251,7 +273,7 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, label, re
       manifestRelative, manifestSha256: stored.sha256, sourceSha256: source.sha256 };
     if (!compatible(record)) throw new Error(`${label} requires macOS ${manifest.minimumMacOS} or later on a compatible Mac.`);
     const selected = inspect(root, record);
-    if (verification === "full") Bundled.verifyPayload(selected.root, selected.declaration);
+    if (verification === "full") Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
     return { ...selected, runtimeVersion: manifest.version, manifestSha256: stored.sha256,
       installDir: root, runtimePath, ready: true };
   } });

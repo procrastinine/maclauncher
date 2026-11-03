@@ -19,7 +19,7 @@ test('original content providers retain package contexts, lifecycle, publication
   execFileSync(path.join(home,'bin/keytool'),['-genkeypair','-alias','owned','-keyalg','RSA','-keysize','2048','-dname','CN=Provider Fixture','-validity','2','-storetype','PKCS12','-keystore',key,'-storepass','test-only-password','-keypass','test-only-password','-noprompt'],{stdio:'pipe'});
   for(const role of ['server','client']){
     const dir=path.join(output,role+'-apk');fs.mkdirSync(dir);
-    fs.copyFileSync(path.resolve('tests/fixtures/android-framework-services/manifests/remote-provider-'+role+'.xml.bin'),path.join(dir,'AndroidManifest.xml'));
+    fs.copyFileSync(require('./helpers/manifest-fixtures').file(t,'android-framework-services/manifests/remote-provider-'+role),path.join(dir,'AndroidManifest.xml'));
     const apk=path.join(output,role+'-unsigned.apk');
     execFileSync(path.join(home,'bin/jar'),['--create','--file',apk,'-C',dir,'AndroidManifest.xml'],{stdio:'pipe'});
     execFileSync(path.join(home,'bin/java'),['-cp',cp,'SignApkSet',key,apk,path.join(output,role+'.apk')],{stdio:'pipe'});

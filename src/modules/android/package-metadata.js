@@ -133,9 +133,7 @@ async function applyLaunchIdentity(config, entry, prepared, payload, java, conte
     applyActivityWindow(config, identity);
     config.title = mergeEntry(entry, { ...entry, name: identity.label || config.title }).name;
     if (identity.iconPath) {
-      config.iconFile = path.join(prepared.cacheRoot, "application-icon.png");
-      const dockIcon = await require("../shared/dock-icon").prepare(identity.iconPath, prepared.cacheRoot, { signal: context.signal });
-      Writable.atomicWrite(config.iconFile, await fs.promises.readFile(dockIcon), { root: prepared.cacheRoot });
+      config.iconFile = await require("../shared/dock-icon").prepare(identity.iconPath, prepared.cacheRoot, { signal: context.signal });
     }
   } catch (error) { context.signal?.throwIfAborted(); context.logger?.debug?.("[android] Application identity: " + error.message); }
 }

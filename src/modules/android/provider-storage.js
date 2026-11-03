@@ -1,4 +1,5 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
+const { cloneOrCopy } = require("../shared/copy-file");
 const Writable = require("../shared/writable-input");
 const Package = require("./provider-package-set");
 const PROVIDERS = new Set(["macapk", "aim"]);
@@ -50,7 +51,7 @@ async function copyPackage(source, destination, signal) {
     const sha256 = hash.digest("hex");
     // APFS shares the immutable blocks with the imported package. Each
     // provider reads this same store; writes create private blocks.
-    await fs.promises.copyFile(source, destination, fs.constants.COPYFILE_EXCL | fs.constants.COPYFILE_FICLONE);
+    await cloneOrCopy(source, destination, { signal, exclusive: true });
     await fs.promises.chmod(destination, 0o400);
     const copied = crypto.createHash("sha256");
     for await (const chunk of fs.createReadStream(destination)) { signal?.throwIfAborted(); copied.update(chunk); }

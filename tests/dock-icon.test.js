@@ -84,7 +84,7 @@ test("JVM Dock arguments and the shared native config receive the same rounded p
   const inputs=metadata.preparedSourceIdentity(prepared),context={userDataDir:root,locale:"en-US"};
   fs.writeFileSync(path.join(icons,"android.json"),JSON.stringify({inputIdentity:require("node:crypto").createHash("sha256").update(JSON.stringify([inputs,context.locale])).digest("hex"),label:"Android game",packageName:"game",icon:true}));
   const config={title:"game"};await metadata.applyLaunchIdentity(config,{gameId:"game",gamePath:prepared.sourceApk,name:"game"},prepared,null,null,context);
-  assert.equal(path.basename(config.iconFile),"application-icon.png");
+  assert.equal(config.iconFile,path.join(cacheRoot,"dock-icon.png"));
   assert.ok(Dock.prepared(fs.readFileSync(config.iconFile)));
   assert.ok(metadata.dockArguments(config).includes("-Xdock:icon="+config.iconFile));
   assert.deepEqual(fs.readFileSync(path.join(icons,"android.png")),artwork);

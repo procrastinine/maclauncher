@@ -121,7 +121,9 @@ async function spawnForegroundNativeGame({ context, executablePath, args = [], o
   const child = await context.spawnDetachedChecked(executablePath, args,
     { ...options, env: foregroundEnvironment(options.env || process.env, { platform }) }, needsRosetta);
   // Game registration/window creation is independent of the launcher response.
-  void Promise.resolve().then(() => focus(child, { executablePath, launchedAt, logger: context.logger, platform }))
+  // A launch can run a private copy of the executable for graphics.
+  const launched = context.launchedPath?.(executablePath) ?? executablePath;
+  void Promise.resolve().then(() => focus(child, { executablePath: launched, launchedAt, logger: context.logger, platform }))
     .catch(error => logActivation(() => context.logger?.warn?.(`[runtime] native window activation: ${error.message}`)));
   return child;
 }

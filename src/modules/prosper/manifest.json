@@ -15,10 +15,11 @@
       "graphicsHost": "window", "graphicsArchitecture": "x86_64",
       "requirements": "macOS 26 · Rosetta on Apple Silicon · Vulkan 1.4",
       "settings": {
-        "defaults": {"vulkanRuntime": "auto", "showFps": false},
+        "defaults": {"vulkanRuntime": "auto", "showFps": false, "configPath": ""},
         "fields": [
           {"key": "vulkanRuntime", "type": "select", "label": "Vulkan", "optionsAction": "listVulkanRuntimes", "optionsKey": "vulkanRuntimes", "options": [{"value": "auto", "label": "Automatic"}]},
-          {"key": "showFps", "type": "boolean", "label": "Frame rate"}
+          {"key": "showFps", "type": "boolean", "label": "Frame rate"},
+          {"key": "configPath", "type": "string", "label": "Configuration file", "description": "Absolute path to this game's Prosper configuration file."}
         ]
       }
     }}

@@ -4,7 +4,7 @@ function install(context = {}) {
   prepareBrowserGlobals();
   require("./userenv-shim").install(globalThis);
   const config = context.config || {};
-  const saveDir = config.saveDir || (config.gameDataDir && require("node:path").join(config.gameDataDir, "modules", "tyrano", "saves"));
+  const saveDir = require("./file-storage").resolveDirectory(config);
   require("./file-storage").install(globalThis, saveDir);
 }
 

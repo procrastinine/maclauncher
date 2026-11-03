@@ -3,6 +3,7 @@ const fs = require("node:fs"), path = require("node:path"), { execFile } = requi
 const B = require("../../shared/runtime/bundled-native"), Native = require("../../shared/runtime/local-native");
 const declarations = require("./distribution-supplementals.json"), run = promisify(execFile);
 const VERSION = "1.0.0-ml1", signatures = new Map();
+// Included helper selection defaults to the launcher process CPU, including under Rosetta.
 async function resolveHelper({resourcesRoot,helperVersion=VERSION,platform=process.platform,arch=process.arch,dependencies={}}={}) {
   if(platform!=="darwin" || !["arm64","x64"].includes(arch)) throw new Error("The CoreText renderer requires an Apple Silicon or Intel Mac.");
   const pin=(dependencies.declarations||declarations).find(item=>item.id==="catsystem2-coretext-raster" && item.version===helperVersion);

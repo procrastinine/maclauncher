@@ -13,7 +13,8 @@ namespace macfx {
 // refresh of tolerance so that 24 fps at 60 Hz keeps two images. The count
 // includes the real image: 1 means that no generated image can be seen, so
 // generation for that interval is suppressed rather than produced and dropped.
-// An unknown refresh (zero), such as file export, leaves the limit unchanged.
+// Presenters pass a refresh rate only for ExternalWindow sources. Games and
+// file export pass zero, which leaves the requested image count unchanged.
 inline unsigned displayVisibleImages(unsigned refreshHz,double sourcePeriod,unsigned limit)noexcept{
  if(!limit)return 0;
  if(!refreshHz||!std::isfinite(sourcePeriod)||sourcePeriod<=0)return limit;

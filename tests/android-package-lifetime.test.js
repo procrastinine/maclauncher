@@ -38,6 +38,7 @@ test('Canonical package generations stay leased across two peers and retire with
  assert.equal(fs.readdirSync(outside).length,0,'rejected reply creates no arbitrary source capability');
 });
 test('Original package rows follow authenticated peers without retaining stale APK generations',{timeout:40000},async t=>{
+  if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
  const runtime=process.env.KLEPTON_NATIVE_RUNTIME,home=process.env.JAVA_HOME,apk=process.env.ANDROID_TEST_SIGNED_APK;
  if(process.platform!=='darwin'||!runtime||!home||!apk)return t.skip('Requires the complete Android runtime, Java21 and a signed APK');
  const temp=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'android-peer-packages-')));t.after(()=>fs.rmSync(temp,{recursive:true,force:true}));
@@ -46,5 +47,5 @@ test('Original package rows follow authenticated peers without retaining stale A
  const run=(name,args)=>{const r=spawnSync(path.join(home,'bin',name),args,{encoding:'utf8',env:{...process.env,...identity.environment},timeout:30000,maxBuffer:2<<20});assert.ifError(r.error);assert.equal(r.status,0,r.stdout+r.stderr);return r.stdout;};
  run('javac',['--release','21','-cp',cp,'-d',temp,...['maclauncher/android/framework/HostPackages','maclauncher/android/framework/HostServices','maclauncher/android/framework/HostDexFiles','maclauncher/android/framework/HostSharedLibraries','maclauncher/android/framework/HostPermissions','maclauncher/android/ProcessAuthority'].map(n=>path.join(source,n+'.java')),
   path.resolve('tests/fixtures/android-package-metadata/TransientPackageProbe.java'),path.resolve('tests/fixtures/android-window-session/RuntimeFixture.java')]);
- assert.match(run('java',['-Xverify:all','-cp',cp,'maclauncher.android.framework.TransientPackageProbe',path.resolve(runtime),temp,path.resolve('tests/fixtures/android-package-metadata/metadata.apk'),path.resolve(apk)]),/PASS original verified package identity, two peers, canonical source lifetime, new generation and persistent rows/);
+ assert.match(run('java',['-Xverify:all','-cp',cp,'maclauncher.android.framework.TransientPackageProbe',path.resolve(runtime),temp,require('./helpers/android-fixture-tools.cjs').metadataApk(t),path.resolve(apk)]),/PASS original verified package identity, two peers, canonical source lifetime, new generation and persistent rows/);
 });

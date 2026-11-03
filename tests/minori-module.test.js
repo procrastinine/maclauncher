@@ -1,3 +1,4 @@
+const Backcompat = require("../src/modules/minori/backcompat");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -8,6 +9,7 @@ const Module = require("../src/modules/minori/main");
 const manager = Module.runtimeManagers[0];
 function directory(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-minori-test-"));
+  t.mock.method(os, "homedir", () => path.join(root, "home"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root;
 }
 function header(prefix = "minori-paz", size = 32, key = 0xaa) {
@@ -72,6 +74,9 @@ test("Minori launch preserves original files and isolates concurrent game save/c
   const a = { gameId: "a", gamePath: game, name: "A" }, b = { gameId: "b", gamePath: game, name: "B", saveDirOverride: path.join(root, "saves-b") };
   const [first, second] = await Promise.all([Module.__test.prepareLaunch(a, context, distribution), Module.__test.prepareLaunch(b, context, distribution)]);
   assert.deepEqual(first.args, ["--game-root", game]); assert.equal(second.saves, b.saveDirOverride);
+  assert.equal(first.cwd, game); assert.equal(second.cwd, game);
+  assert.equal(first.saves, path.join(game, "userdata"));
+  assert.equal(fs.existsSync(first.saves), false, "normal save directories are created by the runtime, not preparation");
   assert.notEqual(first.env.MACLAUNCHER_MINORI_SAVE_DIR, second.env.MACLAUNCHER_MINORI_SAVE_DIR);
   assert.notEqual(first.env.MACLAUNCHER_MINORI_CACHE_DIR, second.env.MACLAUNCHER_MINORI_CACHE_DIR);
   assert.equal(first.env.MACLAUNCHER_MINORI_TITLE, "A"); assert.equal(second.env.MACLAUNCHER_MINORI_TITLE, "B");
@@ -79,6 +84,88 @@ test("Minori launch preserves original files and isolates concurrent game save/c
   assert.equal(process.env.MACLAUNCHER_MINORI_TITLE, undefined);
   assert.deepEqual(fs.readdirSync(game).map(name => [name, fs.readFileSync(path.join(game, name)).toString("hex")]), before);
   assert.throws(() => Module.__test.gameDirectory({ gameId: "../escape" }, context), /persisted/);
+});
+
+test("Minori shared save identity preserves upstream defaults and isolates only actual collisions", t => {
+  const root = directory(t), game = path.join(root, "game"); fs.mkdirSync(game);
+  const { applySaveIdentity } = require("../src/core/save-identity");
+  const context = { userDataDir: path.join(root, "profile") }, entry = { moduleId: "minori", gameId: "first", gamePath: game };
+  const original = path.join(game, "userdata"), shared = path.join(os.homedir(), "Documents/eden/userdata");
+  fs.mkdirSync(original); fs.writeFileSync(path.join(original, "eden0001.sav"), "authored original progress");
+  const before = JSON.stringify(entry), direct = Module.resolveSaveIdentity(entry);
+  assert.equal(direct.identity, original); assert.equal(direct.hostSubstitution, true);
+  assert.equal(JSON.stringify(entry), before, "facts do not mutate the game");
+  Module.onImport(entry, context);
+  assert.equal(entry.saveDirOverride, undefined, "module import itself makes no policy decision");
+  const writable = applySaveIdentity(entry, { describe: Module.resolveSaveIdentity, context });
+  assert.equal(writable.saveDirOverride, original, "managed executable substitution restores the actual original parent");
+  const access = fs.accessSync;
+  t.mock.method(fs, "accessSync", (target, mode) => {
+    if (target === game || target === original) { const error = new Error("fixture read-only"); error.code = "EROFS"; throw error; }
+    return access(target, mode);
+  });
+  const fallback = applySaveIdentity(entry, { describe: Module.resolveSaveIdentity, context });
+  assert.equal(fallback.saveDirOverride, shared, "one read-only game retains the upstream Documents fallback");
+  fs.mkdirSync(shared, { recursive: true }); fs.writeFileSync(path.join(shared, "eden0001.sav"), "existing normal progress");
+  const second = { ...entry, gameId: "second" };
+  const isolated = applySaveIdentity(second, { games: [fallback], describe: Module.resolveSaveIdentity, context });
+  const unique = path.join(os.homedir(), "Documents/eden/games/second/userdata");
+  assert.equal(isolated.saveDirOverride, unique, "only the real loaded-library collision requests isolation");
+  assert.equal(isolated.saveLocations[0].directory, unique);
+  assert.equal(fs.readFileSync(path.join(shared, "eden0001.sav"), "utf8"), "existing normal progress");
+  assert.equal(fs.readFileSync(path.join(original, "eden0001.sav"), "utf8"), "authored original progress");
+  const chosen = path.join(root, "custom"), explicit = { ...entry, saveDirOverride: chosen };
+  assert.equal(applySaveIdentity(explicit, { describe: Module.resolveSaveIdentity, context }), explicit, "explicit noncolliding setting blocks substitution");
+  t.mock.method(fs, "accessSync", () => { throw Error("ordinary Play must not select fallback again"); });
+  t.mock.method(fs, "statSync", () => { throw Error("ordinary save lookup must not inspect original defaults"); });
+  assert.equal(Module.__test.saveDirectory(isolated), unique);
+  assert.equal(Module.resolveSaveLocations(isolated).primaryDirectory, unique);
+});
+
+test("Minori explicit save folders stay unchanged through real shared-core collisions and late environment changes", async t => {
+  const root = directory(t), game = path.join(root, "game"), userDataDir = path.join(root, "profile"); fs.mkdirSync(game); fixture(game);
+  const { applySaveIdentity } = require("../src/core/save-identity"), distribution = tool(t, root, verification());
+  const previous = process.env.MACLAUNCHER_MINORI_SAVE_DIR;
+  t.after(() => { if (previous === undefined) delete process.env.MACLAUNCHER_MINORI_SAVE_DIR; else process.env.MACLAUNCHER_MINORI_SAVE_DIR = previous; });
+  for (const kind of ["saved", "environment", "late-environment"]) {
+    delete process.env.MACLAUNCHER_MINORI_SAVE_DIR;
+    const authored = path.join(root, kind + "-authored"), normal = path.join(game, "userdata");
+    const entry = { moduleId: "minori", gameId: kind + "-first", gamePath: game, name: "Authored game",
+      launchArguments: "--authored-argument", defaultSaveDir: normal, saveLocations: [{ directory: normal, source: "Existing metadata" }],
+      moduleData: { marker: "unchanged" }, runtimeData: { reminori: { version: "authored-runtime" } },
+      ...(kind === "saved" ? { saveDirOverride: authored } : {}) };
+    if (kind === "environment") process.env.MACLAUNCHER_MINORI_SAVE_DIR = authored;
+    const other = { ...entry, gameId: kind + "-second", ...(kind === "late-environment" ? { saveDirOverride: normal } : {}) };
+    const before = JSON.stringify(entry), files = fs.readdirSync(root).sort(); let factoryCalls = 0;
+    const describe = candidate => {
+      const fact = Module.resolveSaveIdentity(candidate), create = fact.createPatch;
+      if (kind === "late-environment" && candidate.gameId === other.gameId) process.env.MACLAUNCHER_MINORI_SAVE_DIR = authored;
+      return { ...fact, createPatch: parameters => {
+        factoryCalls++; assert.equal(parameters.reason, "collision");
+        return create(parameters);
+      } };
+    };
+    const selected = applySaveIdentity(entry, { games: [other], describe, context: { userDataDir } });
+    assert.equal(factoryCalls, 1, "two distinct game IDs really reach the collision factory");
+    assert.equal(selected, entry); assert.equal(JSON.stringify(entry), before, "authored arguments and all metadata remain unchanged");
+    assert.deepEqual(fs.readdirSync(root).sort(), files, "identity resolution creates no directories");
+    assert.equal(fs.existsSync(authored), false); assert.equal(fs.existsSync(os.homedir()), false);
+    const prepared = await Module.__test.prepareLaunch(structuredClone(selected), { userDataDir }, distribution);
+    assert.equal(prepared.env.MACLAUNCHER_MINORI_SAVE_DIR, authored, "the native consumer retains the authored effective path");
+    assert.deepEqual(prepared.args, ["--game-root", game]);
+    assert.equal(JSON.stringify(entry), before); assert.equal(fs.existsSync(authored), false);
+  }
+});
+
+test("Minori declares obsolete saves for one-time recovery without touching current overrides", t => {
+  const root = directory(t), game = path.join(root, "game"); fs.mkdirSync(game);
+  const entry = { gameId: "legacy", gamePath: game }, context = { userDataDir: path.join(root, "profile") };
+  const mirrorRoot = path.join(Module.__test.gameDirectory(entry, context), "saves");
+  assert.deepEqual(Backcompat.legacyGameMirrors(entry, context), [{ mirrorRoot, sourceRoot: path.join(game, "userdata"), createSourceWithin: game,
+    entryPatch: { defaultSaveDir: path.join(game, "userdata"), saveDirOverride: path.join(game, "userdata"), saveLocations: [{ directory: path.join(game, "userdata"), source: "ReMinori user data", confidence: "exact", label: "Saves" }] },
+    releasedSaveRoute: { directory: mirrorRoot, entryPatch: { saveDirOverride: mirrorRoot }, proven: false, explicit: false } }]);
+  assert.equal(fs.existsSync(context.userDataDir), false);
+  assert.deepEqual(Backcompat.legacyGameMirrors({ ...entry, saveDirOverride: path.join(mirrorRoot, "chosen") }, context), []);
 });
 
 test("native verification rejects other crypto profiles and cache invalidates changed original archive facts", async t => {
@@ -120,7 +207,7 @@ test("Minori catalog uses the shared explicit-refresh manager with an immutable 
 });
 
 test("Minori script tools are reachable in the inspector and track owned output availability", t => {
-  const root = directory(t), entry = { gameId: "scripts", moduleData: {} }, revealed = [];
+  const root = directory(t), entry = { gameId: "scripts", gamePath: root, moduleData: {} }, revealed = [];
   let changes = 0;
   const context = { userDataDir: root, revealInFinder: file => revealed.push(file), onEntryChange: () => changes++ };
   const ui = Module.manifest.ui, group = ui.actionGroups.find(value => value.id === "scripts");

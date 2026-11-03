@@ -427,6 +427,7 @@ module.exports = {
     return { ...(await GreenworksSdk.importSdk(context)), role: "encrypted-ticket" };
   },
   uninstallRuntime,
+  trashFirst: true,
   cleanupGameData,
   updateSettingsAfterInstall,
   updateSettingsAfterUninstall,

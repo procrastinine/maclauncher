@@ -1,10 +1,10 @@
-const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
+const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto"), os = require("node:os");
 const SOURCE_SHA256 = "c9bc0b0cd42e0fbcb82a09635bb5abed86afbdd4abc9e76fa5716638217cb59f";
 const LICENSE_SHA256 = "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96";
 const VERSION = "cp932-2.01-eudc-ml1";
 const sha256 = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 
-/** Developer-only transform of exact published data. No network or host codec. */
+/** Transform exact published source data without a host codec. */
 function stage({ sourceFile, licenseFile, destination } = {}) {
   if ([sourceFile, licenseFile, destination].some(file => !path.isAbsolute(file || "")) || fs.existsSync(destination))
     throw new Error("Exact absolute CP932 source/license inputs and a new destination are required.");
@@ -43,8 +43,30 @@ function stage({ sourceFile, licenseFile, destination } = {}) {
   fs.writeFileSync(path.join(destination, "cp932.json"), JSON.stringify(manifest, null, 2) + "\n", { flag: "wx", mode: 0o644 });
   return manifest;
 }
-module.exports = { SOURCE_SHA256, LICENSE_SHA256, VERSION, stage };
-if (require.main === module) {
-  const [sourceFile, licenseFile, destination] = process.argv.slice(2);
-  console.log(JSON.stringify(stage({ sourceFile, licenseFile, destination })));
+/** Shared preparation for checkout setup, local packaging and the app workflow. */
+async function prepare({ repoRoot = path.resolve(__dirname, "../../../.."),
+  download = require("../../../../scripts/native-payload.cjs").downloadPayload } = {}) {
+  const directory = path.join(repoRoot, "src/modules/catsystem2/resources/encoding");
+  const manifest = JSON.parse(fs.readFileSync(path.join(directory, "cp932.json"), "utf8"));
+  const output = path.join(directory, "cp932.bin"), existing = fs.lstatSync(output, { throwIfNoEntry: false });
+  if (existing?.isFile() && existing.size === manifest.tableBytes && sha256(fs.readFileSync(output)) === manifest.tableSha256)
+    return { version: VERSION, generated: false };
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-cp932-"));
+  const replacement = path.join(directory, ".cp932-" + crypto.randomUUID() + ".tmp");
+  try {
+    const sourceFile = path.join(temporary, "CP932.TXT"), destination = path.join(temporary, "generated");
+    await download(manifest.sourceUrl, sourceFile);
+    stage({ sourceFile, licenseFile: path.join(directory, "Unicode-LICENSE.txt"), destination });
+    fs.copyFileSync(path.join(destination, "cp932.bin"), replacement, fs.constants.COPYFILE_EXCL);
+    fs.chmodSync(replacement, 0o644); fs.renameSync(replacement, output);
+    return { version: VERSION, generated: true };
+  } finally { fs.rmSync(temporary, { recursive: true, force: true }); fs.rmSync(replacement, { force: true }); }
 }
+module.exports = { SOURCE_SHA256, LICENSE_SHA256, VERSION, stage, prepare };
+if (require.main === module) (async () => {
+  const args = process.argv.slice(2);
+  if (!args.length) return prepare();
+  if (args.length !== 3) throw new Error("Use no arguments for setup, or exact source, license and destination paths.");
+  const [sourceFile, licenseFile, destination] = args;
+  return stage({ sourceFile, licenseFile, destination });
+})().then(result => console.log(JSON.stringify(result))).catch(error => { console.error(error.message); process.exitCode = 1; });

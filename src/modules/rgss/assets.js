@@ -1,5 +1,7 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../shared/copy-file");
+const { hasFineChangeTime } = require("../shared/file-time");
 const path = require("node:path");
 const { normalizeRtpId } = require("./rgss-utils");
 const rawFs = (() => {
@@ -75,7 +77,7 @@ function resolveResourcePaths({ resourceRoot, kawarikiRoot } = {}) {
     root,
     rtpRoot: path.join(root, "rtp"),
     kawarikiRoot: kawariki,
-    soundfontPath: path.join(root, "soundfont", SOUND_FONT_FILE)
+    soundfontPath: resourceRoot ? path.join(root, "soundfont", SOUND_FONT_FILE) : null
   };
 }
 
@@ -98,9 +100,9 @@ function rawStat(file) {
   catch (error) { if (["ENOENT", "ENOTDIR"].includes(error.code)) return null; throw error; }
 }
 
-function archiveHeader(archive, expected) {
+function archiveHeader(archive, expected, cacheable) {
   const cached = archiveHeaderCache.get(archive);
-  if (cached && sameMetadata(cached.metadata, expected)) return cached.header;
+  if (cacheable && cached && sameMetadata(cached.metadata, expected)) return cached;
   const fd = rawFs.openSync(archive, rawFs.constants.O_RDONLY | (rawFs.constants.O_NOFOLLOW || 0));
   try {
     if (!sameMetadata(statMetadata(rawFs.fstatSync(fd, { bigint: true })), expected)) throw new Error("RGSS asset source changed while reading.");
@@ -121,8 +123,9 @@ function archiveHeader(archive, expected) {
     if (!header || typeof header.files !== "object" || Array.isArray(header.files)) throw new Error("RGSS packed asset metadata is invalid.");
     if (!sameMetadata(statMetadata(rawFs.fstatSync(fd, { bigint: true })), expected) || !sameMetadata(statMetadata(rawFs.lstatSync(archive, { bigint: true })), expected)) throw new Error("RGSS asset source changed while reading.");
     if (archiveHeaderCache.size >= 8 && !archiveHeaderCache.has(archive)) archiveHeaderCache.delete(archiveHeaderCache.keys().next().value);
-    archiveHeaderCache.set(archive, { metadata: expected, header });
-    return header;
+    const record = { metadata: expected, header, dataOffset: 8 + length };
+    archiveHeaderCache.set(archive, record);
+    return record;
   } finally { rawFs.closeSync(fd); }
 }
 
@@ -136,7 +139,8 @@ function observeSource(file) {
     if (container.isSymbolicLink()) throw new Error("RGSS asset resources must contain only real files and directories.");
     if (!container.isFile()) continue;
     const containerMetadata = statMetadata(container), relative = absolute.slice(end + 6);
-    let member = archiveHeader(archive, containerMetadata);
+    const record = archiveHeader(archive, containerMetadata, hasFineChangeTime(container));
+    let member = record.header;
     for (const segment of relative.split(path.sep)) {
       member = member?.files && Object.hasOwn(member.files, segment) ? member.files[segment] : null;
       if (!member || Object.hasOwn(member, "link")) throw new Error("RGSS packed assets must not use symlinks.");
@@ -152,14 +156,39 @@ function observeSource(file) {
       }
       if (stat.isFile() !== unpacked.isFile() || stat.isDirectory() !== unpacked.isDirectory() || stat.isFile() && stat.size !== unpacked.size) throw new Error("RGSS packed asset metadata differs from its source.");
       const physicalMetadata = statMetadata(unpacked);
-      return { stat, size: stat.size, fileMetadata: physicalMetadata, metadata: ["asar-unpacked", archive, ...containerMetadata, ...physicalMetadata] };
+      return { stat, size: stat.size, fileMetadata: physicalMetadata, physicalFile: physical, physicalMetadata, physicalOffset: 0,
+        verifyBytes: !hasFineChangeTime(unpacked) || !hasFineChangeTime(container),
+        metadata: ["asar-unpacked", archive, ...containerMetadata, ...physicalMetadata] };
     }
     // Electron synthesizes a new inode on every ASAR stat. Bind the real archive
     // and member's stable attributes instead; ordinary files keep all metadata.
-    return { stat, size: stat.size, fileMetadata: null, metadata: ["asar", archive, ...containerMetadata, String(stat.mode), String(stat.size)] };
+    const offset = record.dataOffset + Number(member.offset);
+    if (stat.isFile() && (!/^\d+$/.test(member.offset) || !Number.isSafeInteger(offset) || !Number.isSafeInteger(member.size) || member.size < 0 ||
+        BigInt(member.size) !== stat.size || BigInt(offset) + stat.size > container.size)) throw new Error("RGSS packed asset metadata is invalid.");
+    return { stat, size: stat.size, fileMetadata: null, physicalFile: archive, physicalMetadata: containerMetadata, physicalOffset: offset,
+      verifyBytes: !hasFineChangeTime(container),
+      metadata: ["asar", archive, ...containerMetadata, String(stat.mode), String(stat.size), stat.isFile() ? String(offset) : "directory"] };
   }
   const metadata = statMetadata(stat);
-  return { stat, size: stat.size, fileMetadata: metadata, metadata };
+  return { stat, size: stat.size, fileMetadata: metadata, physicalFile: file, physicalMetadata: metadata, physicalOffset: 0,
+    verifyBytes: !hasFineChangeTime(stat), metadata };
+}
+
+function physicalSha256(file, expected) {
+  const fd = rawFs.openSync(expected.physicalFile, rawFs.constants.O_RDONLY | (rawFs.constants.O_NOFOLLOW || 0));
+  try {
+    if (!sameMetadata(statMetadata(rawFs.fstatSync(fd, { bigint: true })), expected.physicalMetadata)) throw new Error("RGSS asset source changed while reading.");
+    const hash = crypto.createHash("sha256"), buffer = Buffer.alloc(1024 * 1024); let total = 0;
+    while (BigInt(total) < expected.size) {
+      const remaining = expected.size - BigInt(total), length = remaining < BigInt(buffer.length) ? Number(remaining) : buffer.length;
+      const count = rawFs.readSync(fd, buffer, 0, length, expected.physicalOffset + total);
+      if (!count) throw new Error("RGSS asset source changed while reading.");
+      hash.update(buffer.subarray(0, count)); total += count;
+    }
+    if (!sameMetadata(statMetadata(rawFs.fstatSync(fd, { bigint: true })), expected.physicalMetadata) ||
+        !sameMetadata(observeSource(file).metadata, expected.metadata)) throw new Error("RGSS asset source changed while reading.");
+    return hash.digest("hex");
+  } finally { rawFs.closeSync(fd); }
 }
 
 function sha256(file, expected) {
@@ -171,7 +200,18 @@ function sha256(file, expected) {
     let bytes, total = 0n;
     while ((bytes = fs.readSync(fd, buffer, 0, buffer.length, null))) { hash.update(buffer.subarray(0, bytes)); total += BigInt(bytes); }
     if (total !== expected.size || !sameMetadata(statMetadata(fs.fstatSync(fd, { bigint: true })), descriptorMetadata) || !sameMetadata(observeSource(file).metadata, expected.metadata)) throw new Error("RGSS asset source changed while reading.");
-    return hash.digest("hex");
+    const digest = hash.digest("hex");
+    if (expected.verifyBytes) {
+      // Coarse identities cannot establish unchanged bytes. Check both this
+      // open file and a fresh pathname read: either may survive a replacement.
+      const repeated = crypto.createHash("sha256"); let offset = 0;
+      while ((bytes = fs.readSync(fd, buffer, 0, buffer.length, offset))) { repeated.update(buffer.subarray(0, bytes)); offset += bytes; }
+      if (BigInt(offset) !== expected.size || repeated.digest("hex") !== digest ||
+          !sameMetadata(statMetadata(fs.fstatSync(fd, { bigint: true })), descriptorMetadata) ||
+          !sameMetadata(observeSource(file).metadata, expected.metadata) || physicalSha256(file, expected) !== digest)
+        throw new Error("RGSS asset source changed while reading.");
+    }
+    return digest;
   } finally { fs.closeSync(fd); }
 }
 
@@ -188,7 +228,7 @@ function inventory(root, { prefix = "", previous = [], force = false, sourcePath
     if (stat.isFile()) {
       item.size = Number(stat.size);
       const prior = cached.get(relative);
-      item.sha256 = !force && /^[a-f0-9]{64}$/.test(prior?.sha256 || "") && JSON.stringify(prior.metadata) === JSON.stringify(item.metadata)
+      item.sha256 = !force && !observation.verifyBytes && /^[a-f0-9]{64}$/.test(prior?.sha256 || "") && JSON.stringify(prior.metadata) === JSON.stringify(item.metadata)
         ? prior.sha256 : sha256(file, observation);
     }
     if (relative) files.push(item);
@@ -215,7 +255,7 @@ function computeSignature({ resourceRoot, kawarikiRoot, previous, force = false 
   const prior = stored?.roots && JSON.stringify(stored.roots) === key && Array.isArray(stored.files) ? stored.files : [];
   const files = [];
   files.push(...inventory(paths.kawarikiRoot, { prefix: "kawariki", previous: prior, force, sourcePaths: true }));
-  files.push(...inventory(paths.soundfontPath, { prefix: "soundfont/" + SOUND_FONT_FILE, previous: prior, force, sourcePaths: true }));
+  if (paths.soundfontPath) files.push(...inventory(paths.soundfontPath, { prefix: "soundfont/" + SOUND_FONT_FILE, previous: prior, force, sourcePaths: true }));
   files.push(...inventory(KAWARIKI_OVERLAY_PATH, { prefix: "overlay/patches-extra.rb", previous: prior, force, sourcePaths: true }));
   files.sort((a, b) => a.relative < b.relative ? -1 : a.relative > b.relative ? 1 : 0);
   const hash = crypto.createHash("sha256").update(JSON.stringify([ASSETS_VERSION, contentIdentity(files)])).digest("hex");
@@ -281,7 +321,7 @@ function applyKawarikiOverlay({ destKawariki, logger }) {
     throw new Error(`RGSS overlay missing: ${KAWARIKI_OVERLAY_PATH}`);
   }
   const overlayDest = path.join(destKawariki, "patches-extra.rb");
-  fs.cpSync(KAWARIKI_OVERLAY_PATH, overlayDest, { force: true });
+  cloneOrCopySync(KAWARIKI_OVERLAY_PATH, overlayDest);
 
   const preloadPath = path.join(destKawariki, "preload.rb");
   const preloadStat = safeStat(preloadPath);
@@ -317,7 +357,7 @@ function resolveStagedPaths(userDataDir, rtpId, { generationRoot, rtpPaths } = {
   };
 }
 
-function checkStagedPaths(userDataDir, generationRoot) {
+function checkStagedPaths(userDataDir, generationRoot, needsSoundfont) {
   const { kawarikiPreload, kawarikiOverlay, soundfontPath } =
     resolveStagedPaths(userDataDir, null, { generationRoot });
   const missing = [];
@@ -329,7 +369,7 @@ function checkStagedPaths(userDataDir, generationRoot) {
   if (!overlayStat || !overlayStat.isFile()) missing.push(kawarikiOverlay);
 
   const fontStat = safeStat(soundfontPath);
-  if (!fontStat || !fontStat.isFile()) missing.push(soundfontPath);
+  if (needsSoundfont && (!fontStat || !fontStat.isFile())) missing.push(soundfontPath);
 
   return missing;
 }
@@ -338,7 +378,7 @@ function getAssetsStatus({ userDataDir, resourceRoot, kawarikiRoot, force = fals
   const marker = readMarker(userDataDir);
   const expected = computeSignature({ resourceRoot, kawarikiRoot, previous: marker?.source, force });
   const root = generationPath(userDataDir, marker);
-  const missing = checkStagedPaths(userDataDir, root);
+  const missing = checkStagedPaths(userDataDir, root, Boolean(resourceRoot));
   let assetsStaged = false;
   if (root && marker.hash === expected.hash && missing.length === 0) {
     try {
@@ -387,7 +427,7 @@ function ensureAssetsStaged({ userDataDir, logger, force, resourceRoot, kawariki
   const kawarikiStat = safeStat(kawarikiPath);
   if (!kawarikiStat || !kawarikiStat.isDirectory()) missingResources.push(kawarikiPath);
   const fontStat = safeStat(soundfontPath);
-  if (!fontStat || !fontStat.isFile()) missingResources.push(soundfontPath);
+  if (soundfontPath && (!fontStat || !fontStat.isFile())) missingResources.push(soundfontPath);
   const overlayStat = safeStat(KAWARIKI_OVERLAY_PATH);
   if (!overlayStat || !overlayStat.isFile()) missingResources.push(KAWARIKI_OVERLAY_PATH);
   if (missingResources.length > 0) {
@@ -408,20 +448,21 @@ function ensureAssetsStaged({ userDataDir, logger, force, resourceRoot, kawariki
     writeRecord(path.join(destRoot, MARKER_FILE), marker);
     return { assetsStaged: true, marker, expected: status.expected, missing: [], generationRoot: candidate, stagedNow: false };
   }
-  for (const source of [kawarikiPath, soundfontPath]) {
+  for (const source of [kawarikiPath, soundfontPath].filter(Boolean)) {
     const real = fs.realpathSync(source);
     if (real === destRoot || real.startsWith(destRoot + path.sep) || destRoot.startsWith(real + path.sep)) throw new Error("RGSS source and staged asset directories overlap.");
   }
   const staging = fs.mkdtempSync(path.join(generations, ".prepare-"));
   try {
-    const copyOptions = { recursive: true, force: false, preserveTimestamps: true, mode: fs.constants.COPYFILE_FICLONE };
     const destKawariki = path.join(staging, "kawariki");
     logger?.info?.("[rgss] staging Kawariki");
-    fs.cpSync(kawarikiPath, destKawariki, copyOptions);
+    cloneOrCopySync(kawarikiPath, destKawariki);
     applyKawarikiOverlay({ destKawariki, logger });
-    const destFont = path.join(staging, "soundfont", SOUND_FONT_FILE);
-    ensureDir(path.dirname(destFont));
-    fs.copyFileSync(soundfontPath, destFont, fs.constants.COPYFILE_FICLONE);
+    if (soundfontPath) {
+      const destFont = path.join(staging, "soundfont", SOUND_FONT_FILE);
+      ensureDir(path.dirname(destFont));
+      cloneOrCopySync(soundfontPath, destFont);
+    }
     const after = computeSignature({ resourceRoot, kawarikiRoot });
     if (after.hash !== status.expected.hash || JSON.stringify(after.files) !== JSON.stringify(status.expected.files)) {
       throw new Error("RGSS asset source changed while staging.");

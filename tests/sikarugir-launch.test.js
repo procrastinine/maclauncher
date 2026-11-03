@@ -8,6 +8,7 @@ const { once } = require("node:events");
 const { EventEmitter } = require("node:events");
 const { PassThrough } = require("node:stream");
 const { stopProcessTree } = require("../src/core/process-stop");
+const { untilTestEnds } = require("./helpers/fixture-process");
 const Detection = require("../src/modules/crossover/detect");
 const WindowsFiles = require("../src/modules/crossover/runtime/launch");
 const Launch = require("../src/modules/crossover/sikarugir/launch");
@@ -115,7 +116,7 @@ test("Sikarugir returns a managed install plan without installing or changing it
 test("Sikarugir provider starts the supervised plain Wine command and records bounded output", async t => {
   const directory = fixture(t), entry = game(directory), calls = [];
   const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), pid: 1234, exitCode: null, signalCode: null });
-  const plan = { directory, executablePath: path.join(directory, "private", "Game.exe"), winePath: "/managed/bin/wine",
+  const plan = { directory, executablePath: path.join(directory, "private", "Game.exe"), workingDirectory: entry.gamePath, winePath: "/managed/bin/wine",
     serverPath: "/managed/bin/wineserver", args: ["/private/Game.exe", "literal;$()"], environment: { WINEPREFIX: "/private/prefix",
       DYLD_LIBRARY_PATH: "/managed/support libraries", DYLD_FRAMEWORK_PATH: "/managed/frameworks" } };
   const provider = Provider.createProvider({ platform: "darwin", manager: {}, launch: { ...Launch, prepareLaunch: async () => plan } });
@@ -123,7 +124,7 @@ test("Sikarugir provider starts the supervised plain Wine command and records bo
   assert.equal(await provider.launchRuntime("sikarugir", entry, context), child);
   assert.equal(calls.length, 1); assert.equal(calls[0][0], "/bin/sh");
   assert.deepEqual(calls[0][1].slice(3), [plan.winePath, plan.serverPath, "play", "/managed/support libraries", "", "/managed/frameworks", "", "", ...plan.args]);
-  assert.equal(calls[0][2].cwd, path.dirname(plan.executablePath)); assert.equal(calls[0][2].env, plan.environment);
+  assert.equal(calls[0][2].cwd, entry.gamePath); assert.equal(calls[0][2].env, plan.environment);
   assert.equal(calls[0][3], false, "Rosetta is checked for Wine before starting the native shell supervisor");
   assert.equal(calls[0][1].some(arg => ["--bottle", "--wait-children", "--workdir", "--env"].includes(arg)), false);
   child.stderr.write(Buffer.alloc(600 * 1024, 97)); child.stdout.write("ignored after cap");
@@ -179,6 +180,31 @@ test("Wine 11 receives the producer's initialization marker for both fresh setup
   assert.throws(() => Launch.parseEnvironment(["SikarugirAppWine11=0"]), /managed automatically/);
 });
 
+test("ordinary Wine uses original files without staging or reconciling earlier views", async t => {
+  const directory = fs.realpathSync(fixture(t)), entry = game(directory), install = installation(directory), dependencies = adapters(install);
+  const GameView = require("../src/modules/crossover/temporal/game-view");
+  assert.equal(WindowsFiles.stageGameFiles, undefined, "released game staging is absent from ordinary launch exports");
+  for (const method of ["reconcile", "remember", "watch"]) t.mock.method(GameView, method, () => assert.fail("No ordinary " + method));
+  const context = {userDataDir: path.join(directory, "data"), settings: {}, runtimeSettings: {graphicsBackend: "dxmt"}};
+  const managed = Launch.runtimeDirectory(entry, context), old = path.join(managed, "game");
+  fs.mkdirSync(old, {recursive: true});fs.writeFileSync(path.join(old, "Save01.dat"), "earlier private save");
+  entry.runtimeData.sikarugir = {cameraGameView: {kind: "camera", id: "old binding must not be read"}};
+  fs.writeFileSync(path.join(entry.gamePath, "asset.dat"), "one");
+  const launch = await Launch.prepareLaunch(entry, context, dependencies);
+  assert.equal(launch.gameRoot, fs.realpathSync(entry.gamePath));
+  assert.equal(launch.args[0], path.join(launch.gameRoot, "Game.exe"));
+  assert.equal(fs.existsSync(path.join(managed, "game-files.json")), false);
+  const mapping = path.join(launch.prefixPath, "dosdevices", "g:");fs.mkdirSync(path.dirname(mapping), {recursive: true});fs.symlinkSync(old, mapping);
+  fs.writeFileSync(path.join(entry.gamePath, "asset.dat"), "two");
+  fs.writeFileSync(path.join(launch.gameRoot, "Save02.dat"), "original portable save");
+  const again = await Launch.prepareLaunch(entry, context, dependencies);
+  assert.equal(again.gameRoot, launch.gameRoot);assert.equal(fs.readFileSync(path.join(again.gameRoot, "asset.dat"), "utf8"), "two");
+  assert.equal(fs.readFileSync(path.join(entry.gamePath, "Save02.dat"), "utf8"), "original portable save");
+  assert.equal(fs.readFileSync(path.join(old, "Save01.dat"), "utf8"), "earlier private save");
+  assert.equal(fs.readlinkSync(mapping), old, "the earlier G: mapping is untouched");
+  assert.equal(dependencies.calls.length, 2, "warm Play does not initialize its prefix again");
+});
+
 test("ordinary Wine preparation configures its private prefix silently and preserves source files and saves", async t => {
   const directory = fixture(t), entry = game(directory), install = installation(directory), dependencies = adapters(install);
   fs.writeFileSync(path.join(entry.gamePath, "settings.ini"), "original");
@@ -199,11 +225,10 @@ test("ordinary Wine preparation configures its private prefix silently and prese
   assert.equal(dependencies.calls[0].command, install.executablePath); assert.equal(dependencies.calls[0].server, install.serverPath);
   assert.equal(dependencies.calls[0].options.env.WINEPREFIX, launch.prefixPath);
   assert.equal(dependencies.calls[0].options.env.WINEDLLOVERRIDES, undefined, "game renderer and mod overrides wait until preparation finishes");
-  assert.deepEqual(launch.args, ["G:\\Game.exe", "-windowed", "literal;$()", ...context.gameArguments]);
-  assert.equal(launch.windowsExecutablePath, "G:\\Game.exe");
-  const drive = path.join(launch.prefixPath, "dosdevices", "g:");
-  assert.equal(fs.realpathSync(drive), fs.realpathSync(launch.gameRoot));
-  assert.equal(path.isAbsolute(fs.readlinkSync(drive)), false, "the private mapping survives a library move");
+  assert.deepEqual(launch.args, [launch.executablePath, "-windowed", "literal;$()", ...context.gameArguments]);
+  assert.equal(launch.windowsExecutablePath, launch.executablePath);
+  assert.equal(fs.realpathSync(launch.gameRoot), fs.realpathSync(entry.gamePath));
+  assert.equal(fs.existsSync(path.join(launch.prefixPath, "dosdevices", "g:")), false);
   assert.equal(launch.environment.WINEDLLOVERRIDES, "d3d11,dxgi=b;winhttp=n,b");
   assert.equal(fs.lstatSync(path.join(launch.prefixPath, "drive_c", "users", "player", "Documents")).isDirectory(), true);
   fs.writeFileSync(path.join(launch.gameRoot, "settings.ini"), "private");
@@ -212,7 +237,7 @@ test("ordinary Wine preparation configures its private prefix silently and prese
   fs.writeFileSync(path.join(entry.gamePath, "asset.dat"), "two");
   await Launch.prepareLaunch(entry, context, dependencies);
   assert.equal(dependencies.calls.length, 2, "completed prefix initialization is reused");
-  assert.equal(fs.readFileSync(path.join(entry.gamePath, "settings.ini"), "utf8"), "original");
+  assert.equal(fs.readFileSync(path.join(entry.gamePath, "settings.ini"), "utf8"), "private");
   assert.equal(fs.readFileSync(path.join(launch.gameRoot, "settings.ini"), "utf8"), "private");
   assert.equal(fs.readFileSync(path.join(launch.gameRoot, "asset.dat"), "utf8"), "two");
   assert.equal(fs.readFileSync(path.join(launch.gameRoot, "Save01.dat"), "utf8"), "game save");
@@ -221,10 +246,11 @@ test("ordinary Wine preparation configures its private prefix silently and prese
   assert.equal(entry.runtimeData.sikarugir.version, undefined, "automatic selection is not persisted as a version override");
   assert.equal(entry.runtimeData.sikarugir.installedVersion, "WS12WineSikarugir11.0_1");
   const saves = Provider.resolveSaveLocations(entry, context);
-  assert.equal(saves.primaryDirectory, launch.gameRoot); assert.equal(saves.directories[1].directory, path.join(launch.prefixPath, "drive_c", "users"));
+  assert.equal(fs.realpathSync(saves.primaryDirectory), fs.realpathSync(launch.gameRoot)); assert.equal(saves.directories[1].directory, path.join(launch.prefixPath, "drive_c", "users"));
   dependencies.setVersion("WS12WineSikarugir10.0_8");
   const older = await Launch.prepareLaunch(entry, context, dependencies);
-  assert.notEqual(older.prefixPath, launch.prefixPath);
+  assert.equal(older.prefixPath, launch.prefixPath, "engine updates keep the per-game Windows profile");
+  assert.notEqual(older.viewRoot, launch.viewRoot, "graphics loaders remain keyed to the selected runtime");
   assert.equal(fs.readFileSync(path.join(launch.prefixPath, "saved.dat"), "utf8"), "prefix save");
   assert.equal(fs.readFileSync(path.join(older.gameRoot, "Save01.dat"), "utf8"), "game save");
 });
@@ -254,6 +280,19 @@ test("trusted optional game effects follow prefix setup and preserve disabled la
     assert.equal(call.options.env.RESHADE_CONFIG, undefined);
   }
   assert.throws(() => Launch.parseEnvironment(["DYLD_INSERT_LIBRARIES=/untrusted.dylib"]), /managed automatically/);
+});
+
+test("a successful explicit Wine camera adapter keeps the original working directory", async t => {
+  const directory = fixture(t), entry = game(directory), dependencies = adapters(installation(directory));
+  const Temporal = require("../src/modules/crossover/temporal");
+  const plan = {libraries: [], inputs: {cameraProjection: true, source: "streamline", methods: ["fsr2"]}, dxmt: {identity: "camera-fixture"}, baseRoot: directory};
+  t.mock.method(Temporal, "resolvePlan", () => plan);t.mock.method(Temporal, "prepareGame", () => true);
+  const prepared = await Launch.prepareLaunch(entry, {userDataDir: path.join(directory, "data"), settings: {}, runtimeSettings: {}}, dependencies);
+  assert.notEqual(prepared.gameRoot, entry.gamePath, "the required DLL loader projection is explicit");
+  assert.equal(prepared.workingDirectory, path.dirname(fs.realpathSync(path.join(entry.gamePath, "Game.exe"))));
+  assert.equal(fs.existsSync(path.join(prepared.directory, "game")), false, "there is no preceding whole-game baseline");
+  const saves = Provider.resolveSaveLocations(entry, {userDataDir: path.join(directory, "data")});
+  assert.equal(fs.realpathSync(saves.primaryDirectory), fs.realpathSync(entry.gamePath));
 });
 
 test("Advanced-only temporal selection reaches the Wine launch camera bridge", async t => {
@@ -388,40 +427,39 @@ test("selected Windows executables cannot escape the source root or select ARM W
   assert.equal(dependencies.calls.length, 0); assert.equal(dependencies.graphicsCalls.length, 0);
 });
 
-test("long private game paths launch through a short per-prefix drive and preserve the imported source", async t => {
-  const directory = fixture(t), source = path.join(directory, "original"), relative = path.join("Game files", "遊戯.exe");
+test("long original game paths keep a short Wine path without a private game mirror", async t => {
+  const directory = fixture(t), source = path.join(directory, ...Array(4).fill("long-original-folder-" + "a".repeat(48))), relative = path.join("Game files", "遊戯.exe");
   const original = pe(path.join(source, relative), 0x8664), bytes = fs.readFileSync(original);
   fs.writeFileSync(path.join(source, "settings.ini"), "source settings");
   const entry = Detection.decorateEntry({ gameId: "long-path-game", moduleId: "crossover", gamePath: source, importPath: original });
-  const context = { userDataDir: path.join(directory, ...Array(4).fill("long-library-folder-" + "a".repeat(48))), settings: {}, runtimeSettings: {} };
+  const context = { userDataDir: path.join(directory, "data"), settings: {}, runtimeSettings: {} };
   const launch = await Launch.prepareLaunch(entry, context, adapters(installation(directory)));
   assert.ok(launch.executablePath.length > 260);
   assert.equal(launch.args[0], "G:\\Game files\\遊戯.exe");
-  assert.ok(launch.args[0].length < 40);
-  assert.deepEqual(fs.readFileSync(launch.executablePath), bytes);
+  assert.ok(launch.args[0].length < 40, "the actual Windows executable path stays below MAX_PATH");
+  assert.equal(fs.realpathSync(launch.executablePath), fs.realpathSync(original));
+  assert.equal(fs.realpathSync(launch.gameRoot), fs.realpathSync(source));
   const mapping = path.join(launch.prefixPath, "dosdevices", "g:");
-  fs.writeFileSync(path.join(mapping, "settings.ini"), "private settings");
-  assert.equal(fs.readFileSync(path.join(source, "settings.ini"), "utf8"), "source settings");
-  assert.equal(fs.readFileSync(path.join(launch.gameRoot, "settings.ini"), "utf8"), "private settings");
+  assert.equal(fs.realpathSync(mapping), fs.realpathSync(source), "the short drive refers to original bytes");
+  assert.equal(fs.existsSync(path.join(launch.directory, "game")), false);
+  fs.writeFileSync(path.join(launch.gameRoot, "settings.ini"), "original settings changed by game");
+  assert.equal(fs.readFileSync(path.join(source, "settings.ini"), "utf8"), "original settings changed by game");
   assert.deepEqual(fs.readFileSync(original), bytes);
-  const link = fs.readlinkSync(mapping);
-  assert.equal(Launch.mapGameDrive(launch.directory, launch.prefixPath, launch.gameRoot, launch.executablePath), launch.args[0]);
-  assert.equal(fs.readlinkSync(mapping), link, "an existing owned mapping is reused");
 });
 
-test("private game drive mappings reject conflicts and aliased parent directories without modifying them", t => {
+test("short original drive mappings preserve conflicting old entries and reject aliased parents", t => {
   const directory = fixture(t), prefix = path.join(directory, "prefixes", "selected"), gameRoot = path.join(directory, "game");
   const executable = pe(path.join(gameRoot, "Game.exe")), dosdevices = path.join(prefix, "dosdevices"), mapping = path.join(dosdevices, "g:");
   fs.mkdirSync(dosdevices, { recursive: true });
   fs.writeFileSync(mapping, "existing mapping file");
-  assert.throws(() => Launch.mapGameDrive(directory, prefix, gameRoot, executable), /mapping conflicts/);
+  assert.equal(Launch.mapGameDrive(directory, prefix, gameRoot, executable), "H:\\Game.exe");
   assert.equal(fs.readFileSync(mapping, "utf8"), "existing mapping file");
   fs.unlinkSync(mapping);
   const outside = path.join(directory, "outside"); fs.mkdirSync(outside); fs.writeFileSync(path.join(outside, "save.dat"), "outside save");
   fs.symlinkSync(outside, mapping, "dir");
-  assert.throws(() => Launch.mapGameDrive(directory, prefix, gameRoot, executable), /mapping conflicts/);
+  assert.equal(Launch.mapGameDrive(directory, prefix, gameRoot, executable), "H:\\Game.exe");
   assert.equal(fs.readlinkSync(mapping), outside);
-  fs.unlinkSync(mapping); fs.rmdirSync(dosdevices); fs.symlinkSync(outside, dosdevices, "dir");
+  fs.unlinkSync(mapping);fs.unlinkSync(path.join(dosdevices, "h:")); fs.rmdirSync(dosdevices); fs.symlinkSync(outside, dosdevices, "dir");
   assert.throws(() => Launch.mapGameDrive(directory, prefix, gameRoot, executable), /must not be aliases/);
   assert.equal(fs.existsSync(path.join(outside, "g:")), false);
   assert.equal(fs.readFileSync(path.join(outside, "save.dat"), "utf8"), "outside save");
@@ -456,14 +494,16 @@ test("profile cleanup rejects an aliased users root before modifying outside dir
   assert.equal(fs.lstatSync(path.join(outside, "player", "Documents")).isSymbolicLink(), true);
 });
 
+// A marker counts once its writer's single write has landed, not when the file is created empty.
+const written = file => { try { return fs.statSync(file).size > 0; } catch { return false; } };
 async function waitForFile(file, timeout = 5000) {
   const deadline = Date.now() + timeout;
-  while (!fs.existsSync(file) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
-  assert.ok(fs.existsSync(file), `missing process marker ${path.basename(file)}`);
+  while (!written(file) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+  assert.ok(written(file), `missing process marker ${path.basename(file)}`);
 }
 function fakeProcesses(directory, { returns = false } = {}) {
   const wine = path.join(directory, "wine"), server = path.join(directory, "wineserver");
-  fs.writeFileSync(wine, `#!${process.execPath}\nconst fs=require('fs'),{spawn}=require('child_process');if(process.env.ENVIRONMENT_FILE)fs.writeFileSync(process.env.ENVIRONMENT_FILE,JSON.stringify({args:process.argv.slice(2),libraries:process.env.DYLD_LIBRARY_PATH,fallbackLibraries:process.env.DYLD_FALLBACK_LIBRARY_PATH,frameworks:process.env.DYLD_FRAMEWORK_PATH,fallbackFrameworks:process.env.DYLD_FALLBACK_FRAMEWORK_PATH,insertLibraries:process.env.DYLD_INSERT_LIBRARIES}));const game=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true,stdio:'ignore'});fs.writeFileSync(process.env.GAME_PID,String(game.pid));${returns ? "game.unref();fs.writeFileSync(process.env.RETURNED,'yes');" : "setInterval(()=>{},1000);"}`, { mode: 0o755 });
+  fs.writeFileSync(wine, `#!${process.execPath}\nconst fs=require('fs'),{spawn}=require('child_process');if(process.env.ENVIRONMENT_FILE)fs.writeFileSync(process.env.ENVIRONMENT_FILE,JSON.stringify({args:process.argv.slice(2),libraries:process.env.DYLD_LIBRARY_PATH,fallbackLibraries:process.env.DYLD_FALLBACK_LIBRARY_PATH,frameworks:process.env.DYLD_FRAMEWORK_PATH,fallbackFrameworks:process.env.DYLD_FALLBACK_FRAMEWORK_PATH,insertLibraries:process.env.DYLD_INSERT_LIBRARIES}));const game=spawn(process.execPath,['-e',${JSON.stringify(untilTestEnds)}],{detached:true,stdio:'ignore'});fs.writeFileSync(process.env.GAME_PID,String(game.pid));${returns ? "game.unref();fs.writeFileSync(process.env.RETURNED,'yes');" : untilTestEnds}`, { mode: 0o755 });
   fs.writeFileSync(server, `#!${process.execPath}\nconst fs=require('fs');if(process.env.SERVER_ENVIRONMENT_FILE)fs.writeFileSync(process.env.SERVER_ENVIRONMENT_FILE,JSON.stringify({insertLibraries:process.env.DYLD_INSERT_LIBRARIES}));if(process.env.WINEPREFIX!==process.env.EXPECTED_PREFIX)process.exit(2);const pid=Number(fs.readFileSync(process.env.GAME_PID,'utf8'));if(process.argv[2]==='-k'){try{process.kill(pid,'SIGTERM')}catch{}fs.writeFileSync(process.env.STOPPED,'yes')}else{const poll=setInterval(()=>{try{process.kill(pid,0)}catch{clearInterval(poll)}},20);}`, { mode: 0o755 });
   return { wine, server };
 }
@@ -472,7 +512,7 @@ test("Wine supervisor keeps tracking independently grouped Windows children and 
   if (process.platform === "win32") return t.skip("POSIX process groups are required");
   const directory = fixture(t), { wine, server } = fakeProcesses(directory, { returns: true });
   const pidFile = path.join(directory, "pid"), returned = path.join(directory, "returned"), stopped = path.join(directory, "stopped");
-  const unrelated = spawn(process.execPath, ["-e", "setInterval(()=>{},1000)"], { detached: true, stdio: "ignore" });
+  const unrelated = spawn(process.execPath, ["-e", untilTestEnds], { detached: true, stdio: "ignore" });
   t.after(() => { try { process.kill(-unrelated.pid, "SIGKILL"); } catch {} });
   const environment = { ...process.env, GAME_PID: pidFile, RETURNED: returned, STOPPED: stopped,
     ENVIRONMENT_FILE: path.join(directory, "environment.json"), SERVER_ENVIRONMENT_FILE: path.join(directory, "server-environment.json"), WINEPREFIX: path.join(directory, "prefix"), EXPECTED_PREFIX: path.join(directory, "prefix"),
@@ -486,6 +526,8 @@ test("Wine supervisor keeps tracking independently grouped Windows children and 
   t.after(() => { try { process.kill(-child.pid, "SIGKILL"); } catch {} });
   const finished = once(child, "exit");
   await waitForFile(returned); await waitForFile(pidFile);
+  const gamePid = Number(fs.readFileSync(pidFile, "utf8"));
+  t.after(() => { try { process.kill(-gamePid, "SIGKILL"); } catch {} });
   assert.deepEqual(JSON.parse(fs.readFileSync(environment.ENVIRONMENT_FILE, "utf8")), { args: gameArguments,
     libraries: environment.DYLD_LIBRARY_PATH, fallbackLibraries: environment.DYLD_FALLBACK_LIBRARY_PATH,
     frameworks: environment.DYLD_FRAMEWORK_PATH, fallbackFrameworks: environment.DYLD_FALLBACK_FRAMEWORK_PATH,
@@ -494,8 +536,6 @@ test("Wine supervisor keeps tracking independently grouped Windows children and 
   await waitForFile(environment.SERVER_ENVIRONMENT_FILE);
   assert.deepEqual(JSON.parse(fs.readFileSync(environment.SERVER_ENVIRONMENT_FILE, "utf8")), {},
     "supervisor server commands do not inherit game-only library injection");
-  const gamePid = Number(fs.readFileSync(pidFile, "utf8"));
-  t.after(() => { try { process.kill(gamePid, "SIGKILL"); } catch {} });
   await new Promise(resolve => setTimeout(resolve, 100));
   assert.equal(child.exitCode, null, "supervisor outlives the initial Wine command");
   assert.equal(fs.existsSync(stopped), false, "ordinary root exit does not kill Windows children");
@@ -516,7 +556,7 @@ test("cancelled Wine initialization waits for its independently grouped child to
     env: { ...process.env, GAME_PID: pidFile, STOPPED: stopped, WINEPREFIX: prefix, EXPECTED_PREFIX: prefix } });
   const rejected = assert.rejects(preparing, { name: "AbortError" });
   await waitForFile(pidFile); const gamePid = Number(fs.readFileSync(pidFile, "utf8"));
-  t.after(() => { try { process.kill(gamePid, "SIGKILL"); } catch {} });
+  t.after(() => { try { process.kill(-gamePid, "SIGKILL"); } catch {} });
   controller.abort(); await rejected;
   assert.equal(registered.options.stopOnLauncherExit, true);
   assert.ok(registered.child.pid > 0); assert.equal(registered.child.exitCode, 143);
@@ -533,7 +573,7 @@ test("failed preparation process registration terminates the private Windows chi
     env: { ...process.env, GAME_PID: pidFile, STOPPED: stopped, WINEPREFIX: prefix, EXPECTED_PREFIX: prefix } });
   await assert.rejects(preparing, /preparation ownership failed/);
   const gamePid = Number(fs.readFileSync(pidFile, "utf8"));
-  t.after(() => { try { process.kill(gamePid, "SIGKILL"); } catch {} });
+  t.after(() => { try { process.kill(-gamePid, "SIGKILL"); } catch {} });
   assert.equal(fs.readFileSync(stopped, "utf8"), "yes");
   assert.throws(() => process.kill(gamePid, 0), { code: "ESRCH" });
 });

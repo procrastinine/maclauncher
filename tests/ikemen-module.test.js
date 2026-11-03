@@ -72,6 +72,48 @@ test("Ikemen stages selected engine defaults and original content without patchi
   assert.equal(fs.existsSync(path.join(gameRoot, "save")), false);
 });
 
+test("Ikemen launches a selected original complete distribution without a private view or legacy changes", async t => {
+  const root = temporary(t), gameRoot = path.join(root, "source"), entry = { ...game(gameRoot), gameId: "original" };
+  const install = runtime(gameRoot), userDataDir = path.join(root, "data");
+  const old = path.join(userDataDir, "games", entry.gameId, "modules", "ikemen", "game");fs.mkdirSync(old,{recursive:true});
+  fs.writeFileSync(path.join(old,"player-state.json"),"old private state");
+  const selectionCalls=[];
+  let selection={ready:true,install};
+  t.mock.method(Module.runtimeManagers[0],"resolveSelection",(...args)=>{selectionCalls.push(args);return selection;});
+  const context={userDataDir};
+  const originalSave=path.join(gameRoot,"save"),privateSave=path.join(path.dirname(old),"saves");
+  entry.defaultSaveDir=privateSave;
+  assert.equal(Module.resolveSaveLocations(entry,context).primaryDirectory,originalSave,"stale private default must not drive save UI before Play");
+  assert.equal(selectionCalls.at(-1)[3].verification,"status");
+  Module.onImport(entry,context);assert.equal(entry.defaultSaveDir,originalSave);
+  entry.defaultSaveDir=privateSave;
+  Module.onRuntimeChange(entry,context);assert.equal(entry.defaultSaveDir,originalSave);
+  assert.equal(Module.resolveSaveLocations({...entry,saveDirOverride:originalSave},context).primaryDirectory,originalSave);
+  assert.equal(Module.resolveSaveLocations({...entry,saveDirOverride:path.join(root,"override")},context).primaryDirectory,privateSave);
+  selection={ready:false};
+  assert.equal(Module.resolveSaveLocations(entry,context).primaryDirectory,privateSave);
+  selection={ready:true,install:{...install,executablePath:path.join(root,"separate-runtime","runner")}};
+  assert.equal(Module.resolveSaveLocations(entry,context).primaryDirectory,privateSave);
+  selection={ready:true,install};
+  assert.equal(fs.existsSync(path.join(gameRoot,"save")),false);
+  assert.deepEqual(fs.readdirSync(path.dirname(old)),["game"],"save presentation must not create private directories");
+  let call;
+  await Module.launchRuntime("ikemen",entry,{userDataDir,runtimeSettings:{},spawnDetachedChecked:async(...args)=>{call=args;return {};}});
+  assert.equal(call[0],install.executablePath);assert.equal(call[2].cwd,gameRoot);
+  assert.deepEqual(call[1],["-r",path.join("data","system.def")]);
+  assert.equal(entry.defaultSaveDir,path.join(gameRoot,"save"));
+  assert.equal(fs.readFileSync(path.join(old,"player-state.json"),"utf8"),"old private state");
+  assert.deepEqual(fs.readdirSync(path.dirname(old)),["game"]);
+  assert.equal(fs.existsSync(path.join(gameRoot,"save")),false,"upstream creates its own save folders");
+  const independent=Module.__test.prepareLaunch({...entry,gameId:"fresh"},{userDataDir:path.join(root,"fresh-data")},install);
+  assert.equal(independent.originalPaths,true);assert.equal(fs.existsSync(path.join(root,"fresh-data")),false);
+  const macos=path.join(gameRoot,"Engine.app","Contents","MacOS");fs.mkdirSync(macos,{recursive:true});
+  const appExecutable=path.join(macos,"runner");fs.writeFileSync(appExecutable,"original app runner");
+  const appLaunch=Module.__test.prepareLaunch(entry,{}, {...install,executablePath:appExecutable});
+  assert.equal(appLaunch.executablePath,appExecutable);assert.equal(appLaunch.wrapper,gameRoot);
+  assert.throws(()=>Module.__test.prepareLaunch({...entry,saveDirOverride:path.relative(process.cwd(),path.join(gameRoot,"save"))},{},install),/must be absolute/);
+});
+
 test("Ikemen stages an unchanged Mac app beside game assets and detects copied executable damage", t => {
   const root = temporary(t), gameRoot = path.join(root, "source"), runtimeRoot = path.join(root, "runtime");
   const entry = { ...game(gameRoot), gameId: "app-fixture" };
@@ -132,19 +174,20 @@ test("Ikemen Play preflights version requirements before installing", t => {
   assert.throws(() => Module.ensureRuntime(entry, context), /newer MUGEN/);
 });
 
-test("Ikemen aliases 3D resources and shrinks only untouched old copies", t => {
+test("Ikemen current overlay aliases new 3D resources and preserves existing player copies", t => {
   const root = temporary(t), source = path.join(root, "source"), managed = path.join(root, "managed"); fs.mkdirSync(source);
   fs.writeFileSync(path.join(source, "stage.glb"), "large immutable 3D model");
   fs.writeFileSync(path.join(source, "settings.json"), "author settings");
-  Module.__test.mergeAssets(source, managed);
+  require("../src/modules/shared/game-overlay").syncOverlay({ destination: managed, recordPath: path.join(root, "game-files.json"), layers: [{ source }], ...Module.__test.overlayRules });
   const model = path.join(managed, "stage.glb"); assert.equal(fs.lstatSync(model).isSymbolicLink(), true);
   fs.rmSync(model); fs.copyFileSync(path.join(source, "stage.glb"), model);
   fs.writeFileSync(path.join(managed, "settings.json"), "player settings");
-  Module.__test.minimizeLegacyResources(source, managed);
-  assert.equal(fs.lstatSync(model).isSymbolicLink(), true);
+  require("../src/modules/shared/game-overlay").syncOverlay({ destination: managed, recordPath: path.join(root, "game-files.json"), layers: [{ source }], ...Module.__test.overlayRules });
+  assert.equal(fs.lstatSync(model).isSymbolicLink(), false);
+  assert.equal(fs.readFileSync(model, "utf8"), "large immutable 3D model");
   assert.equal(fs.readFileSync(path.join(managed, "settings.json"), "utf8"), "player settings");
   fs.rmSync(model); fs.writeFileSync(model, "custom player model");
-  Module.__test.minimizeLegacyResources(source, managed);
+  require("../src/modules/shared/game-overlay").syncOverlay({ destination: managed, recordPath: path.join(root, "game-files.json"), layers: [{ source }], ...Module.__test.overlayRules });
   assert.equal(fs.readFileSync(model, "utf8"), "custom player model");
 });
 

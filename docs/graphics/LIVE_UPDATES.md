@@ -63,7 +63,7 @@ When only an upstream control changes and a row's contract identity stays the sa
 
 ### Paused content
 
-`preparationNotificationAPI: 1` provides `rsObserveFramePresenterPreparation`. Its versioned observer keeps the callback context through queued notices and unregistering. A readiness notice is posted to the producer queue without rendering synchronously, accepting a revision or creating a new source frame. A paused or static producer then retries its retained image with the same content identity. A redraw for changed parameters stays separate from real content progression, so temporal and interpolation history are preserved.
+`preparationNotificationAPI: 1` provides `rsObserveFramePresenterPreparation`. Its versioned observer keeps the callback context through queued notices and unregistering. A readiness notice is posted to the producer queue without rendering synchronously, accepting a revision or creating a new source frame. A paused or static producer then retries its retained image with the same content identity. A redraw for changed parameters stays separate from real content progression, so temporal and interpolation history are preserved. A decoded producer with content timestamps keeps its media time and interval through delayed preparation. Only a new decoded image starts a new interpolation interval; readiness notices and paused redraws never shorten the current one. Playback maps the shared generation phases to producer deadlines with one interval of lookahead, while file export writes them at their media timestamps.
 
 ## Dormant activation
 
@@ -88,7 +88,7 @@ After optional preparation has produced a child process's environment, the launc
 
 Main-process controls supply `runningPids` from the current sessions, and live preparation and validation require a matching `launch.json.pid`. When the binding has expired or is absent, an edit saves the preferences for the next launch without compiling or publishing a live plan. After asynchronous preparation, publication of the plan, shader selection and controls checks the same launch identity and active session again. A stopped or replaced session keeps the saved preferences and leaves the current launch's files alone. Callers that omit `runningPids` keep the standalone API contract.
 
-Some changes always wait for the next launch: models outside the model stores and selected files that the launch was given access to, a different neural provider, and temporal methods that need different scene inputs. The `graphicsInputs` inspection response includes `graphicsLive` for the Simple controls, without model or provider discovery for that binding check.
+Some changes always wait for the next launch: models outside the model stores and selected files that the launch was given access to, a different neural provider, temporal methods that need different scene inputs, and scene inputs or render-size control from an engine helper that the launch did not load. The `graphicsInputs` inspection response includes `graphicsLive` for the Simple controls, without model or provider discovery for that binding check.
 
 ## Live publication
 
@@ -113,8 +113,9 @@ Each native process reads the effects plan on its own serial queue. A directory 
 A live edit prepares only the rows it changes. Within one launch, an included or pack shader row, or a stage row without a Lossless Scaling model, reuses its earlier prepared result when the row, its capabilities, the runtime root, the host, the architecture, the frame inputs and the graphics settings are all unchanged, wherever the row sits in the chain. The order is still checked for every row. These rows are prepared again on every edit: custom and filter library shaders, downloadable collections, shader model operations, neural and XeSS rows, Lossless Scaling model rows and forced shader preparation. A new launch prepares every row again.
 
 XeSS compute requests use the latest registered host for each backend and
-operation. Requests arriving during an active queue scan remain queued for the
-next scan, including when launch preparation and live edits use separate workers.
+operation. A notification that arrives during a queue scan schedules one more
+scan right after it, including when launch preparation and live edits run on
+separate workers.
 The session's periodic liveness check also scans the queue to recover missed
 filesystem notifications.
 

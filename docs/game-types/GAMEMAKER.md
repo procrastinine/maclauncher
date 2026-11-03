@@ -76,7 +76,7 @@ Inspection reports contain game metadata gathered without running the game, plus
 
 ### Butterscotch
 
-[Butterscotch](https://github.com/ButterscotchRunner/Butterscotch) is the default runtime and runs Studio VM bytecode. MacLauncher Builds packages it with AppKit, OpenGL, miniaudio and physics support for the [WAD 8–17 VM formats](https://github.com/ButterscotchRunner/Butterscotch#game-compatibility). The original data is passed to the runner unchanged, and saves go to `userData/games/<gameId>/modules/gamemaker/saves/`.
+[Butterscotch](https://github.com/ButterscotchRunner/Butterscotch) is the default runtime and runs Studio VM bytecode. MacLauncher Builds packages it with AppKit, OpenGL, miniaudio and physics support for the [WAD 8–17 VM formats](https://github.com/ButterscotchRunner/Butterscotch#game-compatibility). The original data is passed to the runner unchanged. The working directory and default save location are the data file's original folder. An explicit save-folder override supplies `--save-folder` without moving the game data.
 
 #### Versions
 
@@ -94,19 +94,23 @@ Game launch arguments use the Mac package's `--game-arg` option, which preserves
 
 Games without arguments follow the usual [version order](../runtimes/README.md#versions).
 
+#### Save locations
+
+Butterscotch and OpenGMK keep the original game's save location. Import assigns a separate folder only when another library game uses the same effective save location. Existing explicit save-folder overrides take precedence. Assigning the folder leaves the game data, launch arguments and other runtime settings unchanged, and later launches keep using it.
+
 ### Classic (OpenGMK)
 
 [OpenGMK](https://github.com/OpenGMK/OpenGMK) is the Classic runtime. It runs GM8.0/8.1 exports with native window controls and input, and programmatic resizing keeps the native title controls and display bounds. MacLauncher Builds packages it with AppKit windows and input, OpenGL 4.1 and CoreAudio, and Runtimes lists each package's architectures and minimum macOS. The matching MacLauncher Builds release commit contains the exact upstream source, MacLauncher's patches and the build script; the package contains the executable, native dependencies and notices.
 
 OpenGMK needs no Wine, and before launch a check parses the assets and extension declarations without running GML or loading DLLs. The publisher's own releases contain only Windows binaries, so **Runtimes** lists the MacLauncher Builds packages.
 
-Original resources are read in place. Working files, saves, settings and highscores use `userData/games/<gameId>/modules/gamemaker/classic/writable/`. When a game opens a file for appending or for reading and writing, only that file is copied.
+Original resources are read in place. The interpreter runs from the original executable's folder, and working files, saves, settings and highscores keep the engine's original paths. An explicit save-folder override supplies `--working-directory`; ordinary Play creates no private writable folder or copy of the game. The asset check before launch is reused within the same preparation and launch only while the source content and the selected runtime are unchanged.
 
 #### Extensions and highscores
 
 For games that use the SuperSound extension, the **SuperSound string ABI** provides 22 symbols for mono and stereo WAV/Ogg decoding, playback, loops, pause and resume, frequency, DirectSound volume and pan, and byte-position, length and rate queries. Both load hints use resident decoding, limited to 64 MiB per file, 16 million samples per sound and 64 million samples in total, and initialization requires an active CoreAudio output callback. Missing symbols and mismatched types fail with an explicit error. Caster and other Windows extensions need their own native implementations; unused DLLs next to the game do not block Play.
 
-The highscore API, as defined in the [Game Maker 8 manual](https://web.engr.oregonstate.edu/~mjb/gamemaker/gmaker80.pdf), provides a ten-place table with `highscore_value`, `highscore_name`, `highscore_add` and `highscore_clear`, private persistence and length-limited names. The [MacLauncher Builds notes for OpenGMK](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/gamemaker/overlays/opengmk-macos/README.md) describe how the Mac version is built.
+The highscore API, as defined in the [Game Maker 8 manual](https://web.engr.oregonstate.edu/~mjb/gamemaker/gmaker80.pdf), provides a ten-place table with `highscore_value`, `highscore_name`, `highscore_add` and `highscore_clear`, persistent storage and length-limited names. The [MacLauncher Builds notes for OpenGMK](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/gamemaker/overlays/opengmk-macos/README.md) describe how the Mac version is built.
 
 ### Official GameMaker
 
@@ -145,7 +149,11 @@ Global installations use `~/Library/Application Support/maclauncher/runtimes/gam
 - Local Igor: `tools/vendor-<tool-version>-<arch>/files/Igor`.
 - Runtime package downloads: `artifacts/<runtime-version>/`.
 
-Each game gets a small copy of the runner under `userData/games/<gameId>/modules/gamemaker/official-runner-<version>/`, with a unique bundle ID and an ad hoc signature. The shared vendor runtime stays unchanged. A bundle-ID alias routes saves to the game's `official-saves/` directory; an existing alias that points elsewhere is left in place and not used. Forgetting the game removes the alias MacLauncher created. AppKit foreground activation runs asynchronously for the launched process and needs no System Events permission.
+The runner receives the original game data and uses its parent folder as the working directory. Import compares the selected runner's bundle identifier with the original native game's identifier. When the identifiers match, the native save identity stays unchanged. When a shared runner replaces the original identity, saves use the original game's Application Support folder. Different original bundle identifiers retain separate save identities even with the same selected runner. For loose game data without an original Mac identifier, saves use `saves/<gameId>/` inside the original game folder. A save-identity collision with another library entry also selects a separate per-game folder. For an original Mac app, that folder stays beside the app, outside its signed bundle. Existing explicit overrides remain unchanged. If the selected runner's identity is unavailable, import leaves the direct launch unchanged.
+
+Without a save-folder adjustment or graphics helper, Play uses the installed runner directly. An active software OpenGL helper requires a separately signed copy under the game's launcher data and preserves the vendor bundle identity. A selected save folder uses a separate runner identity and a bundle-ID alias to that folder. The alias identity includes the chosen destination; an existing alias that points elsewhere is kept, and the launch stops with an error. Runner copies use filesystem cloning where supported, their source and staged file hashes are checked, and the installed vendor runtime stays unchanged. Forgetting the game removes only an alias MacLauncher created. AppKit foreground activation runs asynchronously for the launched process and needs no System Events permission.
+
+Private saves from MacLauncher 0.5.1 are recovered once into the matching current save folder. Existing files there stay unchanged, and a recovered file that differs is kept beside it under a conflict name. When the runner's identity is unavailable or the destination path is unsafe, the old files stay where they are and the reason is recorded, rather than being moved to a guessed folder.
 
 Shared graphics follows the selected runner's verified CPU architecture, so legacy Intel runners use Intel graphics providers while native ARM and universal runners keep their selected native architecture.
 

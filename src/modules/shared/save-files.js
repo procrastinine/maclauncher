@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("./copy-file");
 const path = require("node:path");
 const { randomUUID, createHash } = require("node:crypto");
 
@@ -40,11 +41,11 @@ function writeSaveWithBackup(filePath, encoded, { expectedHash } = {}) {
       if (backup) {
         // Never truncate a previous recovery backup (or its hard-link aliases)
         // while a copy is still in progress.
-        fs.copyFileSync(filePath, tempBackupPath, fs.constants.COPYFILE_EXCL);
+        cloneOrCopySync(filePath, tempBackupPath, { exclusive: true });
         fs.chmodSync(tempBackupPath, backup.mode & 0o777);
         fs.renameSync(tempBackupPath, backupPath);
       } else {
-        fs.copyFileSync(filePath, backupPath, fs.constants.COPYFILE_EXCL);
+        cloneOrCopySync(filePath, backupPath, { exclusive: true });
       }
     }
     assertCurrentHash();

@@ -16,6 +16,7 @@ const { stopProcessTree } = require("./process-stop");
 const { processStopBinding, requestProcessStop, afterProcessStop } = require("./process-lifecycle");
 const { createAbortError } = require("../modules/shared/runtime/download-utils");
 const { COMPLETION_DIAGNOSTIC_WAIT_MS } = require("./game-process-events");
+const { snapshotRuntimeState } = require("./runtime-state-snapshot.mjs");
 
 function listRuntimeManagers(registry) {
   const managers = new Map();
@@ -151,6 +152,7 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
       ? callHost.withSignal(signal, "confirmRuntimeInstall", plan, entry) : callHost("confirmRuntimeInstall", plan, entry),
     onPreparationChange: state => emit("preparation", state),
     onRuntimeStateChange: change => emit("runtimeChanged", change || {}),
+    onSessionEvent: (entry, event) => emit("sessionEvent", { gameId: entry.gameId, gamePath: entry.gamePath, event }),
     onEntryChange: (entry, patch) => {
       const stored = GameStore.readGameRecord(userDataDir, entry.gameId);
       if (stored) {
@@ -173,8 +175,8 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
   function managerState(manager, settings) {
     try {
       const state = manager.getState({ settings: settings?.runtimes?.[manager.id], runtimeSettings: settings?.runtimes, userDataDir, logger });
-      return { label: manager.label || manager.id, ...state, id: manager.id,
-        ui: registry.getRuntimeManagerUi(manager.id) || state.ui || manager.ui || undefined };
+      return snapshotRuntimeState({ label: manager.label || manager.id, ...state, id: manager.id,
+        ui: registry.getRuntimeManagerUi(manager.id) || state.ui || manager.ui || undefined });
     } catch (error) {
       logger.error(`[runtime:${manager.id}] state failed`, error.message);
       return { id: manager.id, label: manager.label || manager.id, installed: [],
@@ -182,6 +184,7 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     }
   }
   const metadata = require("./game-metadata").createGameMetadataService({ userDataDir, registry, app, ui, logger, runtimeCoordinator, downloads,
+    resolveRuntimeId: (entry, settings) => launcher.resolveEntryRuntimeId(entry, settings),
     confirmRuntimeInstall: plan => callHost("confirmRuntimeInstall", plan),
     onRuntimeStateChange: change => emit("runtimeChanged", change || {}) });
   const relocation = require("./game-relocation").createGameRelocation({ userDataDir, registry, metadata,
@@ -376,7 +379,7 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
       if (typeof availability?.available !== "boolean") throw new Error("Library work requires an availability result.");
       let fresh = entry, metadataError = null;
       if (refreshMetadata && availability.available) {
-        try { fresh = await metadata.refreshEntry(currentEntry(entry), settings, { availability }); }
+        try { fresh = await metadata.refreshEntry(currentEntry(entry), settings, { availability, persist: false }); }
         catch (error) { metadataError = error.message; }
       }
       if (shuttingDown) return null;
@@ -470,7 +473,30 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
         appVersion: appInfo.version || null, toolsButtonVisible: options.toolsButtonVisible ?? launcher.resolveToolsButtonVisible(entry, launcher.loadSettings())
       });
     },
-    cancelDownload: id => downloads.cancel(id)
+    cancelDownload: id => downloads.cancel(id),
+    // The game's running session lives in this lane, so settings that apply
+    // live reach its module here.
+    runtimeSettingsChanged(entry, runtimeId, settings) {
+      return registry.getModule(resolveModuleId(entry))?.runtimeSettingsChanged?.(entry, runtimeId, settings) === true;
+    },
+    // Settles runtime removals that an exit interrupted, removes derived data
+    // that modules and core services declare, then superseded runtime versions that Play installed on its own, through
+    // Runtimes' removal. Never runs while a game runs and never fails the caller.
+    async maintainStorage() {
+      if (shuttingDown) return null;
+      const StorageMaintenance = require("./storage-maintenance");
+      // The launcher answers for preparations and downloads in other lanes; a
+      // launcher that cannot answer counts as busy.
+      const busy = async () => shuttingDown || Object.keys(getRunning() || {}).length > 0 ||
+        await callHost("storageUpkeepBusy").then(value => value !== false, () => true);
+      if (!await busy()) require("./coordinated-runtime-managers").settleInterruptedRemovals({ userDataDir, managers });
+      const summary = await StorageMaintenance.maintainStorage({ userDataDir, stores: StorageMaintenance.listStores(registry), running: getRunning(), busy, logger });
+      if (summary.skipped || summary.interrupted || await busy()) return summary;
+      const { removed } = await require("./runtime-install-origins").pruneSuperseded({ userDataDir, managers, settings: launcher.loadSettings(),
+        gameIds: GameStore.listGameIds(userDataDir), isRunning: busy, logger,
+        remove: ({ managerId, ...payload }) => operations.runtimeAction(managerId, "uninstall", payload) });
+      return { ...summary, runtimes: removed };
+    }
   };
   for (const method of ["launchEntry", "refreshSaveLocations", "saveInfo", "selectSaveLocation", "save", "patcher"]) {
     const operation = operations[method];

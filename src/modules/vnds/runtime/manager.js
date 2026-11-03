@@ -13,7 +13,7 @@ function createManager(dependencies = {}) {
           !manifest.files.some(file => file.path === "engine/conf.lua") || !manifest.files.some(file => file.path === "engine/LICENSE"))
         throw new Error("The VNDS-LOVE package has an unsupported interpreter profile.");
     },
-    async verifyPayload(selected, { signal } = {}) { signal?.throwIfAborted(); Bundled.verifyPayload(selected.root, selected.declaration); },
+    async verifyPayload(selected, { signal } = {}) { signal?.throwIfAborted(); Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency); },
     dependencies });
 }
 const manager = createManager();

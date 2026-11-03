@@ -1,4 +1,7 @@
 const fs = require("node:fs");
+const { hasFineChangeTime } = require("../file-time");
+const { createVerifiedIdentityCache } = require("./verified-identity");
+const { cloneOrCopySync } = require("../copy-file");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const Upstream = require("./upstream");
@@ -41,7 +44,7 @@ function createManagedJavaTool(config) {
   }
   const source = config.sourceUrl || `https://github.com/${upstream.repository}/releases`;
   const repositoryId = upstream.repository || source;
-  const states = new Map(), pending = new Map(), verified = new Map();
+  const states = new Map(), pending = new Map(), verified = createVerifiedIdentityCache({ maximum: 64 });
   function normalizeVersion(value) {
     const version = String(value || "").replace(/^v(?=\d)/, "");
     if (!/^[0-9][0-9A-Za-z._-]{0,79}$/.test(version)) throw new Error(`Invalid ${label} version.`);
@@ -92,19 +95,20 @@ function createManagedJavaTool(config) {
         (record.artifact.sha256 && record.archiveSha256 !== record.artifact.sha256) ||
         !record.files || Object.keys(record.files).length > LIMITS.entries || !record.files[jarName]) return null;
       const identities = [];
+      let fine = hasFineChangeTime(stat);
       for (const [relative, item] of Object.entries(record.files)) {
         if (!safeRelative(relative) || !/^[a-f0-9]{64}$/.test(item.sha256)) return null;
         const stat = fs.lstatSync(path.join(root, "files", relative));
         if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== item.bytes) return null;
+        fine = fine && hasFineChangeTime(stat);
         identities.push([relative, stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs]);
       }
       const identity = JSON.stringify([stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs, identities]);
-      if (verification !== "status" && verified.get(root) !== identity) {
+      if (verification !== "status" && !verified.verify(root, { identity: () => fine ? identity : null, verify: () => {
         for (const [relative, item] of Object.entries(record.files))
-          if (Native.hashFile(path.join(root, "files", relative)) !== item.sha256) return null;
-        if (verified.size >= 64) verified.delete(verified.keys().next().value);
-        verified.set(root, identity);
-      }
+          if (Native.hashFile(path.join(root, "files", relative)) !== item.sha256) return false;
+        return true;
+      } })) return null;
       return { ...record, root, installDir: root, jarPath: path.join(root, "files", jarName),
         executablePath: path.join(root, "files", jarName), ready: true, removable: true, sectionId: "default" };
     } catch { return null; }
@@ -194,7 +198,7 @@ function createManagedJavaTool(config) {
     if (config.standaloneJar === true) {
       const target = path.join(destination, jarName);
       fs.mkdirSync(path.dirname(target), { recursive: true });
-      fs.copyFileSync(archive, target);
+      cloneOrCopySync(archive, target);
       return jarName;
     }
     const zip = readZipEntries(archive);
@@ -330,6 +334,7 @@ function createManagedJavaTool(config) {
   const manager = { id, label, upstream, distributionRequired: false, delivery: { included: "none", catalog: "remote", sourceBuild: false },
     ui: { groupId: "tools", tabLabel: "Tools", sectionLabel: label, order, memberOrder: order, management: "managed" },
     normalizeVersion, normalizeSettings, getState, refreshCatalog, installRuntime,
+    trashFirst: true,
     uninstallRuntime: async ({ userDataDir, version, installDir } = {}) => {
       const target = installRoot(userDataDir, version);
       if (installDir && path.resolve(installDir) !== target) throw new Error(`The selected directory does not belong to ${label}.`);

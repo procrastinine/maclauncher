@@ -62,3 +62,14 @@ test('a running or preparing game retains Stop or Cancel after capability change
   assert.match(render({ isRunning: true }), /aria-label="Stop Input"/);
   assert.match(render({ preparation: { phase: 'prepare' } }), /aria-label="Cancel Input"/);
 });
+test('a session entry lists what it applies to, and the last remove button says it ends the session', () => {
+  const state = require('./library-layout-fixture').createLibraryFixture();
+  const render = sessionTargets => renderToStaticMarkup(React.createElement(GameDetails, {
+    g: { ...state.recents[0], ephemeral: true, sessionTargets }, state, moduleInfo: state.modules[0], actions: {}, moduleActionResults: {}, moduleActionBusy: {}
+  }));
+  const several = render([{ id: 'w3', label: 'Document', detail: 'TextEdit' }, { id: 'd1', label: 'Studio Display', detail: 'Display' }]);
+  assert.match(several, />Applied to</);
+  assert.match(several, /aria-label="Remove Document \(TextEdit\)"/);
+  assert.match(several, /aria-label="Remove Studio Display \(Display\)"/);
+  assert.match(render([{ id: 'w3', label: 'Document' }]), /aria-label="Remove Document and end the session"/);
+});

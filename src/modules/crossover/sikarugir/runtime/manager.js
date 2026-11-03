@@ -72,29 +72,7 @@ function createManager({ discoverCatalog = Catalog.discover, dependencies = {} }
     },
     async resolveForPlay(entry, context) {
       throwIfAborted(context.signal);
-      const current = manager.resolveSelection(entry, context.settings, context.userDataDir, { signal: context.signal });
-      if (current.ready || !current.version) return current;
-      try {
-        await manager.refreshCatalog({ userDataDir: context.userDataDir, signal: context.signal, logger: context.logger, force: true });
-      } catch (error) {
-        throwIfAborted(context.signal);
-        if (error.name === "AbortError" || error.code === "ABORT_ERR") throw error;
-        const pin = base.core.catalog.find(row => row.version === current.version);
-        if (!Catalog.validateEntry(pin)) throw error;
-        const requirements = manager.getState({ userDataDir: context.userDataDir }).catalog.versionRequirements[current.version];
-        if (requirements?.installReason) throw new Error(requirements.installReason);
-        base.core.rememberResolvedVersion({ userDataDir: context.userDataDir, entry: pin });
-        context.logger?.warn?.(`[sikarugir] version refresh failed; retaining exact download ${pin.version}: ${error.message}`);
-        context.onRuntimeStateChange?.();
-        return current;
-      }
-      context.onRuntimeStateChange?.();
-      const selection = manager.resolveSelection(entry, context.settings, context.userDataDir, { signal: context.signal });
-      const state = manager.getState({ userDataDir: context.userDataDir, settings: context.settings?.runtimes?.sikarugir });
-      if (!selection.ready && !state.catalog.installableVersions.includes(selection.version))
-        throw new Error(state.catalog.versionRequirements[selection.version]?.installReason ||
-          "The selected Wine download is no longer available. Select an available version in Runtimes or the game settings.");
-      return selection;
+      return manager.resolveSelection(entry, context.settings, context.userDataDir, { signal: context.signal });
     },
     getState(options = {}) {
       const state = base.getState(options), requirements = { ...state.catalog.versionRequirements };

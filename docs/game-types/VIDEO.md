@@ -22,7 +22,7 @@ mpv keeps its seeking, pause, volume, resizing and fullscreen controls. The init
 
 **Settings → Video**, under the mpv player heading, holds the playback defaults, and each video's mpv settings can override them.
 
-**uosc controls** and **Timeline previews** are on by default. [uosc](https://github.com/tomasklaen/uosc) provides the timeline and playback controls, and [thumbfast](https://github.com/po5/thumbfast) generates preview images while the pointer hovers over that timeline. Plugins install only through explicit Install, Download or Update actions. A missing plugin never blocks Play or asks for a download; playback then uses mpv's standard on-screen controls, which also remain available when uosc is disabled.
+**uosc controls** and **Timeline previews** are on by default. [uosc](https://github.com/tomasklaen/uosc) provides the timeline and playback controls, and [thumbfast](https://github.com/po5/thumbfast) generates preview images while the pointer hovers over that timeline. When an enabled plugin is missing, Play offers it as an optional download and continues preparing playback once it is installed; **Skip** plays without that plugin. Without uosc, playback uses mpv's standard on-screen controls, which also remain available when uosc is disabled. The Install, Download and Update actions also install and update plugins.
 
 Upstream mpv and the [decoded GPU builds](#output-paths) load the same player configuration, scripts and plugin settings. Decoded GPU playback runs thumbfast's image-encoding worker in a separate mpv command-line player, and previews stay off when no compatible worker is installed.
 
@@ -34,7 +34,7 @@ Upstream mpv and the [decoded GPU builds](#output-paths) load the same player co
 
 ### Plugin updates
 
-uosc and thumbfast versions come from their upstream projects. **Refresh** lists the recent stable uosc releases and the current thumbfast commit, and shows when a newer version than the installed one is available. **Install** uses the newest listed version. When no list has been fetched yet, the same Install action fetches it first and then continues with the installation. Installed versions stay usable without a network connection; status checks, playback and removal make no network requests.
+uosc and thumbfast versions come from their upstream projects. **Refresh** lists the recent stable uosc releases and the current thumbfast commit, and shows when a newer version than the installed one is available. **Install** uses the newest listed version. When no list has been fetched yet, the same Install action fetches it first and then continues with the installation. Installed versions stay usable without a network connection; status checks, playback with installed plugins and removal make no network requests.
 
 - A uosc version is a stable release that publishes a uosc ZIP and configuration file, `uosc.zip` and `uosc.conf` or renamed files with the same extensions. Each of the two downloads must match the size GitHub reports for it and, when the release publishes one, its SHA-256 digest. The installation includes the repository's license notice at the release's tagged commit when one exists; a notice not named `LICENSE` is found through GitHub's license lookup. The release's `ziggy` helper must be a macOS executable with an Apple Silicon or Intel slice that links only system libraries.
 - thumbfast publishes no releases, so a thumbfast version is a snapshot of the newest commit of its default branch, labeled by commit date, such as **2026-06-28 snapshot**. The script and its license download from addresses fixed to that commit.
@@ -60,7 +60,9 @@ Browse and Add controls select local files and folders, and typed lists take one
 
 ## Filters and effects
 
-New videos use **Lanczos · Sharp** scaling. The graphics chain has independent Downsample and Upscale stages, each with filter and output-size controls. Turning Graphics off preserves the chain and falls back to basic bilinear resizing. The native filter list comes from the installed player and updates during playback through its live connection, while the player version and decoder stay fixed for that session.
+New videos use **Lanczos · Sharp** scaling. The graphics chain has independent Downsample and Upscale stages, each with filter and output-size controls. Turning Graphics off preserves the chain and falls back to basic bilinear resizing. Video playback supplies images only, so methods that need matching renderer depth, motion or camera data are not offered: scene-temporal upscaling and the scene variants of MetalFX, FSR 3 and XeSS frame generation. Temporal methods that use only image history, such as MLX, and image-pair frame generation, such as MetalFX image interpolation, are available. A saved row that holds a scene method reads **Inactive** with the reason and offers a method of the same kind that works with video. The native filter list comes from the installed player and updates during playback through its live connection, while the player version and decoder stay fixed for that session.
+
+When decoded images carry content timestamps, frame generation fills the full interval between successive images, also at low frame rates and in slowed playback. Media timestamps drive image processing, and the player's presentation deadlines set the playback speed. Interpolated playback keeps one decoded interval of lookahead. File export uses the same generation timeline and writes the generated in-between images at their media timestamps.
 
 ### Output paths
 

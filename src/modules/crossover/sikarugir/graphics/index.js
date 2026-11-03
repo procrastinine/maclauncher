@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopy } = require("../../../shared/copy-file");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { versionAtLeast, systemVersionSync } = require("../../../shared/runtime/bundled-native");
@@ -144,7 +145,7 @@ async function cloneLoaderFile(source, destination, signal) {
     }
     return;
   }
-  await fs.promises.copyFile(source, destination, fs.constants.COPYFILE_FICLONE | fs.constants.COPYFILE_EXCL);
+  await cloneOrCopy(source, destination, { signal, exclusive: true });
   await fs.promises.chmod(destination, sourceStat.mode & 0o777);
   signal?.throwIfAborted();
 }

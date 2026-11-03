@@ -5,6 +5,8 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const test = require("node:test");
 const Renpy = require("../src/modules/renpy/main");
+const Sdk = require("../src/modules/renpy/runtime/sdk");
+const Steam = require("../src/modules/renpy/steam-consumer");
 
 test("Ren'Py SDK and patched games preserve quoted arguments after their project and run parameters", async t => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "renpy-game-arguments-")));
@@ -25,6 +27,9 @@ test("Ren'Py SDK and patched games preserve quoted arguments after their project
     const entry = { gameId: `arguments-${runtimeId}`, moduleId: "renpy", gamePath: gameRoot, contentRootDir: gameRoot,
       runtimeId, runtimeData: { sdk: { version: "8.5.3" } },
       moduleData: { major: 8, version: "8.5.3", baseName: "Game" } };
+    const previous = Sdk.resolveWrapperDir(userDataDir, entry.gameId, "8.5.3");
+    fs.mkdirSync(path.join(previous, "game/saves"), { recursive: true });
+    fs.writeFileSync(path.join(previous, "game/saves/retained.save"), "previous private bytes");
     let received;
     const result = await Renpy.launchRuntime(runtimeId, entry, { userDataDir, settings: {}, gameArguments,
       spawnDetachedChecked(command, args, options) {
@@ -35,7 +40,8 @@ test("Ren'Py SDK and patched games preserve quoted arguments after their project
     const observed = result.stdout.split("\0").slice(0, -1);
     assert.deepEqual(observed.slice(-gameArguments.length), gameArguments, runtimeId);
     if (runtimeId === "sdk") {
-      assert.deepEqual(observed.slice(0, 2), [received.options.cwd, "run"]);
+      assert.deepEqual(observed.slice(0, 2), [gameRoot, "run"]);
+      assert.equal(received.options.cwd, gameRoot);
       assert.equal(received.command, path.join(sdk, "renpy.sh"));
     } else {
       assert.deepEqual(observed, gameArguments);
@@ -43,5 +49,45 @@ test("Ren'Py SDK and patched games preserve quoted arguments after their project
       assert.equal(received.command, path.join(gameRoot, "Game.sh"));
     }
     assert.equal(fs.existsSync(path.join(received.options.cwd, "unexpected")), false);
+    assert.deepEqual(fs.readdirSync(previous), ["game"]);
+    assert.equal(fs.readFileSync(path.join(previous, "game/saves/retained.save"), "utf8"), "previous private bytes");
+    assert.equal(fs.lstatSync(path.join(gameRoot, "game")).isSymbolicLink(), false);
+    assert.equal(fs.existsSync(path.join(previous, "game/script.rpy")), false);
+  }
+});
+
+
+test("Ren'Py Steam compatibility adds only its helper search path and keeps the original SDK and patched project routes", async t => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "renpy-original-steam-")));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const userDataDir = path.join(root, "data"), gameRoot = path.join(root, "original"), sdk = path.join(userDataDir, "runtimes/sdk/8/8.5.3");
+  for (const directory of [gameRoot, sdk]) {
+    const lib = path.join(directory, "lib/py3-mac-universal");fs.mkdirSync(lib, { recursive: true });
+    const executable = Buffer.alloc(32);executable.writeUInt32BE(0xfeedfacf, 0);executable.writeUInt32BE(0x0100000c, 4);executable.writeUInt32BE(2, 12);
+    fs.writeFileSync(path.join(lib, "renpy"), executable, { mode: 0o755 });
+    fs.writeFileSync(path.join(directory, directory === sdk ? "renpy.sh" : "Game.sh"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  }
+  fs.mkdirSync(path.join(gameRoot, "game"));fs.writeFileSync(path.join(gameRoot, "game/script.rpy"), "label start:\n    return\n");
+  t.mock.method(Steam, "inspectGameSteamConsumer", () => ({ required: true }));
+  t.mock.method(Steam, "prepareGameSteam", async options => {
+    assert.equal(options.gameRoot, gameRoot);
+    const bootstrap = Steam.ensureBootstrap(options.wrapperDir, { gameRoot, python: options.python, runtimeExecutable: options.runtimeExecutable,
+      libraryPath: path.join(root, "libsteam_api.dylib"), appId: 264380 });
+    return { bootstrap, environment: { ...options.baseEnvironment, RENPY_SEARCHPATH: "/first::/second" } };
+  });
+  for (const runtimeId of ["sdk", "patched"]) {
+    const entry = { gameId: runtimeId, gamePath: gameRoot, contentRootDir: gameRoot, runtimeId,
+      runtimeData: { sdk: { version: "8.5.3" } }, moduleData: { major: 8, version: "8.5.3", baseName: "Game" } };
+    let received;
+    await Renpy.launchRuntime(runtimeId, entry, { userDataDir, settings: {},
+      spawnDetachedChecked(command, args, options) { received = { command, args, options };return { pid: 42 }; } });
+    assert.equal(received.options.cwd, gameRoot);
+    assert.deepEqual(received.args, runtimeId === "sdk" ? [gameRoot, "run"] : []);
+    const helper = Sdk.resolveBootstrapDir(userDataDir, entry.gameId, runtimeId === "sdk" ? "8.5.3" : "patched-8.5.3");
+    assert.equal(received.options.env.RENPY_SEARCHPATH, "/first::/second::" + path.join(helper, "game"));
+    assert.equal(fs.readdirSync(path.join(helper, "game")).length, 1);
+    assert.equal(fs.existsSync(path.join(helper, "game/script.rpy")), false);
+    assert.equal(fs.existsSync(Sdk.resolveWrapperDir(userDataDir, entry.gameId, "8.5.3")), false);
+    assert.equal(fs.readFileSync(path.join(gameRoot, "game/script.rpy"), "utf8"), "label start:\n    return\n");
   }
 });

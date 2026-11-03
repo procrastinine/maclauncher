@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../shared/copy-file");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const GameData = require("../shared/game-data");
@@ -18,10 +19,10 @@ function inspectEntry(entry) {
 function privateProject(root, directory, { stringEncryption = "automatic" } = {}) {
   root = path.resolve(root);
   if (!["automatic", "xor", "none", "mdl"].includes(stringEncryption)) throw new Error("Choose a supported string decoding mode.");
-  const destination = path.join(directory, "project");
+  const destination = path.join(directory, "configured-project", stringEncryption);
   fs.mkdirSync(destination, { recursive: true });
   const skip = new Set(["key.toml", "savedata", "savedata_rs", ".ds_store"]);
-  const sourceNames = new Set();
+  const sourceNames = new Set(["savedata"]);
   for (const item of fs.readdirSync(root, { withFileTypes: true })) {
     if (skip.has(item.name.toLowerCase())) continue;
     const source = path.join(root, item.name), target = path.join(destination, item.name);
@@ -38,45 +39,63 @@ function privateProject(root, directory, { stringEncryption = "automatic" } = {}
   if (!fs.existsSync(keyPath) && original) {
     const file = path.join(root, original);
     if (fs.statSync(file).size > 65536 || fs.lstatSync(file).isSymbolicLink()) throw new Error("The original Siglus key configuration cannot be imported safely.");
-    fs.copyFileSync(file, keyPath); fs.chmodSync(keyPath, 0o600);
+    cloneOrCopySync(file, keyPath); fs.chmodSync(keyPath, 0o600);
   }
   if (stringEncryption !== "automatic") {
     let text = fs.existsSync(keyPath) ? fs.readFileSync(keyPath, "utf8") : "";
+    const previous = text;
     if (Buffer.byteLength(text) > 65536 || fs.lstatSync(keyPath, { throwIfNoEntry: false })?.isSymbolicLink()) throw new Error("Private Siglus key configuration is invalid.");
     text = text.replace(/^\s*override_string_encryption\s*=.*\r?\n?/gm, "").replace(/\s*$/, "") + `\noverride_string_encryption = "${stringEncryption}"\n`;
-    const temporary = keyPath + `.tmp-${crypto.randomUUID()}`;
-    try { fs.writeFileSync(temporary, text, { mode: 0o600, flag: "wx" }); fs.renameSync(temporary, keyPath); } finally { fs.rmSync(temporary, { force: true }); }
+    if (text !== previous) {
+      const temporary = keyPath + `.tmp-${crypto.randomUUID()}`;
+      try { fs.writeFileSync(temporary, text, { mode: 0o600, flag: "wx" }); fs.renameSync(temporary, keyPath); } finally { fs.rmSync(temporary, { force: true }); }
+    }
   }
   return destination;
 }
 
+function saveDirectory(entry, info = entry.moduleData || {}) {
+  const original = path.resolve(entry.contentRootDir || entry.gamePath);
+  if (entry.saveDirOverride) return entry.saveDirOverride;
+  if (info.engineKind === "reallive") return process.env.REALLIVE_SAVE_DIR || path.join(original, "savedata_rs");
+  if (info.engineKind === "avg32") return process.env.AVG32_SAVE_DIR || original;
+  return path.join(original, "savedata");
+}
 function prepareLaunch(entry, context, install) {
   const info = inspectEntry(entry), original = path.resolve(entry.contentRootDir || entry.gamePath), directory = moduleRoot(entry, context), settings = context.runtimeSettings || {};
   fs.mkdirSync(directory, { recursive: true });
   const encoding = settings.encoding || "auto";
   if (!ENCODINGS.has(encoding)) throw new Error("Choose a supported text encoding.");
-  const root = info.engineKind === "siglus" ? privateProject(original, directory, settings) : original;
-  const saves = entry.saveDirOverride || (info.engineKind === "siglus" ? path.join(root, "savedata") : path.join(directory, "saves"));
+  const stringEncryption = settings.stringEncryption || "automatic";
+  if (!["automatic", "xor", "none", "mdl"].includes(stringEncryption)) throw new Error("Choose a supported string decoding mode.");
+  // Siglus exposes key/save overrides through the project layout only. The
+  // ordinary automatic launch needs neither an adapter tree nor private saves.
+  const adapted = info.engineKind === "siglus" && (stringEncryption !== "automatic" || entry.saveDirOverride);
+  const root = adapted ? privateProject(original, directory, settings) : original;
+  const saves = saveDirectory(entry, info);
   if (!path.isAbsolute(saves)) throw new Error("Save directory must be absolute.");
-  fs.mkdirSync(saves, { recursive: true });
-  if (info.engineKind === "siglus" && entry.saveDirOverride) {
+  if (adapted) {
+    fs.mkdirSync(saves, { recursive: true });
     const link = path.join(root, "savedata");
     const prior = fs.lstatSync(link, { throwIfNoEntry: false });
     if (prior && !prior.isSymbolicLink()) throw new Error("Move the existing private Siglus saves before changing their directory.");
-    if (prior) fs.unlinkSync(link);
-    fs.symlinkSync(saves, link);
+    const matches = prior && fs.readlinkSync(link) === saves;
+    if (prior && !matches) fs.unlinkSync(link);
+    if (!matches) fs.symlinkSync(saves, link);
   }
   entry.defaultSaveDir = saves;
   entry.moduleData = { ...entry.moduleData, ...info };
-  return { root, original, directory, saves, info,
+  const env = { ...process.env, SIGLUS_CACHE_DIR: path.join(directory, "cache") };
+  if (entry.saveDirOverride && info.engineKind === "reallive") env.REALLIVE_SAVE_DIR = saves;
+  if (entry.saveDirOverride && info.engineKind === "avg32") env.AVG32_SAVE_DIR = saves;
+  return { root, original, directory: original, saves, info,
     args: ["--run", install.libraryPath, root, ...(info.engineKind === "siglus" ? [] : [encoding])],
-    env: { ...process.env, REALLIVE_SAVE_DIR: saves, AVG32_SAVE_DIR: saves, SIGLUS_CACHE_DIR: path.join(directory, "cache") } };
+    env };
 }
 function resolveSaveLocations(entry, context) {
-  const directory = moduleRoot(entry, context), info = entry.moduleData || {};
-  const saves = entry.saveDirOverride || (info.engineKind === "siglus" ? path.join(directory, "project", "savedata") : path.join(directory, "saves"));
+  const saves = saveDirectory(entry);
   let exists = false;
   try { exists = fs.statSync(saves).isDirectory(); } catch {}
-  return { primaryDirectory: saves, directories: [{ directory: saves, exists, source: "Native interpreter private saves", confidence: "exact", label: "Saves" }] };
+  return { primaryDirectory: saves, directories: [{ directory: saves, exists, source: "Native interpreter saves", confidence: "exact", label: "Saves" }] };
 }
-module.exports = { moduleRoot, inspectEntry, privateProject, prepareLaunch, resolveSaveLocations, ENCODINGS };
+module.exports = { moduleRoot, inspectEntry, privateProject, prepareLaunch, resolveSaveLocations, saveDirectory, ENCODINGS };

@@ -2,10 +2,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {spawn} = require('node:child_process');
 const {once} = require('node:events');
+const {untilTestEnds}=require('./helpers/fixture-process');
 
 async function childProcess(t, ignoreTerm) {
   const child = spawn(process.execPath, ['-e',
-    (ignoreTerm ? "process.on('SIGTERM',()=>{});" : '') + "process.stdout.write('ready\\n');setInterval(()=>{},1000);"],
+    (ignoreTerm ? "process.on('SIGTERM',()=>{});" : '') + "process.stdout.write('ready\\n');"+untilTestEnds],
   {detached:true,stdio:['ignore','pipe','pipe']});
   t.after(() => { if(child.exitCode==null&&child.signalCode==null) try {process.kill(-child.pid,'SIGKILL');} catch {} });
   await once(child.stdout,'data');

@@ -36,13 +36,16 @@ function createManager({commonManager, legacyManager, ...dependencies} = {}) {
       const unified = commonManager.resolveSelection(entry, settings, userDataDir, {...options, version:requested});
       if (hasArt(unified) || commonManager.core.listDiscoveredCatalog({userDataDir}).some(pin => pin.version === requested && pinSupportsArt(pin, userDataDir)))
         return withOwner(unified, commonManager);
-      return withOwner(previous, legacy);
+      options = {...options};
+      delete options.version;
     }
     const unified = commonManager.resolveSelection(entry, settings, userDataDir, {...options,
       compatible:pin => pinSupportsArt(pin, userDataDir) && (!options.compatible || options.compatible(pin))});
     if (hasArt(unified)) return withOwner(unified, commonManager);
-    const previous = legacy.resolveSelection(entry, settings, userDataDir, options);
-    if (previous.ready) return withOwner(previous, legacy);
+    if (!requested) {
+      const previous = legacy.resolveSelection(entry, settings, userDataDir, options);
+      if (previous.ready) return withOwner(previous, legacy);
+    }
     const state = commonManager.getState({userDataDir}), pins = commonManager.core.listDiscoveredCatalog({userDataDir});
     const version = managerDefaultVersion({listed:pins.filter(pin => pinSupportsArt(pin, userDataDir) &&
       !state.catalog.versionRequirements[pin.version]?.installReason).map(pin => pin.version).sort(compareRuntimeVersions),
@@ -60,7 +63,14 @@ function createManager({commonManager, legacyManager, ...dependencies} = {}) {
       return selected.managerId === commonManager.id ? selected : commonManager.resolveSelection(entry, settings, userDataDir, options);
     },
     refreshCatalog:options => commonManager.refreshCatalog(options),
-    installRuntime:options => owner(options).installRuntime(options),
+    async installRuntime(options = {}) {
+      const selected = resolveSelection(null, options.settings, options.userDataDir, options);
+      if (selected.ready && selected.managerId === legacy.id) return selected.install;
+      const sharedOptions = {...options, version:selected.version,
+        compatible:pin => pinSupportsArt(pin, options.userDataDir) && (!options.compatible || options.compatible(pin))};
+      delete sharedOptions.legacyAdapter;
+      return commonManager.installRuntime(sharedOptions);
+    },
     importRuntime:options => owner(options).importRuntime(options),
     registerCustomRuntime:options => owner(options).registerCustomRuntime(options),
     uninstallRuntime:options => owner(options).uninstallRuntime(options),
@@ -96,7 +106,7 @@ function requirements(entry, context) {
   if (selected.ready) return [];
   const managerId = selected.managerId || manager.id;
   return [{managerId, version:selected.version, ...(selected.discoveryRequired ? {discoveryRequired:true} : {}),
-    installOptions:managerId === manager.id ? {legacyAdapter:true} : {}, label:manager.label}];
+    label:manager.label}];
 }
 async function resolveForLaunch(entry, context, {prepareSupplier} = {}) {
   const selected = manager.resolveSelection(entry, context.settings, context.userDataDir);

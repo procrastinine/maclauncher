@@ -2,6 +2,7 @@ const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
 const { spawn, execFileSync } = require("node:child_process"), { once } = require("node:events");
 const Supervisor = require("../src/modules/android/service-processes");
+const { untilTestEnds } = require("./helpers/fixture-process");
 test("profile preparation overlaps owners and retires every late acquisition",async t=>{
   for(const mode of ["ready","cancel","failure"])await t.test(mode,async t=>{
     const broker=require("../src/modules/android/platform-services/client"),pending=new Map(),closed=[];let released=0,settled=false;
@@ -121,7 +122,7 @@ test("a supervisor-owned presenter supplies the app gesture identity until eithe
     const channel=new net.Socket({fd:5});channel.write(frame({op:'identity',pid:123,hostPid:process.pid}));receive(channel,value=>process.send(value),error=>{throw error;});
     process.on('message',value=>channel.write(frame(value)));
   `],{stdio:owner.stdio(["ignore","ignore","pipe","ipc"])});
-  const presenter=spawn(process.execPath,["-e","setInterval(()=>{},1000)"],{stdio:"ignore"});
+  const presenter=spawn(process.execPath,["-e",untilTestEnds],{stdio:"ignore"});
   try{
     const bootstrap=once(child,"message");await owner.connect(child,{presentation:presenter});const [packet]=await bootstrap;
     assert.equal(packet.self.pid,123);assert.equal(packet.self.hostPid,child.pid);

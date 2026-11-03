@@ -37,27 +37,18 @@ function fixture(t, companion) {
   return { root, userDataDir, launcher, spawned, started };
 }
 
-test("a refused attachment processes a captured copy of the game's window with the launch's plan", async t => {
+test("G1: a refused game attachment keeps original rendering even when a capture companion is available", async t => {
   const f = fixture(t, true);
   const entry = { gameId: "captured", gamePath: f.root, moduleId: "probe", runtimeId: "runner", networkAccess: true, effects: plan(true) };
   const context = f.launcher.getGameLaunchContext(entry, {});
   const child = await context.spawnDetachedChecked("/game/Player", [], { env: { KEEP: "yes" } });
-  assert.equal(Object.hasOwn(f.spawned[0].options.env, "RESHADE_EFFECT_PLAN"), false, "the game itself runs without the library");
-  assert.equal(context.graphicsPreparationFailure, undefined);
-  assert.equal(f.started.length, 1);
-  const [{ library, pid, environment, child: companion }] = f.started;
-  assert.equal(library, "/owned/graphics/libreshade-macos.dylib");
-  assert.equal(pid, child.pid, "the companion follows the game's own process");
-  assert.equal(environment.RESHADE_EFFECT_PLAN, "/owned/plan");
-  assert.equal(environment.RESHADE_EXPLICIT_HOST, "1");
-  assert.equal(Object.hasOwn(environment, "DYLD_INSERT_LIBRARIES"), false);
+  assert.equal(Object.hasOwn(f.spawned[0].options.env, "RESHADE_EFFECT_PLAN"), false);
+  assert.equal(context.graphicsPreparationFailure.reason, reason);
+  assert.equal(f.started.length, 0);
   const launch = Binding.read(entry, { userDataDir: f.userDataDir, runningPids: [child.pid] });
-  assert.deepEqual(launch.graphicsAttachment, { available: true, captured: true, reason });
-  assert.match(launch.graphicsWarnings.find(row => row.id === "native-attachment").reason, /captured copy of the game's window/);
-  assert.notEqual(Status.read(entry, { userDataDir: f.userDataDir, runningPids: [child.pid] }).reason, reason, "live edits are not refused");
-  const killed = [];companion.on("killed", signal => killed.push(signal));
-  child.emit("exit", 0, null);
-  assert.deepEqual(killed, ["SIGTERM"], "the companion ends with the game");
+  assert.deepEqual(launch.graphicsAttachment, { available: false, reason });
+  assert.equal(Status.read(entry, { userDataDir: f.userDataDir, runningPids: [child.pid] }).state, "unavailable");
+  assert.equal(require("../src/modules/window/main").captureCompanion, undefined);
 });
 
 test("no companion starts without processing or without window capture", async t => {
@@ -74,15 +65,9 @@ test("no companion starts without processing or without window capture", async t
   assert.equal(Status.read(entry, { userDataDir: missing.userDataDir, runningPids: [child.pid] }).state, "unavailable");
 });
 
-test("the window module offers a companion only where window graphics are available", () => {
-  const helper = { available: true, root: "/owned/graphics", row: { path: "maclauncher-graphics-window" }, executable: "/owned/graphics/maclauncher-graphics-window" };
-  assert.equal(Launch.captureCompanion("/owned/graphics/libreshade-macos.dylib", { availability: () => ({ available: false, reason: "macOS 15.2" }) }), null);
-  assert.equal(Launch.captureCompanion("relative.dylib", { availability: () => helper }), null);
-  const calls = [];
-  const companion = Launch.captureCompanion("/owned/graphics/libreshade-macos.dylib", { availability: ({ root }) => { assert.equal(root, "/owned/graphics");return helper; },
-    verifyFile: (root, row) => calls.push(["verify", root, row.path]), logger: { info() {}, warn() {} },
-    spawn: (command, args, options) => { calls.push(["spawn", command, args, options.env.MARK]);return Object.assign(new EventEmitter(), { kill() {} }); } });
-  companion.start(77, { MARK: "plan" });
-  assert.deepEqual(calls, [["verify", "/owned/graphics", "maclauncher-graphics-window"],
-    ["spawn", helper.executable, ["--pid", "77", "--wait-window", "120", "--owner-only", "--library", "/owned/graphics/libreshade-macos.dylib"], "plan"]]);
+test("explicit window capture remains available independently of game attachment", () => {
+  assert.equal(Launch.captureCompanion, undefined);
+  const helper = { library: "/owned/graphics/libreshade-macos.dylib" };
+  assert.deepEqual(Launch.helperArguments({ moduleData: { target: "application", pid: 77, waitWindow: 120 } }, helper),
+    ["--pid", "77", "--wait-window", "120", "--library", helper.library]);
 });

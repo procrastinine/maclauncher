@@ -19,7 +19,9 @@ Backend callers can choose a different root with `userDataDir`.
 
 ## Original files and private files
 
-MacLauncher reads the original game files and does not change them unless asked to by one of three tools. The [NW.js Tools patch](../tools/CHEATS.md#nwjs-patching) used by RPG Maker MV and MZ games and the [Ren'Py cheat add-ons](../tools/CHEATS.md#renpy-cheat-add-ons) write their files into the game folder (or, for a game inside an archive, into its private writable copy), and **Unpatch** or the add-on's remove button takes them out again. Edits saved in [Near Infinity](../game-types/INFINITY_ENGINE.md#near-infinity) change the game's resources. Each runtime keeps the saves, configuration, logs and generated files it writes in the game's own folder in launcher data, and links to the original assets wherever the runtime can use them in place.
+Play uses the selected original game directory directly when the runtime supports its layout. For inputs that an engine cannot use in place, MacLauncher prepares only the platform, script or executable adaptation it needs. The engine keeps its usual save and configuration locations, or a save-folder override chosen for the game. Each game keeps its own recorded identity and settings.
+
+The [NW.js Tools patch](../tools/CHEATS.md#nwjs-patching) used by RPG Maker MV and MZ games and the [Ren'Py cheat add-ons](../tools/CHEATS.md#renpy-cheat-add-ons) write their files into the game folder, and **Unpatch** or the add-on's remove button takes them out again. Edits saved in [Near Infinity](../game-types/INFINITY_ENGINE.md#near-infinity) change the game's resources. For a game inside an archive, these tools use its extracted project folder. Engine-generated caches, compiled scripts and saves follow the selected engine's normal behavior.
 
 ZIP payloads, archives appended to executables, ASAR files and similar containers are extracted only when the selected runtime cannot read the packaged content directly. The extracted content stays in the game's private launcher data. Explicit decompilation and Mac application exports create separate output, because their purpose is to produce extracted source or a distributable app.
 
@@ -35,17 +37,21 @@ The game-type and runtime pages describe what each one prepares:
 - [WOLF RPG Editor](../game-types/WOLFRPG.md#detection-and-preparation)
 - [CrossOver](../runtimes/CROSSOVER.md#bottles-and-private-game-files) and [Sikarugir (Wine)](../runtimes/SIKARUGIR.md#private-game-files-and-prefixes)
 
-## Writable input views
+<a id="writable-input-views"></a>
 
-Some game types need writable scripts, configuration or portable saves. For these, MacLauncher automatically prepares a private writable view of the game for import, launch, tools and save operations. The library keeps the original game's identity and paths, and the backend can hand a temporary view to the runtime or tool.
+## Original game paths
 
-Actions that read the game's source, such as extraction, decryption and Steam identity detection, use the original files. Runtime, patch and plugin actions use the writable view.
+Import, metadata, Play and tools use the original source paths. When a game has to be extracted, the extracted folder becomes its writable source folder, and no second writable copy is made from it. Executable or script conversions, generated engine configuration, exports and runtime-specific input adapters are kept apart from the original game.
 
-Views are stored in `games/<gameId>/modules/<moduleId>/writable-input/files/`. A view has real directories, private copies of the files that can change, and links to the assets that cannot. Plugin and library changes replace the affected links atomically and leave the files they pointed to unchanged. When the source files and the game type's rules for the view are unchanged, the existing view is reused, and portable saves persist across launches. Read-only backend calls can resolve paths and read an existing view without creating or copying files.
+Installed runtimes and their shared dependencies are managed by MacLauncher and stored once. A runtime helper, or the graphics copy of a restricted native app, never copies or links the whole game tree.
 
-MKXP-Z executables and frameworks stay shared. RGSS save-file metadata is not recursive, so portable saves at the game root are handled separately from nested databases and assets.
+### Earlier private game folders
 
-Ren'Py uses its own [SDK-specific projects](../game-types/RENPY.md#renpy-sdk) instead, kept in sync with the original game.
+After an upgrade, the private folders that an earlier MacLauncher version kept for a game are processed at most once. This happens during the first startup after the upgrade, while the launcher window shows **Updating the library from an earlier MacLauncher version…** with the number of games processed so far, and the library appears when processing finishes. Files missing from the original game return to their original relative paths. Existing original files stay unchanged, and private versions that differ are kept beside them as `<filename>.MacLauncher-conflict-<id>`. Recovery creates no separate recovery folder and no new links in the original game folder.
+
+If the original location is unavailable or recovery cannot finish safely, the private files stay in place and the reason is recorded. Startup, import, Play and upkeep do not retry them automatically, and games without such a folder are never checked again.
+
+When such a game is removed, the removal confirmation names the folders kept in place and their reasons. **Show in Finder** opens the recorded folder, **Cancel** preserves the game, and **Remove Anyway** deletes its launcher data. The original game files go to the Trash only when the removal is [**Move to Trash**](#removing-games).
 
 ## Installer extraction
 
@@ -53,13 +59,13 @@ MacLauncher imports Inno Setup offline installers with the [installer reader](..
 
 A compact progress row shows the extraction and can cancel it, and incomplete output is removed.
 
-A completed extraction is never modified afterward. Paths, case collisions, output sizes and file types are checked before it is used, and only regular files are accepted. A module that needs to patch scripts from the extracted files writes its own copies of just those files, because changing the extraction would break its recorded checksums. It does not need a complete copy of the game.
+A new extraction checks paths, case collisions, output sizes and file types, and accepts only regular files. The completed folder becomes the game's writable source folder, where saves, script edits, patches and added assets can stay. Engine preparation uses this folder directly and makes no second writable copy.
 
 ### Cache reuse
 
-The cache records the installer's bytes and the reader's extraction format, version and executable checksums. An unchanged source reuses the cache, including on a retry after detection found no matching engine. An existing game's cache stays reusable when the bytes match, even if filesystem identifiers have changed. Unchanged file metadata takes a quick path, and changed metadata requires checksum verification before reuse.
+The extraction record holds the installer's bytes and the reader's extraction format, version and executable checksums. An unchanged installer reuses the completed folder, including on a retry after detection found no matching engine. Installer filesystem metadata changes require checksum verification; extracted game contents are not rescanned or hashed on reuse. The extraction folder must still exist as a directory, with no symbolic link in its path.
 
-Compatible older caches are migrated in place only when their contents can be validated. A changed older cache without trustworthy checksums reports an error, so its contents are neither duplicated nor accepted silently. Separate library entries keep separate game data. Read-only inspection can use an existing cache, but it never extracts or migrates an installer.
+Extraction records from earlier MacLauncher versions, which hold only file status, are converted once while the installer still matches them. Only the original installer archives are checksummed, and the completed game stays in its folder. The earlier record is kept, and the extracted files it lists stay marked as not hashed. Later reuse reads the current format. A conversion that cannot finish safely is recorded for resolution; it replaces no game files and is not retried automatically. Separate library entries keep separate game data. Read-only inspection can use an existing extraction but never creates one. Existing game files are never overwritten by re-extraction.
 
 ## Unavailable game files
 

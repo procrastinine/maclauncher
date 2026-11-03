@@ -5,6 +5,7 @@ const path = require("node:path");
 const test = require("node:test");
 const { extractIcon, runIconCommand } = require("../src/core/icon-extraction");
 const { encodePngBitmap } = require("../src/core/icon-utils");
+const { untilTestEnds } = require("./helpers/fixture-process");
 
 test("icon conversion bounds the helper and cleans temporary output after success and failure", { skip: process.platform !== "darwin" }, async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "maclauncher-icon-test-"));
@@ -43,7 +44,7 @@ test("cancelling icon conversion stops its child and removes temporary output", 
   const pending = extractIcon(app, "app", { temporaryRoot: root, signal: controller.signal,
     runCommand: async (_command, args, options) => {
       const request = runIconCommand(process.execPath, ["-e",
-        "process.on('SIGTERM', () => {}); require('node:fs').writeFileSync(process.argv[1], String(process.pid)); setInterval(() => {}, 1000)", ready], options);
+        "process.on('SIGTERM', () => {}); require('node:fs').writeFileSync(process.argv[1], String(process.pid)); " + untilTestEnds, ready], options);
       const deadline = Date.now() + 5000;
       while (childPid === undefined) {
         try {
@@ -55,6 +56,7 @@ test("cancelling icon conversion stops its child and removes temporary output", 
           await new Promise(resolve => setTimeout(resolve, 5));
         }
       }
+      t.after(() => { try { process.kill(childPid, "SIGKILL"); } catch {} });
       await fs.writeFile(args.at(-1), "partial");
       controller.abort();
       return request;

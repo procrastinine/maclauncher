@@ -100,7 +100,13 @@ test("a Unity game the Mac player cannot run is offered the Windows runtimes and
 test("Unity inspects native imports without invoking game code", t => {
   const root = temporary(t); game(root, { nativeImports: [{ library: "GameInputNative", name: "Initialize" }] });
   const entry = Detect.detectGame(context(root)); assert.deepEqual(entry.moduleData.nativeImports, ["GameInputNative"]);
-  assert.equal(entry.moduleData.managedAssemblies[0].assemblyName, "Assembly-CSharp");
+  const info = Detect.inspectData(entry.moduleData.dataRoot);
+  assert.equal(info.managedAssemblies[0].assemblyName, "Assembly-CSharp"); assert.equal(info.nativeImportEvidence[0].name, "Initialize");
+  // Records keep the summary; a refresh also drops evidence an earlier record stored.
+  entry.moduleData = { ...entry.moduleData, nativeImportEvidence: info.nativeImportEvidence, managedAssemblies: info.managedAssemblies };
+  require("../src/modules/unity/main").__test.refreshEntry(entry, {});
+  for (const key of ["nativeImportEvidence", "managedAssemblies"]) assert.equal(Object.hasOwn(entry.moduleData, key), false, key);
+  assert.equal(entry.moduleData.detectedVersion, "2020.1.17f1");
   assert.equal(SharedManaged, require("../src/modules/fna/managed-assembly"));
 });
 

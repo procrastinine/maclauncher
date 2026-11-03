@@ -128,6 +128,9 @@ test("camera capability follows the automatic default after consent and requires
   const Support = require("../src/modules/crossover/temporal/support-manager"), vendor = path.join(f.root, "CrossOver");
   put(path.join(vendor, "lib/wine/x86_64-unix/wine"), "vendor loader");
   const pin = supportPin(), context = { userDataDir: path.join(f.root, "profile"), runtimeId: "crossover", runtimeSettings: { graphicsBackend: "dxmt", graphicsBridgeVersion: pin.version } };
+  const fresh = {...context, userDataDir:path.join(f.root,"fresh-profile"), runtimeSettings:{graphicsBackend:"dxmt"}};
+  const discovery = Temporal.resolvePlan(entry, fresh, {...options, install:{crossoverRoot:vendor}, runtimeId:"crossover", settings:fresh.runtimeSettings, allowDownload:true});
+  assert.deepEqual(discovery.download, {managerId:"sikarugir-graphics-bridge",version:null,discoveryRequired:true});
   Support.core.rememberResolvedVersion({ userDataDir: context.userDataDir, entry: pin });
   const crossover = { ...options, install: { crossoverRoot: vendor }, runtimeId: "crossover", settings: context.runtimeSettings };
   assert.equal(Temporal.resolvePlan(entry, context, crossover), null);
@@ -139,7 +142,8 @@ test("camera capability follows the automatic default after consent and requires
   const sikarugirContext = { ...context, runtimeId: "sikarugir", runtimeSettings: { graphicsBackend: "auto", graphicsBridgeVersion: pin.version } };
   assert.equal(Temporal.resolvePlan(entry, sikarugirContext, { ...options, allowDownload: true }).download.managerId, "sikarugir-graphics-bridge");
   assert.equal(Temporal.requirements(entry, sikarugirContext, { ...dependency, manager: { resolveSelection: () => ({ ready: true, install: options.install }) } })[0]?.managerId, "sikarugir-graphics-bridge");
-  assert.equal(Temporal.resolvePlan(entry, context, { ...crossover, allowDownload: true, settings: { ...context.runtimeSettings, graphicsBridgeVersion: "missing-version" } }), null);
+  assert.deepEqual(Temporal.resolvePlan(entry, context, { ...crossover, allowDownload: true, settings: { ...context.runtimeSettings, graphicsBridgeVersion: "missing-version" } }).download,
+    {managerId:"sikarugir-graphics-bridge",version:null,discoveryRequired:true});
   assert.equal(Temporal.resolvePlan(entry, context, { ...crossover, allowDownload: true, settings: { ...context.runtimeSettings, dllOverrides: ["dxgi=n"] } }), null);
   fs.writeFileSync(f.target, pe([...names, "slFutureAPI"]));assert.deepEqual(Temporal.requirements(entry, context, dependency), []);
   fs.writeFileSync(f.target, pe());
@@ -181,7 +185,10 @@ test("camera capability follows the automatic default after consent and requires
   assert.equal(explicitPlan(older.version).dependency.version, older.version);
   assert.equal(explicitPlan(newer.version), null, "An installed incompatible explicit package is neither replaced nor requested again");
   assert.equal(abiManager.resolveSelection({}, {}, userDataDir, { version: newer.version }).version, newer.version);
-  assert.equal(explicitPlan("unlisted-future"), null, "An unavailable exact choice is not replaced by another version");
+  assert.deepEqual(explicitPlan("unlisted-future").download, {managerId:abiManager.id,version:null,discoveryRequired:true},
+    "An unlisted exact choice discovers the publisher list after consent before deciding availability");
+  assert.equal(abiManager.resolveSelection({}, {}, userDataDir, {version:"unlisted-future"}).version, "unlisted-future",
+    "Discovery planning preserves the explicit choice");
   assert.equal(explicitPlan(future.version).download.version, future.version, "An uninstalled publisher release still receives actual inspection after consent");
   installed(future, "native base", "thunk base");
   assert.equal(explicitPlan(future.version).dependency.version, future.version, "Actual matching bytes admit a future release without a version whitelist");
@@ -303,158 +310,44 @@ for (const layout of ["Frameworks", "SharedSupport"]) test(`DXMT camera support 
   fs.writeFileSync(path.join(unpacked, "dxmt/wine/x86_64-windows/nvapi64.dll"), "changed");assert.equal(Support.verified(install), null);
 });
 
-async function privateGameView(t, executable = "Game.exe") {
-  const f = fixture(t), GameView = require("../src/modules/crossover/temporal/game-view"), WindowsFiles = require("../src/modules/crossover/runtime/launch");
-  const sourceRoot = path.join(f.root, "content"), directory = path.join(f.root, "runtime");
-  const put = (name, bytes) => {const file = path.join(sourceRoot, name);fs.mkdirSync(path.dirname(file), {recursive: true});fs.writeFileSync(file, bytes);};
-  put(executable, "original executable");put("plugins/sl.interposer.dll", pe());put("save.cfg", "initial save");put("delete.cfg", "obsolete");
-  put("Assets/large.pak", Buffer.alloc(65536, 17));put("A/assets/portable.sav", "portable state");put("archive.bin", Buffer.alloc(65536, 9));
-  const gameRoot = await WindowsFiles.stageGameFiles(sourceRoot, directory), executablePath = path.join(gameRoot, executable);
-  const plan = {providerRoot: f.providerRoot, libraries: [{sourcePath: path.join(sourceRoot, "plugins/sl.interposer.dll"), relativePath: "plugins/sl.interposer.dll"}]};
-  const entry = {}, context = {logger: {warn() {}}}, baseline = await GameView.baseline(entry, context, directory, gameRoot, executablePath, "sikarugir", plan.libraries);
-  const open = async () => {
-    const view = await GameView.camera(directory, gameRoot, executablePath, plan, baseline.recovery);
-    assert.equal(require("../src/modules/crossover/temporal").prepareGame(plan, view.gameRoot), true);
-    GameView.prepared(view, plan);GameView.remember(entry, context, "sikarugir", view, baseline.recovery);return view;
-  };
-  return {...f, GameView, sourceRoot, directory, gameRoot, executablePath, plan, entry, context, baseline, open};
-}
+test("an explicit original-source camera view copies only code and retains old and new private bytes", async t => {
+  const f = fixture(t), GameView = require("../src/modules/crossover/temporal/game-view");
+  assert.equal(GameView.baseline, undefined, "released baseline recovery is absent from the current adapter");
+  const base = path.join(fs.realpathSync(f.root), "original"), directory = path.join(f.root, "runtime");
+  const put = (root, name, bytes) => {const file = path.join(root, name);fs.mkdirSync(path.dirname(file), {recursive: true});fs.writeFileSync(file, bytes);};
+  put(base, "Game.exe", "original executable");put(base, "plugins/sl.interposer.dll", pe());
+  put(base, "settings.ini", "original settings");put(base, "Assets/large.pak", Buffer.alloc(65536, 7));
+  const old = path.join(directory, "temporal-camera");put(old, "SaveOld.dat", "old private save");
+  put(directory, "temporal-camera.json", "old receipt must stay untouched");
+  const recovery = {overrides: {}, omitted: new Set(), libraries: []};
+  const plan = {libraries: [{relativePath: "plugins/sl.interposer.dll"}]};
+  const view = await GameView.camera(directory, base, path.join(base, "Game.exe"), plan, recovery);
+  assert.notEqual(view.gameRoot, old);
+  const copied = Object.entries(view.record.entries).filter(([, row]) => row.kind === "file").map(([name]) => name).sort();
+  assert.deepEqual(copied, ["Game.exe", "plugins/sl.interposer.dll"]);
+  assert.ok(fs.lstatSync(path.join(view.gameRoot, "settings.ini")).isSymbolicLink());
+  assert.ok(fs.lstatSync(path.join(view.gameRoot, "Assets")).isSymbolicLink());
+  fs.writeFileSync(path.join(view.gameRoot, "settings.ini"), "game writes to original settings");
+  assert.equal(fs.readFileSync(path.join(base, "settings.ini"), "utf8"), "game writes to original settings");
+  put(view.gameRoot, "SaveNew.dat", "new private save");
+  const entry = {}, context = {};GameView.remember(entry, context, "sikarugir", view, recovery);
+  GameView.reconcile(entry, context, directory, "sikarugir");
+  assert.equal(fs.readFileSync(path.join(view.gameRoot, "SaveNew.dat"), "utf8"), "new private save");
+  assert.equal(fs.existsSync(path.join(base, "SaveNew.dat")), false, "retirement never copies over or renames original data");
+  assert.equal(fs.readFileSync(path.join(old, "SaveOld.dat"), "utf8"), "old private save");
+  assert.equal(fs.readFileSync(path.join(directory, "temporal-camera.json"), "utf8"), "old receipt must stay untouched");
+  GameView.discard(view);
+  assert.equal(fs.readFileSync(path.join(view.gameRoot, "SaveNew.dat"), "utf8"), "new private save");
+  const next = await GameView.camera(directory, base, path.join(base, "Game.exe"), plan, recovery);
+  assert.notEqual(next.gameRoot, view.gameRoot);
+  assert.equal(fs.readFileSync(path.join(view.gameRoot, "SaveNew.dat"), "utf8"), "new private save");
+});
+
 test("never-used camera Off performs no projection filesystem work or process wrapping", async t => {
   const GameView = require("../src/modules/crossover/temporal/game-view"), entry = {}, context = {};
   for (const method of ["lstatSync", "readFileSync", "readdirSync", "realpathSync", "copyFileSync"]) t.mock.method(fs, method, () => assert.fail("Off accessed " + method));
   GameView.reconcile(entry, context, "/owned/runtime", "sikarugir");
-  const plain = await GameView.baseline(entry, context, "/owned/runtime", "/owned/runtime/game", "/owned/runtime/game/Game.exe", "sikarugir", []);
-  GameView.remember(entry, context, "sikarugir", plain, plain.recovery);GameView.watch(entry, context, "/owned/runtime", "sikarugir", plain);
-  assert.equal(plain.gameRoot, "/owned/runtime/game");assert.equal(context.onProcessSpawn, undefined);assert.equal(context.spawnDetachedChecked, undefined);
-});
-test("camera views clone immediate regular leaves and alias only unmodified private asset subtrees", async t => {
-  const f = await privateGameView(t), read = fs.readFileSync, list = fs.readdirSync;let assetReads = 0, assetWalks = 0;
-  t.mock.method(fs, "readFileSync", (file, ...args) => {if (String(file).endsWith("archive.bin") || String(file).endsWith("large.pak")) assetReads++;return read(file, ...args);});
-  t.mock.method(fs, "readdirSync", (file, ...args) => {if (path.basename(String(file)) === "Assets") assetWalks++;return list(file, ...args);});
-  const view = await f.open();
-  for (const name of ["Game.exe", "archive.bin", "save.cfg", "plugins/sl.interposer.dll"]) assert.equal(fs.lstatSync(path.join(view.gameRoot, name)).isSymbolicLink(), false);
-  const assets = path.join(view.gameRoot, "Assets");assert.equal(fs.lstatSync(assets).isSymbolicLink(), true);
-  assert.equal(fs.realpathSync(assets), fs.realpathSync(path.join(f.gameRoot, "Assets")));
-  assert.equal(assetReads, 0);assert.equal(assetWalks, 0);
-  fs.writeFileSync(path.join(view.gameRoot, "Assets/portable-new.sav"), "direct private save");
-  assert.equal(read(path.join(f.gameRoot, "Assets/portable-new.sav"), "utf8"), "direct private save");
-  assert.equal(fs.existsSync(path.join(f.sourceRoot, "Assets/portable-new.sav")), false);
-  assert.deepEqual(read(path.join(f.gameRoot, "plugins/sl.interposer.dll")), pe());assert.deepEqual(read(path.join(f.sourceRoot, "plugins/sl.interposer.dll")), pe());
-});
-test("portable writes, atomic replacement, new files, deletion and changed executables survive camera to Off", async t => {
-  const f = await privateGameView(t), view = await f.open();
-  fs.writeFileSync(path.join(view.gameRoot, "save.cfg"), "first write");
-  assert.equal(fs.readFileSync(path.join(f.gameRoot, "save.cfg"), "utf8"), "initial save", "regular leaves are independent COW files");
-  fs.writeFileSync(path.join(view.gameRoot, "atomic.tmp"), "latest save");fs.renameSync(path.join(view.gameRoot, "atomic.tmp"), path.join(view.gameRoot, "save.cfg"));
-  fs.writeFileSync(path.join(view.gameRoot, "new.sav"), "new portable save");fs.writeFileSync(view.executablePath, "game-updated executable");fs.unlinkSync(path.join(view.gameRoot, "delete.cfg"));
-  fs.mkdirSync(path.join(view.gameRoot, "new-mod"));fs.writeFileSync(path.join(view.gameRoot, "new-mod/config.ini"), "new mod");
-  f.GameView.reconcile(f.entry, f.context, f.directory, "sikarugir");
-  for (const [name, value] of [["save.cfg", "latest save"], ["new.sav", "new portable save"], ["Game.exe", "game-updated executable"], ["new-mod/config.ini", "new mod"]]) assert.equal(fs.readFileSync(path.join(f.gameRoot, name), "utf8"), value);
-  assert.equal(fs.existsSync(path.join(f.gameRoot, "delete.cfg")), false);assert.deepEqual(fs.readFileSync(path.join(f.gameRoot, "plugins/sl.interposer.dll")), pe());
-  assert.equal(fs.existsSync(path.join(f.gameRoot, "plugins", Streamline.ORIGINAL)), false);assert.equal(fs.readFileSync(path.join(f.sourceRoot, "save.cfg"), "utf8"), "initial save");
-  const plain = await f.GameView.baseline(f.entry, f.context, f.directory, f.gameRoot, f.executablePath, "sikarugir", []);
-  assert.equal(plain.gameRoot, f.gameRoot);f.GameView.remember(f.entry, f.context, "sikarugir", plain, plain.recovery);
-  const again = await f.open();assert.equal(fs.readFileSync(path.join(again.gameRoot, "save.cfg"), "utf8"), "latest save");
-});
-test("retirement preserves real concurrent conflicts but keeps the newest game save authoritative", async t => {
-  const f = await privateGameView(t), view = await f.open();
-  fs.writeFileSync(path.join(view.gameRoot, "save.cfg"), "game latest");fs.writeFileSync(path.join(f.gameRoot, "save.cfg"), "external edit");
-  fs.writeFileSync(path.join(view.gameRoot, "plugins/sl.interposer.dll"), "user DLL mod");fs.writeFileSync(path.join(view.gameRoot, "plugins", Streamline.ORIGINAL), "user backup mod");fs.writeFileSync(path.join(view.gameRoot, "plugins", Streamline.RECORD), "user record mod");
-  f.GameView.reconcile(f.entry, f.context, f.directory, "sikarugir");
-  assert.equal(fs.readFileSync(path.join(f.gameRoot, "save.cfg"), "utf8"), "game latest");
-  const conflicts = path.join(f.directory, "temporal-conflicts"), rows = fs.readdirSync(conflicts);
-  assert.ok(rows.some(row => fs.existsSync(path.join(conflicts, row, "save.cfg")) && fs.readFileSync(path.join(conflicts, row, "save.cfg"), "utf8") === "external edit"));
-  for (const [name, value] of [["sl.interposer.dll", "user DLL mod"], [Streamline.ORIGINAL, "user backup mod"], [Streamline.RECORD, "user record mod"]]) assert.equal(fs.readFileSync(path.join(f.gameRoot, "plugins", name), "utf8"), value);
-});
-test("renamed materialized directories retain aliased portable data and moved camera libraries become originals", async t => {
-  const f = await privateGameView(t, "A/Game.exe"), view = await f.open();
-  fs.writeFileSync(path.join(view.gameRoot, "A/assets/portable.sav"), "latest nested save");
-  fs.mkdirSync(path.join(view.gameRoot, "Nested"));fs.renameSync(path.join(view.gameRoot, "A"), path.join(view.gameRoot, "Nested/B"));fs.renameSync(path.join(view.gameRoot, "plugins"), path.join(view.gameRoot, "renamed-plugins"));
-  f.GameView.reconcile(f.entry, f.context, f.directory, "sikarugir");
-  assert.equal(fs.readFileSync(path.join(f.gameRoot, "Nested/B/assets/portable.sav"), "utf8"), "latest nested save");assert.equal(fs.existsSync(path.join(f.gameRoot, "A")), false);
-  assert.deepEqual(fs.readFileSync(path.join(f.gameRoot, "renamed-plugins/sl.interposer.dll")), pe());
-  assert.equal(fs.existsSync(path.join(f.gameRoot, "renamed-plugins", Streamline.ORIGINAL)), false);assert.equal(fs.existsSync(path.join(f.gameRoot, "renamed-plugins", Streamline.RECORD)), false);
-});
-test("interrupted reconciliation retains launch copies and safely retries without deleting an earlier save", async t => {
-  const f = await privateGameView(t), view = await f.open(), rename = fs.renameSync;
-  fs.writeFileSync(path.join(view.gameRoot, "save.cfg"), "first latest");fs.writeFileSync(path.join(view.gameRoot, "z-last.sav"), "last latest");
-  t.mock.method(fs, "renameSync", (from, to) => {if (to === path.join(f.gameRoot, "z-last.sav")) throw Object.assign(Error("controlled publication denied"), {code: "EACCES"});return rename(from, to);});
-  assert.throws(() => f.GameView.reconcile(f.entry, f.context, f.directory, "sikarugir"), /controlled publication denied/);
-  assert.equal(fs.readFileSync(path.join(f.gameRoot, "save.cfg"), "utf8"), "first latest");assert.equal(fs.readFileSync(path.join(view.gameRoot, "save.cfg"), "utf8"), "first latest");
-  fs.renameSync.mock.restore();f.GameView.reconcile(f.entry, f.context, f.directory, "sikarugir");
-  assert.equal(fs.readFileSync(path.join(f.gameRoot, "save.cfg"), "utf8"), "first latest");assert.equal(fs.readFileSync(path.join(f.gameRoot, "z-last.sav"), "utf8"), "last latest");
-});
-test("crash recovery accepts the owned selected receipt when the library binding persisted late", async t => {
-  const f = await privateGameView(t), view = await f.open();
-  fs.writeFileSync(path.join(view.gameRoot, "save.cfg"), "crash-recovered save");
-  f.entry.runtimeData.sikarugir.cameraGameView.id = crypto.randomUUID();
-  f.GameView.reconcile(f.entry, f.context, f.directory, "sikarugir");
-  assert.equal(fs.readFileSync(path.join(f.gameRoot, "save.cfg"), "utf8"), "crash-recovered save");
-  assert.equal(JSON.parse(fs.readFileSync(view.file)).reconciled, true);
-});
-test("a failed next camera setup cannot strand an older persisted binding or block ordinary Off", async t => {
-  const f = await privateGameView(t), view = await f.open(), oldBinding = structuredClone(f.entry.runtimeData.sikarugir.cameraGameView);
-  fs.writeFileSync(path.join(view.gameRoot, "save.cfg"), "retired latest save");f.GameView.reconcile(f.entry, f.context, f.directory, "sikarugir");
-  assert.equal(f.entry.runtimeData.sikarugir.cameraGameView, null);
-  const copy = fs.promises.copyFile;
-  t.mock.method(fs.promises, "copyFile", async () => {throw Object.assign(Error("controlled next preparation failure"), {code: "ENOTSUP"});});
-  await assert.rejects(f.open(), /controlled next preparation failure/);fs.promises.copyFile.mock.restore();
-  assert.equal(fs.promises.copyFile, copy);f.entry.runtimeData.sikarugir.cameraGameView = oldBinding;
-  f.GameView.reconcile(f.entry, f.context, f.directory, "sikarugir");assert.equal(f.entry.runtimeData.sikarugir.cameraGameView, null);
-  const unselected = await f.GameView.camera(f.directory, f.gameRoot, f.executablePath, f.plan, f.baseline.recovery);f.GameView.discard(unselected);
-  f.entry.runtimeData.sikarugir.cameraGameView = oldBinding;f.GameView.reconcile(f.entry, f.context, f.directory, "sikarugir");
-  assert.equal(f.entry.runtimeData.sikarugir.cameraGameView, null);assert.equal(fs.readFileSync(path.join(f.gameRoot, "save.cfg"), "utf8"), "retired latest save");
-});
-test("legacy owned proxies with unavailable backups recover only from SHA-verified supplied originals", async t => {
-  const f = await privateGameView(t), target = path.join(f.gameRoot, "plugins/sl.interposer.dll"), bytes = fs.readFileSync(target);
-  const owned = Streamline.prepare({sourcePath: f.plan.libraries[0].sourcePath, gameRoot: f.gameRoot, relativePath: "plugins/sl.interposer.dll", providerRoot: f.providerRoot});assert.equal(owned.available, true);
-  fs.writeFileSync(path.join(path.dirname(target), Streamline.ORIGINAL), "damaged private backup");
-  t.mock.method(Streamline, "restore", () => assert.fail("legacy restoration must not mutate inaccessible leaves"));
-  const recovery = await f.GameView.baseline(f.entry, f.context, f.directory, f.gameRoot, f.executablePath, "sikarugir", f.plan.libraries);
-  assert.deepEqual(fs.readFileSync(path.join(recovery.gameRoot, "plugins/sl.interposer.dll")), bytes);assert.equal(fs.readFileSync(target)[4095], 2);
-  assert.equal(fs.readFileSync(path.join(recovery.gameRoot, "plugins", Streamline.ORIGINAL), "utf8"), "damaged private backup", "unknown backup bytes are preserved");
-  fs.writeFileSync(f.plan.libraries[0].sourcePath, "unverified changed source");
-  await assert.rejects(f.GameView.baseline(f.entry, f.context, f.directory, f.gameRoot, f.executablePath, "sikarugir", f.plan.libraries), /original temporal library is unavailable/);
-});
-test("projection cloning never silently falls back to copying an unsupported volume", async t => {
-  const f = await privateGameView(t);let attempts = 0;
-  t.mock.method(fs.promises, "copyFile", async (_source, _output, mode) => {attempts++;assert.ok(mode & fs.constants.COPYFILE_FICLONE_FORCE);throw Object.assign(Error("volume does not clone"), {code: "ENOTSUP"});});
-  await assert.rejects(f.open(), /volume does not clone/);assert.equal(attempts, 1);
-  assert.equal(fs.existsSync(path.join(f.directory, "temporal-camera")), false);assert.deepEqual(fs.readFileSync(path.join(f.gameRoot, "plugins/sl.interposer.dll")), pe());
-});
-test("portable save reconciliation waits for real Wine supervisor retirement, including Stop", async t => {
-  const {spawn} = require("node:child_process"), {once, EventEmitter} = require("node:events"), Launch = require("../src/modules/crossover/sikarugir/launch"), CrossOver = require("../src/modules/crossover/runtime/launch");
-  for (const runtimeId of ["sikarugir", "crossover"]) for (const stop of [false, true]) {
-    const f = await privateGameView(t), view = await f.open(), controller = new AbortController();
-    f.entry.runtimeData[runtimeId] = f.entry.runtimeData.sikarugir;
-    const pidFile = path.join(f.root, "writer.pid"), ready = path.join(f.root, "writer.ready"), returned = path.join(f.root, "wine-returned"), gate = path.join(f.root, "finish-permitted"), serverCalled = path.join(f.root, "server-called");
-    const writer = `const fs=require('fs');const finish=()=>{fs.writeFileSync(process.env.SAVE,'final portable save');process.exit(0)};process.on('SIGTERM',finish);fs.writeFileSync(process.env.READY,'ready');setInterval(()=>{if(${!stop}&&fs.existsSync(process.env.GATE))finish()},10);`;
-    const wine = path.join(f.root, "wine"), server = path.join(f.root, "wineserver");
-    const reaper = `const fs=require('fs'),{spawn}=require('child_process');const writer=spawn(process.execPath,['-e',${JSON.stringify(writer)}],{detached:true,stdio:'ignore'});fs.writeFileSync(process.env.PID,String(writer.pid));writer.on('exit',()=>process.exit(0));`;
-    fs.writeFileSync(wine, `#!${process.execPath}\nconst fs=require('fs'),{spawn}=require('child_process');const owner=spawn(process.execPath,['-e',${JSON.stringify(reaper)}],{detached:true,stdio:'ignore'});owner.unref();const wait=setInterval(()=>{if(fs.existsSync(process.env.READY)){clearInterval(wait);fs.writeFileSync(process.env.RETURNED,'yes')}},10);`, {mode: 0o755});
-    fs.writeFileSync(server, `#!${process.execPath}\nconst fs=require('fs'),pid=Number(fs.readFileSync(process.env.PID,'utf8'));fs.writeFileSync(process.env.SERVER_CALLED,'yes');if(process.argv[2]==='-k'){const wait=setInterval(()=>{if(fs.existsSync(process.env.GATE)){clearInterval(wait);try{process.kill(pid,'SIGTERM')}catch{}}},10)}else{const wait=setInterval(()=>{try{process.kill(pid,0)}catch{clearInterval(wait)}},10)}`, {mode: 0o755});
-    let released = false, writerPid;
-    const context = {...f.context, signal: controller.signal, onProcessSpawn: child => child.once("exit", () => {
-      assert.equal(fs.readFileSync(path.join(f.gameRoot, "save.cfg"), "utf8"), "final portable save", "save export root is current before lease release");
-      assert.throws(() => process.kill(writerPid, 0), {code: "ESRCH"}, "Windows writer has retired");released = true;
-    })};
-    f.GameView.watch(f.entry, context, f.directory, runtimeId, view);
-    const helper = Object.assign(new EventEmitter(), {spawnfile: process.execPath, spawnargs: [process.execPath, "setup"], exitCode: null, signalCode: null});
-    await context.onProcessSpawn(helper);helper.removeAllListeners("exit");helper.emit("exit", 0);
-    assert.equal(JSON.parse(fs.readFileSync(view.file)).reconciled, false, "unrelated setup process cannot reconcile the game view");
-    const environment = {...process.env, PID: pidFile, READY: ready, RETURNED: returned, GATE: gate, SERVER_CALLED: serverCalled, SAVE: path.join(view.gameRoot, "save.cfg")};
-    const args = runtimeId === "sikarugir" ? Launch.supervisorArguments(wine, server, "play", [], environment) : ["-c", CrossOver.SUPERVISOR, "maclauncher-crossover", wine, server];
-    const child = spawn("/bin/sh", args, {detached: true, stdio: "ignore", env: environment});
-    t.after(() => {child.removeAllListeners("exit");try {if (child.exitCode == null) process.kill(-child.pid, "SIGKILL");} catch {}try {if (writerPid) process.kill(writerPid, "SIGKILL");} catch {}});
-    const closed = once(child, "close");await context.onProcessSpawn(child);
-    const deadline = Date.now() + 5000;
-    while ((!fs.existsSync(returned) || !fs.existsSync(serverCalled)) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
-    assert.equal(fs.existsSync(returned), true);assert.equal(fs.existsSync(serverCalled), true);writerPid = Number(fs.readFileSync(pidFile, "utf8"));
-    assert.equal(child.exitCode, null);assert.equal(fs.readFileSync(path.join(f.gameRoot, "save.cfg"), "utf8"), "initial save", "root Wine exit is not game retirement");
-    fs.writeFileSync(gate, "permit");
-    if (stop) {controller.abort();assert.equal(require("../src/core/process-stop").stopProcessTree(child.pid), true);}
-    const [code] = await Promise.race([closed, new Promise((_, reject) => setTimeout(() => reject(Error("supervisor did not retire")), 6000).unref())]);
-    assert.equal(code, stop ? 143 : 0);assert.equal(released, true);assert.equal(JSON.parse(fs.readFileSync(view.file)).reconciled, true);
-    f.GameView.clearWatch(context);
-  }
+  assert.equal(GameView.baseline, undefined);
+  const plain = {binding: null};GameView.watch(entry, context, "/owned/runtime", "sikarugir", plain);
+ assert.equal(context.onProcessSpawn, undefined);assert.equal(context.spawnDetachedChecked, undefined);
 });

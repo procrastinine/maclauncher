@@ -2,6 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const {spawn,spawnSync}=require('node:child_process'),{once}=require('node:events');
 
 test('original ART dex-load reports retain identity, validation, ownership and private usage state',{timeout:90000},async t=>{
+  if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
  const {ANDROID_ART_PAYLOAD:payload,ANDROID_ART_LINUX_RUN:runner,KLEPTON_NATIVE_RUNTIME:runtime,JAVA_HOME:jdk,ANDROID_R8:r8,ANDROID_CORE_API:core,ANDROID_CORE_MODULES:coreModules}=process.env;
  if(process.platform!=='darwin'||![payload,runner,runtime,jdk,r8,core,coreModules].every(Boolean))return t.skip('Requires the original ART supplier, Android core declarations, Java and R8');
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-dex-report-'));let binder;
@@ -12,7 +13,7 @@ test('original ART dex-load reports retain identity, validation, ownership and p
  const run=(command,args,options={})=>{const result=spawnSync(command,args,{encoding:'utf8',timeout:30000,maxBuffer:4<<20,...options});assert.ifError(result.error);assert.equal(result.status,0,(result.stdout+result.stderr).slice(-8000));return result.stdout+result.stderr;};
  const source=path.resolve(process.env.KLEPTON_ANDROID_SOURCE||'src/external/maclauncher-android','src/modules/android/native/java'),api=path.resolve(process.env.ANDROID_FRAMEWORK_API||path.join(runtime,'android-framework.jar'));
  const classes=path.join(root,'classes'),dex=path.join(root,'dex'),state=path.join(root,'state'),data=path.join(root,'data'),properties=path.join(root,'properties'),code=path.join(root,'code');for(const directory of[classes,dex,state,data,properties,code])fs.mkdirSync(directory);fs.mkdirSync(path.join(code,'lib'));
- const apk=path.join(code,'base.apk');fs.copyFileSync(path.resolve('tests/fixtures/android-package-metadata/metadata.apk'),apk);
+ const apk=path.join(code,'base.apk');fs.copyFileSync(require('./helpers/android-fixture-tools.cjs').metadataApk(t),apk);
  run(path.join(jdk,'bin/javac'),['--system',core,'-source','21','-target','21','-cp',[api,path.resolve(runtime,'android-host.jar')].join(path.delimiter),'-d',classes,source+'/maclauncher/android/framework/HostPackages.java',source+'/maclauncher/android/framework/HostContext.java',source+'/com/android/server/pm/dex/HostDexReports.java',path.resolve('tests/fixtures/android-dex-load-reporting/DexLoadProbe.java')]);
  const jar=path.join(root,'control.jar');run(path.join(jdk,'bin/jar'),['cf',jar,'-C',classes,'.']);run(path.join(jdk,'bin/java'),['-cp',r8,'com.android.tools.r8.D8','--min-api','36','--lib',coreModules,'--lib',api,'--classpath',path.resolve(runtime,'android-host.jar'),'--output',dex,jar]);
  const supplier=require('./helpers/android-art-supplier').componentSupplier(path.resolve(payload)),{layout,applicationLayout,prepareMountParents,publishPathMap,environment}=await import('../src/modules/android/art/layout.mjs');

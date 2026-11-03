@@ -98,9 +98,19 @@ test("shader library state stays local and derived planes require a capable proc
   assert.ok(Manager.getState({ userDataDir }).sections.every(section => ["mpv","isf","magpie","reshade","libretro"].includes(section.shaderFamily)));
   assert.deepEqual(Manager.getState({ userDataDir }).sections.map(section=>section.id), ["anime4k","artcnn","cfl-prediction","mpv-default","cunny","acnet","mpv-prescalers","vidvox-isf","slang-shaders","magpie","cshade","prod80","fxshaders","ssrt3","niceguy","quint","astrayfx","otisfx"]);
   assert.deepEqual(fs.readdirSync(userDataDir), [], "status does not create storage or contact a server");
-  await assert.rejects(install({ userDataDir, sectionId: "cfl-prediction", confirmRuntimeInstall: approved }), /Refresh/);
-  await refresh(userDataDir, "cfl-prediction");
-  const result = await install({ userDataDir, sectionId: "cfl-prediction", confirmRuntimeInstall: approved }, archiveRoutes("cfl-prediction", packArchive()));
+  const requests = Harness.network.requests.length;
+  await assert.rejects(install({ userDataDir, sectionId: "cfl-prediction", confirmRuntimeInstall: async () => false }), /cancel/i);
+  assert.equal(Harness.network.requests.length, requests, "Declining precedes catalog discovery");
+  const sha = "a".repeat(40), license = Buffer.from("MIT license fixture");
+  let consented = false;
+  const routes = { ...archiveRoutes("cfl-prediction", packArchive()),
+    [`${API}${repository("cfl-prediction")}/commits`]: () => {
+      assert.equal(consented, true);return [{sha, commit:{committer:{date:"2026-10-21T00:00:00Z"}}}];
+    },
+    [`${API}${repository("cfl-prediction")}/git/trees/${sha}`]: { tree: [blob("LICENSE", license), blob("RGB.glsl", rgb), blob("CfL.hook", chroma)] } };
+  const result = await install({ userDataDir, sectionId: "cfl-prediction", confirmRuntimeInstall: async () => {
+    assert.equal(consented, false, "One prompt covers discovery and installation");consented = true;return true;
+  } }, routes);
   assert.equal(result.effects.length, 3);
   const listed = Shaders.listEffects(userDataDir, features, options), color = listed.find(row => !row.nativeVideo), video = listed.find(row => row.nativeVideo);
   assert.ok(Shaders.isId(color.id)); assert.equal(color.available, true); assert.equal(video.available, false);
@@ -324,4 +334,19 @@ test("cancelled shader downloads leave no partial installation", async t => {
     archiveRoutes("cfl-prediction", () => { controller.abort(); return Buffer.from("partial"); })), { name: "AbortError" });
   assert.deepEqual(Shaders.listInstalled(userDataDir), []);
   assert.ok(fs.readdirSync(Shaders.directory(userDataDir, "cfl-prediction")).every(name => !name.startsWith(".install-")));
+});
+
+
+test("held coarse times invalidate shader source and shared Slang include content revisions", t => {
+  const {holdFileTimes} = require("./helpers/held-file-times.cjs"), Traits = require("../src/modules/shared/reshade/shader-traits"), root = fixture(t);
+  const include = path.join(root, "common.slangp"), file = path.join(root, "effect.slangp");
+  fs.writeFileSync(include, 'shaders = 1\nscale_type0 = source\nscale0 = 2\n');
+  fs.writeFileSync(file, '#reference "common.slangp"\n');holdFileTimes(t, [include, file]);
+  const first = Traits.withMetadataSnapshot(() => Traits.analyzeFile(file, "slangp"));
+  assert.equal(first.traits.outputScale.x, 2);
+  fs.writeFileSync(include, 'shaders = 1\nscale_type0 = source\nscale0 = 3\n');
+  const next = Traits.withMetadataSnapshot(() => Traits.analyzeFile(file, "slangp"));
+  assert.equal(next.traits.outputScale.x, 3);assert.notEqual(next.sourceRevision, first.sourceRevision);
+  fs.writeFileSync(file, 'shaders = 1\nscale0 = 4\n    ');
+  const source = Traits.analyzeFile(file, "slangp");assert.notEqual(source.sourceRevision, next.sourceRevision);
 });

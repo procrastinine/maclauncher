@@ -23,6 +23,7 @@ function checkedManifest(value) {
   Object.freeze(manifest.files);return Object.freeze(manifest);
 }
 
+// Included graphics package selection follows the launcher CPU, including the Intel app under Rosetta.
 function createReader(file = path.join(__dirname, "distribution-supplementals.json"), logger = console, trustedResourceRoots = [], {arch = process.arch} = {}) {
   let accepted, warnedIdentity;
   const roots = new Map(), admitted = new Set(), resourceBases = new Set();

@@ -9,7 +9,7 @@ function inUseError() {
 }
 
 function createGameRemoval({ userDataDir, registry, lifecycle, listRuntimeManagers, isGameRunning = () => false, logger = console, trashItem, readSettings = () => ({}), resolveModuleId = entry => entry.moduleId || entry.engine || "unknown" }) {
-  return async function removeGameData(entry, { trash = false, ignoreMissingSource = false } = {}) {
+  return async function removeGameData(entry, { trash = false, ignoreMissingSource = false, retainedGameDataAcknowledgment } = {}) {
     if (!entry?.gameId || !entry.gamePath) throw new Error("Game removal requires a persisted library entry.");
     return lifecycle.remove(entry, async () => {
       // Resolve module paths after acquiring exclusive ownership.
@@ -17,6 +17,8 @@ function createGameRemoval({ userDataDir, registry, lifecycle, listRuntimeManage
       if (!current) throw Object.assign(new Error("Game not found in library."), { code: "GAME_NOT_FOUND" });
       const assertAvailable = () => { if (isGameRunning(current)) throw inUseError(); };
       assertAvailable();
+      const settings = readSettings();
+      require("./backcompat/game-removal").assertRetainedGameDataRemoval(current, settings, userDataDir, retainedGameDataAcknowledgment);
       if (trash) {
         if (typeof trashItem !== "function") throw new Error("A Trash service is required to remove original game files.");
         // Files that are not on disk, such as on a disconnected drive, are never
@@ -28,7 +30,7 @@ function createGameRemoval({ userDataDir, registry, lifecycle, listRuntimeManage
       }
       assertAvailable();
       const moduleId = resolveModuleId(current);
-      const context = { entry: current, gamePath: current.gamePath, gameId: current.gameId, moduleId, userDataDir, logger, settings: readSettings() };
+      const context = { entry: current, gamePath: current.gamePath, gameId: current.gameId, moduleId, userDataDir, logger, settings };
       for (const manager of listRuntimeManagers()) {
         if (typeof manager?.cleanupGameData !== "function") continue;
         try { await manager.cleanupGameData(context); }

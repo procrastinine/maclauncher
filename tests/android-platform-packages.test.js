@@ -9,7 +9,7 @@ test('Platform provider catalog retains original authorities and defers resource
   const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-platform-index-'));
   t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
   const image=path.join(temporary,'image'),output=path.join(temporary,'catalog.json');
-  const manifest=name=>fs.readFileSync(path.join(__dirname,'fixtures/android-framework-services/manifests',name+'.xml.bin'));
+  const manifest=name=>fs.readFileSync(require('./helpers/manifest-fixtures').file(t,'android-framework-services/manifests/'+name));
   writeZipArchive(path.join(image,'system/priv-app/Providers/Providers.apk'),[{name:'AndroidManifest.xml',data:manifest('providers')}]);
   writeZipArchive(path.join(image,'product/app/Window/Window.apk'),[{name:'AndroidManifest.xml',data:manifest('window')}]);
   const {buildPlatformPackageCatalog}=await import('../src/modules/android/native/platform-packages.mjs');

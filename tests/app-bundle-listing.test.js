@@ -1,0 +1,120 @@
+const test = require('node:test'), assert = require('node:assert/strict');
+const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), vm = require('node:vm');
+const Child = require('node:child_process');
+
+test('bundle listings avoid repeated walks and facts processes while full status preserves damaged selection', async t => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'bundle-listing-')));
+  t.after(() => fs.rmSync(root, {recursive:true, force:true}));
+  const processes = [], originalSpawn = Child.spawnSync;
+  t.mock.method(Child, 'spawnSync', (...args) => { processes.push(args[0]);return originalSpawn(...args); });
+  const App = require('../src/modules/shared/runtime/app-bundle');
+  const Godot = require('../src/modules/godot/runtime/godot-runtime');
+  const Love = require('../src/modules/love/runtime/love-runtime');
+  const Nw = require('../src/modules/shared/web/runtime/nwjs-runtime-manager');
+  const bundles = [];
+  function bundle(app, name = 'player', version = '11.5') {
+    fs.mkdirSync(path.join(app, 'Contents/MacOS'), {recursive:true});
+    fs.mkdirSync(path.join(app, 'Contents/Resources/deep'), {recursive:true});
+    const exe = path.join(app, 'Contents/MacOS', name), bytes = Buffer.alloc(32);
+    bytes.writeUInt32LE(0xfeedfacf);bytes.writeUInt32LE(0x0100000c,4);bytes.writeUInt32LE(2,12);
+    fs.writeFileSync(exe, bytes, {mode:0o755});
+    fs.writeFileSync(path.join(app,'Contents/Info.plist'), `<plist version="1.0"><dict><key>CFBundleExecutable</key><string>${name}</string><key>CFBundleShortVersionString</key><string>${version}</string></dict></plist>`);
+    bundles.push(app);return app;
+  }
+  const love = bundle(path.join(Love.getInstallDir({userDataDir:root,channel:'stable',version:'11.5'}),'love.app'));
+  const godotOld = bundle(path.join(Godot.getInstallDir({userDataDir:root,version:'4.4.1',variant:'standard'}),'Godot.app'));
+  const godot = bundle(path.join(Godot.getInstallDir({userDataDir:root,version:'4.5.0',variant:'standard'}),'Godot.app'));
+  const platformKey = process.arch === 'arm64' ? 'osx-arm64' : 'osx-x64';
+  const nwOld = bundle(path.join(Nw.installRootDir(root),'0.91.0',platformKey,'sdk/nwjs.app'),'nwjs');
+  const nw = bundle(path.join(Nw.installRootDir(root),'0.92.0',platformKey,'sdk/nwjs.app'),'nwjs');
+  assert.equal(Love.listInstalledStable(root)[0].ready,true);
+  assert.equal(Godot.listInstalled(root).every(row=>row.ready),true);
+  assert.equal(Nw.listInstalled(root).every(row=>row.ready),true);
+  const readdir = fs.readdirSync;
+  const noBundleWalk = (file,...args) => {
+    assert.ok(!bundles.some(app => path.resolve(String(file)) === app || path.resolve(String(file)).startsWith(app+path.sep)), 'Listing must not walk bundle resources');
+    return readdir(file,...args);
+  };
+  const listing = t.mock.method(fs, 'readdirSync', noBundleWalk);
+  assert.equal(Love.listInstalledStable(root)[0].ready,true);
+  const loveFacts = processes.length;
+  for(let i=0;i<3;i++)assert.equal(Love.listInstalledStable(root)[0].ready,true);
+  assert.equal(processes.length,loveFacts,'Unchanged LOVE plist/architecture facts must reuse precise observations');
+  assert.equal(Godot.listInstalled(root).length,2);
+  const godotFacts = processes.length;
+  for(let i=0;i<3;i++)assert.equal(Godot.listInstalled(root).every(row=>row.ready),true);
+  assert.equal(processes.length,godotFacts,'Shared plist parsing must not spawn plutil for unchanged Godot listings');
+  assert.equal(Nw.listInstalled(root).length,2);
+  assert.equal(App.readInfoPlist(godot).CFBundleExecutable,'player');
+  const copy = App.readInfoPlist(godot);copy.CFBundleExecutable='changed';
+  assert.equal(App.readInfoPlist(godot).CFBundleExecutable,'player','Cached plist values must not leak mutable identity');
+  let observations=0;
+  const detection={stat:fs.statSync,readBytes(file,offset,size){observations++;return fs.readFileSync(file).subarray(offset,offset+size);}};
+  App.readInfoPlist(godot,{detection});App.readInfoPlist(godot,{detection});
+  assert.equal(observations,2,'Detection budgets must observe every read rather than reuse the status memo');
+  const statSync=fs.statSync, plist=path.join(godot,'Contents/Info.plist');
+  const coarse=t.mock.method(fs,'statSync',(file,options)=>{
+    const stat=statSync(file,options);
+    return file===plist && options?.bigint ? Object.assign(Object.create(stat),{ctimeNs:stat.ctimeNs/1000000000n*1000000000n}) : stat;
+  });
+  const beforeCoarse=processes.length;
+  App.readInfoPlist(godot);App.readInfoPlist(godot);
+  assert.equal(processes.length,beforeCoarse+2,'Coarse ctime must reparse rather than reuse plist facts');
+  coarse.mock.restore();
+  listing.mock.restore();
+  const lstatSync=fs.lstatSync, deep=path.join(godot,'Contents/Resources/deep');
+  const coarseDirectory=t.mock.method(fs,'lstatSync',(file,options)=>{
+    const stat=lstatSync(file,options);
+    return file===deep && options?.bigint ? Object.assign(Object.create(stat),{ctimeNs:stat.ctimeNs/1000000000n*1000000000n}) : stat;
+  });
+  let walks=0;
+  const countWalks=t.mock.method(fs,'readdirSync',(file,...args)=>{if(String(file).startsWith(godot+path.sep))walks++;return readdir(file,...args);});
+  assert.equal(App.appBundleStatus(godot).ready,true);const firstCoarseWalk=walks;
+  assert.ok(firstCoarseWalk>0);
+  assert.equal(App.appBundleStatus(godot).ready,true);assert.ok(walks>firstCoarseWalk,'Coarse directory observations must always validate the full bundle');
+  countWalks.mock.restore();coarseDirectory.mock.restore();
+  fs.chmodSync(path.join(love,'Contents/MacOS/player'),0o644);
+  assert.equal(Love.listInstalledStable(root)[0].ready,false,'Executable permission changes invalidate listing facts');
+  fs.chmodSync(path.join(love,'Contents/MacOS/player'),0o755);
+  const infoPath=path.join(love,'Contents/Info.plist');
+  fs.writeFileSync(infoPath,fs.readFileSync(infoPath,'utf8').replace('11.5','11.6'));
+  assert.equal(Love.listInstalledStable(root)[0].bundleVersionNormalized,'11.6','Same-sized plist rewrite invalidates facts');
+  assert.equal(App.appBundleLaunchCommand(godot,[]).command,path.join(godot,'Contents/MacOS/player'));
+  const outside=path.join(root,'outside');fs.writeFileSync(outside,'untouched');
+  for(const app of [love,godot,nw])fs.symlinkSync(outside,path.join(app,'Contents/Resources/deep/unsafe'));
+  assert.equal(Love.listInstalledStable(root)[0].ready,false);
+  const damagedGodot=Godot.listInstalled(root).find(row=>row.appPath===godot);
+  assert.equal(damagedGodot.ready,false);assert.match(damagedGodot.reason,/symlink escapes/);
+  const damagedNw=Nw.listInstalled(root).find(row=>row.version==='0.92.0');
+  assert.equal(damagedNw.ready,false);assert.match(damagedNw.reason,/symlink escapes/);
+  assert.equal(App.appBundleStatus(godot).ready,false,'Default status retains full validation');
+  assert.throws(()=>App.appBundleLaunchCommand(godot,[]),/symlink escapes/);
+  assert.equal(Love.resolveInstalled({userDataDir:root,channel:'stable',version:'11.5'}),null,'Selected LOVE/VNDS host still validates fully');
+  assert.equal(Nw.resolveBestInstalled({userDataDir:root,variant:'sdk',platform:'darwin',arch:process.arch}).version,'0.91.0','NW auto skips nested-damaged newest candidate');
+  const source=fs.readFileSync(path.join(__dirname,'../src/modules/godot/main.js'),'utf8');
+  const start=source.indexOf('const resolveGodotInstall ='),end=source.indexOf('\nfunction buildPromptKey',start);
+  const context=vm.createContext({Custom:{createSelector:(_manager,fn)=>fn},GodotRuntimeManager:{},GodotCore:Godot,
+    require:()=>App,compareVersionsDesc:(a,b)=>b.localeCompare(a,undefined,{numeric:true}),parseMajor:v=>Number(v.split('.')[0])});
+  vm.runInContext(source.slice(start,end)+'\nglobalThis.selected=resolveGodotInstall;',context);
+  assert.equal(context.selected(root,null,'standard',4).appPath,godotOld,'Godot auto retains older-valid fallback');
+  const bare=path.join(root,'custom-player');
+  fs.copyFileSync(path.join(godotOld,'Contents/MacOS/player'),bare);fs.chmodSync(bare,0o755);
+  const install={custom:true,appPath:bare,executablePath:bare,version:'custom'}, spawned=[];
+  const launchContext={settings:{},userDataDir:root,spawnDetachedChecked:async(command)=>{spawned.push(command);return{pid:1234};}};
+  const validation=t.mock.method(App,'validateAppBundle',()=>assert.fail('A custom bare executable must keep its native validation route'));
+  const godotStart=source.indexOf('async function launchRuntime('),godotEnd=source.indexOf('  const runtimeVersion =',godotStart);
+  const godotScope=vm.createContext({resolveRequiredRuntime:()=>({version:'custom',major:4}),resolveRuntimeVariant:()=> 'standard',
+    resolveGodotInstall:()=>install,resolveLaunchTarget:()=>root,require:()=>App});
+  const godotLaunch=vm.runInContext('('+source.slice(godotStart,godotEnd)+'return context.spawnDetachedChecked(executablePath,[]);\n})',godotScope);
+  await godotLaunch('godot',{runtimeData:{}},launchContext);
+  const loveSource=fs.readFileSync(path.join(__dirname,'../src/modules/love/main.js'),'utf8');
+  const loveStart=loveSource.indexOf('async function launchRuntime('),loveEnd=loveSource.indexOf('\nmodule.exports =',loveStart);
+  const loveScope=vm.createContext({normalizeRuntimeId:()=> 'love',RUNTIME_ID:'love',resolveRuntimeSelection:()=>({install}),
+    resolveLaunchTarget:async()=>root,existsDir:file=>fs.statSync(file).isDirectory(),resolveModuleData:()=>({sourceKind:'directory'}),
+    LuaSteam:{prepareLaunchEnvironment:async()=>null},path,require:()=>App});
+  const loveLaunch=vm.runInContext('('+loveSource.slice(loveStart,loveEnd)+')',loveScope);
+  await loveLaunch('love',{},launchContext);
+  assert.deepEqual(spawned,[bare,bare],'Both actual custom launch prefixes must reach their process seam unchanged');
+  validation.mock.restore();
+  assert.equal(fs.readFileSync(outside,'utf8'),'untouched');
+});

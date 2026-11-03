@@ -13,6 +13,12 @@ function gameDirectory(entry, context) {
   return GameData.resolveGameModuleDir(context.userDataDir,entry.gameId,"anyps5");
 }
 const saveDirectory = (entry,context) => entry.saveDirOverride || path.join(gameDirectory(entry,context),"saves");
+function resolveSaveLocations(entry,context) {
+  const primary=saveDirectory(entry,context),root=gameDirectory(entry,context);
+  return {primaryDirectory:primary,directories:[{directory:primary,role:"primary",source:"AnyPS5 data",confidence:"declared"},
+    {directory:path.join(primary,"_sd"),role:"alternate",source:"AnyPS5 save data",confidence:"declared"},
+    {directory:path.join(root,"launch","_sd_mem"),role:"alternate",source:"AnyPS5 save-data memory",confidence:"declared"}]};
+}
 function resolveProgram(entry) {
   const sourceRoot = fs.realpathSync(entry.contentRootDir || entry.gamePath), executablePath = entry.moduleData?.executablePath;
   if (!path.isAbsolute(executablePath || "") || !inside(sourceRoot,fs.realpathSync(executablePath))) throw new Error("The PS5 program must stay inside the imported game folder.");
@@ -170,4 +176,4 @@ async function prepareGame(entry,context,install,dependencies={}) {
     return {directory,executable:path.join(directory,"eboot"),cached:false};
   } finally { fs.rmSync(temporary,{recursive:true,force:true}); }
 }
-module.exports={gameDirectory,saveDirectory,resolveProgram,runtimePaths,prepareGame,unwrapFile,sourceFiles,isGuestModule};
+module.exports={gameDirectory,saveDirectory,resolveSaveLocations,resolveProgram,runtimePaths,prepareGame,unwrapFile,sourceFiles,isGuestModule};

@@ -15,6 +15,7 @@ async function processVideo(options = {}) {
   const identity = options.userDataDir && Neural.modelIdentity(options.userDataDir, options.modelPath);
   return identity ? withRuntimeUse(identity, lease => runVideo({ ...options, lease }), { userDataDir: options.userDataDir }) : runVideo(options);
 }
+// The video host ABI defaults to the launcher process; neural hardware support is checked separately.
 async function runVideo({ input, output, modelPath, signal, onProgress, onToolProcessSpawn, logger, root, lease, intensity = 1, temporal = true,
   codec = "h264", processingScale = 1, detailStrength = 1, colourStrength = 1, frameLimit, method="mlx-dlss",frameFactor=2,
   platform = process.platform, macOSVersion, graphicsArchitecture = process.arch } = {}) {

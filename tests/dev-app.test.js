@@ -37,7 +37,8 @@ test("development branding preserves the original installation and caches a matc
   fs.writeFileSync(rasterIconPath, 'owned raster icon');
   fs.writeFileSync(entitlementsPath, "fixture entitlements");
   const { prepareDevelopmentApp } = await import(pathToFileURL(path.resolve(__dirname, "../scripts/dev-app.mjs")));
-  const calls = [], options = { electronBinary: binary, platform: "darwin", cacheRoot: path.join(root, "cache"), iconPath, rasterIconPath, entitlementsPath,
+  let active = false;
+  const calls = [], options = { signingKeychain: null, inUse: () => active, electronBinary: binary, platform: "darwin", cacheRoot: path.join(root, "cache"), iconPath, rasterIconPath, entitlementsPath,
     run: (command, args) => { calls.push({ command, args }); } };
   const prepared = await prepareDevelopmentApp(options), app = prepared.slice(0, prepared.lastIndexOf("/Contents/MacOS/"));
   assert.equal(path.basename(prepared), "MacLauncher");
@@ -55,17 +56,54 @@ test("development branding preserves the original installation and caches a matc
   assert.ok(info.CFBundleDocumentTypes.some(row => row.CFBundleTypeExtensions.includes("exe") && row.LSHandlerRank === "Owner"));
   assert.ok(info.CFBundleDocumentTypes.some(row => row.CFBundleTypeExtensions.includes("glsl") && row.LSHandlerRank === "Alternate"));
   assert.ok(info.CFBundleDocumentTypes.some(row => row.CFBundleTypeExtensions.includes("dlssmodel") && row.LSTypeIsPackage === true));
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].command, "/usr/bin/codesign");
+  assert.deepEqual(calls[0].args.slice(0, -1), ["--force", "--deep", "--sign", "-", "--entitlements", entitlementsPath]);
+  assert.ok(calls[0].args.at(-1).endsWith("/MacLauncher.app"));
+  assert.equal(calls[1].command, "/usr/bin/codesign");
+  assert.deepEqual(calls[1].args, ["--force", "--sign", "-", "--entitlements", entitlementsPath,
+    '-r=designated => identifier "com.maclauncher.launcher.development"', calls[0].args.at(-1)]);
+  assert.deepEqual(calls[2].args, ["--verify", "--deep", "--strict", calls[0].args.at(-1)]);
   assert.equal(await prepareDevelopmentApp(options), prepared);
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
   assert.equal(await prepareDevelopmentApp({ ...options, platform: "linux" }), binary);
   process.env.MACLAUNCHER_ELECTRON_PATH = binary;
   assert.equal(await prepareDevelopmentApp(options), binary);
   delete process.env.MACLAUNCHER_ELECTRON_PATH;
+  assert.equal(path.basename(path.dirname(app)), 'stable');
   fs.writeFileSync(iconPath,'changed icon');
+  active = true;
+  assert.equal(await prepareDevelopmentApp(options), prepared, 'An active bundle defers regeneration');
+  assert.equal(calls.length, 3);
+  active = false;
+
   await assert.rejects(prepareDevelopmentApp({...options,run:()=>{throw Error('signing failed');}}),/signing failed/);
   assert.equal(fs.readdirSync(options.cacheRoot).some(name=>name.startsWith('.prepare-')),false,'Failed signing removes its entire stage');
   assert.equal(fs.readFileSync(prepared,'utf8'),'fixture executable','A failed replacement preserves the usable generation');
+  const oldReceipt = fs.readFileSync(path.join(options.cacheRoot, 'stable/ready.json'), 'utf8');
+  assert.equal(await prepareDevelopmentApp(options), prepared, 'Changed inputs keep the stable executable path');
+  assert.notEqual(fs.readFileSync(path.join(options.cacheRoot, 'stable/ready.json'), 'utf8'), oldReceipt);
+  assert.equal(calls.length, 6);
+  assert.equal(calls[4].args.at(-2), calls[1].args.at(-2), 'Regeneration keeps the designated requirement');
+  const keychain = path.join(root, 'development.keychain-db');
+  fs.writeFileSync(keychain, 'fixture keychain');
+  fs.writeFileSync(path.join(root, 'keychain-password'), 'fixture password');
+  const signedCalls = [], certificate = 'A'.repeat(40);
+  assert.equal(await prepareDevelopmentApp({...options, signingKeychain: keychain, run: (command, args) => {
+    signedCalls.push({command,args});
+    if(args[0]==='find-identity')return '1) '+certificate+' "MacLauncher Development"';
+  }}), prepared);
+  const outer = signedCalls.find(call => call.args.includes('--keychain'));
+  assert.deepEqual(outer.args.slice(0, 8), ['--force','--sign',certificate,'--keychain',keychain,'--entitlements',entitlementsPath,
+    '-r=designated => identifier "com.maclauncher.launcher.development" and certificate leaf = H"'+certificate+'"']);
+  assert(!outer.args.includes('--deep'), 'The certificate requirement applies only to the outer app');
+  assert(signedCalls.some(call => call.args[0]==='unlock-keychain'));
+  const legacy = path.join(options.cacheRoot, 'd08e6a18a87f1d3b7daddaea');
+  fs.mkdirSync(legacy);fs.writeFileSync(path.join(legacy,'ready.json'),'{}');
+  const {pruneDevelopmentApps}=await import('../scripts/dev-app.mjs');
+  pruneDevelopmentApps(options.cacheRoot,path.dirname(app),{processes:'',alive:()=>false});
+  assert(fs.existsSync(legacy), 'Stable preparation preserves legacy generations');
+
 });
 
 test('development cache retention protects current, fallback, running and leased generations',async t=>{

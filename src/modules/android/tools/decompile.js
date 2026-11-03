@@ -1,4 +1,5 @@
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os");
+const { cloneOrCopySync } = require("../../shared/copy-file");
 const Tool = require("./jadx-manager");
 const Packages = require("../package-set");
 const { inspectApk } = require("../apk");
@@ -98,7 +99,7 @@ async function decompileApk(entry, payload = {}, context = {}, dependencies = {}
       const log = path.join(staging, "decompile.log");
       if (fs.existsSync(log)) {
         const saved = path.join(parent, path.basename(staging).slice(1) + "-failed.log");
-        fs.copyFileSync(log, saved, fs.constants.COPYFILE_EXCL);
+        cloneOrCopySync(log, saved, { exclusive: true });
         error.message = error.message.replaceAll(log, saved);
         if (!error.message.includes(saved)) error.message += " Details: " + saved;
       }

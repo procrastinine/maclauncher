@@ -1,5 +1,5 @@
 import { Select } from "./Select";
-import React, { memo, useRef } from "react";
+import React, { memo, useRef, useState } from "react";
 import type {
   CheatsPatchStatus, LauncherState, LibsPatchStatus, ModuleActionError, ModuleManifest,
   ModuleUiAction, RecentGame, RuntimeId, RuntimeStatusEntry
@@ -19,6 +19,7 @@ import { GameActions } from "./GameActions";
 import { GameArguments } from "./GameArguments";
 import { GameIcon } from "./GameIcon";
 import { HelpTip } from "./HelpTip";
+import { ACTIONS, ACTION_HELP } from "../../../../modules/shared/graphics-shortcuts.mjs";
 import { ModuleTools } from "./ModuleTools";
 import { ModuleEntrySelectors } from "./ModuleEntrySelectors";
 import { moduleToolGroups, presentModuleFields } from "./module-tools-model";
@@ -100,6 +101,57 @@ function ToggleActionButton({
       {enableLabel}
     </button>
   );
+}
+
+// The windows, apps and displays of a running session share its graphics;
+// removing the last one ends the session. A removal in progress disables its
+// button until the session answers.
+function SessionTargets({ gamePath, targets, onRemove }: {
+  gamePath: string;
+  targets: NonNullable<RecentGame["sessionTargets"]>;
+  onRemove: LibraryActions["onRemoveSessionTarget"];
+}) {
+  const [removing, setRemoving] = useState<ReadonlySet<string>>(() => new Set());
+  const remove = (id: string) => {
+    setRemoving(current => new Set(current).add(id));
+    void onRemove(gamePath, id).finally(() => setRemoving(current => { const next = new Set(current);next.delete(id);return next; }));
+  };
+  return <>
+    <h3 className="detailSectionHeading">Applied to</h3>
+    {targets.map(target => {
+      const name = target.detail ? `${target.label} (${target.detail})` : target.label;
+      const description = targets.length > 1 ? `Remove ${name}` : `Remove ${name} and end the session`;
+      return <div className="detailRow" key={target.id}>
+        <div className="detailLabel">{target.detail || "Window"}</div>
+        <div className="detailValue" title={target.label}>{target.label}</div>
+        <div className="detailActions">
+          <button className="btn small iconOnly" disabled={removing.has(target.id)} onClick={() => remove(target.id)}
+            title={description} aria-label={description}><XIcon /></button>
+        </div>
+      </div>;
+    })}
+  </>;
+}
+
+// An app action's shortcut also ends the front app's session. The row names
+// its assignment in macOS menu glyphs, or opens the Launcher section of
+// Settings, where graphics shortcuts are assigned.
+function SessionShortcut({ moduleInfo, assigned }: { moduleInfo: ModuleManifest | null; assigned?: Record<string, string> }) {
+  const appActions = (moduleInfo?.ui as (NonNullable<ModuleManifest["ui"]> & { appActions?: Array<{ shortcut?: unknown; sessionShortcuts?: Array<{ shortcut?: unknown }> }> }) | null | undefined)?.appActions;
+  const shortcuts = [...new Set(appActions?.flatMap(action => [action.shortcut, ...(action.sessionShortcuts || []).map(item => item.shortcut)]).filter((name): name is string => typeof name === "string") || [])];
+  const labels = ACTIONS as Record<string, string>, help = ACTION_HELP as Record<string, string>;
+  const glyphs: Record<string, string> = { Control: "⌃", Option: "⌥", Shift: "⇧", Command: "⌘", Return: "↩", Escape: "⎋", Up: "↑", Down: "↓", Left: "←",
+    Right: "→", Backspace: "⌫", Delete: "⌦", Tab: "⇥" };
+  return <>{shortcuts.map(shortcut => {
+    const label = labels[shortcut] || shortcut, accelerator = assigned?.[shortcut];
+    return <div className="detailRow" key={shortcut}>
+      <div className="detailLabel">Keyboard shortcut {help[shortcut] && <HelpTip label={"About " + label}>{help[shortcut]}</HelpTip>}</div>
+      <div className="detailValue"><span>{label}</span>{accelerator
+        ? <>: <kbd>{accelerator.split("+").map(part => glyphs[part] ?? part).join("")}</kbd></>
+        : <> <button className="btn small" aria-label={"Assign " + label + " in Settings"}
+          onClick={() => void window.MacLauncher?.launcher.openUtilityWindow({ view: "settings", sectionId: "launcher" }).catch(() => {})}>Assign in Settings…</button></>}</div>
+    </div>;
+  })}</>;
 }
 
 function detectionText(value: unknown): string | null {
@@ -372,7 +424,7 @@ export const GameDetails = memo(function GameDetails({
     <>
       <div className="gameDetailsHeader">
         <div className="gameDetailsIdentity">
-          <GameIcon game={g} moduleInfo={moduleInfo} inspector />
+          <GameIcon game={g} inspector />
           <div className="gameDetailsIdentityText">
             <h2 id="game-details-title" className="cardTitle" title={g.name}>{g.name}</h2>
             <div className="cardSubtitle">{g.moduleLabel || g.moduleShortLabel || g.moduleId}{detection.version ? ` · ${detection.version}` : ""}</div>
@@ -390,6 +442,10 @@ export const GameDetails = memo(function GameDetails({
       {g.launchNotices?.map((notice, index) => <div className="detailMeta gameLaunchNotice" role="status" key={index}>{notice}</div>)}
       <div className="gameDetails" tabIndex={0} aria-label={`${g.name} details`}>
         <div className="detailGrid">
+          {/* An entry that exists only while its session runs has no files,
+              launch settings, patches, tools or notes of its own; its
+              inspector holds Stop and Graphics. */}
+          {!g.ephemeral && <>
           <h3 className="detailSectionHeading">Files</h3>
           <div className="detailRow">
             <div className="detailLabel">Game</div>
@@ -786,6 +842,12 @@ export const GameDetails = memo(function GameDetails({
             onAction={onModuleAction} onCancel={onCancelModuleAction} onRevealPath={onRevealToolPath}
             unavailable={filesUnavailable} />
           <ErrorText error={otherActionError} inline />
+          </>}
+
+          {g.ephemeral && <SessionShortcut moduleInfo={moduleInfo} assigned={state.launcherSettings?.graphicsShortcuts} />}
+
+          {g.ephemeral && Boolean(g.sessionTargets?.length) &&
+            <SessionTargets gamePath={g.gamePath} targets={g.sessionTargets!} onRemove={actions.onRemoveSessionTarget} />}
 
           {canLaunch && <EffectsControls key={`effects:${g.gamePath}`} game={g} running={gameRunning}
             live={graphicsLive} warnings={g.graphicsWarnings}
@@ -793,8 +855,8 @@ export const GameDetails = memo(function GameDetails({
             visible={visible}
             onManageModels={() => openRuntimesManager("graphics-models")} />}
 
-          <GameNotes key={`notes:${g.gameId || g.gamePath}`} notes={g.notes || ""}
-            onSave={notes => actions.onSaveGameNotes(g.gamePath, notes)} />
+          {!g.ephemeral && <GameNotes key={`notes:${g.gameId || g.gamePath}`} notes={g.notes || ""}
+            onSave={notes => actions.onSaveGameNotes(g.gamePath, notes)} />}
         </div>
 
       </div>

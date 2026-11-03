@@ -1,4 +1,5 @@
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os");
+const { cloneOrCopySync } = require("../../shared/copy-file");
 const Tool = require("./apktool-manager");
 const { originalPackages } = require("./decompile");
 const GameData = require("../../shared/game-data");
@@ -23,7 +24,7 @@ async function decodeApk(entry, payload = {}, context = {}, dependencies = {}) {
     const sources = inspected.items.map(item => ({ ...item, sha256: Native.hashFile(item.file) }));
     const base = sources.find(item => item.metadata.split === null);
     const baseLibrary = path.join(inputs, "base-library.apk");
-    if (base && sources.length > 1) fs.copyFileSync(base.file, baseLibrary, fs.constants.COPYFILE_FICLONE);
+    if (base && sources.length > 1) cloneOrCopySync(base.file, baseLibrary);
     fs.mkdirSync(parent, { recursive: true });
     temporary = fs.mkdtempSync(path.join(parent, ".decode-"));
     const logPath = path.join(temporary, "decode.log");
@@ -59,7 +60,7 @@ async function decodeApk(entry, payload = {}, context = {}, dependencies = {}) {
   } catch (error) {
     const log = temporary && path.join(temporary, "decode.log");
     if (log && fs.existsSync(log) && !context.signal?.aborted && error.code !== "ABORT_ERR") {
-      const retained = path.join(parent, "decode-failed.log"); fs.copyFileSync(log, retained);
+      const retained = path.join(parent, "decode-failed.log"); cloneOrCopySync(log, retained);
       error.message = error.message.replaceAll(log, retained) + " Details: " + retained;
     }
     throw error;

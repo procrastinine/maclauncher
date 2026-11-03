@@ -21,7 +21,7 @@ export function stageTemporalProvider({name,directory,upstream,ownedRoot}){
   const owned=new Map();
   for(const required of ["source.json","build.mjs","backend.mm","descriptor.js","../frame.h"])if(!Object.hasOwn(metadata.owned,required))throw Error("Missing temporal provider build input: "+required);
   for(const [relative,expected] of Object.entries(metadata.owned)){
-    if(!safe(relative)&&!['../frame.h','../command-order.hpp','../../shaderc-offline.cpp'].includes(relative)||!/^[a-f0-9]{64}$/.test(expected))throw Error("Invalid owned temporal build input.");
+    if(!safe(relative)&&!['../frame.h','../command-order.hpp','../payload-files.hpp','../../shaderc-offline.cpp'].includes(relative)||!/^[a-f0-9]{64}$/.test(expected))throw Error("Invalid owned temporal build input.");
     const file=path.resolve(ownedRoot,relative),target=path.posix.normalize(`maclauncher/temporal/${name}/${relative}`);
     if(!target.startsWith("maclauncher/")||!fs.lstatSync(file).isFile()||hash(file)!==expected)throw Error("Temporal provider source changed: "+relative);
     owned.set(target,file);

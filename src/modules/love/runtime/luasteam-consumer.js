@@ -4,6 +4,7 @@ const crypto = require("node:crypto");
 const { readArchiveText } = require("../detect");
 const Consumer = require("../../shared/runtime/steamworks/native-consumer-probe");
 const AppId = require("../../shared/runtime/steamworks/app-id");
+const FileSignature = require("../../shared/file-signature");
 
 const MAX_SOURCE_BYTES = 512 * 1024;
 const CANDIDATES = ["luasteam.dll", "luasteam.so", "native/luasteam.dll", "native/luasteam.so", "lib/luasteam.so"];
@@ -11,8 +12,23 @@ const digest = text => crypto.createHash("sha256").update(text).digest("hex");
 function identity(file) {
   try {
     const stat = fs.lstatSync(file, { bigint: true });
-    return [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs, stat.mode].map(String).join(":");
+    return [FileSignature.signature(stat), String(stat.mode)];
   } catch { return null; }
+}
+function sameSignature(previous, current) {
+  const normalize = value => {
+    const parts = JSON.parse(value);
+    if (!Array.isArray(parts) || parts.length < 3) return null;
+    const file = identity => {
+      if (typeof identity !== "string") return identity;
+      const fields = identity.split(":");
+      return fields.length === 6 ? [FileSignature.normalize(fields.slice(0, 5)), fields[5]] : identity;
+    };
+    return [parts[0], file(parts[1]), parts[2], ...parts.slice(3).map(row =>
+      Array.isArray(row) ? [row[0], file(row[1])] : row)];
+  };
+  try { return JSON.stringify(normalize(previous)) === JSON.stringify(normalize(current)); }
+  catch { return false; }
 }
 function originalSource(entry) {
   const data = entry?.moduleData || {}, kind = data.sourceKind;
@@ -77,7 +93,7 @@ function inspect(entry) {
   const signature = JSON.stringify([source.scriptPath, identity(source.scriptPath), source.directory,
     ...candidates.map(file => [file, identity(file)]), ...(source.scriptEntry !== "main.lua" ? [source.scriptEntry] : [])]);
   const previous = entry?.moduleData?.luaSteamEvidence;
-  if (previous?.schemaVersion === 1 && previous.signature === signature) return previous;
+  if (previous?.schemaVersion === 1 && sameSignature(previous.signature, signature)) return previous;
   let script = null;
   try {
     if (source.archive) script = readArchiveText(source.scriptPath, source.scriptEntry, MAX_SOURCE_BYTES);

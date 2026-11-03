@@ -1,16 +1,17 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const os = require("node:os");
 const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
 const Native = require("../shared/runtime/local-native");
 const { createPinnedNativeManager } = require("../shared/runtime/pinned-native-manager");
 const { createBundledNativeRuntime } = require("../shared/runtime/bundled-native");
 const { getUiServices } = require("../shared/ui-services");
-const GameData = require("../shared/game-data");
 const { runtimeVersionChoices } = require("../shared/runtime/version-choices");
 const { source, prepareReleaseInstall, releaseExecutable } = require("./catalog");
 const Preparation = require("./prepare");
-const { prepareGame } = Preparation;
+// A prepared result belongs to one Play context and is consumed by launch.
+const preparedLaunches = new WeakMap();
 const MsgTool = require("../shared/runtime/msg-tool");
 
 function resourcePin(runtimeManager, userDataDir, version) {
@@ -86,6 +87,7 @@ function getRuntimeRequirements(entry, context) {
   if (context.runtimeId !== "krkrsdl2" || !Preparation.needsResources(entry)) return [];
   const selected = selection(entry, context);
   if (Preparation.resources(context.userDataDir, selected.install) || preparationInstall(entry, context, selected)) return [];
+  if (Preparation.bundledResourcesAvailable()) return [];
   if (!selected.install && selected.discoveryRequired) return [];
   // A missing selected host carrying the resource contract installs both at once.
   if (manager.core.listCatalog({ userDataDir: context.userDataDir }).some(pin => pin.version === selected.version && pin.kag3Resources === 1)) return [];
@@ -94,9 +96,87 @@ function getRuntimeRequirements(entry, context) {
     label: "KAG3 compatibility resources", requiresDownload: true, installOptions: { kag3Resources: 1 } }];
 }
 
-function saveDirectory(entry, context) {
-  if (!entry.gameId || !context.userDataDir) throw new Error("Import this game before launching so saves have a stable directory.");
-  return path.join(GameData.resolveGameModuleDir(context.userDataDir, entry.gameId, manifest.id), "saves");
+function saveConfiguration(entry) {
+  const { decode } = require("./script");
+  const XP3 = require("./xp3");
+  let archive;
+  if (entry.moduleData?.archivePath) {
+    try {
+      // An unexamined patch may replace the configuration; keep that route direct.
+      const selected = path.resolve(entry.moduleData.archivePath);
+      if (fs.readdirSync(entry.contentRootDir).some(name => /\.xp3$/i.test(name) && path.resolve(entry.contentRootDir, name) !== selected)) return null;
+      archive = XP3.inspectArchive(selected);
+    } catch { return null; }
+  }
+  for (const relative of ["Config.tjs", "system/Config.tjs"]) {
+    try {
+      let bytes;
+      if (archive) {
+        const member = archive.members.get(relative.toLowerCase());
+        if (!member || member.size > 512 * 1024) continue;
+        bytes = XP3.readScript(archive, member, { allowPlainProtected: true });
+      } else {
+        const file = path.join(entry.contentRootDir, relative), stat = fs.statSync(file);
+        if (!stat.isFile() || stat.size > 512 * 1024) continue;
+        bytes = fs.readFileSync(file);
+      }
+      return decode(bytes).replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    } catch {}
+  }
+  return null;
+}
+
+function resolveSaveIdentity(entry, context = {}) {
+  const code = saveConfiguration(entry);
+  if (!code) return null;
+  const assignments = name => [...code.matchAll(new RegExp(`^[\\t ]*;?[\\t ]*(?:var[\\t ]+)?${name}\\s*=\\s*([^;\\r\\n]+)`, "gm"))].at(-1)?.[1]?.trim();
+  const literal = value => value?.match(/^["']([^"'\\]*)["']$/)?.[1];
+  const dataName = literal(assignments("dataName"));
+  if (dataName == null || /[\\/]/.test(dataName)) return null;
+  let args;
+  try {
+    args = [...(context.runtimeSettings?.args || entry.runtimeSettings?.krkrsdl2?.args ||
+      context.settings?.modules?.kirikiri?.runtimeSettings?.krkrsdl2?.args || []),
+      ...(context.gameArguments || require("../shared/runtime/launch-arguments").parse(entry.launchArguments || ""))];
+  } catch { return null; }
+  let argumentPath;
+  for (let at = 0; at < args.length; at++) {
+    if (/^-datapath=/i.test(args[at])) argumentPath = args[at].slice(args[at].indexOf("=") + 1);
+    else if (/^-datapath$/i.test(args[at])) argumentPath = args[++at];
+  }
+  const selected = entry.saveDirOverride || argumentPath;
+  if (selected && !path.isAbsolute(selected)) return null;
+  const base = selected || path.join(os.homedir(), "Library", "Application Support", "krkrsdl2");
+  // Archived KAG3 configuration is normalized by the existing compatibility adapter.
+  const expression = Preparation.needsResources(entry) ? "System.dataPath" : assignments("saveDataLocation");
+  const suffix = expression?.match(/^System\.dataPath\s*\+\s*["']([^"'\\]*)["']$/)?.[1];
+  const adjustable = expression === "System.dataPath" || suffix != null;
+  const effective = nativeBase => path.normalize(suffix != null ? nativeBase + path.sep + suffix.replace(/^[/\\]+/, "") : nativeBase);
+  const rawDirectory = adjustable ? effective(base) : literal(expression);
+  if (!rawDirectory || !path.isAbsolute(rawDirectory)) return null;
+  const directory = path.normalize(rawDirectory);
+  return {
+    namespace: "kirikiri-kag-system-files", identity: JSON.stringify([directory, dataName]),
+    directory, scope: "game", explicit: Boolean(selected), hostSubstitution: false,
+    createPatch: adjustable && !argumentPath && !(suffix || "").split(/[\\/]/).includes("..") ? ({ gameId }) => {
+      if (!/^[A-Za-z0-9_-]+$/.test(gameId || "")) return null;
+      const saveDirOverride = path.join(os.homedir(), "Library", "Application Support", "krkrsdl2", gameId);
+      const actual = effective(saveDirOverride);
+      return { saveDirOverride, defaultSaveDir: actual, saveLocations: [{ directory: actual, label: "KiriKiri saves" }] };
+    } : undefined
+  };
+}
+
+function resolveSaveLocations(entry) {
+  const override = typeof entry.saveDirOverride === "string" && path.isAbsolute(entry.saveDirOverride) ? path.normalize(entry.saveDirOverride) : null;
+  const known = typeof entry.defaultSaveDir === "string" ? path.normalize(entry.defaultSaveDir) : null;
+  const directory = override && known && (known === override || known.startsWith(override + path.sep)) ? known : override;
+  return { primaryDirectory: directory, directories: directory ? [{ directory, label: "KiriKiri saves" }] : [] };
+}
+
+function preparationKey(entry, context, selected) {
+  return JSON.stringify([context.userDataDir, entry.gameId, entry.contentRootDir, entry.moduleData?.archivePath,
+    selected.version, selected.install.runtimePath, context.runtimeSettings?.args || [], context.gameArguments || []]);
 }
 
 function assertCompatibleProject(data) {
@@ -131,33 +211,37 @@ async function launchRuntime(runtimeId, entry, context) {
   const configuredArgs = context.runtimeSettings?.args || [];
   if (!Array.isArray(configuredArgs)) throw new Error("KiriKiri options must be separate arguments beginning with '-'.");
   const extraArgs = [...configuredArgs, ...(context.gameArguments || [])];
-  if (extraArgs.some(arg => typeof arg === "string" && /^-datapath(?:=|$)/i.test(arg))) throw new Error("The launcher manages KiriKiri's save directory; remove -datapath from extra arguments.");
-  if (extraArgs.some(arg => typeof arg !== "string" || !arg.startsWith("-"))) throw new Error("KiriKiri options must be separate arguments beginning with '-'.");
+  for (let at = 0; at < extraArgs.length; at++) {
+    if (typeof extraArgs[at] !== "string" || !extraArgs[at].startsWith("-")) throw new Error("KiriKiri options must be separate arguments beginning with '-'.");
+    if (/^-datapath$/i.test(extraArgs[at]) && typeof extraArgs[++at] !== "string") throw new Error("KiriKiri -datapath needs a path.");
+  }
   const selected = selection(entry, context);
   if (!selected.install) throw new Error(`${selected.reason} Install a compatible version in Runtimes.`);
-  const prepared = prepareGame(entry, context, preparationInstall(entry, context, selected, true));
+  const cached = preparedLaunches.get(context);
+  preparedLaunches.delete(context);
+  const prepared = cached?.key === preparationKey(entry, context, selected) ? cached.prepared
+    : Preparation.prepareGame(entry, context, preparationInstall(entry, context, selected, true));
   const rootDir = prepared?.preparedRoot || entry.contentRootDir;
   const inputPath = prepared?.preparedRoot || entry.moduleData?.archivePath || rootDir;
   const detected = detectGame({ rootDir, inputPath, stat: fs.statSync(inputPath) });
   assertCompatibleProject(detected?.moduleData);
-  const defaultSaveDir = saveDirectory(entry, context);
+  const defaultSaveDir = resolveSaveLocations(entry).primaryDirectory;
   const override = typeof entry.saveDirOverride === "string" ? entry.saveDirOverride.trim() : "";
   if (override && !path.isAbsolute(override)) throw new Error("Save directory override must be an absolute local path.");
-  const saveDir = override || defaultSaveDir;
-  fs.mkdirSync(saveDir, { recursive: true });
+  if (override) fs.mkdirSync(override, { recursive: true });
   entry.defaultSaveDir = defaultSaveDir;
   context.onEntryChange?.({ defaultSaveDir });
   return Native.launchLocalRuntime({
     runtimePath: selected.install.runtimePath, runtimeVersion: selected.version,
     upstreamRevision: selected.install.upstreamRevision, expectedSha256: selected.install.binarySha256,
-    // The SDL2 port preserves a supplied datapath verbatim. KAG appends filenames
-    // directly to System.dataPath, so the directory must retain its final slash.
-    args: [...extraArgs, `-datapath=${saveDir}${path.sep}`, detected.moduleData.launchTarget], cwd: rootDir, context
+    // No override preserves the direct upstream route; a selected folder keeps
+    // its final slash because KAG appends filenames to System.dataPath.
+    args: [...extraArgs, ...(override ? [`-datapath=${override}${path.sep}`] : []), detected.moduleData.launchTarget], cwd: rootDir, context
   });
 }
 
 module.exports = {
-  id: manifest.id, manifest, detectGame, runtimeManagers: [manager, MsgTool], createManager, getRuntimeRequirements,
+  id: manifest.id, manifest, detectGame, resolveSaveLocations, resolveSaveIdentity, runtimeManagers: [manager, MsgTool], createManager, getRuntimeRequirements,
   ensureRuntime: async (entry, context) => {
     if (context.runtimeId !== "krkrsdl2") return null;
     const inputPath = entry.moduleData?.archivePath || entry.gamePath;
@@ -173,11 +257,14 @@ module.exports = {
     if (selected.ready) return null;
     return { managerId: manager.id, version: selected.version, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}) };
   },
-  prepareLaunch: (entry, context) => {
+  prepareLaunch: async (entry, context) => {
     if (context.runtimeId !== "krkrsdl2") return null;
     const selected = selection(entry, context);
     if (!selected.install) throw new Error(`${selected.reason} Install a compatible version in Runtimes.`);
-    const prepared = prepareGame(entry, context, preparationInstall(entry, context, selected, true));
+    if (Preparation.needsResources(entry)) await Preparation.ensureResources(context, preparationInstall(entry, context, selected) || selected.install);
+    preparedLaunches.delete(context);
+    const prepared = Preparation.prepareGame(entry, context, preparationInstall(entry, context, selected, true));
+    preparedLaunches.set(context, { key: preparationKey(entry, context, selected), prepared });
     if (prepared) {
       entry.moduleData = { ...entry.moduleData, preparedRoot: prepared.preparedRoot, preparationProfile: prepared.profile, preparationWarnings: prepared.warnings.join(" "),
         compatibility: prepared.warnings.join(" "),

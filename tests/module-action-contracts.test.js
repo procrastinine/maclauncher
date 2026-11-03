@@ -80,13 +80,20 @@ test("PS5 Vulkan choices resolve through Settings and inspector backend dispatch
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
   const operations = createBackendOperations({ userDataDir, registry });
   t.after(() => operations.beginShutdown());
+  t.mock.method(globalThis, "fetch", () => assert.fail("Vulkan choices must remain offline"));
+  for (const transport of [require("node:http"), require("node:https")])
+    for (const method of ["request", "get"]) t.mock.method(transport, method, () => assert.fail("Vulkan choices must remain offline"));
+  const expected = require("../src/modules/shared/vulkan").choices({ userDataDir, settings: {} },
+    { architecture: "x64", preferredBackend: "kosmickrisp", required: true });
+  assert.deepEqual(expected.vulkanRuntimes[0], { value: "auto", label: "Automatic" });
+  assert.equal(new Set(expected.vulkanRuntimes.map(row => row.value)).size, expected.vulkanRuntimes.length);
   const entry = { moduleId: "anyps5", gameId: "ps5-actions", gamePath: path.join(userDataDir, "game"), runtimeId: "anyps5", moduleData: { format: "elf" } };
   for (const runtimeId of ["anyps5", "prosper"]) {
     for (const moduleId of new Set(["anyps5", runtimeId])) {
       const choices = await operations.moduleSettingsAction(moduleId, "listVulkanRuntimes", { runtimeId });
-      assert.deepEqual(choices, { vulkanRuntimes: [{ value: "auto", label: "Automatic" }] });
+      assert.deepEqual(choices, expected, "Settings retains all choices from the shared current Vulkan catalog");
     }
     assert.deepEqual(await operations.moduleAction(entry, "listVulkanRuntimes", {}, { runtimeId }),
-      { vulkanRuntimes: [{ value: "auto", label: "Automatic" }] });
+      expected, "the inspector exposes the same current choices");
   }
 });

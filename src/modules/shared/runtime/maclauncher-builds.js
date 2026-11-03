@@ -15,7 +15,7 @@ function options(value) {
   const { projectId, repository } = identity(value);
   if (value.architecture !== undefined && !LAUNCHER_ARCHITECTURES.has(value.architecture))
     throw new Error("Choose an ARM or Intel launcher architecture.");
-  return { projectId, repository, architecture: value.architecture, launcherContract: contract(value.launcherContract) };
+  return { projectId, repository, architecture: value.architecture, launcherContract: contract(value.launcherContract === undefined ? 2 : value.launcherContract) };
 }
 
 // A later record schema or launcher contract is reported, not misread. Unknown

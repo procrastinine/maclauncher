@@ -1,7 +1,7 @@
 const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path"), { spawnSync } = require("node:child_process");
 
-test("generation suppresses images no refresh shows and keeps image changes clear of refresh latches", { skip: process.platform !== "darwin" }, t => {
+test("window generation suppresses images no refresh shows and keeps image changes clear of refresh latches", { skip: process.platform !== "darwin" }, t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "generation-schedule-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const binary = path.join(root, "generation-schedule"), native = path.resolve(__dirname, "../src/modules/shared/reshade/native");
@@ -14,7 +14,7 @@ test("generation suppresses images no refresh shows and keeps image changes clea
   assert.match(result.stdout, /rules hold/);
 });
 
-test("display-limited generation retains ordinary real-frame admission and safe delivery transitions", { skip: process.platform !== "darwin" }, t => {
+test("window display-limited generation retains ordinary real-frame admission and safe delivery transitions", { skip: process.platform !== "darwin" }, t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "display-limited-delivery-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const native = path.resolve(__dirname, "../src/modules/shared/reshade/native"), binary = path.join(root, "display-limited-delivery");

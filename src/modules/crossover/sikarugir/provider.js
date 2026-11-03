@@ -10,8 +10,8 @@ const Writable = require("../../shared/writable-input");
 const supportsEntry = entry => Detection.supportsWindowsRuntimes(entry);
 const decorateEntry = Detection.decorateEntry;
 function resolveSaveLocations(entry, context) {
-  const directory = Launch.runtimeDirectory(entry, context), gameRoot = path.join(directory, "game");
-  const directories = [{ directory: gameRoot, role: "primary", source: "Private Windows game files", confidence: "exact" }];
+  const directory = Launch.runtimeDirectory(entry, context), gameRoot = Detection.cachedWindowsExecutable(entry)?.sourceRoot || entry.gamePath;
+  const directories = path.isAbsolute(gameRoot || "") ? [{ directory: gameRoot, role: "primary", source: "Original Windows game files", confidence: "exact" }] : [];
   const prefixPath = entry.runtimeData?.sikarugir?.prefixPath;
   if (typeof prefixPath === "string" && path.isAbsolute(prefixPath) && Detection.inside(path.join(directory, "prefixes"), prefixPath)) {
     const users = path.join(prefixPath, "drive_c", "users");
@@ -20,7 +20,7 @@ function resolveSaveLocations(entry, context) {
       directories.push({ directory: users, role: "alternate", source: "Private Windows profile files", confidence: "exact" });
     }
   }
-  return { primaryDirectory: gameRoot, directories };
+  return { primaryDirectory: directories[0]?.directory || null, directories };
 }
 function createLog(directory) {
   const file = path.join(directory, "wine.log");
@@ -58,8 +58,8 @@ function createProvider({ manager, launch = Launch, platform = process.platform,
       if (!supportsEntry(entry)) throw new Error("Sikarugir requires an x86 or x64 Windows game.");
       const selected = await runtimeManager().resolveForPlay(entry, context);
       if (selected.ready) return null;
-      if (!selected.version) throw new Error(selected.reason || "No compatible Sikarugir version is available.");
-      return { managerId: "sikarugir", version: selected.version, installOptions: selected.installOptions || {},
+      if (!selected.version && !selected.discoveryRequired) throw new Error(selected.reason || "No compatible Sikarugir version is available.");
+      return { managerId: "sikarugir", version: selected.version || null, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: selected.installOptions || {},
         ...(selected.detail ? { detail: selected.detail } : {}), ...(selected.versionLabel ? { versionLabel: selected.versionLabel } : {}) };
     },
     launchRuntime: async (runtimeId, entry, context) => {
@@ -70,7 +70,7 @@ function createProvider({ manager, launch = Launch, platform = process.platform,
       const log = createLog(plan.directory);
       try {
         const child = await context.spawnDetachedChecked("/bin/sh", launch.supervisorArguments(plan.winePath, plan.serverPath, "play", plan.args, plan.environment),
-        { cwd: path.dirname(plan.executablePath), env: plan.environment, stdio: ["ignore", "pipe", "pipe"], graphicsExecutable: plan.winePath }, false);
+        { cwd: plan.workingDirectory || path.dirname(plan.executablePath), env: plan.environment, stdio: ["ignore", "pipe", "pipe"], graphicsExecutable: plan.winePath }, false);
         log.attach(child);
         return child;
       } catch (error) { log.close(); throw error; }

@@ -188,7 +188,12 @@ test("updateSettingsAfterUninstall restores the committed Vineflower installed f
   }
 });
 
-test("java core host variant selection supports Rosetta fallback", () => {
+test("java core host variant selection supports Rosetta fallback", t => {
+  const descriptor = Object.getOwnPropertyDescriptor(process, "arch");
+  Object.defineProperty(process, "arch", { ...descriptor, value: "arm64" });
+  t.after(() => Object.defineProperty(process, "arch", descriptor));
+  t.mock.method(require("../src/modules/shared/runtime/host-capabilities"), "getHostCapabilities",
+    () => ({ platform: "darwin", launcherArch: "arm64", hardwareArch: "arm64", rosettaAvailable: true }));
   const choose = Manager.core.java.__test.chooseVariantForHost;
 
   const native = choose({

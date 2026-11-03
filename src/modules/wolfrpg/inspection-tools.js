@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../shared/copy-file");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { createManagedWindowsTool, windowsPath } = require("../shared/runtime/managed-windows-tool");
@@ -34,7 +35,7 @@ function publish(temporary, target) {
 }
 function retainFailureLog(file, parent, name, error) {
   if (fs.existsSync(file)) {
-    const target = path.join(parent, name + "-failure.log"); fs.copyFileSync(file, target);
+    const target = path.join(parent, name + "-failure.log"); cloneOrCopySync(file, target);
     error.message += " Log: " + target;
   }
   throw error;
@@ -97,7 +98,7 @@ async function extractAdvancedAssets(entry, payload, context, dependencies = {})
     for (const item of staged) {
       throwIfAborted(context.signal);
       const file = path.join(input, ...item.name.split("/")); fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.copyFileSync(path.join(entry.gamePath, item.name), file, fs.constants.COPYFILE_FICLONE);
+      cloneOrCopySync(path.join(entry.gamePath, item.name), file);
     }
     if (!archiveNames.length) throw new Error("No supported WOLF archives were found.");
     const parameters = ["--override", windowsPath(path.join(input, executable.name))];
@@ -108,11 +109,11 @@ async function extractAdvancedAssets(entry, payload, context, dependencies = {})
     // Preserve loose-file precedence after decoding the copied containers.
     for (const item of originals.filter(item => /^Data\//i.test(item.name) && !archiveNames.includes(item.name))) {
       const file = path.join(input, ...item.name.split("/")); fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.copyFileSync(path.join(entry.gamePath, item.name), file, fs.constants.COPYFILE_FICLONE);
+      cloneOrCopySync(path.join(entry.gamePath, item.name), file);
     }
     // Copied containers and executables served only as inspection inputs.
     for (const item of originals.filter(item => archiveNames.includes(item.name) || /\.exe$/i.test(item.name))) fs.rmSync(path.join(input, item.name), { force: true });
-    fs.copyFileSync(path.join(temporary, "uberwolf.log"), path.join(input, "uberwolf.log"));
+    cloneOrCopySync(path.join(temporary, "uberwolf.log"), path.join(input, "uberwolf.log"));
     const result = { outputDir, fileCount: countFiles(input), toolVersion: install.version, sourceSignature: sourceSignature(originals), ...host };
     fs.writeFileSync(path.join(input, "export.json"), JSON.stringify(result, null, 2));
     publish(input, outputDir); remember(entry, context, { assetExportDir: outputDir }); return result;

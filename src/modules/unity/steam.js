@@ -35,6 +35,7 @@ async function prepareLaunch({ info, entry, context, selection, baseEnvironment 
   if (!imports.length) return null;
   if (info.managedDependencyInspection?.complete === false) throw new Error("Unity's managed Steam API requirements could not be inspected completely.");
   const appId = require("../shared/runtime/steamworks/app-id").readGameAppId({ gameRoot: path.dirname(info.dataRoot), extraRoots: [info.dataRoot] });
+  // Steam libraries match the selected Unity child process, whose native default follows the launcher CPU.
   const arch = selection.install.needsRosetta ? "x64" : process.arch;
   const managed = await Managed.selectManagedProfile({ imports, architecture: arch, signal: context.signal });
   const request = { required: true, appId, arch, ...managed,

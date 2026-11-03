@@ -35,10 +35,14 @@ function fixture(t, options = {}) {
 
 test("network access resolves once and persists only the game override through the ordinary action", async t => {
   const { launcher, gamePath, userDataDir, manifest } = fixture(t);
-  const entry = { gameId: "network-game", gamePath, moduleId: "test", runtimeId: "runner",
+  let entry = { gameId: "network-game", gamePath, moduleId: "test", runtimeId: "runner",
     runtimeSettings: { runner: { flag: false, networkIsolation: false, enableProtections: false } },
     moduleData: { retained: true }, launchArguments: "--literal" };
   GameStore.writeGameRecord(userDataDir, entry);
+  entry = GameStore.readGameRecord(userDataDir, entry.gameId, { registry: { getModuleInfo: () => manifest } });
+  assert.equal(entry.schemaVersion, GameStore.CURRENT_RECORD_SCHEMA_VERSION);
+  assert.equal(entry.networkAccess, true, "the ordinary record read persists the old explicit privacy choice once");
+  assert.equal(JSON.parse(fs.readFileSync(path.join(userDataDir, "games", entry.gameId, "game.json"), "utf8")).networkAccess, true);
   const supplied = { flag: false, networkIsolation: true };
   const initial = launcher.getGameLaunchContext(entry, {}, { runtimeSettings: supplied });
   assert.equal(initial.networkAllowed, true, "explicit legacy choice survives normalized runtime settings");
@@ -153,6 +157,8 @@ test("per-game effects survive rediscovery, prepare once on Play and stay out of
   } });
   const entry = await launcher.resolveEntry(gamePath);
   // A v0.4.0 selection is upgraded once when its record is read.
+  entry.schemaVersion = 1;
+  delete entry.effects;
   entry.reshade = { enabled: true, preset: "vibrance", effectPath: null };
   GameStore.writeGameRecord(userDataDir, entry);
   const rediscovered = await launcher.resolveEntry(gamePath);

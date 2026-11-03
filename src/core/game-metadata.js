@@ -6,6 +6,7 @@ const GameData = require("../modules/shared/game-data");
 const GameStore = require("./game-store");
 const Icons = require("./icon-utils");
 const GameIcons = require("./game-icons");
+const FileSignature = require("../modules/shared/file-signature");
 const { recordReads, unchanged } = require("./file-observations");
 const { readJsonObject, writeJsonAtomic } = require("./json-files");
 const { mergeDetectedEntry, detectedNativeRuntime } = require("./launch-utils");
@@ -13,6 +14,7 @@ const { hydrateGameSaveLocations } = require("./save-locations");
 const { resolveModuleId, mergeSettingsChanges } = require("./launcher");
 const Installers = require("../modules/shared/installers");
 const GameAvailability = require("./game-availability");
+const EphemeralEntries = require("./ephemeral-entries");
 const Relocation = require("./game-relocation");
 const GameCommands = require("../main/game-command");
 const { prepareModuleInput, atomicWrite, assertOwnDirectory } = require("../modules/shared/writable-input");
@@ -34,7 +36,8 @@ function imagePath(file) {
   } catch { return null; }
 }
 function createGameMetadataService({ userDataDir, registry, app, ui, logger = console, inputPreparation = Installers.prepareInput,
-  extractIcon = require("./icon-extraction").extractIcon, runtimeCoordinator, downloads, confirmRuntimeInstall, onRuntimeStateChange } = {}) {
+  extractIcon = require("./icon-extraction").extractIcon, runtimeCoordinator, downloads, confirmRuntimeInstall, onRuntimeStateChange,
+  resolveRuntimeId = entry => entry.runtimeId } = {}) {
   runtimeCoordinator ||= require("./runtime-coordinator").coordinatorFor(userDataDir).client();
   const gameLifecycle = require("./game-lifecycle").createGameLifecycle({ userDataDir, coordinator: runtimeCoordinator });
   function debug(message, error) {
@@ -51,9 +54,13 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
         .filter(name => typeof name === "string" && name.length <= 1024 && !name.includes("\0") && !path.isAbsolute(name))
         .map(name => path.resolve(directory, name));
     })];
-  const profile = hash(["game-metadata-v1", app?.getVersion?.() || null, registry.listModules(), [...new Set(sourceFiles)].map(file => {
-    try { const stat = fs.statSync(file); return [file, stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs]; } catch { return [file, null]; }
-  })]);
+  const sourceFacts = [...new Set([...sourceFiles, require.resolve("../modules/shared/file-signature")])].map(file => {
+    try { return [file, FileSignature.signature(fs.statSync(file))]; }
+    catch { return [file, null]; }
+  });
+  // Persist one identity, not the same application-source inventory per game.
+  // Analysis caches with another identity are simply regenerated.
+  const profile = hash(["game-metadata-v1", app?.getVersion?.() || null, registry.listModules(), sourceFacts]);
   function cacheFile(entry) { return path.join(GameData.resolveGameDir(userDataDir, entry.gameId), "metadata.json"); }
   function readCache(entry) {
     try { const file = cacheFile(entry), stat = fs.lstatSync(file); return stat.isFile() && !stat.isSymbolicLink() && stat.size <= 4 * 1024 ** 2 ? readJsonObject(file) : null; } catch { return null; }
@@ -64,8 +71,11 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
     const mod = registry.getModule(resolveModuleId(entry));
     const sourceData = typeof mod?.metadataCacheKey === "function" ? mod.metadataCacheKey(entry, { userDataDir, app, settings }) :
       Object.fromEntries(Object.entries(entry.moduleData || {}).filter(([name]) => /(?:path|dir|root|directory|source|format|kind|generation|extractedReady|gameOnly)$/i.test(name)));
+    const runtimeId = info ? resolveRuntimeId(entry, settings) : entry.runtimeId;
+    // A cache hit describes preparation work, not the container's input identity.
+    const containerInput = entry.containerData && Object.fromEntries(Object.entries(entry.containerData).filter(([name]) => name !== "cached"));
     return hash([entry.importPath, entry.gamePath, entry.contentRootDir, entry.nativeAppPath, entry.iconPath, entry.iconSource,
-    entry.moduleId, entry.runtimeId, entry.runtimeData, sourceData, entry.containerData,
+    entry.moduleId, runtimeId, entry.runtimeData, sourceData, containerInput,
     settings?.modules?.[resolveModuleId(entry)], managerIds.map(id => [id, settings?.runtimes?.[id]])]); }
   async function selectIcon(entry, mod, settings, signal) {
     let moduleIcon;
@@ -82,8 +92,8 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
         const directory = GameData.resolveGameIconsDir(userDataDir, entry.gameId);
         const output = path.join(directory, `icon-${candidate.source}.png`), receipt = output + ".source.json";
         const cached = readJsonObject(receipt);
-        if (cached?.fingerprint === fingerprint && imagePath(output)) return output;
-        if (cached?.fingerprint === fingerprint && cached.missing === true) return null;
+        if (GameIcons.sameFingerprint(cached?.fingerprint, fingerprint) && imagePath(output)) return output;
+        if (GameIcons.sameFingerprint(cached?.fingerprint, fingerprint) && cached.missing === true) return null;
         assertOwnDirectory(userDataDir, directory);
         const bytes = (await extractIcon(candidate.path, candidate.source, { signal }))?.png;
         throwIfAborted(signal);
@@ -92,7 +102,8 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
       }
     });
   }
-  async function refreshEntryOnce(entry, settings, { force = false, findExisting, relocate, previous, importing = false, signal, onProgress } = {}) {
+  async function refreshEntryOnce(entry, settings, { force = false, findExisting, relocate, previous, importing = false, persist = true, signal, onProgress } = {}) {
+    const entryBeforePreparation = entry;
     const cache = readCache(entry), cacheKey = key(entry, settings);
     const previousName = cache?.automaticName || cache?.facts?.name || cache?.detected?.name;
     const customName = entry.name && previousName && entry.name !== previousName ? entry.name : null;
@@ -158,13 +169,35 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
         detected: observed.value.detected, facts: observed.value.facts, moduleDataPatch: observed.value.moduleDataPatch, automaticName: observed.value.automaticName }); }
       catch (error) { throwIfAborted(signal); if (isAbortError(error)) throw error; debug("[metadata] cache write", error); }
     }
+    // Read-only analysis returns its facts; its caller owns the fresh-record
+    // merge. Merging here can discard facts already present in the input but
+    // not yet persisted by that caller.
+    if (!persist) return active;
     const current = entry.gameId && GameStore.readGameRecord(userDataDir, entry.gameId);
     // A relocated game's changes are measured from the record it replaces.
-    const result = current ? mergeSettingsChanges(previous || entry, active, current) : active;
-    if (current && JSON.stringify(current) !== JSON.stringify(result)) GameStore.writeGameRecord(userDataDir, result);
+    const result = current ? mergeSettingsChanges(previous || entryBeforePreparation, active, current) : active;
+    if (persist && current && JSON.stringify(current) !== JSON.stringify(result)) GameStore.writeGameRecord(userDataDir, result);
+    return result;
+  }
+  // An entry a module created for a session, such as a window that receives
+  // graphics, declares its module and has no game files. Detection, input
+  // preparation and metadata lookups never run for it; only its icon is
+  // resolved, from the paths the module gave it.
+  function moduleCreated(entry) {
+    return typeof entry?.moduleId === "string" && Boolean(registry.getModule(entry.moduleId)) && EphemeralEntries.isEphemeral(userDataDir, entry);
+  }
+  async function refreshModuleCreatedEntry(entry, settings, { signal, persist = true } = {}) {
+    const result = { ...entry };
+    prepareModuleInput(result, registry, { settings, userDataDir, logger, app, ui, readOnly: true, signal });
+    const icon = await selectIcon(result, registry.getModule(result.moduleId), settings, signal);
+    result.iconPath = icon.path;result.iconSource = icon.source;
+    const current = GameStore.readGameRecord(userDataDir, entry.gameId);
+    if (persist && current && (current.iconPath !== result.iconPath || current.iconSource !== result.iconSource))
+      GameStore.writeGameRecord(userDataDir, { ...current, iconPath: result.iconPath, iconSource: result.iconSource });
     return result;
   }
   async function refreshEntry(entry, settings, options) {
+    if (moduleCreated(entry)) return gameLifecycle.use(entry, () => refreshModuleCreatedEntry(entry, settings, options));
     // A library game whose drive or folder is missing keeps its stored facts.
     // Detection never runs against the absent path, so it cannot re-detect it.
     if (options?.importing !== true) {
@@ -177,8 +210,24 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
     const games = GameStore.loadGames(userDataDir);
     let existing = games.find(entry => [entry.importPath, entry.gamePath].includes(inputPath));
     if (existing) return refreshEntry(existing, settings, options);
-    const entry = { gameId: Installers.findCachedInputGameId(userDataDir, inputPath) || GameData.createGameId(), gamePath: inputPath, importPath: inputPath };
-    return refreshEntry(entry, settings, { ...options, importing: true, findExisting: detected => games.find(game => game.gamePath === detected.gamePath) });
+    const cachedId = Installers.findCachedInputGameId(userDataDir, inputPath);
+    const entry = { gameId: cachedId || GameData.createGameId(), gamePath: inputPath, importPath: inputPath };
+    try {
+      return await refreshEntry(entry, settings, { ...options, importing: true, findExisting: detected => games.find(game => game.gamePath === detected.gamePath) });
+    } catch (error) {
+      // A failed or cancelled import of a new game leaves no launcher folder.
+      // A completed container unpack stays for the next import to reuse, and a
+      // folder that holds a record is never removed.
+      if (!cachedId) {
+        try {
+          const directory = GameData.resolveGameDir(userDataDir, entry.gameId);
+          assertOwnDirectory(userDataDir, directory, { create: false });
+          if (fs.existsSync(directory) && !fs.existsSync(path.join(directory, "containers")) &&
+            !fs.existsSync(GameData.resolveGameDataPath(userDataDir, entry.gameId))) fs.rmSync(directory, { recursive: true, force: true });
+        } catch (cleanup) { debug("[metadata] import cleanup", cleanup); }
+      }
+      throw error;
+    }
   }
   // Locate… runs the import's detection at the chosen location. A result of
   // the game's own type replaces its paths and detected data, while its game

@@ -1,0 +1,82 @@
+{
+  "resourceIds": {
+    "name": 16842755,
+    "exported": 16842768,
+    "authorities": 16842776,
+    "initOrder": 16842778,
+    "minSdkVersion": 16843276,
+    "versionCode": 16843291,
+    "versionName": 16843292,
+    "targetSdkVersion": 16843376,
+    "compileSdkVersion": 16844146,
+    "compileSdkVersionCodename": 16844147
+  },
+  "tree": {
+    "name": "manifest",
+    "attrs": {
+      "versionCode": 1,
+      "versionName": "1",
+      "compileSdkVersion": 36,
+      "compileSdkVersionCodename": "16",
+      ":package": "owned.providers",
+      ":platformBuildVersionCode": 36,
+      ":platformBuildVersionName": 16
+    },
+    "children": [
+      {
+        "name": "uses-sdk",
+        "attrs": {
+          "minSdkVersion": 21,
+          "targetSdkVersion": 28
+        },
+        "children": []
+      },
+      {
+        "name": "application",
+        "attrs": {},
+        "children": [
+          {
+            "name": "provider",
+            "attrs": {
+              "name": "owned.providers.First",
+              "exported": false,
+              "authorities": "same;same;first"
+            },
+            "children": []
+          },
+          {
+            "name": "provider",
+            "attrs": {
+              "name": "owned.providers.Second",
+              "exported": false,
+              "authorities": "same;second",
+              "initOrder": 100
+            },
+            "children": []
+          },
+          {
+            "name": "provider",
+            "attrs": {
+              "name": "owned.providers.Third",
+              "exported": false,
+              "authorities": "same"
+            },
+            "children": []
+          },
+          {
+            "name": "provider",
+            "attrs": {
+              "name": "owned.providers.Resource",
+              "exported": false,
+              "authorities": {
+                "type": 1,
+                "data": 17039370
+              }
+            },
+            "children": []
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,18 +1,23 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const { AsyncLocalStorage } = require("node:async_hooks");
-const { readJsonObject } = require("./json-files");
+const { readJsonObject, writeJsonAtomic } = require("./json-files");
 const { removeManagedRuntimeQuarantine } = require("../modules/shared/runtime/managed-quarantine");
 const { coordinatorFor, coordinationError, conflicts, containsPath, runtimeIdentity } = require("./runtime-coordinator");
 const { withoutClearedDefaults } = require("./settings-merge");
 const Architecture = require("../modules/shared/runtime/architecture");
 const { isAbortError, throwIfAborted } = require("../modules/shared/runtime/download-utils");
 const { installedRuntimeAvailability, installedRuntimeReplaceable } = require("./runtime-install-availability.mjs");
+const Maintenance = require("./storage-maintenance");
 
 const operations = new AsyncLocalStorage();
 const instrumented = new WeakSet();
 const methods = { installRuntime: "install", importRuntime: "import", uninstallRuntime: "uninstall",
   registerCustomRuntime: "registerCustom", performInstalledAction: "installedAction", performSetupAction: "setup" };
+// A removal in progress: the version's folder, set aside in runtimes/, and its record.
+const REMOVING = ".maclauncher-removing-";
+const REMOVING_RECORD = /^\.maclauncher-removing-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.json$/;
 function canonical(file) { try { return fs.realpathSync(file); } catch { return path.resolve(file); } }
 function sourcePath(install) {
   return [install?.installDir, install?.appPath, install?.runtimePath, install?.executablePath, install?.javaPath]
@@ -79,6 +84,7 @@ function readRuntimeSettings(userDataDir) { return withoutClearedDefaults(readJs
 async function withRuntimeMutation(identity, fn, { coordinator, userDataDir } = {}) {
   identity = runtimeIdentity(identity);
   const operation = operations.getStore();
+  operation?.runtimeUseScope?.clearResolutions?.();
   coordinator ||= operation?.coordinator || coordinatorFor(userDataDir || operation?.userDataDir).client();
   userDataDir ||= operation?.userDataDir;
   const held = operation?.mutations || [];
@@ -97,12 +103,13 @@ async function withRuntimeMutation(identity, fn, { coordinator, userDataDir } = 
       }
       await coordinator.extendMutation(parent.token, broad, allowedUses); parent.identity = broad;
     }
-    return fn();
+    try { return await fn(); }
+    finally { operation?.runtimeUseScope?.clearResolutions?.(); }
   }
   const token = await coordinator.acquireMutation(identity, allowedUses);
   try {
     return await operations.run({ ...operation, coordinator, userDataDir, mutations: [...held, { identity, token }] }, fn);
-  } finally { await coordinator.release(token); }
+  } finally { operation?.runtimeUseScope?.clearResolutions?.(); await coordinator.release(token); }
 }
 
 async function withRuntimeUse(identity, fn, { coordinator, userDataDir } = {}) {
@@ -187,7 +194,7 @@ function instrumentRuntimeManagers(managers) {
         if (data.version != null) await manager.getState?.(stateContext());
         const version = managerVersion(manager, data.version);
         let identity = { managerId: manager.id, ...(version ? { version } : {}) };
-        let payload = { ...data, userDataDir };
+        let payload = { ...data, userDataDir }, removal = null;
         function validateRemoval() {
           if (!version) throw new Error("Select an installed runtime version to remove.");
           const installed = selectInstalled(rows(), data, manager);
@@ -197,6 +204,7 @@ function instrumentRuntimeManagers(managers) {
             throw new Error("The runtime directory does not belong to the selected installed version.");
           }
           identity = identityFor(manager, installed);
+          removal = installed;
           // Caller paths never determine the removal target.
           payload = { ...data, userDataDir, version: installed.version, sectionId: installed.sectionId,
             installDir: installed.installDir, platformKey: installed.platformKey, variant: installed.variant };
@@ -248,6 +256,46 @@ function instrumentRuntimeManagers(managers) {
           await remove();
           return original.call(self, payload, ...args);
         }
+        // For a manager that declares `trashFirst` (its removal tolerates a
+        // missing folder), a removal first sets the version's folder aside in
+        // runtimes/ under an in-progress name, with a record beside it, so an
+        // interrupted removal never leaves a partly deleted version and upkeep
+        // never takes a folder whose removal is still running. The manager then removes its own
+        // records; only then does the folder take a trash name and get deleted.
+        // Upkeep finishes trash that a removal left, and settles an interrupted
+        // removal on the next pass (settleInterruptedRemovals). If the manager
+        // refuses or declines (false), the folder is restored and the manager
+        // decides as before. Other managers, external, custom and imported rows,
+        // whose files the manager does not own, and folders outside runtimes/ or
+        // on another volume are left to the manager.
+        async function uninstallThroughTrash(self, args) {
+          const runtimes = path.join(userDataDir, "runtimes"), folder = payload.installDir;
+          let aside = null;
+          const record = () => `${aside}.json`;
+          const forget = () => { try { fs.rmSync(record(), { force: true }); } catch {} };
+          try {
+            const real = canonical(folder), root = canonical(runtimes), relative = path.relative(root, real);
+            if (manager.trashFirst === true && !["external", "custom", "imported"].some(key => removal?.[key] === true) &&
+              path.isAbsolute(folder || "") && relative && !relative.startsWith("..") && !path.isAbsolute(relative) && relative.split(path.sep).length >= 2 &&
+              !fs.lstatSync(folder).isSymbolicLink() && fs.lstatSync(folder).isDirectory()) {
+              aside = path.join(runtimes, REMOVING + crypto.randomUUID());
+              writeJsonAtomic(record(), { schemaVersion: 1, pid: process.pid, managerId: manager.id, version: payload.version,
+                sectionId: payload.sectionId || "default", installDir: folder });
+              Maintenance.moveToTrash(folder, { trashFolder: runtimes, name: path.basename(aside) });
+            }
+          } catch { if (aside && !fs.existsSync(aside)) { forget(); aside = null; } }
+          if (!aside) return original.call(self, payload, ...args);
+          let result;
+          try { result = await original.call(self, payload, ...args); } catch { result = false; }
+          if (result === false) {
+            try { if (!fs.existsSync(folder)) fs.renameSync(aside, folder); forget(); } catch {}
+            return original.call(self, payload, ...args);
+          }
+          let trash = null;
+          try { trash = Maintenance.moveToTrash(aside); forget(); } catch {}
+          if (trash) try { await Maintenance.removeTrash(trash); } catch {}
+          return result;
+        }
         if (action === "uninstall") validateRemoval();
         if (action === "install" && version) {
           const installed = ready();
@@ -268,7 +316,8 @@ function instrumentRuntimeManagers(managers) {
               if (installed) return installedResult(installed);
             }
             if (action === "uninstall") validateRemoval();
-            const result = action === "install" && version ? await installOverDamaged(this, args) : await original.call(this, payload, ...args);
+            const result = action === "install" && version ? await installOverDamaged(this, args)
+              : action === "uninstall" ? await uninstallThroughTrash(this, args) : await original.call(this, payload, ...args);
             if (action === "install") await removeManagedRuntimeQuarantine(result, { userDataDir, signal: payload.signal });
             return action === "install" ? installedResult(result) : result;
           }, { coordinator, userDataDir });
@@ -284,6 +333,35 @@ function instrumentRuntimeManagers(managers) {
   }
 }
 
+/** Settles removals that an exit interrupted, from their records in
+ * runtimes/: a folder whose version its manager still lists returns to its
+ * place, and any other takes a trash name for upkeep to finish. Removals whose
+ * process still runs, and unreadable records, are left alone. Never throws. */
+function settleInterruptedRemovals({ userDataDir, managers = [] } = {}) {
+  const runtimes = path.join(userDataDir || "", "runtimes");
+  let names;
+  try { names = fs.readdirSync(runtimes).filter(name => REMOVING_RECORD.test(name)); } catch { return; }
+  for (const name of names) {
+    try {
+      const record = path.join(runtimes, name), aside = record.slice(0, -".json".length), row = Maintenance.readJson(record, 64 * 1024);
+      if (!row || Maintenance.processAlive(row.pid)) continue;
+      if (fs.existsSync(aside)) {
+        const manager = managers.find(item => item?.id === row.managerId), target = typeof row.installDir === "string" ? path.resolve(row.installDir) : null;
+        const relative = target && path.relative(runtimes, target);
+        const settings = manager && readRuntimeSettings(userDataDir);
+        const listed = Boolean(relative && !relative.startsWith("..") && !path.isAbsolute(relative) &&
+          installedRows(manager, userDataDir, settings?.[manager.id], settings).some(install => String(install.version) === String(row.version) &&
+            (install.sectionId || "default") === (row.sectionId || "default") && install.installDir && path.resolve(install.installDir) === target));
+        if (listed && !fs.existsSync(target)) {
+          fs.mkdirSync(path.dirname(target), { recursive: true });
+          fs.renameSync(aside, target);
+        } else Maintenance.moveToTrash(aside);
+      }
+      fs.rmSync(record, { force: true });
+    } catch {}
+  }
+}
+
 function withRuntimeCoordinator(coordinator, userDataDir, fn) {
   const previous = operations.getStore();
   return operations.run({ ...previous, coordinator, userDataDir }, fn);
@@ -292,13 +370,22 @@ function withRuntimeUseScope(runtimeUseScope, fn) {
   return operations.run({ ...operations.getStore(), runtimeUseScope }, fn);
 }
 
+// Reuse only within this launch's preparation; ordinary callers still resolve.
+function memoizeRuntimeResolution(owner, key, resolve) {
+  const scope = operations.getStore()?.runtimeUseScope;
+  return scope?.memoizeResolution ? scope.memoizeResolution(owner, key, resolve) : resolve();
+}
+
 /** Leases identify the actual selected artifact, never a manager's default. */
 function createRuntimeUseScope({ coordinator, managers, userDataDir, readSettings = () => ({}) }) {
   const leases = new Map();
   const selected = new Map();
   const selectedLeases = new Map();
   const explicitLeases = new Set();
-  let released = false, bound = false;
+  let released = false, bound = false, mutablePreparations = 0;
+  const resolutions = [];
+  let resolutionCapture = null;
+  const clearResolutions = () => { resolutions.length = 0; };
   function fileIdentity(file) {
     try { const stat = fs.statSync(file); return [stat.dev, stat.ino, stat.size, stat.mtimeMs]; } catch { return null; }
   }
@@ -341,12 +428,33 @@ function createRuntimeUseScope({ coordinator, managers, userDataDir, readSetting
     }
   }
   return {
-    useRuntime, useProcessArtifacts,
+    useRuntime, useProcessArtifacts, clearResolutions,
+    memoizeResolution(owner, key, resolve) {
+      if (released || bound || mutablePreparations || operations.getStore()?.mutations?.length) return resolve();
+      const previous = resolutions.find(row => row.owner === owner && row.key === key);
+      if (previous) { for (const identity of previous.effects) this.recordSelection(identity); return previous.value; }
+      const parent = resolutionCapture, capture = { effects: new Map(), overflow: false };
+      let value; resolutionCapture = capture;
+      try { value = resolve(); }
+      finally {
+        resolutionCapture = parent;
+        if (parent) { for (const identity of capture.effects.values()) this.recordSelection(identity); parent.overflow ||= capture.overflow; }
+      }
+      if (!capture.overflow && value && value.ready !== false && typeof value.then !== "function") {
+        if (resolutions.length >= 64) resolutions.shift();
+        resolutions.push({ owner, key, value, effects: [...capture.effects.values()] });
+      }
+      return value;
+    },
     recordSelection(identity) {
       // A module may reject one candidate and resolve a compatible replacement.
       // Keep its last actual selection, independently for each manager section.
       const key = JSON.stringify([identity.managerId, identity.sectionId || "default", identity.variant || null]);
       selected.set(key, identity);
+      if (resolutionCapture) {
+        if (resolutionCapture.effects.size < 64 || resolutionCapture.effects.has(key)) resolutionCapture.effects.set(key, identity);
+        else resolutionCapture.overflow = true;
+      }
     },
     async flushSelections() {
       for (const [key, identity] of selected) {
@@ -363,20 +471,26 @@ function createRuntimeUseScope({ coordinator, managers, userDataDir, readSetting
     },
     async preparationLeaseTokens() { return bound ? [] : Promise.all([...leases.values()]); },
     async withMutablePreparation(identity, fn) {
-      if (bound) return fn();
+      clearResolutions();
+      const mutate = async () => {
+        mutablePreparations++; clearResolutions();
+        try { return await fn(); }
+        finally { mutablePreparations--; clearResolutions(); }
+      };
+      if (bound) return mutate();
       const suspended = [...leases].filter(([key]) => conflicts(runtimeIdentity(JSON.parse(key)), runtimeIdentity(identity)));
       for (const [key, token] of suspended) { await coordinator.release(await token); leases.delete(key); }
-      try { return await fn(); }
+      try { return await mutate(); }
       finally {
         // A preparing writer gives up only its own unstarted read reservations.
         // Reclaim the selected shared sources before preparation continues.
         for (const [key] of suspended) await useRuntime(JSON.parse(key), explicitLeases.has(key));
       }
     },
-    async bind(pid) { bound = true; await Promise.all([...leases.values()].map(async pending => coordinator.bindUse(await pending, pid))); },
+    async bind(pid) { bound = true; clearResolutions(); await Promise.all([...leases.values()].map(async pending => coordinator.bindUse(await pending, pid))); },
     async release() {
       if (released) return;
-      released = true;
+      released = true; clearResolutions();
       await Promise.all([...leases.values()].map(async pending => {
         try { await coordinator.release(await pending); } catch (error) { if (error.code !== "RUNTIME_USE_CLOSED") throw error; }
       }));
@@ -385,4 +499,4 @@ function createRuntimeUseScope({ coordinator, managers, userDataDir, readSetting
   };
 }
 
-module.exports = { instrumentRuntimeManagers, withRuntimeCoordinator, withRuntimeUseScope, withRuntimeMutation, withRuntimeUse, createRuntimeUseScope, installedRows, identityFor };
+module.exports = { memoizeRuntimeResolution, instrumentRuntimeManagers, settleInterruptedRemovals, withRuntimeCoordinator, withRuntimeUseScope, withRuntimeMutation, withRuntimeUse, createRuntimeUseScope, installedRows, identityFor };

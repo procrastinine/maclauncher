@@ -100,9 +100,9 @@ test('beforePack applies explicit architecture selection and rejects local-only 
   const config = await require('app-builder-lib/out/util/config/config').getConfig(f.root);
   assert.equal(config.extraResources[0].to, undefined);
   const context = { electronPlatformName: 'darwin', arch: require('builder-util').Arch.arm64,
-    packager: { config } };
+    packager: { config, info: {projectDir:f.root} } };
   let mapped;
-  await require('../scripts/before-pack.js')(context, { dependencies: { ...f.dependencies, prepareAppInputs: async input => { mapped = input; return {}; } }, environment: { MACLAUNCHER_NATIVE_MAXIMUM_MACOS: '13.0' } });
+  await require('../scripts/before-pack.js')(context, { dependencies: { ...f.dependencies, prepareAppInputs: async input => { mapped = input; return { asar: new Map(), suppliers: new Map() }; } }, environment: { MACLAUNCHER_NATIVE_MAXIMUM_MACOS: '13.0' } });
   assert.equal(mapped.plan.launcherArch, 'arm64');
   assert.equal(mapped.packageConfig.build, context.packager.config);
   assert.ok(context.packager.config.extraResources[0].filter.includes('native-runtimes/native-example/2.0/arm64/**'));
@@ -171,7 +171,7 @@ test('final ASAR and unpacked verification reject managed payloads and unused np
   const f = await appFixture(t), asar = require('@electron/asar'), source = path.join(f.root, 'asar-source');
   const archive = path.join(f.appPath, 'Contents/Resources/app.asar');
   for (const file of ['src/modules/flash/resources/flash-player/Flash Player.app/Contents/MacOS/Flash Player',
-    'node_modules/steam-session/src/LoginSession.ts', 'node_modules/undici/docs/docs/api/Client.md', 'node_modules/smart-buffer/docs/README_v3.md']) {
+    'node_modules/steam-session/src/LoginSession.ts', 'node_modules/smart-buffer/docs/README_v3.md']) {
     const added = path.join(source, file); fs.mkdirSync(path.dirname(added), { recursive: true }); fs.writeFileSync(added, 'Unused package input');
     await finished(await asar.createPackage(source, archive));
     assert.throws(() => Check.inspectAsar(archive, plan(f)), /excluded by its delivery configuration/);
@@ -242,6 +242,7 @@ test('application checks keep supplemental runtime versions separate from select
   f.dependencies.links = () => []; f.dependencies.libraryIds = () => [];
   f.inventory.supplementals = [declaration];
   fs.cpSync(source, path.join(nativeRoot, relative), { recursive: true });
+  require('../scripts/app-deduplication.cjs').collapse(f.appPath);
   assert.equal(Check.verifyApp(f).nativePackages, 1);
   assert.equal(Check.verifyApp(f).supplementalCount, 1);
   const extra = path.join(nativeRoot, f.manager.id, '3.0/arm64');

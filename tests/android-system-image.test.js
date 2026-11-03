@@ -161,7 +161,7 @@ test('original content, stored DMG bytes, aliases and writable foreign mounts fa
   fs.writeFileSync(path.join(f.volume,'root/system/build.prop'),'ro.build.id=original\n');
   const good=await Image.prepare(f.options,f.deps);
   const mount=path.dirname(good.root);f.mounts.get(mount).writeable=true;
-  await assert.rejects(Image.prepare(f.options,f.deps),/different or writable/);assert.equal(f.mounts.get(mount).writeable,true,'A foreign/writable owner is never force-detached');
+  await assert.rejects(Image.prepare(f.options,f.deps),/different image or access mode/);assert.equal(f.mounts.get(mount).writeable,true,'A foreign/writable owner is never force-detached');
   f.mounts.get(mount).writeable=false;
   fs.chmodSync(good.base,0o600);fs.writeFileSync(good.base,'modified DMG!');fs.chmodSync(good.base,0o400);
   await assert.rejects(Image.prepare(f.options,f.deps),/content changed|receipt differs/);
@@ -216,4 +216,17 @@ test('fresh launcher workers reuse verified immutable fingerprints and reverify 
   const first=run();assert.ifError(first.error);assert.equal(first.status,0,first.stderr);assert.match(first.stdout,/persistent verification reused/);
   fs.chmodSync(image.base,0o600);fs.writeFileSync(image.base,'new bytes same size');fs.chmodSync(image.base,0o400);
   const changed=run();assert.ifError(changed.error);assert.notEqual(changed.status,0);assert.match(changed.stderr,/receipt differs|unexpected full container hash/);
+});
+
+test('a successful attach without the requested writable volume never invokes extraction',async t=>{
+  const f=await fixture(t),run=f.deps.command;let extracted=false;
+  f.deps.command=async(file,args,options)=>{
+    if(file==='/owned/extractor'){extracted=true;throw Error('Extraction must not run on the host filesystem');}
+    const result=await run(file,args,options);
+    if(path.basename(file)==='hdiutil'&&args[0]==='attach'&&args.includes('-readwrite'))f.mounts.clear();
+    return result;
+  };
+  await assert.rejects(Image.prepare(f.options,f.deps),/did not attach/);
+  assert.equal(extracted,false);
+  assert.ok(!fs.existsSync(path.join(f.userDataDir,'android/system-images',f.image.sha256)));
 });

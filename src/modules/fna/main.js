@@ -1,10 +1,11 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../shared/copy-file");
 const path = require("node:path");
 const NativeFocus = require("../shared/runtime/native-focus");
 const crypto = require("node:crypto");
 const manifest = require("./manifest.json");
 const { detectGame, inspectGameAssembly } = require("./detect");
-const { retargetIlAssembly, inspectManagedAssembly } = require("./managed-assembly");
+const { retargetIlAssembly } = require("./managed-assembly");
 const manager = require("./runtime/manager");
 const GameData = require("../shared/game-data");
 const Native = require("../shared/runtime/local-native");
@@ -13,6 +14,7 @@ const { applyGraphicsEnvironment } = require("./runtime/graphics");
 const Decompiler = require("./decompiler");
 const Steam = require("./steam");
 const SourceInventory = require("./source-inventory");
+const { hasFineChangeTime } = require("../shared/file-time");
 
 function inspectEntry(entry) {
   const info = inspectGameAssembly(entry.moduleData?.assemblyPath || entry.gamePath);
@@ -33,7 +35,7 @@ function preflight(entry, context = {}) {
   if (info.requires32Bit) throw new Error("This game requires a 32-bit CLR host. The selected FNA host is 64-bit.");
   const narrowDependency = info.managedDependencies?.find(dependency => dependency.requires32Bit);
   if (narrowDependency) throw new Error("Managed dependency " + narrowDependency.assemblyName + " declares a 32-bit CLR host.");
-  if (info.peMachine === 0x8664 && options.retargetIlArchitecture === false) throw new Error("This game's portable IL is pinned to x64. Enable architecture conversion to use the ARM64 host.");
+  if (info.peMachine === 0x8664 && options.retargetIlArchitecture === false && (context.hostArchitecture || require("../shared/runtime/architecture").selectedArchitecture()) !== "x64") throw new Error("This game's portable IL is pinned to x64. Enable architecture conversion to use the ARM64 host.");
   const netTarget = /^\.NETCoreApp,Version=v(\d+)/.exec(info.targetFramework || "");
   if (netTarget && Number(netTarget[1]) > 8) throw new Error("This game requires a newer .NET host than the selected .NET 8 runtime.");
   if (info.unsupportedXnaServices.length) throw new Error("FNA does not implement these XNA services: " + info.unsupportedXnaServices.join(", ") + ".");
@@ -44,102 +46,92 @@ function preflight(entry, context = {}) {
 function runtimeStatus(entry, context) {
   const selected = manager.resolveSelection(entry, context.settings, context.userDataDir);
   try {
-    const info = preflight(entry, context);
+    const info = preflight(entry, {...context, hostArchitecture: selected.profile?.architecture});
     if (!selected.ready) return selected;
     return { ...selected, gameVersion: info.gameVersion, gameFrameworkVersion: info.detectedVersion,
       frameworkVersion: selected.profile.frameworkVersion, dotnetVersion: selected.profile.dotnetVersion };
   } catch (error) { return { ...selected, ready: false, reason: error.message }; }
 }
-const { ASSET_DIRECTORY } = SourceInventory;
 function moduleRoot(entry, context) {
   if (!entry.gameId || !/^[A-Za-z0-9_-]+$/.test(entry.gameId) || !context.userDataDir) throw new Error("FNA requires a persisted game id and launcher data directory.");
   return GameData.resolveGameModuleDir(context.userDataDir, entry.gameId, "fna");
 }
-function copyGame(source, destination, budget = { files: 0, bytes: 0 }, depth = 0, options = {}) {
-  if (depth > 32) throw new Error("FNA game directory nesting exceeds supported bounds.");
-  fs.mkdirSync(destination, { recursive: true });
-  for (const item of fs.readdirSync(source, { withFileTypes: true })) {
-    if (item.name === ".git" || item.name === ".DS_Store") continue;
-    const from = path.join(source, item.name), to = path.join(destination, item.name);
-    if (item.isSymbolicLink()) throw new Error("Private FNA staging requires regular files and directories; symbolic links need an unpacked copy.");
-    if (item.isDirectory()) {
-      if (depth === 0 && ASSET_DIRECTORY.test(item.name)) fs.symlinkSync(from, to, "dir");
-      else copyGame(from, to, budget, depth + 1, options);
-    }
-    else if (item.isFile()) {
-      const size = fs.statSync(from).size;
-      if (++budget.files > 50000 || (budget.bytes += size) > 4 * 1024 * 1024 * 1024) throw new Error("FNA game copy exceeds supported bounds.");
-      const mutable = options.sourceFiles ? options.sourceFiles.get(from)?.copied === true : SourceInventory.shouldCopy(from, item.name, options);
-      if (mutable) fs.copyFileSync(from, to);
-      else fs.symlinkSync(from, to, "file");
-    }
-  }
-}
-const sourceInventory = (source, options) => SourceInventory.inspectSources(source, options).digest;
 function prepareGame(entry, context) {
-  const selected = runtimeStatus(entry, context);
+  context.signal?.throwIfAborted();
+  const selected = manager.resolveSelection(entry, context.settings, context.userDataDir);
+  const architecture = selected.profile?.architecture || require("../shared/runtime/architecture").selectedArchitecture();
+  const info = preflight(entry, {...context, hostArchitecture: architecture});
   if (!selected.ready) throw new Error(selected.reason);
-  const info = inspectEntry(entry), assemblyPath = fs.realpathSync(info.assemblyPath), source = path.dirname(assemblyPath), root = moduleRoot(entry, context);
+  const originalAssembly = path.resolve(info.assemblyPath), originalFile = fs.realpathSync(originalAssembly);
+  const gameRoot = path.dirname(originalAssembly), runtimeRoot = selected.profile.root;
   const converted = context.runtimeSettings?.useRuntimeFramework !== false;
-  const retargeted = context.runtimeSettings?.retargetIlArchitecture !== false;
-  const gameRoot = path.join(root, "overlays", selected.version + (converted ? ".converted" : ".original") + (retargeted ? ".arm64-il" : ""));
-  const realSource = fs.realpathSync(source);
-  let ancestor = path.resolve(root), suffix = [];
-  while (!fs.existsSync(ancestor)) { suffix.unshift(path.basename(ancestor)); const parent = path.dirname(ancestor); if (parent === ancestor) break; ancestor = parent; }
-  const resolvedRoot = path.join(fs.realpathSync(ancestor), ...suffix);
-  if (resolvedRoot === realSource || resolvedRoot.startsWith(realSource + path.sep)) throw new Error("The game source must be separate from its launcher data directory.");
-  const policyKey = crypto.createHash("sha256").update(JSON.stringify([assemblyPath, converted, retargeted])).digest("hex");
-  const inventory = SourceInventory.inspectSources(source, { assemblyPath, converted, retargeted, signal: context.signal,
-    cacheFile: path.join(root, "source-inventories", policyKey + ".json") });
-  const fingerprint = { schemaVersion: 2, source, sourceInventory: inventory.digest, assemblySha256: inventory.files.get(assemblyPath).sha256, runtimeVersion: selected.version,
-    frameworkSha256: selected.profile.files["FNA.dll"], hostSha256: selected.profile.files["MacLauncherFnaHost.dll"], converted, retargeted };
-  const marker = path.join(gameRoot, ".maclauncher-fna.json");
-  let prior;
-  try {
-    const stat = fs.lstatSync(marker);
-    if (stat.isFile() && !stat.isSymbolicLink() && stat.size <= 64 * 1024) prior = JSON.parse(fs.readFileSync(marker, "utf8"));
-  } catch {}
-  if (JSON.stringify(prior) !== JSON.stringify(fingerprint)) {
-    fs.mkdirSync(path.dirname(gameRoot), { recursive: true });
-    const temporary = fs.mkdtempSync(path.join(path.dirname(gameRoot), ".prepare-"));
+  const result = {gameRoot, assemblyPath: originalAssembly, originalAssembly, assemblyRoot: null, info,
+    hostPath: path.join(runtimeRoot, "MacLauncherFnaHost.dll"), runtimeRoot, selected,
+    frameworkVersion: converted ? selected.profile.frameworkVersion : info.detectedVersion, converted};
+  // Only CPU-pinned reachable assemblies need derived bytes. Data, config,
+  // assets and ordinary portable assemblies stay at their original paths.
+  const candidates = [info, ...(info.managedDependencies || []).filter(item => !item.resourceName)];
+  const inputs = architecture === "arm64" ? [...new Set(candidates.filter(item => item.peMachine === 0x8664 && item.peFormat === "PE32+")
+    .map(item => fs.realpathSync(item.assemblyPath)))] : [];
+  if (!inputs.length) return result;
+  if (context.runtimeSettings?.retargetIlArchitecture === false) throw new Error("Portable x64 assemblies need architecture conversion for the ARM64 host.");
+  const root = moduleRoot(entry, context);
+  let ancestor = path.resolve(root);const suffix = [];
+  while (!fs.existsSync(ancestor)) {suffix.unshift(path.basename(ancestor));ancestor = path.dirname(ancestor);}
+  const resolvedRoot = path.join(fs.realpathSync(ancestor), ...suffix), originalRoot = fs.realpathSync(gameRoot);
+  if (resolvedRoot === originalRoot || resolvedRoot.startsWith(originalRoot + path.sep)) throw new Error("Derived assemblies must be separate from the original game.");
+  const policy = crypto.createHash("sha256").update(JSON.stringify([originalFile, architecture])).digest("hex").slice(0, 24);
+  const directory = path.join(root, "assemblies", policy), marker = path.join(directory, "prepared.json");
+  const Writable = require("../shared/writable-input");
+  Writable.assertOwnDirectory(context.userDataDir, directory, {create: false});
+  let previous;
+  try {const stat = fs.lstatSync(marker);if (stat.isFile() && !stat.isSymbolicLink() && stat.size <= 1024 * 1024) previous = JSON.parse(fs.readFileSync(marker, "utf8"));} catch {}
+  const snapshot = SourceInventory.inspectTransforms(inputs, {previous: previous?.inputs, signal: context.signal});
+  const key = snapshot.digest;
+  if (previous?.key === key && /^[a-f0-9-]+$/.test(previous.directory || "") && Array.isArray(previous.outputs)) {
+    const prepared = path.join(directory, previous.directory);
     try {
-      copyGame(source, temporary, undefined, 0, { assemblyPath, converted, retargeted, sourceFiles: inventory.files });
-      const runtimeRoot = selected.profile.root;
-      if (converted) fs.copyFileSync(path.join(runtimeRoot, "FNA.dll"), path.join(temporary, "FNA.dll"));
-      if (converted && info.engineKind === "xna") {
-        const facades = path.join(runtimeRoot, "abi");
-        for (const name of fs.readdirSync(facades).filter(name => /^Microsoft\.Xna\.Framework(?:\.[A-Za-z.]+)?\.dll$/.test(name))) {
-          fs.copyFileSync(path.join(facades, name), path.join(temporary, name));
-        }
+      const stat = fs.lstatSync(prepared);
+      if (!stat.isDirectory() || stat.isSymbolicLink() || previous.outputs.length !== inputs.length) throw Error("Invalid assembly cache.");
+      const seen = new Set();
+      for (const record of previous.outputs) {
+        if (seen.has(record.name) || !inputs.some(file => path.basename(file) === record.name) || !/^[a-f0-9]{64}$/.test(record.sha256 || "")) throw Error("Invalid assembly cache.");
+        seen.add(record.name);
+        const file = path.join(prepared, record.name), observed = fs.lstatSync(file, {bigint: true});
+        if (!observed.isFile() || observed.isSymbolicLink() ||
+            (SourceInventory.identity(observed) !== record.identity || !hasFineChangeTime(observed)) &&
+            SourceInventory.hashRegularFile(file, SourceInventory.identity(observed), context.signal) !== record.sha256) throw Error("Changed assembly cache.");
       }
-      if (retargeted) {
-        // Only game-local pure IL assemblies qualify. ReadyToRun, mixed-mode
-        // and unmanaged Windows DLLs are never rewritten or represented as ports.
-        const visit = directory => {
-          for (const item of fs.readdirSync(directory, { withFileTypes: true })) {
-            const file = path.join(directory, item.name);
-            if (item.isDirectory()) { visit(file); continue; }
-            if (!item.isFile() || !/\.(exe|dll)$/i.test(item.name)) continue;
-            let metadata; try { metadata = inspectManagedAssembly(file); } catch { continue; }
-            if (metadata.peMachine === 0x8664 && metadata.ilOnly && !metadata.requires32Bit && !metadata.nativeEntryPoint && !metadata.hasNativeManagedCode) retargetIlAssembly(file);
-          }
-        };
-        visit(temporary);
-      }
-      for (const name of ["MacLauncherFnaHost.dll", "MacLauncherFnaHost.runtimeconfig.json"]) fs.copyFileSync(path.join(runtimeRoot, name), path.join(temporary, name));
-      SourceInventory.assertUnchanged(inventory);
-      fs.writeFileSync(path.join(temporary, ".maclauncher-fna.json"), JSON.stringify(fingerprint));
-      if (fs.existsSync(gameRoot)) {
-        const retained = path.join(root, "previous-overlays"); fs.mkdirSync(retained, { recursive: true });
-        fs.renameSync(gameRoot, path.join(retained, selected.version + "-" + Date.now()));
-      }
-      fs.renameSync(temporary, gameRoot);
-    } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
+      snapshot.assertUnchanged();
+      return {...result, assemblyRoot: prepared, assemblyPath: inputs.includes(originalFile) ? path.join(prepared, path.basename(originalFile)) : originalAssembly};
+    } catch {context.signal?.throwIfAborted();}
   }
-  SourceInventory.assertUnchanged(inventory);
-  return { gameRoot, assemblyPath: path.join(gameRoot, path.basename(info.assemblyPath)), info,
-    hostPath: path.join(gameRoot, "MacLauncherFnaHost.dll"), runtimeRoot: selected.profile.root,
-    frameworkVersion: converted ? selected.profile.frameworkVersion : info.detectedVersion, selected };
+  Writable.assertOwnDirectory(context.userDataDir, directory);
+  const temporary = fs.mkdtempSync(path.join(directory, ".prepare-"));
+  try {
+    const outputs = [];
+    for (const [file, record] of snapshot.files) {
+      context.signal?.throwIfAborted();
+      const destination = path.join(temporary, path.basename(file));cloneOrCopySync(file, destination);
+      let stat = fs.lstatSync(destination, {bigint: true});
+      if (SourceInventory.hashRegularFile(destination, SourceInventory.identity(stat), context.signal) !== record.sha256) throw SourceInventory.changedError();
+      retargetIlAssembly(destination, architecture);
+      stat = fs.lstatSync(destination, {bigint: true});
+      outputs.push({name: path.basename(file), identity: SourceInventory.identity(stat),
+        sha256: SourceInventory.hashRegularFile(destination, SourceInventory.identity(stat), context.signal)});
+    }
+    snapshot.assertUnchanged();
+    // Existing generations, including modified caches and all legacy game
+    // overlays, are retained. This cache never hosts the game's working data.
+    const name = fs.existsSync(path.join(directory, key)) ? key + "-" + crypto.randomUUID() : key;
+    const prepared = path.join(directory, name);
+    const receipt = {key, directory: name, inputs: [...snapshot.files.values()], outputs};
+    const pending = path.join(temporary, "prepared.json");fs.writeFileSync(pending, JSON.stringify(receipt));
+    snapshot.assertUnchanged();
+    fs.renameSync(temporary, prepared);
+    fs.renameSync(path.join(prepared, "prepared.json"), marker);
+    return {...result, assemblyRoot: prepared, assemblyPath: inputs.includes(originalFile) ? path.join(prepared, path.basename(originalFile)) : originalAssembly};
+  } finally {fs.rmSync(temporary, {recursive: true, force: true});}
 }
 
 module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [manager],
@@ -150,7 +142,8 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     preflight(entry, context);
     const selected = manager.resolveSelection(entry, context.settings, context.userDataDir);
     const requirement = manager.getState({ userDataDir: context.userDataDir, settings: context.settings }).catalog.versionRequirements?.[selected.version];
-    return selected.ready ? null : { managerId: manager.id, version: selected.version, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), requiresDownload: requirement?.requiresDownload !== false, installOptions: {} };
+    return selected.ready ? null : { managerId: manager.id, version: selected.version, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), requiresDownload: requirement?.requiresDownload !== false,
+      installOptions: {...selected.installOptions, ...(selected.architecture ? {architecture: selected.architecture} : {})} };
   },
   canLaunchRuntime: (runtimeId, entry) => runtimeId !== "native" || Boolean(entry.nativeAppPath),
   launchRuntime: async (runtimeId, entry, context) => {
@@ -166,19 +159,22 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     const launch = prepareGame(entry, context), settings = context.runtimeSettings || {};
     const args = Array.isArray(settings.appArgs) ? settings.appArgs : [];
     if (args.some(arg => typeof arg !== "string" || arg.includes("\0"))) throw new Error("Invalid FNA game arguments.");
-    const env = { ...process.env, DOTNET_ROOT: launch.runtimeRoot, DOTNET_MULTILEVEL_LOOKUP: "0", FNA_PLATFORM_BACKEND: "SDL3" };
+    const env = { ...process.env, DOTNET_ROOT: launch.runtimeRoot, DOTNET_MULTILEVEL_LOOKUP: "0", FNA_PLATFORM_BACKEND: "SDL3",
+      MACLAUNCHER_FNA_GAME_ROOT: launch.gameRoot, MACLAUNCHER_FNA_ASSEMBLY_ROOT: launch.assemblyRoot || "",
+      MACLAUNCHER_FNA_USE_RUNTIME_FRAMEWORK: launch.converted ? "1" : "0" };
     applyGraphicsEnvironment(env, settings);
     const steam = await Steam.prepareLaunch({ info: launch.info, context, gameRoot: launch.gameRoot, baseEnvironment: env,
-      arch: launch.selected.profile.architecture || "arm64" });
+      arch: launch.selected.profile.architecture || "arm64", ownedDirectory: path.join(moduleRoot(entry, context), "steam-api") });
     return NativeFocus.spawnForegroundNativeGame({ context, executablePath: launch.selected.install.executablePath,
       args: ["exec", launch.hostPath, launch.assemblyPath, launch.runtimeRoot, ...args, ...(context.gameArguments || [])], options: { cwd: launch.gameRoot, env: steam?.environment || env } });
   },
-  cleanupGameData: (entry, context) => { fs.rmSync(moduleRoot(entry, context), { recursive: true, force: true }); return true; },
+  // Older overlays may contain the only copy of private game writes.
+  cleanupGameData: () => false,
   actions: { inspectGame: (entry, _payload, context) => {
       const info = inspectEntry(entry); entry.moduleData = { ...entry.moduleData, ...info }; context.onEntryChange?.(entry); return info;
     }, runtimeStatus: (entry, _payload, context) => runtimeStatus(entry, context),
     prepareGame: (entry, _payload, context) => prepareGame(entry, context),
     decompile: (entry, payload, context) => Decompiler.decompile(entry, payload, context),
     revealDecompiled: (entry, _payload, context) => Decompiler.reveal(entry, context) },
-  __test: { preflight, runtimeStatus, copyGame, sourceInventory, prepareGame, inspectEntry }
+  __test: { preflight, runtimeStatus, prepareGame, inspectEntry }
 };

@@ -341,3 +341,19 @@ test("cached manifest display checks invalidate on changed bytes or symlink subs
   fs.renameSync(resourceManifest, resourceBackup); fs.symlinkSync(resourceBackup, resourceManifest);
   assert.throws(() => f.bundle.resolve({ version: f.version, upstreamRevision: f.revision }), /regular|unreadable/);
 });
+
+
+test("coarse identities include bytes and bounded reads detect same-stamp source mutation", t => {
+  const {holdFileTimes} = require("./helpers/held-file-times.cjs"), f = fixture(t), file = path.join(f.payload, "licenses/LICENSE");
+  holdFileTimes(t, [file]);const before = B.fileIdentity(file), original = fs.readFileSync(file);
+  assert.equal(B.fileIdentity(file), before);
+  fs.writeFileSync(file, "changed notice");assert.notEqual(B.fileIdentity(file), before);
+  assert.throws(() => B.verifyPayload(f.payload, f.manifest), /checksum/);
+  fs.writeFileSync(file, original);const read = fs.readSync;let changed = false;
+  t.mock.method(fs, "readSync", (descriptor, ...args) => {
+    const count = read(descriptor, ...args);
+    if (!changed && fs.fstatSync(descriptor).ino === fs.statSync(file).ino) {changed = true;fs.writeFileSync(file, "changed notice");}
+    return count;
+  });
+  assert.throws(() => B.readRegular(file, 14), /changed while being read/);assert.equal(changed, true);
+});

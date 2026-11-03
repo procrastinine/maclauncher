@@ -7,6 +7,7 @@ const Upstream = require("./upstream");
 const { runDownloadTask } = require("./download-manager");
 const { buildRuntimeDownloadMeta } = require("./runtime-downloads");
 const RuntimeCatalog = require("./runtime-catalog");
+const { sanitizeErrorMessage } = require("../../../core/runtime-errors.mjs");
 const Architecture = require("./architecture");
 const { systemVersionSync, versionAtLeast } = require("./bundled-native");
 const Custom = require("./custom-runtime");
@@ -237,6 +238,9 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
   // Folders of earlier layouts: this manager's folder without a CPU subfolder,
   // then the folders of managers it replaced. Their versions are used in place.
   const installBases = userDataDir => [path.dirname(root(userDataDir)), ...formerIds.map(former => path.join(userDataDir, "runtimes", former))];
+  // Every folder that can hold a version, in lookup order.
+  const versionFolders = (userDataDir, version) => installBases(userDataDir).flatMap(base =>
+    [path.join(base, version), ...["arm64", "x64", "universal"].map(architecture => path.join(base, architecture, version))]);
   const entrySource = entry => entry.catalogSourceId || (entry.projectPackage ? "builds" : "upstream");
   function mergeEntries(incoming, sourceId) {
     if (!Array.isArray(incoming)) throw new Error("Discovered runtime catalog is not a version list.");
@@ -320,7 +324,8 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
         const state = cached.sourceStates?.[sourceId];
         sourceStates[sourceId] = state
           ? { status: ["idle", "success", "error"].includes(state.status) ? state.status : "idle", fetchedAt: Number.isFinite(state.fetchedAt) ? state.fetchedAt : null,
-            error: typeof state.error === "string" ? state.error.slice(0, 8192) : null, mode: ["all", "latest"].includes(state.mode) ? state.mode : null }
+            error: typeof state.error === "string" ? sanitizeErrorMessage(state.error).slice(0, 8192) : null,
+            failedAt: Number.isFinite(state.failedAt) ? state.failedAt : null, mode: ["all", "latest"].includes(state.mode) ? state.mode : null }
           : { status: "success", fetchedAt: cached.fetchedAt, error: null, mode: null };
       }
       if (sourceIds.length === 1) discoveryState = { ...discoveryState, ...sourceStates[sourceIds[0]] };
@@ -382,8 +387,9 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
         saveCatalog(userDataDir);
         return getState({ userDataDir }).catalog;
       } catch (error) {
-        sourceStates[sourceId] = { ...previous, status: "error", error: error.message || String(error) };
-        discoveryState = { ...discoveryState, status: "error", error: error.message || String(error),
+        const failedAt = Date.now(), message = sanitizeErrorMessage(error.message || String(error));
+        sourceStates[sourceId] = { ...previous, status: "error", error: message, failedAt };
+        discoveryState = { ...discoveryState, status: "error", error: message, failedAt,
           ...(sourceIds.length === 1 ? { mode: previous.mode, fetchedAt: previous.fetchedAt } : {}) };
         throw error;
       } finally { discoveryPromises.delete(sourceId); }
@@ -398,23 +404,29 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     return value;
   }
   const installDir = (userDataDir, version) => {
-    // A declared build or single host CPU decides; file slices decide only when neither is declared.
-    const normalized = normalizeVersion(version), declaredArchitecture = pinArchitecture(entries.get(normalized));
+    // CPU folders are storage layouts. A package offered to both CPUs has one
+    // lookup order, so its Intel executable can be reused through Rosetta.
+    const normalized = normalizeVersion(version), pin = entries.get(normalized), declaredArchitecture = pinArchitecture(pin);
     const directory = ["arm64", "x64", "universal"].includes(declaredArchitecture) ? path.join(path.dirname(root(userDataDir)), declaredArchitecture) : root(userDataDir);
     const selected = path.join(directory, normalized);
-    if (fs.existsSync(selected)) return selected;
-    for (const base of installBases(userDataDir)) for (const candidate of [path.join(base, normalized), ...["arm64", "x64", "universal"].map(architecture => path.join(base, architecture, normalized))]) {
+    const sharedPackage = !declaredArchitecture && /^[a-f0-9]{64}$/.test(pin?.asset?.sha256 || "");
+    if (!sharedPackage && fs.existsSync(selected)) return selected;
+    for (const candidate of versionFolders(userDataDir, normalized)) {
       try {
         const metadata = path.join(candidate, "runtime.json");
         if (fs.statSync(metadata).size > 1024 * 1024) continue;
         const record = JSON.parse(fs.readFileSync(metadata, "utf8")), declared = pinArchitecture(record) || pinArchitecture(record.catalogEntry);
+        if (record.version !== normalized || sharedPackage && record.archiveSha256 !== pin.asset.sha256) continue;
         const runtimePath = record.source === "local" ? record.runtimePath : path.join(candidate, record.executableRelative || "");
         const target = declaredArchitecture && declaredArchitecture !== "universal" ? declaredArchitecture : installationArchitecture;
         if (declared === "universal" || declared === target) return candidate;
+        const intelOnAppleSilicon = target === "arm64" &&
+          (dependencies.hostArch || require("./host-capabilities").getHostCapabilities().hardwareArch) === "arm64";
+        const samePackage = /^[a-f0-9]{64}$/.test(pin?.asset?.sha256 || "") && record.archiveSha256 === pin.asset.sha256;
+        if (declared === "x64" && intelOnAppleSilicon && (!declaredArchitecture || declaredArchitecture === "universal" || samePackage)) return candidate;
         if (!declared || declaredArchitecture === "universal") {
           const architectures = Native.readMachOArchitectures(runtimePath, {allowLibrary: nativeLibrary});
-          if (architectures.includes(target === "x64" ? "x86_64" : "arm64") &&
-            (candidate === path.join(base, normalized) || architectures.includes("arm64") && architectures.includes("x86_64"))) return candidate;
+          if (architectures.includes(target === "x64" ? "x86_64" : "arm64") || intelOnAppleSilicon && architectures.includes("x86_64")) return candidate;
         }
       } catch {}
     }
@@ -475,7 +487,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       }
       let project;
       if (projectPackages && pin.projectPackage && record.source === "download") {
-        project = projectPackages.inspectInstalled(directory, pin, { verification });
+        project = projectPackages.inspectInstalled(directory, pin, { verification, userDataDir });
         if (runtimePath !== project.executablePath) return null;
       }
       if (verification === "status" && cached?.key === cacheKey) return cached.install;
@@ -485,11 +497,13 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       // resolveLocalRuntime already hashes the executable against this record.
       const installed = { ...record, ...native, version: normalized, runtimePath, installDir: directory,
         ...(project ? {
+          root: project.root, declaration: project.declaration, resolveDependency: project.resolveDependency, dependencyLibraryPaths: project.dependencyLibraryPaths, dependencyReadRoots:project.dependencyReadRoots,
           sourceIdentity: require("./maclauncher-builds").sourceIdentity(pin.projectPackage, {manifest: project.manifest, receiptRevision: record.upstreamRevision}),
           environmentRelative: Object.fromEntries(Object.entries(project.manifest.environmentRelative || {}).map(([key, value]) => [key, path.posix.join("project-payload/files", value)])),
           runtimeFiles: Object.fromEntries(Object.entries(project.manifest.runtimeFiles || {}).map(([key, value]) => [key, path.posix.join("project-payload/files", value)]))
         } : {}),
         ...(record.installationMetadata === undefined ? {} : { installationMetadata: installationEvidence(record.installationMetadata) }) };
+      if(project) require('./package-dependencies').attach(installed,project);
       rememberDisplay(directory, cacheKey, installed);
       return installed;
     } catch {
@@ -688,8 +702,12 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     const destinationRoot = path.dirname(destination);
     fs.mkdirSync(destinationRoot, { recursive: true });
     const staging = fs.mkdtempSync(path.join(destinationRoot, ".install-"));
-    let preserveStaging = false;
+    let preserveStaging = false, packageDependencies;
     try {
+      if (pin.projectPackage) packageDependencies = await require('./package-dependencies').prepare(pin.projectPackage, {
+        userDataDir, repository: buildsRepository || projectBuilds?.repository || 'procrastinine/maclauncher-builds', signal, logger, onProgress,
+        ...(dependencies.packageDependencies || {})
+      });
       const archivePath = path.join(staging, pin.asset.filename);
       onProgress?.({ downloaded: 0, total: pin.asset.bytes || null, detail: "Downloading…" });
       const fetched = dependencies.downloadToFile ? await dependencies.downloadToFile(pin.asset.url, archivePath, { signal, onProgress })
@@ -718,7 +736,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       onProgress?.({ ...progressBytes, detail: "Checking installation…" });
       const preparation = projectPackages && pin.projectPackage ? projectPackages.prepare : prepareInstall;
       const installationMetadata = preparation
-        ? installationEvidence(await preparation({ unpacked, pin, userDataDir, signal, logger, onProgress })) : undefined;
+        ? installationEvidence(await preparation({ unpacked, pin, userDataDir, signal, logger, onProgress, resolveDependency: packageDependencies?.resolveDependency, installedDependencies: packageDependencies?.installed })) : undefined;
       let installedPin = pin;
       if (installationMetadata?.minimumMacOS !== undefined) {
         const required = installationMetadata.minimumMacOS;
@@ -728,8 +746,8 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
         if (hostReason(installedPin)) throw new Error(rememberFloor(userDataDir, pin, installedPin));
       }
       throwIfAborted(signal);
-      const runtimePath = projectPackages && pin.projectPackage ? projectPackages.inspectInstalled(unpacked, pin).executablePath
-        : (pin.resolveExecutable || resolveExecutable)(unpacked, pin);
+      const runtimePath = projectPackages && pin.projectPackage ? projectPackages.inspectInstalled(unpacked, pin, {userDataDir}).executablePath
+        : (pin.resolveExecutable || resolveExecutable)(unpacked, pin, {userDataDir});
       const target = ["arm64", "x64"].includes(Architecture.recordArchitecture(pin)) ? Architecture.recordArchitecture(pin) : installationArchitecture;
       const native = inspectRuntime({ arch: target,
         hostArchitecture: dependencies.hostArch || require("./host-capabilities").getHostCapabilities().hardwareArch,
@@ -750,6 +768,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
         source: "download", provenanceVerified: Boolean(pin.asset.sha256 || artifactVerification?.verified),
         integritySource: pin.asset.integritySource || (pin.asset.sha256 ? "publisher-sha256" : archiveMd5 ? "publisher-md5-and-signature" : "recorded-local"), installedAt: new Date().toISOString() });
       throwIfAborted(signal);
+      if (pin.projectPackage) require('./package-dependencies').relocateInstallation(unpacked,destination,pin.projectPackage,userDataDir);
       const previous = path.join(staging, "previous");
       if (replacing) fs.renameSync(destination, previous);
       try {
@@ -766,17 +785,22 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
         throw error;
       }
     } finally {
-      if (!preserveStaging) fs.rmSync(staging, { recursive: true, force: true });
+      try { if (!preserveStaging) fs.rmSync(staging, { recursive: true, force: true }); }
+      finally { await packageDependencies?.release(); }
     }
   }
-  function uninstallRuntime({ userDataDir, version } = {}) {
-    const directory = installDir(userDataDir, version);
+  function uninstallRuntime({ userDataDir, version, installDir: selected, logger } = {}) {
+    // The selected row's own folder, so removing one copy never reaches another
+    // CPU's, an earlier layout's or a replaced manager's copy of the version.
+    const directory = typeof selected === "string" && versionFolders(userDataDir, normalizeVersion(version)).find(folder => folder === path.resolve(selected)) ||
+      installDir(userDataDir, version);
     if (bundledRuntime?.isResourcePath?.(directory)) throw new Error("Included app resources cannot be removed as runtime installations.");
     if (!fs.existsSync(directory) && resolveIncluded({ version, verification: "status" }))
       throw new Error("This runtime is included in the app and cannot be removed separately.");
     displayCache.delete(directory);
     bundledRuntime?.clearCache?.(directory);
     fs.rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    if (fs.existsSync(path.join(userDataDir,'runtimes','.dependencies'))) return require('./package-dependencies').collect(userDataDir,dependencies.packageDependencies).then(()=>true,error=>{logger?.warn?.('Shared dependency cleanup deferred: '+error.message);return true;});
     return true; // A local registration never owns or removes the external executable.
   }
   // Large upstream archives may omit an exact old game version from their
@@ -907,7 +931,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
           });
         }, { onProgress });
     },
-    uninstallRuntime,
+    uninstallRuntime, trashFirst: true,
     ...(importLocal ? { importRuntime: ({ userDataDir, version, runtimePath } = {}) => {
       if (!version || version === "auto") throw new Error("Select the version matching the local build before importing it.");
       return registerLocal({ userDataDir, version, runtimePath });

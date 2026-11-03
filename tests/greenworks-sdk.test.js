@@ -131,3 +131,13 @@ test("unknown explicit SDK versions fail before reading an input or changing dat
   await assert.rejects(Sdk.importSdk({ userDataDir: f.userDataDir, runtimeRoot: f.source, version: "sdk-latest", dependencies: f.dependencies }), /explicitly listed/);
   assert.equal(fs.existsSync(f.userDataDir), false); assert.deepEqual(f.inspected, []);
 });
+
+
+test("held coarse native SDK times cannot reuse verification of modified API bytes", async t => {
+  const {holdFileTimes} = require("./helpers/held-file-times.cjs"), f = fixture(t), result = await f.import();
+  holdFileTimes(t, [result.apiLibraryPath]);assert.ok(Sdk.resolveManagedTicket(f.userDataDir, f.pin).apiLibraryPath);
+  assert.ok(Sdk.resolveManagedTicket(f.userDataDir, f.pin).apiLibraryPath);
+  const bytes = fs.readFileSync(result.apiLibraryPath);bytes[100] ^= 1;fs.writeFileSync(result.apiLibraryPath, bytes);
+  const ticket = Sdk.resolveManagedTicket(f.userDataDir, f.pin);
+  assert.ok(ticket.libraryPath);assert.equal(ticket.apiLibraryPath, undefined);assert.match(ticket.nativeApiReason, /checksum/);
+});

@@ -110,6 +110,7 @@ test('library work shares availability, runs checks off main, retains previous r
     onChange: () => { if (context.cachedState) context.scheduleStateRebuild(); }
   });
   const context = { Map, JSON, String, Array, path, require: id => require(path.resolve(__dirname, '../src/main', id)),
+    sanitizeRuntimeErrors: require('../src/core/runtime-errors.mjs').sanitizeRuntimeErrors,
     graphicsLaunchWarnings: new Map(), gameLaunchNotices: new Map(), runtimeInventoryRevision: 0,
     runtimeStateSnapshots: { local: { installed: [] } }, gameAvailability: monitor,
     GameAvailability: require('../src/core/game-availability'), Modules: { getModule: () => ({}), getModuleInfo: () => manifest },
@@ -179,7 +180,8 @@ test('library work shares availability, runs checks off main, retains previous r
   assert.deepEqual(Array.from(context.cachedState.recents[0].moduleRuntimeSupport), ['local']);
   assert.equal(probes, 1, 'inventory changes reuse main availability');
   const usable = context.cachedState.recents[0];
-  handle('runtimeState', { id: 'local', state: { installed: [{ version: 'copy', ready: true }], catalog: { versions: ['remote'] } } });
+  handle('runtimeState', { id: 'local', state: { installed: [{ version: 'copy', ready: true }], catalog: { versions: ['remote'] }, error: 'Proxy http://fixture:secret@proxy.invalid failed' } });
+  assert.equal(context.runtimeStateSnapshots.local.error, 'Proxy http://proxy.invalid failed', 'The actual event handler sanitizes errors before storing a snapshot');
   flush(); await turn();
   assert.equal(requests.length, 0, 'catalog-only changes do no game work');
   assert.equal(context.cachedState.recents[0], usable);

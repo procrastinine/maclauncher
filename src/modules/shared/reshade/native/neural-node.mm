@@ -155,17 +155,22 @@ void captureNeuralInput(const ShaderFrame &frame,const std::shared_ptr<Images> &
     if(!enabled||std::strcmp(enabled,"1")||!path||!*path)return;
     static std::atomic<bool> captured{false};if(captured.exchange(true))return;
     const unsigned width=images->width,height=images->height,stride=(width*4+255)&~255u;
+    if(!captureLayout(width,height,stride))return;
     auto bytes=[frame.commands.device newBufferWithLength:size_t(stride)*height options:MTLResourceStorageModeShared];
     if(!bytes)return;
     auto copy=[frame.commands blitCommandEncoder];
     [copy copyFromTexture:images->source.texture sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(width,height,1) toBuffer:bytes destinationOffset:0 destinationBytesPerRow:stride destinationBytesPerImage:size_t(stride)*height];[copy endEncoding];
-    const std::string prefix=std::string(path)+"-neural-input.png";
+    const std::string prefix=std::string(path)+"-neural-input.rgba",temporary=std::string(path)+".capture-neural-input.rgba";
     [frame.commands addCompletedHandler:^(id<MTLCommandBuffer> commands){
         if(commands.status!=MTLCommandBufferStatusCompleted)return;
+        dispatch_async(captureWriterQueue(),^{@autoreleasepool{
         unsigned minimum=255,maximum=0;size_t nonopaque=0;const auto data=static_cast<const unsigned char*>(bytes.contents);
         for(unsigned y=0;y<height;++y)for(unsigned x=0;x<width;++x){const unsigned alpha=data[size_t(y)*stride+x*4+3];minimum=std::min(minimum,alpha);maximum=std::max(maximum,alpha);nonopaque+=alpha!=255;}
         nativeLog("Neural input capture "+std::to_string(width)+"x"+std::to_string(height)+" alpha_min="+std::to_string(minimum)+" alpha_max="+std::to_string(maximum)+" nonopaque="+std::to_string(nonopaque));
-        try{writeCapturedFrame(prefix,bytes.contents,width,height,true,false,stride);}catch(const std::exception &error){nativeLog(error.what());}
+        try{writeCapturedFrame(temporary,bytes.contents,width,height,true,false,stride);
+            if(std::rename(temporary.c_str(),prefix.c_str()))throw std::runtime_error("Cannot publish the neural input capture");
+        }catch(const std::exception &error){unlink(temporary.c_str());nativeLog(error.what());}
+        }});
     }];
 }
 struct NeuralObservation {uintptr_t context=0;std::string stage,revision,method;};

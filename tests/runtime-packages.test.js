@@ -334,6 +334,34 @@ test('cleanup keeps every folder of an id with generation leases or when process
   assert.deepEqual(R.unlockedPackages({ lock, repoRoot: f.repoRoot, processes: '' }).folders, [path.join(f.root, 'helper/1.0')]);
 });
 
+test('cleanup removes local generations of a locked id once no plan selects them', async t => {
+  const f = installedLayout(t), exists = relative => fs.existsSync(path.join(f.root, relative));
+  const lock = { architectures: ['arm64', 'x64'], maximumMacOS: '13.0', packages: [f.record('helper', '0.3.1', 'universal')] };
+  // The module declares a development package, which the plans for both CPUs select.
+  const selected = '0.3.1-dev.85ce5521', declaration = { id: 'helper', version: selected, arch: 'universal', launcherArchitectures: ['arm64', 'x64'],
+    minimumMacOS: '13.0', sourceRelative: null, sourceSha256: 'a'.repeat(64), directoryRelative: `helper/${selected}/universal`,
+    manifestRelative: 'helper.json', manifestSha256: 'b'.repeat(64), files: [{ path: 'helper.json', size: 1, mode: 0o644, sha256: 'b'.repeat(64) }],
+    notices: [{ name: 'Helper', license: 'MIT', path: 'helper.json' }] };
+  const dependencies = { managers: () => new Map(), supplementals: () => [declaration], modules: () => [] };
+  f.install('helper', '0.3.1', 'universal');
+  for (const version of [selected, '0.3.1-dev.ac47510f', '0.1.0-0123abcd-4567cdef', '0.1.0-89abcdef-01234567', '0.1.0-aaaaaaaa-bbbbbbbb', '0.8-local'])
+    f.install('helper', version, 'universal', { archive: false });
+  f.write(path.join(f.root, 'helper/0.1.0-cccccccc-dddddddd/universal/partial.bin'));
+  f.install('other', '0.1.0-0123abcd-4567cdef', 'universal', { archive: false });
+  const running = `/usr/bin/game ${path.join(f.root, 'helper/0.1.0-aaaaaaaa-bbbbbbbb')}/universal/helper.json\n`;
+  // An unreadable plan or a generation lease keeps every generation.
+  assert.deepEqual(R.unlockedPackages({ lock: { packages: lock.packages }, repoRoot: f.repoRoot, processes: running }).folders, []);
+  f.write(path.join(f.root, 'helper/.generation-leases/1-lease.json'), '{}');
+  assert.deepEqual(R.unlockedPackages({ lock, repoRoot: f.repoRoot, processes: running, dependencies }).folders, []);
+  fs.rmSync(path.join(f.root, 'helper/.generation-leases/1-lease.json'));
+  const removed = await R.pruneUnlockedPackages({ lock, repoRoot: f.repoRoot, processes: running, dependencies });
+  assert.deepEqual(removed.sort(), ['0.1.0-0123abcd-4567cdef', '0.1.0-89abcdef-01234567', '0.3.1-dev.ac47510f']
+    .map(version => `src/resources/native-runtimes/helper/${version}`));
+  for (const kept of ['helper/0.3.1/universal', `helper/${selected}/universal`, 'helper/0.1.0-aaaaaaaa-bbbbbbbb',
+    'helper/0.1.0-cccccccc-dddddddd', 'helper/0.8-local', 'other/0.1.0-0123abcd-4567cdef'])
+    assert.ok(exists(kept), kept);
+});
+
 test('the stale package hint compares local manifests for this CPU without network access', t => {
   t.mock.method(globalThis, 'fetch', () => { throw new Error('The hint must stay offline.'); });
   const f = installedLayout(t), manifest = Buffer.from('{"id":"helper","version":"2.0"}\n');
@@ -350,4 +378,38 @@ test('the stale package hint compares local manifests for this CPU without netwo
   f.write(installed, '{"id":"helper","version":"1.9"}\n');
   assert.match(hint('arm64'), /Run pnpm install/);
   assert.equal(globalThis.fetch.mock.calls.length, 0);
+});
+
+test('included consumer bindings select package versions present in the application lock', () => {
+  const lock = require('../build/runtime-packages.json'), bindings = [];
+  const read = file => require('../src/modules/' + file);
+  const add = (file, id, version, field) => bindings.push({file, id, version, field});
+  const steamFile = 'shared/runtime/steamworks/versions.json', ticketFile = 'shared/runtime/steamworks/ticket-versions.json';
+  for (const [file, id] of [[steamFile, 'steam-api-helper'], [ticketFile, 'steam-ticket-loader']])
+    for (const pin of read(file)) add(file, id, pin.packageVersion ?? pin.version, 'packageVersion/version');
+  const bridgeOwners = new Map();
+  for (const [file, id, field] of [['java/runtime/steamworks/versions.json', 'java-steamworks', 'bridgeVersion'],
+    ['love/runtime/luasteam-versions.json', 'love-luasteam', 'version']]) {
+    for (const pin of read(file)) {
+      add(file, id, pin[field], field);
+      add(file, 'steam-api-helper', pin.helperVersion, 'helperVersion');
+      bridgeOwners.set(pin.helperAbiProfile, id);
+    }
+  }
+  const profileFile = 'shared/runtime/steamworks/profiles.json';
+  for (const profile of read(profileFile)) {
+    add(profileFile, 'steam-api-helper', profile.helperVersion, 'helperVersion');
+    if (bridgeOwners.has(profile.id)) add(profileFile, bridgeOwners.get(profile.id), profile.bridgeVersion, 'bridgeVersion');
+    for (const field of ['ticketHelperVersion', 'encryptedTicketVersion'])
+      if (profile[field] !== undefined) add(profileFile, 'steam-ticket-loader', profile[field], field);
+  }
+  const verify = packages => {
+    for (const binding of bindings) assert.ok(typeof binding.version === 'string' && packages.some(record =>
+      record.id === binding.id && record.version === binding.version),
+    `${binding.file}:${binding.field} selects missing included package ${binding.id}/${binding.version}`);
+  };
+  verify(lock.packages);
+  const first = bindings[0];
+  assert.throws(() => verify(lock.packages.filter(record => record.id !== first.id || record.version !== first.version)),
+    error => error.message.includes(`missing included package ${first.id}/${first.version}`));
 });

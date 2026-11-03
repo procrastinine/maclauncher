@@ -42,6 +42,14 @@ test("filterGames returns empty when no types are selected", async () => {
   assert.equal(filterGames(games, "", []).length, 0);
 });
 
+test("filterGames keeps entries of modules outside the type options", async () => {
+  const { filterGames } = await loadUtils();
+  const entries = [{ name: "Game", gamePath: "/g", moduleId: "mz" }, { name: "iTerm2", gamePath: "/w", moduleId: "window" }];
+  assert.deepEqual(filterGames(entries, "", ["mz"], ["mz", "mv"]), entries);
+  assert.deepEqual(filterGames(entries, "", [], ["mz", "mv"]), [entries[1]]);
+  assert.deepEqual(filterGames(entries, "", ["mz"]), [entries[0]]);
+});
+
 test("game type options use detection declarations and retain labels and sort order", async () => {
   const { gameTypeOptionsForModules } = await loadUtils();
   const modules = [

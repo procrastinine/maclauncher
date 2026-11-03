@@ -28,6 +28,7 @@ test('the packaged Android metadata closure resolves without a source checkout o
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'android-packaged-source-'));
   try {
     const repository = path.resolve(__dirname, '..');
+    const selected = require('../scripts/check-packaging.cjs').applicationFileSelector(require('../package.json'));
     const pin = require('../src/modules/android/distribution-included.json').find(item => item.id === 'android-launcher');
     const packageRoot = path.join(root, 'src/resources/native-runtimes', pin.directoryRelative);
     assert.equal(require('../package.json').build.files.some(row => typeof row === 'object' && row.to === 'src/android-runtime'), false);
@@ -38,11 +39,13 @@ test('the packaged Android metadata closure resolves without a source checkout o
       fs.chmodSync(destination, file.mode);
     }
     for (const name of ['runtime-source.js', 'included-files.js', 'distribution-included.json', 'apk.js', 'binary-manifest.js', 'profile.js', 'art/runtime.js', 'art/boot-classpath.mjs']) {
+      assert.equal(selected('src/modules/android/' + name), true, `Packaged Android source must be selected: ${name}`);
       const destination = path.join(root, 'src/modules/android', name);
       fs.mkdirSync(path.dirname(destination), { recursive: true });
       fs.copyFileSync(path.join(repository, 'src/modules/android', name), destination);
     }
-    for (const name of ['included-helpers.js', 'package-contract.cjs', 'bundled-native.js', 'host-capabilities.js', 'feature-requirements.js', '../effects/operation-contracts.mjs', '../reshade/neural/source.json', '../reshade/temporal/fsr4/source.json', 'local-native.js', 'app-bundle.js', 'pe-exports.js']) {
+    for (const name of ['included-helpers.js', 'package-contract.cjs', 'bundled-native.js', 'verified-identity.js', 'package-dependencies.js', 'maclauncher-builds.js', 'download-utils.js', 'upstream-transport.js', 'host-capabilities.js', 'feature-requirements.js', '../effects/operation-contracts.mjs', '../reshade/neural/source.json', '../reshade/temporal/fsr4/source.json', 'local-native.js', 'app-bundle.js', '../copy-file.js', '../file-time.js', '../file-lock.js', 'pe-exports.js']) {
+      assert.equal(selected(path.posix.normalize('src/modules/shared/runtime/' + name)), true, `Packaged helper must be selected: ${name}`);
       const destination = path.join(root, 'src/modules/shared/runtime', name);
       fs.mkdirSync(path.dirname(destination), { recursive: true });
       fs.copyFileSync(path.join(repository, 'src/modules/shared/runtime', name), destination);

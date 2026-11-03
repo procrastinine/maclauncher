@@ -26,8 +26,8 @@ function refreshGame(entry, context) {
   return { root, data, profile: requestedProfile, disc };
 }
 
-// The interpreter's adapter markers show what it supports: private saves and
-// output, and optionally the original-disc resource adapter.
+// The interpreter's adapter markers show what it supports: explicit save and
+// output roots, and optionally the original-disc resource adapter.
 const profileCache = new Map();
 function verifyProfile(install) {
   const profileKey = `${install.version}:${install.sha256}`;
@@ -51,6 +51,18 @@ function fontDirectory(install) {
     if (!fs.statSync(path.join(directory, name)).isFile()) throw new Error("AI5 needs its complete native distribution and font files.");
   }
   return directory;
+}
+
+function writeIfChanged(file, content) {
+  const bytes = Buffer.from(content);
+  try {
+    const stat = fs.lstatSync(file);
+    if (stat.isFile() && !stat.isSymbolicLink() && stat.size === bytes.length && fs.readFileSync(file).equals(bytes)) return file;
+  } catch (error) { if (error.code !== "ENOENT") throw error; }
+  const temporary = file + `.tmp-${crypto.randomUUID()}`;
+  try { fs.writeFileSync(temporary, bytes, { flag: "wx", mode: 0o600 }); fs.renameSync(temporary, file); }
+  finally { fs.rmSync(temporary, { force: true }); }
+  return file;
 }
 
 function writeConfiguration(data, file, { textCapture = "off" } = {}) {
@@ -77,10 +89,7 @@ function writeConfiguration(data, file, { textCapture = "off" } = {}) {
   if (force.length) lines.push("[FILE]", ...force.map(ref => `bARC${ref.type.toUpperCase()}=1`));
   lines.push("[AI5SDL2]", `TEXTHOOKSTDOUT=${textCapture === "console" ? 1 : 0}`,
     `TEXTHOOKCLIPBOARD=${textCapture === "clipboard" ? 1 : 0}`);
-  const temporary = file + `.tmp-${crypto.randomUUID()}`;
-  try { fs.writeFileSync(temporary, lines.join("\n") + "\n", { flag: "wx", mode: 0o600 }); fs.renameSync(temporary, file); }
-  finally { fs.rmSync(temporary, { force: true }); }
-  return file;
+  return writeIfChanged(file, lines.join("\n") + "\n");
 }
 
 function prepareLaunch(entry, context, install) {
@@ -88,9 +97,13 @@ function prepareLaunch(entry, context, install) {
   const { root, data, profile, disc } = refreshGame(entry, context), directory = directoryFor(entry, context);
   const capture = context.runtimeSettings?.textCapture || "off";
   if (!["off", "console", "clipboard"].includes(capture)) throw new Error("Choose a supported text-capture mode.");
-  const saves = entry.saveDirOverride || path.join(directory, "saves"), screenshots = path.join(directory, "screenshots");
+  const defaultSaveDir = path.resolve(root);
+  const saves = entry.saveDirOverride || defaultSaveDir, screenshots = path.join(defaultSaveDir, "Screenshots");
   if (!path.isAbsolute(saves)) throw new Error("AI5 save directory must be absolute.");
-  fs.mkdirSync(saves, { recursive: true }); fs.mkdirSync(screenshots, { recursive: true });
+  if (entry.saveDirOverride) fs.mkdirSync(saves, { recursive: true });
+  fs.mkdirSync(directory, { recursive: true });
+  // The packaged output adapter expects its destination to exist.
+  fs.mkdirSync(screenshots, { recursive: true });
   if (disc && !features.disc) throw new Error("This original disc layout needs an interpreter with original-disc resource support.");
   const resources = features.disc ? Disc.prepareResources(root, data, profile, directory, saves, disc) : { references: data.archiveReferences, env: {}, descriptors: [], seededSaves: [] };
   const configPath = writeConfiguration({ ...data, archiveReferences: resources.references }, path.join(directory, "AI5SDL2.INI"), { textCapture: capture });
@@ -98,8 +111,8 @@ function prepareLaunch(entry, context, install) {
   const authoredFont = data.config.ai5sdl2?.font;
   const font = custom || (authoredFont && Inspect.localFile(root, authoredFont, { stat: file => { try { return fs.statSync(file); } catch { return null; } }, readdir: dir => fs.readdirSync(dir, { withFileTypes: true }) }, { windowsInstallPath: true }));
   if (custom && (!path.isAbsolute(custom) || !fs.statSync(custom).isFile())) throw new Error("Choose an existing font file.");
-  entry.defaultSaveDir = saves;
-  const env = { ...process.env, ...Object.fromEntries(["RESOURCE_DIR", "AUX_ROOT", "BG_BASE", "MES_BASE", "DATA_BASE", "BGM_BASE", "EFFECT_BASE"].map(key => [`MACLAUNCHER_AI5_${key}`, ""])),
+  entry.defaultSaveDir = defaultSaveDir;
+  const env = { ...require("../shared/runtime/dependency-environment").environment(install), ...Object.fromEntries(["RESOURCE_DIR", "AUX_ROOT", "BG_BASE", "MES_BASE", "DATA_BASE", "BGM_BASE", "EFFECT_BASE"].map(key => [`MACLAUNCHER_AI5_${key}`, ""])),
     MACLAUNCHER_AI5_SAVE_DIR: saves, MACLAUNCHER_AI5_OUTPUT_DIR: screenshots,
     MACLAUNCHER_AI5_FONT_DIR: fonts, MACLAUNCHER_AI5_INI: configPath, MACLAUNCHER_AI5_FONT: font || "",
     MACLAUNCHER_AI5_ORIGINAL_EXE: data.originalRunnerPath || "", ...resources.env };
@@ -107,14 +120,14 @@ function prepareLaunch(entry, context, install) {
   if (capture === "console") args.push("--texthook-stdout");
   if (capture === "clipboard") args.push("--texthook-clipboard");
   args.push(data.iniPath);
-  fs.writeFileSync(path.join(directory, "preparation.json"), JSON.stringify({ profile, runtimeVersion: install.version,
+  writeIfChanged(path.join(directory, "preparation.json"), JSON.stringify({ profile, runtimeVersion: install.version,
     sourceIniPath: data.iniPath, sourceIniSha256: Native.hashFile(data.iniPath), privateConfigPath: configPath, configSha256: Native.hashFile(configPath),
     originalDataRoot: root, saves, screenshots, copies: [configPath], disc: resources.disc, archiveDescriptors: resources.descriptors, seededSaves: resources.seededSaves }, null, 2));
   return { root, data, profile, directory, saves, screenshots, configPath, args, env };
 }
 
 module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [manager], normalizeRuntimeId: () => "ai5",
-  onImport: (entry, context) => { entry.defaultSaveDir = path.join(directoryFor(entry, context), "saves"); },
+  onImport: entry => { entry.defaultSaveDir = path.resolve(entry.contentRootDir || entry.gamePath); },
   ensureRuntime: (entry, context) => {
     const game = refreshGame(entry, context);
     const selected = manager.resolveSelection(entry, context.settings, context.userDataDir);

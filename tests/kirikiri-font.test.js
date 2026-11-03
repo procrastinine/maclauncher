@@ -1,0 +1,30 @@
+const test = require("node:test"), assert = require("node:assert/strict");
+const fs = require("node:fs"), os = require("node:os"), path = require("node:path"), crypto = require("node:crypto");
+const Font = require("../src/modules/kirikiri/font"), Preparation = require("../src/modules/kirikiri/prepare");
+const profile = require("../src/modules/kirikiri/kag3-profile.json");
+
+test("KAG3 script-only resources fetch only their font and preserve the resource manifest contract", async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "kag3-font-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  assert.equal(Font.asset.sha256, profile.files["font.ttf"].sha256);
+  assert.equal(Font.asset.bytes, 4242092);
+  assert.equal(Font.asset.url, `https://raw.githubusercontent.com/krkrsdl2/kag3/${profile.upstreamRevision}/data/system_polyfill/font.ttf`);
+  assert.equal(Preparation.bundledResourcesAvailable(), true);
+  assert.equal(Preparation.needsResources({ moduleData: { archivePath: "data.xp3", kagVersion: "3.0" } }), true);
+  assert.equal(Preparation.needsResources({ moduleData: {} }), false);
+  const font = path.join(root, "download.ttf"), bytes = Buffer.from("test KAG3 font"); fs.writeFileSync(font, bytes);
+  const original = profile.files["font.ttf"];
+  profile.files["font.ttf"] = { size: bytes.length, sha256: crypto.createHash("sha256").update(bytes).digest("hex") };
+  t.after(() => { profile.files["font.ttf"] = original; });
+  let downloads = 0;
+  t.mock.method(Font, "ensure", async () => { downloads++; return font; });
+  assert.equal(Preparation.resources(root), null);
+  const prepared = await Preparation.ensureResources({ userDataDir: root });
+  assert.equal(downloads, 1);
+  assert.equal(prepared.manifestSha256, crypto.createHash("sha256").update(JSON.stringify(profile)).digest("hex"));
+  assert.equal(fs.readFileSync(path.join(prepared.root, "font.ttf"), "utf8"), bytes.toString());
+  assert.equal((await Preparation.ensureResources({ userDataDir: root })).root, prepared.root);
+  assert.equal(downloads, 1);
+  fs.writeFileSync(path.join(prepared.root, "font.ttf"), "bad");
+  assert.throws(() => Preparation.resources(root), /checksum/);
+});

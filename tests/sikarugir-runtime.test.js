@@ -224,12 +224,12 @@ test("Sikarugir selection stays offline and failed Refresh preserves exact choic
   const entry={runtimeData:{sikarugir:{version:pin.version}}};
   const exact=await manager.resolveForPlay(entry,{userDataDir:root,settings:{}});
   assert.equal(exact.version,pin.version);assert.equal(exact.artifacts.length,2);
-  assert.match(exact.detail,/engine.*support libraries/);assert.equal(calls,1);
+  assert.match(exact.detail,/engine.*support libraries/);assert.equal(calls,0,"A known Play choice also stays offline before consent");
   await assert.rejects(manager.refreshCatalog({userDataDir:root,force:true}),/403/);
   assert.equal(manager.getState({userDataDir:root}).catalog.status,"error");
   assert.equal(manager.resolveSelection(entry,{},root).version,pin.version);
   assert.equal(fixtureManager().resolveSelection(entry,{},root).version,pin.version, "A new manager reads the retained exact identity offline");
-  assert.equal(calls,2);assert.equal(manager.ui.management,"managed");
+  assert.equal(calls,1);assert.equal(manager.ui.management,"managed");
   const controller=new AbortController();controller.abort();
   await assert.rejects(manager.resolveForPlay({}, {userDataDir:root,settings:{},signal:controller.signal}),{name:"AbortError"});
 });

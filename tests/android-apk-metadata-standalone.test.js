@@ -10,10 +10,10 @@ const helper = process.env.ANDROID_APK_METADATA_HELPER || (() => {
   catch { return null; }
 })();
 const enabled = process.platform === 'darwin' && helper && fs.existsSync(helper);
-const fixture = path.join(__dirname, 'fixtures/android-package-metadata/metadata.apk');
-const splits = path.join(__dirname, 'fixtures/android-apk-metadata-standalone');
 
 test('standalone APK metadata resolves localized adaptive icons and split resources without Java', { skip: !enabled }, t => {
+  if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
+  const fixture=require('./helpers/android-fixture-tools.cjs').metadataApk(t);
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'maclauncher-apk-metadata-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   let sequence = 0;
@@ -43,7 +43,7 @@ test('standalone APK metadata resolves localized adaptive icons and split resour
   const french = run([fixture], 'fr-FR');
   assert.equal(french.value.label, 'Jeu Métadonnées');
   png(french);
-  const base = path.join(splits, 'base.apk'), resources = path.join(splits, 'resources.apk');
+  const base = require('./helpers/android-fixture-tools.cjs').metadataApk(t,'base'), resources = require('./helpers/android-fixture-tools.cjs').metadataApk(t,'resources');
   const unavailable = run([base]);
   assert.equal(unavailable.child.status, 0, unavailable.child.stderr);
   assert.equal(unavailable.value.label, 'org.maclauncher.metadata.fixture');
@@ -57,7 +57,7 @@ test('standalone APK metadata resolves localized adaptive icons and split resour
   assert.deepEqual(combined.value.activityWindows['org.maclauncher.metadata.fixture.LandscapeAlias'], { landscape: true });
   for (const [sources, message] of [
     [[resources, base], /base APK must be the first source/],
-    [[base, path.join(splits, 'foreign.apk')], /different package/],
+    [[base, require('./helpers/android-packages').foreignMetadataApk(root)], /different package/],
     [[base, base], /not a split/],
   ]) {
     const result = run(sources);
@@ -72,10 +72,12 @@ test('standalone APK metadata resolves localized adaptive icons and split resour
 });
 
 test('adaptive icon viewport fills its intended bounds while legacy vectors keep their scale', { skip: !enabled }, t => {
+  if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
+  const fixture=require('./helpers/android-fixture-tools.cjs').metadataApk(t);
   const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'android-icon-viewport-')));
   t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const files=[];
-  for(const [name,source]of [['adaptive',fixture],['legacy',path.join(splits,'legacy-vector.apk')]]){
+  for(const [name,source]of [['adaptive',fixture],['legacy',require('./helpers/android-fixture-tools.cjs').metadataApk(t,'legacy-vector')]]){
     const outputDirectory=path.join(root,name);fs.mkdirSync(outputDirectory);
     const child=spawnSync(path.resolve(helper),[],{input:JSON.stringify({sourceApks:[source],locale:'en-US',outputDirectory}),encoding:'utf8',timeout:5000});
     assert.equal(child.status,0,child.stderr);files.push(JSON.parse(child.stdout).iconFile);

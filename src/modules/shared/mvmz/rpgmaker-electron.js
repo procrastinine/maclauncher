@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const Module = require("module");
+const { writeFileAtomic } = require("../atomic-file");
 const { prepareBrowserGlobals, setupNwjsCompatibility } = require("../web/preload/nwjs-compat");
 const { buildStoragePatchScript } = require("./storage-patch");
 
@@ -452,7 +453,7 @@ function createRpgmakerElectronRuntime({ engineId } = {}) {
       } catch {}
       try {
         const normalized = normalizeCheats(nextCheats);
-        fs.writeFileSync(cheatsFilePath, JSON.stringify(normalized, null, 2), "utf8");
+        writeFileAtomic(cheatsFilePath, JSON.stringify(normalized, null, 2));
         return true;
       } catch {
         return false;

@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { randomUUID } = require("node:crypto");
+const { sanitizeRuntimeErrors } = require("../../../core/runtime-errors.mjs");
 
 const MAX_CATALOG_ENTRIES = 500;
 function entryLimit(maxEntries) {
@@ -17,7 +18,7 @@ function readRuntimeCatalog({ userDataDir, managerId, sourceId, validateEntry = 
     const limit = entryLimit(maxEntries);
     const file = catalogPath(userDataDir, managerId, sourceId);
     if (fs.statSync(file).size > 8 * 1024 * 1024) return null;
-    const record = JSON.parse(fs.readFileSync(file, "utf8"));
+    const record = sanitizeRuntimeErrors(JSON.parse(fs.readFileSync(file, "utf8")));
     if (record.schemaVersion !== 1 || record.managerId !== managerId || (record.sourceId ?? null) !== (sourceId ?? null) || !Array.isArray(record.entries) ||
       record.entries.length > limit || (record.retainedEntries != null && (!Array.isArray(record.retainedEntries) || record.retainedEntries.length > limit))) return null;
     // A cached row this launcher can no longer read is left out; the others stay listed.
@@ -29,8 +30,8 @@ function writeRuntimeCatalog({ userDataDir, managerId, sourceId, entries, retain
   const limit = entryLimit(maxEntries);
   if (!Array.isArray(entries) || entries.length > limit || !Array.isArray(retainedEntries) || retainedEntries.length > limit) throw new Error("Runtime catalog exceeds its release bound.");
   const file = catalogPath(userDataDir, managerId, sourceId);
-  const data = JSON.stringify({ schemaVersion: 1, managerId, fetchedAt, source: source || null, entries, retainedEntries,
-    ...(sourceId ? { sourceId } : {}), ...(sourceStates ? { sourceStates } : {}) }, null, 2) + "\n";
+  const data = JSON.stringify(sanitizeRuntimeErrors({ schemaVersion: 1, managerId, fetchedAt, source: source || null, entries, retainedEntries,
+    ...(sourceId ? { sourceId } : {}), ...(sourceStates ? { sourceStates } : {}) }), null, 2) + "\n";
   if (Buffer.byteLength(data) > 8 * 1024 * 1024) throw new Error("Runtime catalog exceeds its metadata size bound.");
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temporary = file + "." + randomUUID() + ".tmp";

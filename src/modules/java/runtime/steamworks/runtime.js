@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../../../shared/copy-file");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const Bundle = require("../../../shared/runtime/bundled-native");
@@ -7,6 +8,7 @@ const declarations = require("./distribution-supplementals.json");
 const Native = require("../../../shared/runtime/local-native");
 const GameData = require("../../../shared/game-data");
 const Consumer = require("./consumer");
+const Host = require("../../../shared/runtime/host-capabilities");
 const Catalog = require("./versions.json");
 
 const failure = (code, message) => Object.assign(new Error(message), { code });
@@ -24,19 +26,22 @@ function nativeHostDependencies() {
 
 /** The wrapper selects its matching JNI; a newer JNI is never substituted. */
 function requiredVariant(entry, { hostArch = process.arch, explicitVariant, preferredVariant } = {}) {
+  // The launcher CPU is the default JVM preference; hardware decides which JVMs can run.
   const required = Consumer.requirement(entry);
   if (!required) return null;
+  const hardwareArch = Host.getHostCapabilities().hardwareArch;
   const available = required.pin.architectures.map(arch => arch === "x86_64" ? "x64" : arch);
   if (explicitVariant && !available.includes(explicitVariant))
     throw failure("JAVA_STEAM_CPU_MISMATCH", "This game's exact Java Steam bridge requires a different JVM CPU.");
   if (explicitVariant) {
-    if (hostArch !== "arm64" && explicitVariant === "arm64")
+    if (hardwareArch !== "arm64" && explicitVariant === "arm64")
       throw failure("JAVA_STEAM_CPU_UNAVAILABLE", "An ARM JVM cannot run on this Intel Mac.");
     return explicitVariant;
   }
-  if (preferredVariant && available.includes(preferredVariant) && (hostArch === "arm64" || preferredVariant === "x64")) return preferredVariant;
-  if (hostArch === "arm64" && available.includes("arm64")) return "arm64";
+  if (preferredVariant && available.includes(preferredVariant) && (hardwareArch === "arm64" || preferredVariant === "x64")) return preferredVariant;
+  if (hostArch === "arm64" && hardwareArch === "arm64" && available.includes("arm64")) return "arm64";
   if (available.includes("x64")) return "x64";
+  if (hardwareArch === "arm64" && available.includes("arm64")) return "arm64";
   throw failure("JAVA_STEAM_CPU_UNAVAILABLE", "This game's exact Java Steam bridge has no compatible JVM CPU.");
 }
 
@@ -57,7 +62,7 @@ function resolveBundle(pin, { resourcesRoot, verification = "full", native = Nat
       if (library.sha256 !== pin.jniSha256 || library.size !== pin.jniSize || agent.sha256 !== pin.agentSha256 ||
           JSON.stringify(native.readMachOArchitectures(libraryPath, { allowLibrary: true }).sort()) !== JSON.stringify(pin.architectures.slice().sort()))
         throw failure("JAVA_STEAM_BUNDLE_CHANGED", "The included Java Steam JNI or loader agent changed.");
-    } else if (![libraryPath, agentPath].every(file => fs.lstatSync(file).isFile() && !fs.lstatSync(file).isSymbolicLink()))
+    } else if (![libraryPath, agentPath].every(file => (fs.lstatSync(file).isFile() || Boolean(Bundle.appAlias(file)))))
       throw failure("JAVA_STEAM_BUNDLE_CHANGED", "The included Java Steam bridge files are invalid.");
     return { ...pin, ready: true, directory, libraryPath, agentPath, source: "bundled", bundledExecution: "direct" };
   }
@@ -84,7 +89,8 @@ function ownedDirectory(userDataDir, directory) {
 /** The JVM canonicalizes symlinks, so @loader_path needs a real JNI entry.
  * A hardlink shares the small native bridge. Across volumes/protected app
  * bundles, clone/copy only that bridge; originals, games and JREs stay shared. */
-function prepareNativeLayout(directory, bridge, steam, operations = fs) {
+const NATIVE_LAYOUT = { linkSync: fs.linkSync, copyFileSync: (source, target) => cloneOrCopySync(source, target) };
+function prepareNativeLayout(directory, bridge, steam, operations = NATIVE_LAYOUT) {
   Bundle.realDirectory(directory, { create: true });
   const key = digest(JSON.stringify([bridge.bridgeVersion, bridge.jniSha256, steam.libraryPath, steam.sha256]));
   const target = path.join(directory, key), name = "libsteamworks4j.dylib", apiName = "libsteam_api.dylib";

@@ -6,13 +6,30 @@ const { spawnSync } = require('node:child_process');
 const test = require('node:test');
 
 const wrapper = path.resolve(__dirname, '../scripts/package-mac.mjs');
+const preparation = ['stage-cp932.cjs', 'prepareSevenZip', 'prepareDeclaredPublishers', 'preparePython'];
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maclauncher-package-command-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.mkdirSync(path.join(root, 'scripts'));
   fs.mkdirSync(path.join(root, 'bin'));
+  fs.mkdirSync(path.join(root, 'build'));
+  fs.mkdirSync(path.join(root, 'src/modules/catsystem2/runtime'), { recursive: true });
+  // Execute the real wrapper with all preparation dependencies owned by this
+  // fixture: no publisher downloads or writes into the actual source tree.
+  const localWrapper = path.join(root, 'scripts/package-mac.mjs');
+  fs.copyFileSync(wrapper, localWrapper);
+  fs.writeFileSync(path.join(root, 'build/runtime-packages.json'), JSON.stringify({ maximumMacOS: require('../build/runtime-packages.json').maximumMacOS }));
   const recorder = `const fs = require('node:fs');
     fs.appendFileSync('commands.jsonl', JSON.stringify({command: require('node:path').basename(process.argv[1]), args: process.argv.slice(2)}) + '\\n');`;
+  fs.writeFileSync(path.join(root, 'src/modules/catsystem2/runtime/stage-cp932.cjs'), recorder);
+  const recordPreparation = `const fs=require('node:fs'),assert=require('node:assert/strict');
+    const record=(command,options)=>{assert.equal(options.repoRoot,process.cwd());
+      fs.appendFileSync('commands.jsonl',JSON.stringify({command,args:options.arch?[options.arch]:[]})+'\\n');};`;
+  fs.writeFileSync(path.join(root, 'scripts/published-inputs.cjs'), recordPreparation + `
+    module.exports={prepareSevenZip:async options=>record('prepareSevenZip',options),
+      prepareDeclaredPublishers:async options=>record('prepareDeclaredPublishers',options)};`);
+  fs.writeFileSync(path.join(root, 'scripts/ci-macos.cjs'), recordPreparation + `
+    module.exports={preparePython:async options=>record('preparePython',options)};`);
   fs.writeFileSync(path.join(root, 'scripts/check-packaging.cjs'), recorder + `
     const args = process.argv.slice(2), index = args.indexOf('--inventory');
     if (index >= 0) {
@@ -22,7 +39,7 @@ function fixture(t) {
     fs.writeFileSync(path.join(root, 'bin', name), '#!' + process.execPath + '\n' + recorder, { mode: 0o755 });
   const env = { ...process.env, PATH: path.join(root, 'bin'), CSC_IDENTITY_AUTO_DISCOVERY: 'false' };
   for (const key of ['CSC_LINK', 'CSC_NAME', 'MACLAUNCHER_RUNTIME_SIGN_IDENTITY']) delete env[key];
-  return { root, run: args => spawnSync(process.execPath, [wrapper, '--', '--dir', '--arm64', ...args], { cwd: root, env, encoding: 'utf8' }),
+  return { root, run: args => spawnSync(process.execPath, [localWrapper, '--', '--dir', '--arm64', ...args], { cwd: root, env, encoding: 'utf8' }),
     commands: () => fs.existsSync(path.join(root, 'commands.jsonl'))
       ? fs.readFileSync(path.join(root, 'commands.jsonl'), 'utf8').trim().split('\n').map(JSON.parse) : [] };
 }
@@ -33,11 +50,13 @@ test('package command verifies an imported inventory without requiring local sou
   const result = f.run(['--runtime-inventory', inventory]);
   assert.equal(result.status, 0, result.stderr);
   const commands = f.commands();
-  assert.deepEqual(commands.map(row => row.command), ['check-packaging.cjs', 'pnpm', 'pnpm']);
-  assert.deepEqual(commands[0].args, ['source', '--arch', 'arm64', '--maximum-macos', require('../build/runtime-packages.json').maximumMacOS, '--inventory', inventory]);
-  assert.deepEqual(commands[2].args.slice(0, 4), ['exec', 'electron-builder', '--mac', '--publish=never']);
-  assert.equal(commands[2].args.includes('--runtime-inventory'), false);
-  assert.equal(commands[2].args.includes(inventory), false);
+  assert.deepEqual(commands.map(row => row.command), [...preparation, 'check-packaging.cjs', 'pnpm', 'pnpm']);
+  assert.deepEqual(commands.find(row => row.command === 'preparePython').args, ['arm64']);
+  assert.deepEqual(commands.find(row => row.command === 'check-packaging.cjs').args, ['source', '--arch', 'arm64', '--maximum-macos', require('../build/runtime-packages.json').maximumMacOS, '--inventory', inventory]);
+  const builder = commands.at(-1);
+  assert.deepEqual(builder.args.slice(0, 4), ['exec', 'electron-builder', '--mac', '--publish=never']);
+  assert.equal(builder.args.includes('--runtime-inventory'), false);
+  assert.equal(builder.args.includes(inventory), false);
   const workflow = fs.readFileSync(path.resolve(__dirname, '../.github/workflows/macos-app.yml'), 'utf8');
   assert.match(workflow, /run: pnpm run package:mac[^\n]*--runtime-inventory dist\/ci\/native-payload-inventory\.json/);
 });
@@ -46,13 +65,13 @@ test('package command stops before the renderer and app build when inventory ver
   const f = fixture(t), inventory = path.join(f.root, 'invalid.json');
   fs.writeFileSync(inventory, JSON.stringify({ valid: false }));
   assert.equal(f.run(['--runtime-inventory', inventory]).status, 43);
-  assert.deepEqual(f.commands().map(row => row.command), ['check-packaging.cjs']);
+  assert.deepEqual(f.commands().map(row => row.command), [...preparation, 'check-packaging.cjs']);
 });
 
 test('package command retains local source verification when no inventory is supplied', t => {
   const f = fixture(t);
   assert.equal(f.run([]).status, 42);
-  assert.equal(f.commands()[0].args.includes('--inventory'), false);
+  assert.equal(f.commands().find(row => row.command === 'check-packaging.cjs').args.includes('--inventory'), false);
   fs.mkdirSync(path.join(f.root, 'src/resources/native-runtime-sources'), { recursive: true });
   assert.equal(f.run([]).status, 0);
 });

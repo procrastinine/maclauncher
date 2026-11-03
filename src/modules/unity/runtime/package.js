@@ -1,8 +1,10 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../../shared/copy-file");
 const path = require("node:path");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const Native = require("../../shared/runtime/local-native");
+const Host = require("../../shared/runtime/host-capabilities");
 const { throwIfAborted } = require("../../shared/runtime/download-utils");
 const { VERSION } = require("../detect");
 const exec = promisify(execFile);
@@ -122,7 +124,7 @@ function templateSchemes(version, variationsDir) {
   };
   return [...named.map(pattern => name => pattern.test(name)), structural];
 }
-// The Mac's own CPU first, then a universal player, then Intel under Rosetta.
+// The selected runtime CPU (the launcher default) first, then Universal, then Intel under Rosetta.
 function templateRank(architectures, arch) {
   const host = arch === "x64" ? "x86_64" : arch;
   if (architectures.includes(host)) return architectures.length === 1 ? 0 : 1;
@@ -153,21 +155,21 @@ async function prepareInstall({ unpacked, pin, signal, logger }, { run = exec } 
   const variations = [template];
   const variation = path.join(payload, "Variations", template.name), sourceApp = path.join(variation, "UnityPlayer.app"), destination = path.join(unpacked, "player", "UnityPlayer.app");
   fs.mkdirSync(path.dirname(destination), { recursive: true });
-  fs.cpSync(sourceApp, destination, { recursive: true, verbatimSymlinks: true });
+  cloneOrCopySync(sourceApp, destination);
   const contents = path.join(destination, "Contents"), frameworks = path.join(contents, "Frameworks");
   const fused = !fs.existsSync(path.join(frameworks, "UnityPlayer.dylib")), identity = engineIdentity(fused ? path.join(contents, "MacOS", "UnityPlayer") : path.join(frameworks, "UnityPlayer.dylib"));
   if (identity.version !== pin.version || identity.revision !== pin.upstreamRevision) throw new Error("The downloaded Unity player version/revision does not match the selected release.");
   for (const name of ["libmonobdwgc-2.0.dylib", "libMonoPosixHelper.dylib"]) {
     const from = path.join(payload, "Frameworks", name);
-    if (fs.existsSync(from)) fs.copyFileSync(from, path.join(frameworks, name));
+    if (fs.existsSync(from)) cloneOrCopySync(from, path.join(frameworks, name));
   }
   const mono = path.join(payload, "MonoBleedingEdge");
-  if (fs.existsSync(mono)) fs.cpSync(mono, path.join(contents, "MonoBleedingEdge"), { recursive: true, verbatimSymlinks: true });
+  if (fs.existsSync(mono)) cloneOrCopySync(mono, path.join(contents, "MonoBleedingEdge"));
   if (fused ? !fs.existsSync(path.join(frameworks, "MonoEmbedRuntime", "osx", "libmono.0.dylib")) || !fs.existsSync(path.join(contents, "Data", "Managed", "etc", "mono", "config"))
     : !fs.existsSync(path.join(frameworks, "libmonobdwgc-2.0.dylib")) || !fs.existsSync(path.join(contents, "MonoBleedingEdge", "etc", "mono", "config"))) throw new Error("The Unity Mono player component is incomplete.");
   const architectures = Native.readMachOArchitectures(path.join(contents, "MacOS", "UnityPlayer"));
-  const requested = process.arch === "x64" ? "x86_64" : process.arch;
-  if (!architectures.includes(requested) && !(requested === "arm64" && architectures.includes("x86_64"))) throw new Error("The Unity player template does not support this Mac's CPU.");
+  const host = Host.getHostCapabilities();
+  if (!architectures.some(architecture => Host.architectureSupport(architecture, host).supported)) throw new Error("The Unity player template does not support this Mac's CPU.");
   const plistPath = path.join(contents, "Info.plist");
   const plist = `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleExecutable</key><string>UnityPlayer</string><key>CFBundleIdentifier</key><string>com.maclauncher.unity.player</string><key>CFBundleName</key><string>Unity Player</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleShortVersionString</key><string>${pin.version}</string><key>CFBundleVersion</key><string>${pin.upstreamRevision}</string><key>NSMainNibFile</key><string>MainMenu</string><key>NSPrincipalClass</key><string>PlayerApplication</string><key>LSMinimumSystemVersion</key><string>${pin.minimumMacOS || "10.13"}</string></dict></plist>`;
   fs.writeFileSync(plistPath, plist);

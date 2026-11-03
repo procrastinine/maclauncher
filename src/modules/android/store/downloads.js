@@ -102,11 +102,19 @@ function createGooglePlayDownloads(options = {}) {
         } else if (credentials.mode !== "reuse") {
           if (typeof options.browserLogin !== "function") throw publicError("Google account sign-in is unavailable.");
           state.connection.phase = "browser"; emit();
-          const requestedBrowserAccountId = crypto.randomUUID(), login = await options.browserLogin({ signal, accountId: requestedBrowserAccountId, remember: credentials.remember !== false,
-            onAuthenticated: () => { if (current === generation && !signal.aborted) { state.connection.phase = "authorizing"; emit(); } } });
-          signal.throwIfAborted(); if (!validSession(login)) throw publicError("Google did not return an authenticated account.");
-          if (session?.email !== login.email) { state.library = []; state.libraryFetchedAt = null; entries.clear(); catalog.clear(); }
-          session = { ...login, mode: "browser", browserAccountId: login.browserAccountId || requestedBrowserAccountId, remember: credentials.remember !== false, devices: {}, auths: {} };
+          // Device check-in needs no account token and can overlap the browser
+          // challenge. Cancelling that challenge also cancels this request.
+          const deviceController = new AbortController(), deviceSignal = AbortSignal.any([signal, deviceController.signal]);
+          const device = Promise.resolve().then(() => protocol.prepareDevice({ architecture: "arm64", locale: "en-US", androidSdk: 34, signal: deviceSignal }));
+          device.catch(() => {});
+          try {
+            const requestedBrowserAccountId = crypto.randomUUID(), login = await options.browserLogin({ signal, accountId: requestedBrowserAccountId, remember: credentials.remember !== false,
+              onAuthenticated: () => { if (current === generation && !signal.aborted) { state.connection.phase = "authorizing"; emit(); } } });
+            signal.throwIfAborted(); if (!validSession(login)) throw publicError("Google did not return an authenticated account.");
+            if (session?.email !== login.email) { state.library = []; state.libraryFetchedAt = null; entries.clear(); catalog.clear(); }
+            session = { ...login, mode: "browser", browserAccountId: login.browserAccountId || requestedBrowserAccountId, remember: credentials.remember !== false,
+              devices: { "arm64:34:en-us": await device }, auths: {} };
+          } finally { deviceController.abort(); }
         } else if (!validSession(session)) throw publicError("No saved Google account is available. Choose browser sign-in.");
         state.connection.phase = "authorizing"; emit();
         await authorization("arm64", "en-US", { signal }); signal.throwIfAborted(); if (current !== generation) return snapshot();

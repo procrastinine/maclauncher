@@ -13,6 +13,14 @@ export async function startDevelopment(electronArguments = ["."]) {
     throw new Error("Usage: node scripts/dev.mjs [--debug] [--background]");
   }
   if (args.has("--background") && !electronArguments.includes("--background")) electronArguments=[...electronArguments,"--background"];
+  await createRequire(import.meta.url)("../src/modules/catsystem2/runtime/stage-cp932.cjs").prepare();
+  if (process.platform === "darwin") {
+    const require = createRequire(import.meta.url), repoRoot = path.resolve(import.meta.dirname, "..");
+    // Python follows the development launcher process CPU, including an Intel process under Rosetta.
+    await require("./ci-macos.cjs").preparePython({ repoRoot, arch: process.arch });
+    await require("./published-inputs.cjs").prepareSevenZip({ repoRoot });
+    await require("./published-inputs.cjs").prepareDeclaredPublishers({ repoRoot });
+  }
   // A pull without an install can leave earlier included packages in place.
   // The offline manifest check only reports; startup continues either way.
   if (process.platform === "darwin") {
@@ -57,8 +65,8 @@ export async function startDevelopment(electronArguments = ["."]) {
     await vite.close();
   })();
 
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
+  // A closed terminal sends SIGHUP; Electron must not outlive the server it loads from.
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(signal, shutdown);
 
   electron.on("error", error => {
     console.error(error.message);

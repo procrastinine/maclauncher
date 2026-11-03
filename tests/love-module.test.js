@@ -12,6 +12,49 @@ const Archive = require("../src/modules/love/archive");
 const Detect = require("../src/modules/love/detect");
 const { writeZipArchive } = require("./helpers/zip-fixture");
 
+test("nested archive records retain legacy folders and reuse readable identities after reconnect", async t => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "love-reconnect-")));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const file = path.join(root, "game.love"), context = { userDataDir: path.join(root, "profile") }, entry = { gameId: "reconnect", moduleData: {} };
+  writeZipArchive(file, [{ name: "nested/main.lua", data: "return 1" }, { name: "nested/data.txt", data: "game data" }]);
+  const original = fs.statSync, extract = Zip.extractZipEntry;
+  let device = 4, mtimeChange = 0n, extractions = 0;
+  t.mock.method(fs, "statSync", (source, ...args) => {
+    const stat = original(source, ...args);
+    if (source !== file) return stat;
+    return new Proxy(stat, { get(target, name) {
+      if (name === "dev") return typeof target.dev === "bigint" ? BigInt(device) : device;
+      if (name === "mtimeNs") return target.mtimeNs + mtimeChange;
+      return Reflect.get(target, name);
+    } });
+  });
+  t.mock.method(Zip, "extractZipEntry", (...args) => { extractions++; return extract(...args); });
+  const first = await Archive.prepare(file, entry, context), source = fs.statSync(file, { bigint: true });
+  const legacyBasis = [file, source.dev, source.ino, source.size, source.mtimeNs, source.ctimeNs].map(String);
+  const legacyKey = require("node:crypto").createHash("sha256").update(JSON.stringify([1, legacyBasis, "nested"])).digest("hex");
+  const legacyDirectory = path.join(path.dirname(path.dirname(first)), legacyKey);
+  fs.renameSync(path.dirname(first), legacyDirectory);
+  fs.writeFileSync(path.join(legacyDirectory, "prepared.json"), JSON.stringify({ key: legacyKey }));
+  const inode = fs.statSync(legacyDirectory).ino, legacyTarget = path.join(legacyDirectory, path.basename(file));
+  assert.equal(await Archive.prepare(file, entry, context), legacyTarget);
+  assert.equal(extractions, 2, "The matching opaque key reuses its original folder");
+  assert.equal(fs.statSync(legacyDirectory).ino, inode);
+  device = 9;
+  const reconnected = await Archive.prepare(file, entry, context);
+  assert.notEqual(reconnected, legacyTarget, "An unmatched opaque key gets one ordinary preparation");
+  assert.equal(fs.statSync(legacyDirectory).ino, inode, "The old folder is neither moved nor removed");
+  assert.equal(extractions, 4);
+  const receipt = JSON.parse(fs.readFileSync(path.join(path.dirname(reconnected), "prepared.json")));
+  assert.equal(receipt.source[0], file);
+  assert.equal(receipt.source[1].split(":").length, 3);
+  device = 10;
+  assert.equal(await Archive.prepare(file, entry, context), reconnected);
+  assert.equal(extractions, 4, "Readable source facts avoid another extraction on reconnect");
+  mtimeChange = 1000000n;
+  assert.notEqual(await Archive.prepare(file, entry, context), reconnected);
+  assert.equal(extractions, 6, "Changed mtime still prepares changed source bytes");
+});
+
 function makeTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
@@ -219,9 +262,13 @@ test("launchRuntime extracts AppImages into per-game module data before launch",
     const appImagePath = path.join(root, "example-game.AppImage");
     writeFile(appImagePath, "appimage");
 
+    let extractions = 0, outcome = "success", controller;
     SevenZip.extractArchive = async (_archivePath, destDir) => {
+      extractions++;
+      if (outcome === "failure") throw new Error("fixture extraction failed");
       const binaryPath = path.join(destDir, "bin", "example-game");
       writeFile(binaryPath, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+      if (outcome === "cancel") controller.abort();
       return true;
     };
 
@@ -238,22 +285,36 @@ test("launchRuntime extracts AppImages into per-game module data before launch",
       },
       runtimeData: {}
     };
+    let persisted = structuredClone(entry), publications = 0;
 
-    await LoveModule.launchRuntime("love", entry, {
+    const context = {
       userDataDir,
       settings: { runtimes: { love: {} } },
       logger: { info: () => {} },
+      onEntryChange: patch => { publications++; persisted = { ...persisted, ...structuredClone(patch) }; },
       spawnDetachedChecked: async (cmd, args, options) => {
         launches.push({ cmd, args, options });
         return { pid: 4321 };
       }
-    });
+    };
+    await LoveModule.launchRuntime("love", entry, context);
 
     assert.equal(launches.length, 1);
     assert.ok(String(entry.moduleData.appImageExtractRoot || "").includes("appimage"));
     assert.equal(entry.moduleData.appImageReady, true);
     assert.ok(String(entry.moduleData.launchTargetPath || "").endsWith(path.join("bin", "example-game")));
     assert.deepEqual(launches[0].args, [entry.moduleData.launchTargetPath]);
+    assert.equal(publications, 1); assert.equal(persisted.moduleData.appImageReady, true);
+    await LoveModule.launchRuntime("love", structuredClone(persisted), context);
+    assert.equal(extractions, 1, "A new entry loaded from persisted metadata must reuse the extraction");
+    assert.equal(publications, 1); assert.equal(launches.length, 2);
+    const fresh = id => ({ ...structuredClone(entry), gameId: id, moduleData: { ...entry.moduleData, appImageReady: false } });
+    const noPublish = { ...context, onEntryChange: () => assert.fail("Failed/cancelled extraction must not publish readiness") };
+    outcome = "failure";
+    await assert.rejects(LoveModule.launchRuntime("love", fresh("failed"), noPublish), /fixture extraction failed/);
+    outcome = "cancel"; controller = new AbortController();
+    await assert.rejects(LoveModule.launchRuntime("love", fresh("cancelled"), { ...noPublish, signal: controller.signal }), { name: "AbortError" });
+    assert.equal(launches.length, 2);
   } finally {
     SevenZip.extractArchive = originalExtract;
     fs.rmSync(root, { recursive: true, force: true });

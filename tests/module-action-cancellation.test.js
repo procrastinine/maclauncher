@@ -7,6 +7,7 @@ const path = require("node:path");
 const { createModuleActionRequests } = require("../src/main/module-action-requests");
 const { createBackendOperations } = require("../src/core/backend-operations");
 const { runToolCommand } = require("../src/modules/shared/runtime/tool-command");
+const { untilTestEnds } = require("./helpers/fixture-process");
 
 function gate() {
   let resolve;
@@ -67,7 +68,7 @@ test("inspector action cancellation isolates windows and stops the real tool bef
   let otherSignal;
   const env = fixture(t, {
     process: async (_entry, _payload, context) => {
-      await runToolCommand(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+      await runToolCommand(process.execPath, ["-e", untilTestEnds], {
         cwd: env.root, logPath: path.join(env.root, "tool.log"), signal: context.signal,
         onSpawn: async child => { await context.onToolProcessSpawn(child); processStarted.resolve(child.pid); }
       });

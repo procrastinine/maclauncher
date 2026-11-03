@@ -5,7 +5,7 @@ const MachO = require("../../shared/runtime/macho-load-commands");
 const { createProjectBuildManager } = require("../../shared/runtime/project-build-manager");
 
 function verifyInstall(install) {
-  Bundled.verifyPayload(install.root, install.declaration);
+  Bundled.verifyPayload(install.root, install.declaration, install.resolveDependency);
   const file = install.executablePath;
   const image = MachO.assertSystemLibraryClosure(MachO.readMachOLoadCommands(file), {
     fileType: 6, installName: "@rpath/rlvm-adapter.dylib", maximumMacOS: install.declaration.minimumMacOS });

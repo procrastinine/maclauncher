@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../shared/copy-file");
 const path = require("node:path");
 const { randomUUID } = require("node:crypto");
 const { buildUnrenCommand } = require("./unren");
@@ -99,7 +100,7 @@ function copyLooseSources(source, destination) {
     }
     const target = path.join(destination, rel);
     fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.copyFileSync(path.join(source, rel), target);
+    cloneOrCopySync(path.join(source, rel), target);
     copied++;
   }
   return copied;

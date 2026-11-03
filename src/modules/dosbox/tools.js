@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { cloneOrCopySync } = require("../shared/copy-file");
 const path = require("node:path");
 const Native = require("../shared/decompilation/native");
 const { getUiServices } = require("../shared/ui-services");
@@ -31,7 +32,7 @@ function inspectExecutable(entry, _payload, context) {
     const result = { ...program, fileCount: files.length, files, outputRoot };
     if (program.format === "bat") {
       const source = path.join(outputRoot, "source.bat");
-      fs.copyFileSync(program.executablePath, source, fs.constants.COPYFILE_EXCL);
+      cloneOrCopySync(program.executablePath, source, { exclusive: true });
       const fd = fs.openSync(source, "r"), bytes = Buffer.alloc(Math.min(program.bytes, 65536));
       try { fs.readSync(fd, bytes, 0, bytes.length, 0); } finally { fs.closeSync(fd); }
       Object.assign(result, { sourceFile: source, scriptPreview: scriptPreview(bytes), previewTruncated: program.bytes > bytes.length,

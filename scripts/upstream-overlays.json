@@ -1834,7 +1834,7 @@
       "id": "maclauncher-android",
       "repository": "https://github.com/procrastinine/maclauncher-android.git",
       "path": "src/external/maclauncher-android",
-      "revision": "c58f5b6ebe6d46f3c2dacf496ed00beb24a83e81",
+      "revision": "f4ae6717620c32b5e22102be87ab63f43c22d096",
       "licensePaths": [
         "LICENSE"
       ],
@@ -4466,7 +4466,7 @@
         },
         {
           "path": "src/modules/rgss/assets.js",
-          "sha256": "4b4c9be946235ec5b7846484dec561d250147e329d9154697cbf629cd63d885b"
+          "sha256": "dccd9b03f3dcf7df56dd13204db49553e730e915942fd16759184b1f33b791aa"
         }
       ],
       "operations": [
@@ -4757,11 +4757,11 @@
       "ownedFiles": [
         {
           "path": "src/modules/fna/runtime/manager.js",
-          "sha256": "de6f947c1256c0886686bf83c2ea1d6785f1d097402035ee086f6bb497c6640d"
+          "sha256": "7cb5afe47d821910fd0bebdcf4d53c50fc24ed587d3ce293f37cd0169ed772dc"
         },
         {
           "path": "src/modules/fna/runtime/profile.js",
-          "sha256": "1601d29ffc5563cd06c4f0a044c4728a4ec272843f6c8b826d1d9e76f99166f6"
+          "sha256": "fe81ba30947f324ae2bdc517e235e62ca2d946e94353a3738de73d2364cbb43d"
         }
       ],
       "operations": []
@@ -4828,7 +4828,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/catsystem2/runtime/port.js",
-          "sha256": "107ead9d9ec823bdc2dd68ccdf29b3f69d2e9a2762d08872f1dfac3303900bd7"
+          "sha256": "e78421426bc7b04e26c8a2a42bc620182b9f661719b7a7ddd207ab344512d761"
         }
       ],
       "operations": [
@@ -5556,16 +5556,18 @@
       "id": "rgss-config-helper-v7",
       "kind": "owned-native-helper",
       "usage": "Builds projects compiled helper bytes into the declared source-free delivery package; native source and compiler inputs retain their original identities.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "versionRefs": [
         {
           "kind": "json",
           "path": "src/modules/rgss/runtime/distribution-supplementals.json",
           "select": {
             "id": "mkxpz-config-helper",
-            "version": "1.0.0"
+            "version": "1.1.1",
+            "arch": "universal"
           },
-          "property": "version"
+          "property": "version",
+          "expectedVersion": "1.1.1"
         },
         {
           "kind": "export",
@@ -5576,7 +5578,7 @@
       "ownedFiles": [
         {
           "path": "scripts/native-binary-tools.cjs",
-          "sha256": "40c99e682e785a42de48ae958fe23deac10c9a527d777c9a8852bfa0246a2074"
+          "sha256": "731e49be840a34c86e356bc56bbda097aed19e71155c2661246d00e4bbdb41b7"
         },
         {
           "path": "scripts/stage-mkxpz-config-helper.cjs",
@@ -5592,23 +5594,23 @@
         },
         {
           "path": "src/modules/rgss/runtime/distribution-supplementals.json",
-          "sha256": "7103d7efc08494d045cc597af5cabc1cba4fd09f61b90e1754980d82319b41a0"
+          "sha256": "0d21f1b323a9174997c92b73d5377833fc84e41a47d88f8d3bbb7022c3cd2a6f"
         },
         {
           "path": "src/modules/rgss/runtime/mkxpz-config-helper.js",
-          "sha256": "09e362c9f1c063c6ca0ba98efdab550a9ae0417c31588b9de7e819caa2ea5b41"
+          "sha256": "08d4c0dd150c83ef2c9107f3271d68d3c1ed80c96d1810973edd90fac79d4e63"
         },
         {
           "path": "src/modules/rgss/runtime/mkxpz-game-runtime.js",
-          "sha256": "f07ac531e1c72909e2fae8f3b9b8cc4b467f4edde8b30a6932e7acb6a7775f1a"
+          "sha256": "2427b7bf64150562690c35bfdfc9e042067a39aadd25923a2fb882b2d6de1f2c"
         },
         {
           "path": "src/modules/shared/native-application.js",
-          "sha256": "244e24ec7efb41db3e09261088afd11ca4de4ee38579458f8acae68f2a4bb873"
+          "sha256": "bbaa3199ed5e14b65d458bd980830ed2f9af552481c75384ebdf464b94fa741f"
         },
         {
-          "path": "src/modules/shared/runtime/clone-file.js",
-          "sha256": "f467f5e47fd6705b4f47e9865e8d8e2d716f5f85072fa18afd211fa09ffa8b78"
+          "path": "src/modules/shared/copy-file.js",
+          "sha256": "fff1260f51b2d5c8613041d1bc201134575647d020bf2cc5fbcab908d9693edf"
         }
       ],
       "buildEntries": [
@@ -5643,23 +5645,26 @@
           "kind": "json",
           "path": "src/modules/love/runtime/luasteam-versions.json",
           "select": {
-            "version": "4.0.2-MCLv1"
+            "version": "4.0.2-MCLv3"
           },
-          "property": "version"
+          "property": "version",
+          "expectedVersion": "4.0.2-MCLv3"
         },
         {
           "kind": "json",
           "path": "src/modules/love/runtime/distribution-supplementals.json",
           "select": {
             "id": "love-luasteam",
-            "version": "4.0.2-MCLv1"
+            "version": "4.0.2-MCLv3"
           },
-          "property": "version"
+          "property": "version",
+          "expectedVersion": "4.0.2-MCLv3"
         },
         {
           "kind": "json",
-          "path": "src/resources/native-runtimes/love-luasteam/4.0.2-MCLv1/universal/helper.json",
-          "property": "version"
+          "path": "src/resources/native-runtimes/love-luasteam/4.0.2-MCLv2/universal/helper.json",
+          "property": "version",
+          "expectedVersion": "4.0.2-MCLv2"
         }
       ],
       "ownedFiles": [
@@ -5681,11 +5686,11 @@
         },
         {
           "path": "src/modules/love/runtime/luasteam-versions.json",
-          "sha256": "49c19f353e9a957b30506450ce738ce0297672086ec98a32cf6b77d165f29924"
+          "sha256": "9db968038e3bbd315c529346da5197d928bb0bc8e88d881a2add9df6981c73f1"
         },
         {
           "path": "src/modules/love/runtime/distribution-supplementals.json",
-          "sha256": "6556f12b1528e8a5595a5ab46bbbc2ae323638694bce393d62dccbb26a8d8640"
+          "sha256": "e13efd2c8b941534c2dee48b9b683b035c13ec176379fc1c292cb42274d348cb"
         }
       ],
       "buildEntries": [
@@ -5699,7 +5704,7 @@
       ],
       "sourceEvidence": [
         "src/modules/love/runtime/luasteam-source-inputs.json",
-        "src/resources/native-runtimes/love-luasteam/luasteam-4.0.2-ml1-lua51-universal-content1/universal/helper.json"
+        "src/resources/native-runtimes/love-luasteam/4.0.2-MCLv2/universal/helper.json"
       ],
       "sourceScopes": {
         "luasteam": [
@@ -6071,7 +6076,7 @@
     {
       "id": "catsystem2-kif-crypto",
       "kind": "owned-native-helper",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "usage": "Builds projects compiled helper bytes into the declared source-free delivery package; native source and compiler inputs retain their original identities.",
       "versionRefs": [
         {
@@ -6079,9 +6084,22 @@
           "path": "src/modules/catsystem2/runtime/distribution-supplementals.json",
           "select": {
             "id": "catsystem2-kif-crypto",
-            "version": "1.0.0"
+            "version": "1.1.1",
+            "arch": "arm64"
           },
-          "property": "version"
+          "property": "version",
+          "expectedVersion": "1.1.1"
+        },
+        {
+          "kind": "json",
+          "path": "src/modules/catsystem2/runtime/distribution-supplementals.json",
+          "select": {
+            "id": "catsystem2-kif-crypto",
+            "version": "1.1.1",
+            "arch": "x64"
+          },
+          "property": "version",
+          "expectedVersion": "1.1.1"
         },
         {
           "kind": "export",
@@ -6100,11 +6118,11 @@
         },
         {
           "path": "src/modules/catsystem2/runtime/crypto.js",
-          "sha256": "63c451d20cfe033656dbe247b4ec9ab8d10b2d5ce4195e9b1046bc4d3a1629c9"
+          "sha256": "93cc99ff7ca7e275334d00d4991840575e6e4ce191069751861c40553b95b8fa"
         },
         {
           "path": "src/modules/catsystem2/runtime/distribution-supplementals.json",
-          "sha256": "a6482c90bfdedf1300a201f794890b309ba7c846a2531441f1224d00cdc94bc5"
+          "sha256": "d308e86fc4fdf362d88757c5728879e47f5d1c40819f9d4dc6ce787e33eea715"
         }
       ],
       "buildEntries": [
@@ -6140,7 +6158,7 @@
       "ownedFiles": [
         {
           "path": "scripts/native-binary-tools.cjs",
-          "sha256": "40c99e682e785a42de48ae958fe23deac10c9a527d777c9a8852bfa0246a2074"
+          "sha256": "731e49be840a34c86e356bc56bbda097aed19e71155c2661246d00e4bbdb41b7"
         },
         {
           "path": "scripts/stage-native-runtimes.cjs",
@@ -6152,7 +6170,7 @@
         },
         {
           "path": "src/modules/shared/runtime/pinned-native-build.js",
-          "sha256": "5ee5d9dfad34dfbdb70c9abbeaa43fd04ea29ef76da7a5c97b0b835148617535"
+          "sha256": "0fab50d0139d110f5198064227be7b38851252a2203298a7bc67735cdecff600"
         },
         {
           "path": "src/modules/shared/runtime/portable-sdl2-fonts.js",
@@ -6264,14 +6282,16 @@
           "kind": "json",
           "path": "src/modules/shared/runtime/steamworks/versions.json",
           "select": {
-            "version": "0.5.0"
+            "version": "0.5.2"
           },
-          "property": "version"
+          "property": "version",
+          "expectedVersion": "0.5.2"
         },
         {
           "kind": "json",
-          "path": "src/resources/native-runtimes/steam-api-helper/0.5.0/universal/helper.json",
-          "property": "version"
+          "path": "src/resources/native-runtimes/steam-api-helper/0.5.1/universal/helper.json",
+          "property": "version",
+          "expectedVersion": "0.5.1"
         }
       ],
       "ownedFiles": [
@@ -6297,39 +6317,39 @@
         },
         {
           "path": "src/modules/love/runtime/luasteam-versions.json",
-          "sha256": "49c19f353e9a957b30506450ce738ce0297672086ec98a32cf6b77d165f29924"
+          "sha256": "9db968038e3bbd315c529346da5197d928bb0bc8e88d881a2add9df6981c73f1"
         },
         {
           "path": "src/modules/love/runtime/luasteam-runtime.js",
-          "sha256": "245b8933a1ce65240db0c7c18052b3668834e6cff8dadf643e2e6e52959bba1f"
+          "sha256": "eb45eb6531278ab9477a97bdc09d387917a056d5fd535976af38b8eb2f836970"
         },
         {
           "path": "src/modules/java/runtime/steamworks/versions.json",
-          "sha256": "d7c663322a9c2537f2de1cde5c59a2988339f5505fde43abb2bbecb2e5bcfec6"
+          "sha256": "737847473180d366051aff480df6e75ecc6e41b3e54c0d729ee54e4d5f1cf3ac"
         },
         {
           "path": "src/modules/java/runtime/steamworks/runtime.js",
-          "sha256": "79699b42e335388d0029e5c6f64e52a2c4a6fb23c7075c4cebaad98f2f733ae0"
+          "sha256": "f62ff53cf0e276f5e2700498715a4c8503ff47033612592f354a338157531c34"
         },
         {
           "path": "src/modules/shared/web/runtime/greenworks-preparation.js",
-          "sha256": "e7519fc45bc57fa64307db248e63038ae9c104f46279f22a4123c35d74cda407"
+          "sha256": "b5649c983b4815cb932ee8d0a35a1a18cf05d0ce9c9acd69c2d2aca707ddeac3"
         },
         {
           "path": "src/modules/shared/web/runtime/greenworks-contracts.json",
-          "sha256": "6431d063115daabbe5fff6e4e10c0a4985e291cf52d52deec5cd21c40fc403c0"
+          "sha256": "b4f20da7fed7571b4667bd9616513c5428419387b8e817b1df087c839f7f38f1"
         },
         {
           "path": "src/modules/fna/steam.js",
-          "sha256": "18909791002196a24081a40bda745a88e0f838a749e7965cade3d77ce560e418"
+          "sha256": "206479080a3d26938993437fac9e233cfec100cd03ab8af48b02155a786f35a3"
         },
         {
           "path": "src/modules/unity/steam.js",
-          "sha256": "0ef3c28436a1d9ddd974bd1211f84a1ff65ccc807d7156970250ea903a0fcba8"
+          "sha256": "8268a0f60ea66281fcea733174f27ea462d55e191a7be08b9d865cdac593c872"
         },
         {
           "path": "src/modules/gamemaker/runtime/steam-api.js",
-          "sha256": "04ad4d20642bf32757d07f01cb68477f35ec9ac36ec4b193aab706606ffc8083"
+          "sha256": "8b60db6fa7f965d50da95d394c5d54a8272ea60d1e28998400c1b2cc882f3f0c"
         },
         {
           "path": "src/modules/gamemaker/runtime/official-compatibility.js",
@@ -6337,7 +6357,7 @@
         },
         {
           "path": "src/modules/shared/runtime/steamworks/ticket.js",
-          "sha256": "f938d9aa9a3c6337318980c81fa6d6692dcbacf0458a2edfeb3466ba45e0f203"
+          "sha256": "30403facdddc6ac4373b2d67bb0c85b3c4f586f2507e97270541493ed64421bb"
         },
         {
           "path": "src/modules/shared/runtime/steamworks/managed-profile.js",
@@ -6345,11 +6365,11 @@
         },
         {
           "path": "src/modules/shared/runtime/steamworks/index.js",
-          "sha256": "412a81fbd55d62cd54adac90ee5b08df7e53331913a76d17713d89f85ac25f5c"
+          "sha256": "7f6da8b95d2b5dc77dc8e026cc8ef20668af60f5e20a7f0e49eae85545442a7c"
         },
         {
           "path": "src/modules/shared/runtime/steamworks/automatic.js",
-          "sha256": "0e42b8bd81fde49d1861d286ae9f35eab59fff5e520fd79c969af8905e2e83ac"
+          "sha256": "bafdaa68801075a2387cc9ca4517073482097b62c82682cdc1398c932f7fba73"
         },
         {
           "path": "src/modules/shared/runtime/steamworks/environment.js",
@@ -6357,7 +6377,7 @@
         },
         {
           "path": "src/modules/shared/runtime/steamworks/profiles.js",
-          "sha256": "9a4761c016b407cc6d38f7abefc701c098ed39bf5fd95f147b1cb9dc02679bc5"
+          "sha256": "912f8e941d58175941cbd3881a7e91ba62cc1fc4af7f5b80882e39eb314b7e5b"
         },
         {
           "path": "src/modules/shared/runtime/steamworks/source-identity.js",
@@ -6385,7 +6405,7 @@
         "tests/gamemaker-steam-producer.test.js"
       ],
       "sourceEvidence": [
-        "src/resources/native-runtimes/steam-api-helper/maclauncher-offline-abi-0.5.0-universal/universal/helper.json",
+        "src/resources/native-runtimes/steam-api-helper/0.5.1/universal/helper.json",
         "src/modules/shared/runtime/steamworks/native/offline-0.5.0/contracts.json",
         "src/modules/shared/runtime/steamworks/versions.json"
       ],
@@ -6406,14 +6426,16 @@
           "kind": "json",
           "path": "src/modules/shared/runtime/steamworks/ticket-versions.json",
           "select": {
-            "version": "0.1.0"
+            "version": "0.1.2"
           },
-          "property": "version"
+          "property": "version",
+          "expectedVersion": "0.1.2"
         },
         {
           "kind": "json",
-          "path": "src/resources/native-runtimes/steam-ticket-loader/0.1.0/universal/helper.json",
-          "property": "version"
+          "path": "src/resources/native-runtimes/steam-ticket-loader/0.1.1/universal/helper.json",
+          "property": "version",
+          "expectedVersion": "0.1.1"
         }
       ],
       "ownedFiles": [
@@ -6445,7 +6467,7 @@
         "tests/steamworks-ticket.test.js"
       ],
       "sourceEvidence": [
-        "src/resources/native-runtimes/steam-ticket-loader/maclauncher-ticket-unavailable-0.1.0-universal/universal/helper.json",
+        "src/resources/native-runtimes/steam-ticket-loader/0.1.1/universal/helper.json",
         "src/modules/shared/runtime/steamworks/native/ticket-0.1.0/contracts.json",
         "src/modules/shared/runtime/steamworks/ticket-versions.json"
       ],
@@ -6474,7 +6496,7 @@
         },
         {
           "path": "src/modules/nitroplus/main.js",
-          "sha256": "f40ef6a452b85a02e8368e233edaae6072e22ac0c2dbaa78b748667f537c5c4e"
+          "sha256": "aa36545eda4723799396885edd07c8bad45ca421413e3c8e4979d476a9a36344"
         }
       ],
       "operations": [],
@@ -6492,7 +6514,7 @@
         },
         {
           "path": "src/modules/gemrb/main.js",
-          "sha256": "471c9de539ecac09cd96da0946b851286667a412a3bbb926dc19bfde452224d0"
+          "sha256": "4952e0017b0bf5e83210f621ef0ddb275e572e91ec27380f15edbd23f43b3dc8"
         },
         {
           "path": "src/modules/gemrb/manifest.json",
@@ -6699,7 +6721,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/shared/runtime/pinned-native-build.js",
-          "sha256": "5ee5d9dfad34dfbdb70c9abbeaa43fd04ea29ef76da7a5c97b0b835148617535"
+          "sha256": "0fab50d0139d110f5198064227be7b38851252a2203298a7bc67735cdecff600"
         },
         {
           "path": "src/modules/shared/runtime/portable-sdl2-fonts.js",
@@ -6723,7 +6745,7 @@
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/onsyuri-runtime.js",
-          "sha256": "33509e607048341220f1b2646865bf6375262a6fdc72917a19e33a52a0526006"
+          "sha256": "e575ed25a9ac1718a39ae2a1f155c12e6f45693801c163ee28efe0f1eda647e5"
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/onsyuri-manager.js",
@@ -6731,11 +6753,11 @@
         },
         {
           "path": "src/modules/shared/runtime/github-releases.js",
-          "sha256": "c405de40e5ea6b13cc3ce903f788616cb8c9853c7c6971968ff969a611cbecec"
+          "sha256": "6f882bfb7af656097acf95e39ba39cb249c5ddca0dabf48df6eaf7e11cbaef91"
         },
         {
           "path": "src/modules/nscripter/main.js",
-          "sha256": "b78e183cdfcc3971ce513980eb4ff26aff328665789809b48470780d1aea63f1"
+          "sha256": "61c86f8a860d439d0d295079a2d284c7d6c2a5dfcc749cb3a9e0806f91ed15aa"
         }
       ],
       "operations": []
@@ -7528,7 +7550,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/shared/runtime/pinned-native-build.js",
-          "sha256": "5ee5d9dfad34dfbdb70c9abbeaa43fd04ea29ef76da7a5c97b0b835148617535"
+          "sha256": "0fab50d0139d110f5198064227be7b38851252a2203298a7bc67735cdecff600"
         },
         {
           "path": "src/modules/shared/runtime/portable-sdl2-fonts.js",
@@ -7552,7 +7574,7 @@
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/onsyuri-runtime.js",
-          "sha256": "33509e607048341220f1b2646865bf6375262a6fdc72917a19e33a52a0526006"
+          "sha256": "e575ed25a9ac1718a39ae2a1f155c12e6f45693801c163ee28efe0f1eda647e5"
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/onsyuri-manager.js",
@@ -7560,11 +7582,11 @@
         },
         {
           "path": "src/modules/shared/runtime/github-releases.js",
-          "sha256": "c405de40e5ea6b13cc3ce903f788616cb8c9853c7c6971968ff969a611cbecec"
+          "sha256": "6f882bfb7af656097acf95e39ba39cb249c5ddca0dabf48df6eaf7e11cbaef91"
         },
         {
           "path": "src/modules/nscripter/main.js",
-          "sha256": "b78e183cdfcc3971ce513980eb4ff26aff328665789809b48470780d1aea63f1"
+          "sha256": "61c86f8a860d439d0d295079a2d284c7d6c2a5dfcc749cb3a9e0806f91ed15aa"
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/payload-policy.json",
@@ -10701,7 +10723,7 @@
         },
         {
           "path": "src/modules/gemrb/main.js",
-          "sha256": "471c9de539ecac09cd96da0946b851286667a412a3bbb926dc19bfde452224d0"
+          "sha256": "4952e0017b0bf5e83210f621ef0ddb275e572e91ec27380f15edbd23f43b3dc8"
         },
         {
           "path": "src/modules/gemrb/manifest.json",
@@ -12657,11 +12679,11 @@
         },
         {
           "path": "src/modules/shared/reshade/temporal/fsr/backend.mm",
-          "sha256": "e4297457a6d46128e395739de3dae32f2d3176c8c80c4d29d8786e5b5f5436cf"
+          "sha256": "d7f9f47eca45c9e2270b74822239a8e0d8db98efa8b693fee8a5a9492d0e0711"
         },
         {
           "path": "src/modules/shared/reshade/temporal/fsr/build.mjs",
-          "sha256": "c4cb515713ea1a140bcc557ebe4b1497bb9a0a57b79168d7da97a671c6714d67"
+          "sha256": "f2d2cc04920ad5cc662c978c34d1507d8199ddc4f5fdd038cf7738701ab011cb"
         },
         {
           "path": "src/modules/shared/reshade/temporal/fsr/host-compat.hpp",
@@ -12669,7 +12691,7 @@
         },
         {
           "path": "src/modules/shared/reshade/temporal/fsr/index.js",
-          "sha256": "15cce2c9afe51927b89d87ccae272b09b9da48266e8b653bc8d16ed0c21fd760"
+          "sha256": "31a4c7827dd529c7bd8c9b89ac49ba69977c15e31c4ebb6e133601716e780e19"
         },
         {
           "path": "src/modules/shared/reshade/temporal/fsr/projection.hpp",
@@ -12720,7 +12742,7 @@
         },
         {
           "path": "src/modules/shared/reshade/temporal/fsr4/build.mjs",
-          "sha256": "d71ceda8979ab3883b8513a079625b08377e48cc0038b48d7faf576f09b41e47"
+          "sha256": "0f98de7948f0eb7eabc9f3061cc193d45a6b1c51d9919b6f55a3cf353a966392"
         },
         {
           "path": "src/modules/shared/reshade/temporal/fsr4/index.js",
@@ -12728,7 +12750,7 @@
         },
         {
           "path": "src/modules/shared/reshade/temporal/fsr4/provider.mm",
-          "sha256": "f9089fe1576acd018bd5c9e3c0766ef555966401f2c46d0a440ba946f908877b"
+          "sha256": "db09c23dfeab73b0a79e27332b0d0345da303133a86b3d45fb07ec23eb4c169d"
         },
         {
           "path": "src/modules/shared/reshade/temporal/fsr4/source.json",
@@ -12754,7 +12776,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/godot/graphics/README.md",
-          "sha256": "c93503c8801d1653df1337a3cf1c17413292b87e7d541ea0fce1af7802515da8"
+          "sha256": "d95d9138666f3e66117cdc7adfad74f33243e8ac3b8d40361dc673f8f105d2ab"
         },
         {
           "path": "src/modules/godot/graphics/autoload.gd",
@@ -12774,7 +12796,7 @@
         },
         {
           "path": "src/modules/godot/graphics/index.js",
-          "sha256": "d969f7a4b24d9a0f4e814d8da6e667673eff0acdef50b0cc41dba318ef25122a"
+          "sha256": "da23d728ae1b9fc0334a8da4742669282536368473d7cd9bb9f7e7a99120287e"
         },
         {
           "path": "src/modules/godot/graphics/source.json",
@@ -12825,7 +12847,7 @@
         },
         {
           "path": "src/modules/crossover/temporal/streamline/index.js",
-          "sha256": "29755e37bd4f95d796adfba13b597343cafc2294dbdcc2ba8210a50cf525c344"
+          "sha256": "f06028785751b40d6718ee512983c0e4f03895aeb3982a01ac8b48c34fb1a8b9"
         },
         {
           "path": "src/modules/crossover/temporal/streamline/pe-exports.js",
@@ -12918,14 +12940,15 @@
     {
       "id": "android-privacy",
       "kind": "owned-native-helper",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "versionRefs": [
         {
           "kind": "json",
           "path": "src/modules/android/privacy-distribution.json",
           "select": {
             "id": "android-privacy",
-            "version": "1.0.0"
+            "version": "1.1.0",
+            "arch": "arm64"
           },
           "property": "version"
         }
@@ -12949,9 +12972,7 @@
       "project": "aim-runtime",
       "kind": "build-overlay",
       "version": "MCLv1-1028-2",
-      "buildEntries": [
-        "src/modules/android/providers/aim/build-controller.mjs"
-      ],
+      "buildEntries": [],
       "tests": [
         "tests/android-aim-provider.test.js",
         "tests/android-application.test.js",
@@ -12971,7 +12992,7 @@
         },
         {
           "path": "src/modules/android/providers/aim/index.js",
-          "sha256": "084d5901fe76fe87a180e0ba3c6c24c123dba87bf4cfea2c9d2770836908b9fb"
+          "sha256": "548a95a13dd0c47aaf6a88f1f65d17503b32c0e0522fbd852bf83ecd3001231e"
         },
         {
           "path": "src/modules/android/providers/aim/keeper.rs",
@@ -12979,7 +13000,7 @@
         },
         {
           "path": "src/modules/android/providers/aim/runtime_prepare.rs",
-          "sha256": "29ea2aa47a5bab8c4673049d18b036997187a5d903e7b95fc11c2124ec0609f2"
+          "sha256": "04cd9a46b2df70502857ba4ae10cef2604165a837d11313777df4ee281459d55"
         },
         {
           "path": "src/modules/android/providers/aim/socket_path.rs",
@@ -12987,7 +13008,7 @@
         },
         {
           "path": "src/modules/android/providers/aim/manager.js",
-          "sha256": "06ae5eccdfe9b9f5ce4495f12830dc2b55ab6459acf084d315ff8fa6a02b2141"
+          "sha256": "63d1f3d3558c691aed663e2d5654dffac6c71044c533b8efd27598d16d4b2f5e"
         },
         {
           "path": "src/modules/android/providers/aim/image-cache.js",
@@ -12999,15 +13020,11 @@
         },
         {
           "path": "src/modules/shared/runtime/project-build-manager.js",
-          "sha256": "928da884ca5f10e64f67fb2ae83b36f2a77423de2be27c0152e2540461be5a54"
+          "sha256": "7551ace8330edfb04cb8a49c2ee7a79b628fa27aea5e1478b533920623faa716"
         },
         {
           "path": "src/modules/android/providers/aim/identity.js",
           "sha256": "2679dbbcadc38952b58a953031c447f186a027c2fe59b1d64d50049402c8813d"
-        },
-        {
-          "path": "src/modules/android/providers/aim/build-controller.mjs",
-          "sha256": "5dadfc15fa9614de656e184f2a9c5d043a2bd192dc36873c662eebb24a288ddc"
         },
         {
           "path": "src/modules/android/providers/aim/controller/Cargo.toml",
@@ -13030,10 +13047,6 @@
           "sha256": "4fc3feaaa52d537c45893ae979365a92c021c52f116900491c5ece8beab8a767"
         },
         {
-          "path": "src/modules/android/providers/aim/resources/maclauncher-aim",
-          "sha256": "a7b962e9dfa1ab15c3fd31e392f59efb3e50aaa3a153b238eca82b1ce9ad42e4"
-        },
-        {
           "path": "src/modules/android/providers/aim/retained-versions.json",
           "sha256": "af6f0ddb9a327d04b75ae36f20ebb372f1cf25f453718f7454632d88c3416f56"
         },
@@ -13047,15 +13060,15 @@
         },
         {
           "path": "src/modules/shared/native-application.js",
-          "sha256": "244e24ec7efb41db3e09261088afd11ca4de4ee38579458f8acae68f2a4bb873"
+          "sha256": "bbaa3199ed5e14b65d458bd980830ed2f9af552481c75384ebdf464b94fa741f"
         },
         {
-          "path": "src/modules/shared/runtime/clone-file.js",
-          "sha256": "f467f5e47fd6705b4f47e9865e8d8e2d716f5f85072fa18afd211fa09ffa8b78"
+          "path": "src/modules/shared/copy-file.js",
+          "sha256": "fff1260f51b2d5c8613041d1bc201134575647d020bf2cc5fbcab908d9693edf"
         },
         {
           "path": "tests/android-aim-provider.test.js",
-          "sha256": "628223e5db220f7b1468398a9517052d309bf6a648762d7b64ba93db11f520ff"
+          "sha256": "d79c106acc53a2ec01f6c4f855ae03d5d684171fba44b31227ab30a929ca6345"
         },
         {
           "path": "tests/fixtures/android-aim-resident/liveness.rs",
@@ -13063,7 +13076,7 @@
         },
         {
           "path": "tests/runtime-project-build-manager.test.js",
-          "sha256": "714ef8637b244627731cf47f6428f0f09d14c7aa819723fed97a82780bf1c6a0"
+          "sha256": "373c65dcf11a9234363b035df45e4aef0ff894b6ab5fa61ab2eb9af10b8c5956"
         },
         {
           "path": "tests/fixtures/android-aim-fuse-transport/private.rs",
@@ -13079,15 +13092,15 @@
         },
         {
           "path": "tests/android-aim-app-host-preparation.test.js",
-          "sha256": "75c1152366c99a3f45647b878b71a60a923dba4ae201efe4a30f46de10ce7d91"
+          "sha256": "5657e906073c9479f8518cd8b14dde28813dc4952c40537738e61e72ffe22c00"
         },
         {
           "path": "tests/android-aim-controller.test.mjs",
-          "sha256": "e86a0eb60c4d61e8bc52bd69ec497296e30b4bdc0f3a62ca02e46a60e4e0cd6b"
+          "sha256": "6fe6443640d6d32fdc6a00f0ae581844d34355883158bfc11326de305850dec6"
         },
         {
           "path": "tests/fixtures/android-aim-controller/aimctl.cjs",
-          "sha256": "c3845ec76669245720e237d630d23e31b119c2d76eb6fd13060737027735813f"
+          "sha256": "e4183cb820dbae85ffe5a313f41b8234c707f979e485f282a99ed308bc6c6ec1"
         },
         {
           "path": "tests/android-provider-output.test.js",
@@ -13095,7 +13108,7 @@
         },
         {
           "path": "tests/android-aim-downloads.test.js",
-          "sha256": "78c27ee82fe8765c5dac44da551ca1bb4e03f81047c4055853b9d384fba466f5"
+          "sha256": "247b723ee4abec0fd4fb459d5d0e0676bb21cb3bf142b88686be5c7f52ed892d"
         },
         {
           "path": "tests/fixtures/android-aim-display/readiness.rs",
@@ -13153,21 +13166,23 @@
     {
       "id": "maclauncher-graphics",
       "kind": "owned-native-helper",
-      "version": "0.2.0",
+      "version": "0.3.1-dev.71c72abb.e6edde4f",
       "versionRefs": [
         {
           "kind": "json",
           "path": "src/modules/shared/reshade/distribution-supplementals.json",
           "select": {
-            "id": "reshade"
+            "id": "reshade",
+            "arch": "universal"
           },
-          "property": "version"
+          "property": "version",
+          "expectedVersion": "0.3.2"
         }
       ],
       "ownedFiles": [
         {
           "path": "docs/development/BACKEND.md",
-          "sha256": "e2b0fdc75a823b277b112ae7bbfaec702ea45e30fb0d9dd5470bb0898d033934"
+          "sha256": "47d10ffb07bba52a4cd39e8f8b311594fb5305f7ee2b58930fcc4f277a7c28e7"
         },
         {
           "path": "docs/graphics/PIPELINE.md",
@@ -13175,23 +13190,23 @@
         },
         {
           "path": "docs/graphics/README.md",
-          "sha256": "9467cbbc837511fd57239f62d7bcd9949619874fa4255b8427d48d2e959e1aa5"
+          "sha256": "ec0ffa975a028b493def38b719a220a09c116ccf363690e3e6bdf4e62dd97564"
         },
         {
           "path": "docs/game-types/RENPY.md",
-          "sha256": "8ac575f0def2b5b1f7fccda2e7e86a315382996f1fb959a137df24842ca74b31"
+          "sha256": "9fee8ff722c196549ff667a1eeaf469abc26087c9490ae89b8677f55994877d4"
         },
         {
           "path": "docs/development/REPO_GUIDE.md",
-          "sha256": "facdf832c34aa3ec7f18640350deeadabf33dec1df100f028abd18249eda25c1"
+          "sha256": "94a5233229239e1a3920cc8fe38aa66d78542aa933b54e56de439d26f8da461b"
         },
         {
           "path": "docs/game-types/GAMEMAKER.md",
-          "sha256": "dfee046e8a9a3f386708567e65c5dd6c4376191698525fbb585f122af612c102"
+          "sha256": "aa7c8b20119ad819a4eb61030ccc2a138e17159a95bc5fc2948341a2ea0b6346"
         },
         {
           "path": "docs/graphics/SHARED_PROCESSING.md",
-          "sha256": "023b2594ea8ed8a995b24f8f9dca9856d8fd986b9f64a1299e78fe5e9bf8e56a"
+          "sha256": "d9b4e10d7cfa16250a2fe45d8887eb922bf582423a7e768acafa50d8cb7d9b22"
         },
         {
           "path": "docs/game-types/JAVA.md",
@@ -13203,19 +13218,19 @@
         },
         {
           "path": "docs/game-types/HASHLINK.md",
-          "sha256": "0d6438c61b5f68f552c5b06515fbd9b2c81911a7692a7d1870cf435dc2888500"
+          "sha256": "f878d972028869c8d3cee89ed362f38016daabf2522085e22c9aa21e99139f9a"
         },
         {
           "path": "docs/game-types/UNITY.md",
-          "sha256": "ac6ce31b12553d05d599b2ac46754e37ac320bed70e04e310f6e12819e5f00e5"
+          "sha256": "f16129bd397ca23b38ce16622cf12b6f0c9c7d06a77cd22182e872d4afbb94a0"
         },
         {
           "path": "docs/game-types/VIDEO.md",
-          "sha256": "0e33d849c5db8426062f92a7558e476f1d236e2da39ad0611fd198c1633d2baa"
+          "sha256": "ea42ed38b656eb830f98b4db2b7f436ed1781fccbc970c098573a2672ce98457"
         },
         {
           "path": "package.json",
-          "sha256": "de4666181fc885cb0440cfc337cfe571840d132d2f2be8a77f3ce61f69cae5a6"
+          "sha256": "28e51525201132e1e6ebee8b296b142b2634dc06afcf8bdd352399e9f0d7b90d"
         },
         {
           "path": "scripts/build-graphics-runtime.mjs",
@@ -13227,7 +13242,7 @@
         },
         {
           "path": "scripts/native-supplementals.cjs",
-          "sha256": "165efc8c5b826b1035510f83a807cb4cec3c0de3f0a01c62bbf292a65c91304c"
+          "sha256": "2cfcee0f1776392020e50c12e0ecb94645c371ca8ae8a12af30650933b7e0b54"
         },
         {
           "path": "scripts/prune-graphics-runtimes.mjs",
@@ -13243,11 +13258,11 @@
         },
         {
           "path": "scripts/stage-reshade.mjs",
-          "sha256": "822f6406213234215c6ae45d3ce823a30c865e6887dc40a8d5b1e73bec3b4a0f"
+          "sha256": "0721e350761957197ee10709bc3939ccb2ff5a5f93cf78a25e3c55edebdb2d52"
         },
         {
           "path": "src/core/backend-operations.js",
-          "sha256": "aef61cd5472f51d4bb4c6c412469fb42c3f2fb731886300a547b95ab9e66a5bb"
+          "sha256": "7f0dc8d04b4416e32ee9b2680f39fb43f98177000a5303f6a0fb9974f7766bd4"
         },
         {
           "path": "src/core/backend-worker-client.js",
@@ -13255,7 +13270,7 @@
         },
         {
           "path": "src/core/coordinated-runtime-managers.js",
-          "sha256": "44473b5247cc060ca79423a428895f1fbcc7488be18134cb9a7387ed5426ea99"
+          "sha256": "426e83d12138d235b3d1fa0909443ab99df0706790fb34621c52557d4b149f07"
         },
         {
           "path": "src/core/game-process-events.js",
@@ -13263,7 +13278,7 @@
         },
         {
           "path": "src/core/launcher.js",
-          "sha256": "d15fa40d12a7f12b786290b532515d1ea8d034eba1ef8f1271d3c95dd1adb941"
+          "sha256": "525fcd85ea309af6ede04bded629e0aed16272f995a9c09357f957e633dfda0a"
         },
         {
           "path": "src/core/process-stop.js",
@@ -13279,11 +13294,11 @@
         },
         {
           "path": "src/main/main.js",
-          "sha256": "68772e3d3ed65c0a7da0db6d4534a5b0cbc8c4cad76afa0f104c2aff0a586ada"
+          "sha256": "988aa35aad9a61c338dc24b5ec82760dce4dccddc5141cf03b29a86cddbf8f14"
         },
         {
           "path": "src/modules/gamemaker/main.js",
-          "sha256": "4043859b7148bc3b2857312a78600bbe8725926affaa21ed0ec25767fd81dd8f"
+          "sha256": "d2129791d6768d1daf7a16af51ab84b55807d7a810862900c08efd91e7811c98"
         },
         {
           "path": "src/modules/hashlink/manifest.json",
@@ -13295,15 +13310,15 @@
         },
         {
           "path": "src/modules/java/main.js",
-          "sha256": "4027688022f50b3b96197560e40d49ddecc224273fc9000a6b6e1d69b98d3f61"
+          "sha256": "36df989a1e649a47f8641a0a3eabd81b9336470eed398acc2e252f52b6bf9315"
         },
         {
           "path": "src/modules/love/main.js",
-          "sha256": "7b96902b4f852437866e0653f4cb884b9e261324d1c503a1b4e3ae5c8f388c55"
+          "sha256": "dd3772832802d596aa860346aac52382b2675c93577f83a3309c6031bdca13d7"
         },
         {
           "path": "src/modules/renpy/main.js",
-          "sha256": "e8e8ad1ada03d9d9df64c34343199b78e12c17d5f0d1efd957d2bede6e7737cc"
+          "sha256": "9cef233fb6fa5f680c3b1f51922cecaefdb7a70b6084a67b6a5c34f5a8adfe96"
         },
         {
           "path": "src/modules/runtime-presentations.ts",
@@ -13311,27 +13326,27 @@
         },
         {
           "path": "src/modules/shared/effects/plan.d.mts",
-          "sha256": "a028514cce2142861dfffa35da64bc03d3d3a36baff84c1b51338fea6633ce3c"
+          "sha256": "e68f683285f08a52084161a3e4ab86dcc1b0f82bd02cc50f31207cfc58a28623"
         },
         {
           "path": "src/modules/shared/effects/plan.js",
-          "sha256": "06dcbd580b3d7046b3562d67f70887e67584ecee905af87f928bb024b02f3684"
+          "sha256": "87077acd645bbf3d5d2015f39195c50530fc0cfca4a1fc543ff66a59c6e9a8f3"
         },
         {
           "path": "src/modules/shared/effects/plan.mjs",
-          "sha256": "2d64c2cc761b86615c8f6ff92237f030716755eb6f6d2681c4c91cdde5248fab"
+          "sha256": "709950ea945e13dee193dc16a9894cfb3828e38b232abdca76423d92f05b126f"
         },
         {
           "path": "src/modules/shared/effects/runtime.js",
-          "sha256": "955b7c50e2751020486da42ec013b3855e91f616df717f75c9514af736dd733f"
+          "sha256": "e5b3575620b9f7de58b9a5d95d82418b61e8d23f5a8f9c12728264c6729522f0"
         },
         {
           "path": "src/modules/shared/reshade/diagnostic-retention.js",
-          "sha256": "7f475f952e18538b35bb1f260ce843454f2bf9dff5e24c54ce9705c0da8ef086"
+          "sha256": "da8e9602b92ad51752f9d7ef24a94fc4d6019c3f81609e5733cfaa2fd50d561a"
         },
         {
           "path": "src/modules/shared/reshade/distribution-supplementals.json",
-          "sha256": "25fb96ff9724479745668426b041228ff778077085ac4821befc9db1d26ea217"
+          "sha256": "2f0cf3faf39a75d18b86e35daf6094fffbf77154cac9fb2a48cd3e3fbba10566"
         },
         {
           "path": "src/modules/shared/reshade/effect-chain.js",
@@ -13367,7 +13382,7 @@
         },
         {
           "path": "src/modules/shared/reshade/features.json",
-          "sha256": "d7bcb88a6d1326efca59110da4d3a1fd050a23c126c0720e7e6aec6bf0aa2350"
+          "sha256": "95bdf8646fb15fe63a07698644f2a3a778aed2a80dc0f284f8b69f5026ee2ea4"
         },
         {
           "path": "src/modules/shared/reshade/filter-library.js",
@@ -13375,15 +13390,15 @@
         },
         {
           "path": "src/modules/shared/reshade/graphics-settings.js",
-          "sha256": "271eea098ef9c7252be7fa1f8fa155989298814b14ced99d56dfa6530c5938b6"
+          "sha256": "7eec9de734d7d1c617c54bd4e32dabf765180aa70d86bc5eff15b4c8d5ca8f58"
         },
         {
           "path": "src/modules/shared/reshade/index.js",
-          "sha256": "3c1aa411d1103ebac43e524bf93a57ace29a04988729f633e6d9f172bebe81a3"
+          "sha256": "c00ac04df5d7ad9ce6ba2089d17652cbdb9098eaa8f5f31473212b177aec4b54"
         },
         {
           "path": "src/modules/shared/reshade/launch-binding.js",
-          "sha256": "6b7c2becb2642cf68e4b612f048605d3139142648780617fbf144c822c7ee20b"
+          "sha256": "f90bbfc367206dca982000c01a9acda3d1935a6ef7998d37ad090a025c0e4fc2"
         },
         {
           "path": "src/modules/shared/reshade/libplacebo-build.mjs",
@@ -13399,7 +13414,7 @@
         },
         {
           "path": "src/modules/shared/reshade/live-effect.js",
-          "sha256": "dd966b59fc54f91fae710d8343a29b3b71c4e38f11922c154d0b68b4bdab24a1"
+          "sha256": "4ef6242979bdb262f2fc34cd6aa69bc66fb32016fcfa08deaa2233c1c282d613"
         },
         {
           "path": "src/modules/shared/reshade/live-resources.js",
@@ -13415,7 +13430,7 @@
         },
         {
           "path": "src/modules/shared/reshade/models.js",
-          "sha256": "d0d1aa4ce402a285ec011de5c4176f84928217c16aa4022d10a7deb0b72464f9"
+          "sha256": "5790e7e6441756a952b2b0dfd36ee2e239e791ce81c00f3631c8c28a52dc564c"
         },
         {
           "path": "src/modules/shared/reshade/native/automatic-resolution.hpp",
@@ -13427,7 +13442,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/base/CMakeLists.txt",
-          "sha256": "445f8fb6b5aa35bc1641eb180e2164a84b1063089c94082b373b4b5467e6c7eb"
+          "sha256": "04a61d818c37e51d43b2086b2428a04bf25da710028ce761792ffb62d48ce71c"
         },
         {
           "path": "src/modules/shared/reshade/native/base/compat/float_literal.hpp",
@@ -13438,20 +13453,16 @@
           "sha256": "998d1b2efbe2c8727e177c6fa4c7970afc86c0b80bc53fa72426d00f82624bab"
         },
         {
-          "path": "src/modules/shared/reshade/native/base/compat/fsr/fsr1-shaders.hpp",
-          "sha256": "51f088b600325eb9be7e4e7dff22e3f287bc076d32b483939392f3e09aa96c08"
-        },
-        {
           "path": "src/modules/shared/reshade/native/base/compat/fsr/fsr1-shaders.json",
           "sha256": "352111299fc6fb2fa6d3144a5d0b5dde94619cde59024420d55ae1913374c822"
         },
         {
           "path": "src/modules/shared/reshade/native/base/compat/fsr/generate.mjs",
-          "sha256": "0c4f4f7429cce1f3706656b15394c453b9e95c316a4a4784efaeb4cc3417144c"
+          "sha256": "6c35c757532220f3782a2a2a21c07ea4727be6e6e3a97ecf6a2d4ab2ca200fd6"
         },
         {
           "path": "src/modules/shared/reshade/native/base/compat/fsr/README.md",
-          "sha256": "10d99495e27920867a027122ee1eb065912fcdce9d8a87fe526d7b4fa2e4664a"
+          "sha256": "5f0200971e812b9d5240da384e7d66cf7e74d593dd5b6db493b137cb27b90949"
         },
         {
           "path": "src/modules/shared/reshade/native/base/compat/mako-ls1.cmake",
@@ -13743,7 +13754,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/browser-frame.mm",
-          "sha256": "cb7e0275e30461e42b450649d48c35160ec3fdbbb25923583031228f3e2afbe8"
+          "sha256": "4705d090c4af643bae63e57195171ed6123328a4423ebb00e715701f89ccb2f3"
         },
         {
           "path": "src/modules/shared/reshade/native/build-retroarch.mjs",
@@ -13759,7 +13770,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/CMakeLists.txt",
-          "sha256": "b6b16b909cff5d9931eaf070cdc7ae3d10db948821593a8c628c3a6df1785ea7"
+          "sha256": "587af068b342708f48b21841f4ef8f68d5d2d3c50c203d47996911e0a18088cd"
         },
         {
           "path": "src/modules/shared/reshade/native/color-contract.hpp",
@@ -13775,7 +13786,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/delivery-plan.hpp",
-          "sha256": "8367a285ef4372154b124709ef5cfa3f757c664a4e242f10b3304b83fa564351"
+          "sha256": "ae4abd675567dcc6d12b67270596760a86a16c44b21671523ea3cf7ade8ff7f5"
         },
         {
           "path": "src/modules/shared/reshade/native/depth-demand.hpp",
@@ -13811,11 +13822,11 @@
         },
         {
           "path": "src/modules/shared/reshade/native/effects-execution.hpp",
-          "sha256": "ab68f52977e5604138e82134621ac7f63ff498b457026131695610262a62f394"
+          "sha256": "18e9a44ee4976f4970bba5b7ff83be3b6edb28423f0bcd91954d83e9af552af0"
         },
         {
           "path": "src/modules/shared/reshade/native/effects-execution.mm",
-          "sha256": "1f3b7de46ebf1c61b2dcc5a56922114e50c3c5dbfa7356463e9a6231f0cb818a"
+          "sha256": "c79971df8f38959af6db0a210e9d96b667e5e4dd62f439ac7ddb8c344fb242e3"
         },
         {
           "path": "src/modules/shared/reshade/native/effects-plan.hpp",
@@ -13827,7 +13838,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/frame-capture.hpp",
-          "sha256": "fba767469a4dcedf038a5c0ebe8c98a722c63b9aacf54e29924274a84126f2da"
+          "sha256": "e0417a54ec7de6a402d98549379a01bec85e9fcac664143150496ec2311fe01e"
         },
         {
           "path": "src/modules/shared/reshade/native/frame-depth.h",
@@ -13947,7 +13958,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/metal.mm",
-          "sha256": "b9f3958489cb2ab6bb603996d85b31f69dd4d571456cf7a17f69bee891264682"
+          "sha256": "db2ac3156ec3fb58284c7a60b34549ea97ca05babfb609de60bf86e9922d0967"
         },
         {
           "path": "src/modules/shared/reshade/native/metal4-diagnostics.hpp",
@@ -13963,7 +13974,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/neural-node.mm",
-          "sha256": "d8784914eaa4ff6ffbc34270140ac5a7f869857e58bce4724b0dbeb288e7b96d"
+          "sha256": "6c6ca2f25da771f2bb9ecda43760a032bac0c57a0c7d4c038fad520817b8158b"
         },
         {
           "path": "src/modules/shared/reshade/native/opengl-depth.hpp",
@@ -14007,11 +14018,11 @@
         },
         {
           "path": "src/modules/shared/reshade/native/presentation.mm",
-          "sha256": "afbee565b2fa9f603d5699ea55007ed7e35271781025206c80da3e62eb50d6a3"
+          "sha256": "1f4ed7f2cbdae9486ef876745e8834563d9bbb04c31fe7c5c02a9dd1cdf8123c"
         },
         {
           "path": "src/modules/shared/reshade/native/processor-sources.json",
-          "sha256": "c5fe7eae321eb59599c9035573430f2eb9952b2e56f51acc399dc55ab6e59516"
+          "sha256": "6652ed1a93b2c8f2b708e702204eeee60d979c05e41682cde54c6b9e5fd72fc0"
         },
         {
           "path": "src/modules/shared/reshade/native/publisher-pixels.hpp",
@@ -14067,7 +14078,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/source-overlay.json",
-          "sha256": "431ea069d9bb1263af6d43f6298724b67bb14168c38b6a1f1629664b7178c9cb"
+          "sha256": "fe05b1f72282e3a7739eb724dd5893ae594f3c2a01ad4c8efeeaf2519daaf5d1"
         },
         {
           "path": "src/modules/shared/reshade/native/source-texture.hpp",
@@ -14075,7 +14086,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/source-timing.hpp",
-          "sha256": "a3b0f5ea8bf3901444fc509d6118bd3824a5ff24df8c9fc7fff0fe5fff232998"
+          "sha256": "62decc321cec65a9e230c61eb393fa887771b64b0b275facf100aca9dd5d1d23"
         },
         {
           "path": "src/modules/shared/reshade/native/spatial.hpp",
@@ -14123,7 +14134,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/video-frame.mm",
-          "sha256": "202fff50c54e4fa24790a6ff9bd1bc5f15f7d3b38df0e585bf186c852511ecd2"
+          "sha256": "122864fde92a658f3b9bae6297c1777cad5c28ab98143516a857a90749b359df"
         },
         {
           "path": "src/modules/shared/reshade/native/view-presentation.hpp",
@@ -14155,11 +14166,11 @@
         },
         {
           "path": "src/modules/shared/reshade/neural/models.js",
-          "sha256": "7d8bb9ef9738278acfb3166c07afe86dc84369383d3ad56189a53c27583932fe"
+          "sha256": "68e5c8b5e7f47c6e88eec859b8c141b08625fed91ab5613400bcf63ff70a97ad"
         },
         {
           "path": "src/modules/shared/reshade/neural/offline.js",
-          "sha256": "c0cee1fe4db30bad8aa998a12dfe1c111cfd61cdba18ec26978cca2e47e70f0b"
+          "sha256": "6b5bdacc7024e21190c348f7410c4825ad6553f01a37048d9aa63cecf9899a52"
         },
         {
           "path": "src/modules/shared/reshade/neural/setup.js",
@@ -14203,7 +14214,7 @@
         },
         {
           "path": "src/modules/shared/reshade/shader-providers.js",
-          "sha256": "fa86c0d4578673e00c4532c8b47449fc56d95fbf942920d0a92b6f84e43da1e6"
+          "sha256": "44abaf28bd2467cd6e2ec3783690ca5ba5d939e58aa75071ce4f24b5b0a9afe7"
         },
         {
           "path": "src/modules/shared/reshade/stage-royale.mjs",
@@ -14227,15 +14238,15 @@
         },
         {
           "path": "src/modules/shared/runtime/macos-sandbox.js",
-          "sha256": "c18d35b86c5af4229ab4ea480f9345c94ac16e6971861885df2b2d0ea29c6be6"
+          "sha256": "8b64d2ac6423bc9c550c1a8072fda8fd4867026c0b1e6ece4fdb603a913812a1"
         },
         {
           "path": "src/modules/shared/web/preload/launcher.js",
-          "sha256": "6a6c7337d1690f0e24f5814c8242fa386224a31050a34e3c2efd625dd663d03b"
+          "sha256": "2134ea144d5d972b1567c53b3d224d7e4e7c8bb7a739f3c96fdcdf1232655bed"
         },
         {
           "path": "src/modules/unity/main.js",
-          "sha256": "8245dee6a84901fe4dcac7458a44a5d88f97534cca08e1a267de6582ab8c91f6"
+          "sha256": "6131c78ab5b2c04a17103bad9c9eec5debb7b120dd678dc43d39b202a712364a"
         },
         {
           "path": "src/modules/video/export-process.js",
@@ -14243,7 +14254,7 @@
         },
         {
           "path": "src/modules/video/export.js",
-          "sha256": "6851194fca5ccdd7e1d3b7c40f2439d8da1a01adf847992c691156187882a159"
+          "sha256": "7c14d9da785d8981adfa73fde527fab12752d81e64487eb834fc02a03ea2ca93"
         },
         {
           "path": "src/modules/video/graphics.js",
@@ -14251,11 +14262,11 @@
         },
         {
           "path": "src/renderer/src/ui/App.tsx",
-          "sha256": "7189ece4c4e23f09d8482946b84ee8b026b87c96e9e30f592fe451ad6d57a1dd"
+          "sha256": "3b8018612463c5be224fc1fa5ee7345ffbaa864bc87629b661a19e620479851f"
         },
         {
           "path": "src/renderer/src/ui/components/EffectsControls.tsx",
-          "sha256": "69671278f821cd8fdba133472ccad91ed706d0ac8149bd4a7d5ebbb84faf7bb4"
+          "sha256": "0b471e7a31eb93abf7b9758722fa7820dcee1eba3fcb237062865b2c41a7b7d6"
         },
         {
           "path": "src/renderer/src/ui/components/EffectsPresetManager.tsx",
@@ -14267,11 +14278,11 @@
         },
         {
           "path": "src/renderer/src/ui/components/GameActions.tsx",
-          "sha256": "43230a54fb63c922b209ecbcee74b05c5f4f246d0697dbec7561a51bb272ed16"
+          "sha256": "969548ec7608c4daece47bbbbe32e999203404300c90e5a2af0a8cec5ff52d97"
         },
         {
           "path": "src/renderer/src/ui/components/GameDetails.tsx",
-          "sha256": "9d8a029f4710793d03ea902c604e34ac4b1f75a0d8377263c822b1f4a632458a"
+          "sha256": "07d89ae134c3ffb3d9d39aecafeb6fc03d711ed04ba9884cbf8c9dce173a3985"
         },
         {
           "path": "src/renderer/src/ui/components/ReShadeFilterLibrary.tsx",
@@ -14279,7 +14290,7 @@
         },
         {
           "path": "src/renderer/src/ui/components/runtime-tabs-model.ts",
-          "sha256": "34eff3ef1135b808de6a8a5acc970a65cba0390d808f679646f49ced94cfe283"
+          "sha256": "3f101c053fdb111741056d890ef0d56451ce4983ae207e8c732c076650359831"
         },
         {
           "path": "src/renderer/src/ui/components/RuntimeDescription.tsx",
@@ -14291,7 +14302,7 @@
         },
         {
           "path": "src/renderer/src/ui/components/RuntimesView.tsx",
-          "sha256": "bbcfc1f1196042d2a607f04aa1b1589f6e6c41c1587a2dcb344ff74d15cec940"
+          "sha256": "9f5c8070feb5c7ceceef433acc3af3d767b3ae62fad6fb279320d1059ce41b55"
         },
         {
           "path": "src/renderer/src/ui/components/SettingsView.tsx",
@@ -14311,11 +14322,11 @@
         },
         {
           "path": "src/renderer/src/ui/styles.css",
-          "sha256": "62aecefcf81ca70c1f4fce939f83ebec0796b97af468b7a07df9d993cc6e842f"
+          "sha256": "08894bfd6eb0f6fe3ad41ec75df0a40f3ce92dd564f25fb8f31e5e093364210b"
         },
         {
           "path": "src/renderer/src/ui/types.ts",
-          "sha256": "513a9f5bf84931e8cbb2e9c749381a37959be87a29295f529050de16b6effb18"
+          "sha256": "aada1a4193dacfc6b3bb59a947c9604f4cb001639e9aed78f30a17deae2925a3"
         },
         {
           "path": "src/main/graphics-catalog.js",
@@ -14335,7 +14346,7 @@
         },
         {
           "path": "src/modules/shared/effects/edit-operations.mjs",
-          "sha256": "91f84bada112b7fe479430f454bfd166d441b238f65785e63f3636cfe417c4a7"
+          "sha256": "0b81efea132199f6c8284401b23012a2b5ab696c8abd146bd5f9baa50f3994aa"
         },
         {
           "path": "src/modules/shared/effects/execution-requirements.js",
@@ -14359,7 +14370,7 @@
         },
         {
           "path": "src/modules/shared/effects/operation-contracts.mjs",
-          "sha256": "140adde897e72d32309629acd68f96838b1246d9f1b6e74ec2b193b889e675a5"
+          "sha256": "e24e6767cec1245ed6051f4b59d6f66ff61065ce10b31a5b7179561e921f141d"
         },
         {
           "path": "src/modules/shared/effects/presentation.d.mts",
@@ -14423,7 +14434,7 @@
         },
         {
           "path": "src/modules/shared/reshade/managed-shaders.js",
-          "sha256": "835d55ff4f1dc36544fc96dbcd9f4bb1a5f1c46d38d9ca78e62ae887dbe9fe1e"
+          "sha256": "3682a65520ca0303544d28cb8e135f8bd7bf5157a5004797a5d633a2fb5050c5"
         },
         {
           "path": "src/modules/shared/reshade/mpv-hook-contract.js",
@@ -14635,7 +14646,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/generation-execution.mm",
-          "sha256": "6da17f2cc1dbf589e601cef50527fe893996984f2f331b4943f3092de29d16a2"
+          "sha256": "8e2096f16fc03c3fcaa6b1349df1a43a48cecb41f2867f7415850569d561735f"
         },
         {
           "path": "src/modules/shared/reshade/native/generation-methods.hpp",
@@ -15035,15 +15046,15 @@
         },
         {
           "path": "src/modules/shared/reshade/publication.js",
-          "sha256": "3b61348b97ad5aa85d6b7f13c4fb27ffa2aa732b387f7e9197f075f535437a51"
+          "sha256": "7b6c26804e8e549a792eedc4c2123404fa84c4ba4dcfd7a745853c577a7fe8be"
         },
         {
           "path": "src/modules/shared/reshade/retroarch-traits.js",
-          "sha256": "1764905d997750fe2f4df160903fd7097616024cd063f1c88fac120860996c24"
+          "sha256": "f4061b2bd2883098b9ed73afbd801cf42575bf1f411d088a504d5f1164e98aef"
         },
         {
           "path": "src/modules/shared/reshade/runtime-record.js",
-          "sha256": "e461eb5bef4cec784a93655589d6c5fb991c79969c790806b3434b196dbfa36e"
+          "sha256": "da715c6e646b96f5c197cce771b0905bcff3364cf7ea7937c3a25e8b449e2490"
         },
         {
           "path": "src/modules/shared/reshade/runtime-status.js",
@@ -15071,7 +15082,7 @@
         },
         {
           "path": "src/modules/shared/reshade/shader-traits.js",
-          "sha256": "89dcdab277e8220b196a7a58f9440942df3e8fb153faa7b10774c0c9fa3cce4c"
+          "sha256": "a4b359fe51cf9ae9520ef445180beaecebc6b8eb07464373fb5dd37bcff166c3"
         },
         {
           "path": "src/modules/shared/reshade/simple-setup.js",
@@ -15087,11 +15098,11 @@
         },
         {
           "path": "src/renderer/src/ui/components/AdvancedEffectsView.tsx",
-          "sha256": "b789e0aad42d403d4fff247d427ca791da5e6156e5dcf2b821a6ff16b35e904d"
+          "sha256": "f6af9ebdaf801d9dfe4f1db962a33e83d2226f88e4318e182287b4478a08692e"
         },
         {
           "path": "src/renderer/src/ui/components/EffectRowControls.tsx",
-          "sha256": "676cdf2c7829e464ae7f934806932d6169c432c2604bc6c97b31706dd8e751f4"
+          "sha256": "014f39ade5a68ae103e0a24fe24965e5c514cf601d7638718ee97cb8a80fd6f8"
         },
         {
           "path": "src/renderer/src/ui/components/GraphicsStatusLabel.tsx",
@@ -15103,11 +15114,11 @@
         },
         {
           "path": "src/renderer/src/ui/components/SimpleEffectsView.tsx",
-          "sha256": "6c2a40f77b938b7132ac7a5c5e5cd1a63340a878445096e40692070d531d7a1e"
+          "sha256": "88af60ccef043bba7ed4505ba211ca8a8d018359e068eef2c23f4bb66d0199cd"
         },
         {
           "path": "src/renderer/src/ui/effects-catalog.ts",
-          "sha256": "f8385dc0d55902c18d7d9a1d2a934123ac4765a8ba48cc8d3ba2a3cd373da23f"
+          "sha256": "5041f06fd19fc959f3438fe38175934d791e381d7d4e51ff121c90ff564f3b6c"
         },
         {
           "path": "src/renderer/src/ui/useEffectsEditor.ts",
@@ -15147,7 +15158,7 @@
         },
         {
           "path": "src/modules/shared/runtime/native-injection.js",
-          "sha256": "d79b87199d41b2453e7fef88f47f100074ac85616ea1b588eeda01532b8dc185"
+          "sha256": "c2833acd3b2a53ad77592f4004e10478dda9a8fa0ebf79483ea34c840990a647"
         },
         {
           "path": "src/modules/shared/reshade/temporal/command-order.hpp",
@@ -15155,15 +15166,15 @@
         },
         {
           "path": "scripts/stage-temporal-provider.mjs",
-          "sha256": "a6e6150e80c72b2799a791b4aa23772645a02d5f17ce4b7f8e9a6b6e83ad2815"
+          "sha256": "1be2cf9eb234955ad2b98a88b6e2204f96a513e82ea97e854b50099aca6278af"
         },
         {
           "path": "src/modules/shared/reshade/temporal/asr/backend.mm",
-          "sha256": "ce8e15873b54d9a485d9d1997be8bae804e50091f58d7704fc6c9693ed1cd8aa"
+          "sha256": "1ca27cce5f3cb2f7a156dfd1b895e8a8300fa20d741cbc2749e8c12844a5827c"
         },
         {
           "path": "src/modules/shared/reshade/temporal/asr/build.mjs",
-          "sha256": "92449aac7a6900a1b1e0df84ee10ba24fafa9e25fddd65ed734205d1bb00f0ca"
+          "sha256": "2acdee0377acc9b78da9587b720b096507e1b79b4768584f01b7ad51eb5fecd7"
         },
         {
           "path": "src/modules/shared/reshade/temporal/sgsr2/backend.mm",
@@ -15172,38 +15183,6 @@
         {
           "path": "src/modules/shared/reshade/temporal/sgsr2/build.mjs",
           "sha256": "0e0b3d412ff58a10c93177089e8f5a11fb8a6ad1019dc50d405f30e850d4ceb6"
-        },
-        {
-          "path": "src/modules/shared/reshade/native/depth-opengl-test.fx",
-          "sha256": "e7d0e8beba538a012e0435527b1c47f30f95ad5e369bc8d142061bc1ac61089e"
-        },
-        {
-          "path": "src/modules/shared/reshade/native/depth-opengl-test.mm",
-          "sha256": "3869a3f63e6a3716459ba8fc4639b9459f16f239b45e204f1d842230b0ec505e"
-        },
-        {
-          "path": "src/modules/shared/reshade/native/metal-presentation-test.mm",
-          "sha256": "080733b5963d84768642e67f0d1f99896d6e4b0c136742205fe87a159865bf3f"
-        },
-        {
-          "path": "src/modules/shared/reshade/native/native-layer-test.mm",
-          "sha256": "709828ffdb111e27308ba0bff3c846eb187eb48c2ca375290853af2b3a1882f1"
-        },
-        {
-          "path": "src/modules/shared/reshade/native/opengl-test.mm",
-          "sha256": "6870e0a504e162dc02a91e0240d8d459ee1efeffc2d4d0fe2999fd0398283b87"
-        },
-        {
-          "path": "src/modules/shared/reshade/native/remote-presentation-test.mm",
-          "sha256": "fd1e605e5d6fd2be7bc55f7ae4b19b1757f4072f4229a9b6de097ae8cd9472dd"
-        },
-        {
-          "path": "src/modules/shared/reshade/native/smaa-opengl-test.mm",
-          "sha256": "2cd17ca8bdab01031f589e9745083edbd05c955c70aed18cc9e573c75fd111f6"
-        },
-        {
-          "path": "src/modules/shared/reshade/native/smaa-test.mm",
-          "sha256": "12a2e4893a8c498bbd9a55e0fcf18004884688ec0a73cfd300f4c6dcfe4a1089"
         },
         {
           "path": "src/modules/shared/reshade/native/test/adaptive-presentation-test.mm",
@@ -15303,15 +15282,15 @@
         },
         {
           "path": "tests/backend-worker.test.js",
-          "sha256": "c1a3221c6c7b86c5c4656fae31ee3b1bbcb1fd1d965ec677f881f4bba5981da7"
+          "sha256": "b4fcb6add9777f62dde5721601f6e5247733db5292fcfb148359cd57be4091e7"
         },
         {
           "path": "tests/core-launcher.test.js",
-          "sha256": "18197fbeb6b01a66db9d784d06c9cc8685b671c663260c62151a11ee48ef12bf"
+          "sha256": "d90c7dc5cc62bc2dd23117ab920b4b4a7c7b079bd97ea9ec8a2865ebef899d0d"
         },
         {
           "path": "tests/effects-controls.test.js",
-          "sha256": "07c6c214070faec8c374d380371939090b7715fad9b141eecddb0f09b9fdfbb3"
+          "sha256": "dba6bb577c68fca6539eae019102bbfb318597b04daa5fc6e8af0c3d437c539c"
         },
         {
           "path": "tests/effects-presets-ui.test.js",
@@ -15319,7 +15298,7 @@
         },
         {
           "path": "tests/effects-runtime.test.js",
-          "sha256": "f3763c6514e9d232601c907b9b75dcd3122ca98790f5454caa3988a8d17f62b4"
+          "sha256": "b462a5fca8f456618d76ccb4dbad6303d64f8f9929cac2cb5a8d795e83a255ba"
         },
         {
           "path": "tests/electron-host-launch.test.js",
@@ -15335,7 +15314,7 @@
         },
         {
           "path": "tests/game-details-keys.test.js",
-          "sha256": "2d0df5903decfd29e453eee9627b5e32adb6d31da5db23c75541fefd530d1f40"
+          "sha256": "8d3b62f6eab260665da6b222db07b3d1b7eb11c8b69b44592e548d2c06a61f09"
         },
         {
           "path": "tests/graphics-launch-binding.test.js",
@@ -15351,7 +15330,7 @@
         },
         {
           "path": "tests/graphics-managed-shaders.test.js",
-          "sha256": "24b80b3f94e91715c879d58b0c07f5f4d965e2747529b69936da31598caffaa2"
+          "sha256": "cbd9b3d98cdd3b866a656759b6cd6b8fefccf2e7186579768e9f70a363656285"
         },
         {
           "path": "tests/graphics-models.test.js",
@@ -15363,11 +15342,11 @@
         },
         {
           "path": "tests/graphics-neural-models.test.js",
-          "sha256": "01232bd8a711503097384befc798bffa41d2879b0b27e4e6b2ba6c61762bbf53"
+          "sha256": "c6cce0a9ca480272d9cc3a16f88b3ea8244dd95735ff2e5112103fd5f1e106d1"
         },
         {
           "path": "tests/graphics-neural-offline.test.js",
-          "sha256": "0f38d402869f1f7a2d5c531674d617d14acf46ea16016500d5eb21fd5e9114bb"
+          "sha256": "a800d3968d572ce853c040090ef8c4b0488e7e432bd2978bffc6a6cfb66101fb"
         },
         {
           "path": "tests/graphics-runtime-use.test.js",
@@ -15375,7 +15354,7 @@
         },
         {
           "path": "tests/ios-module.test.js",
-          "sha256": "d28330ef072ca799dbc174ef9734ac86be9b99c951e25cdd43aa5b98e89f1645"
+          "sha256": "c0dfabeb343dc775568ec7b7fc4be2443d6596ad6d4bb0b918076db927eee993"
         },
         {
           "path": "tests/launch-context-parity.test.js",
@@ -15383,7 +15362,7 @@
         },
         {
           "path": "tests/mac32-runtime.test.js",
-          "sha256": "0d2dae156cb6aa4148f4b96ca6cdcca548fbad1f374140e731d57e9ccc180fec"
+          "sha256": "4ea9c3cbed0b1e8586d30335a15d30dd77f4dab9198c64d33b0eb6e3033b629a"
         },
         {
           "path": "tests/macos-sandbox-graphics-models.test.js",
@@ -15407,7 +15386,7 @@
         },
         {
           "path": "tests/native/effects-presenter-capture.mm",
-          "sha256": "27b4e6654cbcfa5a03332db84ac47de02684f21412f693a4a1cc7bbce9f9277f"
+          "sha256": "79c7a0089e19afc7b00ae093d33c26cd5efc6fef3ac746e083c6cbd09e100a78"
         },
         {
           "path": "tests/native/effects-temporal.mm",
@@ -15423,11 +15402,11 @@
         },
         {
           "path": "tests/package-build-config.test.js",
-          "sha256": "57cd9d7c3b7b01c12c1236fd81e2658618b6e879e6f258ffbf0b4e94645565cc"
+          "sha256": "636498934da3b050c1f8218fd675112441a1b9685c2e4408c691089b6947a65c"
         },
         {
           "path": "tests/process-stop.test.js",
-          "sha256": "bc838d36acd0cf86ab5e69e19b4ff224002c10b7bea1c38757212380ab4dc4c0"
+          "sha256": "eca54428109b063574a45843e9c6f39ea3089b7cd08f8e920853bd772ff829e5"
         },
         {
           "path": "tests/reshade-filter-ipc.test.js",
@@ -15435,15 +15414,15 @@
         },
         {
           "path": "tests/reshade.test.js",
-          "sha256": "7c22cac1c4bf28c4f24b41ba67ccae0c9241b1fe8f0b8c50a61dddd72acba29b"
+          "sha256": "90cbdc7f8faf3b6f386622896077c28f410384422acb3dee52bd43a32641b1c6"
         },
         {
           "path": "tests/runtime-coordination.test.js",
-          "sha256": "28a67c4c6c6b9d162db2361c227946d819d8fd23a4cea5bd64fdfac0799c18f6"
+          "sha256": "c6c3fae039e0c731a01e1850a76e71f96f4595d0163626d2f4d59cd4e8d3837f"
         },
         {
           "path": "tests/runtime-tabs-render.test.js",
-          "sha256": "bdb88a3f58d8372f013282958e0cc8622c1bb7c04b9a2174a06296a34813a876"
+          "sha256": "0e023267e7620b3e149c1240cfa7422c87d871a6865cd6b108df4cf972a07605"
         },
         {
           "path": "tests/runtime-tabs-ui.test.js",
@@ -15459,7 +15438,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/test/browser-frame-lifetime.mm",
-          "sha256": "e2cc26027287b2f54d54c71414cc664974815869f6b3cef61fdd2e7269a333c0"
+          "sha256": "290a20f4206961ae0e745d608941bd4441236914ea7861126c6d5cb34ebdddbd"
         },
         {
           "path": "src/modules/shared/reshade/native/test/browser-frame-policy.cpp",
@@ -15559,7 +15538,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/test/metal-float.mm",
-          "sha256": "3b5df8799125b9720f5181d9691b98d9826d2951a94aabf5a507d8dc7ba81ff2"
+          "sha256": "3e5609d8055772db5ffb95b8190d9d78b8f7c0a1ce93e4d16f8c952101e9960b"
         },
         {
           "path": "src/modules/shared/reshade/native/test/metal-scene-ingress.mm",
@@ -15607,7 +15586,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/test/presentation-failure.mm",
-          "sha256": "da3665ae989724cbd98cadb8d9000dfd6424cacba1cf5bde94aa514fb7614e6b"
+          "sha256": "aff96fb72a543e9445bb7a5e45a63727f1b57d1d93903aad4220a6a7e7a8a408"
         },
         {
           "path": "src/modules/shared/reshade/native/test/presentation-hold.mm",
@@ -15651,7 +15630,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/test/run.mjs",
-          "sha256": "9c779d8c5a36774d4b4c9deca6e38ce927577f7472e95ec63080cf5db04ff516"
+          "sha256": "331d1431d9798304b79cb7de988b8bbe3241942f1e45c48621853cd8a5dd684d"
         },
         {
           "path": "src/modules/shared/reshade/native/test/runtime-status.cpp",
@@ -15675,7 +15654,7 @@
         },
         {
           "path": "tests/effects-edit-operations.test.js",
-          "sha256": "20a746e6ae3ac19511b3fd40aca22f2c1d1663b48c7cb5793dc89ccfed975be2"
+          "sha256": "e0f41ba436480e6e74eeb3469f0a40de6b243b85c29d9149eef721a74ae3b444"
         },
         {
           "path": "tests/graphics-editor-demand.test.js",
@@ -15683,7 +15662,7 @@
         },
         {
           "path": "tests/graphics-preparation-caches.test.js",
-          "sha256": "2943098b8e7c8c5745647b7f72c8231e86066bad562bc570570812d9cb7e437c"
+          "sha256": "2db33dcc656a45947d4ac8524176ea342bdddcf415a997e14293198eb3299895"
         },
         {
           "path": "src/modules/shared/reshade/native/test/fixture-colour-shaders.hpp",
@@ -15699,15 +15678,15 @@
         },
         {
           "path": "src/main/graphics-shortcuts.js",
-          "sha256": "3846c1e4d53db33d211df5ad6fe45d4803907d0e38a4a3014d062cd9e8e93b02"
+          "sha256": "57a78c08ca48b030cc4a83312c260990220fc7c6b72933a88fafda57269bceaf"
         },
         {
           "path": "src/main/module-app-actions.js",
-          "sha256": "756b5a0556bece925b1ca0e884122bd12d94fcb5a9b9a60032460a96b9a99fbd"
+          "sha256": "c59a1561927af8d36a63ddd49ce08770a9c36a364ce87ffb1c39251fab7f44d9"
         },
         {
           "path": "src/modules/shared/effects/application-stacks.js",
-          "sha256": "c28df9247dffbbc9a819cee22fc9312050e0285b28847a4d8f2ded83e07f4942"
+          "sha256": "ba00bd6acebe43aa07ebb6ce14b626f16fd7bb2bf642218f0d1df7d13f58055d"
         },
         {
           "path": "src/modules/shared/effects/output-options.js",
@@ -15715,11 +15694,11 @@
         },
         {
           "path": "src/modules/shared/graphics-shortcuts.d.mts",
-          "sha256": "2b33d1ec09b1fe8228b6e4e590baf2eb4edcd060d2fa24a6f961d62da8fd1ec3"
+          "sha256": "7ccf2a8ae95131e10b5d1bcc2933f02d1c447f99a26a6a342998a5e42a3b7c97"
         },
         {
           "path": "src/modules/shared/graphics-shortcuts.mjs",
-          "sha256": "558adcd312644b83987b701c070f3f6dc87db8089342be756f35ea64ac094e5d"
+          "sha256": "b36e520ff1509418f6e8745758a325620d8bf0b849d3dd27370d3772d0410e7d"
         },
         {
           "path": "src/modules/shared/reshade/native/generation-automatic.hpp",
@@ -15727,7 +15706,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/generation-schedule.hpp",
-          "sha256": "5696ce6a9826a4ec97a7d3f9d33e53a901b86d22cc556bb3338c6b1e658d2ffd"
+          "sha256": "01a53deb6b1779e280d01b064bed0b35157046cb553d519e4b83fa1c7d31b0b2"
         },
         {
           "path": "src/modules/shared/reshade/native/graphics-window-Info.plist",
@@ -15735,7 +15714,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/graphics-window.mm",
-          "sha256": "a1b0da696b6da69924112b4c80f45628f8397d671d241d2faeb56ac8cb0fd88d"
+          "sha256": "4adfa6213629d1f7eddc7a9befd10adf8d60fc0ac13ce16d4079be3fecbad3d5"
         },
         {
           "path": "src/modules/shared/reshade/native/hud-counters.hpp",
@@ -15747,7 +15726,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/image-pair-generation.mm",
-          "sha256": "45fee6f317f9e8b95de2f56b59ba0c88dcba01a77d922471e5cfa0f2c432a24e"
+          "sha256": "bd361e4ad9d66b37cffbafad3b25bdc48f2111524c424949f0fefec80389f36b"
         },
         {
           "path": "src/modules/shared/reshade/native/image-pair-kernels.hpp",
@@ -15775,7 +15754,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/test/display-limited-delivery.cpp",
-          "sha256": "bddf4471c0caf446358f073dc00a34a1ea1d7b05a1d0318ba1335c723642101d"
+          "sha256": "db5a0bdd943382876e00f0fd5401a421c3a2870acff43874c9c4e3d4b46651c3"
         },
         {
           "path": "src/modules/shared/reshade/native/test/generation-automatic.cpp",
@@ -15795,55 +15774,55 @@
         },
         {
           "path": "src/modules/shared/reshade/native/test/window-overlay-policy.cpp",
-          "sha256": "d60d5a960a4a0abac848eb51eb1b399bbeac8fa74cc3af597820899e75a748bf"
+          "sha256": "d94a358e2b323bcdeee90526c4c2ce4afebc87de774bee62964d6ccf67c531a3"
         },
         {
           "path": "src/modules/shared/reshade/native/test/window-source-fixture.mm",
-          "sha256": "dff3fbf9d851ba812f5ac5f753586a1fbc4e5c73dc7ee63596de56cf6eac67c6"
+          "sha256": "07aa6314485e338f7fd87522131a7bac0aa67b646b1080820b225c3d85035b4a"
         },
         {
           "path": "src/modules/shared/reshade/native/window-overlay-policy.hpp",
-          "sha256": "3d094a378bc582c71ba1a6d21f4a184561ec4adba34392fa53a5d982f670d202"
+          "sha256": "a19f707c4e4124e42a21560bdba947af4b4aeef31a818edfa277723187ac823c"
         },
         {
           "path": "src/modules/shared/reshade/native/window-source.h",
-          "sha256": "c2cc9676195340193e49a5abd747550d2095dc57ebc046c11a286e5350b1d47f"
+          "sha256": "928dea27cd5c0c8afcb94e9dd7526382431faa7816c4d7a513e94819a25dabc6"
         },
         {
           "path": "src/modules/shared/reshade/native/window-source.mm",
-          "sha256": "541e98b08c531c2ba91e7202e71d570b9fe164504e5dcc121df9241276e7a3a0"
+          "sha256": "d5e58cf06aeb1d219d7fe6869e96c90f6b8430b48f2c2c0d4d4b25871b6f237c"
         },
         {
           "path": "src/modules/shared/reshade/native/window-stream.hpp",
-          "sha256": "9969cd55cc746d8de784c1f0495a2475ab27dc901d0782f1732e3dc6dd44c6e1"
+          "sha256": "b44bf2f896e0bf9a99f1ccff4c227ac50befa8c8afdc46f3438e165bac09f4db"
         },
         {
           "path": "src/modules/shared/reshade/native/window-stream.mm",
-          "sha256": "bc15c363e40a8c470de62c3b53697e65edfaaf1184186a05c389c6b89831c764"
+          "sha256": "382db8e6d20217bb377c3df850328be367492a716fc1997a5e84a3ef4906f3d1"
         },
         {
           "path": "src/modules/shared/reshade/screenshots.js",
-          "sha256": "14f1e5c4c391a6995d7db96d9af8fc8c6362f3d95f3ab39597c386dce8eefa91"
+          "sha256": "8e38e3c2f752fbae8b866a810673fe3550294308c403a6016aba692f3cb4acfe"
         },
         {
           "path": "src/modules/window/app-actions.js",
-          "sha256": "9eb38ee059b6630dd18013cf3792dcdc7fceb0f3918eba83d65ba126f0d0cf18"
+          "sha256": "e3742ae3cad82bb36ab9fc97f44a897060cdf062019b54cd2ceceab419f5c70a"
         },
         {
           "path": "src/modules/window/applications.js",
-          "sha256": "3addcf098b93c59e80639b1774c6f769b9e8bbb607e4d35c13040c91b2d6ec88"
+          "sha256": "6582ddd4cb681b4dc5e9c7d2038172c0728294b313629eed964adaa47300319c"
         },
         {
           "path": "src/modules/window/launch.js",
-          "sha256": "bf5747723c6872b9fc85dc967433353bee97a43152daedaf9ba50d640a92b6c0"
+          "sha256": "27d9824a8cafcee6830200b65086e4d82ccbc60dc2ddca143a6cfbc0572feba7"
         },
         {
           "path": "src/modules/window/main.js",
-          "sha256": "8944db75d228af6c42e6498089ba28a3a5a502415cd74a1b27a8fe0d558616d9"
+          "sha256": "34a5d4d15b73e4f3590acfb3e5fca08e4cc1b5b0f774b9f4803777a2571dfb03"
         },
         {
           "path": "src/modules/window/manifest.json",
-          "sha256": "3c0294c4c14ac163b7b99ddb8302399ba131f84e01fc5d627fc51ddca6df0217"
+          "sha256": "dd2bdeb4bb1dfaf05f3f2dd86be14152f08124e752b7b91d42f771d848533afd"
         },
         {
           "path": "src/modules/window/resources/icon.json",
@@ -15859,11 +15838,11 @@
         },
         {
           "path": "src/renderer/src/ui/components/GraphicsShortcutSettings.tsx",
-          "sha256": "197e61d5a233297c3d06791dae6fcfa58c9cb61b36dc74505b3532db09600210"
+          "sha256": "b116b6b5d51cfec466f75fbd18c84bc2cbe564c8bceb3294d897f504f40eee8f"
         },
         {
           "path": "tests/application-stacks.test.js",
-          "sha256": "b3d27f7454ddfa8027a81cd0faecf6a808d822192bdb7ef66715a26b2e1d5d4f"
+          "sha256": "31684c5ac3272dfe0a9b15fc6665b5ce512ac48b6b5f4f13b0a7782daabe8d15"
         },
         {
           "path": "tests/ephemeral-entry.test.js",
@@ -15871,11 +15850,11 @@
         },
         {
           "path": "tests/generation-schedule-native.test.js",
-          "sha256": "0298a2f938a817d8e1d35927ab908c45a51da011abe8dd0fb87f1fa1cbb11748"
+          "sha256": "706262d4c136c2dc19a93489cbbd1a0829bad2704dfc4350d1c31359511d24b5"
         },
         {
           "path": "tests/generation-static-content.test.js",
-          "sha256": "12709f734e9e9ece7d6947050e27162549ba67e0eab054bbee7052fb71b1dfe6"
+          "sha256": "51920e87fdb4bfd4861bfa6bee9d266630e7ce12a8a03d41b001ea5b15d7a0a7"
         },
         {
           "path": "tests/graphics-hud-counters.test.js",
@@ -15883,7 +15862,7 @@
         },
         {
           "path": "tests/graphics-image-pair-generation.test.js",
-          "sha256": "5f3edddd9334351d8602576d7be73e733cddb2cbd7a3faf660de80322b4aae99"
+          "sha256": "272af713169122be73323ec91eb00897e450a145c26f508a00cdd80e72091300"
         },
         {
           "path": "tests/graphics-presentation-options.test.js",
@@ -15895,11 +15874,11 @@
         },
         {
           "path": "tests/graphics-screenshots.test.js",
-          "sha256": "c40cdce46101897c406f525392f6f5846d4339ca6b0b03aacd7fa4c5f396943d"
+          "sha256": "e5e1758bb6f5ba96d9909272f66296951e396a301db1d9a57c693c2c6b120c24"
         },
         {
           "path": "tests/graphics-shortcuts.test.js",
-          "sha256": "a696f0f34af1fa4edab9269efbb6795d7c661f241f10132c6f25719154e2be5d"
+          "sha256": "e0adefeabf494dce0e52e96ddfc63fb3e6fea5163cee7c7074e5fc044ca7236d"
         },
         {
           "path": "tests/graphics-source-frame-pacing.test.js",
@@ -15907,7 +15886,7 @@
         },
         {
           "path": "tests/module-app-actions.test.js",
-          "sha256": "25969ab94954e44d7bd8a851aa9c55973a098b24b275e0ddf19691a0e56f37de"
+          "sha256": "d48fad839e65f0e6728273e93136c408b7563d5ce19c66ebe4878e95424a9d73"
         },
         {
           "path": "tests/native/generation-schedule.cpp",
@@ -15915,11 +15894,31 @@
         },
         {
           "path": "tests/window-capture-fallback.test.js",
-          "sha256": "98e71039fac1c76a156a4cda65f5f61d54f179727632ab339a6179c90c9f1a8e"
+          "sha256": "2a3e04c20b05f9452a2bdb341d2015c7d5aa2ed52870d36dff49c54a917d6f9a"
         },
         {
           "path": "tests/window-module.test.js",
-          "sha256": "27410e7a3495c479f79adcdb8ce35fbe114dd5302c7bac565f461a019fc5e8e0"
+          "sha256": "3efbe0420f37da38511c4bbf2cc01330bdf6dfa89709665a8fc70d823be15c27"
+        },
+        {
+          "path": "src/modules/shared/reshade/capture-file.js",
+          "sha256": "5c216c410e0a304d63079f6b8805529f684c668b6d4240227b6ea8fde29289fb"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/capture-file.hpp",
+          "sha256": "d17235bdf7e06f7b5cc31dee674aa2ecdce95c16e213e3e12651681dbf4d2763"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/test/frame-capture.mm",
+          "sha256": "5b3d41c522410ef3fa971bccd93068a03f06ac242ebe8d4a07f95d2b69de5444"
+        },
+        {
+          "path": "src/modules/shared/file-time.js",
+          "sha256": "3992808c6ea9a1269d0a31b34b8a9b026c4f9089eed7dd78493392a439d973e6"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/fsr/build.cmake",
+          "sha256": "981a1b6b0fe5f7a1e7f9c39c8f064403f76f247a020b3cc6d2fd6b4aae48c7af"
         }
       ],
       "buildEntries": [
@@ -16036,7 +16035,7 @@
       "ownedFiles": [
         {
           "path": "docs/game-types/ANDROID.md",
-          "sha256": "1171218136597e1ae33037c7da34249c5ddfc124e93ca5ad5b8ed6988af11d73"
+          "sha256": "03b7162e4ce0a41e63d8e5e254ef070e8db968300d75e94a185da028943d83fd"
         },
         {
           "path": "docs/game-types/android/ARCHITECTURE.md",
@@ -16048,7 +16047,7 @@
         },
         {
           "path": "docs/runtimes/RUNTIME_DISTRIBUTION.md",
-          "sha256": "26ada20ac38247cffc30e433611b719ea0cb8abe2c2a18cee92dfcb4682e9b20"
+          "sha256": "3138450bb9bb1fd1a534ecffb646401b1733bed71e86733627ea74acbd854c27"
         },
         {
           "path": "src/modules/android/art/image.js",
@@ -16064,7 +16063,7 @@
         },
         {
           "path": "src/modules/android/art/runtime-manager.js",
-          "sha256": "1cc9e1e33cf4bd9db870fe5ed81f4813a87f9f9adc98aad547f44395a2b73d31"
+          "sha256": "e6148da14d1f3bca94661135f68cf9592612eef9e312ad972c6a87fec3829a21"
         },
         {
           "path": "src/modules/android/art/runtime.js",
@@ -16072,11 +16071,11 @@
         },
         {
           "path": "src/modules/android/custom-main.js",
-          "sha256": "3e67e4c4a2762d35a9336cb8de9711e65573547f27cb34e417a994e4ea785f3b"
+          "sha256": "c504d49726693dd3797d5391ce533803eaa7b88f56500b08344ebfa80ed22443"
         },
         {
           "path": "src/modules/android/host.js",
-          "sha256": "8a31bede57f7ba8714dc00ffdc0def2856a205c9b226d764a4a7b12e006eedda"
+          "sha256": "2dd44915af56cec5461f2779d8ed78d212d17892a246e408812880086965a5d8"
         },
         {
           "path": "src/modules/android/launch-policy.js",
@@ -16084,19 +16083,19 @@
         },
         {
           "path": "src/modules/android/providers/aim/index.js",
-          "sha256": "084d5901fe76fe87a180e0ba3c6c24c123dba87bf4cfea2c9d2770836908b9fb"
+          "sha256": "548a95a13dd0c47aaf6a88f1f65d17503b32c0e0522fbd852bf83ecd3001231e"
         },
         {
           "path": "src/modules/android/runtime.js",
-          "sha256": "c20f05a131f922770299d7f77f40625414e92284befa3fd78a02e0b5ee0dc804"
+          "sha256": "d02387468eeddc3bf9cf5c0755e60fa6e03b855a9c21b893a3320706aabf7365"
         },
         {
           "path": "src/modules/android/system-image.js",
-          "sha256": "d93e7801ab083f1b49cffecbdd3fbe4e4667829a113ff1a3508598b17a3211ea"
+          "sha256": "670546c98841656bbbd2ec573a82a1b7a8f6b40ec55902b3912297248f46d528"
         },
         {
           "path": "src/modules/shared/runtime/project-build-manager.js",
-          "sha256": "928da884ca5f10e64f67fb2ae83b36f2a77423de2be27c0152e2540461be5a54"
+          "sha256": "7551ace8330edfb04cb8a49c2ee7a79b628fa27aea5e1478b533920623faa716"
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/art/build.mjs",
@@ -16224,7 +16223,7 @@
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/native/README.md",
-          "sha256": "64cf523d23a8fc1a17d7d8b6793af6573cc0db4142a44f80014015ce37514bba"
+          "sha256": "b15df99edcf35dc2c0b8180136f2c138d8603f219d0a3da81f2fada39349adbe"
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/art/source.mjs",
@@ -16244,7 +16243,7 @@
         },
         {
           "path": "tests/android-art-package.test.js",
-          "sha256": "d18abc1bb829c8c47c80c9eb7b3ff17a9a41d689e1bc40dbb15375935312a6b0"
+          "sha256": "2af75cb249fa90dd1db38b647c116781de3c5ce7f925666c237db49fdafb1dbc"
         },
         {
           "path": "tests/android-execution-selection.test.js",
@@ -16252,15 +16251,15 @@
         },
         {
           "path": "tests/android-module.test.js",
-          "sha256": "b3518531925326e231f3422c363dc92210bfee8c87f2748f97ef580e482cdcc0"
+          "sha256": "f249303a3308b64ff8ae7c5aa422d610267425fa4272efed2788929f986e9049"
         },
         {
           "path": "tests/android-system-image.test.js",
-          "sha256": "8cba89c78efd42d3a8dd7ba017107cb7b4cb836bfd96cb80e09fff685438678c"
+          "sha256": "659785fd8cd786b2712076987404bdf0baa27c2b8f85d0a86746a105fe485f1c"
         },
         {
           "path": "tests/runtime-project-build-manager.test.js",
-          "sha256": "714ef8637b244627731cf47f6428f0f09d14c7aa819723fed97a82780bf1c6a0"
+          "sha256": "373c65dcf11a9234363b035df45e4aef0ff894b6ab5fa61ab2eb9af10b8c5956"
         },
         {
           "path": "src/external/maclauncher-android/tests/android-hwui-inputs.test.js",
@@ -16367,7 +16366,7 @@
         },
         {
           "path": "scripts/native-binary-tools.cjs",
-          "sha256": "40c99e682e785a42de48ae958fe23deac10c9a527d777c9a8852bfa0246a2074"
+          "sha256": "731e49be840a34c86e356bc56bbda097aed19e71155c2661246d00e4bbdb41b7"
         },
         {
           "path": "src/modules/rgss/overlays/mkxpz-filename-nfc/filesystem.patch",

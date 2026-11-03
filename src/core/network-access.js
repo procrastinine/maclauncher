@@ -1,16 +1,9 @@
-// Each game stores a concrete choice. Legacy explicit values remain readable
-// when normalizing an older record for the first time.
+// Each game stores a current concrete choice. Old records converge once at the
+// shared record-format boundary, before launch reads this preference.
 function overrideForEntry(entry, runtimeId) {
   if (Object.hasOwn(entry || {}, "networkAccess")) {
     return typeof entry.networkAccess === "boolean" ? entry.networkAccess : null;
   }
-  const selected = typeof entry?.runtimeId === "string" && entry.runtimeId
-    ? entry.runtimeId : runtimeId;
-  const legacy = entry?.runtimeSettings?.[selected];
-  if (Object.hasOwn(legacy || {}, "networkIsolation") && typeof legacy.networkIsolation === "boolean")
-    return !legacy.networkIsolation;
-  if (Object.hasOwn(legacy || {}, "enableProtections") && typeof legacy.enableProtections === "boolean")
-    return !legacy.enableProtections;
   return null;
 }
 

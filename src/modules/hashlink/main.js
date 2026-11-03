@@ -61,67 +61,11 @@ function recommendation(bytecode, context) {
     bytecode, { hostVersion: systemVersionSync() })?.version : null;
 }
 
-function prepareLaunch(entry, context) {
-  if (!entry.gameId || !/^[A-Za-z0-9_-]+$/.test(entry.gameId) || !context.userDataDir) throw new Error("HashLink requires a persisted game id and launcher data directory.");
-  const root = path.dirname(entry.moduleData.bytecodePath);
-  const directory = GameData.resolveGameModuleDir(context.userDataDir, entry.gameId, manifest.id);
-  if (directory.startsWith(root + path.sep)) throw new Error("HashLink staging must be outside the imported game directory.");
-  const wrapper = path.join(directory, "game"), recordPath = path.join(directory, "game-source.json");
-  const bytecodeSha256 = Native.hashFile(entry.moduleData.bytecodePath);
-  let record; try { record = JSON.parse(fs.readFileSync(recordPath, "utf8")); } catch {}
-  if (record && (record.root !== root || record.bytecodeSha256 !== bytecodeSha256)) throw new Error("Imported HashLink bytecode changed. Preserve any game saves before explicitly clearing its managed game data.");
-  if (!record || !fs.existsSync(wrapper)) {
-    fs.mkdirSync(directory, { recursive: true });
-    const stage = fs.mkdtempSync(path.join(directory, ".stage-"));
-    function copy(source, destination, depth = 0) {
-      if (depth > 32) throw new Error("HashLink game directory is too deeply nested.");
-      fs.mkdirSync(destination, { recursive: true });
-      for (const item of fs.readdirSync(source, { withFileTypes: true })) {
-        if (item.name.startsWith(".")) continue;
-        const from = path.join(source, item.name), to = path.join(destination, item.name);
-        if (item.isDirectory()) copy(from, to, depth + 1);
-        else if (item.isFile()) {
-          // The selected VM reads bytecode directly from the original file in
-          // binary read mode. Foreign executables/modules are never game assets
-          // and must not shadow the selected macOS native modules in cwd.
-          if (from === entry.moduleData.bytecodePath || /\.(?:exe|dll|hdll|dylib)$/i.test(item.name)) continue;
-          // Read large, known resource files from their original locations.
-          // Configuration and unknown writable sidecars remain private.
-          if (/\.(?:png|jpg|jpeg|bmp|gif|ogg|wav|mp3|flac|ttf|otf|pak|pck|bsp|mesh|fbx|obj|swf|dds|ktx)$/i.test(item.name)) fs.symlinkSync(from, to);
-          else fs.copyFileSync(from, to);
-        }
-        // Ignore symlinks rather than following imported paths outside the game.
-      }
-    }
-    try {
-      copy(root, stage);
-      fs.rmSync(wrapper, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-      fs.renameSync(stage, wrapper);
-      fs.writeFileSync(recordPath, JSON.stringify({ root, bytecodeSha256, layoutVersion: 2 }));
-    } finally { fs.rmSync(stage, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
-  }
-  if (record && record.layoutVersion !== 2) {
-    // Migrate the old overlay without replacing it: relative player saves and
-    // configuration edits must survive removal of unnecessary runtime copies.
-    const priorBytecode = path.join(wrapper, path.basename(entry.moduleData.bytecodePath));
-    if (fs.existsSync(priorBytecode)) {
-      if (Native.hashFile(priorBytecode) !== bytecodeSha256) throw new Error("Managed HashLink bytecode changed; preserve it before clearing the obsolete copy.");
-      fs.rmSync(priorBytecode);
-    }
-    function removeForeignBinaries(source, destination, depth = 0) {
-      if (depth > 32) throw new Error("HashLink game directory is too deeply nested.");
-      for (const item of fs.readdirSync(source, { withFileTypes: true })) {
-        const from = path.join(source, item.name), to = path.join(destination, item.name);
-        if (item.isDirectory() && fs.existsSync(to) && fs.lstatSync(to).isDirectory()) removeForeignBinaries(from, to, depth + 1);
-        else if (item.isFile() && /\.(?:exe|dll|hdll|dylib)$/i.test(item.name) && fs.existsSync(to) && Native.hashFile(to) === Native.hashFile(from)) fs.rmSync(to);
-      }
-    }
-    removeForeignBinaries(root, wrapper);
-    fs.writeFileSync(recordPath, JSON.stringify({ root, bytecodeSha256, layoutVersion: 2 }));
-  }
-  return { directory, wrapper, bytecodePath: entry.moduleData.bytecodePath };
+function prepareLaunch(entry) {
+  const bytecodePath = entry.moduleData?.bytecodePath;
+  if (!path.isAbsolute(bytecodePath || "") || !fs.statSync(bytecodePath).isFile()) throw new Error("HashLink bytecode was not found.");
+  return { root: path.dirname(bytecodePath), bytecodePath };
 }
-
 function inspectDependencies(entry, context) {
   const bytecode = readBytecode(entry.moduleData.bytecodePath);
   const selection = manager.resolveSelection(entry, context.settings, context.userDataDir,
@@ -212,12 +156,12 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     const launch = prepareLaunch(entry, context);
     const args = [launch.bytecodePath, ...(context.runtimeSettings?.appArgs || []), ...(context.gameArguments || [])];
     if (args.some(arg => typeof arg !== "string" || arg.includes("\0"))) throw new Error("Invalid HashLink application arguments.");
-    const env = { ...process.env, DYLD_LIBRARY_PATH: status.directories.join(path.delimiter) };
+    const env = { ...require("../shared/runtime/dependency-environment").environment(status.install), DYLD_LIBRARY_PATH: status.directories.join(path.delimiter) };
     // Thin Intel Mach-O binaries enter Rosetta through exec itself. A protected
     // /usr/bin/arch wrapper strips DYLD_* needed for HashLink native modules.
     const forceIntelSlice = Architecture.requiresRosetta("x64") && status.install.architectures.includes("arm64");
     return context.spawnDetachedChecked(status.install.executablePath, args,
-      { cwd: launch.wrapper, env }, forceIntelSlice);
+      { cwd: launch.root, env }, forceIntelSlice);
   },
   cleanupGameData: (entry, context) => {
     if (!entry.gameId || !/^[A-Za-z0-9_-]+$/.test(entry.gameId)) throw new Error("HashLink requires a persisted game id.");

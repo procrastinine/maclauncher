@@ -150,7 +150,7 @@
       },
       {
         "id": "renpyMod",
-        "label": "Universal Ren'Py Mod",
+        "label": "Universal Ren'Py Mod (own file)",
         "statusKey": "urmPresent",
         "addAction": "addRenpyMod",
         "removeAction": "removeRenpyMod"
@@ -219,9 +219,14 @@
       },
       {
         "id": "addRenpyMod",
-        "label": "Add Universal Ren'Py Mod",
+        "label": "Add Universal Ren'Py Mod from own file…",
         "kind": "primary",
         "inspector": false
+      },
+      {
+        "id": "chooseRenpyMod",
+        "label": "Choose another Universal Ren'Py Mod file…",
+        "kind": "secondary"
       },
       {
         "id": "removeRenpyMod",

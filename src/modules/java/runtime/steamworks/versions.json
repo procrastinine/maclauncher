@@ -1,10 +1,10 @@
 [
   {
     "version": "1.9.0",
-    "bridgeVersion": "1.9.0-MCLv2",
+    "bridgeVersion": "1.9.0-MCLv3",
     "abiProfile": "steamworks4j-1.9.0-ml1",
     "helperAbiProfile": "steamworks4j-1.9.0-ml1-offline-abi0.5.0",
-    "helperVersion": "0.5.1",
+    "helperVersion": "0.5.2",
     "sourceRevision": "33ae54e87657afe8464eb01845e62b79403f5bfa",
     "sourceUrl": "https://github.com/code-disaster/steamworks4j/tree/1.9.0",
     "publisherUrl": "https://repo.maven.apache.org/maven2/com/code-disaster/steamworks4j/steamworks4j/1.9.0/steamworks4j-1.9.0.jar",
@@ -195,10 +195,10 @@
   },
   {
     "version": "1.10.0",
-    "bridgeVersion": "1.10.0-MCLv2",
+    "bridgeVersion": "1.10.0-MCLv3",
     "abiProfile": "steamworks4j-1.10.0-ml1",
     "helperAbiProfile": "steamworks4j-1.10.0-ml1-offline-abi0.5.0",
-    "helperVersion": "0.5.1",
+    "helperVersion": "0.5.2",
     "sourceRevision": "84790acfcb16f4ee25f25f5725bd0df39c527f6d",
     "sourceUrl": "https://github.com/code-disaster/steamworks4j/tree/1.10.0",
     "publisherUrl": "https://repo.maven.apache.org/maven2/com/code-disaster/steamworks4j/steamworks4j/1.10.0/steamworks4j-1.10.0.jar",

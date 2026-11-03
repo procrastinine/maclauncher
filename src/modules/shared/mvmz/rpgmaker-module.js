@@ -50,7 +50,8 @@ function resolveDefaultRuntime(_entry, _moduleSettings, context = {}) {
     ? context.getRuntimeManagerState("nwjs")?.installed || []
     : path.isAbsolute(context.userDataDir || "")
       ? NwjsRuntimeManager.core.listInstalled(context.userDataDir) : [];
-  const platforms = process.arch === "arm64" ? ["osx-arm64", "osx-x64"] : ["osx-x64"];
+  const platforms = require("../runtime/host-capabilities").getHostCapabilities().hardwareArch === "arm64"
+    ? ["osx-arm64", "osx-x64"] : ["osx-x64"];
   return installed.some(runtime => runtime.ready === true && runtime.variant === "sdk" &&
     platforms.includes(runtime.platformKey)) ? "nwjs-patched" : "electron";
 }

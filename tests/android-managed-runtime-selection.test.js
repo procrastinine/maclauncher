@@ -33,10 +33,11 @@ test("Android helper execution retains the selected managed package and refuses 
 });
 
 test("Android import metadata stays available without an installed Android runtime", async t => {
+  if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "android-no-runtime-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const gamePath = path.join(root, "game.apk");
-  fs.copyFileSync(path.resolve(__dirname, "fixtures/android-package-metadata/metadata.apk"), gamePath);
+  fs.copyFileSync(require('./helpers/android-fixture-tools.cjs').metadataApk(t), gamePath);
   // The included native reader supplies labels; the Android runtime is not involved.
   const Reader = require("../src/modules/android/tools/apk-metadata");
   t.mock.method(Reader, "inspect", async () => ({ schemaVersion: 1, packageName: "org.maclauncher.metadata.fixture", label: "Fixture", activityWindows: {}, iconFile: null }));
@@ -46,7 +47,7 @@ test("Android import metadata stays available without an installed Android runti
   assert.equal(Metadata.metadataCacheKey({ gamePath }, {}).metadata, undefined);
   t.mock.method(Manager, "resolveSelection", () => assert.fail("Package detection does not require an installed runtime"));
   const detected = require("../src/modules/android/detect").detectGame({
-    inputPath: path.resolve(__dirname, "fixtures/android-package-metadata/metadata.apk") });
+    inputPath: require('./helpers/android-fixture-tools.cjs').metadataApk(t) });
   assert.equal(detected.moduleData.packageName, "org.maclauncher.metadata.fixture");
 });
 

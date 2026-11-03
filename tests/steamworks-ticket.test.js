@@ -23,7 +23,12 @@ function fixture(t) {
   const declarations = [declaration];
   const manifest = { schemaVersion: 1, ...pin, files: [{ path: Ticket.FILENAME, size: bytes.length, mode: 0o644,
     sha256: hash(bytes), architectures: ["arm64"] }] };
-  const seal = () => { const content = JSON.stringify(manifest); fs.writeFileSync(path.join(directory, "helper.json"), content); declaration.manifestSha256 = hash(content); };
+  const seal = () => {
+    const content = JSON.stringify(manifest);
+    fs.writeFileSync(path.join(directory, "helper.json"), content);
+    declaration.manifestSha256 = hash(content);
+    declaration.files = [...manifest.files, { path: "helper.json", size: Buffer.byteLength(content), mode: 0o644, sha256: declaration.manifestSha256 }];
+  };
   seal();
   return { root, directory, library, pin, manifest, seal,
     options: { resourcesRoot: root, architecture: "arm64", version, catalog: [pin], declarations } };

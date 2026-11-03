@@ -251,7 +251,8 @@ body {
 .filterLibraryPathControl .btn { flex-shrink: 0; }
 .filterLibraryUnavailable { display: block; margin-top: 5px; color: var(--muted); line-height: 1.4; overflow-wrap: anywhere; }
 .filterLibraryFormat { display: block; margin-top: 5px; color: var(--muted); font-size: var(--font-xs); }
-.effectsEditor { border: 0; padding: 0; margin: 0; min-width: 0; }
+/* The fieldset holds its hidden legend, so the legend stays inside the scrolling pane instead of extending the page. */
+.effectsEditor { position: relative; border: 0; padding: 0; margin: 0; min-width: 0; }
 .effectsEditor > legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .effectsList { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 8px; }
 .effectNode { padding: 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); min-width: 0; }
@@ -282,6 +283,9 @@ body {
 .effectsControls .simpleEffectActions .iconOnly { flex: 0 0 26px; width: 26px; min-width: 26px; }
 /* The attention badge takes its own line under the picker so the picker keeps its width. */
 .effectsControls .simpleEffectRow > .simpleEffectAttention { grid-column: 2 / -1; grid-row: 2; display: flex; align-items: center; gap: 4px; margin-top: -4px; }
+.effectsControls .simpleEffectRow > .simpleEffectInactive { grid-column: 2 / -1; margin-top: -4px; }
+.effectInactive, .graphicsOffNotice { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; }
+.effectInactive > .btn, .graphicsOffNotice > .btn { flex: none; }
 .effectNodeSettings { margin-top: 8px; }
 .effectNodeSettings > summary { cursor: pointer; color: var(--muted); font-size: var(--font-xs); }
 .effectNodeSettings[open] > summary { margin-bottom: 10px; }
@@ -573,6 +577,11 @@ body {
   color: var(--muted);
   font-size: var(--font-md);
 }
+
+/* One-time library update from an earlier version, before the library loads. */
+.startupMigration { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  padding: 18px 16px; text-align: center; font-variant-numeric: tabular-nums; }
+.startupMigration progress { width: 240px; height: 6px; accent-color: var(--accent); }
 
 .dropHint {
   display: flex;

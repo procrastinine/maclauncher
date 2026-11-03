@@ -6,6 +6,7 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { once } = require("node:events");
 const { stopProcessTree } = require("../src/core/process-stop");
+const { untilTestEnds } = require("./helpers/fixture-process");
 const Detection = require("../src/modules/crossover/detect");
 const Module = require("../src/modules/crossover/main");
 const Manager = require("../src/modules/crossover/runtime/manager");
@@ -16,6 +17,16 @@ function fixture(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-crossover-test-"));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   return directory;
+}
+function heldFileTimes(t, roots) {
+  for (const method of ["stat", "lstat"]) {
+    const original = fs.promises[method];
+    t.mock.method(fs.promises, method, async (file, ...args) => {
+      const info = await original(file, ...args), root = [...roots.keys()].sort((a, b) => b.length - a.length).find(root => String(file).startsWith(root + path.sep));
+      if (root && info && typeof info.ctimeMs === "number") {info.ctimeMs = roots.get(root);info.mtimeMs = 1700000000000;}
+      return info;
+    });
+  }
 }
 function pe(file, { machine = 0x14c, subsystem = 2, dll = false, signature = 0x4550 } = {}) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -292,6 +303,19 @@ test("CrossOver automatic discovery is read-only and application updates retain 
   assert.throws(() => Manager.core.inspectApplication(runtimePath), /inside the selected application/);
 });
 
+test("CrossOver coarse application timestamps refresh plist and loader facts without changing registration", t => {
+  const directory = fs.realpathSync(fixture(t)), application = app(path.join(directory, "CrossOver.app"), "25.0"), stat = fs.statSync;
+  t.mock.method(fs, "statSync", (file, ...args) => {
+    const info = stat(file, ...args);if (String(file).startsWith(application + path.sep)) {info.mtimeMs = 1700000000000;info.ctimeMs = 1700000000000;}return info;
+  });
+  const first = Manager.core.inspectApplication(application), plist = path.join(application, "Contents/Info.plist"), loader = first.loaderPath;
+  const before = fs.statSync(plist);fs.writeFileSync(plist, fs.readFileSync(plist, "utf8").replace("25.0", "26.3"));
+  const bytes = fs.readFileSync(loader);bytes.writeUInt32LE(0x01000007, 4);fs.writeFileSync(loader, bytes);
+  const after = fs.statSync(plist);assert.deepEqual([after.ino, after.size, after.mtimeMs, after.ctimeMs], [before.ino, before.size, before.mtimeMs, before.ctimeMs]);
+  const next = Manager.core.inspectApplication(application);
+  assert.equal(next.version, first.version);assert.equal(next.upstreamVersion, "26.3");assert.deepEqual(next.loaderArchitectures, ["x86_64"]);
+});
+
 test("CrossOver renderer floors follow installed libraries without rejecting ordinary Wine", t => {
   const root = fixture(t), installation = { crossoverRoot: root };
   const backend = require("../src/modules/crossover/runtime/backend-support");
@@ -410,7 +434,7 @@ test("CrossOver rejects invalid launch options before creating game data or a bo
   assert.equal(calls, 0);
 });
 
-test("CrossOver app and Windows environment selections reuse separate bottles and shared private game files", async t => {
+test("CrossOver app changes reuse one per-game bottle while Windows templates remain separate", async t => {
   const directory = fixture(t), userDataDir = path.join(directory, "data"), game = path.join(directory, "game");
   pe(path.join(game, "Game.exe"));
   const first = Manager.importRuntime({ userDataDir, runtimePath: app(path.join(directory, "First.app")) });
@@ -430,100 +454,14 @@ test("CrossOver app and Windows environment selections reuse separate bottles an
   fs.writeFileSync(path.join(a.gameRoot, "Save.dat"), "shared game save");
   const b = await launch({ version: second.version });
   const c = await launch({ version: second.version, bottleTemplate: "win11_64" });
-  assert.notEqual(a.bottlePath, b.bottlePath);assert.notEqual(b.bottlePath, c.bottlePath);
+  assert.equal(a.bottlePath, b.bottlePath);assert.notEqual(b.bottlePath, c.bottlePath);
   assert.equal(a.gameRoot, b.gameRoot);assert.equal(b.gameRoot, c.gameRoot);
   assert.equal(fs.readFileSync(path.join(c.gameRoot, "Save.dat"), "utf8"), "shared game save");
   assert.equal((await launch({ version: first.version })).bottlePath, a.bottlePath);
   assert.equal(fs.readFileSync(path.join(a.bottlePath, "saved-profile.dat"), "utf8"), "first app save");
-  assert.equal(calls, 3, "returning to a previous selection reuses its completed bottle");
+  assert.equal(calls, 2, "CrossOver app changes reuse the existing bottle; a new Windows template has its own bottle");
   await assert.rejects(Launch.ensureBottle(first, a.bottlePath, a.directory,
     { bottleTemplate: "unsupported" }, {}, { run }), /Unsupported CrossOver Windows bottle type/);
-});
-
-test("CrossOver private files preserve original files, relaunch changes and saves across changed input roots", async t => {
-  const directory = fixture(t), source = path.join(directory, "source"), managed = path.join(directory, "managed");
-  pe(path.join(source, "Game.exe")); fs.writeFileSync(path.join(source, "settings.ini"), "original");
-  const gameRoot = await Launch.stageGameFiles(source, managed);
-  fs.writeFileSync(path.join(gameRoot, "settings.ini"), "private settings");
-  fs.writeFileSync(path.join(gameRoot, "Save01.dat"), "save");
-  assert.equal(await Launch.stageGameFiles(source, managed), gameRoot);
-  assert.equal(fs.readFileSync(path.join(source, "settings.ini"), "utf8"), "original");
-  const updated = path.join(directory, "updated"); fs.cpSync(source, updated, { recursive: true });
-  fs.writeFileSync(path.join(updated, "new-file.dat"), "new");
-  await Launch.stageGameFiles(updated, managed);
-  assert.equal(fs.readFileSync(path.join(gameRoot, "settings.ini"), "utf8"), "private settings");
-  assert.equal(fs.readFileSync(path.join(gameRoot, "Save01.dat"), "utf8"), "save");
-  assert.equal(fs.readFileSync(path.join(gameRoot, "new-file.dat"), "utf8"), "new");
-  fs.rmSync(gameRoot, { recursive: true }); fs.symlinkSync(source, gameRoot);
-  await assert.rejects(Launch.stageGameFiles(updated, managed), /must not be aliases/);
-});
-
-test("CrossOver rejects escaping source aliases before staging game files", async t => {
-  const directory = fixture(t), source = path.join(directory, "source"), managed = path.join(directory, "managed");
-  pe(path.join(source, "Game.exe"));
-  fs.symlinkSync("/etc/hosts", path.join(source, "escape.dat"));
-  await assert.rejects(Launch.stageGameFiles(source, managed), /alias outside/);
-  await assert.rejects(Launch.stageGameFiles(source, path.join(source, "private")), /outside the original/);
-});
-
-test("CrossOver updates unchanged private assets in the same source folder while preserving saves and same-size mod edits", async t => {
-  const directory = fixture(t), source = path.join(directory, "source"), managed = path.join(directory, "managed");
-  pe(path.join(source, "Game.exe"));
-  fs.writeFileSync(path.join(source, "asset.dat"), "version one");
-  fs.writeFileSync(path.join(source, "settings.ini"), "source");
-  fs.writeFileSync(path.join(source, "removed.dat"), "keep this file");
-  const gameRoot = await Launch.stageGameFiles(source, managed);
-  const originalTimes = fs.statSync(path.join(source, "settings.ini"));
-  fs.writeFileSync(path.join(gameRoot, "settings.ini"), "edited");
-  fs.utimesSync(path.join(gameRoot, "settings.ini"), originalTimes.atime, originalTimes.mtime);
-  fs.writeFileSync(path.join(gameRoot, "Save01.dat"), "private save");
-  fs.writeFileSync(path.join(source, "asset.dat"), "version two");
-  fs.writeFileSync(path.join(source, "settings.ini"), "update");
-  fs.utimesSync(path.join(source, "settings.ini"), originalTimes.atime, originalTimes.mtime);
-  fs.unlinkSync(path.join(source, "removed.dat"));
-  fs.writeFileSync(path.join(source, "new.dat"), "new asset");
-  await Launch.stageGameFiles(source, managed);
-  assert.equal(fs.readFileSync(path.join(gameRoot, "asset.dat"), "utf8"), "version two");
-  assert.equal(fs.readFileSync(path.join(gameRoot, "settings.ini"), "utf8"), "edited");
-  assert.equal(fs.readFileSync(path.join(gameRoot, "Save01.dat"), "utf8"), "private save");
-  assert.equal(fs.readFileSync(path.join(gameRoot, "removed.dat"), "utf8"), "keep this file");
-  assert.equal(fs.readFileSync(path.join(gameRoot, "new.dat"), "utf8"), "new asset");
-  let reads = 0;
-  await Launch.stageGameFiles(source, managed, { onProgress: value => { if (value.bytesRead != null) reads++; } });
-  assert.equal(reads, 0, "unchanged assets are checked without reading or hashing their contents");
-});
-
-test("CrossOver preserves differing private files when upgrading an older no-hash record", async t => {
-  const directory = fixture(t), source = path.join(directory, "source"), managed = path.join(directory, "managed");
-  pe(path.join(source, "Game.exe")); fs.writeFileSync(path.join(source, "settings.ini"), "original");
-  const gameRoot = await Launch.stageGameFiles(source, managed);
-  fs.writeFileSync(path.join(gameRoot, "settings.ini"), "private settings");
-  fs.writeFileSync(path.join(managed, "game-files.json"), JSON.stringify({ sourceRoot: fs.realpathSync(source), files: 2, layoutVersion: 1 }));
-  await Launch.stageGameFiles(source, managed);
-  fs.writeFileSync(path.join(source, "settings.ini"), "new settings");
-  await Launch.stageGameFiles(source, managed);
-  assert.equal(fs.readFileSync(path.join(gameRoot, "settings.ini"), "utf8"), "private settings");
-  const receipt = JSON.parse(fs.readFileSync(path.join(managed, "game-files.json")));
-  assert.equal(receipt.layoutVersion, 2);
-  assert.equal(receipt.files["settings.ini"].baseline, null);
-});
-
-test("CrossOver cancellation and source races leave a pending asset update retryable", async t => {
-  const directory = fixture(t), source = path.join(directory, "source"), managed = path.join(directory, "managed");
-  fs.mkdirSync(source); fs.writeFileSync(path.join(source, "asset.dat"), "old asset");
-  const gameRoot = await Launch.stageGameFiles(source, managed);
-  fs.writeFileSync(path.join(source, "asset.dat"), "new asset");
-  const controller = new AbortController();
-  await assert.rejects(Launch.stageGameFiles(source, managed, { signal: controller.signal, onProgress: () => controller.abort() }), { name: "AbortError" });
-  assert.equal(fs.readFileSync(path.join(gameRoot, "asset.dat"), "utf8"), "old asset");
-  let changed = false;
-  await assert.rejects(Launch.stageGameFiles(source, managed, { onProgress: () => {
-    if (!changed) { changed = true; fs.writeFileSync(path.join(source, "asset.dat"), "raced update"); }
-  } }), /original Windows game changed/);
-  assert.equal(fs.readFileSync(path.join(gameRoot, "asset.dat"), "utf8"), "old asset");
-  await Launch.stageGameFiles(source, managed);
-  assert.equal(fs.readFileSync(path.join(gameRoot, "asset.dat"), "utf8"), "raced update");
-  assert.deepEqual(fs.readdirSync(gameRoot), ["asset.dat"]);
 });
 
 test("CrossOver Play automatically creates a private bottle and launches the selected PE with explicit BepInEx overrides", async t => {
@@ -543,7 +481,14 @@ test("CrossOver Play automatically creates a private bottle and launches the sel
   const context = { userDataDir, settings: { runtimes: { crossover: { defaultVersion: installed.version } } },
     gameArguments: ["--title", "  A quoted game  ", "", "$(touch literal)", "first\nsecond"],
     runtimeSettings: { graphicsBackend: "dxvk", locale: "en_US.UTF-8", bepInExWinhttp: true, arguments: ["-windowed"] } };
+  const GameView = require("../src/modules/crossover/temporal/game-view");
+  assert.equal(GameView.baseline, undefined);
+  for (const method of ["reconcile", "remember", "watch"]) t.mock.method(GameView, method, () => assert.fail("Ordinary Play must not " + method + " a private game view"));
+  const old = path.join(Launch.runtimeDirectory(entry, context), "temporal-camera", "Save01.dat");
+  fs.mkdirSync(path.dirname(old), {recursive: true});fs.writeFileSync(old, "earlier private save");
+  entry.runtimeData.crossover.cameraGameView = {kind: "camera", id: "old binding must not be read"};
   const launch = await Launch.prepareLaunch(entry, context, { run });
+  assert.equal(fs.readFileSync(old, "utf8"), "earlier private save");
   assert.equal(calls.length, 1);
   assert.equal(calls[0].command, installed.bottleToolPath);
   assert.equal(calls[0].options.env.WINEPREFIX, launch.bottlePath);
@@ -551,7 +496,11 @@ test("CrossOver Play automatically creates a private bottle and launches the sel
   assert.ok(launch.args.includes("--wait-children"));
   assert.deepEqual(launch.args.slice(launch.args.indexOf("--")), ["--", launch.executablePath, "-windowed", ...context.gameArguments]);
   assert.equal(calls[0].args.some(arg => context.gameArguments.includes(arg)), false, "bottle setup does not receive game arguments");
-  assert.notEqual(launch.executablePath, original);
+  assert.equal(fs.realpathSync(launch.executablePath), fs.realpathSync(original));
+  assert.equal(fs.realpathSync(launch.gameRoot), fs.realpathSync(game));
+  assert.equal(launch.args[launch.args.indexOf("--workdir") + 1], path.dirname(launch.executablePath));
+  assert.equal(fs.existsSync(path.join(launch.directory, "game")), false);
+  assert.equal(fs.existsSync(path.join(launch.directory, "game-files.json")), false);
   assert.equal(entry.runtimeData.crossover.gameRoot, launch.gameRoot);
   assert.equal(Launch.runtimeDirectory(entry, context), path.join(userDataDir, "games", "testgame", "runtimes", "crossover"));
   await Launch.prepareLaunch(entry, context, { run });
@@ -628,6 +577,8 @@ test("CrossOver transports trusted game effects through its vendor environment a
   assert.equal(camera.args[camera.args.indexOf("--dll") + 1], camera.environment.WINEDLLOVERRIDES);
   assert.match(camera.args[camera.args.indexOf("--env") + 1], /MACLAUNCHER_DXMT_BASE_LIBRARY=/);
   assert.equal(camera.bottlePath, disabled.bottlePath);assert.equal(preparation.length, 1);
+  assert.equal(camera.workingDirectory, path.dirname(path.join(game, "Game.exe")));
+  assert.equal(camera.args[camera.args.indexOf("--workdir") + 1], camera.workingDirectory, "camera adaptation keeps the original cwd");
 });
 
 test("CrossOver loader failure preserves ordinary vendor launch, Steam and final game environment", async t => {
@@ -684,11 +635,12 @@ test("CrossOver loader failure disables only optional camera adaptation before a
   const run = async (_command, args) => {bottles++;const bottle = args[args.indexOf('--bottle') + 1];fs.mkdirSync(bottle, {recursive: true});
     fs.writeFileSync(path.join(bottle, 'cxbottle.conf'), '[Bottle]\n');fs.writeFileSync(path.join(bottle, 'system.reg'), 'registry');return {stdout: '', stderr: ''};};
   const original = await Launch.prepareLaunch(entry, context, {run}), Temporal = require('../src/modules/crossover/temporal');
+  const oldGameRoot = await require("./helpers/crossover-0.5.1-fixtures").stageGameFiles(game, original.directory);
   const Streamline = require('../src/modules/crossover/temporal/streamline'), crypto = require('node:crypto');
   const sha = value => crypto.createHash('sha256').update(value).digest('hex');
-  fs.writeFileSync(path.join(original.gameRoot, Streamline.ORIGINAL), 'original Streamline');
-  fs.writeFileSync(path.join(original.gameRoot, 'sl.interposer.dll'), 'old owned proxy');
-  fs.writeFileSync(path.join(original.gameRoot, Streamline.RECORD), JSON.stringify({schema: 1, sourceSha256: sha('original Streamline'), proxySha256: sha('old owned proxy')}));
+  fs.writeFileSync(path.join(oldGameRoot, Streamline.ORIGINAL), 'original Streamline');
+  fs.writeFileSync(path.join(oldGameRoot, 'sl.interposer.dll'), 'old owned proxy');
+  fs.writeFileSync(path.join(oldGameRoot, Streamline.RECORD), JSON.stringify({schema: 1, sourceSha256: sha('original Streamline'), proxySha256: sha('old owned proxy')}));
   entry.effects = {schema: 2, mode: 'advanced', enabled: true, video: [{id: 'scene', kind: 'temporal', enabled: true, method: 'fsr2', settings: {}}]};const saved = structuredClone(entry.effects);
   t.mock.method(Temporal, 'resolvePlan', () => ({libraries: [{relativePath: 'sl.interposer.dll', sourcePath: source}], inputs: {cameraProjection: true, source: 'streamline', methods: ['fsr2']}}));
   t.mock.method(Temporal, 'prepareGame', () => assert.fail('a failed loader cannot install another camera DLL'));
@@ -706,8 +658,8 @@ test("CrossOver loader failure disables only optional camera adaptation before a
   for (const key of ['DYLD_INSERT_LIBRARIES', 'RESHADE_TEMPORAL_METHOD', 'MACLAUNCHER_DXMT_BASE_LIBRARY', 'WINELOADER']) assert.equal(launch.environment[key], undefined);
   assert.equal(fs.readFileSync(path.join(launch.gameRoot, 'sl.interposer.dll'), 'utf8'), 'original Streamline');
   assert.equal(fs.existsSync(path.join(launch.gameRoot, Streamline.ORIGINAL)), false);assert.equal(fs.readFileSync(source, 'utf8'), 'original Streamline');
-  assert.equal(fs.readFileSync(path.join(original.gameRoot, 'sl.interposer.dll'), 'utf8'), 'old owned proxy', 'legacy leaves are not rewritten to make optional fallback safe');
-  assert.equal(fs.readFileSync(path.join(original.gameRoot, Streamline.ORIGINAL), 'utf8'), 'original Streamline');
+  assert.equal(fs.readFileSync(path.join(oldGameRoot, 'sl.interposer.dll'), 'utf8'), 'old owned proxy', 'legacy leaves are not rewritten to make optional fallback safe');
+  assert.equal(fs.readFileSync(path.join(oldGameRoot, Streamline.ORIGINAL), 'utf8'), 'original Streamline');
   assert.deepEqual(entry.effects, saved);
   for (const marker of [{name: 'AbortError'}, {code: 'ABORT_ERR'}]) {
     const abort = Object.assign(new Error('Cancelled'), marker);
@@ -733,7 +685,7 @@ test("CrossOver loader failure disables only optional camera adaptation before a
   }
   const restoration = Object.assign(new Error('Original DLL could not be restored'), {code: 'STREAMLINE_RESTORE_FAILED'});
   Temporal.prepareGame.mock.mockImplementation(() => {throw restoration;});
-  const preserved = [source, original.executablePath, ...['sl.interposer.dll', Streamline.ORIGINAL, Streamline.RECORD].map(name => path.join(original.gameRoot, name))]
+  const preserved = [source, original.executablePath, ...['sl.interposer.dll', Streamline.ORIGINAL, Streamline.RECORD].map(name => path.join(oldGameRoot, name))]
     .map(file => [file, fs.readFileSync(file)]);
   await assert.rejects(Launch.prepareLaunch(entry, {...context,
     applyGameEnvironment: async base => require('../src/modules/shared/reshade').mergeEnvironment(base, crt), getGameEffectsEnvironment: async () => crt}, {run}),
@@ -776,7 +728,7 @@ test("CrossOver Stop terminates an independently grouped Windows process before 
   const argumentsFile = path.join(directory, "game-arguments.json");
   const gameArguments = ["--bottle", "private bottle", "--", "C:\\Game.exe", "--title", "  A quoted game  ", "", "$(touch unexpected)", "first\nsecond"];
   const fakeWine = path.join(directory, "wine"), fakeServer = path.join(directory, "wineserver");
-  fs.writeFileSync(fakeWine, `#!${process.execPath}\nconst fs=require('fs'),{spawn}=require('child_process');fs.writeFileSync(process.env.GAME_ARGUMENTS,JSON.stringify(process.argv.slice(2)));const game=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true,stdio:'ignore'});fs.writeFileSync(process.env.GAME_PID,String(game.pid));setInterval(()=>{},1000);`, { mode: 0o755 });
+  fs.writeFileSync(fakeWine, `#!${process.execPath}\nconst fs=require('fs'),{spawn}=require('child_process');fs.writeFileSync(process.env.GAME_ARGUMENTS,JSON.stringify(process.argv.slice(2)));const game=spawn(process.execPath,['-e',${JSON.stringify(untilTestEnds)}],{detached:true,stdio:'ignore'});fs.writeFileSync(process.env.GAME_PID,String(game.pid));${untilTestEnds}`, { mode: 0o755 });
   fs.writeFileSync(fakeServer, `#!${process.execPath}\nconst fs=require('fs');if(process.argv[2]==='-k'){const pid=Number(fs.readFileSync(process.env.GAME_PID,'utf8'));try{process.kill(pid,'SIGTERM')}catch{}fs.writeFileSync(process.env.STOPPED,'stopped');}`, { mode: 0o755 });
   const child = spawn("/bin/sh", ["-c", Launch.SUPERVISOR, "test-crossover", fakeWine, fakeServer, ...gameArguments],
     { detached: true, stdio: "ignore", env: { ...process.env, GAME_PID: pidFile, STOPPED: stoppedFile, GAME_ARGUMENTS: argumentsFile } });
@@ -787,7 +739,7 @@ test("CrossOver Stop terminates an independently grouped Windows process before 
   assert.ok(fs.existsSync(pidFile));
   assert.deepEqual(JSON.parse(fs.readFileSync(argumentsFile, "utf8")), gameArguments);
   const gamePid = Number(fs.readFileSync(pidFile, "utf8"));
-  t.after(() => { try { process.kill(gamePid, "SIGKILL"); } catch {} });
+  t.after(() => { try { process.kill(-gamePid, "SIGKILL"); } catch {} });
   assert.equal(stopProcessTree(child.pid), true);
   const outcome = await Promise.race([finished, new Promise((_, reject) => setTimeout(() => reject(new Error("CrossOver supervisor did not stop")), 5000).unref())]);
   assert.equal(outcome[0], 143);
@@ -825,7 +777,7 @@ test("CrossOver cancelled preparation waits until independently grouped Wine chi
   if (process.platform === "win32") return t.skip("POSIX process groups are required");
   const directory = fixture(t), pidFile = path.join(directory, "child-pid"), stopped = path.join(directory, "stopped");
   const command = path.join(directory, "cxbottle"), server = path.join(directory, "wineserver");
-  fs.writeFileSync(command, `#!${process.execPath}\nconst fs=require('fs'),{spawn}=require('child_process');let c=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true,stdio:'ignore'});fs.writeFileSync(process.env.CHILD_PID,String(c.pid));setInterval(()=>{},1000);`, { mode: 0o755 });
+  fs.writeFileSync(command, `#!${process.execPath}\nconst fs=require('fs'),{spawn}=require('child_process');let c=spawn(process.execPath,['-e',${JSON.stringify(untilTestEnds)}],{detached:true,stdio:'ignore'});fs.writeFileSync(process.env.CHILD_PID,String(c.pid));${untilTestEnds}`, { mode: 0o755 });
   fs.writeFileSync(server, `#!${process.execPath}\nconst fs=require('fs');if(process.argv[2]==='-k'){try{process.kill(Number(fs.readFileSync(process.env.CHILD_PID,'utf8')),'SIGTERM')}catch{}fs.writeFileSync(process.env.STOPPED,'yes');}`, { mode: 0o755 });
   const controller = new AbortController();
   const preparing = Launch.runSupervised(command, server, [], { cwd: directory, env: { ...process.env, CHILD_PID: pidFile, STOPPED: stopped }, signal: controller.signal, timeout: 5000 });
@@ -834,7 +786,7 @@ test("CrossOver cancelled preparation waits until independently grouped Wine chi
   while (!fs.existsSync(pidFile) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
   assert.ok(fs.existsSync(pidFile));
   const pid = Number(fs.readFileSync(pidFile, "utf8"));
-  t.after(() => { try { process.kill(pid, "SIGKILL"); } catch {} });
+  t.after(() => { try { process.kill(-pid, "SIGKILL"); } catch {} });
   controller.abort(); await rejected;
   assert.equal(fs.readFileSync(stopped, "utf8"), "yes");
   const exited = Date.now() + 3000;

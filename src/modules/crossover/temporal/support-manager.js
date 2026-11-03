@@ -1,4 +1,5 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
+const { cloneOrCopySync } = require("../../shared/copy-file");
 const { createPinnedNativeManager } = require("../../shared/runtime/pinned-native-manager");
 const { createProjectBuildManager } = require("../../shared/runtime/project-build-manager");
 const Bundled = require("../../shared/runtime/bundled-native");
@@ -22,7 +23,7 @@ async function prepareInstall({ unpacked, pin, signal }) {
     const stat = fs.statSync(file);
     if (!stat.isFile() || stat.size > 128 * 1024 * 1024 || !fs.realpathSync(file).startsWith(fs.realpathSync(source) + path.sep)) throw Error("The DXMT support archive is incomplete.");
     const destination = path.join(target, relative);fs.mkdirSync(path.dirname(destination), { recursive: true });
-    fs.copyFileSync(file, destination, fs.constants.COPYFILE_FICLONE | fs.constants.COPYFILE_EXCL);files[relative] = hash(destination);
+    cloneOrCopySync(file, destination, { exclusive: true });files[relative] = hash(destination);
   }
   for (const name of fs.readdirSync(unpacked)) if (name !== "dxmt") fs.rmSync(path.join(unpacked, name), { recursive: true, force: true });
   return { schema: 1, files, templateRenderers: renderers };

@@ -1,4 +1,5 @@
 const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
+const { cloneOrCopy } = require('../shared/copy-file');
 const {spawn} = require('node:child_process'), {once} = require('node:events');
 const Writable = require('../shared/writable-input');
 const {confirmToolInstall} = require('../shared/runtime/tool-install');
@@ -71,18 +72,18 @@ async function attachments(run,context){
   const json=await run('/usr/bin/plutil',['-convert','json','-o','-','--','-'],{context,input:raw});
   const images=JSON.parse(json).images;if(!Array.isArray(images))throw Error('Android image attachment information is invalid.');return images;
 }
-async function attach(base,mount,run,context){
+async function attach(base,mount,run,context,writable=false){
   const images=await attachments(run,context);
   for(const image of images){const mounts=(image['system-entities']||[]).map(row=>row['mount-point']).filter(Boolean);
     if(!mounts.includes(mount))continue;
-    if(image['image-path']!==base||image.writeable!==false||image['shadow-path'])throw Error('The Android image mount belongs to a different or writable image.');
+    if(image['image-path']!==base||image.writeable!==writable||image['shadow-path'])throw Error('The Android image mount belongs to a different image or access mode.');
     return;
   }
   Writable.assertOwnDirectory(path.dirname(mount),mount);
-  await run('/usr/bin/hdiutil',['attach','-readonly','-nobrowse','-mountpoint',mount,base],{context});
+  await run('/usr/bin/hdiutil',['attach',writable?'-readwrite':'-readonly','-nobrowse','-mountpoint',mount,base],{context});
   const attached=await attachments(run,context);
-  if(!attached.some(image=>image['image-path']===base&&image.writeable===false&&!image['shadow-path']&&
-    image['system-entities']?.some(row=>row['mount-point']===mount)))throw Error('The Android image did not attach read-only at its private mount.');
+  if(!attached.some(image=>image['image-path']===base&&image.writeable===writable&&!image['shadow-path']&&
+    image['system-entities']?.some(row=>row['mount-point']===mount)))throw Error('The Android image did not attach with the selected access mode at its private mount.');
 }
 async function lock(file,signal,acquire){
   for(;;){signal?.throwIfAborted();const release=await acquire(file,{wait:false});if(release)return release;
@@ -147,7 +148,7 @@ async function prepare({context,image,expected,extractor,existingOnly=false},dep
         const destination=path.join(staging,'system.dmg');
         // Separate inodes preserve each image owner's attach/detach lifecycle;
         // APFS clones still share the immutable physical extents.
-        await fs.promises.copyFile(source,destination,fs.constants.COPYFILE_FICLONE|fs.constants.COPYFILE_EXCL);
+        await cloneOrCopy(source,destination,{exclusive:true});
         if(identity(await regular(source))!==candidate.identity)throw Error('The original Android image changed during preparation.');
       }
       if(!reused){
@@ -160,7 +161,7 @@ async function prepare({context,image,expected,extractor,existingOnly=false},dep
         const sparse=path.join(staging,'build.sparseimage'),building=path.join(staging,'build');
         await run('/usr/bin/hdiutil',['create','-size','16g','-type','SPARSE','-fs','Case-sensitive APFS','-volname','Android System','-o',sparse],{context,timeout:120000});
         Writable.assertOwnDirectory(staging,building);
-        stagingMounts.add(building);await run('/usr/bin/hdiutil',['attach','-readwrite','-nobrowse','-mountpoint',building,sparse],{context});
+        stagingMounts.add(building);await attach(sparse,building,run,context,true);
         await run(extractor,[archive,path.join(building,'root')],{context,timeout:20*60*1000});
         if(fs.readFileSync(path.join(building,'root.identity'),'utf8').trim()!==image.sha256)throw Error('The Android system image archive identity differs from its selected supplier.');
         await run('/usr/bin/hdiutil',['detach',building],{context:{...context,signal:undefined}});stagingMounts.delete(building);
@@ -234,7 +235,7 @@ async function adoptBase({context,image,destination},dependencies={}){
   if(!original)return false;
   Writable.assertOwnDirectory(context.userDataDir,path.dirname(destination));
   const temporary=path.join(path.dirname(destination),'.image-adopt-'+crypto.randomUUID());
-  try{await fs.promises.copyFile(original.base,temporary,fs.constants.COPYFILE_FICLONE|fs.constants.COPYFILE_EXCL);await fs.promises.chmod(temporary,0o400);
+  try{await cloneOrCopy(original.base,temporary,{exclusive:true});await fs.promises.chmod(temporary,0o400);
     try{await fs.promises.link(temporary,destination);}catch(error){if(error.code!=='EEXIST')throw error;await regular(destination);}
   }finally{await fs.promises.rm(temporary,{force:true});}
   return true;

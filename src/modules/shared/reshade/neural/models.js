@@ -1,4 +1,5 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
+const { cloneOrCopySync, cloneOrCopy } = require("../../copy-file");
 const Writable = require("../../writable-input");
 const { withRuntimeMutation, withRuntimeUse } = require("../../../../core/coordinated-runtime-managers");
 const localHashes = new Map();
@@ -288,7 +289,7 @@ function preserveSource(directory, source, model, userDataDir) {
   for (const [index, row] of source.notices.entries()) {
     regular(row.source, 2 << 20);
     const target = path.join(notices, index + "-" + row.name);
-    fs.copyFileSync(row.source, target, fs.constants.COPYFILE_EXCL);fs.chmodSync(target, 0o444);
+    cloneOrCopySync(row.source, target, { exclusive: true });fs.chmodSync(target, 0o444);
   }
   fs.writeFileSync(receipt, JSON.stringify({schema: 1, kind: source.kind, fileName: path.basename(source.file),
     packagePath: model.sourcePackage || path.relative(source.file, model.canonical).split(path.sep).join("/")}, null, 2) + "\n", {flag: "wx", mode: 0o444});
@@ -302,12 +303,12 @@ async function importPackage(context, source, origin) {
   try {
     fs.writeFileSync(path.join(modelPath, "manifest.json"), source.bytes, { flag: "wx", mode: 0o444 });
     const weightsPath = path.join(modelPath, source.value.weights.file);
-    await fs.promises.copyFile(source.weightsPath, weightsPath, fs.constants.COPYFILE_FICLONE);
+    await cloneOrCopy(source.weightsPath, weightsPath, { signal });
     const weightsHash = await hashFile(weightsPath, signal, completed => onProgress?.({ phase: "import", completed,
       total: source.weightsStat.size, label: "Importing neural model…" }));
     if (source.value.weights.sha256 && weightsHash !== source.value.weights.sha256) throw new Error("The neural model weights do not match their manifest checksum.");
     for(const row of source.auxiliary||[]) {
-      const target=path.join(modelPath,row.file);await fs.promises.copyFile(row.source,target,fs.constants.COPYFILE_FICLONE);
+      const target=path.join(modelPath,row.file);await cloneOrCopy(row.source,target,{signal});
       if(digest(fs.readFileSync(target))!==row.sha256||!sameFile(row.stat,fs.lstatSync(row.source)))throw new Error("The neural model support file changed during import.");
       fs.chmodSync(target,0o444);
     }

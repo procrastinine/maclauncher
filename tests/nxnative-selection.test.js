@@ -176,7 +176,8 @@ test("nxnative state inventories retain independent native-tools preferences acr
     return original(options);
   });
   await operations.runtimeStates(settings);
-  const published = events.find(row => row.event === "runtimeState").payload.state;
+  const published = require("../src/core/runtime-state-snapshot.mjs").restoreRuntimeState(
+    events.find(row => row.event === "runtimeState").payload.state);
   assert.equal(published.sections[0].installed[0].ready, true);
   assert.equal(received[0].settings, own, "the manager's own settings ABI stays intact");
   assert.equal(received[0].runtimeSettings, runtimes, "only the runtime preference map is forwarded");

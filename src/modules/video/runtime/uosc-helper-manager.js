@@ -1,4 +1,5 @@
 const fs = require("node:fs"), path = require("node:path");
+const { cloneOrCopySync } = require("../../shared/copy-file");
 const Upstream = require("../../shared/runtime/upstream");
 const {createPinnedNativeManager} = require("../../shared/runtime/pinned-native-manager");
 const {extractPayload} = require("../../shared/runtime/release-files");
@@ -21,7 +22,7 @@ function createManager(dependencies = {}) {
       revision: pin.upstreamRevision, destination: path.join(unpacked, "LICENSE"), signal}) || undefined,
     dependencies: {extractArchive: (archive, destination, signal) => extractPayload(archive, destination, signal,
       {payloadName: "ziggy-darwin", project: "uosc helper", copy: (file, target) => {
-        fs.copyFileSync(file, target); fs.chmodSync(target, 0o755);
+        cloneOrCopySync(file, target); fs.chmodSync(target, 0o755);
       }}), ...dependencies}});
 }
 
@@ -56,12 +57,12 @@ async function stageHelper({root, binary, ...context}) {
       const manifest = JSON.parse(Bundled.readRegular(path.join(payload, record.manifestRelative), Bundled.LIMITS.manifestBytes).bytes);
       for (const [index, notice] of (manifest.notices || []).entries()) {
         if (!manifest.files.some(file => file.path === notice.path)) continue;
-        fs.copyFileSync(path.join(payload, "files", notice.path), path.join(notices, index + "-" + path.basename(notice.path)));
+        cloneOrCopySync(path.join(payload, "files", notice.path), path.join(notices, index + "-" + path.basename(notice.path)));
       }
     } else if (fs.existsSync(path.join(install.installDir, "LICENSE"))) {
-      fs.copyFileSync(path.join(install.installDir, "LICENSE"), path.join(notices, "LICENSE"));
+      cloneOrCopySync(path.join(install.installDir, "LICENSE"), path.join(notices, "LICENSE"));
     }
-    fs.copyFileSync(install.executablePath, binary + ".native");
+    cloneOrCopySync(install.executablePath, binary + ".native");
     fs.chmodSync(binary + ".native", 0o755); fs.renameSync(binary + ".native", binary);
     return {managerId: manager.id, version: selected.version, architecture: install.architecture};
   } catch (error) {

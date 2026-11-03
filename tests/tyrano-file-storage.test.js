@@ -6,10 +6,10 @@ const test = require("node:test");
 const Storage = require("../src/modules/tyrano/file-storage");
 const Tyrano = require("../src/modules/tyrano/main");
 
-test("Tyrano file saves retain escaped JSON in managed storage without writing the runner folder", t => {
+test("Tyrano file saves retain escaped JSON in the original game without writing the shared runner folder", t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "tyrano-file-storage-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const runner = path.join(root, "runner"), saves = path.join(root, "profile/saves"); fs.mkdirSync(runner);
+  const runner = path.join(root, "runner"), saves = path.join(root, "original-game"); fs.mkdirSync(runner);
   const handlers = {}, target = { document: { addEventListener: (name, listener) => { handlers[name] = listener; } } };
   assert.equal(Storage.install(target, saves), true);
   // The author's functions arrive later when tyrano/libs.js finishes loading.
@@ -27,10 +27,18 @@ test("Tyrano file saves retain escaped JSON in managed storage without writing t
   assert.deepEqual(fs.readdirSync(saves), ["authored_game_sf.sav"]);
 });
 
-test("Tyrano Electron declares its per-game save directory through module metadata", () => {
-  const userDataDir = path.resolve(os.tmpdir(), "tyrano-profile"), entry = { gameId: "owned-game", runtimeId: "electron" };
+test("Tyrano declares original file saves while browser storage and explicit overrides stay separate", () => {
+  const userDataDir = path.resolve(os.tmpdir(), "tyrano-profile"), game = path.resolve(os.tmpdir(), "tyrano-original"),
+    entry = { gameId: "owned-game", gamePath: game, contentRootDir: path.join(userDataDir, "required-extraction"), runtimeId: "electron" };
   const result = Tyrano.resolveSaveLocations(entry, { userDataDir });
-  assert.equal(result.primaryDirectory, path.join(userDataDir, "games/owned-game/modules/tyrano/saves"));
+  assert.equal(result.primaryDirectory, game, "required extraction is not the save root");
   assert.equal(Tyrano.manifest.runtime.hosted.saveDirectory, true);
-  assert.equal(Tyrano.resolveSaveLocations({ ...entry, runtimeId: "nwjs" }, { userDataDir }).primaryDirectory, null);
+  assert.equal(Tyrano.resolveSaveLocations({ ...entry, runtimeId: "nwjs" }, { userDataDir }).primaryDirectory, game);
+  const explicit = path.join(userDataDir, "games/owned-game/modules/tyrano/saves");
+  assert.equal(Storage.resolveDirectory({ gameDir: game, contentRootDir: entry.contentRootDir }), game);
+  assert.equal(Storage.resolveDirectory({ gameDir: game, saveDir: explicit }), explicit, "an intentional private override remains usable");
+  const saves = require("../src/core/save-locations");
+  const hydrated = saves.hydrateGameSaveLocations({ ...entry, moduleId: "tyrano", defaultSaveDir: explicit }, { getModule: () => Tyrano });
+  assert.equal(hydrated.defaultSaveDir, game, "the actual pre-launch hydration replaces stale default metadata");
+  assert.equal(Storage.resolveDirectory({ saveDir: hydrated.defaultSaveDir, gameDir: game }), game);
 });

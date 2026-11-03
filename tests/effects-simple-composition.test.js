@@ -48,13 +48,13 @@ test("shader contracts select source, reconstruction or final display placement 
   assert.deepEqual(kinds(Plan.composeSimple({...entry, graphics: {...entry.graphics, effectPlacement: "after"}})), kinds(Plan.composeSimple(entry)));
   assert.deepEqual(kinds(Plan.composeSimple(entry, {shaderFacts: {"legacy-shader": {traits: {neural: true}, requirements: {depth: true}}}})).slice(0, 2), ["shader", "temporal"]);
 });
-test("the DLSS preset uses 540 pixels then window fitting and 4x frames, preserving saved order and settings", async () => {
+test("the DLSS preset uses 720 pixels then window fitting and 4x frames, preserving saved order and settings", async () => {
   const entry = {reshade: shader, graphics: {...neural, spatialMethod: "metalfx", frameGeneration: "lsfg", effectPlacement: "before"}};
   const legacy = Plan.fromLegacy(entry), before = structuredClone(entry);
   assert.equal(legacy.video[0].kind, "shader");
   const preset = Plan.reconstructionPreset(entry);
   assert.deepEqual(kinds(preset), ["downsample", "neural", "upscale", "frame-generation", "shader"]);
-  assert.equal(preset.schema,2);assert.equal(preset.video[0].method,'bilinear');assert.deepEqual(preset.video[0].extent,{height:540});
+  assert.equal(preset.schema,2);assert.equal(preset.video[0].method,'bilinear');assert.deepEqual(preset.video[0].extent,{height:720});
   assert.equal(preset.video[1].settings.modelPath, neural.neuralModelPath);
   assert.equal(preset.video[2].method,'metalfx');assert.deepEqual(preset.video[2].extent,{relativeTo:'presentation',factor:1});
   assert.equal(preset.video[3].settings.frameMultiplier, 4);assert.equal(preset.video[3].settings.frameGeneration, "lsfg");

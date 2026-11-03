@@ -5,6 +5,7 @@
 #include "image-color.hpp"
 #include "image-admission.hpp"
 #include "generation-execution.hpp"
+#include "source-timing.hpp"
 #include "comparison.hpp"
 #include "output-color.hpp"
 #include <condition_variable>
@@ -235,7 +236,7 @@ extern "C" int rsVideoProcessSequence(void *handle,const RSVideoFrame *request,R
   if(video.finishing.size()<generated.events.size())video.finishing.resize(generated.events.size());
   for(unsigned index=0;index<generated.events.size();++index){const auto&event=generated.events[index];auto output=(__bridge id<MTLTexture>)sequence->outputs[index].texture;auto final=allocate(video.finishing[index],target.width,target.height,format,"video-sequence-finishing");
    auto stamp=content;stamp.contentId=event.synthetic?event.eventId:content.contentId;stamp.synthetic=event.synthetic;stamp.displayMapped=event.displayMapped;
-   macfx::ShaderFrame frame{commands,event.image,final,stamp.contentId,input.timeMs-input.durationMs*(1-event.phase),float(input.durationMs/required)};frame.opaqueDisplay=true;bool displayMapped=event.displayMapped;
+   macfx::ShaderFrame frame{commands,event.image,final,stamp.contentId,macfx::generationPhaseTime(input.timeMs,input.durationMs,event.phase),float(input.durationMs/required)};frame.opaqueDisplay=true;bool displayMapped=event.displayMapped;
    const auto suffix=execution->encodeContentImage(frame,stamp,true,false,&displayMapped);if(!suffix.encoded)throw std::runtime_error(suffix.reason);
    auto finalDescription=inputDescription;final=compareVideo(video,execution,commands,raw,final,inputDescription,outputDescription,stamp.contentId,finalDescription,displayMapped);
    macfx::ColorConversion conversion;conversion.source=finalDescription;conversion.target=outputDescription;conversion.frameId=stamp.contentId;conversion.headroom=std::max(1.f,outputDescription.peakLuminance/outputDescription.referenceWhite);

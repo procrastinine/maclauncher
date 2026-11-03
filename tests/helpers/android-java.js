@@ -69,15 +69,15 @@ function processNamespace(directory) {
   return { KL_ANDROID_ID_DIRECTORY: fs.realpathSync(ids) };
 }
 
-function spawnSync(executable, args, options = {}) {
-  const env = options.env || process.env;
-  if (path.basename(executable) !== 'java' || args.includes('-jar') || env.KL_ANDROID_ID_DIRECTORY)
-    return childProcess.spawnSync(executable, frameworkArguments(executable, args), options);
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'android-process-ids-'));
-  try {
-    return childProcess.spawnSync(executable, frameworkArguments(executable, args),
-      { ...options, env: { ...env, ...processNamespace(directory) } });
-  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+function spawnSync(executable,args,options={}){
+ const env=options.env||process.env;
+ if(path.basename(executable)!=='java'||args.includes('-jar'))return childProcess.spawnSync(executable,frameworkArguments(executable,args),options);
+ const directory=fs.mkdtempSync(path.join(os.tmpdir(),'android-process-ids-'));
+ try{
+  const manifests=require('./manifest-fixtures').prepare(path.join(directory,'manifests'));
+  return childProcess.spawnSync(executable,['-Dandroid.test.manifests='+path.join(manifests,'android-framework-services/manifests'),...frameworkArguments(executable,args)],
+   {...options,env:env.KL_ANDROID_ID_DIRECTORY?env:{...env,...processNamespace(directory)}});
+ }finally{fs.rmSync(directory,{recursive:true,force:true});}
 }
 
 // A test declares the runtime it exercises, as installation declares a managed

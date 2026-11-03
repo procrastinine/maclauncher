@@ -303,7 +303,7 @@ test("row outcomes of an accepted revision are read without another acceptance v
 test("closed-panel transaction acquires actual CPU resource acceptance without inspector reads", {skip: process.platform !== "darwin"}, async t => {
   const f = fixture(t);
   const binary = path.join(f.root, "accepted-status-fixture"), native = path.resolve(__dirname, "../src/modules/shared/reshade/native");
-  execFileSync("clang++", ["-std=c++17", "-UNDEBUG", "-I", native, path.join(native, "runtime-status.cpp"), path.join(native, "test/runtime-status.cpp"), "-o", binary], {stdio: "pipe"});
+  execFileSync("clang++", ["-std=c++17", "-UNDEBUG", "-I", native, path.join(native, "runtime-status.cpp"), path.join(native, "test/runtime-status.cpp"), path.join(native, "test/fixture-assert.cpp"), "-o", binary], {stdio: "pipe"});
   assert.equal(fs.existsSync(f.selected.binding.file), false);
   const pending = Status.acquireAccepted(f.entry, {...f.options, launchBinding: f.launch});
   execFileSync(binary, [f.revision, f.digest, "--acceptance"], {env: {...process.env, ...f.selected.environment}, stdio: "pipe", timeout: 5000});
@@ -340,7 +340,9 @@ test("actual CPU status-page producer preserves prepared, completed, fallback an
   assert.equal(first.preparation.pending[0].method, "mlx-dlss");
   assert.equal(first.preparation.requested.some(row => row.id === "generation"), false, "an old prepared request is never labelled as the current selection");
   const binary = path.join(f.root, "status-fixture"), native = path.resolve(__dirname, "../src/modules/shared/reshade/native");
-  execFileSync("clang++", ["-std=c++17", "-UNDEBUG", "-I", native, path.join(native, "runtime-status.cpp"), path.join(native, "test/runtime-status.cpp"), "-o", binary], {stdio: "pipe"});
+  execFileSync("clang++", ["-std=c++17", "-UNDEBUG", "-I", native, path.join(native, "runtime-status.cpp"), path.join(native, "test/runtime-status.cpp"), path.join(native, "test/fixture-assert.cpp"), "-o", binary], {stdio: "pipe"});
+  // A native compile can outlast the observation lease during the full suite.
+  assert.equal(Status.prime(f.selected.binding, f.options), true);
   execFileSync(binary, [f.revision, f.digest], {env: {...process.env, ...f.selected.environment}, stdio: "pipe", timeout: 5000});
   execFileSync(binary, [], {stdio: "pipe", timeout: 5000});
   const actual = Status.read(f.entry, f.options), row = actual.contexts[0];

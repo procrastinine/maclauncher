@@ -608,4 +608,4 @@ function createExternalStoreDownloads(options = {}) {
   return { snapshot, connect, submitAuth, loadLibrary, getVersions, download, cancel, markImported, disconnect, dispose };
 }
 
-module.exports = { createExternalStoreDownloads, ensureLegendary, normalizeEpicLibrary, normalizeGogVersions, codeFromInput, findSession, launch, AUTH_URLS, LEGENDARY };
+module.exports = { createExternalStoreDownloads, ensureLegendary, installedLegendary, normalizeEpicLibrary, normalizeGogVersions, codeFromInput, findSession, launch, AUTH_URLS, LEGENDARY };

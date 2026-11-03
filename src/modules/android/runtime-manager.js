@@ -9,7 +9,7 @@ function createManager(dependencies = {}) {
           !manifest.profile.id || manifest.profile.nativeLoadTarget !== "maclauncher.android.bridge.GuestNativeLoader")
         throw new Error("The selected Android runtime profile is unsupported.");
     },
-    verifyPayload: (selected, options) => require("./runtime-verifier").verifyPayload(selected.root, selected.declaration, options), dependencies });
+    verifyPayload: (selected, options) => require("./runtime-verifier").verifyPayload(selected.root, selected.declaration, { ...options, resolveDependency: selected.resolveDependency }), dependencies });
 }
 module.exports = createManager();
 module.exports.createManager = createManager;

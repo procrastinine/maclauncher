@@ -114,7 +114,8 @@ test("Steam API lookup enforces interface, architecture, manifest and full paylo
   const catalog = [{ version: Overlay.VERSION, minimumMacOS: "13.0", sourceRevision: Overlay.SOURCE_REVISION, architectures: ["x86_64"], qualifiedInterfaces: interfaces,
     librarySha256: library.sha256, manifestSha256: crypto.createHash("sha256").update(content).digest("hex") }];
   const declarations = [{ id: "steam-api-helper", version: Overlay.VERSION, arch: "x64", minimumMacOS: "13.0", launcherArchitectures: [process.arch],
-    directoryRelative: `steam-api-helper/${Overlay.VERSION}/x64`, manifestRelative: "helper.json", manifestSha256: catalog[0].manifestSha256 }];
+    directoryRelative: `steam-api-helper/${Overlay.VERSION}/x64`, manifestRelative: "helper.json", manifestSha256: catalog[0].manifestSha256,
+    files: [...manifest.files, { path: "helper.json", size: Buffer.byteLength(content), mode: 0o644, sha256: catalog[0].manifestSha256 }] }];
   const options = { resourcesRoot: root, architecture: "x86_64", interfaces, catalog, declarations };
   assert.equal(Steam.resolveBundledLibrary(options).ready, true);
   assert.equal(Steam.resolveBundledLibrary({ ...options, architecture: "arm64" }).ready, false);
@@ -147,6 +148,7 @@ test("source-package revisions preserve native ABI identity and never fall back 
     fs.writeFileSync(path.join(directory, "helper.json"), content, { mode: 0o644 });
     pin.manifestSha256 = crypto.createHash("sha256").update(content).digest("hex");
     declarations[0].manifestSha256 = pin.manifestSha256;
+    declarations[0].files = [...manifest.files, { path: "helper.json", size: Buffer.byteLength(content), mode: 0o644, sha256: pin.manifestSha256 }];
   };
   publishManifest();
   const options = { resourcesRoot: root, architecture: "x86_64", interfaces, catalog: [pin], declarations };
