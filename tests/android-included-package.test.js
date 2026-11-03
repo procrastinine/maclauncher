@@ -11,7 +11,7 @@ const RuntimePackages = require("../scripts/runtime-packages.cjs");
 
 test("the Android included package installs offline, loads physical interfaces and rejects corruption", async t => {
   if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
-  const pin = require("../src/modules/android/distribution-included.json").find(item => item.id === "android-launcher");
+  const pin = require("../src/modules/shared/runtime/included-package-metadata").declarations(require("../src/modules/android/distribution-included.json")).find(item => item.id === "android-launcher");
   assert.ok(pin);
   const archive = path.resolve(__dirname, "../build/included-helper-packages", `${pin.id}-${pin.version}-${pin.arch}.tar.gz`);
   if (!fs.existsSync(archive)) return t.skip("Requires the locally prepared Android included package archive");

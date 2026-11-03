@@ -57,7 +57,7 @@ test('graphics isolation cancellation during an awaited grant cannot become orig
 
 test('included graphics core is locally available with a declared native dependency closure', () => {
   const ReShade = require('../src/modules/shared/reshade'), root = ReShade.runtimeRoot();
-  const manifest = require('../src/modules/shared/reshade/distribution-supplementals.json')[0];
+  const manifest = require("../src/modules/shared/runtime/included-package-metadata").declarations(require('../src/modules/shared/reshade/distribution-supplementals.json'))[0];
   assert.equal(manifest.id,'reshade');
   for (const name of ['libreshade-macos.dylib','libvkd3d-shader.dylib']) {
     const row = manifest.files.find(file => file.path===name);assert.ok(row,name);

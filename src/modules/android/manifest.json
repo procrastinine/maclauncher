@@ -428,19 +428,9 @@
         "hostFeature": "APPLE_SILICON",
         "groupId": "maclauncher-android",
         "tabLabel": "MacLauncher Android",
-        "sectionLabel": "JVM",
+        "sectionLabel": "JVM and ART",
         "order": 123,
         "memberOrder": 0,
-        "management": "managed",
-        "category": "platforms"
-      },
-      "android-art": {
-        "hostFeature": "APPLE_SILICON",
-        "groupId": "maclauncher-android",
-        "tabLabel": "MacLauncher Android",
-        "sectionLabel": "ART",
-        "order": 123,
-        "memberOrder": 1,
         "management": "managed",
         "category": "platforms"
       },

@@ -34,7 +34,7 @@ test("Steam API overlay changes only an owned export and records exact input/out
   const root = ownedExport(context);
   const before = Object.keys(Overlay.ORIGINAL_SHA256).map(file => fs.readFileSync(path.join(source, file)));
   const result = Overlay.applySourceOverlay(root);
-  assert.equal(result.version, "goldberg-mac-1.0.0-ml1-universal");
+  assert.equal(result.version, require("../src/modules/shared/runtime/included-package-metadata").version("steam-api-helper"));
   for (const [index, file] of result.files.entries()) {
     assert.deepEqual(fs.readFileSync(path.join(source, file.path)), before[index], "upstream must remain unchanged");
     assert.equal(file.beforeSha256, crypto.createHash("sha256").update(before[index]).digest("hex"));

@@ -1,6 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import crypto from 'node:crypto';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
 const Source=require('../runtime-source');
@@ -14,16 +11,5 @@ const metadata={fileInventory:Bundled.fileInventory,readMachOLoadCommands:MachO.
 
 /** Preserve the launcher producer entry while runtime assembly has one owner. */
 export function packageArtAdapter(options){
- let {commonDeclaration}=options;
- if(!commonDeclaration){
-  const manifestFile=path.join(options.commonRoot,'runtime.json');
-  const bytes=fs.readFileSync(manifestFile),manifest=JSON.parse(bytes);
-  if(!manifest.notices?.length){
-   const identity=crypto.createHash('sha256').update(bytes).digest('hex');
-   const declarations=require('../managed-packages.json');
-   commonDeclaration=declarations.find(row=>row.id==='android'&&row.manifestRelative==='runtime.json'&&row.manifestSha256===identity);
-   if(!commonDeclaration)throw Error('Android ART packaging requires the matching common runtime declaration.');
-  }
- }
- return packageRuntime({...options,commonDeclaration},metadata);
+ return packageRuntime(options,metadata);
 }

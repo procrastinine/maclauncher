@@ -1,7 +1,7 @@
 const path = require("node:path");
 const Bundle = require("../bundled-native");
 const Included = require("../included-helpers");
-const declarations = require("../distribution-supplementals.json");
+const declarations = require("../included-package-metadata").declarations(require("../distribution-supplementals.json"));
 const Native = require("../local-native");
 const Source = require("./source-identity");
 
@@ -10,7 +10,7 @@ const FILENAME = "libsdkencryptedappticket.dylib";
 
 /** Included loader for unavailable encrypted-ticket operations; never a decryptor. */
 function resolveBundledTicket({ resourcesRoot, architecture, version, catalog, declarations: includedDeclarations = declarations } = {}) {
-  const pins = catalog || require("./ticket-versions.json");
+  const pins = catalog || require("../included-package-metadata").resolve(require("./ticket-versions.json"));
   if (!Array.isArray(pins) || !pins.length) return { ready: false, reason: "This app does not include an encrypted-ticket loader." };
   if (!["arm64", "x86_64"].includes(architecture)) return { ready: false, reason: "The encrypted-ticket loader CPU is unknown." };
   const pin = pins.find(value => value.id === ID && value.schemaVersion === 1 &&

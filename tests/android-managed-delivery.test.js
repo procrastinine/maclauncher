@@ -1,20 +1,16 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 
-test('Android managed families never resolve missing primary or retained payloads as installed', {skip: process.arch !== 'arm64'}, async t => {
+test('Android managed families discover only their current project catalogs', {skip: process.arch !== 'arm64'}, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'android-managed-delivery-'));
   t.after(() => fs.rmSync(root, {recursive:true, force:true}));
   const families = [
-    ['android', 'klepton', require('../src/modules/android/runtime-manager').createManager, '../src/modules/android/retained-versions.json'],
-    ['android-art', 'android-art', require('../src/modules/android/art/runtime-manager').createLegacyManager, '../src/modules/android/art/retained-versions.json'],
-    ['android-aim', 'aim', require('../src/modules/android/providers/aim/manager').createManager, '../src/modules/android/providers/aim/retained-versions.json']
+    ['android', 'klepton', require('../src/modules/android/runtime-manager').createManager],
+    ['android-aim', 'aim', require('../src/modules/android/providers/aim/manager').createManager]
   ];
   const requests = [], managers = [];
-  for (const [id, runtimeId, create, metadata] of families) {
-    const legacy = JSON.parse(fs.readFileSync(path.resolve(__dirname,metadata))).packages[0];
-    assert.ok(legacy);
-    // Retained metadata and a leftover directory do not supply a runtime.
-    fs.mkdirSync(path.join(root,legacy.directoryRelative), {recursive:true});
+  for (const [id, runtimeId, create] of families) {
+    const version = '99.0.0-fixture';
     const manager = create({systemVersionSync:()=> '26.0', fetchUrlBuffer: async url=> {requests.push(url); return {status:404,body:Buffer.alloc(0)};}});
     const userDataDir = path.join(root,'profiles',id), options = {nativeResourceRoot:root};
     const state = manager.getState({userDataDir,...options});
@@ -30,18 +26,18 @@ test('Android managed families never resolve missing primary or retained payload
     assert.equal(fallback.ready,false);
     assert.equal(fallback.install,null);
     // A saved explicit choice remains exact even while its package is missing.
-    const defaulted = manager.resolveSelection(null,{runtimes:{[id]:{defaultVersion:legacy.version}}},userDataDir,options);
-    assert.equal(defaulted.version, legacy.version);
+    const defaulted = manager.resolveSelection(null,{runtimes:{[id]:{defaultVersion:version}}},userDataDir,options);
+    assert.equal(defaulted.version, version);
     for (const selected of [
-      manager.resolveSelection(null,{},userDataDir,{...options,version:legacy.version}),
-      manager.resolveSelection({runtimeData:{[runtimeId]:{version:legacy.version}}},{},userDataDir,options),
+      manager.resolveSelection(null,{},userDataDir,{...options,version:version}),
+      manager.resolveSelection({runtimeData:{[runtimeId]:{version:version}}},{},userDataDir,options),
       ...(state.supportsDefault ? [defaulted] : [])
     ]) {
-      assert.equal(selected.version,legacy.version);
+      assert.equal(selected.version,version);
       assert.equal(selected.ready,false);
       assert.equal(selected.install ?? null,null);
     }
-    managers.push({manager,userDataDir,options,version:legacy.version,id});
+    managers.push({manager,userDataDir,options,version:version,id});
   }
   assert.equal(requests.length,0,'Missing payloads and status never fetch, install or substitute a version');
   for (const {manager,userDataDir,options,version,id} of managers) {
@@ -49,14 +45,5 @@ test('Android managed families never resolve missing primary or retained payload
     assert.equal(requests.at(-1),`https://raw.githubusercontent.com/procrastinine/maclauncher-builds/main/catalogs/${id}.json`);
     assert.equal(manager.resolveSelection(null,{},userDataDir,{...options,version}).version,version);
   }
-  assert.equal(requests.length,3,'Explicit installation discovers only the selected project catalog');
-});
-
-test('empty ART prerequisite requests discovery while explicit versions stay exact', t => {
-  const art = require('../src/modules/android/art/runtime-manager');
-  let version = null;
-  t.mock.method(art.manager, 'resolveSelection', () => ({ready:false,version}));
-  assert.equal(art.requirements({},{} )[0].version,null);
-  version = 'missing-4.0';
-  assert.equal(art.requirements({},{} )[0].version,'missing-4.0');
+  assert.equal(requests.length,2,'Explicit installation discovers only the selected project catalog');
 });

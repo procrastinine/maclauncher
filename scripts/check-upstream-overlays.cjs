@@ -106,6 +106,9 @@ function sourceRef(root, ref) {
     return ref.value;
   }
   value = ref.kind === "json" ? JSON.parse(fs.readFileSync(file, "utf8")) : require(file);
+  if (ref.array !== undefined) {
+    for (const key of ref.array.split(".")) value = value?.[key];
+  }
   if (ref.select !== undefined) {
     if (!Array.isArray(value) || !ref.select || typeof ref.select !== "object" || Array.isArray(ref.select))
       throw Error(`Pin selection requires a JSON array and explicit record fields: ${ref.path}.`);
@@ -145,7 +148,9 @@ function validateInventory(inventory) {
       recipe.revision || recipe.sourceScopes || recipe.sourceSubdirectory || recipe.reviewedOriginalFiles || recipe.reviewedAdaptedFiles))
       throw Error("An owned native helper requires exact owned/version evidence and cannot declare upstream Git operations.");
     recipes.add(recipe.id);
-    if (recipe.version !== undefined && (typeof recipe.version !== "string" || !recipe.version)) throw Error("An adaptation version must be an explicit string.");
+    if (recipe.version !== undefined && !(typeof recipe.version === "string" && recipe.version ||
+        recipe.version?.kind === "json" && typeof recipe.version.path === "string" && typeof recipe.version.property === "string"))
+      throw Error("An adaptation version must be an explicit string or JSON reference.");
     for (const ref of recipe.versionRefs || []) if (ref.expectedVersion !== undefined &&
       (typeof ref.expectedVersion !== "string" || !ref.expectedVersion.trim()))
       throw Error("A version reference expectedVersion must be a nonempty explicit string.");
@@ -294,7 +299,11 @@ async function checkInventory({ root = ROOT, inventory = JSON.parse(fs.readFileS
       if (!fs.existsSync(path.join(root, ref.path)) && optionalEvidence(ref.path, { recipe: recipe.id })) continue;
       // A source/API version and its packaged revision can differ. Each
       // explicitly declared package version still requires exact equality.
-      try { if (sourceRef(root, ref) !== (ref.expectedVersion === undefined ? recipe.version : ref.expectedVersion)) errors.push({ code: "adaptation-version-drift", recipe: recipe.id, path: ref.path }); }
+      try {
+        const version = typeof recipe.version === "object" ? sourceRef(root, recipe.version) : recipe.version;
+        if (sourceRef(root, ref) !== (ref.expectedVersion === undefined ? version : ref.expectedVersion))
+          errors.push({ code: "adaptation-version-drift", recipe: recipe.id, path: ref.path });
+      }
       catch (error) { errors.push({ code: "version-evidence-invalid", recipe: recipe.id, message: error.message }); }
     }
     for (const ref of recipe.pinRefs || []) {

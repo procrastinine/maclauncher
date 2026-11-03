@@ -176,7 +176,6 @@ test('pure Builds managers request discovery without a package choice while cold
   const dependencies = { fetchUrlBuffer: async () => { calls.push('network'); assert.fail('Local state and selection cannot discover packages'); }, systemVersionSync: () => '26.0' };
   const managers = [
     [require('../src/modules/android/runtime-manager').createManager(dependencies), '0.1.0'],
-    [require('../src/modules/android/art/runtime-manager').createLegacyManager(dependencies), '0.1.0'],
     [require('../src/modules/android/providers/aim/manager').createManager(dependencies), '99.0.0-fixture'],
     [require('../src/modules/flash/runtime/projector-manager').__test.createManager({ dependencies }), '35.0.0.60-MCLv1'],
     [require('../src/modules/shared/vulkan/managed').createManager(dependencies), 'MCLv1-1024']

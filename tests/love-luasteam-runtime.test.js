@@ -52,7 +52,7 @@ function zip(entries) {
 }
 function bundleFixture(t, root) {
   const original = { ...Bridge.Catalog[0] }, pin = Bridge.Catalog[0]; t.after(() => Object.assign(pin, original));
-  const declaration = require("../src/modules/love/runtime/distribution-supplementals.json").find(item => item.version === pin.version);
+  const declaration = require("../src/modules/shared/runtime/included-package-metadata").declarations(require("../src/modules/love/runtime/distribution-supplementals.json")).find(item => item.version === pin.version);
   const originalDeclaration = { ...declaration }; t.after(() => Object.assign(declaration, originalDeclaration));
   const bytes = Buffer.alloc(8192 + 32); bytes.writeUInt32BE(0xcafebabe); bytes.writeUInt32BE(2, 4);
   for (const [index, cpu, offset] of [[0, 0x0100000c, 4096], [1, 0x01000007, 8192]]) {

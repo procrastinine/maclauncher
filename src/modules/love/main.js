@@ -466,7 +466,7 @@ module.exports = {
   id: manifest.id,
   manifest,
   runtimeManagers: [LoveRuntimeManager, LjdManager, UnluacManager],
-  distributionSupplementals: require("./runtime/distribution-supplementals.json"),
+  distributionSupplementals: require("../shared/runtime/included-package-metadata").declarations(require("./runtime/distribution-supplementals.json")),
   nativeHostDependencies: LuaSteam.nativeHostDependencies,
   detectGame,
   normalizeRuntimeId,

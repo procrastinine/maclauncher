@@ -154,7 +154,7 @@ test("Java JNI layout shares one native bridge, isolates game paths and verifies
 
 test("Java selects the successor helper profile while retaining the exact JNI bridge ABI", async t => {
   const source = fixture(t, { appId: 480 }), resourcesRoot = path.join(source.root, "resources"), pin = { ...source.pin };
-  const declaration = require("../src/modules/java/runtime/steamworks/distribution-supplementals.json").find(item => item.version === pin.bridgeVersion);
+  const declaration = require("../src/modules/shared/runtime/included-package-metadata").declarations(require("../src/modules/java/runtime/steamworks/distribution-supplementals.json")).find(item => item.version === pin.bridgeVersion);
   const originalDeclaration = { ...declaration }; t.after(() => Object.assign(declaration, originalDeclaration));
   const directory = path.join(resourcesRoot, "native-runtimes/java-steamworks", pin.bridgeVersion, "x64");
   fs.mkdirSync(directory, { recursive: true });

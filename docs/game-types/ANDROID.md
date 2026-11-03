@@ -184,8 +184,7 @@ describes its components in detail.
 
 MacLauncher Builds publishes one Android package containing the JVM and ART
 engines, separately from the app. Both engines use the same installed package
-and shared native dependencies. Existing separate ART installations and saved
-version choices remain available offline and can be removed in Runtimes.
+and shared native dependencies, with one version selection in Runtimes.
 [Version selection](../runtimes/README.md#versions) and
 [downloads](../runtimes/README.md#downloads-and-offline-use) work as for other
 runtimes.

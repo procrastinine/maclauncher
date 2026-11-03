@@ -587,7 +587,7 @@ module.exports = {
   resolveGameIcon,
   normalizeRuntimeId,
   runtimeManagers: [JavaRuntimeManager],
-  distributionSupplementals: require("./runtime/steamworks/distribution-supplementals.json"),
+  distributionSupplementals: require("../shared/runtime/included-package-metadata").declarations(require("./runtime/steamworks/distribution-supplementals.json")),
   nativeHostDependencies: JavaSteam.nativeHostDependencies,
   onImport: entry => { JavaSteamConsumer.inspect(entry); },
   getRuntimeRequirements: (entry, context) => {

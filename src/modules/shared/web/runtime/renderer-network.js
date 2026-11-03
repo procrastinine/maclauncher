@@ -7,7 +7,7 @@ const Included = require("../../runtime/included-helpers");
 const Isolation = require("../../runtime/network-isolation");
 const run = promisify(execFile);
 const ID = "web-renderer-network";
-const declarations = () => require("../distribution-supplementals.json");
+const declarations = () => require("../../runtime/included-package-metadata").declarations(require("../distribution-supplementals.json"));
 
 // The trusted browser broker stays outside this profile: Chromium applies its
 // own GPU/network-service profiles. Publisher Node code executes in a renderer

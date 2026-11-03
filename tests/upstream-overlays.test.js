@@ -228,6 +228,20 @@ test("offline audit checks adaptation versions and source archive pins independe
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(current.root, "scripts/profile.json"))), pins);
 });
 
+test("source recipes derive the package version from the selected app lock record", async t => {
+  const current = fixture(t), recipe = current.inventory.recipes[0];
+  const ref = { kind: "json", path: "build/runtime-packages.json", array: "packages",
+    select: { id: "helper", arch: "universal" }, property: "version" };
+  write(current.root, ref.path, JSON.stringify({ packages: [{ id: "helper", arch: "universal", version: "next-release" }] }));
+  write(current.root, "scripts/source-version.json", JSON.stringify({ version: "next-release" }));
+  recipe.version = ref;
+  recipe.versionRefs = [{ kind: "json", path: "scripts/source-version.json", property: "version" }];
+  assert.equal(Check.sourceRef(current.root, ref), "next-release");
+  assert.equal((await Check.checkInventory(current)).passed, true);
+  write(current.root, ref.path, JSON.stringify({ packages: [{ id: "helper", arch: "universal", version: "new-release" }] }));
+  assert.ok((await Check.checkInventory(current)).errors.some(issue => issue.code === "adaptation-version-drift"));
+});
+
 test("explicit package revisions stay exact without changing the source adaptation version", async t => {
   const current = fixture(t), recipe = current.inventory.recipes[0];
   recipe.version = "0.5.0";
@@ -417,7 +431,7 @@ test("checked-in inventory covers every top-level Git source and owned overlay",
   for (const source of await Check.submodules(Check.ROOT)) assert.ok(projects.has(source.path), source.path);
   const declared = new Set(inventory.recipes.flatMap(recipe => recipe.ownedFiles.map(file => file.path)));
   for (const file of Check.ownedAdaptationFiles(Check.ROOT, projects)) assert.ok(declared.has(file), file);
-  for (const id of ["reshade-sweetfx", "reshade-retroarch", "mkxp-z"]) {
+  for (const id of ["reshade-sweetfx", "reshade-retroarch"]) {
     const project = inventory.projects.find(project => project.id === id);
     assert.ok(project, id);
     assert.equal(project.path, undefined, id + " uses copied source or an exact source archive");

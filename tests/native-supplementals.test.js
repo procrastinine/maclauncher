@@ -20,7 +20,7 @@ test('registered supplemental declarations have pure module exports and complete
   const exported = Modules.listModules().flatMap(info => Modules.getModule(info.id)?.distributionSupplementals || []);
   for (const submodule of Modules.listSharedSubmodules()) {
     const declaration = path.join(submodule.dir, 'distribution-supplementals.json');
-    if (fs.existsSync(declaration)) exported.push(...JSON.parse(fs.readFileSync(declaration, 'utf8')));
+    if (fs.existsSync(declaration)) exported.push(...require('../src/modules/shared/runtime/included-package-metadata').declarations(JSON.parse(fs.readFileSync(declaration, 'utf8'))));
   }
   assert.deepEqual(declarations, exported);
   assert.ok(declarations.length);

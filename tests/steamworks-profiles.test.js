@@ -1,11 +1,11 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { resolveProfile, selectProfile, normalizeProfileSelection } = require('../src/modules/shared/runtime/steamworks/profiles');
-const catalog = require('../src/modules/shared/runtime/steamworks/profiles.json');
-const pins = require('../src/modules/shared/runtime/steamworks/versions.json');
+const catalog = require("../src/modules/shared/runtime/included-package-metadata").resolve(require('../src/modules/shared/runtime/steamworks/profiles.json'));
+const pins = require("../src/modules/shared/runtime/included-package-metadata").resolve(require('../src/modules/shared/runtime/steamworks/versions.json'));
 const pinForProfile = id => pins.find(pin => pin.version === catalog.find(profile =>
   profile.id === normalizeProfileSelection({ abiProfile: id }).abiProfile)?.helperVersion);
-const java = require('../src/modules/java/runtime/steamworks/versions.json');
+const java = require("../src/modules/shared/runtime/included-package-metadata").resolve(require('../src/modules/java/runtime/steamworks/versions.json'));
 const greenworks = require('../src/modules/shared/web/runtime/greenworks-contracts.json');
 const sdk = require('../src/modules/shared/web/runtime/greenworks-sdk').PIN;
 
@@ -79,7 +79,7 @@ test('Greenworks offline qualification retains its exact bridge, host, ticket an
   assert.equal(successor.helperVersion, selectProfile({ id: contract.helperAbiProfile, architecture: 'arm64' }).pin.version);
   assert.equal(successor.bridgeLibrarySha256, profile.bridgeLibrarySha256);
   assert.equal(successor.bridgeJavascriptSha256, profile.bridgeJavascriptSha256);
-  const ticket = require('../src/modules/shared/runtime/steamworks/ticket-versions.json')
+  const ticket = require("../src/modules/shared/runtime/included-package-metadata").resolve(require('../src/modules/shared/runtime/steamworks/ticket-versions.json'))
     .find(pin => pin.version === successor.encryptedTicketVersion);
   assert.ok(ticket);
   assert.equal(successor.encryptedTicketLibrarySha256, ticket.librarySha256);

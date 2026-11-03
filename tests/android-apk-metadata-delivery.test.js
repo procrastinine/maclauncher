@@ -7,7 +7,7 @@ const Reader = require("../src/modules/android/tools/apk-metadata");
 test("Included APK reader works from packaged resources and rejects changed helper bytes", async t => {
   if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
   if (process.platform !== "darwin") return t.skip("Requires macOS native APK resource decoding");
-  const pin = require("../src/modules/android/distribution-included.json").find(item => item.id === "android-apk-metadata");
+  const pin = require("../src/modules/shared/runtime/included-package-metadata").declarations(require("../src/modules/android/distribution-included.json")).find(item => item.id === "android-apk-metadata");
   if (!pin) return t.skip("Requires the included APK reader payload");
   const original = Reader.resolve();
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-apk-delivery-"));

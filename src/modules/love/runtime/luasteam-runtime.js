@@ -3,11 +3,11 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const Bundle = require("../../shared/runtime/bundled-native");
 const Included = require("../../shared/runtime/included-helpers");
-const declarations = require("./distribution-supplementals.json");
+const declarations = require("../../shared/runtime/included-package-metadata").declarations(require("./distribution-supplementals.json"));
 const Native = require("../../shared/runtime/local-native");
 const GameData = require("../../shared/game-data");
 const Consumer = require("./luasteam-consumer");
-const Catalog = require("./luasteam-versions.json");
+const Catalog = require("../../shared/runtime/included-package-metadata").resolve(require("./luasteam-versions.json"));
 const Custom = require("../../shared/runtime/custom-runtime");
 
 const SECTION_ID = "luasteam";

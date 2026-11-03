@@ -4,9 +4,9 @@ const{spawnSync}=require('./helpers/android-java');
 test('ART inherited constructor resolution uses the existing forwarding planner',async t=>{
  const source=process.env.DEX2JVM_SOURCE;
  if(!source)return t.skip('Requires DEX2JVM_SOURCE with the pinned converter sources');
- const runtime=process.env.KLEPTON_NATIVE_RUNTIME||require('../src/modules/android/runtime').runtimeRoot();
+ const runtime=require('./helpers/android-java').runtimeRoot();
  const home=process.env.JAVA_HOME||(process.platform==='darwin'?spawnSync('/usr/libexec/java_home',['-v','21'],{encoding:'utf8'}).stdout.trim():'');
- if(!home||!fs.existsSync(path.join(runtime,'dex2jvm.jar'))||!fs.existsSync(source+'/src/main/java/io/github/kksimp/dex2jvm/InitRepointPlan.java'))return t.skip('Requires Java 21 and DEX2JVM_SOURCE with the pinned converter sources');
+ if(!home||!runtime||!fs.existsSync(path.join(runtime,'dex2jvm.jar'))||!fs.existsSync(source+'/src/main/java/io/github/kksimp/dex2jvm/InitRepointPlan.java'))return t.skip('Requires Java 21 and DEX2JVM_SOURCE with the pinned converter sources');
  const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-constructor-resolution-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
  const run=(tool,args)=>{const r=spawnSync(path.join(home,'bin',tool),args,{encoding:'utf8',timeout:30000});assert.ifError(r.error);assert.equal(r.status,0,r.stdout+r.stderr);return r.stdout;};
  const{adaptInitRepointPlan}=await import('../src/modules/android/native/converter-source.mjs');

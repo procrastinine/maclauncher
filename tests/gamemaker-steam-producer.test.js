@@ -7,8 +7,8 @@ const GameMaker = require("../src/modules/gamemaker/runtime/steam-api");
 const Steam = require("../src/modules/shared/runtime/steamworks");
 const Native = require("../src/modules/shared/runtime/local-native");
 const Probe = require("../src/modules/shared/runtime/steamworks/native-consumer-probe");
-const Catalog = require("../src/modules/shared/runtime/steamworks/versions.json");
-const Profiles = require("../src/modules/shared/runtime/steamworks/profiles.json");
+const Catalog = require("../src/modules/shared/runtime/included-package-metadata").resolve(require("../src/modules/shared/runtime/steamworks/versions.json"));
+const Profiles = require("../src/modules/shared/runtime/included-package-metadata").resolve(require("../src/modules/shared/runtime/steamworks/profiles.json"));
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "gamemaker-steam-producer-"));

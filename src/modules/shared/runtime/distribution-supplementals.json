@@ -1,7 +1,6 @@
 [
   {
     "id": "steam-api-helper",
-    "version": "0.5.2",
     "arch": "universal",
     "launcherArchitectures": [
       "arm64",
@@ -10,7 +9,6 @@
     "minimumMacOS": "13.0",
     "sourceRelative": null,
     "sourceSha256": "40597e2596bf3df91e7a8d1be6939f75d2d427bbeb91d0ac2316420c1c0cb23e",
-    "directoryRelative": "steam-api-helper/0.5.2/universal",
     "manifestRelative": "helper.json",
     "manifestSha256": "98dfa9f48c6ccf0efa14deb3080abb47e255b83bb109326faa19f3bec2d46ade",
     "files": [
@@ -59,7 +57,6 @@
   },
   {
     "id": "steam-ticket-loader",
-    "version": "0.1.2",
     "arch": "universal",
     "launcherArchitectures": [
       "arm64",
@@ -68,7 +65,6 @@
     "minimumMacOS": "13.0",
     "sourceRelative": null,
     "sourceSha256": "5b5604323f8d6a016efb50056403fe504271ddbd70ba738b268eb3b4dc223f00",
-    "directoryRelative": "steam-ticket-loader/0.1.2/universal",
     "manifestRelative": "helper.json",
     "manifestSha256": "7b0acef06b820d19d188471b99a52f28e4d76e4cdbf6d4b9b062cfeef1b2a3bc",
     "files": [

@@ -78,7 +78,7 @@ test("packaged commands run the archived Node entry point through the included e
   fs.mkdirSync(path.dirname(python), { recursive: true });
   fs.writeFileSync(python, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
   const graphicsRoot = path.join(resources, "native-runtimes",
-    require("../src/modules/shared/reshade/distribution-supplementals.json")[0].directoryRelative);
+    require("../src/modules/shared/runtime/included-package-metadata").declarations(require("../src/modules/shared/reshade/distribution-supplementals.json"))[0].directoryRelative);
   fs.mkdirSync(graphicsRoot, { recursive: true });
   fs.writeFileSync(path.join(graphicsRoot, "runtime.json"), "{}");
   const capture = path.join(root, "captured.json");

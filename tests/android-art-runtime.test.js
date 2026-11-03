@@ -7,15 +7,13 @@ const componentNames=Object.keys(require('../src/modules/android/art/components.
 test('actual ART native host binds the selected runner identity API before guest execution',{timeout:15000},t=>{
  if(process.platform!=='darwin'||process.arch!=='arm64')return t.skip('Requires the native Apple Silicon ART supplier');
  const {spawnSync}=require('node:child_process');
- const declarations=require('../src/modules/android/managed-packages.json');
- const payloadRoot=path.resolve(__dirname,'../src/resources/native-runtimes');
- const art=declarations.find(row=>row.id==='android-art'&&row.arch==='arm64'),common=declarations.find(row=>row.id==='android'&&row.arch==='arm64');
- const supplierRoot=art&&path.join(payloadRoot,art.directoryRelative,'art');
+ const commonRoot=require('./helpers/android-java').runtimeRoot();
+ const supplierRoot=commonRoot&&path.join(commonRoot,'art');
  const runner=process.env.ANDROID_ART_LINUX_RUN||(supplierRoot&&path.join(supplierRoot,'host/linux-run'));
  const host=process.env.ANDROID_ART_HOST_LIBRARY||(supplierRoot&&path.join(supplierRoot,'host/libandroid-art-host.dylib'));
  if(!runner||!host||!fs.existsSync(runner)||!fs.existsSync(host))return t.skip('Requires the installed ART runner and production host library');
  const root=fixture(t),identity=path.join(root,'identity');fs.mkdirSync(identity,{mode:0o700});
- const frameworkPath=common&&path.join(payloadRoot,common.directoryRelative,'native');
+ const frameworkPath=commonRoot&&path.join(commonRoot,'native');
  const result=spawnSync(runner,['--host-module',host,'--root',root,'--no-cache','/__art_host_binding_missing__'],{
   encoding:'utf8',timeout:10000,maxBuffer:64*1024,env:{...process.env,KL_ANDROID_ID_DIRECTORY:identity,...(frameworkPath?{DYLD_FRAMEWORK_PATH:frameworkPath}:{})}
  });

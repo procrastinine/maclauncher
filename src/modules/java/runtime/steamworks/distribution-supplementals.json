@@ -1,7 +1,6 @@
 [
   {
     "id": "java-steamworks",
-    "version": "1.10.0-MCLv3",
     "arch": "universal",
     "minimumMacOS": "11.0",
     "launcherArchitectures": [
@@ -10,7 +9,6 @@
     ],
     "sourceRelative": null,
     "sourceSha256": "b92ea7eac757c843c358fd2de0103a0851d94f4f5a748dd0f56e7979f9daf141",
-    "directoryRelative": "java-steamworks/1.10.0-MCLv3/universal",
     "manifestRelative": "helper.json",
     "manifestSha256": "267a2fa472c73d140133bfefcd962bafd6a79912acb11b95bcf5d1d4e8a5bcf2",
     "files": [
@@ -77,7 +75,6 @@
   },
   {
     "id": "java-steamworks",
-    "version": "1.9.0-MCLv3",
     "arch": "x64",
     "minimumMacOS": "10.9",
     "launcherArchitectures": [
@@ -86,7 +83,6 @@
     ],
     "sourceRelative": null,
     "sourceSha256": "b92ea7eac757c843c358fd2de0103a0851d94f4f5a748dd0f56e7979f9daf141",
-    "directoryRelative": "java-steamworks/1.9.0-MCLv3/x64",
     "manifestRelative": "helper.json",
     "manifestSha256": "1961dd8cf83b7f1da4e556b0dcbde1b3b2a2889918b850a4de970bdae0c6741d",
     "files": [

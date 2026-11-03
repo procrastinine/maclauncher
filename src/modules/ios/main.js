@@ -19,7 +19,7 @@ function source(entry) {
   if (typeof entry.gamePath !== "string" || !path.isAbsolute(entry.gamePath) || !/\.ipa$/i.test(entry.gamePath)) throw new Error("IPA file is missing.");
   return entry.gamePath;
 }
-module.exports = { metadataSources: ["icon.js", "archive.js", "inspect.js", "macho.js", "../shared/runtime/zip.js"], resolveGameIcon: require("./icon").resolveGameIcon, id: manifest.id, manifest, distributionSupplementals: require("./distribution-supplementals.json"), detectGame, runtimeManagers: [manager], normalizeRuntimeId: () => "playcover",
+module.exports = { metadataSources: ["icon.js", "archive.js", "inspect.js", "macho.js", "../shared/runtime/zip.js"], resolveGameIcon: require("./icon").resolveGameIcon, id: manifest.id, manifest, distributionSupplementals: require("../shared/runtime/included-package-metadata").declarations(require("./distribution-supplementals.json")), detectGame, runtimeManagers: [manager], normalizeRuntimeId: () => "playcover",
   ensureRuntime: (entry, context) => {
     if (entry.moduleData?.encrypted) throw new Error("Encrypted IPAs cannot run through PlayCover. Import an unencrypted application.");
     const selection = manager.resolveSelection(entry, context.settings, context.userDataDir);

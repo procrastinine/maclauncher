@@ -1,7 +1,6 @@
 [
   {
     "id": "web-renderer-network",
-    "version": "1.1.1",
     "arch": "arm64",
     "launcherArchitectures": [
       "arm64"
@@ -9,7 +8,6 @@
     "minimumMacOS": "11.0",
     "sourceRelative": null,
     "sourceSha256": "9d1a5fb91b8ea207ec117aaabb62a1b7925637cec958bd0b443b03f9eaa0631c",
-    "directoryRelative": "web-renderer-network/1.1.1/arm64",
     "manifestRelative": "helper.json",
     "manifestSha256": "bda6a49eee8f49cab42480df97bf06eab80a25676de73dcd57fda4b1ce090227",
     "files": [
@@ -57,7 +55,6 @@
   },
   {
     "id": "web-renderer-network",
-    "version": "1.1.1",
     "arch": "x64",
     "launcherArchitectures": [
       "x64"
@@ -65,7 +62,6 @@
     "minimumMacOS": "11.0",
     "sourceRelative": null,
     "sourceSha256": "9d1a5fb91b8ea207ec117aaabb62a1b7925637cec958bd0b443b03f9eaa0631c",
-    "directoryRelative": "web-renderer-network/1.1.1/x64",
     "manifestRelative": "helper.json",
     "manifestSha256": "5355cb902e6b5ecf28144bee4dbf52c869e11515378e71ec1af4bda2c33fc79d",
     "files": [

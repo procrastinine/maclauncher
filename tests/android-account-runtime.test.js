@@ -2,28 +2,6 @@ const test = require('node:test'), assert = require('node:assert/strict');
 const { resolveForAccounts } = require('../src/modules/android/account-runtime');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 
-test('an Android build without included metadata remains manageable and offline', t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'account-optional-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const declarationFile = path.resolve(__dirname, '../src/modules/android/managed-packages.json');
-  const read = fs.readFileSync;
-  t.mock.method(fs, 'readFileSync', function(file, ...args) {
-    return path.resolve(String(file)) === declarationFile ? '[]' : read.call(this, file, ...args);
-  });
-  const Runtime = require('../src/modules/android/runtime');
-  assert.equal(Runtime.readDeclaration({ optional: true }), null);
-  assert.throws(() => Runtime.readDeclaration(), /metadata is missing/);
-  const manager = require('../src/modules/android/runtime-manager').createManager();
-  const selection = manager.resolveSelection(null, {}, root);
-  assert.equal(selection.ready, false);
-  // Discovery requires consent; a missing catalog never selects a package version.
-  assert.equal(selection.version, null);
-  assert.equal(selection.selectionRequired, undefined);
-  assert.equal(selection.discoveryRequired, true);
-  assert.equal(selection.install, null);
-  assert.deepEqual(manager.getState({ userDataDir: root }).catalog.includedVersions, []);
-});
-
 test('missing account runtime prompts before network, discovers a managed build and resumes with its payload', async () => {
   const calls = [], context = { userDataDir: '/profile', settings: {}, onRuntimeStateChange: () => calls.push('state') };
   let version = null, ready = false;

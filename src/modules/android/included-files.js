@@ -1,7 +1,7 @@
 const fs = require("node:fs"), path = require("node:path");
 const B = require("../shared/runtime/bundled-native");
 const Included = require("../shared/runtime/included-helpers");
-const declarations = require("./distribution-included.json");
+const declarations = require("../shared/runtime/included-package-metadata").declarations(require("./distribution-included.json"));
 
 function root() {
   const selected = Included.resolveIncluded(declarations, { id: "android-launcher", verification: "full" });

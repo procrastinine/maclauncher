@@ -12,7 +12,7 @@ const {
 const Upstream = require("../../runtime/upstream");
 const Release = require("../../runtime/release-files");
 const Versions = require("./onsyuri-versions");
-const { createOnsyuriBundled, RECOMMENDED_VERSION } = require("./onsyuri-bundled");
+const { createOnsyuriBundled } = require("./onsyuri-bundled");
 const Bundled = createOnsyuriBundled();
 const Hosted = require("./onsyuri-hosted").manager;
 
@@ -414,7 +414,6 @@ module.exports = {
   sourceUrl: SOURCE_URL,
   rowsFromReleases,
   versionsOf,
-  recommendedVersion: RECOMMENDED_VERSION,
   bundled: Bundled,
   hosted: Hosted,
   installRootDir,

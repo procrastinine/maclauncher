@@ -15,7 +15,7 @@ test("Android is a discovered APK module with local settings and shared graphics
   assert.equal(module.manifest.detection.extensions[0].extension, ".apk");
   assert.equal(module.manifest.runtime.default, "klepton");
   assert.deepEqual(Module.manifest.runtime.supported, ["klepton", "macapk", "aim"]);
-  assert.deepEqual(Module.runtimeManagers.map(manager => manager.id), ["android", "android-art", "macapk", "android-aim", "jadx", "apktool"]);
+  assert.deepEqual(Module.runtimeManagers.map(manager => manager.id), ["android", "macapk", "android-aim", "jadx", "apktool"]);
   assert.deepEqual(Object.keys(Module.actions).sort(), ["addToGooglePlay", "decodeApk", "decompileApk", "importFiles", "inspectGame", "listAngleBackends", "listGoogleAccounts", "listMediaInputs", "listVulkanRuntimes", "revealDecompiled", "runtimeStatus"]);
   for (const id of ["klepton", "macapk", "aim"]) assert.equal(Module.normalizeRuntimeId(id), id);
   assert.equal(Module.manifest.ui.accounts.stateAction, "googleAccounts");
@@ -74,13 +74,12 @@ test("Android provider selection preserves custom data and uses distinct save ro
   assert.deepEqual(fs.readdirSync(path.join(root, "android/apps/game")), ["data"]);
 });
 
-test("Android included runtime requires ARM macOS and checks metadata identity before launch", t => {
+test("Android selected runtime requires ARM macOS and checks metadata identity before launch", t => {
   t.mock.method(require("../src/modules/shared/runtime/host-capabilities"), "getHostCapabilities", () => ({ platform: "darwin", hardwareArch: "arm64" }));
   assert.throws(() => Runtime.resolve({ platform: "linux", arch: "arm64" }), /Apple Silicon/);
   assert.throws(() => Runtime.resolve({ platform: "darwin", arch: "x64" }), /Apple Silicon/);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "android-runtime-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.writeFileSync(path.join(root, "runtime.json"), JSON.stringify({ schemaVersion: 1, profile: { javaMajor: 21 } }));
-  assert.throws(() => Runtime.resolve({ root, platform: "darwin", arch: "arm64", macOSVersion: "27.0" }), /metadata has changed/);
-  assert.equal(Runtime.status({ root, platform: "darwin", arch: "arm64" }).ready, false);
+  assert.throws(() => Runtime.resolve({ root, platform: "darwin", arch: "arm64", macOSVersion: "27.0" }, { manifestSha256: "a".repeat(64) }), /metadata has changed/);
 });

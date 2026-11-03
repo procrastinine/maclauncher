@@ -8,7 +8,7 @@ const Bundle = require("../../../shared/runtime/bundled-native");
 const Zip = require("../../../shared/runtime/zip");
 const Native = require("../../../shared/runtime/local-native");
 const { build } = require("./build-agent.cjs");
-const Catalog = require("./versions.json");
+const Catalog = require("../../../shared/runtime/included-package-metadata").resolve(require("./versions.json"));
 
 const COMPILER_RUNTIME = "17.0.20.1+1";
 function stage({ references, jdkBin, resourcesRoot } = {}) {

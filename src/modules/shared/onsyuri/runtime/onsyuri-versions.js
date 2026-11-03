@@ -3,7 +3,7 @@ const { archiveFormat } = require("../../runtime/release-files");
 
 // ONScripter-Yuri versions: any number of numeric parts with an optional
 // alpha, beta or rc suffix ("0.7.6beta2", "0.8", "1.0.0rc1"). MacLauncher
-// Builds packages add a native revision ("0.7.7beta-MCLv1").
+// Builds packages add their own release revision.
 const SUFFIX = "(?:[-_. ]?(alpha|beta|b|rc)(?:[-_. ]?(\\d+))?)?";
 function parseOnsyuriVersion(input) {
   const raw = String(input || "").trim();

@@ -21,7 +21,7 @@ async function verifyArchive(file,description){
 export function checkSources(){
     const owned=Object.fromEntries(source.ownedFiles.map(file=>[file,digest(fs.readFileSync(path.join(here,file)))]));
     const shared=Object.fromEntries(source.sharedHeaders.map(file=>[file,digest(fs.readFileSync(path.resolve(here,'../../../shared',file)))]));
-    return {profile:source.profile,version:source.version,source:source.archive,owned,shared};
+    return {profile:source.profile,source:source.archive,owned,shared};
 }
 export async function prepareSource({archive,work}){
     archive=await verifyArchive(archive,source.archive);work=path.resolve(work);
@@ -113,10 +113,11 @@ export async function buildModule(options){
     const files=['dlls/winevulkan/x86_64-windows/winevulkan.dll','dlls/winevulkan/i386-windows/winevulkan.dll','dlls/winevulkan/winevulkan.so'];
     for(const file of files)if(!fs.statSync(path.join(build,file),{throwIfNoEntry:false})?.isFile())throw Error('The paired module output is missing: '+file);
     const result={...prepared,build,files,readobj:path.join(mingw,'llvm-readobj'),strip:path.join(mingw,'llvm-strip')};
-    if(options.output)result.provider=publishModule(result,path.resolve(options.output));
+    if(options.output)result.provider=publishModule(result,path.resolve(options.output),options.version);
     return result;
 }
-export function publishModule(built,output){
+export function publishModule(built,output,version){
+    if(!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(version||''))throw Error('An explicit managed package version is required.');
     if(fs.existsSync(output))throw Error('The immutable module output already exists.');
     const binaries=[['x86_64-unix/winevulkan.so',built.files[2]],['x86_64-windows/winevulkan.dll',built.files[0]],['i386-windows/winevulkan.dll',built.files[1]]];
     const native=read('/usr/bin/nm',['-gU',path.join(built.build,built.files[2])]);
@@ -148,7 +149,7 @@ export function publishModule(built,output){
             ...(binary?{format:native?'mach-o':'pe',architectures:[file.startsWith('i386-windows/')?'x86':'x86_64'],
                 ...(native?{executionArchitecture:'x86_64'}:{})}:{})};
     });
-    const provider={schema:1,provider:source.id,version:source.version,profile:source.profile,
+    const provider={schema:1,provider:source.id,version:version,profile:source.profile,
         sceneInteropAPI:1,sceneContextAPI:1,wineVulkanDriverVersion:source.wineVulkanDriverVersion,originalUnixCallCount:source.unixCallCount,runtimeProfile:source.runtimeProfile,
         minimumMacOS:source.minimumMacOS,architectures:source.architectures,originalGpuWorkRetained:true,
         libraries:Object.fromEntries(binaries.map(([file])=>[file.split('/')[0],file])),files};
@@ -157,13 +158,13 @@ export function publishModule(built,output){
         sourceUrl:source.sourcePage,path:'notices/Wine-'+name})),
         {name:'MacLauncher',license:'MIT',sourceUrl:'https://github.com/procrastinine/maclauncher',path:'notices/MacLauncher-MIT'},
         {name:'Khronos Vulkan',license:'MIT',sourceUrl:'https://github.com/KhronosGroup/Vulkan-Headers',path:'notices/Khronos-Vulkan-MIT'}];
-    const manifest={schemaVersion:1,managerId:source.id,version:source.version,platform:'darwin',arch:'x64',minimumMacOS:source.minimumMacOS,
+    const manifest={schemaVersion:1,managerId:source.id,version:version,platform:'darwin',arch:'x64',minimumMacOS:source.minimumMacOS,
         executableRelative:provider.libraries['x86_64-unix'],provider,files,notices,dependencies:[]};
     const payload=path.join(output,'payload');fs.mkdirSync(payload);
     for(const file of files){const target=path.join(payload,file.path);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(path.join(output,file.path),target);fs.chmodSync(target,file.mode);}
     const manifestFile=path.join(payload,'manifest.json');writeChanged(manifestFile,JSON.stringify(manifest,null,2)+'\n');
-    const declaration={id:source.id,version:source.version,arch:'x64',launcherArchitectures:['arm64','x64'],minimumMacOS:source.minimumMacOS,
-        sourceRelative:null,sourceSha256:digest(fs.readFileSync(path.join(here,'source.json'))),directoryRelative:[source.id,source.version,'x64'].join('/'),
+    const declaration={id:source.id,version:version,arch:'x64',launcherArchitectures:['arm64','x64'],minimumMacOS:source.minimumMacOS,
+        sourceRelative:null,sourceSha256:digest(fs.readFileSync(path.join(here,'source.json'))),directoryRelative:[source.id,version,'x64'].join('/'),
         manifestRelative:'manifest.json',manifestSha256:digest(fs.readFileSync(manifestFile)),files:[...files,{path:'manifest.json',
             size:fs.statSync(manifestFile).size,mode:0o644,sha256:digest(fs.readFileSync(manifestFile))}],notices};
     writeChanged(path.join(output,'runtime-package.json'),JSON.stringify(declaration,null,2)+'\n');return provider;
@@ -172,7 +173,7 @@ if(process.argv[1]&&fs.existsSync(process.argv[1])&&pathToFileURL(fs.realpathSyn
     try{
         const options={};for(let i=2;i<process.argv.length;i++){
             const key=process.argv[i];if(['--check','--prepare-only','--configure-only'].includes(key)){options[key.slice(2).replace(/-([a-z])/g,(_,x)=>x.toUpperCase())]=true;continue;}
-            if(!['--archive','--work','--mingw','--moltenvk-archive','--vulkan-library','--bison','--bison-archive','--jobs','--output'].includes(key)||!process.argv[i+1])throw Error('Use --check or --archive SOURCE --work DIRECTORY --mingw BIN [--moltenvk-archive ARCHIVE | --vulkan-library EXACT_LIBRARY] [--bison EXECUTABLE | --bison-archive SOURCE] [--jobs 1|2] [--output NEW_DIRECTORY].');
+            if(!['--archive','--work','--mingw','--moltenvk-archive','--vulkan-library','--bison','--bison-archive','--jobs','--output','--version'].includes(key)||!process.argv[i+1])throw Error('Use --check or --archive SOURCE --work DIRECTORY --mingw BIN [--moltenvk-archive ARCHIVE | --vulkan-library EXACT_LIBRARY] [--bison EXECUTABLE | --bison-archive SOURCE] [--jobs 1|2] [--output NEW_DIRECTORY --version RELEASE].');
             options[key.slice(2).replace(/-([a-z])/g,(_,x)=>x.toUpperCase())]=process.argv[++i];
         }
         if(options.check)console.log(JSON.stringify(checkSources(),null,2));

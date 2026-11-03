@@ -1,7 +1,6 @@
 [
   {
     "id": "catsystem2-kif-crypto",
-    "version": "1.1.1",
     "arch": "arm64",
     "launcherArchitectures": [
       "arm64"
@@ -9,7 +8,6 @@
     "minimumMacOS": "11.0",
     "sourceRelative": null,
     "sourceSha256": "325c23b2d1dab9c3c0818da1d9c64b20f21fc959181b25dbe6b7a32a8a792f0c",
-    "directoryRelative": "catsystem2-kif-crypto/1.1.1/arm64",
     "manifestRelative": "helper.json",
     "manifestSha256": "53957456f2eb9c4d54391023e96e3e0d3f229c39935919aefe52a389bde261b8",
     "files": [
@@ -57,7 +55,6 @@
   },
   {
     "id": "catsystem2-kif-crypto",
-    "version": "1.1.1",
     "arch": "x64",
     "launcherArchitectures": [
       "arm64",
@@ -66,7 +63,6 @@
     "minimumMacOS": "11.0",
     "sourceRelative": null,
     "sourceSha256": "325c23b2d1dab9c3c0818da1d9c64b20f21fc959181b25dbe6b7a32a8a792f0c",
-    "directoryRelative": "catsystem2-kif-crypto/1.1.1/x64",
     "manifestRelative": "helper.json",
     "manifestSha256": "c097fd9b79ef6db684899a8c3e54e3f82419c53073c5ad76562802135cdca5c4",
     "files": [

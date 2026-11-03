@@ -4,7 +4,7 @@ const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const Bundled = require("../../shared/runtime/bundled-native");
 const Included = require("../../shared/runtime/included-helpers");
-const declarations = require("./distribution-supplementals.json");
+const declarations = require("../../shared/runtime/included-package-metadata").declarations(require("./distribution-supplementals.json"));
 const run = promisify(execFile);
 const HELPER_VERSION = declarations.find(item => item.id === "mkxpz-config-helper")?.version;
 const signatureCache = new Map();

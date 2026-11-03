@@ -382,7 +382,7 @@ test('the stale package hint compares local manifests for this CPU without netwo
 
 test('included consumer bindings select package versions present in the application lock', () => {
   const lock = require('../build/runtime-packages.json'), bindings = [];
-  const read = file => require('../src/modules/' + file);
+  const read = file => require('../src/modules/shared/runtime/included-package-metadata').resolve(require('../src/modules/' + file));
   const add = (file, id, version, field) => bindings.push({file, id, version, field});
   const steamFile = 'shared/runtime/steamworks/versions.json', ticketFile = 'shared/runtime/steamworks/ticket-versions.json';
   for (const [file, id] of [[steamFile, 'steam-api-helper'], [ticketFile, 'steam-ticket-loader']])

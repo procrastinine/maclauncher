@@ -24,7 +24,7 @@ const providerOwners = new Map(["macapk", "aim"].map(runtimeId => [runtimeId, {
 module.exports = {
   ...Custom, manifest, normalizeRuntimeId,
   get runtimeManagers() { return [...Custom.runtimeManagers, ...Providers.runtimeManagers, Jadx, Apktool]; },
-  get distributionSupplementals() { return require("./distribution-included.json"); },
+  get distributionSupplementals() { return require("../shared/runtime/included-package-metadata").declarations(require("./distribution-included.json")); },
   getRuntimeProvider(runtimeId) { return providerOwners.get(runtimeId) || null; },
   async resolveGameIcon(entry, context) {
     try {

@@ -1,6 +1,6 @@
 const Environment = require("./environment");
-const Catalog = require("./profiles.json");
-const Pins = require("./versions.json");
+const Catalog = require("../included-package-metadata").resolve(require("./profiles.json"));
+const Pins = require("../included-package-metadata").resolve(require("./versions.json"));
 const Source = require("./source-identity");
 const Contract = require("../package-contract.cjs");
 

@@ -1,7 +1,6 @@
 [
   {
     "id": "android-apk-metadata",
-    "version": "1.1.1",
     "arch": "arm64",
     "minimumMacOS": "13.0",
     "launcherArchitectures": [
@@ -9,7 +8,6 @@
     ],
     "sourceRelative": null,
     "sourceSha256": "34430ef0f71a136d9bf5a208964ef8b7ccdec1559dc721eca1868ed9b975ea96",
-    "directoryRelative": "android-apk-metadata/1.1.1/arm64",
     "manifestRelative": "helper.json",
     "manifestSha256": "7a6ebd8e22a7422bf426c7d95f258738d24e3bf263b1ed7cc15d972941c75fe2",
     "files": [
@@ -717,7 +715,6 @@
   },
   {
     "id": "android-apk-metadata",
-    "version": "1.1.1",
     "arch": "x64",
     "minimumMacOS": "13.0",
     "launcherArchitectures": [
@@ -726,7 +723,6 @@
     ],
     "sourceRelative": null,
     "sourceSha256": "34430ef0f71a136d9bf5a208964ef8b7ccdec1559dc721eca1868ed9b975ea96",
-    "directoryRelative": "android-apk-metadata/1.1.1/x64",
     "manifestRelative": "helper.json",
     "manifestSha256": "3f9cd0b992ce234295c073b9e6ef5177c7bce18108b75acc7241a69554993c1d",
     "files": [
@@ -1435,7 +1431,6 @@
   },
   {
     "id": "android-launcher",
-    "version": "1.0.1",
     "arch": "universal",
     "minimumMacOS": "13.0",
     "launcherArchitectures": [
@@ -1444,7 +1439,6 @@
     ],
     "sourceRelative": null,
     "sourceSha256": "d1e55810f81f8fdb0bdede929ece4d24a3323e4f49364ee7ab198c18d9e74259",
-    "directoryRelative": "android-launcher/1.0.1/universal",
     "manifestRelative": "manifest.json",
     "manifestSha256": "d9ca9b1a947884f13c6755172e7e9d8f0efe14f926b5fe01c0e3c22b8d4947f9",
     "files": [
@@ -1616,7 +1610,6 @@
   },
   {
     "id": "android-privacy",
-    "version": "1.1.1",
     "arch": "arm64",
     "launcherArchitectures": [
       "arm64"
@@ -1624,7 +1617,6 @@
     "minimumMacOS": "13.0",
     "sourceRelative": null,
     "sourceSha256": "a95dfc40811e331ffde87ccca5e52e9bc1683bd3c90b09734bf1fcd46a3969ff",
-    "directoryRelative": "android-privacy/1.1.1/arm64",
     "manifestRelative": "helper.json",
     "manifestSha256": "d73573dc4b769d5d1ff09c0ed466020af77a2909193466e989b3ba916065486e",
     "files": [

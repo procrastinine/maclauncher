@@ -2,8 +2,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const Managed = require("./managed-consumer");
 const Profiles = require("./profiles");
-const ProfileCatalog = require("./profiles.json");
-const HelperCatalog = require("./versions.json");
+const ProfileCatalog = require("../included-package-metadata").resolve(require("./profiles.json"));
+const HelperCatalog = require("../included-package-metadata").resolve(require("./versions.json"));
 
 /** Select only an exact, independently attributed managed consumer. Unknown
  * or mixed consumers keep their complete native import requirements. */

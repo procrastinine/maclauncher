@@ -60,7 +60,7 @@ test("an unpackaged launcher uses only its included resource root", () => {
 });
 
 test("unchanged upstream helper suppliers retain their direct bundled routes", () => {
-  const declarations = require("../src/modules/shared/runtime/distribution-supplementals.json");
+  const declarations = require("../src/modules/shared/runtime/included-package-metadata").declarations(require("../src/modules/shared/runtime/distribution-supplementals.json"));
   for (const id of ["python", "sevenzip", "evbunpack"]) assert.equal(declarations.some(item => item.id === id), false, id);
   const Python = require("../src/modules/shared/runtime/python"), Sevenzip = require("../src/modules/shared/runtime/sevenzip");
   assert.equal(Python.resolveEmbeddedPythonRoot(), path.resolve(__dirname, "../src/resources/python"));
@@ -72,9 +72,9 @@ test("unchanged upstream helper suppliers retain their direct bundled routes", (
 
 test("the retired Goldberg package is absent from runtime catalogs and cannot resolve as included", () => {
   const Steam = require("../src/modules/shared/runtime/steamworks");
-  const catalog = require("../src/modules/shared/runtime/steamworks/versions.json");
+  const catalog = require("../src/modules/shared/runtime/included-package-metadata").resolve(require("../src/modules/shared/runtime/steamworks/versions.json"));
   assert.equal(catalog.some(item => item.packageVersion?.startsWith("goldberg")), false);
-  const profiles = require("../src/modules/shared/runtime/steamworks/profiles.json");
+  const profiles = require("../src/modules/shared/runtime/included-package-metadata").resolve(require("../src/modules/shared/runtime/steamworks/profiles.json"));
   assert.equal(profiles.some(item => item.helperVersion?.startsWith("goldberg")), false);
   const pin = { version: "goldberg-mac-1.0.0-ml1-universal",
     packageVersion: "goldberg-mac-1.0.0-ml1-package2-universal",

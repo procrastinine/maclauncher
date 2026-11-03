@@ -90,6 +90,6 @@ test("Apple-Silicon-only runtimes leave an Intel Mac's game types with their req
     }
     assert.deepEqual(withHostSettings(mod, host()).runtime.supported, mod.runtime.supported, `${mod.id} keeps every runtime on Apple Silicon`);
   }
-  for (const id of ["android", "android-art", "macapk", "android-aim", "playcover"])
+  for (const id of ["android", "macapk", "android-aim", "playcover"])
     assert.ok(unavailableReason(registry.getRuntimeManagerUi(id)?.hostFeature, intel), `${id} is not offered on Intel`);
 });

@@ -3,8 +3,8 @@ const { spawn } = require("node:child_process");
 const Bundled = require("../shared/runtime/bundled-native");
 const Included = require("../shared/runtime/included-helpers");
 function resolveHelper() {
-  const declarations = require("./privacy-distribution.json"), pin = declarations[0];
-  const { directory } = Included.requireIncluded(declarations, { id: pin.id, version: pin.version, verification: "full" });
+  const declarations = require("../shared/runtime/included-package-metadata").declarations(require("./distribution-included.json"));
+  const { directory } = Included.requireIncluded(declarations, { id: "android-privacy", verification: "full" });
   return path.join(directory, "clipboard-helper");
 }
 async function create(context = {}) {

@@ -399,8 +399,8 @@ test("Android installs native helpers as executable while retaining private asse
 test("Android package verification checks real signing blocks and converts selected DEX together", t => {
   const { spawnSync } = require("node:child_process"), crypto = require("node:crypto");
   const home = process.env.JAVA_HOME || (process.platform === "darwin" ? spawnSync("/usr/libexec/java_home", ["-v", "21"], { encoding: "utf8" }).stdout.trim() : "");
-  const runtime = require("../src/modules/android/runtime").runtimeRoot(), native = path.resolve(__dirname, "../src/modules/android/native");
-  if (!home || !fs.existsSync(path.join(runtime, "dex2jvm.jar"))) return t.skip("Requires Java 21 and the included converter");
+  const runtime = require("./helpers/android-java").runtimeRoot(), native = path.resolve(__dirname, "../src/modules/android/native");
+  if (!home || !runtime || !fs.existsSync(path.join(runtime, "dex2jvm.jar"))) return t.skip("Requires Java 21 and the included converter");
   const root = directory(t), tool = path.join(native, "tools/apksig.jar"), classes = path.join(root, "classes");
   const env = { ...process.env }; for (const name of Object.keys(env)) if (/^(DYLD_|DEX2JVM_|JAVA_TOOL_OPTIONS$|JDK_JAVA_OPTIONS$|_JAVA_OPTIONS$|CLASSPATH$)/.test(name)) delete env[name];
   const run = (tool, args, ok = true) => {

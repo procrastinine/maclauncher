@@ -50,7 +50,7 @@ test("MKXP-Z defaults prefer listed releases and fall back to ready installed ve
 });
 
 test("owned NFC builds bind the full source adaptation and executable without claiming publisher bytes", () => {
-  const source = require("../src/modules/rgss/overlays/mkxpz-filename-nfc/source.json");
+  const source = { id: "fixture-nfc", patch: { sha256: "1".repeat(64) }, addedFiles: [{ sha256: "2".repeat(64) }, { sha256: "3".repeat(64) }], upstream: { revision: "4".repeat(40) } };
   const pin = { version: "owned-nfc-fixture", sourceKind: "owned-source-adaptation", adaptationId: source.id,
     patchSha256: source.patch.sha256, headerSha256: source.addedFiles[0].sha256, implementationSha256: source.addedFiles[1].sha256,
     upstreamRevision: source.upstream.revision, executableRelative: "mkxp-z.aarch64.app/Contents/MacOS/bundle_mkxp-z",

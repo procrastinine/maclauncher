@@ -21,7 +21,7 @@ function storedModuleDeclaration(dir, reference) {
   if (Object.keys(reference).length !== 1 || typeof reference.path !== 'string' || !reference.path.endsWith('.json')) throw new Error('Supplemental resource metadata must reference a module-owned JSON file.');
   const stored = JSON.parse(B.readRegular(path.join(dir, B.relativeFile(reference.path)), B.LIMITS.manifestBytes).bytes);
   if (!Array.isArray(stored)) throw new Error('Module supplemental resources need a pure JSON declaration.');
-  return stored;
+  return require("../src/modules/shared/runtime/included-package-metadata").declarations(stored);
 }
 /** Release verification with included packages in place: every backend loads and its export matches its declaration. */
 function verifyModuleDeclarations() {
@@ -55,6 +55,7 @@ function declarations(dependencies) {
     }
   }
   if (!Array.isArray(items) || items.length > 128) throw new Error('Invalid supplemental resource catalog.');
+  items = require('../src/modules/shared/runtime/included-package-metadata').declarations(items);
   const seen = new Set();
   for (const item of items) {
     validateDeclaration(item);

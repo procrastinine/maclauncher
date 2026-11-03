@@ -60,47 +60,24 @@ test('Absent direct execution defaults to JVM and invalid execution fails before
   }), /execution engine is unsupported/);
 });
 
-test('Only ART adds its exact managed supplier to ordinary consent and installation planning', async t => {
-  const {launcher, entry, userDataDir} = fixture(t);
-  const Module = require('../src/modules/android/main');
-  const Common = require('../src/modules/android/runtime-manager');
-  const Art = require('../src/modules/android/art/runtime-manager');
-  const {prepareForLaunch} = require('../src/core/runtime-preparation');
-  t.mock.method(Common, 'resolveSelection', () => ({ready:true}));
-  t.mock.method(Art.manager, 'resolveSelection', () => ({ready:false, version:'1.2.3', install:null}));
-  const registry = {listModuleIds:() => ['android'], getModule:() => Module};
-  const events = [];
-  const context = launcher.getLaunchContext(entry, {});
-  context.confirmRuntimeInstall = async plan => {events.push(['consent', plan.managerId, plan.version]); return false;};
-  const prepare = () => prepareForLaunch({entry, mod:Module, info:manifest, context, registry,
-    runAction:() => assert.fail('No game or original runtime is executed'),
-    install:async (manager, plan) => events.push(['install', manager.id, plan.version])});
-  assert.equal(await prepare(), true);
-  assert.deepEqual(events, [], 'Default JVM has no ART download or setup requirement');
-  context.runtimeSettings.execution = 'art';
-  assert.equal(await prepare(), false);
-  assert.deepEqual(events, [['consent', 'android-art', '1.2.3']]);
-  assert.equal(fs.existsSync(path.join(userDataDir, 'android')), false, 'Declining setup leaves all application storage untouched');
-  events.length = 0;
-  context.confirmRuntimeInstall = async plan => {events.push(['consent', plan.managerId, plan.version]); return true;};
-  assert.equal(await prepare(), true);
-  assert.deepEqual(events, [['consent', 'android-art', '1.2.3'], ['install', 'android-art', '1.2.3']]);
-  assert.deepEqual(Module.getRuntimeRequirements(entry, {...context, runtimeId:'macapk'}), [], 'Optional providers keep their own runtime selection');
-});
-
-test('a unified Android package is consented and installed once for ART', async t => {
+test('JVM and ART consent to the same Android package once', async t => {
   const {launcher, entry} = fixture(t), Module = require('../src/modules/android/main'),
-    Common = require('../src/modules/android/runtime-manager'), Art = require('../src/modules/android/art/runtime-manager');
+    Common = require('../src/modules/android/runtime-manager');
   const {prepareForLaunch} = require('../src/core/runtime-preparation');
-  t.mock.method(Art.manager, 'resolveSelection', () => ({ready:false, managerId:'android', version:'unified', install:null}));
-  const events = [], context = launcher.getLaunchContext(entry, {});
-  context.runtimeSettings.execution = 'art';
-  context.confirmRuntimeInstall = async plan => {events.push(['consent', plan.managerId, plan.version]);return true;};
+  t.mock.method(Common, 'resolveSelection', () => ({ready:false, version:'unified', install:null}));
   const registry = {listModuleIds:() => ['android'], getModule:() => Module};
-  assert.equal(await prepareForLaunch({entry, mod:Module, info:manifest, context, registry,
-    runAction:() => assert.fail('Package preparation does not launch an app'),
-    install:async (manager, plan) => {assert.equal(manager, Common);events.push(['install', manager.id, plan.version]);}}), true);
-  assert.deepEqual(events, [['consent', 'android', 'unified'], ['install', 'android', 'unified']]);
+  assert.deepEqual(Module.runtimeManagers.filter(item => item.id.startsWith('android')).map(item => item.id), ['android', 'android-aim']);
+  assert.equal(manifest.runtime.managerUi['android-art'], undefined);
+  for (const execution of ['jvm', 'art']) {
+    const context = launcher.getLaunchContext(entry, {}), events = [];
+    context.runtimeSettings.execution = execution;
+    context.confirmRuntimeInstall = async plan => {events.push(['consent', plan.managerId, plan.version]);return true;};
+    assert.equal(await prepareForLaunch({entry, mod:Module, info:manifest, context, registry,
+      runAction:() => assert.fail('Package preparation does not launch an app'),
+      install:async (manager, plan) => {assert.equal(manager, Common);events.push(['install', manager.id, plan.version]);}}), true);
+    assert.deepEqual(events, [['consent', 'android', 'unified'], ['install', 'android', 'unified']]);
+    assert.deepEqual(Module.getRuntimeRequirements(entry, context), [], 'ART adds no second package requirement');
+  }
 });
 
 function descriptor(root) {
@@ -112,19 +89,21 @@ function descriptor(root) {
   return {root, manifest, components, bootClasspath:manifest.bootClasspath};
 }
 
-test('ART launch retains the selected common platform and attaches only its verified separate supplier', async t => {
+test('ART launch verifies the selected Android package before attaching its own supplier', async t => {
   const {launcher, entry, userDataDir} = fixture(t);
   const Module = require('../src/modules/android/main');
   const Common = require('../src/modules/android/runtime-manager'), Runtime = require('../src/modules/android/runtime');
-  const Art = require('../src/modules/android/art/runtime-manager'), ArtRuntime = require('../src/modules/android/art/runtime');
+  const Image = require('../src/modules/android/art/image'), ArtRuntime = require('../src/modules/android/art/runtime');
   const common = {root:path.join(userDataDir, 'selected-common'), profile:{processIdentityVersion:1}, runtimeIdentity:{manifestSha256:'a'.repeat(64)}};
   const supplier = descriptor(path.join(userDataDir, 'selected-art'));
   const declaration = {version:'common-explicit', manifestSha256:'a'.repeat(64)};
   t.mock.method(Common, 'resolveSelection', () => ({ready:true, version:declaration.version, install:{root:common.root, installDir:common.root, declaration}}));
   t.mock.method(Runtime, 'resolveForLaunch', async (options, selected) => {assert.equal(options.root, common.root);assert.equal(selected, declaration);return common;});
   let supplierResolutions = 0;
-  t.mock.method(Art.manager, 'resolveSelection', () => ({ready:true, managerId:'android-art', version:'art-explicit'}));
-  t.mock.method(Art, 'resolveForLaunch', async () => {supplierResolutions++;return supplier;});
+  t.mock.method(Image, 'prepareSupplier', async options => {
+    assert.equal(options.install.root, common.root);assert.equal(options.install.declaration, declaration);
+    supplierResolutions++;return supplier;
+  });
   const context = launcher.getLaunchContext({...entry, runtimeSettings:{klepton:{execution:'art'}}}, {}), leases = [];
   context.useRuntime = async lease => leases.push(lease);
   const child = {pid:1};
@@ -141,24 +120,10 @@ test('ART launch retains the selected common platform and attaches only its veri
   assert.deepEqual(leases, [{managerId:'android', version:declaration.version, sourcePath:common.root}]);
   assert.equal(common.profile.artExecutionVersion, undefined, 'Enabling ART does not mutate the verified common profile');
   assert.throws(() => ArtRuntime.resolve({...common, artSupplier:supplier}), /not included/, 'Imported metadata cannot attach an unverified supplier');
-});
-
-test('Managed ART verifies and leases owned code before image acquisition; failure cannot activate a supplier', async t => {
-  const {launcher, entry, userDataDir} = fixture(t);
-  const Art = require('../src/modules/android/art/runtime-manager'), Verifier = require('../src/modules/android/runtime-verifier');
-  const install = {root:path.join(userDataDir, 'owned-art'), installDir:path.join(userDataDir, 'owned-art-install'), declaration:{manifestSha256:'b'.repeat(64)}};
-  t.mock.method(Art.manager, 'resolveSelection', () => ({ready:true, version:'art-explicit', install}));
-  const context = launcher.getLaunchContext(entry, {}), events = [];
-  context.useRuntime = async lease => events.push(['lease', lease]);
-  t.mock.method(Verifier, 'verifyPayload', async (root, declaration) => {assert.equal(root, install.root);assert.equal(declaration, install.declaration);events.push(['verify']);});
-  const supplier = descriptor(path.join(userDataDir, 'art'));
-  assert.equal(await Art.resolveForLaunch(entry, context, {prepareSupplier:async options => {
-    assert.equal(options.install, install);assert.equal(options.context, context);events.push(['image']);return supplier;
-  }}), supplier);
-  assert.deepEqual(events, [['lease', {managerId:'android-art', version:'art-explicit', sourcePath:install.installDir}], ['verify'], ['image']]);
-  const failure = Error('Owned ART payload changed');
-  t.mock.method(Verifier, 'verifyPayload', async () => {throw failure;});
-  await assert.rejects(Art.resolveForLaunch(entry, context, {prepareSupplier:async () => assert.fail('Changed code must not acquire or activate an image')}), error => error === failure);
+  const failure = Error('Selected Android payload changed');
+  t.mock.method(Runtime, 'resolveForLaunch', async () => {throw failure;});
+  await assert.rejects(Module.launchRuntime('klepton', entry, context), error => error === failure);
+  assert.equal(supplierResolutions, 1, 'Failed package verification cannot acquire or activate an image');
 });
 
 test('ART sandbox binds separate immutable supplier/image roots without exposing their parent or sibling data', async t => {

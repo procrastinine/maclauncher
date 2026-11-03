@@ -1,7 +1,6 @@
 [
   {
     "id": "mkxpz-config-helper",
-    "version": "1.1.1",
     "arch": "universal",
     "launcherArchitectures": [
       "arm64",
@@ -10,7 +9,6 @@
     "minimumMacOS": "11.0",
     "sourceRelative": null,
     "sourceSha256": "2d266fa0916eafa57826a153ae72519ea9c3b4df348cfe219b731b5ae8ac8515",
-    "directoryRelative": "mkxpz-config-helper/1.1.1/universal",
     "manifestRelative": "helper.json",
     "manifestSha256": "cfae4a04b81d1a339b01f79884547e370c06355080b255b6b5d648778f3b42cd",
     "files": [

@@ -1,8 +1,6 @@
-const fs = require("node:fs");
 const path = require("node:path");
 const Bundled = require("../shared/runtime/bundled-native");
 const HostCapabilities = require("../shared/runtime/host-capabilities");
-const declarationFile = path.join(__dirname, "managed-packages.json");
 const platformHashes = new Map();
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
@@ -28,30 +26,10 @@ function platformHash(manifest, manifestSha256) {
   if (platformHashes.size > 4) platformHashes.delete(platformHashes.keys().next().value);
   return value;
 }
-// Staging publishes this small declaration atomically. A retained backend must
-// observe its next version without reloading modules or restarting Electron.
-function readDeclaration({ optional = false } = {}) {
-  let records;
-  try { records = JSON.parse(fs.readFileSync(declarationFile, "utf8")); }
-  catch (error) { if (optional && error.code === "ENOENT") return null; throw error; }
-  const declaration = records.find(item => item.id === "android");
-  if (!declaration && optional) return null;
-  if (!declaration) throw new Error("The managed Android runtime metadata is missing. Install Android in Runtimes.");
-  return declaration;
-}
-
-// Development staging only. Ordinary launches resolve a managed installation.
-function runtimeRoot(declaration) {
-  if (require("../shared/runtime/included-helpers").isPackaged(__filename))
-    throw new Error("Select an installed Android runtime in Runtimes.");
-  if (declaration === undefined) declaration = readDeclaration();
-  return path.resolve(__dirname, "../../../build/managed-runtimes", Bundled.relativeFile(declaration.directoryRelative));
-}
-
 // Metadata resolution is used by status/UI. Only resolveForLaunch authorizes
 // execution after verifying the complete payload outside the calling thread.
 function resolve({ root, platform = process.platform, arch,
-  macOSVersion, dependencyLibraryPaths, dependencyReadRoots } = {}, declaration = readDeclaration()) {
+  macOSVersion, dependencyLibraryPaths, dependencyReadRoots } = {}, declaration) {
   // Hardware admits the runtime even when the launcher runs through Rosetta;
   // an explicit runtime CPU remains a separate constraint on its ARM build.
   const host = platform === "darwin" && HostCapabilities.getHostCapabilities();
@@ -82,7 +60,7 @@ function resolve({ root, platform = process.platform, arch,
     ...(dependencyLibraryPaths?.length?{dependencyLibraryPaths}:{}), ...(dependencyReadRoots?.length?{dependencyReadRoots}:{}) };
 }
 
-async function resolveForLaunch(options = {}, declaration = readDeclaration()) {
+async function resolveForLaunch(options = {}, declaration) {
   options.signal?.throwIfAborted();
   const payload = resolve(options, declaration);
   const dependencyContext=options.resolveDependency ? options : require('../shared/runtime/package-dependencies').contextForPayload(payload.root,options.userDataDir);
@@ -91,13 +69,6 @@ async function resolveForLaunch(options = {}, declaration = readDeclaration()) {
   // Re-read the small declaration after the worker completes so a replaced
   // runtime.json cannot supply unchecked launch metadata.
   return resolve({ ...options, ...dependencyContext, root: payload.root }, declaration);
-}
-
-function status(options = {}) {
-  try {
-    const payload = resolve(options);
-    return { ready: true, managed: true, version: payload.version, label: "MacLauncher Android" };
-  } catch (error) { return { ready: false, managed: true, reason: error.message }; }
 }
 
 function resolveSelected(entry, context = {}) {
@@ -111,4 +82,4 @@ async function resolveSelectedForLaunch(entry, context = {}) {
   return module.exports.resolveForLaunch({root:selected.install.root,signal:context.signal,userDataDir:context.userDataDir,resolveDependency:selected.install.resolveDependency,dependencyLibraryPaths:selected.install.dependencyLibraryPaths,dependencyReadRoots:selected.install.dependencyReadRoots},selected.install.declaration);
 }
 
-module.exports = { runtimeRoot, resolve, resolveForLaunch, resolveSelected, resolveSelectedForLaunch, status, readDeclaration };
+module.exports = { resolve, resolveForLaunch, resolveSelected, resolveSelectedForLaunch };

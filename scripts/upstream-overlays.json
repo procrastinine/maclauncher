@@ -4053,22 +4053,6 @@
       ]
     },
     {
-      "id": "mkxp-z",
-      "repository": "https://github.com/mkxp-z/mkxp-z",
-      "revision": "37a04d14413454551a7b6aadbb4e93e67168accb",
-      "licensePaths": [
-        "COPYING"
-      ],
-      "usage": "Pinned MKXP-Z source for the distinct macOS filename-normalization adaptation; developer build consumes the exact source archive without initializing the checkout.",
-      "pinRefs": [
-        {
-          "kind": "json",
-          "path": "src/modules/rgss/overlays/mkxpz-filename-nfc/source.json",
-          "property": "upstream.revision"
-        }
-      ]
-    },
-    {
       "id": "xess",
       "repository": "https://github.com/intel/xess",
       "path": "src/external/xess",
@@ -5501,7 +5485,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/shared/runtime/steamworks/source-overlay.js",
-          "sha256": "83a26d4ad5e4ea1cb2bdf554373298638f181f593511cdd7a28747f274959485"
+          "sha256": "6d54523cfef396a60ce5b56ee0f59cae9dc38df5291f2d776f6f15690e12173a"
         },
         {
           "path": "src/modules/shared/runtime/steamworks/build.js",
@@ -5522,7 +5506,16 @@
           ]
         }
       ],
-      "version": "goldberg-mac-1.0.0-ml1-universal",
+      "version": {
+        "kind": "json",
+        "path": "build/runtime-packages.json",
+        "array": "packages",
+        "select": {
+          "id": "steam-api-helper",
+          "arch": "universal"
+        },
+        "property": "version"
+      },
       "versionRefs": [
         {
           "kind": "export",
@@ -5556,18 +5549,26 @@
       "id": "rgss-config-helper-v7",
       "kind": "owned-native-helper",
       "usage": "Builds projects compiled helper bytes into the declared source-free delivery package; native source and compiler inputs retain their original identities.",
-      "version": "1.1.0",
+      "version": {
+        "kind": "json",
+        "path": "build/runtime-packages.json",
+        "array": "packages",
+        "select": {
+          "id": "mkxpz-config-helper",
+          "arch": "universal"
+        },
+        "property": "version"
+      },
       "versionRefs": [
         {
           "kind": "json",
-          "path": "src/modules/rgss/runtime/distribution-supplementals.json",
+          "path": "build/runtime-packages.json",
+          "array": "packages",
           "select": {
             "id": "mkxpz-config-helper",
-            "version": "1.1.1",
             "arch": "universal"
           },
-          "property": "version",
-          "expectedVersion": "1.1.1"
+          "property": "version"
         },
         {
           "kind": "export",
@@ -5594,11 +5595,11 @@
         },
         {
           "path": "src/modules/rgss/runtime/distribution-supplementals.json",
-          "sha256": "0d21f1b323a9174997c92b73d5377833fc84e41a47d88f8d3bbb7022c3cd2a6f"
+          "sha256": "b8211787683bca321695b1e3fc59a6acd643ac1697274b12fa5ec5f4a3b509df"
         },
         {
           "path": "src/modules/rgss/runtime/mkxpz-config-helper.js",
-          "sha256": "08d4c0dd150c83ef2c9107f3271d68d3c1ed80c96d1810973edd90fac79d4e63"
+          "sha256": "0b71defbb6bf1bcc3ca9ee393341a441699fb243495a667c1ba1d8e6e08b5709"
         },
         {
           "path": "src/modules/rgss/runtime/mkxpz-game-runtime.js",
@@ -5633,44 +5634,38 @@
       "id": "love-luasteam",
       "project": "luasteam",
       "kind": "build-overlay",
-      "version": "4.0.2-MCLv1",
+      "version": {
+        "kind": "json",
+        "path": "build/runtime-packages.json",
+        "array": "packages",
+        "select": {
+          "id": "love-luasteam",
+          "arch": "universal"
+        },
+        "property": "version"
+      },
       "usage": "Pinned LuaSteam/host-Lua 5.1 linkage; proprietary SDK header inputs are not relicensed or included in the bridge source package",
       "versionRefs": [
+        {
+          "kind": "json",
+          "path": "build/runtime-packages.json",
+          "array": "packages",
+          "select": {
+            "id": "love-luasteam",
+            "arch": "universal"
+          },
+          "property": "version"
+        },
         {
           "kind": "export",
           "path": "src/modules/love/runtime/luasteam-source-overlay.js",
           "property": "VERSION"
-        },
-        {
-          "kind": "json",
-          "path": "src/modules/love/runtime/luasteam-versions.json",
-          "select": {
-            "version": "4.0.2-MCLv3"
-          },
-          "property": "version",
-          "expectedVersion": "4.0.2-MCLv3"
-        },
-        {
-          "kind": "json",
-          "path": "src/modules/love/runtime/distribution-supplementals.json",
-          "select": {
-            "id": "love-luasteam",
-            "version": "4.0.2-MCLv3"
-          },
-          "property": "version",
-          "expectedVersion": "4.0.2-MCLv3"
-        },
-        {
-          "kind": "json",
-          "path": "src/resources/native-runtimes/love-luasteam/4.0.2-MCLv2/universal/helper.json",
-          "property": "version",
-          "expectedVersion": "4.0.2-MCLv2"
         }
       ],
       "ownedFiles": [
         {
           "path": "src/modules/love/runtime/luasteam-source-overlay.js",
-          "sha256": "cc4d103ad5c0a208a22d8d416774e570aff3a9b2e3b7cad62ebf366b315a1ca7"
+          "sha256": "fb35c3f81d1137700b42ff5fc914c26d72a9e07514946d63efb50a6a126394fc"
         },
         {
           "path": "src/modules/love/runtime/luasteam-source-inputs.json",
@@ -5678,7 +5673,7 @@
         },
         {
           "path": "src/modules/love/runtime/luasteam-build.js",
-          "sha256": "3bbaafa2893256054846de952303e05fcc5f8af9bc59152996319d621d64cfe4"
+          "sha256": "5c4d1c49ed8f48a9feb69e74d631c9ee20cdb90f184c77d76526d04dae8e9d6d"
         },
         {
           "path": "src/modules/love/runtime/luasteam-package.js",
@@ -5686,11 +5681,11 @@
         },
         {
           "path": "src/modules/love/runtime/luasteam-versions.json",
-          "sha256": "9db968038e3bbd315c529346da5197d928bb0bc8e88d881a2add9df6981c73f1"
+          "sha256": "d446a3fbc28b423cc09ea24ef06bbbc0eb1787e9a006203883ba3f6cafbe19a2"
         },
         {
           "path": "src/modules/love/runtime/distribution-supplementals.json",
-          "sha256": "e13efd2c8b941534c2dee48b9b683b035c13ec176379fc1c292cb42274d348cb"
+          "sha256": "26951e3c4e5d45c2e26883670a140e6a03da6f838f2bae6dc5f8def3e96336e0"
         }
       ],
       "buildEntries": [
@@ -5703,8 +5698,7 @@
         "tests/steamworks-automatic.test.js"
       ],
       "sourceEvidence": [
-        "src/modules/love/runtime/luasteam-source-inputs.json",
-        "src/resources/native-runtimes/love-luasteam/4.0.2-MCLv2/universal/helper.json"
+        "src/modules/love/runtime/luasteam-source-inputs.json"
       ],
       "sourceScopes": {
         "luasteam": [
@@ -6076,30 +6070,27 @@
     {
       "id": "catsystem2-kif-crypto",
       "kind": "owned-native-helper",
-      "version": "1.1.0",
+      "version": {
+        "kind": "json",
+        "path": "build/runtime-packages.json",
+        "array": "packages",
+        "select": {
+          "id": "catsystem2-kif-crypto",
+          "arch": "arm64"
+        },
+        "property": "version"
+      },
       "usage": "Builds projects compiled helper bytes into the declared source-free delivery package; native source and compiler inputs retain their original identities.",
       "versionRefs": [
         {
           "kind": "json",
-          "path": "src/modules/catsystem2/runtime/distribution-supplementals.json",
+          "path": "build/runtime-packages.json",
+          "array": "packages",
           "select": {
             "id": "catsystem2-kif-crypto",
-            "version": "1.1.1",
             "arch": "arm64"
           },
-          "property": "version",
-          "expectedVersion": "1.1.1"
-        },
-        {
-          "kind": "json",
-          "path": "src/modules/catsystem2/runtime/distribution-supplementals.json",
-          "select": {
-            "id": "catsystem2-kif-crypto",
-            "version": "1.1.1",
-            "arch": "x64"
-          },
-          "property": "version",
-          "expectedVersion": "1.1.1"
+          "property": "version"
         },
         {
           "kind": "export",
@@ -6118,11 +6109,11 @@
         },
         {
           "path": "src/modules/catsystem2/runtime/crypto.js",
-          "sha256": "93cc99ff7ca7e275334d00d4991840575e6e4ce191069751861c40553b95b8fa"
+          "sha256": "a1b584abe07e39701d3b86a3af0c9faa0a5bb5437a21b7d310a5a4a6fea615d4"
         },
         {
           "path": "src/modules/catsystem2/runtime/distribution-supplementals.json",
-          "sha256": "d308e86fc4fdf362d88757c5728879e47f5d1c40819f9d4dc6ce787e33eea715"
+          "sha256": "0e569fd30807337fd76115ba4476a94afdb2f76eb381d6807ba8dff493610d2e"
         }
       ],
       "buildEntries": [
@@ -6277,21 +6268,6 @@
           "kind": "json",
           "path": "src/modules/shared/runtime/steamworks/native/offline-0.5.0/contracts.json",
           "property": "version"
-        },
-        {
-          "kind": "json",
-          "path": "src/modules/shared/runtime/steamworks/versions.json",
-          "select": {
-            "version": "0.5.2"
-          },
-          "property": "version",
-          "expectedVersion": "0.5.2"
-        },
-        {
-          "kind": "json",
-          "path": "src/resources/native-runtimes/steam-api-helper/0.5.1/universal/helper.json",
-          "property": "version",
-          "expectedVersion": "0.5.1"
         }
       ],
       "ownedFiles": [
@@ -6317,23 +6293,23 @@
         },
         {
           "path": "src/modules/love/runtime/luasteam-versions.json",
-          "sha256": "9db968038e3bbd315c529346da5197d928bb0bc8e88d881a2add9df6981c73f1"
+          "sha256": "d446a3fbc28b423cc09ea24ef06bbbc0eb1787e9a006203883ba3f6cafbe19a2"
         },
         {
           "path": "src/modules/love/runtime/luasteam-runtime.js",
-          "sha256": "eb45eb6531278ab9477a97bdc09d387917a056d5fd535976af38b8eb2f836970"
+          "sha256": "83f3b66e1c6b86bd4794e23880cb8a2e7dc0579f880f95c76dc7a2da45018d8f"
         },
         {
           "path": "src/modules/java/runtime/steamworks/versions.json",
-          "sha256": "737847473180d366051aff480df6e75ecc6e41b3e54c0d729ee54e4d5f1cf3ac"
+          "sha256": "a8ac965d03a4f0a4307a9ddad30c0e9a2adc3ec1d65645d60503b1e1ed4f3677"
         },
         {
           "path": "src/modules/java/runtime/steamworks/runtime.js",
-          "sha256": "f62ff53cf0e276f5e2700498715a4c8503ff47033612592f354a338157531c34"
+          "sha256": "d3bd2455d830a4cd0bfe5dcb5791c7caf104b29081d8cabb1095d77c66a22481"
         },
         {
           "path": "src/modules/shared/web/runtime/greenworks-preparation.js",
-          "sha256": "b5649c983b4815cb932ee8d0a35a1a18cf05d0ce9c9acd69c2d2aca707ddeac3"
+          "sha256": "9f39b182da5012a8bc46fab5d406aab50f73e6cb1c9bc4674c369f42f9f4e097"
         },
         {
           "path": "src/modules/shared/web/runtime/greenworks-contracts.json",
@@ -6357,19 +6333,19 @@
         },
         {
           "path": "src/modules/shared/runtime/steamworks/ticket.js",
-          "sha256": "30403facdddc6ac4373b2d67bb0c85b3c4f586f2507e97270541493ed64421bb"
+          "sha256": "7c16fc69ca51924c1b16a008a10316d2b1c2922a54856f463bacdfd9f490879a"
         },
         {
           "path": "src/modules/shared/runtime/steamworks/managed-profile.js",
-          "sha256": "c425b122b2f6ace36f99bab84114c3d1ff4d54ded8f3059c157b440fd37d6535"
+          "sha256": "d33db5cd2f9b6d0dcefc6367d10f2165f9a177aa9a905948478783a60bc08601"
         },
         {
           "path": "src/modules/shared/runtime/steamworks/index.js",
-          "sha256": "7f6da8b95d2b5dc77dc8e026cc8ef20668af60f5e20a7f0e49eae85545442a7c"
+          "sha256": "ef7ca02aa1a534ed42027555c2b576428d3d579249c70f460ab323e4206bb8d3"
         },
         {
           "path": "src/modules/shared/runtime/steamworks/automatic.js",
-          "sha256": "bafdaa68801075a2387cc9ca4517073482097b62c82682cdc1398c932f7fba73"
+          "sha256": "401a4570d902078c3b35a02e562026da34ed16e8ccb314831220d8329121069e"
         },
         {
           "path": "src/modules/shared/runtime/steamworks/environment.js",
@@ -6377,7 +6353,7 @@
         },
         {
           "path": "src/modules/shared/runtime/steamworks/profiles.js",
-          "sha256": "912f8e941d58175941cbd3881a7e91ba62cc1fc4af7f5b80882e39eb314b7e5b"
+          "sha256": "727b945f2b345b419459504805483020dea0e00a5410c4841e3efaede574513c"
         },
         {
           "path": "src/modules/shared/runtime/steamworks/source-identity.js",
@@ -6421,21 +6397,6 @@
           "kind": "json",
           "path": "src/modules/shared/runtime/steamworks/native/ticket-0.1.0/contracts.json",
           "property": "version"
-        },
-        {
-          "kind": "json",
-          "path": "src/modules/shared/runtime/steamworks/ticket-versions.json",
-          "select": {
-            "version": "0.1.2"
-          },
-          "property": "version",
-          "expectedVersion": "0.1.2"
-        },
-        {
-          "kind": "json",
-          "path": "src/resources/native-runtimes/steam-ticket-loader/0.1.1/universal/helper.json",
-          "property": "version",
-          "expectedVersion": "0.1.1"
         }
       ],
       "ownedFiles": [
@@ -6741,11 +6702,11 @@
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/onsyuri-bundled.js",
-          "sha256": "68b10949941eb0e339c1d71f3650d145b7ef2c7c4b61fc1098c8854cbbc75185"
+          "sha256": "f97a9189daf669bdf36228e611f73925d3131f083c4a4da86318439716a6d9b2"
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/onsyuri-runtime.js",
-          "sha256": "e575ed25a9ac1718a39ae2a1f155c12e6f45693801c163ee28efe0f1eda647e5"
+          "sha256": "c963d2c01fbb6e017f1716590f839201722b8f3d01f9835863c590dec8262c9f"
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/onsyuri-manager.js",
@@ -7570,11 +7531,11 @@
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/onsyuri-bundled.js",
-          "sha256": "68b10949941eb0e339c1d71f3650d145b7ef2c7c4b61fc1098c8854cbbc75185"
+          "sha256": "f97a9189daf669bdf36228e611f73925d3131f083c4a4da86318439716a6d9b2"
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/onsyuri-runtime.js",
-          "sha256": "e575ed25a9ac1718a39ae2a1f155c12e6f45693801c163ee28efe0f1eda647e5"
+          "sha256": "c963d2c01fbb6e017f1716590f839201722b8f3d01f9835863c590dec8262c9f"
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/onsyuri-manager.js",
@@ -12940,14 +12901,23 @@
     {
       "id": "android-privacy",
       "kind": "owned-native-helper",
-      "version": "1.1.0",
+      "version": {
+        "kind": "json",
+        "path": "build/runtime-packages.json",
+        "array": "packages",
+        "select": {
+          "id": "android-privacy",
+          "arch": "arm64"
+        },
+        "property": "version"
+      },
       "versionRefs": [
         {
           "kind": "json",
-          "path": "src/modules/android/privacy-distribution.json",
+          "path": "build/runtime-packages.json",
+          "array": "packages",
           "select": {
             "id": "android-privacy",
-            "version": "1.1.0",
             "arch": "arm64"
           },
           "property": "version"
@@ -12956,13 +12926,11 @@
       "buildEntries": [
         "scripts/build-android-privacy.mjs"
       ],
-      "sourceEvidence": [
-        "src/modules/android/privacy-distribution.json"
-      ],
+      "sourceEvidence": [],
       "ownedFiles": [
         {
           "path": "scripts/build-android-privacy.mjs",
-          "sha256": "e84f918c928e7dee9fc48d68558e558a4a0d28ac5944c63f4d72004e2022f796"
+          "sha256": "398df351f0794884403ab60c2e1a9c3ee33bf980947ffcb9c7f091b955a916eb"
         }
       ],
       "usage": "Builds projects compiled helper bytes into the declared source-free delivery package; native source and compiler inputs retain their original identities."
@@ -12971,7 +12939,6 @@
       "id": "android-aim-runtime",
       "project": "aim-runtime",
       "kind": "build-overlay",
-      "version": "MCLv1-1028-2",
       "buildEntries": [],
       "tests": [
         "tests/android-aim-provider.test.js",
@@ -13045,10 +13012,6 @@
         {
           "path": "src/modules/android/provider-main.js",
           "sha256": "4fc3feaaa52d537c45893ae979365a92c021c52f116900491c5ece8beab8a767"
-        },
-        {
-          "path": "src/modules/android/providers/aim/retained-versions.json",
-          "sha256": "af6f0ddb9a327d04b75ae36f20ebb372f1cf25f453718f7454632d88c3416f56"
         },
         {
           "path": "src/modules/shared/runtime/maclauncher-builds.md",
@@ -13166,17 +13129,26 @@
     {
       "id": "maclauncher-graphics",
       "kind": "owned-native-helper",
-      "version": "0.3.1-dev.71c72abb.e6edde4f",
+      "version": {
+        "kind": "json",
+        "path": "build/runtime-packages.json",
+        "array": "packages",
+        "select": {
+          "id": "reshade",
+          "arch": "universal"
+        },
+        "property": "version"
+      },
       "versionRefs": [
         {
           "kind": "json",
-          "path": "src/modules/shared/reshade/distribution-supplementals.json",
+          "path": "build/runtime-packages.json",
+          "array": "packages",
           "select": {
             "id": "reshade",
             "arch": "universal"
           },
-          "property": "version",
-          "expectedVersion": "0.3.2"
+          "property": "version"
         }
       ],
       "ownedFiles": [
@@ -13230,7 +13202,7 @@
         },
         {
           "path": "package.json",
-          "sha256": "28e51525201132e1e6ebee8b296b142b2634dc06afcf8bdd352399e9f0d7b90d"
+          "sha256": "d36b1c78aabe39be9e9423c8397c4b7f1654d2fdeab6979dca9dd668d9c471d1"
         },
         {
           "path": "scripts/build-graphics-runtime.mjs",
@@ -13242,7 +13214,7 @@
         },
         {
           "path": "scripts/native-supplementals.cjs",
-          "sha256": "2cfcee0f1776392020e50c12e0ecb94645c371ca8ae8a12af30650933b7e0b54"
+          "sha256": "1e0371a9945ae04498e4e157188ff7fe6159acb74104ebf15933859d0b1ad35e"
         },
         {
           "path": "scripts/prune-graphics-runtimes.mjs",
@@ -13310,11 +13282,11 @@
         },
         {
           "path": "src/modules/java/main.js",
-          "sha256": "36df989a1e649a47f8641a0a3eabd81b9336470eed398acc2e252f52b6bf9315"
+          "sha256": "a70564227e004d7cbc1c6fd78e556d5627f0acf887c40eb1311c73f7aeb7f5cf"
         },
         {
           "path": "src/modules/love/main.js",
-          "sha256": "dd3772832802d596aa860346aac52382b2675c93577f83a3309c6031bdca13d7"
+          "sha256": "243ef8b7f126bce960543f97ae2870f91cacd918e88526839dccab8c07953f67"
         },
         {
           "path": "src/modules/renpy/main.js",
@@ -13346,7 +13318,7 @@
         },
         {
           "path": "src/modules/shared/reshade/distribution-supplementals.json",
-          "sha256": "2f0cf3faf39a75d18b86e35daf6094fffbf77154cac9fb2a48cd3e3fbba10566"
+          "sha256": "b2402fdbcf50b7c84eb5eca2cc68e0cdeb078231a308d25c26c66bebbeaf6c45"
         },
         {
           "path": "src/modules/shared/reshade/effect-chain.js",
@@ -15322,7 +15294,7 @@
         },
         {
           "path": "tests/graphics-library-propagation.test.js",
-          "sha256": "194d695d3374e41eddb9fbd303f10e0e2454946f090450f6bc22287b64187cc3"
+          "sha256": "7657d3d5919e50d1004a56e1c082e25d1d2af4363a8fa822a14a77241ab177b2"
         },
         {
           "path": "tests/graphics-live-resources.test.js",
@@ -15402,7 +15374,7 @@
         },
         {
           "path": "tests/package-build-config.test.js",
-          "sha256": "636498934da3b050c1f8218fd675112441a1b9685c2e4408c691089b6947a65c"
+          "sha256": "3ffac069fdb94cdf2fe80abc7303acb7dfecfee71ddb5657952388b824a85b0b"
         },
         {
           "path": "tests/process-stop.test.js",
@@ -15422,7 +15394,7 @@
         },
         {
           "path": "tests/runtime-tabs-render.test.js",
-          "sha256": "0e023267e7620b3e149c1240cfa7422c87d871a6865cd6b108df4cf972a07605"
+          "sha256": "41a07687f851573d173bb5485112f254f3e44aa36df25c58f2c870577c3dec57"
         },
         {
           "path": "tests/runtime-tabs-ui.test.js",
@@ -15995,18 +15967,7 @@
     },
     {
       "id": "android-art-adapter",
-      "kind": "owned-native-helper",
-      "version": "0.1.0",
-      "versionRefs": [
-        {
-          "kind": "json",
-          "path": "src/modules/android/managed-packages.json",
-          "select": {
-            "id": "android-art"
-          },
-          "property": "version"
-        }
-      ],
+      "kind": "source-integration",
       "buildEntries": [
         "src/modules/android/art/build.mjs",
         "src/modules/android/art/build-image-extractor.mjs",
@@ -16035,7 +15996,7 @@
       "ownedFiles": [
         {
           "path": "docs/game-types/ANDROID.md",
-          "sha256": "03b7162e4ce0a41e63d8e5e254ef070e8db968300d75e94a185da028943d83fd"
+          "sha256": "cc6edc9c8222041d6d766a8858d43991eef2dfe76191f47d099f155f36b0fde4"
         },
         {
           "path": "docs/game-types/android/ARCHITECTURE.md",
@@ -16059,11 +16020,7 @@
         },
         {
           "path": "src/modules/android/art/package.mjs",
-          "sha256": "8367297bd0094a10e9ed8e58a822570de5e160ebbcbafda90da6cbafc4275f8c"
-        },
-        {
-          "path": "src/modules/android/art/runtime-manager.js",
-          "sha256": "e6148da14d1f3bca94661135f68cf9592612eef9e312ad972c6a87fec3829a21"
+          "sha256": "3d3fd0d222265a60792b771a72a94469fbc311c3be37c0c767474f52a1eda4f0"
         },
         {
           "path": "src/modules/android/art/runtime.js",
@@ -16071,7 +16028,7 @@
         },
         {
           "path": "src/modules/android/custom-main.js",
-          "sha256": "c504d49726693dd3797d5391ce533803eaa7b88f56500b08344ebfa80ed22443"
+          "sha256": "081bfdb395fcd5014e47b7fe39968fa866900a73b3a18fa2f6f1aa245565b91b"
         },
         {
           "path": "src/modules/android/host.js",
@@ -16087,7 +16044,7 @@
         },
         {
           "path": "src/modules/android/runtime.js",
-          "sha256": "d02387468eeddc3bf9cf5c0755e60fa6e03b855a9c21b893a3320706aabf7365"
+          "sha256": "f78512157b495658f02f54ee72215069a72797ccdebda9113bceabb8b39dec71"
         },
         {
           "path": "src/modules/android/system-image.js",
@@ -16247,11 +16204,11 @@
         },
         {
           "path": "tests/android-execution-selection.test.js",
-          "sha256": "34990f1ad7742d6fd77141b2c3652295be7dc5de35c50987d2da0415ec89b710"
+          "sha256": "b69add6d8cb5e6aa2f4e34da066845af138bacb2dea80f158f4cede33ee33f06"
         },
         {
           "path": "tests/android-module.test.js",
-          "sha256": "f249303a3308b64ff8ae7c5aa422d610267425fa4272efed2788929f986e9049"
+          "sha256": "55e3eeaae869b8399460c6a78f1d83da7aaa087f073aa9dd8b7f183228f995b6"
         },
         {
           "path": "tests/android-system-image.test.js",
@@ -16337,91 +16294,8 @@
           "path": "src/external/maclauncher-android/tests/fixtures/android-art-sockets/stream-sockets.rs",
           "sha256": "8e771930345dca3f82b5efddf8a24159cc13d7b21a8a3e94a4a67664a403826d"
         }
-      ]
-    },
-    {
-      "id": "rgss-filename-nfc",
-      "project": "mkxp-z",
-      "kind": "build-overlay",
-      "version": "macos-filename-nfc-v1",
-      "usage": "Distinct macOS filename-normalization source build with relative Ruby source metadata and relocatable dependency defaults; publisher binaries remain unchanged",
-      "versionRefs": [
-        {
-          "kind": "json",
-          "path": "src/modules/rgss/overlays/mkxpz-filename-nfc/source.json",
-          "property": "id"
-        }
       ],
-      "pinRefs": [
-        {
-          "kind": "json",
-          "path": "src/modules/rgss/overlays/mkxpz-filename-nfc/source.json",
-          "property": "upstream.revision"
-        }
-      ],
-      "ownedFiles": [
-        {
-          "path": "scripts/build-mkxpz-nfc.cjs",
-          "sha256": "942c130d29f93191948828505b57e79c07030c5d414882d96214a0d36068ff2a"
-        },
-        {
-          "path": "scripts/native-binary-tools.cjs",
-          "sha256": "731e49be840a34c86e356bc56bbda097aed19e71155c2661246d00e4bbdb41b7"
-        },
-        {
-          "path": "src/modules/rgss/overlays/mkxpz-filename-nfc/filesystem.patch",
-          "sha256": "ad8196202a2fb4d245a8108074f9b96260514f3a4ebb38521389db392dec8847"
-        },
-        {
-          "path": "src/modules/rgss/overlays/mkxpz-filename-nfc/macos-filename-nfc.c",
-          "sha256": "fe91a1c72bfcf98d46bd07924c3ecb61923b18dc538e6e9419b43f83cc1d27fe"
-        },
-        {
-          "path": "src/modules/rgss/overlays/mkxpz-filename-nfc/macos-filename-nfc.h",
-          "sha256": "adb6fbf0926e72aaf93532d7fcc1f53eafc2518257647e975fa0bb106d560641"
-        },
-        {
-          "path": "src/modules/rgss/overlays/mkxpz-filename-nfc/source.json",
-          "sha256": "532619810a2fce64c7dee2ec235114be00a56b6242c3cf1b71d752ae164c835b"
-        }
-      ],
-      "buildEntries": [
-        "scripts/build-mkxpz-nfc.cjs"
-      ],
-      "tests": [
-        "tests/runtime-mkxpz-filename-nfc.test.js"
-      ],
-      "sourceEvidence": [
-        "src/modules/rgss/overlays/mkxpz-filename-nfc/source.json"
-      ],
-      "guards": [
-        {
-          "sourceProject": "mkxp-z",
-          "files": {
-            "src/filesystem/filesystem.cpp": "4198717f9b2a1f90f2bce43346f48b3d7a1f0b46146f7349e1f1ed8ecc24b02f",
-            "meson.build": "62d7c2e8608144042b885b8c0863717a613f14c2674f44e8a95966ea0c7b1378",
-            "subprojects/packagefiles/ruby-3.1/meson.build": "b0b1db0d96a32e539e0e2520c16025fb9bf5068dff671b38266fd0d9cbede6d6",
-            "subprojects/packagefiles/ruby-3.1-mkxp-z-patches.patch": "bf3a240de684793460db2cf3dfe5f18e2b82d174d6a4d2564dbef88980bdd281"
-          }
-        }
-      ],
-      "reviewedOriginalFiles": {
-        "src/filesystem/filesystem.cpp": "4198717f9b2a1f90f2bce43346f48b3d7a1f0b46146f7349e1f1ed8ecc24b02f",
-        "meson.build": "62d7c2e8608144042b885b8c0863717a613f14c2674f44e8a95966ea0c7b1378",
-        "subprojects/packagefiles/ruby-3.1/meson.build": "b0b1db0d96a32e539e0e2520c16025fb9bf5068dff671b38266fd0d9cbede6d6",
-        "subprojects/packagefiles/ruby-3.1-mkxp-z-patches.patch": "bf3a240de684793460db2cf3dfe5f18e2b82d174d6a4d2564dbef88980bdd281",
-        "src/filesystem/macos-filename-nfc.h": null,
-        "src/filesystem/macos-filename-nfc.c": null
-      },
-      "reviewedAdaptedFiles": {
-        "src/filesystem/filesystem.cpp": "f8e990504528b7bc6ac693d896693aa21de98f99052e3c93e1744cd9b5036baf",
-        "meson.build": "d4bf1c4d568a217fd134cb3b7576cceea865bc143db9581946f46dab238de20d",
-        "subprojects/packagefiles/ruby-3.1/meson.build": "bdfd546344f1d0b06df197d44aee5eafe2019b76afbe7eb8b690174f328edfad",
-        "subprojects/packagefiles/ruby-3.1-mkxp-z-patches.patch": "c8fa18f94a2e43986c1b8dae83781075b858d6035ecaa54ddcf893090b77d09a",
-        "src/filesystem/macos-filename-nfc.h": "adb6fbf0926e72aaf93532d7fcc1f53eafc2518257647e975fa0bb106d560641",
-        "src/filesystem/macos-filename-nfc.c": "fe91a1c72bfcf98d46bd07924c3ecb61923b18dc538e6e9419b43f83cc1d27fe"
-      },
-      "operations": []
+      "project": "maclauncher-android"
     },
     {
       "id": "butterscotch-game-arguments",

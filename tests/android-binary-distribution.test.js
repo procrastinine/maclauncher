@@ -7,7 +7,6 @@ const B = require('../src/modules/shared/runtime/bundled-native');
 const Verifier = require('../src/modules/android/runtime-verifier');
 const factories = {
   android: require('../src/modules/android/runtime-manager').createManager,
-  'android-art': require('../src/modules/android/art/runtime-manager').createLegacyManager,
   'android-aim': require('../src/modules/android/providers/aim/manager').createManager
 };
 
@@ -17,7 +16,7 @@ for (const [id, createManager] of Object.entries(factories)) {
     t.after(async () => { await Verifier.close(); fs.rmSync(root, { recursive: true, force: true }); });
     const input = path.join(root, 'package'), prefix = id === 'android-aim' ? 'files/' : '';
     const manifestRelative = id === 'android-aim' ? 'manifest.json' : 'runtime.json';
-    const executableRelative = id === 'android' ? 'native/libklepton-jvm.dylib' : id === 'android-art' ? 'art/host/linux-run' : 'bin/aimctl';
+    const executableRelative = id === 'android' ? 'native/libklepton-jvm.dylib' : 'bin/aimctl';
     const version = 'binary-package-1', arch = process.arch, repository = 'procrastinine/maclauncher-builds';
     const image = Buffer.alloc(32); image.writeUInt32LE(0xfeedfacf); image.writeUInt32LE(arch === 'arm64' ? 0x0100000c : 0x01000007, 4);
     image.writeUInt32LE(id === 'android' ? 6 : 2, 12);

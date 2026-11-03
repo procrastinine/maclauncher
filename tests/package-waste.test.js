@@ -43,18 +43,6 @@ test("RPG Maker MV inputs ship once, from the layout their consumers read first"
   assert.equal(selectedBy(matcher, `${pixi}/LICENSE`), true);
 });
 
-test("retained Android package records stay in the source tree and out of the application", () => {
-  const { sources } = builderMatchers();
-  for (const file of ["src/modules/android/retained-versions.json", "src/modules/android/art/retained-versions.json",
-    "src/modules/android/providers/aim/retained-versions.json"]) {
-    assert.ok(fs.existsSync(path.join(projectRoot, file)), file);
-    assert.equal(sources.some(matcher => selectedBy(matcher, file)), false, file);
-  }
-  assert.equal(sources.some(matcher => selectedBy(matcher, "src/modules/android/distribution-included.json")), true);
-  const search = spawnSync("git", ["grep", "-l", "retained-versions", "--", "src", ":!src/external"], { cwd: projectRoot, encoding: "utf8" });
-  assert.ok(search.status === 0 || search.status === 1, search.stderr);
-  assert.deepEqual(search.stdout.split("\n").filter(Boolean), [], "Application code reads retained Android records");
-});
 
 test("npm source maps, browser bundles and schema sources stay out while every file the Steam clients load remains", () => {
   const { modules } = builderMatchers();
@@ -114,7 +102,7 @@ const nativeBuildInputs = ["src/modules/crossover/temporal/dxmt{,/**}",
   "src/modules/shared/reshade/dof/generated/*.{hpp,json}", "src/modules/shared/reshade/{lens,libplacebo}{,/**}",
   "src/modules/shared/reshade/{stage-royale.mjs,shaderc-offline.cpp}", "src/modules/shared/reshade/temporal/*.{h,hpp}",
   "src/modules/shared/reshade/temporal/*/{build.mjs,adapt-runtime.mjs,*.mm,*.hpp}", "src/modules/shared/vulkan/native{,/**}",
-  "src/modules/rgss/overlays/mkxpz-filename-nfc{,/**}", "src/modules/shared/runtime/steamworks/{build,source-overlay}.js",
+  "src/modules/shared/runtime/steamworks/{build,source-overlay}.js",
   "src/modules/java/runtime/steamworks/{build-agent.cjs,stage-bridge.cjs,*.java}", "src/modules/love/runtime/luasteam-build.js",
   "src/modules/mages/native/{current-windows.patch,current-windows-overlay.json,dependency-overlays.json,ffmpeg-probe.c,portable-overlay.js}",
   "src/modules/ios/native{,/**}", "src/modules/shared/web/native{,/**}", "src/modules/video/native{,/**}"];

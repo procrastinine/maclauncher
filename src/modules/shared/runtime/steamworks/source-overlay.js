@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 
-const VERSION = "goldberg-mac-1.0.0-ml1-universal";
+const VERSION = require("../included-package-metadata").version("steam-api-helper");
 const SOURCE_REVISION = "6aab9c6ff879ceae24891b7930a222829573bddf";
 const DEPENDENCIES_REVISION = "92a4a130262083c4e887155cbe6bcab99baf36ea";
 const ABSEIL_REVISION = "76bb24329e8bf5f39704eb10d21b9a80befa7c81";

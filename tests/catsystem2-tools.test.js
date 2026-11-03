@@ -14,7 +14,7 @@ const moduleBackend = require("../src/modules/catsystem2/main");
 const { resourceFixture } = require("./helpers/pe-resources-fixture");
 const { versionResource } = require("./helpers/pe-fixture");
 const Bundle = require("../src/modules/shared/runtime/bundled-native");
-const declarations = require("../src/modules/catsystem2/runtime/distribution-supplementals.json");
+const declarations = require("../src/modules/shared/runtime/included-package-metadata").declarations(require("../src/modules/catsystem2/runtime/distribution-supplementals.json"));
 const nativeAvailable = process.platform === "darwin" && declarations.length > 0;
 
 function temporary(t) { const dir = fs.mkdtempSync(path.join(os.tmpdir(), "catsystem2-tools-")); t.after(() => fs.rmSync(dir, { recursive: true, force: true })); return dir; }

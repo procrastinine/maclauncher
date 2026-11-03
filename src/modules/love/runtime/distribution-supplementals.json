@@ -1,7 +1,6 @@
 [
   {
     "id": "love-luasteam",
-    "version": "4.0.2-MCLv3",
     "arch": "universal",
     "minimumMacOS": "13.0",
     "launcherArchitectures": [
@@ -10,7 +9,6 @@
     ],
     "sourceRelative": null,
     "sourceSha256": "5d78a1e1d39f661727a583e25cfd3d32ab26bcc545374fb3203d51e7c1c3e181",
-    "directoryRelative": "love-luasteam/4.0.2-MCLv3/universal",
     "manifestRelative": "helper.json",
     "manifestSha256": "604c407acc1ab3939dfa3a47688055edf91892b0384fc24bb758c87ee69cdc6f",
     "files": [

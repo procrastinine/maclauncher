@@ -7,7 +7,7 @@ import {fileURLToPath} from "node:url";
 const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, "..");
 const Requirements = require("../src/modules/shared/runtime/feature-requirements.js");
-const declarations = require("../src/modules/shared/reshade/distribution-supplementals.json");
+const declarations = require("../src/modules/shared/runtime/included-package-metadata").declarations(require("../src/modules/shared/reshade/distribution-supplementals.json"));
 export const documentFile = path.join(root, "docs/runtimes/SYSTEM_REQUIREMENTS.md");
 const version = value => String(value).replace(/(?:\.0)+$/, "");
 const maximum = values => values.filter(Boolean).reduce((a, b) => Requirements.versionAtLeast(a, b) ? a : b);

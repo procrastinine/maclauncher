@@ -2,9 +2,9 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const {spawnSync}=require('./helpers/android-java');
 test('APK conversion resolves external interface defaults across the complete hierarchy',t=>{
- const runtime=process.env.KLEPTON_NATIVE_RUNTIME||require('../src/modules/android/runtime').runtimeRoot();
+ const runtime=require('./helpers/android-java').runtimeRoot();
  const home=process.env.JAVA_HOME||(process.platform==='darwin'?spawnSync('/usr/libexec/java_home',['-v','21'],{encoding:'utf8'}).stdout.trim():'');
- if(!home||!fs.existsSync(path.join(runtime,'dex2jvm.jar')))return t.skip('Requires Java 21 and Android converter');
+ if(!home||!runtime||!fs.existsSync(path.join(runtime,'dex2jvm.jar')))return t.skip('Requires Java 21 and Android converter');
  const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-converter-super-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
  const fixture=path.join(__dirname,'fixtures/android-converter-super');
  const r8=require('./helpers/android-fixture-tools.cjs').paths().r8;

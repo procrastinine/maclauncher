@@ -5,7 +5,7 @@ const Native = require("../local-native");
 const Bundle = require("../bundled-native");
 const Steam = require("./index");
 const Environment = require("./environment");
-const Catalog = require("./versions.json");
+const Catalog = require("../included-package-metadata").resolve(require("./versions.json"));
 const Profiles = require("./profiles");
 const Managed = require("./managed-consumer");
 

@@ -18,8 +18,7 @@ function retainChild(child) {
 
 function createReader({ declaration, resourceRoot, spawnProcess = spawn } = {}) {
   function definition() {
-    const pin = declaration || JSON.parse(fs.readFileSync(path.join(__dirname, "../distribution-included.json"), "utf8"))
-      .find(record => record.id === "android-apk-metadata");
+    const pin = declaration || Included.declared(JSON.parse(fs.readFileSync(path.join(__dirname, "../distribution-included.json"), "utf8")), { id: "android-apk-metadata" });
     if (!pin) throw new Error("The included APK metadata reader is unavailable. Reinstall MacLauncher.");
     return pin;
   }

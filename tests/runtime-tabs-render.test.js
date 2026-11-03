@@ -168,18 +168,18 @@ test('current module presentations repair cached Android and shader metadata wit
   const source = require('../src/modules/shared/reshade/runtime/shader-library-manager');
   const shaders = { ...source.getState(), ui: { groupId: 'graphics', tabLabel: 'Shader library', sectionLabel: 'Shader packs', order: 10, management: 'managed' } };
   shaders.sections = shaders.sections.map(({ shaderFamily, ...section }) => section);
-  const cached = ['android', 'macapk', 'android-aim', 'android-art'].map((id, index) => manager(id,
-    id === 'android-art' ? undefined : { tabLabel: 'Android', order: 123 + index, management: 'managed' },
+  const cached = ['android', 'macapk', 'android-aim'].map((id, index) => manager(id,
+    { tabLabel: 'Android', order: 123 + index, management: 'managed' },
     { versions: [id + '-version'] }, [{ version: id + '-version', ready: true }]));
   cached.push(manager('last-tool', { groupId: 'tools', tabLabel: 'Tools', order: -100, management: 'managed' }));
   cached.push(manager('future', undefined));cached.push(shaders);
   const before = structuredClone(cached);
-  for (const id of ['android', 'android-art']) {
+  for (const id of ['android']) {
     const markup = render(cached, id);
     const names = [...markup.matchAll(/class="launcherSidebarItem[^>]*>([^<]*)<\/button>/g)].map(match => match[1]);
     for (const label of ['MacLauncher Android', 'Mac.apk', 'AIM']) assert.equal(names.filter(name => name === label).length, 1);
     assert.equal(names.includes('Android'), false);assert.equal(names.includes('Android ART'), false);assert.equal(names.at(-1), 'Tools');
-    assert.match(markup, /role="tab"[^>]*>JVM<\/button>/);assert.match(markup, /role="tab"[^>]*>ART<\/button>/);
+    assert.doesNotMatch(markup, /runtime-panel-android-art-/);
     assert.match(markup, new RegExp(`id="runtime-panel-${id}-default"`));
     assert.match(markup, new RegExp(`value="${id}-version"`));
   }

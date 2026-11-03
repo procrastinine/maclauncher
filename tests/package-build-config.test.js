@@ -170,7 +170,6 @@ test('source-only helper producers and Python SDK inputs are omitted while consu
   const info = { projectDir: projectRoot, buildResourcesDir: 'build', config: build, isPrepackedAppAsar: false, debugLogger: { isEnabled: false } };
   const matchers = getMainFileMatchers(projectRoot, '/stage', value => value, build.mac, { info }, path.join(projectRoot, build.directories.output), false);
   for (const file of ['src/modules/rgss/overlays/mkxpz-config.c', 'src/modules/rgss/overlays/mkxpz-identity.m',
-    'src/modules/rgss/overlays/mkxpz-filename-nfc/macos-filename-nfc.c', 'src/modules/rgss/overlays/mkxpz-filename-nfc/macos-filename-nfc.h',
     'src/modules/shared/runtime/steamworks/native/offline-0.5.0/source/offline.cpp', 'src/modules/shared/runtime/steamworks/native/ticket-0.1.0/source/ticket.cpp',
     'src/modules/shared/runtime/steamworks/native/offline-0.5.0/build.cjs', 'src/modules/shared/runtime/steamworks/native/ticket-0.1.0/build.cjs',
     'src/modules/mages/native/ffmpeg-probe.c'])
@@ -266,12 +265,12 @@ test("first-party fixtures and managed engines stay out of ASAR while declared h
 test("managed Android runtime payloads are excluded while owned integration helpers remain included", () => {
   const distribution = require('../scripts/distribution-model.cjs');
   const plan = distribution.createPlan({arch:'arm64', maximumMacOS:'26.0'});
-  const managed = new Set(['android', 'android-art', 'android-aim']);
+  const managed = new Set(['android', 'android-aim']);
   assert.equal(plan.packages.some(item => managed.has(item.managerId)), false);
   assert.equal(plan.supplementals.some(item => managed.has(item.id)), false);
   const helper = plan.supplementals.find(item => item.id === 'android-privacy');
   assert.ok(helper);
-  const declarations = require('../src/modules/android/privacy-distribution.json');
+  const declarations = require('../src/modules/shared/runtime/included-package-metadata').declarations(require('../src/modules/android/distribution-included.json')).filter(row=>row.id==='android-privacy');
   const original = declarations.find(item => item.id === helper.id && item.version === helper.version && item.arch === helper.arch);
   assert.ok(original, 'The packaged helper matches the declaration used by the clipboard consumer');
   const selection = require('../scripts/runtime-packages.cjs').selectArchitecture(require('../build/runtime-packages.json'), 'arm64');
@@ -289,7 +288,7 @@ test("managed Android runtime payloads are excluded while owned integration help
     assert.equal(selectedBy(matcher,`native-runtimes/${id}/version/arm64/${file}`),false,`Managed Android payload included: ${id}/${file}`);
   assert.equal(selectedBy(matcher,`native-runtimes/${helper.directoryRelative}/${helper.manifestRelative}`),true);
 
-  assert.equal(planned.filter.some(pattern => !pattern.startsWith('!') && /^native-runtimes\/(android|android-art|android-aim)\//.test(pattern)), false);
+  assert.equal(planned.filter.some(pattern => !pattern.startsWith('!') && /^native-runtimes\/(android|android-aim)\//.test(pattern)), false);
 });
 
 test("planned resources retain stock suppliers and sealed custom helpers while excluding managed and local payloads", () => {

@@ -27,6 +27,7 @@ function launcherArch(arch = process.arch) {
 // package. Include one compatible build per version, preferring the app's CPU.
 function preferredIncludedBuilds(declarations, arch = process.arch) {
   if (!Array.isArray(declarations)) throw new Error("Included helper declarations are invalid.");
+  declarations = require("./included-package-metadata").declarations(declarations);
   const host = launcherArch(arch), selected = new Map();
   const rank = item => item.arch === host ? 0 : item.arch === "universal" ? 1 : 2;
   for (const item of declarations) {

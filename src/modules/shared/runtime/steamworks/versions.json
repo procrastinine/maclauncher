@@ -1,6 +1,8 @@
 [
   {
-    "version": "0.5.2",
+    "version": {
+      "includedPackage": "steam-api-helper"
+    },
     "sourceKind": "owned",
     "sourceSha256": "40597e2596bf3df91e7a8d1be6939f75d2d427bbeb91d0ac2316420c1c0cb23e",
     "sourceRevision": null,

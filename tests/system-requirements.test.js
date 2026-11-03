@@ -19,7 +19,7 @@ test("requirements detect changed API floors, package minima and processor build
   const requirements = {...Requirements, METAL4: {...Requirements.METAL4, minimumMacOS: "28.1"}};
   assert.throws(() => checkSystemRequirements(text, {requirements}), /differ from their source/);
   assert.match(generateSystemRequirements(text, {requirements}), /\| Metal 4 \| 28\.1 \|/);
-  const packages = structuredClone(require("../src/modules/shared/reshade/distribution-supplementals.json"));
+  const packages = structuredClone(require("../src/modules/shared/runtime/included-package-metadata").declarations(require("../src/modules/shared/reshade/distribution-supplementals.json")));
   const row = packages[0].files.find(row => row.path === "libreshade-macos.dylib");
   row.minimumMacOS = "28.2";
   row.architectures = ["arm64"];
@@ -66,7 +66,7 @@ test("documented processor behavior agrees with shared execution and launch gate
   assert.match(text, /Each app selects its own processor build by default/);
   // Use the actual included iOS helper declarations, without loading a game,
   // reading installed resources or starting any native helper.
-  const mod = {distributionSupplementals: require("../src/modules/ios/distribution-supplementals.json")};
+  const mod = {distributionSupplementals: require("../src/modules/shared/runtime/included-package-metadata").declarations(require("../src/modules/ios/distribution-supplementals.json"))};
   const info = {runtime: {supported: ["playcover"], entries: {playcover: {}}}};
   for (const launcherArch of ["arm64", "x64"]) {
     const host = Host.getHostCapabilities({platform: "darwin", launcherArch, hardwareArch: launcherArch,

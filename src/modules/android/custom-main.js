@@ -10,7 +10,6 @@ const Storage = require("./storage");
 const Metadata = require("./package-metadata");
 const manager = require("./runtime-manager");
 const LaunchPolicy = require("./launch-policy");
-const ArtRuntime = require("./art/runtime-manager");
 
 function gameDirectory(entry, context) {
   return Storage.storagePaths(context?.userDataDir, entry?.gameId).root;
@@ -28,9 +27,9 @@ module.exports = {
   id: manifest.id, manifest, detectGame, detectGameAsync,
   metadataCacheKey: Metadata.metadataCacheKey, mergeEntry: Metadata.mergeEntry,
   resolveGameMetadata: Metadata.resolveGameMetadata, resolveGameIcon: Metadata.resolveGameIcon,
-  distributionSupplementals: require("./distribution-included.json"),
+  distributionSupplementals: require("../shared/runtime/included-package-metadata").declarations(require("./distribution-included.json")),
   normalizeRuntimeId: () => "klepton",
-  get runtimeManagers() { return [manager, ArtRuntime.manager]; },
+  get runtimeManagers() { return [manager]; },
   onImport(entry, context) { entry.defaultSaveDir = path.join(gameDirectory(entry, context), "data", "files"); },
   resolveSaveLocations(entry, context) {
     const directory = Storage.storagePaths(context.userDataDir, entry.gameId).filesRoot;
@@ -38,15 +37,12 @@ module.exports = {
   },
   prepareSaveLocation(entry, context) { return Storage.prepareStorage(entry, context.userDataDir); },
   ensureRuntime(entry, context) {
-    const selection = LaunchPolicy.execution(context) === "art"
-      ? ArtRuntime.manager.resolveCommonSelection(entry, context?.settings, context?.userDataDir)
-      : manager.resolveSelection(entry, context?.settings, context?.userDataDir);
+    const selection = manager.resolveSelection(entry, context?.settings, context?.userDataDir);
     return selection.ready ? null : { managerId: manager.id, version: selection.version, ...(selection.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {} };
   },
   getRuntimeRequirements(entry, context) {
     if (context.runtimeId && context.runtimeId !== "klepton") return [];
     return [
-      ...(LaunchPolicy.execution(context) === "art" ? ArtRuntime.requirements(entry, context) : []),
       ...require("../shared/vulkan").requirements(context, { required: context.runtimeSettings?.angleBackend === "vulkan" })
     ];
   },
@@ -54,16 +50,14 @@ module.exports = {
     if (runtimeId !== "klepton") return null;
     const execution = LaunchPolicy.execution(context);
     entry.defaultSaveDir = Storage.storagePaths(context.userDataDir, entry.gameId).filesRoot;
-    const selection = execution === "art"
-      ? ArtRuntime.manager.resolveCommonSelection(entry, context.settings, context.userDataDir)
-      : manager.resolveSelection(entry, context.settings, context.userDataDir);
+    const selection = manager.resolveSelection(entry, context.settings, context.userDataDir);
     if (!selection.ready) throw new Error(selection.reason);
     if (context.useRuntime) await context.useRuntime({ managerId: manager.id, version: selection.version,
       sourcePath: selection.install.installDir });
     let payload = await Runtime.resolveForLaunch({ root: selection.install.root, signal: context.signal }, selection.install.declaration);
     if (execution === "art") {
       const common = payload;
-      payload = require("./art/runtime").attachSupplier(common, await ArtRuntime.resolveForLaunch(entry, context));
+      payload = require("./art/runtime").attachSupplier(common, await require("./art/image").prepareSupplier({ install: selection.install, context }));
       return Host.launch(entry, context, payload, { resolvePlatformRuntime: async () => common });
     }
     return Host.launch(entry, context, payload);

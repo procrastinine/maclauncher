@@ -330,7 +330,7 @@ test("the installer reader is a managed Tools package for its actual ARM host", 
   assert.equal(manager.id, "innoextract");
   assert.equal(manager.ui.groupId, "tools");
   assert.equal(manager.ui.management, "managed");
-  assert.equal(require("../src/modules/shared/installers/distribution-supplementals.json").length, 0);
+  assert.equal(require("../src/modules/shared/runtime/included-package-metadata").declarations(require("../src/modules/shared/installers/distribution-supplementals.json")).length, 0);
   assert.equal(require("../scripts/native-supplementals.cjs").declarations().some(item => item.id === "innoextract"), false);
   assert.equal(require("../src/modules/registry").listSharedRuntimeManagers().some(item => item.id === "innoextract"), true);
   assert.equal("recommendedVersion" in manager.getState({}).catalog, false);

@@ -47,7 +47,6 @@ test('every registered runtime manager has a linked upstream project in Credits'
     'vulkan-kosmickrisp-gles32': 'https://gitlab.freedesktop.org/mesa/mesa',
     'alice-tools': 'https://github.com/nunuhara/alice-tools',
     'android': 'https://github.com/shinyquagsire23/Klepton',
-    'android-art': 'https://android.googlesource.com/platform/art',
     'macapk': 'https://github.com/kksimp/Mac.apk',
     'android-aim': 'https://github.com/hahnlee/aim',
     'jadx': 'https://github.com/skylot/jadx',

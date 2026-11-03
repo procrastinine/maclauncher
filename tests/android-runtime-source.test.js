@@ -29,7 +29,7 @@ test('the packaged Android metadata closure resolves without a source checkout o
   try {
     const repository = path.resolve(__dirname, '..');
     const selected = require('../scripts/check-packaging.cjs').applicationFileSelector(require('../package.json'));
-    const pin = require('../src/modules/android/distribution-included.json').find(item => item.id === 'android-launcher');
+    const pin = require("../src/modules/shared/runtime/included-package-metadata").declarations(require('../src/modules/android/distribution-included.json')).find(item => item.id === 'android-launcher');
     const packageRoot = path.join(root, 'src/resources/native-runtimes', pin.directoryRelative);
     assert.equal(require('../package.json').build.files.some(row => typeof row === 'object' && row.to === 'src/android-runtime'), false);
     for (const file of pin.files) {

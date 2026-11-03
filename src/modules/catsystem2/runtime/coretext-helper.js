@@ -1,7 +1,7 @@
 const Included = require("../../shared/runtime/included-helpers");
 const fs = require("node:fs"), path = require("node:path"), { execFile } = require("node:child_process"), { promisify } = require("node:util");
 const B = require("../../shared/runtime/bundled-native"), Native = require("../../shared/runtime/local-native");
-const declarations = require("./distribution-supplementals.json"), run = promisify(execFile);
+const declarations = require("../../shared/runtime/included-package-metadata").declarations(require("./distribution-supplementals.json")), run = promisify(execFile);
 const VERSION = "1.0.0-ml1", signatures = new Map();
 // Included helper selection defaults to the launcher process CPU, including under Rosetta.
 async function resolveHelper({resourcesRoot,helperVersion=VERSION,platform=process.platform,arch=process.arch,dependencies={}}={}) {

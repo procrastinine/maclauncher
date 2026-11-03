@@ -4,12 +4,12 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const Bundle = require("../../../shared/runtime/bundled-native");
 const Included = require("../../../shared/runtime/included-helpers");
-const declarations = require("./distribution-supplementals.json");
+const declarations = require("../../../shared/runtime/included-package-metadata").declarations(require("./distribution-supplementals.json"));
 const Native = require("../../../shared/runtime/local-native");
 const GameData = require("../../../shared/game-data");
 const Consumer = require("./consumer");
 const Host = require("../../../shared/runtime/host-capabilities");
-const Catalog = require("./versions.json");
+const Catalog = require("../../../shared/runtime/included-package-metadata").resolve(require("./versions.json"));
 
 const failure = (code, message) => Object.assign(new Error(message), { code });
 const digest = bytes => crypto.createHash("sha256").update(bytes).digest("hex");

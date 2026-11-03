@@ -5,7 +5,7 @@ const { promisify } = require("node:util");
 const Source = require("../../shared/runtime/pinned-native-build");
 const Native = require("../../shared/runtime/local-native");
 const Steam = require("../../shared/runtime/steamworks");
-const SteamPins = require("../../shared/runtime/steamworks/versions.json");
+const SteamPins = require("../../shared/runtime/included-package-metadata").resolve(require("../../shared/runtime/steamworks/versions.json"));
 const Overlay = require("./luasteam-source-overlay");
 const { throwIfAborted } = require("../../shared/runtime/download-utils");
 

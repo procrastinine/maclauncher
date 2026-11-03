@@ -67,7 +67,8 @@ export function publishSceneProvider({library,projected,output,architecture,depe
  writeChanged(path.join(output,'provider.json'),JSON.stringify(provider,null,2)+'\n');return provider;
 }
 /** Wrap the unchanged raw driver in the ordinary managed runtime format. */
-export function publishScenePackage({providerDirectory,peerDirectory,output}){
+export function publishScenePackage({providerDirectory,peerDirectory,output,version}){
+ if(!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(version||''))throw Error('An explicit managed package version is required.');
  providerDirectory=fs.realpathSync(providerDirectory);output=path.resolve(output);
  if(fs.existsSync(output))throw Error('The immutable managed output already exists');
  const inputs=[providerDirectory,...(peerDirectory?[fs.realpathSync(peerDirectory)]:[])].map(directory=>{
@@ -103,7 +104,7 @@ export function publishScenePackage({providerDirectory,peerDirectory,output}){
   provider.files=provider.files.map(row=>row.path===provider.library?{...row,sha256:digest(fs.readFileSync(path.join(temporary,row.path))),size:fs.statSync(path.join(temporary,row.path)).size}:row);
   writeChanged(path.join(temporary,'provider.json'),JSON.stringify(provider,null,2)+'\n');
   const files=Bundled.fileInventory(temporary).map(file=>{const stored=Bundled.readRegular(path.join(temporary,file),Bundled.LIMITS.fileBytes);return {path:file,size:stored.size,mode:stored.mode,sha256:stored.sha256,...(file===provider.library?{architectures}:{})};});
-  const manifest={schemaVersion:1,managerId:source.projectId,version:source.version,upstreamRevision:source.revision,
+  const manifest={schemaVersion:1,managerId:source.projectId,version:version,upstreamRevision:source.revision,
    platform:'darwin',arch:inputs.length===2?'universal':architectures[0]==='x86_64'?'x64':'arm64',minimumMacOS:source.minimumMacOS,
    executableRelative:provider.library,files,dependencies:[{file:provider.library,links:first.links}],notices,provider,
    provenance:{sourceRevision:source.revision,sourceUrl:source.repository,upstreamVersion:source.upstreamVersion,
@@ -116,10 +117,10 @@ export function publishScenePackage({providerDirectory,peerDirectory,output}){
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  const values={};for(let i=2;i<process.argv.length;i++){const key=process.argv[i];if(!key.startsWith('--'))throw Error('Unknown build argument');values[key]=process.argv[++i];}
- if(!values['--source']||!values['--work'])throw Error('Usage: node moltenvk-scene-build.mjs --source <exact Git source> --work <owned build> [--check <include paths joined by path delimiter>] [--spirv-cross <Git source> --vulkan-headers <Git source> --cereal <Git source> --output <new immutable provider> --package-output <new managed package> --package-peer <other architecture raw provider>]');
+ if(!values['--source']||!values['--work'])throw Error('Usage: node moltenvk-scene-build.mjs --source <exact Git source> --work <owned build> [--check <include paths joined by path delimiter>] [--spirv-cross <Git source> --vulkan-headers <Git source> --cereal <Git source> --output <new immutable provider> --package-output <new managed package> --version <release> --package-peer <other architecture raw provider>]');
  if(values['--package-output']&&!values['--output'])throw Error('A managed package requires the raw provider output');
  if(values['--package-peer']&&!values['--package-output'])throw Error('A second architecture requires the managed package output');
  const projected=prepareSceneSource({repository:values['--source'],work:values['--work']});
  if(values['--check']!==undefined)checkSceneSource({projected,includes:values['--check'].split(path.delimiter).filter(Boolean),architecture:values['--architecture']||'arm64'});
- if(values['--output']){const architecture=values['--architecture']||'arm64';const built=buildSceneProvider({projected,work:values['--work'],dependencies:{'SPIRV-Cross':values['--spirv-cross'],'Vulkan-Headers':values['--vulkan-headers'],cereal:values['--cereal']},architecture});publishSceneProvider({...built,projected,output:values['--output'],architecture});if(values['--package-output'])publishScenePackage({providerDirectory:values['--output'],peerDirectory:values['--package-peer'],output:values['--package-output']});}
+ if(values['--output']){const architecture=values['--architecture']||'arm64';const built=buildSceneProvider({projected,work:values['--work'],dependencies:{'SPIRV-Cross':values['--spirv-cross'],'Vulkan-Headers':values['--vulkan-headers'],cereal:values['--cereal']},architecture});publishSceneProvider({...built,projected,output:values['--output'],architecture});if(values['--package-output'])publishScenePackage({providerDirectory:values['--output'],peerDirectory:values['--package-peer'],output:values['--package-output'],version:values['--version']});}
 }

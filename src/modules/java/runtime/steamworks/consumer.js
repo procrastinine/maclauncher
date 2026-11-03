@@ -6,7 +6,7 @@ const Zip = require("../../../shared/runtime/zip");
 const AppId = require("../../../shared/runtime/steamworks/app-id");
 const Observations = require("../../../../core/file-observations");
 const { PREFIX, inspectClass } = require("./class-file");
-const Catalog = require("./versions.json");
+const Catalog = require("../../../shared/runtime/included-package-metadata").resolve(require("./versions.json"));
 
 const LIMITS = Object.freeze({ archives: 24, entries: 20000, classes: 8192,
   classBytes: 1024 * 1024, manifestBytes: 64 * 1024, directoryBytes: 4 * 1024 * 1024,

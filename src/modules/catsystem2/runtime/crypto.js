@@ -3,7 +3,7 @@ const { spawn, execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const B = require("../../shared/runtime/bundled-native");
 const Native = require("../../shared/runtime/local-native");
-const declarations = require("./distribution-supplementals.json");
+const declarations = require("../../shared/runtime/included-package-metadata").declarations(require("./distribution-supplementals.json"));
 const run = promisify(execFile), signatures = new Map();
 const VERSION = Included.declared(declarations, { id: "catsystem2-kif-crypto" })?.version, MAXIMUM = 64 * 1024 * 1024;
 
