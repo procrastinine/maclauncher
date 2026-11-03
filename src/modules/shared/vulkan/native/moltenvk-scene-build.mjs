@@ -1,3 +1,4 @@
+import {addLicense} from "../../../../../scripts/license-files.mjs";
 // Copyright (c) MacLauncher contributors. MIT license.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -59,9 +60,13 @@ export function publishSceneProvider({library,projected,output,architecture,depe
  const links=read('/usr/bin/otool',['-L',library]).split('\n').slice(2).map(line=>line.trim().split(' (')[0]);for(const link of links)if(link&&!link.startsWith('/System/Library/')&&!link.startsWith('/usr/lib/'))throw Error('Unclosed provider dependency: '+link);
  fs.mkdirSync(output,{recursive:true});const name='libMoltenVK-scene.dylib',destination=path.join(output,name);fs.copyFileSync(library,destination);fs.chmodSync(destination,0o755);
  run('/usr/bin/install_name_tool',['-id','@rpath/'+name,destination]);run('/usr/bin/codesign',['--force','--sign','-','--timestamp=none',destination]);
- fs.copyFileSync(path.join(projected,'LICENSE'),path.join(output,'MoltenVK-LICENSE'));
- const notices=['MoltenVK-LICENSE'];for(const item of source.dependencies){const input=dependencies?.[item.id];if(!input)throw Error('Dependency source is missing at publication: '+item.id);const notice=['LICENSE','LICENSE.txt','LICENSE.md'].find(file=>fs.existsSync(path.join(input,file)));const licenses=(item.licenseFiles||[notice]).filter(file=>file&&fs.existsSync(path.join(input,file)));if(!licenses.length)continue;const destination=item.id+'-LICENSE';writeChanged(path.join(output,destination),licenses.map(file=>fs.readFileSync(path.join(input,file),'utf8')).join('\n\n'));notices.push(destination);}
- const files=[name,...notices].map(file=>({path:file,sha256:digest(fs.readFileSync(path.join(output,file))),size:fs.statSync(path.join(output,file)).size}));
+ addLicense(output,'moltenvk',path.join(projected,'LICENSE'));
+ for(const item of source.dependencies){const input=dependencies?.[item.id],names=item.licenseFiles||['LICENSE','LICENSE.txt','LICENSE.md'].filter(file=>input&&fs.existsSync(path.join(input,file))).slice(0,1);
+   if(!input){addLicense(output,item.id,undefined);continue;}
+   for(const file of names)addLicense(output,item.id,path.join(input,file),item.id+'-'+path.basename(file));
+ }
+ const licenseRoot=path.join(output,'licenses');
+ const files=[name,...(fs.existsSync(licenseRoot)?fs.readdirSync(licenseRoot).map(file=>'licenses/'+file):[])].map(file=>({path:file,sha256:digest(fs.readFileSync(path.join(output,file))),size:fs.statSync(path.join(output,file)).size}));
  const provider={schema:1,provider:'moltenvk',sceneOperationAPI:1,sceneStagingAPI:1,sceneOperationResources:'prepared-tracked-boundary',originalOutputRetained:true,
   library:name,architectures:[architecture],minimumMacOS:source.minimumMacOS,files,buildInputs};
  writeChanged(path.join(output,'provider.json'),JSON.stringify(provider,null,2)+'\n');return provider;
@@ -84,7 +89,7 @@ export function publishScenePackage({providerDirectory,peerDirectory,output,vers
  if(native.architectures.length!==1||native.architectures[0]!==architecture||
     native.slices.some(slice=>!Bundled.versionAtLeast(source.minimumMacOS,slice.minimumMacOS)))throw Error('The driver target differs from its profile');
  // A dependency without a license notice has no notice file.
- const expected=[provider.library,'MoltenVK-LICENSE',...source.dependencies.map(item=>item.id+'-LICENSE').filter(file=>provider.files.some(row=>row.path===file))];
+ const expected=provider.files.map(file=>file.path);
  if(provider.files.length!==expected.length||expected.some(file=>!provider.files.some(row=>row.path===file)))throw Error('The raw driver inventory is incomplete');
  for(const row of provider.files){Bundled.relativeFile(row.path);const stored=Bundled.readRegular(path.join(directory,row.path),Bundled.LIMITS.fileBytes);if(stored.sha256!==row.sha256||stored.size!==row.size)throw Error('The raw driver inventory changed');}
  const links=read('/usr/bin/otool',['-L',library]).split('\n').slice(2).map(line=>line.trim().split(' (')[0]).filter(Boolean);
@@ -93,10 +98,8 @@ export function publishScenePackage({providerDirectory,peerDirectory,output,vers
  const first=inputs[0],architectures=inputs.map(input=>input.architecture).sort();
  if(new Set(architectures).size!==inputs.length)throw Error('Managed driver inputs repeat a CPU architecture');
  for(const input of inputs.slice(1))if(JSON.stringify(input.provider.buildInputs)!==JSON.stringify(first.provider.buildInputs)||
-  JSON.stringify(input.links)!==JSON.stringify(first.links)||input.provider.files.some(row=>row.path!==input.provider.library&&!first.provider.files.some(other=>other.path===row.path&&other.sha256===row.sha256)))throw Error('Managed driver inputs have different source or dependency identities');
+  JSON.stringify(input.links)!==JSON.stringify(first.links))throw Error('Managed driver inputs have different source or dependency identities');
  const provider={...first.provider,architectures};
- const notices=[{name:'MoltenVK',license:source.license,sourceUrl:source.repository,path:'MoltenVK-LICENSE'},
-  ...source.dependencies.filter(item=>first.expected.includes(item.id+'-LICENSE')).map(item=>({name:item.id,license:item.license,sourceUrl:item.repository,path:item.id+'-LICENSE'}))];
  fs.mkdirSync(path.dirname(output),{recursive:true});const temporary=fs.mkdtempSync(path.join(path.dirname(output),'.moltenvk-package-'));
  try{
   for(const file of first.expected){fs.copyFileSync(path.join(first.directory,file),path.join(temporary,file));fs.chmodSync(path.join(temporary,file),file===provider.library?0o755:0o644);}
@@ -106,7 +109,7 @@ export function publishScenePackage({providerDirectory,peerDirectory,output,vers
   const files=Bundled.fileInventory(temporary).map(file=>{const stored=Bundled.readRegular(path.join(temporary,file),Bundled.LIMITS.fileBytes);return {path:file,size:stored.size,mode:stored.mode,sha256:stored.sha256,...(file===provider.library?{architectures}:{})};});
   const manifest={schemaVersion:1,managerId:source.projectId,version:version,upstreamRevision:source.revision,
    platform:'darwin',arch:inputs.length===2?'universal':architectures[0]==='x86_64'?'x64':'arm64',minimumMacOS:source.minimumMacOS,
-   executableRelative:provider.library,files,dependencies:[{file:provider.library,links:first.links}],notices,provider,
+   executableRelative:provider.library,files,dependencies:[{file:provider.library,links:first.links}],provider,
    provenance:{sourceRevision:source.revision,sourceUrl:source.repository,upstreamVersion:source.upstreamVersion,
     adaptationVersion:source.adaptationVersion,buildInputs:provider.buildInputs,packageProducer:{file:'moltenvk-scene-build.mjs',sha256:digest(fs.readFileSync(fileURLToPath(import.meta.url)))}}};
   Bundled.validateManifest(manifest);Bundled.verifyPayload(temporary,manifest);

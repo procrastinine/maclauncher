@@ -1,3 +1,4 @@
+const {addLicense} = require("../../../../scripts/license-files.mjs");
 const fs = require("node:fs");
 const path = require("node:path");
 const { execFile } = require("node:child_process");
@@ -36,33 +37,29 @@ async function stageBundledHelper({ libraryPath, sourceRoot, destination, profil
   fs.mkdirSync(destination, { recursive: true, mode: 0o755 });
   const copy = (name, bytes, mode = 0o644) => fs.writeFileSync(path.join(destination, name), bytes, { flag: "wx", mode });
   copy("luasteam.so", library.bytes, 0o755);
-  copy("LuaSteam-MIT.txt", Bundle.readRegular(path.join(sourceRoot, "notices/LuaSteam-LICENSE"), 128 * 1024).bytes);
-  copy("LuaJIT-MIT.txt", Bundle.readRegular(path.join(sourceRoot, "notices/LuaJIT-COPYRIGHT"), 128 * 1024).bytes);
-  copy("MacLauncher-MIT.txt", Bundle.readRegular(projectLicense, 128 * 1024).bytes);
-  copy("DEPENDENCIES.txt", Buffer.from(DEPENDENCIES));
-  const files = fs.readdirSync(destination).sort().map(name => {
+  addLicense(destination,"luasteam",sourceRoot&&path.join(sourceRoot,"licenses/luasteam.txt"));
+  addLicense(destination,"luajit",sourceRoot&&path.join(sourceRoot,"licenses/luajit.txt"));
+  addLicense(destination,"maclauncher",projectLicense);
+  fs.mkdirSync(path.join(destination,"licenses"),{recursive:true});
+  copy("licenses/luasteam-dependencies.txt",Buffer.from(DEPENDENCIES));
+  const files = Bundle.fileInventory(destination).sort().map(name => {
     const file = Bundle.readRegular(path.join(destination, name), 4 * 1024 * 1024);
     return { path: name, size: file.size, sha256: file.sha256, mode: file.mode,
       ...(name === "luasteam.so" ? { architectures: ["arm64", "x86_64"] } : {}) };
   });
-  const notices = [
-    { name: "LuaSteam", license: "MIT", path: "LuaSteam-MIT.txt", sourceUrl: "https://github.com/uspgamedev/luasteam" },
-    { name: "Lua C API headers from LuaJIT", license: "MIT", path: "LuaJIT-MIT.txt", sourceUrl: "https://luajit.org/" },
-    { name: "MacLauncher LuaSteam adaptation", license: "MIT", path: "MacLauncher-MIT.txt" }
-  ];
   const manifest = { schemaVersion: 1, id: "love-luasteam", version: Overlay.VERSION, upstreamVersion: "4.0.2",
     sourceRevision: Overlay.SOURCE_REVISION, luaHeadersRevision: Overlay.LUA_HEADERS_REVISION,
     sdkHeadersRevision: Overlay.SDK_HEADERS_REVISION, sdkVersion: Overlay.SDK_VERSION,
     hostLuaAbi: Overlay.HOST_LUA_ABI, minimumMacOS: "13.0", abiProfile: profile.id,
     librarySha256: library.sha256, steamHelperVersion: profile.helperVersion,
-    steamHelperLibrarySha256: profile.helperLibrarySha256, files, notices };
+    steamHelperLibrarySha256: profile.helperLibrarySha256, files };
   copy("helper.json", Buffer.from(JSON.stringify(manifest, null, 2) + "\n"));
   const sealed = Bundle.readRegular(path.join(destination, "helper.json"), 128 * 1024);
   const declaration = { id: "love-luasteam", version: Overlay.VERSION, arch: "universal",
     launcherArchitectures: ["arm64", "x64"], minimumMacOS: "13.0", sourceRelative: null,
     sourceSha256: Bundle.readRegular(path.join(__dirname, "luasteam-source-overlay.js"), 128 * 1024).sha256,
     directoryRelative: `love-luasteam/${Overlay.VERSION}/universal`, manifestRelative: "helper.json", manifestSha256: sealed.sha256,
-    files: [...files, { path: "helper.json", size: sealed.size, sha256: sealed.sha256, mode: 0o644 }], notices };
+    files: [...files, { path: "helper.json", size: sealed.size, sha256: sealed.sha256, mode: 0o644 }] };
   Bundle.verifyPayload(destination, declaration);
   return { manifest, declaration };
 }

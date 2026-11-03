@@ -1,3 +1,4 @@
+import {addLicense} from "./license-files.mjs";
 // Build the small included storage adapter; PlayCover remains a managed download.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,7 +18,7 @@ const directory = path.join(root,'src/resources/native-runtimes',directoryRelati
 fs.mkdirSync(directory,{recursive:true});
 execFileSync(process.execPath,[path.join(source,'build.mjs'),directory],{stdio:'inherit'});
 for (const file of sources) fs.copyFileSync(path.join(source,file),path.join(directory,file));
-fs.copyFileSync(path.join(root,'LICENSE'),path.join(directory,'license.txt'));
+addLicense(directory,id,path.join(root,'LICENSE'));
 const library = path.join(directory,'libplaytools-paths.dylib');
 const minimumMacOS = require('./stage-native-runtimes.cjs').loadCommands(library).minimumMacOS;
 if (minimumMacOS !== '12.0') throw new Error('Unexpected PlayTools adapter deployment target.');
@@ -26,13 +27,12 @@ const manifest = {schemaVersion:1,id,version,minimumMacOS,architectures:['arm64'
   sources:Object.fromEntries(sources.map(file=>[file,Native.hashFile(path.join(source,file))])),
   scope:'private-playtools-file-url-and-vendor-identifier',build:{signing:'ad-hoc',installName:'@rpath/libplaytools-paths.dylib'}};
 fs.writeFileSync(path.join(directory,'helper.json'),JSON.stringify(manifest,null,2)+'\n');
-const files = fs.readdirSync(directory).sort().map(name=>{
+const files = require("../src/modules/shared/runtime/bundled-native").fileInventory(directory).sort().map(name=>{
   const file=path.join(directory,name);fs.chmodSync(file,name.endsWith('.dylib')?0o755:0o644);
   return {path:name,size:fs.statSync(file).size,mode:fs.statSync(file).mode&0o777,sha256:Native.hashFile(file),...(name.endsWith('.dylib')?{architectures:['arm64']}:{} )};
 });
 const declaration = {id,version,arch:'arm64',launcherArchitectures:['arm64'],minimumMacOS,
-  sourceRelative:'playtools-paths.swift',sourceSha256:manifest.sourceSha256,directoryRelative,manifestRelative:'helper.json',manifestSha256:Native.hashFile(path.join(directory,'helper.json')),files,
-  notices:[{name:'MacLauncher PlayTools storage adapter',license:'MIT',path:'license.txt'}]};
+  sourceRelative:'playtools-paths.swift',sourceSha256:manifest.sourceSha256,directoryRelative,manifestRelative:'helper.json',manifestSha256:Native.hashFile(path.join(directory,'helper.json')),files};
 require('./native-supplementals.cjs').validateDeclaration(declaration);
 fs.writeFileSync(path.join(root,'src/modules/ios/distribution-supplementals.json'),JSON.stringify([declaration],null,2)+'\n');
 console.log(directoryRelative);

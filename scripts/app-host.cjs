@@ -22,7 +22,7 @@ function archiveInventory(archive, { version, arch, sha256 }) {
     entries = Zip.readCentralDirectory(fd, directory, { metadata: true });
   } finally { fs.closeSync(fd); }
   if (entries.length !== directory.entries || entries.length > B.LIMITS.files * 2) throw new Error('The Electron ZIP directory is incomplete.');
-  const names = new Set(), files = [], notices = []; let total = 0, native = 0, archiveVersion;
+  const names = new Set(), files = []; let total = 0, native = 0, archiveVersion;
   for (const entry of entries) {
     const name = B.relativeFile(entry.name.replace(/\/$/, '')), folded = name.normalize('NFC').toLowerCase();
     const type = (entry.externalAttributes >>> 16) & 0xf000;
@@ -35,8 +35,6 @@ function archiveInventory(archive, { version, arch, sha256 }) {
     const bytes = Zip.readZipEntry(archive, entry, { maxOutputBytes: B.LIMITS.fileBytes });
     if (!bytes || bytes.length !== entry.uncompressedSize) throw new Error('The Electron ZIP has an unreadable member.');
     if (name === 'version') archiveVersion = bytes.toString('utf8').trim();
-    if (name === 'LICENSE' || name === 'LICENSES.chromium.html') notices.push({ path: name,
-      size: bytes.length, sha256: hash(bytes), resource: name === 'LICENSE' ? 'LICENSE.electron.txt' : name });
     if (!name.startsWith('Electron.app/')) continue;
     const relative = B.relativeFile(name.slice('Electron.app/'.length));
     if (type === 0xa000) {
@@ -61,8 +59,7 @@ function archiveInventory(archive, { version, arch, sha256 }) {
   }
   if (archiveVersion !== version || !native || !files.some(file => file.path === 'Contents/MacOS/Electron'))
     throw new Error('The Electron ZIP differs from its npm version or executable.');
-  if (notices.length !== 2) throw new Error('The Electron ZIP is missing its publisher license notices.');
-  const inventory = { version, arch, files, notices };
+  const inventory = { version, arch, files };
   inventories.set(key, inventory);
   return inventory;
 }

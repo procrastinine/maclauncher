@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import {execFileSync} from "node:child_process";
 import {isolateCompiler} from "./isolate-compiler.mjs";
 import {SCENE_SHADER_INPUTS} from "../../effects/operation-contracts.mjs";
+import {addLicense} from "../../../../../scripts/license-files.mjs";
 const owned=import.meta.dirname,workspace=path.resolve(owned,"../../../../.."),source=JSON.parse(fs.readFileSync(path.join(owned,"source.json")));
 const output=path.resolve(process.argv[2]||"");
 if(!process.argv[2]||process.argv.length!==3&&!(process.argv.length===5&&process.argv[3]==="--payload"))throw Error("Choose an ISF build directory and optional --payload <new output>.");
@@ -43,10 +44,10 @@ for(const name of ["CopierMTLScene","SwizzleMTLScene"]){const file=path.join(out
 run("xcrun",["-sdk","macosx","metallib",...air,"-o",path.join(payload,"default.metallib")]);
 // Each checkout's license notice is carried when the checkout has one.
 for(const [name,root]of [["ISF",upstream],["VVMetalKit",path.join(upstream,"submodules/VVMetalKit")],["ISFGLSLGenerator",path.join(upstream,"submodules/ISFGLSLGenerator")],["PINCache",path.join(upstream,"submodules/PINCache")],["PINOperation",path.join(upstream,"submodules/PINCache/Carthage/Checkouts/PINOperation")]]){
-  const license=fs.readdirSync(root).find(file=>/^license(?:\.txt|\.md)?$/i.test(file));if(license)fs.copyFileSync(path.join(root,license),path.join(payload,name+"-LICENSE.txt"));
+  const license=(fs.existsSync(root)?fs.readdirSync(root):[]).find(file=>/^license(?:\.txt|\.md)?$/i.test(file));addLicense(payload,name,path.join(root,license||"LICENSE"));
 }
 for(const name of [source.library,...source.compilerLibraries.map(file=>path.basename(file))])run("codesign",["--force","--sign","-",path.join(payload,name)]);
-const files=fs.readdirSync(payload).filter(name=>name!=="provider.json").sort().map(name=>{const bytes=fs.readFileSync(path.join(payload,name));return {path:name,size:bytes.length,sha256:crypto.createHash("sha256").update(bytes).digest("hex")};});
+const files=fs.readdirSync(payload,{recursive:true,withFileTypes:true}).filter(entry=>entry.isFile()&&!(entry.parentPath===payload&&entry.name==="provider.json")).map(entry=>{const file=path.join(entry.parentPath,entry.name),name=path.relative(payload,file).split(path.sep).join("/"),bytes=fs.readFileSync(file);return {path:name,size:bytes.length,sha256:crypto.createHash("sha256").update(bytes).digest("hex")};}).sort((a,b)=>a.path.localeCompare(b.path));
 const ownedInputs=Object.fromEntries(["source.json","build.mjs","isolate-compiler.mjs","../compiler-isolation.mjs","../../effects/operation-contracts.mjs","CMakeLists.txt","provider.mm","index.js"].map(name=>[name,crypto.createHash("sha256").update(fs.readFileSync(path.join(owned,name))).digest("hex")]));
 const nativeRoot=path.resolve(owned,"../native"),dependencyText=fs.readFileSync(path.join(output,"cmake/CMakeFiles/macfx-isf.dir/provider.mm.o.d"),"utf8").replace(/\\\r?\n/g," ");
 const dependencies=[...dependencyText.matchAll(/(?:\\.|[^\s])+/g)].map(match=>match[0].replace(/\\(.)/g,"$1")).filter(file=>file.startsWith(nativeRoot+path.sep)&&/\.(?:h|hpp)$/.test(file));

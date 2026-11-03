@@ -5,9 +5,9 @@ import Supplementals from "./native-supplementals.cjs";
 export function validateEffectSources(sources, files) {
   if (!Array.isArray(sources) || sources.length > 64) throw new Error("Invalid ReShade effect sources.");
   const paths = new Set();
-  const keys = ["name", "license", "path", "sourceUrl", "revision", "sourceSha256", "sha256", "adaptation"];
+  const keys = ["name", "path", "sourceUrl", "revision", "sourceSha256", "sha256", "adaptation"];
   for (const source of sources) {
-    if (!source || Object.keys(source).length !== keys.length || Object.keys(source).some(key => !keys.includes(key)) ||
+    if (!source || Object.keys(source).some(key => !keys.includes(key) && key !== "license") ||
         keys.some(key => typeof source[key] !== "string" || !source[key].trim() || source[key].length > 1024) ||
         !/^effects\/[A-Za-z0-9_-]+\.fxh?$/.test(source.path) || paths.has(source.path) ||
         !/^https:\/\//.test(source.sourceUrl) || !/^[a-f0-9]{40}$/.test(source.revision) ||
@@ -18,5 +18,4 @@ export function validateEffectSources(sources, files) {
     paths.add(source.path);
   }
   Supplementals.validatePublicMetadata(sources);
-  return sources.map(({ name, license, path, sourceUrl }) => ({ name, license, path, sourceUrl }));
 }

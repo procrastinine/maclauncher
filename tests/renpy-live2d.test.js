@@ -92,7 +92,7 @@ test("game Live2D uses an owned library helper while original project and native
   const python = path.resolve(__dirname, "../src/resources/python/bin/python3");
   const check = `import sys, types, os\nrenpy = types.ModuleType('renpy')\nrenpy.gl2 = types.ModuleType('renpy.gl2')\nrenpy.gl2.live2dmodel = types.ModuleType('renpy.gl2.live2dmodel')\ncalls = []\nrenpy.gl2.live2dmodel.load = lambda name: calls.append(name) or True\nfor module in [renpy, renpy.gl2, renpy.gl2.live2dmodel]: sys.modules[module.__name__] = module\noriginal_executable = sys.executable\noriginal_cwd = os.getcwd()\nexec(${JSON.stringify(body)})\nassert calls == [], 'Core must not load during init'\nrenpy.gl2.live2dmodel.load(b'libLive2DCubismCore.dylib')\nassert calls[-1] == ${JSON.stringify(info.targetPath)}.encode('utf-8')\nrenpy.gl2.live2dmodel.load(b'/original/lib/libLive2DCubismCore.dylib')\nassert calls[-1] == ${JSON.stringify(info.targetPath)}.encode('utf-8')\nrenpy.gl2.live2dmodel.load(b'/original/lib/unrelated.dylib')\nassert calls[-1] == b'/original/lib/unrelated.dylib'\nassert sys.executable == original_executable and os.getcwd() == original_cwd\nprint('lazy Core route preserved')\n`;
   assert.match(require("node:child_process").execFileSync(python, ["-B", "-c", check], { encoding: "utf8", timeout: 15000 }), /lazy Core route preserved/);
-  assert.deepEqual(fs.readdirSync(helper).sort(), ["00_maclauncher_live2d.rpy", "LICENSE.md", "libLive2DCubismCore.dylib", "record.json"], "The helper contains no game files or runtime forest");
+  assert.deepEqual(fs.readdirSync(helper).sort(), ["00_maclauncher_live2d.rpy", "libLive2DCubismCore.dylib", "licenses", "record.json"], "The helper contains no game files or runtime forest");
   assert.equal((await Module.actions.removeLive2D(entry, {}, { userDataDir })).removed, true);
   assert.deepEqual(fs.readFileSync(sourceExecutable), original);
   assert.deepEqual(fs.readFileSync(sourceLibrary), originalLibrary);
@@ -152,9 +152,20 @@ test("incompatible imports and changed managed libraries cannot overwrite or rem
 
 test("publication failure rolls the library back and leaves no new install/backup record", t => {
   const root = fixture(t), target = Live2D.sdkTarget(sdk(root, "8.5.2")), original = Buffer.from("original library");
-  fs.writeFileSync(target.libraryPath, original); fs.mkdirSync(path.join(target.metadataDir, "LICENSE.md"), { recursive: true });
-  assert.throws(() => Live2D.importLibrary(target, archive(root)), /EISDIR|ENOTEMPTY/);
+  fs.writeFileSync(target.libraryPath, original, { mode: 0o640 });
+  const rename = fs.renameSync; let publishing = false;
+  t.mock.method(fs, "renameSync", (from, to) => {
+    if (to === path.join(target.metadataDir, "record.json")) {
+      publishing = true;
+      assert.notDeepEqual(fs.readFileSync(target.libraryPath), original, "The replacement reached publication before the failure");
+      throw Object.assign(new Error("Record publication denied"), { code: "EACCES" });
+    }
+    return rename(from, to);
+  });
+  assert.throws(() => Live2D.importLibrary(target, archive(root)), /Record publication denied/);
+  assert.equal(publishing, true);
   assert.deepEqual(fs.readFileSync(target.libraryPath), original);
+  assert.equal(fs.statSync(target.libraryPath).mode & 0o777, 0o640);
   assert.equal(fs.existsSync(path.join(target.metadataDir, "record.json")), false);
   assert.equal(fs.existsSync(path.join(target.metadataDir, "original.dylib")), false);
 });

@@ -1,3 +1,4 @@
+import {addLicense} from "../../../../scripts/license-files.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -9,12 +10,13 @@ export const SOURCE_PATH = "src/external/reshade-crt-royale";
 export function stageRoyale(source = path.resolve(SOURCE_PATH)) {
   source = path.resolve(source);
   const git = args => execFileSync("git", ["-C", source, ...args], { encoding: "utf8", maxBuffer: 1024 * 1024 }).trim();
-  if (git(["rev-parse", "HEAD"]) !== SOURCE_REVISION || git(["status", "--porcelain", "--untracked-files=no"]))
+  if (git(["rev-parse", "HEAD"]) !== SOURCE_REVISION)
     throw new Error("CRT Royale source must match its unmodified pinned revision.");
-  const paths = git(["ls-files"]).split("\n").filter(file => ["LICENSE.TXT", "README.MD"].includes(file) ||
+  const paths = git(["ls-files"]).split("\n").filter(file => file === "README.MD" ||
     /^reshade-shaders\/Shaders\/(?:crt-royale\.fx|crt-royale\/[A-Za-z0-9/-]+\.fxh)$/.test(file));
-  if (!paths.includes("LICENSE.TXT") || !paths.includes("reshade-shaders/Shaders/crt-royale.fx")) throw new Error("CRT Royale sources are incomplete.");
-  const destination = path.join(import.meta.dirname, "shader-collection/crt-royale"), files = [];
+  git(["diff","--exit-code","HEAD","--",...paths]);
+  if (!paths.includes("reshade-shaders/Shaders/crt-royale.fx")) throw new Error("CRT Royale sources are incomplete.");
+  const destination = path.join(import.meta.dirname,"shader-collection/crt-royale"), files = [];
   for (const original of paths.sort()) {
     const from = path.join(source, original), relative = original.replace(/^reshade-shaders\//, ""), to = path.join(destination, relative);
     const stat = fs.lstatSync(from);
@@ -25,8 +27,11 @@ export function stageRoyale(source = path.resolve(SOURCE_PATH)) {
     fs.writeFileSync(to, bytes, { mode: 0o644 });
     files.push({ path: relative, sourcePath: original, size: bytes.length, sha256 });
   }
+  addLicense(destination,"crt-royale",path.join(source,"LICENSE.TXT"));
+  const licenses=path.join(destination,"licenses");
+  if(fs.existsSync(licenses))for(const name of fs.readdirSync(licenses)){const bytes=fs.readFileSync(path.join(licenses,name));files.push({path:"licenses/"+name,size:bytes.length,sha256:crypto.createHash("sha256").update(bytes).digest("hex")});}
   const inventory = { schemaVersion: 1, repository: "https://github.com/akgunter/crt-royale-reshade", revision: SOURCE_REVISION,
-    license: "GPL-2.0-or-later and MIT", licensePaths: ["LICENSE.TXT", "Shaders/crt-royale/lib/blur-functions.fxh",
+    license: "GPL-2.0-or-later and MIT", licensePaths: ["licenses/crt-royale.txt", "Shaders/crt-royale/lib/blur-functions.fxh",
       "Shaders/crt-royale/lib/gamma-management.fxh", "Shaders/crt-royale/lib/helper-functions-and-macros.fxh",
       "Shaders/crt-royale/lib/quad-pixel-communication.fxh", "Shaders/crt-royale/lib/special-functions.fxh"], files };
   fs.writeFileSync(path.join(destination, "source-files.json"), JSON.stringify(inventory, null, 2) + "\n");

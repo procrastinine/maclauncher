@@ -1,3 +1,4 @@
+import {addLicense} from "../../../../../scripts/license-files.mjs";
 // Copyright (c) MacLauncher contributors. MIT license.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -47,10 +48,9 @@ const clang=execFileSync('xcrun',['--find','clang++'],{encoding:'utf8'}).trim(),
 for(const architecture of ['arm64','x86_64']){const object=path.join(out,'recorded-source-'+architecture+'.o');execFileSync(clang,['-std=c++17','-O2','-arch',architecture,'-isysroot',macSDK,'-mmacosx-version-min=13.0','-fdeclspec','-Wno-ignored-attributes',
  '-ffile-prefix-map='+repository+'=MacLauncher','-ffile-prefix-map='+out+'=FidelityFXBuild','-I'+inputs,'-I'+path.resolve(here,'../../../shared/vulkan/native'),'-c',path.join(here,'recorded-source.cpp'),'-o',object],{stdio:'inherit'});objects.push(object);}
 const producer=path.join(out,'libffx-vulkan-scene-source.a');execFileSync('libtool',['-static','-o',producer,...objects],{stdio:'inherit'});
-let license;for(const file of ['LICENSE.txt','LICENSE.md','LICENSE']){try{license=git(sdk,'show',source.sdk.revision+':'+file);break;}catch{}}
-if(!license)throw Error('The original FidelityFX license is unavailable.');fs.writeFileSync(path.join(out,'FidelityFX-SDK-LICENSE.txt'),license);
-fs.copyFileSync(path.join(here,source.vulkan.licenseFile),path.join(out,'Vulkan-Headers-Apache-2.0.txt'));
-fs.copyFileSync(path.resolve(here,'../../../../../LICENSE'),path.join(out,'MacLauncher-MIT.txt'));
+addLicense(out,'fidelityfx-sdk',['LICENSE.txt','LICENSE.md','LICENSE'].map(file=>path.join(sdk,file)).find(file=>fs.existsSync(file)));
+addLicense(out,'vulkan-headers',path.join(here,source.vulkan.licenseFile));
+addLicense(out,'maclauncher',path.resolve(here,'../../../../../LICENSE'));
 // The Vulkan headers also retain their original copyright notices in inputs/.
 const owned=['source.json','Apache-2.0.txt','capture.hpp','observation.h','proxy.cpp','wine-observer.hpp','wine-observer.cpp','scalar-mapping.hpp','native-source.h','recorded-source.hpp','recorded-source.cpp','index.js','build.mjs'];
 const metadata={schema:1,version:args.version,profile:source.profile,backend,library:source.libraries[backend],sha256:hash(library),exports:actual,
@@ -64,15 +64,12 @@ const metadata={schema:1,version:args.version,profile:source.profile,backend,lib
 fs.writeFileSync(path.join(out,'provider.json'),JSON.stringify(metadata,null,2)+'\n');
 // Runtime packages select binary and notice files only. Compiler inputs and
 // the native source archive remain producer outputs outside that selection.
-const runtimeFiles=[source.libraries[backend],source.original[backend],'FidelityFX-SDK-LICENSE.txt','Vulkan-Headers-Apache-2.0.txt','MacLauncher-MIT.txt'];
-const files=runtimeFiles.map(file=>{const target=path.join(out,file),binary=file.endsWith('.dll');fs.chmodSync(target,binary?0o755:0o644);return{
+const licenseRoot=path.join(out,'licenses');
+const runtimeFiles=[source.libraries[backend],source.original[backend],...(fs.existsSync(licenseRoot)?fs.readdirSync(licenseRoot).map(file=>'licenses/'+file):[])];
+const files=runtimeFiles.filter(file=>fs.existsSync(path.join(out,file))).map(file=>{const target=path.join(out,file),binary=file.endsWith('.dll');fs.chmodSync(target,binary?0o755:0o644);return{
  path:file,size:fs.statSync(target).size,mode:binary?0o755:0o644,sha256:hash(target),...(binary?{format:'pe',architectures:['x86_64']}:{})};});
-const notices=[{name:'FidelityFX SDK',license:source.sdk.license,sourceUrl:source.sdk.repository,path:'FidelityFX-SDK-LICENSE.txt'},
- {name:'Vulkan headers',license:source.vulkan.license,sourceUrl:source.vulkan.repository,path:'Vulkan-Headers-Apache-2.0.txt'},
- {name:'MacLauncher',license:'MIT',sourceUrl:'https://github.com/procrastinine/maclauncher',path:'MacLauncher-MIT.txt'}];
-const provider=Object.fromEntries(['schema','version','profile','backend','library','sha256','exports','sourceExports','observationAPI','referenceSha256','referenceFileVersion','originalLibrary','execution'].map(key=>[key,metadata[key]]));
 const manifest={schemaVersion:1,managerId:source.id,version:args.version,platform:'darwin',arch:'x64',minimumMacOS:source.minimumMacOS,
- executableRelative:source.libraries[backend],provider,files,notices,dependencies:[]};
+ executableRelative:source.libraries[backend],provider,files,dependencies:[]};
 const payload=path.join(out,'payload');fs.mkdirSync(payload,{recursive:true});
 for(const file of files){const target=path.join(payload,file.path);fs.copyFileSync(path.join(out,file.path),target);fs.chmodSync(target,file.mode);}
 // The game-library adapter reads this descriptor from its installed payload.
@@ -82,6 +79,6 @@ files.push({path:'provider.json',size:fs.statSync(providerFile).size,mode:0o644,
 const manifestFile=path.join(payload,'manifest.json');fs.writeFileSync(manifestFile,JSON.stringify(manifest,null,2)+'\n');fs.chmodSync(manifestFile,0o644);
 const declaration={id:source.id,version:args.version,arch:'x64',launcherArchitectures:['arm64','x64'],minimumMacOS:source.minimumMacOS,
  sourceRelative:null,sourceSha256:hash(path.join(here,'source.json')),directoryRelative:[source.id,args.version,'x64'].join('/'),
- manifestRelative:'manifest.json',manifestSha256:hash(manifestFile),files:[...files,{path:'manifest.json',size:fs.statSync(manifestFile).size,mode:0o644,sha256:hash(manifestFile)}],notices};
+ manifestRelative:'manifest.json',manifestSha256:hash(manifestFile),files:[...files,{path:'manifest.json',size:fs.statSync(manifestFile).size,mode:0o644,sha256:hash(manifestFile)}],};
 fs.writeFileSync(path.join(out,'runtime-package.json'),JSON.stringify(declaration,null,2)+'\n');
 console.log(JSON.stringify({library,sha256:metadata.sha256,exports:actual.length,nativeProducer:producer,wineVulkanInterop:false}));

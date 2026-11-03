@@ -5,7 +5,6 @@
   "version": "FidelityFX DoF 1.1.0",
   "license": "MIT",
   "sourceScope": [
-    "LICENSE.txt",
     "sdk/include/FidelityFX/gpu/dof/CMakeCompileDOFShaders.txt",
     "sdk/include/FidelityFX/gpu/dof/ffx_dof_blur.h",
     "sdk/include/FidelityFX/gpu/dof/ffx_dof_callbacks_glsl.h",
@@ -68,7 +67,6 @@
     }
   ],
   "files": {
-    "LICENSE.txt": "82cf74fc23885107c7f69249ac3f1dac55898ff68320eb2c753984cae6b2d78a",
     "sdk/include/FidelityFX/gpu/dof/CMakeCompileDOFShaders.txt": "220e8e2be577296e58459fac6d4607d4b3e1a8bf2f3027e4af33c46e1c064805",
     "sdk/include/FidelityFX/gpu/dof/ffx_dof_blur.h": "533e0846268e484f4d1f8341536e73f703f4065d03be2bf25c5fbe172c8ae408",
     "sdk/include/FidelityFX/gpu/dof/ffx_dof_callbacks_glsl.h": "4c97d8c27b7de63864fa0e52ac676b84fd9d4dbdc2a2b6925a1a46681b9a2c45",
@@ -102,5 +100,10 @@
     "sdk/include/FidelityFX/gpu/ffx_core_glsl.h": "01afe5b65549b2c0951b494ca4bf570ee2aa89a64344e4c7d98ef86e6613ab42",
     "sdk/include/FidelityFX/gpu/ffx_core_gpu_common.h": "0e3c50cb0b4592c051d87e028a1dfa54fbd097942ebb3146964db801dec095d0",
     "sdk/include/FidelityFX/gpu/ffx_core_gpu_common_half.h": "d10466cbf027c8c23858a25f8e8cbbbf521d29f373db663c9354221651e9a498"
-  }
+  },
+  "licenseFiles": [
+    {
+      "path": "LICENSE.txt"
+    }
+  ]
 }

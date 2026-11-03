@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+const {addLicense} = require("./license-files.mjs");
 // Release-time only: no games, network requests or original binary mutations.
 const fs = require("node:fs");
 const path = require("node:path");
@@ -10,7 +11,7 @@ const Native = require("../src/modules/shared/runtime/local-native");
 const { validateSourceScope, validatePinnedSource, hashPinnedFiles } = require("../src/modules/shared/runtime/pinned-native-build");
 const { requiresDistribution } = require("./distribution-model.cjs");
 
-const { macho, loadCommands, parseLinkedLibraries, links, libraryIds, thinStagedMachO, resolveLink, copyTree, formulaRoot, assertPublicMetadata, publicProvenance, sanitizeHomebrewReceipt, addDependencyNotices } = require("./native-binary-tools.cjs");
+const { macho, loadCommands, parseLinkedLibraries, links, libraryIds, thinStagedMachO, resolveLink, copyTree, formulaRoot, assertPublicMetadata, publicProvenance, sanitizeHomebrewReceipt, addDependencyLicenses } = require("./native-binary-tools.cjs");
 
 const REPO = path.resolve(__dirname, "..");
 const systemLink = value => value.startsWith("/usr/lib/") || value.startsWith("/System/Library/");
@@ -136,8 +137,8 @@ function applyPayloadPolicy(payload, { executableRelative, notices = [], runtime
   const omitted = policy.omitPaths.map(B.relativeFile), nextRuntimeFiles = { ...runtimeFiles };
   for (const key of policy.omitRuntimeFiles || []) delete nextRuntimeFiles[key];
   const matches = file => omitted.some(relative => file === relative || file.startsWith(relative + "/"));
-  if ([executableRelative, ...notices.map(notice => notice.path), ...Object.values(nextRuntimeFiles)].some(matches)) {
-    throw new Error("Native payload policy would remove a required executable, notice or runtime resource.");
+  if ([executableRelative, ...Object.values(nextRuntimeFiles)].some(matches)) {
+    throw new Error("Native payload policy would remove a required executable or runtime resource.");
   }
   const removed = B.fileInventory(payload).filter(matches);
   for (const relative of omitted) fs.rmSync(path.join(payload, relative), { recursive: true, force: true });
@@ -212,7 +213,6 @@ async function stagePackage(input, { outputRoot, maximumMacOS = "13.0", signingI
   const additionalSources = await validateAdditionalSources(input, pin, sourceRoot);
   const inputHash = Native.hashFile(executable);
   if (!/^[a-f0-9]{64}$/.test(input.expectedInputSha256 || "") || inputHash !== input.expectedInputSha256) throw new Error(`Input executable checksum differs from the reviewed build: ${input.managerId}`);
-  if (!Array.isArray(input.notices) || !input.notices.length) throw new Error("Every runtime package needs upstream and dependency license notices.");
   const root = absolute(outputRoot), destination = path.join(root, input.managerId, pin.version, arch);
   B.realDirectory(path.dirname(destination), { create: true });
   const staging = fs.mkdtempSync(path.join(path.dirname(destination), ".stage-")), payload = path.join(staging, "files");
@@ -228,12 +228,8 @@ async function stagePackage(input, { outputRoot, maximumMacOS = "13.0", signingI
       signingIdentity, sourceRevision: source.head, inputExecutableSha256: inputHash, stagedAt: new Date().toISOString() }, null, 2) + "\n", { flag: "wx", mode: 0o600 });
     const executableRelative = resolveExecutableRelative(input, executable);
     if (input.appRoot) {
-      const rootExcludes = input.appRootNoticeFiles || [];
-      if (!Array.isArray(rootExcludes) || rootExcludes.some(name => typeof name !== "string" ||
-          path.basename(name) !== name || [".", "..", "Contents"].includes(name) ||
-          !input.notices.some(notice => absolute(notice.file) === path.join(absolute(input.appRoot), name)))) {
-        throw new Error("App-root notice files must be explicitly preserved in the package's license inventory.");
-      }
+      const rootExcludes = (Array.isArray(input.appRootNoticeFiles) ? input.appRootNoticeFiles : [])
+        .filter(name => typeof name === "string" && path.basename(name) === name && ![".", "..", "Contents"].includes(name));
       // Modern codesign rejects extra license files beside Contents. Preserve
       // those exact notices in licenses/, leaving the copied app root sealable.
       copyTree(absolute(input.appRoot), path.join(payload, path.basename(input.appRoot)), { rootExcludes });
@@ -241,14 +237,8 @@ async function stagePackage(input, { outputRoot, maximumMacOS = "13.0", signingI
     else copyTree(executable, path.join(payload, executableRelative));
     if (input.executableMode !== undefined) fs.chmodSync(path.join(payload, executableRelative), input.executableMode);
     for (const extra of input.payloads || []) copyTree(absolute(extra.source), path.join(payload, B.relativeFile(extra.relative)), { excludes: extra.excludes || [] });
-    const notices = [];
-    for (const [index, notice] of input.notices.entries()) {
-      const relative = `licenses/upstream/${index}-${path.basename(notice.file)}`;
-      copyTree(absolute(notice.file), path.join(payload, relative));
-      notices.push({ name: notice.name, license: notice.license, sourceUrl: notice.sourceUrl, path: relative,
-        ...(notice.dependencyName ? { dependencyName: notice.dependencyName } : {}) });
-    }
-    const payloadContent = applyPayloadPolicy(payload, { executableRelative, notices, runtimeFiles: input.runtimeFiles || {} }, manager.payloadPolicy);
+    for(const notice of Array.isArray(input.notices)?input.notices:[])addLicense(payload,input.managerId,notice?.file,path.basename(notice?.file||"license"));
+    const payloadContent = applyPayloadPolicy(payload, { executableRelative, runtimeFiles: input.runtimeFiles || {} }, manager.payloadPolicy);
     // Match initial copied Mach-O files to their originals, including app plugins.
     const originalPayloads = [{ source: input.appRoot ? absolute(input.appRoot) : executable,
       relative: input.appRoot ? path.basename(input.appRoot) : executableRelative }, ...(input.payloads || []).map(item => ({ source: absolute(item.source), relative: item.relative }))];
@@ -259,7 +249,7 @@ async function stagePackage(input, { outputRoot, maximumMacOS = "13.0", signingI
       const original = fs.realpathSync(relative === entry.relative ? entry.source : path.join(entry.source, relative.slice(entry.relative.length + 1)));
       sourceTargets.set(original, target); binarySources.set(target, original); originals.set(original, Native.hashFile(original));
     }
-    const noticeRoots = new Set(), inherited = loadCommands(executable, selectedCPU).rpaths, thinned = [];
+    const licenseRoots = new Set(), inherited = loadCommands(executable, selectedCPU).rpaths, thinned = [];
     const extraLibraries = [...(input.extraLibraries || [])];
     // SDL2-compat's SDL3 is loaded with dlopen and is absent from otool -L.
     if ([...binarySources.values()].some(file => file.includes("sdl2-compat"))) {
@@ -286,7 +276,7 @@ async function stagePackage(input, { outputRoot, maximumMacOS = "13.0", signingI
         const transformation = thinStagedMachO(target, payload, selectedCPU, tool);
         if (transformation) thinned.push(transformation);
       }
-      addDependencyNotices(original, payload, notices, noticeRoots, receiptRoot);
+      addDependencyLicenses(original, payload, licenseRoots, receiptRoot);
       const originalCommands = loadCommands(original, selectedCPU);
       for (const link of links(original, selectedCPU)) {
         if (systemLink(link)) continue;
@@ -329,7 +319,7 @@ async function stagePackage(input, { outputRoot, maximumMacOS = "13.0", signingI
     });
     if (selectedCPU) provenance.nativeThinning = { version: "mach-o-slice-v1", architecture: selectedCPU, files: thinned.sort((a, b) => a.file.localeCompare(b.file)) };
     const manifest = { schemaVersion: 1, managerId: input.managerId, version: input.version, upstreamRevision: source.head,
-      platform: "darwin", arch, minimumMacOS, executableRelative, files, dependencies, notices,
+      platform: "darwin", arch, minimumMacOS, executableRelative, files, dependencies,
       environmentRelative: input.environmentRelative || {}, runtimeFiles: payloadContent.runtimeFiles, signature: { identity: signingIdentity, verified: true },
       provenance, createdAt: new Date().toISOString() };
     B.validateManifest(manifest, { managerId: input.managerId, version: input.version, upstreamRevision: pin.upstreamRevision, arch });
@@ -376,5 +366,5 @@ async function main(args) {
   for (const input of packages) console.log(JSON.stringify(await stagePackage(input, { outputRoot, maximumMacOS: options["maximum-macos"] || "13.0", signingIdentity: options["sign-identity"] || "-", arch: options.arch || process.arch })));
 }
 
-module.exports = { stagePackage, applyPayloadPolicy, resolveStagingPin, validateCandidateSource, additionalSourceIdentities, validateAdditionalSources, verifyAdditionalSources, validateArtifactSource, reviewedBinaryTree, requiresDistribution, resolveExecutableRelative, thinStagedMachO, loadCommands, parseLinkedLibraries, links, libraryIds, resolveLink, copyTree, managers, main, publicProvenance, sanitizeHomebrewReceipt, addDependencyNotices };
+module.exports = { stagePackage, applyPayloadPolicy, resolveStagingPin, validateCandidateSource, additionalSourceIdentities, validateAdditionalSources, verifyAdditionalSources, validateArtifactSource, reviewedBinaryTree, requiresDistribution, resolveExecutableRelative, thinStagedMachO, loadCommands, parseLinkedLibraries, links, libraryIds, resolveLink, copyTree, managers, main, publicProvenance, sanitizeHomebrewReceipt, addDependencyLicenses };
 if (require.main === module) main(process.argv.slice(2)).catch(error => { console.error(error.message); process.exitCode = 1; });

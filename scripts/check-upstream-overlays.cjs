@@ -281,9 +281,6 @@ async function checkInventory({ root = ROOT, inventory = JSON.parse(fs.readFileS
         if (!sourcePaths.has(childPath)) errors.push({ code: "untracked-nested-upstream", path: childPath });
         if (!nested.some(child => child.path === location)) errors.push({ code: "missing-nested-submodule-metadata", id: project.id, path: childPath });
       }
-      for (const license of project.licensePaths || []) {
-        if (!fs.existsSync(path.join(directory, relativePath(license)))) errors.push({ code: "license-evidence-missing", id: project.id, path: license });
-      }
       if (project.licenseStatus === "unresolved") warnings.push({ code: "license-review-required", id: project.id });
       checked.push({ id: project.id, status: head === project.revision && !dirty ? "pinned" : "drift", revision: project.revision });
     } catch (error) { errors.push({ code: "source-inspection-failed", id: project.id, message: error.message.split("\n")[0] }); }

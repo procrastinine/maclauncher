@@ -1,3 +1,4 @@
+import {addLicense} from "../../../../../../scripts/license-files.mjs";
 // Copyright (c) MacLauncher contributors. MIT license.
 import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
@@ -11,13 +12,13 @@ const here = import.meta.dirname,
       [ sourceArg, destinationArg, ...flags ] = process.argv.slice(2);
 if (!sourceArg || !destinationArg)
   throw Error(
-      'Usage: build.mjs SOURCE OUTPUT --tools DIR --lite2-weights FILE --lite2-license FILE [--quick]');
+      'Usage: build.mjs SOURCE OUTPUT --tools DIR --lite2-weights FILE [--lite2-license FILE] [--quick]');
 const source = path.resolve(sourceArg),
       destination = path.resolve(destinationArg), options = {};
 const ownedNames =
           [
             'source.json', 'build.mjs', 'adapt-runtime.mjs', 'provider.mm',
-            'index.js', 'NOTICE.md', 'README.md', '../frame.h',
+            'index.js', 'README.md', '../frame.h',
             '../payload-files.hpp'
           ],
       ownedSnapshot = new Map(await Promise.all(ownedNames.map(
@@ -40,7 +41,7 @@ for (let i = 0; i < flags.length; i++) {
 }
 if (quick && repackage)
   throw Error('Repackaging requires an existing complete payload.');
-for (const name of ['--tools', '--lite2-weights', '--lite2-license'])
+for (const name of ['--tools', '--lite2-weights'])
   if (!options[name])
     throw Error('Missing ' + name);
 const hash = b => createHash('sha256').update(b).digest('hex'),
@@ -67,8 +68,7 @@ const capture = async (command, args) => {
 if (await capture('git', [ '-C', source, 'rev-parse', 'HEAD' ]) !== pin.commit)
   throw Error('FSR4 source pin changed.');
 await run('git', [ '-C', source, 'diff', '--exit-code', 'HEAD', '--' ]);
-for (const [option, digest] of [[ '--lite2-weights', pin.lite2.sha256 ],
-                                [ '--lite2-license', pin.lite2.licenseSha256 ]])
+for (const [option, digest] of [[ '--lite2-weights', pin.lite2.sha256 ]])
   if (hash(await fs.readFile(options[option])) !== digest)
     throw Error('The pinned Lite2 input changed: ' + option);
 const work = path.join(destination, 'source'),
@@ -277,12 +277,11 @@ if (!repackage) {
   await fs.mkdir(path.join(payload, 'third_party/fsr411'), {recursive : true});
   await fs.rm(path.join(payload, 'third_party/fsr411/weights_lossy2.npz'),
               {force : true});
-  for (const file of ['initializers.bin', 'initializers-ultraperformance.bin',
-                      'LICENSE', 'LICENSE.AMD.md'])
+  for (const file of ['initializers.bin', 'initializers-ultraperformance.bin'])
     await fs.copyFile(path.join(work, 'third_party/fsr411', file),
                       path.join(payload, 'third_party/fsr411', file));
-  await fs.copyFile(options['--lite2-license'],
-                    path.join(payload, 'third_party/fsr411/LICENSE.Lite2.txt'));
+  for(const file of ['LICENSE','LICENSE.AMD.md'])addLicense(payload,'fsr4',path.join(work,'third_party/fsr411',file),'fsr4-'+file);
+  addLicense(payload,'fsr4-lite2',options['--lite2-license']);
 }
 await fs.mkdir(path.join(destination, 'source-inputs'), {recursive : true});
 await fs.copyFile(options['--lite2-weights'],
@@ -319,8 +318,7 @@ await run('xcrun', [
 await run('codesign', [
   '--force', '--sign', '-', path.join(payload, 'libmaclauncher-fsr4.dylib')
 ]);
-await fs.copyFile(path.join(here, 'NOTICE.md'),
-                  path.join(payload, 'NOTICE.md'));
+addLicense(payload,'fsr4-native',path.join(here,'NOTICE.md'));
 const owned = {};
 for (const [name, bytes] of ownedSnapshot) {
   owned[name] = hash(bytes);

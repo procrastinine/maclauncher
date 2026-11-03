@@ -61,7 +61,7 @@ function selectedFiles(manifest, entry, options = {}) {
   if (formats.has("magpie")) {names.add("shaderc-offline");prefixes.push("libplacebo/");}
   if (formats.has("isf")) prefixes.push("isf/");
   return manifest.files.filter(row => (names.has(row.path) || prefixes.some(prefix => row.path.startsWith(prefix))) &&
-    !row.path.startsWith("neural/notices/") && row.path !== "neural/maclauncher-neural-video");
+    row.path !== "neural/maclauncher-neural-video");
 }
 function verifyLaunch(root, entry, options = {}) {
   const manifest = options.manifest || require("./publication").forRoot(root);

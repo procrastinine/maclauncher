@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {addLicense} from '../../../../../scripts/license-files.mjs';
 // Copyright (c) MacLauncher contributors. MIT license.
 // Original FidelityFX CACAO kernels and constant/scheduling contract.
 import fs from 'node:fs';
@@ -24,7 +25,7 @@ const source = options['--source'], tools = options['--tools'],
           exe, args, {encoding : 'utf8', maxBuffer : 32 * 1024 * 1024});
 if (run('git', [ '-C', source, 'rev-parse', 'HEAD' ]).trim() !== spec.commit)
   throw Error('CACAO source pin changed.');
-run('git', [ '-C', source, 'diff', '--exit-code', 'HEAD', '--' ]);
+run('git', [ '-C', source, 'diff', '--exit-code', 'HEAD', '--', ...Object.keys(spec.files) ]);
 const read = file =>
     fs.existsSync(path.join(source, file))
         ? fs.readFileSync(path.join(source, file), 'utf8')
@@ -278,7 +279,7 @@ shaders.forEach(
         i},sizeof(bindings${i})/sizeof(Binding),${s.threads.join(',')}},`);
 header += '};\n}\n';
 fs.writeFileSync(path.join(out, 'cacao-shaders.hpp'), header);
-fs.writeFileSync(path.join(out, 'cacao-MIT.txt'), read('LICENSE.txt'));
+for(const candidate of spec.licenseFiles||[])addLicense(out,'cacao',path.join(source,candidate.path));
 fs.writeFileSync(path.join(out, 'translation.json'), JSON.stringify({
   schema : 1,
   repository : spec.repository,

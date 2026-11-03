@@ -174,7 +174,6 @@ function validateManifest(manifest, { managerId, version, upstreamRevision, arch
       manifest.platform !== "darwin" || !["arm64", "x64", "universal"].includes(manifest.arch) ||
       !/^\d+\.\d+(?:\.\d+)?$/.test(manifest.minimumMacOS || "") ||
       !Array.isArray(manifest.files) || !manifest.files.length || manifest.files.length > LIMITS.files ||
-      checkSourceIdentity && (!Array.isArray(manifest.notices) || !manifest.notices.length) ||
       checkSourceIdentity && manifest.provenance?.sourceRevision !== manifest.upstreamRevision || !Array.isArray(manifest.dependencies)) throw new Error("Invalid bundled runtime manifest.");
   if (managerId && manifest.managerId !== managerId || version && manifest.version !== version ||
       checkSourceIdentity && upstreamRevision && manifest.upstreamRevision !== upstreamRevision || arch && manifest.arch !== arch) throw new Error("Bundled runtime version, source pin or architecture differs from the selected catalog entry.");
@@ -197,10 +196,6 @@ function validateManifest(manifest, { managerId, version, upstreamRevision, arch
   const executable = filesByPath.get(manifest.executableRelative);
   const requiredArchitectures = manifest.arch === "universal" ? ["arm64", "x86_64"] : [manifest.arch === "x64" ? "x86_64" : "arm64"];
   if (!executable || !(executable.mode & 0o111) || !requiredArchitectures.every(architecture => executable.architectures?.includes(architecture))) throw new Error("Bundled runtime has no matching executable.");
-  for (const notice of checkSourceIdentity ? manifest.notices : []) {
-    if (!notice || typeof notice.name !== "string" || !notice.name || typeof notice.license !== "string" || !notice.license ||
-        !/^https:\/\//.test(notice.sourceUrl || "") || !filesByPath.has(relativeFile(notice.path))) throw new Error("Bundled runtime license notice is missing.");
-  }
   for (const dependency of manifest.dependencies) {
     if (!dependency || !filesByPath.has(relativeFile(dependency.file)) ||
         !Array.isArray(dependency.links) || dependency.links.some(link => typeof link !== "string" || !(

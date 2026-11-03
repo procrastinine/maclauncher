@@ -69,13 +69,6 @@
       "url": "{url}",
       "sha256": "{sha256}"
     },
-    "lite2-license": {
-      "kind": "file",
-      "description": "License of the FSR 4 Lite 2 weights",
-      "pin": {"file": "src/modules/shared/reshade/temporal/fsr4/source.json", "pointer": "/lite2"},
-      "url": "https://raw.githubusercontent.com/zgauthier2000/fsr4-shader-performance-overrides/{commit}/LICENSE",
-      "sha256": "{licenseSha256}"
-    },
     "streamline-reference": {
       "kind": "archive",
       "description": "Official 64-bit sl.interposer.dll from the Streamline 2.9.0 SDK",
@@ -185,7 +178,7 @@
       "payload": "output/payload",
       "tools": ["uv"],
       "steps": [{"recipe": "src/modules/shared/reshade/temporal/fsr4/build.mjs", "args": [
-        "{source:fsr4}", "{output}", "--tools", "{input:shader-tools}", "--lite2-weights", "{input:lite2-weights}", "--lite2-license", "{input:lite2-license}"]}]
+        "{source:fsr4}", "{output}", "--tools", "{input:shader-tools}", "--lite2-weights", "{input:lite2-weights}"]}]
     },
     "asr": {
       "option": "--asr",

@@ -181,9 +181,12 @@ function createManagedWindowsTool({ id, label, owner, repo, executableName, asse
           if (!item) throw new Error(`${label} archive does not contain ${name}.`);
           fs.writeFileSync(path.join(unpacked, name), item.read(128 * 1024 ** 2));
         }
-        for (const item of entries.filter(item => /(?:^|\/)(?:LICENSE|COPYING|COPYRIGHT)(?:[^/]*)$/i.test(item.name)).slice(0, 16)) {
+        for (const item of entries.filter(item => /(?:^|\/)(?:LICENSE|COPYING|COPYRIGHT)(?:[^/]*)$/i.test(item.name))) {
           const name = path.posix.basename(item.name);
-          if (/^[A-Za-z0-9_. ()-]+$/.test(name)) fs.writeFileSync(path.join(unpacked, name), item.read(1024 * 1024));
+          try {
+            fs.mkdirSync(path.join(unpacked, "licenses"), { recursive: true });
+            fs.writeFileSync(path.join(unpacked, "licenses", name), item.read(128 * 1024 ** 2));
+          } catch (error) { console.warn("Optional tool license could not be copied:", error.message); }
         }
       } finally { fs.rmSync(work, { recursive: true, force: true }); }
     }
@@ -193,9 +196,14 @@ function createManagedWindowsTool({ id, label, owner, repo, executableName, asse
     sourceUrl: `https://github.com/${repository}/releases`, upstream,
     resolveExecutable: root => path.join(root, executableName), inspectRuntime: inspectWindowsTool,
     prepareInstall: async ({ unpacked, pin, signal }) => {
-      if (notices) return notices({ unpacked, pin, signal });
-      if (!fs.readdirSync(unpacked).some(name => /^(?:LICENSE|COPYING|COPYRIGHT)(?:[^/]*)$/i.test(name)))
-        await Upstream.githubLicense({ repository, revision: pin.upstreamRevision, destination: path.join(unpacked, "LICENSE"), signal });
+      try {
+        if (notices) return await notices({ unpacked, pin, signal });
+        if (!fs.existsSync(path.join(unpacked, "licenses")))
+          await Upstream.githubLicense({ repository, revision: pin.upstreamRevision, destination: path.join(unpacked, "licenses", "LICENSE.txt"), signal });
+      } catch (error) {
+        signal?.throwIfAborted();
+        console.warn("Optional tool notices could not be copied:", error.message);
+      }
     },
     dependencies: { ...dependencies, extractArchive: dependencies.extractArchive || extractArchive } });
   const manager = { ...core,

@@ -110,7 +110,11 @@ function importLibrary(t, archivePath, { signal, expectedVersion, expectedSha256
         publisherDigestVerified: !!supplier?.sha256 && supplier.sha256 === archive.archiveSha256,
         backup, installedAt: new Date().toISOString() };
       atomicBytes(t.libraryPath, archive.bytes); changed = true;
-      atomicBytes(path.join(t.metadataDir, "LICENSE.md"), archive.license);
+      try { if (archive.license) {
+        fs.mkdirSync(path.join(t.metadataDir, "licenses"), { recursive: true });
+        atomicBytes(path.join(t.metadataDir, "licenses", "Cubism.txt"), archive.license);
+      } }
+      catch (error) { console.warn("The optional Cubism notice could not be copied:", error.message); }
       atomicBytes(path.join(t.metadataDir, "record.json"), Buffer.from(JSON.stringify(record, null, 2)));
       return status(t);
     } catch (error) {
@@ -132,7 +136,8 @@ function removeLibrary(t) {
       if (Native.hashFile(backupPath) !== record.backup.sha256) throw new Error("Live2D original-library backup changed; refusing to restore it.");
       atomicBytes(t.libraryPath, fs.readFileSync(backupPath), record.backup.mode);
     } else fs.unlinkSync(t.libraryPath);
-    for (const name of ["record.json", "LICENSE.md", ...(record.backup ? ["original.dylib"] : [])]) fs.unlinkSync(path.join(t.metadataDir, name));
+    for (const name of ["record.json", ...(record.backup ? ["original.dylib"] : [])]) fs.unlinkSync(path.join(t.metadataDir, name));
+    fs.rmSync(path.join(t.metadataDir, "licenses"), { recursive: true, force: true });
     return { removed: true, restoredOriginal: !!record.backup, targetPath: t.libraryPath };
   });
 }

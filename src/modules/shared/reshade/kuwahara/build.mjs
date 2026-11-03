@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {addLicense} from '../../../../../scripts/license-files.mjs';
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2009-2011 Computer Graphics Systems Group, Hasso-Plattner-Institut, Potsdam.
 // Shader interface and static sector-table adaptation of Jan Eric Kyprianidis's gpuakf.
@@ -10,7 +11,7 @@ const here=import.meta.dirname,spec=JSON.parse(fs.readFileSync(path.join(here,'s
 if(args.length!==4||args[0]!=='--source'||args[2]!=='--output')throw Error('Expected --source and --output directories.');
 const source=path.resolve(args[1]),output=path.resolve(args[3]),hash=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 if(execFileSync('git',['-C',source,'rev-parse','HEAD'],{encoding:'utf8'}).trim()!==spec.commit)throw Error('The Kuwahara source revision differs from its declared pin.');
-execFileSync('git',['-C',source,'diff','--exit-code','HEAD','--']);
+execFileSync('git',['-C',source,'diff','--exit-code','HEAD','--',...Object.keys(spec.files)]);
 const inputs={};for(const [file,digest]of Object.entries(spec.files)){
  const bytes=fs.readFileSync(path.join(source,file));if(hash(bytes)!==digest)throw Error('The Kuwahara source changed: '+file);inputs[file]=bytes.toString('utf8').replaceAll('\r\n','\n');
 }
@@ -148,6 +149,6 @@ vec4 mlKernel(vec2 p){return AKF_KERNEL_tex((p*32.0+1.0)/34.0);}
 const float PI=3.14159265358979323846;const int N=8;
 vec4 hook(){${filter}}
 `;
-fs.mkdirSync(output,{recursive:true});fs.writeFileSync(path.join(output,'anisotropic-kuwahara.hook'),shader);fs.copyFileSync(path.join(source,'LICENSE'),path.join(output,'LICENSE'));
-fs.writeFileSync(path.join(output,'source-files.json'),JSON.stringify({schema:1,repository:spec.repository,revision:spec.commit,license:'GPL-3.0-or-later',sources:spec.files,adaptation:['Five GPU passes with separable equivalent Gaussian smoothing','Original 32x32 smoothed sector kernel with exact zero border','Premultiplied alpha boundary, original alpha retained','Anisotropy control equals inverse original alpha','Equivalent log-domain sector-weight normalization prevents overflow and underflow'],files:{'anisotropic-kuwahara.hook':hash(shader),LICENSE:hash(fs.readFileSync(path.join(output,'LICENSE')))},owned:{'build.mjs':hash(fs.readFileSync(path.join(here,'build.mjs'))),'source.json':hash(fs.readFileSync(path.join(here,'source.json')))}},null,2)+'\n');
+fs.mkdirSync(output,{recursive:true});fs.writeFileSync(path.join(output,'anisotropic-kuwahara.hook'),shader);const files={'anisotropic-kuwahara.hook':hash(shader)};for(const candidate of spec.licenseFiles||[])addLicense(output,'kuwahara',path.join(source,candidate.path));const licenses=path.join(output,'licenses');if(fs.existsSync(licenses))for(const name of fs.readdirSync(licenses))files['licenses/'+name]=hash(fs.readFileSync(path.join(licenses,name)));
+fs.writeFileSync(path.join(output,'source-files.json'),JSON.stringify({schema:1,repository:spec.repository,revision:spec.commit,license:'GPL-3.0-or-later',sources:spec.files,adaptation:['Five GPU passes with separable equivalent Gaussian smoothing','Original 32x32 smoothed sector kernel with exact zero border','Premultiplied alpha boundary, original alpha retained','Anisotropy control equals inverse original alpha','Equivalent log-domain sector-weight normalization prevents overflow and underflow'],files,owned:{'build.mjs':hash(fs.readFileSync(path.join(here,'build.mjs'))),'source.json':hash(fs.readFileSync(path.join(here,'source.json')))}},null,2)+'\n');
 console.log('Built anisotropic Kuwahara shader collection: '+output);

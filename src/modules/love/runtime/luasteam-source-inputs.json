@@ -198,9 +198,7 @@
   {
     "origin": "luasteam",
     "path": "LICENSE",
-    "destination": "notices/LuaSteam-LICENSE",
-    "size": 1067,
-    "sha256": "115ab018030b37f892e33da0f2af96d01b3d03c845c6ad41ce4ad19c4b342f73"
+    "destination": "licenses/luasteam.txt"
   },
   {
     "origin": "luajit",
@@ -226,9 +224,7 @@
   {
     "origin": "luajit",
     "path": "COPYRIGHT",
-    "destination": "notices/LuaJIT-COPYRIGHT",
-    "size": 2935,
-    "sha256": "5b79fb4754728487cf43d55b213bb68369912484f2dd7ab68380435e994bce39"
+    "destination": "licenses/luajit.txt"
   },
   {
     "origin": "steamSdk",
@@ -541,8 +537,6 @@
   {
     "origin": "steamSdk",
     "path": "Readme.txt",
-    "destination": "notices/Steamworks-SDK-Readme.txt",
-    "size": 82561,
-    "sha256": "c01ef8c39e3e6864ed01137dd543d4dcdf202c46d42ce8f7405e1955138a8099"
+    "destination": "licenses/steamworks-sdk.txt"
   }
 ]

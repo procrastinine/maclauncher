@@ -1,3 +1,4 @@
+import {addLicense} from './license-files.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -10,13 +11,13 @@ const version=require('../src/modules/shared/runtime/included-package-metadata')
 const output=path.resolve('src/resources/native-runtimes',directoryRelative);fs.mkdirSync(output,{recursive:true});
 for(const name of names)fs.copyFileSync(path.join(source,name),path.join(output,name));
 fs.copyFileSync(new URL(import.meta.url),path.join(output,'build.mjs'));
-fs.copyFileSync('LICENSE',path.join(output,'license.txt'));
+addLicense(output,'MacLauncher clipboard integration','LICENSE','MIT');
 execFileSync('/usr/bin/xcrun',['clang++','-target','arm64-apple-macos13','-std=c++20','-O2','-fobjc-arc','-framework','AppKit','-framework','Carbon','-framework','CoreGraphics',path.join(source,'clipboard-helper.mm'),'-o',path.join(output,'clipboard-helper')],{stdio:'inherit'});
 execFileSync('/usr/bin/codesign',['--force','--sign','-',path.join(output,'clipboard-helper')],{stdio:'inherit'});
 const metadata={schemaVersion:1,id,version,minimumMacOS:'13.0',executable:'clipboard-helper',clipboard:'explicit-plain-text'};
 fs.writeFileSync(path.join(output,'helper.json'),JSON.stringify(metadata,null,2)+'\n');
 const files=B.fileInventory(output).map(name=>{const file=path.join(output,name),value=B.readRegular(file,B.LIMITS.fileBytes);return {path:name,size:value.size,mode:value.mode,sha256:value.sha256,...(name==='clipboard-helper'?{architectures:['arm64']}:{})};});
-const pin={id,version,arch:'arm64',launcherArchitectures:['arm64'],minimumMacOS:'13.0',sourceRelative:'clipboard-helper.mm',sourceSha256:B.readRegular(path.join(output,'clipboard-helper.mm'),1024*1024).sha256,directoryRelative,manifestRelative:'helper.json',manifestSha256:B.readRegular(path.join(output,'helper.json'),1024*1024).sha256,files,notices:[{name:'MacLauncher clipboard integration',license:'MIT',path:'license.txt'}]};
+const pin={id,version,arch:'arm64',launcherArchitectures:['arm64'],minimumMacOS:'13.0',sourceRelative:'clipboard-helper.mm',sourceSha256:B.readRegular(path.join(output,'clipboard-helper.mm'),1024*1024).sha256,directoryRelative,manifestRelative:'helper.json',manifestSha256:B.readRegular(path.join(output,'helper.json'),1024*1024).sha256,files};
 const declarationFile='src/modules/android/distribution-included.json';
 const declarations=JSON.parse(fs.readFileSync(declarationFile));
 const declarationMetadata={...pin};delete declarationMetadata.version;delete declarationMetadata.directoryRelative;

@@ -4,7 +4,6 @@ const Upstream = require("../../shared/runtime/upstream");
 const {createPinnedNativeManager} = require("../../shared/runtime/pinned-native-manager");
 const {extractPayload} = require("../../shared/runtime/release-files");
 const {throwIfAborted, isAbortError} = require("../../shared/runtime/download-utils");
-const Bundled = require("../../shared/runtime/bundled-native");
 
 const source = Upstream.github({repository: "tomasklaen/uosc", recognize: release => {
   if (typeof release?.tag_name !== "string") return [];
@@ -50,18 +49,11 @@ async function stageHelper({root, binary, ...context}) {
     }
     if (!selected.ready) return null;
     const install = selected.install;
-    const notices = path.join(root, "notices/uosc-helper");
-    fs.mkdirSync(notices, {recursive: true});
-    if (install.catalogEntry?.projectPackage) {
-      const payload = path.join(install.installDir, "project-payload"), record = install.catalogEntry.projectPackage;
-      const manifest = JSON.parse(Bundled.readRegular(path.join(payload, record.manifestRelative), Bundled.LIMITS.manifestBytes).bytes);
-      for (const [index, notice] of (manifest.notices || []).entries()) {
-        if (!manifest.files.some(file => file.path === notice.path)) continue;
-        cloneOrCopySync(path.join(payload, "files", notice.path), path.join(notices, index + "-" + path.basename(notice.path)));
-      }
-    } else if (fs.existsSync(path.join(install.installDir, "LICENSE"))) {
-      cloneOrCopySync(path.join(install.installDir, "LICENSE"), path.join(notices, "LICENSE"));
-    }
+    const payload = install.catalogEntry?.projectPackage ? path.join(install.installDir, "project-payload", "files") : install.installDir;
+    try {
+      if (fs.existsSync(path.join(payload, "licenses")))
+        cloneOrCopySync(path.join(payload, "licenses"), path.join(root, "licenses", "uosc-helper"));
+    } catch (error) { console.warn("The optional uosc licenses could not be copied:", error.message); }
     cloneOrCopySync(install.executablePath, binary + ".native");
     fs.chmodSync(binary + ".native", 0o755); fs.renameSync(binary + ".native", binary);
     return {managerId: manager.id, version: selected.version, architecture: install.architecture};

@@ -5,7 +5,6 @@
   "version": "FidelityFX Lens 1.1.0",
   "license": "MIT",
   "sourceScope": [
-    "LICENSE.txt",
     "sdk/include/FidelityFX/gpu/lens/CMakeCompileLENSShaders.txt",
     "sdk/include/FidelityFX/gpu/lens/ffx_lens.h",
     "sdk/include/FidelityFX/gpu/lens/ffx_lens_callbacks_glsl.h",
@@ -25,7 +24,6 @@
     "sdk/src/components/lens/ffx_lens_private.h"
   ],
   "files": {
-    "LICENSE.txt": "82cf74fc23885107c7f69249ac3f1dac55898ff68320eb2c753984cae6b2d78a",
     "sdk/include/FidelityFX/gpu/lens/CMakeCompileLENSShaders.txt": "16014f600be3e1aba70775bc19b59abe0ef5552be5f7efed22d93f14562b749e",
     "sdk/include/FidelityFX/gpu/lens/ffx_lens.h": "4dc1d49808b3f1ad7379f914925aa4fd931f597d3879a827db2ac62f63a2aacd",
     "sdk/include/FidelityFX/gpu/lens/ffx_lens_callbacks_glsl.h": "dfc7e17f4ddd5bc781c69ca4716e4b6eb28237574f22a54753cea3527668256e",
@@ -43,5 +41,10 @@
     "sdk/src/backends/dx12/shaders/lens/ffx_lens_pass.hlsl": "095c7f3ebc30c6e3ea38a701f92eebbcefb01fc2125361db9025931cd7dee22f",
     "sdk/src/components/lens/ffx_lens.cpp": "ce171fb80b2d232eb867319b7804d928eac7036bcd38915d89adb54f04635252",
     "sdk/src/components/lens/ffx_lens_private.h": "0332eac529bd2f6d612539cb61d6a19b2722dd4d4f8cd47bb91972e2b9a58dcb"
-  }
+  },
+  "licenseFiles": [
+    {
+      "path": "LICENSE.txt"
+    }
+  ]
 }

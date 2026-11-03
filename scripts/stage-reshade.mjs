@@ -1,3 +1,4 @@
+import {addLicense} from "./license-files.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -78,29 +79,14 @@ if(features.graphics.hardwareQueryAPI===1){
 }
 const retroarchInputs = new Map();
 const extraSources=[];
-const temporalProviderNotices=[];
-const restorationNotices=[
-  ["Real-ESRGAN","BSD-3-Clause","Real-ESRGAN-BSD-3-CLAUSE.txt","https://github.com/xinntao/Real-ESRGAN"],
-  ["SRVGG Swift","MIT","SRVGG-Swift-MIT.txt","https://github.com/xocialize/mlx-realesrgan-swift"],
-  ["Real-CUGAN","MIT","REAL-CUGAN-MIT.txt","https://github.com/bilibili/ailab"],
-  ["NAFNet","MIT","NAFNET-ORIGINAL-MIT.txt","https://github.com/megvii-research/NAFNet"],
-  ["NAFNet Swift","MIT","NAFNET-SWIFT-MIT.txt","https://github.com/xocialize/mlx-nafnet-swift"],
-  ["NAFNet notices","MIT","NAFNET-NOTICE.txt","https://github.com/xocialize/mlx-nafnet-swift"],
-  ["RIFE","MIT","RIFE-MIT.txt","https://github.com/hzwer/Practical-RIFE"],
-  ["RIFE ncnn","MIT","RIFE-NCNN-MIT.txt","https://github.com/nihui/rife-ncnn-vulkan"],
-  ["ncnn","BSD-3-Clause","NCNN-BSD-3-CLAUSE.txt","https://github.com/Tencent/ncnn"]
-].map(([name,license,file,sourceUrl])=>({name,license,path:"neural/notices/"+file,sourceUrl}));
-const depthNotices=[
-  {name:"Depth Anything V2 Small",license:"Apache-2.0",path:"neural/notices/DEPTH-ANYTHING-APACHE-2.0.txt",sourceUrl:"https://github.com/DepthAnything/Depth-Anything-V2"},
-  {name:"Depth Anything V2 adaptation",license:"Apache-2.0",path:"neural/notices/DEPTH-ANYTHING-NOTICE.txt",sourceUrl:"https://github.com/DepthAnything/Depth-Anything-V2"}
-];
+const licenseInputs=[];
 const optionalInputs=new Map(),optionalLoad=new Map(),extraOwned=new Map();
 if(options["--xess-host"]){
   const directory=options["--xess-host"],ownedRoot=path.resolve(import.meta.dirname,"../src/modules/shared/reshade/xess"),source=JSON.parse(fs.readFileSync(path.join(ownedRoot,"source.json"))),metadata=JSON.parse(fs.readFileSync(path.join(directory,"provider.json")));
   const generation=metadata.generation;
-  const owned=["host.cpp","host-vulkan.cpp",...(generation?["host-fg.cpp","offscreen-swapchain.hpp","xess-fg-protocol.h"]:[]),"bridge.c","bridge.mm","xess-protocol.h","xess-wire.hpp","build.mjs","vulkan-source.json","KHRONOS-APACHE-2.0.txt"],required=new Set(["INTEL-LICENSE.txt","INTEL-THIRD-PARTY.txt","LICENSE.txt","source/source.json",...owned.map(name=>"source/"+name),"x86_64-windows/maclauncher-xess-host.exe","x86_64-windows/maclauncher-xess-gpu.dll","x86_64-unix/maclauncher-xess-gpu.so"]);
+  const owned=["host.cpp","host-vulkan.cpp",...(generation?["host-fg.cpp","offscreen-swapchain.hpp","xess-fg-protocol.h"]:[]),"bridge.c","bridge.mm","xess-protocol.h","xess-wire.hpp","build.mjs","vulkan-source.json"],required=new Set(["source/source.json",...owned.map(name=>"source/"+name),"x86_64-windows/maclauncher-xess-host.exe","x86_64-windows/maclauncher-xess-gpu.dll","x86_64-unix/maclauncher-xess-gpu.so"]);
   const backends=metadata.backends,hostPaths=metadata.hostPaths;
-  if(metadata.schema!==1||metadata.providerABI!==1||metadata.backend!=="d3d12"||metadata.architecture!=="x86_64"||metadata.sdk?.repository!==source.repository||metadata.sdk?.commit!==source.commit||metadata.sdk?.sha256!==source.sha256||metadata.sdk?.bytes!==source.bytes||metadata.hostPath!=="x86_64-windows/maclauncher-xess-host.exe"||!Array.isArray(backends)||backends[0]!=="d3d12"||backends.length>2||backends.some((name,index)=>index&&name!=="vulkan")||hostPaths?.d3d12!==metadata.hostPath||Object.keys(hostPaths||{}).sort().join()!==[...backends].sort().join()||metadata.bridge?.name!=="maclauncher-xess-gpu"||metadata.bridge?.windows!=="x86_64-windows/maclauncher-xess-gpu.dll"||metadata.bridge?.unix!=="x86_64-unix/maclauncher-xess-gpu.so"||!Array.isArray(metadata.files)||!Array.isArray(metadata.source?.ownedFiles)||metadata.source.ownedFiles.length!==owned.length)throw Error("A complete compatible original XeSS GPU host is required.");
+  if(metadata.schema!==1||metadata.providerABI!==1||metadata.backend!=="d3d12"||metadata.architecture!=="x86_64"||metadata.sdk?.repository!==source.repository||metadata.sdk?.commit!==source.commit||metadata.sdk?.sha256!==source.sha256||metadata.sdk?.bytes!==source.bytes||metadata.hostPath!=="x86_64-windows/maclauncher-xess-host.exe"||!Array.isArray(backends)||backends[0]!=="d3d12"||backends.length>2||backends.some((name,index)=>index&&name!=="vulkan")||hostPaths?.d3d12!==metadata.hostPath||Object.keys(hostPaths||{}).sort().join()!==[...backends].sort().join()||metadata.bridge?.name!=="maclauncher-xess-gpu"||metadata.bridge?.windows!=="x86_64-windows/maclauncher-xess-gpu.dll"||metadata.bridge?.unix!=="x86_64-unix/maclauncher-xess-gpu.so"||!Array.isArray(metadata.files)||!Array.isArray(metadata.source?.ownedFiles))throw Error("A complete compatible original XeSS GPU host is required.");
   const nativeSource=options["--xess-host-source"]||path.join(ownedRoot,"native");
   for(const name of owned){const row=metadata.source.ownedFiles.find(row=>row.path===name),file=path.join(nativeSource,name);if(!row||digest(fs.readFileSync(file))!==row.sha256)throw Error("The XeSS GPU host source changed: "+name);extraOwned.set("maclauncher/xess/native/"+name,file);}
   extraOwned.set("maclauncher/xess/source.json",path.join(ownedRoot,"source.json"));
@@ -115,9 +101,9 @@ if(options["--xess-host"]){
   const upstream=path.resolve(import.meta.dirname,"../src/external/xess"),actual=execFileSync("git",["-C",upstream,"rev-parse","HEAD"],{encoding:"utf8"}).trim();if(actual!==source.commit)throw Error("The original XeSS SDK pin differs from the GPU host.");execFileSync("git",["-C",upstream,"diff","--exit-code","HEAD","--"],{stdio:"pipe"});pins.push(` ${actual} third_party/xess-original`);
   if(backends.includes("vulkan")){
     const headers=JSON.parse(fs.readFileSync(path.join(ownedRoot,"native/vulkan-source.json"))),headerRoot=path.resolve(import.meta.dirname,"../src/external/krkrsdl2/external/SDL");
-    if(hostPaths.vulkan!=="x86_64-windows/maclauncher-xess-vulkan-host.exe"||JSON.stringify(metadata.source.vulkanHeaders)!==JSON.stringify(headers)||headers.repository!=="https://github.com/libsdl-org/SDL"||headers.license!=="Apache-2.0"||!Array.isArray(headers.headers)||headers.headers.length!==3||execFileSync("git",["-C",headerRoot,"rev-parse","HEAD"],{encoding:"utf8"}).trim()!==headers.commit||execFileSync("git",["-C",headerRoot,"remote","get-url","origin"],{encoding:"utf8"}).trim().replace(/\.git$/,"")!==headers.repository)throw Error("The XeSS Vulkan header source differs from its declared pin.");
+    if(hostPaths.vulkan!=="x86_64-windows/maclauncher-xess-vulkan-host.exe"||JSON.stringify(metadata.source.vulkanHeaders)!==JSON.stringify(headers)||headers.repository!=="https://github.com/libsdl-org/SDL"||!Array.isArray(headers.headers)||headers.headers.length!==3||execFileSync("git",["-C",headerRoot,"rev-parse","HEAD"],{encoding:"utf8"}).trim()!==headers.commit||execFileSync("git",["-C",headerRoot,"remote","get-url","origin"],{encoding:"utf8"}).trim().replace(/\.git$/,"")!==headers.repository)throw Error("The XeSS Vulkan header source differs from its declared pin.");
     execFileSync("git",["-C",headerRoot,"diff","--exit-code","HEAD","--"],{stdio:"pipe"});
-    required.add(hostPaths.vulkan);required.add("KHRONOS-APACHE-2.0.txt");
+    required.add(hostPaths.vulkan);
     for(const row of headers.headers){
       if(!["vulkan.h","vulkan_core.h","vk_platform.h"].includes(row.path)||!/^\w{64}$/.test(row.sha256))throw Error("Invalid XeSS Vulkan header identity.");
       const file=path.join(headerRoot,headers.headerDirectory,row.path),snapshot=path.join(directory,"source/vulkan",row.path);
@@ -126,9 +112,9 @@ if(options["--xess-host"]){
     }
     pins.push(` ${headers.commit} third_party/xess-vulkan-headers`);
   }else if(metadata.source.vulkanHeaders)throw Error("The XeSS Vulkan source is declared without its GPU host.");
-  for(const row of metadata.files){if(typeof row.path!=="string"||!required.delete(row.path))throw Error("The XeSS GPU host contains an undeclared resource.");const file=path.join(directory,row.path),stat=fs.lstatSync(file);if(!stat.isFile()||stat.isSymbolicLink()||stat.size!==row.size||digest(fs.readFileSync(file))!==row.sha256)throw Error("The XeSS GPU host resource changed: "+row.path);if(!row.path.startsWith("source/"))optionalInputs.set("xess/"+row.path,file);if(row.path.endsWith(".so"))optionalLoad.set("xess/"+row.path,{architectures:["x86_64"],minimumMacOS:metadata.minimumMacOS});}
+  for(const row of metadata.files){if(typeof row.path!=="string"||path.isAbsolute(row.path)||row.path.split(/[\\/]/).some(part=>!part||part==="."||part===".."))throw Error("Invalid XeSS GPU host resource path.");required.delete(row.path);const file=path.join(directory,row.path),stat=fs.lstatSync(file);if(!stat.isFile()||stat.isSymbolicLink()||stat.size!==row.size||digest(fs.readFileSync(file))!==row.sha256)throw Error("The XeSS GPU host resource changed: "+row.path);if(!row.path.startsWith("source/"))optionalInputs.set("xess/"+row.path,file);if(row.path.endsWith(".so"))optionalLoad.set("xess/"+row.path,{architectures:["x86_64"],minimumMacOS:metadata.minimumMacOS});}
   if(required.size||digest(fs.readFileSync(path.join(directory,"source/source.json")))!==digest(fs.readFileSync(path.join(ownedRoot,"source.json"))))throw Error("The XeSS GPU host source closure is incomplete.");
-  optionalInputs.set("xess/provider.json",path.join(directory,"provider.json"));optionalInputs.set("xess/INTEL-HEADERS-MIT.txt",path.join(upstream,"inc/MIT.txt"));features.graphics.xessSceneAPI=1;
+  optionalInputs.set("xess/provider.json",path.join(directory,"provider.json"));licenseInputs.push(["intel-xess-headers",path.join(upstream,"inc/MIT.txt")]);features.graphics.xessSceneAPI=1;
 }
 if(options["--isf"]){
   const directory=options["--isf"],ownedRoot=path.resolve(import.meta.dirname,"../src/modules/shared/reshade/isf"),source=JSON.parse(fs.readFileSync(path.join(ownedRoot,"source.json"))),metadata=JSON.parse(fs.readFileSync(path.join(directory,"provider.json")));
@@ -147,13 +133,13 @@ if(options["--isf"]){
     if(actual!==entry.commit)throw Error("The ISF source pin differs from its provider: "+entry.path);
     execFileSync("git",["-C",upstream,"diff","--exit-code","HEAD","--"],{stdio:"pipe"});pins.push(` ${actual} third_party/isf/${path.basename(entry.path)}`);
   }
-  const required=new Set([source.library,...source.compilerLibraries.map(file=>path.basename(file)),"default.metallib","ISF-LICENSE.txt","VVMetalKit-LICENSE.txt","ISFGLSLGenerator-LICENSE.txt","PINCache-LICENSE.txt","PINOperation-LICENSE.txt"]);
+  const required=new Set([source.library,...source.compilerLibraries.map(file=>path.basename(file)),"default.metallib"]);
   for(const row of metadata.files){
-    if(typeof row.path!=="string"||!required.delete(row.path))throw Error("The ISF provider contains an undeclared or duplicate resource.");
+    if(typeof row.path!=="string"||path.isAbsolute(row.path)||row.path.split(/[\\/]/).some(part=>!part||part==="."||part===".."))throw Error("Invalid ISF provider resource path.");required.delete(row.path);
     const file=path.join(directory,row.path),stat=fs.lstatSync(file);if(!stat.isFile()||stat.isSymbolicLink()||stat.size!==row.size||digest(fs.readFileSync(file))!==row.sha256)throw Error("The ISF provider resource changed: "+row.path);
     optionalInputs.set("isf/"+row.path,file);if(row.path.endsWith(".dylib"))optionalLoad.set("isf/"+row.path,{architectures:source.architectures,minimumMacOS:source.minimumMacOS});
   }
-  if(required.size||fs.readdirSync(directory).length!==metadata.files.length+1)throw Error("The ISF provider dependency and license closure is incomplete.");
+  if(required.size||fs.readdirSync(directory).length!==metadata.files.length+1)throw Error("The ISF provider dependency closure is incomplete.");
   optionalInputs.set("isf/provider.json",path.join(directory,"provider.json"));
   for(const name of ownedNames)extraOwned.set(path.posix.normalize("maclauncher/isf/"+name),path.join(ownedRoot,name));
   features.shaders.formats=[...new Set([...(features.shaders.formats||[]),"isf"])];features.shaders.providers??={};features.shaders.providers.isf={nodeABI:1,architectures:source.architectures,minimumMacOS:source.minimumMacOS};
@@ -172,7 +158,6 @@ if (options["--neural"]) {
       descriptor.minimumMacOS !== source.minimumMacOS || descriptor.architectures?.join() !== "arm64" || !Array.isArray(descriptor.files)) throw new Error("A compatible neural rendering provider is required.");
   const required = new Set([source.library, "mlx.metallib", "maclauncher-neural-video"]);
   if(descriptor.supportedABIs?.includes(2))required.add("maclauncher-neural-service");
-  if(descriptor.restorationAPI===1)for(const notice of restorationNotices)required.add(notice.path.slice("neural/".length));
   if(descriptor.estimatedDepthAPI!==undefined&&descriptor.estimatedDepthAPI!==1)throw Error("The neural relative-depth interface is unsupported.");
   if(descriptor.estimatedDepthAPI===1){
     if(!descriptor.operations?.includes("depth-anything-v2-small")||!descriptor.supportedABIs?.includes(2)||descriptor.service?.protocol!==3||descriptor.service?.executable!=="maclauncher-neural-service")throw Error("The scalar neural provider requires its matching GPU service and operation contract.");
@@ -181,7 +166,6 @@ if (options["--neural"]) {
       [depth.source,depth.checkpointLayout].some(row=>!/^https:\/\//.test(row?.repository||"")||!/^[a-f0-9]{40}$/.test(row?.commit||""))||!/^[a-f0-9]{64}$/.test(depth.model?.sha256||""))throw Error("The scalar model's exact source and output contract are undeclared.");
     const exports=execFileSync("nm",["-gU",path.join(directory,source.library)],{encoding:"utf8"});
     for(const name of ["ml_neural_depth_api","ml_neural_prepare_depth_v1"])if(!new RegExp("\\b_"+name+"\\b").test(exports))throw Error("The scalar neural provider is missing "+name+".");
-    for(const notice of depthNotices)required.add(notice.path.slice("neural/".length));
     features.graphics.estimatedDepthAPI=1;
   }
   else if(descriptor.operations?.includes("depth-anything-v2-small"))throw Error("Scalar model execution requires the versioned relative-depth interface.");
@@ -261,8 +245,8 @@ if(options["--libplacebo"]) {
     if(!stat.isFile()||stat.isSymbolicLink()||stat.size!==entry.size||digest(fs.readFileSync(file))!==entry.sha256)throw new Error("The optional shader provider changed.");
     optionalInputs.set(entry.path,file);
     if(required.delete(entry.path))optionalLoad.set(entry.path,{architectures:metadata.architectures,minimumMacOS:metadata.minimumMacOS});
-    else if(!entry.path.startsWith("notices/libplacebo/")||!entry.path.endsWith(".LICENSE")&&
-      !(metadata.sceneInputsAPI===1&&["notices/libplacebo/scene-source.json","notices/libplacebo/scene-source.x86_64.json"].includes(entry.path)))throw new Error("Unexpected optional provider file.");
+    else if(!entry.path.startsWith("licenses/")&&
+      !(metadata.sceneInputsAPI===1&&["source/libplacebo/scene-source.json","source/libplacebo/scene-source.x86_64.json"].includes(entry.path)))throw new Error("Unexpected optional provider file.");
   }
   if(required.size)throw new Error("The optional shader provider dependency closure is incomplete.");
   const scene=stageLibplaceboScene({directory,metadata,recipeRoot:path.resolve(import.meta.dirname,"../src/modules/shared/reshade")});
@@ -286,16 +270,16 @@ if(options["--libplacebo"]) {
 if(options["--retroarch"]) {
   const directory=options["--retroarch"];
   const manifest=JSON.parse(fs.readFileSync(path.join(directory,"runtime-files.json"),"utf8"));
-  const required=new Set(["librashader.dylib","retroarch-prepare","notices/librashader/LICENSE.md","notices/librashader/source.json"]);
-  if(!Array.isArray(manifest.files)||manifest.files.length!==required.size)throw new Error("A complete RetroArch shader payload is required.");
+  const required=new Set(["librashader.dylib","retroarch-prepare","source/librashader/source.json"]);
+  if(!Array.isArray(manifest.files)||manifest.files.length<required.size)throw new Error("A complete RetroArch shader payload is required.");
   for(const entry of manifest.files) {
-    if(!required.delete(entry.path))throw new Error("Unexpected RetroArch shader payload file.");
+    if(typeof entry.path!=="string"||path.isAbsolute(entry.path)||entry.path.split(/[\\/]/).some(part=>!part||part==="."||part===".."))throw new Error("Invalid RetroArch shader payload path.");required.delete(entry.path);
     const file=path.join(directory,entry.path),stat=fs.lstatSync(file);
     if(!stat.isFile()||stat.isSymbolicLink()||stat.size!==entry.size||digest(fs.readFileSync(file))!==entry.sha256)
       throw new Error("The RetroArch shader payload changed.");
     retroarchInputs.set(entry.path,file);
   }
-  const pin=JSON.parse(fs.readFileSync(retroarchInputs.get("notices/librashader/source.json"),"utf8"));
+  const pin=JSON.parse(fs.readFileSync(retroarchInputs.get("source/librashader/source.json"),"utf8"));
   const original=path.resolve(import.meta.dirname,"../src/external/librashader");
   const actual=execFileSync("git",["-C",original,"rev-parse","HEAD"],{encoding:"utf8"}).trim();
   if(actual!==pin.commit)throw new Error("The original librashader source pin differs from its payload.");
@@ -329,20 +313,20 @@ if(options["--fsr3-generation"]){
   const directory=options["--fsr3-generation"],ownedRoot=path.resolve(import.meta.dirname,"../src/modules/shared/reshade/generation/fsr3");
   const source=JSON.parse(fs.readFileSync(path.join(ownedRoot,"source.json"),"utf8")),metadata=JSON.parse(fs.readFileSync(path.join(directory,"provider.json"),"utf8"));
   if(metadata.providerABI!==source.providerABI||metadata.complete!==true||metadata.source!==source.repository||metadata.commit!==source.commit||metadata.method!=="fsr3"||metadata.interfaces?.preparation!==1||metadata.library!=="libmaclauncher-fsr3-generation.dylib"||metadata.architectures?.join()!==source.architectures.join()||metadata.minimumMacOS!==source.minimumMacOS||metadata.shaderVariants?.opticalflow!==2||metadata.shaderVariants?.frameinterpolation!==8||metadata.shaderPasses?.opticalflow!==7||metadata.shaderPasses?.frameinterpolation!==11||["dxc","spirv-cross"].some(name=>metadata.tools?.[name]!==source.tools[name]))throw Error("A complete compatible AMD optical-flow/frame-interpolation provider is required.");
-  const expected=new Set([metadata.library,"provider.json","FSR3-LICENSE.txt"]);
+  const expected=new Set([metadata.library,"provider.json"]);
   for(const [effect,variants,passes]of [["opticalflow",2,7],["frameinterpolation",8,11]])for(let variant=0;variant<variants;++variant)for(let pass=0;pass<passes;++pass)for(const extension of ["metal","json"])expected.add(`${effect}/${variant}/${pass}.${extension}`);
   for(const relative of fs.readdirSync(directory,{recursive:true}).sort()){
     const file=path.join(directory,relative),stat=fs.lstatSync(file);
     if(stat.isSymbolicLink()||!stat.isFile()&&!stat.isDirectory())throw Error("Generation payloads require regular files and directories.");
     if(stat.isDirectory())continue;
-    if(!expected.delete(relative)||Content.excludedReason(relative))throw Error("Unexpected AMD generation payload input: "+relative);
+    if(Content.excludedReason(relative))throw Error("Unexpected AMD generation payload input: "+relative);expected.delete(relative);
     if(relative.endsWith(".json")&&relative!=="provider.json"){
       const shader=JSON.parse(fs.readFileSync(file,"utf8"));
       if(typeof shader.entry!=="string"||!Array.isArray(shader.threads)||shader.threads.length!==3||shader.threads.some(value=>!Number.isInteger(value)||value<1)||!Array.isArray(shader.bindings))throw Error("Invalid AMD generation shader metadata.");
     }
     temporalInputs.set("generation/fsr3/"+relative,file);
   }
-  if(expected.size)throw Error("The AMD generation shader and license closure is incomplete.");
+  if(expected.size)throw Error("The AMD generation shader closure is incomplete.");
   const symbols=execFileSync("/usr/bin/nm",["-gU",path.join(directory,metadata.library)],{encoding:"utf8"});
   if(!/\b_rsGetGenerationProvider\b/.test(symbols))throw Error("The AMD generation library does not export its provider interface.");
   for(const name of ["source.json","build.mjs","backend.mm","metal-backend.hpp","index.js"])extraOwned.set("maclauncher/generation/fsr3/"+name,path.join(ownedRoot,name));
@@ -378,7 +362,8 @@ if(options["--xess"]){
   }
   const library=path.join(directory,source.library);
   if(!fs.lstatSync(library).isFile()||fs.lstatSync(library).isSymbolicLink()||digest(fs.readFileSync(library))!==metadata.sha256)throw Error("The XeSS translation library changed.");
-  for(const name of [source.library,"provider.json","XeSS-Headers-LICENSE.txt","DXMT-LICENSE.txt"])temporalInputs.set("temporal/xess/"+name,path.join(directory,name));
+  licenseInputs.push(["xess-headers",path.join(directory,"XeSS-Headers-LICENSE.txt")],["dxmt",path.join(directory,"DXMT-LICENSE.txt")]);
+  for(const name of [source.library,"provider.json"])temporalInputs.set("temporal/xess/"+name,path.join(directory,name));
 }
 for (const name of ["fsr", "fsr4"]) {
   const directory = options["--" + name];
@@ -391,7 +376,7 @@ for (const name of ["fsr", "fsr4"]) {
     if(staged){
       for(const [relative,file]of staged.files)temporalInputs.set(relative,file);
       for(const [relative,file]of staged.owned)extraOwned.set(relative,file);
-      extraSources.push(staged.source);pins.push(...staged.pins);temporalProviderNotices.push(...staged.notices);
+      extraSources.push(staged.source);pins.push(...staged.pins);
       features.graphics.temporalProfileAPI=1;continue;
     }
   }
@@ -406,7 +391,7 @@ for(const name of ["asr","sgsr2"]){
   const staged=stageTemporalProvider({name,directory,upstream:options["--"+name+"-source"],ownedRoot:path.resolve(import.meta.dirname,"../src/modules/shared/reshade/temporal",name)});
   for(const [relative,file] of staged.files)temporalInputs.set(relative,file);
   for(const [relative,file] of staged.owned)extraOwned.set(relative,file);
-  extraSources.push(staged.source);pins.push(staged.pin);temporalProviderNotices.push(...staged.notices);
+  extraSources.push(staged.source);pins.push(staged.pin);
   features.graphics.temporalMethods=[...new Set([...(features.graphics.temporalMethods||[]),name])];
   features.graphics.temporalProviderRegistryAPI=1;
 }
@@ -420,9 +405,12 @@ for (const name of ["godot", "streamline", "dxmt"]) {
   const directory = options["--" + name];
   if (!directory) continue;
   const metadata = JSON.parse(fs.readFileSync(path.join(directory, name === "dxmt" ? "camera-bridge.json" : "provider.json")));
-  const selected = name === "godot" ? ["libmaclauncher-godot-camera.dylib", "provider.json", "GODOT-LICENSE.txt", "autoload.gd", "camera-effect.gd"]
-    : name === "streamline" ? ["sl.interposer.dll", "provider.json", "Streamline-LICENSE.txt"]
-    : [...Object.keys(metadata.files).filter(name=>name!=="source.tar.gz"), "camera-bridge.json", "LICENSE", "LICENSE.OLD", "COPYING.LIB"];
+  for(const file of ["LICENSE","LICENSE.OLD","COPYING.LIB"])if(name==="dxmt")licenseInputs.push(["dxmt-"+file,path.join(directory,file)]);
+  const licenseDirectory=path.join(directory,"licenses");
+  if(fs.existsSync(licenseDirectory))for(const file of fs.readdirSync(licenseDirectory).sort())if(file!=="components.txt")licenseInputs.push([name+"-"+path.basename(file,".txt"),path.join(licenseDirectory,file)]);
+  const selected = name === "godot" ? ["libmaclauncher-godot-camera.dylib", "provider.json", "autoload.gd", "camera-effect.gd"]
+    : name === "streamline" ? ["sl.interposer.dll", "provider.json"]
+    : [...Object.keys(metadata.files).filter(name=>name!=="source.tar.gz"), "camera-bridge.json"];
   if (name === "godot" ? metadata.abi !== 1 || metadata.complete !== true : metadata.schema !== 1)
     throw new Error("Unsupported camera bridge metadata.");
   if(name!=="godot"){
@@ -583,23 +571,48 @@ const inputs = new Map([
 ]);
 if(nativeFiles.includes("shaderc-offline")){
   const metadata=JSON.parse(fs.readFileSync(path.join(ownedSource,"compat/shaderc/source.json"),"utf8"));
-  if(metadata.repository!=="https://github.com/google/shaderc"||metadata.commit!=="d393a813c9b67c709d37b329203d72beb69d719e"||metadata.version!=="2026.4"||metadata.license!=="Apache-2.0"||metadata.files?.length!==4)throw Error("The shader compiler API source pin is invalid.");
+  if(metadata.repository!=="https://github.com/google/shaderc"||metadata.commit!=="d393a813c9b67c709d37b329203d72beb69d719e"||metadata.version!=="2026.4"||metadata.files?.length!==4)throw Error("The shader compiler API source pin is invalid.");
   for(const row of metadata.files)if(!["shaderc.h","env.h","status.h","visibility.h"].includes(row.path)||digest(fs.readFileSync(path.join(ownedSource,"compat/shaderc",row.path)))!==row.sha256)throw Error("A shader compiler API declaration changed.");
   inputs.set("licenses/shaderc-api.txt",path.join(ownedSource,"compat/shaderc/LICENSE"));pins.push(` ${metadata.commit} third_party/shaderc-headers`);
 }
 if(fs.existsSync(path.join(ownedSource,"src/color-source.json"))){
   const colorSource=JSON.parse(fs.readFileSync(path.join(ownedSource,"src/color-source.json"),"utf8"));
-  if(colorSource.repository!=="https://github.com/KhronosGroup/ToneMapping"||!/^\w{40}$/.test(colorSource.commit)||colorSource.license!=="Apache-2.0"||colorSource.licenseFile!=="color-tone-mapping-LICENSE.txt")throw Error("Invalid color implementation source metadata.");
+  if(colorSource.repository!=="https://github.com/KhronosGroup/ToneMapping"||!/^\w{40}$/.test(colorSource.commit))throw Error("Invalid color implementation source metadata.");
   inputs.set("licenses/Khronos-ToneMapping.txt",path.join(ownedSource,"src",colorSource.licenseFile));
   pins.push(` ${colorSource.commit} third_party/Khronos-ToneMapping`);
 }
 for (const name of ["ReShade.fxh", "ReShadeUI.fxh"]) inputs.set("include/" + name, path.join(source, "third_party/reshade-shaders/Shaders", name));
 const effects = path.resolve(import.meta.dirname, "../src/modules/shared/reshade/effects");
 for (const name of fs.readdirSync(effects)) inputs.set("effects/" + name, path.join(effects, name));
-const effectNotices = validateEffectSources(effectSources, [...inputs].map(([relative, input]) => ({ path: relative, sha256: digest(fs.readFileSync(input)) })));
+const effectPaths=new Set(effectSources.map(source=>source.path));
+const effectNotices = validateEffectSources(effectSources, [...inputs].filter(([relative])=>effectPaths.has(relative)).map(([relative,input])=>({path:relative,sha256:digest(fs.readFileSync(input))})));
+const licenseCandidates=[["reshade-shader-headers",inputs.get("include/ReShade.fxh")],...effectSources.map(source=>[source.name,inputs.get(source.path)]),...licenseInputs];
+const licenseStage=fs.mkdtempSync(path.join(os.tmpdir(),"maclauncher-build-licenses-"));
+process.once("exit",()=>fs.rmSync(licenseStage,{recursive:true,force:true}));
+for(const [component,input]of licenseCandidates)addLicense(licenseStage,component,input);
+const indexedLicenses=new Set();
+for(const [relative,input]of [...inputs].sort(([a],[b])=>a.localeCompare(b))){
+  if(relative.split("/").includes("licenses")&&path.basename(relative)==="components.txt"){
+    indexedLicenses.add(path.dirname(input));
+    for(const line of fs.readFileSync(input,"utf8").split(/\r?\n/).filter(Boolean)){
+      const separator=line.indexOf(": "),component=line.slice(0,separator),file=path.basename(line.slice(separator+2));
+      addLicense(licenseStage,component,path.join(path.dirname(input),file),path.basename(file,".txt"));
+    }
+  }
+}
+for(const [relative,input]of [...inputs].sort(([a],[b])=>a.localeCompare(b))){
+  const directory=relative.split("/");
+  if(directory.includes("licenses")||directory.includes("notices")){
+    if(!indexedLicenses.has(path.dirname(input)))addLicense(licenseStage,path.basename(relative,path.extname(relative)),input);
+    inputs.delete(relative);
+  }
+}
+const licenseDirectory=path.join(licenseStage,"licenses");
+if(fs.existsSync(licenseDirectory))for(const file of fs.readdirSync(licenseDirectory).sort())inputs.set("licenses/"+file,path.join(licenseDirectory,file));
 // Identical files under the paths providers open through the shared payload
 // resolver are stored once; each provider's alias index names the stored copy
 // of every removed path.
+const selectedPaths=new Set(inputs.keys());
 const deduplicated = deduplicate(inputs, { prefixes: resolvedPrefixes(inputs), keep: new Set(nativeFiles) });
 const removedPayload = new Set([...inputs.keys()].filter(relative => !deduplicated.inputs.has(relative)));
 for (const relative of removedPayload) inputs.delete(relative);
@@ -631,16 +644,26 @@ for (const [relative, input] of inputs) {
       ...(relative.startsWith("temporal/dxmt/") ? { executionArchitecture: "x86_64" } : {}),
       ...(optionalLoad.has(relative)?{optionalLoad:optionalLoad.get(relative)}:{}) } : {}) });
 }
-// The camera provider's source is available in the tagged producer repository.
-if(options["--xess-host"]){
-  const relative="xess/provider.json",file=path.join(destination,relative),metadata=JSON.parse(fs.readFileSync(file));
-  metadata.files=metadata.files.filter(row=>!row.path.startsWith("source/")).map(row=>{const actual=files.find(item=>item.path==="xess/"+row.path);return {...row,size:actual.size,sha256:actual.sha256};});
-  fs.writeFileSync(file,JSON.stringify(metadata,null,2)+"\n");Object.assign(files.find(row=>row.path===relative),{sha256:digest(fs.readFileSync(file)),size:fs.statSync(file).size});
+// Provider inventories describe the final ordinary selection, including
+// content retained through each provider's existing local alias index.
+const selectedFacts=new Map(files.map(file=>[file.path,file]));
+for(const [directory,aliases]of deduplicated.indexes)for(const [name,target]of Object.entries(aliases)){
+  const actual=selectedFacts.get(path.posix.join(directory,target));
+  if(actual)selectedFacts.set(path.posix.join(directory,name),actual);
 }
-if (inputs.has('temporal/dxmt/camera-bridge.json')) {
-  const relative='temporal/dxmt/camera-bridge.json',file=path.join(destination,relative),metadata=JSON.parse(fs.readFileSync(file));
-  delete metadata.files['source.tar.gz'];fs.writeFileSync(file,JSON.stringify(metadata,null,2)+'\n');
-  Object.assign(files.find(entry=>entry.path===relative),{sha256:digest(fs.readFileSync(file)),size:fs.statSync(file).size});
+for(const record of files.filter(file=>path.posix.basename(file.path)==="provider.json"||path.posix.basename(file.path)==="camera-bridge.json")){
+  const file=path.join(destination,record.path),metadata=JSON.parse(fs.readFileSync(file,"utf8")),directory=path.posix.dirname(record.path);
+  delete metadata.notices;
+  if(Array.isArray(metadata.files))metadata.files=metadata.files.filter(row=>selectedPaths.has(path.posix.join(directory,row.path))).map(row=>{
+    const actual=selectedFacts.get(path.posix.join(directory,row.path));
+    return actual?{...row,size:actual.size,sha256:actual.sha256}:row;
+  });
+  else if(metadata.files&&typeof metadata.files==="object")metadata.files=Object.fromEntries(Object.entries(metadata.files).filter(([name])=>selectedPaths.has(path.posix.join(directory,name))).map(([name,row])=>{
+    const actual=selectedFacts.get(path.posix.join(directory,name));
+    return [name,actual?(typeof row==="string"?actual.sha256:{...row,size:actual.size,sha256:actual.sha256}):row];
+  }));
+  fs.writeFileSync(file,JSON.stringify(metadata,null,2)+"\n");
+  Object.assign(record,{sha256:digest(fs.readFileSync(file)),size:fs.statSync(file).size});
 }
 // Source and owned build recipes are delivered by the tagged producer repository.
 function record(relative) {
@@ -654,68 +677,8 @@ const manifest = record("runtime.json"); files.push(manifest);
 const declaration = { id: "reshade", version, arch: "universal", launcherArchitectures: ["arm64", "x64"], minimumMacOS,
   sourceRelative: null, sourceSha256: sourceHash, directoryRelative,
   manifestRelative: manifest.path, manifestSha256: manifest.sha256, files,
-  notices: [
-    ...temporalProviderNotices,
-    ...(nativeImageFilters?.notices||[]),
-    ...restorationNotices.filter(notice=>inputs.has(notice.path)),
-    ...depthNotices.filter(notice=>inputs.has(notice.path)),
-    ...(inputs.has("licenses/shaderc-api.txt")?[{name:"shaderc public interfaces",license:"Apache-2.0",path:"licenses/shaderc-api.txt",sourceUrl:"https://github.com/google/shaderc"}]:[]),
-    { name: "ReShade macOS adapter", license: "BSD-3-Clause", path: "licenses/MacFX.txt" },
-    { name: "ReShade", license: "BSD-3-Clause", path: "licenses/ReShade.txt", sourceUrl: "https://github.com/crosire/reshade" },
-    { name: "vkd3d shader translator", license: "LGPL-2.1-or-later", path: "licenses/vkd3d.txt", sourceUrl: "https://codeberg.org/vkd3d/vkd3d" },
-    { name: "MAKO model processing and frame pacing", license: "GPL-3.0-or-later", path: "licenses/MAKO.txt", sourceUrl: "https://github.com/eugeniosegala/MAKO" },
-    { name: "AMD FidelityFX FSR1", license: "MIT", path: "licenses/FSR1.txt", sourceUrl: "https://github.com/GPUOpen-Effects/FidelityFX-FSR" },
-    { name: "SPIRV-Cross", license: "Apache-2.0 OR MIT", path: "licenses/SPIRV-Cross.txt", sourceUrl: "https://github.com/KhronosGroup/SPIRV-Cross" },
-    { name: "SPIRV-Headers", license: "MIT", path: "licenses/SPIRV-Headers.txt", sourceUrl: "https://github.com/KhronosGroup/SPIRV-Headers" },
-    { name: "ReShade shader headers", license: "CC0-1.0", path: "include/ReShade.fxh", sourceUrl: "https://github.com/crosire/reshade-shaders" },
-    ...(inputs.has("licenses/Khronos-ToneMapping.txt")?[{name:"Khronos PBR Neutral tone mapping",license:"Apache-2.0",path:"licenses/Khronos-ToneMapping.txt",sourceUrl:"https://github.com/KhronosGroup/ToneMapping"}]:[]),
-    ...(options["--isf"]?[
-      {name:"ISFMSLKit and shader compiler dependencies",license:"MIT AND BSD-3-Clause AND Apache-2.0",path:"isf/ISF-LICENSE.txt",sourceUrl:"https://github.com/mrRay/ISFMSLKit"},
-      {name:"VVMetalKit",license:"MIT AND LicenseRef-Apple-Sample-Code",path:"isf/VVMetalKit-LICENSE.txt",sourceUrl:"https://github.com/mrRay/VVMetalKit"},
-      {name:"ISFGLSLGenerator",license:"BSD-3-Clause",path:"isf/ISFGLSLGenerator-LICENSE.txt",sourceUrl:"https://github.com/mrRay/ISFGLSLGenerator"},
-      {name:"PINCache",license:"Apache-2.0",path:"isf/PINCache-LICENSE.txt",sourceUrl:"https://github.com/mrRay/PINCache"},
-      {name:"PINOperation",license:"Apache-2.0",path:"isf/PINOperation-LICENSE.txt",sourceUrl:"https://github.com/pinterest/PINOperation"}
-    ]:[]),
-    ...(options["--retroarch"] ? [{name:"librashader",license:"MPL-2.0",path:"notices/librashader/LICENSE.md",sourceUrl:"https://github.com/SnowflakePowered/librashader"}] : []),
-    ...(options["--neural"] ? [
-      { name: "MLX-DLSS", license: "Apache-2.0", path: "neural/notices/MLX-DLSS-LICENSE", sourceUrl: "https://github.com/iamwavecut/MLX-DLSS" },
-      { name: "MLX", license: "MIT", path: "neural/notices/MLX-LICENSE", sourceUrl: "https://github.com/ml-explore/mlx" },
-      { name: "MLX Swift", license: "MIT", path: "neural/notices/MLX-Swift-LICENSE", sourceUrl: "https://github.com/ml-explore/mlx-swift" },
-      { name: "Swift Argument Parser", license: "Apache-2.0 WITH Swift-exception", path: "neural/notices/Swift-Argument-Parser-LICENSE", sourceUrl: "https://github.com/apple/swift-argument-parser" },
-      { name: "Swift Numerics", license: "Apache-2.0 WITH Swift-exception", path: "neural/notices/Swift-Numerics-LICENSE", sourceUrl: "https://github.com/apple/swift-numerics" }
-    ] : []),
-    ...(libplacebo?[
-      {name:"libplacebo",license:"LGPL-2.1-or-later",path:"notices/libplacebo/libplacebo.360.dylib.LICENSE",sourceUrl:libplacebo.inputs.find(item=>["libplacebo.360.dylib","libplacebo"].includes(item.name)).source},
-      {name:"shaderc",license:"Apache-2.0",path:"notices/libplacebo/libshaderc_shared.1.dylib.LICENSE",sourceUrl:libplacebo.inputs.find(item=>item.name==="libshaderc_shared.1.dylib").source},
-      {name:"Little CMS",license:"MIT",path:"notices/libplacebo/liblcms2.2.dylib.LICENSE",sourceUrl:libplacebo.inputs.find(item=>item.name==="liblcms2.2.dylib").source},
-      {name:"MoltenVK",license:"Apache-2.0",path:"notices/libplacebo/MoltenVK.LICENSE",sourceUrl:"https://github.com/KhronosGroup/MoltenVK"}
-    ]:[]),
-    ...(options["--fsr"] ? [
-      { name: "AMD FidelityFX FSR2", license: "MIT", path: "temporal/fsr/FSR2-LICENSE.txt", sourceUrl: "https://github.com/GPUOpen-Effects/FidelityFX-FSR2" },
-      { name: "AMD FidelityFX FSR3 upscaler", license: "MIT", path: "temporal/fsr/FSR3-LICENSE.txt", sourceUrl: "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK" }
-    ] : []),
-    ...(options["--fsr4"] ? [
-      { name: "FSR4 Metal provider", license: "MIT", path: "temporal/fsr4/NOTICE.md", sourceUrl: "https://github.com/UzenUPoZiTiV4ik/fsr4-native-macos" },
-      { name: "FSR4 shader implementation", license: "MIT", path: "temporal/fsr4/third_party/fsr411/LICENSE", sourceUrl: "https://github.com/int3rrobang/fsr4-int8-reverse-engineering" },
-      { name: "AMD FSR4 model and helpers", license: "MIT", path: "temporal/fsr4/third_party/fsr411/LICENSE.AMD.md", sourceUrl: "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK" }
-    ] : []),
-    ...(options["--fsr3-generation"]?[{name:"AMD FidelityFX optical flow and frame interpolation",license:"MIT",path:"generation/fsr3/FSR3-LICENSE.txt",sourceUrl:"https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK"}]:[]),
-    ...(options["--xess-host"]?[{name:"Intel XeSS runtime terms",license:"LicenseRef-Intel-Simplified-Software-October-2022",path:"xess/INTEL-LICENSE.txt",sourceUrl:"https://github.com/intel/xess"},{name:"Intel XeSS public interfaces",license:"MIT",path:"xess/INTEL-HEADERS-MIT.txt",sourceUrl:"https://github.com/intel/xess"},{name:"Intel XeSS third-party notices",license:"LicenseRef-XeSS-Notices",path:"xess/INTEL-THIRD-PARTY.txt",sourceUrl:"https://github.com/intel/xess"},...(inputs.has("xess/KHRONOS-APACHE-2.0.txt")?[{name:"Vulkan public interfaces",license:"Apache-2.0",path:"xess/KHRONOS-APACHE-2.0.txt",sourceUrl:"https://github.com/KhronosGroup/Vulkan-Headers"}]:[])]:[]),
-    ...(options["--godot"] ? [{ name: "Godot extension interface", license: "MIT", path: "godot/GODOT-LICENSE.txt", sourceUrl: "https://github.com/godotengine/godot" }] : []),
-    ...(options["--streamline"] ? [{ name: "NVIDIA Streamline interface", license: "MIT", path: "temporal/streamline/Streamline-LICENSE.txt", sourceUrl: "https://github.com/NVIDIA-RTX/Streamline" }] : []),
-    ...(options["--xess"] ? [
-      {name:"Intel XeSS public interfaces",license:"MIT",path:"temporal/xess/XeSS-Headers-LICENSE.txt",sourceUrl:"https://github.com/intel/xess"},
-      {name:"DXMT temporal interface",license:"LGPL-2.1-or-later",path:"temporal/xess/DXMT-LICENSE.txt",sourceUrl:"https://github.com/3Shain/dxmt"}
-    ] : []),
-    ...(options["--dxmt"] ? [
-      { name: "DXMT camera integration", license: "LGPL-2.1-or-later", path: "temporal/dxmt/LICENSE", sourceUrl: "https://github.com/3Shain/dxmt" },
-      { name: "DXMT Wine interfaces", license: "LGPL-2.1-or-later", path: "temporal/dxmt/COPYING.LIB", sourceUrl: "https://github.com/3Shain/dxmt" },
-      { name: "DXMT third-party components", license: "LicenseRef-DXMT-Notices", path: "temporal/dxmt/LICENSE.OLD", sourceUrl: "https://github.com/3Shain/dxmt" }
-    ] : []),
-    ...effectNotices
-  ] };
+ };
 const { validateDeclaration } = await import("./native-supplementals.cjs");
-if (declaration.notices.some(notice => removedPayload.has(notice.path))) throw new Error("A declared notice must keep its own file, not a payload alias.");
 validateDeclaration(declaration);
 if(priorDeclaration?!fs.readFileSync(declarationPath).equals(priorDeclaration):fs.existsSync(declarationPath))throw Error("The graphics selection changed during staging; the newer selection was preserved.");
 const declarationTemporary=declarationPath+"."+crypto.randomBytes(8).toString("hex")+".tmp";

@@ -10,7 +10,7 @@ function createManager(dependencies = {}) {
     executableRelative: "engine/main.lua", dataOnly: true, supportsDefault: true,
     validateManifest(manifest, record) {
       if (manifest.kind !== "data" || manifest.loveVersion !== "11.5" ||
-          !manifest.files.some(file => file.path === "engine/conf.lua") || !manifest.files.some(file => file.path === "engine/LICENSE"))
+          !manifest.files.some(file => file.path === "engine/conf.lua"))
         throw new Error("The VNDS-LOVE package has an unsupported interpreter profile.");
     },
     async verifyPayload(selected, { signal } = {}) { signal?.throwIfAborted(); Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency); },

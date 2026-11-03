@@ -90,7 +90,7 @@ function prepare(value, { root, ...options }) {
   for (const row of installed.descriptor.files) {
     if (typeof row.path !== "string" || path.isAbsolute(row.path) || row.path.split(/[\\/]/).some(part => !part || part === "..") || !/^[a-f0-9]{64}$/.test(row.sha256 || ""))
       throw new Error("The neural rendering provider inventory is invalid.");
-    if (row.path.startsWith("notices/") || row.path === "maclauncher-neural-video" && !options.offlineVideo) continue;
+    if (row.path === "maclauncher-neural-video" && !options.offlineVideo) continue;
     try { require("../payload-verification").verifyFile(installed.directory, row, {reuse: true}); }
     catch { throw new Error("The neural rendering provider changed. Reinstall the selected provider."); }
   }

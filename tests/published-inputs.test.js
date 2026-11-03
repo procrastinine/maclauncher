@@ -89,8 +89,10 @@ test('7-Zip setup preserves a verified executable inode and replaces changed inp
   const pin = { version: '1', url: 'https://github.com/ip7z/7zip/releases/download/1/7z.tar.xz',
     sha256: sha(archive), bytes: archive.length, executableSha256: sha(executable) };
   fs.writeFileSync(path.join(root, 'source.json'), JSON.stringify(pin));
+  fs.writeFileSync(path.join(root, 'LICENSE.txt'), license);
+  const extracted = [];
   const options = { repoRoot: f.root, download: async (_url, target) => fs.writeFileSync(target, archive),
-    tool: (_command, args) => args.at(-1) === '7zz' ? executable : license };
+    tool: (_command, args) => { extracted.push(args.at(-1)); return executable; } };
   await Published.prepareSevenZip(options);
   const target = path.join(root, '7zz'), licensePath = path.join(root, 'LICENSE.txt');
   const before = fs.statSync(target, { bigint: true }), licenseBefore = fs.statSync(licensePath, { bigint: true });
@@ -104,6 +106,7 @@ test('7-Zip setup preserves a verified executable inode and replaces changed inp
   assert.deepEqual(fs.readFileSync(target), executable);
   assert.equal(fs.statSync(target).mode & 0o777, 0o755);
   assert.deepEqual(fs.readdirSync(root).sort(), ['7zz', 'LICENSE.txt', 'source.json']);
+  assert.deepEqual(extracted, ['7zz', '7zz', '7zz'], 'Preparation only restores the executable; the shipped licence remains read-only.');
 });
 
 test('Android producer tool pins restore their declared tools directory without fetching installed publisher bytes', async t => {

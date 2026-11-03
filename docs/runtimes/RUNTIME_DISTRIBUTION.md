@@ -16,7 +16,6 @@ Each download source has its own version selector, link and **Install** action, 
 | --- | --- |
 | ai5 | AI5 SDL2 |
 | android | MacLauncher Android: the JVM and ART engines, their adapters and the shared runtime files in one package |
-| android-art | Earlier versions, which shipped the ART adapter as a separate package. Existing installations keep using them, and new downloads get ART from the android package. |
 | android-aim | AIM adapter |
 | anyps5 | AnyPS5 converter for PS5 executables and the x86-64 macOS system libraries for converted games |
 | butterscotch | Butterscotch |
@@ -47,7 +46,7 @@ Each download source has its own version selector, link and **Install** action, 
 | xsystem35 | xsystem35 |
 | xsystem4 | xsystem4 |
 
-In **Runtimes**, each game type's panel groups its related packages and ABI variants. Each package contains its required license notices and can contain native libraries as well as executables. A package can also take shared libraries from dependency packages that it declares at exact releases.
+In **Runtimes**, each game type's panel groups its related packages and ABI variants. Packages can contain license texts, native libraries and executables. A package can also take shared libraries from dependency packages that it declares at exact releases.
 
 The RLVM Mac app downloads from its upstream project, and its MacLauncher adapter is a separate MacLauncher Builds package. ScummVM installs from the publisher's disk image or another published Mac archive, which is checked against the publisher's SHA-256 file when one is listed. Installation then signs it locally (ad hoc) so that MacLauncher's graphics integration can load into it, and the installation record holds the checksum of the signed copy, which later checks verify without the network.
 
@@ -147,7 +146,7 @@ The final artifact check also takes the app path, the native inventory, the arch
 
 Each MacLauncher Builds release tag points to the commit that contains everything the package was built from: the exact upstream commits, MacLauncher's patches and the build scripts. The source is available at that commit on GitHub, so a release holds only the compiled package, with no separate source archive or manifest.
 
-Catalog metadata and the manifests inside packages are used for installation and integrity checks. Required license notices stay with their binaries. Android system images and proprietary developer SDKs follow their own acquisition and redistribution terms.
+Catalog metadata and the manifests inside packages are used for installation and integrity checks. License texts are ordinary payload files in `licenses/`, covered by the same file inventory and checksums as other package files. Each distinct text is stored once; `licenses/components.txt` names the text used by each component. Build scripts warn and continue when a candidate license source cannot be copied. Android system images and proprietary developer SDKs follow their own acquisition and redistribution terms.
 
 Upstream source is used at an exact commit and never edited, and MacLauncher's changes are applied during the build. A working publisher binary is used as it is when a rebuild would add no needed feature or compatibility fix. The build scripts are in [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds).
 

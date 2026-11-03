@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {addLicense} from "../../../../../scripts/license-files.mjs";
 // Copyright (c) MacLauncher contributors. MIT license.
 // Compile the original Godot SSR kernels without changing upstream sources.
 import fs from 'node:fs';
@@ -8,7 +9,7 @@ import {execFileSync} from 'node:child_process';
 const here=import.meta.dirname,spec=JSON.parse(fs.readFileSync(path.join(here,'source.json'))),options={};
 for(let i=2;i<process.argv.length;i+=2){
  const key=process.argv[i];
- if(!['--source','--compiler-root','--license','--output'].includes(key)||!process.argv[i+1]||options[key])throw Error('Expected unique source, compiler-root, license and output paths.');
+ if(!['--source','--compiler-root','--license','--output'].includes(key)||!process.argv[i+1]||options[key])throw Error('Expected unique source, compiler and output options.');
  options[key]=path.resolve(process.argv[i+1]);
 }
 for(const key of ['--source','--compiler-root','--output'])if(!options[key])throw Error('Missing '+key);
@@ -20,8 +21,6 @@ const original={};
 for(const [file,expected]of Object.entries(spec.files)){
  const bytes=fs.readFileSync(path.join(source,file));if(sha(bytes)!==expected)throw Error('Godot SSR source changed: '+file);original[file]=bytes.toString('utf8');
 }
-const license=fs.readFileSync(options['--license']||path.join(source,spec.licenseFile));
-if(sha(license)!==spec.licenseSha256)throw Error('Godot SSR license changed.');
 if(fs.existsSync(out))throw Error('Choose a new shader output directory.');
 fs.mkdirSync(out,{recursive:true});
 const base='servers/rendering/renderer_rd/shaders/effects/',shader=name=>original[base+name+'.glsl'];
@@ -75,7 +74,8 @@ results.forEach((row,i)=>{
  header+='inline constexpr const char*source'+i+'=R"SSR_GPU('+row.msl+')SSR_GPU";\n';
 });
 header+='inline constexpr Shader shaders[]={'+results.map((row,i)=>'{'+JSON.stringify(row.name)+','+JSON.stringify(row.entry)+',source'+i+',bindings'+i+','+row.bindings.length+','+row.threads.join(',')+'}').join(',')+'};\n}\n';
-fs.writeFileSync(path.join(out,'ssr-shaders.hpp'),header);fs.writeFileSync(path.join(out,'ssr-MIT.txt'),license);
+fs.writeFileSync(path.join(out,'ssr-shaders.hpp'),header);
+addLicense(out,'godot-ssr',options['--license']||path.join(source,spec.licenseFile));
 const metadata={schema:1,...spec,ownedRecipeSha256:sha(fs.readFileSync(import.meta.filename)),shaders:results.map(({msl,...row})=>row)};
 fs.writeFileSync(path.join(out,'ssr-source.json'),JSON.stringify(metadata,null,2)+'\n');
 console.log(JSON.stringify({output:out,shaders:results.length,roles:results.map(row=>row.name)}));

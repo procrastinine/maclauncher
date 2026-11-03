@@ -5,7 +5,6 @@
   "version": "Godot 4.4",
   "license": "MIT",
   "licenseFile": "LICENSE.txt",
-  "licenseSha256": "b0435e3b3e4e55238f05f4b306f30524a1b2e20147810d436eaa554fa6855c80",
   "files": {
     "servers/rendering/renderer_rd/effects/ss_effects.cpp": "b8b3e6a2253d47a8c72130b811636741bfa2200c3b9e26df62842483be71c916",
     "servers/rendering/renderer_rd/effects/ss_effects.h": "1834eae848c5a2e591c349a6bcc2d2b32d6af21e59f41649da991b68d4fd8b52",

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {addLicense} from '../../../../../scripts/license-files.mjs';
 // Copyright (c) MacLauncher contributors. MIT license.
 // Original FidelityFX DoF kernels, constants and dispatch schedule.
 import fs from 'node:fs';
@@ -11,7 +12,7 @@ for(const key of ['--source','--tools','--output'])if(!options[key])throw Error(
 const source=options['--source'],tools=options['--tools'],out=options['--output'];
 const hash=b=>crypto.createHash('sha256').update(b).digest('hex'),run=(exe,args)=>execFileSync(exe,args,{encoding:'utf8',maxBuffer:64*1024*1024});
 if(run('git',['-C',source,'rev-parse','HEAD']).trim()!==spec.commit)throw Error('DoF source pin changed.');
-run('git',['-C',source,'diff','--exit-code','HEAD','--']);
+run('git',['-C',source,'diff','--exit-code','HEAD','--',...Object.keys(spec.files)]);
 const read=file=>fs.existsSync(path.join(source,file))?fs.readFileSync(path.join(source,file),'utf8'):run('git',['-C',source,'show',spec.commit+':'+file]);
 for(const [file,digest]of Object.entries(spec.files))if(hash(read(file))!==digest)throw Error('DoF source changed: '+file);
 fs.mkdirSync(out,{recursive:true});const overlay=path.join(out,'overlay'),gpu=path.join(source,'sdk/include/FidelityFX/gpu');fs.mkdirSync(path.join(overlay,'dof'),{recursive:true});
@@ -60,9 +61,7 @@ const shaders=[];for(const role of [...spec.roles,{name:'depth',entry:'CSDepth'}
 }
 let header='// Copyright (C) 2024 Advanced Micro Devices, Inc. MIT; see dof-MIT.txt.\n// Generated original FidelityFX DoF compute kernels.\n#pragma once\n#include <cstddef>\nnamespace macfx::dof_shaders {\nstruct Binding{const char*name;const char*kind;unsigned index;};\nstruct Shader{const char*name;const char*entry;const char*source;const Binding*bindings;size_t count;unsigned x,y,z;};\n';
 shaders.forEach((s,i)=>{header+=`inline constexpr Binding bindings${i}[]={${s.bindings.map(b=>'{'+JSON.stringify(b.name)+','+JSON.stringify(b.kind)+','+b.index+'}').join(',')}};\ninline constexpr const char*source${i}=R"DOF_GPU(${s.source})DOF_GPU";\n`;});header+='inline constexpr Shader shaders[]={'+shaders.map((s,i)=>`{${JSON.stringify(s.name)},${JSON.stringify(s.entry)},source${i},bindings${i},sizeof(bindings${i})/sizeof(Binding),${s.threads.join(',')}}`).join(',')+'};\n}\n';
-fs.writeFileSync(path.join(out,'dof-shaders.hpp'),header);fs.writeFileSync(path.join(out,'dof-MIT.txt'),read('LICENSE.txt'));
-const hash22Notice=/\/\* hash22[\s\S]*?\*\//.exec(read('sdk/include/FidelityFX/gpu/dof/ffx_dof_blur.h'))?.[0];
-if(!hash22Notice||!hash22Notice.includes('Copyright (c)2014 David Hoskins.'))throw Error('DoF hash22 attribution changed.');
-fs.writeFileSync(path.join(out,'dof-HASH22-MIT.txt'),hash22Notice+'\n');
+fs.writeFileSync(path.join(out,'dof-shaders.hpp'),header);for(const candidate of spec.licenseFiles||[])addLicense(out,'ffx-dof',path.join(source,candidate.path));
+addLicense(out,'ffx-dof-hash22',path.join(here,'generated/dof-HASH22-MIT.txt'));
 fs.writeFileSync(path.join(out,'translation.json'),JSON.stringify({schema:1,repository:spec.repository,commit:spec.commit,license:spec.license,source:spec,owned:hash(fs.readFileSync(import.meta.filename)),ownedFiles:Object.fromEntries(['boundary.hlsl','../native/scene-projection.hlsl'].map(file=>[file,hash(fs.readFileSync(path.join(here,file)))])),adaptations:{callbacks:{sourceSha256:hash(original),appliedSha256:hash(callbacks)},inverseDepthDomain:{sourceSha256:hash(originalDepth),appliedSha256:hash(depth)}},shaders:shaders.map(({source,...s})=>s)},null,2)+'\n');
 console.log(JSON.stringify({output:out,kernels:shaders.length}));

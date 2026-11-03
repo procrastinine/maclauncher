@@ -188,8 +188,9 @@ function sourceMetadata(directory,manifest){
     if(row&&(row.files?receipt.inputIdentity===digest(JSON.stringify(row.files)):receipt.sha256===row.sha256))source=row;
   }catch{}
   if(!source)try{
-    const provenance=new Set([...(manifest.sourceFiles||[]).filter(row=>/^[a-f0-9]{64}$/.test(row?.sha256||'')).map(row=>row.sha256),manifest.weights?.sha256,manifest.denoiseWeights?.sha256]),notices=fs.readdirSync(path.join(directory,'notices'));
-    source=sources.find(row=>(row.method||'mlx-dlss')===operationForArchitecture(manifest.architecture)&&row.files&&row.files.filter(asset=>!/^(LICENSE|NOTICE|COPYING)/i.test(asset.file)).every(asset=>provenance.has(asset.sha256))&&row.files.filter(asset=>/^(LICENSE|NOTICE|COPYING)/i.test(asset.file)).every(asset=>notices.some(name=>{if(!name.endsWith('-'+asset.file))return false;const stat=fs.lstatSync(path.join(directory,'notices',name));return stat.isFile()&&!stat.isSymbolicLink()&&stat.size===asset.bytes;})));
+    const provenance=new Set([...(manifest.sourceFiles||[]).filter(row=>/^[a-f0-9]{64}$/.test(row?.sha256||'')).map(row=>row.sha256),manifest.weights?.sha256,manifest.denoiseWeights?.sha256]);
+    const consumed=(manifest.sourceFiles||[]).filter(row=>/^[a-f0-9]{64}$/.test(row?.sha256||''));
+    source=sources.find(row=>(row.method||'mlx-dlss')===operationForArchitecture(manifest.architecture)&&row.files?.some(asset=>provenance.has(asset.sha256))&&row.files.filter(asset=>consumed.some(input=>input.file===asset.file)).every(asset=>consumed.some(input=>input.file===asset.file&&input.sha256===asset.sha256)));
   }catch{}
   return source?{sourceVersion:source.version,...(source.defaultForOperation===true?{curatedDefault:true}:{})}:{};
 }
@@ -282,14 +283,15 @@ async function importModel(context = {}) {
   } finally { if (expanded) fs.rmSync(expanded, {recursive: true, force: true}); }
 }
 function preserveSource(directory, source, model, userDataDir) {
-  if (source.kind === "package" && !source.notices.length) return;
+  if (source.kind === "package" && !source.notices?.length) return;
   const receipt = path.join(directory, "source.json");
   if (fs.existsSync(receipt)) return;
-  const notices = path.join(directory, "notices");Writable.assertOwnDirectory(userDataDir, notices);
-  for (const [index, row] of source.notices.entries()) {
-    regular(row.source, 2 << 20);
-    const target = path.join(notices, index + "-" + row.name);
-    cloneOrCopySync(row.source, target, { exclusive: true });fs.chmodSync(target, 0o444);
+  const notices = path.join(directory, "licenses");
+  for (const [index, row] of (source.notices||[]).entries()) {
+    if(!fs.existsSync(row.source)){console.warn("Source candidate copy skipped: missing file",row.source);continue;}
+    const target = path.join(notices, index + "-" + path.basename(row.name));
+    try { Writable.assertOwnDirectory(userDataDir, notices);cloneOrCopySync(row.source, target, { exclusive: true });fs.chmodSync(target, 0o444); }
+    catch(error) { console.warn("Source candidate copy skipped:",error.message); }
   }
   fs.writeFileSync(receipt, JSON.stringify({schema: 1, kind: source.kind, fileName: path.basename(source.file),
     packagePath: model.sourcePackage || path.relative(source.file, model.canonical).split(path.sep).join("/")}, null, 2) + "\n", {flag: "wx", mode: 0o444});
@@ -319,9 +321,7 @@ async function importPackage(context, source, origin) {
     const identity = { managerId: ID, sectionId: "default", version: selected, sourcePath: target };
     const reused = await withRuntimeUse(identity, async () => {
       const previous = readInstall(userDataDir, selected);
-      // Adding source notices is a write and belongs to the publication lock.
-      const completeSource = origin.kind === "package" && !origin.notices.length || previous && fs.existsSync(path.join(previous.installDir, "source.json"));
-      return previous && completeSource && await hashFile(previous.weightsPath, signal) === weightsHash ? previous : null;
+      return previous && await hashFile(previous.weightsPath, signal) === weightsHash ? previous : null;
     }, { userDataDir });
     if (reused) return reused;
     return await withRuntimeMutation(identity, async () => {

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {addLicense} from "../../../../../../scripts/license-files.mjs";
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -13,7 +14,7 @@ if(run('git',['-C',source,'rev-parse','HEAD']).trim()!==pin.commit)throw Error('
 for(const name of ['dxc','spirv-cross'])if(hash(fs.readFileSync(path.join(tools,name)))!==pin.tools[name])throw Error('The shader compiler differs from the declared build input: '+name);
 fs.mkdirSync(output,{recursive:true});
 const exported=path.join(output,'source'),archive=path.join(output,'source.tar');fs.mkdirSync(exported,{recursive:true});
-run('git',['-C',source,'archive','--format=tar','--output='+archive,pin.commit,'LICENSE.txt','sdk/include','sdk/src/components/opticalflow','sdk/src/components/frameinterpolation','sdk/src/shared','sdk/src/backends/shared','sdk/src/backends/dx12/shaders/opticalflow','sdk/src/backends/dx12/shaders/frameinterpolation']);
+run('git',['-C',source,'archive','--format=tar','--output='+archive,pin.commit,'sdk/include','sdk/src/components/opticalflow','sdk/src/components/frameinterpolation','sdk/src/shared','sdk/src/backends/shared','sdk/src/backends/dx12/shaders/opticalflow','sdk/src/backends/dx12/shaders/frameinterpolation']);
 run('tar',['-xf',archive,'-C',exported]);fs.rmSync(archive);
 // The SDK's alpha channel is an internal inpainting mask. The final pass has
 // consumed that mask; an opaque presentation image requires alpha one even
@@ -42,7 +43,7 @@ if(!options.includes('--native-only'))for(const [effect,passes]of Object.entries
   fs.writeFileSync(path.join(directory,pass+'.metal'),metal);fs.writeFileSync(path.join(directory,pass+'.json'),JSON.stringify(signature(metal,reflection)));fs.rmSync(spv);
  }
 }
-fs.copyFileSync(path.join(exported,'LICENSE.txt'),path.join(payload,'FSR3-LICENSE.txt'));
+addLicense(payload,'fsr3',path.join(source,'LICENSE.txt'));
 if(options.includes('--shaders-only')){console.log('Translated FidelityFX optical flow and frame interpolation shaders: '+payload);process.exit(0);}
 const overlay=path.join(output,'host-overlay/FidelityFX/host');fs.mkdirSync(overlay,{recursive:true});
 for(const effect of ['opticalflow','frameinterpolation']){

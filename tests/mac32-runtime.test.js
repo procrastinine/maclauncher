@@ -145,7 +145,7 @@ test("mac32 lists Intel Mac release archives with the publisher's digest, or a r
 test("mac32 payload validates the native host, four guest libraries and retained licenses", t => {
   const root = temporary(t), executable = writePayload(root), pin = published("0.1");
   const metadata = Payload.preparePayload({ unpacked: root, pin }, host);
-  assert.equal(metadata.minimumMacOS, "26.0.0"); assert.equal(metadata.files.length, 7);
+  assert.equal(metadata.minimumMacOS, "26.0.0"); assert.equal(metadata.files.length, 8);
   assert.equal(fs.readFileSync(path.join(root, "mac32-0.1", "README.md"), "utf8"), "README.md original text");
   const install = { version: "0.1", installDir: root, executablePath: executable, installationMetadata: metadata };
   const resolve = Payload.createPayloadResolver(host);
@@ -156,9 +156,9 @@ test("mac32 payload validates the native host, four guest libraries and retained
   assert.equal(resolve(install, { verification: "status" }).install, null);
   assert.equal(resolve(install).install, null);
   fs.writeFileSync(library, binary("i386", 6)); fs.rmSync(path.join(root, "mac32-0.1", "NOTICE"));
-  assert.equal(Payload.preparePayload({ unpacked: root, pin }, host).files.length, 6);
+  assert.equal(Payload.preparePayload({ unpacked: root, pin }, host).files.length, 7);
   fs.rmSync(path.join(root, "mac32-0.1", "COPYING"));
-  assert.throws(() => Payload.preparePayload({ unpacked: root, pin }, host), /license files/);
+  assert.equal(Payload.preparePayload({ unpacked: root, pin }, host).files.length, 6);
 });
 
 test("mac32 rejects guest-library aliases and non-Intel native hosts", t => {

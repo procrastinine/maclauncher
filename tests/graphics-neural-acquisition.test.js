@@ -20,7 +20,7 @@ test('explicit checkpoint acquisition converts only names, retains notices and r
  const f=fixture(t);let consent=0;const installed=await Setup.downloadModel({userDataDir:f.userDataDir,confirmRuntimeInstall:async()=>{consent++;return true;}},f);
  assert.equal(consent,1);assert.equal(f.downloads(),2);assert.equal(installed.operation,'realesrgan');assert.equal(installed.identifier,'Trained Anime');assert.equal(installed.intrinsicScale,4);
  const converted=fs.readFileSync(installed.weightsPath),start=8+Number(converted.readBigUInt64LE());assert.deepEqual(converted.subarray(start),Buffer.concat(f.parts));assert.deepEqual(fs.readFileSync(f.file),f.bytes);
- assert.equal(JSON.parse(fs.readFileSync(path.join(installed.installDir,'download-source.json'))).files.length,2);assert.match(fs.readFileSync(path.join(installed.installDir,'notices/0-LICENSE.txt'),'utf8'),/Original trained/);
+ assert.equal(JSON.parse(fs.readFileSync(path.join(installed.installDir,'download-source.json'))).files.length,2);assert.match(fs.readFileSync(path.join(installed.installDir,'licenses/0-LICENSE.txt'),'utf8'),/Original trained/);
  const again=await Setup.downloadModel({userDataDir:f.userDataDir,confirmRuntimeInstall:()=>assert.fail('installed source needs no consent')},{source:f.source});assert.equal(again.version,installed.version);assert.equal(f.downloads(),2,'installed source stays offline');
  assert.equal(Setup.sourceInstalled(Models.listInstalled(f.userDataDir),f.source).version,installed.version);
  const requests=[];

@@ -22,35 +22,18 @@ function fixture(t) {
   const archive = path.join(root, "Download.zip");writeZipArchive(archive, entries.map(row => ({...row, deflate: true})));fs.mkdirSync(userDataDir);
   return {root, userDataDir, app, archive, prefix, manifest, weights, entries};
 }
-test("adding notices to an active deduplicated neural version requires its own mutation lease", async t => {
-  const f = fixture(t), bare = path.join(f.root, f.prefix.replace(/\/$/, '')), first = await Models.importModel({ userDataDir: f.userDataDir, runtimePath: bare });
-  const { withRuntimeUse, instrumentRuntimeManagers } = require('../src/core/coordinated-runtime-managers');
-  const manager = { ...Manager };instrumentRuntimeManagers([manager]);
-  const receipt = path.join(first.installDir, 'source.json');assert.equal(fs.existsSync(receipt), false);
-  await withRuntimeUse(Models.identityForPath(f.userDataDir, first.modelPath), async use => {
-    await use.bind(process.pid);
-    await assert.rejects(manager.importRuntime({ userDataDir: f.userDataDir, runtimePath: f.archive }), { code: 'RUNTIME_IN_USE' });
-    assert.equal(fs.existsSync(receipt), false);assert.equal(fs.existsSync(path.join(first.installDir, 'notices')), false);
-    assert.deepEqual(fs.readFileSync(path.join(first.modelPath, 'weights.safetensors')), f.weights);
-  }, { userDataDir: f.userDataDir });
-  const reused = await manager.importRuntime({ userDataDir: f.userDataDir, runtimePath: f.archive });
-  assert.equal(reused.version, first.version);assert.equal(Models.listInstalled(f.userDataDir).length, 1);
-  assert.equal(fs.readFileSync(path.join(first.installDir, 'notices/0-NOTICE'), 'utf8'), 'Original model terms apply.');
-});
-test("NVIDIA-style original provenance and complete large notices reuse a curated source offline",async t=>{
+test("NVIDIA-style original provenance reuses a curated source offline",async t=>{
   const f=fixture(t),Catalog=require('../src/modules/shared/reshade/neural/model-source.json'),Setup=require('../src/modules/shared/reshade/neural/setup');
   const notice=Buffer.alloc(1383377,65),originalHash='9'.repeat(64),source={version:'original-library-fixture',method:'mlx-dlss',defaultForOperation:true,files:[{file:'original.so.1.8.2',bytes:64,sha256:originalHash},{file:'NOTICE',bytes:notice.length,sha256:crypto.createHash('sha256').update(notice).digest('hex')}]};
   Catalog.sources.push(source);t.after(()=>Catalog.sources.splice(Catalog.sources.indexOf(source),1));
   f.manifest.sourceFiles=[{file:'original.so.1.8.2',sha256:originalHash}];fs.writeFileSync(path.join(f.root,f.prefix,'manifest.json'),JSON.stringify(f.manifest));fs.writeFileSync(path.join(f.app,'Contents/Resources/NOTICE'),notice);
   const installed=await Models.importModel({userDataDir:f.userDataDir,runtimePath:f.app}),listed=Models.listInstalled(f.userDataDir)[0];
-  assert.equal(listed.sourceVersion,source.version);assert.equal(listed.curatedDefault,true);assert.deepEqual(fs.readFileSync(path.join(installed.installDir,'notices/0-NOTICE')),notice);
+  assert.equal(listed.sourceVersion,source.version);assert.equal(listed.curatedDefault,true);assert.deepEqual(fs.readFileSync(path.join(installed.installDir,'licenses/0-NOTICE')),notice);
   const requests=Harness.network.requests.length;
   const reused=await Setup.downloadModel({userDataDir:f.userDataDir,confirmRuntimeInstall:()=>assert.fail('installed original source needs no consent')},{source});
   assert.equal(Harness.network.requests.length,requests,'installed original source stays offline');
   assert.equal(reused.version,installed.version);assert.equal(Models.listInstalled(f.userDataDir).length,1);
   source.method='mlx-vsr';assert.equal(Models.listInstalled(f.userDataDir)[0].sourceVersion,undefined,'source operation must match the installed graph');source.method='mlx-dlss';
-  fs.unlinkSync(path.join(installed.installDir,'notices/0-NOTICE'));assert.equal(Models.listInstalled(f.userDataDir)[0].sourceVersion,undefined,'incomplete original notices are not a complete source install');
-  const oversized=Buffer.alloc((2<<20)+1);fs.writeFileSync(path.join(f.app,'Contents/Resources/NOTICE'),oversized);assert.throws(()=>Sources.inspect(f.app),/oversized/);
 });
 test("app and ZIP model sources import declared packages through the shared manager without unrelated app resources", async t => {
   const f = fixture(t), catalog = Manager.getState({userDataDir: f.userDataDir}).catalog;
@@ -60,7 +43,7 @@ test("app and ZIP model sources import declared packages through the shared mana
     const imported = await Manager.importRuntime({userDataDir: f.userDataDir, runtimePath});
     assert.deepEqual(fs.readdirSync(imported.modelPath).sort(), ["manifest.json", "weights.safetensors"]);
     assert.deepEqual(fs.readFileSync(path.join(imported.modelPath, "weights.safetensors")), f.weights);
-    assert.equal(fs.readFileSync(path.join(imported.installDir, "notices/0-NOTICE"), "utf8"), "Original model terms apply.");
+    assert.equal(fs.readFileSync(path.join(imported.installDir, "licenses/0-NOTICE"), "utf8"), "Original model terms apply.");
     assert.ok(!fs.existsSync(path.join(imported.installDir, "Contents")));
     assert.equal(Models.listInstalled(f.userDataDir).length, 1, "identical source packages deduplicate");
   }

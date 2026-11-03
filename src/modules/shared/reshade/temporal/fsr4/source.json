@@ -85,7 +85,6 @@
     "path": "research/lossy2/weights_lossy2.npz",
     "url": "https://raw.githubusercontent.com/zgauthier2000/fsr4-shader-performance-overrides/69cc9b9979a8fe90b97b1ed2f20e94487df261e2/research/lossy2/weights_lossy2.npz",
     "sha256": "9a458f65812848b273dace03edcbd346d66364d5d41a99d0963adaa601a3c93c",
-    "license": "GPL-2.0-or-later",
-    "licenseSha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6"
+    "license": "GPL-2.0-or-later"
   }
 }

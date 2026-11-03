@@ -15,7 +15,7 @@ export function stageLibplaceboScene({directory,metadata,recipeRoot}){
   const owned=new Map(recipes.map(name=>['maclauncher/'+name,path.join(recipeRoot,name)]));
   const declarations=new Map(),pins=new Set();
   for(const architecture of metadata.architectures){
-    const receiptName='notices/libplacebo/scene-source'+(architecture==='arm64'?'':'.x86_64')+'.json';
+    const receiptName='source/libplacebo/scene-source'+(architecture==='arm64'?'':'.x86_64')+'.json';
     if(!metadata.files.some(row=>row.path===receiptName))throw Error('The libplacebo source interface declaration is missing: '+architecture);
     const receipt=JSON.parse(fs.readFileSync(path.join(directory,receiptName),'utf8'));
     if(receipt.architecture!==architecture||!samePin(receipt.source,SOURCE)||!samePin(receipt.vulkanHeaders,VULKAN_HEADERS)||

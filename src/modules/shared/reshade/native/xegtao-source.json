@@ -16,10 +16,6 @@
       {
         "path": "Source/Rendering/Shaders/XeGTAO.hlsli",
         "sha256": "30faf4f5013916c14694db20fe9ec7f0c786f2edac7610968f9391987115064e"
-      },
-      {
-        "path": "LICENSE",
-        "sha256": "1f3bfd6b628535f0f0e779e70c260cfdc1bb45bc8644d7108e65f83e24a05cba"
       }
     ],
     "entries": [
@@ -32,9 +28,14 @@
       "CSDenoiseLastPass",
       "CSUnprojectDepth",
       "CSApplyAO"
+    ],
+    "licenseFiles": [
+      {
+        "path": "LICENSE"
+      }
     ]
   },
-  "owned": "b48cd8f49e4970e3405892a82a20ab72a80c5ba8cf683c1e3f917f3e74fa93c5",
+  "owned": "147a7f26b2cd0c452d94661877e27226ff48438ea0a46611b54408de8117a5a4",
   "ownedFiles": {
     "wrapper.hlsl": "5ebdb97d74896693d3e82608ccb09083ad8e47c136410c49671bc6d0aa9506f3"
   },

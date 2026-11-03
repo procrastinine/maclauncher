@@ -4,7 +4,7 @@
   "revision": "7ca7f7cbb7e7d016ca1756d0855879c3b7d0cc05",
   "license": "GPL-2.0-or-later and MIT",
   "licensePaths": [
-    "LICENSE.TXT",
+    "licenses/crt-royale.txt",
     "Shaders/crt-royale/lib/blur-functions.fxh",
     "Shaders/crt-royale/lib/gamma-management.fxh",
     "Shaders/crt-royale/lib/helper-functions-and-macros.fxh",
@@ -12,12 +12,6 @@
     "Shaders/crt-royale/lib/special-functions.fxh"
   ],
   "files": [
-    {
-      "path": "LICENSE.TXT",
-      "sourcePath": "LICENSE.TXT",
-      "size": 15521,
-      "sha256": "186d4b813cca7c779938db8fb041d9fe9c132f403045f88c251af1656358d169"
-    },
     {
       "path": "README.MD",
       "sourcePath": "README.MD",
@@ -179,6 +173,16 @@
       "sourcePath": "reshade-shaders/Shaders/crt-royale/version-number.fxh",
       "size": 2191,
       "sha256": "67092eca5adef657f04d8213dea9b33977b2e71b1c4b5b7bd03aee3b28b4fb77"
+    },
+    {
+      "path": "licenses/components.txt",
+      "size": 27,
+      "sha256": "ca41c3ac9e3a46b2470b4f120d10daca8cbb1e8a8224f9922f544fc956dcdacf"
+    },
+    {
+      "path": "licenses/crt-royale.txt",
+      "size": 15521,
+      "sha256": "186d4b813cca7c779938db8fb041d9fe9c132f403045f88c251af1656358d169"
     }
   ]
 }

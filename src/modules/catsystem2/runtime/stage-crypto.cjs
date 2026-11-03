@@ -1,3 +1,4 @@
+const { addLicense } = require("../../../../scripts/license-files.mjs");
 // Developer-only build recipe. CatSystem2 tools execute the sealed Included
 // helper directly; end users need neither a compiler nor a runtime install.
 const fs = require("node:fs");
@@ -40,7 +41,7 @@ function stage({ resourcesRoot } = {}) {
     if (command(executable, ["--version"]) !== "maclauncher-kif-crypto 1.0.0") throw new Error("The new KIF helper cannot execute its declared protocol.");
     if (JSON.stringify(Native.readMachOArchitectures(executable).sort()) !== JSON.stringify(["arm64", "x86_64"])) throw new Error("KIF helper CPU slices differ.");
     for (const name of ["kif-crypto.c", "stage-crypto.cjs"]) fs.copyFileSync(path.join(__dirname, name), path.join(destination, name));
-    fs.copyFileSync(path.join(REPO, "LICENSE"), path.join(destination, "MacLauncher-MIT.txt"));
+    addLicense(destination, "MacLauncher KIF cipher helper", path.join(REPO, "LICENSE"), "MIT");
     const dependencies = ["MacLauncher KIF cipher helper: owned MIT source, no third-party engine code or game assets.",
       "CommonCrypto: supplied by macOS through libSystem; not redistributed in this package.",
       "Protocol version: maclauncher-kif-crypto 1.0.0 / KBF1, four-byte minimum cyclic key, eight-byte little-endian blocks.",
@@ -48,24 +49,24 @@ function stage({ resourcesRoot } = {}) {
       "Key resources: https://github.com/trigger-segfault/TriggersTools.CatSystem2/wiki/V_CODEs",
       "No game keys, Windows executable, Valve API or proprietary runtime is included."].join("\n") + "\n";
     fs.writeFileSync(path.join(destination, "DEPENDENCIES.txt"), dependencies);
-    const files = fs.readdirSync(destination).sort().map(name => {
+    const files = B.fileInventory(destination).sort().map(name => {
       fs.chmodSync(path.join(destination, name), name === "kif-crypto" ? 0o755 : 0o644);
       const file = B.readRegular(path.join(destination, name), 1024 * 1024);
       return { path: name, size: file.size, sha256: file.sha256, mode: file.mode,
         ...(name === "kif-crypto" ? { architectures: ["arm64", "x86_64"] } : {}) };
     });
-    const notices = [{ name: "MacLauncher KIF cipher helper", license: "MIT", path: "MacLauncher-MIT.txt" }];
+
     const record = { schemaVersion: 1, id: "catsystem2-kif-crypto", version: VERSION, protocolVersion: "KBF1",
       sourceSha256: source.sha256, binarySha256: files.find(file => file.path === "kif-crypto").sha256,
       minimumMacOS: MINIMUM_MACOS, architectures: ["arm64", "x86_64"], scope: "kif-little-endian-blowfish",
       sourceKind: "owned-source", verifiedBuild: true,
       build: { compiler, sdk, signing: "ad-hoc", optimizations: "O2", minimumMacOS: MINIMUM_MACOS,
-        recipe: "src/modules/catsystem2/runtime/stage-crypto.cjs", recipeSha256: files.find(file => file.path === "stage-crypto.cjs").sha256 }, files, notices };
+        recipe: "src/modules/catsystem2/runtime/stage-crypto.cjs", recipeSha256: files.find(file => file.path === "stage-crypto.cjs").sha256 }, files };
     const metadata = Buffer.from(JSON.stringify(record, null, 2) + "\n");
     fs.writeFileSync(path.join(destination, "helper.json"), metadata, { mode: 0o644 });
     const declaration = { id: record.id, version: VERSION, arch: "universal", launcherArchitectures: ["arm64", "x64"], minimumMacOS: MINIMUM_MACOS,
       sourceRelative: "kif-crypto.c", sourceSha256: source.sha256, directoryRelative, manifestRelative: "helper.json",
-      manifestSha256: B.digest(metadata), files: [...files, { path: "helper.json", size: metadata.length, sha256: B.digest(metadata), mode: 0o644 }], notices };
+      manifestSha256: B.digest(metadata), files: [...files, { path: "helper.json", size: metadata.length, sha256: B.digest(metadata), mode: 0o644 }] };
     Supplemental.validateDeclaration(declaration);
     Supplemental.verifySupplementals({ resourceRoot: path.join(resourcesRoot, "native-runtimes"), arch: process.arch, maximumMacOS: MINIMUM_MACOS, items: [declaration] });
     return declaration;

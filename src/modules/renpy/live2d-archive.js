@@ -53,8 +53,10 @@ function readCubismArchive(archivePath) {
     const selected = candidates[0], version = selected.name.split("/")[0].match(/^CubismSdkForNative-(\d+-r\.\d+(?:[.-][A-Za-z0-9]+)*)$/)?.[1];
     if (!version) throw new Error("Cubism ZIP does not declare an explicit supported Native SDK version.");
     const license = entries.find(entry => entry.name === `${selected.name.split("/")[0]}/Core/LICENSE.md`);
-    if (!license) throw new Error("Cubism Native ZIP is missing its Core license notice.");
-    return { bytes: member(selected), license: member(license), version, memberPath: selected.name, archiveSha256: Native.hashFile(archivePath) };
+    let notice;
+    try { if (license) notice = member(license); }
+    catch (error) { console.warn("The optional Cubism notice could not be read:", error.message); }
+    return { bytes: member(selected), ...(notice ? { license: notice } : {}), version, memberPath: selected.name, archiveSha256: Native.hashFile(archivePath) };
   } finally { fs.closeSync(fd); }
 }
 

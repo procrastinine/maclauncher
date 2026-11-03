@@ -106,11 +106,13 @@ async function installLoader(unpacked, loader, signal) {
     const library = libraries[0], prefix = library.slice(0, library.lastIndexOf("/lib/"));
     // The bottle's license notice accompanies the library when it has one.
     const license = members.find(name => name === prefix + "/LICENSE.txt" || name === prefix + "/LICENSE");
-    for (const [member, output, maxBuffer] of [[library, "libvulkan.1.dylib", 32 * 1024 * 1024],
-      ...(license ? [[license, "Vulkan-Loader-LICENSE.txt", 1024 * 1024]] : [])]) {
-      const content = await run("/usr/bin/tar", ["-xOf", archive, member], { signal, maxBuffer, encoding: "buffer" });
-      fs.writeFileSync(path.join(unpacked, output), content.stdout);
-    }
+    const content = await run("/usr/bin/tar", ["-xOf", archive, library], { signal, maxBuffer: 32 * 1024 * 1024, encoding: "buffer" });
+    fs.writeFileSync(path.join(unpacked, "libvulkan.1.dylib"), content.stdout);
+    try { if (license) {
+      const text = await run("/usr/bin/tar", ["-xOf", archive, license], { signal, encoding: "buffer" });
+      fs.mkdirSync(path.join(unpacked, "licenses"), { recursive: true });
+      fs.writeFileSync(path.join(unpacked, "licenses", "Vulkan-Loader.txt"), text.stdout);
+    } } catch (error) { signal?.throwIfAborted(); console.warn("The optional Vulkan loader license could not be copied:", error.message); }
   } finally { fs.rmSync(archive, { force: true }); }
 }
 function createManager(backend, dependencies = {}) {
@@ -123,12 +125,18 @@ function createManager(backend, dependencies = {}) {
         const library = findFile(unpacked, "MoltenVK/MoltenVK/dynamic/dylib/macOS/libMoltenVK.dylib", /^libMoltenVK\.dylib$/);
         if (!library) throw new Error("The MoltenVK package has no macOS library.");
         const license = findFile(unpacked, "MoltenVK/LICENSE", /^LICEN[CS]E(?:\.(?:md|txt))?$/i);
-        const kept = { [definition.library]: fs.readFileSync(library), ...(license ? { "MoltenVK-LICENSE.txt": fs.readFileSync(license) } : {}) };
+        const kept = { [definition.library]: fs.readFileSync(library) };
+        try { if (license) kept["licenses/MoltenVK.txt"] = fs.readFileSync(license); }
+        catch (error) { console.warn("The optional MoltenVK license could not be copied:", error.message); }
         for (const name of fs.readdirSync(unpacked)) fs.rmSync(path.join(unpacked, name), { recursive: true, force: true });
-        for (const [name, bytes] of Object.entries(kept)) fs.writeFileSync(path.join(unpacked, name), bytes);
+        for (const [name, bytes] of Object.entries(kept)) {
+          fs.mkdirSync(path.dirname(path.join(unpacked, name)), { recursive: true });
+          fs.writeFileSync(path.join(unpacked, name), bytes);
+        }
       } else {
         await installLoader(unpacked, loader, signal);
-        cloneOrCopySync(path.join(__dirname, "notices"), path.join(unpacked, "notices"));
+        try { cloneOrCopySync(path.join(__dirname, "notices"), path.join(unpacked, "licenses")); }
+        catch (error) { console.warn("The optional Vulkan licenses could not be copied:", error.message); }
       }
       const files = [definition.library, ...(loader ? ["libvulkan.1.dylib"] : [])];
       let minimumMacOS = "1.0";

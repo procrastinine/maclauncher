@@ -1,3 +1,4 @@
+const {addLicense} = require("./license-files.mjs");
 // Developer staging only. Play reads the reviewed supplemental directly.
 const fs = require('node:fs');
 const path = require('node:path');
@@ -31,15 +32,15 @@ function stage({ output }) {
     if (identifiers.length !== 2 || identifiers.some(value => value !== installName)) throw new Error('The config helper contains an unexpected or private dynamic-library identity.');
     fs.copyFileSync(source, path.join(directory, 'mkxpz-config.c'));
     fs.copyFileSync(identitySource, path.join(directory, 'mkxpz-identity.m'));
-    fs.copyFileSync(path.resolve(__dirname, '../LICENSE'), path.join(directory, 'license.txt'));
-    for (const name of ['mkxpz-config.c', 'mkxpz-identity.m', 'license.txt']) fs.chmodSync(path.join(directory, name), 0o644);
+    addLicense(directory,ID,path.resolve(__dirname,'../LICENSE'));
+    for (const name of ['mkxpz-config.c', 'mkxpz-identity.m']) fs.chmodSync(path.join(directory, name), 0o644);
     const compiler = execFileSync('/usr/bin/xcrun', ['clang', '--version'], { encoding: 'utf8', timeout: 10000 }).split('\n')[0];
     const manifest = { schemaVersion: 1, id: ID, version: VERSION, sourceSha256: Native.hashFile(source),
-      binarySha256: Native.hashFile(library), licenseSha256: Native.hashFile(path.join(directory, 'license.txt')),
+      binarySha256: Native.hashFile(library),
       minimumMacOS, architectures, scope: 'selected-executable-config-and-display-identity',
       build: { compiler, flags: [...flags, ...identityFlags], sources: ['mkxpz-config.c', 'mkxpz-identity.m'], installName, signing: 'ad-hoc' } };
     fs.writeFileSync(path.join(directory, 'helper.json'), JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx', mode: 0o644 });
-    const files = fs.readdirSync(directory).sort().map(name => {
+    const files = require("../src/modules/shared/runtime/bundled-native").fileInventory(directory).sort().map(name => {
       const file = path.join(directory, name), stat = fs.statSync(file);
       return { path: name, size: stat.size, sha256: Native.hashFile(file), mode: stat.mode & 0o777,
         ...(name.endsWith('.dylib') ? { architectures } : {}) };
@@ -47,8 +48,7 @@ function stage({ output }) {
     return { id: ID, version: VERSION, arch: 'universal', launcherArchitectures: ['arm64', 'x64'], minimumMacOS,
       sourceRelative: 'mkxpz-config.c', sourceSha256: manifest.sourceSha256,
       directoryRelative: `${ID}/${VERSION}/universal`, manifestRelative: 'helper.json',
-      manifestSha256: Native.hashFile(path.join(directory, 'helper.json')), files,
-      notices: [{ name: 'MacLauncher MKXP-Z config isolation helper', license: 'MIT', path: 'license.txt' }] };
+      manifestSha256: Native.hashFile(path.join(directory, 'helper.json')), files };
   } catch (error) { fs.rmSync(directory, { recursive: true, force: true }); throw error; }
 }
 if (require.main === module) {

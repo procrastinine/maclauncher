@@ -1,3 +1,4 @@
+import {addLicense} from "../../../../scripts/license-files.mjs";
 // Copyright (c) MacLauncher contributors. MIT license.
 import fs from "node:fs";
 import {isolateCompiler} from "./compiler-isolation.mjs";
@@ -11,9 +12,9 @@ const directory=path.dirname(fileURLToPath(import.meta.url)), repository=path.re
 const hash=file=>crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 const run=(program,args)=>execFileSync(program,args,{stdio:"pipe",encoding:"utf8"});
 function sceneNotice(library,destination){
-  const {library:_library,include:_include,notices=[],...provenance}=library;
+  const {library:_library,include:_include,licenseSources=[],...provenance}=library;
   fs.writeFileSync(destination,JSON.stringify(provenance,null,2)+"\n");
-  for(const notice of notices){if(hash(notice.file)!==notice.sha256||path.basename(notice.name)!==notice.name)throw new Error("The source library notice changed.");fs.copyFileSync(notice.file,path.join(path.dirname(destination),notice.name));}
+  for(const [name,file]of licenseSources)addLicense(path.resolve(path.dirname(destination),"../.."),"libplacebo",file,name);
 }
 // Homebrew bottle and MoltenVK release identities of the binary inputs.
 const bottle=(formula,sha256)=>"https://ghcr.io/v2/homebrew/core/"+formula+"/blobs/sha256:"+sha256;
@@ -29,10 +30,10 @@ export function build({inputs,moltenvk,headers,output,sceneLibrary}){
   const mvk=path.join(moltenvk,"MoltenVK/MoltenVK/dynamic/dylib/macOS/libMoltenVK.dylib");
   if(hash(mvk)!==MOLTENVK.sha256)throw new Error("The MoltenVK binary input changed.");
   if(fs.existsSync(output))throw new Error("The output already exists; choose a new build directory.");
-  const lib=path.join(output,"libplacebo"),notices=path.join(output,"notices/libplacebo");fs.mkdirSync(lib,{recursive:true});fs.mkdirSync(notices,{recursive:true});
-  for(const item of INPUTS){fs.copyFileSync(path.join(inputs,item.file),path.join(lib,item.name));fs.copyFileSync(path.join(inputs,item.notice),path.join(notices,item.name+".LICENSE"));}
-  if(sceneLibrary){if(sceneLibrary.architecture!=="arm64"||hash(sceneLibrary.library)!==sceneLibrary.sha256)throw new Error("The source-built libplacebo library changed.");fs.chmodSync(path.join(lib,"libplacebo.360.dylib"),0o755);fs.copyFileSync(sceneLibrary.library,path.join(lib,"libplacebo.360.dylib"));sceneNotice(sceneLibrary,path.join(notices,"scene-source.json"));}
-  fs.copyFileSync(mvk,path.join(lib,"libMoltenVK.dylib"));fs.copyFileSync(path.join(moltenvk,"MoltenVK/LICENSE"),path.join(notices,"MoltenVK.LICENSE"));
+  const lib=path.join(output,"libplacebo"),metadataRoot=path.join(output,"source/libplacebo");fs.mkdirSync(lib,{recursive:true});fs.mkdirSync(metadataRoot,{recursive:true});
+  for(const item of INPUTS){fs.copyFileSync(path.join(inputs,item.file),path.join(lib,item.name));addLicense(output,item.formula,path.join(inputs,item.notice));}
+  if(sceneLibrary){if(sceneLibrary.architecture!=="arm64"||hash(sceneLibrary.library)!==sceneLibrary.sha256)throw new Error("The source-built libplacebo library changed.");fs.chmodSync(path.join(lib,"libplacebo.360.dylib"),0o755);fs.copyFileSync(sceneLibrary.library,path.join(lib,"libplacebo.360.dylib"));sceneNotice(sceneLibrary,path.join(metadataRoot,"scene-source.json"));}
+  fs.copyFileSync(mvk,path.join(lib,"libMoltenVK.dylib"));addLicense(output,"moltenvk",path.join(moltenvk,"MoltenVK/LICENSE"));
   for(const name of [...INPUTS.map(item=>item.name),"libMoltenVK.dylib"]){const file=path.join(lib,name);fs.chmodSync(file,0o755);run("install_name_tool",["-id","@rpath/"+(sceneLibrary&&name==="libplacebo.360.dylib"?"libplacebo/":"")+name,file]);
     for(const line of run("otool",["-L",file]).split("\n").slice(2)){const dependency=line.trim().split(" (")[0];if(!dependency.startsWith("@@HOMEBREW_PREFIX@@"))continue;let next=path.basename(dependency);if(next.startsWith("libvulkan."))next="libMoltenVK.dylib";run("install_name_tool",["-change",dependency,"@loader_path/"+next,file]);}
     if(name==="libshaderc_shared.1.dylib")isolateShaderCompiler(file);
@@ -65,17 +66,16 @@ export function buildUniversal({armStage,intelInputs,inputs,moltenvk,headers,out
   if(fs.existsSync(output))throw new Error("The output already exists; choose a new build directory.");
   for(const item of INTEL_INPUTS)if(hash(path.join(intelInputs,item.file))!==item.sha256)throw new Error("An Intel libplacebo input changed: "+item.name);
   const files=arm.files.map(row=>{if(typeof row.path!=="string"||path.isAbsolute(row.path)||row.path.split("/").some(part=>!part||part===".."))throw new Error("The arm64 inventory path is invalid.");const file=path.join(armStage,row.path);if(!fs.lstatSync(file).isFile()||fs.statSync(file).size!==row.size||hash(file)!==row.sha256)throw new Error("The sealed arm64 stage changed.");return row.path;});
-  fs.mkdirSync(output,{recursive:true});for(const file of files){fs.mkdirSync(path.dirname(path.join(output,file)),{recursive:true});fs.copyFileSync(path.join(armStage,file),path.join(output,file));}
+  fs.mkdirSync(output,{recursive:true});fs.mkdirSync(path.join(output,"source/libplacebo"),{recursive:true});for(const file of files){fs.mkdirSync(path.dirname(path.join(output,file)),{recursive:true});fs.copyFileSync(path.join(armStage,file),path.join(output,file));}
   const temporary=path.join(output,".intel-build"),lib=path.join(temporary,"libplacebo");fs.mkdirSync(lib,{recursive:true});
   try{
     for(const row of INTEL_INPUTS){const file=path.join(lib,row.name);fs.copyFileSync(sceneLibrary&&row.name==="libplacebo.360.dylib"?sceneLibrary.library:path.join(intelInputs,row.file),file);fs.chmodSync(file,0o755);run("install_name_tool",["-id","@rpath/"+(sceneLibrary&&row.name==="libplacebo.360.dylib"?"libplacebo/":"")+row.name,file]);
       for(const line of run("otool",["-L",file]).split("\n").slice(2)){const dependency=line.trim().split(" (")[0];if(!dependency.startsWith("@@HOMEBREW_PREFIX@@"))continue;const name=path.basename(dependency);run("install_name_tool",["-change",dependency,"@loader_path/"+(name.startsWith("libvulkan.")?"libMoltenVK.dylib":name),file]);}
       if(row.name==="libshaderc_shared.1.dylib")isolateShaderCompiler(file);
       run("codesign",["--force","-s","-",file]);
-      const originalNotice=path.join(intelInputs,path.dirname(path.dirname(row.file)),"LICENSE"),includedNotice=path.join(output,"notices/libplacebo",row.name+".LICENSE");
-      if(hash(originalNotice)!==hash(includedNotice))fs.copyFileSync(originalNotice,path.join(output,"notices/libplacebo",row.name+".x86_64.LICENSE"));
+      addLicense(output,row.formula,path.join(intelInputs,path.dirname(path.dirname(row.file)),"LICENSE"),row.formula+"-x86_64");
     }
-    if(sceneLibrary)sceneNotice(sceneLibrary,path.join(output,"notices/libplacebo/scene-source.x86_64.json"));
+    if(sceneLibrary)sceneNotice(sceneLibrary,path.join(output,"source/libplacebo/scene-source.x86_64.json"));
     fs.copyFileSync(path.join(armStage,"libplacebo/libMoltenVK.dylib"),path.join(lib,"libMoltenVK.dylib"));
     const native=path.join(directory,"native");
     // Headers are a separate build input, not delivered runtime resources.

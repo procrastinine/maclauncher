@@ -1,3 +1,4 @@
+import {addLicense} from "../../../../../scripts/license-files.mjs";
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -55,10 +56,11 @@ if(option==='--universal'){
  const intel=path.join(capiTarget,'x86_64-apple-darwin/release/retroarch-prepare');run('/usr/bin/lipo',['-create',helper,intel,'-output',helper+'.universal']);fs.renameSync(helper+'.universal',helper);
 }
 for(const file of [library,helper]){run('/usr/bin/codesign',['--force','--sign','-','--timestamp=none',file]);run('/usr/bin/codesign',['--verify','--strict',file]);}
-const notice=path.join(output,'notices/librashader');fs.mkdirSync(notice,{recursive:true});
-fs.copyFileSync(path.join(source,'LICENSE.md'),path.join(notice,'LICENSE.md'));
-fs.writeFileSync(path.join(notice,'source.json'),JSON.stringify(declaration,null,2)+'\n');
-const files=[library,helper,...['LICENSE.md','source.json'].map(file=>path.join(notice,file))].map(file=>({path:path.relative(output,file),source:file,size:fs.statSync(file).size,mode:fs.statSync(file).mode&0o777,sha256:hash(file)}));
+const metadataRoot=path.join(output,'source/librashader');fs.mkdirSync(metadataRoot,{recursive:true});
+addLicense(output,'librashader',path.join(source,'LICENSE.md'));
+fs.writeFileSync(path.join(metadataRoot,'source.json'),JSON.stringify(declaration,null,2)+'\n');
+const licenses=path.join(output,'licenses');
+const files=[library,helper,path.join(metadataRoot,'source.json'),...(fs.existsSync(licenses)?fs.readdirSync(licenses).map(file=>path.join(licenses,file)):[])].map(file=>({path:path.relative(output,file),source:file,size:fs.statSync(file).size,mode:fs.statSync(file).mode&0o777,sha256:hash(file)}));
 const exports=run('/usr/bin/nm',['-gU',library]);
 for(const name of ['libra_mtl_external_inputs_api','libra_mtl_filter_chain_create_external','libra_mtl_filter_chain_set_external','libra_mtl_filter_chain_uniform_snapshots','libra_mtl_filter_chain_uniform_snapshot_bytes','libra_mtl_filter_chain_uniform_snapshots_available','libra_mtl_filter_chain_prepare_uniform_snapshots'])
   if(!new RegExp('\\b_'+name+'\\b').test(exports))throw Error('The Slang immutable input API is missing: '+name);

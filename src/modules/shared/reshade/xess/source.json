@@ -12,6 +12,5 @@
   "url": "https://raw.githubusercontent.com/intel/xess/de0fb9c1c510661c571164e1418ceca8101dab69/bin/libxess.dll",
   "sourceUrl": "https://github.com/intel/xess/tree/de0fb9c1c510661c571164e1418ceca8101dab69",
   "license": "LicenseRef-Intel-Simplified-Software-October-2022",
-  "licenseFile": "INTEL-LICENSE.txt",
-  "licenseSha256": "784be42c39a4a4d03cf85d88e15e59d75828fca773ce45b8dbfffbd7eaf208df"
+  "licenseFile": "INTEL-LICENSE.txt"
 }

@@ -21,7 +21,7 @@ test("managed PE tools discover only on an explicit action and cancellation down
   assert.equal(Harness.network.requests.length, requests); assert.equal(fs.existsSync(userDataDir), false);
 });
 
-test("upstream PE download retains its pinned notice and checksum and rejects later changes", async t => {
+test("upstream PE download verifies its checksum and rejects later changes", async t => {
   const userDataDir = path.join(temporary(t), "profile"), bytes = pe();
   const sha256 = crypto.createHash("sha256").update(bytes).digest("hex"), tool = manager();
   const release = Harness.githubRelease("publisher/tool", "v1.0", ["tool.exe"]);
@@ -33,7 +33,7 @@ test("upstream PE download retains its pinned notice and checksum and rejects la
   const context = { userDataDir, settings: {}, confirmRuntimeInstall: async () => true };
   const install = await tool.ensure({}, {}, context);
   assert.equal(install.version, "1.0"); assert.equal(install.upstreamRevision, revision);
-  assert.equal(fs.readFileSync(path.join(install.installDir, "LICENSE"), "utf8"), "MIT License");
+  assert.equal(fs.readFileSync(path.join(install.installDir, "licenses", "LICENSE.txt"), "utf8"), "MIT License");
   assert.equal(tool.resolveSelection({}, {}, userDataDir).ready, true);
   const changed = Buffer.from(bytes); changed[800] ^= 1; fs.writeFileSync(install.executablePath, changed);
   assert.equal(tool.resolveSelection({}, {}, userDataDir).ready, false);
@@ -47,7 +47,7 @@ test("upstream PE download from a repository without a license notice installs w
   Harness.network.routes = { ...Harness.githubRoutes("publisher/tool", [release]), [release.assets[0].browser_download_url]: bytes };
   t.after(() => { Harness.network.routes = null; });
   const install = await tool.ensure({}, {}, { userDataDir, settings: {}, confirmRuntimeInstall: async () => true });
-  assert.equal(install.version, "1.0"); assert.equal(fs.existsSync(path.join(install.installDir, "LICENSE")), false);
+  assert.equal(install.version, "1.0"); assert.equal(fs.existsSync(path.join(install.installDir, "licenses", "LICENSE.txt")), false);
   assert.equal(tool.resolveSelection({}, {}, userDataDir).ready, true);
 });
 

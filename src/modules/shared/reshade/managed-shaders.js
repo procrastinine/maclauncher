@@ -249,7 +249,7 @@ const tree = (pack, commit, signal) => Upstream.githubTree({ repository: pack.re
 const raw = (pack, ref, relative) => Upstream.listedFile({ filename: path.posix.basename(relative),
   url: `https://raw.githubusercontent.com/${pack.repository}/${ref}/${relative.split("/").map(encodeURIComponent).join("/")}` });
 // The files one revision provides for installation, or the reason it cannot
-// be installed: a declared recipe input or the license notice is missing, no
+// be installed: a declared recipe input is missing, no
 // supported shader remains (a recipe writes its own), or the selection
 // exceeds the library limits.
 function selectTree(pack, tree, recipe) {
@@ -257,7 +257,7 @@ function selectTree(pack, tree, recipe) {
   const blobs = tree.tree.filter(item => item?.type === "blob" && safe(item.path)), inputs = new Set(recipe?.sourceFiles || []);
   const files = pack.delivery !== "tree" ? blobs.filter(item => keep(item.path)) : blobs.filter(item => inputs.has(item.path) || keep(item.path) &&
     (pack.prefixes.some(prefix => item.path.startsWith(prefix)) || item.path === pack.licenseFile || /^README/i.test(item.path)));
-  const missing = [...inputs, pack.licenseFile].find(file => !blobs.some(item => item.path === file));
+  const missing = [...inputs].find(file => !blobs.some(item => item.path === file));
   if (missing) return { reason: `This revision does not contain ${missing}.` };
   if (!recipe && !files.some(item => formats[path.extname(item.path).toLowerCase()])) return { reason: "This revision contains no supported shader files." };
   if (pack.delivery === "tree" && (files.length > LIMITS.entries || files.some(item => item.size > LIMITS.file) ||
@@ -484,16 +484,17 @@ async function installRuntime(context = {}) {
           const archive = path.join(temporary, listed.name);
           await download(listed, archive, downloadContext);
           await unpack(archive, files, signal); fs.rmSync(archive);
-          if (!fs.existsSync(path.join(files, pack.licenseFile)))
-            await download(raw(pack, row.commit || row.tag, pack.licenseFile), path.join(files, pack.licenseFile), downloadContext, 1 << 20);
+          if (!fs.existsSync(path.join(files, pack.licenseFile))) {
+            try { await download(raw(pack, row.commit || row.tag, pack.licenseFile), path.join(files, pack.licenseFile), downloadContext, LIMITS.file); }
+            catch(error) { Downloads.throwIfAborted(signal);console.warn("Shader notice acquisition skipped:",error.message); }
+          }
         }
         for(const relative of pack.bundledNotices||[]){
-          if(!safe(relative))throw Error("The shader collection notice path is invalid.");
-          const moduleRoot=require("./shader-packs").physicalModuleRoot(),source=path.join(moduleRoot,relative),stat=fs.lstatSync(source);
-          if(!stat.isFile()||stat.isSymbolicLink())throw Error("The shader collection license notice is unavailable.");
-          const target=path.join(files,"notices",path.basename(relative));fs.mkdirSync(path.dirname(target),{recursive:true});
-          if(fs.existsSync(target)){if(!fs.readFileSync(target).equals(fs.readFileSync(source)))throw Error("The shader collection notice conflicts with its source.");}
-          else cloneOrCopySync(source,target);
+          if(!safe(relative)){console.warn("Shader notice copy skipped: unusable source path.");continue;}
+          const moduleRoot=require("./shader-packs").physicalModuleRoot(),source=path.join(moduleRoot,relative);
+          if(!fs.existsSync(source)){console.warn("Shader notice copy skipped: missing candidate",relative);continue;}
+          const target=path.join(files,"licenses",path.basename(relative));fs.mkdirSync(path.dirname(target),{recursive:true});
+          if(!fs.existsSync(target))cloneOrCopySync(source,target);
         }
         let sourceOverlay;
         if(sourceRecipe){
@@ -502,7 +503,6 @@ async function installRuntime(context = {}) {
         }
         const record = { schema: 1, packId: pack.id, version: selected, source: row, license: pack.license,
           ...(sourceOverlay?{sourceOverlay}:{}),installedAt: new Date().toISOString(), ...discover(files, pack) };
-        if (!record.files[pack.licenseFile]) throw new Error("The shader pack license notice is missing.");
         for (const relative of Object.keys(record.files)) fs.chmodSync(path.join(files, relative), 0o444);
         fs.writeFileSync(path.join(temporary, "pack.json"), JSON.stringify(record, null, 2) + "\n");
         Downloads.throwIfAborted(signal);

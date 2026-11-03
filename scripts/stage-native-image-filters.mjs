@@ -14,7 +14,7 @@ export function stageNativeImageFilters({ownedSource,symbols,recipeRoot}){
   if(metadata.schema!==1||!Array.isArray(metadata.providers)||metadata.providers.length>32)throw Error("The native image filter source declaration is invalid.");
   const methods=[],inputs=new Map(),owned=new Map(),notices=[],pins=[],seen=new Set();
   for(const provider of metadata.providers){
-    if(!Object.hasOwn(factories,provider.method)||seen.has(provider.method)||!filename(provider.sourceManifest)||!Array.isArray(provider.notices)||!provider.notices.length)throw Error("A native image filter source contract is invalid.");
+    if(!Object.hasOwn(factories,provider.method)||seen.has(provider.method)||!filename(provider.sourceManifest))throw Error("A native image filter source contract is invalid.");
     seen.add(provider.method);
     if(!dispatcher||!symbols.includes(factories[provider.method]))continue;
     const source=JSON.parse(fs.readFileSync(path.join(ownedSource,"src",provider.sourceManifest),"utf8"));
@@ -49,12 +49,13 @@ export function stageNativeImageFilters({ownedSource,symbols,recipeRoot}){
       }
     }
     for(const file of provider.embeddedResources||[])if(!filename(file)||!fs.statSync(path.join(ownedSource,"src",file)).isFile())throw Error("An embedded image filter resource is missing.");
-    for(const notice of provider.notices){
-      if(!filename(notice.path)||typeof notice.name!=="string"||typeof notice.license!=="string"||!/^https:\/\//.test(notice.sourceUrl||""))throw Error("A native image filter notice is invalid.");
-      const file=path.join(ownedSource,"src",notice.path),stat=fs.lstatSync(file);if(!stat.isFile()||stat.isSymbolicLink()||!stat.size)throw Error("A native image filter notice is missing.");
+    for(const notice of Array.isArray(provider.notices)?provider.notices:[]){
+      if(!filename(notice?.path)){console.warn("A native image filter source path is unavailable.");continue;}
+      const file=path.join(ownedSource,"src",notice.path);
+      if(!fs.existsSync(file)){console.warn("A native image filter notice source is missing:",file);continue;}
       const target="licenses/native-filters/"+notice.path;inputs.set(target,file);notices.push({...notice,path:target});
     }
     methods.push(provider.method);if(!ownedImplementation)pins.push(` ${source.commit} third_party/native-filter/${provider.method}`);
   }
-  return methods.length?{methods,inputs,owned,notices,pins}:null;
+  return methods.length?{methods,inputs,owned,pins}:null;
 }

@@ -1,3 +1,4 @@
+const {addLicense} = require("../../../../scripts/license-files.mjs");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
@@ -44,6 +45,11 @@ function stageSource({ roots, destination, inputs = INPUTS } = {}) {
     const root = sourceRoots[input.origin];
     const safe = value => typeof value === "string" && value && !path.isAbsolute(value) &&
       !value.split(/[\\/]/).some(part => part === ".." || part === ".git" || !part);
+    if(input.destination.startsWith("licenses/")){
+      if(!root||!safe(input.path)||!safe(input.destination))throw new Error("Invalid source member path.");
+      addLicense(destination,path.basename(input.destination,".txt"),path.join(root,input.path));
+      continue;
+    }
     if (!root || !safe(input.path) || !safe(input.destination) || outputPaths.has(input.destination) ||
         !/^[a-f0-9]{64}$/.test(input.sha256 || "") || !Number.isSafeInteger(input.size) || input.size < 0 || input.size > 1024 * 1024)
       throw new Error("Invalid pinned LuaSteam source input.");
@@ -58,6 +64,11 @@ function stageSource({ roots, destination, inputs = INPUTS } = {}) {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, bytes, { flag: "wx", mode: 0o644 });
     records.push({ ...input });
+  }
+  const licenses=path.join(destination,"licenses");
+  if(fs.existsSync(licenses))for(const name of fs.readdirSync(licenses).sort()){
+    const relative="licenses/"+name,bytes=fs.readFileSync(path.join(licenses,name));
+    records.push({origin:"generated",path:relative,destination:relative,size:bytes.length,sha256:sha256(bytes)});
   }
   return { version: VERSION, sourceRevision: SOURCE_REVISION, luaHeadersRevision: LUA_HEADERS_REVISION,
     sdkHeadersRevision: SDK_HEADERS_REVISION, sdkVersion: SDK_VERSION, hostLuaAbi: HOST_LUA_ABI,

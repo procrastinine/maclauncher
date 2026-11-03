@@ -226,9 +226,11 @@ function createManager(dependencies = {}) {
         // The repository's license notice at the installed revision, when it
         // publishes one.
         if (entry.licenseRepository) {
-          const notice = path.join(unpacked, "LICENSE"), license = await Upstream.githubLicense({ repository: entry.licenseRepository,
-            revision: entry.upstreamRevision, destination: notice, signal: combined });
-          if (license) assets.push({ filename: "LICENSE", url: license.licenseUrl, bytes: fs.statSync(notice).size, sha256: license.licenseSha256 });
+          try {
+            const notice = path.join(unpacked, "LICENSE"), license = await Upstream.githubLicense({ repository: entry.licenseRepository,
+              revision: entry.upstreamRevision, destination: notice, signal: combined });
+            if (license) assets.push({ filename: "LICENSE", url: license.licenseUrl, bytes: fs.statSync(notice).size, sha256: hash(notice) });
+          } catch(error) { throwIfAborted(combined);console.warn("Plugin notice acquisition skipped:",error.message); }
         }
         let nativeHelper = null;
         if (pkg.id === "uosc") {

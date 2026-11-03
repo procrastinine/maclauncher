@@ -198,12 +198,6 @@ function hostSources(repoRoot, packageConfig, { required = true, arch = process.
     files.set(relative, { ...input, owner: 'upstream-host', source, package: [record.id, record.version, record.arch].join('/'),
       unsignedSha256: input.architectures ? unsignedMachO(fs.readFileSync(source)) : null });
   }
-  for (const notice of inventory.notices) {
-    const source = path.join(path.dirname(sourceRoot), notice.path);
-    if (regular(source).sha256 !== notice.sha256) throw new Error('Electron license notices differ from their publisher archive.');
-    files.set('Contents/Resources/' + notice.resource, { ...notice, source, owner: 'upstream-host',
-      package: [record.id, record.version, record.arch].join('/') });
-  }
   return { record, root: selected.root, sourceRoot, files, aliases };
 }
 // Signing may append a signature command and alignment padding to unsigned
@@ -257,7 +251,7 @@ function expectedSelections({ repoRoot = ROOT, plan, packageConfig = require('..
   const asar = new Map(), resources = new Map(), sources = new Map(), upstream = new Map();
   for (const relative of ['package.json','pnpm-lock.yaml','build/entitlements.mac.plist',
     'scripts/before-pack.js','scripts/after-pack.js','scripts/check-packaging.cjs','scripts/app-inputs.cjs','scripts/distribution-model.cjs','scripts/runtime-content.cjs',
-    'scripts/python-resources.cjs','src/modules/shared/runtime/embedded-python.json']) {
+    'scripts/python-resources.cjs','scripts/license-files.mjs','src/modules/shared/runtime/embedded-python.json']) {
     const file = path.join(repoRoot, relative);
     if (fs.existsSync(file)) sources.set(file, { ...regular(file), source: file, owner: 'packaging-source' });
   }
@@ -350,7 +344,22 @@ function expectedSelections({ repoRoot = ROOT, plan, packageConfig = require('..
   const interpreter = resources.get('python/' + python.interpreter);
   if (interpreter) for (const [alias, target] of Object.entries(python.aliases))
     resources.set('python/' + alias, { ...interpreter, aliasTarget: target });
-  return { repoRoot, packageConfig, plan, asar, resources, sources, renderer,
+  const generatedResourceRoot = path.join(repoRoot, 'dist/app-licenses', plan.launcherArch), generatedResources = new Map();
+  fs.rmSync(generatedResourceRoot, { recursive: true, force: true });
+  const { addLicense } = require('./license-files.mjs');
+  for (const [component, relative, licence] of [
+    ['MacLauncher', 'LICENSE', 'MIT'], ['Electron', 'node_modules/electron/dist/LICENSE', 'Electron'],
+    ['Chromium', 'node_modules/electron/dist/LICENSES.chromium.html', 'Chromium']
+  ]) {
+    const file = path.join(repoRoot, relative);
+    addLicense(generatedResourceRoot, component, file, licence);
+  }
+  const licenses = path.join(generatedResourceRoot, 'licenses');
+  if (fs.existsSync(licenses)) for (const name of fs.readdirSync(licenses)) {
+    const file = path.join(licenses, name), relative = 'licenses/' + name, record = { ...regular(file), source: file, owner: 'generated-resource' };
+    add(resources, relative, record); generatedResources.set(relative, record);
+  }
+  return { repoRoot, packageConfig, plan, asar, resources, sources, renderer, generatedResources, generatedResourceRoot,
     suppliers: dependencySources(repoRoot, packageConfig, lockfile(repoRoot)), lock: lockfile(repoRoot) };
 }
 async function prepare(options) {

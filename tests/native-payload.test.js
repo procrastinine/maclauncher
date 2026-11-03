@@ -397,7 +397,6 @@ test('backup cleanup failure retains every newly verified package after earlier 
 test('supplemental declarations retain source identities, license files and honest runtime floors', t => {
   const f = fixture(t), item = supplementalFixture(f);
   assert.throws(() => S.validateDeclaration({ ...item, sourceSha256: 'b'.repeat(64) }), /incomplete/);
-  assert.throws(() => S.validateDeclaration({ ...item, notices: [{ name: 'Fixture', license: 'MIT', path: 'missing' }] }), /notice is missing/);
   assert.throws(() => S.validateInventory([item], { arch: 'arm64', maximumMacOS: '12.0' }, f.dependencies), /macOS floor/);
   assert.throws(() => S.validateDeclaration({ ...item, files: item.files.map(file => file.architectures ? { ...file, architectures: ['arm64'] } : file) }), /launcher CPUs/);
 });
@@ -519,4 +518,32 @@ test('source archive paths and destinations cannot overlap native resources or e
   fs.unlinkSync(path.join(f.sourceRoot, item.directoryRelative));
   fs.symlinkSync(path.join(f.resourceRoot, f.manager.id, '2.0', 'manifest.json'), path.join(f.sourceRoot, item.directoryRelative));
   assert.throws(() => Sources.verify(f.sourceRoot, [item]));
+});
+
+test('payloads without a license source build and install with ordinary file integrity', async t => {
+  const f = fixture(t), helper = supplementalFixture(f);
+  for (const version of f.manager.distributionVersions) {
+    const directory = path.join(f.resourceRoot, f.manager.id, version, 'arm64');
+    fs.rmSync(path.join(directory, 'files/licenses'), { recursive: true });
+    const file = path.join(directory, 'manifest.json'), manifest = JSON.parse(fs.readFileSync(file));
+    delete manifest.notices;
+    manifest.files = manifest.files.filter(item => item.path === 'bin/runner');
+    fs.writeFileSync(file, JSON.stringify(manifest));
+  }
+  fs.rmSync(path.join(f.resourceRoot, helper.directoryRelative, 'LICENSE'));
+  delete helper.notices;
+  helper.files = helper.files.filter(item => item.path !== 'LICENSE');
+  const { addLicense } = await import('../scripts/license-files.mjs');
+  const warn = t.mock.method(console, 'log');
+  addLicense(path.join(f.resourceRoot, helper.directoryRelative), 'Fixture', path.join(f.root, 'missing-license'));
+  assert.equal(warn.mock.calls.length, 1);
+  const exported = await P.exportPayload(f);
+  const installed = await P.importPayload({ ...f, resourceRoot: f.destination, archive: f.output, sha256: exported.sha256 });
+  assert.equal(installed.published.length, 2);
+  assert.equal(installed.publishedSupplementals.length, 1);
+  const directory = path.join(f.destination, f.manager.id, '1.0', 'arm64');
+  const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'manifest.json')));
+  assert.equal(B.verifyPayload(path.join(directory, 'files'), manifest), true);
+  fs.writeFileSync(path.join(directory, 'files/bin/runner'), Buffer.alloc(32));
+  assert.throws(() => B.verifyPayload(path.join(directory, 'files'), manifest), /checksum|native|architecture/i);
 });

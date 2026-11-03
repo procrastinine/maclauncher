@@ -4,7 +4,6 @@
   "sourceRevision": "838e47b7b47ed8d019cdaaa191f4953324e75540",
   "loveVersion": "11.5",
   "files": {
-    "LICENSE": "acd48104ab0e800b52c2f37557fcc2fe1936a6da485f5d6f535b8a38f2c8bfc6",
     "audio.lua": "ead0eddc0e20ccc18ff222b13bc8885f6fec0922ef85ac11619a70735ceb9f1d",
     "choose.lua": "dcfcbf7850f2acf7feeae991abb1d0064ad56a36d32ebf7e08afd58c0a0b4e89",
     "conf.lua": "f5a14918909729a5aa6158248b03b96286efeca54f54ecb9f28cd3ddf8f8d40b",

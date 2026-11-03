@@ -1,3 +1,4 @@
+import {addLicense} from "../../../../../scripts/license-files.mjs";
 // Copyright (c) MacLauncher contributors. MIT license.
 import fs from "node:fs";
 import path from "node:path";
@@ -40,13 +41,13 @@ export function buildSceneLibrary({source,vulkanSource,fastFloatSource,inputs,de
   logged("configure",meson,args);logged("compile",ninja,["-C",build,"-j2"]);logged("install",ninja,["-C",build,"install"]);
   const library=path.join(prefix,"lib/libplacebo.360.dylib");if(!fs.existsSync(library))throw new Error("The original libplacebo library was not produced.");
   const exports=run("nm",["-gU",library]);for(const name of["pl_mpv_user_shader_external_textures_api","pl_mpv_user_shader_set_external_textures"])if(!exports.includes("_"+name))throw new Error("The named texture resolver was not exported.");
-  const notices=[
+  const licenseSources=[
     ["libplacebo-source.LICENSE","LICENSE"],
     ["Vulkan-Headers.LICENSE","3rdparty/Vulkan-Headers/LICENSE.md"],
     ["Vulkan-Headers.Apache-2.0.LICENSE","3rdparty/Vulkan-Headers/LICENSES/Apache-2.0.txt"],
     ["Vulkan-Headers.MIT.LICENSE","3rdparty/Vulkan-Headers/LICENSES/MIT.txt"],
     ...(fastFloatSource?["APACHE","BOOST","MIT"].map(name=>["fast_float."+name+".LICENSE","3rdparty/fast_float/LICENSE-"+name]):[]),
-  ].map(([name,relative])=>({name,file:path.join(tree,relative),sha256:hash(path.join(tree,relative))}));
-  const result={...manifest,architecture,library,include:path.join(prefix,"include"),sha256:hash(library),notices,overlaySha256:hash(new URL("./scene-overlay.mjs",import.meta.url)),recipeSha256:hash(new URL("./scene-source.mjs",import.meta.url)),buildTools:{meson:run(meson,["--version"]).trim(),ninja:run(ninja,["--version"]).trim()}};
-  fs.writeFileSync(path.join(output,"source-build.json"),JSON.stringify(result,null,2)+"\n");return result;
+  ].map(([name,relative])=>[name,path.join(tree,relative)]);
+  const result={...manifest,architecture,library,include:path.join(prefix,"include"),sha256:hash(library),licenseSources,overlaySha256:hash(new URL("./scene-overlay.mjs",import.meta.url)),recipeSha256:hash(new URL("./scene-source.mjs",import.meta.url)),buildTools:{meson:run(meson,["--version"]).trim(),ninja:run(ninja,["--version"]).trim()}};
+  fs.writeFileSync(path.join(output,"source-build.json"),JSON.stringify({...result,licenseSources:undefined},null,2)+"\n");return result;
 }

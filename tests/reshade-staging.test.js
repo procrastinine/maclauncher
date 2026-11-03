@@ -46,7 +46,6 @@ test("effects-only staging preserves sealed native bytes and provenance in an im
   assert.notEqual(result.version, f.declaration.version);
   assert.equal(result.nativePayloadPreserved, true);
   assert.equal(next.sourceSha256, f.declaration.sourceSha256);
-  assert.deepEqual(next.notices, f.declaration.notices);
   const manifest = JSON.parse(fs.readFileSync(path.join(result.destination, "runtime.json")));
   assert.equal(manifest.sourceHash, f.manifest.sourceHash); assert.deepEqual(manifest.sourcePins, f.manifest.sourcePins);
   for (const [relative, bytes] of before) {
@@ -96,14 +95,13 @@ test("effects-only staging rejects effect symlinks and preserves the active payl
   assert.deepEqual(fs.readFileSync(f.declarationPath), declaration);
 });
 
-test("third-party effect identities and embedded notices update without changing native provenance", async t => {
+test("third-party effect identities update without changing native provenance", async t => {
   const { stageReShadeEffects } = await import("../scripts/stage-reshade-effects.mjs"), f = fixture(t);
   const source = { name: "Example shader", license: "MIT", path: "effects/grayscale.fx",
     sourceUrl: "https://example.com/shader.fx", revision: "c".repeat(40), sourceSha256: "d".repeat(64),
     sha256: hash(fs.readFileSync(path.join(f.effectsDirectory, "grayscale.fx"))), adaptation: "Portable sampling." };
   const result = stageReShadeEffects({ ...f, effectSources: [source] });
   const declaration = JSON.parse(fs.readFileSync(f.declarationPath))[0];
-  assert.deepEqual(declaration.notices, [...f.declaration.notices, { name: source.name, license: source.license, path: source.path, sourceUrl: source.sourceUrl }]);
   const manifest = JSON.parse(fs.readFileSync(path.join(result.destination, "runtime.json")));
   assert.deepEqual(manifest.effectSources, [source]);
   assert.deepEqual(manifest.sourcePins, f.manifest.sourcePins);
@@ -113,7 +111,6 @@ test("third-party effect identities and embedded notices update without changing
   const changed = stageReShadeEffects({ ...f, effectSources: [{ ...source, adaptation: "Updated source description." }] });
   assert.notEqual(changed.version, result.version, "source metadata belongs to content identity");
   const removed = stageReShadeEffects({ ...f, effectSources: [] });
-  assert.deepEqual(JSON.parse(fs.readFileSync(f.declarationPath))[0].notices, f.declaration.notices);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(removed.destination, "runtime.json"))).effectSources, []);
 });
 

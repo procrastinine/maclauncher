@@ -57,7 +57,7 @@ test("consented download verifies the ZIP and imports only model files and notic
   const installed = await Models.resolveModel(f.userDataDir, result.version);
   assert.deepEqual(fs.readdirSync(installed.modelPath).sort(), ["manifest.json", "weights.safetensors"]);
   assert.deepEqual(fs.readFileSync(installed.weightsPath), f.weights);
-  assert.equal(fs.readFileSync(path.join(installed.installDir, "notices/0-NOTICE"), "utf8"), "Original model terms");
+  assert.equal(fs.readFileSync(path.join(installed.installDir, "licenses/0-NOTICE"), "utf8"), "Original model terms");
   assert.equal(JSON.parse(fs.readFileSync(path.join(installed.installDir, "download-source.json"))).sha256, f.source.sha256);
   assert.ok(!fs.existsSync(path.join(installed.installDir, "Contents")));noPartial(f);
   const requests = Harness.network.requests.length;

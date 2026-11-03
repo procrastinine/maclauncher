@@ -5,7 +5,6 @@
   "version": "FidelityFX Blur 1.1.0",
   "license": "MIT",
   "sourceScope": [
-    "LICENSE.txt",
     "sdk/include/FidelityFX/gpu/blur/CMakeCompileBlurShaders.txt",
     "sdk/include/FidelityFX/gpu/blur/ffx_blur.h",
     "sdk/include/FidelityFX/gpu/blur/ffx_blur_blur.h",
@@ -26,7 +25,6 @@
     "sdk/src/components/blur/ffx_blur_private.h"
   ],
   "files": {
-    "LICENSE.txt": "82cf74fc23885107c7f69249ac3f1dac55898ff68320eb2c753984cae6b2d78a",
     "sdk/include/FidelityFX/gpu/blur/CMakeCompileBlurShaders.txt": "c3c666d5a000dda95f5776c5ebe71de5ee26c2c759bbe460a715e2969228111f",
     "sdk/include/FidelityFX/gpu/blur/ffx_blur.h": "3f0d4d60344547bdd757f98b7b548ec23feca7bfb5202cf1bca9dbc8df42964f",
     "sdk/include/FidelityFX/gpu/blur/ffx_blur_blur.h": "3490548730d2539cfca78e6abf5125787a15ead0d9117caa0c1aeee082f7e5c3",
@@ -45,5 +43,10 @@
     "sdk/src/backends/dx12/shaders/blur/ffx_blur_pass.hlsl": "ea3aa2cc7899e8eb1fb8b2fd0837b0a3adf10c8ecaffc22eef499d72b4bcf9c0",
     "sdk/src/components/blur/ffx_blur.cpp": "87b47ecb32406214b160c97cc0867494d5ff9dc77793d24942e130adc1c28033",
     "sdk/src/components/blur/ffx_blur_private.h": "46c638f23e33ed44dc5bb879299d9bf10900f70a496620efc1607aa89b26bac4"
-  }
+  },
+  "licenseFiles": [
+    {
+      "path": "LICENSE.txt"
+    }
+  ]
 }

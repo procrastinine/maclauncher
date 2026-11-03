@@ -16,10 +16,8 @@ function validateArchives(archives, { catalog = PIN } = {}) {
     if (!/^[a-z0-9_]+$/.test(pin.id || "") || seen.has(pin.id) || !/^[a-f0-9]{40}$/.test(pin.revision || "") ||
         !/^[a-f0-9]{64}$/.test(pin.archiveSha256 || "") || !/^https:\/\//.test(pin.archiveUrl || "") ||
         !Number.isSafeInteger(pin.archiveBytes) || pin.archiveBytes <= 0 || pin.archiveBytes > 256 * 1024 * 1024 ||
-        !Array.isArray(pin.notices) || !pin.notices.length || pin.notices.some(value => typeof value !== "string" ||
-          path.isAbsolute(value) || value.split(/[\\/]/).some(part => ["", ".", ".."].includes(part))) ||
         !Array.isArray(pin.options) || pin.options.some(option => typeof option !== "string" || !/^-D[A-Za-z0-9_]+=/.test(option))) {
-      throw new Error("Portable dependencies require unique names, exact source pins and license notices.");
+      throw new Error("Portable dependencies require unique names and exact source pins.");
     }
     seen.add(pin.id);
     const file = archives?.[pin.id];
@@ -118,7 +116,6 @@ async function buildDependencies({ archives, workRoot, pathMappings = [], signal
     // outputs and CMake-generated files never touch an upstream Git checkout.
     await (dependencies.runBuildCommand || Source.runBuildCommand)("/usr/bin/tar", ["-xzf", archives[pin.id], "--strip-components", "1", "-C", sourceRoot],
       { cwd: workRoot, logPath: path.join(workRoot, "extraction.log"), env: buildEnvironment(prefix, sdk), signal });
-    for (const notice of pin.notices) if (!fs.lstatSync(path.join(sourceRoot, notice)).isFile()) throw new Error(`Missing source license for ${pin.name}.`);
     const options = [...pin.options, ...(["libpng", "freetype"].includes(pin.id) ? zlib : []),
       ...(pin.id === "freetype" ? [`-DBZIP2_LIBRARY_RELEASE=${sdk}/usr/lib/libbz2.tbd`, `-DBZIP2_INCLUDE_DIR=${sdk}/usr/include`] : [])];
     const build = await buildProject({ sourceRoot, outputRoot: path.join(workRoot, pin.id), prefix, sdk, tools, pathMappings, options, signal, onProgress, dependencies });

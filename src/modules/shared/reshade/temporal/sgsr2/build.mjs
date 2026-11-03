@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {addLicense} from "../../../../../../scripts/license-files.mjs";
 // Offline GLSL -> SPIR-V -> Metal translation of Qualcomm's two-pass SGSR2.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -68,8 +69,8 @@ for(const arch of ['arm64','x86_64'])run('xcrun',['clang++','-std=c++17','-O2','
 const library=path.join(out,'libmaclauncher-sgsr2.dylib');
 run('lipo',['-create',...['arm64','x86_64'].map(arch=>path.join(out,`libmaclauncher-sgsr2-${arch}.dylib`)),'-output',library]);
 run('codesign',['--force','--sign','-',library]);
-const license=path.join(source,'LICENSE');fs.copyFileSync(license,path.join(out,'SGSR-LICENSE.txt'));
-const files=[];for(const relative of ['libmaclauncher-sgsr2.dylib','SGSR-LICENSE.txt',...['convert','upscale'].flatMap(pass=>['metal','json'].map(ext=>'sgsr2/'+pass+'.'+ext))])files.push({path:relative,size:fs.statSync(path.join(out,relative)).size,sha256:hash(path.join(out,relative))});
+addLicense(out,'sgsr2',path.join(source,'LICENSE'));
+const files=[];for(const relative of ['libmaclauncher-sgsr2.dylib',...(fs.existsSync(path.join(out,'licenses'))?fs.readdirSync(path.join(out,'licenses')).map(file=>'licenses/'+file):[]),...['convert','upscale'].flatMap(pass=>['metal','json'].map(ext=>'sgsr2/'+pass+'.'+ext))])files.push({path:relative,size:fs.statSync(path.join(out,relative)).size,sha256:hash(path.join(out,relative))});
 const owned=Object.fromEntries(['source.json','build.mjs','backend.mm','descriptor.js','../frame.h','../command-order.hpp','../../shaderc-offline.cpp'].map(name=>[name,hash(path.join(here,name))]));
-fs.writeFileSync(path.join(out,'provider.json'),JSON.stringify({providerABI:1,complete:true,methods:['sgsr2'],minimumMacOS:spec.minimumMacOS,architectures:['arm64','x86_64'],libraries:['libmaclauncher-sgsr2.dylib'],shaders:['sgsr2'],resourcePreparation:1,files,source:{repository:spec.repository,commit:spec.commit},owned,adaptations,notices:[{name:'Snapdragon Game Super Resolution 2',license:spec.license,path:'SGSR-LICENSE.txt',sourceUrl:spec.repository}],buildInputs},null,2)+'\n');
+fs.writeFileSync(path.join(out,'provider.json'),JSON.stringify({providerABI:1,complete:true,methods:['sgsr2'],minimumMacOS:spec.minimumMacOS,architectures:['arm64','x86_64'],libraries:['libmaclauncher-sgsr2.dylib'],shaders:['sgsr2'],resourcePreparation:1,files,source:{repository:spec.repository,commit:spec.commit},owned,adaptations,buildInputs},null,2)+'\n');
 console.log('Built SGSR2 Metal provider: '+out);

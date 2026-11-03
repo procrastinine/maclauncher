@@ -141,7 +141,6 @@
     }
   ],
   "files": {
-    "LICENSE.txt": "82cf74fc23885107c7f69249ac3f1dac55898ff68320eb2c753984cae6b2d78a",
     "sdk/src/components/cacao/ffx_cacao.cpp": "c9bf7511c1642f05922f3cf900f4dd5b0c335f8f86d4b3a356202fbacf71028c",
     "sdk/include/FidelityFX/host/ffx_cacao.h": "932e367523774a174078e06b11266884d1110ee0db95ec7b740b907981039ba2",
     "sdk/include/FidelityFX/gpu/cacao/ffx_cacao_callbacks_hlsl.h": "2df23637cd9460e3456224987aba80156789c3f2a1cae234b1f418c0a51abd65",
@@ -186,7 +185,11 @@
     "sdk/include/FidelityFX/gpu",
     "sdk/include/FidelityFX/host/ffx_cacao.h",
     "sdk/src/components/cacao/ffx_cacao.cpp",
-    "sdk/src/backends/dx12/shaders/cacao",
-    "LICENSE.txt"
+    "sdk/src/backends/dx12/shaders/cacao"
+  ],
+  "licenseFiles": [
+    {
+      "path": "LICENSE.txt"
+    }
   ]
 }

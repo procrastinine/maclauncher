@@ -73,14 +73,14 @@ export function stageReShadeEffects({
     inputs.set(relative, { bytes, record: { path: relative, size: bytes.length, mode: 0o644, sha256: digest(bytes) } });
   }
   const sources = effectSources ?? manifest.effectSources ?? [];
-  const notices = [...original.notices.filter(notice => !notice.path.startsWith("effects/")),
-    ...validateEffectSources(sources, [...inputs.values()].map(input => input.record))];
+  validateEffectSources(sources, [...inputs.values()].map(input => input.record));
+  delete manifest.notices;
   if (effectSources !== undefined || manifest.effectSources !== undefined) manifest.effectSources = structuredClone(sources);
   // Identity includes preserved provenance and every output byte. Repeating an
   // unchanged effects update is idempotent, even after its declaration is active.
   const { version: _version, files: _files, ...provenance } = manifest;
   const payloadHash = digest(Buffer.concat([
-    Buffer.from("reshade-effects-v1\0" + JSON.stringify(provenance) + "\0" + JSON.stringify(notices) + "\0"),
+    Buffer.from("reshade-effects-v1\0" + JSON.stringify(provenance) + "\0"),
     ...[...inputs].sort(([a], [b]) => a.localeCompare(b)).flatMap(([name, input]) =>
       [Buffer.from(name + "\0" + JSON.stringify(input.record) + "\0"), input.bytes])
   ]));
@@ -89,7 +89,8 @@ export function stageReShadeEffects({
   const files = [...inputs.values()].map(input => input.record).sort((a, b) => a.path.localeCompare(b.path));
   const manifestBytes = Buffer.from(JSON.stringify({ ...manifest, version, files }, null, 2) + "\n");
   const manifestRecord = { path: original.manifestRelative, sha256: digest(manifestBytes), size: manifestBytes.length, mode: 0o644 };
-  const declaration = { ...original, version, directoryRelative, manifestSha256: manifestRecord.sha256, files: [...files, manifestRecord], notices };
+  const declaration = { ...original, version, directoryRelative, manifestSha256: manifestRecord.sha256, files: [...files, manifestRecord] };
+  delete declaration.notices;
   Supplementals.validateDeclaration(declaration);
   inputs.set(original.manifestRelative, { bytes: manifestBytes, record: manifestRecord });
   const temporary = fs.mkdtempSync(path.join(resourceRoot, ".reshade-effects-"));

@@ -1,3 +1,4 @@
+const { addLicense } = require("../../../../../scripts/license-files.mjs");
 // Developer staging of publisher JNI binaries and the small owned loader.
 // Runtime launch never downloads a SDK, compiles Java or rewrites this catalog.
 const fs = require("node:fs");
@@ -41,8 +42,8 @@ function stage({ references, jdkBin, resourcesRoot } = {}) {
         throw new Error("The publisher JNI CPU inventory changed.");
       execFileSync("/usr/bin/codesign", ["--verify", "--strict", libraryPath], { timeout: 30000, stdio: "pipe" });
       fs.copyFileSync(agent, path.join(directory, "steam-agent.jar"));
-      fs.copyFileSync(path.join(__dirname, "steamworks4j-" + original.version + "-MIT.txt"), path.join(directory, "steamworks4j-MIT.txt"));
-      fs.copyFileSync(path.resolve(__dirname, "../../../../../LICENSE"), path.join(directory, "MacLauncher-MIT.txt"));
+      addLicense(directory, "steamworks4j " + original.version, path.join(__dirname, "steamworks4j-" + original.version + "-MIT.txt"), "MIT");
+      addLicense(directory, "MacLauncher Java loader", path.resolve(__dirname, "../../../../../LICENSE"), "MIT");
       const dependencies = [
         "steamworks4j " + original.version + ": publisher JNI binary, unchanged. MIT.",
         "Source: " + original.sourceUrl,
@@ -57,22 +58,21 @@ function stage({ references, jdkBin, resourcesRoot } = {}) {
         "The game retains its original JAR, initialization, callbacks and shutdown."
       ].join("\n") + "\n";
       fs.writeFileSync(path.join(directory, "DEPENDENCIES.txt"), dependencies);
-      const files = fs.readdirSync(directory).sort().map(name => {
+      const files = Bundle.fileInventory(directory).sort().map(name => {
         fs.chmodSync(path.join(directory, name), name === "libsteamworks4j.dylib" ? 0o755 : 0o644);
         const item = Bundle.readRegular(path.join(directory, name), 8 * 1024 * 1024);
         return { path: name, size: item.size, sha256: item.sha256, mode: item.mode,
           ...(name === "libsteamworks4j.dylib" ? { architectures: original.architectures,
             ...(arch === "x64" ? { executionArchitecture: "x86_64" } : {}) } : {}) };
       });
-      const notices = [{ name: "steamworks4j " + original.version, license: "MIT", path: "steamworks4j-MIT.txt", sourceUrl: original.sourceUrl },
-        { name: "MacLauncher Java loader", license: "MIT", path: "MacLauncher-MIT.txt" }];
+
       const record = { schemaVersion: 1, id: "java-steamworks", version: original.bridgeVersion, wrapperVersion: original.version,
         sourceRevision: original.sourceRevision, sourceUrl: original.sourceUrl, sourceKind: "reviewed-binary", verifiedBuild: false,
         publisherUrl: original.publisherUrl, publisherJarSha256: original.publisherJarSha256,
         librarySha256: original.jniSha256, agentSha256: built.sha256, agentSourceSha256: built.sourceSha256,
         agentCompilerRuntime: COMPILER_RUNTIME, agentClassMajor: 52, abiProfile: original.abiProfile,
         minimumMacOS: arch === "x64" ? "10.9" : "11.0", architectures: original.architectures,
-        interfaces: original.interfaces, symbols: original.symbols, files, notices };
+        interfaces: original.interfaces, symbols: original.symbols, files };
       const manifestPath = path.join(directory, "helper.json");
       fs.writeFileSync(manifestPath, JSON.stringify(record, null, 2) + "\n", { mode: 0o644 });
       const manifest = Bundle.readRegular(manifestPath, 128 * 1024);
@@ -81,7 +81,7 @@ function stage({ references, jdkBin, resourcesRoot } = {}) {
       declarations.push({ id: "java-steamworks", version: original.bridgeVersion, arch,
         launcherArchitectures: ["arm64", "x64"], minimumMacOS: record.minimumMacOS,
         sourceRelative: null, sourceSha256: built.sourceSha256,
-        directoryRelative, manifestRelative: "helper.json", manifestSha256: manifest.sha256, files: allFiles, notices });
+        directoryRelative, manifestRelative: "helper.json", manifestSha256: manifest.sha256, files: allFiles });
       pins.push({ ...original, agentSha256: built.sha256, agentSourceSha256: built.sourceSha256, agentCompilerRuntime: COMPILER_RUNTIME,
         minimumMacOS: record.minimumMacOS });
     }

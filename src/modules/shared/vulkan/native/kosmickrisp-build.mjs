@@ -1,3 +1,4 @@
+import {addLicense} from "../../../../../scripts/license-files.mjs";
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -73,24 +74,11 @@ export function publishKosmic({source,work,library,loader,loaderNotice,spirvNoti
    run('/usr/bin/codesign',['--verify','--strict',destination]);
    links.push({file:name,links:dependencies});
   }
-  const licenseRoot=path.join(payload,'licenses');fs.mkdirSync(licenseRoot);
-  const mesaLicense=execFileSync('git',['-C',source,'show',pin.revision+':docs/license.rst']);
-  fs.writeFileSync(path.join(licenseRoot,'Mesa-license.rst'),mesaLicense);
-  const notices=[{name:'Mesa',license:'MIT and upstream notices',sourceUrl:pin.repository,path:'licenses/Mesa-license.rst'}];
-  for(const name of read('git',['-C',source,'ls-tree','-r','--name-only',pin.revision,'licenses/']).split('\n')){
-   const relative='licenses/Mesa-'+path.basename(name);
-   fs.writeFileSync(path.join(payload,relative),execFileSync('git',['-C',source,'show',pin.revision+':'+name]));
-   notices.push({name:'Mesa '+path.basename(name),license:path.basename(name),sourceUrl:pin.repository,path:relative});
-  }
-  for(const item of [
-   ['Vulkan-Loader','Apache-2.0','https://github.com/KhronosGroup/Vulkan-Loader',loaderNotice],
-   ['SPIRV-Tools','Apache-2.0','https://github.com/KhronosGroup/SPIRV-Tools',spirvNotice],
-   ['Zstandard','BSD-3-Clause','https://github.com/facebook/zstd',zstdNotice]
-  ]){
-   const [name,license,sourceUrl,file]=item,relative='licenses/'+name+'.txt';
-   if(!file)continue;
-   fs.copyFileSync(file,path.join(payload,relative));notices.push({name,license,sourceUrl,path:relative});
-  }
+  const licenseSources=path.join(temporary,'license-inputs');fs.mkdirSync(licenseSources);
+  const sourceLicenses=read('git',['-C',source,'ls-tree','-r','--name-only',pin.revision,'docs/license.rst','licenses/']).split('\n').filter(Boolean);
+  if(!sourceLicenses.length)addLicense(payload,'mesa',undefined);
+  for(const name of sourceLicenses){const candidate=path.join(licenseSources,path.basename(name));fs.writeFileSync(candidate,execFileSync('git',['-C',source,'show',pin.revision+':'+name]));addLicense(payload,'mesa',candidate,'mesa-'+path.basename(name));}
+  for(const [component,file]of [['vulkan-loader',loaderNotice],['spirv-tools',spirvNotice],['zstd',zstdNotice]])addLicense(payload,component,file);
   const files=Bundled.fileInventory(payload).map(relative=>{
    const file=path.join(payload,relative),stat=fs.statSync(file);
    const native=links.some(item=>item.file===relative);
@@ -105,7 +93,7 @@ export function publishKosmic({source,work,library,loader,loaderNotice,spirvNoti
    ...(architecture==='arm64'?[]:['kosmickrisp-targets.mjs','kosmickrisp-targets.json'])].map(file=>({file,sha256:sha(fs.readFileSync(path.join(root,file)))}));
   const sourceHash=sha(JSON.stringify({pin,adaptations})),version=requestedVersion||'0.1.0-'+sourceHash.slice(0,8)+'-'+sha(JSON.stringify(files)).slice(0,8);
   const manifest={schemaVersion:1,managerId:'vulkan-kosmickrisp-gles32',version,upstreamRevision:pin.revision,
-   platform:'darwin',arch:architecture==='x64'?'x64':'arm64',minimumMacOS,executableRelative:pin.library,files,dependencies:links,notices,
+   platform:'darwin',arch:architecture==='x64'?'x64':'arm64',minimumMacOS,executableRelative:pin.library,files,dependencies:links,
    runtimeFiles:{loader:'libvulkan.1.dylib'},provenance:{sourceRevision:pin.revision,verifiedBuild:true,
     sourceUrl:pin.repository,adaptations,...(nativeBuild&&architecture!=='arm64'?{
      nativeCompilers:JSON.parse(fs.readFileSync(path.join(nativeBuild,'native-tools.json'))),
@@ -134,7 +122,7 @@ export function stageKosmic({output,resourceRoot,declarationFile=path.join(root,
   minimumMacOS:manifest.minimumMacOS,directoryRelative,sourceRelative:null,
   sourceSha256:sha(JSON.stringify(manifest.provenance.adaptations)),manifestRelative:'manifest.json',
   manifestSha256:files.find(file=>file.path==='manifest.json').sha256,files,
-  notices:manifest.notices.map(notice=>({...notice,path:'files/'+notice.path}))};
+  };
  Supplementals.validateDeclaration(declaration);
  prepareSourceTree(path.join(resourceRoot,directoryRelative),temporary=>fs.cpSync(output,temporary,{recursive:true}));
  const previous=fs.existsSync(declarationFile)?JSON.parse(fs.readFileSync(declarationFile)):[];
@@ -152,7 +140,7 @@ if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.ur
   options['loader-source']||=path.join(buildsRoot,inputs.vulkanLoader.path);
   options['headers-source']||=path.join(buildsRoot,inputs.vulkanHeaders.path);
  }
- for(const name of ['source','work','meson','ninja','output',...(!targeted||!options['native-build']?['llvm']:[]),...(targeted?['loader-source','headers-source']:['loader','loader-notice','spirv-notice','zstd-notice'])])if(!options[name])throw Error('Missing --'+name);
+ for(const name of ['source','work','meson','ninja','output',...(!targeted||!options['native-build']?['llvm']:[]),...(targeted?['loader-source','headers-source']:['loader'])])if(!options[name])throw Error('Missing --'+name);
  const built=buildKosmic(options);
  const loader=targeted?buildKosmicLoader({source:options['loader-source'],headersSource:options['headers-source'],work:options.work,architecture:options.architecture,jobs:Number(options.jobs||2)}):{};
  const manifest=publishKosmic({...options,...built,...loader,loaderNotice:loader.loaderNotice||options['loader-notice'],spirvNotice:options['spirv-notice'],zstdNotice:options['zstd-notice']});

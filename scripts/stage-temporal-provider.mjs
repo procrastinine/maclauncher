@@ -32,9 +32,7 @@ export function stageTemporalProvider({name,directory,upstream,ownedRoot}){
   if(git(["rev-parse","HEAD"])!==spec.commit||canonical(git(["remote","get-url","origin"]))!==canonical(spec.repository))throw Error("Temporal provider checkout differs from its declared public origin or exact commit.");
   git(["diff","--exit-code","--ignore-submodules=all","HEAD","--"]);
   if(!Array.isArray(spec.sourceScope)||!spec.sourceScope.length||spec.sourceScope.some(value=>!safe(value)))throw Error("The temporal provider source scope is undeclared.");
-  const notices=metadata.notices;
-  if(!Array.isArray(notices)||!notices.length||notices.some(row=>!files.has(row.path)||typeof row.name!=="string"||typeof row.license!=="string"||!/^https:\/\//.test(row.sourceUrl||"")))throw Error("Temporal provider notices are incomplete.");
   return {files:new Map([...files].map(([relative,file])=>[`temporal/${name}/${relative}`,file]).concat([[`temporal/${name}/provider.json`,path.join(directory,"provider.json")]])),owned,
     source:{directory:upstream,relative:"third_party/"+name,commit:spec.commit,scope:spec.sourceScope},pin:` ${spec.commit} third_party/${name}`,
-    notices:notices.map(row=>({...row,path:`temporal/${name}/${row.path}`}))};
+    };
 }

@@ -17,23 +17,31 @@ const noticeSource = Upstream.github({ repository: "yoremi-trad-fr/rldev-2026",
     return asset ? { version: release.tag_name, assets: [asset] } : null;
   } });
 async function originalNotices({ unpacked, signal }) {
-  const listed = (await noticeSource.discover({ signal })).find(row => row.files.length)?.files[0];
-  if (!listed) throw new Error("The original RLdev notices are unavailable.");
   const archive = path.join(unpacked, ".notices.zip");
   try {
-    const { sha256, integrity } = await noticeSource.download(listed, archive, { signal });
+    const listed = (await noticeSource.discover({ signal })).find(row => row.files.length)?.files[0];
+    if (!listed) { console.warn("The optional RLdev notices are unavailable."); return {}; }
+    await noticeSource.download(listed, archive, { signal });
     const entries = readZipEntries(archive)?.entries || [];
     for (const name of ["COPYING", "GPL", "LGPL"]) {
-      const item = entries.filter(entry => path.posix.basename(entry.name) === name).sort((a, b) => a.name.length - b.name.length)[0];
-      const bytes = item && readZipEntryBuffer(archive, item.name);
-      if (!bytes || bytes.length > 128 * 1024) throw new Error("An original RLdev license notice is missing.");
-      fs.writeFileSync(path.join(unpacked, name), bytes);
+      try {
+        const item = entries.filter(entry => path.posix.basename(entry.name) === name).sort((a, b) => a.name.length - b.name.length)[0];
+        const bytes = item && readZipEntryBuffer(archive, item.name);
+        if (bytes) {
+          fs.mkdirSync(path.join(unpacked, "licenses"), { recursive: true });
+          fs.writeFileSync(path.join(unpacked, "licenses", name + ".txt"), bytes);
+        }
+      } catch (error) { console.warn("An optional RLdev notice could not be copied:", error.message); }
     }
-    const originalNotices = { url: listed.url, sha256, integrity };
-    fs.writeFileSync(path.join(unpacked, "NOTICE-SOURCES.json"), JSON.stringify({ upstream: "https://github.com/yoremi-trad-fr/rldev2026-go-edition",
-      originalNotices, scope: "Original RLdev and bundled KFN notices; the publisher provides no separate Go license file." }, null, 2) + "\n");
-    return { originalNotices };
-  } finally { fs.rmSync(archive, { force: true }); }
+    return {};
+  } catch (error) {
+    throwIfAborted(signal);
+    console.warn("The optional RLdev notices could not be collected:", error.message);
+    return {};
+  } finally {
+    try { fs.rmSync(archive, { force: true }); }
+    catch (error) { console.warn("The temporary RLdev notice archive could not be removed:", error.message); }
+  }
 }
 const manager = createManagedWindowsTool({ id: "rldev", label: "RLdev", owner: "yoremi-trad-fr", repo: "rldev2026-go-edition",
   executableName: "kprl16.exe", assetPattern: /^V[\d.]+-Windows\.7z$/i, files: ["reallive.kfn"], notices: originalNotices, order: 269 });

@@ -11,10 +11,6 @@
     {
       "path": "Source/Rendering/Shaders/XeGTAO.hlsli",
       "sha256": "30faf4f5013916c14694db20fe9ec7f0c786f2edac7610968f9391987115064e"
-    },
-    {
-      "path": "LICENSE",
-      "sha256": "1f3bfd6b628535f0f0e779e70c260cfdc1bb45bc8644d7108e65f83e24a05cba"
     }
   ],
   "entries": [
@@ -27,5 +23,10 @@
     "CSDenoiseLastPass",
     "CSUnprojectDepth",
     "CSApplyAO"
+  ],
+  "licenseFiles": [
+    {
+      "path": "LICENSE"
+    }
   ]
 }

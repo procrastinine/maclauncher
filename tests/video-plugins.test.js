@@ -148,10 +148,9 @@ test('uosc installation stages a native managed helper and its notices before re
     const binary = nativeTool(path.join(userDataDir, 'fixture-native-' + architecture), '', {architecture}).binary;
     const helper = packageFor(path.join(userDataDir, 'fixture-package-' + architecture), {id: 'uosc-helper', version: '5.13.0-MCLv1', architecture,
       filesPrefix: 'files/', manifest: {managerId: 'uosc-helper', platform: 'darwin', upstreamRevision: UOSC_OLD.revision,
-        executableRelative: 'bin/ziggy-darwin', provenance: {sourceRevision: UOSC_OLD.revision}, dependencies: [],
-        notices: [{name: 'Fixture', license: 'MIT', sourceUrl: 'https://example.com/source', path: 'LICENSE'}]},
+        executableRelative: 'bin/ziggy-darwin', provenance: {sourceRevision: UOSC_OLD.revision}, dependencies: []},
       entries: [{path: 'bin/ziggy-darwin', bytes: binary, mode: 0o755, architectures: [architecture === 'x64' ? 'x86_64' : 'arm64']},
-        {path: 'LICENSE', bytes: Buffer.from('helper license'), mode: 0o644}]});
+        {path: 'licenses/helper.txt', bytes: Buffer.from('helper license'), mode: 0o644}]});
     helper.record.source = {repository: 'tomasklaen/uosc', revision: UOSC_OLD.revision};
     return helper;
   });
@@ -171,8 +170,8 @@ test('uosc installation stages a native managed helper and its notices before re
   assert.deepEqual(cpuChecks, [[process.arch === 'x64' ? 'x86_64' : 'arm64']], warnings.join('\n'));
   const receipt = JSON.parse(fs.readFileSync(path.join(installed.installDir, 'plugin.json')));
   assert.equal(receipt.nativeHelper.version, helper.record.version);
-  assert.equal(fs.readFileSync(path.join(installed.installDir, 'notices/uosc-helper/0-LICENSE'), 'utf8'), 'helper license');
-  assert.ok(receipt.files.some(file => file.path === 'notices/uosc-helper/0-LICENSE'));
+  assert.equal(fs.readFileSync(path.join(installed.installDir, 'licenses/uosc-helper/helper.txt'), 'utf8'), 'helper license');
+  assert.ok(receipt.files.some(file => file.path === 'licenses/uosc-helper/helper.txt'));
   await helperManager.refreshCatalog({userDataDir, force: true});
   const state = helperManager.getState({userDataDir});
   assert.equal(state.defaultVersion, helper.record.version, 'Shared native preference wins over newer upstream helper metadata with unknown CPU');

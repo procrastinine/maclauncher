@@ -118,20 +118,29 @@ if [[ ! -f "$destination/mlx.metallib" || "$(shasum -a 256 "$destination/mlx.met
 fi
 
 upstream_root="${MACLAUNCHER_MLX_DLSS_SOURCE:-$build_root/checkouts/MLX-DLSS}"
-mkdir -p "$destination/notices"
-cp -f "$upstream_root/LICENSE" "$destination/notices/MLX-DLSS-LICENSE"
-cp -f "$upstream_root/NOTICE" "$destination/notices/MLX-DLSS-NOTICE"
-cp -f "$mlx_source/LICENSE" "$destination/notices/MLX-Swift-LICENSE"
-cp -f "$mlx_source/Source/Cmlx/mlx/LICENSE" "$destination/notices/MLX-LICENSE"
-cp -f "$build_root/checkouts/swift-numerics/LICENSE.txt" "$destination/notices/Swift-Numerics-LICENSE"
-cp -f "$build_root/checkouts/swift-argument-parser/LICENSE.txt" "$destination/notices/Swift-Argument-Parser-LICENSE"
-cp "$native_root/REAL-ESRGAN-BSD-3-CLAUSE.txt" "$destination/notices/Real-ESRGAN-BSD-3-CLAUSE.txt"
-cp "$native_root/SRVGG-SWIFT-MIT.txt" "$destination/notices/SRVGG-Swift-MIT.txt"
-for notice in REAL-CUGAN-MIT.txt NAFNET-SWIFT-MIT.txt NAFNET-NOTICE.txt RIFE-NCNN-MIT.txt RIFE-MIT.txt NCNN-BSD-3-CLAUSE.txt NAFNET-ORIGINAL-MIT.txt; do
-  cp "$native_root/$notice" "$destination/notices/$notice"
-done
-cp "$native_root/DEPTH-ANYTHING-APACHE-2.0.txt" "$destination/notices/DEPTH-ANYTHING-APACHE-2.0.txt"
-cp "$native_root/DEPTH-ANYTHING-NOTICE.txt" "$destination/notices/DEPTH-ANYTHING-NOTICE.txt"
+node --input-type=module - "$repo_root/scripts/license-files.mjs" "$destination" "$upstream_root" "$mlx_source" "$build_root" "$native_root" <<'NODE'
+import path from 'node:path';
+import {pathToFileURL} from 'node:url';
+const [helper,destination,upstream,mlx,build,native]=process.argv.slice(2);
+const {addLicense}=await import(pathToFileURL(helper).href);
+addLicense(destination,'mlx-dlss',path.join(upstream,'LICENSE'));
+addLicense(destination,'mlx-dlss',path.join(upstream,'NOTICE'),'mlx-dlss-notice');
+addLicense(destination,'mlx-swift',path.join(mlx,'LICENSE'));
+addLicense(destination,'mlx',path.join(mlx,'Source/Cmlx/mlx/LICENSE'));
+addLicense(destination,'swift-numerics',path.join(build,'checkouts/swift-numerics/LICENSE.txt'));
+addLicense(destination,'swift-argument-parser',path.join(build,'checkouts/swift-argument-parser/LICENSE.txt'));
+addLicense(destination,'realesrgan',path.join(native,'REAL-ESRGAN-BSD-3-CLAUSE.txt'));
+addLicense(destination,'srvgg-swift',path.join(native,'SRVGG-SWIFT-MIT.txt'));
+addLicense(destination,'realcugan',path.join(native,'REAL-CUGAN-MIT.txt'));
+addLicense(destination,'nafnet-swift',path.join(native,'NAFNET-SWIFT-MIT.txt'));
+addLicense(destination,'nafnet-swift',path.join(native,'NAFNET-NOTICE.txt'),'nafnet-swift-notice');
+addLicense(destination,'rife-ncnn',path.join(native,'RIFE-NCNN-MIT.txt'));
+addLicense(destination,'rife',path.join(native,'RIFE-MIT.txt'));
+addLicense(destination,'ncnn',path.join(native,'NCNN-BSD-3-CLAUSE.txt'));
+addLicense(destination,'nafnet',path.join(native,'NAFNET-ORIGINAL-MIT.txt'));
+addLicense(destination,'depth-anything',path.join(native,'DEPTH-ANYTHING-APACHE-2.0.txt'));
+addLicense(destination,'depth-anything',path.join(native,'DEPTH-ANYTHING-NOTICE.txt'),'depth-anything-notice');
+NODE
 cp "$native_root/upstream.json" "$destination/upstream.json"
 cp "$upstream_root/maclauncher-adaptation.json" "$destination/adaptation.json"
 cp "$mlx_source/maclauncher-gpu-timing.json" "$destination/timing-adaptation.json"

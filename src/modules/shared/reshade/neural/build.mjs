@@ -43,7 +43,7 @@ export function buildProvider({ work, output = path.join(work || cacheDirectory,
   if(!execFileSync('nm',['-gU',path.join(output,'maclauncher-neural-service')],{encoding:'utf8'}).includes('_ml_neural_service_timing_api\n'))
     throw new Error('The neural helper is missing its GPU timing transport.');
   const files = [source.library, "maclauncher-neural-video", "maclauncher-neural-service", "mlx.metallib", "upstream.json", "adaptation.json",'timing-adaptation.json',
-    ...fs.readdirSync(path.join(output, "notices")).sort().map(name => "notices/" + name)].map(relative => {
+    ...(fs.existsSync(path.join(output,"licenses"))?fs.readdirSync(path.join(output, "licenses")).sort().map(name => "licenses/" + name):[])].map(relative => {
     const file = path.join(output, relative), stat = fs.lstatSync(file);
     if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("The neural provider requires regular installed files.");
     return { path: relative, size: stat.size, sha256: sha256(file),

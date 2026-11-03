@@ -1,3 +1,4 @@
+import {addLicense} from "../../../../../scripts/license-files.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -65,6 +66,6 @@ const metadata = { schema: 1, version: "3", resourceSnapshotAPI:1,resourceSnapsh
   library: "sl.interposer.dll", sha256: hash(path.join(output, "sl.interposer.dll")), referenceSha256: hash(reference), exports,
   compiler: execFileSync(path.resolve(args.compiler), ["--version"], { encoding: "utf8" }).split("\n")[0],
   sources: Object.fromEntries(["build.mjs", "source.json", "proxy.cpp", "camera.hpp", "resources.hpp", "snapshots.hpp", "snapshot-budget.hpp", "../dxmt/camera-transport.hpp", "../dxmt/streamline-transport.hpp", "../dxmt/streamline-snapshot.hpp", "pe-exports.js", "../../../shared/reshade/temporal/camera.h", "../../../shared/reshade/temporal/frame.h", "../../../shared/reshade/native/image-color.h", "../../../shared/reshade/native/image-budget.hpp"].map(file => [file, hash(path.resolve(here, file))])) };
-fs.copyFileSync(path.join(source, "license.txt"), path.join(output, "Streamline-LICENSE.txt"));
+addLicense(output,"streamline",path.join(source,"license.txt"));
 fs.writeFileSync(path.join(output, "provider.json"), JSON.stringify(metadata, null, 2) + "\n");
 console.log(JSON.stringify({ library: path.join(output, metadata.library), exports: exports.length, sha256: metadata.sha256 }));

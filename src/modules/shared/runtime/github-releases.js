@@ -151,24 +151,28 @@ async function fetchGithubCommits({ owner, repo, branch, signal, request = fetch
 // the caller continues without one.
 async function fetchGithubLicense({ owner, repo, revision, destination, signal, request = fetchUrlBuffer, download } = {}) {
   if (!/^[A-Za-z0-9_.-]+$/.test(owner || "") || !/^[A-Za-z0-9_.-]+$/.test(repo || "") || !/^[A-Za-z0-9_.-]+$/.test(revision || ""))
-    throw new Error("Invalid GitHub license lookup.");
+    return null;
   const fs = require("node:fs");
   const url = `https://raw.githubusercontent.com/${owner}/${repo}/${revision}/LICENSE`;
   let source = url;
-  try { await (download || require("./upstream-transport").downloadToFile)(url, destination, { signal }); }
-  catch (error) {
+  try {
+    try { await (download || require("./upstream-transport").downloadToFile)(url, destination, { signal }); }
+    catch (error) {
+      if (signal?.aborted) throw error;
+      fs.rmSync(destination, { force: true });
+      const response = await request(`https://api.github.com/repos/${owner}/${repo}/license?ref=${encodeURIComponent(revision)}`,
+        { headers: { "User-Agent": "maclauncher", "Accept": "application/vnd.github+json" }, signal });
+      const data = response.status === 200 ? parseJsonResponse(response) : null;
+      if (data?.encoding !== "base64" || typeof data.content !== "string") return null;
+      fs.writeFileSync(destination, Buffer.from(data.content, "base64"));
+      source = typeof data.download_url === "string" ? data.download_url : source;
+    }
+    return { licenseUrl: source };
+  } catch (error) {
     if (signal?.aborted) throw error;
-    fs.rmSync(destination, { force: true });
-    const response = await request(`https://api.github.com/repos/${owner}/${repo}/license?ref=${encodeURIComponent(revision)}`,
-      { headers: { "User-Agent": "maclauncher", "Accept": "application/vnd.github+json" }, signal });
-    const data = response.status === 200 ? parseJsonResponse(response) : null;
-    if (data?.encoding !== "base64" || typeof data.content !== "string") return null;
-    fs.writeFileSync(destination, Buffer.from(data.content, "base64"));
-    source = typeof data.download_url === "string" ? data.download_url : source;
+    console.warn("The optional GitHub notice could not be collected:", error.message);
+    return null;
   }
-  const bytes = fs.readFileSync(destination);
-  if (!bytes.length || bytes.length > 1024 * 1024 || bytes.includes(0)) { fs.rmSync(destination, { force: true }); return null; }
-  return { licenseUrl: source, licenseSha256: require("node:crypto").createHash("sha256").update(bytes).digest("hex") };
 }
 
 module.exports = {

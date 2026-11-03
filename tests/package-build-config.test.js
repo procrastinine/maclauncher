@@ -59,7 +59,7 @@ test("source-directory aliases and live Android source mappings are excluded", (
   const matchers = getMainFileMatchers(projectRoot, "/packaged-app", value => value, build.mac, packager,
     path.join(projectRoot, build.directories.output), false);
   const application = matchers.find(matcher => matcher.from === projectRoot);
-  const aliases = ["src/resources", "src/external", "src/renderer", "src/modules/bgi/native",
+  const aliases = ["src/resources", "src/external", "src/renderer",
     "src/modules/shared/reshade/native", "src/modules/shared/reshade/neural/native",
     "src/modules/renpy/resources/unren", "src/modules/renpy/resources/universal-renpy-walkthrough",
     "src/modules/android/native", "src/modules/android/art/boot-image-driver.rs",
@@ -333,7 +333,6 @@ test("application packaging preserves code and artwork while excluding local fil
     "src/modules/rgss/resources/rtp/Standard/Audio/BGM/sample.mid",
     "src/modules/rgss/resources/rtp/RPGVX/Graphics/Characters/sample.png",
     "src/modules/rgss/resources/rtp/RPGVXAce/Fonts/VL-Gothic-Regular.ttf",
-    "src/modules/bgi/native/probe-main.c", "src/modules/bgi/native/build.js", "src/modules/bgi/native/versions/probe-v1/vm-guards.c",
     "docs/README.md", "scripts/dev.mjs"])
     assert.equal(selected(file), false, `Local or separately packaged file included: ${file}`);
 });

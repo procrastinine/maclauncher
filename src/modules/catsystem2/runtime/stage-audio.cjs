@@ -1,3 +1,4 @@
+const { addLicense } = require("../../../../scripts/license-files.mjs");
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os");
 const { execFileSync } = require("node:child_process");
 const B = require("../../shared/runtime/bundled-native"), Native = require("../../shared/runtime/local-native");
@@ -44,26 +45,26 @@ function stage({ resourcesRoot, sourceArchives } = {}) {
     if (protocol.version !== VERSION || protocol.protocolVersion !== 1 || protocol.libogg !== "1.3.6" || protocol.libvorbis !== "1.3.7") throw new Error("The audio helper codec or protocol differs.");
     if (JSON.stringify(Native.readMachOArchitectures(executable).sort()) !== JSON.stringify(["arm64", "x86_64"])) throw new Error("The audio helper CPU slices differ.");
     fs.copyFileSync(SOURCE, path.join(destination, "ogg-decode.c")); fs.copyFileSync(__filename, path.join(destination, "stage-audio.cjs"));
-    fs.copyFileSync(path.join(REPO, "LICENSE"), path.join(destination, "MacLauncher-MIT.txt"));
+    addLicense(destination, "MacLauncher Ogg decoder", path.join(REPO, "LICENSE"), "MIT");
     for (const descriptor of SOURCES) {
-      fs.copyFileSync(path.join(temporary, `${descriptor.id}-${descriptor.version}/COPYING`), path.join(destination, descriptor.id + "-BSD.txt"));
+      addLicense(destination, `${descriptor.id} ${descriptor.version}`, path.join(temporary, `${descriptor.id}-${descriptor.version}/COPYING`), descriptor.license);
       fs.copyFileSync(sourceArchives[descriptor.id], path.join(destination, descriptor.name));
     }
     fs.writeFileSync(path.join(destination, "DEPENDENCIES.txt"), "MacLauncher Ogg decoder: MIT; libogg 1.3.6 and libvorbis 1.3.7: BSD-3-Clause.\nOriginal compressed streams are received through stdin; MLPC v1 returns bounded signed 16-bit little-endian PCM.\nSingle logical Vorbis stream, one or two channels, 8–192 kHz, maximum 600 seconds / 256 MiB decoded.\nPlayback uses macOS /usr/bin/afplay.\n");
-    const notices = [{ name: "MacLauncher Ogg decoder", license: "MIT", path: "MacLauncher-MIT.txt" }, ...SOURCES.map(descriptor => ({ name: `${descriptor.id} ${descriptor.version}`, license: descriptor.license, path: descriptor.id + "-BSD.txt" }))];
-    const files = fs.readdirSync(destination).sort().map(name => {
+
+    const files = B.fileInventory(destination).sort().map(name => {
       fs.chmodSync(path.join(destination, name), name === "ogg-decode" ? 0o755 : 0o644); const file = B.readRegular(path.join(destination, name), 4 * 1024 * 1024);
       return { path: name, size: file.size, sha256: file.sha256, mode: file.mode, ...(name === "ogg-decode" ? { architectures: ["arm64", "x86_64"] } : {}) };
     });
     const metadata = Buffer.from(JSON.stringify({ schemaVersion: 1, id: "catsystem2-ogg-decode", version: VERSION, protocolVersion: 1, minimumMacOS: MINIMUM_MACOS,
       sourceKind: "owned-source-with-bsd-codecs", sourceSha256: source.sha256, binarySha256: files.find(file => file.path === "ogg-decode").sha256,
-      dependencySources: SOURCES, architectures: ["arm64", "x86_64"], notices, files,
+      dependencySources: SOURCES, architectures: ["arm64", "x86_64"], files,
       build: { compiler, sdk, signing: "ad-hoc", minimumMacOS: MINIMUM_MACOS, recipe: "src/modules/catsystem2/runtime/stage-audio.cjs", recipeSha256: files.find(file => file.path === "stage-audio.cjs").sha256,
         oggConfigTypesSha256: B.digest(Buffer.from(generatedTypes)), oggFiles: ["src/bitwise.c", "src/framing.c"], vorbisFiles: VORBIS_FILES.map(name => `lib/${name}.c`) } }, null, 2) + "\n");
     fs.writeFileSync(path.join(destination, "helper.json"), metadata, { mode: 0o644 });
     const declaration = { id: "catsystem2-ogg-decode", version: VERSION, arch: "universal", launcherArchitectures: ["arm64", "x64"], minimumMacOS: MINIMUM_MACOS,
       sourceRelative: "ogg-decode.c", sourceSha256: source.sha256, directoryRelative, manifestRelative: "helper.json", manifestSha256: B.digest(metadata),
-      files: [...files, { path: "helper.json", size: metadata.length, sha256: B.digest(metadata), mode: 0o644 }], notices };
+      files: [...files, { path: "helper.json", size: metadata.length, sha256: B.digest(metadata), mode: 0o644 }] };
     Supplemental.validateDeclaration(declaration); Supplemental.verifySupplementals({ resourceRoot: path.join(resourcesRoot, "native-runtimes"), arch: process.arch, maximumMacOS: MINIMUM_MACOS, items: [declaration] }); return declaration;
   } catch (error) { fs.rmSync(destination, { recursive: true, force: true }); throw error; }
   finally { fs.rmSync(temporary, { recursive: true, force: true }); }

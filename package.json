@@ -140,7 +140,6 @@
       "!src/modules/shared/reshade/temporal/*.{h,hpp}",
       "!src/modules/shared/reshade/temporal/*/{build.mjs,adapt-runtime.mjs,*.mm,*.hpp}",
       "!src/modules/shared/vulkan/native{,/**}",
-      "!src/modules/bgi/native{,/**}",
       "!src/modules/renpy/resources/unren{,/**}",
       "!src/modules/renpy/resources/universal-renpy-walkthrough{,/**}",
       "!src/modules/android/native{,/**}",

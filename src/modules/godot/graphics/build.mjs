@@ -1,3 +1,4 @@
+import {addLicense} from "../../../../scripts/license-files.mjs";
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -15,7 +16,7 @@ execFileSync('/usr/bin/c++', ['-std=c++17','-O2','-arch','arm64','-arch','x86_64
   '-ffile-prefix-map='+path.resolve(import.meta.dirname,'../../../..')+'=MacLauncher',
   '-I'+path.dirname(header),path.join(import.meta.dirname,'bridge.cpp'),'-o',library], {stdio:'inherit'});
 execFileSync('/usr/bin/codesign',['--force','--sign','-','--timestamp=none',library],{stdio:'inherit'});
-fs.copyFileSync(path.join(source,'LICENSE.txt'),path.join(output,'GODOT-LICENSE.txt'));
+addLicense(output,'godot',path.join(source,'LICENSE.txt'));
 for (const script of ['autoload.gd','camera-effect.gd','aov-effect.gd']) fs.copyFileSync(path.join(import.meta.dirname,script),path.join(output,script));
 const capturePrograms=[];
 for(let variant=0;variant<4;++variant){

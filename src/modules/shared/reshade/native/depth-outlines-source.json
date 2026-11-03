@@ -4,8 +4,7 @@
   "commit": "76365e35c48e30170985ca371e67d8daf8eb9a98",
   "license": "MIT",
   "sources": {
-    "Shaders/Sketch.fx": "0e63beb41a7123235216f160361761a0e0c7fa890747fd6eb37660ebff39fb75",
-    "LICENSE": "715dfa2cf3ea38aff207a34ec79611f80bf9189e121f564e42cff4aeed8541c1"
+    "Shaders/Sketch.fx": "0e63beb41a7123235216f160361761a0e0c7fa890747fd6eb37660ebff39fb75"
   },
   "adaptations": [
     "Selected original Sketch depth-gradient normal and threshold functions",

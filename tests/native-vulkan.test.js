@@ -306,7 +306,10 @@ test("stock KosmicKrisp discovers upstream metadata, installs verified closures 
     assert.equal(installed.integritySource, "recorded-local");
     assert.deepEqual(installed.installationMetadata.libraries.map(row => row.file), ["libvulkan_kosmickrisp.dylib", "libvulkan.1.dylib"]);
     assert.match(installed.installationMetadata.minimumMacOS, /^13\./);
-    assert.equal(fs.readFileSync(path.join(installed.installDir, "Vulkan-Loader-LICENSE.txt"), "utf8"), "fixture loader license");
+    const licenseDirectory = path.join(installed.installDir, "licenses"), sourceLicenses = path.resolve(__dirname, "../src/modules/shared/vulkan/notices");
+    assert.equal(fs.readFileSync(path.join(licenseDirectory, "Vulkan-Loader.txt"), "utf8"), "fixture loader license");
+    for (const name of fs.readdirSync(sourceLicenses))
+      assert.deepEqual(fs.readFileSync(path.join(licenseDirectory, name)), fs.readFileSync(path.join(sourceLicenses, name)), "Bundled texts merge without discarding the loader's licence");
     tamperedBottle = true;
     await assert.rejects(manager.installRuntime({userDataDir, version: versions[1]}), /vulkan-loader\.tar\.gz does not match the checksum its publisher lists/);
     tamperedBottle = false;

@@ -725,13 +725,16 @@ test("CrossOver launch retries unavailable optional temporal inputs but retains 
 test("CrossOver Stop terminates an independently grouped Windows process before its tracked supervisor exits", async t => {
   if (process.platform === "win32") return t.skip("POSIX process groups are required");
   const directory = fixture(t), pidFile = path.join(directory, "game-pid"), stoppedFile = path.join(directory, "bottle-stopped");
-  const argumentsFile = path.join(directory, "game-arguments.json");
+  const argumentsFile = path.join(directory, "game-arguments.json"), terminatedFile = path.join(directory, "game-terminated"), serverCalls = path.join(directory, "server-calls");
   const gameArguments = ["--bottle", "private bottle", "--", "C:\\Game.exe", "--title", "  A quoted game  ", "", "$(touch unexpected)", "first\nsecond"];
   const fakeWine = path.join(directory, "wine"), fakeServer = path.join(directory, "wineserver");
-  fs.writeFileSync(fakeWine, `#!${process.execPath}\nconst fs=require('fs'),{spawn}=require('child_process');fs.writeFileSync(process.env.GAME_ARGUMENTS,JSON.stringify(process.argv.slice(2)));const game=spawn(process.execPath,['-e',${JSON.stringify(untilTestEnds)}],{detached:true,stdio:'ignore'});fs.writeFileSync(process.env.GAME_PID,String(game.pid));${untilTestEnds}`, { mode: 0o755 });
-  fs.writeFileSync(fakeServer, `#!${process.execPath}\nconst fs=require('fs');if(process.argv[2]==='-k'){const pid=Number(fs.readFileSync(process.env.GAME_PID,'utf8'));try{process.kill(pid,'SIGTERM')}catch{}fs.writeFileSync(process.env.STOPPED,'stopped');}`, { mode: 0o755 });
+  const gameCode = `const fs=require('fs');process.on('SIGTERM',()=>{fs.writeFileSync(process.env.GAME_TERMINATED,'terminated');process.exit(0)});const ready=process.env.GAME_PID+'.ready';fs.writeFileSync(ready,String(process.pid));fs.renameSync(ready,process.env.GAME_PID);${untilTestEnds}`;
+  fs.writeFileSync(fakeWine, `#!${process.execPath}\nconst fs=require('fs'),{spawn}=require('child_process');fs.writeFileSync(process.env.GAME_ARGUMENTS,JSON.stringify(process.argv.slice(2)));spawn(process.execPath,['-e',${JSON.stringify(gameCode)}],{detached:true,stdio:'ignore'});${untilTestEnds}`, { mode: 0o755 });
+  // The real server is a lightweight native CLI. Cold Node startups here can
+  // consume the ordinary Stop grace before the fixture has requested shutdown.
+  fs.writeFileSync(fakeServer, '#!/bin/sh\nprintf "%s\\n" "$1" >> "$SERVER_CALLS"\nif [ "$1" = "-k" ]; then\n  read -r game_pid < "$GAME_PID"\n  kill -TERM "$game_pid" 2>/dev/null || :\n  printf stopped > "$STOPPED"\nfi\n', { mode: 0o755 });
   const child = spawn("/bin/sh", ["-c", Launch.SUPERVISOR, "test-crossover", fakeWine, fakeServer, ...gameArguments],
-    { detached: true, stdio: "ignore", env: { ...process.env, GAME_PID: pidFile, STOPPED: stoppedFile, GAME_ARGUMENTS: argumentsFile } });
+    { detached: true, stdio: "ignore", env: { ...process.env, GAME_PID: pidFile, GAME_TERMINATED: terminatedFile, STOPPED: stoppedFile, GAME_ARGUMENTS: argumentsFile, SERVER_CALLS: serverCalls } });
   t.after(() => { try { process.kill(-child.pid, "SIGKILL"); } catch {} });
   const finished = once(child, "exit");
   const deadline = Date.now() + 5000;
@@ -743,7 +746,10 @@ test("CrossOver Stop terminates an independently grouped Windows process before 
   assert.equal(stopProcessTree(child.pid), true);
   const outcome = await Promise.race([finished, new Promise((_, reject) => setTimeout(() => reject(new Error("CrossOver supervisor did not stop")), 5000).unref())]);
   assert.equal(outcome[0], 143);
+  assert.equal(outcome[1], null);
   assert.equal(fs.readFileSync(stoppedFile, "utf8"), "stopped");
+  assert.deepEqual(fs.readFileSync(serverCalls, "utf8").trim().split("\n"), ["-k", "-w"]);
+  assert.equal(fs.readFileSync(terminatedFile, "utf8"), "terminated");
   const exitDeadline = Date.now() + 3000;
   while (Date.now() < exitDeadline) {
     try { process.kill(gamePid, 0); } catch { return; }

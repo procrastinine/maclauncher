@@ -2,7 +2,7 @@ const fs = require("node:fs"), path = require("node:path"), crypto = require("no
 const { cloneOrCopy } = require("../../copy-file");
 const Zip = require("../../runtime/zip"), Models = require("./models");
 const PICKER_EXTENSIONS=Object.freeze([...Models.PACKAGE_EXTENSIONS,"safetensors","pth","dll","so","app","zip"]);
-const LIMITS = {entries: 16384, directory: 16 << 20, packages: 16, notice: 2 << 20, notices: 8 << 20,
+const LIMITS = {entries: 16384, directory: 16 << 20, packages: 16,
   archive: 2 * Models.MAX_WEIGHTS + (32 << 20)};
 const noticeName = name => /^(?:LICENSE|NOTICE|COPYING)(?:[._-][A-Za-z0-9._-]+)?$/i.test(name);
 const safeName = name => typeof name === "string" && name.length <= 4096 && !/[\\\x00-\x1f]/.test(name) &&
@@ -18,11 +18,8 @@ function children(directory, maximum) {
   finally { opened.closeSync(); }return rows;
 }
 function localNotices(directory, maximum) {
-  const notices = children(directory, maximum).filter(row => row.isFile() && noticeName(row.name)).map(row => {
-    const source = path.join(directory, row.name), stat = regular(source, LIMITS.notice);return {name: row.name, source, bytes: stat.size};
-  });
-  if (notices.reduce((sum, row) => sum + row.bytes, 0) > LIMITS.notices) throw new Error("The model source notices exceed the size limit.");
-  return notices;
+  return children(directory, maximum).filter(row => row.isFile() && noticeName(row.name))
+    .map(row => ({name: row.name, source: path.join(directory, row.name)}));
 }
 function appSource(file) {
   const canonical = fs.realpathSync(file), resources = path.join(canonical, "Contents/Resources"), folder = path.join(resources, "models");
@@ -88,9 +85,8 @@ function archiveSource(file) {
   for (const entry of entries) {
     const parent = entry.name.slice(0, entry.name.lastIndexOf("/") + 1);
     if (!safeName(entry.name) || !noticeName(path.posix.basename(entry.name)) || !(parent === "" || resources.has(parent))) continue;
-    notices.push(selected(entry.name, LIMITS.notice));
+    notices.push(entry);
   }
-  if (notices.reduce((sum, entry) => sum + entry.uncompressedSize, 0) > LIMITS.notices) throw new Error("The model ZIP notices exceed the size limit.");
   return {kind: "archive", file, stat, packages, notices};
 }
 function inspect(file) {
@@ -203,10 +199,12 @@ async function materialize(source, destination, {signal, onProgress, modelIdenti
     for(const entry of row.auxiliary||[])await Zip.extractZipEntry(source.file,entry,path.join(modelPath,path.posix.basename(entry.name)),{maxOutputBytes:Models.MAX_WEIGHTS,signal});
     packages.push({...Models.inspectPackage(modelPath), sourcePackage: row.prefix.replace(/\/$/, "")});
   }
-  for (const [index, row] of source.notices.entries()) {
+  for (const [index, row] of (source.notices||[]).entries()) {
     signal?.throwIfAborted();const file = path.join(destination, "notice-" + index);
-    await Zip.extractZipEntry(source.file, row, file, {maxOutputBytes: LIMITS.notice, signal});
-    notices.push({name: path.posix.basename(row.name), source: file});
+    try {
+      await Zip.extractZipEntry(source.file, row, file, {maxOutputBytes: LIMITS.archive, signal});
+      notices.push({name: path.posix.basename(row.name), source: file});
+    } catch(error) { signal?.throwIfAborted();console.warn("Source candidate extraction skipped:",error.message); }
   }
   const after = fs.lstatSync(source.file);
   if (["dev", "ino", "size", "mtimeMs", "ctimeMs"].some(key => source.stat[key] !== after[key])) throw new Error("The model ZIP changed during import.");

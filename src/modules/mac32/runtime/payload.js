@@ -7,18 +7,16 @@ const { locatePackaged } = require("../../shared/runtime/release-files");
 
 const GUEST_LIBRARIES = Object.freeze(["libmac32rt.dylib", "libmac32cxx.dylib", "libmac32cxx2.dylib", "libmac32ios.dylib"]);
 const HOST = "Mac32.app/Contents/MacOS/mac32";
-const LICENSE = /^(?:COPYING|NOTICE|LICEN[CS]E)(?:[._-][^/]*)?$/i;
 const guestFiles = executable => GUEST_LIBRARIES.map(name => path.posix.join(path.posix.dirname(executable), "guest", name));
 
 // Releases may move the app into another folder. The host found at
-// installation is recorded with its guest libraries and license files.
+// installation is recorded with its guest libraries and the other packaged files.
 function packageFiles(root) {
   const executable = locatePackaged(root, HOST);
   if (!executable) throw new Error("The mac32 download does not contain Mac32.app.");
   const relative = path.relative(root, executable).split(path.sep).join("/"), folder = path.join(root, relative.slice(0, -HOST.length));
-  const licenses = fs.readdirSync(folder).filter(name => LICENSE.test(name)).sort();
-  if (!licenses.length) throw new Error("The mac32 download does not contain its license files.");
-  return [relative, ...guestFiles(relative), ...licenses.map(name => path.posix.join(relative.slice(0, -HOST.length), name))];
+  const files = fs.readdirSync(folder, { withFileTypes: true }).filter(entry => entry.isFile()).map(entry => entry.name).sort();
+  return [relative, ...guestFiles(relative), ...files.map(name => path.posix.join(relative.slice(0, -HOST.length), name))];
 }
 
 function payloadPath(root, relative) {
@@ -67,11 +65,9 @@ function createPayloadResolver({ systemVersionSync = Host.systemVersionSync } = 
     let key;
     try {
       const metadata = install.installationMetadata, recorded = Array.isArray(metadata?.files) ? metadata.files.map(file => file?.relativePath) : [];
-      if (metadata?.schemaVersion !== 1 || metadata.interface !== "mac32-app-v1" || recorded.length < 6 || typeof recorded[0] !== "string" ||
+      if (metadata?.schemaVersion !== 1 || metadata.interface !== "mac32-app-v1" || recorded.length < 5 || typeof recorded[0] !== "string" ||
         !(recorded[0] === HOST || recorded[0].endsWith("/" + HOST)) || path.resolve(install.installDir, recorded[0]) !== path.resolve(install.executablePath || "") ||
         JSON.stringify(recorded.slice(1, 5)) !== JSON.stringify(guestFiles(recorded[0])) ||
-        recorded.slice(5).some(file => typeof file !== "string" || !LICENSE.test(path.posix.basename(file)) ||
-          file !== recorded[0].slice(0, -HOST.length) + path.posix.basename(file)) ||
         metadata.files.some(file => !/^[a-f0-9]{64}$/.test(file.sha256 || "") || !Number.isSafeInteger(file.bytes) || file.bytes < 1))
         throw new Error("mac32 runtime registration is incomplete. Remove and install this version again.");
       const files = metadata.files.map(file => {

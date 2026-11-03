@@ -57,8 +57,7 @@ async function prepareSevenZip({ repoRoot = ROOT, download = require('./native-p
   assertArchive(archive, pin);
   const executable = tool('/usr/bin/tar', ['-xOf', archive, '7zz'], { maxBuffer: 16 * 1024 ** 2 });
   if (digest(executable) !== pin.executableSha256) throw new Error('7-Zip publisher executable differs from its pin.');
-  const license = tool('/usr/bin/tar', ['-xOf', archive, 'License.txt']);
-  for (const [name, bytes, mode] of [['7zz', executable, 0o755], ['LICENSE.txt', license, 0o644]]) {
+  for (const [name, bytes, mode] of [['7zz', executable, 0o755]]) {
     const target = path.join(root, name), stat = fs.lstatSync(target, { throwIfNoEntry: false });
     if (stat?.isFile() && fs.readFileSync(target).equals(bytes)) {
       if ((stat.mode & 0o777) !== mode) fs.chmodSync(target, mode);

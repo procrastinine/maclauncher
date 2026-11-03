@@ -33,7 +33,12 @@ test("CRT Royale retains its complete original source closure and license notice
   const root = path.dirname(path.dirname(selected.file)), inventory = JSON.parse(fs.readFileSync(path.join(root, "source-files.json")));
   assert.equal(inventory.revision, Packs.lookup("shader:crt-royale:royale").pack.revision);
   assert.deepEqual(selected.texturePaths, []);
-  assert.ok(inventory.files.some(file => file.path === "LICENSE.TXT"));
+  assert.ok(inventory.files.some(file => file.path === "licenses/components.txt"));
+  const component = fs.readFileSync(path.join(root, "licenses/components.txt"), "utf8").split(/\r?\n/).find(line => line.startsWith("crt-royale: "));
+  assert.ok(component, "The original component remains attributed");
+  const license = "licenses/" + component.slice("crt-royale: ".length);
+  assert.ok(inventory.files.some(file => file.path === license));
+  assert.match(fs.readFileSync(path.join(root, license), "utf8"), /GNU GENERAL PUBLIC LICENSE[\s\S]*Version 2/);
   assert.ok(inventory.files.some(file => file.path === "Shaders/crt-royale/lib/bind-shader-params.fxh"));
   for (const file of inventory.files) {
     const bytes = fs.readFileSync(path.join(root, file.path)); assert.equal(bytes.length, file.size);
