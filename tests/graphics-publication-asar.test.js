@@ -18,7 +18,7 @@ for (const unpacked of [false, true]) test(`Electron ${unpacked ? "unpacked" : "
     manifestSha256: "a".repeat(64), files: [{path: "runtime.json", size: 2, sha256: "b".repeat(64)}]}];
   fs.writeFileSync(path.join(source, relative), JSON.stringify(declaration));
   const archive = path.join(root, "app.asar");
-  await finished(await require("@electron/asar").createPackageWithOptions(source, archive, unpacked ? {unpack: "**/distribution-supplementals.json"} : {}));
+  await finished(await require("@electron/asar").createPackageWithOptions(source, archive, unpacked ? {unpack: path.join(source, relative)} : {}));
   const runner = path.join(root, "check.cjs");
   fs.writeFileSync(runner, `
 const assert=require('node:assert/strict'),fs=require('node:fs'),raw=require('original-fs');

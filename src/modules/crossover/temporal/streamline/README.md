@@ -50,6 +50,4 @@ remains unchanged. The built payload includes the proxy, `provider.json` with
 source and binary identities, and `Streamline-LICENSE.txt`.
 
 `camera-test.cpp` checks perspective projection validation using the pinned
-headers. `test-forwarders.mjs PAYLOAD CLANGXX OUTPUT` builds a Windows executable
-and an original-library substitute to check every forwarding entry point,
-ordinal and mixed register/stack argument transport.
+headers.

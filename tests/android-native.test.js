@@ -303,7 +303,7 @@ test('Android x18 ADR veneer preserves the original address and live registers',
   for(const [file,adapted] of [[path.join(klepton,'runtime/kl_x18.c'),'0'],[modified,'1']]){
     const binary=path.join(temporary,'probe-'+adapted);
     run('clang',['-std=gnu11','-I'+path.join(klepton,'runtime'),'-DKL_X18_SOURCE='+JSON.stringify(file),path.join(fixtures,'x18-adr.c'),path.join(klepton,'runtime/kl_env.c'),'-o',binary]);
-    assert.match(run(binary,[adapted]),adapted==='1'?/PASS actual ADR veneer target, live scratch registers and thread slot/:/PASS original ADR refusal preserved/);
+    assert.match(run(binary,[adapted]),adapted==='1'?/PASS actual ADR veneer target, live scratch registers and thread slot/:/PASS original ADR veneer target, live scratch registers and thread slot/);
   }
 });
 

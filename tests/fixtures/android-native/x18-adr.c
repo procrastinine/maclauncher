@@ -23,12 +23,11 @@ int main(int argc,char **argv){
         uint64_t expected=(uintptr_t)(code+2)+(int64_t)displacement;
         kl_x18_stats stats;size_t used=0;
         assert(!kl_x18_emit(code,24,(uintptr_t)code,pool,512,(uintptr_t)pool,&stats,&used));
-        if(!adapted){assert(stats.refused==1&&code[2]==adr(18,displacement));assert(!munmap(memory,size));continue;}
         assert(stats.refused==0&&stats.patched==2&&used<=64);
         assert(!mprotect(memory,size,PROT_READ|PROT_EXEC));sys_icache_invalidate(memory,size);
         uint64_t output[3]={0};((void (*)(uint64_t *))code)(output);
         assert(output[0]==0x1234&&output[1]==0x5678&&output[2]==expected);
         assert(!munmap(memory,size));
     }
-    puts(adapted?"PASS actual ADR veneer target, live scratch registers and thread slot":"PASS original ADR refusal preserved");
+    puts(adapted?"PASS actual ADR veneer target, live scratch registers and thread slot":"PASS original ADR veneer target, live scratch registers and thread slot");
 }

@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {fork}=require('node:child_process'),{once}=require('node:events');
-const path=require('node:path'),fs=require('node:fs/promises'),os=require('node:os'),net=require('node:net');
+const path=require('node:path'),fs=require('node:fs/promises'),net=require('node:net');
 const {connectAuthority}=require('../src/modules/android/platform-services/jvm');
 const channel=require('../src/modules/android/process-channel');
 
@@ -38,7 +38,8 @@ test('physical identity does not consume a nonexistent pre-bootstrap frame or im
 });
 
 test('each profile service is acquired directly without circular device or KeyStore leases',{timeout:5000},async t=>{
-  const root=await fs.mkdtemp(path.join(os.tmpdir(),'android-profile-lease-'));
+  // Unix socket names include the parent path; TMPDIR can exceed sockaddr_un.
+  const root=await fs.mkdtemp('/tmp/android-profile-lease-');
   const locations={},paths=require('../src/modules/android/platform-services/paths'),events=[],servers=[],sockets=new Set();
   t.after(async()=>{for(const socket of sockets)socket.destroy();await Promise.all(servers.map(server=>new Promise(resolve=>server.close(resolve))));await fs.rm(root,{recursive:true,force:true});});
   const stamp={pid:process.pid,uid:process.getuid(),startedSeconds:1,startedMicros:2};
