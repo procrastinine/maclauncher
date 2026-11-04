@@ -143,3 +143,35 @@ test('resource aliases verify through relative CLI paths and reject redirected t
   fs.unlinkSync(canonical); write(f.root, 'outside-python', 'image'); fs.symlinkSync(path.join(f.root, 'outside-python'), canonical);
   assert.throws(() => Inputs.verifyContents(selected, options), /alias differs/);
 });
+
+
+test('Builder-renamed Electron publisher resources retain archive digests and remain optional when not copied', async t => {
+  const f = fixture(t), Host = require('../scripts/app-host.cjs'), zip = require('./helpers/metadata-archive');
+  const sourceAppRelative = 'node_modules/electron/dist/Electron.app', original = write(f.root, sourceAppRelative + '/Contents/file', 'publisher host');
+  const texts = {LICENSE: 'Electron publisher terms', 'LICENSES.chromium.html': '<html>Chromium publisher terms</html>'};
+  const archive = path.join(f.root, 'electron.zip');zip(archive, Object.entries(texts));
+  const record = {id: 'electron', version: '1.0.0', arch: 'arm64', sourceAppRelative};
+  const inventory = {files: [{path: 'Contents/file', type: 'file', size: fs.statSync(original).size, mode: fs.statSync(original).mode & 0o777, sha256: sha(fs.readFileSync(original))}]};
+  write(f.root, 'node_modules/electron/package.json', JSON.stringify({name: 'electron', version: record.version}));
+  t.mock.method(Host, 'readHost', () => ({record, inventory, archive, root: path.join(f.root, 'node_modules/electron')}));
+  const selected = await Inputs.prepare(f.options), appPath = path.join(f.root, 'MacLauncher.app'), resources = path.join(appPath, 'Contents/Resources'), assembly = path.join(f.root, 'assembly');
+  selected.provenance = {fixture: true};
+  const transformer = require('app-builder-lib/out/fileTransformer').createTransformer(f.root, f.packageConfig.build);
+  for (const [name, input] of selected.asar) write(assembly, name, await transformer(input.source) || fs.readFileSync(input.source));
+  write(resources, 'icon.png', 'image');write(appPath, 'Contents/file', fs.readFileSync(original));
+  const asar = path.join(resources, 'app.asar');await finished(await require('@electron/asar').createPackage(assembly, asar));
+  const options = {archive: asar, resources, appPath};
+  for (const [member, output] of [['LICENSE', 'LICENSE.electron.txt'], ['LICENSES.chromium.html', 'LICENSES.chromium.html']]) {
+    const destination = write(resources, output, texts[member]);
+    assert.doesNotThrow(() => Inputs.verifyContents(selected, options));
+    fs.writeFileSync(destination, 'changed publisher bytes');
+    assert.throws(() => Inputs.verifyContents(selected, options), /host file differs from its publisher supplier/);
+    fs.writeFileSync(destination, texts[member]);
+  }
+  fs.rmSync(path.join(resources, 'LICENSE.electron.txt'));fs.rmSync(path.join(resources, 'LICENSES.chromium.html'));
+  zip(archive, [['version', record.version]]);
+  selected.host = Inputs.hostSources(f.root, f.packageConfig);
+  assert.equal(selected.host.files.has('Contents/Resources/LICENSE.electron.txt'), false);
+  assert.equal(selected.host.files.has('Contents/Resources/LICENSES.chromium.html'), false);
+  assert.doesNotThrow(() => Inputs.verifyContents(selected, options));
+});

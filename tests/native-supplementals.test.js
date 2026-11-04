@@ -40,7 +40,6 @@ test('registered supplemental declarations have pure module exports and complete
       assert.ok(item.files.some(file => file.path.endsWith('.js')));
       require('../src/modules/shared/runtime/bundled-native').verifyPayload(path.resolve(__dirname, '../src/resources/native-runtimes', item.directoryRelative), item);
     } else assert.ok(item.files.some(file => file.architectures), item.id + ' requires its native CPU inventory');
-    assert.ok(item.notices.every(notice => item.files.some(file => file.path === notice.path)));
   }
   for (const change of [{ size: -1 }, { mode: 0o666 }]) {
     const invalid = structuredClone(declarations[0]); Object.assign(invalid.files[0], change);

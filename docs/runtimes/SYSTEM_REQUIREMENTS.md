@@ -50,18 +50,18 @@ The included graphics package and its native dependencies have these requirement
 <!-- selected-graphics-requirements:start -->
 | Included component | Package version | Processor | Effective minimum macOS |
 | --- | --- | --- | --- |
-| Shared graphics effects | 0.3.3 | Apple Silicon and Intel | 13 |
-| libplacebo filters and shader compilation | 0.3.3 | Apple Silicon and Intel | 13 |
-| ISF shaders | 0.3.3 | Apple Silicon and Intel | 13 |
-| Video export | 0.3.3 | Apple Silicon and Intel | 14 |
-| Window graphics | 0.3.3 | Apple Silicon and Intel | 15.2 |
-| MLX neural processing | 0.3.3 | Apple Silicon | 14 |
-| Neural video decoding and encoding | 0.3.3 | Apple Silicon | 26 |
-| Shared graphics effects | 0.3.3 | Intel | 13 |
-| libplacebo filters and shader compilation | 0.3.3 | Intel | 13 |
-| ISF shaders | 0.3.3 | Intel | 13 |
-| Video export | 0.3.3 | Intel | 14 |
-| Window graphics | 0.3.3 | Intel | 15.2 |
+| Shared graphics effects | 0.3.6 | Apple Silicon and Intel | 13 |
+| libplacebo filters and shader compilation | 0.3.6 | Apple Silicon and Intel | 13 |
+| ISF shaders | 0.3.6 | Apple Silicon and Intel | 13 |
+| Video export | 0.3.6 | Apple Silicon and Intel | 14 |
+| Window graphics | 0.3.6 | Apple Silicon and Intel | 15.2 |
+| MLX neural processing | 0.3.6 | Apple Silicon | 14 |
+| Neural video decoding and encoding | 0.3.6 | Apple Silicon | 26 |
+| Shared graphics effects | 0.3.6 | Intel | 13 |
+| libplacebo filters and shader compilation | 0.3.6 | Intel | 13 |
+| ISF shaders | 0.3.6 | Intel | 13 |
+| Video export | 0.3.6 | Intel | 14 |
+| Window graphics | 0.3.6 | Intel | 15.2 |
 <!-- selected-graphics-requirements:end -->
 
 Shader preparation uses the selected compiler's dependency requirements, including per-processor compiler minima. Prepared MagpieFX effects execute on Metal from macOS 13. Shader collections and model weights contain data; their execution provider determines the processor, macOS and GPU requirements. MLX uses an ARM64 service for Intel game processes on Apple Silicon.

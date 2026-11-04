@@ -254,7 +254,7 @@ test("first-party fixtures and managed engines stay out of ASAR while declared h
   const resources=new FileMatcher(path.join(projectRoot,resource.from),'/resources',value=>value,resource.filter);
   for(const helper of plan.supplementals) {
     assert.equal(helper.files.some(file=>/(?:^|\/)source\.tar\.gz$/.test(file.path)),false,'Corresponding source stays in Builds source: '+helper.id);
-    for(const file of [helper.files.find(file=>file.path===helper.manifestRelative),...helper.notices.map(notice=>helper.files.find(file=>file.path===notice.path))]) {
+    for(const file of helper.files) {
       assert.ok(file); assert.equal(selectedBy(resources,'native-runtimes/'+helper.directoryRelative+'/'+file.path),true);
       assert.match(file.sha256,/^[a-f0-9]{64}$/);
     }

@@ -198,6 +198,16 @@ function hostSources(repoRoot, packageConfig, { required = true, arch = process.
     files.set(relative, { ...input, owner: 'upstream-host', source, package: [record.id, record.version, record.arch].join('/'),
       unsignedSha256: input.architectures ? unsignedMachO(fs.readFileSync(source)) : null });
   }
+  // Builder moves these publisher ZIP members from beside Electron.app into
+  // the bundle, renaming LICENSE. They retain the archive's ordinary identity.
+  const Zip = require('../src/modules/shared/runtime/zip');
+  for (const [member, output] of [['LICENSE', 'LICENSE.electron.txt'], ['LICENSES.chromium.html', 'LICENSES.chromium.html']]) {
+    const bytes = Zip.readZipEntryBuffer(selected.archive, member);
+    if (!bytes) continue;
+    const relative = 'Contents/Resources/' + output;
+    files.set(relative, { path: relative, type: 'file', size: bytes.length, sha256: sha(bytes), owner: 'upstream-host',
+      source: path.join(path.dirname(sourceRoot), member), package: [record.id, record.version, record.arch].join('/'), unsignedSha256: null });
+  }
   return { record, root: selected.root, sourceRoot, files, aliases };
 }
 // Signing may append a signature command and alignment padding to unsigned

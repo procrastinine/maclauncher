@@ -45,7 +45,7 @@ test('app input gate traces installed Electron to its npm identity and original 
   assert.match(selected.record.npm.integrity,/^sha512-/);
   assert.equal(Host.verifyElectronApp(original,selected.inventory).files,selected.inventory.files.length);
   const sources = require('../scripts/app-inputs.cjs').hostSources(ROOT,require('../package.json'));
-  assert.equal(sources.files.size+sources.aliases.size,selected.inventory.files.length);
+  assert.equal(sources.files.size+sources.aliases.size,selected.inventory.files.length + 2);
   assert.equal(sources.files.get('Contents/MacOS/Electron').owner,'upstream-host');
   const root = temporary(t), corrupt = path.join(root,'modified.zip');fs.writeFileSync(corrupt,'modified');
   assert.throws(()=>Host.readHost({repoRoot:ROOT,archivePath:corrupt}),/publisher checksum/);

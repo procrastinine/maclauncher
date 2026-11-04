@@ -10,32 +10,32 @@
     {
       "schemaVersion": 2,
       "id": "android-apk-metadata",
-      "version": "1.1.2",
+      "version": "1.1.5",
       "arch": "arm64",
       "launcherArchitectures": [
         "arm64"
       ],
       "minimumMacOS": "13.0",
       "manifestRelative": "helper.json",
-      "manifestSha256": "c5e57f2dd73b2fd3842eeca1583a5626392695128a6abf224447952af4f2efe9",
+      "manifestSha256": "f8722757a05c7acf19f2b97f7df980cebbf8209d42259b5047f02155af34e091",
       "sourceSha256": "34430ef0f71a136d9bf5a208964ef8b7ccdec1559dc721eca1868ed9b975ea96",
       "updatePolicy": "manual",
-      "tag": "android-apk-metadata/v1.1.2/arm64",
+      "tag": "android-apk-metadata/v1.1.5/arm64",
       "asset": {
-        "filename": "android-apk-metadata-1.1.2-arm64.tar.gz",
-        "sha256": "93592f65b7357b009123fec98df324a52fcd7597d2d455629b95c23221ba3e74",
-        "bytes": 399488,
-        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/android-apk-metadata%2Fv1.1.2%2Farm64/android-apk-metadata-1.1.2-arm64.tar.gz"
+        "filename": "android-apk-metadata-1.1.5-arm64.tar.gz",
+        "sha256": "e6f548027994e73a0a660f97dba0ebe235e40f5ee9f526c9807c1d082fccf3eb",
+        "bytes": 1010963,
+        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/android-apk-metadata%2Fv1.1.5%2Farm64/android-apk-metadata-1.1.5-arm64.tar.gz"
       },
       "source": {
         "repository": "procrastinine/maclauncher-builds",
-        "revision": "f245d0abaa8f852118cfa3280aa01c4106b6e0d2"
+        "revision": "bc6263f860cae2a22db42d1aef39707e99d430b9"
       }
     },
     {
       "schemaVersion": 2,
       "id": "android-apk-metadata",
-      "version": "1.1.2",
+      "version": "1.1.5",
       "arch": "x64",
       "launcherArchitectures": [
         "arm64",
@@ -43,25 +43,25 @@
       ],
       "minimumMacOS": "13.0",
       "manifestRelative": "helper.json",
-      "manifestSha256": "991e2297897884ecdf46c544ba6906cc61a09a85ca607b69830aa0c6d0bd937b",
+      "manifestSha256": "2c31093295a643ccf71c207c4ba189ca28b79c64c68a92701b670df6a3f2925c",
       "sourceSha256": "34430ef0f71a136d9bf5a208964ef8b7ccdec1559dc721eca1868ed9b975ea96",
       "updatePolicy": "manual",
-      "tag": "android-apk-metadata/v1.1.2/x64",
+      "tag": "android-apk-metadata/v1.1.5/x64",
       "asset": {
-        "filename": "android-apk-metadata-1.1.2-x64.tar.gz",
-        "sha256": "a333367262cbf2b6c364a21dab4d41e4f8b603d40a90f8665ed2a827ddc12daf",
-        "bytes": 420862,
-        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/android-apk-metadata%2Fv1.1.2%2Fx64/android-apk-metadata-1.1.2-x64.tar.gz"
+        "filename": "android-apk-metadata-1.1.5-x64.tar.gz",
+        "sha256": "1107ffb8d8cd9732192a2adfe3f4d2e3dd2c2e2f3a6fa4c622d11ea865ad2c4a",
+        "bytes": 1029366,
+        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/android-apk-metadata%2Fv1.1.5%2Fx64/android-apk-metadata-1.1.5-x64.tar.gz"
       },
       "source": {
         "repository": "procrastinine/maclauncher-builds",
-        "revision": "f245d0abaa8f852118cfa3280aa01c4106b6e0d2"
+        "revision": "bc6263f860cae2a22db42d1aef39707e99d430b9"
       }
     },
     {
       "schemaVersion": 2,
       "id": "android-launcher",
-      "version": "1.0.3",
+      "version": "1.0.6",
       "arch": "universal",
       "launcherArchitectures": [
         "arm64",
@@ -69,75 +69,75 @@
       ],
       "minimumMacOS": "13.0",
       "manifestRelative": "manifest.json",
-      "manifestSha256": "361cba258f3c97806ac70e66af54cd393f4e6a9015c48b096ffcb860cdb6b82b",
-      "sourceSha256": "d1e55810f81f8fdb0bdede929ece4d24a3323e4f49364ee7ab198c18d9e74259",
+      "manifestSha256": "cd0a716e1518574ed6891dc5f06d46c70fa2b760cba0817cb9562fa15958fbfa",
+      "sourceSha256": "d903fd42c6f11850b87e4acd9e499494d42ab1c8021399a6efe7fb9a313c8130",
       "updatePolicy": "manual",
-      "tag": "android-launcher/v1.0.3/universal",
+      "tag": "android-launcher/v1.0.6/universal",
       "asset": {
-        "filename": "android-launcher-1.0.3-universal.tar.gz",
-        "sha256": "d954b109f54d95026d13671876d6186b263cb28433c0abee1d5dd5e57c115c70",
-        "bytes": 101186,
-        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/android-launcher%2Fv1.0.3%2Funiversal/android-launcher-1.0.3-universal.tar.gz"
+        "filename": "android-launcher-1.0.6-universal.tar.gz",
+        "sha256": "e222c5848c41798f80a88d66f6aa640f4a2bf9aceeb504770eb03bd2bfaa399f",
+        "bytes": 98449,
+        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/android-launcher%2Fv1.0.6%2Funiversal/android-launcher-1.0.6-universal.tar.gz"
       },
       "source": {
         "repository": "procrastinine/maclauncher-builds",
-        "revision": "d2b042f9b8002d2e09ece537b8e34cf7b6a60815"
+        "revision": "0c8b9e93b53b126bbc337986a6d093ea3167b2ec"
       }
     },
     {
       "schemaVersion": 2,
       "id": "android-privacy",
-      "version": "1.1.2",
+      "version": "1.1.5",
       "arch": "arm64",
       "launcherArchitectures": [
         "arm64"
       ],
       "minimumMacOS": "13.0",
       "manifestRelative": "helper.json",
-      "manifestSha256": "3fcfc017900b1e003a210377f59b53114f8e6e186d864c9ac269bf902e503303",
+      "manifestSha256": "8fc9a1a9cf9d55c1eaf5452e5954a9f16f1c3cf933a922c89aec2895eeab349c",
       "sourceSha256": "a95dfc40811e331ffde87ccca5e52e9bc1683bd3c90b09734bf1fcd46a3969ff",
       "updatePolicy": "manual",
-      "tag": "android-privacy/v1.1.2/arm64",
+      "tag": "android-privacy/v1.1.5/arm64",
       "asset": {
-        "filename": "android-privacy-1.1.2-arm64.tar.gz",
-        "sha256": "7ef576df1d49fcfaace1acbc45016e5e4c35efe9de91a4212f24b8804f2155a8",
-        "bytes": 26710,
-        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/android-privacy%2Fv1.1.2%2Farm64/android-privacy-1.1.2-arm64.tar.gz"
+        "filename": "android-privacy-1.1.5-arm64.tar.gz",
+        "sha256": "937a3a495bb091dcdbc5d716ada37cd5ec9e92807822b845c94a22e001fce432",
+        "bytes": 27265,
+        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/android-privacy%2Fv1.1.5%2Farm64/android-privacy-1.1.5-arm64.tar.gz"
       },
       "source": {
         "repository": "procrastinine/maclauncher-builds",
-        "revision": "f245d0abaa8f852118cfa3280aa01c4106b6e0d2"
+        "revision": "bc6263f860cae2a22db42d1aef39707e99d430b9"
       }
     },
     {
       "schemaVersion": 2,
       "id": "catsystem2-kif-crypto",
-      "version": "1.1.2",
+      "version": "1.1.5",
       "arch": "arm64",
       "launcherArchitectures": [
         "arm64"
       ],
       "minimumMacOS": "11.0",
       "manifestRelative": "helper.json",
-      "manifestSha256": "8f94aa3f9192d83df9089b83cca656381277887dec1859c1561e57ba4d0e1a74",
+      "manifestSha256": "cec6f16a4911db0589e47f0076d205a0437b2931342276d1f5592316131cf028",
       "sourceSha256": "325c23b2d1dab9c3c0818da1d9c64b20f21fc959181b25dbe6b7a32a8a792f0c",
       "updatePolicy": "manual",
-      "tag": "catsystem2-kif-crypto/v1.1.2/arm64",
+      "tag": "catsystem2-kif-crypto/v1.1.5/arm64",
       "asset": {
-        "filename": "catsystem2-kif-crypto-1.1.2-arm64.tar.gz",
-        "sha256": "8549007db18b8a87a35fd34051038d7b92013c94b0ba1c8a60784d7a9f05e564",
-        "bytes": 10400,
-        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/catsystem2-kif-crypto%2Fv1.1.2%2Farm64/catsystem2-kif-crypto-1.1.2-arm64.tar.gz"
+        "filename": "catsystem2-kif-crypto-1.1.5-arm64.tar.gz",
+        "sha256": "f48f241c585efd501854700933a6e8b3c275977b8b350dcbe41d88676b6c0d87",
+        "bytes": 10959,
+        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/catsystem2-kif-crypto%2Fv1.1.5%2Farm64/catsystem2-kif-crypto-1.1.5-arm64.tar.gz"
       },
       "source": {
         "repository": "procrastinine/maclauncher-builds",
-        "revision": "f245d0abaa8f852118cfa3280aa01c4106b6e0d2"
+        "revision": "f445a97387537e90d6f56d5e6b30d8ba395aa2aa"
       }
     },
     {
       "schemaVersion": 2,
       "id": "catsystem2-kif-crypto",
-      "version": "1.1.2",
+      "version": "1.1.5",
       "arch": "x64",
       "launcherArchitectures": [
         "arm64",
@@ -145,50 +145,50 @@
       ],
       "minimumMacOS": "11.0",
       "manifestRelative": "helper.json",
-      "manifestSha256": "bc53a12cc21f2977ac3ae13225b0e3f17f0c9e594afe99e91d867e6e243ba6a0",
+      "manifestSha256": "e6fbc6045c982683f5135e81ac4051fca43455a6ab6f24a9203a658139480251",
       "sourceSha256": "325c23b2d1dab9c3c0818da1d9c64b20f21fc959181b25dbe6b7a32a8a792f0c",
       "updatePolicy": "manual",
-      "tag": "catsystem2-kif-crypto/v1.1.2/x64",
+      "tag": "catsystem2-kif-crypto/v1.1.5/x64",
       "asset": {
-        "filename": "catsystem2-kif-crypto-1.1.2-x64.tar.gz",
-        "sha256": "5bafa0cf9609745fa5b6e4423f53567ca2e537e4c436c1b45476b03fca2e86da",
-        "bytes": 10266,
-        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/catsystem2-kif-crypto%2Fv1.1.2%2Fx64/catsystem2-kif-crypto-1.1.2-x64.tar.gz"
+        "filename": "catsystem2-kif-crypto-1.1.5-x64.tar.gz",
+        "sha256": "5175828eb3686d8abad1225a920c5c0d1d41036a6602449e9abf72a80a2d18bc",
+        "bytes": 10809,
+        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/catsystem2-kif-crypto%2Fv1.1.5%2Fx64/catsystem2-kif-crypto-1.1.5-x64.tar.gz"
       },
       "source": {
         "repository": "procrastinine/maclauncher-builds",
-        "revision": "f245d0abaa8f852118cfa3280aa01c4106b6e0d2"
+        "revision": "f445a97387537e90d6f56d5e6b30d8ba395aa2aa"
       }
     },
     {
       "schemaVersion": 2,
       "id": "ios-playtools-paths",
-      "version": "1.1.2",
+      "version": "1.1.5",
       "arch": "arm64",
       "launcherArchitectures": [
         "arm64"
       ],
       "minimumMacOS": "12.0",
       "manifestRelative": "helper.json",
-      "manifestSha256": "e146e163514d2b81683ab6b365e1a01c2f52e072a35beb8107d1ff0d5c5e62dc",
+      "manifestSha256": "8e33085b7d0317af8557c2a9068fe263fd72cbb454833bd7c6480fa4637a14af",
       "sourceSha256": "2af09a89b7f8fd6f6814f023654ac9a503c59db7c950f960721a6846cc4ddb7e",
       "updatePolicy": "manual",
-      "tag": "ios-playtools-paths/v1.1.2/arm64",
+      "tag": "ios-playtools-paths/v1.1.5/arm64",
       "asset": {
-        "filename": "ios-playtools-paths-1.1.2-arm64.tar.gz",
-        "sha256": "d5dea403f4cdad3400b5a886231ab62745fbae1a58684a15b8387378971ff5e5",
-        "bytes": 23993,
-        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/ios-playtools-paths%2Fv1.1.2%2Farm64/ios-playtools-paths-1.1.2-arm64.tar.gz"
+        "filename": "ios-playtools-paths-1.1.5-arm64.tar.gz",
+        "sha256": "c6f7367ff552d88cde1874939db4d3b017afe6c9df2a5e3056328c085072d2d5",
+        "bytes": 24459,
+        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/ios-playtools-paths%2Fv1.1.5%2Farm64/ios-playtools-paths-1.1.5-arm64.tar.gz"
       },
       "source": {
         "repository": "procrastinine/maclauncher-builds",
-        "revision": "f245d0abaa8f852118cfa3280aa01c4106b6e0d2"
+        "revision": "f445a97387537e90d6f56d5e6b30d8ba395aa2aa"
       }
     },
     {
       "schemaVersion": 2,
       "id": "java-steamworks",
-      "version": "1.10.0-MCLv4",
+      "version": "1.10.0-MCLv7",
       "arch": "universal",
       "launcherArchitectures": [
         "arm64",
@@ -196,25 +196,25 @@
       ],
       "minimumMacOS": "11.0",
       "manifestRelative": "helper.json",
-      "manifestSha256": "f004d9e3ec61e1d9952c0807a5ee2a979c7a2f27546f5181bff7d896fe53ea6a",
+      "manifestSha256": "1e3a18ef4a8de5e9a08476f9e042871f72d6797381d928a4c8c82e5eecfc5e46",
       "sourceSha256": "b92ea7eac757c843c358fd2de0103a0851d94f4f5a748dd0f56e7979f9daf141",
       "updatePolicy": "manual",
-      "tag": "java-steamworks/v1.10.0-MCLv4/universal",
+      "tag": "java-steamworks/v1.10.0-MCLv7/universal",
       "asset": {
-        "filename": "java-steamworks-1.10.0-MCLv4-universal.tar.gz",
-        "sha256": "8d0af736133a324b7a13c564ce4d8e5c2e0bec5693e014d08d5225a2f7c670b0",
-        "bytes": 155252,
-        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/java-steamworks%2Fv1.10.0-MCLv4%2Funiversal/java-steamworks-1.10.0-MCLv4-universal.tar.gz"
+        "filename": "java-steamworks-1.10.0-MCLv7-universal.tar.gz",
+        "sha256": "b715554640510731ebc20fb7a349c00ce9b2b178cf131527895e4529918db14a",
+        "bytes": 155611,
+        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/java-steamworks%2Fv1.10.0-MCLv7%2Funiversal/java-steamworks-1.10.0-MCLv7-universal.tar.gz"
       },
       "source": {
         "repository": "procrastinine/maclauncher-builds",
-        "revision": "f245d0abaa8f852118cfa3280aa01c4106b6e0d2"
+        "revision": "f445a97387537e90d6f56d5e6b30d8ba395aa2aa"
       }
     },
     {
       "schemaVersion": 2,
       "id": "java-steamworks",
-      "version": "1.9.0-MCLv4",
+      "version": "1.9.0-MCLv7",
       "arch": "x64",
       "launcherArchitectures": [
         "arm64",
@@ -222,25 +222,25 @@
       ],
       "minimumMacOS": "10.9",
       "manifestRelative": "helper.json",
-      "manifestSha256": "85a9d73d906893f166ccc8b39b542f8cac3b31fd4e14a0f6af1bcea25e9fc290",
+      "manifestSha256": "d113e3f0e4d8d4e2e156a388199e5e1878ed178fb4b576aebafbb37452c6ff98",
       "sourceSha256": "b92ea7eac757c843c358fd2de0103a0851d94f4f5a748dd0f56e7979f9daf141",
       "updatePolicy": "manual",
-      "tag": "java-steamworks/v1.9.0-MCLv4/x64",
+      "tag": "java-steamworks/v1.9.0-MCLv7/x64",
       "asset": {
-        "filename": "java-steamworks-1.9.0-MCLv4-x64.tar.gz",
-        "sha256": "815557217dce7a2c81521e1736c56b5a92439394128551d0cc7cc77df561a394",
-        "bytes": 92729,
-        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/java-steamworks%2Fv1.9.0-MCLv4%2Fx64/java-steamworks-1.9.0-MCLv4-x64.tar.gz"
+        "filename": "java-steamworks-1.9.0-MCLv7-x64.tar.gz",
+        "sha256": "a7bb802f541bc988a54ca2b1696538c476776452cc6412c74f647bbe445f2913",
+        "bytes": 93059,
+        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/java-steamworks%2Fv1.9.0-MCLv7%2Fx64/java-steamworks-1.9.0-MCLv7-x64.tar.gz"
       },
       "source": {
         "repository": "procrastinine/maclauncher-builds",
-        "revision": "f245d0abaa8f852118cfa3280aa01c4106b6e0d2"
+        "revision": "f445a97387537e90d6f56d5e6b30d8ba395aa2aa"
       }
     },
     {
       "schemaVersion": 2,
       "id": "love-luasteam",
-      "version": "4.0.2-MCLv4",
+      "version": "4.0.2-MCLv7",
       "arch": "universal",
       "launcherArchitectures": [
         "arm64",
@@ -248,25 +248,25 @@
       ],
       "minimumMacOS": "13.0",
       "manifestRelative": "helper.json",
-      "manifestSha256": "509a5b783f40a6fd9ad36cea501d14b8362994fd2ded22a8a92389a0bb428bd5",
-      "sourceSha256": "5d78a1e1d39f661727a583e25cfd3d32ab26bcc545374fb3203d51e7c1c3e181",
+      "manifestSha256": "718b30d2755948a80a5dda1654a15c6fdd756d4d619ba26a2906656aa56ae75d",
+      "sourceSha256": "9081894e5ec77cdaf43b4812bffb84c879d32ea452bc5ed914d9fd298c26dddf",
       "updatePolicy": "manual",
-      "tag": "love-luasteam/v4.0.2-MCLv4/universal",
+      "tag": "love-luasteam/v4.0.2-MCLv7/universal",
       "asset": {
-        "filename": "love-luasteam-4.0.2-MCLv4-universal.tar.gz",
-        "sha256": "aeea323ad6e49601d3dc5b4c06b9cb8946cd385391fb86fa7befdb4263627d72",
-        "bytes": 84395,
-        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/love-luasteam%2Fv4.0.2-MCLv4%2Funiversal/love-luasteam-4.0.2-MCLv4-universal.tar.gz"
+        "filename": "love-luasteam-4.0.2-MCLv7-universal.tar.gz",
+        "sha256": "b64ee7056b29e6228a58f8990d33f6110021f1d39abe1e7a812942bd39ac6ed2",
+        "bytes": 84717,
+        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/love-luasteam%2Fv4.0.2-MCLv7%2Funiversal/love-luasteam-4.0.2-MCLv7-universal.tar.gz"
       },
       "source": {
         "repository": "procrastinine/maclauncher-builds",
-        "revision": "f245d0abaa8f852118cfa3280aa01c4106b6e0d2"
+        "revision": "f445a97387537e90d6f56d5e6b30d8ba395aa2aa"
       }
     },
     {
       "schemaVersion": 2,
       "id": "mkxpz-config-helper",
-      "version": "1.1.2",
+      "version": "1.1.5",
       "arch": "universal",
       "launcherArchitectures": [
         "arm64",
@@ -274,25 +274,25 @@
       ],
       "minimumMacOS": "11.0",
       "manifestRelative": "helper.json",
-      "manifestSha256": "4b6c4e98b3d976d2db3e2692103252212c28955299997dc1d1854b5c187c502f",
+      "manifestSha256": "6630677278b3dbe3f7d0e058550518862033f70218a7746080294cf864b91a96",
       "sourceSha256": "2d266fa0916eafa57826a153ae72519ea9c3b4df348cfe219b731b5ae8ac8515",
       "updatePolicy": "manual",
-      "tag": "mkxpz-config-helper/v1.1.2/universal",
+      "tag": "mkxpz-config-helper/v1.1.5/universal",
       "asset": {
-        "filename": "mkxpz-config-helper-1.1.2-universal.tar.gz",
-        "sha256": "397c4e9788999ae4bd784c2019d42499e6acccd527f75be90570c853c205218b",
-        "bytes": 21609,
-        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/mkxpz-config-helper%2Fv1.1.2%2Funiversal/mkxpz-config-helper-1.1.2-universal.tar.gz"
+        "filename": "mkxpz-config-helper-1.1.5-universal.tar.gz",
+        "sha256": "c9a00c62899a1caecbde45af55c393fe7f013aece0cfde5f32f13af7ceb02b2f",
+        "bytes": 22078,
+        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/mkxpz-config-helper%2Fv1.1.5%2Funiversal/mkxpz-config-helper-1.1.5-universal.tar.gz"
       },
       "source": {
         "repository": "procrastinine/maclauncher-builds",
-        "revision": "f245d0abaa8f852118cfa3280aa01c4106b6e0d2"
+        "revision": "f445a97387537e90d6f56d5e6b30d8ba395aa2aa"
       }
     },
     {
       "schemaVersion": 2,
       "id": "reshade",
-      "version": "0.3.3",
+      "version": "0.3.6",
       "arch": "universal",
       "launcherArchitectures": [
         "arm64",
@@ -300,52 +300,52 @@
       ],
       "minimumMacOS": "13.0",
       "manifestRelative": "runtime.json",
-      "manifestSha256": "ba265e6349faad8d83177a5a46998bf02d4910691aae34ec04b56969779b1b92",
-      "sourceSha256": "e466435248d6072dc899ec1055d4619889dc2cf636fbcb4782cd787e08da9e7d",
+      "manifestSha256": "8236fa5545b5fa5c726af6731d2b3dee8722423568af488ab1225924ea236faa",
+      "sourceSha256": "a6740b9636a5e059e7cabf975c34b3a359bafa350b6104f2ed1aabdd84559942",
       "updatePolicy": "manual",
-      "tag": "reshade/v0.3.3/universal",
+      "tag": "reshade/v0.3.6/universal",
       "asset": {
-        "filename": "reshade-0.3.3-universal.tar.gz",
-        "sha256": "ebf7111b57d36baa5f674636fa40e7140e86569b237d484db63c3774548c296b",
-        "bytes": 59564456,
-        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/reshade%2Fv0.3.3%2Funiversal/reshade-0.3.3-universal.tar.gz"
+        "filename": "reshade-0.3.6-universal.tar.gz",
+        "sha256": "d4a81c40024c6e86509d0c012b91314d2e5aa15b35f1cefce8ecb7644b1e877e",
+        "bytes": 59702565,
+        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/reshade%2Fv0.3.6%2Funiversal/reshade-0.3.6-universal.tar.gz"
       },
       "source": {
         "repository": "procrastinine/maclauncher-builds",
-        "revision": "f245d0abaa8f852118cfa3280aa01c4106b6e0d2"
+        "revision": "5fe354a9e824330c2afca1efe7ea90b913ac0335"
       },
       "launcherContract": 2
     },
     {
       "schemaVersion": 2,
       "id": "reshade",
-      "version": "0.3.3",
+      "version": "0.3.6",
       "arch": "x64",
       "launcherArchitectures": [
         "x64"
       ],
       "minimumMacOS": "13.0",
       "manifestRelative": "runtime.json",
-      "manifestSha256": "015a75f54e93290255d7cb43aea36e98efd0d14bc3ab134e68747cd70f0fdd32",
-      "sourceSha256": "d3e3cf16313b73110d7bbc6beb834f7c8f177425bec5a415ab38f770e80ba5dc",
+      "manifestSha256": "1cd4266787913f7d62ea3ff68c1be6022f1e592b12f68b6acf57015591855de7",
+      "sourceSha256": "da00b1b8a8d34ea4533ae855ea6c755fef366155e19325bbe9c9e01bdfadb45c",
       "updatePolicy": "manual",
-      "tag": "reshade/v0.3.3/x64",
+      "tag": "reshade/v0.3.6/x64",
       "asset": {
-        "filename": "reshade-0.3.3-x64.tar.gz",
-        "sha256": "3b2b9b362ca9bacd04751c98ab8d87cd5163aea5ccf24de765ada0d72e903f2d",
-        "bytes": 28000859,
-        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/reshade%2Fv0.3.3%2Fx64/reshade-0.3.3-x64.tar.gz"
+        "filename": "reshade-0.3.6-x64.tar.gz",
+        "sha256": "3d529da1d4acf30ad1031042272f168a49f83cedee8bbd8757b82437cf4f0cd3",
+        "bytes": 28134083,
+        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/reshade%2Fv0.3.6%2Fx64/reshade-0.3.6-x64.tar.gz"
       },
       "source": {
         "repository": "procrastinine/maclauncher-builds",
-        "revision": "f245d0abaa8f852118cfa3280aa01c4106b6e0d2"
+        "revision": "5fe354a9e824330c2afca1efe7ea90b913ac0335"
       },
       "launcherContract": 2
     },
     {
       "schemaVersion": 2,
       "id": "steam-api-helper",
-      "version": "0.5.3",
+      "version": "0.5.6",
       "arch": "universal",
       "launcherArchitectures": [
         "arm64",
@@ -353,25 +353,25 @@
       ],
       "minimumMacOS": "13.0",
       "manifestRelative": "helper.json",
-      "manifestSha256": "f5bf1b892f4dc203dc26de333d8e603e65b9058a6fd066b9866c337a028ba728",
+      "manifestSha256": "3f9feacb55307d164bae819a78dd492614f32df95eb9bcc124ad58d8cda05aed",
       "sourceSha256": "40597e2596bf3df91e7a8d1be6939f75d2d427bbeb91d0ac2316420c1c0cb23e",
       "updatePolicy": "manual",
-      "tag": "steam-api-helper/v0.5.3/universal",
+      "tag": "steam-api-helper/v0.5.6/universal",
       "asset": {
-        "filename": "steam-api-helper-0.5.3-universal.tar.gz",
-        "sha256": "47cc6828b8ac44fc143cfb35b8838c93cfcb196c0ef121a50dfbe360f8633be1",
-        "bytes": 102340,
-        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/steam-api-helper%2Fv0.5.3%2Funiversal/steam-api-helper-0.5.3-universal.tar.gz"
+        "filename": "steam-api-helper-0.5.6-universal.tar.gz",
+        "sha256": "c4ac0be23be6dd8925f3e6f982f3c763dc608b83a45788d80c62fc5aa9cea8f2",
+        "bytes": 102917,
+        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/steam-api-helper%2Fv0.5.6%2Funiversal/steam-api-helper-0.5.6-universal.tar.gz"
       },
       "source": {
         "repository": "procrastinine/maclauncher-builds",
-        "revision": "f245d0abaa8f852118cfa3280aa01c4106b6e0d2"
+        "revision": "f445a97387537e90d6f56d5e6b30d8ba395aa2aa"
       }
     },
     {
       "schemaVersion": 2,
       "id": "steam-ticket-loader",
-      "version": "0.1.3",
+      "version": "0.1.6",
       "arch": "universal",
       "launcherArchitectures": [
         "arm64",
@@ -379,69 +379,69 @@
       ],
       "minimumMacOS": "13.0",
       "manifestRelative": "helper.json",
-      "manifestSha256": "a1d3149ba65a29caeaf4b0199a9661c33b395a91c8fd865314a2c0b675ab1d9a",
+      "manifestSha256": "9ef3680c7788f3c4f6f31853f1d82f1d7138bc0cc8061e17f8fa628f9053a29c",
       "sourceSha256": "5b5604323f8d6a016efb50056403fe504271ddbd70ba738b268eb3b4dc223f00",
       "updatePolicy": "manual",
-      "tag": "steam-ticket-loader/v0.1.3/universal",
+      "tag": "steam-ticket-loader/v0.1.6/universal",
       "asset": {
-        "filename": "steam-ticket-loader-0.1.3-universal.tar.gz",
-        "sha256": "739ed4690dc6c6950947f0edaa108decaa6d078d8fc1de27b56a08e3096d583d",
-        "bytes": 9523,
-        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/steam-ticket-loader%2Fv0.1.3%2Funiversal/steam-ticket-loader-0.1.3-universal.tar.gz"
+        "filename": "steam-ticket-loader-0.1.6-universal.tar.gz",
+        "sha256": "167f3777629568d8af904c2cbdc18e70c5188e10b4e31e491e6bc03f87e00635",
+        "bytes": 10062,
+        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/steam-ticket-loader%2Fv0.1.6%2Funiversal/steam-ticket-loader-0.1.6-universal.tar.gz"
       },
       "source": {
         "repository": "procrastinine/maclauncher-builds",
-        "revision": "f245d0abaa8f852118cfa3280aa01c4106b6e0d2"
+        "revision": "f445a97387537e90d6f56d5e6b30d8ba395aa2aa"
       }
     },
     {
       "schemaVersion": 2,
       "id": "web-renderer-network",
-      "version": "1.1.2",
+      "version": "1.1.5",
       "arch": "arm64",
       "launcherArchitectures": [
         "arm64"
       ],
       "minimumMacOS": "11.0",
       "manifestRelative": "helper.json",
-      "manifestSha256": "0d5a6fe657ca3b8c8238c23fe6b1e1a488ade960e085ca42570e0dc8deebefae",
+      "manifestSha256": "a8e0457bb683ffb318df3ba2ed74f91fe4618b6225b04c7720844ce3e0d68a94",
       "sourceSha256": "9d1a5fb91b8ea207ec117aaabb62a1b7925637cec958bd0b443b03f9eaa0631c",
       "updatePolicy": "manual",
-      "tag": "web-renderer-network/v1.1.2/arm64",
+      "tag": "web-renderer-network/v1.1.5/arm64",
       "asset": {
-        "filename": "web-renderer-network-1.1.2-arm64.tar.gz",
-        "sha256": "75802054acdee90d2f4ab5f429e758e5a267f91586bd24bd7194abd2d968a9a8",
-        "bytes": 10246,
-        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/web-renderer-network%2Fv1.1.2%2Farm64/web-renderer-network-1.1.2-arm64.tar.gz"
+        "filename": "web-renderer-network-1.1.5-arm64.tar.gz",
+        "sha256": "649288770b6e5da7aa8c631a1ea7534ec7fa433bb53c9c1cafeba05b93f82868",
+        "bytes": 10732,
+        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/web-renderer-network%2Fv1.1.5%2Farm64/web-renderer-network-1.1.5-arm64.tar.gz"
       },
       "source": {
         "repository": "procrastinine/maclauncher-builds",
-        "revision": "f245d0abaa8f852118cfa3280aa01c4106b6e0d2"
+        "revision": "f445a97387537e90d6f56d5e6b30d8ba395aa2aa"
       }
     },
     {
       "schemaVersion": 2,
       "id": "web-renderer-network",
-      "version": "1.1.2",
+      "version": "1.1.5",
       "arch": "x64",
       "launcherArchitectures": [
         "x64"
       ],
       "minimumMacOS": "11.0",
       "manifestRelative": "helper.json",
-      "manifestSha256": "edab2cb8a4bb1aa2b2e91e25b42f66d0053120594f02f5d544e040dff1b81589",
+      "manifestSha256": "17a9b9a1bf2cc6edef2c3f396fe80055cd8b2cae4fb16a789ea473710bf45c9e",
       "sourceSha256": "9d1a5fb91b8ea207ec117aaabb62a1b7925637cec958bd0b443b03f9eaa0631c",
       "updatePolicy": "manual",
-      "tag": "web-renderer-network/v1.1.2/x64",
+      "tag": "web-renderer-network/v1.1.5/x64",
       "asset": {
-        "filename": "web-renderer-network-1.1.2-x64.tar.gz",
-        "sha256": "fd7958bea436a9919f321d937d8dda96f38a07c096b455f655553b491735c352",
-        "bytes": 10088,
-        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/web-renderer-network%2Fv1.1.2%2Fx64/web-renderer-network-1.1.2-x64.tar.gz"
+        "filename": "web-renderer-network-1.1.5-x64.tar.gz",
+        "sha256": "59cae04ddd8a348f3a58290378ac2f692c4e97fa939401c66acb0b2434aebd28",
+        "bytes": 10563,
+        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/web-renderer-network%2Fv1.1.5%2Fx64/web-renderer-network-1.1.5-x64.tar.gz"
       },
       "source": {
         "repository": "procrastinine/maclauncher-builds",
-        "revision": "f245d0abaa8f852118cfa3280aa01c4106b6e0d2"
+        "revision": "f445a97387537e90d6f56d5e6b30d8ba395aa2aa"
       }
     }
   ]

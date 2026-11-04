@@ -250,23 +250,41 @@ async function extractPayload(archive, staging, config, dependencies) {
   } finally { input.destroy(); stream.destroy(); }
 }
 async function downloadPayload(url, output, dependencies) {
-  let current = publishedUrl(url);
   const request = dependencies?.fetch || fetch;
-  for (let redirects = 0; redirects <= 8; redirects++) {
-    const response = await request(current, { redirect: 'manual', signal: AbortSignal.timeout(15 * 60 * 1000) });
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      const location = response.headers.get('location'); await response.body?.cancel();
-      if (!location) throw new Error('Native payload redirect has no destination.');
-      current = publishedUrl(new URL(location, current).href); continue;
+  const wait = dependencies?.wait || (milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)));
+  for (let attempt = 0; attempt < 6; attempt++) {
+    let current = publishedUrl(url);
+    const temporary = output + '.download-' + crypto.randomUUID();
+    try {
+      for (let redirects = 0; redirects <= 8; redirects++) {
+        const response = await request(current, { redirect: 'manual', signal: AbortSignal.timeout(15 * 60 * 1000) });
+        if ([301, 302, 303, 307, 308].includes(response.status)) {
+          const location = response.headers.get('location'); await response.body?.cancel();
+          if (!location) throw new Error('Native payload redirect has no destination.');
+          current = publishedUrl(new URL(location, current).href); continue;
+        }
+        if (!response.ok || !response.body) {
+          await response.body?.cancel();
+          throw Object.assign(new Error(`Native payload download failed (HTTP ${response.status}).`), { statusCode: response.status });
+        }
+        const size = response.headers.get('content-length');
+        if (size && (!/^\d+$/.test(size) || Number(size) > LIMITS.archiveBytes)) { await response.body.cancel(); throw new Error('Native payload download exceeds its limit.'); }
+        let bytes = 0;
+        async function* chunks() { for await (const chunk of Readable.fromWeb(response.body)) { bytes += chunk.length; if (bytes > LIMITS.archiveBytes) throw new Error('Native payload download exceeds its limit.'); yield chunk; } }
+        await pipeline(Readable.from(chunks()), fs.createWriteStream(temporary, { flags: 'wx', mode: 0o600 }));
+        fs.renameSync(temporary, output); return;
+      }
+      throw new Error('Native payload has too many redirects.');
+    } catch (error) {
+      fs.rmSync(temporary, { force: true });
+      const status = error.statusCode, code = error.code || error.cause?.code;
+      const transient = status ? status === 408 || status === 429 || status >= 500 && status <= 599 :
+        ['ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'ECONNRESET', 'EPIPE', 'ENETUNREACH', 'EHOSTUNREACH', 'ERR_STREAM_PREMATURE_CLOSE'].includes(code) ||
+        /^UND_ERR_/.test(code || '') || ['AbortError', 'TimeoutError'].includes(error.name) || /fetch failed|connection (?:reset|closed|timed out)|socket hang up|network (?:error|unreachable)/i.test(error.message);
+      if (attempt === 5 || !transient) throw error;
+      await wait(5000 * 2 ** attempt);
     }
-    if (!response.ok || !response.body) throw new Error(`Native payload download failed (HTTP ${response.status}).`);
-    const size = response.headers.get('content-length');
-    if (size && (!/^\d+$/.test(size) || Number(size) > LIMITS.archiveBytes)) { await response.body.cancel(); throw new Error('Native payload download exceeds its limit.'); }
-    let bytes = 0;
-    async function* chunks() { for await (const chunk of Readable.fromWeb(response.body)) { bytes += chunk.length; if (bytes > LIMITS.archiveBytes) throw new Error('Native payload download exceeds its limit.'); yield chunk; } }
-    await pipeline(Readable.from(chunks()), fs.createWriteStream(output, { flags: 'wx', mode: 0o600 })); return;
   }
-  throw new Error('Native payload has too many redirects.');
 }
 async function importPayload({ archive, url, sha256, resourceRoot, sourceRoot, arch, maximumMacOS, dependencies } = {}) {
   const config = configuration({ arch, maximumMacOS });

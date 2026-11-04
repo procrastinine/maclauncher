@@ -210,6 +210,46 @@ test('published fetch allows bounded HTTPS redirects and verifies the exact down
   const result = await P.importPayload({ ...f, resourceRoot: f.destination, url: 'https://example.invalid/reviewed-native.tar.gz', sha256: exported.sha256 });
   assert.equal(result.published.length, 2); assert.equal(requested.length, 2);
 });
+test('published downloads retry transient failures and publish only complete files', async t => {
+  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'payload-download-retry-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const url = 'https://example.invalid/payload.tar.gz', output = path.join(root, 'payload.tar.gz');
+  const delays = []; let calls = 0;
+  await P.downloadPayload(url, output, { wait: async delay => delays.push(delay), fetch: async () =>
+    ++calls === 1 ? new Response('unavailable', { status: 503 }) : new Response('complete archive') });
+  assert.equal(calls, 2); assert.deepEqual(delays, [5000]);
+  assert.equal(fs.readFileSync(output, 'utf8'), 'complete archive');
+  assert.deepEqual(fs.readdirSync(root), ['payload.tar.gz']);
+
+  const missing = path.join(root, 'missing.tar.gz'); calls = 0; delays.length = 0;
+  await assert.rejects(P.downloadPayload(url, missing, { wait: async delay => delays.push(delay),
+    fetch: async () => { calls++; return new Response('missing', { status: 404 }); } }), /HTTP 404/);
+  assert.equal(calls, 1); assert.deepEqual(delays, []); assert.equal(fs.existsSync(missing), false);
+
+  const interrupted = path.join(root, 'interrupted.tar.gz'); calls = 0; delays.length = 0;
+  await P.downloadPayload(url, interrupted, { wait: async delay => {
+    delays.push(delay); assert.equal(fs.existsSync(interrupted), false);
+    assert.deepEqual(fs.readdirSync(root), ['payload.tar.gz']);
+  }, fetch: async () => {
+    if (++calls !== 1) return new Response('retried complete archive');
+    let sent = false;
+    return new Response(new ReadableStream({ pull(controller) {
+      assert.equal(fs.existsSync(interrupted), false);
+      if (!sent) { sent = true; controller.enqueue(new TextEncoder().encode('partial')); }
+      else controller.error(Object.assign(new Error('connection reset'), { code: 'ECONNRESET' }));
+    } }));
+  } });
+  assert.equal(calls, 2); assert.deepEqual(delays, [5000]);
+  assert.equal(fs.readFileSync(interrupted, 'utf8'), 'retried complete archive');
+
+  const failed = path.join(root, 'failed.tar.gz'); calls = 0; delays.length = 0;
+  await assert.rejects(P.downloadPayload(url, failed, { wait: async delay => delays.push(delay),
+    fetch: async () => { calls++; throw Object.assign(new Error('connection reset'), { code: 'ECONNRESET' }); } }), /connection reset/);
+  assert.equal(calls, 6); assert.deepEqual(delays, [5000, 10000, 20000, 40000, 80000]);
+  assert.equal(fs.existsSync(failed), false);
+  assert.deepEqual(fs.readdirSync(root).sort(), ['interrupted.tar.gz', 'payload.tar.gz']);
+});
+
 test('download redirects cannot downgrade to HTTP or embed credentials', async t => {
   for (const location of ['http://example.invalid/native.tar.gz', 'https://fixture:dummy@example.invalid/native.tar.gz']) {
     const f = fixture(t); let requested = 0;

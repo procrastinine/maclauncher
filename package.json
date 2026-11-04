@@ -4,7 +4,7 @@
   "author": "procrastinine <24549552+procrastinine@users.noreply.github.com>",
   "license": "MIT",
   "private": true,
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Mac-first Electron launcher with modular engine support",
   "main": "src/main/bootstrap.js",
   "scripts": {
