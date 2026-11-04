@@ -25,6 +25,8 @@ When Play or an inspector action needs a runtime or tool version that is not ins
 
 This preparation includes selected graphics adapters, Vulkan implementations and downloadable shader collections. A manual visit to Runtimes is unnecessary. Missing enabled video plugins are optional downloads: **Skip** continues playback without the declined plugin.
 
+When Automatic prefers KosmicKrisp for an Intel program on Apple Silicon with macOS 26 or later, the first Vulkan download offers the Intel GLES 3.2 build; **Use MoltenVK** continues with MoltenVK if the offer is declined, and acquisition failures use the same fallback. An installed compatible Vulkan implementation starts without another offer.
+
 Installed versions work offline and are shared between games, while saves, accounts and writable game data stay separate for each game. A version stays selectable after it is no longer offered for download. Ordinary use needs no compiler, Homebrew, source checkout or developer tools, and MacLauncher does not install developer tools on the system.
 
 MacLauncher's own [update check](../UPDATES.md) contacts GitHub only when **Check for Updates…** is chosen, or at launch when **Check for updates at launch** is on in **Settings → Launcher**; that setting is off by default.

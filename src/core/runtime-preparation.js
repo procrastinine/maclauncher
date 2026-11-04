@@ -128,9 +128,18 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
   let plans = await runtimePlans(entry, mod, info, context, managers);
   const approved = new Set(), refreshed = new Set(), declined = new Set();
   const consentKey = plan => JSON.stringify([plan.managerId, Object.entries(plan.installOptions || {}).sort(([a], [b]) => a.localeCompare(b))]);
+  function useFallback(plan, error) {
+    if (!plan.optional || !plan.fallback || context.signal?.aborted) return false;
+    declined.add(consentKey(plan));
+    const label = `${managers.find(manager => manager.id === plan.managerId)?.label || plan.label || plan.managerId} could not be installed. Using ${managers.find(manager => manager.id === plan.fallback.managerId)?.label || plan.fallback.label || plan.fallback.managerId}.`;
+    context.logger?.warn?.("[runtimes] " + label, error.message);
+    report({ phase: "prepare", label, managerId: plan.managerId });
+    return true;
+  }
   let installations;
   for (;;) {
-    installations = plans.filter(plan => !plan.optional || !declined.has(consentKey(plan))).map(plan => {
+    installations = plans.flatMap(plan => plan.optional && declined.has(consentKey(plan))
+      ? plan.fallback ? [plan.fallback] : [] : [plan]).map(plan => {
       const manager = managers.find(manager => manager.id === plan.managerId);
       if (require("../modules/shared/runtime/custom-runtime").isPath(plan.version))
         throw new Error("The selected custom runtime is unavailable. Check its path in Runtimes.");
@@ -144,6 +153,7 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
       return { manager, plan, requiresDownload, versionLabel, installedBefore };
     });
     // Consent covers discovery and acquisition before either occurs.
+    let fallbackRequired = false;
     for (const { manager, plan, requiresDownload, versionLabel } of installations) {
       const key = consentKey(plan);
       if ((requiresDownload || !plan.version || plan.discoveryRequired) && !approved.has(key)) {
@@ -151,33 +161,48 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
           label: plan.label || manager.label || manager.id, requiresDownload })) {
           if (!plan.optional) return false;
           declined.add(key);
+          fallbackRequired ||= Boolean(plan.fallback);
           continue;
         }
         approved.add(key);
       }
     }
+    if (fallbackRequired) continue;
     installations = installations.filter(({ plan }) => !plan.optional || !declined.has(consentKey(plan)));
     const unknown = installations.find(({ plan }) => !plan.version || plan.discoveryRequired);
-    if (!unknown) break;
-    const { manager, plan } = unknown, label = plan.label || manager.label || manager.id;
-    const key = JSON.stringify([manager.id, plan.installOptions || {}, plan.latestOnly === true]);
-    if (refreshed.has(key) || typeof manager.refreshCatalog !== "function")
-      throw new Error(`No ${label} versions are available to download.`);
-    refreshed.add(key);
-    report({ phase: "install", label: `Finding ${label} versions…`, managerId: manager.id });
-    await manager.refreshCatalog({ userDataDir: context.userDataDir, logger: context.logger, ...plan.installOptions,
-      force: true, latestOnly: plan.latestOnly === true });
-    context.onRuntimeStateChange?.();
+    if (unknown) {
+      const { manager, plan } = unknown, label = plan.label || manager.label || manager.id;
+      const key = JSON.stringify([manager.id, plan.installOptions || {}, plan.latestOnly === true]);
+      try {
+        if (refreshed.has(key) || typeof manager.refreshCatalog !== "function")
+          throw new Error(`No ${label} versions are available to download.`);
+        refreshed.add(key);
+        report({ phase: "install", label: `Finding ${label} versions…`, managerId: manager.id });
+        await manager.refreshCatalog({ userDataDir: context.userDataDir, logger: context.logger, ...plan.installOptions,
+          force: true, latestOnly: plan.latestOnly === true });
+        context.onRuntimeStateChange?.();
+        plans = await runtimePlans(entry, mod, info, context, managers);
+      } catch (error) { if (!useFallback(plan, error)) throw error; }
+      continue;
+    }
+    let retry = false;
+    for (const { manager, plan, installedBefore } of installations) {
+      const label = plan.label || manager.label || manager.id;
+      const progressLabel = plan.progressLabel || `Installing ${label}…`;
+      report({ phase: "install", label: progressLabel, managerId: manager.id, version: plan.version });
+      try {
+        const result = await install(manager, { ...plan.installOptions, version: plan.version }, { label, progressLabel });
+        // A version Play chose on its own may later be superseded and removed.
+        if (plan.automatic === true) require("./runtime-install-origins").recordPlayInstall({ userDataDir: context.userDataDir, manager, plan, result,
+          entry, settings: context.settings, installedBefore, logger: context.logger });
+      } catch (error) {
+        if (!useFallback(plan, error)) throw error;
+        retry = true;
+        break;
+      }
+    }
+    if (!retry) break;
     plans = await runtimePlans(entry, mod, info, context, managers);
-  }
-  for (const { manager, plan, installedBefore } of installations) {
-    const label = plan.label || manager.label || manager.id;
-    const progressLabel = plan.progressLabel || `Installing ${label}…`;
-    report({ phase: "install", label: progressLabel, managerId: manager.id, version: plan.version });
-    const result = await install(manager, { ...plan.installOptions, version: plan.version }, { label, progressLabel });
-    // A version Play chose on its own may later be superseded and removed.
-    if (plan.automatic === true) require("./runtime-install-origins").recordPlayInstall({ userDataDir: context.userDataDir, manager, plan, result,
-      entry, settings: context.settings, installedBefore, logger: context.logger });
   }
   await context.flushRuntimeUses?.();
   const declaration = info.runtime?.preLaunch?.[context.runtimeId];
