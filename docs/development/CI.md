@@ -14,6 +14,8 @@ A GitHub Actions workflow, [Build macOS app](../../.github/workflows/macos-app.y
 
 The app's package lock, [`build/runtime-packages.json`](../../build/runtime-packages.json), lists each package that the app includes from MacLauncher Builds, with its exact project, version, architecture, URL, size and SHA-256. Each record also lists the app architectures that include it, so the same lock serves both builds; [Application assembly](../runtimes/RUNTIME_DISTRIBUTION.md#application-assembly) describes what each app contains. For every package version it needs, an app includes the build for its own CPU when one exists, and otherwise the Universal build. The workflow downloads the packages for the architecture it builds and compiles no game runtimes. Updating one runtime changes only its package entry, and unchanged packages are reused across app releases. The workflow needs no repository variables for package URLs, checksums or architectures.
 
+Module declarations name the included projects and package architectures. Release versions and identities come only from the app lock; file inventories come from the sealed declarations in those packages. To update an included package, select its published version in the lock, run `node scripts/runtime-packages.cjs lock /path/to/catalogs` against the Builds catalogs, then run `pnpm install`. The lock command resolves the selected versions to their published records; it does not select newer versions automatically.
+
 The app includes Python, 7-Zip, extraction helpers and the core graphics and internal-helper packages that the [distribution policy](../runtimes/RUNTIME_DISTRIBUTION.md#distribution-policy) selects. Game runtimes, including Flash Player, are not part of the app build; the app downloads them.
 
 ## Build

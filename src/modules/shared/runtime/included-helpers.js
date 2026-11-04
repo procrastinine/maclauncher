@@ -48,6 +48,7 @@ const MAC_NAMES = Object.freeze({ arm64: "a Mac with Apple Silicon", x64: "an In
 // features that need it report the Mac they require instead of a missing file.
 function hostRequirement(declarations, { id, arch = process.arch } = {}) {
   if (!Array.isArray(declarations)) throw new Error("Included helper declarations are invalid.");
+  declarations = require("./included-package-metadata").declarations(declarations);
   const host = launcherArch(arch), byId = new Map();
   for (const item of declarations) {
     if (!item || id !== undefined && item.id !== id) continue;

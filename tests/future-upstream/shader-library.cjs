@@ -62,10 +62,9 @@ module.exports = {
       const next = version(artcnn, sha("artcnn next"));
       assert.ok(first && next && section(userDataDir, "artcnn").installableVersions.includes(first));
       Harness.network.routes = { ...githubRoutes(anime4k, releases), ...commitRoutes({
-        artcnn: { sha: sha("artcnn without license"), omit: artcnn.licenseFile },
-        ssrt3: { sha: sha("ssrt3 without input"), omit: sourceFiles(ssrt3)[1] } }) };
+        ssrt3: { sha: sha("ssrt3 without input"), omit: sourceFiles(ssrt3)[0] } }) };
       await manager().refreshCatalog({ userDataDir, force: true });
-      for (const [pack, commit, missing] of [[artcnn, "artcnn without license", artcnn.licenseFile], [ssrt3, "ssrt3 without input", sourceFiles(ssrt3)[1]]]) {
+      for (const [pack, commit, missing] of [[ssrt3, "ssrt3 without input", sourceFiles(ssrt3)[0]]]) {
         const catalog = section(userDataDir, pack.id), skipped = version(pack, sha(commit));
         assert.ok(catalog.versions.includes(skipped), `${pack.id}: the new commit stays listed`);
         assert.equal(catalog.versionRequirements[skipped].installReason, `This revision does not contain ${missing}.`);

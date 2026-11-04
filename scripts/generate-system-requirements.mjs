@@ -35,9 +35,9 @@ const groups = [
   ["Neural video decoding and encoding", row => row.path === "neural/maclauncher-neural-video"]
 ];
 
-// The public package declarations retain the measured processor slices and
-// optional-load minima. Ordinary generation needs no installed app or binaries.
-// --resources additionally verifies those declarations against the sealed bytes.
+// Sealed package declarations retain measured processor slices and optional-load
+// minima. Generation reads the included records prepared by setup; --resources
+// additionally verifies their binary checksums and load commands.
 export function graphicsRows({packages = declarations, resources} = {}) {
   const rows = [];
   for (const declaration of packages) {

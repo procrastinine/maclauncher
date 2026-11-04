@@ -136,9 +136,13 @@ function packagingLocations(build = require("../package.json").build) {
 
 function knownIdentities() {
   const Supplementals = require("../scripts/native-supplementals.cjs"), Modules = require("../src/modules/registry");
+  const Model = require("../scripts/distribution-model.cjs"), build = require("../package.json").build;
+  const lock = require("../scripts/runtime-packages.cjs").readLock({ arch: process.arch });
+  const plan = Model.createPlan({ arch: lock.arch, maximumMacOS: lock.maximumMacOS });
   const items = Supplementals.declarations();
   const managers = [...Modules.listSharedRuntimeManagers(), ...Modules.listModules().flatMap(info => Modules.getModule(info.id)?.runtimeManagers || [])];
-  return { items, declared: new Set(items.map(item => item.id)), managers: new Set(managers.map(manager => manager.id)), packaging: packagingLocations() };
+  return { items, declared: new Set(items.map(item => item.id)), managers: new Set(managers.map(manager => manager.id)),
+    packaging: packagingLocations({ ...build, extraResources: Model.resourceRules(plan, build.extraResources, { packages: lock.packages }) }) };
 }
 
 test("the lookup scan reports undeclared native-runtimes, Resources and src/resources locations", () => {
@@ -209,8 +213,9 @@ test("included-helper lookups read only declarations that application packaging 
     if (!/\bresolveIncluded\(/.test(source) || file === RESOLVER) continue;
     for (const match of source.matchAll(/require\(["'](\.[^"']+\.json)["']\)/g)) {
       const value = JSON.parse(fs.readFileSync(path.resolve(ROOT, path.dirname(file), match[1]), "utf8"));
-      if (!Array.isArray(value) || !value.some(item => item?.directoryRelative && item?.manifestSha256)) continue;
-      for (const item of value) if (!collected.has(`${item.directoryRelative}:${item.manifestSha256}`)) problems.push(`${file}: ${item.directoryRelative}`);
+      if (!Array.isArray(value) || !value.some(item => item?.id && (item?.directoryRelative || item?.arch))) continue;
+      for (const item of require("../src/modules/shared/runtime/included-package-metadata").declarations(value))
+        if (!collected.has(`${item.directoryRelative}:${item.manifestSha256}`)) problems.push(`${file}: ${item.directoryRelative}`);
     }
   }
   assert.deepEqual(problems, []);

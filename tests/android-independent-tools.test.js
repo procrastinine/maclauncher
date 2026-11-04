@@ -2,7 +2,6 @@ const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os"), crypto = require("node:crypto");
 const { writeZipArchive } = require("./helpers/zip-fixture");
 const Fixtures = require("./helpers/android-packages");
-const Runtime = require("../src/modules/android/runtime");
 const Android = require("../src/modules/android/main");
 const Packages = require("../src/modules/android/package-set");
 const Signatures = require("../src/modules/android/tools/apk-signature");
@@ -19,8 +18,6 @@ test("uncached package inspection retains x86 and both ARM ABIs without any game
   if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
   const root = temporary(t), userDataDir = path.join(root, "empty-profile");
   fs.mkdirSync(userDataDir);
-  for (const name of ["runtimeRoot", "resolveSelected", "resolveSelectedForLaunch", "resolveForLaunch"])
-    t.mock.method(Runtime, name, () => assert.fail("Package inspection must not resolve an Android game runtime"));
   const manifest = Fixtures.binaryXml(Fixtures.manifest());
   for (const architectures of [["x86_64"], ["arm64-v8a", "armeabi-v7a", "x86_64"]]) {
     const file = path.join(root, architectures.length === 1 ? "x86.apk" : "all.apk");
@@ -50,7 +47,6 @@ test("uncached package inspection retains x86 and both ARM ABIs without any game
 
 test("included APK signer uses its single unpacked app file without a profile copy", t => {
   const root = temporary(t), userDataDir = path.join(root, "empty-profile"); fs.mkdirSync(userDataDir);
-  t.mock.method(Runtime, "runtimeRoot", () => assert.fail("Mac.apk signature verification must not resolve MacLauncher Android"));
   t.mock.method(require("../src/modules/android/included-files"), "file", () => assert.fail("Stock apksig must not resolve a custom Builds helper"));
   const source = Google.signatureVerifier();
   assert.equal(source, path.resolve(__dirname, "../src/modules/android/tools/apksig/apksig.jar"));

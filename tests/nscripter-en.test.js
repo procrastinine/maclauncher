@@ -10,11 +10,13 @@ const Tools = require("../src/modules/nscripter/native-tools");
 const Manager = require("../src/modules/nscripter/runtime/onscripter-en-manager");
 const { detectGame } = require("../src/modules/nscripter/detect");
 const Scan = require("../src/modules/nscripter/scan");
+const gameFont = require("./helpers/nscripter-game-font.cjs");
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-ons-en-test-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const source = path.join(root, "Original Windows game"); fs.mkdirSync(source);
+  gameFont(source);
   return { root, source, entry: { gameId: "original-game", contentRootDir: source, gamePath: source },
     context: { userDataDir: path.join(root, "userData"), settings: {}, runtimeSettings: {} } };
 }

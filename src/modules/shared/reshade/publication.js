@@ -63,8 +63,9 @@ function createReader(file = path.join(__dirname, "distribution-supplementals.js
       stamp = identity();
       if (accepted?.identity === stamp) return accepted.manifest;
       const rows = JSON.parse(fs.readFileSync(file, "utf8"));
-      const manifest = Array.isArray(rows) && (rows.length === 1 && !rows[0]?.launcherArchitectures
+      const selected = Array.isArray(rows) && (rows.length === 1 && !rows[0]?.launcherArchitectures && rows[0]?.version
         ? rows[0] : Included.declared(rows, {id: "reshade", arch}));
+      const manifest = selected && !selected.files ? Included.requireIncluded(rows, {id:"reshade",arch}).item : selected;
       if (!Array.isArray(rows) || manifest?.id !== "reshade" ||
           typeof manifest.version !== "string" || !manifest.version ||
           !/^[a-f0-9]{64}$/.test(manifest.manifestSha256 || "") ||

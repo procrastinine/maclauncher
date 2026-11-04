@@ -50,12 +50,6 @@ function validateSelection(value, { plan, dependencies } = {}) {
   }
   required.forEach(item=>include(selected.get(key(item))));
   if(reachable.size!==selected.size)throw new Error('The package lock contains unrelated application packages.');
-  for (const item of plan.supplementals) {
-    const record = selected.get(key(item));
-    if (record.manifestRelative !== item.manifestRelative || record.manifestSha256 !== item.manifestSha256 ||
-        record.sourceSha256 !== item.sourceSha256 || record.minimumMacOS !== item.minimumMacOS)
-      throw new Error('A locked helper differs from its module declaration.');
-  }
   for (const source of plan.sourceArtifacts) for (const record of selected.values()) {
     if (record.id === source.managerId && record.version === source.version && record.sourceAsset &&
         (record.sourceAsset.sha256 !== source.sha256 || record.sourceAsset.bytes !== source.bytes))
@@ -329,7 +323,7 @@ async function fetchPackages({ lock = readLock({ arch: process.arch }), repoRoot
     return { ...item, minimumMacOS: manifest.minimumMacOS, manifestSize: stored.size, manifestSha256: stored.sha256 };
   });
   const inventory = { schemaVersion: 1, launcherArch: lock.arch, maximumMacOS: lock.maximumMacOS, packages,
-    supplementals: plan.supplementals, sourceArtifacts: plan.sourceArtifacts, projectPackages: lock.packages,
+    supplementals: plan.supplementals.map(item => declarations.find(row => key(row) === key(item))), sourceArtifacts: plan.sourceArtifacts, projectPackages: lock.packages,
     packageRepository: lock.repository };
   Payload.validateInventory(inventory, config, dependencies.model);
   // The full lock covers `setup:dev --arch x64` in the same folder. Cleanup

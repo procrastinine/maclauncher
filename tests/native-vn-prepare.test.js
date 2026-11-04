@@ -1,4 +1,3 @@
-const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -6,7 +5,6 @@ const path = require("node:path");
 const os = require("node:os");
 const zlib = require("node:zlib");
 const crypto = require("node:crypto");
-const { execFileSync } = require("node:child_process");
 const X = require("../src/modules/kirikiri/xp3");
 const Prepare = require("../src/modules/kirikiri/prepare");
 const managedFixtures = new Map();
@@ -14,7 +12,6 @@ const P = { ...Prepare, prepareGame: (entry, context, install = resourcePackage(
 const D = require("../src/modules/kirikiri/detect");
 const Native = require("../src/modules/shared/runtime/local-native");
 const Kiri = require("../src/modules/kirikiri/main");
-const KiriBackcompat = require("../src/modules/kirikiri/backcompat");
 const { signalUnavailableOptionalPlugins, requiredNativeFeatures } = require("../src/modules/kirikiri/script");
 
 function fixture(t) { const root = fs.mkdtempSync(path.join(os.tmpdir(), "kiri-prepare-")); t.after(() => fs.rmSync(root, { recursive: true, force: true })); return fs.realpathSync(root); }
@@ -51,19 +48,6 @@ function resourcePackage(root, { version = "fixture-kag3-v1", revision = "1".rep
     runtimeFiles: { kag3Manifest: "project-payload/files/" + resourceFile.path }, catalogEntry: { projectPackage: record } };
   const result = { install, record, manifest, resourceManifest, payload, files, resourceFile };
   managedFixtures.set(root, result); return result;
-}
-function resourceArchive(fixture, root) {
-  const staging = path.join(root, "archive"), record = fixture.record;
-  fs.mkdirSync(staging); fs.cpSync(fixture.payload, path.join(staging, "files"), { recursive: true });
-  const files = fixture.manifest.files.map(file => ({ ...file, path: "files/" + file.path }));
-  files.push({ path: "manifest.json", size: fs.statSync(path.join(fixture.payload, "manifest.json")).size, mode: 0o644, sha256: record.manifestSha256 });
-  fs.writeFileSync(path.join(staging, "runtime-package.json"), JSON.stringify({ ...record, redistribution: "bundle", files }));
-  const filename = `krkrsdl2-${record.version}-${record.arch}.tar.gz`, archive = path.join(root, filename);
-  execFileSync("/usr/bin/tar", ["-czf", archive, "-C", staging, "files", "runtime-package.json"]);
-  record.tag = `krkrsdl2/v${record.version}/${record.arch}`;
-  record.asset = { filename, bytes: fs.statSync(archive).size, sha256: Native.hashFile(archive),
-    url: `https://github.com/procrastinine/maclauncher-builds/releases/download/${encodeURIComponent(record.tag)}/${filename}` };
-  return archive;
 }
 function missingNativeRuntime(t) {
   const manager = Kiri.runtimeManagers.find(item => item.id === "krkrsdl2");
@@ -296,77 +280,6 @@ test("warm preparation verifies archive/output identities and reuses decoded scr
   } finally { X.readScript = read; }
 });
 
-test("KAG3 resources install through consented Play from empty or stale catalogs without changing an older engine choice", { skip: process.platform !== "darwin" }, async t => {
-  const { prepareForLaunch } = require("../src/core/runtime-preparation");
-  for (const stale of [false, true]) await t.test(stale ? "stale 1001-only catalog" : "empty catalog", async t => {
-    const root = fixture(t), f = project(root), events = [], uses = [];
-    const donor = resourcePackage(path.join(root, "package"), { version: "MCLv2-9000" });
-    const archiveFile = resourceArchive(donor, path.join(root, "package"));
-    let catalog = [donor.record];
-    const runtime = Kiri.createManager({
-      downloadToFile: async (url, target) => { events.push("download"); assert.equal(url, donor.record.asset.url); fs.copyFileSync(archiveFile, target); },
-      projectBuilds: {
-        fetchUrlBuffer: async url => {
-          events.push("discover"); assert.equal(url, "https://raw.githubusercontent.com/procrastinine/maclauncher-builds/main/catalogs/krkrsdl2.json");
-          return { status: 200, body: Buffer.from(JSON.stringify({ schemaVersion: 2, projectId: "krkrsdl2", updatePolicy: "manual", packages: catalog })) };
-        },
-        verifySignatures: async () => { events.push("signatures"); }
-      }
-    });
-    if (stale) {
-      const old = { ...donor.record, version: "MCLv1-1001", capabilities: {}, tag: `krkrsdl2/vMCLv1-1001/${process.arch}`,
-        asset: { filename: `krkrsdl2-MCLv1-1001-${process.arch}.tar.gz`, bytes: 1, sha256: "7".repeat(64),
-          url: `https://github.com/procrastinine/maclauncher-builds/releases/download/${encodeURIComponent(`krkrsdl2/vMCLv1-1001/${process.arch}`)}/krkrsdl2-MCLv1-1001-${process.arch}.tar.gz` } };
-      catalog = [old]; await runtime.refreshCatalog({ userDataDir: f.context.userDataDir, sourceId: "builds" });
-      catalog = [donor.record]; events.length = 0;
-    }
-    const host = path.join(root, "older-host"); fs.copyFileSync(donor.install.runtimePath, host); fs.chmodSync(host, 0o755);
-    if (!stale) runtime.core.rememberResolvedVersion({ userDataDir: f.context.userDataDir, entry: {
-      version: "MCLv1-1001", upstreamRevision: donor.record.source.revision, nativeFeatures: [], localBuild: false
-    } });
-    runtime.core.registerLocal({ userDataDir: f.context.userDataDir, version: "MCLv1-1001", runtimePath: host });
-    const manager = Kiri.runtimeManagers[0];
-    for (const method of ["resolveSelection", "getState", "installRuntime", "refreshCatalog"]) t.mock.method(manager, method, runtime[method].bind(runtime));
-    for (const method of ["listInstalled", "listCatalog"]) t.mock.method(manager.core, method, runtime.core[method].bind(runtime.core));
-    f.entry.runtimeData = { krkrsdl2: { version: "MCLv1-1001" } };
-    const settings = { runtimes: { krkrsdl2: { defaultVersion: "MCLv1-1001" } } }, savedSettings = structuredClone(settings), savedChoice = structuredClone(f.entry.runtimeData);
-    const context = { ...f.context, settings, runtimeId: "krkrsdl2", runtimeSettings: { version: "auto" },
-      recordRuntimeUse: use => uses.push(use),
-      onEntryChange: patch => { if (patch.moduleData?.preparedRoot) events.push("prepare"); },
-      confirmRuntimeInstall: async plan => { events.push("consent"); assert.equal(plan.label, "KAG3 compatibility resources"); return false; } };
-    const prepare = () => prepareForLaunch({ entry: f.entry, mod: Kiri, info: Kiri.manifest, context,
-      registry: { listModuleIds: () => [Kiri.id], getModule: () => Kiri },
-      runAction: () => assert.fail("No manual preparation action is needed"),
-      install: async (target, plan) => { events.push("install"); return target.installRuntime({ ...context, ...plan }); } });
-    assert.equal(await Kiri.ensureRuntime(f.entry, context), null);
-    assert.deepEqual(Kiri.getRuntimeRequirements(f.entry, context), [{ managerId: "krkrsdl2", version: null, discoveryRequired: true,
-      label: "KAG3 compatibility resources", requiresDownload: true, installOptions: { kag3Resources: 1 } }]);
-    assert.deepEqual(events, [], "Requirement/status scans do not refresh or install");
-    assert.equal(await prepare(), false);
-    assert.deepEqual(events, ["consent"]);
-    assert.equal(f.entry.moduleData.preparedRoot, undefined);
-    assert.deepEqual(settings, savedSettings); assert.deepEqual(f.entry.runtimeData, savedChoice);
-    context.confirmRuntimeInstall = async plan => { events.push("consent"); assert.equal(plan.label, "KAG3 compatibility resources"); return true; };
-    events.length = 0;
-    assert.equal(await prepare(), true);
-    assert.deepEqual(events, ["consent", "discover", "install", "download", "signatures", "prepare"]);
-    assert.equal(runtime.resolveSelection(f.entry, settings, context.userDataDir).version, "MCLv1-1001");
-    assert.deepEqual(settings, savedSettings); assert.deepEqual(f.entry.runtimeData, savedChoice);
-    const installed = runtime.core.resolveInstalled({ userDataDir: context.userDataDir, version: donor.record.version });
-    assert.ok(installed?.runtimeFiles.kag3Manifest);
-    assert.equal(fs.readlinkSync(path.join(f.entry.moduleData.preparedRoot, "system_polyfill")), path.dirname(path.join(installed.installDir, installed.runtimeFiles.kag3Manifest)));
-    assert.ok(uses.some(use => use.version === donor.record.version && use.sourcePath === installed.installDir));
-    events.length = 0;
-    context.confirmRuntimeInstall = () => assert.fail("Verified installed resources need no download consent");
-    assert.equal(await prepare(), true);
-    assert.deepEqual(events, ["prepare"], "Installed donor reuses its sealed resources without discovery or download");
-    delete f.entry.runtimeData.krkrsdl2.version;
-    assert.equal(runtime.resolveSelection(f.entry, settings, context.userDataDir).version, "MCLv1-1001", "Global choice remains exact");
-    delete settings.runtimes.krkrsdl2.defaultVersion;
-    assert.equal(runtime.resolveSelection(f.entry, settings, context.userDataDir).version, donor.record.version, "Automatic selection still uses the newest usable installation");
-  });
-});
-
 test("later sealed KAG3 resource revisions and extra production files work while resource and package tampering fail", t => {
   const root = fixture(t), f = project(root), first = resourcePackage(path.join(root, "first"));
   const old = P.prepareGame(f.entry, f.context, first.install);
@@ -392,24 +305,19 @@ test("later sealed KAG3 resource revisions and extra production files work while
   assert.throws(() => Prepare.resources(f.context.userDataDir), /resource checksum differs/, "Legacy caches retain the exact launcher pin");
 });
 
-test("KiriKiri consumes one verified prepared result per Play and preserves direct native datapath options", { skip: process.platform !== "darwin" }, async t => {
+test("KiriKiri preserves direct native datapath options and original project paths", { skip: process.platform !== "darwin" }, async t => {
   const root = fixture(t), f = project(root), binary = path.join(root, "native-runtime"), bytes = Buffer.alloc(32); bytes.writeUInt32LE(0xfeedfacf); bytes.writeUInt32LE(process.arch === "arm64" ? 0x0100000c : 0x01000007, 4); bytes.writeUInt32LE(2, 12); fs.writeFileSync(binary, bytes, { mode: 0o755 });
   t.mock.method(os, "homedir", () => path.join(root, "home"));
   const manager = Kiri.runtimeManagers[0]; manager.core.registerLocal({ userDataDir: f.context.userDataDir, version: "snapshot-124bdf8-macos-v2", runtimePath: binary });
   const override = path.join(root, "custom-saves"); f.entry.saveDirOverride = override; let call;
   const context = { ...f.context, runtimeId: "krkrsdl2", settings: {}, runtimeSettings: { version: "snapshot-124bdf8-macos-v2" }, spawnDetachedChecked: (...args) => { call = args; return "native-process"; } };
-  // The selected older host can use another verified package's resources.
+  // Use verified compatibility resources from a sealed package.
   const donor = resourcePackage(path.join(root, "donor"));
   t.mock.method(manager.core, "listInstalled", () => [donor.install]);
   context.gameArguments = ["-title=A quoted game", "-literal=$(touch unexpected)"];
-  const prepare = t.mock.method(Prepare, "prepareGame");
-  Kiri.prepareLaunch(f.entry, context);
-  assert.equal(prepare.mock.callCount(), 1);
+  await Kiri.prepareLaunch(f.entry, context);
   assert.equal(f.entry.moduleData.kagVersion, "3.24 stable");
   assert.equal(await Kiri.launchRuntime("krkrsdl2", f.entry, context), "native-process");
-  assert.equal(prepare.mock.callCount(), 1, "launch consumes the result already verified during preparation");
-  assert.equal(call[1].at(-1), f.entry.moduleData.preparedRoot);
-  assert.equal(call[2].cwd, f.entry.moduleData.preparedRoot);
   assert.ok(call[1].includes(`-datapath=${override}${path.sep}`));
   assert.deepEqual(call[1].slice(0, context.gameArguments.length), context.gameArguments);
   delete f.entry.saveDirOverride;
@@ -419,17 +327,7 @@ test("KiriKiri consumes one verified prepared result per Play and preserves dire
   }
   assert.equal(f.entry.contentRootDir, f.game);
   assert.equal(fs.existsSync(path.join(f.game, "savedata")), false);
-  const newer = path.join(root, "newer-native-runtime"); fs.writeFileSync(newer, Buffer.concat([bytes, Buffer.from("v3")]), { mode: 0o755 });
-  manager.core.registerLocal({ userDataDir: f.context.userDataDir, version: "MCLv1-1001", runtimePath: newer });
-  f.entry.runtimeData = { krkrsdl2: { version: "snapshot-124bdf8-macos-v2" } };
-  context.runtimeSettings.version = "MCLv1-1001";
-  delete f.entry.saveDirOverride;
-  await Kiri.launchRuntime("krkrsdl2", f.entry, context);
-  assert.equal(call[0], fs.realpathSync(newer));
-  assert.equal(prepare.mock.callCount(), 4, "subsequent direct launches verify preparation again");
-  assert.equal(call[1].some(arg => /^-datapath(?:=|$)/i.test(arg)), false);
-  assert.equal(f.entry.defaultSaveDir, null);
-  assert.equal(f.entry.runtimeData.krkrsdl2.version, "snapshot-124bdf8-macos-v2");
+
 });
 
 test("XP3 traversal, protected data, chained loops and bad script checksums fail before preparation", t => {

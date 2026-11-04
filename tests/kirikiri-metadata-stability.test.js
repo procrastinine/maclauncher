@@ -87,7 +87,7 @@ test("KiriKiri declared version source stays stable through real cold/warm prepa
   const manager = Kiri.runtimeManagers.find(value => value.id === "krkrsdl2");
   t.mock.method(manager, "resolveSelection", () => ({ ready: true, version: runtime.install.version, install: runtime.install }));
   const context = { userDataDir: path.join(root, "profile"), runtimeId: "krkrsdl2", runtimeSettings: {}, settings: {} };
-  const cold = Kiri.prepareLaunch(entry, context);
+  const cold = await Kiri.prepareLaunch(entry, context);
   assert.equal(cold.cached, false); assert.equal(cold.versionSource, initial.detectedVersionSource);
   assert.deepEqual(versionFacts(entry.moduleData), initial, "preparation preserves the authored version and its exact source evidence");
   assert.ok(fs.readFileSync(path.join(cold.preparedRoot, "startup.tjs"), "utf8").includes("system_polyfill/PolyfillInitialize.tjs"));
@@ -97,7 +97,7 @@ test("KiriKiri declared version source stays stable through real cold/warm prepa
   const existing = JSON.parse(fs.readFileSync(receipt, "utf8"));
   existing.versionSource = actual + "!/System/INITIALIZE.tjs explicit script version constant after bounded extraction";
   const existingBytes = JSON.stringify(existing, null, 2); fs.writeFileSync(receipt, existingBytes); fs.utimesSync(receipt, stamp, stamp);
-  const warm = Kiri.prepareLaunch(entry, context);
+  const warm = await Kiri.prepareLaunch(entry, context);
   assert.equal(warm.cached, true); assert.equal(warm.preparedRoot, cold.preparedRoot);
   assert.deepEqual(versionFacts(entry.moduleData), initial); assert.equal(warm.versionSource, initial.detectedVersionSource);
   assert.equal(fs.statSync(receipt).mtimeMs, stamp.getTime(), "unchanged warm metadata does not rewrite the preparation receipt");
@@ -106,14 +106,14 @@ test("KiriKiri declared version source stays stable through real cold/warm prepa
   writeGame("3.25 authored");
   await Kiri.ensureRuntime(entry, context);
   assert.equal(entry.moduleData.detectedVersion, "KAG 3.25 authored", "a changed authored version is not suppressed");
-  const updated = Kiri.prepareLaunch(entry, context);
+  const updated = await Kiri.prepareLaunch(entry, context);
   assert.equal(updated.cached, false); assert.notEqual(updated.preparedRoot, warm.preparedRoot);
   assert.equal(entry.moduleData.detectedVersion, "KAG 3.25 authored");
   assert.equal(entry.moduleData.detectedVersionSource, initial.detectedVersionSource);
 
   const previousSource = entry.moduleData.detectedVersionSource;
   writeGame("3.25 authored", "Initialize.tjs");
-  const movedMember = Kiri.prepareLaunch(entry, context);
+  const movedMember = await Kiri.prepareLaunch(entry, context);
   assert.equal(movedMember.cached, false); assert.equal(entry.moduleData.detectedVersion, "KAG 3.25 authored");
   assert.notEqual(entry.moduleData.detectedVersionSource, previousSource, "same version in a genuinely different member retains its new source evidence");
   assert.equal(entry.moduleData.detectedVersionSource, detect().moduleData.detectedVersionSource);
@@ -121,7 +121,7 @@ test("KiriKiri declared version source stays stable through real cold/warm prepa
 
   const formerSource = entry.moduleData.detectedVersionSource, renamed = path.join(game, "renamed.xp3"); fs.renameSync(actual, renamed);
   actual = renamed; selected = path.join(selectedRoot, "renamed.xp3"); entry.moduleData.archivePath = selected;
-  const movedArchive = Kiri.prepareLaunch(entry, context);
+  const movedArchive = await Kiri.prepareLaunch(entry, context);
   assert.equal(movedArchive.cached, false); assert.notEqual(entry.moduleData.detectedVersionSource, formerSource);
   assert.equal(entry.moduleData.detectedVersionSource, detect().moduleData.detectedVersionSource);
   assert.equal(entry.moduleData.detectedVersionSource, actual + "!/Initialize.tjs explicit script version constant");

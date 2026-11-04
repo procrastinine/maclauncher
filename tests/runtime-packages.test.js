@@ -142,6 +142,39 @@ test('catalog lock creation requires the selected version and reads only declare
   assert.throws(() => R.createLock(options), /Missing published package/);
 });
 
+test('a helper upgrades through the app lock alone and consumes its newly sealed payload', async t => {
+  const f = await fixture(t), repoRoot = path.join(f.root, 'app'), catalogs = path.join(f.root, 'catalogs');
+  fs.mkdirSync(catalogs);fs.mkdirSync(path.join(repoRoot, 'build'), {recursive:true});
+  const references = [{id:f.record.id,arch:f.arch}], originalReferences = JSON.stringify(references);
+  const model = {...f.dependencies, managers:()=>new Map(), supplementals:()=>references};
+  const Metadata = require('../src/modules/shared/runtime/included-package-metadata');
+  const Included = require('../src/modules/shared/runtime/included-helpers');
+  for (const version of ['1.0','2.0']) {
+    const manifest = {...JSON.parse(f.files[0].bytes),version};
+    const files = [bytesEntry('manifest.json',Buffer.from(JSON.stringify(manifest)+'\n')), ...f.files.slice(1)];
+    const declaration = {...f.declaration,version,sourceRelative:null,directoryRelative:`${f.record.id}/${version}/${f.arch}`,
+      manifestSha256:files[0].sha256,files:files.map(({name,bytes,...item})=>({path:name,...item}))};
+    delete declaration.sourceArtifact;
+    const archive = await writePackage(f,declaration,files,path.join(f.root,version+'.tar.gz'));
+    const tag=`${f.record.id}/v${version}/${f.arch}`,filename=`${f.record.id}-${version}-${f.arch}.tar.gz`;
+    const record = {...f.record,version,tag,manifestSha256:declaration.manifestSha256,
+      asset:{filename,bytes:fs.statSync(archive).size,sha256:await P.checksum(archive),
+        url:`https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}/${filename}`}};
+    delete record.sourceAsset;
+    fs.writeFileSync(path.join(catalogs,f.record.id+'.json'),JSON.stringify({schemaVersion:2,projectId:f.record.id,updatePolicy:'manual',packages:[record]}));
+    model.packageLock={...f.lock,packages:[record]};
+    const lock=R.createLock({catalogs,architectures:[f.arch],maximumMacOS:f.maximumMacOS,repository,dependencies:model});
+    fs.writeFileSync(path.join(repoRoot,R.LOCK),JSON.stringify(lock));model.packageLock=lock;
+    await R.fetchPackages({lock:R.selectArchitecture(lock,f.arch),packageLock:lock,repoRoot,
+      dependencies:{model,processes:()=>'',download:async(_url,destination)=>fs.copyFileSync(archive,destination)}});
+    const selected=Included.requireIncluded(Metadata.declarations(references,lock),{
+      id:record.id,arch:f.arch,resourcesRoot:path.join(repoRoot,'src/resources'),verification:'full'});
+    assert.equal(selected.item.version,version);assert.equal(selected.manifest.sha256,record.manifestSha256);
+    assert.equal(JSON.parse(selected.manifest.bytes).version,version);
+    assert.equal(JSON.stringify(references),originalReferences,'the unchanged module reference cannot pin an older release');
+  }
+});
+
 test('package extraction restores exact nested bytes and executable permissions', async t => {
   const f = await fixture(t), output = destination(f);
   assert.deepEqual(await R.extractPackage(f.archive, output, f.record), f.declaration);

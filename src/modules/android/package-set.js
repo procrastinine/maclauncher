@@ -48,7 +48,8 @@ function directFiles(input) {
     try {
       const m = inspectApk(file);
       if (m.packageName === metadata.packageName && m.versionCode === metadata.versionCode &&
-          m.versionCodeMajor === metadata.versionCodeMajor) matching.push({ file, metadata: m });
+          m.versionCodeMajor === metadata.versionCodeMajor &&
+          (metadata.split || m.split || path.resolve(file) === path.resolve(input))) matching.push({ file, metadata: m });
     }
     catch { /* Unrelated invalid files do not become part of a selected APK. */ }
   }

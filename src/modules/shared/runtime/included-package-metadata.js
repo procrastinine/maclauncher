@@ -10,10 +10,9 @@ function applicationLock() {
   return require(file);
 }
 
-function record({ id, arch, manifestSha256 }, lock = applicationLock()) {
+function record({ id, arch }, lock = applicationLock()) {
   const matches = lock.packages.filter(item => item.id === id &&
-    (arch === undefined || item.arch === arch) &&
-    (manifestSha256 === undefined || item.manifestSha256 === manifestSha256));
+    (arch === undefined || item.arch === arch));
   const versions = new Set(matches.map(item => item.version));
   if (!matches.length || versions.size !== 1)
     throw new Error("An included package reference must select one locked version: " + id);
@@ -24,8 +23,7 @@ function version(id, options = {}) {
   return record({ id, ...options }).version;
 }
 
-// ABI/source facts remain module-owned. Version fields are references, rather
-// than another release selection, and resolve before consumers see the data.
+// ABI facts remain module-owned; included release identities come from the lock.
 function resolve(value, lock) {
   if (lock === undefined && value && typeof value === "object" && resolvedValues.has(value)) return resolvedValues.get(value);
   const result = resolveValue(value, lock);
@@ -46,10 +44,21 @@ function declarations(items, lock) {
   const result = items.map(item => {
     if (item.version !== undefined) return item;
     const selected = record(item, lock);
-    return { ...item, version: selected.version,
+    if (lock === undefined) {
+      const file = path.join(require("./included-helpers").nativeRoot(), ".declarations", selected.asset.sha256 + ".json");
+      if (require("node:fs").existsSync(file)) {
+        const declaration = JSON.parse(require("./bundled-native").readRegular(file,require("./bundled-native").LIMITS.manifestBytes).bytes);
+        require("./package-dependencies").assertDeclaration(declaration,selected);
+        return declaration;
+      }
+    }
+    return { id: selected.id, version: selected.version, arch: selected.arch,
+      launcherArchitectures: selected.launcherArchitectures, minimumMacOS: selected.minimumMacOS,
+      manifestRelative: selected.manifestRelative, manifestSha256: selected.manifestSha256,
+      sourceRelative: null, sourceSha256: selected.sourceSha256,
       directoryRelative: [selected.id, selected.version, selected.arch].join("/") };
   });
-  if (lock === undefined) resolvedDeclarations.set(items, result);
+  if (lock === undefined && result.every(item => item.files)) resolvedDeclarations.set(items, result);
   return result;
 }
 

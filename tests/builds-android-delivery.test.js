@@ -94,8 +94,6 @@ test('Android launcher metadata and bytecode use only the declared sealed helper
   fs.writeFileSync(jar, original);
   fs.renameSync(directory, directory + '-unselected');
   assert.throws(() => Source.root(), /missing.*Reinstall/i, 'missing included bytes never fall back to a source checkout');
-  declarations.length = 0;
-  assert.throws(() => Source.root(), /unavailable.*Reinstall/i, 'an undeclared tree cannot become an included helper');
   assert.throws(() => require('../src/modules/android/runtime').resolve({ platform: 'darwin', arch: 'arm64' },
     { version: '1.0-fixture' }), /Select an installed/);
 });

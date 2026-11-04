@@ -17,11 +17,11 @@ function moduleManifests() {
     .filter(item => fs.existsSync(item.manifestPath) && fs.existsSync(path.join(item.dir, 'main.js')))
     .map(item => ({ ...item, manifest: JSON.parse(B.readRegular(item.manifestPath, B.LIMITS.manifestBytes).bytes) }));
 }
-function storedModuleDeclaration(dir, reference) {
+function storedModuleDeclaration(dir, reference, lock) {
   if (Object.keys(reference).length !== 1 || typeof reference.path !== 'string' || !reference.path.endsWith('.json')) throw new Error('Supplemental resource metadata must reference a module-owned JSON file.');
   const stored = JSON.parse(B.readRegular(path.join(dir, B.relativeFile(reference.path)), B.LIMITS.manifestBytes).bytes);
   if (!Array.isArray(stored)) throw new Error('Module supplemental resources need a pure JSON declaration.');
-  return require("../src/modules/shared/runtime/included-package-metadata").declarations(stored);
+  return require("../src/modules/shared/runtime/included-package-metadata").declarations(stored, lock);
 }
 /** Release verification with included packages in place: every backend loads and its export matches its declaration. */
 function verifyModuleDeclarations() {
@@ -45,7 +45,7 @@ function declarations(dependencies) {
     const modules = require('../src/modules/registry');
     items = [];
     for (const { dir, manifest } of moduleManifests())
-      if (manifest.distributionSupplementals) items.push(...storedModuleDeclaration(dir, manifest.distributionSupplementals));
+      if (manifest.distributionSupplementals) items.push(...storedModuleDeclaration(dir, manifest.distributionSupplementals, dependencies?.packageLock));
     for (const submodule of modules.listSharedSubmodules()) {
       const declaration = path.join(submodule.dir, 'distribution-supplementals.json');
       if (!fs.existsSync(declaration)) continue;
@@ -55,10 +55,10 @@ function declarations(dependencies) {
     }
   }
   if (!Array.isArray(items) || items.length > 128) throw new Error('Invalid supplemental resource catalog.');
-  items = require('../src/modules/shared/runtime/included-package-metadata').declarations(items);
+  items = require('../src/modules/shared/runtime/included-package-metadata').declarations(items, dependencies?.packageLock);
   const seen = new Set();
   for (const item of items) {
-    validateDeclaration(item);
+    if (item.files) validateDeclaration(item);
     if (seen.has(item.directoryRelative)) throw new Error('Duplicate supplemental native declaration.');
     seen.add(item.directoryRelative);
   }
@@ -70,7 +70,11 @@ function requirements(config, dependencies) {
 }
 function validateInventory(items, config, dependencies) {
   const expected = requirements(config, dependencies);
-  if (!Array.isArray(items) || !isDeepStrictEqual(items, expected)) throw new Error('Payload supplemental resources differ from the complete module declarations.');
+  const identity = ({id,version,arch,directoryRelative,manifestRelative,manifestSha256,sourceSha256,minimumMacOS,launcherArchitectures}) =>
+    ({id,version,arch,directoryRelative,manifestRelative,manifestSha256,sourceSha256,minimumMacOS,launcherArchitectures});
+  if (!Array.isArray(items) || !isDeepStrictEqual(items.map((item,index) => expected[index]?.files ? item : identity(item)),
+      expected.map(item => item.files ? item : identity(item)))) throw new Error('Payload supplemental resources differ from the complete module declarations.');
+  items.forEach(validateDeclaration);
   if (items.some(item => !B.versionAtLeast(config.maximumMacOS, item.minimumMacOS))) throw new Error('Supplemental native payload exceeds the explicitly selected macOS floor.');
   return items;
 }
@@ -92,7 +96,12 @@ function nativeHostDependencies(dependencies) {
   return rows;
 }
 function verifySupplementals({ resourceRoot, arch, maximumMacOS, items, dependencies = {} }) {
-  const selected = items || requirements({ arch, maximumMacOS }, dependencies);
+  const selected = (items || requirements({ arch, maximumMacOS }, dependencies)).map(item => {
+    if (item.files) return item;
+    const context = require('../src/modules/shared/runtime/included-package-dependencies').context(path.dirname(resourceRoot), {verification:'status'});
+    const record = context.lock.packages.find(record => record.id === item.id && record.version === item.version && record.arch === item.arch);
+    return context.visit(record).declaration;
+  });
   const hostDependencies = nativeHostDependencies(dependencies);
   for (const item of selected) {
     validateDeclaration(item);

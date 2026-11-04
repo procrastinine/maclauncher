@@ -21,14 +21,14 @@ function detectGame(context) {
   try {
     const profile = Abi.installedProfile();
     if (fs.lstatSync(file).isDirectory()) {
-      const selected = Package.inspectFiles(Package.directFiles(file), { profile });
+      const selected = Package.inspectFiles(Package.directFiles(file), { profile, inspection: true });
       return result(selected.base.file, selected.metadata, true);
     }
     if (!/\.apk$/i.test(file)) return null;
     const metadata = inspectApk(file, { nativeArchitectures: Abi.supported(profile) });
     const files = Package.directFiles(file);
     if (files.length > 1 || metadata.split || metadata.requiresSplitInstallation || metadata.requiredSplits.length) {
-      const selected = Package.inspectFiles(files, { profile });
+      const selected = Package.inspectFiles(files, { profile, inspection: true });
       return result(selected.base.file, selected.metadata, true);
     }
     return result(file, metadata);
@@ -38,7 +38,7 @@ function detectGame(context) {
 async function detectGameAsync(context) {
   const file = context?.inputPath;
   if (typeof file !== "string" || !path.isAbsolute(file) || !Package.ARCHIVES.test(file)) return detectGame(context);
-  try { return result(file, (await Package.inspectInput(file, { profile: Abi.installedProfile() })).metadata, true); } catch { return null; }
+  try { return result(file, (await Package.inspectInput(file, { profile: Abi.installedProfile(), inspection: true })).metadata, true); } catch { return null; }
 }
 
 module.exports = { detectGame, detectGameAsync };

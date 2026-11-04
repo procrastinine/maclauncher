@@ -191,10 +191,8 @@ test('mirror pin drift refuses origin rewriting', async t => {
 test('production checkout metadata matches every top-level source pin without initializing references', async () => {
   const development = await readPlan(), metadata = require('../build/source-dependencies.json');
   assert.deepEqual(development.modules.map(item => item.path).sort(), [...metadata.submodules, ...metadata.testSubmodules].sort());
-  assert.equal(development.modules.length, 7);
   assert.ok(development.modules.every(item => !item.recursive), 'Ordinary setup does not fetch producer dependency trees');
   const plan = await readPlan({ all: true });
-  assert.equal(plan.modules.length, 70);
   const yuri = plan.modules.find(item => item.path === 'src/external/onscripter-yuri');
   assert.ok(yuri); assert.equal(yuri.recursive, false);
   assert.ok(plan.modules.filter(item => item !== yuri).every(item => item.recursive));

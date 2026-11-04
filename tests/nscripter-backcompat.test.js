@@ -8,12 +8,14 @@ const Module = require("../src/modules/nscripter/main");
 const Manager = require("../src/modules/nscripter/runtime/onscripter-en-manager");
 const Arguments = require("../src/modules/shared/runtime/launch-arguments");
 const { runDataMigrations } = require("../src/core/backcompat/data-migrations");
+const gameFont = require("./helpers/nscripter-game-font.cjs");
 
 function fixture(t, runtimeId = "onsyuri_mac") {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "nscripter-released-")));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const userDataDir = path.join(root, "profile"), gamePath = path.join(root, "original"), home = path.join(root, "home");
   fs.mkdirSync(gamePath); fs.mkdirSync(path.join(home, "Library", "Application Support"), { recursive: true });
+  gameFont(gamePath);
   t.mock.method(os, "homedir", () => home);
   const entry = { gameId: "released-game", moduleId: "nscripter", runtimeId, gamePath, contentRootDir: gamePath,
     defaultSaveDir: path.join(userDataDir, "games/released-game/modules/nscripter/saves") };

@@ -5,6 +5,7 @@ const path = require("node:path");
 const test = require("node:test");
 const Module = require("../src/modules/nscripter/main");
 const Runtime = require("../src/modules/shared/onsyuri/runtime/onsyuri-runtime");
+const gameFont = require("./helpers/nscripter-game-font.cjs");
 
 test("Onsyuri refuses missing explicit versions and architectures instead of launching another install", t => {
   const previousMac = Runtime.listInstalledMac, previousWeb = Runtime.listInstalledWeb;
@@ -64,6 +65,7 @@ test("Onsyuri web retains the trusted launch context when delegating to NW.js", 
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const game = path.join(root, "game"), runtime = path.join(root, "runtime");
   fs.mkdirSync(game); fs.mkdirSync(runtime);
+  gameFont(game);
   fs.writeFileSync(path.join(game, "0.txt"), "*define\ngame\n*start\nend\n");
   fs.writeFileSync(path.join(runtime, "index.html"), "<html><body></body></html>");
   t.mock.method(Runtime, "listInstalledWeb", () => [{ version: "0.7.7", installDir: runtime }]);
@@ -83,6 +85,7 @@ test("native Yuri retains original cwd and saves, including the required UTF fil
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const game = path.join(root, "game"), runtime = path.join(root, "runtime"), profile = path.join(root, "profile");
   fs.mkdirSync(game); fs.mkdirSync(runtime);
+  gameFont(game);
   const binary = path.join(runtime, "onsyuri"); fs.writeFileSync(binary, "fixture executable; spawn is stubbed");
   fs.writeFileSync(path.join(game, "ons.cfg"), "original config");
   t.mock.method(Runtime, "listInstalledMac", () => [{ version: "fixture", variant: "arm64", installDir: runtime, executablePath: binary }]);

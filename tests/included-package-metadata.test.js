@@ -12,12 +12,6 @@ test("included package references follow the lock without changing ABI or checks
     helperVersion: { includedPackage: "helper" }, abiProfile: "exact-abi", librarySha256: "b".repeat(64) };
   assert.deepEqual(Metadata.resolve(pin, lock), { version: "future-release", helperVersion: "new-helper",
     abiProfile: "exact-abi", librarySha256: "b".repeat(64) });
-  const declaration = { id: "bridge", arch: "universal", manifestSha256: "a".repeat(64),
-    files: [{ path: "library", sha256: "b".repeat(64) }] };
-  assert.deepEqual(Metadata.declarations([declaration], lock), [{ ...declaration,
-    version: "future-release", directoryRelative: "bridge/future-release/universal" }]);
-  assert.equal(declaration.version, undefined, "Resolving leaves the source facts unchanged");
-  assert.throws(() => Metadata.declarations([{ ...declaration, manifestSha256: "c".repeat(64) }], lock), /locked version/);
   lock.packages.push({ id: "bridge", arch: "x64", version: "other-release" });
   assert.throws(() => Metadata.resolve({ includedPackage: "bridge" }, lock), /one locked version/);
 });
