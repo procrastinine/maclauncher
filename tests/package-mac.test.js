@@ -20,7 +20,7 @@ function fixture(t) {
   fs.copyFileSync(wrapper, localWrapper);
   fs.writeFileSync(path.join(root, 'build/runtime-packages.json'), JSON.stringify({ maximumMacOS: require('../build/runtime-packages.json').maximumMacOS }));
   const recorder = `const fs = require('node:fs');
-    fs.appendFileSync('commands.jsonl', JSON.stringify({command: require('node:path').basename(process.argv[1]), args: process.argv.slice(2)}) + '\\n');`;
+    fs.appendFileSync('commands.jsonl', JSON.stringify({command: require('node:path').basename(process.argv[1]), args: process.argv.slice(2), maximum: process.env.MACLAUNCHER_NATIVE_MAXIMUM_MACOS}) + '\\n');`;
   fs.writeFileSync(path.join(root, 'src/modules/catsystem2/runtime/stage-cp932.cjs'), recorder);
   const recordPreparation = `const fs=require('node:fs'),assert=require('node:assert/strict');
     const record=(command,options)=>{assert.equal(options.repoRoot,process.cwd());
@@ -56,4 +56,13 @@ test('package command builds one app architecture per run', t => {
     assert.match(result.stderr, /one architecture per run|separate Apple Silicon and Intel apps/);
   }
   assert.deepEqual(f.commands(), []);
+});
+
+test('package command keeps runtime CLI validation and forwards the selected macOS configuration', t => {
+  const f = fixture(t);
+  for (const args of [['--runtime-only', 'native'], ['--runtime-sign-identity']]) {
+    const result = f.run(args); assert.notEqual(result.status, 0); assert.match(result.stderr, /complete runtime distribution|requires a value/);
+  }
+  assert.equal(f.run(['--runtime-maximum-macos', '14.0', '--runtime-sign-identity', '-']).status, 0);
+  assert.equal(f.commands().at(-1).maximum, '14.0');
 });

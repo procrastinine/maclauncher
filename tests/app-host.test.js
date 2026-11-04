@@ -31,3 +31,19 @@ test('Electron input archive follows its exact npm publisher identity and digest
   const root = temporary(t), corrupt = path.join(root,'modified.zip');fs.writeFileSync(corrupt,'modified');
   assert.throws(()=>Host.readHost({repoRoot:ROOT,archivePath:corrupt}),/publisher checksum/);
 });
+
+test('Electron archive input safety rejects escapes while accepting members without an expected-name table', t => {
+  const root = temporary(t), version = require('electron/package.json').version, archive = path.join(root, 'publisher.zip');
+  const directory = path.join(root, 'node_modules/electron'); fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ devDependencies: { electron: version } }));
+  fs.writeFileSync(path.join(directory, 'package.json'), JSON.stringify({ name: 'electron', version }));
+  fs.writeFileSync(path.join(root, 'pnpm-lock.yaml'), require('js-yaml').dump({ importers: { '.': { devDependencies: { electron: { specifier: version, version } } } },
+    packages: { ['electron@' + version]: { resolution: { integrity: 'sha512-AA==' } } } }));
+  for (const name of ['new-publisher-member', '../outside']) {
+    require('./helpers/zip-fixture').writeZipArchive(archive, [{ name, data: 'publisher bytes' }]);
+    const sha = require('node:crypto').createHash('sha256').update(fs.readFileSync(archive)).digest('hex');
+    fs.writeFileSync(path.join(directory, 'checksums.json'), JSON.stringify({ ['electron-v' + version + '-darwin-arm64.zip']: sha }));
+    if (name === '../outside') assert.throws(() => Host.readHost({ repoRoot: root, arch: 'arm64', archivePath: archive }), /relative|path|Unsafe/);
+    else assert.equal(Host.readHost({ repoRoot: root, arch: 'arm64', archivePath: archive }).record.asset.sha256, sha);
+  }
+});

@@ -48,7 +48,9 @@ function projectPackagedPython({ sourceRoot, resourceRoot }) {
   if (source === target || source.startsWith(target + path.sep) || target.startsWith(source + path.sep))
     throw new Error('Python app projection must be separate from its producer files.');
   directory(path.join(target, 'bin'));
-  const selected = configuration();
+  directory(path.join(source, 'bin'));
+  const selected = configuration(), canonical = fs.lstatSync(path.join(source, selected.interpreter));
+  if (!canonical.isFile() || canonical.isSymbolicLink()) throw new Error('Embedded Python needs regular producer files.');
   // Replace only generated bundle aliases. Producer files stay unchanged.
   for (const [alias, link] of Object.entries(selected.aliases)) {
     const file = path.join(target, alias), stat = fs.lstatSync(file, { throwIfNoEntry: false });

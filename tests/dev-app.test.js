@@ -160,3 +160,12 @@ test("packaged Finder file associations are written before signing without losin
   assert.equal(shaders.LSHandlerRank, "Alternate");
   assert.equal(info.CFBundleDocumentTypes.filter(row => row.CFBundleTypeName === "Neural rendering model").length, 1);
 });
+
+test('afterPack preserves bundle executable path safety without an output file list', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'app-executable-path-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const info = path.join(root, 'Example.app/Contents/Info.plist'); fs.mkdirSync(path.dirname(info), { recursive: true });
+  await savePlistFile(info, { CFBundleExecutable: '../outside' });
+  await assert.rejects(require('../scripts/after-pack')({ electronPlatformName: 'darwin', appOutDir: root,
+    packager: { appInfo: { productFilename: 'Example' } } }), /bundle-local filename/);
+});

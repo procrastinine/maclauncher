@@ -27,8 +27,9 @@ function verifyRunner(config, { platform = process.platform, arch = process.arch
   if (platform !== 'darwin' || arch !== config.arch) throw new Error('The macOS runner CPU must match the explicitly selected launcher architecture.');
 }
 function publicJson(file, value) {
+  require('./native-supplementals.cjs').validatePublicMetadata(value);
   B.realDirectory(path.dirname(file), { create: true });
-  fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n', { mode: 0o644 });
+  fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n', { flag: 'wx', mode: 0o644 });
 }
 // Checkout setup and app builds install the pinned publisher build for their CPU.
 async function preparePython({ arch, repoRoot, force = false, install = async args => (await import('./setup-python-runtime.mjs')).main(args) }) {
@@ -84,13 +85,15 @@ async function finalize({ config = readConfiguration(), repoRoot = path.resolve(
   const inventory = JSON.parse(fs.readFileSync(path.join(outputRoot, 'native-payload-inventory.json'), 'utf8'));
   const publishedInputs = require('./published-inputs.cjs').verifyBuildAttestations({ repoRoot, lock: config.lock });
   const sourceCommit = tool('git', ['-C', repoRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  if (!/^[a-f0-9]{40}$/.test(sourceCommit)) throw new Error('The application source commit is unavailable.');
   const name = require('./release.cjs').appAsset(config.arch).name;
   const archive = path.join(outputRoot, name);
+  if (fs.existsSync(archive)) throw new Error('Existing app artifacts are preserved.');
   // ditto retains app/framework symlinks and executable modes; upload a zip,
   // since Actions file upload does not preserve these attributes itself.
   tool('/usr/bin/ditto', ['-c', '-k', '--sequesterRsrc', '--keepParent', app, archive], { stdio: 'pipe' });
   const sha256 = await Payload.checksum(archive);
-  fs.writeFileSync(path.join(outputRoot, 'SHA256SUMS.txt'), `${sha256}  ${name}\n`, { mode: 0o644 });
+  fs.writeFileSync(path.join(outputRoot, 'SHA256SUMS.txt'), `${sha256}  ${name}\n`, { flag: 'wx', mode: 0o644 });
   publicJson(path.join(outputRoot, require('./release.cjs').appManifest(config.arch)), { schemaVersion: 1, product, version: pkg.version, releaseTag, sourceCommit, arch: config.arch,
     toolchain: { node: process.versions.node,
       pnpm: tool('pnpm', ['--version'], { encoding: 'utf8' }).trim(),
@@ -103,7 +106,7 @@ async function finalize({ config = readConfiguration(), repoRoot = path.resolve(
     publishedInputs: { builds: publishedInputs },
     appArchive: name, appArchiveSha256: sha256, signing: 'Ad hoc signed; not Developer ID signed or notarized' });
   fs.writeFileSync(path.join(outputRoot, 'RELEASE_NOTES.md'), releaseNotes({ repoRoot, version: pkg.version,
-    minimumMacOS: pkg.build.mac.minimumSystemVersion, packageRepository: inventory.packageRepository }), { mode: 0o644 });
+    minimumMacOS: pkg.build.mac.minimumSystemVersion, packageRepository: inventory.packageRepository }), { flag: 'wx', mode: 0o644 });
   return { archive: name, sha256, sourceCommit, nativePackages: inventory.packages.length, nativeSupplementals: inventory.supplementals.length };
 }
 function initializeSources({ repoRoot = path.resolve(__dirname, '..'), tests = false, tool = execFileSync } = {}) {

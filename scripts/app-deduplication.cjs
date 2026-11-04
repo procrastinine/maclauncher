@@ -1,6 +1,11 @@
 const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
 const { TextDecoder } = require('node:util');
-const Content = require('./runtime-content.cjs');
+const Content = require('./runtime-content.cjs'), B = require('../src/modules/shared/runtime/bundled-native');
+function regular(file) {
+  const stat = fs.statSync(file);
+  if (!stat.isFile() || stat.size > B.LIMITS.fileBytes) throw new Error('Application inputs require bounded regular files.');
+  return fs.readFileSync(file);
+}
 function binaryKind(name, bytes) {
   const magic = bytes.subarray(0, 4).toString('hex');
   if (['feedface','cefaedfe','feedfacf','cffaedfe','cafebabe','bebafeca','cafebabf','bfbafeca'].includes(magic)) return true;
@@ -28,24 +33,31 @@ function unpackPatterns({projectDir,packageConfig}) {
   const matchers=getMainFileMatchers(root,destination,value=>value,build.mac||{},{info},path.join(root,build.directories.output),false);
   const names=new Set();
   function walk(directory,filter,visit,ancestors=new Set()) {
-    const real=fs.realpathSync(directory);if(ancestors.has(real))return;ancestors.add(real);
+    const real=fs.realpathSync(directory);
+    if(!real.startsWith(root+path.sep)&&real!==root||ancestors.has(real))throw new Error('Application input directories contain an escaping or cyclic alias.');
+    ancestors.add(real);
     for(const row of fs.readdirSync(directory,{withFileTypes:true})){
       const file=path.join(directory,row.name),stat=fs.statSync(file,{throwIfNoEntry:false});
-      if(!stat||!filter(file,stat))continue;
+      if(!stat){if(!filter(file,fs.lstatSync(file)))continue;throw new Error('Application inputs contain an alias without a target.');}
+      if(!filter(file,stat))continue;
       if(stat.isDirectory())walk(file,filter,visit,ancestors);
       else if(stat.isFile())visit(file);
+      else throw new Error('Application inputs contain a special file.');
     }
     ancestors.delete(real);
   }
-  for(const matcher of matchers)if(fs.existsSync(matcher.from))walk(matcher.from,matcher.createFilter(),file=>{
+  for(const matcher of matchers){
+    if(!path.resolve(matcher.from).startsWith(root+path.sep)&&path.resolve(matcher.from)!==root)throw new Error('Application FileSets require checkout-relative sources.');
+    walk(matcher.from,matcher.createFilter(),file=>{
     const name=path.relative(destination,path.join(matcher.to,path.relative(matcher.from,file))).split(path.sep).join('/');
-    if(!Content.excludedReason(name)&&candidate(name,fs.readFileSync(file)))names.add(name);
-  });
+    if(!Content.excludedReason(name)&&candidate(name,regular(file)))names.add(name);
+    });
+  }
   const modules=path.join(root,'node_modules'),filter=getNodeModuleFileMatcher(root,destination,value=>value,build.mac||{},info).createFilter();
   if(fs.existsSync(modules))for(const row of fs.readdirSync(modules,{withFileTypes:true})){
     if(row.name.startsWith('.'))continue;
     const source=path.join(modules,row.name);if(!fs.statSync(source,{throwIfNoEntry:false})?.isDirectory())continue;
-    walk(source,filter,file=>{const name=path.relative(modules,file).split(path.sep).join('/');if(!Content.excludedReason(name)&&candidate(name,fs.readFileSync(file)))names.add('node_modules/**/'+name);});
+    walk(source,filter,file=>{const name=path.relative(modules,file).split(path.sep).join('/');if(!Content.excludedReason(name)&&candidate(name,regular(file)))names.add('node_modules/**/'+name);});
   }
   return [...names];
 }

@@ -38,7 +38,7 @@ const nativeOptions = {};
 for (let index = 0; index < incomingArgs.length; index += 1) {
   const argument = incomingArgs[index];
   if (argument === "--") continue;
-  if (["--runtime-maximum-macos"].includes(argument)) {
+  if (["--runtime-only", "--runtime-maximum-macos", "--runtime-sign-identity"].includes(argument)) {
     const value = incomingArgs[++index];
     if (!value || value.startsWith("--")) throw new Error(`${argument} requires a value.`);
     nativeOptions[argument] = value;
@@ -50,9 +50,14 @@ if (extraArgs.includes("--universal")) throw new Error("MacLauncher ships separa
 const architectures = [extraArgs.includes("--arm64") && "arm64", extraArgs.includes("--x64") && "x64"].filter(Boolean);
 if (architectures.length > 1) throw new Error("Package one architecture per run: --arm64 or --x64.");
 if (!architectures.length) { architectures.push(process.arch); extraArgs.push("--" + process.arch); }
+if (nativeOptions["--runtime-only"]) throw new Error("A MacLauncher app build requires the complete runtime distribution plan.");
 const signedBuild = hasDeveloperIdIdentity(env);
 const maximumMacOS = nativeOptions["--runtime-maximum-macos"] ||
   JSON.parse(readFileSync(new URL("../build/runtime-packages.json", import.meta.url), "utf8")).maximumMacOS;
+const nativeIdentity = nativeOptions["--runtime-sign-identity"] || env.MACLAUNCHER_RUNTIME_SIGN_IDENTITY || env.CSC_NAME;
+if (signedBuild && !nativeIdentity) {
+  throw new Error("Set MACLAUNCHER_RUNTIME_SIGN_IDENTITY to the identity used by stage-native-runtimes.cjs before a signed package build. See docs/runtimes/RUNTIME_DISTRIBUTION.md.");
+}
 run(process.execPath, ["src/modules/catsystem2/runtime/stage-cp932.cjs"], env);
 
 const require = createRequire(import.meta.url), repoRoot = path.resolve(import.meta.dirname, "..");

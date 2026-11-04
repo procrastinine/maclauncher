@@ -44,3 +44,27 @@ test('native copy restoration uses actual copied paths, retains extra bytes and 
   assert.equal(fs.readFileSync(path.join(target, 'unlisted'), 'utf8'), 'keep copied bytes');
   assert.equal(fs.readlinkSync(path.join(source, 'alias.dylib')), 'component.dylib');
 });
+
+
+test('native copy source aliases cannot escape directly or through another link', t => {
+  for (const indirect of [false, true]) {
+    const f = fixture(t), original = path.join(f.sourceRoot, f.relative, 'files/lib/alias.dylib'), copied = path.join(f.resourceRoot, f.relative, 'files/lib/alias.dylib');
+    const outside = path.join(path.dirname(f.sourceRoot), 'outside');fs.writeFileSync(outside, 'outside input');
+    if (indirect) fs.symlinkSync(outside, path.join(f.sourceRoot, 'elsewhere'));
+    fs.symlinkSync(indirect ? '../../../../../elsewhere' : outside, original);
+    fs.writeFileSync(copied, 'copied bytes');
+    assert.throws(() => restoreCopiedNativePayload(f), /aliases must stay within/);
+    assert.equal(fs.readFileSync(outside, 'utf8'), 'outside input');
+    assert.equal(fs.lstatSync(copied).isFile(), true);
+  }
+});
+
+test('native copy refuses overlapping trees and never follows copied directory links', t => {
+  const f = fixture(t);
+  assert.throws(() => restoreCopiedNativePayload({...f, resourceRoot: f.sourceRoot}), /separate/);
+  const copied = path.join(f.resourceRoot, f.relative, 'files/lib');
+  fs.rmSync(copied, {recursive: true});fs.symlinkSync(path.join(f.sourceRoot, f.relative, 'files/lib'), copied);
+  restoreCopiedNativePayload(f);
+  assert.equal(fs.lstatSync(copied).isSymbolicLink(), true);
+  assert.equal(fs.statSync(path.join(f.sourceRoot, f.relative, 'files/lib/component.dylib')).mode & 0o777, 0o600);
+});

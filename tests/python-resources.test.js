@@ -69,3 +69,26 @@ test('Python app selection excludes installation, SDK and demo files while prese
     'lib/python3.12/unittest/__init__.py', 'lib/python3.12/threading.py', 'lib/python3.12/pydoc.py',
     'lib/python3.12/site-packages/packaging/licenses/__init__.py']) assert.equal(selected(file), true, file);
 });
+
+
+test('Python projection rejects redirected source directories and nonregular canonical inputs', t => {
+  for (const redirectedDirectory of [true, false]) {
+    const options = fixture(t), sourceBin = path.join(options.sourceRoot, 'bin'), interpreter = path.join(sourceBin, 'python3');
+    if (redirectedDirectory) {
+      fs.rmSync(sourceBin, {recursive: true});fs.symlinkSync(path.join(options.resourceRoot, 'bin'), sourceBin);
+    } else {
+      fs.unlinkSync(interpreter);fs.symlinkSync(path.join(options.resourceRoot, 'bin/python3'), interpreter);
+    }
+    assert.throws(() => Python.projectPackagedPython(options), /real resource directory|regular producer files/);
+    assert.equal(fs.lstatSync(path.join(options.resourceRoot, 'bin/python')).isFile(), true);
+  }
+});
+
+test('Python projection does not consume producer alias copies or gate signed output bytes', t => {
+  const options = fixture(t);
+  for (const alias of Object.keys(Python.configuration().aliases)) fs.unlinkSync(path.join(options.sourceRoot, alias));
+  fs.chmodSync(path.join(options.sourceRoot, 'bin/python3'), 0o644);
+  fs.appendFileSync(path.join(options.resourceRoot, 'bin/python3'), ' signed output');
+  Python.projectPackagedPython(options);
+  assert.match(fs.readFileSync(path.join(options.resourceRoot, 'bin/python'), 'utf8'), /signed output/);
+});

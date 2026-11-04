@@ -17,7 +17,7 @@ function restoreCopiedNativePayload({ sourceRoot, resourceRoot } = {}) {
       if (!stat) continue;
       if (stat.isSymbolicLink()) {
         const link = fs.readlinkSync(original), resolved = path.resolve(path.dirname(original), link);
-        if (path.isAbsolute(link) || !resolved.startsWith(source + path.sep)) throw new Error('Native source aliases must stay within their resource directory.');
+        if (path.isAbsolute(link) || !resolved.startsWith(source + path.sep) || !fs.realpathSync(original).startsWith(source + path.sep)) throw new Error('Native source aliases must stay within their resource directory.');
         if (item.isSymbolicLink() && fs.readlinkSync(target) === link) continue;
         if (item.isFile() || item.isSymbolicLink()) { fs.unlinkSync(target); fs.symlinkSync(link, target); restoredFiles++; }
       } else if (item.isDirectory() && stat.isDirectory()) walk(name);

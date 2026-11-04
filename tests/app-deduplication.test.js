@@ -46,3 +46,14 @@ test('incompatible duplicate permissions and existing external aliases are retai
  assert.equal(fs.lstatSync(first).isFile(),true);assert.equal(fs.lstatSync(second).isFile(),true);
  assert.equal(fs.readlinkSync(path.join(app,'outside-link.jar')),outside);assert.deepEqual(fs.readFileSync(outside),bytes);
 });
+
+test('unpack preparation retains input path containment and rejects cyclic source aliases',t=>{
+ const {root}=fixture(t),source=path.join(root,'source');fs.mkdirSync(source);
+ write(source,'one.jar',Buffer.from('PK\x03\x04data'));
+ const packageConfig={build:{files:['**/*'],directories:{output:'dist'},mac:{}}};
+ fs.symlinkSync('.',path.join(source,'cycle'));
+ assert.throws(()=>D.unpackPatterns({projectDir:source,packageConfig}),/escaping or cyclic/);
+ fs.unlinkSync(path.join(source,'cycle'));
+ packageConfig.build.files=[{from:'../outside',to:'.',filter:['**/*']}];
+ assert.throws(()=>D.unpackPatterns({projectDir:source,packageConfig}),/checkout-relative/);
+});

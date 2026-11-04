@@ -22,6 +22,8 @@ module.exports = async function afterPack(context) {
   const resourcesPath = path.join(appPath, "Contents", "Resources");
   const infoPath = path.join(appPath, "Contents", "Info.plist");
   const info = await parsePlistFile(infoPath);
+  if (info.CFBundleExecutable !== undefined && (typeof info.CFBundleExecutable !== 'string' || info.CFBundleExecutable !== path.basename(info.CFBundleExecutable)))
+    throw new Error('Application executable must be a bundle-local filename.');
   info.CFBundleDisplayName = "MacLauncher";
   const documentTypes = applicationDocumentTypes(Modules.listSupportedInputExtensions(), info.CFBundleIconFile);
   const managedTypes = new Set(documentTypes.map(type => type.CFBundleTypeName));
@@ -45,4 +47,16 @@ module.exports = async function afterPack(context) {
   addLicense(resourcesPath, 'Electron', path.join(projectDir, 'node_modules/electron/dist/LICENSE'), 'Electron');
   addLicense(resourcesPath, 'Chromium', path.join(projectDir, 'node_modules/electron/dist/LICENSES.chromium.html'), 'Chromium');
   require('./app-deduplication.cjs').collapse(appPath);
+  const realApp = fs.realpathSync(appPath);
+  function paths(directory) {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory()) paths(file);
+      else if (entry.isSymbolicLink()) {
+        const link = fs.readlinkSync(file), resolved = fs.existsSync(file) ? fs.realpathSync(file) : path.resolve(directory, link);
+        if (path.isAbsolute(link) || !resolved.startsWith(realApp + path.sep)) throw new Error('Application link escapes its bundle: ' + path.relative(appPath, file));
+      } else if (!entry.isFile()) throw new Error('Application contains a special file.');
+    }
+  }
+  paths(appPath);
 };
