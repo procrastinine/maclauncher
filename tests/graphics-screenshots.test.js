@@ -2,9 +2,9 @@ const test = require("node:test"), assert = require("node:assert/strict"), fs = 
 const Screenshots = require("../src/modules/shared/reshade/screenshots");
 const CaptureFile = require("../src/modules/shared/reshade/capture-file"), zlib = require("node:zlib");
 
-function rawFrame(width, height, flags, bytes) {
-  const header = Buffer.alloc(24);header.write("MCLCAP01");
-  [width, height, width * 4, flags].forEach((value, index) => header.writeUInt32LE(value, 8 + index * 4));
+function rawFrame(width, height, flags, bytes, version = 1) {
+  const header = Buffer.alloc(24);header.write(version === 2 ? "MCLCAP02" : "MCLCAP01");
+  [width, height, width * (version === 2 ? 8 : 4), flags].forEach((value, index) => header.writeUInt32LE(value, 8 + index * 4));
   return Buffer.concat([header, Buffer.from(bytes)]);
 }
 function pngPixels(file) {
@@ -32,6 +32,34 @@ test("raw processed captures become opaque PNGs in the launcher, preserving chan
     const saved = Screenshots.save({prefix, title: "Game", settings: {graphicsScreenshotFolder: path.join(work, "Pictures")}});
     assert.deepEqual([...pngPixels(saved)], expected);assert.deepEqual(Screenshots.staged(prefix), []);
   }
+});
+
+test("HDR captures retain 16-bit PQ samples, BT.2020 metadata and the captured row origin", t => {
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-hdr-screenshot-"));
+  t.after(() => fs.rmSync(work, {recursive:true,force:true}));
+  const pixels = [[1024,32768,60000,1234],[4096,50000,65535,4321]], bytes = Buffer.alloc(16);
+  pixels.flat().forEach((value,index)=>bytes.writeUInt16LE(value,index*2));
+  for (const flags of [4,6]) {
+    const prefix=path.join(work,'hdr'+flags), file=prefix+'-after.rgba';
+    fs.writeFileSync(file,rawFrame(1,2,flags,bytes,2));
+    const frame=CaptureFile.read(file);
+    assert.equal(frame.bitDepth,16);assert.equal(frame.colorSpace,'rec2100-pq');
+    const saved=Screenshots.save({prefix,title:'HDR',settings:{graphicsScreenshotFolder:path.join(work,'Pictures')}});
+    const png=fs.readFileSync(saved), chunks=new Map();
+    for(let offset=8;offset<png.length;){
+      const length=png.readUInt32BE(offset);
+      chunks.set(png.toString('ascii',offset+4,offset+8),png.subarray(offset+8,offset+8+length));
+      offset+=length+12;
+    }
+    assert.equal(chunks.get('IHDR')[8],16);assert.equal(chunks.get('IHDR')[9],2);
+    assert.deepEqual([...chunks.get('cICP')],[9,16,0,1]);assert.equal(chunks.has('sRGB'),false);
+    const rows=flags&2?[pixels[1],pixels[0]]:pixels, expected=Buffer.alloc(14);
+    rows.forEach((pixel,y)=>pixel.slice(0,3).forEach((value,channel)=>expected.writeUInt16BE(value,y*7+1+channel*2)));
+    assert.deepEqual(pngPixels(saved),expected);
+    assert.deepEqual(Screenshots.staged(prefix),[]);
+  }
+  fs.writeFileSync(path.join(work,'wrong-format'),rawFrame(1,2,4,bytes));
+  assert.throws(()=>CaptureFile.read(path.join(work,'wrong-format')),/layout/);
 });
 
 test("raw capture parsing rejects invalid, oversized, truncated and linked inputs and clears failed staging", t => {

@@ -1,4 +1,5 @@
-// Processed screenshots. The game's frame capture writes raw processed pixels;
+// Processed screenshots. HDR frames become 16-bit BT.2020 PQ PNG; SDR stays
+// 8-bit sRGB. The game's frame capture writes raw processed pixels;
 // the launcher encodes PNG and moves that one image into a
 // visible folder and removes everything the capture staged, so no copy stays
 // behind in application data.
