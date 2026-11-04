@@ -22,7 +22,7 @@ function createManager(dependencies = {}) {
       await Bundled.verifySignatures(selected.root,selected.declaration,{signal});
     }, dependencies });
   return { ...manager, distributionRequired: false,
-    ui: { groupId: "graphics", tabLabel: "Graphics", sectionLabel: "KosmicKrisp GLES 3.2", memberOrder: 22, management: "managed" } };
+    ui: { groupId: "graphics", tabLabel: "Graphics", sectionLabel: "KosmicKrisp GLES 3.2", memberOrder: 22, management: "managed", hostFeature: "METAL4" } };
 }
 
 function createProvider(manager) {
