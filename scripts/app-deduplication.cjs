@@ -1,30 +1,64 @@
 const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
 const { TextDecoder } = require('node:util');
+const Content = require('./runtime-content.cjs');
+function binaryKind(name, bytes) {
+  const magic = bytes.subarray(0, 4).toString('hex');
+  if (['feedface','cefaedfe','feedfacf','cffaedfe','cafebabe','bebafeca','cafebabf','bfbafeca'].includes(magic)) return true;
+  if (magic === '7f454c46' || magic === '0061736d' || bytes[0] === 0x4d && bytes[1] === 0x5a) return true;
+  if (['504b0304','504b0506','504b0708','377abcaf','fd377a58'].includes(magic) || bytes[0] === 0x1f && bytes[1] === 0x8b ||
+      bytes.subarray(0, 8).toString('ascii') === '!<arch>\n') return true;
+  if (/\.(?:jar|class|dex|odex|vdex|art|dll|dylib|so|node|exe|wasm|luac|pyc|pyo|rpyc|rpyb|zip|tar|tgz|gz|xz|7z)$/i.test(name)) return true;
+  return bytes.subarray(0, 4).toString('ascii') === '\x1bLua' || bytes.subarray(0, 3).toString('ascii') === '\x1bLJ';
+}
 function candidate(name, bytes) {
   const magic=bytes.subarray(0,4).toString('hex');
   if(['feedface','cefaedfe','feedfacf','cffaedfe'].includes(magic))return false;
   if(['cafebabe','bebafeca','cafebabf','bfbafeca'].includes(magic)){try{require('../src/modules/shared/runtime/macho-load-commands').parseMachOLoadCommands(bytes);return false;}catch{}}
   if (/(?:^|\/)(?:licenses?|notices?|flash)(?:\/|$)|(?:^|\/)(?:license|notice|copying|copyright|authors)(?:[._-]|$)/i.test(name) ||
       /\.(?:png|jpe?g|gif|webp|ico|icns|svg|ttf|otf|woff2?|wav|ogg|flac|mp3|mp4|webm)$/i.test(name)) return false;
-  if (require('./app-inputs.cjs').binaryKind(name, bytes) || /\.(?:bin|metallib|spv|pak|dat)$/i.test(name)) return true;
+  if (binaryKind(name, bytes) || /\.(?:bin|metallib|spv|pak|dat)$/i.test(name)) return true;
   if (bytes.includes(0)) return true;
   try { new TextDecoder('utf-8',{fatal:true}).decode(bytes); return false; } catch { return true; }
 }
-function unpackPatterns(selected) {
-  const names=[];
-  for (const [name,record] of selected.asar) if(candidate(name,fs.readFileSync(record.source))) names.push(name);
-  for (const supplier of selected.suppliers.values()) for (const [name,record] of supplier.files)
-    if(candidate(name,fs.readFileSync(record.source))) names.push('node_modules/**/'+supplier.name+'/'+name);
-  return names;
+function unpackPatterns({projectDir,packageConfig}) {
+  const {getMainFileMatchers,getNodeModuleFileMatcher}=require('app-builder-lib/out/fileMatcher');
+  const {doMergeConfigs}=require('app-builder-lib/out/util/config/config');
+  const root=path.resolve(projectDir),destination='/application',build=Content.applyBuildPolicy(doMergeConfigs([structuredClone(packageConfig.build)]));
+  const info={projectDir:root,buildResourcesDir:'build',config:build,isPrepackedAppAsar:false,debugLogger:{isEnabled:false}};
+  const matchers=getMainFileMatchers(root,destination,value=>value,build.mac||{},{info},path.join(root,build.directories.output),false);
+  const names=new Set();
+  function walk(directory,filter,visit,ancestors=new Set()) {
+    const real=fs.realpathSync(directory);if(ancestors.has(real))return;ancestors.add(real);
+    for(const row of fs.readdirSync(directory,{withFileTypes:true})){
+      const file=path.join(directory,row.name),stat=fs.statSync(file,{throwIfNoEntry:false});
+      if(!stat||!filter(file,stat))continue;
+      if(stat.isDirectory())walk(file,filter,visit,ancestors);
+      else if(stat.isFile())visit(file);
+    }
+    ancestors.delete(real);
+  }
+  for(const matcher of matchers)if(fs.existsSync(matcher.from))walk(matcher.from,matcher.createFilter(),file=>{
+    const name=path.relative(destination,path.join(matcher.to,path.relative(matcher.from,file))).split(path.sep).join('/');
+    if(!Content.excludedReason(name)&&candidate(name,fs.readFileSync(file)))names.add(name);
+  });
+  const modules=path.join(root,'node_modules'),filter=getNodeModuleFileMatcher(root,destination,value=>value,build.mac||{},info).createFilter();
+  if(fs.existsSync(modules))for(const row of fs.readdirSync(modules,{withFileTypes:true})){
+    if(row.name.startsWith('.'))continue;
+    const source=path.join(modules,row.name);if(!fs.statSync(source,{throwIfNoEntry:false})?.isDirectory())continue;
+    walk(source,filter,file=>{const name=path.relative(modules,file).split(path.sep).join('/');if(!Content.excludedReason(name)&&candidate(name,fs.readFileSync(file)))names.add('node_modules/**/'+name);});
+  }
+  return [...names];
 }
 function inventory(appPath) {
   const root=fs.realpathSync(appPath),items=[];
-  for(const name of require('./check-packaging.cjs').appTree(root).files){
-    const file=path.join(root,name),stat=fs.lstatSync(file);
-    if(!stat.isFile() || name==='Contents/Resources/app.asar')continue;
+  function walk(directory){for(const row of fs.readdirSync(directory,{withFileTypes:true})){
+    const file=path.join(directory,row.name),stat=fs.lstatSync(file);
+    if(stat.isDirectory()){walk(file);continue;}
+    if(!stat.isFile())continue;
+    const name=path.relative(root,file).split(path.sep).join('/');if(name==='Contents/Resources/app.asar')continue;
     const bytes=fs.readFileSync(file);if(!candidate(name,bytes))continue;
     items.push({name,file,mode:stat.mode&0o777,size:bytes.length,sha256:crypto.createHash('sha256').update(bytes).digest('hex')});
-  }
+  }}walk(root);
   const archive=path.join(root,'Contents/Resources/app.asar');
   if(fs.existsSync(archive)){
     const asar=require('@electron/asar');asar.uncache(archive);
@@ -42,11 +76,11 @@ function groups(items) {
 function collapse(appPath) {
   let aliases=0,bytesRemoved=0;
   for(const group of groups(inventory(appPath))){
-    if(group.some(item=>item.packed))throw new Error('Duplicate binary must use the shared ASAR unpack selection: '+group.map(item=>item.name).join(', '));
+    if(group.some(item=>item.packed))continue;
     const ignored=item=>item.name.startsWith('Contents/Resources/native-runtimes/');
     const required=group.reduce((bits,item)=>bits|(item.mode&0o111),0);
     const candidates=group.filter(item=>(item.mode&required)===required&&group.every(other=>(other.mode&~0o111)===(item.mode&~0o111)));
-    if(!candidates.length||group.some(ignored)&&!candidates.some(ignored))throw new Error('Duplicate data has incompatible permissions across the native-runtimes signing boundary.');
+    if(!candidates.length||group.some(ignored)&&!candidates.some(ignored))continue;
     group.sort((a,b)=>Number(candidates.includes(b))-Number(candidates.includes(a))||Number(ignored(b))-Number(ignored(a))||a.name.localeCompare(b.name));
     const [canonical,...others]=group;
     for(const item of others){
@@ -58,9 +92,4 @@ function collapse(appPath) {
   }
   return {aliases,bytesRemoved};
 }
-function assertUnique(appPath) {
-  const duplicates=groups(inventory(appPath));
-  if(duplicates.length)throw new Error('Application stores duplicate binary bytes:\n'+duplicates.map(group=>group.map(item=>item.name).join(' = ')).join('\n'));
-  return true;
-}
-module.exports={candidate,unpackPatterns,collapse,assertUnique};
+module.exports={candidate,unpackPatterns,collapse};

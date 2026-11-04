@@ -43,15 +43,6 @@ test('app native packages require signed Runtime build provenance for the exact 
   fs.appendFileSync(path.join(f.root, 'dist/runtime-downloads', f.record.asset.filename), 'changed');
   assert.throws(() => Published.verifyBuildAttestations({ ...options, tool }), /differs from its pinned archive/);
 });
-test('publisher Python verification rejects a local replacement even when source metadata remains valid', t => {
-  const f = fixture(t), pin = require('../src/modules/shared/runtime/python').embeddedPythonProfile('arm64');
-  const selected = { repoRoot: f.root, plan: { launcherArch: 'arm64' }, sources: new Map([['python', {
-    owner: 'upstream', binary: 'Mach-O', supplier: { name: 'python' }, sourceRelative: 'src/resources/python/bin/python3', sha256: 'a'.repeat(64)
-  }]]) };
-  const target = path.join(f.root, 'dist/upstream-downloads', pin.sha256 + '.tar.gz');
-  fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, 'unverified local build');
-  assert.throws(() => Published.verifyPublisherNativeInputs(selected), /differs from its pinned archive/);
-});
 test('declared binary suppliers are compared with checksum-verified publisher downloads', async t => {
   const f = fixture(t), bytes = Buffer.from('publisher JAR'), folder = path.join(f.root, 'src/modules/example');
   fs.mkdirSync(folder, { recursive: true });
@@ -69,13 +60,7 @@ test('declared binary suppliers are compared with checksum-verified publisher do
   assert.deepEqual(fs.readFileSync(installed), bytes);
   fs.unlinkSync(path.join(f.root, 'dist/upstream-downloads', file.sha256 + '.bin'));
   await Published.prepareDeclaredPublishers({ repoRoot: f.root, download: () => assert.fail('Pinned installed bytes refill the cache offline') });
-  const record = { owner: 'upstream', binary: 'archive', sha256: file.sha256, supplier: { name: 'declared-upstream', file } };
-  const selected = { repoRoot: f.root, sources: new Map([['tool', record]]) };
-  assert.deepEqual(Published.verifyPublisherNativeInputs(selected), { nativeFiles: 1 });
-  record.sha256 = 'a'.repeat(64);
-  assert.throws(() => Published.verifyPublisherNativeInputs(selected), /differs from its publisher download/);
   fs.unlinkSync(path.join(f.root, 'dist/upstream-downloads', file.sha256 + '.bin'));
-  assert.throws(() => Published.verifyPublisherNativeInputs(selected), /archive is missing/);
   fs.unlinkSync(installed);
   await assert.rejects(Published.prepareDeclaredPublishers({ repoRoot: f.root, download: async (_url, target) => fs.writeFileSync(target, 'wrong') }), /differs from its pinned archive/);
   assert.equal(fs.existsSync(installed), false);

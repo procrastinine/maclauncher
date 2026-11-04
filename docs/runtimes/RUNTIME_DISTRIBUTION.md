@@ -127,20 +127,15 @@ node scripts/runtime-packages.cjs lock <catalog-directory>
 
 `scripts/distribution-model.cjs` derives the list of resources to include from module declarations. `scripts/runtime-content.cjs` keeps test runners, fixtures and generated test outputs out of the development renderer server and out of application packages, and embedded source archives follow the same rule.
 
-[`scripts/app-inputs.cjs`](../../scripts/app-inputs.cjs) compares the normalized packaging selectors with the actual ASAR, unpacked and resource files. Each file must come from the launcher's source, an upstream download at a fixed version, a locked source dependency or a finished MacLauncher Builds package, and renderer outputs record the source and configuration they were built from. Packaging fails on unknown inputs, extra files or source changes during assembly.
-
-Before signing and inventory, native staging applies each module's rules for which files ship. Executables, dependency libraries, runtime resources and license notices go into the package, and the scripts that build it stay in the source repository.
-
-The contents and permissions of native files are recorded before the application is signed, and copying and signing must keep them unchanged. The final package checks compare the source plan, the native inventory, the `.app` and the `.zip`. A check of an earlier artifact does not apply to a later build.
+Before signing, native staging applies each module's rules for which files ship. Executables, dependency libraries, runtime resources and license notices go into the package, and the scripts that build it stay in the source repository.
 
 ```sh
-pnpm package:check -- source --arch arm64 --maximum-macos 13.0
 pnpm package:mac --arm64
 ```
 
-Each command builds or checks one architecture. The Intel app uses `--arch x64` and `--x64`, and it needs the Intel build of the embedded Python, which `node scripts/setup-python-runtime.mjs --arch x64` installs; `--arch arm64` installs the pinned Apple Silicon publisher build. Packaging fails when the embedded Python does not match the app's architecture.
+Each command builds one architecture. The Intel app uses `--x64`, and it needs the Intel build of the embedded Python, which `node scripts/setup-python-runtime.mjs --arch x64` installs; `--arch arm64` installs the pinned Apple Silicon publisher build. Packaging fails when the embedded Python does not match the app's architecture.
 
-The final artifact check also takes the app path, the native inventory, the archive and the archive's SHA-256. The launcher's release assets are `MacLauncher.app.zip` for Apple Silicon and `MacLauncher-Intel.app.zip` for Intel. [macOS app builds](../development/CI.md) describes the application workflow.
+The launcher's release assets are `MacLauncher.app.zip` for Apple Silicon and `MacLauncher-Intel.app.zip` for Intel. [macOS app builds](../development/CI.md) describes the application workflow.
 
 ## Source and licenses
 

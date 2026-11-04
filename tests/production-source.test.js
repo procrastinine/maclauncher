@@ -42,7 +42,4 @@ test('actual source archive projection preserves the input and removes test arch
   const repeated = path.join(root, 'repeated.tar.gz');
   Production.projectArchive(source, repeated);
   assert.equal(digest(repeated), digest(output), 'identical source input produces identical projection bytes');
-  const Check = require('../scripts/check-packaging.cjs');
-  assert.throws(() => Check.inspectSourceArchive(source), /Runtime content excludes/);
-  assert.equal(Check.inspectSourceArchive(output).entries, entries.length);
 });

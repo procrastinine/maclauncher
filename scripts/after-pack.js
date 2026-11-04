@@ -1,7 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { parsePlistFile, savePlistFile } = require("app-builder-lib/out/util/plist");
-const { Arch } = require("builder-util");
 const { applicationDocumentTypes } = require("../src/core/file-associations");
 const { restoreCopiedNativePayload } = require("./native-copy.cjs");
 const Modules = require("../src/modules/registry");
@@ -15,7 +14,7 @@ function exists(p) {
   }
 }
 
-module.exports = async function afterPack(context, { dependencies = {} } = {}) {
+module.exports = async function afterPack(context) {
   if (context.electronPlatformName !== "darwin") return;
 
   const appName = context.packager.appInfo.productFilename;
@@ -35,32 +34,15 @@ module.exports = async function afterPack(context, { dependencies = {} } = {}) {
   const projectDir = context.packager.info?.projectDir || path.resolve(__dirname, "..");
   const nativeSource = path.join(projectDir, "src", "resources", "native-runtimes");
   if (exists(nativeSource)) {
-    const architecture = typeof context.arch === "string" ? context.arch : Arch[context.arch];
     restoreCopiedNativePayload({ sourceRoot: nativeSource,
-      resourceRoot: path.join(resourcesPath, "native-runtimes"),
-      requiredOnly: true,
-      architectures: architecture === "universal" ? ["arm64", "x64"] : [architecture] });
+      resourceRoot: path.join(resourcesPath, "native-runtimes") });
   }
-  const arch = typeof context.arch === 'string' ? context.arch : Arch[context.arch];
   require('./python-resources.cjs').projectPackagedPython({
-    sourceRoot: path.join(projectDir, 'src/resources/python'), resourceRoot: path.join(resourcesPath, 'python'), arch
+    sourceRoot: path.join(projectDir, 'src/resources/python'), resourceRoot: path.join(resourcesPath, 'python')
   });
-  const check = require('./check-packaging.cjs');
-  check.assertRuntimeBoundary(appPath, { arch });
-  check.inspectAsar(path.join(resourcesPath, 'app.asar'), {
-    product: 'MacLauncher', version: context.packager.appInfo.version
-  });
-  const inputs = require('./app-inputs.cjs'), selected = inputs.pending.get(context.packager)?.get(arch);
-  for (const [relative, record] of selected?.generatedResources || []) {
-    const target = path.join(resourcesPath, relative); fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.copyFileSync(record.source, target);
-  }
-  if (dependencies.verifyAppInputs) await dependencies.verifyAppInputs({ selected, archive: path.join(resourcesPath, 'app.asar'), resources: resourcesPath, appPath });
-  else {
-    if (!selected) throw new Error('Application packaging requires the source, supplier and Builds input map from beforePack.');
-    inputs.verifyContents(selected, { archive: path.join(resourcesPath, 'app.asar'), resources: resourcesPath, appPath });
-  }
+  const { addLicense } = require('./license-files.mjs');
+  addLicense(resourcesPath, 'MacLauncher', path.join(projectDir, 'LICENSE'), 'MIT');
+  addLicense(resourcesPath, 'Electron', path.join(projectDir, 'node_modules/electron/dist/LICENSE'), 'Electron');
+  addLicense(resourcesPath, 'Chromium', path.join(projectDir, 'node_modules/electron/dist/LICENSES.chromium.html'), 'Chromium');
   require('./app-deduplication.cjs').collapse(appPath);
-  inputs.pending.get(context.packager)?.delete(arch);
-  if (selected?.generatedResourceRoot) fs.rmSync(selected.generatedResourceRoot, { recursive: true, force: true });
 };

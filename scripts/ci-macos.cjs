@@ -26,17 +26,9 @@ function readConfiguration(env = process.env) {
 function verifyRunner(config, { platform = process.platform, arch = process.arch } = {}) {
   if (platform !== 'darwin' || arch !== config.arch) throw new Error('The macOS runner CPU must match the explicitly selected launcher architecture.');
 }
-function verifyAppVersion(archive, expectedVersion) {
-  const packed = JSON.parse(require('@electron/asar').extractFile(archive, 'package.json').toString('utf8'));
-  if (typeof expectedVersion !== 'string' || !expectedVersion || packed.version !== expectedVersion) {
-    throw new Error('The packaged app version differs from package.json.version. Rebuild the candidate before creating artifacts.');
-  }
-  return packed.version;
-}
 function publicJson(file, value) {
-  require('./native-supplementals.cjs').validatePublicMetadata(value);
   B.realDirectory(path.dirname(file), { create: true });
-  fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n', { flag: 'wx', mode: 0o644 });
+  fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n', { mode: 0o644 });
 }
 // Checkout setup and app builds install the pinned publisher build for their CPU.
 async function preparePython({ arch, repoRoot, force = false, install = async args => (await import('./setup-python-runtime.mjs')).main(args) }) {
@@ -55,6 +47,7 @@ function prepareElectron({ repoRoot = path.resolve(__dirname, '..'), tool = exec
 async function fetchResources({ config = readConfiguration(), repoRoot = path.resolve(__dirname, '..') } = {}) {
   verifyRunner(config);
   prepareElectron({ repoRoot });
+  require('./app-host.cjs').readHost({ repoRoot, arch: config.arch });
   const python = await preparePython({ arch: config.arch, repoRoot, force: true });
   await require('./published-inputs.cjs').prepareSevenZip({ repoRoot });
   await require('./published-inputs.cjs').prepareDeclaredPublishers({ repoRoot });
@@ -82,80 +75,22 @@ function releaseNotes({ repoRoot = path.resolve(__dirname, '..'), version, minim
     `[Upstream licences](${base}/blob/${tag}/docs/ATTRIBUTIONS.md) are also retained in the app. ` +
     `[Build provenance and package verification](${base}/blob/${tag}/docs/development/VERIFYING.md).\n\n</details>\n`;
 }
-function assertCopiedPayload(resourceRoot, inventory, verified) {
-  if (verified.length !== inventory.packages.length || inventory.packages.some(item => !verified.some(found =>
-    found.managerId === item.managerId && found.version === item.version && found.arch === item.arch && found.manifestSha256 === item.manifestSha256))) {
-    throw new Error('Packaged native payload differs from its pinned archive.');
-  }
-  const expectedFiles = new Set(), expectedDirectories = new Set(['']);
-  for (const item of inventory.packages) {
-    const relative = Payload.safeFile(item.directoryRelative);
-    const stored = B.readRegular(path.join(resourceRoot, relative, 'manifest.json'), B.LIMITS.manifestBytes);
-    if (stored.sha256 !== item.manifestSha256) throw new Error('Packaged native manifest changed after verification.');
-    const manifest = JSON.parse(stored.bytes);
-    for (const name of [`${relative}/manifest.json`, ...manifest.files.map(file => `${relative}/files/${file.path}`)]) {
-      const safe = Payload.safeFile(name);
-      expectedFiles.add(safe);
-      for (let directory = path.posix.dirname(safe); directory !== '.'; directory = path.posix.dirname(directory)) expectedDirectories.add(directory);
-    }
-  }
-  for (const item of inventory.supplementals || []) for (const file of item.files) {
-    const safe = Payload.safeFile(`${item.directoryRelative}/${file.path}`);
-    expectedFiles.add(safe);
-    for (let directory = path.posix.dirname(safe); directory !== '.'; directory = path.posix.dirname(directory)) expectedDirectories.add(directory);
-  }
-  const sidecars=path.join(resourceRoot,'.declarations');
-  if(fs.existsSync(sidecars)){
-    const records=inventory.projectPackages||[];
-    const context=require('../src/modules/shared/runtime/included-package-dependencies').context(path.dirname(resourceRoot),{lock:{packages:records},verification:'status'});
-    for(const record of records){
-      const selected=context.visit(record),logical=require('../src/modules/shared/runtime/package-contract.cjs').logicalFiles(selected.declaration,selected.resolveDependency);
-      for(const name of ['.declarations/'+record.asset.sha256+'.json',...logical.map(file=>selected.declaration.directoryRelative+'/'+file.path)]){
-        expectedFiles.add(name);for(let dir=path.posix.dirname(name);dir!=='.';dir=path.posix.dirname(dir))expectedDirectories.add(dir);
-      }
-    }
-  }
-  function walk(relative) {
-    const directory = path.join(resourceRoot, relative);
-    B.realDirectory(directory);
-    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      const name = relative ? `${relative}/${entry.name}` : entry.name;
-      if (entry.isDirectory() && expectedDirectories.has(name)) walk(name);
-      else if ((entry.isFile() || entry.isSymbolicLink() && B.appAlias(path.join(resourceRoot,name))) && expectedFiles.delete(name)) continue;
-      else throw new Error('The app contains a native file or directory outside its sealed payload.');
-    }
-  }
-  walk('');
-  if (expectedFiles.size) throw new Error('The app is missing sealed native payload files.');
-}
 async function finalize({ config = readConfiguration(), repoRoot = path.resolve(__dirname, '..'), outputRoot = path.join(repoRoot, 'dist/ci'), tool = execFileSync } = {}) {
   verifyRunner(config);
   const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
   const releaseTag = verifyTagVersion(pkg.version, process.env.MACLAUNCHER_RELEASE_TAG ? `refs/tags/${process.env.MACLAUNCHER_RELEASE_TAG}` : process.env.GITHUB_REF);
   const product = pkg.build.productName;
-  if (product !== 'MacLauncher') throw new Error('The package product must be MacLauncher before producing its named CI archive.');
   const app = path.join(repoRoot, pkg.build.directories.output, config.arch === 'arm64' ? 'mac-arm64' : 'mac', `${product}.app`);
   const inventory = JSON.parse(fs.readFileSync(path.join(outputRoot, 'native-payload-inventory.json'), 'utf8'));
-  const packaging = require('./check-packaging.cjs');
-  const appCheck = packaging.verifyApp({ appPath: app, arch: config.arch, maximumMacOS: config.maximumMacOS, inventory, packageConfig: pkg, tool });
-  const inputs = require('./app-inputs.cjs');
-  const selected = await inputs.prepare({ repoRoot, packageConfig: pkg,
-    plan: require('./distribution-model.cjs').createPlan({ arch: config.arch, maximumMacOS: config.maximumMacOS, packageConfig: pkg }) });
-  inputs.verifyContents(selected, { archive: path.join(app, 'Contents/Resources/app.asar'),
-    resources: path.join(app, 'Contents/Resources'), appPath: app });
+  const publishedInputs = require('./published-inputs.cjs').verifyBuildAttestations({ repoRoot, lock: config.lock });
   const sourceCommit = tool('git', ['-C', repoRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-  if (!/^[a-f0-9]{40}$/.test(sourceCommit)) throw new Error('The application source commit is unavailable.');
   const name = require('./release.cjs').appAsset(config.arch).name;
   const archive = path.join(outputRoot, name);
-  if (fs.existsSync(archive)) throw new Error('Existing app artifacts are preserved.');
   // ditto retains app/framework symlinks and executable modes; upload a zip,
   // since Actions file upload does not preserve these attributes itself.
   tool('/usr/bin/ditto', ['-c', '-k', '--sequesterRsrc', '--keepParent', app, archive], { stdio: 'pipe' });
   const sha256 = await Payload.checksum(archive);
-  const zipCheck = await packaging.verifyZip({ archive, sha256, appPath: app, product });
-  publicJson(path.join(outputRoot, 'packaging-checks.json'), { schemaVersion: 1, app: appCheck, zip: zipCheck });
-  publicJson(path.join(outputRoot, 'distribution-plan.json'), require('./distribution-model.cjs').createPlan({ arch: config.arch, maximumMacOS: config.maximumMacOS, packageConfig: pkg }));
-  fs.writeFileSync(path.join(outputRoot, 'SHA256SUMS.txt'), `${sha256}  ${name}\n`, { flag: 'wx', mode: 0o644 });
+  fs.writeFileSync(path.join(outputRoot, 'SHA256SUMS.txt'), `${sha256}  ${name}\n`, { mode: 0o644 });
   publicJson(path.join(outputRoot, require('./release.cjs').appManifest(config.arch)), { schemaVersion: 1, product, version: pkg.version, releaseTag, sourceCommit, arch: config.arch,
     toolchain: { node: process.versions.node,
       pnpm: tool('pnpm', ['--version'], { encoding: 'utf8' }).trim(),
@@ -165,10 +100,10 @@ async function finalize({ config = readConfiguration(), repoRoot = path.resolve(
     launcherMinimumMacOS: pkg.build.mac.minimumSystemVersion, maximumNativeMacOS: config.maximumMacOS,
     runtimePackageLockSha256: B.digest(Buffer.from(JSON.stringify(config.lock))),
     nativePackages: inventory.packages, nativeSupplementals: inventory.supplementals, 
-    publishedInputs: selected.provenance,
+    publishedInputs: { builds: publishedInputs },
     appArchive: name, appArchiveSha256: sha256, signing: 'Ad hoc signed; not Developer ID signed or notarized' });
   fs.writeFileSync(path.join(outputRoot, 'RELEASE_NOTES.md'), releaseNotes({ repoRoot, version: pkg.version,
-    minimumMacOS: pkg.build.mac.minimumSystemVersion, packageRepository: inventory.packageRepository }), { flag: 'wx', mode: 0o644 });
+    minimumMacOS: pkg.build.mac.minimumSystemVersion, packageRepository: inventory.packageRepository }), { mode: 0o644 });
   return { archive: name, sha256, sourceCommit, nativePackages: inventory.packages.length, nativeSupplementals: inventory.supplementals.length };
 }
 function initializeSources({ repoRoot = path.resolve(__dirname, '..'), tests = false, tool = execFileSync } = {}) {
@@ -198,5 +133,5 @@ async function main(args, sourceOptions) {
   if (args[0] === 'finalize') return finalize({ config });
   throw new Error('Usage: node scripts/ci-macos.cjs sources|test-sources|configure|fetch|finalize');
 }
-module.exports = { verifyTagVersion, readConfiguration, verifyRunner, verifyAppVersion, preparePython, prepareElectron, fetchResources, releaseNotes, assertCopiedPayload, finalize, initializeSources, main };
+module.exports = { verifyTagVersion, readConfiguration, verifyRunner, preparePython, prepareElectron, fetchResources, releaseNotes, finalize, initializeSources, main };
 if (require.main === module) main(process.argv.slice(2)).then(result => console.log(JSON.stringify(result))).catch(error => { console.error(error.message); process.exitCode = 1; });

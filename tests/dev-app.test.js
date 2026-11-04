@@ -132,34 +132,17 @@ test("packaged Finder file associations are written before signing without losin
   const custom = { CFBundleTypeName: "Custom document", CFBundleTypeExtensions: ["custom"] };
   await savePlistFile(infoPath, { CFBundleName: "MacLauncher", CFBundleIconFile: "icon.icns", CFBundleDocumentTypes: [custom] });
   const afterPack = require("../scripts/after-pack");
-  const Python = require('../scripts/python-resources.cjs'), pythonProfile = require('../src/modules/shared/runtime/python').embeddedPythonProfile('arm64');
+  const Python = require('../scripts/python-resources.cjs');
   const pythonSource = path.join(root, 'src/resources/python'), pythonResources = path.join(contents, 'Resources/python');
-  for (const file of [...Python.requiredFiles, 'bin/python3', ...Object.keys(Python.configuration().aliases)]) {
+  for (const file of ['bin/python3', ...Object.keys(Python.configuration().aliases)]) {
     const target = path.join(pythonSource, file); fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, file.startsWith('bin/') ? 'same producer interpreter' : 'runtime module', { mode: file.startsWith('bin/') ? 0o755 : 0o644 });
   }
-  fs.writeFileSync(path.join(pythonSource, 'runtime.json'), JSON.stringify(pythonProfile));
   fs.cpSync(pythonSource, pythonResources, { recursive: true });
-  const pythonBefore = Python.verifySourcePython({ sourceRoot: pythonSource });
-  const archiveSource = path.join(root, 'archive-source');
-  for (const [name, value] of Object.entries({ 'package.json': JSON.stringify(require('../package.json')),
-    'dist/renderer/index.html': '<html></html>', 'src/main/bootstrap.js': 'module.exports = {}' })) {
-    fs.mkdirSync(path.dirname(path.join(archiveSource, name)), { recursive: true });
-    fs.writeFileSync(path.join(archiveSource, name), value);
-  }
-  await require('@electron/asar').createPackage(archiveSource, path.join(contents, 'Resources', 'app.asar'));
   const context = { electronPlatformName: "darwin", appOutDir: root, arch: 3,
     packager: { info: { projectDir: root }, appInfo: { productFilename: "MacLauncher", version: require('../package.json').version } } };
-  let checked = 0;
-  const dependencies = { verifyAppInputs({ appPath, archive }) {
-    assert.equal(appPath, path.join(root, 'MacLauncher.app'));
-    assert.equal(archive, path.join(contents, 'Resources/app.asar')); checked++;
-  } };
-  await afterPack(context, { dependencies });
-  await afterPack(context, { dependencies });
-  assert.equal(checked, 2);
-  assert.deepEqual(Python.verifySourcePython({ sourceRoot: pythonSource }), pythonBefore);
-  assert.equal(Python.assertPackagedPython({ resourceRoot: pythonResources, arch: 'arm64' }).version, pythonProfile.version);
+  await afterPack(context);
+  await afterPack(context);
   for (const [alias, target] of Object.entries(Python.configuration().aliases)) {
     assert.equal(fs.lstatSync(path.join(pythonSource, alias)).isFile(), true, 'Projection preserves the producer interpreter copies');
     assert.equal(fs.readlinkSync(path.join(pythonResources, alias)), target);

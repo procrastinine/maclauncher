@@ -3,7 +3,6 @@ const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
 const test = require("node:test");
-const { finished } = require("node:stream/promises");
 const { FileMatcher, getMainFileMatchers, getNodeModuleFileMatcher } = require("app-builder-lib/out/fileMatcher");
 const { doMergeConfigs } = require("app-builder-lib/out/util/config/config");
 const Content = require("../scripts/runtime-content.cjs");
@@ -76,8 +75,7 @@ test("source-directory aliases and live Android source mappings are excluded", (
 
 });
 
-test("Android source exporters remain excluded from actual ASAR files while metadata uses a sealed resource package", async t => {
-  const asar = require("@electron/asar"), Check = require("../scripts/check-packaging.cjs");
+test("Android source exporters remain excluded by Builder filters while metadata uses a sealed resource package", async t => {
   const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "android-source-alias-package-"));
   t.after(() => fs.rmSync(root, {recursive:true, force:true}));
   const source = path.join(root,"source"), stage = path.join(root,"stage"), config = packageConfig();
@@ -99,14 +97,7 @@ test("Android source exporters remain excluded from actual ASAR files while meta
     const info = {projectDir:source,buildResourcesDir:"build",config:build,isPrepackedAppAsar:false,debugLogger:{isEnabled:false}};
     return getMainFileMatchers(source,stage,value=>value,build.mac,{info},path.join(source,build.directories.output),false);
   };
-  // Reproduce the former normalized selection against actual aliases: ASAR
-  // retains the link but its source-only canonical target was never selected.
-  const previous = structuredClone(config);previous.build.files = previous.build.files.map(row => typeof row === "string" ? row.replace(",source-archive,source-hwui,",",") : row);
-  const oldMain = matchersFor(previous.build).find(matcher => matcher.from === source);
-  for (const alias of aliases) assert.equal(selectedBy(oldMain,alias),true);
   const walk = require("builder-util").walk;
-  const before = path.join(root,"before.asar");await finished(await asar.createPackageFromFiles(source,before,await walk(source,oldMain.createFilter())));
-  assert.throws(()=>Check.inspectAsar(before,{version:config.version,product:config.build.productName},{packageConfig:previous}),/link is missing its target/);
   // Apply the actual normalized launcher FileSet; the sealed helper stays outside ASAR.
   const selected = [];
   for (const matcher of matchersFor(config.build)) for (const file of await walk(matcher.from,matcher.createFilter())) {
@@ -124,8 +115,6 @@ test("Android source exporters remain excluded from actual ASAR files while meta
     assert.equal(require("../src/modules/shared/runtime/bundled-native").digest(fs.readFileSync(path.join(projectRoot,"src/resources/native-runtimes",helper.directoryRelative,file.path))),file.sha256);
   }
   assert.equal(selected.some(file=>file.startsWith("src/external/")),false);
-  const after = path.join(root,"after.asar");await finished(await asar.createPackage(stage,after));
-  assert.equal(Check.inspectAsar(after,{version:config.version,product:config.build.productName},{packageConfig:config}).archiveLinks,0);
 });
 test("late root FileSet exclusions survive Builder merging and npm filters retain runtime entry points", () => {
   const input = packageConfig().build, flash = '!src/modules/flash/resources/flash-player{,/**}';

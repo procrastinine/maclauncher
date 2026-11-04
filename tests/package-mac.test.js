@@ -30,11 +30,6 @@ function fixture(t) {
       prepareDeclaredPublishers:async options=>record('prepareDeclaredPublishers',options)};`);
   fs.writeFileSync(path.join(root, 'scripts/ci-macos.cjs'), recordPreparation + `
     module.exports={preparePython:async options=>record('preparePython',options)};`);
-  fs.writeFileSync(path.join(root, 'scripts/check-packaging.cjs'), recorder + `
-    const args = process.argv.slice(2), index = args.indexOf('--inventory');
-    if (index >= 0) {
-      if (!JSON.parse(fs.readFileSync(args[index + 1])).valid) process.exit(43);
-    } else if (!fs.existsSync('src/resources/native-runtime-sources')) process.exit(42);`);
   for (const name of ['pnpm', 'electron-builder'])
     fs.writeFileSync(path.join(root, 'bin', name), '#!' + process.execPath + '\n' + recorder, { mode: 0o755 });
   const env = { ...process.env, PATH: path.join(root, 'bin'), CSC_IDENTITY_AUTO_DISCOVERY: 'false' };
@@ -44,45 +39,15 @@ function fixture(t) {
       ? fs.readFileSync(path.join(root, 'commands.jsonl'), 'utf8').trim().split('\n').map(JSON.parse) : [] };
 }
 
-test('package command verifies an imported inventory without requiring local source archives', t => {
-  const f = fixture(t), inventory = path.join(f.root, 'payload inventory.json');
-  fs.writeFileSync(inventory, JSON.stringify({ valid: true }));
-  const result = f.run(['--runtime-inventory', inventory]);
+test('package command prepares publisher resources before the renderer and app build', t => {
+  const f = fixture(t), result = f.run([]);
   assert.equal(result.status, 0, result.stderr);
   const commands = f.commands();
-  assert.deepEqual(commands.map(row => row.command), [...preparation, 'check-packaging.cjs', 'pnpm', 'pnpm']);
+  assert.deepEqual(commands.map(row => row.command), [...preparation, 'pnpm', 'pnpm']);
   assert.deepEqual(commands.find(row => row.command === 'preparePython').args, ['arm64']);
-  assert.deepEqual(commands.find(row => row.command === 'check-packaging.cjs').args, ['source', '--arch', 'arm64', '--maximum-macos', require('../build/runtime-packages.json').maximumMacOS, '--inventory', inventory]);
-  const builder = commands.at(-1);
-  assert.deepEqual(builder.args.slice(0, 4), ['exec', 'electron-builder', '--mac', '--publish=never']);
-  assert.equal(builder.args.includes('--runtime-inventory'), false);
-  assert.equal(builder.args.includes(inventory), false);
-  const workflow = fs.readFileSync(path.resolve(__dirname, '../.github/workflows/macos-app.yml'), 'utf8');
-  assert.match(workflow, /run: pnpm run package:mac[^\n]*--runtime-inventory dist\/ci\/native-payload-inventory\.json/);
+  assert.deepEqual(commands.at(-2).args, ['run', 'build']);
+  assert.deepEqual(commands.at(-1).args.slice(0, 4), ['exec', 'electron-builder', '--mac', '--publish=never']);
 });
-
-test('package command stops before the renderer and app build when inventory verification fails', t => {
-  const f = fixture(t), inventory = path.join(f.root, 'invalid.json');
-  fs.writeFileSync(inventory, JSON.stringify({ valid: false }));
-  assert.equal(f.run(['--runtime-inventory', inventory]).status, 43);
-  assert.deepEqual(f.commands().map(row => row.command), [...preparation, 'check-packaging.cjs']);
-});
-
-test('package command retains local source verification when no inventory is supplied', t => {
-  const f = fixture(t);
-  assert.equal(f.run([]).status, 42);
-  assert.equal(f.commands().find(row => row.command === 'check-packaging.cjs').args.includes('--inventory'), false);
-  fs.mkdirSync(path.join(f.root, 'src/resources/native-runtime-sources'), { recursive: true });
-  assert.equal(f.run([]).status, 0);
-});
-
-test('package command rejects an inventory flag without a value before running commands', t => {
-  const f = fixture(t), result = f.run(['--runtime-inventory']);
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /--runtime-inventory requires a value/);
-  assert.deepEqual(f.commands(), []);
-});
-
 test('package command builds one app architecture per run', t => {
   const f = fixture(t);
   for (const extra of [['--x64'], ['--universal']]) {

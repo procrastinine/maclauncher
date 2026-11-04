@@ -266,7 +266,6 @@ test('module-declared universal supplemental resources round-trip exact source, 
   for (const file of supplemental.files) assert.deepEqual(fs.readFileSync(path.join(f.destination, supplemental.directoryRelative, file.path)),
     fs.readFileSync(path.join(f.resourceRoot, supplemental.directoryRelative, file.path)));
   assert.equal(S.verifySupplementals({ resourceRoot: f.destination, arch: 'x64', maximumMacOS: f.maximumMacOS, dependencies: f.dependencies }).length, 1);
-  require('../scripts/ci-macos.cjs').assertCopiedPayload(f.destination, exported.inventory, imported.published);
 });
 test('supplemental payloads retain complete notice trees within the shared package limit', t => {
   const item = supplementalFixture(fixture(t));

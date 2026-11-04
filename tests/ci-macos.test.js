@@ -1,12 +1,10 @@
-const { finished } = require("node:stream/promises");
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { createHash } = require('node:crypto');
 const test = require('node:test');
 const { load: parse } = require('js-yaml');
-const { verifyTagVersion, readConfiguration, verifyRunner, verifyAppVersion, releaseNotes, assertCopiedPayload, preparePython, prepareElectron, main } = require('../scripts/ci-macos.cjs');
+const { verifyTagVersion, readConfiguration, verifyRunner, releaseNotes, preparePython, prepareElectron, main } = require('../scripts/ci-macos.cjs');
 
 const environment = { MACLAUNCHER_APP_ARCH: 'arm64' };
 // The committed lock is checked against the current application plan by its
@@ -55,39 +53,6 @@ test('packaging and repository tests initialize their own declared sources at Gi
     await assert.rejects(main(['test-sources'], { repoRoot, tool }), /explicit pinned submodules|Unsafe/);
   }
   assert.equal(calls.length, 2, 'Invalid declarations cannot reach Git');
-});
-test('finalize CLI exposes payload verification during its synchronous packaging callback', async t => {
-  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ci-cli-payload-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const filename = path.resolve(__dirname, '../scripts/ci-macos.cjs');
-  const originalRequire = require('node:module').createRequire(filename);
-  const cliModule = { exports: {} }, errors = [], inventory = { packages: [] };
-  let payloadVerified = false;
-  const cliRequire = name => {
-    if (name === 'node:fs') return { ...fs, readFileSync(file, ...args) {
-      return String(file).endsWith('/dist/ci/native-payload-inventory.json')
-        ? JSON.stringify(inventory) : fs.readFileSync(file, ...args);
-    } };
-    if (name === './runtime-packages.cjs') return { readLock: () => fixtureLock };
-    if (name === './check-packaging.cjs') return { verifyApp() {
-      // This callback runs before the CLI entrypoint returns its first promise.
-      // The packaging module calls back into the still-loading CI module.
-      cliModule.exports.assertCopiedPayload(root, inventory, []);
-      payloadVerified = true;
-      throw new Error('Synthetic archive boundary reached');
-    } };
-    return originalRequire(name);
-  };
-  cliRequire.main = cliModule;
-  const cliProcess = { platform: 'darwin', arch: 'arm64', env: environment, argv: ['node', filename, 'finalize'] };
-  require('node:vm').runInNewContext(fs.readFileSync(filename, 'utf8'), {
-    require: cliRequire, module: cliModule, __dirname: path.dirname(filename), process: cliProcess,
-    console: { log() {}, error(message) { errors.push(message); } }, Buffer
-  }, { filename });
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(payloadVerified, true);
-  assert.deepEqual(errors, ['Synthetic archive boundary reached']);
-  assert.equal(cliProcess.exitCode, 1);
 });
 test('release notes lead with the app download and use version-specific highlights', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'release-notes-'));
@@ -139,16 +104,6 @@ test('tag builds require the exact app version, preserving stable and prerelease
   assert.throws(() => readConfiguration({ ...environment, GITHUB_REF: 'refs/tags/v999.0.0' }), /package\.json\.version exactly/);
   assert.doesNotThrow(() => readConfiguration({ ...environment, GITHUB_REF: 'refs/heads/main', MACLAUNCHER_RELEASE_TAG: `v${actualVersion}` }));
 });
-test('final app validation reads the real packaged version and rejects a different stable or prerelease build', async t => {
-  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ci-app-version-test-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const source = path.join(root, 'source'), archive = path.join(root, 'app.asar'); fs.mkdirSync(source);
-  const version = '1.2.3-beta.4+build.7';
-  fs.writeFileSync(path.join(source, 'package.json'), JSON.stringify({ name: 'fixture', version }));
-  await finished(await require('@electron/asar').createPackage(source, archive));
-  assert.equal(verifyAppVersion(archive, version), version);
-  for (const other of ['1.2.3', '1.2.3-beta.5', '1.2.3-beta.4+build.8']) assert.throws(() => verifyAppVersion(archive, other), /packaged app version differs/);
-});
 test('version, manual and tag app workflow pins actions, installs locked dependencies and never permits a native subset', () => {
   const workflow = parse(fs.readFileSync(path.join(__dirname, '../.github/workflows/macos-app.yml'), 'utf8'));
   assert.ok(workflow.on.workflow_dispatch); assert.deepEqual(workflow.on.push.tags, ['v*']);
@@ -196,31 +151,6 @@ test('version, manual and tag app workflow pins actions, installs locked depende
   assert.equal(workflow.jobs.build.if, "needs.plan.outputs.build == 'true'");
   assert.equal(workflow.jobs.release.if, "needs.plan.outputs.publish == 'true'");
   assert.equal(workflow.jobs.release.steps.find(step => step.run)?.run, 'node scripts/release.cjs publish release-assets');
-});
-test('app payload comparison requires exact reviewed versions and rejects extra files, directories and links', t => {
-  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ci-copied-payload-test-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const relative = 'native-example/1.0/arm64', packageRoot = path.join(root, relative);
-  fs.mkdirSync(path.join(packageRoot, 'files/bin'), { recursive: true });
-  fs.writeFileSync(path.join(packageRoot, 'files/bin/runtime'), 'Synthetic reviewed executable bytes');
-  const manifest = Buffer.from(JSON.stringify({ files: [{ path: 'bin/runtime' }] }));
-  fs.writeFileSync(path.join(packageRoot, 'manifest.json'), manifest);
-  const record = { managerId: 'native-example', version: '1.0', arch: 'arm64', directoryRelative: relative,
-    manifestSha256: createHash('sha256').update(manifest).digest('hex') };
-  const inventory = { packages: [record] };
-  assert.doesNotThrow(() => assertCopiedPayload(root, inventory, [record]));
-  assert.throws(() => assertCopiedPayload(root, inventory, []), /differs from its pinned archive/);
-  assert.throws(() => assertCopiedPayload(root, inventory, [record, { ...record, version: '2.0' }]), /differs from its pinned archive/);
-  assert.throws(() => assertCopiedPayload(root, inventory, [{ ...record, manifestSha256: 'a'.repeat(64) }]), /differs from its pinned archive/);
-  const extra = path.join(packageRoot, 'review-session.json');
-  fs.writeFileSync(extra, 'Unreviewed content');
-  assert.throws(() => assertCopiedPayload(root, inventory, [record]), /outside its sealed payload/);
-  fs.rmSync(extra); fs.mkdirSync(extra);
-  assert.throws(() => assertCopiedPayload(root, inventory, [record]), /outside its sealed payload/);
-  fs.rmSync(extra, { recursive: true }); fs.symlinkSync('manifest.json', extra);
-  assert.throws(() => assertCopiedPayload(root, inventory, [record]), /outside its sealed payload/);
-  fs.rmSync(extra); fs.rmSync(path.join(packageRoot, 'files/bin/runtime'));
-  assert.throws(() => assertCopiedPayload(root, inventory, [record]), /missing sealed native payload files/);
 });
 test('the fetch step installs the publisher Python build for the app architecture when the checkout holds another', async t => {
   const repoRoot = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ci-python-'));

@@ -1,7 +1,6 @@
 // Production native inputs come from publisher archives or Runtime build attestations.
 const fs = require('node:fs');
 const path = require('node:path');
-const os = require('node:os');
 const crypto = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 const ROOT = path.resolve(__dirname, '..');
@@ -120,41 +119,4 @@ async function prepareDeclaredPublishers({ repoRoot = ROOT, download = require('
   }
   return { files };
 }
-function verifyPublisherNativeInputs(selected, { tool = execFileSync } = {}) {
-  const native = [...selected.sources.values()].filter(record => record.owner === 'upstream' && record.binary);
-  const python = native.filter(record => record.supplier.name === 'python');
-  if (python.length) {
-    const pin = require('../src/modules/shared/runtime/python').embeddedPythonProfile(selected.plan.launcherArch);
-    const archive = path.join(selected.repoRoot, 'dist/upstream-downloads', pin.sha256 + '.tar.gz');
-    assertArchive(archive, pin);
-    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'maclauncher-publisher-'));
-    try {
-      tool('/usr/bin/tar', ['-xzf', archive, '-C', temporary], { timeout: 30000, stdio: 'pipe' });
-      for (const record of python) {
-        const name = record.sourceRelative.slice('src/resources/python/'.length), source = path.join(temporary, 'python', name);
-        if (!fs.existsSync(source) || digest(fs.readFileSync(source)) !== record.sha256)
-          throw new Error('Embedded Python native code differs from its publisher archive: ' + name + '.');
-      }
-    } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
-  }
-  for (const record of native.filter(item => item.supplier.name === '7zip')) {
-    const pin = record.supplier, archive = path.join(selected.repoRoot, 'dist/upstream-downloads', pin.sha256 + '.tar.xz');
-    assertArchive(archive, pin);
-    const bytes = tool('/usr/bin/tar', ['-xOf', archive, '7zz'], { maxBuffer: 16 * 1024 ** 2 });
-    if (digest(bytes) !== record.sha256) throw new Error('7-Zip native code differs from its publisher archive.');
-  }
-  for (const record of native.filter(item => !['python', '7zip'].includes(item.supplier.name))) {
-    const pin = record.supplier.file;
-    if (!pin) throw new Error('Native publisher inputs require a verified release download.');
-    const file = path.join(selected.repoRoot, 'dist/upstream-downloads', pin.sha256 + '.bin');
-    assertArchive(file, { sha256: pin.sha256, bytes: pin.size });
-    if (record.sha256 !== pin.sha256) throw new Error('Native code differs from its publisher download.');
-  }
-  return { nativeFiles: native.length };
-}
-function verifyProductionInputs(selected, { tool = execFileSync } = {}) {
-  const lock = require('./runtime-packages.cjs').readLock({ repoRoot: selected.repoRoot, arch: selected.plan.launcherArch });
-  const builds = verifyBuildAttestations({ repoRoot: selected.repoRoot, lock, tool });
-  return { builds, publishers: verifyPublisherNativeInputs(selected, { tool }) };
-}
-module.exports = { assertArchive, downloadBuildAttestations, verifyBuildAttestations, prepareSevenZip, prepareDeclaredPublishers, verifyPublisherNativeInputs, verifyProductionInputs };
+module.exports = { assertArchive, downloadBuildAttestations, verifyBuildAttestations, prepareSevenZip, prepareDeclaredPublishers };

@@ -1,6 +1,5 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const crypto = require('node:crypto');
 const profile = require('../src/modules/shared/runtime/embedded-python.json');
 const { embeddedPythonProfile } = require('../src/modules/shared/runtime/python');
 
@@ -36,24 +35,6 @@ function directory(root) {
   if (!fs.lstatSync(root).isDirectory() || fs.lstatSync(root).isSymbolicLink()) throw new Error('Embedded Python needs a real resource directory.');
   return fs.realpathSync(root);
 }
-function regular(file) {
-  const stat = fs.lstatSync(file);
-  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Embedded Python needs regular producer files.');
-  return { stat, bytes: fs.readFileSync(file) };
-}
-const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
-function verifySourcePython({ sourceRoot }) {
-  const root = directory(sourceRoot), selected = configuration();
-  directory(path.join(root, 'bin'));
-  const canonical = regular(path.join(root, selected.interpreter));
-  if (!(canonical.stat.mode & 0o111)) throw new Error('The embedded Python interpreter is not executable.');
-  const sha256 = digest(canonical.bytes);
-  for (const alias of Object.keys(selected.aliases)) {
-    const file = regular(path.join(root, alias));
-    if (digest(file.bytes) !== sha256) throw new Error('Embedded Python aliases differ from the canonical producer executable.');
-  }
-  return { interpreter: selected.interpreter, bytes: canonical.stat.size, sha256 };
-}
 // The installed tree must be the publisher build for the app's CPU.
 function assertProfile(metadata, arch) {
   const expected = embeddedPythonProfile(arch);
@@ -62,64 +43,20 @@ function assertProfile(metadata, arch) {
       throw new Error(`The embedded Python is not the ${arch} build of its pinned profile. Run node scripts/setup-python-runtime.mjs --arch ${arch}.`);
   return expected;
 }
-function assertPackagedPython({ resourceRoot, arch }) {
-  const root = directory(resourceRoot), selected = configuration(), canonicalPath = path.join(root, selected.interpreter);
-  directory(path.join(root, 'bin'));
-  const canonical = regular(canonicalPath);
-  if (!(canonical.stat.mode & 0o111)) throw new Error('The embedded Python interpreter is not executable.');
-  assertProfile(JSON.parse(regular(path.join(root, 'runtime.json')).bytes), arch);
-  for (const [alias, target] of Object.entries(selected.aliases)) {
-    const file = path.join(root, alias);
-    if (!fs.lstatSync(file).isSymbolicLink() || fs.readlinkSync(file) !== target || fs.realpathSync(file) !== canonicalPath)
-      throw new Error('A packaged Python alias escapes or duplicates its canonical interpreter.');
-  }
-  for (const file of requiredFiles) regular(path.join(root, file));
-  let files = 0;
-  function walk(parent, prefix = '') {
-    for (const entry of fs.readdirSync(parent, { withFileTypes: true })) {
-      const name = prefix ? prefix + '/' + entry.name : entry.name, file = path.join(parent, entry.name);
-      if (excluded(name)) throw new Error('Packaged Python contains a build, installation or demonstration resource: ' + name);
-      if (entry.isDirectory()) walk(file, name);
-      else if (entry.isSymbolicLink()) {
-        if (!Object.hasOwn(selected.aliases, name) && !require('../src/modules/shared/runtime/bundled-native').appAlias(file))
-          throw new Error('Packaged Python contains an unregistered symbolic link.');
-      } else if (!entry.isFile()) throw new Error('Packaged Python contains a special file.');
-      else files++;
-    }
-  }
-  walk(root);
-  return { version: profile.version, interpreter: selected.interpreter, aliases: selected.aliases, files };
-}
-function projectPackagedPython({ sourceRoot, resourceRoot, arch }) {
+function projectPackagedPython({ sourceRoot, resourceRoot }) {
   const source = directory(sourceRoot), target = directory(resourceRoot);
   if (source === target || source.startsWith(target + path.sep) || target.startsWith(source + path.sep))
     throw new Error('Python app projection must be separate from its producer files.');
   directory(path.join(target, 'bin'));
-  const original = verifySourcePython({ sourceRoot: source }), selected = configuration();
-  const canonical = regular(path.join(target, selected.interpreter));
-  if (digest(canonical.bytes) !== original.sha256) throw new Error('The copied Python interpreter changed before signing.');
-  const aliases = [];
+  const selected = configuration();
+  // Replace only generated bundle aliases. Producer files stay unchanged.
   for (const [alias, link] of Object.entries(selected.aliases)) {
-    const file = path.join(target, alias);
-    let stat;
-    try { stat = fs.lstatSync(file); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-    if (stat?.isSymbolicLink()) {
-      if (fs.readlinkSync(file) !== link || fs.realpathSync(file) !== path.join(target, selected.interpreter))
-        throw new Error('An existing Python resource alias changed.');
-    } else if (stat && (!stat.isFile() || digest(fs.readFileSync(file)) !== original.sha256))
-      throw new Error('An existing Python resource differs from its producer.');
-    aliases.push({ file, link, replace: stat?.isFile() === true, present: Boolean(stat) });
+    const file = path.join(target, alias), stat = fs.lstatSync(file, { throwIfNoEntry: false });
+    if (stat?.isSymbolicLink() && fs.readlinkSync(file) === link) continue;
+    if (stat) fs.unlinkSync(file);
+    fs.symlinkSync(link, file);
   }
-  // Only generated app copies are replaced. Producer files stay unchanged.
-  for (const alias of aliases) {
-    if (alias.replace) fs.unlinkSync(alias.file);
-    if (!alias.present || alias.replace) fs.symlinkSync(alias.link, alias.file);
-  }
-  return assertPackagedPython({ resourceRoot: target, arch });
+  return { version: profile.version, interpreter: selected.interpreter, aliases: selected.aliases };
 }
 
-const requiredFiles = Object.freeze(['lib/python3.12/encodings/__init__.py', 'lib/python3.12/ctypes/__init__.py',
-  'lib/python3.12/site-packages/pefile.py', 'lib/python3.12/site-packages/aplib.py',
-  'lib/python3.12/site-packages/corrupy/__init__.py', 'lib/python3.12/site-packages/packaging/__init__.py']);
-
-module.exports = { configuration, excluded, resourceExclusions, requiredFiles, assertProfile, verifySourcePython, assertPackagedPython, projectPackagedPython };
+module.exports = { configuration, excluded, resourceExclusions, assertProfile, projectPackagedPython };

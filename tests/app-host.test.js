@@ -1,8 +1,7 @@
 const test = require('node:test'), assert = require('node:assert/strict');
-const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
+const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const Host = require('../scripts/app-host.cjs');
 const ROOT = path.resolve(__dirname, '..');
-const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 function temporary(t) { const root = fs.mkdtempSync(path.join(os.tmpdir(), 'electron-supplier-')); t.after(() => fs.rmSync(root, {recursive:true,force:true})); return root; }
 
 test('Node resolves the installed upstream Electron without loading its downloading entry point', t => {
@@ -23,30 +22,12 @@ test('Node resolves the installed upstream Electron without loading its download
   assert.equal(Binary.resolveElectronBinary(), process.execPath);
 });
 
-test('Electron publisher comparison rejects changed source, modes, extra members and escaping aliases', t => {
-  const root = temporary(t), app = path.join(root, 'Electron.app'); fs.mkdirSync(path.join(app, 'Contents'), {recursive:true});
-  const file = path.join(app, 'Contents/file'); fs.writeFileSync(file, 'source', {mode:0o644}); fs.symlinkSync('file', path.join(app, 'Contents/alias'));
-  const inventory = { files: [{path:'Contents/file',type:'file',size:6,mode:0o644,sha256:hash(file)}, {path:'Contents/alias',type:'symlink',target:'file'}] };
-  assert.equal(Host.verifyElectronApp(app, inventory).files, 2);
-  fs.writeFileSync(file, 'change'); assert.throws(() => Host.verifyElectronApp(app, inventory), /differs from its publisher/);
-  fs.writeFileSync(file, 'source'); fs.chmodSync(file, 0o755); assert.throws(() => Host.verifyElectronApp(app, inventory), /differs from its publisher/);
-  fs.chmodSync(file, 0o644); fs.writeFileSync(path.join(app, 'Contents/extra'), 'extra');
-  assert.throws(() => Host.verifyElectronApp(app, inventory), /unlisted app member/); fs.rmSync(path.join(app, 'Contents/extra'));
-  fs.writeFileSync(path.join(root, 'outside'), 'keep'); fs.rmSync(path.join(app, 'Contents/alias')); fs.symlinkSync('../../outside', path.join(app, 'Contents/alias'));
-  assert.throws(() => Host.verifyElectronApp(app, {files:[inventory.files[0], {...inventory.files[1],target:'../../outside'}]}), /alias differs/);
-  assert.equal(fs.readFileSync(path.join(root, 'outside'),'utf8'),'keep');
-});
-
-test('app input gate traces installed Electron to its npm identity and original publisher ZIP', {skip:process.platform!=='darwin'}, t => {
-  const selected = Host.readHost({repoRoot:ROOT}), original = path.join(ROOT, Host.sourceAppRelative(selected.record));
+test('Electron input archive follows its exact npm publisher identity and digest', {skip:process.platform!=='darwin'}, t => {
+  const selected = Host.readHost({repoRoot:ROOT});
   assert.equal(selected.record.id,'electron');
   assert.equal(selected.record.version,require('electron/package.json').version);
   assert.match(selected.record.asset.url,/^https:\/\/github.com\/electron\/electron\/releases\/download\//);
   assert.match(selected.record.npm.integrity,/^sha512-/);
-  assert.equal(Host.verifyElectronApp(original,selected.inventory).files,selected.inventory.files.length);
-  const sources = require('../scripts/app-inputs.cjs').hostSources(ROOT,require('../package.json'));
-  assert.equal(sources.files.size+sources.aliases.size,selected.inventory.files.length + 2);
-  assert.equal(sources.files.get('Contents/MacOS/Electron').owner,'upstream-host');
   const root = temporary(t), corrupt = path.join(root,'modified.zip');fs.writeFileSync(corrupt,'modified');
   assert.throws(()=>Host.readHost({repoRoot:ROOT,archivePath:corrupt}),/publisher checksum/);
 });

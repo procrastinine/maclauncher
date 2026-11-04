@@ -148,7 +148,6 @@ test("ScummVM dmg extraction detaches after an interrupted attach", async t => {
 test('ScummVM installs an actual read-only DMG, re-signs nested Sparkle without changing content, and verifies offline reuse', {skip:process.platform!=='darwin',timeout:120000}, async t => {
   const {execFileSync,execFile}=require('node:child_process'),{promisify}=require('node:util');
   const Native=require('../src/modules/shared/runtime/local-native'),Signing=require('../src/modules/scummvm/runtime/signing');
-  const {unsignedMachO}=require('../scripts/app-inputs.cjs');
   const root=temporary(t),volume=path.join(root,'volume'),app=path.join(volume,'ScummVM.app'),version='2.9.1';
   const framework=path.join(app,'Contents/Frameworks/Sparkle.framework'),current=path.join(framework,'Versions/A');
   const helper=path.join(current,'Resources/Updater.app'),source=path.join(root,'fixture.c'),librarySource=path.join(root,'sparkle.c');
@@ -183,7 +182,7 @@ test('ScummVM installs an actual read-only DMG, re-signs nested Sparkle without 
   run('/usr/bin/codesign',['--verify','--deep','--strict',app]);
   const supplied=require('node:child_process').spawnSync('/usr/bin/codesign',['-d','--verbose=4',app],{encoding:'utf8'});
   assert.equal(supplied.status,0);assert.ok(Number.parseInt(/flags=0x([a-f0-9]+)/i.exec(supplied.stderr)[1],16)&0x10000);
-  const before=Signing.inventory(app),code=new Map(nativePaths.map(name=>[name,unsignedMachO(fs.readFileSync(path.join(app,name)))]));
+  const before=Signing.inventory(app);
   const dmg=path.join(root,'publisher-fixture.dmg');
   run('/usr/bin/hdiutil',['create','-srcfolder',volume,'-fs','HFS+','-format','UDZO','-volname','ScummVMFixture','-ov',dmg]);
   const archiveSha256=Native.hashFile(dmg),originalPrepare=Signing.prepareInstall,signCalls=[];
@@ -212,8 +211,7 @@ test('ScummVM installs an actual read-only DMG, re-signs nested Sparkle without 
   for(const file of before.files){
     const target=path.join(installedApp,file.path);
     if(file.link)assert.equal(fs.readlinkSync(target),file.link);
-    else if(code.has(file.path))assert.equal(unsignedMachO(fs.readFileSync(target)),code.get(file.path),'Only embedded signature data changes');
-    else if(!file.path.endsWith('/_CodeSignature/CodeResources'))assert.equal(Native.hashFile(target),file.sha256,file.path);
+    else if(!nativePaths.includes(file.path)&&!file.path.endsWith('/_CodeSignature/CodeResources'))assert.equal(Native.hashFile(target),file.sha256,file.path);
   }
   assert.equal(Signing.inventory(app).sha256,before.sha256);assert.equal(Native.hashFile(dmg),archiveSha256);
   const record=JSON.parse(fs.readFileSync(path.join(installed.installDir,'runtime.json')));

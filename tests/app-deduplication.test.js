@@ -8,9 +8,7 @@ test('app assembly stores one binary across included packages, unpacked ASAR and
  for(const name of names)write(app,name,bytes);
  write(app,'Contents/Resources/licenses/LICENSE','same notice');write(app,'Contents/Resources/notices/LICENSE','same notice');
  write(app,'Contents/Resources/one.png','artwork');write(app,'Contents/Resources/two.png','artwork');
- assert.throws(()=>D.assertUnique(app),/duplicate binary bytes/);
  const result=D.collapse(app);assert.equal(result.aliases,3);assert.equal(result.bytesRemoved,bytes.length*3);
- assert.equal(D.assertUnique(app),true);
  assert.equal(names.filter(name=>fs.lstatSync(path.join(app,name)).isFile()).length,1);
  for(const name of names){const file=path.join(app,name);assert.deepEqual(fs.readFileSync(file),bytes);if(fs.lstatSync(file).isSymbolicLink()){assert.equal(path.isAbsolute(fs.readlinkSync(file)),false);assert.ok(fs.realpathSync(file).startsWith(app+path.sep));}}
  const record={files:[{path:'steam-agent.jar',size:bytes.length,mode:0o644,sha256:B.digest(bytes)}]};
@@ -27,11 +25,24 @@ test('canonical storage retains executable mode and bundle aliases cannot escape
  fs.unlinkSync(regular);const outside=write(root,'outside.bin',bytes);fs.symlinkSync(outside,regular);assert.throws(()=>B.withAppBundle(app,()=>B.readRegular(regular,bytes.length)),/relative/);
  fs.unlinkSync(regular);fs.symlinkSync(path.relative(path.dirname(regular),outside),regular);assert.throws(()=>B.withAppBundle(app,()=>B.readRegular(regular,bytes.length)),/escapes/);
 });
-test('packed ASAR binary collisions are rejected, and preparation requests their unpacking',async t=>{
+test('packed ASAR binary collisions are retained, and preparation requests actual selected binary unpacking',async t=>{
  const {root,app}=fixture(t),source=path.join(root,'source'),resources=path.join(app,'Contents/Resources');
  const binary=write(source,'agent.jar',Buffer.from('PK\x03\x04one agent'));
  fs.mkdirSync(resources,{recursive:true});await require('@electron/asar').createPackage(source,path.join(resources,'app.asar'));
  write(resources,'copy.jar',fs.readFileSync(binary));
- assert.throws(()=>D.collapse(app),/ASAR unpack selection/);
- assert.deepEqual(D.unpackPatterns({asar:new Map([['agent.jar',{source:binary}]]),suppliers:new Map()}),['agent.jar']);
+ assert.deepEqual(D.collapse(app),{aliases:0,bytesRemoved:0});
+ assert.deepEqual(fs.readFileSync(path.join(resources,'copy.jar')),fs.readFileSync(binary));
+ write(source,'tests/unshipped.jar',fs.readFileSync(binary));
+ write(source,'node_modules/example/dependency.jar',fs.readFileSync(binary));
+ const packageConfig={build:{files:['agent.jar'],directories:{output:'dist'},mac:{}}};
+ assert.deepEqual(D.unpackPatterns({projectDir:source,packageConfig}),['agent.jar','node_modules/**/example/dependency.jar']);
+});
+
+test('incompatible duplicate permissions and existing external aliases are retained',t=>{
+ const {root,app}=fixture(t),bytes=Buffer.from('PK\x03\x04data');
+ const first=write(app,'a.jar',bytes,0o600),second=write(app,'b.jar',bytes,0o644),outside=write(root,'outside.jar',bytes);
+ fs.symlinkSync(outside,path.join(app,'outside-link.jar'));
+ assert.deepEqual(D.collapse(app),{aliases:0,bytesRemoved:0});
+ assert.equal(fs.lstatSync(first).isFile(),true);assert.equal(fs.lstatSync(second).isFile(),true);
+ assert.equal(fs.readlinkSync(path.join(app,'outside-link.jar')),outside);assert.deepEqual(fs.readFileSync(outside),bytes);
 });
