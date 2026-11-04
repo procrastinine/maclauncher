@@ -86,23 +86,25 @@ function readMirrors(root, declarations, modules) {
     const top = modules.find(item => location === item.path || item.recursive && location.startsWith(item.path + '/'));
     if (!top) continue;
     const repository = origin(project.repository), checkoutOrigin = origin(project.checkoutOrigin);
-    if (!/^[a-f0-9]{40}$/.test(project.revision || '') || !project.checkoutOriginReason?.trim())
+    const revision = location === top.path ? top.revision : project.revision;
+    if (!/^[a-f0-9]{40}$/.test(revision || '') || !project.checkoutOriginReason?.trim())
       throw new Error('A source mirror requires an exact revision and origin reason.');
     if (urls.has(repository) && urls.get(repository) !== checkoutOrigin) throw new Error('Conflicting source mirrors.');
     urls.set(repository, checkoutOrigin);
     let parent;
     if (location === top.path) {
-      if (project.revision !== top.revision || repository !== origin(declarations.find(item => item.path === location).url))
+      if (project.revision !== undefined && project.revision !== top.revision || repository !== origin(declarations.find(item => item.path === location).url))
         throw new Error('Source mirror differs from its top-level Gitlink.');
     } else {
       const ancestor = projects.get(project.parent);
-      if (!ancestor || !/^[a-f0-9]{40}$/.test(ancestor.revision || '') ||
+      const parentRevision = ancestor?.path === top.path ? top.revision : ancestor?.revision;
+      if (!ancestor || !/^[a-f0-9]{40}$/.test(parentRevision || '') ||
           !location.startsWith(relativePath(ancestor.path) + '/') ||
           ancestor.path !== top.path && !ancestor.path.startsWith(top.path + '/'))
         throw new Error('Nested source mirror requires its pinned parent.');
-      parent = { path: ancestor.path, revision: ancestor.revision, relative: location.slice(ancestor.path.length + 1) };
+      parent = { path: ancestor.path, revision: parentRevision, relative: location.slice(ancestor.path.length + 1) };
     }
-    mirrors.push({ path: location, revision: project.revision, repository, checkoutOrigin, ...(parent ? { parent } : {}) });
+    mirrors.push({ path: location, revision, repository, checkoutOrigin, ...(parent ? { parent } : {}) });
   }
   return mirrors;
 }

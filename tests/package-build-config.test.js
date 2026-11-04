@@ -228,7 +228,7 @@ test("first-party fixtures and managed engines stay out of ASAR while declared h
     "src/modules/shared/reshade/features.json","src/modules/shared/reshade/effects/crt.fx",
     "src/modules/shared/reshade/xess/index.js","src/modules/shared/reshade/xess/library.js",
     "src/modules/shared/reshade/xess/source.json","src/modules/shared/reshade/xess/INTEL-LICENSE.txt",
-    "src/modules/shared/reshade/isf/index.js","src/modules/shared/reshade/isf/source.json",
+    "src/modules/shared/reshade/isf/index.js",
     "src/modules/shared/reshade/generation/fsr3/index.js","src/modules/shared/reshade/generation/fsr3/source.json",
     "src/modules/shared/reshade/shader-collection/crt-royale/Shaders/crt-royale/lib/special-functions.fxh",
     "src/modules/android/included-files.js","src/modules/rgss/evb-files.py",

@@ -80,40 +80,19 @@ its output reports that frame's stages under the presenter's context; output
 that nothing consumes keeps them under the encoder. An encoder that stops
 producing ordered scene output, or whose owner is released, reports Stopped.
 
-A complete build materializes the owned base, these overlays and the pinned
-vendor sources, then builds the production CMake targets:
-
-```sh
-node scripts/build-graphics-runtime.mjs --only core --work /path/to/work
-```
-
-Repeating that command updates only changed files in `core/source`, so CMake
-rebuilds only affected units. With `--tests`, the same build directory is
-configured with `-DBUILD_TESTING=ON` and `MACLAUNCHER_FIXTURE_DIR` naming
-`test/`, and also builds host-architecture fixture executables in
-`core/build/test`. Production targets keep the same flags and outputs. The
-runner executes every fixture mode and reports fixtures that need a Metal
-device as skipped when none is available. Fixtures that need inputs outside
-the public sources are skipped with the missing input named, unless these
-variables provide it:
-
-| Variable | Input |
-| --- | --- |
-| `MACLAUNCHER_NATIVE_FIXTURE_LIBRASHADER` | `librashader.dylib` from the graphics runtime |
-| `MACLAUNCHER_NATIVE_FIXTURE_LOSSLESS` | A user-supplied Lossless Scaling DLL |
-| `MACLAUNCHER_NATIVE_FIXTURE_WINDOWS=1` | Permission to create on-screen windows in an interactive session |
+[MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds) materializes
+these sources and builds the production component. Its graphics recipe supports
+`BUILD_TESTING=ON` for native fixture targets. An existing fixture build runs with:
 
 ```sh
 node src/modules/shared/reshade/native/test/run.mjs /path/to/work/core/build
 MACLAUNCHER_NATIVE_FIXTURES=/path/to/work/core/build node --test tests/graphics-native-fixtures.test.js
 ```
 
-Staging uses this complete build. `build.mjs`
-instead rebuilds the owned host units, compiler and video helper against an
-existing universal build, such as the `core/build` directory above:
+`build.mjs` rebuilds owned units against the base source and universal core build
+from that producer:
 
 ```sh
-node src/modules/shared/reshade/native/materialize-source.mjs /path/to/base --base-only
 node src/modules/shared/reshade/native/build.mjs \
   /path/to/base /path/to/work/core/build /path/to/output
 ```

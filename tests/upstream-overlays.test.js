@@ -49,6 +49,17 @@ test("offline audit agrees on Git, catalog and owned source evidence without con
   assert.equal(git(current.source, "rev-parse", "HEAD"), current.revision);
 });
 
+test("Gitlink-only source records retain exact offline and candidate checks", async t => {
+  const current = fixture(t);delete current.inventory.projects[0].revision;
+  const offline = await Check.checkInventory(current);
+  assert.equal(offline.passed,true);assert.equal(offline.checked[0].revision,current.revision);
+  const candidate = await Check.checkCandidate({...current,projectId:"fixture",workDir:path.join(current.root,".local/gitlink-only")});
+  assert.equal(candidate.passed,true);assert.equal(candidate.reviewedRevision,current.revision);
+  assert.equal(current.inventory.projects[0].revision,undefined);
+  fs.appendFileSync(path.join(current.source,"engine.c"),"changed input\n");
+  assert.ok((await Check.checkInventory(current)).errors.some(issue=>issue.code==="tracked-source-modified"));
+});
+
 test("an explicitly reviewed checkout mirror preserves independent declared-origin and exact-pin checks", async t => {
   const current = fixture(t), project = current.inventory.projects[0];
   git(current.source, "config", "remote.origin.url", "https://mirror.example.invalid/fixture.git");
@@ -66,26 +77,6 @@ test("an explicitly reviewed checkout mirror preserves independent declared-orig
   assert.equal(git(current.source, "rev-parse", "HEAD"), current.revision);
 });
 
-test("new module-owned appliers are discovered outside an overlays directory", async t => {
-  const current = fixture(t);
-  const file = "src/modules/fixture/runtime/new-engine-source-overlay.js";
-  write(current.root, file, "exports.apply = () => {};\n");
-  const report = await Check.checkInventory(current);
-  assert.ok(report.errors.some(issue => issue.code === "untracked-owned-adaptation" && issue.path === file));
-  current.inventory.recipes[0].ownedFiles.push({ path: file, sha256: sha(fs.readFileSync(path.join(current.root, file))) });
-  assert.equal((await Check.checkInventory(current)).passed, true);
-});
-
-test("offline audit discovers undeclared Git references and owned adaptations", async t => {
-  const current = fixture(t);
-  fs.appendFileSync(path.join(current.root, ".gitmodules"), '[submodule "new"]\n path = src/external/new\n url = https://example.invalid/new\n');
-  write(current.root, "src/modules/fixture/overlays/new.c", "new adaptation\n");
-  const report = await Check.checkInventory(current);
-  assert.equal(report.passed, false);
-  assert.ok(report.errors.some(issue => issue.code === "untracked-upstream" && issue.path === "src/external/new"));
-  assert.ok(report.errors.some(issue => issue.code === "untracked-owned-adaptation" && issue.path.endsWith("new.c")));
-});
-
 test("offline audit detects a Git index entry whose submodule configuration was removed", async t => {
   const current = fixture(t);
   fs.rmSync(path.join(current.root, ".gitmodules"));
@@ -95,7 +86,7 @@ test("offline audit detects a Git index entry whose submodule configuration was 
   assert.equal(git(current.source, "rev-parse", "HEAD"), current.revision);
 });
 
-test("offline audit discovers new nested source references at the reviewed parent commit", async t => {
+test("candidate nested sources use parent Gitlinks and metadata without inventory entries", async t => {
   const current = fixture(t);
   const child = path.join(current.source, "vendor/child"); fs.mkdirSync(child, { recursive: true }); git(child, "init", "-q");
   write(child, "dependency.c", "nested dependency\n"); git(child, "add", "dependency.c"); git(child, "commit", "-qm", "Nested fixture");
@@ -108,9 +99,11 @@ test("offline audit discovers new nested source references at the reviewed paren
   write(current.root, "scripts/pin.json", JSON.stringify({ revision }));
   git(current.root, "update-index", "--cacheinfo", `160000,${revision},src/external/fixture`);
   const report = await Check.checkInventory(current);
-  assert.ok(report.errors.some(issue => issue.code === "untracked-nested-upstream" && issue.path === "src/external/fixture/vendor/child"));
-  assert.equal(report.passed, false);
-  await assert.rejects(Check.checkCandidate({ ...current, revision, projectId: "fixture", workDir: path.join(current.root, ".local/unknown-nested") }), /uninventoried nested Git source/);
+  assert.equal(report.passed, true);
+  const workDir = path.join(current.root, ".local/unknown-nested");
+  const candidate = await Check.checkCandidate({ ...current, revision, projectId: "fixture", workDir });
+  assert.equal(candidate.passed, true);assert.equal(candidate.upstreamCheckoutUnchanged, true);
+  assert.equal(fs.readFileSync(path.join(workDir,"fixture-overlay/source/vendor/child/dependency.c"),"utf8"),"nested dependency\n");
 });
 
 test("stale nested submodule declarations warn without inventing a pinned dependency", async t => {
@@ -129,7 +122,7 @@ test("stale nested submodule declarations warn without inventing a pinned depend
   assert.ok(candidate.warnings.some(issue => issue.code === "unused-submodule-declaration" && issue.path === "src/external/fixture/vendor/stale"));
 });
 
-test("actual nested Gitlinks require inventory and metadata even outside the candidate file scope", async t => {
+test("candidate scopes leave unrelated nested sources alone and require metadata for consumed sources", async t => {
   const current = fixture(t), childRevision = current.revision;
   git(current.source, "update-index", "--add", "--cacheinfo", `160000,${childRevision},vendor/undeclared`);
   git(current.source, "commit", "-qm", "Actual nested Gitlink without metadata");
@@ -137,12 +130,9 @@ test("actual nested Gitlinks require inventory and metadata even outside the can
   write(current.root, "scripts/pin.json", JSON.stringify({ revision }));
   git(current.root, "update-index", "--cacheinfo", `160000,${revision},src/external/fixture`);
   current.inventory.recipes[0].includePaths = ["engine.c"];
-  const report = await Check.checkInventory(current), childPath = "src/external/fixture/vendor/undeclared";
-  assert.equal(report.passed, false);
-  assert.ok(report.errors.some(issue => issue.code === "untracked-nested-upstream" && issue.path === childPath));
-  assert.ok(report.errors.some(issue => issue.code === "missing-nested-submodule-metadata" && issue.path === childPath));
-  await assert.rejects(Check.checkCandidate({ ...current, revision, projectId: "fixture", workDir: path.join(current.root, ".local/unknown-actual-nested") }), /uninventoried nested Git source/);
-  current.inventory.projects.push({ id: "fixture-child", parent: "fixture", path: childPath, repository: "https://example.invalid/child", revision: childRevision });
+  assert.equal((await Check.checkInventory(current)).passed, true);
+  assert.equal((await Check.checkCandidate({ ...current, revision, projectId: "fixture", workDir: path.join(current.root, ".local/unconsumed-nested") })).passed, true);
+  current.inventory.recipes[0].includePaths.push("vendor/undeclared");
   await assert.rejects(Check.checkCandidate({ ...current, revision, projectId: "fixture", workDir: path.join(current.root, ".local/missing-actual-metadata") }), /lacks .gitmodules metadata/);
 });
 
@@ -157,7 +147,6 @@ test("candidate file scopes cross pinned nested Git trees without copying unrela
   git(current.source, "update-index", "--add", "--cacheinfo", `160000,${childRevision},vendor/child`);
   git(current.source, "commit", "-qm", "Parent with scoped dependency");
   const revision = git(current.source, "rev-parse", "HEAD"); current.inventory.projects[0].revision = revision;
-  current.inventory.projects.push({ id: "fixture-child", path: "src/external/fixture/vendor/child", repository: "https://example.invalid/child", revision: childRevision });
   current.inventory.recipes[0].sourceScopes = { fixture: ["engine.c", "vendor/child/selected.c"] };
   const workDir = path.join(current.root, ".local/scoped-candidate"), before = git(child, "status", "--porcelain");
   const report = await Check.checkCandidate({ ...current, revision, projectId: "fixture", workDir });
@@ -166,7 +155,7 @@ test("candidate file scopes cross pinned nested Git trees without copying unrela
   assert.deepEqual(fs.readdirSync(staged), ['selected.c']);
   assert.equal(fs.readFileSync(path.join(staged, 'selected.c'), 'utf8'), 'selected dependency\n');
   assert.equal(git(child, "status", "--porcelain"), before);
-  current.inventory.projects.at(-1).revision = 'a'.repeat(40);
+  current.inventory.projects.push({ id: "fixture-child", path: "src/external/fixture/vendor/child", repository: "https://example.invalid/child", revision: 'a'.repeat(40) });
   await assert.rejects(Check.checkCandidate({ ...current, revision, projectId: "fixture", workDir: path.join(current.root, '.local/changed-nested-pin') }), /nested source pin changed/);
 });
 
@@ -424,20 +413,17 @@ test("full immutable commits and explicit network arguments are required", () =>
   assert.equal(Check.normalizedOrigin("git@github.com:owner/repo.git"), "https://github.com/owner/repo");
 });
 
-test("checked-in inventory covers every top-level Git source and owned overlay", async () => {
+test("checked-in inventory validates retained source records and explicit recipes", async () => {
   const inventory = require("../scripts/upstream-overlays.json");
   Check.validateInventory(inventory);
-  const projects = new Set(inventory.projects.filter(project => project.path).map(project => project.path));
-  for (const source of await Check.submodules(Check.ROOT)) assert.ok(projects.has(source.path), source.path);
-  const declared = new Set(inventory.recipes.flatMap(recipe => recipe.ownedFiles.map(file => file.path)));
-  for (const file of Check.ownedAdaptationFiles(Check.ROOT, projects)) assert.ok(declared.has(file), file);
-  for (const id of ["reshade-sweetfx", "reshade-retroarch"]) {
-    const project = inventory.projects.find(project => project.id === id);
-    assert.ok(project, id);
-    assert.equal(project.path, undefined, id + " uses copied source or an exact source archive");
-    assert.match(project.revision, /^[a-f0-9]{40}$/, id);
-    assert.ok(project.pinRefs?.length, id + " retains exact source provenance");
-    for (const ref of project.pinRefs) assert.equal(Check.sourceRef(Check.ROOT, ref), project.revision, id);
+  const links = await Check.indexLinks(Check.ROOT);
+  for (const project of inventory.projects) {
+    const revision = project.revision || links.get(project.path);
+    if (!project.parent) assert.match(revision, /^[a-f0-9]{40}$/, project.id);
+    for (const ref of project.pinRefs || []) assert.equal(Check.sourceRef(Check.ROOT, ref), revision, project.id);
   }
-  assert.ok(inventory.archiveInputs.some(input => input.id === "ffmpeg-7.1.2"));
+  for (const recipe of inventory.recipes) {
+    for (const file of recipe.ownedFiles || []) assert.equal(sha(fs.readFileSync(path.join(Check.ROOT,file.path))),file.sha256,file.path);
+    for (const file of [...recipe.tests || [], ...recipe.buildEntries || []]) assert.equal(fs.existsSync(path.join(Check.ROOT,file)),true,file);
+  }
 });

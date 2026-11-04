@@ -1,6 +1,6 @@
 # Upstream sources and adaptations
 
-MacLauncher uses many third-party engines, tools and libraries, called upstream projects here. Some are used unchanged; others need MacLauncher's changes, called adaptations, to work on macOS or with the launcher. The [source inventory](../../scripts/upstream-overlays.json) records the app's source checkouts, copied source and archive adaptations, with exact commits, licenses and owned files. [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds) builds and publishes the adapted runtime packages and tracks their producer dependencies. [MacLauncher Android](https://github.com/procrastinine/maclauncher-android) tracks the Android platform sources and their dependencies. [Runtime distribution](RUNTIME_DISTRIBUTION.md) describes the downloaded packages, the included components and where their source is kept.
+MacLauncher uses many third-party engines, tools and libraries, called upstream projects here. Some are used unchanged; others need MacLauncher's changes, called adaptations, to work on macOS or with the launcher. The [source inventory](../../scripts/upstream-overlays.json) records adaptations to the app's source dependencies. Their Gitlinks fix the source commits. [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds) builds and publishes the adapted runtime packages and tracks their producer dependencies. [MacLauncher Android](https://github.com/procrastinine/maclauncher-android) tracks the Android platform sources and their dependencies. [Runtime distribution](RUNTIME_DISTRIBUTION.md) describes the downloaded packages, the included components and where their source is kept.
 
 ## External store clients
 
@@ -24,24 +24,7 @@ GOG and itch.io use MacLauncher's own HTTPS adapters, which follow [gog-cli](htt
 
 ### Building the graphics component
 
-MacLauncher includes a graphics component, which is built and staged with `node scripts/build-graphics-runtime.mjs --work <directory> --stage`. Its [build recipe](../../scripts/graphics-runtime.json) lists the core CMake targets, the recipe of each optional provider, the Git sources with the files that record their commits, and the binary build inputs with their checksums.
-
-- `--check` resolves every input without building, and reports uninitialized submodules, differing commits and missing inputs.
-- `--fetch` downloads the inputs that have a fixed URL and checksum: the LLVM-MinGW toolchain, the FSR 4 Lite 2 weights, the Streamline 2.9.0 SDK, the DXMT renderer template, MoltenVK 1.4.2, and the Homebrew bottles of libplacebo, shaderc and Little CMS. Each is checked against its recorded SHA-256 before use.
-- `--only`, `--skip` and `--reuse <provider>=<payload>` select components and reuse existing verified builds.
-- `--source` and `--input` supply other checkouts or files, which are checked against the recorded commits and checksums.
-
-The libplacebo adapter compiles against the core headers produced by the same build. The core requires the macOS 27 SDK and CMake. Provider recipes use their declared tools: Cargo, Swift, uv, Meson and Ninja, and the Python that runs Meson provides Jinja2 for libplacebo's code generator. Shader translation uses the DXC and SPIRV-Cross binaries included in the FSR 4 source.
-
-`--fetch` does not cover package-manager dependencies:
-
-- the neural provider's Swift packages at the revisions in its `Package.resolved`, including the MLX and MLX C submodules of MLX Swift, and the checksummed MLX Metal library archive;
-- the RetroArch provider's crates at the versions in librashader's `Cargo.lock`, which its offline Cargo builds read from the Cargo cache;
-- the Python 3.12 interpreter that uv runs for FSR 4 shader translation.
-
-The neural and FSR 4 recipes keep their package copies and caches under `--work`. Windows helpers link with a zero PE timestamp. The Cargo builds of the RetroArch Slang provider record the absolute paths of the librashader checkout and of the generated helper workspace in crate metadata, which feeds Rust symbol hashes. The bytes of its `librashader.dylib` and `retroarch-prepare` therefore depend on those two locations as well as on the exact sources and toolchain.
-
-`materialize-source.mjs` assembles the core, and CMake builds it. Staging runs `node scripts/stage-reshade.mjs <source-directory> <build-directory>` with the resulting provider builds. Each staging run creates a new copy of the component under `src/resources/native-runtimes/reshade`. After selecting the new copy, staging removes older copies except the previously selected one; incomplete copies and copies that a running process uses are kept. The module's distribution record lists binary hashes, CPU slices, the actual macOS requirement, upstream commits and license notices. MacLauncher's adapter source and the compiler sources it uses ship with the binary.
+MacLauncher includes a graphics component built and published by [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds). Its [producer recipe](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/scripts/graphics-runtime.json) declares the source dependencies, provider recipes and binary inputs. The app downloads the package selected in its runtime package lock.
 
 ### Components with their own licenses
 
@@ -53,7 +36,7 @@ FSR1 uses AMD's MIT-licensed EASU and RCAS headers from FidelityFX-FSR commit `a
 
 ### Camera integration
 
-Camera projection integration uses Godot 4.4 GDExtension headers, Streamline 2.9 headers and DXMT sources at fixed commits. The [source inventory](../../scripts/upstream-overlays.json) records those commits, the licenses and MacLauncher's module adapters.
+Camera projection integration uses Godot 4.4 GDExtension headers, Streamline 2.9 headers and DXMT sources at fixed commits. The [Builds producer sources](https://github.com/procrastinine/maclauncher-builds/tree/main/producers/maclauncher) record those commits and the module adapters.
 
 - The native [camera API](../../src/modules/shared/reshade/temporal/README.md) binds projection metadata to the Metal textures or command buffer of the same frame.
 - The [Godot adapter](../../src/modules/godot/graphics/README.md) supplies this metadata from eligible native Metal views.

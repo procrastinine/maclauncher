@@ -7,8 +7,7 @@ const root = import.meta.dirname;
 const [sourceArg, buildArg, outputArg, option] = process.argv.slice(2);
 if (!sourceArg || !buildArg || !outputArg || (option && option !== "--compiler-only") || process.argv.length > 6)
   throw new Error("Usage: node build.mjs <base source> <existing universal build> <output directory> [--compiler-only]\n" +
-    "Create the base source with materialize-source.mjs <directory> --base-only and the universal build with\n" +
-    "node scripts/build-graphics-runtime.mjs --only core --work <directory> (its core/build directory).");
+    "Use the base source and existing universal core build from MacLauncher Builds.");
 const compilerOnly = option === "--compiler-only";
 const source = path.resolve(sourceArg), build = path.resolve(buildArg), output = path.resolve(outputArg);
 const libraSource = path.resolve(process.env.MACLAUNCHER_LIBRASHADER_SOURCE || path.join(root, "../../../../external/librashader"));

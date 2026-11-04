@@ -193,35 +193,23 @@ test('production checkout metadata matches every top-level source pin without in
   assert.deepEqual(development.modules.map(item => item.path).sort(), [...metadata.submodules, ...metadata.testSubmodules].sort());
   assert.ok(development.modules.every(item => !item.recursive), 'Ordinary setup does not fetch producer dependency trees');
   const plan = await readPlan({ all: true });
-  const yuri = plan.modules.find(item => item.path === 'src/external/onscripter-yuri');
-  assert.ok(yuri); assert.equal(yuri.recursive, false);
-  assert.ok(plan.modules.filter(item => item !== yuri).every(item => item.recursive));
-  assert.ok(plan.skipped.length > 0 && plan.skipped.every(item => item.reason === 'reference-only'));
+  assert.deepEqual(plan.modules.map(item => item.path).sort(), [...metadata.submodules, ...metadata.testSubmodules].sort());
+  assert.deepEqual(plan.skipped, []);
   const inventory = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/upstream-overlays.json')));
-  const top = new Map([...plan.modules, ...plan.skipped].map(item => [item.path, item]));
-  const projects = new Map(inventory.projects.map(item => [item.id, item]));
   for (const project of inventory.projects) {
-    if (!project.path) {
-      assert.equal(project.parent, undefined, project.id + ' is an independent copied or archive source');
-      assert.equal(project.checkoutOrigin, undefined, project.id + ' does not initialize a checkout');
-      assert.match(project.revision, /^[a-f0-9]{40}$/);
-      assert.ok(project.pinRefs?.length, project.id + ' needs exact source evidence');
-      const consumers = inventory.recipes.filter(recipe => recipe.project === project.id || recipe.inputs?.some(input => input.project === project.id));
-      assert.ok(consumers.length, project.id + ' needs an app adaptation consumer');
-      for (const ref of project.pinRefs) assert.equal(require('../scripts/check-upstream-overlays.cjs').sourceRef(ROOT, ref), project.revision);
-      for (const consumer of consumers) {
-        assert.ok(consumer.ownedFiles.length, consumer.id + ' needs owned adaptation inputs');
-        for (const file of consumer.ownedFiles) assert.ok(fs.statSync(path.join(ROOT, file.path)).isFile(), file.path);
-      }
-      continue;
-    }
-    if (!project.parent) assert.equal(top.get(project.path)?.revision, project.revision, project.id);
-    else {
-      const parent = projects.get(project.parent);
-      assert.ok(parent && project.path.startsWith(parent.path + '/'), project.id + ' needs its actual parent checkout');
-      assert.equal(top.has(project.path), false, 'Nested sources retain the upstream parent Gitlink');
-    }
+    assert.equal(Object.hasOwn(project, 'revision'), false, project.id + ' uses its Gitlink as the only pin');
+    assert.ok(plan.modules.some(item => item.path === project.path));
   }
   assert.equal(plan.mirrors.length, inventory.projects.filter(project => project.path && project.checkoutOrigin &&
     plan.modules.some(item => project.path === item.path || item.recursive && project.path.startsWith(item.path + '/'))).length);
+});
+
+test('checkout mirrors use the Gitlink pin without repeating it in inventory metadata', async t => {
+  const {checkout} = fixture(t), file = path.join(checkout, 'scripts/upstream-overlays.json');
+  const inventory = JSON.parse(fs.readFileSync(file));
+  for (const project of inventory.projects) if (!project.parent) delete project.revision;
+  fs.writeFileSync(file, JSON.stringify(inventory));
+  const plan = await readPlan({repoRoot: checkout});
+  for (const mirror of plan.mirrors.filter(mirror => !mirror.parent))
+    assert.equal(mirror.revision, plan.modules.find(module => module.path === mirror.path).revision);
 });

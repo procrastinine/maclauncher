@@ -122,7 +122,7 @@ to correlate frames and does not submit commands or wait for GPU completion.
 GDExtension C header. No Godot C++ ABI or private object layout is used.
 
 ```sh
-node src/modules/godot/graphics/build.mjs src/external/godot-camera /path/to/output
+node src/modules/godot/graphics/build.mjs /path/to/godot-checkout /path/to/output
 ```
 
 The build requires the Xcode command-line tools and produces a universal arm64 and

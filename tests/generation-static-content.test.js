@@ -25,7 +25,6 @@ test("the static-content row control appears only for packages that declare blen
   const controls = fs.readFileSync(path.join(__dirname, "../src/renderer/src/ui/components/EffectRowControls.tsx"), "utf8");
   assert.match(controls, /staticContent && choice\?\.inputContract\?\.domain === "image-pair"/);
   assert.match(fs.readFileSync(path.join(__dirname, "../src/modules/shared/reshade/graphics-settings.js"), "utf8"), /staticContent:graphics\?\.generationStaticContentAPI===1/);
-  assert.match(fs.readFileSync(path.join(__dirname, "../scripts/stage-reshade.mjs"), "utf8"), /generationStaticContentAPI===1&&!symbols\.includes\("ImagePairAnalysis14blendAvailable"\)/);
 });
 
 test("G8: window stacks explicitly opt into static-content without changing a saved false choice", t => {

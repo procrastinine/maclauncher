@@ -127,7 +127,7 @@ function validateInventory(inventory) {
   if (inventory?.schemaVersion !== 1 || !Array.isArray(inventory.projects) || !Array.isArray(inventory.recipes)) throw Error("Unsupported upstream inventory schema.");
   const ids = new Set(), locations = new Set(), recipes = new Set();
   for (const project of inventory.projects) {
-    if (!/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(project.id || "") || ids.has(project.id) || !/^[a-f0-9]{40}$/.test(project.revision || "")) throw Error("Duplicate or invalid upstream project identity.");
+    if (!/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(project.id || "") || ids.has(project.id) || (!project.path || project.revision !== undefined) && !/^[a-f0-9]{40}$/.test(project.revision || "")) throw Error("Duplicate or invalid upstream project identity.");
     ids.add(project.id); normalizedOrigin(project.repository);
     if (project.checkoutOrigin !== undefined) {
       normalizedOrigin(project.checkoutOrigin);
@@ -188,22 +188,6 @@ function validateInventory(inventory) {
   }
   return inventory;
 }
-function ownedAdaptationFiles(root, sourcePaths) {
-  const result = [];
-  function visit(directory, relative = "src/modules") {
-    if (sourcePaths.has(relative)) return;
-    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      const name = relative + "/" + entry.name;
-      if ([".git", "native-runtimes", "__pycache__"].includes(entry.name)) continue;
-      if (entry.isDirectory()) {
-        if (name.includes("/resources/") && !name.endsWith("/unren") && !name.includes("/unren/")) continue;
-        visit(path.join(directory, entry.name), name);
-      } else if (entry.isFile() && (name.includes("/overlays/") || name.endsWith(".patch") || name.includes("/unren/patches/") || entry.name.endsWith("source-overlay.js"))) result.push(name);
-    }
-  }
-  const directory = path.join(root, "src/modules"); if (fs.existsSync(directory)) visit(directory);
-  return result.sort();
-}
 async function sourceGuardBlob({ root, project, revision, file, projects, depth = 0 }) {
   relativePath(file);
   if (depth > 16 || !/^[a-f0-9]{40}$/.test(revision)) throw Error("Invalid nested source guard identity.");
@@ -212,13 +196,14 @@ async function sourceGuardBlob({ root, project, revision, file, projects, depth 
   catch (original) {
     const link = [...await treeLinks(directory, revision)].find(([name]) => file.startsWith(name + "/"));
     if (!link) throw original;
-    const [name, commit] = link, nested = [...projects.values()].find(item =>
+    const [name, commit] = link, declared = [...projects.values()].find(item =>
       item.path === project.path + "/" + name || item.parent === project.id && item.sourceSubdirectory === name);
     const declaration = (await submodules(directory, revision, project.repository)).find(item => item.path === name);
-    if (!nested?.path || !declaration || nested.revision !== commit ||
-        normalizedOrigin(nested.repository) !== normalizedOrigin(declaration.repository)) {
-      throw Error("Nested source guard differs from its inventoried Gitlink or origin.");
+    if (!declaration || declared?.revision && declared.revision !== commit || declared &&
+        normalizedOrigin(declared.repository) !== normalizedOrigin(declaration.repository)) {
+      throw Error("Nested source guard differs from its Gitlink or origin.");
     }
+    const nested = declared || { id: project.id + "/" + name, path: project.path + "/" + name, repository: declaration.repository };
     const child = path.join(root, nested.path);
     if (!fs.existsSync(path.join(child, ".git")) || !checkoutOriginMatches(nested, await git(child, ["remote", "get-url", "origin"])))
       throw Error("Nested source guard checkout is unavailable or has a different origin.");
@@ -228,8 +213,8 @@ async function sourceGuardBlob({ root, project, revision, file, projects, depth 
 async function checkInventory({ root = ROOT, inventory = JSON.parse(fs.readFileSync(INVENTORY, "utf8")) } = {}) {
   validateInventory(inventory);
   const errors = [], warnings = [], checked = [];
-  const projects = new Map(inventory.projects.map(project => [project.id, project]));
-  const sourcePaths = new Set(inventory.projects.filter(project => project.path).map(project => project.path));
+  const top = await submodules(root), links = await indexLinks(root);
+  const projects = new Map(inventory.projects.map(project => [project.id, { ...project, revision: project.revision || links.get(project.path) }]));
   const dependencyFile = path.join(root, "build/source-dependencies.json");
   const dependencies = fs.existsSync(dependencyFile) ? JSON.parse(fs.readFileSync(dependencyFile, "utf8")) : {};
   const requiredSources = new Set([...(dependencies.submodules || []), ...(dependencies.testSubmodules || [])]);
@@ -242,10 +227,7 @@ async function checkInventory({ root = ROOT, inventory = JSON.parse(fs.readFileS
     warnings.push({ code: "optional-source-evidence-unavailable", id: project.id, path: file, ...details });
     return true;
   };
-  const top = await submodules(root), links = await indexLinks(root);
-  for (const module of top) if (!sourcePaths.has(module.path)) errors.push({ code: "untracked-upstream", path: module.path });
-  for (const location of links.keys()) if (!sourcePaths.has(location)) errors.push({ code: "untracked-index-gitlink", path: location });
-  for (const project of inventory.projects) {
+  for (const project of projects.values()) {
     if (!project.path) { checked.push({ id: project.id, status: "explicit-build-input", revision: project.revision }); continue; }
     const directory = path.join(root, project.path);
     let declared, declaredOrigin, metadataAvailable = !project.parent;
@@ -261,6 +243,7 @@ async function checkInventory({ root = ROOT, inventory = JSON.parse(fs.readFileS
         metadataAvailable = true;
       } catch (error) { warnings.push({ code: "parent-source-unavailable", id: project.id }); }
     }
+    project.revision ||= declared;
     if (declared && declared !== project.revision) errors.push({ code: "gitlink-pin-drift", id: project.id, expected: project.revision, declared });
     if (!declared && !project.parent) errors.push({ code: "missing-gitlink", id: project.id });
     if (metadataAvailable && !declaredOrigin) errors.push({ code: "missing-submodule-metadata", id: project.id });
@@ -276,21 +259,15 @@ async function checkInventory({ root = ROOT, inventory = JSON.parse(fs.readFileS
       if (dirty) errors.push({ code: "tracked-source-modified", id: project.id });
       const nested = await submodules(directory, project.revision, project.repository), nestedPins = await treeLinks(directory, project.revision);
       for (const child of nested) if (!nestedPins.has(child.path)) warnings.push({ code: "unused-submodule-declaration", id: project.id, path: project.path + "/" + child.path });
-      for (const location of nestedPins.keys()) {
-        const childPath = project.path + "/" + location;
-        if (!sourcePaths.has(childPath)) errors.push({ code: "untracked-nested-upstream", path: childPath });
-        if (!nested.some(child => child.path === location)) errors.push({ code: "missing-nested-submodule-metadata", id: project.id, path: childPath });
-      }
       if (project.licenseStatus === "unresolved") warnings.push({ code: "license-review-required", id: project.id });
       checked.push({ id: project.id, status: head === project.revision && !dirty ? "pinned" : "drift", revision: project.revision });
     } catch (error) { errors.push({ code: "source-inspection-failed", id: project.id, message: error.message.split("\n")[0] }); }
   }
-  for (const project of inventory.projects) for (const ref of project.pinRefs || []) {
+  for (const project of projects.values()) for (const ref of project.pinRefs || []) {
     if (!fs.existsSync(path.join(root, ref.path)) && optionalEvidence(ref.path, { project: project.id })) continue;
     try { if (sourceRef(root, ref) !== project.revision) errors.push({ code: "module-pin-drift", id: project.id, path: ref.path }); }
     catch (error) { errors.push({ code: "pin-evidence-invalid", id: project.id, message: error.message }); }
   }
-  const declaredFiles = new Set();
   for (const recipe of inventory.recipes) {
     for (const ref of recipe.versionRefs || []) {
       if (!fs.existsSync(path.join(root, ref.path)) && optionalEvidence(ref.path, { recipe: recipe.id })) continue;
@@ -309,7 +286,6 @@ async function checkInventory({ root = ROOT, inventory = JSON.parse(fs.readFileS
       catch (error) { errors.push({ code: "pin-evidence-invalid", recipe: recipe.id, message: error.message }); }
     }
     for (const file of recipe.ownedFiles || []) {
-      declaredFiles.add(file.path);
       try { if (hash(fs.readFileSync(path.join(root, file.path))) !== file.sha256) errors.push({ code: "owned-adaptation-drift", recipe: recipe.id, path: file.path }); }
       catch { errors.push({ code: "owned-adaptation-missing", recipe: recipe.id, path: file.path }); }
     }
@@ -339,7 +315,6 @@ async function checkInventory({ root = ROOT, inventory = JSON.parse(fs.readFileS
       catch (error) { errors.push({ code: "archive-evidence-invalid", id: input.id, message: error.message }); }
     }
   }
-  for (const file of ownedAdaptationFiles(root, sourcePaths)) if (!declaredFiles.has(file)) errors.push({ code: "untracked-owned-adaptation", path: file });
   return { schemaVersion: 1, mode: "offline", passed: errors.length === 0, projects: checked.length,
     topLevelSubmodules: top.length, recipes: inventory.recipes.length, errors, warnings, checked,
     ...(unavailableOptionalSources.length ? { optionalSourceInstruction: OPTIONAL_SOURCE_INSTRUCTION } : {}) };
@@ -368,13 +343,6 @@ async function materializeGitTree({ source, revision, destination, projects, pro
     item.parent === project?.id && item.sourceSubdirectory === file);
   const nestedPins = await treeLinks(source, revision), declarations = await submodules(source, revision, project?.repository);
   for (const child of declarations) if (!nestedPins.has(child.path)) warnings.push({ code: "unused-submodule-declaration", id: project?.id, path: project?.path ? project.path + "/" + child.path : child.path });
-  for (const [location, pin] of nestedPins) {
-    const nested = nestedProject(location), child = declarations.find(item => item.path === location);
-    if (!nested) throw Error(`Candidate introduces an uninventoried nested Git source: ${location}. Review its pin, license and build use first.`);
-    if (!child) throw Error(`Candidate nested Git source lacks .gitmodules metadata: ${location}.`);
-    if (normalizedOrigin(nested.repository) !== normalizedOrigin(child.repository)) throw Error(`Candidate nested origin changed: ${location}.`);
-    if (pin !== nested.revision) throw Error(`Candidate nested source pin changed: ${location}. Review the new dependency before updating its inventory pin.`);
-  }
   if (!includePaths.length && project?.id && sourceScopes[project.id]) includePaths = sourceScopes[project.id];
   const listingPaths = [...new Set([...includePaths, ...[...nestedPins.keys()].filter(nested => includePaths.some(file => file.startsWith(nested + "/")))])];
   const entries = (await git(source, ["ls-tree", "-rz", "-l", revision, ...(listingPaths.length ? ["--", ...listingPaths.map(relativePath)] : [])])).split("\0").filter(Boolean).map(row => {
@@ -412,10 +380,14 @@ async function materializeGitTree({ source, revision, destination, projects, pro
   }
   for (const entry of entries) {
     if (entry.kind === "commit") {
-      const nested = nestedProject(entry.path);
-      const nestedSource = nested?.path ? path.join(root, nested.path) : path.join(source, entry.path);
-      if (!nested || !fs.existsSync(path.join(nestedSource, ".git"))) throw Error(`Candidate nested source is unavailable: ${entry.path}. Supply a complete separate checkout; no implicit fetch is performed.`);
-      if (nested.revision !== entry.object) throw Error(`Candidate nested source pin changed: ${entry.path}.`);
+      const declared = nestedProject(entry.path), child = declarations.find(item => item.path === entry.path);
+      if (!child) throw Error(`Candidate nested Git source lacks .gitmodules metadata: ${entry.path}.`);
+      if (declared && normalizedOrigin(declared.repository) !== normalizedOrigin(child.repository)) throw Error(`Candidate nested origin changed: ${entry.path}.`);
+      if (declared?.revision && declared.revision !== entry.object) throw Error(`Candidate nested source pin changed: ${entry.path}.`);
+      const nested = declared || { id: project?.id + "/" + entry.path, repository: child.repository,
+        ...(project?.path ? { path: project.path + "/" + entry.path } : {}) };
+      const nestedSource = declared?.path ? path.join(root, declared.path) : path.join(source, entry.path);
+      if (!fs.existsSync(path.join(nestedSource, ".git"))) throw Error(`Candidate nested source is unavailable: ${entry.path}. Supply a complete separate checkout; no implicit fetch is performed.`);
       const nestedPaths = includePaths.includes(entry.path) ? [] : includePaths.filter(file => file.startsWith(entry.path + "/")).map(file => file.slice(entry.path.length + 1));
       await materializeGitTree({ source: nestedSource, revision: entry.object, destination: path.join(destination, entry.path), projects, project: nested, root, budget, recordSource, sourceScopes, includePaths: nestedPaths, warnings });
       continue;
@@ -468,6 +440,8 @@ function substitute(value, context) {
 }
 async function checkCandidate({ root = ROOT, inventory = JSON.parse(fs.readFileSync(INVENTORY, "utf8")), projectId, revision, workDir, sourceDir, recipeId, fetch = false, dependencies = {} }) {
   validateInventory(inventory);
+  const links = await indexLinks(root);
+  inventory = { ...inventory, projects: inventory.projects.map(project => ({ ...project, revision: project.revision || links.get(project.path) })) };
   const project = inventory.projects.find(item => item.id === projectId);
   if (!project || !/^[a-f0-9]{40}$/.test(revision || "")) throw Error("Choose an inventoried project and a full candidate commit.");
   if (!fetch && !sourceDir && project.path && !fs.existsSync(path.join(root, project.path, ".git")))
@@ -617,4 +591,4 @@ if (require.main === module) {
   }).catch(error => { console.error(error.message); process.exitCode = 1; });
 }
 module.exports = { ROOT, LIMITS, relativePath, normalizedOrigin, configRows, submodules, indexLinks, treeLinks,
-  sourceRef, validateInventory, ownedAdaptationFiles, sourceGuardBlob, checkInventory, ensureOwnedWork, materializeGitTree, snapshot, substitute, checkCandidate, options };
+  sourceRef, validateInventory, sourceGuardBlob, checkInventory, ensureOwnedWork, materializeGitTree, snapshot, substitute, checkCandidate, options };
