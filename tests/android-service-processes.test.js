@@ -150,7 +150,7 @@ test("Concurrent installed-service demands share one fully enrolled process befo
   assert.equal(launched,1);assert.equal(fs.existsSync(dispatches),false,'No descriptor dispatch may precede provider enrollment');
   const bootstrap=once(serviceChild.stdout,'data');permit();const packet=JSON.parse(String((await bootstrap)[0]));assert.equal(packet.self.pid,serviceChild.pid);assert.equal(packet.self.uid,10030);
   assert.deepEqual(packet.accountPolicy,{interactive:false},'Background providers inherit the game account policy without an account broker');
-  for(let i=0;!fs.existsSync(dispatches)&&i<100;i++)await new Promise(resolve=>setTimeout(resolve,10));
+  for(let i=0;(!fs.existsSync(dispatches)||fs.readFileSync(dispatches,'utf8')!=='dispatch\n')&&i<100;i++)await new Promise(resolve=>setTimeout(resolve,10));
   assert.equal(fs.readFileSync(dispatches,'utf8'),'dispatch\n','Shared process aliases must create one connection');
   // A process can remain alive during native teardown after its authority EOF.
   // A peer exit must reject its queued notice, never throw from the exit event.
