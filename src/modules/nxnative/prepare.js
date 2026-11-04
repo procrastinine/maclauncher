@@ -94,7 +94,10 @@ async function runCli(runtime, args, directory, context, dependencies = {}, prep
   const python = await pythonEnvironment(runtime, context);
   const environment = { ...(python?.env || process.env), ...preparationEnvironment, ...(python ? { NXNATIVE_PYTHON: python.pythonPath } : {}),
     ...(runtime.source ? { NXNATIVE_SOURCE_ROOT: runtime.source.root, NXNATIVE_SOURCE_REVISION: runtime.source.revision,
-      NXNATIVE_SOURCE_COMMITTED_AT: runtime.source.committedAt || "" } : {}) };
+      NXNATIVE_SOURCE_COMMITTED_AT: runtime.source.committedAt || "" } : {}),
+    ...(context.runtimeSettings?.buildUpstreamHost === true ? {
+      NXNATIVE_UPSTREAM_HOST_CACHE: path.join(context.userDataDir, "runtimes", "nxnative", "upstream-hosts") }
+      : { NXNATIVE_UPSTREAM_HOST_CACHE: undefined }) };
   fs.mkdirSync(directory, { recursive: true });
   const logPath = path.join(directory, "nxnative.log");
   fs.writeFileSync(logPath, "");
@@ -102,7 +105,7 @@ async function runCli(runtime, args, directory, context, dependencies = {}, prep
   const progress = createProgressHandler(context.onProgress);
   try {
     await (dependencies.runCommand || runToolCommand)(runtime.cli, args, { cwd: directory, logPath, signal: context.signal, timeout: 60 * 60 * 1000,
-      ...(python || runtime.source || Object.keys(preparationEnvironment).length ? { env: environment } : {}),
+      ...(python || runtime.source || context.runtimeSettings?.buildUpstreamHost === true || Object.keys(preparationEnvironment).length ? { env: environment } : {}),
       onSpawn: child => {
         const decoder = new StringDecoder("utf8");let pending = "";
         child.stdout?.on("data", chunk => {
@@ -208,8 +211,13 @@ const PATH_ENVIRONMENT = new Set(["NXNATIVE_PROFILE", "DM_ROOT", "DM_ROMFS", "DM
 function validateLaunch(file, prepared, runtime, input, entry, context) {
   const launch = readJson(file), actualPrepared = fs.realpathSync(prepared);
   const argumentPathSafe=value=>[actualPrepared,runtime.root,input?.sourceRoot].filter(Boolean).some(root=>inside(fs.realpathSync(root),fs.realpathSync(value)));
-  if (!runtime.managed && launch.schemaVersion !== 1 || !path.isAbsolute(launch.command || "") ||
-      (runtime.managed ? !inside(fs.realpathSync(runtime.root),fs.realpathSync(launch.command)) : fs.realpathSync(launch.command) !== fs.realpathSync(runtime.host)) ||
+  const packagedHost = path.isAbsolute(launch.command || "") && (runtime.managed
+    ? inside(fs.realpathSync(runtime.root),fs.realpathSync(launch.command))
+    : fs.existsSync(runtime.host) && fs.realpathSync(launch.command) === fs.realpathSync(runtime.host));
+  const upstreamHost = !packagedHost && context.runtimeSettings?.buildUpstreamHost === true &&
+    path.isAbsolute(launch.command || "") && fs.lstatSync(launch.command).isFile() && inside(path.join(fs.realpathSync(context.userDataDir),
+      "runtimes", "nxnative", "upstream-hosts"), fs.realpathSync(launch.command));
+  if (!runtime.managed && launch.schemaVersion !== 1 || !path.isAbsolute(launch.command || "") || !packagedHost && !upstreamHost ||
       !Array.isArray(launch.args) || !runtime.managed && launch.args.length !== 1 || launch.args.some(value => typeof value !== "string" || value.length > 16384 || value.includes("\0")) ||
       (runtime.managed ? launch.args.some(value=>path.isAbsolute(value)&&!argumentPathSafe(value)) : !path.isAbsolute(launch.args[0]) || !inside(actualPrepared, fs.realpathSync(launch.args[0]))) ||
       !path.isAbsolute(launch.cwd || "") || !inside(actualPrepared, fs.realpathSync(launch.cwd)) || !launch.env || typeof launch.env !== "object" || Array.isArray(launch.env))
@@ -230,7 +238,7 @@ function validateLaunch(file, prepared, runtime, input, entry, context) {
   const save = saveDirectory(entry, context), temporary = path.join(gameDirectory(entry, context), "temp");
   assertOutsideSource(input.sourceRoot, save);fs.mkdirSync(save, { recursive: true });Writable.assertOwnDirectory(context.userDataDir, temporary);
   entry.defaultSaveDir = save;
-  return { command: runtime.host, args: launch.args, cwd: launch.cwd,
+  return { command: packagedHost && !runtime.managed ? runtime.host : launch.command, args: launch.args, cwd: launch.cwd,
     env: { ...environment, DM_SAVE: save, DM_TEMP: temporary, DM_WINDOW: "1", DM_AUDIO: "1" }, prepared };
 }
 async function prepareGame(entry, context, selection, dependencies = {}) {

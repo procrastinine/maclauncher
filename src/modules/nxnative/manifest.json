@@ -24,10 +24,11 @@
     },
     "entries": {
       "nxnative": { "label": "Switch (nxnative)", "graphicsHost": "window", "graphicsArchitecture": "arm64", "settings": {
-        "defaults": { "keysPath": "" },
+        "defaults": { "keysPath": "", "buildUpstreamHost": false },
         "provider": { "readAction": "readGameSettings", "writeAction": "writeGameSettings", "gameOnly": true },
         "fields": [
           { "key": "keysPath", "type": "string", "label": "prod.keys", "description": "Keys for encrypted Switch game data. The file stays in its current location.", "pickerAction": "pickKeysFile", "pickerResultKey": "filePath", "fileStatusAction": "keysFileStatus" },
+          { "key": "buildUpstreamHost", "type": "boolean", "label": "Build the upstream host when needed", "description": "Needs Xcode. During preparation, supported native tools can build the selected snapshot's host when the packaged host does not match. Disabled by default; older native tools ignore this option." },
           { "key": "keyboard", "type": "display", "label": "Fixed keyboard mapping", "description": "nxnative uses fixed physical key positions; keyboard remapping is not supported. Key names below follow the US keyboard layout.", "rows": [
             { "label": "L + R prompt", "value": "Hold Q + E" }, { "label": "Left stick", "value": "W A S D" }, { "label": "D-pad", "value": "Arrow keys" },
             { "label": "A / B / X / Y", "value": "J / K / U / I" }, { "label": "L / R", "value": "Q / E" }, { "label": "ZL / ZR", "value": "Z / C" },
