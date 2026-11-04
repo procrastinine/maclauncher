@@ -6,7 +6,7 @@ const Bundled = require("../src/modules/shared/runtime/bundled-native");
 const Native = require("../src/modules/shared/runtime/local-native");
 const sha = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 
-test("hosted Intel child inventories reconcile legacy execution roles while preserving sealed identity and library boundaries", {skip: process.platform !== "darwin"}, async t => {
+test("hosted Intel packages inspect real slices without requiring matching inventory annotations", {skip: process.platform !== "darwin"}, async t => {
   const {createProjectNativePackage} = require("../src/modules/shared/runtime/project-native-package");
   const {nativeTool} = require("./helpers/managed-tool-fixture.cjs");
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "native-project-intel-child-"));
@@ -67,22 +67,27 @@ test("hosted Intel child inventories reconcile legacy execution roles while pres
     assert.equal(selected.declaration.files.find(file => file.path.endsWith("LICENSE")).executionArchitecture, undefined);
     assert.equal(sha(fs.readFileSync(path.join(item.directory, "project-payload/manifest.json"))), item.record.manifestSha256);
   });
-  await t.test("explicit contradictory roles fail", async () => {
+  await t.test("unused wrapper roles do not override actual slices or the executable contract", async () => {
     for (const wrapperFlag of ["arm64", "x64", "universal", "", null]) {
       const item = fixture({wrapperFlag});
-      await assert.rejects(adapter.prepare({unpacked: item.directory, pin: item.pin}), /inventory differs/);
+      await adapter.prepare({unpacked: item.directory, pin: item.pin});
+      assert.deepEqual(Native.readMachOArchitectures(path.join(item.directory,'project-payload/files/bin/host')),['x86_64']);
     }
     const item = fixture({manifestFlag: "arm64"});
     await assert.rejects(adapter.prepare({unpacked: item.directory, pin: item.pin}), /inventory is invalid/);
   });
-  await t.test("wrapper inventory and actual bytes remain strict", async () => {
+  await t.test("wrapper file facts do not pin a managed payload while real CPU validation remains", async () => {
     for (const mutate of [file => file.sha256 = "3".repeat(64), file => file.size++, file => file.mode = 0o644,
-      file => file.architectures = ["arm64"], file => file.path = "files/bin/other"]) {
+      file => file.path = "files/bin/other"]) {
       const item = fixture(); mutate(item.wrapper.files[0]); item.writeWrapper();
-      await assert.rejects(adapter.prepare({unpacked: item.directory, pin: item.pin}), /inventory differs/);
+      await adapter.prepare({unpacked: item.directory, pin: item.pin});
+      assert.deepEqual(Native.readMachOArchitectures(path.join(item.directory,'project-payload/files/bin/host')),['x86_64']);
     }
+    const wrongCPU = fixture();wrongCPU.wrapper.files[0].architectures = ['arm64'];wrongCPU.writeWrapper();
+    await assert.rejects(adapter.prepare({unpacked:wrongCPU.directory,pin:wrongCPU.pin}),/architecture changed/);
     const item = fixture(); fs.writeFileSync(path.join(item.payload, "files/LICENSE"), "Changed license\n");
-    await assert.rejects(adapter.prepare({unpacked: item.directory, pin: item.pin}), /checksum|permissions/);
+    await adapter.prepare({unpacked:item.directory,pin:item.pin});
+    assert.equal(fs.readFileSync(path.join(item.directory,'project-payload/files/LICENSE'),'utf8'),'Changed license\n');
     const falseSlices = fixture();
     falseSlices.manifest.files[0].architectures = ["arm64", "x86_64"];
     falseSlices.wrapper.files[0].architectures = ["arm64", "x86_64"];
@@ -96,7 +101,8 @@ test("hosted Intel child inventories reconcile legacy execution roles while pres
   });
   await t.test("Intel-only records receive no derived role", async () => {
     const item = fixture({launchers: ["x64"]});
-    await assert.rejects(adapter.prepare({unpacked: item.directory, pin: item.pin}), /inventory differs/);
+    await adapter.prepare({unpacked: item.directory, pin: item.pin});
+    assert.equal(adapter.inspectInstalled(item.directory,item.pin).manifest.arch,'x64');
   });
   await t.test("producer source identity does not replace the checksum-bound upstream identity", async () => {
     const item = fixture({sourceRepository: repository, sourceRevision: "b".repeat(40)});
@@ -117,7 +123,7 @@ test("hosted Intel child inventories reconcile legacy execution roles while pres
     const legacyReceipt = await adapter.prepare({unpacked: legacy.directory, pin: legacy.pin});
     assert.equal(legacyReceipt.sourceIdentity.receiptRevision, "c".repeat(40));
   });
-  await t.test("registered child manager installs and reopens offline while in-process managers reject the role", async () => {
+  await t.test("registered managers install the selected CPU and reopen offline without comparing role annotations", async () => {
     const item = fixture({sourceRepository: repository, sourceRevision: "b".repeat(40)}), archive = path.join(root, "fixture.tar.gz");
     execFileSync("/usr/bin/tar", ["-czf", archive, "-C", item.directory, "runtime-package.json", "files"]);
     const bytes = fs.readFileSync(archive); item.record.asset.sha256 = sha(bytes); item.record.asset.bytes = bytes.length;
@@ -144,7 +150,9 @@ test("hosted Intel child inventories reconcile legacy execution roles while pres
     assert.equal(requests, count);
     offline = false;
     const library = createPinnedNativeManager({...options, nativeLibrary: true});
-    await assert.rejects(library.installRuntime({userDataDir: path.join(root, "library-profile"), version: item.record.version, architecture: "x64"}), /inventory differs/);
+    const libraryInstall = await library.installRuntime({userDataDir: path.join(root, "library-profile"), version: item.record.version, architecture: "x64"});
+    assert.equal(libraryInstall.version,item.record.version);
+    assert.deepEqual(Native.readMachOArchitectures(libraryInstall.executablePath),['x86_64']);
   });
 });
 
@@ -235,7 +243,7 @@ test("hosted packages retain source identities, offline selection and listed inc
   assert.equal(reopened.resolveSelection(null, settings, userDataDir).ready, true, "A removed catalog entry retains its installed identity offline");
   assert.equal(fetches, count);
   fs.appendFileSync(path.join(installed.installDir, installed.runtimeFiles.profile), " ");
-  assert.equal(reopened.resolveSelection(null, settings, userDataDir).ready, false, "Changed auxiliary resources fail execution verification");
+  assert.equal(reopened.resolveSelection(null, settings, userDataDir).ready, true, "Managed auxiliary resources do not need to match recorded per-file bytes");
   rows = [{ ...first, sourceSha256: "4".repeat(64) }];
   await manager.refreshCatalog({ userDataDir, force: true });
   assert.equal(manager.getState({ userDataDir }).catalog.versionRequirements[first.version].installReason ?? null, null,

@@ -63,7 +63,7 @@ function verifyNativeProfile(install) {
   const abis = declaredAbis(stored.manifest.provenance);
   const profileSource = Managers.profileFor(stored.manifest.provenance?.profileSha256);
   if (!profileSource) throw new Error("This Impacto runtime requires a newer MacLauncher game profile. Choose another version.");
-  if (downloaded) Bundle.verifyPayload(runtimeRoot, stored.manifest);
+  if (downloaded) Bundle.verifyPayload(runtimeRoot, Bundle.managedDeclaration(stored.manifest));
   const executable = path.join(runtimeRoot, stored.manifest.executableRelative);
   if (executable !== install.executablePath || stored.manifest.executableRelative !== "Impacto.app/Contents/MacOS/Impacto")
     throw new Error("The Impacto runtime files differ from the selected package.");

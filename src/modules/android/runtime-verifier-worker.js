@@ -69,7 +69,7 @@ function snapshot(root, declaration, resolveDependency) {
     } else throw new Error("Bundled runtimes may contain only regular files and directories.");
   }
   visit("", 0);
-  if (JSON.stringify(files.sort()) !== JSON.stringify((declaration.aliases ? require("../shared/runtime/package-contract.cjs").logicalFiles(declaration,resolveDependency) : declaration.files).map(file => file.path).sort()))
+  if (!Bundled.isManagedDeclaration(declaration) && JSON.stringify(files.sort()) !== JSON.stringify((declaration.aliases ? require("../shared/runtime/package-contract.cjs").logicalFiles(declaration,resolveDependency) : declaration.files).map(file => file.path).sort()))
     throw new Error("Bundled runtime file inventory differs from its manifest.");
   return JSON.stringify(identities);
 }
@@ -82,7 +82,7 @@ function verify(root, declaration, dependencyFiles = {}, dependencyPackages=[]) 
   root = path.resolve(root);
   const dependencyResolve=require('../shared/runtime/package-dependencies').resolverFromFacts(dependencyPackages);
   const identity=()=>JSON.stringify([snapshot(root,declaration,resolveDependency),...dependencyPackages.map(item=>snapshot(item.root,item.declaration,dependencyResolve))]);
-  const key = JSON.stringify([root, declaration, dependencyFiles,dependencyPackages]), before = identity();
+  const key = JSON.stringify([root, declaration, dependencyFiles,dependencyPackages,Bundled.isManagedDeclaration(declaration)]), before = identity();
   const persistentKey = digest(key), persistentIdentity = digest(before);
   if (cache.get(key) === before || storedIdentities().some(entry => entry[0] === persistentKey && entry[1] === persistentIdentity)) {
     if (cache.size >= CACHE_LIMIT) cache.delete(cache.keys().next().value);
@@ -100,7 +100,9 @@ function verify(root, declaration, dependencyFiles = {}, dependencyPackages=[]) 
   remember(persistentKey, persistentIdentity);
   return { cacheHit: false };
 }
-parentPort.on("message", ({ id, root, declaration, dependencyFiles,dependencyPackages,appBundle }) => {
+parentPort.on("message", ({ id, root, declaration, dependencyFiles,dependencyPackages,appBundle,managed }) => {
+  if (managed) Bundled.managedDeclaration(declaration);
+  for (const item of dependencyPackages || []) if (item.managed) Bundled.managedDeclaration(item.declaration);
   try { parentPort.postMessage({ id, result: appBundle ? Bundled.withAppBundle(appBundle,()=>verify(root,declaration,dependencyFiles,dependencyPackages)) : verify(root, declaration, dependencyFiles,dependencyPackages) }); }
   catch (error) { parentPort.postMessage({ id, error: { message: error.message, name: error.name, code: error.code } }); }
 });

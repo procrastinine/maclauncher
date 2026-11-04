@@ -77,7 +77,7 @@ function rewriteManifest(installed, mutate) {
   installed.bundledManifestSha256 = Adapter.hash(file);
 }
 
-test("downloaded Impacto profiles verify their relocated manifest and sealed payload before Play", t => {
+test("downloaded Impacto profiles verify their manifest without requiring an exact payload inventory", t => {
   const root = temporary(t), install = installedRuntime(root), version = install.version;
   const directory = path.join(root, "project-payload"); fs.mkdirSync(directory);
   fs.renameSync(path.join(root, "files"), path.join(directory, "files"));
@@ -93,11 +93,13 @@ test("downloaded Impacto profiles verify their relocated manifest and sealed pay
     installationMetadata: { manifestSha256: record.manifestSha256 },
     executablePath: path.join(directory, "files", "Impacto.app/Contents/MacOS/Impacto") });
   assert.equal(Launch.verifyNativeProfile(install).runtimeRoot, path.join(directory, "files"));
+  fs.writeFileSync(path.join(directory,'files/build-inputs.json'),'{}');
+  assert.equal(Launch.verifyNativeProfile(install).manifest.version,version);
   const bytes = fs.readFileSync(manifest); fs.appendFileSync(manifest, " ");
   assert.throws(() => Launch.verifyNativeProfile(install), /manifest changed/);
   fs.writeFileSync(manifest, bytes);
   fs.appendFileSync(install.executablePath, "changed native bytes");
-  assert.throws(() => Launch.verifyNativeProfile(install), /limit|size|checksum/);
+  assert.equal(Launch.verifyNativeProfile(install).manifest.version,version,'Recorded per-file bytes do not pin a managed payload');
 });
 
 test("current Impacto declares its Windows contracts as one manifest profile", t => {

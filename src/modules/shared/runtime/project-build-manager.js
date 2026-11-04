@@ -7,7 +7,7 @@ const Custom = require("./custom-runtime");
 const Architecture = require("./architecture");
 
 const Contract = require("./package-contract.cjs");
-function inspectPackage(root, record, { projectId, manifestRelative, sourceRelative, executableRelative, filesPrefix = "", dataOnly = false, validateManifest, validatePayload, resolveDependency, declaration, metadataOnly = false }) {
+function inspectPackage(root, record, { projectId, manifestRelative, sourceRelative, executableRelative, filesPrefix = "", dataOnly = false, validateManifest, validatePayload, resolveDependency, declaration, metadataOnly = false, managed = false }) {
   if (record.id !== projectId || record.manifestRelative !== manifestRelative) throw new Error("The runtime package belongs to a different project or format.");
   const stored = Bundled.readRegular(path.join(root, manifestRelative), Bundled.LIMITS.manifestBytes);
   if (stored.sha256 !== record.manifestSha256 || stored.mode !== 0o644) throw new Error("The runtime package manifest changed.");
@@ -20,10 +20,10 @@ function inspectPackage(root, record, { projectId, manifestRelative, sourceRelat
     const full = path.join(root, file.path);
     const alias = declaration?.aliases?.files?.[file.path];
     const physical = alias && typeof alias === 'object' ? resolveDependency(alias,declaration.dependencies.find(dep=>dep.project===alias.project)).path : full;
-    Bundled.fileIdentity(physical, { maximum: file.size });
+    Bundled.fileIdentity(physical, managed ? undefined : { maximum: file.size });
     const stat = fs.statSync(full);
     const mode=stat.mode&0o777;
-    if (stat.size !== file.size || (alias ? (mode&~0o111)!==(file.mode&~0o111)||(mode&file.mode&0o111)!==(file.mode&0o111) : mode!==file.mode))
+    if (!managed && (stat.size !== file.size || (alias ? (mode&~0o111)!==(file.mode&~0o111)||(mode&file.mode&0o111)!==(file.mode&0o111) : mode!==file.mode)))
       throw new Error("The runtime package source or executable differs from its manifest.");
   }
   files.push({ path: manifestRelative, size: stored.size, mode: 0o644, sha256: stored.sha256 });
@@ -44,7 +44,7 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, label, re
     const outer = fs.existsSync(wrapper) ? JSON.parse(Bundled.readRegular(wrapper,Bundled.LIMITS.manifestBytes).bytes) : null;
     if (outer && !installedDependencies) installedDependencies = P.load(userDataDir || (outer.dependencies?.length?P.userDataForPayload(root):undefined),outer.dependencies,{verification:'status'});
     resolveDependency ||= P.resolver(installedDependencies || new Map());
-    const selected = inspectPackage(root,record,{...format,resolveDependency,declaration:outer,metadataOnly});
+    const selected = inspectPackage(root,record,{...format,resolveDependency,declaration:outer,metadataOnly,managed:Boolean(outer)});
     if (outer) selected.declaration=P.bind(root,record,selected.declaration,resolveDependency,wrapper);
     selected.dependencyLibraryPaths=P.loaderPaths(selected.declaration,installedDependencies||new Map());
     selected.dependencyReadRoots=P.readRoots(installedDependencies||new Map());
@@ -91,9 +91,9 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, label, re
         throw new Error("The runtime archive belongs to a different project or version.");
       const P=require('./package-dependencies');
       const selected = inspect(path.join(unpacked, "payload"), record, {userDataDir,resolveDependency,installedDependencies,verification:"status",metadataOnly:true});
-      if(wrapper.aliases)Bundled.verifyStoredPayload(selected.root,wrapper);
+      if(wrapper.aliases)Bundled.verifyStoredPayload(selected.root,wrapper,{managed:true});
       P.materialize(selected.root,wrapper,resolveDependency,{verify:false});
-      inspectPackage(selected.root,record,{...format,resolveDependency,declaration:wrapper});
+      inspectPackage(selected.root,record,{...format,resolveDependency,declaration:wrapper,managed:true});
       const sourcePath = typeof sourceRelative === "function" ? sourceRelative(selected.manifest, record) : sourceRelative;
       await verifyPayload(selected, { signal });
       return { manifestSha256: record.manifestSha256,
@@ -112,11 +112,9 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, label, re
         if (types.stdout.trim().split("\n").some(line => !/^[d-]/.test(line))) throw new Error("The runtime archive contains unsupported links.");
         await execute("/usr/bin/tar", ["-xzf", archive, "-C", extracted], options);
       }
-      if (JSON.stringify(fs.readdirSync(extracted).sort()) !== JSON.stringify(["files", "runtime-package.json"]))
-        throw new Error("The runtime archive layout is invalid.");
       fs.renameSync(path.join(extracted, "runtime-package.json"), path.join(unpacked, "project-package.json"));
       fs.renameSync(path.join(extracted, "files"), path.join(unpacked, "payload"));
-      fs.rmdirSync(extracted);
+      if (!fs.readdirSync(extracted).length) fs.rmdirSync(extracted);
     } }
   });
   function include(item) {

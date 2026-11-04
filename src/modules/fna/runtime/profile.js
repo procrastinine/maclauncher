@@ -44,7 +44,7 @@ function verifyRuntime(install) {
     });
     if (sealed.sha256 !== selected.manifestSha256) throw new Error("FNA runtime package manifest changed.");
     sealedPayload = path.join(directory, "files");
-    Bundled.verifyPayload(sealedPayload, manifest);
+    Bundled.verifyPayload(sealedPayload, Bundled.managedDeclaration(manifest));
     sealedManifest = manifest;
   }
   if (sealedManifest) {

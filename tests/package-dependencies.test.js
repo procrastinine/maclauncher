@@ -10,7 +10,8 @@ async function damagedDependency(t){
  const options={userDataDir,repository:'example/runtime-builds',acquireLock:lock,fetchCatalog:async()=>({packages:[shared.record]}),
   download:async(url,file)=>fs.copyFileSync(shared.archive,file)};
  const first=await P.prepare(record,options);await first.release();
- const target=P.directory(userDataDir,dep),entry=path.join(target,'files/entry.js');fs.writeFileSync(entry,'existing damaged bytes');
+ const target=P.directory(userDataDir,dep),entry=path.join(target,'files/entry.js'),outside=path.join(directory,'outside.js');
+ fs.writeFileSync(outside,'existing damaged bytes');fs.unlinkSync(entry);fs.symlinkSync(outside,entry);
  const inode=fs.statSync(target).ino;
  function snapshot(directory){return fs.readdirSync(directory).sort().flatMap(name=>{
   const file=path.join(directory,name);return fs.lstatSync(file).isDirectory()?snapshot(file).map(([child,bytes])=>[name+'/'+child,bytes]):[[name,fs.readFileSync(file).toString('hex')]];
@@ -28,13 +29,13 @@ for(const failure of ['catalog','download','digest','payload','abort'])test(`dep
  if(failure==='digest')changed.download=async(url,file)=>{retained();fs.writeFileSync(file,'wrong archive');};
  if(failure==='payload')changed.extract=async(archive,output,signal)=>{
   retained();await require('../src/modules/shared/runtime/project-native-package').extractArchive(archive,output,signal);
-  fs.writeFileSync(path.join(output,'files/entry.js'),'invalid staged payload');
+  const file=path.join(output,'files/entry.js');fs.unlinkSync(file);fs.symlinkSync(path.join(output,'runtime-package.json'),file);
  };
  if(failure==='abort'){
   changed.signal=controller.signal;
   changed.download=async(url,file)=>{retained();fs.copyFileSync(shared.archive,file);controller.abort(new Error('replacement canceled'));};
  }
- await assert.rejects(P.prepare(record,changed),/unavailable|digest|checksum|size|canceled|aborted/);
+ await assert.rejects(P.prepare(record,changed),/unavailable|digest|checksum|size|canceled|aborted|symlinks/);
  unchanged();
 });
 test('dependency replacement restores the exact prior directory when publishing fails',async t=>{
@@ -151,14 +152,15 @@ test('dependency retirement resumes after interrupted deletion without needing t
  const parent=path.dirname(P.directory(userDataDir,dep));assert.equal(fs.readdirSync(parent).length,1);
  await P.collect(userDataDir,{acquireLock:lock});assert.deepEqual(fs.readdirSync(parent),[]);
 });
-test('binding retains the sealed inventory while deriving a legacy Intel execution role consistently',t=>{
+test('managed binding uses the downloaded declaration without demanding an identical inner inventory',t=>{
  const directory=root(t),stored={path:'runner',size:32,mode:0o755,sha256:'a'.repeat(64),architectures:['x86_64']};
  const manifest={path:'manifest.json',size:2,mode:0o644,sha256:'b'.repeat(64)};
  const record={id:'intel-runtime',version:'1.0.0',arch:'x64',launcherArchitectures:['arm64','x64'],minimumMacOS:'13.0',manifestRelative:'manifest.json',manifestSha256:manifest.sha256,sourceSha256:'c'.repeat(64)};
  const outer={...record,files:[{...stored,format:'mach-o'},manifest]},file=path.join(directory,'outer.json');fs.writeFileSync(file,JSON.stringify(outer));
- const logical={files:[{...stored,executionArchitecture:'x86_64'},manifest]};assert.throws(()=>P.bind(directory,record,logical,null,file),/inventory differs/);
+ const logical={files:[{...stored,executionArchitecture:'x86_64'},manifest]};assert.equal(P.bind(directory,record,logical,null,file).files[0].format,'mach-o');
  const normalizeFiles=files=>files.map(item=>item.architectures?{...item,executionArchitecture:'x86_64'}:item);
  assert.equal(P.bind(directory,record,logical,null,file,{normalizeFiles}).files[0].executionArchitecture,'x86_64');
- logical.files[0].sha256='d'.repeat(64);assert.throws(()=>P.bind(directory,record,logical,null,file),/inventory differs/);
+ logical.files[0].sha256='d'.repeat(64);logical.files.push({path:'build-inputs.json'});
+ assert.deepEqual(P.bind(directory,record,logical,null,file).files,outer.files);
 });
 module.exports={packageFor};

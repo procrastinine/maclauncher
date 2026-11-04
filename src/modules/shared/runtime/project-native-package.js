@@ -9,8 +9,7 @@ async function extractArchive(archive, destination, signal) {
       const name = original.replace(/^\.\//, "").replace(/\/$/, "");
       if (!name) continue;
       Bundled.relativeFile(name);
-      if (names.has(name) || names.size >= Bundled.LIMITS.files * 2 ||
-          name !== "runtime-package.json" && name !== "files" && !name.startsWith("files/"))
+      if (names.has(name) || names.size >= Bundled.LIMITS.files * 2)
         throw new Error("The hosted runtime archive layout is invalid.");
       names.add(name);
     }
@@ -50,7 +49,7 @@ function createProjectNativePackage({ projectId, repository, validateManifest, l
     resolveDependency ||= P.resolver(installedDependencies||new Map());
     // Lazy import keeps the shared pinned-manager dependency acyclic at load.
     const selected = require("./project-build-manager").inspectPackage(root, record, {
-      projectId, manifestRelative: record.manifestRelative, sourceRelative: null, filesPrefix: "files/", resolveDependency, declaration:outer,metadataOnly,
+      projectId, manifestRelative: record.manifestRelative, sourceRelative: null, filesPrefix: "files/", resolveDependency, declaration:outer,metadataOnly,managed:true,
       executableRelative: manifest => manifest.executableRelative,
       validateManifest(manifest) {
         Bundled.validateRuntimeManifest(manifest, { managerId: id, version: pin.version, arch: record.arch });
@@ -60,7 +59,7 @@ function createProjectNativePackage({ projectId, repository, validateManifest, l
     selected.declaration.files = executionFiles(selected.declaration.files, record);
     if(outer){
       const logical={...selected.declaration,files:executionFiles(selected.declaration.files,record)};
-      selected.declaration=P.bind(root,record,logical,resolveDependency,wrapper,{normalizeFiles:files=>executionFiles(files,record),message:"The hosted runtime archive inventory differs from its sealed manifest."});
+      selected.declaration=P.bind(root,record,logical,resolveDependency,wrapper,{normalizeFiles:files=>executionFiles(files,record)});
     }
     selected.dependencyLibraryPaths=P.loaderPaths(selected.declaration,installedDependencies||new Map());
     selected.dependencyReadRoots=P.readRoots(installedDependencies||new Map());
@@ -92,8 +91,6 @@ function createProjectNativePackage({ projectId, repository, validateManifest, l
   async function prepare({ unpacked, pin, signal, userDataDir, resolveDependency, installedDependencies }) {
     signal?.throwIfAborted();
     const record = recordFor(pin);
-    if (JSON.stringify(fs.readdirSync(unpacked).sort()) !== JSON.stringify(["files", "runtime-package.json"]))
-      throw new Error("The hosted runtime archive layout is invalid.");
     const wrapperBytes = Bundled.readRegular(path.join(unpacked, "runtime-package.json"), Bundled.LIMITS.manifestBytes);
     const wrapper = JSON.parse(wrapperBytes.bytes), P=require('./package-dependencies');
     if (["id", "version", "arch", "minimumMacOS", "manifestRelative", "manifestSha256"]
@@ -101,9 +98,9 @@ function createProjectNativePackage({ projectId, repository, validateManifest, l
       throw new Error("The hosted runtime archive differs from its selected project or source identity.");
     const selected = inspect(path.join(unpacked,"files"),pin,{userDataDir,resolveDependency,installedDependencies,verification:'status',metadataOnly:true});
     // Before the transport rename, bind the unchanged wrapper explicitly.
-    selected.declaration=P.bind(selected.root,record,selected.declaration,resolveDependency,path.join(unpacked,'runtime-package.json'),{normalizeFiles:files=>executionFiles(files,record),message:"The hosted runtime archive inventory differs from its sealed manifest."});
+    selected.declaration=P.bind(selected.root,record,selected.declaration,resolveDependency,path.join(unpacked,'runtime-package.json'),{normalizeFiles:files=>executionFiles(files,record)});
     P.attach(selected,{resolveDependency,sealedDeclaration:wrapper});
-    if(wrapper.aliases)Bundled.verifyStoredPayload(selected.root,wrapper);
+    if(wrapper.aliases)Bundled.verifyStoredPayload(selected.root,wrapper,{managed:true});
     P.materialize(selected.root,wrapper,resolveDependency,{verify:false});
     Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
     if (dependencies.verifySignatures) await dependencies.verifySignatures(selected.payloadRoot, selected.manifest, { signal });

@@ -261,9 +261,9 @@ test("project catalogs preserve committed fallbacks and exact offline installati
   packages.get("4.0").wrapper.id = "other-runtime";
   await assert.rejects(manager.installRuntime({ userDataDir, version: "4.0" }), /different project/);
   packages.get("4.0").wrapper.id = projectId;
-  fs.unlinkSync(path.join(packages.get("4.0").directory, "source.tar.gz"));
+  fs.unlinkSync(path.join(packages.get("4.0").directory, "native"));
   await assert.rejects(manager.installRuntime({ userDataDir, version: "4.0" }), /inventory|ENOENT/);
-  assert.equal(fs.existsSync(manager.core.getInstallDir({ userDataDir, version: "4.0" })), false, "Incomplete closures never publish");
+  assert.equal(fs.existsSync(manager.core.getInstallDir({ userDataDir, version: "4.0" })), false, "A missing executable never publishes");
   fs.appendFileSync(path.join(selected.install.root, "runtime.json"), " ");
   assert.equal(manager.resolveSelection(null, settings, userDataDir).ready, false, "Manifest tampering fails closed");
   assert.equal(gameManager.resolveSelection(null, settings, userDataDir).version, "2.0", "An explicit damaged selection is never replaced");

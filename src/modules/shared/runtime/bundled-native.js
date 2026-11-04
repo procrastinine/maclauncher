@@ -37,6 +37,10 @@ function dependencyResolver(root,manifest){
 // policy check; precise unchanged file identities can reuse their digest.
 const manifestCache = new Map();
 const dependencyContexts = new WeakMap();
+// Managed archives are digest-bound catalog downloads, not app-lock inventories.
+const managedDeclarations = new WeakSet();
+function managedDeclaration(declaration) { managedDeclarations.add(declaration); return declaration; }
+const isManagedDeclaration = declaration => managedDeclarations.has(declaration);
 function rememberDependencies(declaration,resolveDependency){if(declaration&&resolveDependency)dependencyContexts.set(declaration,resolveDependency);}
 const MANIFEST_CACHE_LIMIT = 128;
 
@@ -307,13 +311,18 @@ function verifyPayload(root, manifest, resolveDependency) {
   const files = !manifest.aliases ? manifest.files : Contract.logicalFiles(manifest,(target,dependency)=>dependencyFile(target,dependency));
   const expected = files.map(file=>file.path).sort();
   const directories = new Set();
-  if (JSON.stringify(fileInventory(root,{allowedAliases,directories})) !== JSON.stringify(expected)) throw new Error("Bundled runtime file inventory differs from its manifest.");
-  for (const file of files) {
-    const full = resolved.get(file.path)?.path || path.join(root,file.path), actual = readRegular(full,file.size, { digestOnly: true, directories });
-    if (actual.size!==file.size || actual.sha256!==file.sha256 ||
-        (actual.mode!==file.mode && !(fs.lstatSync(full).isSymbolicLink() && appAlias(full) &&
-        (actual.mode & ~0o111)===(file.mode & ~0o111) && (actual.mode & file.mode & 0o111)===(file.mode & 0o111))))
-      throw new Error(`Bundled runtime checksum or permissions changed: ${file.path}`);
+  const actualFiles = fileInventory(root,{allowedAliases,directories});
+  const managed = isManagedDeclaration(manifest), present = new Set(actualFiles);
+  if (!managed && JSON.stringify(actualFiles) !== JSON.stringify(expected)) throw new Error("Bundled runtime file inventory differs from its manifest.");
+  for (const file of files.filter(file => !managed || present.has(file.path))) {
+    const full = resolved.get(file.path)?.path || path.join(root,file.path);
+    if (!managed) {
+      const actual = readRegular(full,file.size, { digestOnly: true, directories });
+      if (actual.size!==file.size || actual.sha256!==file.sha256 ||
+          (actual.mode!==file.mode && !(fs.lstatSync(full).isSymbolicLink() && appAlias(full) &&
+          (actual.mode & ~0o111)===(file.mode & ~0o111) && (actual.mode & file.mode & 0o111)===(file.mode & 0o111))))
+        throw new Error(`Bundled runtime checksum or permissions changed: ${file.path}`);
+    }
     if (file.architectures) {
       const architectures=file.format==="pe" ? [PE.readPeExports(full)?.architecture].filter(Boolean) : Native.readMachOArchitectures(full,{allowLibrary:true});
       if (JSON.stringify(architectures.sort())!==JSON.stringify([...file.architectures].sort())) throw new Error(`Bundled runtime ${file.format==="pe" ? "PE" : "Mach-O"} architecture changed: ${file.path}`);
@@ -321,11 +330,12 @@ function verifyPayload(root, manifest, resolveDependency) {
   }
   return true;
 }
-function verifyStoredPayload(root, declaration) {
+function verifyStoredPayload(root, declaration, { managed = false } = {}) {
   const Contract = require("./package-contract.cjs");
   Contract.packageDependencies(declaration.dependencies);
   Contract.packageAliases(declaration.aliases,declaration.files,declaration.dependencies);
-  return verifyPayload(root,{...declaration,aliases:undefined,dependencies:undefined});
+  const stored = {...declaration,aliases:undefined,dependencies:undefined};
+  return verifyPayload(root,managed ? managedDeclaration(stored) : stored);
 }
 
 function bundledManifestPath(install) {
@@ -550,5 +560,5 @@ function resolveInstalledAsset(install, name) {
   return file;
 }
 
-module.exports = { localMachO, validateLocalAlias, rememberDependencies, appBundleRoot, withAppBundle, dependencyResolver, LIMITS, appAlias, digest, relativeFile, realDirectory, readRegular, fileIdentity, clearManifestCache, validateManifest, validateRuntimeManifest, verifyStoredPayload, verifyPayload, verifySignatures,
+module.exports = { localMachO, validateLocalAlias, managedDeclaration, isManagedDeclaration, rememberDependencies, appBundleRoot, withAppBundle, dependencyResolver, LIMITS, appAlias, digest, relativeFile, realDirectory, readRegular, fileIdentity, clearManifestCache, validateManifest, validateRuntimeManifest, verifyStoredPayload, verifyPayload, verifySignatures,
   fileInventory, verifyInstalled, bundledManifestPath, versionAtLeast, systemVersionSync, createBundledNativeRuntime, resolveInstalledEnvironment, resolveInstalledAsset };

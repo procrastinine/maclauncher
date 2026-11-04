@@ -426,7 +426,7 @@ test("FNA runtime state and module imports remain offline and independent from E
   assert.equal(child.status, 0, child.stderr);
 });
 
-test("FNA downloaded packages bind relocated files to their sealed manifest", t => {
+test("FNA downloaded profiles allow additional payload files while retaining their runtime requirements", t => {
   const root = fixture(t), directory = path.join(root, "project-payload"), payload = path.join(directory, "files", "fna");
   fs.mkdirSync(payload, { recursive: true });
   for (const relative of Profile.requiredFiles(DOTNET_VERSION)) {
@@ -449,6 +449,8 @@ test("FNA downloaded packages bind relocated files to their sealed manifest", t 
   const install = { source: "download", version: FNA_VERSION, upstreamRevision: FNA_REVISION, installDir: root, executablePath: path.join(payload, "dotnet"),
     catalogEntry: { projectPackage: { id: "fna", version: FNA_VERSION, manifestRelative: "manifest.json", manifestSha256: B.digest(bytes) } } };
   assert.equal(Profile.verifyRuntime(install).files["FNA.dll"], Native.hashFile(path.join(payload, "FNA.dll")));
+  fs.writeFileSync(path.join(directory,'files/build-inputs.json'),'{}');
+  assert.equal(Profile.verifyRuntime(install).dotnetVersion,DOTNET_VERSION);
   assert.equal(Profile.verifyRuntime({...install, upstreamRevision: undefined}).sourceIdentity.receiptRevision, null);
   const project = install.catalogEntry.projectPackage;
   install.upstreamRevision = "d".repeat(40);
@@ -461,5 +463,5 @@ test("FNA downloaded packages bind relocated files to their sealed manifest", t 
   assert.equal(Profile.verifyRuntime(install).sourceIdentity.receiptRevision, "e".repeat(40));
   install.upstreamRevision = project.source.revision;
   fs.appendFileSync(metadata, " "); assert.throws(() => Profile.verifyRuntime(install), /manifest changed/); fs.writeFileSync(metadata, bytes);
-  fs.writeFileSync(path.join(payload, "native/lib/libSDL3.0.dylib"), "modified"); assert.throws(() => Profile.verifyRuntime(install), /checksum|permissions/i);
+  fs.writeFileSync(path.join(payload, "native/lib/libSDL3.0.dylib"), "modified"); assert.throws(() => Profile.verifyRuntime(install), /integrity/i);
 });

@@ -56,7 +56,7 @@ function pump() {
     try {
       const current = start();
       current.ref();
-      current.postMessage({ id: job.id, root: job.root, declaration: job.declaration, dependencyFiles: job.dependencyFiles, dependencyPackages:job.dependencyPackages, appBundle:job.appBundle });
+      current.postMessage({ id: job.id, root: job.root, declaration: job.declaration, dependencyFiles: job.dependencyFiles, dependencyPackages:job.dependencyPackages, appBundle:job.appBundle, managed:job.managed });
     } catch (error) { finish(job, error); }
     return;
   }
@@ -76,17 +76,18 @@ function verifyPayload(root, declaration, { signal, resolveDependency } = {}) {
   return new Promise((resolve, reject) => {
     root = path.resolve(root);
     resolveDependency ||= declaration.dependencies?.length ? require('../shared/runtime/bundled-native').dependencyResolver(root,declaration) : undefined;
-    const dependencyPackages=resolveDependency?.packages||[],appBundle=require('../shared/runtime/bundled-native').appBundleRoot();
+    const Bundled=require('../shared/runtime/bundled-native'), managed=Bundled.isManagedDeclaration(declaration);
+    const dependencyPackages=(resolveDependency?.packages||[]).map(item=>({...item,managed:Bundled.isManagedDeclaration(item.declaration)})),appBundle=Bundled.appBundleRoot();
     const dependencyFiles = Object.fromEntries(Object.values(declaration.aliases?.files || {}).filter(target=>target && typeof target==='object').map(target=>{
       const dependency=declaration.dependencies.find(item=>item.project===target.project);
       if(!resolveDependency)throw new Error("Android dependency verifier needs its installed sealed declaration.");
       return [target.project+':'+target.path,{...resolveDependency(target,dependency),dependency}];
     }));
-    const key = JSON.stringify([root, declaration, dependencyFiles,dependencyPackages,appBundle]);
+    const key = JSON.stringify([root, declaration, dependencyFiles,dependencyPackages,appBundle,managed]);
     let job = jobs.get(key);
     if (!job) {
       // Capture the selected immutable version before a queued job begins.
-      job = { id: ++nextId, key, root, declaration: structuredClone(declaration), dependencyFiles: structuredClone(dependencyFiles), dependencyPackages:structuredClone(dependencyPackages), appBundle, requests: new Set() };
+      job = { id: ++nextId, key, root, declaration: structuredClone(declaration), dependencyFiles: structuredClone(dependencyFiles), dependencyPackages:structuredClone(dependencyPackages), appBundle, managed, requests: new Set() };
       jobs.set(key, job); queue.push(job);
     }
     const request = { resolve, reject, signal };

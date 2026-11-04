@@ -52,7 +52,7 @@ function load(userDataDir,dependencies,{verification='full',seen=new Set()}={}){
   const dir=directory(userDataDir,dep),receipt=read(path.join(dir,'runtime.json'));
   const record=Catalog.validateProjectRecord(receipt.catalogEntry.projectPackage,{projectId:dep.project,repository:receipt.repository});
   if(record.version!==dep.release||record.asset.sha256!==dep.sha256)throw new Error('Dependency receipt differs from its exact release.');
-  const declaration=read(path.join(dir,'runtime-package.json'));
+  const declaration=B.managedDeclaration(read(path.join(dir,'runtime-package.json')));
   assertDeclaration(declaration,record);
   const children=load(userDataDir,declaration.dependencies,{verification,seen:next}),resolve=resolver(children),root=path.join(dir,'files');
   if(verification==='full')B.verifyPayload(root,declaration,resolve);
@@ -97,16 +97,9 @@ function materialize(root,declaration,resolveDependency,{copy,verify=true}={}){
  }
  if(verify)B.verifyPayload(root,declaration,resolveDependency);
 }
-function bind(root,record,logical,resolveDependency,filename,{normalizeFiles=files=>files,message="The runtime archive inventory differs from its sealed manifest."}={}) {
+function bind(root,record,logical,resolveDependency,filename,{normalizeFiles=files=>files}={}) {
  const declaration=read(filename);assertDeclaration(declaration,record);
- const expanded=normalizeFiles(C.logicalFiles(declaration,resolveDependency)),facts=new Map(expanded.map(file=>[file.path,file]));
- const format=file=>file.format || (file.architectures?'mach-o':null);
- if(logical.files.length!==expanded.length||logical.files.some(file=>{
-  const expected=facts.get(file.path);return !expected||expected.sha256!==file.sha256||expected.size!==file.size||
-   JSON.stringify(expected.architectures?.slice().sort()||null)!==JSON.stringify(file.architectures?.slice().sort()||null)||format(expected)!==format(file)||(expected.executionArchitecture||null)!==(file.executionArchitecture||null)||
-   (expected.mode!==file.mode&&(!Object.hasOwn(declaration.aliases?.files||{},file.path)||(expected.mode&~0o111)!==(file.mode&~0o111)||(expected.mode&file.mode&0o111)!==(file.mode&0o111)));
- }))throw new Error(message);
- return {...logical,files:normalizeFiles(declaration.files),...(declaration.aliases?{aliases:declaration.aliases}:{}),...(declaration.dependencies?{dependencies:declaration.dependencies}:{})};
+ return B.managedDeclaration({...logical,files:normalizeFiles(declaration.files),...(declaration.aliases?{aliases:declaration.aliases}:{}),...(declaration.dependencies?{dependencies:declaration.dependencies}:{})});
 }
 function relocate(root,destination,declaration,resolveDependency){
  for(const[name,target]of Object.entries(declaration.aliases?.files||{})){
@@ -145,9 +138,8 @@ async function installOne(dep,options,seen){
   await download(record.asset.url,archive,{signal:options.signal,onProgress:options.onProgress});
   if(fs.statSync(archive).size!==record.asset.bytes||hash(archive)!==dep.sha256)throw new Error('Dependency archive digest or size differs from its exact release.');
   await(options.extract||require('./project-native-package').extractArchive)(archive,unpacked,options.signal);
-  if(JSON.stringify(fs.readdirSync(unpacked).sort())!==JSON.stringify(['files','runtime-package.json']))throw new Error('Invalid dependency archive layout.');
-  const declaration=read(path.join(unpacked,'runtime-package.json'));assertDeclaration(declaration,record);
-  if(declaration.aliases)B.verifyStoredPayload(path.join(unpacked,'files'),declaration);
+  const declaration=B.managedDeclaration(read(path.join(unpacked,'runtime-package.json')));assertDeclaration(declaration,record);
+  if(declaration.aliases)B.verifyStoredPayload(path.join(unpacked,'files'),declaration,{managed:true});
   const resolved=resolver(children);materialize(path.join(unpacked,'files'),declaration,resolved,{copy:options.copy});
   fs.writeFileSync(path.join(unpacked,'runtime.json'),JSON.stringify({version:record.version,archiveSha256:dep.sha256,repository:options.repository,catalogEntry:{projectPackage:record}})+'\n',{flag:'wx',mode:0o644});
   options.signal?.throwIfAborted();
