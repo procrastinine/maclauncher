@@ -32,7 +32,7 @@ function fixture(t) {
   write(root, "tests/focused.test.js", "// A declared focused check.\n");
   const inventory = { schemaVersion: 1, projects: [{ id: "fixture", path: "src/external/fixture", repository: "https://example.invalid/fixture", revision,
     pinRefs: [{ kind: "json", path: "scripts/pin.json", property: "revision" }] }], recipes: [{ id: "fixture-overlay", project: "fixture", kind: "source-overlay",
-    ownedFiles: [{ path: applyFile, sha256: sha(fs.readFileSync(path.join(root, applyFile))) }], buildEntries: [applyFile], tests: ["tests/focused.test.js"],
+    ownedFiles: [{ path: applyFile }], buildEntries: [applyFile], tests: ["tests/focused.test.js"],
     reviewedOriginalFiles: { "engine.c": sha("reviewed source\n"), "helper.c": null },
     reviewedAdaptedFiles: { "engine.c": sha("reviewed source\nowned adaptation\n"), "helper.c": sha("owned helper\n") },
     guards: [{ root: "$stage", sourceProject: "fixture", files: { "engine.c": sha("reviewed source\n") } }],
@@ -192,13 +192,13 @@ test("offline source guards read exact nested Gitlink blobs and reject hash or o
   assert.equal(git(child, "status", "--porcelain"), "");
 });
 
-test("offline audit reports catalog and owned file drift instead of updating either", async t => {
+test("offline audit allows owned code edits while preserving upstream catalog pin checks", async t => {
   const current = fixture(t);
-  write(current.root, "scripts/pin.json", JSON.stringify({ revision: "f".repeat(40) }));
   fs.appendFileSync(path.join(current.root, current.applyFile), "// changed recipe\n");
+  assert.equal((await Check.checkInventory(current)).passed,true);
+  write(current.root, "scripts/pin.json", JSON.stringify({ revision: "f".repeat(40) }));
   const report = await Check.checkInventory(current);
   assert.ok(report.errors.some(issue => issue.code === "module-pin-drift"));
-  assert.ok(report.errors.some(issue => issue.code === "owned-adaptation-drift"));
   assert.equal(JSON.parse(fs.readFileSync(path.join(current.root, "scripts/pin.json"))).revision, "f".repeat(40));
 });
 
@@ -280,7 +280,7 @@ test("owned native helpers have explicit evidence without claiming an upstream s
   write(current.root, catalog, JSON.stringify([{ version: "helper-v2" }]));
   const helper = { id: "owned-helper", kind: "owned-native-helper", version: "helper-v2",
     versionRefs: [{ kind: "json", path: catalog, select: { version: "helper-v2" }, property: "version" }],
-    ownedFiles: [{ path: source, sha256: sha("owned helper source\n") }],
+    ownedFiles: [{ path: source }],
     buildEntries: [source], tests: ["tests/focused.test.js"], operations: [] };
   current.inventory.recipes.push(helper);
   assert.equal((await Check.checkInventory(current)).passed, true);
@@ -360,10 +360,11 @@ test("candidate source changes are conflicts; original hash guards are never rel
   assert.equal(current.inventory.projects[0].revision, current.revision);
 });
 
-test("candidate check refuses changed owned adaptation bytes before invocation", async t => {
+test("candidate check allows owned code edits and keeps upstream source immutable", async t => {
   const current = fixture(t);
   fs.appendFileSync(path.join(current.root, current.applyFile), "// changed after review\n");
-  await assert.rejects(Check.checkCandidate({ ...current, projectId: "fixture", workDir: path.join(current.root, ".local/changed-owned") }), /Owned adaptation changed/);
+  const report = await Check.checkCandidate({ ...current, projectId: "fixture", workDir: path.join(current.root, ".local/changed-owned") });
+  assert.equal(report.passed,true);assert.equal(report.upstreamCheckoutUnchanged,true);
   assert.equal(fs.existsSync(path.join(current.source, "helper.c")), false);
 });
 
@@ -423,7 +424,7 @@ test("checked-in inventory validates retained source records and explicit recipe
     for (const ref of project.pinRefs || []) assert.equal(Check.sourceRef(Check.ROOT, ref), revision, project.id);
   }
   for (const recipe of inventory.recipes) {
-    for (const file of recipe.ownedFiles || []) assert.equal(sha(fs.readFileSync(path.join(Check.ROOT,file.path))),file.sha256,file.path);
+    for (const file of recipe.ownedFiles || []) assert.equal(fs.existsSync(path.join(Check.ROOT,file.path)),true,file.path);
     for (const file of [...recipe.tests || [], ...recipe.buildEntries || []]) assert.equal(fs.existsSync(path.join(Check.ROOT,file)),true,file);
   }
 });

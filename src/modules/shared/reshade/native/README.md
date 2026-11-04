@@ -1,8 +1,7 @@
 # Shared graphics integration
 
-These owned source overrides extend the shared native graphics library. Apply
-them to the source revision recorded in `source-overlay.json`; the pinned vendor
-checkout stays unchanged. The resulting library retains the existing effects,
+These owned source overrides extend the shared native graphics library. The MacLauncher Builds producer compiles
+them with its pinned vendor sources. The resulting library retains the existing effects,
 scaling, frame generation and native presentation entry points.
 
 `target-time.h` adds optional `rsSubmitFramePresenterAtTime` and
@@ -88,18 +87,6 @@ these sources and builds the production component. Its graphics recipe supports
 node src/modules/shared/reshade/native/test/run.mjs /path/to/work/core/build
 MACLAUNCHER_NATIVE_FIXTURES=/path/to/work/core/build node --test tests/graphics-native-fixtures.test.js
 ```
-
-`build.mjs` rebuilds owned units against the base source and universal core build
-from that producer:
-
-```sh
-node src/modules/shared/reshade/native/build.mjs \
-  /path/to/base /path/to/work/core/build /path/to/output
-```
-
-The overlay build recompiles all directly linked native host units and the
-owned diagnostics archive together so shared header layouts remain consistent.
-Unchanged vendor archives are reused from the existing universal build.
 
 Automatic Metal layer ownership reuses a weak direct view binding. Layer
 replacement or view destruction returns to discovery; current window ownership
@@ -233,12 +220,8 @@ rendering without repeating shader preparation.
 The compiler accepts Windows separators in shader include paths and `exists`
 checks without altering ordinary string literals. Legacy texture offset and
 gather names use ReShade's original compatibility aliases and sampling operators.
-The preprocessor adaptation retains its BSD-3-Clause header and records the exact
-vendor source hash in `source-overlay.json`. Full source builds select the same
-adaptation through the owned `CMakeLists.txt`.
-
-The builder’s optional `--compiler-only` argument produces the shader compiler
-without rebuilding the native presentation library.
+The preprocessor adaptation retains its BSD-3-Clause header. The Builds producer
+selects it through the owned `CMakeLists.txt`.
 
 `uniform-sources.hpp` supplies per-effect timer, frame time, typed frame count,
 ping-pong animation, bounded random and local date uniforms. Annotation lookup

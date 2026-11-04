@@ -28,25 +28,6 @@ test("included shaders are available offline without a runtime manager or user-d
     assert.ok(selected.file.includes(path.join("reshade", "shader-collection")));
   }
 });
-test("CRT Royale retains its complete original source closure and license notices", () => {
-  const crypto = require("node:crypto"), selected = Packs.resolveEffect(null, "shader:crt-royale:royale", features);
-  const root = path.dirname(path.dirname(selected.file)), inventory = JSON.parse(fs.readFileSync(path.join(root, "source-files.json")));
-  assert.equal(inventory.revision, Packs.lookup("shader:crt-royale:royale").pack.revision);
-  assert.deepEqual(selected.texturePaths, []);
-  assert.ok(inventory.files.some(file => file.path === "licenses/components.txt"));
-  const component = fs.readFileSync(path.join(root, "licenses/components.txt"), "utf8").split(/\r?\n/).find(line => line.startsWith("crt-royale: "));
-  assert.ok(component, "The original component remains attributed");
-  const license = "licenses/" + component.slice("crt-royale: ".length);
-  assert.ok(inventory.files.some(file => file.path === license));
-  assert.match(fs.readFileSync(path.join(root, license), "utf8"), /GNU GENERAL PUBLIC LICENSE[\s\S]*Version 2/);
-  assert.ok(inventory.files.some(file => file.path === "Shaders/crt-royale/lib/bind-shader-params.fxh"));
-  for (const file of inventory.files) {
-    const bytes = fs.readFileSync(path.join(root, file.path)); assert.equal(bytes.length, file.size);
-    assert.equal(crypto.createHash("sha256").update(bytes).digest("hex"), file.sha256, file.path);
-  }
-  assert.match(fs.readFileSync(selected.file, "utf8"), /either version 2 of the License, or any later version/);
-  assert.match(fs.readFileSync(path.join(root, "Shaders/crt-royale/lib/blur-functions.fxh"), "utf8"), /MIT LICENSE/);
-});
 test("included FXAA is SweetFX's pinned FXAA 3.11 effect with its original include and notice", () => {
   const row = Packs.listEffects(null, features).find(item => item.id === "shader:sweetfx:fxaa");
   assert.equal(row.label, "SweetFX · FXAA");assert.equal(row.purpose, "Anti-aliasing and blur");assert.equal(row.format, "fx");

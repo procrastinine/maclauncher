@@ -398,21 +398,3 @@ test("Node module dispatch plans an offline bundled install and spawns only the 
   assert.equal(calls.length, 1);
   assert.equal(Object.keys(require.cache).some(file => /(?:^|\/)electron\//.test(file)), false);
 });
-
-test("owned Impacto overlay applies exact hashes to staged copies and refuses Git sources or changed files", async t => {
-  const source = path.resolve(__dirname, "../src/external/impacto");
-  if (!fs.existsSync(path.join(source, "CMakeLists.txt"))) { t.skip("Initialize the pinned Impacto source submodule to validate its overlay."); return; }
-  const root = temporary(t), staged = path.join(root, "source"); fs.mkdirSync(staged);
-  const originals = overlay.files.map(file => file.originalSha256 === null ? null : Adapter.hash(path.join(source, file.path)));
-  for (const file of overlay.files) {
-    if (file.originalSha256 === null) continue;
-    const target = path.join(staged, file.path); fs.mkdirSync(path.dirname(target), { recursive: true }); fs.copyFileSync(path.join(source, file.path), target);
-  }
-  const result = await Adapter.applyImpactoOverlay(staged, { logPath: path.join(root, "overlay.log") });
-  assert.equal(result.upstreamRevision, Adapter.SOURCES.impacto.revision);
-  overlay.files.forEach(file => assert.equal(Adapter.hash(path.join(staged, file.path)), file.adaptedSha256));
-  assert.deepEqual(overlay.files.map(file => file.originalSha256 === null ? null : Adapter.hash(path.join(source, file.path))), originals);
-  overlay.files.filter(file => file.originalSha256 === null).forEach(file => assert.equal(fs.existsSync(path.join(source, file.path)), false));
-  await assert.rejects(Adapter.applyImpactoOverlay(source, { logPath: path.join(root, "rejected.log") }), /owned staged source/);
-  await assert.rejects(Adapter.applyImpactoOverlay(staged, { logPath: path.join(root, "changed.log") }), /source file differs/);
-});

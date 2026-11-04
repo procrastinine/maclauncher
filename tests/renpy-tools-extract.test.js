@@ -148,7 +148,7 @@ test("actual Ren'Py 7.7 and 8.2 compiled scripts decompile through current bundl
   const root = fixture(t);
   for (const [vendor, version] of [["unrpyc-legacy", "7.7"], ["unrpyc", "8.2"]]) {
     const script = path.join(command.unrenRoot, "third_party", vendor, "testcases", "compiled", `the_question-${version}`, "script.rpyc");
-    if (!fs.existsSync(script)) { t.diagnostic(`Missing bundled ${version} fixture`); continue; }
+    assert.ok(fs.existsSync(script), `Required Ren'Py ${version} test source is missing; initialize declared test submodules.`);
     const output = path.join(root, version);
     const report = path.join(root, `${version}.json`);
     await runProcess(command.command, [...command.args, "decompile", "--mode", "auto", "--output", output, "--report", report, script], { env: command.env, maxBuffer: 1024 * 1024 });

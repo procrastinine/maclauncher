@@ -21,9 +21,5 @@ def gideon_dir() -> Path:
     return third_party_dir() / "UnRen-Gideon-mod-"
 
 
-def unrpyc_legacy_dir() -> Path:
-    return third_party_dir() / "unrpyc-legacy"
-
-
 def unrpyc_legacy_py3_dir() -> Path:
     return third_party_dir() / "unrpyc-legacy-py3"

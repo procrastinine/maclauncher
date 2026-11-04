@@ -20,3 +20,7 @@
 	path = src/external/maclauncher-android
 	url = https://github.com/procrastinine/maclauncher-android.git
 	maclauncher-role = source
+[submodule "src/modules/renpy/resources/unren/third_party/unrpyc-legacy"]
+	path = src/modules/renpy/resources/unren/third_party/unrpyc-legacy
+	url = https://github.com/CensoredUsername/unrpyc
+	branch = legacy

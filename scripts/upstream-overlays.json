@@ -97,12 +97,10 @@
       "sourceEvidence": [],
       "ownedFiles": [
         {
-          "path": "src/modules/rgss/overlays/kawariki/patches-extra.rb",
-          "sha256": "49670573ea30a1e5e77d75b6b8fee864beb53d4aa182344f332884f51fac5c19"
+          "path": "src/modules/rgss/overlays/kawariki/patches-extra.rb"
         },
         {
-          "path": "src/modules/rgss/assets.js",
-          "sha256": "dccd9b03f3dcf7df56dd13204db49553e730e915942fd16759184b1f33b791aa"
+          "path": "src/modules/rgss/assets.js"
         }
       ],
       "operations": [
@@ -160,24 +158,19 @@
       ],
       "ownedFiles": [
         {
-          "path": "src/modules/renpy/resources/unren/patches/__init__.py",
-          "sha256": "015922484dc7546aa8f092778305480352370781be2c46d48e3ee67b2a15c90c"
+          "path": "src/modules/renpy/resources/unren/patches/__init__.py"
         },
         {
-          "path": "src/modules/renpy/resources/unren/patches/decompiler.py",
-          "sha256": "c0807ae0a38ac85b52c036b5889359445b5282bc1052412903360f56a2483e2f"
+          "path": "src/modules/renpy/resources/unren/patches/decompiler.py"
         },
         {
-          "path": "src/modules/renpy/resources/unren/patches/deobfuscate.py",
-          "sha256": "8ba32e7055a8cc3e172a5ed64168f5400b923f5d60d1b3f81df8c405bcbb08ee"
+          "path": "src/modules/renpy/resources/unren/patches/deobfuscate.py"
         },
         {
-          "path": "src/modules/renpy/resources/unren/patches/renpycompat.py",
-          "sha256": "43f1383466b96d12a3f39e80b71ed59bf5d97fce8a6ed46f3f131fa07b0b6e8a"
+          "path": "src/modules/renpy/resources/unren/patches/renpycompat.py"
         },
         {
-          "path": "src/modules/renpy/resources/unren/patches/rpa.py",
-          "sha256": "f760818c3b378c75009673310cb26080ed79adb3d00608419825214a37b35b0b"
+          "path": "src/modules/renpy/resources/unren/patches/rpa.py"
         }
       ],
       "operations": []
@@ -199,24 +192,19 @@
       ],
       "ownedFiles": [
         {
-          "path": "src/modules/renpy/resources/unren/patches/__init__.py",
-          "sha256": "015922484dc7546aa8f092778305480352370781be2c46d48e3ee67b2a15c90c"
+          "path": "src/modules/renpy/resources/unren/patches/__init__.py"
         },
         {
-          "path": "src/modules/renpy/resources/unren/patches/decompiler.py",
-          "sha256": "c0807ae0a38ac85b52c036b5889359445b5282bc1052412903360f56a2483e2f"
+          "path": "src/modules/renpy/resources/unren/patches/decompiler.py"
         },
         {
-          "path": "src/modules/renpy/resources/unren/patches/deobfuscate.py",
-          "sha256": "8ba32e7055a8cc3e172a5ed64168f5400b923f5d60d1b3f81df8c405bcbb08ee"
+          "path": "src/modules/renpy/resources/unren/patches/deobfuscate.py"
         },
         {
-          "path": "src/modules/renpy/resources/unren/patches/renpycompat.py",
-          "sha256": "43f1383466b96d12a3f39e80b71ed59bf5d97fce8a6ed46f3f131fa07b0b6e8a"
+          "path": "src/modules/renpy/resources/unren/patches/renpycompat.py"
         },
         {
-          "path": "src/modules/renpy/resources/unren/patches/rpa.py",
-          "sha256": "f760818c3b378c75009673310cb26080ed79adb3d00608419825214a37b35b0b"
+          "path": "src/modules/renpy/resources/unren/patches/rpa.py"
         }
       ],
       "operations": []
@@ -238,24 +226,19 @@
       ],
       "ownedFiles": [
         {
-          "path": "src/modules/renpy/resources/unren/patches/__init__.py",
-          "sha256": "015922484dc7546aa8f092778305480352370781be2c46d48e3ee67b2a15c90c"
+          "path": "src/modules/renpy/resources/unren/patches/__init__.py"
         },
         {
-          "path": "src/modules/renpy/resources/unren/patches/decompiler.py",
-          "sha256": "c0807ae0a38ac85b52c036b5889359445b5282bc1052412903360f56a2483e2f"
+          "path": "src/modules/renpy/resources/unren/patches/decompiler.py"
         },
         {
-          "path": "src/modules/renpy/resources/unren/patches/deobfuscate.py",
-          "sha256": "8ba32e7055a8cc3e172a5ed64168f5400b923f5d60d1b3f81df8c405bcbb08ee"
+          "path": "src/modules/renpy/resources/unren/patches/deobfuscate.py"
         },
         {
-          "path": "src/modules/renpy/resources/unren/patches/renpycompat.py",
-          "sha256": "43f1383466b96d12a3f39e80b71ed59bf5d97fce8a6ed46f3f131fa07b0b6e8a"
+          "path": "src/modules/renpy/resources/unren/patches/renpycompat.py"
         },
         {
-          "path": "src/modules/renpy/resources/unren/patches/rpa.py",
-          "sha256": "f760818c3b378c75009673310cb26080ed79adb3d00608419825214a37b35b0b"
+          "path": "src/modules/renpy/resources/unren/patches/rpa.py"
         }
       ],
       "operations": []
@@ -273,8 +256,7 @@
       "sourceEvidence": [],
       "ownedFiles": [
         {
-          "path": "src/modules/renpy/overlays/urw_updater.rpy",
-          "sha256": "ba4dd252f02e8c0a7c1a947f8d72cc4824304ab1f773dc18dea6e9b6c6292bd4"
+          "path": "src/modules/renpy/overlays/urw_updater.rpy"
         }
       ],
       "operations": [

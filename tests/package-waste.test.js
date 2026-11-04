@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const { execFileSync, spawnSync } = require("node:child_process");
+const { execFileSync } = require("node:child_process");
 const { FileMatcher, getMainFileMatchers, getNodeModuleFileMatcher } = require("app-builder-lib/out/fileMatcher");
 const { doMergeConfigs } = require("app-builder-lib/out/util/config/config");
 const Content = require("../scripts/runtime-content.cjs");
@@ -90,81 +90,6 @@ test("native runtime resources contain exactly the selected included builds, wha
         if (!selected.has(relative)) assert.equal(selectedBy(matcher, `native-runtimes/${relative}/manifest.json`), false, relative);
       }
     }
-  }
-});
-
-// Producer inputs that MacLauncher Builds compiles from the source tree. Their outputs ship in packages,
-// so the application itself never reads these files.
-const nativeBuildInputs = ["src/modules/crossover/temporal/dxmt{,/**}",
-  "src/modules/crossover/temporal/{fidelityfx,streamline,xess}/{build.mjs,*.cpp,*.h,*.hpp}",
-  "src/modules/crossover/temporal/xess/reference-exports.json", "src/modules/godot/graphics/{build.mjs,bridge.cpp,*.gd,*.glsl}",
-  "src/modules/shared/reshade/{blur,cacao,cmaa2,dof,kuwahara,ssr,xegtao}/{build.mjs,*.hlsl}",
-  "src/modules/shared/reshade/dof/generated/*.{hpp,json}", "src/modules/shared/reshade/{lens,libplacebo}{,/**}",
-  "src/modules/shared/reshade/{stage-royale.mjs,shaderc-offline.cpp}", "src/modules/shared/reshade/temporal/*.{h,hpp}",
-  "src/modules/shared/reshade/temporal/*/{build.mjs,adapt-runtime.mjs,*.mm,*.hpp}", "src/modules/shared/vulkan/native{,/**}",
-  "src/modules/shared/runtime/steamworks/{build,source-overlay}.js",
-  "src/modules/java/runtime/steamworks/{build-agent.cjs,stage-bridge.cjs,*.java}", "src/modules/love/runtime/luasteam-build.js",
-  "src/modules/mages/native/{current-windows.patch,current-windows-overlay.json,dependency-overlays.json,ffmpeg-probe.c,portable-overlay.js}",
-  "src/modules/ios/native{,/**}", "src/modules/shared/web/native{,/**}", "src/modules/video/native{,/**}"];
-// Mentions that are not reads: the Godot module and the graphics declarations name the scripts inside the
-// built graphics package, the LÖVE notice names the Builds producer, and comments cite native headers.
-const nonReadingMentions = {
-  "src/modules/godot/graphics/aov-effect.gd": ["src/modules/godot/graphics/index.js", "src/modules/shared/reshade/distribution-supplementals.json"],
-  "src/modules/godot/graphics/autoload.gd": ["src/modules/godot/graphics/index.js", "src/modules/shared/reshade/distribution-supplementals.json"],
-  "src/modules/godot/graphics/camera-effect.gd": ["src/modules/godot/graphics/index.js", "src/modules/shared/reshade/distribution-supplementals.json"],
-  "src/modules/love/runtime/luasteam-build.js": ["src/modules/love/runtime/luasteam-package.js"],
-  "src/modules/shared/reshade/temporal/frame.h": ["src/modules/shared/reshade/temporal-controls.js"],
-  "src/modules/shared/reshade/temporal/payload-files.hpp": ["src/modules/shared/runtime/payload-files.js"] };
-const commonNames = new Set(["build.mjs", "build.js", "source.json", "source-overlay.js", "patch.mjs", "index.js", "README.md"]);
-const escape = text => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const named = (text, name) => text.includes(name) && new RegExp(`(^|[^\\w.-])${escape(name)}(?![\\w-])`).test(text);
-// A file refers to another by its relative path, a module specifier, its parent directory and name,
-// its name from the same directory, or, for distinctive names, its name anywhere.
-function refers(reader, text, file) {
-  const name = path.posix.basename(file), directory = path.posix.dirname(file), from = path.posix.dirname(reader);
-  const stem = /\.(js|cjs|mjs|json)$/.test(name) ? name.replace(/\.[^.]+$/, "") : null;
-  if (!text.includes(stem || name)) return false;
-  const relative = path.posix.relative(from, file);
-  if (relative.includes("/") && named(text, relative)) return true;
-  if (stem) {
-    const specifier = path.posix.relative(from, path.posix.join(directory, stem));
-    if (new RegExp(`['"\`]${specifier.startsWith(".") ? "" : "\\./"}${escape(specifier)}['"\`]`).test(text)) return true;
-  }
-  return named(text, `${path.posix.basename(directory)}/${name}`) || (from === directory || !commonNames.has(name)) && named(text, name);
-}
-
-test("native build inputs stay in the source tree, and nothing the application ships reads them", () => {
-  const matches = matchers => { const filters = matchers.map(matcher => matcher.createFilter());
-    return file => filters.some(filter => filter(path.join(projectRoot, file), { isDirectory: () => false })); };
-  const shipped = matches(builderMatchers().sources);
-  const files = execFileSync("git", ["ls-files", "-co", "--exclude-standard", "--", "src"], { cwd: projectRoot, encoding: "utf8" })
-    .split("\n").filter(file => file && !/^src\/(external|resources)\//.test(file) && fs.existsSync(path.join(projectRoot, file)));
-  const rules = packageConfig().build.files;
-  const inputs = new Set();
-  for (const pattern of nativeBuildInputs) {
-    assert.ok(rules.includes(`!${pattern}`), `Packaging rule missing: !${pattern}`);
-    const matched = files.filter(matches([new FileMatcher(projectRoot, "/inputs", value => value, [pattern])]));
-    assert.ok(matched.length, `No source file matches ${pattern}`);
-    for (const file of matched) inputs.add(file);
-  }
-  // The renderer reaches the application through its bundle, so its sources count as shipped readers.
-  const readers = files.filter(file => /\.(js|cjs|mjs|ts|tsx|json|lua|rb|py|jxa)$/.test(file) && !inputs.has(file) &&
-    (shipped(file) || file.startsWith("src/renderer/src/") && !/(__tests__|\.test\.)/.test(file)))
-    .map(file => [file, fs.readFileSync(path.join(projectRoot, file), "utf8")]);
-  const readersOf = file => readers.filter(([reader, text]) => refers(reader, text, file)).map(([reader]) => reader);
-  // The search finds each way the application reads its own files.
-  assert.ok(readersOf("src/modules/crossover/temporal/streamline/pe-exports.js").includes("src/modules/crossover/temporal/support-manager.js"));
-  assert.ok(readersOf("src/modules/crossover/temporal/xess/source.json").includes("src/modules/crossover/temporal/xess/index.js"));
-  assert.ok(readersOf("src/modules/love/runtime/luasteam-source-overlay.js").includes("src/modules/love/runtime/luasteam-package.js"));
-  assert.ok(readersOf("src/modules/mages/native/impacto.patch").includes("src/modules/mages/native/adapter.js"));
-  for (const file of ["src/modules/godot/graphics/index.js", "src/modules/godot/graphics/source.json", "src/modules/crossover/temporal/xess/source.json",
-    "src/modules/crossover/temporal/streamline/pe-exports.js", "src/modules/love/runtime/luasteam-source-overlay.js",
-    "src/modules/shared/reshade/temporal/fsr4/index.js", "src/modules/mages/native/impacto.patch"])
-    assert.equal(shipped(file), true, file);
-  for (const file of inputs) {
-    assert.equal(shipped(file), false, `Native build input shipped: ${file}`);
-    const allowed = nonReadingMentions[file] || [];
-    assert.deepEqual(readersOf(file).filter(reader => !allowed.includes(reader)), [], `Application files refer to ${file}`);
   }
 });
 

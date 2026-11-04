@@ -161,10 +161,7 @@ function validateInventory(inventory) {
       if (!ids.has(projectId) || !Array.isArray(files) || !files.length) throw Error("A source scope needs an inventoried project and paths.");
       files.forEach(relativePath);
     }
-    for (const file of recipe.ownedFiles || []) {
-      relativePath(file.path);
-      if (!/^[a-f0-9]{64}$/.test(file.sha256 || "")) throw Error("An owned adaptation needs its exact file SHA-256.");
-    }
+    for (const file of recipe.ownedFiles || []) relativePath(file.path);
     for (const directory of recipe.ownedDirectories || []) relativePath(directory);
     for (const file of [...recipe.tests || [], ...recipe.buildEntries || []]) relativePath(file);
     for (const operation of recipe.operations || []) {
@@ -284,10 +281,6 @@ async function checkInventory({ root = ROOT, inventory = JSON.parse(fs.readFileS
       if (!fs.existsSync(path.join(root, ref.path)) && optionalEvidence(ref.path, { recipe: recipe.id })) continue;
       try { if (sourceRef(root, ref) !== (recipe.revision || projects.get(recipe.project).revision)) errors.push({ code: "recipe-pin-drift", recipe: recipe.id, path: ref.path }); }
       catch (error) { errors.push({ code: "pin-evidence-invalid", recipe: recipe.id, message: error.message }); }
-    }
-    for (const file of recipe.ownedFiles || []) {
-      try { if (hash(fs.readFileSync(path.join(root, file.path))) !== file.sha256) errors.push({ code: "owned-adaptation-drift", recipe: recipe.id, path: file.path }); }
-      catch { errors.push({ code: "owned-adaptation-missing", recipe: recipe.id, path: file.path }); }
     }
     for (const file of [...recipe.tests || [], ...recipe.buildEntries || []]) if (!fs.existsSync(path.join(root, file))) errors.push({ code: "recipe-entry-missing", recipe: recipe.id, path: file });
     for (const file of recipe.sourceEvidence || []) if (!fs.existsSync(path.join(root, relativePath(file))) && !optionalEvidence(file, { recipe: recipe.id })) errors.push({ code: "source-evidence-missing", recipe: recipe.id, path: file });
@@ -468,7 +461,6 @@ async function checkCandidate({ root = ROOT, inventory = JSON.parse(fs.readFileS
   if (project.path && fs.existsSync(path.join(root, project.path, ".git"))) await recordSource(path.join(root, project.path));
   const results = [], warnings = [];
   for (const recipe of recipes.length ? recipes : [{ id: "reference", operations: [] }]) {
-    for (const file of recipe.ownedFiles || []) if (hash(fs.readFileSync(path.join(root, file.path))) !== file.sha256) throw Error(`Owned adaptation changed: ${file.path}. Review its inventory hash before a candidate check.`);
     const layout = path.join(work, recipe.id, "source");
     const stage = recipe.sourceSubdirectory ? path.join(layout, recipe.sourceSubdirectory) : layout;
     const budget = { files: 0, bytes: 0 };

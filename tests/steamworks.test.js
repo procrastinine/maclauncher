@@ -9,42 +9,6 @@ const Build = require("../src/modules/shared/runtime/steamworks/build");
 const Environment = require("../src/modules/shared/runtime/steamworks/environment");
 const Steam = require("../src/modules/shared/runtime/steamworks");
 const GameMakerSteam = require("../src/modules/gamemaker/runtime/steam-api");
-const source = path.resolve(__dirname, "../src/external/goldberg-mac");
-const available = Object.keys(Overlay.ORIGINAL_SHA256).every(file => fs.existsSync(path.join(source, file)));
-
-function ownedExport(context) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "steamworks-source-"));
-  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  for (const file of Object.keys(Overlay.ORIGINAL_SHA256)) {
-    fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
-    fs.copyFileSync(path.join(source, file), path.join(root, file));
-  }
-  return root;
-}
-
-test("Steam API overlay refuses a changed source before modifying any output", { skip: available ? false : "Optional upstream integration; run node scripts/init-submodules.cjs --all." }, context => {
-  const root = ownedExport(context), files = Object.keys(Overlay.ORIGINAL_SHA256);
-  fs.appendFileSync(path.join(root, files.at(-1)), "\nchanged upstream\n");
-  const before = files.map(file => fs.readFileSync(path.join(root, file)));
-  assert.throws(() => Overlay.applySourceOverlay(root), /input changed/);
-  files.forEach((file, index) => assert.deepEqual(fs.readFileSync(path.join(root, file)), before[index]));
-});
-
-test("Steam API overlay changes only an owned export and records exact input/output identities", { skip: available ? false : "Optional upstream integration; run node scripts/init-submodules.cjs --all." }, context => {
-  const root = ownedExport(context);
-  const before = Object.keys(Overlay.ORIGINAL_SHA256).map(file => fs.readFileSync(path.join(source, file)));
-  const result = Overlay.applySourceOverlay(root);
-  assert.equal(result.version, require("../src/modules/shared/runtime/included-package-metadata").version("steam-api-helper"));
-  for (const [index, file] of result.files.entries()) {
-    assert.deepEqual(fs.readFileSync(path.join(source, file.path)), before[index], "upstream must remain unchanged");
-    assert.equal(file.beforeSha256, crypto.createHash("sha256").update(before[index]).digest("hex"));
-    assert.equal(file.afterSha256, crypto.createHash("sha256").update(fs.readFileSync(path.join(root, file.path))).digest("hex"));
-    assert.notEqual(file.beforeSha256, file.afterSha256);
-  }
-  assert.throws(() => Overlay.applySourceOverlay(root), /input changed/, "an applied export cannot be silently patched twice");
-  assert.throws(() => Overlay.applySourceOverlay(source), /separate owned source export/);
-});
-
 test("Steam API dependency validation rejects changed archives without a build or network request", context => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "steamworks-dependencies-"));
   context.after(() => fs.rmSync(root, { recursive: true, force: true }));

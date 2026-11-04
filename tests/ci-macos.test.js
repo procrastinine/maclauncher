@@ -33,7 +33,8 @@ test('packaging and repository tests initialize their own declared sources at Gi
   const android = 'src/external/maclauncher-android';
   assert.equal(declaration.submodules.length, 6);
   assert.equal(declaration.submodules.includes(android), false, 'Android producer source is not an app packaging input');
-  assert.deepEqual(declaration.testSubmodules, [android]);
+  const legacy = 'src/modules/renpy/resources/unren/third_party/unrpyc-legacy';
+  assert.deepEqual(declaration.testSubmodules, [android, legacy]);
   const plan = await require('../scripts/init-submodules.cjs').readPlan({ paths: [android] });
   assert.equal(plan.modules[0].path, android);
   assert.match(plan.modules[0].revision, /^[a-f0-9]{40}$/);
@@ -42,11 +43,11 @@ test('packaging and repository tests initialize their own declared sources at Gi
   fs.writeFileSync(metadata, JSON.stringify(declaration));
   const calls = [], tool = (...args) => calls.push(args);
   assert.deepEqual(await main(['sources'], { repoRoot, tool }), { submodules: 6 });
-  assert.deepEqual(await main(['test-sources'], { repoRoot, tool }), { submodules: 7 });
+  assert.deepEqual(await main(['test-sources'], { repoRoot, tool }), { submodules: declaration.submodules.length + declaration.testSubmodules.length });
   const prefix = ['-c', 'submodule.recurse=false', 'submodule', 'update', '--init', '--checkout', '--'];
   assert.deepEqual(calls, [
     ['git', [...prefix, ...declaration.submodules], { cwd: repoRoot, stdio: 'inherit' }],
-    ['git', [...prefix, ...declaration.submodules, android], { cwd: repoRoot, stdio: 'inherit' }]
+    ['git', [...prefix, ...declaration.submodules, ...declaration.testSubmodules], { cwd: repoRoot, stdio: 'inherit' }]
   ]);
   for (const testSubmodules of [undefined, [], [android, android], ['../outside']]) {
     fs.writeFileSync(metadata, JSON.stringify({ ...declaration, testSubmodules }));
