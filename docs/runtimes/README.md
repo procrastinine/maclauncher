@@ -230,7 +230,7 @@ A game can override its runtime's version, variant and some manager-specific cho
 
 The inspector shows these overrides when the selected runtime has a manager, and every installed version that the Mac can run stays selectable there. Play applies the [selection order](#versions) described above.
 
-In version lists, versions are sorted by comparing their numeric parts as numbers. A stable release sorts before a prerelease of the same version, and versions that differ only by a build hash keep their catalog order. A prerelease whose name does not already say so is labeled **(pre-release)**, and the installation controls preselect a stable version when the source lists one.
+Version lists are sorted newest first by the release version that each source recognizes, such as a GitHub release tag. Numeric parts compare as numbers, so 1.0.10 is newer than 1.0.9. A letter revision such as 3.0a or 3.0b is newer than its base release 3.0 and older than the next numeric release, 3.0.1. A stable release sorts before a prerelease of the same version, and versions that differ only by a build hash keep their catalog order. A prerelease whose name does not already say so is labeled **(pre-release)**. Each source's version menu keeps an explicit choice for as long as the source lists it. Without one, the menu preselects the source's recommended version, unless that version is a prerelease and a stable version is listed. In that case, and when no version is recommended, the menu preselects the newest stable version, or the first listed version when every version is a prerelease.
 
 ## Runtime settings
 

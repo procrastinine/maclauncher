@@ -122,7 +122,7 @@ For a game in an existing wrapper, each setting defaults to **Wrapper setting**,
 
 [Graphics translators](TRANSLATORS.md) describes how the translator choices are installed, loaded and checked. Runtimes groups the translators as DirectX → Vulkan, DirectX → Metal, Vulkan drivers and video codecs, and Runtime Settings arranges the Direct3D choices from Direct3D 8 to 12. Their versions, API scope and sources come from installed files. Direct3D APIs that share DXGI or native modules use one consistent set of those files in the private graphics view. For a game in an existing wrapper, each control also offers the wrapper's current setting. A runtime version is installed once, and private graphics views and prefix DLLs link to that installation. Prepared loader trees are shared between games that use the same inputs.
 
-DXMT, DXVK, DXVK3, D9VK and D3DMetal can be installed from Template component catalogs without installing another Wine engine. Registered folders stay at their original locations.
+DXMT, D3DMetal and the Template's `dxvk`, `dxvk3` and `d9vk` DXVK folders can be installed from Template component catalogs without installing another Wine engine. Registered folders stay at their original locations.
 
 Video components retain Sikarugir's scanner, system-plugin paths and established GStreamer/GObject core. Only selected plugin directories enter the plugin search path; private dependency neighborhoods use the shared prepared view. Optional unusable plugins are reported while usable siblings remain available. Inherited video settings do not add another component view.
 
@@ -130,7 +130,7 @@ Video components retain Sikarugir's scanner, system-plugin paths and established
 
 Per-game ReShade effects use the shared [graphics pipeline](../graphics/SHARED_PROCESSING.md) with the selected Wine version, graphics backend and Windows environment. Effects can be switched while the game runs, and the shared Wine installation stays unchanged.
 
-The Template's automatic choice depends on the Mac. Direct3D 10 and 11 use DXMT. On a confirmed physical Apple M-series GPU with macOS 26 or later, the automatic choice also enables KosmicKrisp, and Direct3D 8 and 9 then use D9VK. Virtual or unrecognized GPUs and older systems use WineD3D for Direct3D 8 and 9 and MoltenVK for Vulkan.
+The Template's automatic choice depends on the Mac. Direct3D 10 and 11 use DXMT. On a confirmed physical Apple M-series GPU with macOS 26 or later, the automatic choice also enables KosmicKrisp, and Direct3D 8 and 9 then use the Template's `d9vk` libraries. Virtual or unrecognized GPUs and older systems use WineD3D for Direct3D 8 and 9 and MoltenVK for Vulkan.
 
 The Vulkan driver is chosen separately from the Direct3D renderer, and it also applies to games that use Vulkan directly. Its automatic choice prefers KosmicKrisp when the macOS, architecture and physical GPU checks pass, and uses MoltenVK otherwise. A selected translator that cannot load falls back to the same engine supplied by the runtime, or to the runtime's automatic choice, and the warning and inspector name both versions and the reason.
 
@@ -139,7 +139,7 @@ During installation, MacLauncher identifies the renderers that the selected Temp
 | Component | Supplied by | Requirements and role |
 | --- | --- | --- |
 | DXMT | The Template's DXMT libraries | macOS 14 or the libraries' higher minimum; Direct3D 10/11 to Metal. |
-| DXVK / D9VK | The Template's DXVK, DXVK3 and D9VK libraries | Direct3D to Vulkan. MoltenVK uses the older Direct3D 10/11 profile; KosmicKrisp uses the newer profile when supplied and supported. |
+| DXVK / D9VK | The Template's `dxvk`, `dxvk3` and `d9vk` libraries | Direct3D to Vulkan. MoltenVK uses the older Direct3D 10/11 profile; KosmicKrisp uses the newer profile when supplied and supported. |
 | MoltenVK | The Template's Vulkan libraries | Vulkan-to-Metal driver; minimum macOS read from the installed libraries. |
 | KosmicKrisp | The Template's Vulkan libraries | Vulkan-to-Metal driver; Apple Silicon and macOS 26 or the libraries' higher minimum. |
 | D3DMetal | The Template's D3DMetal framework and dependencies | Apple Silicon and 64-bit Windows games; minimum macOS follows the installed framework and dependencies. Direct3D 11/12 to Metal. |
