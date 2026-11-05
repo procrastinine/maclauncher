@@ -163,6 +163,9 @@ test("module-selected paths reuse flat packages and separately delivered source 
     assert.throws(() => inspectPackage(directory, record, format), /manifest changed/);
     assert.equal(calls, 1, "Untrusted metadata never reaches the executable selector");
     fs.writeFileSync(file, bytes);
+    fs.chmodSync(file, 0o444);
+    assert.throws(() => inspectPackage(directory, record, format), /manifest has mode 0444 instead of 0644/, "unchanged bytes with another mode name the mode");
+    fs.chmodSync(file, 0o644);
     expectedRecord = { ...record, sourceSha256: "0".repeat(64) };
     const changedSourceMetadata = inspectPackage(directory, expectedRecord, format);
     assert.equal(changedSourceMetadata.sourceIdentity.declaredSourceSha256, "0".repeat(64));

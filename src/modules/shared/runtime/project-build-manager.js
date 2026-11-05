@@ -12,7 +12,8 @@ function inspectPackage(root, record, { projectId, manifestRelative, sourceRelat
   if (!managed && (record.id !== projectId || record.manifestRelative !== manifestRelative)) throw new Error("The runtime package belongs to a different project or format.");
   Bundled.relativeFile(manifestRelative);
   const stored = Bundled.readRegular(path.join(root, manifestRelative), Bundled.LIMITS.manifestBytes);
-  if (!managed && (stored.sha256 !== record.manifestSha256 || stored.mode !== 0o644)) throw new Error("The runtime package manifest changed.");
+  if (!managed && stored.sha256 !== record.manifestSha256) throw new Error("The runtime package manifest changed.");
+  if (!managed && stored.mode !== 0o644) throw new Error(`The runtime package manifest has mode ${stored.mode.toString(8).padStart(4, "0")} instead of 0644.`);
   const manifest = JSON.parse(stored.bytes);
   if (managed) {
     Bundled.managedDeclaration(manifest);
