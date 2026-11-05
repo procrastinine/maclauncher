@@ -3,14 +3,17 @@
 const names = { d3dmetal: "D3DMetal", dxmt: "DXMT", dxvk: "DXVK", wined3d: "WineD3D",
   moltenvk: "MoltenVK", kosmickrisp: "KosmicKrisp", "vkd3d-proton": "vkd3d-proton", gstreamer: "GStreamer" };
 const displayText = value => String(value ?? "").replace(/[\s\x00-\x1f\x7f]+/g, " ").trim();
-function componentVersion(value) {
+function componentRelease(value) {
   const text = displayText(String(value?.version || "").split(/[\r\n]/)[0]).split(/\s*·\s*/)[0];
-  return /(?:^|[^\d])v?(\d+(?:\.\d+)+(?:[a-z]+\d*)?(?:[-+][a-z0-9]+)*)/i.exec(text)?.[1] || "";
+  return /(?:^|[^\d])v?((\d+(?:\.\d+)+(?:[a-z]+\d*)?)(?:[-+][a-z0-9]+)*)/i.exec(text);
+}
+function componentVersion(value) {
+  return componentRelease(value)?.[2] || "";
 }
 function componentLabel(value) {
   const name = names[value.engine] || value.engine;
   const [text, ...qualifiers] = displayText(String(value.version || "").split(/[\r\n]/)[0]).split(/\s*·\s*/);
-  const version = componentVersion(value);
+  const version = componentRelease(value)?.[1] || "";
   if (!version) return [text.toLowerCase().startsWith(String(name).toLowerCase()) ? text : [name, text].filter(Boolean).join(" "), ...qualifiers].filter(Boolean).join(" · ");
   const prefix = text.slice(0, text.indexOf(version));
   const component = `${name} ${version}${/\basync\b/i.test(prefix) && !/\basync\b/i.test(version) ? " async" : ""}`.replace(/-async\b/i, " async");
@@ -25,7 +28,7 @@ function hostLabel(host, source) {
 function label(value, host, { folder = value?.labelFolder, hostVersionLabel, hostName } = {}) {
   if (!value) return "";
   const source = hostLabel(host, value.source) || (typeof value.source === "string" ? value.source : "");
-  const parts = [componentLabel(value), source].filter(Boolean);
+  const parts = [componentLabel(value), source === "custom" ? "Registered" : source].filter(Boolean);
   for (const part of [folder, ...displayText(hostVersionLabel).split(/\s*·\s*/), hostName].map(displayText)) {
     if (part && !parts.some(existing => existing.includes(part))) parts.push(part);
   }

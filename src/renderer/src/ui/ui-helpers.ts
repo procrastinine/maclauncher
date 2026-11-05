@@ -418,8 +418,8 @@ export function sortInstalled(
         b.version === defaultVersion && (defaultVariant ? b.variant === defaultVariant : true);
       if (aIsDefault !== bIsDefault) return aIsDefault ? -1 : 1;
     }
-    const aVersion = String(a.sortVersion || (a.translator || a.reference ? "" : a.version) || "");
-    const bVersion = String(b.sortVersion || (b.translator || b.reference ? "" : b.version) || "");
+    const aVersion = String(a.sortVersion || (a.translator || a.installationMetadata?.translator || a.reference ? "" : a.version) || "");
+    const bVersion = String(b.sortVersion || (b.translator || b.installationMetadata?.translator || b.reference ? "" : b.version) || "");
     if (Boolean(aVersion) !== Boolean(bVersion)) return aVersion ? -1 : 1;
     if (!aVersion && !bVersion) {
       const byLabel = String(a.versionLabel || a.label || "").localeCompare(String(b.versionLabel || b.label || ""), undefined, { numeric: true });
@@ -431,7 +431,8 @@ export function sortInstalled(
       ? compareSemver(String(a.sortHostVersion || ""), String(b.sortHostVersion || ""))
       : compareSemver(String(b.sortHostVersion || ""), String(a.sortHostVersion || ""));
     if (byHost !== 0) return byHost;
-    return String(a.installDir || "").localeCompare(String(b.installDir || ""));
+    const byLabel = String(a.versionLabel || a.label || "").localeCompare(String(b.versionLabel || b.label || ""), undefined, { numeric: true });
+    return byLabel || String(a.installDir || "").localeCompare(String(b.installDir || ""));
   });
   return list;
 }

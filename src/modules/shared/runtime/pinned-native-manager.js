@@ -850,7 +850,13 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     const cfg = normalizeSettings(settings);
     const sortVersion = pin => String(sourceFor(pin)?.versionOf?.(pin) || require("./version-order.mjs").catalogVersion(pin));
     const installed = (userDataDir || bundledExecution === "direct" ? listRuntimeRows(userDataDir) : [])
-      .map(row => ({ ...row, sortVersion: sortVersion(row.catalogEntry || entries.get(row.version) || row) }));
+      .map(row => {
+        const pin = row.catalogEntry || entries.get(row.version) || row, translator = row.translator || row.installationMetadata?.translator;
+        const result = { ...row, sortVersion: translator ? require("./translator-label").componentVersion(translator) : sortVersion(pin) };
+        if (translator && !result.sortVersion) delete result.sortVersion;
+        if (translator && pin.component) result.sortHostVersion = sortVersion(pin);
+        return result;
+      });
     const verifiedMinimums = new Map(installed.map(item => [item.version, item.catalogEntry?.minimumMacOS || item.minimumMacOS]));
     const verifiedHostReason = pin => hostReason(verifiedMinimums.get(pin.version) ? { ...pin, minimumMacOS: verifiedMinimums.get(pin.version) } : pin);
     const bundleErrors = new Map();

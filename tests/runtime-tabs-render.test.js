@@ -1050,7 +1050,7 @@ test('Installed ordering compares component releases before host releases and pr
   t.mock.method(require('../src/modules/registry'),'getModule',id=>id==='crossover'?{manifest,runtimeManagers:managers}:null);
   const references=Component.includedReferences('dxvk',{userDataDir:path.join(root,'data'),logger:{warn(){}}});
   const reference=host=>references.find(row=>row.reference.path===host.installDir);
-  assert.equal(reference(templates[0]).sortVersion,'3.1.1-async');assert.equal(reference(templates[1]).sortVersion,'3.1.1-async');
+  assert.equal(reference(templates[0]).sortVersion,'3.1.1');assert.equal(reference(templates[1]).sortVersion,'3.1.1');
   assert.equal(reference(templates[0]).sortHostVersion,'1.0.9');assert.equal(reference(templates[1]).sortHostVersion,'1.0.10');
   assert.equal(reference(crosses[0]).sortVersion,'1.10.3');assert.equal(reference(crosses[0]).sortHostVersion,'26.3');
   assert.equal(Object.hasOwn(reference(templates[2]),'sortVersion'),false);
@@ -1091,15 +1091,37 @@ test('Installed ordering compares component releases before host releases and pr
     {version:'/fixture/9.99-z',registrationName:'Zulu',sortVersion:'stale',translator:{engine:'dxvk',version:'',source:'custom'}},
     {version:'/fixture/0.01-a',registrationName:'Alpha',translator:{engine:'dxvk',version:'',source:'custom'}}];
   const customBefore=structuredClone(customInput),custom=Labels.registeredLabels(customInput);
-  assert.equal(custom[0].sortVersion,'3.1.1-async');assert.equal(custom[1].sortVersion,'1.10.3');
+  assert.equal(custom[0].sortVersion,'3.1.1');assert.equal(custom[1].sortVersion,'1.10.3');
   assert.ok(custom.slice(2).every(row=>!Object.hasOwn(row,'sortVersion')));assert.equal(Labels.registeredLabels([ordinary])[0],ordinary);
-  const mixed={...included,installed:custom,versionLabels:{...included.versionLabels,...Object.fromEntries(custom.map(row=>[row.version,row.versionLabel]))}};
+  const owner=require('../src/modules/shared/runtime/translator-managers').createManager('dxvk'),userDataDir=path.join(root,'managed-state');
+  const pin={version:'template-1.0.27',upstreamRevision:'fixture-template',catalogSourceId:'template-dxvk3',component:'dxvk3',architecture:'universal',
+    asset:{filename:'Template-1.0.27.tar.xz',url:'https://github.com/Sikarugir-App/Template/releases/download/v1.0.27/Template-1.0.27.tar.xz',sha256:'a'.repeat(64)}};
+  owner.core.rememberResolvedVersion({userDataDir,entry:pin});
+  const bytes=peFixture({is64:true});bytes.bytes.writeUInt16LE(0x2002,bytes.peOffset+22);
+  const runtimePath=put('managed-dxvk3/d3d11.dll',bytes.bytes);put('managed-dxvk3/version','DXVK-Sikarugir-v3.1.1-async');
+  owner.core.registerLocal({userDataDir,version:pin.version,runtimePath});
+  const state=owner.getState({userDataDir}),managedTemplate=state.installed.find(row=>row.version===pin.version);
+  assert.ok(managedTemplate);assert.equal(managedTemplate.sortVersion,'3.1.1');assert.equal(managedTemplate.sortHostVersion,'1.0.27');
+  managedTemplate.versionLabel=state.versionLabels[pin.version];assert.match(managedTemplate.versionLabel,/DXVK 3\.1\.1 async.*Template 1\.0\.27/);
+  const plain={...custom[0],version:'/fixture/plain',translator:{...custom[0].translator,version:'3.1.1'}};
+  const plainRow=Labels.registeredLabels([plain])[0];assert.equal(plainRow.sortVersion,custom[0].sortVersion);
+  assert.match(custom[0].versionLabel,/Registered/);assert.equal(custom[0].translator.source,'custom');
+  const Description=require('../src/modules/shared/runtime/translator-description'),Plan=require('../src/modules/shared/runtime/translator-plan'),Wine=require('../src/modules/shared/runtime/wine-translators');
+  const selected={...managedTemplate.translator,id:custom[0].version,version:custom[0].translator.version,source:'custom'};
+  const plan=Plan.resolvePlan({runtime:'sikarugir',included:[selected],selections:{'d3d-renderer':selected.id}});
+  Plan.resolveApiRoles(plan,{included:[selected],selections:{d3d11:selected.id},automatic:{d3d11:selected}});
+  assert.equal(Description.label(custom[0].translator),custom[0].versionLabel,'per-game producer shares Registered wording');
+  assert.equal(Plan.apiOptions(plan,{included:[selected],selections:{d3d11:selected.id}}).translatorD3D11Options.find(option=>option.value===selected.id).label,custom[0].versionLabel);
+  assert.equal(Wine.inspectorRows(plan).find(row=>row.component==='d3d11').selected,custom[0].versionLabel,'inspector shares Registered wording');
+  const localRows=[...custom,plainRow,managedTemplate],mixed={...included,installed:localRows,versionLabels:{...included.versionLabels,...Object.fromEntries(localRows.map(row=>[row.version,row.versionLabel]))}};
   for(const sort of ['newest','oldest']){
     const markup=render([mixed],mixed.id,{runtimeUi:{[mixed.id]:{remoteOpen:{},installedSort:{default:sort},installVersion:{},installVariant:{},pendingActions:{},messages:{},sourceErrors:{}}}});
     const labels=markup.split('class="saveRow"').slice(1).map(row=>/<div class="saveName">([^<]+)/.exec(row)?.[1]);
     const unknown=[reference(templates[2]).versionLabel,...custom.slice(2).map(row=>row.versionLabel)].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
     assert.deepEqual(labels.slice(-unknown.length),unknown,'unknown components follow every known release, in visible-label order');
     assert.ok(sort==='oldest'?labels.indexOf(custom[1].versionLabel)<labels.indexOf(custom[0].versionLabel):labels.indexOf(custom[0].versionLabel)<labels.indexOf(custom[1].versionLabel));
+    assert.ok(sort==='oldest'?labels.indexOf(managedTemplate.versionLabel)>labels.indexOf(custom[1].versionLabel):labels.indexOf(managedTemplate.versionLabel)<labels.indexOf(custom[1].versionLabel),'managed Template sorts by component, not host');
+    assert.ok(labels.indexOf(plainRow.versionLabel)<labels.indexOf(custom[0].versionLabel),'equal plain/async releases use visible label as tie-break in either direction');
     const expected=['DXVK 3.1.1 · CrossOver 26.10','DXVK 3.1.1 · CrossOver 26.9','DXVK 1.10.3 · CrossOver 26.7','DXVK 1.10.3 · CrossOver 26.3'];
     assert.deepEqual(labels.filter(label=>expected.includes(label)),sort==='oldest'?[...expected].reverse():expected,'the four-host subsequence stays exact');
   }
