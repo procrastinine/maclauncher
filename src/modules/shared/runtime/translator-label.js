@@ -3,12 +3,16 @@
 const names = { d3dmetal: "D3DMetal", dxmt: "DXMT", dxvk: "DXVK", wined3d: "WineD3D",
   moltenvk: "MoltenVK", kosmickrisp: "KosmicKrisp", "vkd3d-proton": "vkd3d-proton", gstreamer: "GStreamer" };
 const displayText = value => String(value ?? "").replace(/[\s\x00-\x1f\x7f]+/g, " ").trim();
+function componentVersion(value) {
+  const text = displayText(String(value?.version || "").split(/[\r\n]/)[0]).split(/\s*·\s*/)[0];
+  return /(?:^|[^\d])v?(\d+(?:\.\d+)+(?:[a-z]+\d*)?(?:[-+][a-z0-9]+)*)/i.exec(text)?.[1] || "";
+}
 function componentLabel(value) {
   const name = names[value.engine] || value.engine;
   const [text, ...qualifiers] = displayText(String(value.version || "").split(/[\r\n]/)[0]).split(/\s*·\s*/);
-  const release = /(?:^|[^\d])v?(\d+(?:\.\d+)+(?:[-+][a-z0-9]+)*)/i.exec(text);
-  if (!release) return [text.toLowerCase().startsWith(String(name).toLowerCase()) ? text : [name, text].filter(Boolean).join(" "), ...qualifiers].filter(Boolean).join(" · ");
-  const prefix = text.slice(0, release.index), version = release[1];
+  const version = componentVersion(value);
+  if (!version) return [text.toLowerCase().startsWith(String(name).toLowerCase()) ? text : [name, text].filter(Boolean).join(" "), ...qualifiers].filter(Boolean).join(" · ");
+  const prefix = text.slice(0, text.indexOf(version));
   const component = `${name} ${version}${/\basync\b/i.test(prefix) && !/\basync\b/i.test(version) ? " async" : ""}`.replace(/-async\b/i, " async");
   return [component, ...qualifiers].filter(Boolean).join(" · ");
 }
@@ -27,4 +31,4 @@ function label(value, host, { folder, hostVersionLabel, hostName } = {}) {
   }
   return displayText(parts.join(" · "));
 }
-module.exports = { componentLabel, hostLabel, label };
+module.exports = { componentVersion, componentLabel, hostLabel, label };
