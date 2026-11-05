@@ -204,7 +204,7 @@ test('included shaders do not register a runtime manager or shader-pack navigati
   const markup = render([manager('other', { tabLabel: 'Other' })]);
   assert.doesNotMatch(markup, /ReShade ·|Shader packs|runtime-panel-reshade-shaders/);
 });
-test('CrossOver and Sikarugir manage one shared DXMT support download and default under DirectX to Metal', () => {
+test('CrossOver and Sikarugir manage one shared DXMT support download under DirectX to Metal', () => {
   const registry = require('../src/modules/registry');
   const source = require('../src/modules/crossover/temporal/support-manager');
   const engineSources = [require('../src/modules/crossover/runtime/manager'),
@@ -223,7 +223,8 @@ test('CrossOver and Sikarugir manage one shared DXMT support download and defaul
   assert.match(markup, /class="runtimePanelTitle">DXMT<\/div>/);
   assert.match(markup, /id="runtime-group-panel-directx-metal"/);
   assert.match(markup, />Installed<\/button>/);
-  assert.match(markup, /Set default/);
+  // Translator versions are chosen per game; the manager has no global default.
+  assert.doesNotMatch(markup, /Set default/);
   assert.equal(markup.match(/class="runtimePanelTitle">DXMT<\/div>/g).length, 1);
   assert.doesNotMatch(markup, /DXMT · support/);
   for (const engine of engines) assert.doesNotMatch(render([...engines, bridge], engine.id), /class="runtimePanelTitle">DXMT<\/div>/, `${engine.id}: no separate copy`);
