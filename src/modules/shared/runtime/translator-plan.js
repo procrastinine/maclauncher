@@ -74,6 +74,18 @@ function uniqueComponents(items, role, selected, sameScope = () => true) {
   }
   return result;
 }
+function withOptionScopes(rows) {
+  const groups = new Map();
+  const coverage = row => {
+    const apis = [...new Set(Array.isArray(row.apis) ? row.apis : [])].filter(api => typeof api === 'string')
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    return apis.length && apis.every(api => api.startsWith('Direct3D ')) ? `Direct3D ${apis.map(api => api.slice(9)).join(', ')}` : apis.join(', ');
+  };
+  for (const row of rows) { if (!groups.has(row.label)) groups.set(row.label, []); groups.get(row.label).push(row); }
+  for (const group of groups.values()) if (new Set(group.map(coverage)).size > 1)
+    for (const row of group) { const scope = coverage(row); if (scope) row.label += ` · ${scope}`; }
+  return rows;
+}
 function offeredForm(item, runtime, role) {
   const form = item.source?.optionsRuntimeForms?.[runtime];
   if (form !== 'builtin' && form !== 'native') return true;
@@ -227,7 +239,7 @@ function apiOptions(plan, { choices = [], included = [], environment = null, sel
       else rows.push({ value: '', label: 'Default Direct3D engine' });
     } else if (!rows.some(row => row.value === saved)) rows.push({ value: saved, label: 'Saved selection (unavailable)', reason: current.reasonCode || 'missing-choice', heldBack: Boolean(current.fallback),
       notice: current.fallback ? "This saved choice is unavailable. The runtime's current fallback will be used." : undefined, runtimeSettingsPatch: { [role.settingsKey]: saved } });
-    result[role.optionsKey] = rows;
+    result[role.optionsKey] = withOptionScopes(rows);
   }
   result.translatorGroups = plan.groups || apiGroups(plan);
   result.translatorRoles = Roles.ROLES.map(role => ({ ...role, groupId: result.translatorGroups.find(group => group.roles.includes(role.id))?.id || role.id,
@@ -277,7 +289,7 @@ function options({ component, runtime = 'crossover', included = [], choices = []
   const selected = findChoice([...included, ...choices].filter(item => item.component === component), selections[component]);
   for (const item of uniqueComponents([...included, ...choices].filter(item => item.component === component &&
     (item.id === selected?.id || offeredForm(item, runtime))), null, selected))
-    result.push({ value: item === selected ? selections[component] : item.id, label: label(item) });
-  return result;
+    result.push({ value: item === selected ? selections[component] : item.id, label: label(item), apis: item.apis });
+  return withOptionScopes(result);
 }
 module.exports = { AUTOMATIC, INHERIT, resolvePlan, options, fallbackWarnings, projectRoles, resolveApiRoles, apiOptions, filesForRole, ROLES: Roles.ROLES };
