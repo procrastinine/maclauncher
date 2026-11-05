@@ -94,6 +94,31 @@ test('without cached lists, the recorded launch of a game names its saved choice
   assert.doesNotMatch(rendered.markup, /Other recorded component/, 'a recorded row names only the value it was recorded for');
 });
 
+test('without cached lists or a recorded launch, installed runtime inventories name saved translator choices', t => {
+  storage(t); const data = fixture(), game = data.state.recents[0];
+  const saved = { left: 'translator-fixture:upstream-1.0', right: 'included:d3d-renderer:dxvk' };
+  Object.assign(game, { moduleId: 'fixture', runtimeId: 'managed', runtimeSettings: { managed: saved }, runtimeData: { managed: {} } });
+  data.context = { scope: 'game', moduleId: 'fixture', runtimeId: 'managed', gamePath: game.gamePath };
+  const reference = (host, folder, versionLabel) => ({ versionLabel, installDir: '/runtime/lib/' + folder, reference: { managerId: host, version: 'host-1' } });
+  data.state.runtimeManagers = {
+    'translator-fixture': { label: 'Fixture', installed: [{ version: 'upstream-1.0', versionLabel: '1.0', ready: true }], versionLabels: { 'upstream-1.0': 'Fixture 1.0 · upstream' } },
+    'translator-dxvk': { label: 'DXVK', references: [reference('managed', 'dxvk', 'DXVK 1.10.3 · Managed 26.3'), reference('other', 'dxvk', 'DXVK 2.0 · Other host')] }
+  };
+  const rendered = render(data);
+  assert.match(select(rendered.markup, 'left choice'), /selected="">Fixture 1.0 · upstream<\/option>/);
+  assert.match(select(rendered.markup, 'right choice'), /selected="">DXVK 1.10.3 · Managed 26.3<\/option>/);
+  assert.doesNotMatch(rendered.markup, /Loading saved selection/);
+  const managers = data.state.runtimeManagers, label = choices.inventoryChoiceLabel;
+  assert.equal(label('translator-fixture:upstream-1.0:d3d12', 'managed', managers), 'Fixture 1.0 · upstream', 'a Direct3D 12 copy shares its version label');
+  managers['translator-dxvk'].references.push(reference('managed', 'dxvk', 'DXVK 1.10.4 · Managed 27.0'));
+  assert.equal(label(saved.right, 'managed', managers), undefined, 'two Wine installations with that name leave the choice to its list');
+  managers['translator-dxvk'].references = [reference('managed', 'd9vk', 'DXVK 3.1.1 · Template · d9vk'), reference('managed', 'dxvk3', 'DXVK 3.1.1 · Template · dxvk3')];
+  assert.equal(label('included:d3d-renderer:d9vk', 'managed', managers), 'DXVK 3.1.1 · Template · d9vk', 'a template folder names one copy');
+  assert.equal(label('included:d3d-renderer:dxvk', 'managed', managers), undefined, 'several copies of one engine are not guessed');
+  assert.equal(label('translator-missing:1.0', 'managed', managers), undefined);
+  assert.equal(label('local-runtime-version', 'managed', managers), undefined);
+});
+
 test('canceled and invalid refreshes preserve cached choices, report only real failure and permit successful recovery', async t => {
   storage(t); const data = fixture(); await receive(data, data.result);
   let finish; const failures = [], diagnostics = [];

@@ -12,6 +12,37 @@ function cachedRecords(context: RuntimeSettingsContext) {
   } catch { return {}; }
 }
 
+// Before a game's choice list arrives, a saved translator choice is named from
+// the runtime inventories already in the launcher state. A managed copy,
+// "<manager>:<version>", takes that version's listed label. An included copy,
+// "included:<component>:<name>", takes the label of the one reference to the
+// game's Wine runtime whose folder or translator manager carries that name.
+export function inventoryChoiceLabel(value: string, runtimeId: string, managers: Record<string, any> | undefined): string | undefined {
+  if (!value || !managers || typeof managers !== "object") return undefined;
+  const sections = (state: any) => [state, ...(Array.isArray(state?.sections) ? state.sections : [])].filter(item => item && typeof item === "object");
+  const included = /^included:[^:]+:([^:]+)$/.exec(value);
+  if (included) {
+    const name = included[1], byFolder = new Set<string>(), byManager = new Set<string>();
+    for (const [managerId, state] of Object.entries(managers)) for (const section of sections(state)) for (const row of section.references || []) {
+      if (row?.reference?.managerId !== runtimeId || typeof row.versionLabel !== "string" || !row.versionLabel) continue;
+      if (String(row.installDir || "").split("/").pop() === name) byFolder.add(row.versionLabel);
+      else if (managerId === `translator-${name}`) byManager.add(row.versionLabel);
+    }
+    const labels = byFolder.size ? byFolder : byManager;
+    return labels.size === 1 ? [...labels][0] : undefined;
+  }
+  const at = value.indexOf(":"), state = at > 0 ? managers[value.slice(0, at)] : undefined;
+  if (!state || typeof state !== "object") return undefined;
+  const version = value.slice(at + 1);
+  for (const candidate of [version, version.replace(/:d3d12$/, "")]) for (const section of sections(state)) {
+    const listed = section.versionLabels?.[candidate];
+    if (typeof listed === "string" && listed) return listed;
+    const row = (section.installed || []).find((item: any) => item?.version === candidate);
+    if (row) return [state.label, typeof row.versionLabel === "string" && row.versionLabel ? row.versionLabel : candidate].filter(Boolean).join(" ");
+  }
+  return undefined;
+}
+
 // Persist provider results, including their labels and atomic settings patches.
 // An earlier request can supply a saved label, but only matching inputs supply
 // selectable choices. A failed refresh leaves the last successful result intact.

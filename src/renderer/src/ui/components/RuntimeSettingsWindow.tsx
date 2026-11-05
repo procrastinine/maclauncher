@@ -24,7 +24,7 @@ import { CommitNumberInput, CommitTextArea, CommitTextInput } from "./CommitInpu
 import { ErrorText } from "./ErrorText";
 import { Toggle } from "./FieldRow";
 import { createQueuedWriter, type QueuedWriter } from "./queued-write-model";
-import { loadSettingChoices, readSettingChoices, storeSettingChoices, settingChoiceRequest, settingChoiceScope, type SettingChoices } from "./runtime-setting-choices";
+import { inventoryChoiceLabel, loadSettingChoices, readSettingChoices, storeSettingChoices, settingChoiceRequest, settingChoiceScope, type SettingChoices } from "./runtime-setting-choices";
 import { RuntimeFileSetting } from "./RuntimeFileSetting";
 
 export type RuntimeSettingsApi = Pick<LauncherApi, "setModuleRuntimeSettings" | "setGameRuntimeSettings"> & Partial<Pick<LauncherApi, "moduleAction" | "moduleSettingsAction">>;
@@ -349,9 +349,11 @@ export function RuntimeSettingsWindow({
                   const listed: RuntimeSettingOption[] = choices[field.optionsAction]?.[field.optionsKey || field.key] || field.options || [];
                   const options = field.optionsAction === "listRuntimeVersions" ? runtimeVersionOptions(listed) : listed;
                   const scope = settingChoiceScope(choices[field.optionsAction], field, options.find(option => option.value === selected));
-                  // A cached list, or the game's last launch, names a saved choice before its list arrives.
+                  // A cached list, the game's last launch or the installed runtime inventories
+                  // name a saved choice before its list arrives.
                   const recordedLabel = recordedChoices[field.optionsAction]?.[field.optionsKey || field.key]?.find((option: RuntimeSettingOption) => option.value === selected)?.label ||
-                    (selected && launchSettings?.[field.key] === selected ? launchRows.find((row: any) => row?.id === field.key)?.selected : undefined);
+                    (selected && launchSettings?.[field.key] === selected ? launchRows.find((row: any) => row?.id === field.key)?.selected : undefined) ||
+                    inventoryChoiceLabel(selected, context.runtimeId, state.runtimeManagers);
                   const loading = choiceLoading[field.optionsAction] === true;
                   const disabled = fieldsDisabled || (field.gameOnly === true && !isGameScope) || (loading && !choices[field.optionsAction] && !options.length);
                   return <React.Fragment key={field.key}>
