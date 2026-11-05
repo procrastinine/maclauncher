@@ -740,7 +740,9 @@ test('the discovered ILSpy tool exposes versions and defaults through the shared
     runtimeUi: { ilspy: { remoteOpen: { decompiler: true }, installVersion: {}, installVariant: {}, installedSort: {}, error: null } } });
   assert.match(markup, /runtime-panel-ilspy-decompiler/);
   assert.match(markup, /<option value="11\.1\.0\.9782"/); assert.match(markup, /<option value="9\.1\.0\.7988"/);
-  assert.match(markup, /\.NET 10\.0/); assert.match(markup, /Set default<\/button>/);
+  assert.match(markup, /\.NET 10\.0/); assert.match(markup, /badge badgeAccent[^>]*>Default<\/span>/);
+  assert.equal(state.sections.find(section=>section.id==='decompiler').defaultVersion,pin.version,'usable installed tool is the automatic default');
+  assert.doesNotMatch(markup,/Set default<\/button>/,'the automatic installed default has no redundant default action');
   assert.match(markup, /aria-label="Reload versions"/);
   assert.doesNotMatch(markup, /runtime-panel-fna|fixed-fna|All versions<\/button>|Load versions/);
 });
@@ -949,6 +951,7 @@ test('included translator references use host records and shared release facts w
   write(path.join(templateHosts[0].templateRoot,'Resources/vulkan/icd.d/optional.json'),'{');
   // Bad optional component metadata cannot hide another component or host.
   fs.symlinkSync(path.join(root,'outside'),path.join(first.wine,'lib/dxvk/escape'));fs.mkdirSync(path.join(root,'outside'));
+  write(path.join(root,'outside/d3d11.dll'),dll());
   const Description=require('../src/modules/shared/runtime/translator-description'),described=[],inspected=[];
   const describe=Description.describeTranslator,inspect=Description.inspectFile;
   t.mock.method(Description,'describeTranslator',(root,options)=>{described.push(options.engine);return describe(root,options);});
@@ -975,7 +978,15 @@ test('included translator references use host records and shared release facts w
   assert.equal(metal.getState(options).references.length,2,'D3D12 aliases do not duplicate the same source component');
   assert.ok(metal.getState(options).references.every(row=>row.versionLabel.includes('D3DMetal 3.0')));
   assert.ok(molten.getState(options).references.every(row=>row.versionLabel.includes('MoltenVK 1.2.10')&&row.platformKey==='x86_64'));
-  assert.equal(dxvk.getState(options).references.length,3,'only the escaped component is omitted');assert.ok(warnings.some(row=>row.includes('dxvk')&&row.includes('escapes')));
+  const dxvkState=dxvk.getState(options);
+  assert.equal(dxvkState.references.length,4,'usable siblings remain when an unsafe optional entry is skipped');assert.ok(warnings.some(row=>row.includes('dxvk')&&/outside.*root|escapes/.test(row)));
+  const bounded=Wine.includedTranslators({crossoverRoot:first.wine},'crossover',{engine:'dxvk'}).included;
+  assert.ok(bounded.some(row=>row.engine==='dxvk'));
+  assert.ok(bounded.flatMap(row=>row.files).every(file=>!file.path.includes('escape')&&file.path.startsWith(path.join(first.wine,'lib/dxvk')+path.sep)),'unsafe entry never enters the retained description');
+  const escaped=path.join(first.wine,'lib/dxvk/escaped.dll');fs.symlinkSync(path.join(root,'outside/d3d11.dll'),escaped);
+  assert.equal(dxvk.getState(options).references.length,3,'a directly consumed escaping DLL excludes that component');
+  assert.ok(warnings.some(row=>row.includes('dxvk')&&/outside.*root|escapes/.test(row)));
+  fs.unlinkSync(escaped);
   assert.equal(owners.createManager('vkd3d-proton').getState(options).references,undefined,'builtin Wine choices are not mislabeled as vkd3d-proton');
   const wine=registry.listSharedRuntimeManagers().find(manager=>manager.id==='translator-vkd3d'),wineState=wine.getState(options);
   assert.equal(wine.customRuntime,false);assert.equal(wine.registerCustomRuntime,undefined);assert.equal(wineState.supportsDefault,false);
