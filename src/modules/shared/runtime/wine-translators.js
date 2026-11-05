@@ -37,13 +37,15 @@ function includedTranslators(install, runtime) {
     add(path.join(layout.root, 'lib64/apple_gptk'), 'd3dmetal', 'd3d-renderer');
     add(path.join(layout.root, 'lib64/libMoltenVK.dylib'), 'moltenvk', 'vulkan-driver', { form: 'dylib' });
   } else {
+    const { RELATIVE_PATHS, templateRenderers } = require('../../crossover/sikarugir/graphics/closure');
     const support = install.templateRoot || install.supportRoot || path.join(install.installDir, 'support');
-    const renderers = ['Frameworks/renderer', 'SharedSupport/renderer'].map(relative => path.join(support, relative)).find(file => fs.existsSync(file));
+    const rendererPath = fs.existsSync(path.join(support, RELATIVE_PATHS.renderers)) ? RELATIVE_PATHS.renderers : templateRenderers(support, install.templateVersion);
+    const renderers = rendererPath && path.join(support, rendererPath);
     if (renderers) for (const name of fs.readdirSync(renderers).sort()) {
       const engine = /^(?:dxvk|d9vk)/.test(name) ? 'dxvk' : name;
       if (['dxmt', 'dxvk', 'd3dmetal', 'cnc_ddraw'].includes(engine)) add(path.join(renderers, name), engine, 'd3d-renderer', { templateComponent: name, hiddenChoice: engine === 'cnc_ddraw' });
     }
-    const vulkan = path.join(support, 'Resources/vulkan');
+    const vulkan = path.join(support, RELATIVE_PATHS.vulkan);
     if (fs.existsSync(vulkan)) for (const name of fs.readdirSync(vulkan).filter(name => name.endsWith('.json'))) {
       try {
         const descriptor = JSON.parse(fs.readFileSync(path.join(vulkan, name), 'utf8')), library = path.resolve(vulkan, descriptor.ICD.library_path);
@@ -52,8 +54,8 @@ function includedTranslators(install, runtime) {
           const before = result.length; add(library, engine, 'vulkan-driver', { form: 'icd' });
           if (result.length > before) {
             const description = result.at(-1); description.icd = path.join(vulkan, name);
-            const loader = path.join(support, 'Frameworks/libvulkan.1.dylib');
-            if (fs.existsSync(loader)) description.files.push(Description.inspectFile({ path: loader, relative: 'Frameworks/libvulkan.1.dylib' }));
+            const relative = path.join(RELATIVE_PATHS.frameworks, 'libvulkan.1.dylib'), loader = path.join(support, relative);
+            if (fs.existsSync(loader)) description.files.push(Description.inspectFile({ path: loader, relative }));
           }
         }
       } catch (error) { warnings.push(error.message); }

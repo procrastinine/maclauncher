@@ -6,6 +6,8 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const { EventEmitter } = require("node:events");
 const { untilTestEnds } = require("./helpers/fixture-process");
+const { peFixture, versionResource } = require("./helpers/pe-fixture");
+const { image, X64 } = require("./fixtures/macho-image");
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-sikarugir-integration-"));
@@ -20,21 +22,16 @@ function write(file, bytes) {
 }
 
 function pe(file, machine = 0x14c) {
-  const bytes = Buffer.alloc(1024);
-  bytes.writeUInt16LE(0x5a4d); bytes.writeUInt32LE(128, 60);
-  bytes.writeUInt32LE(0x4550, 128); bytes.writeUInt16LE(machine, 132);
-  bytes.writeUInt16LE(1, 134); bytes.writeUInt16LE(240, 148); bytes.writeUInt16LE(2, 150);
-  bytes.writeUInt16LE(machine === 0x14c ? 0x10b : 0x20b, 152);
-  bytes.writeUInt16LE(2, 220);
+  const { bytes, peOffset, optional } = peFixture({ is64: machine !== 0x14c, version: versionResource({ strings: {} }) });
+  bytes.writeUInt16LE(2, peOffset + 22);
+  bytes.writeUInt16LE(2, optional + 68); // Windows GUI executable, as in the original fixture.
   return write(file, bytes);
 }
 
 function builtinDll(file, architecture) {
-  const bytes = Buffer.alloc(512);
-  bytes.writeUInt16LE(0x5a4d); bytes.writeUInt32LE(120, 60);
-  bytes.write("Wine builtin DLL\0", 64); bytes.writeUInt32LE(0x4550, 120);
-  bytes.writeUInt16LE(architecture === "i386-windows" ? 0x14c : 0x8664, 124);
-  bytes.writeUInt16LE(0x2000, 142);
+  const { bytes, peOffset } = peFixture({ is64: architecture !== "i386-windows", version: versionResource({ strings: {} }) });
+  bytes.write("Wine builtin DLL\0", 64);
+  bytes.writeUInt16LE(0x2002, peOffset + 22);
   return write(file, bytes);
 }
 
@@ -70,7 +67,8 @@ function managedFixture(t, { installed = [], approval = true, native = false } =
     const installDir = path.join(runtimeRoot, version), executablePath = path.join(installDir, "bin", "wine"), serverPath = path.join(installDir, "bin", "wineserver");
     write(executablePath, "#!/bin/sh\nexit 0\n"); write(serverPath, "#!/bin/sh\nexit 0\n");
     fs.chmodSync(executablePath, 0o755); fs.chmodSync(serverPath, 0o755);
-    write(path.join(installDir, "lib", "wine", "x86_64-unix", "ntdll.so"), "engine library");
+    write(path.join(installDir, "lib", "wine", "x86_64-unix", "ntdll.so"), image({ cpu: X64,
+      installName: "@rpath/ntdll.so", symbols: ["wine_unix_call"] }));
     write(path.join(installDir, "share", "wine", "nls", "c_932.nls"), "engine locale data");
     for (const architecture of ["i386-windows", "x86_64-windows"]) {
       for (const name of ["ntdll", "apisetschema"]) {
@@ -83,8 +81,14 @@ function managedFixture(t, { installed = [], approval = true, native = false } =
         builtinDll(path.join(frameworks, "renderer", "dxmt", "wine", architecture, name + ".dll"), architecture);
       }
     }
-    write(path.join(frameworks, "renderer", "dxmt", "wine", "x86_64-unix", "winemetal.so"), "publisher native bridge");
-    write(path.join(frameworks, "libMoltenVK.dylib"), "publisher Vulkan driver");
+    const bridge = image({ cpu: X64, installName: "@rpath/winemetal.so", minimumOS: 0x000e0000,
+      dependencies: ["@rpath/ntdll.so"], symbols: ["wine_unix_call"] });
+    const symbol = 32 + bridge.readUInt32LE(20);
+    bridge.writeUInt32LE(0x80, 24); // MH_TWOLEVEL: the undefined symbol names its real dependency.
+    bridge[symbol + 4] = 1; bridge[symbol + 5] = 0; bridge.writeUInt16LE(0x100, symbol + 6);
+    write(path.join(frameworks, "renderer", "dxmt", "wine", "x86_64-unix", "winemetal.so"), bridge);
+    write(path.join(frameworks, "libMoltenVK.dylib"), image({ cpu: X64,
+      installName: "@rpath/libMoltenVK.dylib", minimumOS: 0x000b0000, symbols: ["vkGetInstanceProcAddr"] }));
     write(path.join(templateRoot, "Resources", "vulkan", "icd.d", "MoltenVK_icd.json"), JSON.stringify({
       ICD: { library_path: "../../../Frameworks/libMoltenVK.dylib", api_version: "1.3.0" }
     }));
@@ -109,7 +113,8 @@ function managedFixture(t, { installed = [], approval = true, native = false } =
     updateSettingsAfterInstall: () => assert.fail("automatic Play must preserve global runtime defaults") };
   const graphics = async options => {
     const { install, settings, executableArchitecture } = options;
-    calls.push({ stage: "graphics", version: install.version, backend: settings.graphicsBackend, executableArchitecture });
+    calls.push({ stage: "graphics", version: install.version, backend: settings.graphicsBackend, executableArchitecture,
+      translatorPlan: options.translatorPlan });
     return Graphics.prepareGraphicsView(options);
   };
   const run = async (_wine, _server, args, options) => {
@@ -285,13 +290,21 @@ test("ordinary Play obtains one consent, prepares the Windows environment and ru
   assert.equal(prompt.requiresDownload, true);
   const spawned = calls.find(call => call.stage === "spawn");
   const state = entry.runtimeData.sikarugir;
+  const plan = calls.find(call => call.stage === "graphics").translatorPlan;
+  const { RELATIVE_PATHS } = require("../src/modules/crossover/sikarugir/graphics/closure");
+  assert.equal(plan.components["vulkan-driver"].used.icd,
+    path.join(root, "runtime-payloads", "engine-12", "support", RELATIVE_PATHS.vulkan, "MoltenVK_icd.json"));
+  assert.equal(plan.components["d3d-renderer"].fallback, false);
+  assert.deepEqual(plan.components["d3d-renderer"].used.unixImports.map(({ symbol, library }) => ({ symbol, library })),
+    [{ symbol: "wine_unix_call", library: "@rpath/ntdll.so" }]);
+  assert.ok(plan.record.modules["ntdll.so"].exports.includes("wine_unix_call"));
   assert.equal(spawned.command, "/bin/sh"); assert.equal(spawned.args[2], "maclauncher-sikarugir");
   assert.equal(spawned.options.cwd, state.gameRoot);
   assert.equal(spawned.options.env.WINEPREFIX, state.prefixPath);
   assert.equal(spawned.options.env.LC_ALL, "ja_JP.UTF-8");
   assert.equal(spawned.options.env.WINEMSYNC, "1");
   assert.match(spawned.options.env.WINEDLLOVERRIDES, /winhttp=n,b/);
-  assert.match(spawned.options.env.WINEDLLOVERRIDES, /d3d10core,d3d11,dxgi,winemetal=b/);
+  assert.match(spawned.options.env.WINEDLLOVERRIDES, /d3d10core=b;d3d11=b;dxgi=b;winemetal=b/);
   assert.equal(fs.realpathSync(spawned.args.at(-2)), fs.realpathSync(original));
   assert.equal(spawned.args.at(-1), "--windowed");
   const gameDrive = path.join(state.prefixPath, "dosdevices", "g:");
@@ -305,7 +318,9 @@ test("ordinary Play obtains one consent, prepares the Windows environment and ru
   assert.deepEqual(fs.readFileSync(spawned.args[3]), fs.readFileSync(path.join(installedWine, "bin", "wine")));
   assert.ok(fs.lstatSync(spawned.args[4]).isSymbolicLink());
   assert.ok(fs.lstatSync(path.join(privateWine, "lib", "wine", "x86_64-windows", "d3d11.dll")).isSymbolicLink());
-  assert.equal(spawned.options.env.WINEDLLPATH, fs.realpathSync(path.join(installedWine, "lib", "wine")));
+  assert.deepEqual(spawned.options.env.WINEDLLPATH.split(path.delimiter), [
+    path.join(privateWine, "lib", "wine", "i386-windows"), path.join(privateWine, "lib", "wine", "x86_64-windows"),
+    path.join(privateWine, "lib", "wine"), fs.realpathSync(path.join(installedWine, "lib", "wine"))]);
   assert.equal(JSON.parse(fs.readFileSync(spawned.options.env.VK_DRIVER_FILES)).ICD.library_path,
     fs.realpathSync(path.join(root, "runtime-payloads", "engine-12", "support", "Frameworks", "libMoltenVK.dylib")));
   assert.equal(fs.realpathSync(state.gameRoot), fs.realpathSync(source));
@@ -425,7 +440,9 @@ test("Stop ends only the selected private prefix and keeps independently spawned
       assert.deepEqual(JSON.parse(fs.readFileSync(path.join(prefix, "wine-arguments.json"))), [path.join(entry.runtimeData.sikarugir.gameRoot, "Game.exe")]);
       assert.equal(fs.existsSync(path.join(prefix, "dosdevices", "g:")), false);
       const environment = JSON.parse(fs.readFileSync(path.join(prefix, "windows-environment.json")));
-      assert.equal(environment.dlls, fs.realpathSync(path.join(install.engineRoot, "lib", "wine")));
+      const privateDllRoot = path.join(entry.runtimeData.sikarugir.viewRoot, "wine", "lib", "wine");
+      assert.deepEqual(environment.dlls.split(path.delimiter), [path.join(privateDllRoot, "i386-windows"),
+        path.join(privateDllRoot, "x86_64-windows"), privateDllRoot, fs.realpathSync(path.join(install.engineRoot, "lib", "wine"))]);
       assert.ok(environment.libraries?.includes(path.join(entry.runtimeData.sikarugir.viewRoot, "wine", "lib", "wine", "x86_64-unix")),
         "private graphics library paths must survive the protected supervisor shell");
       assert.ok(environment.frameworks?.includes(fs.realpathSync(path.join(install.templateRoot, "Frameworks"))));
