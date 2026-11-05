@@ -33,7 +33,7 @@ The choice of translators is a major part of MacLauncher's support for Windows g
 | MoltenVK | KhronosGroup/MoltenVK | Library, folder, archive or installed runtime |
 | KosmicKrisp | LWJGL's KosmicKrisp builds of Mesa; MacLauncher KosmicKrisp from MacLauncher Builds | Driver and loader folder, archive or installed runtime |
 | DXMT | 3Shain/dxmt builtin releases; Sikarugir Template | Folder, archive or installed runtime |
-| DXVK | doitsujin/dxvk; Gcenx/DXVK-macOS, with a separate async catalog; historical AlpyneDreams/d8vk and misyltoad/d9vk releases; Template dxvk, dxvk3 and d9vk | Folder, archive or installed runtime |
+| DXVK | DXVK upstream, including historical D8VK/D9VK variants; DXVK-macOS with an async variant; Sikarugir Template components | Folder, archive or installed runtime |
 | Wine vkd3d | Link to the Wine upstream source | Read-only copies included with registered runtimes |
 | vkd3d-proton | HansKristian-Work/vkd3d-proton | Folder or archive |
 | D3DMetal | Sikarugir Template | Apple Game Porting Toolkit disk image or folder; installed runtime |
@@ -43,9 +43,9 @@ Wine runs as an x86-64 process, also on Apple Silicon through Rosetta. Every mac
 
 MacLauncher KosmicKrisp is an adapted build of KosmicKrisp. In addition to upstream's features, it implements transform feedback and primitives-generated queries for DXVK's Direct3D stream output and ANGLE's OpenGL ES 3.2, non-solid polygon fill for DXVK, single-texel alignment of texel buffer views for vkd3d-proton, and variable multisample rate for Direct3D 11.1 and 12; [Native Vulkan libraries](../../src/modules/shared/vulkan/README.md) describes it.
 
-Each catalog has its own Refresh control and publisher link, and each release label names its source, such as `(macOS async)`. The **Vulkan drivers** entry also holds **MoltenVK scene support**, a MacLauncher Builds package that CrossOver's [Vulkan scene support](CROSSOVER.md#vulkan-scene-support) uses.
+Each source card has its own Refresh control and publisher link. A grouped source exposes its existing catalogs through a Variant control; Refresh updates those catalogs together. The **Vulkan drivers** entry also holds **MoltenVK scene support**, a MacLauncher Builds package that CrossOver's [Vulkan scene support](CROSSOVER.md#vulkan-scene-support) uses.
 
-DXVK-macOS is offered as an optional macOS alternative to the runtime's own included or automatic choice. The upstream, async, historical D8VK and D9VK, and Template sources are listed under **Additional sources**. D8VK and D9VK keep their historical releases, although their Direct3D 8 and 9 work is part of modern DXVK. Installed rows show the API coverage read from the actual libraries, so each version can expose a different set of APIs. A Template's package version is distinct from the versions of the components installed from it. The GStreamer panel offers official runtime packages and prepared local codec folders, and D3DMetal links to Apple's official Game Porting Toolkit download page.
+Translator versions are selected per game, with **Automatic** using the Wine runtime's own copy. Translator managers have no global version default. DXVK upstream is the primary download card; **Additional sources** holds DXVK-macOS, with its async variant, and Sikarugir Template components. Historical D8VK and D9VK releases are variants of DXVK upstream, and empty historical catalogs add no variant. Template component names identify folders; the installed files supply their Direct3D API coverage and component versions. A Template's package version remains distinct from its components' versions. D3DMetal has an Apple Game Porting Toolkit card for registering an Apple download, alongside the secondary Template source. The GStreamer panel offers official runtime packages and prepared local codec folders.
 
 For LWJGL's KosmicKrisp driver, the LWJGL package version is shown as the package it came from, and a KosmicKrisp component version appears only when the component's metadata supplies one. Releases and builds that share a short label keep their publisher revision or exact build identity rather than a numbered position in a list.
 

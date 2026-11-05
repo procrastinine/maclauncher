@@ -5,3 +5,4 @@ export { GameDetails } from "../src/renderer/src/ui/components/GameDetails";
 export { ReShadeFilterLibrary } from "../src/renderer/src/ui/components/ReShadeFilterLibrary";
 
 export { RuntimeSettingsWindow } from "../src/renderer/src/ui/components/RuntimeSettingsWindow";
+export { RuntimeCatalogSources } from "../src/renderer/src/ui/components/RuntimeCatalogSources";

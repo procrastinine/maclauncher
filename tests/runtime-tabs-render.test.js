@@ -6,7 +6,7 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { build } = require('vite');
 const { react, componentHarness } = require('./helpers/renderer-component');
-let RuntimesView, SettingsView, CreditsView, GameDetails, ReShadeFilterLibrary, RuntimeSettingsWindow;
+let RuntimesView, SettingsView, CreditsView, GameDetails, ReShadeFilterLibrary, RuntimeSettingsWindow, RuntimeCatalogSources;
 test('cached runtime refresh failures show their failure date and redact errors and install tooltips', () => {
   const failedAt = Date.UTC(2026, 9, 24, 12), fetchedAt = Date.UTC(2026, 9, 20, 12);
   const error = 'request to https://fixture-user:fixture-password@github.com/example/runtime failed ECONNREFUSED';
@@ -32,7 +32,7 @@ test.before(async () => {
   compiled.paths = module.paths;
   compiled.require = id => id === 'react' ? react : Module.prototype.require.call(compiled, id);
   compiled._compile(bundle.output.find(chunk => chunk.type === 'chunk').code, compiled.id);
-  ({ RuntimesView, SettingsView, CreditsView, GameDetails, ReShadeFilterLibrary, RuntimeSettingsWindow } = compiled.exports);
+  ({ RuntimesView, SettingsView, CreditsView, GameDetails, ReShadeFilterLibrary, RuntimeSettingsWindow, RuntimeCatalogSources } = compiled.exports);
 });
 const manager = (id, ui, catalog = {}, installed = []) => ({ id, label: `Backend ${id}`, ui,
   catalog: { status: 'idle', versions: [], ...catalog }, installed });
@@ -250,10 +250,10 @@ test('inactive scene adapters stay internally managed without Graphics tabs or p
     const runtimes = adapters.map(source => ({ ...manager(source.id, uiFor(source)), label: source.label }));
     const before = structuredClone(runtimes);
     const hidden = render(runtimes);
-    assert.doesNotMatch(hidden, /class="launcherSidebarItem[^>]*>Graphics<\/button>|runtime-group-panel-graphics|runtime-panel-graphics-presets/);
+    assert.doesNotMatch(hidden, /class="launcherSidebarItem[^>]*>Effects<\/button>|runtime-group-panel-graphics|runtime-panel-graphics-presets/);
     for (const source of adapters) assert.ok(!hidden.includes(source.label), `${source.id}: no inactive adapter tab`);
     const markup = render([...runtimes, active], runtimes[0].id);
-    assert.match(markup, /class="launcherSidebarItem[^>]*>Graphics<\/button>/);
+    assert.match(markup, /class="launcherSidebarItem[^>]*>Effects<\/button>/);
     assert.match(markup, /id="runtime-group-panel-graphics"/);
     assert.deepEqual(sectionTabLabels(markup), ['Providers', 'Presets']);
     assert.match(markup, /id="runtime-panel-graphics-models-default"/);
@@ -837,8 +837,8 @@ test('Graphics has its own sidebar section with component information and model 
     { ...state, id: models.id, label: models.label, ui: models.ui }];
   const markup = render(runtimes, models.id, { onRuntimeImport() {}, onRuntimeSetupAction() {} });
   // Graphics follows the game engines in its own section.
-  assert.ok(markup.indexOf('>Engine</button>') < markup.indexOf('>Graphics</button>'));
-  assert.match(markup, /class="launcherSidebarSection unlabeled" role="group" aria-label="Graphics"><ul class="launcherSidebarList"><li><button[^>]*>Graphics<\/button>/);
+  assert.ok(markup.indexOf('>Engine</button>') < markup.indexOf('>Effects</button>'));
+  assert.match(markup, /class="launcherSidebarHeading"[^>]*>Graphics<\/h2><ul class="launcherSidebarList"><li><button[^>]*>Effects<\/button>/);
   assert.doesNotMatch(markup, /ReShade ·|Shader packs|SweetFX|qUINT/);
   for (const label of ['Apple MetalFX', 'AMD FSR 1', 'AMD FSR 2.2', 'AMD FSR 3.1', 'AMD FSR 4.1', 'Lossless Scaling models']) assert.ok(markup.includes(label));
   assert.match(markup, /Download from Steam…/); assert.match(markup, /Find in Steam \/ CrossOver/);
@@ -880,9 +880,9 @@ test('translator source links use one caption with explicit project and Template
     const markup=render([state],owner.id);
     const links=[...markup.matchAll(/class="runtimeSourceLink"[^>]*>([^<]+)<\/a>/g)].map(match=>match[1]);
     assert.ok(links.length);if(engine!=='gstreamer')assert.ok(links.every(label=>label==='Source'));
-    if(engine==='dxvk') { assert.match(markup,/DXVK-macOS async/);assert.match(markup,/DXVK-macOS releases published by Gcenx\/DXVK-macOS/); }
-    if(engine!=='gstreamer')assert.match(markup,/copies taken from a Sikarugir Template release/);
-    else { assert.match(markup,/GStreamer macOS runtime/);assert.match(markup,/Runtime framework packages published by GStreamer/);assert.match(markup,/runtimeSources/);assert.doesNotMatch(markup,/No downloadable versions/); }
+    if(engine==='dxvk') { assert.match(markup,/DXVK-macOS/);assert.match(markup,/builtin-layout async packages/);assert.match(markup,/DXVK components from Sikarugir Templates/); }
+    if(engine==='dxmt')assert.match(markup,/copies taken from a Sikarugir Template release/);
+    if(engine==='gstreamer') { assert.match(markup,/GStreamer macOS runtime/);assert.match(markup,/Runtime framework packages published by GStreamer/);assert.match(markup,/runtimeSources/);assert.doesNotMatch(markup,/No downloadable versions/); }
   }
   for(const owner of require('../src/modules/shared/vulkan/libraries').managers) {
     const markup=render([{...owner.getState({}),id:owner.id,label:owner.label,ui:owner.ui}],owner.id);
@@ -1035,10 +1035,17 @@ test('official codec catalog, local registration and Apple upstream links use or
   assert.match(markup,/Register custom/);assert.match(markup,/GStreamer macOS runtime/);assert.match(markup,/GStreamer downloads/);assert.match(markup,/Load versions/);
   assert.doesNotMatch(markup,/No downloadable versions|>Install</);
   const metal=createManager('d3dmetal'),state=metal.getState({});
-  assert.ok(state.catalog.sourceLinks.some(link=>link.url==='https://developer.apple.com/games/game-porting-toolkit/'));
-  const apple=render([{...state,id:metal.id,label:metal.label,ui:metal.ui}],metal.id);
-  assert.match(apple,/href="https:\/\/developer\.apple\.com\/games\/game-porting-toolkit\/"[^>]*>Apple Game Porting Toolkit downloads<\/a>/);
-  assert.match(apple,/Sikarugir Template/);
+  assert.equal(state.catalog.sources[0].delivery,'local-files');
+  const apple=render([{...state,id:metal.id,label:metal.label,ui:metal.ui}],metal.id,{onRuntimeRegister(){assert.fail('No registration during render');}});
+  assert.match(apple,/href="https:\/\/developer\.apple\.com\/games\/game-porting-toolkit\/"[^>]*>Source<\/a>/);
+  assert.match(apple,/Register Game Porting Toolkit/);assert.match(apple,/Sikarugir Template/);
+  assert.doesNotMatch(apple,/Register custom|Load Apple|No downloadable versions/);
+  let registrations=0;
+  const ui={installVersion:{},installVariant:{},installedSort:{},remoteOpen:{},pendingActions:{},messages:{},sourceErrors:{}};
+  const control=componentHarness(RuntimeCatalogSources,{managerId:metal.id,section:{...state,id:'default'},ui,busy:false,variant:'',downloads:[],
+    onSelect(){assert.fail('Registration must not alter a version choice');},onInstall(){assert.fail('Registration is not an Install');},onRefresh(){assert.fail('Registration must not refresh');},onRegister(){registrations++;}});
+  const nodes=value=>value==null?[]:Array.isArray(value)?value.flatMap(nodes):typeof value==='object'?[value,...nodes(value.props?.children)]:[];
+  nodes(control.render()).find(node=>node.type==='button'&&node.props.children==='Register Game Porting Toolkit…').props.onClick();assert.equal(registrations,1);control.close();
 });
 
 test('persisted generic-tag source labels render actual asset packages without Refresh or positional ties', t => {
@@ -1058,24 +1065,40 @@ test('persisted generic-tag source labels render actual asset packages without R
   assert.doesNotMatch(markup,/\(2\)|earlier build|v1\.0 \(Sikarugir Template\)/);assert.deepEqual(fs.readFileSync(file),before);
 });
 
-test('secondary source disclosure preserves every DXVK source, version and install action', t => {
+test('grouped DXVK cards retain source identities and route variants, Install and Refresh through ordinary actions', t => {
   const fs=require('node:fs'),os=require('node:os'),root=fs.mkdtempSync(path.join(os.tmpdir(),'secondary-translator-sources-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const CrossOver=require('../src/modules/crossover/runtime/manager'),Sika=require('../src/modules/crossover/sikarugir/runtime/manager');
   t.mock.method(CrossOver.core,'listInstalled',()=>[]);const original=Sika.core;Sika.core={...original,listInstalled:()=>[]};t.after(()=>{Sika.core=original;});
   t.mock.method(globalThis,'fetch',()=>assert.fail('Disclosure must stay offline'));
   const owner=require('../src/modules/shared/runtime/translator-managers').createManager('dxvk'),initial=owner.getState({});
-  const sourceIds=initial.catalog.sources.map(row=>row.id),entries=sourceIds.map(id=>({version:id+'-fixture',upstreamRevision:'published-asset',catalogSourceId:id,architecture:'universal',
+  const sourceIds=initial.catalog.sources.flatMap(row=>row.variants?.map(variant=>variant.id)||row.id),entries=sourceIds.map(id=>({version:id+'-fixture',upstreamRevision:'published-asset',catalogSourceId:id,architecture:'universal',
     asset:{filename:id.startsWith('template')?'Template-1.0.26.tar.xz':`dxvk-${id}-v2.7.tar.gz`,url:`https://github.com/example/runtime/releases/download/rolling/${id}.tar.gz`,integrity:'recorded-local'}}));
   require('../src/modules/shared/runtime/runtime-catalog').writeRuntimeCatalog({userDataDir:root,managerId:owner.id,entries,source:initial.catalog.sourceUrl});
-  const state=owner.getState({userDataDir:root});assert.deepEqual(state.catalog.sources.map(row=>row.id),sourceIds);
+  const state=owner.getState({userDataDir:root});assert.deepEqual(state.catalog.sources.map(row=>row.id),['upstream','macos','template']);
   const markup=render([{...state,id:owner.id,label:owner.label,ui:owner.ui}],owner.id);
   const offset=markup.indexOf('<details class="runtimeAdditionalSources">');assert.ok(offset>0);
   const primary=markup.slice(0,offset),additional=markup.slice(offset,markup.indexOf('</details>',offset));
-  assert.match(primary,/CrossOver&#x27;s included copy or automatic choice/);assert.match(primary,/data-runtime-source="macos"/);
-  assert.match(additional,/<summary>Additional sources<\/summary>/);assert.match(additional,/older Direct3D 8\/9 variant/);
-  for(const id of sourceIds){assert.ok(markup.includes(`data-runtime-source="${id}"`));if(id!=='macos'){assert.ok(!primary.includes(`data-runtime-source="${id}"`));assert.ok(additional.includes(`data-runtime-source="${id}"`));}}
-  for(const entry of entries)assert.ok(markup.includes(`value="${entry.version}"`));
-  assert.equal((markup.match(/>Install<\/button>/g)||[]).length,sourceIds.length);
+  assert.match(primary,/data-runtime-source="upstream"/);assert.doesNotMatch(primary,/data-runtime-source="macos"/);
+  assert.match(additional,/<summary>Additional sources<\/summary>/);assert.doesNotMatch(additional,/older Direct3D 8\/9 variant/);
+  assert.equal((markup.match(/data-runtime-source=/g)||[]).length,3);
+  assert.match(markup,/Historical D8VK/);assert.match(markup,/Historical D9VK/);assert.match(markup,/DXVK subset \(d9vk\)/);
+  const ui={installVersion:{},installVariant:{},installedSort:{},remoteOpen:{},pendingActions:{},messages:{},sourceErrors:{}};
+  const calls=[],props={managerId:owner.id,section:{...state,id:'default'},ui,busy:false,variant:'',downloads:[],
+    onSelect(key,field,value){ui[field][key]=value;},onInstall(...args){calls.push(['install',...args]);},onRefresh(options){calls.push(['refresh',options]);}};
+  const harness=componentHarness(RuntimeCatalogSources,props);
+  const nodes=value=>value==null?[]:Array.isArray(value)?value.flatMap(nodes):typeof value==='object'?[value,...nodes(value.props?.children)]:[];
+  for(const source of state.catalog.sources)for(const variant of source.variants){
+    const key=JSON.stringify(['default',source.id]);ui.installVariant[key]=variant.id;
+    const tree=nodes(harness.render()),card=tree.find(node=>node.props?.['data-runtime-source']===source.id),controls=nodes(card);
+    const version=controls.find(node=>node.props?.['aria-label']===`${source.label} version`);
+    assert.equal(version.props.value,variant.id+'-fixture');
+    controls.find(node=>node.type==='button'&&node.props.children==='Install').props.onClick();
+    assert.equal(calls.at(-1)[1],variant.id+'-fixture');assert.equal(calls.at(-1)[2],undefined,'source variant never becomes a runtime variant');
+    controls.find(node=>node.props?.['aria-label']===`Reload ${source.label} versions`).props.onClick();
+    assert.deepEqual(calls.at(-1),['refresh',{sourceId:source.id}]);
+  }
+  for(const entry of entries)assert.ok(state.catalog.versions.includes(entry.version));
+  harness.close();
 });
 
 test('translator API coverage comes from actual installed libraries rather than manager hints', t => {
@@ -1120,4 +1143,64 @@ test('effective provider arrays expose all used settings without changing saved 
   const h=componentHarness(RuntimeSettingsWindow,{api,state,context:{scope:'module',moduleId:'fixture',runtimeId:'managed'},error:null});
   try{h.render();const markup=renderToStaticMarkup(await h.settle());assert.match(markup,/first provider settings/);assert.equal(markup.includes('second provider settings'),Array.isArray(label));assert.doesNotMatch(markup,/third provider settings/);assert.match(markup,/value="automatic"/);assert.deepEqual(writes,[]);}finally{h.close();}
  }
+});
+
+test('translator defaults are absent for custom and Included rows while Vulkan defaults remain available', t => {
+  const {createManager}=require('../src/modules/shared/runtime/translator-managers');
+  const translator=createManager('dxvk'),state=translator.getState({});
+  assert.equal(state.supportsDefault,false);
+  const saved={defaultVersion:'kept-choice',unrelated:true};
+  assert.deepEqual(translator.applySettingsUpdate('setDefault',{version:'other'},saved),saved);
+  const rows=[{version:'registered',versionLabel:'Registered component',custom:true,ready:true},{version:'host',versionLabel:'Host component',reference:true,readOnly:true,removable:false,supportsDefault:false,ready:true}];
+  const runtime={...state,id:translator.id,label:translator.label,ui:translator.ui,installed:rows,sections:undefined,defaultVersion:'not-installed'};
+  const markup=render([runtime],translator.id);
+  assert.doesNotMatch(markup,/Set default|Default first|data-runtime-default-missing|>Default<\/span>/);
+  const driver=manager('vulkan-driver',{groupId:'vulkan-drivers'}, {versions:['1.4.2']},[{version:'1.4.1',ready:true}]);
+  driver.supportsDefault=true;driver.defaultVersion='1.4.2';
+  assert.match(render([driver]),/Set default/);
+  for(const owner of require('../src/modules/shared/vulkan/libraries').managers)assert.equal(owner.getState({}).supportsDefault,true);
+});
+
+test('cached source release metadata sorts numerically without changing keys or build ties', t => {
+  const fs=require('node:fs'),os=require('node:os'),root=fs.mkdtempSync(path.join(os.tmpdir(),'cached-release-order-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const {createPinnedNativeManager}=require('../src/modules/shared/runtime/pinned-native-manager'),Catalog=require('../src/modules/shared/runtime/runtime-catalog');
+  const owner=createPinnedNativeManager({id:'release-order',label:'Release order',nativeLibrary:true,discoverCatalog:async()=>assert.fail('No discovery during status'),resolveExecutable:()=>null,dependencies:{systemVersionSync:()=> '26.0'}});
+  const releases=['v1.4.1-rc1','v1.4.2-rc1','v1.4.1','v1.4.10','v1.4.2','v1.4.2'];
+  const entries=releases.map((release,index)=>({version:'opaque-'+index,upstreamTag:'opaque-'+index,upstreamRevision:'published-'+index,sourceUrl:'https://github.com/KhronosGroup/MoltenVK/releases/tag/'+release,
+    asset:{filename:'MoltenVK-macos.tar',url:'https://github.com/KhronosGroup/MoltenVK/releases/download/'+release+'/MoltenVK-macos.tar',integrity:'recorded-local'}}));
+  Catalog.writeRuntimeCatalog({userDataDir:root,managerId:owner.id,entries});
+  const file=Catalog.catalogPath(root,owner.id),before=fs.readFileSync(file),state=owner.getState({userDataDir:root});
+  assert.deepEqual(state.catalog.versions,['opaque-3','opaque-4','opaque-5','opaque-1','opaque-2','opaque-0']);
+  assert.deepEqual(fs.readFileSync(file),before);
+  const runtime={...state,id:owner.id,label:owner.label,sections:undefined};
+  const markup=render([runtime]);assert.match(markup,/<option[^>]*value="opaque-3" selected/);
+  const minimum=manager('floor',{}, {versions:['low'],installableVersions:['low'],versionRequirements:{low:{minimumMacOS:'12.0'}}},[{version:'low',ready:true,minimumMacOS:'12.0'}]);
+  assert.doesNotMatch(render([minimum]),/Requires macOS 12\.0/);
+  minimum.catalog.versionRequirements.low.minimumMacOS='27.0';minimum.installed=[];assert.match(render([minimum]),/Requires macOS 27\.0 or later/);
+});
+
+test('source-group Refresh fetches each existing variant once and local registration uses no discovery', async t => {
+  const fs=require('node:fs'),os=require('node:os'),root=fs.mkdtempSync(path.join(os.tmpdir(),'group-refresh-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const calls=[],group={id:'upstream',label:'Publisher'},source=id=>({id,label:id,url:'https://example.invalid/'+id,group,discover:async()=>{calls.push(id);return[{version:id+'-1.0',upstreamRevision:'published',asset:{filename:id+'.tar.gz',url:'https://example.invalid/'+id+'.tar.gz',integrity:'recorded-local'}}];}});
+  const owner=require('../src/modules/shared/runtime/pinned-native-manager').createPinnedNativeManager({id:'group-refresh',label:'Grouped publisher',nativeLibrary:true,resolveExecutable:()=>null,discoverCatalog:()=>[],catalogSources:[source('upstream'),source('historical'),{id:'local',label:'Local',delivery:'local-files',discover:async()=>assert.fail('Local registration must not discover')}]});
+  const state=await owner.refreshCatalog({userDataDir:root,sourceId:'upstream',force:true});
+  assert.deepEqual(calls.sort(),['historical','upstream']);assert.equal(state.sources[0].variants.length,2);
+  await owner.refreshCatalog({userDataDir:root,sourceId:'local',force:true});assert.equal(calls.length,2);
+});
+
+test('Gcenx inspected source metadata declares offered PE forms without changing actual binary facts', t => {
+  const fs=require('node:fs'),os=require('node:os'),root=fs.mkdtempSync(path.join(os.tmpdir(),'source-forms-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const Pinned=require('../src/modules/shared/runtime/pinned-native-manager'),original=Pinned.createPinnedNativeManager;let config;
+  t.mock.method(Pinned,'createPinnedNativeManager',options=>{config=options;return original(options);});
+  const file=require.resolve('../src/modules/shared/runtime/translator-managers');delete require.cache[file];
+  const {createManager}=require(file);createManager('dxvk');t.after(()=>delete require.cache[file]);
+  const {peFixture}=require('./helpers/pe-fixture');
+  for(const builtin of [true,false]){
+    const unpacked=path.join(root,builtin?'builtin':'native'),folder=path.join(unpacked,'dxvk',builtin?'x86_64-windows':'x64');fs.mkdirSync(folder,{recursive:true});
+    const fixture=peFixture({is64:true});fixture.bytes.writeUInt16LE(0x2002,fixture.peOffset+22);if(builtin)fixture.bytes.write('Wine builtin DLL\0',64);fs.writeFileSync(path.join(folder,'d3d11.dll'),fixture.bytes);
+    const pin={version:'unchanged-'+builtin,catalogSourceId:builtin?'async':'macos'},prepared=config.prepareInstall({unpacked,pin});
+    assert.deepEqual(prepared.translator.source.optionsRuntimeForms,{crossover:'builtin'});
+    assert.equal(prepared.translator.files.find(file=>file.format==='pe').form,builtin?'builtin':'native');
+    assert.equal(pin.version,'unchanged-'+builtin);
+  }
 });

@@ -7,7 +7,21 @@ function orderKey(value) {
 }
 
 function compareVersions(left, right) {
-  return orderKey(left).localeCompare(orderKey(right), undefined, { numeric: true, sensitivity: "base" });
+  const a = orderKey(left), b = orderKey(right), release = /^(\d+(?:\.\d+)+)(?:-(.+))?$/;
+  const aa = release.exec(a), bb = release.exec(b);
+  if (aa && bb && aa[1] === bb[1] && Boolean(aa[2]) !== Boolean(bb[2])) return aa[2] ? -1 : 1;
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+}
+
+// Publisher metadata orders a catalog; opaque download keys remain identities.
+function catalogVersion(pin = {}) {
+  if (pin.projectPackage) return pin.version;
+  if (pin.releaseVersion) return pin.releaseVersion;
+  try {
+    const tag = new URL(pin.sourceUrl).pathname.split("/releases/tag/")[1];
+    if (tag) return decodeURIComponent(tag);
+  } catch {}
+  return pin.upstreamTag || pin.version;
 }
 
 /** The item with the newest version. Different versions equal in order, such
@@ -25,4 +39,4 @@ function newest(items, { listed = [], versionOf = item => item.version } = {}) {
   return tied.reduce((best, item) => rank(item) < rank(best) ? item : best);
 }
 
-module.exports = { compareVersions, newest };
+module.exports = { compareVersions, catalogVersion, newest };

@@ -14,7 +14,7 @@ import {
 import { DownloadIcon, RefreshIcon, TrashIcon } from "../icons";
 import { groupRuntimeManagers, resolveRuntimeTabSelection, runtimeGroupSections, runtimeSectionTabs,
   runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation,
-  runtimeRemovalPresentation, isRuntimeIncluded, isRuntimeSetupPending } from "./runtime-tabs-model";
+  runtimeRemovalPresentation, runtimeMinimumNotice, isRuntimeIncluded, isRuntimeSetupPending } from "./runtime-tabs-model";
 import type { RuntimeTabGroup, RuntimeTabSection, RuntimeSectionTab } from "./runtime-tabs-model";
 import { HelpTip } from "./HelpTip";
 import { RuntimeCatalogSources } from "./RuntimeCatalogSources";
@@ -505,7 +505,7 @@ export function RuntimesView({
                         <option value="all">All operations</option>{itemGroups.map((group:Record<string,any>)=><option key={group.id} value={group.id}>{group.label}</option>)}
                       </select></div>}
                     {managementPresentation.local && activeRuntimeSection.catalog?.description && <p className="dim">{activeRuntimeSection.catalog.description}</p>}
-                    {activeRuntimeSection.sourceLinks?.length > 0 && <div className="detailActions runtimeSourceLinks">
+                    {activeRuntimeSection.sourceLinks?.length > 0 && <div className="runtimeRemote runtimeSourceLinks">
                       {activeRuntimeSection.sourceLinks.map((link:Record<string,any>)=><a key={link.url} href={link.url} className="runtimeSourceLink"
                         onClick={event=>{event.preventDefault();onOpenSource?.(link.url);}}>{link.label}</a>)}
                     </div>}
@@ -534,6 +534,7 @@ export function RuntimesView({
                       <RuntimeCatalogSources managerId={activeRuntimeManager.id} section={activeRuntimeSection}
                         ui={activeRuntimeUi} busy={runtimeBusy} variant={activeRuntimeResolvedInstallVariant}
                         downloads={activeRuntimeDownloads} onOpenSource={onOpenSource}
+                        onRegister={activeRuntimeSection.customRuntime && onRuntimeRegister ? () => onRuntimeRegister(activeRuntimeManager.id, activeRuntimeSection.id) : undefined}
                         onRefresh={options => onRuntimeRefresh(activeRuntimeManager.id, activeRuntimeSection.id, options)}
                         onSelect={(key, field, value) => updateRuntimeUiSection(activeRuntimeManager.id, key, field, value)}
                         onInstall={(version, variant, architecture) => architecture ? onRuntimeInstall(activeRuntimeManager.id, activeRuntimeSection.id, version, variant, architecture) : onRuntimeInstall(activeRuntimeManager.id, activeRuntimeSection.id, version, variant)} />
@@ -620,8 +621,8 @@ export function RuntimesView({
                         const installArchitecture = (row: Record<string, any>) => buildArchitecture(row, activeRuntimeSection, activeRuntimeInstalledSorted);
                         const installBuild = installArchitecture(inst);
                         const defaultFor = defaultSelections?.filter((row: Record<string, any>) => row.version === inst.version).map((row: Record<string, any>) => row.label) || [];
-                        const isDefault = !inst.reference && (
-                          defaultSelections ? defaultFor.length > 0 : (activeRuntimeSupportsDefault || inst.custom) && inst.version === activeRuntimeSection.defaultVersion &&
+                        const isDefault = activeRuntimeSupportsDefault && !inst.reference && (
+                          defaultSelections ? defaultFor.length > 0 : inst.version === activeRuntimeSection.defaultVersion &&
                           // A version installed only for another CPU, such as an Intel-only
                           // build on Apple Silicon, is still the default.
                           (!installArchitecture(inst) || installArchitecture(inst) === "universal" || !preferredArchitecture || installArchitecture(inst) === preferredArchitecture ||
@@ -663,7 +664,7 @@ export function RuntimesView({
                                 {(defaultFor.length > 0 || inst.platformKey || inst.minimumMacOS || installDetail || inst.installDir || Object.keys(inst.libraries || {}).length > 0) && <HelpTip label={`About ${activeRuntimeVersionTag(inst.version)}`}>
                                   {defaultFor.length > 0 && <p>Automatic for {defaultFor.join(", ")}.</p>}
                                   {inst.platformKey && <p>{inst.platformKey}</p>}
-                                  {inst.minimumMacOS && <p>Requires macOS {inst.minimumMacOS} or later.</p>}
+                                  {runtimeMinimumNotice(inst.minimumMacOS) && <p>{runtimeMinimumNotice(inst.minimumMacOS)}</p>}
                                   {installDetail && <p>{installDetail}</p>}
                                   {Object.entries(inst.libraries || {}).map(([id, library]: [string, any]) => library.ready &&
                                     <p key={id}>{library.label || id} {library.version || library.apiProfile || ""}</p>)}
@@ -679,7 +680,7 @@ export function RuntimesView({
                                   onClick={() => onRuntimeInstalledAction(activeRuntimeManager.id, activeRuntimeSection.id, inst.version, action.id, inst.architecture)}>
                                   {action.label}
                                 </button>)}
-                              {(!isDefault || incompleteDefault) && inst.ready !== false && (inst.custom || activeRuntimeSection.supportsDefault !== false) && (
+                              {(!isDefault || incompleteDefault) && inst.ready !== false && activeRuntimeSupportsDefault && inst.supportsDefault !== false && (
                                 <>
                                   <button
                                     className="btn small"
@@ -722,7 +723,7 @@ export function RuntimesView({
                     </div>
                   )}
                 </div>}
-                {activeRuntimeSection.customRuntime && onRuntimeRegister && <div className="runtimeImport">
+                {activeRuntimeSection.customRuntime && onRuntimeRegister && !activeRuntimeSection.catalog?.sources?.some((source: Record<string, any>) => source.delivery === "local-files" && source.registrationLabel) && <div className="runtimeImport">
                   <button className="btn" disabled={runtimeBusy}
                     onClick={() => onRuntimeRegister(activeRuntimeManager.id, activeRuntimeSection.id)}>
                     {pendingAction === "registerCustom" ? "Registering…" : activeRuntimeSection.registrationPresentation?.label || "Register custom…"}

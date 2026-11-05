@@ -1,5 +1,12 @@
 import type { RuntimeManagerState, RuntimeRefreshOptions } from "../types";
 import { sanitizeErrorMessage } from "../../../../core/runtime-errors.mjs";
+import packageInfo from "../../../../../package.json";
+
+export function runtimeMinimumNotice(minimum: unknown) {
+  const value = typeof minimum === "string" ? minimum.trim() : "";
+  return value && value.localeCompare(packageInfo.build.mac.minimumSystemVersion, undefined, { numeric: true }) > 0
+    ? `Requires macOS ${value} or later.` : "";
+}
 
 export function runtimeRefreshFailure(catalog: Record<string, any> | null | undefined) {
   const failedAt = catalog?.failedAt;
@@ -238,5 +245,5 @@ export function runtimeCatalogPresentation(catalog: Record<string, any> | null |
   const reason = text(requirements?.installReason) || text(catalog?.installReason) ||
     (installLabel === "Build" ? "Build the selected version locally." : "");
   return { installLabel, included, sourceUrl, sourceLabel, installHelpUrl,
-    installReason: sanitizeErrorMessage([reason, minimum ? `Requires macOS ${minimum} or later.` : ""].filter(Boolean).join(" ")) };
+    installReason: sanitizeErrorMessage([reason, runtimeMinimumNotice(minimum)].filter(Boolean).join(" ")) };
 }

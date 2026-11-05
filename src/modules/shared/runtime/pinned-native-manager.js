@@ -18,12 +18,7 @@ function compareRuntimeVersions(left, right) {
   const sourceID = /^(?=[a-f0-9]*[a-f])[a-f0-9]{7,}(?:[-_]|$)/i;
   if (sourceID.test(String(left)) || sourceID.test(String(right))) return 0;
   const stem = value => String(value).replace(/[-_][a-f0-9]{7,}(?:[-_].*)?$/i, "");
-  const a = stem(left), b = stem(right);
-  if (a === b) return 0;
-  const release = /^(\d+(?:\.\d+)+)(?:-(.+))?$/;
-  const aa = release.exec(a), bb = release.exec(b);
-  if (aa && bb && aa[1] === bb[1] && Boolean(aa[2]) !== Boolean(bb[2])) return aa[2] ? 1 : -1;
-  return b.localeCompare(a, undefined, { numeric: true, sensitivity: "base" });
+  return require("./version-order").compareVersions(stem(right), stem(left));
 }
 
 function hashFile(filePath, algorithm = "sha256") {
@@ -250,8 +245,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       throw new Error(`The ${label} release list has no version this MacLauncher can use. The previous list is kept.`);
     const selected = selectEntries(usable).map(entry => sourceId ? { ...entry, catalogSourceId: sourceId } : entry);
     const combined = sourceId ? [...remoteEntries.filter(entry => entrySource(entry) !== sourceId), ...selected] : selected;
-    if (catalogSources) combined.sort((a, b) => sourceIds.indexOf(entrySource(a)) - sourceIds.indexOf(entrySource(b)) ||
-      (catalogSources.find(source => source.id === entrySource(a))?.compareEntries?.(a, b) || 0));
+    if (catalogSources) combined.sort((a, b) => sourceIds.indexOf(entrySource(a)) - sourceIds.indexOf(entrySource(b)));
     const deduplicated = new Map();
     for (const original of combined) {
       const version = canonicalVersion(original.version);
@@ -351,15 +345,22 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     }
     return hostReason(installedPin);
   }
-  async function refreshCatalog({ userDataDir, logger, signal, force = false, latestOnly = false, sourceId } = {}) {
-    if (sourceId === "default") sourceId = sourceIds[0];
-    if (sourceId != null && !sourceIds.includes(sourceId)) throw new Error("This runtime download source is unavailable.");
+  async function refreshCatalog(options = {}) {
+    let { sourceId } = options;
+    const remote = catalogSources?.filter(source => source.delivery !== "local-files").map(source => source.id) || sourceIds;
+    if (sourceId === "default") sourceId = remote[0];
+    const group = catalogSources?.filter(source => source.group?.id === sourceId);
+    const selected = sourceId == null ? remote : group?.length ? group.map(source => source.id) : sourceIds.includes(sourceId) ? remote.filter(id => id === sourceId) : null;
+    if (!selected) throw new Error("This runtime download source is unavailable.");
+    loadCatalog(options.userDataDir);
+    if (!selected.length) return getState({ userDataDir: options.userDataDir }).catalog;
+    if (selected.length === 1) return refreshSource({ ...options, sourceId: selected[0] });
+    const results = await Promise.allSettled(selected.map(sourceId => refreshSource({ ...options, sourceId })));
+    if (results.every(result => result.status === "rejected")) throw results[0].reason;
+    return getState({ userDataDir: options.userDataDir }).catalog;
+  }
+  async function refreshSource({ userDataDir, logger, signal, force = false, latestOnly = false, sourceId } = {}) {
     loadCatalog(userDataDir);
-    if (sourceId == null && sourceIds.length > 1) {
-      const results = await Promise.allSettled(sourceIds.map(sourceId => refreshCatalog({ userDataDir, logger, signal, force, latestOnly, sourceId })));
-      if (results.every(result => result.status === "rejected")) throw results[0].reason;
-      return getState({ userDataDir }).catalog;
-    }
     sourceId ||= sourceIds[0];
     const mode = latestOnly === true ? "latest" : "all", previous = sourceStates[sourceId];
     if (!force && previous.mode === mode && previous.status === "success" && previous.fetchedAt && Date.now() - previous.fetchedAt < 6 * 3600000)
@@ -369,7 +370,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       if (pending.mode === mode) return pending.promise;
       try { await pending.promise; } catch {}
       throwIfAborted(signal);
-      return refreshCatalog({ userDataDir, logger, signal, force, latestOnly, sourceId });
+      return refreshSource({ userDataDir, logger, signal, force, latestOnly, sourceId });
     }
     if (userDataDir) { clearDisplayCache(userDataDir); listInstalled(userDataDir); }
     bundledRuntime?.clearCache?.();
@@ -844,7 +845,10 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
   function getState({ settings, userDataDir } = {}) {
     loadCatalog(userDataDir);
     const cfg = normalizeSettings(settings);
-    const installed = userDataDir || bundledExecution === "direct" ? listRuntimeRows(userDataDir) : [];
+    const sourceFor = pin => catalogSources?.find(source => source.id === entrySource(pin));
+    const sortVersion = pin => String(sourceFor(pin)?.versionOf?.(pin) || require("./version-order").catalogVersion(pin));
+    const installed = (userDataDir || bundledExecution === "direct" ? listRuntimeRows(userDataDir) : [])
+      .map(row => ({ ...row, sortVersion: sortVersion(row.catalogEntry || entries.get(row.version) || row) }));
     const verifiedMinimums = new Map(installed.map(item => [item.version, item.catalogEntry?.minimumMacOS || item.minimumMacOS]));
     const verifiedHostReason = pin => hostReason(verifiedMinimums.get(pin.version) ? { ...pin, minimumMacOS: verifiedMinimums.get(pin.version) } : pin);
     const bundleErrors = new Map();
@@ -858,7 +862,12 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     const includedVersions = installed.filter(item => item.bundledExecution === "direct").map(item => item.version);
     // Download rows come from explicit discovery or its persisted snapshot.
     // Installed registrations and automatic Play pins remain separate.
-    const displayVersions = preferredArchitectures(remoteEntries).map(pin => pin.version);
+    const displayVersions = [...preferredArchitectures(remoteEntries)].filter(pin => sourceFor(pin)?.filterEntry?.(pin) !== false).sort((a, b) => {
+      const sourceOrder = sourceIds.indexOf(entrySource(a)) - sourceIds.indexOf(entrySource(b));
+      if (sourceOrder) return sourceOrder;
+      const source = sourceFor(a);
+      return source?.compareEntries ? source.compareEntries(a, b) : compareRuntimeVersions(sortVersion(a), sortVersion(b));
+    }).map(pin => pin.version);
     const visibleVersions = displayVersions.filter(version => !entries.get(version).deprecated || installed.some(row => row.version === version));
     const installable = visibleVersions.filter(version => versions.includes(version)).map(version => entries.get(version)).filter(pin => !pin.deprecated && !includedVersions.includes(pin.version) && !bundleErrors.has(pin.version) &&
       !verifiedHostReason(pin) && !assetReason(pin) &&
@@ -907,9 +916,13 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       { projectId: id, repository: projectBuilds?.repository || buildsRepository, upstreamUrl: upstreamUrl || (projectBuilds ? sourceUrl : undefined), upstreamLabel,
         upstreamDownloads: projectBuilds?.upstreamMacDownloads === true });
     if (!projectPackages && !buildsRepository && upstreamUrl) state.catalog.sourceLinks = [{ label: upstreamLabel || "upstream code", url: upstreamUrl }];
-    if (catalogSources) state.catalog.sources = catalogSources.map(source => require("./runtime-sources").sourceCatalog(state.catalog, {
-      id: source.id, label: source.label, source: source.url, description: source.description, secondary: source.secondary,
-      versions: state.catalog.versions.filter(version => entrySource(entries.get(version) || {}) === source.id) }));
+    if (catalogSources) {
+      const Sources = require("./runtime-sources");
+      state.catalog.sources = Sources.groupSources(state.catalog, catalogSources.map(source => Sources.sourceCatalog(state.catalog, {
+        id: source.id, label: source.label, source: source.url, description: source.description, secondary: source.secondary,
+        delivery: source.delivery, registrationLabel: source.registrationLabel, group: source.group, variantLabel: source.variantLabel,
+        versions: state.catalog.versions.filter(version => entrySource(entries.get(version) || {}) === source.id) })));
+    }
     return { ...state, sections: [{ id: "default", label: `${label} versions`, ...state }] };
   }
   manager = {
@@ -918,7 +931,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     distributionVersions: [],
     delivery: Object.freeze({ included: bundledRuntime ? bundledExecution : "none", catalog: "remote", sourceBuild: typeof buildRuntime === "function" }),
     refreshCatalog,
-    applySettingsUpdate: (action, payload, settings) => action === "setDefault"
+    applySettingsUpdate: (action, payload, settings) => supportsDefault && action === "setDefault"
       ? { ...normalizeSettings(settings), defaultVersion: payload?.version ? normalizeVersion(payload.version) : null } : settings,
     installRuntime: async ({ downloads, onProgress, signal, ...options } = {}) => {
       loadCatalog(options.userDataDir);

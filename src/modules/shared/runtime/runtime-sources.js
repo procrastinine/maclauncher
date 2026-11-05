@@ -1,6 +1,6 @@
 // Each provider owns a complete catalog view. Installation identities remain
 // the manager's exact version keys; sources only organize download choices.
-function sourceCatalog(catalog, { id, label, source, description, secondary, versions = catalog.versions || [], state }) {
+function sourceCatalog(catalog, { id, label, source, description, secondary, delivery, registrationLabel, group, variantLabel, versions = catalog.versions || [], state }) {
   const selected = new Set(versions);
   const pick = values => Object.fromEntries(Object.entries(values || {}).filter(([version]) => selected.has(version)));
   const installableVersions = (catalog.installableVersions || []).filter(version => selected.has(version));
@@ -13,12 +13,39 @@ function sourceCatalog(catalog, { id, label, source, description, secondary, ver
   const installReason = installableVersions.length ? null : provider?.error || reasons.join(" · ") ||
     (provider ? provider.fetchedAt ? "No compatible download is available from this source." : "Refresh versions to list available downloads." : catalog.installReason);
   return { ...shared, ...refresh, sources: undefined, sourceLinks: undefined, sourceStates: undefined, id, label, source, sourceUrl: source, ...(description ? { description } : {}), ...(secondary ? { secondary: true } : {}),
+    ...(delivery ? { delivery } : {}), ...(registrationLabel ? { registrationLabel } : {}), ...(group ? { group } : {}), ...(variantLabel ? { variantLabel } : {}),
     versions, installableVersions, includedVersions: (catalog.includedVersions || []).filter(version => selected.has(version)),
     buildableVersions: (catalog.buildableVersions || []).filter(version => selected.has(version)),
     ...(catalog.versionDetails ? { versionDetails: catalog.versionDetails.filter(row => selected.has(row.version)) } : {}),
     versionRequirements: pick(catalog.versionRequirements), versionLabels: pick(catalog.versionLabels),
     latestAvailableVersion: null, installable: installableVersions.length > 0, installReason,
     supportsLatestOnly: id === "builds" ? false : catalog.supportsLatestOnly };
+}
+
+// Groups are display views over the same source/version identities. A variant
+// selects an existing source view; it never becomes an installation identity.
+function groupSources(catalog, sources) {
+  const groups = new Map(), projected = new Set(), result = [];
+  for (const source of sources) {
+    if (!source.group) { result.push(source); continue; }
+    if (!groups.has(source.group.id)) {
+      const group = { presentation: source.group, members: [] };
+      groups.set(source.group.id, group); projected.add(group); result.push(group);
+    }
+    groups.get(source.group.id).members.push(source);
+  }
+  return result.map(item => {
+    if (!projected.has(item)) return item;
+    const members = item.members, versions = new Set(members.flatMap(source => source.versions));
+    const errors = [...new Set(members.map(source => source.error).filter(Boolean))];
+    const newestDate = key => Math.max(0, ...members.map(source => Number(source[key]) || 0)) || null;
+    const state = { status: members.some(source => source.status === "loading") ? "loading" : errors.length ? "error"
+      : members.every(source => source.status === "success") ? "success" : "idle",
+      error: errors.join(" · ") || null, fetchedAt: newestDate("fetchedAt"), failedAt: newestDate("failedAt") };
+    return { ...sourceCatalog(catalog, { ...item.presentation, source: members[0].source, state,
+      versions: catalog.versions.filter(version => versions.has(version)) }),
+      variants: members.map(source => ({ id: source.id, label: source.variantLabel || source.label, catalog: source })) };
+  });
 }
 
 function projectSources(catalog, pins, { projectId, repository = "procrastinine/maclauncher-builds", upstreamUrl, upstreamLabel = "upstream code", upstreamDownloads = false } = {}) {
@@ -40,4 +67,4 @@ function projectSources(catalog, pins, { projectId, repository = "procrastinine/
       ? { sourceLinks: [{ label: upstreamLabel, url: upstreamUrl }] } : {}) };
 }
 
-module.exports = { sourceCatalog, projectSources };
+module.exports = { sourceCatalog, projectSources, groupSources };

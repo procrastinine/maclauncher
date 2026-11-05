@@ -17,6 +17,7 @@ type Props = {
   onInstall: (version: string, variant?: string, architecture?: string) => void;
   onRefresh: (options: RuntimeRefreshOptions) => void;
   onOpenSource?: (url: string) => void;
+  onRegister?: () => void;
 };
 
 function sourceDescription(source: Record<string, any>, url: string | null) {
@@ -32,7 +33,7 @@ function sourceDescription(source: Record<string, any>, url: string | null) {
   return `Runtime downloads from ${parsed.hostname}.`;
 }
 
-export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, downloads, onSelect, onInstall, onRefresh, onOpenSource }: Props) {
+export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, downloads, onSelect, onInstall, onRefresh, onOpenSource, onRegister }: Props) {
   // The automatic CPU is the one Play uses: the launcher's own, or another CPU
   // this Mac runs when the launcher's CPU has no build.
   const defaultArchitecture = section.automaticArchitecture || section.launcherArchitecture || section.catalog?.architecture;
@@ -74,7 +75,13 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
     return <a className="runtimeSourceLink" href={url} title={url}
       onClick={event => { if (onOpenSource) { event.preventDefault(); onOpenSource(url); } }}>{label}</a>;
   }
-  const renderSource = (source: Record<string, any>) => {
+  const renderSource = (group: Record<string, any>) => {
+      const groupKey = runtimeSourceUiKey(section.id, group.explicit ? group.id : undefined);
+      const sourceVariants: Array<Record<string, any>> = Array.isArray(group.variants) ? group.variants : [];
+      const availableVariants = sourceVariants.filter(item => item.catalog?.versions?.length > 0);
+      const sourceVariant = availableVariants.find(item => item.id === ui.installVariant[groupKey]) || availableVariants[0] || sourceVariants[0];
+      const source = sourceVariant ? { ...sourceVariant.catalog, id: group.id, label: group.label, description: group.description,
+        explicit: group.explicit, secondary: group.secondary, status: group.status, error: group.error, failedAt: group.failedAt, fetchedAt: group.fetchedAt } : group;
       const key = runtimeSourceUiKey(section.id, source.explicit ? source.id : undefined);
       const versions: string[] = Array.isArray(source.versions) ? source.versions : [];
       const requested = ui.installVersion[key] || ui.installVersion[section.id];
@@ -121,6 +128,14 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
       const reload = (latestOnly?: boolean) => onRefresh({ ...(source.explicit ? { sourceId: source.id } : {}),
         ...(latestOnly === undefined ? {} : { latestOnly }) });
       const fieldId = `runtime-version-${encodeURIComponent(managerId)}-${encodeURIComponent(section.id)}-${encodeURIComponent(source.id)}`;
+      if (source.delivery === "local-files") return <div className="runtimeSource" data-runtime-source={source.id} key={source.id}>
+        <div className="runtimeSourceHeader"><div className="runtimeSourceHeading">
+          <span className="runtimeSourceName">{label}</span>{url && link(url, source.sourceLabel || "Source")}
+        </div></div>
+        <div className="dim runtimeAvailability">{sourceDescription(source, url)}</div>
+        <div className="runtimeRemote"><button className="btn primary" disabled={sourceBusy || !onRegister}
+          onClick={() => onRegister?.()}>{source.registrationLabel || "Register custom…"}</button></div>
+      </div>;
       // A blocking reason explains the disabled button; otherwise the reason is a requirement note.
       const pendingInstall = Boolean(version) && !isInstalled && !included;
       const blocked = pendingInstall && !canInstall;
@@ -168,11 +183,11 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
               }) : <option value="">No versions loaded</option>}
             </Select>
           </div>}
-          {versions.length > 0 && variants.length > 1 && <div className="runtimeRemoteField">
+          {versions.length > 0 && (sourceVariants.length ? availableVariants : variants).length > 1 && <div className="runtimeRemoteField">
             <label className="fieldLabel" htmlFor={`${fieldId}-variant`}>Variant</label>
             <select id={`${fieldId}-variant`} className="input" aria-label={`${source.explicit ? label + " " : ""}variant`}
-              value={selectedVariant} onChange={event => onSelect(section.id, "installVariant", event.target.value)}>
-              {variants.map((item: any) => <option key={item.id} value={item.id}>{item.label || item.id}</option>)}
+              value={sourceVariants.length ? sourceVariant?.id : selectedVariant} onChange={event => onSelect(sourceVariants.length ? key : section.id, "installVariant", event.target.value)}>
+              {(sourceVariants.length ? availableVariants : variants).map((item: any) => <option key={item.id} value={item.id}>{item.label || item.id}</option>)}
             </select>
           </div>}
           {versions.length > 0 && !included && <button className="btn primary"
