@@ -3,6 +3,60 @@ import { isRuntimeSettingChoiceValue } from "../../../../core/runtime-setting-va
 
 export type SettingChoices = Record<string, any>;
 
+const cacheKey = (context: RuntimeSettingsContext) => "maclauncher:setting-choices:" +
+  JSON.stringify([context.scope, context.moduleId, context.runtimeId, context.gamePath]);
+function cachedRecords(context: RuntimeSettingsContext) {
+  try {
+    const records = JSON.parse(window.localStorage.getItem(cacheKey(context)) || "{}");
+    return records && typeof records === "object" && !Array.isArray(records) ? records : {};
+  } catch { return {}; }
+}
+
+// Persist provider results, including their labels and atomic settings patches.
+// An earlier request can supply a saved label, but only matching inputs supply
+// selectable choices. A failed refresh leaves the last successful result intact.
+export function readSettingChoices(context: RuntimeSettingsContext, inputs?: Record<string, unknown>, fields: RuntimeSettingField[] = []): Record<string, SettingChoices> {
+  try {
+    return Object.fromEntries(Object.entries(cachedRecords(context)).flatMap(([action, record]: [string, any]) => {
+      if (!record || inputs && record.inputs !== JSON.stringify(inputs)) return [];
+      try { return [[action, settingChoiceGroups(action, record.choices, fields)]]; }
+      catch { return []; }
+    }));
+  } catch { return {}; }
+}
+
+export function storeSettingChoices(context: RuntimeSettingsContext, inputs: Record<string, unknown>, action: string, choices: SettingChoices) {
+  try {
+    window.localStorage.setItem(cacheKey(context), JSON.stringify({ ...cachedRecords(context),
+      [action]: { inputs: JSON.stringify(inputs), choices } }));
+  } catch { /* An unavailable browser cache does not prevent editing settings. */ }
+}
+
+function settingChoiceGroups(action: string, result: unknown, fields: RuntimeSettingField[]) {
+  if (!result || typeof result !== "object" || Array.isArray(result))
+    throw Object.assign(new Error("Local setting choices are unavailable."), {
+      responseType: result === null ? "null" : Array.isArray(result) ? "array" : typeof result
+    });
+  const groups: SettingChoices = { ...result };
+  for (const key of new Set(fields.filter(field => field.optionsAction === action).map(field => field.optionsKey || field.key))) {
+    const options = groups[key];
+    if (options === undefined) continue;
+    if (!Array.isArray(options)) {
+      console.warn("Skipped an invalid local setting choice list.", action, key);
+      groups[key] = [];
+      continue;
+    }
+    const usable = options.filter(option => option &&
+      isRuntimeSettingChoiceValue(option.value) && typeof option.label === "string" &&
+      !/[\x00-\x1f\x7f]/.test(option.value + option.label));
+    if (usable.length !== options.length) {
+      console.warn("Skipped invalid local setting choices.", action, key);
+      groups[key] = usable;
+    }
+  }
+  return groups;
+}
+
 export function settingChoiceScope(_choices: SettingChoices | undefined, _field: RuntimeSettingField, option?: RuntimeSettingOption) {
   return option?.heldBack === true && typeof option.notice === "string" ? option.notice : "";
 }
@@ -32,28 +86,13 @@ export function loadSettingChoices(
   let active = true;
   for (const action of actions) {
     void Promise.resolve().then(() => request(action)).then(result => {
+      if (!active || result === false) return;
+      receive(action, settingChoiceGroups(action, result, fields));
+    }).catch(error => {
       if (!active) return;
-      if (!result || typeof result !== "object" || Array.isArray(result))
-        throw new Error("Local setting choices are unavailable.");
-      const groups: SettingChoices = { ...result };
-      for (const key of new Set(fields.filter(field => field.optionsAction === action).map(field => field.optionsKey || field.key))) {
-        const options = groups[key];
-        if (options === undefined) continue;
-        if (!Array.isArray(options)) {
-          console.warn("Skipped an invalid local setting choice list.", action, key);
-          groups[key] = [];
-          continue;
-        }
-        const usable = options.filter(option => option &&
-          isRuntimeSettingChoiceValue(option.value) && typeof option.label === "string" &&
-          !/[\x00-\x1f\x7f]/.test(option.value + option.label));
-        if (usable.length !== options.length) {
-          console.warn("Skipped invalid local setting choices.", action, key);
-          groups[key] = usable;
-        }
-      }
-      receive(action, groups);
-    }).catch(error => { if (active) failed(action, error); })
+      if (typeof error?.responseType === "string") console.warn("Local setting choice response is unavailable.", { action, responseType: error.responseType });
+      failed(action, error);
+    })
       .finally(() => { if (active) settled(action); });
   }
   return () => { active = false; };

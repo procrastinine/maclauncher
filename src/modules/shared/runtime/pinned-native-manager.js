@@ -279,18 +279,20 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       const directories = [root(userDataDir), ...installBases(userDataDir).flatMap(base => [base, ...["arm64", "x64", "universal"].map(architecture => path.join(base, architecture))])];
       const stamp = directories.map(metadataIdentity).join(":");
       const previous = loadedInstalledPins.get(userDataDir), pending = previous?.pending || new Map();
-      let names;
+      let names, installedNames = previous?.names || [];
       if (!previous || previous.stamp !== stamp) {
         names = [...new Set(directories.flatMap(directory => {
           try { return fs.readdirSync(directory, {withFileTypes: true}).slice(0, 500)
             .filter(item => item.isDirectory() && !["arm64", "x64", "universal"].includes(item.name) && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(item.name)).map(item => item.name); }
           catch { return []; }
         }))];
+        installedNames = names;
         for (const name of pending.keys()) if (!names.includes(name)) pending.delete(name);
       } else {
         // A writer may create the version directory before its atomic receipt.
         names = [...pending.keys()].filter(name => metadataIdentity(path.join(installDir(userDataDir, name), "runtime.json")) !== pending.get(name));
       }
+      loadedInstalledPins.set(userDataDir, {stamp, pending, names: installedNames});
       for (const name of names) {
         if (entries.has(name)) { pending.delete(name);continue; }
         const file = path.join(installDir(userDataDir, name), "runtime.json"), identity = metadataIdentity(file);
@@ -301,7 +303,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
           entries.set(name, Object.freeze(pin));pending.delete(name);
         } catch { pending.set(name, identity); }
       }
-      loadedInstalledPins.set(userDataDir, {stamp, pending});
+      loadedInstalledPins.set(userDataDir, {stamp, pending, names: installedNames});
     }
     if (!userDataDir) return;
     const stamp = metadataIdentity(catalogPath(userDataDir, id));
@@ -412,6 +414,8 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     const selected = path.join(directory, normalized);
     const sharedPackage = !declaredArchitecture && /^[a-f0-9]{64}$/.test(pin?.asset?.sha256 || "");
     if (!sharedPackage && fs.existsSync(selected)) return selected;
+    const observed = loadedInstalledPins.get(userDataDir);
+    if (observed && !observed.names.includes(normalized)) return selected;
     for (const candidate of versionFolders(userDataDir, normalized)) {
       try {
         const metadata = path.join(candidate, "runtime.json");
@@ -463,6 +467,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       loadCatalog(userDataDir);
       normalized = normalizeVersion(version);
       directory = installDir(userDataDir, normalized);
+      if (!fs.existsSync(directory)) return null;
       recordPath = path.join(directory, "runtime.json");
       const record = JSON.parse(fs.readFileSync(recordPath, "utf8"));
       pin = record.catalogEntry && validEntry(record.catalogEntry) && record.catalogEntry.version === normalized
@@ -502,6 +507,8 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       if (verification === "status" && cached?.install && cached.key === cacheKey) return cached.install;
       const native = inspectRuntime({ arch: ["arm64", "x64"].includes(Architecture.recordArchitecture(pin)) ? Architecture.recordArchitecture(pin) : installationArchitecture,
         hostArchitecture: dependencies.hostArch || require("./host-capabilities").getHostCapabilities().hardwareArch, runtimePath, runtimeRoot: record.source === 'local' ? undefined : directory, runtimeSource: pin.catalogSourceId, runtimeLabel: pin.versionLabel, runtimeCatalogEntry: pin, runtimeVersion: normalized,
+        runtimeInstallationMetadata: record.installationMetadata,
+        runtimeBinarySha256: record.binarySha256,
         upstreamRevision: pin.upstreamRevision, expectedSha256: record.source === 'download' ? undefined : record.binarySha256, allowLibrary: nativeLibrary });
       // resolveLocalRuntime already hashes the executable against this record.
       const installed = { ...record, ...native, ...(record.source === 'download' ? {binarySha256: native.sha256} : {}), version: normalized, runtimePath, installDir: directory,
@@ -566,11 +573,18 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
   }
   function listInstalled(userDataDir) {
     loadCatalog(userDataDir);
-    return [...entries.keys()].map(version => resolveInstalled({ userDataDir, version })).filter(Boolean);
+    return installedVersions(userDataDir).map(version => resolveInstalled({ userDataDir, version })).filter(Boolean);
+  }
+  // The catalog describes downloads, not installed folders. Reuse the ordinary
+  // local-directory observation rather than probing every catalog version's
+  // possible legacy/CPU receipt paths whenever a settings view asks for rows.
+  function installedVersions(userDataDir) {
+    return [...new Set([...(loadedInstalledPins.get(userDataDir)?.names || []).filter(version => entries.has(version)),
+      ...(bundledRuntime ? entries.keys() : [])])];
   }
   function listRuntimeRows(userDataDir) {
     loadCatalog(userDataDir);
-    return [...entries.keys()].flatMap(version => {
+    return installedVersions(userDataDir).flatMap(version => {
       const installed = resolveInstalled({ userDataDir, version, verification: "status" });
       if (installed) return [{ ...installed, ready: true, status: "ready" }];
       const directory = userDataDir && installDir(userDataDir, version);
@@ -770,11 +784,11 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       }
       throwIfAborted(signal);
       const runtimePath = projectPackages && pin.projectPackage ? projectPackages.inspectInstalled(unpacked, pin, {userDataDir}).executablePath
-        : (pin.resolveExecutable || resolveExecutable)(unpacked, pin, {userDataDir});
+        : (pin.resolveExecutable || resolveExecutable)(unpacked, pin, {userDataDir, installationMetadata});
       const target = ["arm64", "x64"].includes(Architecture.recordArchitecture(pin)) ? Architecture.recordArchitecture(pin) : installationArchitecture;
       const native = inspectRuntime({ arch: target,
         hostArchitecture: dependencies.hostArch || require("./host-capabilities").getHostCapabilities().hardwareArch,
-        runtimePath, runtimeRoot: unpacked, runtimeSource: pin.catalogSourceId, runtimeLabel: pin.versionLabel, runtimeCatalogEntry: pin, runtimeVersion: normalized, upstreamRevision: pin.upstreamRevision, allowLibrary: nativeLibrary });
+        runtimePath, runtimeRoot: unpacked, runtimeSource: pin.catalogSourceId, runtimeLabel: pin.versionLabel, runtimeCatalogEntry: pin, runtimeVersion: normalized, runtimeInstallationMetadata: installationMetadata, upstreamRevision: pin.upstreamRevision, allowLibrary: nativeLibrary });
       const floor = executableFloor(native.executablePath, target);
       if (floor && !versionAtLeast(installedPin.minimumMacOS || "0", floor)) installedPin = { ...installedPin, minimumMacOS: floor };
       if (hostReason(installedPin)) throw new Error(rememberFloor(userDataDir, pin, installedPin));

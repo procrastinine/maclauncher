@@ -114,9 +114,17 @@ function createManager(engine, { dependencies = {} } = {}) {
     upstreamUrl: definition.upstreamUrl, upstreamLabel: definition.upstreamLabel,
     formatVersionLabel: (pin, installed) => versionLabel(pin, installed, catalogSources.find(source => source.id === pin?.catalogSourceId)?.componentLabel || definition.label),
     discoverCatalog: () => [], ...(catalogSources.length ? { catalogSources } : {}), sourceUrl: definition.sourceUrl || downloadSource?.url || catalogSources[0]?.url || "https://gstreamer.freedesktop.org/", sourceLabel: "Source", sourceName: definition.sourceName, sourceDescription: definition.sourceDescription, nativeLibrary: true, cacheDownloads: true, supportsDefault: false, customRuntime: !definition.referenceOnly,
-    resolveExecutable(root) { return Component.inspected(Component.componentRoot(root, definition), definition).executablePath; },
-    inspectRuntime({ runtimePath, runtimeRoot, runtimeSource, runtimeCatalogEntry }) {
-      return Component.inspected(Component.componentRoot(runtimeRoot || path.dirname(runtimePath), definition), definition, { ...catalogDescription(runtimeCatalogEntry), engine: runtimeCatalogEntry?.translatorEngine || definition.engine, source: runtimeCatalogEntry ? installedSource(runtimeCatalogEntry) : runtimeSource || "upstream" });
+    resolveExecutable(root, _pin, { installationMetadata } = {}) {
+      const stored = installationMetadata?.translator;
+      const selected = stored ? path.join(root, installationMetadata.translatorRelative || '') : Component.componentRoot(root, definition);
+      return Component.inspected(selected, definition, stored ? { translator: require('./translator-description').restoreInstallationDescription(selected, stored) } : {}).executablePath;
+    },
+    inspectRuntime({ runtimePath, runtimeRoot, runtimeSource, runtimeCatalogEntry, runtimeInstallationMetadata }) {
+      const stored = runtimeInstallationMetadata?.translator;
+      const base = runtimeRoot || path.dirname(runtimePath), root = stored ? path.join(base, runtimeInstallationMetadata.translatorRelative || '') : Component.componentRoot(base, definition);
+      const supplied = { ...catalogDescription(runtimeCatalogEntry), engine: runtimeCatalogEntry?.translatorEngine || definition.engine, source: runtimeCatalogEntry ? installedSource(runtimeCatalogEntry) : runtimeSource || "upstream" };
+      return Component.inspected(root, definition, { ...supplied, ...(stored ? { translator: Component.withCatalogFacts(
+        require('./translator-description').restoreInstallationDescription(root, stored), supplied, runtimeCatalogEntry?.catalogSourceId) } : {}) });
     },
     prepareInstall({ unpacked, pin }) {
       const selected = pin.component ? { ...definition, names: [pin.component] } : definition;

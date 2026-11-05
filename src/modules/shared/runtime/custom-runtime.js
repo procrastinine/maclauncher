@@ -57,6 +57,7 @@ function configure(manager, descriptor = {}) {
     .map(provider => owner && owner !== manager && provider.core === owner.core ? { ...provider, core: manager.core } : provider);
   manager.customRuntime = { ...inherited, ...descriptor, ...(providers.length ? { providers } : {}) };
   descriptorOwners.set(manager.customRuntime, manager);
+  manager.configureCustomRuntime?.(descriptor);
   managers.set(manager.id, manager);
   const registration = forManager(manager);
   for (const provider of providers) registration.bindProvider(provider.core, provider);
@@ -117,13 +118,13 @@ function listFor(manager, { sectionId, userDataDir } = {}) {
   return require('./translator-label').registeredLabels(rows);
 }
 function list({ managerId, ...options } = {}) { return listFor(managers.get(managerId), options); }
-function resolveFor(manager, { sectionId, userDataDir, version, allowInstallable = false } = {}) {
+function resolveFor(manager, { sectionId, userDataDir, version, allowInstallable = false, verification = "full" } = {}) {
   if (!isPath(version)) return null;
   if (!manager) return null;
   const row = records(userDataDir, manager.id).find(row => row.path === version && (!sectionId || row.sectionId === sectionId));
   if (!row) return null;
   try {
-    const install = inspect(manager, row, userDataDir, "full");
+    const install = inspect(manager, row, userDataDir, verification);
     if (!install.ready && !(allowInstallable && install.installable)) return null;
     if (!install.translator) return install;
     const siblings = listFor(manager, { sectionId, userDataDir }).filter(item => item.version !== install.version);
@@ -229,7 +230,8 @@ function selection(manager, entry, settings, userDataDir, options = {}) {
   if (!version) return null;
   const registered = records(userDataDir, manager.id).find(row => row.path === version);
   const sectionId = options.sectionId || manager.customRuntime?.sectionForEntry?.(entry, settings) || registered?.sectionId || "default";
-  const install = resolveFor(manager, { sectionId, userDataDir, version, allowInstallable: Boolean(manager.customRuntime?.prepareInstall) });
+  const install = resolveFor(manager, { sectionId, userDataDir, version, verification: options.verification,
+    allowInstallable: Boolean(manager.customRuntime?.prepareInstall) });
   let extra = {};
   try { if (install) extra = manager.customRuntime?.selection?.(install, { entry, settings, userDataDir, options }) || {}; }
   catch (error) { return { version, sectionId, install: null, ready: false, reason: error.message }; }
@@ -254,9 +256,10 @@ function createSelector(manager, original, descriptor = {}) {
  * their ordinary version/catalog behavior remains the underlying implementation. */
 class RuntimeRegistration {
   constructor(manager) { this.manager = manager; }
+  records(userDataDir) { return records(userDataDir, this.manager.id); }
   list(userDataDir, sectionId) { return listFor(this.manager, { userDataDir }).filter(row =>
     !sectionId || sectionId === "*" || (Array.isArray(sectionId) ? sectionId : [sectionId]).includes(row.sectionId)); }
-  resolve(userDataDir, version, sectionId) { return resolveFor(this.manager, { userDataDir, version,
+  resolve(userDataDir, version, sectionId, options = {}) { return resolveFor(this.manager, { userDataDir, version, verification: options.verification,
     ...(!Array.isArray(sectionId) && sectionId && sectionId !== "*" ? { sectionId } : {}) }); }
   select(...args) { return selection(this.manager, ...args); }
   register(options) { return register(this.manager, options); }
@@ -294,7 +297,7 @@ class RuntimeRegistration {
         if (kind === "directory" && isPath(version)) throw new Error("Custom runtimes remain in their original location.");
         if (kind === "resolve" && isPath(version)) {
           const get = () => {
-            const installed = registration.resolve(userDataDir, version, sectionId), compatible = setting("compatible");
+            const installed = registration.resolve(userDataDir, version, sectionId, { verification: query.verification }), compatible = setting("compatible");
             const selected = installed && (sectionId === "*" || (Array.isArray(sectionId) ? sectionId.includes(installed.sectionId) : installed.sectionId === sectionId)) &&
               (!compatible || compatible(installed, options)) ? installed : null;
             const missing = setting("missing");

@@ -121,6 +121,17 @@ function createManager(backend, dependencies = {}) {
     nativeLibrary: true, cacheDownloads: true,
     ...(backend === "kosmickrisp" ? { formatVersionLabel: (pin, installed) => pin ? [installed?.translator?.version, `LWJGL package ${pin.upstreamTag || pin.version}`].filter(Boolean).join(" · ") : undefined } : {}),
     inspectRuntime(options) {
+      const metadata = options.runtimeInstallationMetadata;
+      if (metadata?.translator) {
+        const root = options.runtimeRoot || path.dirname(options.runtimePath), Component = require('../runtime/component-runtime');
+        const translator = require('../runtime/translator-description').restoreInstallationDescription(root, metadata.translator);
+        const native = Component.inspected(root, { entryLibrary: definition.library }, { translator });
+        const architectures = translator.files.find(file => file.path === options.runtimePath)?.cpuSlices || native.architectures;
+        const sha256 = options.runtimeBinarySha256 || metadata.libraries?.find(file => path.resolve(root, file.file) === options.runtimePath)?.sha256;
+        return { ...native, executablePath: options.runtimePath, architectures, sha256,
+          needsRosetta: require('../runtime/architecture').imageRequiresRosetta(architectures, { platform: 'darwin', hardwareArch: options.hostArchitecture }),
+          runtimeVersion: options.runtimeVersion, upstreamRevision: options.upstreamRevision };
+      }
       const native = require("../runtime/local-native").resolveLocalRuntime(options), root = path.dirname(native.executablePath);
       const translator = require("../runtime/component-runtime").description(root, { engine: backend, apis: ["Vulkan"] }, {
         source: backend === "kosmickrisp" ? { kind: "upstream", id: definition.source, label: `LWJGL ${options.runtimeVersion} package` } : "upstream",
@@ -168,13 +179,14 @@ function createManager(backend, dependencies = {}) {
     return { ...native, installDir: root, installationMetadata: { backend, libraries: files.map(file => ({ file: path.basename(file), sha256: hashFile(file) })) } };
   } });
   const Component = require("../runtime/component-runtime"), customInspect = result.customRuntime.inspect;
-  Custom.configure(result, { prepare: Component.prepareArchive, inspect(input, context) {
-    const root = Component.componentRoot(context.data?.root || input, { names: [backend], library: backend === "moltenvk" ? /^lib(?:MoltenVK|MVK)\.dylib$/ : /^libvulkan_kosmickrisp\.dylib$/ });
-    const inspected = customInspect(root, context), source = Component.registrationSource(input, root);
-    const descriptions = inspected.installationMetadata.libraries.map(file => Component.description(path.join(inspected.installDir, file.file), { engine: backend, apis: ["Vulkan"] }, { source }));
-    const translator = { ...descriptions[0], files: descriptions.flatMap(item => item.files),
-      macosFloor: descriptions.map(item => item.macosFloor).filter(Boolean).sort(require("../runtime/translator-description").compareVersions).at(-1) || null };
-    return { ...inspected, translator, translatorRoot: translator.root };
+  Component.configure(result, { engine: backend, names: [backend], entryLibrary: definition.library,
+    library: backend === "moltenvk" ? /^lib(?:MoltenVK|MVK)\.dylib$/ : /^libvulkan_kosmickrisp\.dylib$/,
+    inspect(root, context) {
+      const inspected = customInspect(root, context), source = context.source;
+      const descriptions = inspected.installationMetadata.libraries.map(file => Component.description(path.join(inspected.installDir, file.file), { engine: backend, apis: ["Vulkan"] }, { source }));
+      const translator = { ...descriptions[0], files: descriptions.flatMap(item => item.files),
+        macosFloor: descriptions.map(item => item.macosFloor).filter(Boolean).sort(require("../runtime/translator-description").compareVersions).at(-1) || null };
+      return { ...inspected, translator, translatorRoot: translator.root };
   } });
   return Component.withIncludedReferences(result);
 }

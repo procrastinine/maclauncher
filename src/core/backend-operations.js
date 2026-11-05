@@ -172,9 +172,9 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     }
   });
   function context(settings) { return { settings, runtimeSettings: settings?.runtimes, userDataDir, logger, app, ui, fs, path, downloads }; }
-  function managerState(manager, settings) {
+  function managerState(manager, settings, referenceStates) {
     try {
-      const state = manager.getState({ settings: settings?.runtimes?.[manager.id], runtimeSettings: settings?.runtimes, userDataDir, logger });
+      const state = manager.getState({ settings: settings?.runtimes?.[manager.id], runtimeSettings: settings?.runtimes, userDataDir, logger, referenceStates });
       return snapshotRuntimeState({ label: manager.label || manager.id, ...state, id: manager.id,
         ui: registry.getRuntimeManagerUi(manager.id) || state.ui || manager.ui || undefined });
     } catch (error) {
@@ -217,16 +217,16 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     },
     removeGameData,
     async runtimeStates(settings, ids) {
-      const localPreparations = [];
+      const localPreparations = [], referenceStates = new Map();
       for (const manager of managers) {
         if (ids?.length && !ids.includes(manager.id) && !manager.referenceManagerIds?.some(id => ids.includes(id)) || typeof manager.getState !== "function") continue;
         if (typeof manager.prepareLocalState === "function") {
-          localPreparations.push(Promise.resolve().then(() => manager.prepareLocalState({...context(settings), settings: settings?.runtimes?.[manager.id]}))
+          localPreparations.push(Promise.resolve().then(() => manager.prepareLocalState({...context(settings), settings: settings?.runtimes?.[manager.id], referenceStates}))
             .catch(error => logger.warn(`[runtime:${manager.id}] local state could not be prepared`, error.message))
-            .then(() => emit("runtimeState", {id: manager.id, state: managerState(manager, settings)})));
+            .then(() => emit("runtimeState", {id: manager.id, state: managerState(manager, settings, referenceStates)})));
           continue;
         }
-        emit("runtimeState", { id: manager.id, state: managerState(manager, settings) });
+        emit("runtimeState", { id: manager.id, state: managerState(manager, settings, referenceStates) });
         // Cancellation and new jobs get an opportunity between independent inventories.
         await new Promise(resolve => setImmediate(resolve));
       }

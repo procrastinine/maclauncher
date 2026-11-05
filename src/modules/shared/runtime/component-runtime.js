@@ -4,19 +4,19 @@ const { componentLabel, componentVersion, hostLabel, label: translatorLabel } = 
 
 // A component root is retained intact: libraries, notices and future companion
 // files belong to the publisher, rather than a launcher inventory.
-function componentRoot(input, { names, library }) {
+function componentRoot(input, { names, library, entryLibrary }, translator) {
   const stat = fs.statSync(input);
-  if (stat.isFile()) return library ? input : path.dirname(input);
+  if (stat.isFile()) return entryLibrary ? path.dirname(fs.realpathSync(input)) : library ? input : path.dirname(input);
   const matches = name => names.includes(name.toLowerCase().replace(/\.framework$/, ""));
   if (matches(path.basename(input))) return input;
-  const files = require("./translator-description").describeTranslator(input, { engine: "dxvk" }).files;
+  const files = (translator || require("./translator-description").describeTranslator(input, { engine: "dxvk" })).files;
   for (const file of files) {
     const parts = file.relative.split(path.sep), index = parts.findIndex(matches);
     if (index >= 0) return path.join(input, ...parts.slice(0, index + 1));
   }
   const selected = library && files.filter(file => library.test(path.basename(file.path)))
     .sort((a, b) => a.relative.split(path.sep).length - b.relative.split(path.sep).length)[0];
-  if (selected) return selected.path;
+  if (selected) return entryLibrary ? path.dirname(selected.realPath || fs.realpathSync(selected.path)) : selected.path;
   if (/\.app$/i.test(input)) throw Error("The application's translator component could not be identified. Select its component folder or library.");
   return input;
 }
@@ -32,7 +32,8 @@ function registrationSource(input, root = input) {
     ? { kind: "sikarugir", id: input, runtime: "sikarugir", label: "Sikarugir" } : "custom";
 }
 function description(root, definition, options = {}) {
-  const result = require("./translator-description").describeTranslator(root, { engine: definition.engine, ...options });
+  const { translator, ...selection } = options;
+  const result = translator || require("./translator-description").describeTranslator(root, { engine: definition.engine, ...selection });
   if (definition.pluginDirectory) {
     const directories = [...new Set(result.files.filter(file => file.format === "macho" &&
       (!file.slices?.length || file.slices.some(slice => slice.fileType !== 2)) && path.basename(path.dirname(file.path)) === definition.pluginDirectory)
@@ -41,7 +42,7 @@ function description(root, definition, options = {}) {
   }
   return result;
 }
-function inspected(root, definition, options) {
+function inspected(root, definition, options = {}) {
   const translator = description(root, definition, options);
   const file = definition.entryLibrary && translator.files.find(file => path.basename(file.path) === definition.entryLibrary) ||
     translator.files.find(file => file.format === "macho" || file.format === "pe");
@@ -61,11 +62,45 @@ function withCatalogFacts(translator, supplied = {}, sourceId = "upstream") {
   return { ...supplied, ...translator, version: translator.version || supplied.version || "", source };
 }
 function configure(manager, definition) {
-  Custom.configure(manager, { prepare: prepareArchive, inspect(input, { data } = {}) {
-    const root = componentRoot(data?.root || input, definition);
+  const Description = require("./translator-description");
+  const prepareComponent = async (input, options, data = {}) => {
+    let root = data.root || input;
+    const source = data.source || registrationSource(input, root);
+    const facts = { engine: definition.engine, source, userDataDir: options.userDataDir, signal: options.signal, logger: options.logger };
+    const all = await Description.prepareTranslator(root, facts), selected = componentRoot(root, definition, all);
+    if (selected !== root) { root = selected; await Description.prepareTranslator(root, facts); }
+    return { ...data, root, source };
+  };
+  Custom.configure(manager, { async prepare(input, options) {
+    return prepareComponent(input, options, await prepareArchive(input, options));
+  }, inspect(input, context = {}) {
+    const { data, userDataDir, verification } = context;
+    let root = data?.root || input;
     const source = data?.source || registrationSource(input, root);
-    return inspected(root, definition, { source });
+    if (verification === "status") {
+      const selection = { engine: definition.engine, source, userDataDir };
+      const outer = Description.cachedTranslator(root, selection);
+      if (outer) root = componentRoot(root, definition, outer);
+      const translator = outer && Description.cachedTranslator(root, selection);
+      if (!translator) {
+        fs.statSync(root);
+        return { installDir: root, ready: false, reason: "Local component details are being prepared." };
+      }
+      return inspected(root, definition, { translator });
+    }
+    root = componentRoot(root, definition);
+    return definition.inspect ? definition.inspect(root, { ...context, source }) : inspected(root, definition, { source });
   } });
+  const prepare = manager.prepareLocalState;
+  manager.prepareLocalState = async function(options = {}) {
+    await prepare?.call(this, options);
+    options.signal?.throwIfAborted();
+    const results = await Promise.allSettled(Custom.forManager(manager).records(options.userDataDir)
+      .map(row => prepareComponent(row.path, options, row.data)));
+    options.signal?.throwIfAborted();
+    for (const result of results) if (result.status === "rejected") require("../graphics-warning")(options.logger || console,
+      `[translators] ${result.reason?.message || result.reason}`);
+  };
   const selection = manager.resolveSelection;
   manager.resolveSelection = function(...args) {
     const result = selection.apply(this, args);
@@ -81,50 +116,62 @@ function configure(manager, definition) {
   };
   return manager;
 }
-// Source-owned copies are presentation references, never managed installations.
+// Source-owned components retain their host's installation identity rather
+// than becoming managed translator installations.
 // The host manifest supplies the runtime/manager associations; the shared Wine
 // reader supplies every component path, version and binary fact.
-function includedReferences(engine, options = {}) {
+function referencedComponents(engine, options = {}) {
   if (!options.userDataDir) return [];
-  const owner = require("../../registry").getModule("crossover"), rows = new Map(), hostsByReference = new Map();
-  const Wine = require("./wine-translators");
+  const owner = require("../../registry").getModule("crossover"), result = [];
+  const Wine = require("./wine-translators"), Description = require("./translator-description");
+  const describe = options.describe || ((root, selection) => Description.cachedTranslator(root, { ...selection,
+    userDataDir: options.userDataDir, logger: options.logger }));
   const warn = message => require("../graphics-warning")(options.logger || console, `[translators] ${message}`);
   for (const [runtime, managerId] of Object.entries(owner?.manifest?.runtime?.manager || {})) {
     const manager = owner.runtimeManagers.find(item => item.id === managerId);
     if (!manager) continue;
-    let hosts;
+    let state;
     try {
-      hosts = [...manager.core.listInstalled(options.userDataDir), ...Custom.forManager(manager).list(options.userDataDir)];
+      state = options.referenceStates?.get(managerId);
+      if (!state) {
+        state = manager.getState({ ...options, settings: options.settings?.runtimes?.[managerId] });
+        options.referenceStates?.set(managerId, state);
+      }
     } catch (error) { warn(`${runtime}: ${error.message}`); continue; }
     const seen = new Set();
-    for (const host of hosts) {
-      if (host.ready === false) continue;
+    for (const host of state.installed || []) {
       const sourcePath = host.appPath || host.installDir || host.engineRoot;
-      if (seen.has(sourcePath)) continue;
+      if (!sourcePath || seen.has(sourcePath)) continue;
       seen.add(sourcePath);
       try {
-        const inventory = Wine.includedTranslators(host, runtime, { engine });
+        const inventory = Wine.includedTranslators(host, runtime, { engine, describe });
         for (const message of inventory.warnings) warn(`${sourcePath}: ${message}`);
         for (const value of inventory.included) {
           if (value.engine !== engine) continue;
-          const version = `reference:${JSON.stringify([runtime, sourcePath, value.engine, value.root])}`;
-          const architectures = [...new Set(value.files.flatMap(file => file.cpuSlices || (file.architecture ? [file.architecture] : [])))];
-          const templateVersion = host.templateVersion || host.catalogEntry?.template?.version;
-          const wineVersion = host.engineVersion || host.wineVersion || host.catalogEntry?.engineVersion;
-          const sourceLabel = hostLabel(host, value.source);
-          const label = translatorLabel(value, host);
-          const sortVersion = componentVersion(value);
-          rows.set(version, { version, versionLabel: label, ready: true, included: true, readOnly: true, removable: false, supportsDefault: false,
-            ...(sortVersion ? { sortVersion } : {}),
-            ...(templateVersion || host.upstreamVersion ? { sortHostVersion: templateVersion || host.upstreamVersion } : {}),
-            reference: { managerId, version: host.version, path: sourcePath }, source: value.source, installDir: value.root,
-            minimumMacOS: value.macosFloor, architectures, apis: value.apis, platformKey: architectures.join(", "), detail: value.version ? `Component ${value.version.replace(/\s+/g, " ")}` : sourceLabel });
-          hostsByReference.set(version, { version: templateVersion || host.upstreamVersion || "", wineVersion: wineVersion || "",
-            name: host.displayName || host.name, folder: value.templateComponent, manager, hostVersion: host.version,
-            translator: value, install: host, qualifiers: {} });
+          result.push({ id: `reference:${JSON.stringify([runtime, sourcePath, value.engine, value.root])}`,
+            description: value, reference: { managerId, version: host.version, path: sourcePath }, install: host, runtime,
+            hostVersionLabel: state.versionLabels?.[host.version] });
         }
       } catch (error) { warn(`${sourcePath}: ${error.message}`); }
     }
+  }
+  return result;
+}
+function includedReferences(engine, options = {}) {
+  const rows = new Map(), hostsByReference = new Map();
+  for (const { id: version, description: value, reference, install: host, hostVersionLabel } of referencedComponents(engine, options)) {
+    const architectures = [...new Set(value.files.flatMap(file => file.cpuSlices || (file.architecture ? [file.architecture] : [])))];
+    const templateVersion = host.templateVersion || host.catalogEntry?.template?.version;
+    const wineVersion = host.engineVersion || host.wineVersion || host.catalogEntry?.engineVersion;
+    const sourceLabel = hostLabel(host, value.source), sortVersion = componentVersion(value);
+    rows.set(version, { version, versionLabel: translatorLabel(value, host), ready: true, included: true, readOnly: true, removable: false, supportsDefault: false,
+      ...(sortVersion ? { sortVersion } : {}),
+      ...(templateVersion || host.upstreamVersion ? { sortHostVersion: templateVersion || host.upstreamVersion } : {}),
+      reference, source: value.source, installDir: value.root, minimumMacOS: value.macosFloor, architectures, apis: value.apis,
+      platformKey: architectures.join(", "), detail: value.version ? `Component ${value.version.replace(/\s+/g, " ")}` : sourceLabel });
+    hostsByReference.set(version, { version: templateVersion || host.upstreamVersion || "", wineVersion: wineVersion || "",
+      name: host.displayName || host.name, folder: value.templateComponent, hostVersionLabel,
+      translator: value, install: host, qualifiers: {} });
   }
   const result = [...rows.values()], folders = new Map();
   for (const row of result) {
@@ -137,16 +184,12 @@ function includedReferences(engine, options = {}) {
     host.qualifiers.folder = host.folder;
     row.versionLabel = translatorLabel(host.translator, host.install, host.qualifiers);
   }
-  const counts = new Map(), hostStates = new Map();
+  const counts = new Map();
   for (const row of result) counts.set(row.versionLabel, (counts.get(row.versionLabel) || 0) + 1);
   for (const row of result) if (counts.get(row.versionLabel) > 1) {
     const host = hostsByReference.get(row.version);
-    if (!hostStates.has(host.manager)) {
-      try { hostStates.set(host.manager, host.manager.getState(options).versionLabels || {}); }
-      catch (error) { warn(error.message); hostStates.set(host.manager, {}); }
-    }
     // The shared producer omits host provenance already stated in the label.
-    host.qualifiers.hostVersionLabel = hostStates.get(host.manager)[host.hostVersion] || host.name || "";
+    host.qualifiers.hostVersionLabel = host.hostVersionLabel || host.name || "";
     row.versionLabel = translatorLabel(host.translator, host.install, host.qualifiers);
   }
   counts.clear();
@@ -167,6 +210,25 @@ function includedReferences(engine, options = {}) {
 }
 function withIncludedReferences(manager) {
   manager.referenceManagerIds = [...new Set(Object.values(require("../../crossover/manifest.json").runtime.manager))];
+  const prepare = manager.prepareLocalState;
+  manager.prepareLocalState = async function(options = {}) {
+    await prepare?.call(this, options);
+    options.signal?.throwIfAborted();
+    const Description = require("./translator-description"), pending = new Map();
+    referencedComponents(manager.translatorEngine, { ...options, describe(root, selection) {
+      const facts = { ...selection, userDataDir: options.userDataDir, logger: options.logger, signal: options.signal };
+      const cached = Description.cachedTranslator(root, facts);
+      if (!cached) {
+        const key = JSON.stringify([root, selection]);
+        if (!pending.has(key)) pending.set(key, Description.prepareTranslator(root, facts));
+      }
+      return cached;
+    } });
+    const results = await Promise.allSettled(pending.values());
+    options.signal?.throwIfAborted();
+    for (const result of results) if (result.status === "rejected") require("../graphics-warning")(options.logger || console,
+      `[translators] ${result.reason?.message || result.reason}`);
+  };
   const getState = manager.getState;
   manager.getState = function(options = {}) {
     const state = getState.call(this, options), references = includedReferences(manager.translatorEngine, options);
@@ -177,7 +239,8 @@ function withIncludedReferences(manager) {
   };
   return manager;
 }
-module.exports = { componentRoot, registrationSource, description, inspected, configure, withCatalogFacts, componentLabel, hostLabel, includedReferences, withIncludedReferences };
+module.exports = { componentRoot, registrationSource, description, inspected, configure, withCatalogFacts, componentLabel, hostLabel,
+  referencedComponents, includedReferences, withIncludedReferences };
 
 // A downloaded local container is unpacked once into shared launcher storage.
 // Directory registrations stay at the supplied location and remain references.

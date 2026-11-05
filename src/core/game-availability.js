@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const PathStat = require("./path-stat-probe");
 
 // One rule for every per-game path: while a game's files are not on disk, for
 // example on a disconnected drive, nothing verifies, scans, follows or rewrites
@@ -39,7 +40,7 @@ function errorCode(error) {
 }
 
 // One outstanding stat per path. A location that stops responding then holds a
-// single I/O thread, however often the library or a window asks again.
+// single isolated probe thread, however often the library or a window asks again.
 const pendingByStat = new WeakMap();
 function statOnce(file, stat) {
   let pending = pendingByStat.get(stat);
@@ -61,7 +62,7 @@ function statOnce(file, stat) {
 // root once and never walks the folder. A stat that outlasts timeoutMs reports
 // "unresponsive", and later checks of that path report it at once until the
 // stat finishes.
-async function checkGameAvailability(entry, { userDataDir, stat = fs.promises.stat, timeoutMs = TIMEOUT_MS } = {}) {
+async function checkGameAvailability(entry, { userDataDir, stat = PathStat.statPath, timeoutMs = TIMEOUT_MS } = {}) {
   const file = rootPath(entry, { userDataDir });
   if (!file) return AVAILABLE;
   const probe = statOnce(file, stat);

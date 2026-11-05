@@ -8,7 +8,7 @@ const Architecture = require('./architecture');
 const Roles = require('./translator-roles');
 const SETTINGS = Object.freeze({ 'd3d-renderer': 'translatorRenderer', 'vulkan-driver': 'translatorVulkan', d3d12: 'translatorD3D12', video: 'translatorVideo' });
 
-function includedTranslators(install, runtime, { engine: requestedEngine } = {}) {
+function includedTranslators(install, runtime, { engine: requestedEngine, describe } = {}) {
   const layout = wineLayout(install), result = [], warnings = [], nativeRoots = [];
   const source = { kind: runtime, id: install.version || layout.root, runtime,
     label: require('./translator-label').hostLabel(install, { label: runtime === 'crossover' ? 'CrossOver' : 'Sikarugir Template' }) };
@@ -16,7 +16,8 @@ function includedTranslators(install, runtime, { engine: requestedEngine } = {})
     if (requestedEngine && engine !== requestedEngine) return;
     if (!fs.existsSync(root)) return;
     try {
-      let value = Description.describeTranslator(root, { engine, component, source, ...extra });
+      let value = (describe || Description.describeTranslator)(root, { engine, component, source, ...extra });
+      if (!value) return;
       value = { ...value, included: true, id: `included:${component}:${extra.templateComponent || engine}`, ...extra };
       if (!value.version) {
         const framework = value.files.find(file => /D3DMetal\.framework/.test(file.path));
@@ -42,9 +43,9 @@ function includedTranslators(install, runtime, { engine: requestedEngine } = {})
     if (!requestedEngine || requestedEngine === 'gstreamer') {
       let version = '';
       try {
-        const core = Description.describeTranslator(path.join(layout.root, 'lib64/libgstreamer-1.0.0.dylib'),
+        const core = (describe || Description.describeTranslator)(path.join(layout.root, 'lib64/libgstreamer-1.0.0.dylib'),
           { engine: 'gstreamer', component: 'video', source, form: 'dylib' });
-        version = require('./gstreamer-source').libraryVersion(core);
+        if (core) version = core.version || require('./gstreamer-source').libraryVersion(core);
       } catch (error) { if (error.code !== 'ENOENT') warnings.push(`gstreamer: ${error.message}`); }
       add(path.join(layout.root, 'lib64/gstreamer-1.0'), 'gstreamer', 'video', { form: 'dylib', version });
     }
@@ -72,13 +73,20 @@ function includedTranslators(install, runtime, { engine: requestedEngine } = {})
           if (result.length > before) {
             const description = result.at(-1); description.icd = path.join(vulkan, name);
             const relative = path.join(RELATIVE_PATHS.frameworks, 'libvulkan.1.dylib'), loader = path.join(support, relative);
-            if (fs.existsSync(loader)) description.files.push(Description.inspectFile({ path: loader, relative }));
+            if (fs.existsSync(loader)) {
+              const file = describe ? describe(loader, { engine, component: 'vulkan-driver', source, form: 'dylib' })?.files[0] : Description.inspectFile({ path: loader, relative });
+              if (file) description.files.push({ ...file, relative });
+            }
           }
         }
       } catch (error) { warnings.push(error.message); }
     }
   }
-  const direct3DFiles = (!requestedEngine || requestedEngine === 'wined3d' || requestedEngine === 'vkd3d') && layout.primaryWindowsRoot && fs.existsSync(layout.primaryWindowsRoot) ? fs.readdirSync(layout.primaryWindowsRoot).filter(name => /^(?:d3d\d.*|dxgi)\.dll$/i.test(name)).map(name => Description.inspectFile({ path: path.join(layout.primaryWindowsRoot, name), relative: `${layout.primaryWindows}/${name}` })) : [];
+  const direct3DFiles = (!requestedEngine || requestedEngine === 'wined3d' || requestedEngine === 'vkd3d') && layout.primaryWindowsRoot && fs.existsSync(layout.primaryWindowsRoot) ? fs.readdirSync(layout.primaryWindowsRoot).filter(name => /^(?:d3d\d.*|dxgi)\.dll$/i.test(name)).map(name => {
+    const file = path.join(layout.primaryWindowsRoot, name), relative = `${layout.primaryWindows}/${name}`;
+    const facts = describe ? describe(file, { engine: 'wined3d', component: 'd3d-renderer', source, form: 'builtin' })?.files[0] : Description.inspectFile({ path: file, relative });
+    return facts && { ...facts, relative };
+  }).filter(Boolean) : [];
   const d3d12Files = direct3DFiles.filter(file => Roles.fileApis(file).includes('Direct3D 12'));
   if (!requestedEngine || requestedEngine === 'wined3d') result.push(Description.description({ id: 'included:d3d-renderer:wined3d', included: true, component: 'd3d-renderer', engine: 'wined3d', source,
     version: install.wineVersion || install.engineVersion || '', form: 'builtin', root: layout.root, files: direct3DFiles.filter(file => !d3d12Files.includes(file)) }));
@@ -94,7 +102,8 @@ function managedTranslators(context, runtime, managers = runtimeManagers(), arch
   const choices = [], consumer = Architecture.targetArchitecture(architecture);
   for (const manager of managers.filter(manager => manager.translatorEngine || manager.translator?.engine)) {
     const inspect = () => {
-    const state = manager.getState({ userDataDir: context.userDataDir, settings: context.settings?.runtimes?.[manager.id] });
+    const state = manager.getState({ userDataDir: context.userDataDir, settings: context.settings?.runtimes?.[manager.id],
+      runtimeSettings: context.settings?.runtimes, referenceStates: context.referenceStates });
     for (const version of new Set((state.installed || []).map(item => item.version))) {
       const selection = manager.resolveSelection?.(null, context.settings, context.userDataDir, { version, ...(consumer ? { architecture: consumer } : {}), verification: 'status' });
       let install = selection?.install || (!manager.resolveSelection && state.installed.find(item => item.version === version && (!consumer || Architecture.matchesArchitecture(item, consumer))));
@@ -123,7 +132,7 @@ function managedTranslators(context, runtime, managers = runtimeManagers(), arch
   return choices;
 }
 function inventory(install, runtime, context, dependencies = {}) {
-  const result = install ? includedTranslators(install, runtime) : { included: [], warnings: [], layout: null };
+  const result = dependencies.includedInventory || (install ? includedTranslators(install, runtime) : { included: [], warnings: [], layout: null });
   const managers = dependencies.managers || runtimeManagers();
   const consumerArchitecture = result.layout?.architecture || dependencies.consumerArchitecture;
   const choices = dependencies.choices || managedTranslators(context, runtime, managers, consumerArchitecture);
@@ -157,6 +166,58 @@ function inventory(install, runtime, context, dependencies = {}) {
   }
   return { ...result, choices, environment, selections, runtime };
 }
+// Settings enumerate recorded facts. Actual load checks and native preparation
+// remain in resolve(), after Play has selected its runtime and executable.
+async function optionsInventory(install, runtime, context, dependencies = {}) {
+  context = { ...context, referenceStates: new Map() };
+  const managers = dependencies.managers || runtimeManagers(), pending = new Map();
+  const options = { userDataDir: context.userDataDir, logger: context.logger };
+  if (!dependencies.choices) for (const manager of managers.filter(item => item.translatorEngine || item.translator?.engine))
+    if (manager.prepareLocalState) await manager.prepareLocalState({ ...context, settings: context.settings?.runtimes?.[manager.id], runtimeSettings: context.settings?.runtimes });
+  const describe = (root, selection) => {
+    const value = Description.cachedTranslator(root, { ...selection, ...options });
+    if (!value) {
+      const key = JSON.stringify([root, selection]);
+      if (!pending.has(key)) pending.set(key, () => Description.prepareTranslator(root, { ...selection, ...options }));
+    }
+    return value;
+  };
+  const Component = require('./component-runtime');
+  // These actions run in the existing backend lane. Yield between independent
+  // roots, so a cold inventory can be canceled without holding up other work.
+  const attempted = new Set();
+  let includedInventory;
+  for (;;) {
+    includedInventory = install ? includedTranslators(install, runtime, { describe }) : { included: [], warnings: [], layout: null };
+    const missing = [...pending].filter(([key]) => !attempted.has(key));
+    if (!missing.length) break;
+    for (const [key, prepare] of missing) {
+      attempted.add(key);
+      context.signal?.throwIfAborted();
+      try { await prepare(); } catch (error) { warn(context.logger, `[translators] ${error.message}`); }
+      await new Promise(resolve => setImmediate(resolve));
+    }
+  }
+  const input = inventory(install, runtime, context, { ...dependencies, managers, includedInventory });
+  if (!dependencies.choices) {
+    const seen = new Set(input.choices.map(item => item.id));
+    for (const manager of managers.filter(item => item.referenceManagerIds?.length))
+      for (const item of Component.referencedComponents(manager.translatorEngine || manager.translator.engine, context)) {
+        const value = item.description;
+        if (value.source?.runtime === 'crossover' && runtime !== 'crossover' || seen.has(item.id)) continue;
+        seen.add(item.id);
+        input.choices.push({ ...value, id: item.id, included: false, managerId: item.reference.managerId,
+          runtimeVersion: item.reference.version, architecture: Architecture.recordArchitecture(item.install),
+          variant: item.install.variant, sectionId: item.install.sectionId || 'default', buildKey: item.install.buildKey,
+          reference: item.reference });
+      }
+  }
+  return input;
+}
+function optionsPlan(input, context) {
+  return Plan.resolveApiRoles(Plan.resolvePlan(input), { ...input,
+    selections: Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id, context.runtimeSettings?.[role.settingsKey]])) });
+}
 function environmentContext(context, install) {
   const value = context.runtimeSettings?.environmentReference;
   if (value === undefined) return context;
@@ -167,7 +228,13 @@ function environmentContext(context, install) {
   return reference ? { ...context, wineEnvironment: reader.readEnvironment(reference, { userDataDir: context.userDataDir, crossoverRoot: install?.crossoverRoot }) } : context;
 }
 async function resolve(install, runtime, context, { executableArchitecture, host = {}, ...dependencies } = {}) {
-  const input = inventory(install, runtime, context, dependencies);
+  const input = await optionsInventory(install, runtime, context, dependencies);
+  // Display records omit native symbols. Play completes those facts before
+  // checking Wine imports; video completes its own selected plugin closure.
+  const complete = item => item.component === 'video' ? item : { ...item, files: item.files.map(file =>
+    file.format === 'macho' && file.slices?.some(slice => slice.importsComplete !== true) && fs.existsSync(file.path)
+      ? Description.inspectFile(file) : file) };
+  input.included = input.included.map(complete); input.choices = input.choices.map(complete);
   const record = await Binary.wineCompatibilityRecord(install), compatibility = {};
   for (const description of [...input.included, ...input.choices]) compatibility[description.id] = Binary.compatibility(description, record,
     { executableArchitecture, macOSVersion: host.macOSVersion || systemVersionSync() });
@@ -300,7 +367,7 @@ function withSettings(manifest) {
   return result;
 }
 function optionLists(install, runtime, context, dependencies = {}) {
-  const input = inventory(install, runtime, context, dependencies), plan = dependencies.plan || Plan.resolvePlan(input);
+  const input = dependencies.inventory || inventory(install, runtime, context, dependencies), plan = dependencies.plan || Plan.resolvePlan(input);
   if (plan.compatibility) for (const key of ['included', 'choices']) input[key] = input[key].map(item => {
     const files = plan.compatibility[item.id]?.files || plan.compatibility[item.id]?.inspectedFiles || item.files;
     return { ...item, files, ...(['d3d-renderer', 'd3d12'].includes(item.component) && files.some(file => file.format === 'pe') ? { apis: Roles.apisForFiles(files) } : {}) };
@@ -332,4 +399,4 @@ function inspectorRows(plan) {
       used: row.used ? Description.label(row.used) : plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice", reason: row.reason, reasonCode: row.reasonCode, fallback: row.fallback };
   }));
 }
-module.exports = { SETTINGS, includedTranslators, managedTranslators, inventory, resolve, engines, settingsForPlan, wineRoot, withSettings, optionLists, inspectorRows, presentInspectorRows, environmentContext };
+module.exports = { SETTINGS, includedTranslators, managedTranslators, inventory, optionsInventory, optionsPlan, resolve, engines, settingsForPlan, wineRoot, withSettings, optionLists, inspectorRows, presentInspectorRows, environmentContext };

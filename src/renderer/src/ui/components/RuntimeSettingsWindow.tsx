@@ -24,7 +24,7 @@ import { CommitNumberInput, CommitTextArea, CommitTextInput } from "./CommitInpu
 import { ErrorText } from "./ErrorText";
 import { Toggle } from "./FieldRow";
 import { createQueuedWriter, type QueuedWriter } from "./queued-write-model";
-import { loadSettingChoices, settingChoiceRequest, settingChoiceScope, type SettingChoices } from "./runtime-setting-choices";
+import { loadSettingChoices, readSettingChoices, storeSettingChoices, settingChoiceRequest, settingChoiceScope, type SettingChoices } from "./runtime-setting-choices";
 import { RuntimeFileSetting } from "./RuntimeFileSetting";
 
 export type RuntimeSettingsApi = Pick<LauncherApi, "setModuleRuntimeSettings" | "setGameRuntimeSettings"> & Partial<Pick<LauncherApi, "moduleAction" | "moduleSettingsAction">>;
@@ -57,7 +57,7 @@ export function RuntimeSettingsWindow({
   const [draft, setDraft] = useState<Record<string, any> | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [choices, setChoices] = useState<Record<string, SettingChoices>>({});
+  const [liveChoices, setChoices] = useState<Record<string, SettingChoices>>({});
   const [choiceError, setChoiceError] = useState<string | null>(null);
   const [choiceLoading, setChoiceLoading] = useState<Record<string, boolean>>({});
   const choiceScope = useRef("");
@@ -182,6 +182,14 @@ export function RuntimeSettingsWindow({
 
   const displaySettings = draft || savedSettings;
   const canEdit = Boolean(api && schema && displaySettings);
+  const inheritanceReference = schema?.fields.find(field => field.inheritFrom)?.inheritFrom;
+  const inheritanceValue = inheritanceReference ? displaySettings?.[inheritanceReference] : undefined;
+  const choiceContext = JSON.stringify([context.scope, context.moduleId, context.runtimeId, context.gamePath]);
+  const choiceInputs = { environmentReference: inheritanceValue, runtimeSettings: displaySettings };
+  const choiceInputsKey = JSON.stringify(choiceInputs);
+  const recordedChoices = useMemo(() => readSettingChoices(context, undefined, schema?.fields), [choiceContext, schema]);
+  const cachedChoices = useMemo(() => readSettingChoices(context, choiceInputs, schema?.fields), [choiceContext, choiceInputsKey, schema]);
+  const choices = { ...cachedChoices, ...(choiceScope.current === choiceContext ? liveChoices : {}) };
   const visibilitySettings = { ...displaySettings };
   for (const row of choices[schema?.inheritanceAction || ""]?.effectiveSettings || []) if (visibilitySettings[row.value] === "inherit") visibilitySettings[row.value] = row.label;
   for (const row of choices[schema?.visibilityAction || ""]?.effectiveSettings || []) visibilitySettings[row.value] = row.label;
@@ -211,24 +219,28 @@ export function RuntimeSettingsWindow({
     finally { if (pickerScope.current === scope) setPickingField(null); }
   }
 
-  const inheritanceReference = schema?.fields.find(field => field.inheritFrom)?.inheritFrom;
-  const inheritanceValue = inheritanceReference ? displaySettings?.[inheritanceReference] : undefined;
   const externalSettings = Boolean(inheritanceValue && inheritanceValue !== "private");
   const visibilityRevision = schema?.visibilityAction ? JSON.stringify(schema.fields.filter(field => field.optionsAction === schema.visibilityAction).map(field => displaySettings?.[field.key])) : "";
   const choiceActions = JSON.stringify([...new Set((schema?.fields || []).filter(field => (isGameScope || !field.gameOnly) && isRuntimeSettingVisible(field, displaySettings || {})).map(field => field.optionsAction).concat(schema?.visibilityAction, externalSettings ? schema?.inheritanceAction : undefined).filter(Boolean))]);
   useEffect(() => {
-    const scope = JSON.stringify([context.moduleId, context.gamePath, context.runtimeId, isGameScope, choiceActions]);
-    if (choiceScope.current !== scope) { setChoices({}); choiceScope.current = scope; }
+    if (choiceScope.current !== choiceContext) { setChoices({}); choiceScope.current = choiceContext; }
     setChoiceError(null); setChoiceLoading({});
     const actions = JSON.parse(choiceActions) as string[];
     const request = settingChoiceRequest(api, context);
     if (!actions.length || !request) return;
     setChoiceLoading(Object.fromEntries(actions.map(action => [action, true])));
-    return loadSettingChoices(actions, action => request(action, { environmentReference: inheritanceValue, runtimeSettings: displaySettings }),
-      (action, groups) => setChoices(previous => ({ ...previous, [action]: groups })),
-      (_action, error) => setChoiceError(error instanceof Error ? error.message : String(error)),
+    return loadSettingChoices(actions, action => request(action, choiceInputs),
+      (action, groups) => {
+        storeSettingChoices(context, choiceInputs, action, groups);
+        setChoices(previous => ({ ...previous, [action]: groups }));
+      },
+      (action, error) => {
+        if (choices[action]) return;
+        const label = schema?.fields.find(field => !field.hidden && field.optionsAction === action)?.label;
+        setChoiceError((label ? label + ": " : "") + (error instanceof Error ? error.message : String(error)));
+      },
       action => setChoiceLoading(previous => ({ ...previous, [action]: false })), schema?.fields);
-  }, [api?.moduleAction, api?.moduleSettingsAction, context.moduleId, context.gamePath, context.runtimeId, isGameScope, choiceActions, choiceRevision, inheritanceValue, visibilityRevision]);
+  }, [api?.moduleAction, api?.moduleSettingsAction, context.moduleId, context.gamePath, context.runtimeId, isGameScope, choiceActions, choiceRevision, inheritanceValue, visibilityRevision, state?.runtimeInventoryRevision]);
 
   saveCallback.current = async currentDraft => {
     if (!api || !schema) return;
@@ -334,8 +346,9 @@ export function RuntimeSettingsWindow({
                   const listed: RuntimeSettingOption[] = choices[field.optionsAction]?.[field.optionsKey || field.key] || field.options || [];
                   const options = field.optionsAction === "listRuntimeVersions" ? runtimeVersionOptions(listed) : listed;
                   const scope = settingChoiceScope(choices[field.optionsAction], field, options.find(option => option.value === selected));
+                  const recordedLabel = recordedChoices[field.optionsAction]?.[field.optionsKey || field.key]?.find((option: RuntimeSettingOption) => option.value === selected)?.label;
                   const loading = choiceLoading[field.optionsAction] === true;
-                  const disabled = fieldsDisabled || (field.gameOnly === true && !isGameScope) || (loading && !choices[field.optionsAction]);
+                  const disabled = fieldsDisabled || (field.gameOnly === true && !isGameScope) || (loading && !choices[field.optionsAction] && !options.length);
                   return <React.Fragment key={field.key}>
                     {typeof notice === "string" && notice && <div className="dim">{notice}</div>}
                     <div className="settingsRow">
@@ -345,7 +358,7 @@ export function RuntimeSettingsWindow({
                       <Select className="input" aria-label={field.label} value={selected} disabled={disabled}
                         onChange={event => { const value = event.target.value, option = options.find(option => option.value === value);
                           return onFieldsChange(option?.runtimeSettingsPatch || { [field.key]: value }); }}>
-                        {!options.some(option => option.value === selected) && <option value={selected}>{selected ? (loading || !choices[field.optionsAction] ? "Loading saved selection…" : "Selected option unavailable") : "Off"}</option>}
+                        {!options.some(option => option.value === selected) && <option value={selected}>{recordedLabel || (selected ? (loading || !choices[field.optionsAction] ? "Loading saved selection…" : "Selected option unavailable") : "Off")}</option>}
                         {options.map(option => <option key={option.value} value={option.value} title={settingChoiceScope(choices[field.optionsAction!], field, option) || undefined}>{option.label}</option>)}
                       </Select>
                       {firstInGroup && <button type="button" className="btn iconOnly" title="Refresh choices" aria-label="Refresh choices" disabled={disabled || loading}

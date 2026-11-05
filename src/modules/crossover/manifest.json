@@ -70,6 +70,7 @@
         },
         "label": "CrossOver",
         "statusAction": "runtimeStatus",
+        "statusFromRecord": true,
         "graphicsHost": "window",
         "settings": {
           "defaults": {
@@ -295,6 +296,7 @@
         },
         "label": "Sikarugir (Wine)",
         "statusAction": "runtimeStatus",
+        "statusFromRecord": true,
         "graphicsHost": "window",
         "graphicsArchitecture": "x86_64",
         "supports": {

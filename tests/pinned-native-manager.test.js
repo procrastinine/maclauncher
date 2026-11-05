@@ -27,6 +27,29 @@ async function listed(options = {}, userDataDir) {
   return runtime;
 }
 
+test("installed inventories reuse observed folders without probing download-only catalog versions", async t => {
+  const root = temporary(t), runtime = await listed({ supportsDefault: false }, root);
+  const reads = [], read = fs.readFileSync;
+  t.mock.method(fs, "readFileSync", (file, ...args) => { if (path.basename(String(file)) === "runtime.json") reads.push(String(file)); return read(file, ...args); });
+  assert.deepEqual(runtime.getState({ userDataDir: root }).installed, []);
+  assert.deepEqual(reads, [], "listed downloads do not cause missing receipt probes");
+  const executable = path.join(root, "native"); fs.writeFileSync(executable, binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 });
+  runtime.core.registerLocal({ userDataDir: root, version: "1.1.0", runtimePath: executable });
+  reads.length = 0;
+  assert.deepEqual(runtime.getState({ userDataDir: root }).installed.map(row => row.version), ["1.1.0"]);
+  assert.ok(reads.every(file => file.split(path.sep).includes("1.1.0")), "only actual installation receipts are read");
+  const selected = runtime.core.getInstallDir({ userDataDir: root, version: "1.2.0" }); fs.mkdirSync(selected, { recursive: true });
+  assert.equal(runtime.getState({ userDataDir: root }).installed.find(row => row.version === "1.2.0").status, "incomplete");
+  fs.writeFileSync(path.join(selected, "runtime.json"), JSON.stringify({ version: "1.2.0", upstreamRevision: "abc123", catalogEntry: catalog[0],
+    source: "local", architecture: process.arch === "arm64" ? "arm64" : "x64", runtimePath: executable, binarySha256: hashFile(executable) }));
+  assert.equal(runtime.getState({ userDataDir: root }).installed.find(row => row.version === "1.2.0").ready, true);
+  const legacy = path.join(root, "runtimes/fixture-native/1.2.0"); fs.renameSync(selected, legacy);
+  assert.equal(runtime.getState({ userDataDir: root }).installed.find(row => row.version === "1.2.0").installDir, legacy);
+  fs.rmSync(legacy, { recursive: true });
+  assert.equal(runtime.getState({ userDataDir: root }).installed.some(row => row.version === "1.2.0"), false);
+  assert.deepEqual(runtime.getState({ userDataDir: root }).catalog.versions, ["1.2.0", "1.1.0"], "downloads remain listed independently of installation changes");
+});
+
 test("existing managers observe another process's catalog and local registration offline",async t=>{
   const root=temporary(t),runtime=manager({discoverCatalog:()=>assert.fail("Local changes must not query releases")});
   assert.deepEqual(runtime.getState({userDataDir:root}).catalog.versions,[]);

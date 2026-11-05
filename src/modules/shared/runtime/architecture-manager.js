@@ -23,15 +23,24 @@ function createArchitectureManager(config, createManager) {
     });
   };
   let facade;
+  let customRuntimeOverrides;
   function instance(architecture) {
-    if (!instances.has(architecture)) instances.set(architecture, Architecture.withArchitecture(architecture,
-      () => createManager({ ...config, installationArchitecture: architecture, shareDiscovery,
-        ...(config.buildRuntime ? {buildRuntime: args => config.buildRuntime({...args, manager: facade})} : {}) })));
+    if (!instances.has(architecture)) {
+      const manager = Architecture.withArchitecture(architecture,
+        () => createManager({ ...config, installationArchitecture: architecture, shareDiscovery,
+          ...(config.buildRuntime ? {buildRuntime: args => config.buildRuntime({...args, manager: facade})} : {}) }));
+      instances.set(architecture, manager);
+      if (customRuntimeOverrides) require("./custom-runtime").configure(manager, customRuntimeOverrides);
+    }
     return instances.get(architecture);
   }
   const current = Architecture.selectedArchitecture();
   const primary = instance(current);
   facade = { ...primary };
+  facade.configureCustomRuntime = ({ providers, ...overrides }) => {
+    customRuntimeOverrides = { ...customRuntimeOverrides, ...overrides };
+    for (const manager of instances.values()) require("./custom-runtime").configure(manager, customRuntimeOverrides);
+  };
   const selected = payload => Architecture.requestedArchitecture(payload) || Architecture.selectedArchitecture();
   // A CPU offers a build when its list or its installations hold one this Mac
   // can use; a manager's included packages count through `includedBuilds`.

@@ -26,9 +26,8 @@ test("runtime setting option providers remain read-only and usable without game 
     listSharedRuntimeManagers: () => [] };
   const userDataDir = path.join(root, "data");
   const launcher = require("../src/core/launcher").createLauncher({ userDataDir, registry });
-  const stat = fs.promises.stat;
-  fs.promises.stat = (...args) => { if (args[0] === entry.gamePath) probes++; return stat(...args); };
-  t.after(() => { fs.promises.stat = stat; });
+  const PathStat = require("../src/core/path-stat-probe"), stat = PathStat.statPath;
+  t.mock.method(PathStat, "statPath", (...args) => { if (args[0] === entry.gamePath) probes++; return stat(...args); });
   assert.deepEqual(await launcher.runAction(entry, "localGraphics"), { options: ["auto"] });
   assert.equal(calls, 1); assert.equal(probes, 0); assert.equal(entry.name, undefined);
   assert.equal(GameStore.readGameRecord(userDataDir, entry.gameId), null, "opening runtime settings never creates or rewrites a record");

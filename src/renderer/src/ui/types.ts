@@ -537,6 +537,7 @@ export type LauncherState = {
   moduleSettings: Record<string, Record<string, any>>;
   moduleStates: Record<string, Record<string, any>>;
   runtimeManagers: Record<string, RuntimeManagerState>;
+  runtimeInventoryRevision?: number;
   runtimeDefaults: Record<string, Record<string, any>>;
   launcherSettings: LauncherSettings;
   running: Record<string, number>;

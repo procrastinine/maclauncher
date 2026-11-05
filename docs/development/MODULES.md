@@ -262,6 +262,7 @@ The `runtime` object declares the module's backends and how they are offered, de
   - `description`, `requirements`, `preparation` and `dataNotice`: optional text shown with the runtime's settings, covering what it is, its platform requirements, its automatic setup and how its data is kept separate.
   - `networkAccess`: an optional capability flag; `false` turns off network access controls for that runtime.
   - `settings`: an optional runtime settings schema; see [runtime settings schema](#runtime-settings-schema).
+  - `statusAction`: an optional inspector action. `statusFromRecord: true` declares that it reads saved state and installed runtime facts without preparing or requiring the game's files.
   - `supports`: optional capability overrides for a runtime provider.
   - `launch: false`: the runtime never launches games.
   - `hostFeature`: the name of a requirement in `src/modules/shared/runtime/feature-requirements.js`, such as `APPLE_SILICON`. On a Mac that can never meet it, the runtime is removed from `runtime.supported`, and games of that type show the requirement instead of **Play**. Runtimes also hides managers whose `managerUi` entry names the same requirement.

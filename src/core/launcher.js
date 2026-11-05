@@ -839,7 +839,9 @@ function createLauncher({
     const moduleId = resolveModuleId(entry), mod = registry.getModule(moduleId), info = registry.getModuleInfo(moduleId);
     const optionRuntimeId = runtimeId || entry.runtimeId;
     const schema = resolveRuntimeSettingsSchema(info, optionRuntimeId);
-    if (schema?.fields.some(field => field.optionsAction === actionId)) {
+    const runtimeEntry = info.runtime?.entries?.[optionRuntimeId];
+    if (schema?.fields.some(field => field.optionsAction === actionId) ||
+        runtimeEntry?.statusFromRecord === true && runtimeEntry.statusAction === actionId) {
       const action = mod?.actions?.[actionId];
       if (typeof action !== "function") throw new Error(`Unknown module action: ${actionId}`);
       // Runtime setting choices inspect installed runtimes and saved state.

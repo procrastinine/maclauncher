@@ -2684,6 +2684,7 @@ function buildState(settings, games) {
     moduleSettings: launcherService.getResolvedModuleSettings(settings),
     moduleStates: buildModuleState(settings),
     runtimeManagers: buildRuntimeManagerState(settings),
+    runtimeInventoryRevision,
     runtimeDefaults: buildRuntimeDefaultsState(),
     launcherSettings: settings.launcher || {},
     debug: isDebug,

@@ -6,6 +6,7 @@ const { fileApis, apisForFiles } = require('./translator-roles');
 const warn = require('../graphics-warning');
 const { fileIdentity } = require('./verified-identity');
 const inspections = new Map();
+const fileInspections = new Map();
 function observedIdentity(file) {
   const identity = fileIdentity(file);
   if (identity) return JSON.stringify(identity);
@@ -49,23 +50,90 @@ function installationDescription(input) {
     ...(file.format === 'macho' && Array.isArray(file.slices) ? { slices: file.slices.map(({ imports: _imports, ...slice }) =>
       ({ ...slice, importsComplete: false })) } : {}) })) };
 }
+function restoreInstallationDescription(root, input) {
+  const base = fs.statSync(root).isFile() ? path.dirname(root) : root;
+  return description({ ...input, root, id: input.id || `${input.engine}:${root}`,
+    files: input.files.map(file => ({ ...file, path: path.resolve(base, file.relative || file.path) })) });
+}
+function compactDescription(value) {
+  const stored = installationDescription(value);
+  return { ...stored, root: value.root, id: value.id,
+    files: stored.files.map((file, index) => ({ ...file, path: value.files[index].path,
+      ...(value.files[index].realPath ? { realPath: value.files[index].realPath } : {}) })) };
+}
 function label(value) {
   return require('./translator-label').label(value);
 }
 function displayText(value) { return String(value ?? '').replace(/[\s\x00-\x1f\x7f]+/g, ' ').trim(); }
+function inspectionKey(root, options) {
+  const { logger, userDataDir, signal, ...selection } = options;
+  return JSON.stringify([fs.realpathSync(root), selection]);
+}
+function unchangedInspection(entry) {
+  return entry && Array.isArray(entry.observed) && entry.observed.length &&
+    entry.observed.every(([file, identity]) => identity !== null && observedIdentity(file) === identity);
+}
+function inspectionFile(key, userDataDir) {
+  return userDataDir && path.join(userDataDir, 'cache/translator-descriptions', require('node:crypto').createHash('sha256').update(key).digest('hex') + '.json');
+}
+// UI inventories read compact facts only. A missing or changed observation is
+// filled by prepareTranslator in the existing backend worker, never here.
+function cachedTranslator(root, options = {}) {
+  let key;
+  try {
+    key = inspectionKey(root, options);
+    let entry = inspections.get(key);
+    if (!unchangedInspection(entry)) {
+      inspections.delete(key);
+      const file = inspectionFile(key, options.userDataDir);
+      const stored = file && require('../../../core/json-files').readJsonObject(file);
+      if (stored?.key !== key || !stored.value || !unchangedInspection(stored)) return null;
+      entry = { value: stored.value, observed: stored.observed, live: false, persistedPath: file };
+      inspections.set(key, entry);
+    }
+    if (!entry.peFactsSeeded) {
+      const observed = new Map(entry.observed);
+      for (const { path: logical, relative: _relative, apis: _apis, ...facts } of entry.value.files) {
+        if (facts.format !== 'pe') continue;
+        const source = fileIdentity(logical);
+        if (!source || JSON.stringify(source) !== observed.get(logical)) continue;
+        const realPath = fs.realpathSync(logical), identity = fileIdentity(realPath);
+        if (!identity || JSON.stringify(identity.own) !== JSON.stringify(source.target || source.own)) continue;
+        fileInspections.set(realPath, { identity: JSON.stringify(identity), value: { ...facts, realPath } });
+      }
+      entry.peFactsSeeded = true;
+    }
+    return copyDescription(compactDescription(entry.value));
+  } catch { if (key) inspections.delete(key); return null; }
+}
+async function prepareTranslator(root, options = {}) {
+  options.signal?.throwIfAborted();
+  let value = cachedTranslator(root, options);
+  if (!value) value = compactDescription(describeTranslator(root, options));
+  let key;
+  try { key = inspectionKey(root, options); } catch { return value; }
+  const entry = inspections.get(key), file = inspectionFile(key, options.userDataDir);
+  if (file && entry && entry.persistedPath !== file && unchangedInspection(entry)) {
+    options.signal?.throwIfAborted();
+    try {
+      require('../../../core/json-files').writeJsonAtomic(file, { key, observed: entry.observed, value });
+      entry.persistedPath = file;
+    } catch (error) { warn(options.logger || console, `[translators] Could not retain component description: ${error.message}`); }
+  }
+  return copyDescription(value);
+}
 /** Synchronous custom-runtime.inspect seam; unchanged observed files reuse facts. */
 function describeTranslator(root, options = {}) {
-  const { logger, ...selection } = options;
   let key;
-  try { key = JSON.stringify([fs.realpathSync(root), selection]); }
+  try { key = inspectionKey(root, options); }
   catch { return inspectDescription(root, options); }
   const previous = inspections.get(key);
-  if (previous && previous.observed.every(([file, identity]) => observedIdentity(file) === identity)) return copyDescription(previous.value);
+  if (previous?.live !== false && unchangedInspection(previous)) return copyDescription(previous.value);
   const observed = new Map(), observe = file => { if (!observed.has(file)) observed.set(file, observedIdentity(file)); };
   const value = inspectDescription(root, options, observe);
   let result;
   try { result = copyDescription(value); } catch { return value; }
-  if ([...observed].every(([file, identity]) => identity !== null && observedIdentity(file) === identity)) inspections.set(key, { value, observed: [...observed] });
+  if ([...observed].every(([file, identity]) => identity !== null && observedIdentity(file) === identity)) inspections.set(key, { value, observed: [...observed], live: true });
   else inspections.delete(key);
   return result;
 }
@@ -170,9 +238,11 @@ function inspectDescription(root, { engine, source, version, component, id, apis
   })])];
   const floors = files.flatMap(file => file.macosFloor ? [file.macosFloor] : []);
   for (const warning of warnings) warn(logger, `[translators] ${warning}`);
-  return description({ id: id || `${engine}:${root}`, root, component, engine, source, version, apis, form, files,
+  const result = description({ id: id || `${engine}:${root}`, root, component, engine, source, version, apis, form, files,
     warnings, ...(pluginDirectories === undefined ? {} : { pluginDirectories }),
     macosFloor: floors.sort(compareVersions).at(-1) || null });
+  if (!result.version && engine === 'gstreamer') result.version = require('./gstreamer-source').libraryVersion(result);
+  return result;
 }
 function compareVersions(a, b) {
   const left = String(a).split('.').map(Number), right = String(b).split('.').map(Number);
@@ -181,22 +251,38 @@ function compareVersions(a, b) {
 }
 function inspectFile(file) {
   const { unixImports: _legacyImports, ...result } = file;
+  const original = fs.realpathSync(file.path), identity = fileIdentity(original), key = identity && JSON.stringify(identity);
+  const previous = fileInspections.get(original);
+  let facts = previous?.identity === key && key ? previous.value : null;
+  if (!facts) {
+    facts = inspectFileFacts(original);
+    if (key && JSON.stringify(fileIdentity(original)) === key) fileInspections.set(original, { identity: key, value: facts });
+    else fileInspections.delete(original);
+  }
+  return { ...result, ...copyDescription(facts),
+    ...(facts.format === 'unknown' && file.path.endsWith('.json') ? { format: 'json' } : {}),
+    ...(facts.format === 'macho' ? { form: file.path.endsWith('.so') ? 'builtin' : 'dylib' } : {}),
+    apis: facts.format === 'pe' ? fileApis({ ...file, format: 'pe' }) : [] };
+}
+function inspectFileFacts(original) {
+  const result = {};
   try {
-    const native = readMachOLoadCommands(file.path, { imports: true });
-    return { ...result, realPath: fs.realpathSync(file.path), format: 'macho', form: file.path.endsWith('.so') ? 'builtin' : 'dylib', apis: [], cpuSlices: native.architectures,
+    const native = readMachOLoadCommands(original, { imports: true });
+    return { ...result, realPath: original, format: 'macho', cpuSlices: native.architectures,
       slices: native.slices, macosFloor: native.slices.map(slice => slice.minimumMacOS).filter(Boolean).sort(compareVersions).at(-1) || null };
   } catch (error) {
     if (error.code !== 'MACHO_MALFORMED') result.inspectionWarning = error.message;
   }
-  const original = fs.realpathSync(file.path), exports = readPeExports(original, { imports: true }), pe = exports || readPeExports(original, { headersOnly: true, imports: true });
+  const exports = readPeExports(original, { imports: true }), pe = exports || readPeExports(original, { headersOnly: true, imports: true });
   if (pe) {
     if (!exports) result.inspectionWarning = 'PE export inspection is incomplete; basic image facts are available.';
     if (!pe.importsComplete) result.inspectionWarning = [result.inspectionWarning,
       `PE import inspection is incomplete: ${pe.importWarning || 'unknown import metadata'}`].filter(Boolean).join(' ');
     // Replacement DLL resources report Windows component versions, not translator releases.
     return { ...result, realPath: original, format: 'pe', form: pe.form, machine: pe.machine, architecture: pe.architecture, macosFloor: null,
-      apis: fileApis({ ...file, format: 'pe' }), peImports: pe.peImports, importsComplete: pe.importsComplete, version: null };
+      peImports: pe.peImports, importsComplete: pe.importsComplete, version: null };
   }
-  return { ...result, format: file.path.endsWith('.json') ? 'json' : 'unknown', apis: [], macosFloor: null };
+  return { ...result, format: 'unknown', macosFloor: null };
 }
-module.exports = { COMPONENTS, ENGINES, FORMS, description, installationDescription, label, describeTranslator, inspectFile, compareVersions };
+module.exports = { COMPONENTS, ENGINES, FORMS, description, installationDescription, restoreInstallationDescription, label,
+  cachedTranslator, prepareTranslator, describeTranslator, inspectFile, compareVersions };
