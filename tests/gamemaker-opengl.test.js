@@ -85,7 +85,7 @@ test("OpenGL status is read-only and leaves installation to the ordinary managed
   assert.equal(requirements[0].requiresDownload, true);
 });
 
-test("saved owned helper receipts remain usable offline with their exact CPU, source and binary identity", t => {
+test("saved helper receipts remain usable offline without source and byte admission pins", t => {
   const userDataDir = temporary(t), owned = ownedHelper(userDataDir, "saved-helper-7");
   const options = { userDataDir, helperVersion: owned.record.version, runnerVersion: "1.4.9999", manager: emptyManager };
   const before = fs.readFileSync(owned.recordPath), goodBinary = fs.readFileSync(owned.dylibPath);
@@ -96,16 +96,17 @@ test("saved owned helper receipts remain usable offline with their exact CPU, so
   assert.equal(selected.environment.MACLAUNCHER_LEGACY_LOGICAL_OPENGL, "1", "older receipts recover their source's actual coordinate ABI");
   assert.deepEqual(fs.readFileSync(owned.recordPath), before);
   fs.appendFileSync(owned.dylibPath, "changed");
-  assert.equal(Fallback.resolveFallback(options).ready, false);
+  assert.equal(Fallback.resolveFallback(options).ready, true);
   fs.writeFileSync(owned.dylibPath, goodBinary);
   for (const change of [{ version: "other" }, { sourceSha256: "0".repeat(64) }, { architecture: "arm64" }, { legacyLogicalRunnerVersions: [] }]) {
     fs.writeFileSync(owned.recordPath, JSON.stringify({ ...owned.record, ...change }));
-    assert.equal(Fallback.resolveFallback(options).ready, false);
+    assert.equal(Fallback.resolveFallback(options).ready, true);
   }
   fs.writeFileSync(owned.recordPath, before);
   fs.writeFileSync(owned.dylibPath, image({ cpu: ARM64 }));
   fs.writeFileSync(owned.recordPath, JSON.stringify({ ...owned.record, binarySha256: Native.hashFile(owned.dylibPath) }));
-  assert.equal(Fallback.resolveFallback(options).ready, false, "a matching receipt cannot admit a missing CPU slice");
+  assert.equal(Fallback.resolveFallback(options).ready, process.arch === "arm64", "Actual native slices determine host support independently of metadata");
+  fs.writeFileSync(owned.dylibPath, "not a native image");assert.equal(Fallback.resolveFallback(options).ready, false);
 });
 
 test("explicit missing legacy choices stay exact and never map to a different managed package", t => {
@@ -133,7 +134,7 @@ test("verified owned helper receipts supply a manager default only without a lis
   const selected = Fallback.selection({}, { userDataDir }, emptyManager);
   assert.equal(selected.ready, true);
   assert.equal(selected.version, newer.record.version);
-  fs.appendFileSync(newer.dylibPath, "changed");
+  fs.writeFileSync(newer.dylibPath, "not a Mach-O image");
   assert.equal(Fallback.selection({}, { userDataDir }, emptyManager).version, earlier.record.version, "A damaged automatic donor is never admitted");
   const cleared = Fallback.selection({}, {userDataDir,settings:{runtimes:{[emptyManager.id]:{defaultVersion:null}}}}, emptyManager);
   assert.equal(cleared.ready, true);

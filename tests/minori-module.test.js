@@ -228,3 +228,15 @@ test("Minori script tools are reachable in the inspector and track owned output 
   fs.symlinkSync(root, output); Module.onImport(entry, context);
   assert.equal(entry.moduleData.scriptsDirectory, null); assert.throws(() => Module.actions.removeScripts(entry, {}, context), /Extract scripts first/);
 });
+
+
+test("managed Minori profiles resolve declared companions without source or file-count pins", t => {
+  const root=directory(t), B=require("../src/modules/shared/runtime/bundled-native");
+  const executablePath=path.join(root,"renamed-engine"), profile=path.join(root,"facts.json"), probe=path.join(root,"inspect-paz"), movie=path.join(root,"movie-reader");
+  for(const file of [executablePath,probe,movie])fs.writeFileSync(file,"runtime fixture");
+  fs.writeFileSync(profile,JSON.stringify({schemaVersion:99,upstreamRevision:"observed upstream",executables:{eden:"not-an-admission-hash"},movieDecoder:{files:[]}}));
+  const install={installDir:root,executablePath,upstreamRevision:"producer",sha256:"archive identity",declaration:B.managedDeclaration({}),runtimeFiles:{profile:"facts.json",pazProbe:"inspect-paz",movieDecoder:"movie-reader"}};
+  const found=Module.__test.readProfile(install);
+  assert.equal(found.probe,probe);assert.equal(found.movieDecoder,movie);assert.equal(found.profile.schemaVersion,99);
+  assert.throws(()=>Module.__test.readProfile({...install,runtimeFiles:{...install.runtimeFiles,pazProbe:"../escape"}}),/Invalid|relative|path/i);
+});

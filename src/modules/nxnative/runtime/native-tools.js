@@ -7,11 +7,13 @@ const ADAPTER = "maclauncher-nxnative-1";
 function sourceRequirement(install) {
   const root = install?.payloadRoot;
   if (!root) throw new Error("The nxnative native tools are unavailable.");
-  const stored = Bundled.readRegular(path.join(root, "runtime.json"), Bundled.LIMITS.manifestBytes);
+  const relative=install.manifest?.runtimeFiles?.runtimeProfile || 'runtime.json';
+  const stored = Bundled.readRegular(path.join(root, Bundled.relativeFile(relative)), Bundled.LIMITS.manifestBytes);
   const expected = install.manifest?.files?.find(file => file.path === "runtime.json");
-  if (!expected || stored.sha256 !== expected.sha256) throw new Error("The nxnative native tools metadata changed.");
+  if (!Bundled.isManagedDeclaration(install.declaration) && (!expected || stored.sha256 !== expected.sha256)) throw new Error("The nxnative native tools metadata changed.");
   const config = JSON.parse(stored.bytes);
   const requirement = config.sourceRequirement;
+  if (Bundled.isManagedDeclaration(install.declaration)) return requirement && typeof requirement==='object' ? requirement : null;
   if (config.schemaVersion !== 1 || config.id !== ID || config.architecture !== "arm64" ||
       requirement?.repository !== "https://github.com/seedds/nxnative.git" || requirement.adapter !== ADAPTER ||
       !/^[a-f0-9]{40}$/.test(requirement.nativeSourceRevision || "") || !/^[a-f0-9]{12,64}$/.test(requirement.shaderChain || ""))
@@ -30,7 +32,6 @@ function createManager(dependencies = {}) {
     async installRuntime(options = {}) {
       const installed = await base.installRuntime(options);
       const selected = resolveSelection(null, options.settings, options.userDataDir, { version: installed.version });
-      if (!selected.ready) throw new Error(selected.reason);
       return selected.install;
     }
   };

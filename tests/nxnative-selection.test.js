@@ -32,7 +32,7 @@ function fixture(t) {
   let native = null, previous = null;
   const tools = { resolveSelection(_entry, settings) {
     const stored = settings?.runtimes?.["nxnative-tools"], version = stored && Object.hasOwn(stored, "defaultVersion") ? stored.defaultVersion : "tools-1";
-    return { version, install: version && native?.version === version ? native : null,
+    return { version, sourceRequirement: native ? {repository:"https://github.com/seedds/nxnative.git"} : null, install: version && native?.version === version ? native : null,
       ready: Boolean(version && native?.version === version), reason: version ? "Native tools are not installed." : "Choose native tools." };
   }, async installRuntime(options) {
     const selected = tools.resolveSelection(null, options.settings);

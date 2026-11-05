@@ -11,8 +11,23 @@ const hash = Native.hashFile;
 
 const verified = new Map();
 function resolveProfile(install, { verification = "full" } = {}) {
-  const root = path.dirname(path.dirname(install.executablePath)), profilePath = path.join(root, "siglus-profile.json");
   const project = install.catalogEntry?.projectPackage;
+  const root = install.payloadRoot || path.dirname(path.dirname(install.executablePath));
+  const declaredFile=(key,fallback)=>install.runtimeFiles?.[key]
+    ? path.join(install.installDir,Bundled.relativeFile(install.runtimeFiles[key]))
+    : path.join(root,Bundled.relativeFile(install.manifest?.runtimeFiles?.[key] || fallback));
+  if (install.source==='download') {
+    const library=declaredFile('siglusLibrary','lib/libsiglus.dylib');
+    const file=declaredFile('siglusProfile','siglus-profile.json');
+    const profile=fs.existsSync(file) ? JSON.parse(Bundled.readRegular(file,65536).bytes) : install.manifest?.profile || {};
+    const manifestFile=path.join(install.root || path.join(install.installDir,'project-payload'),Bundled.relativeFile(project?.manifestRelative || 'manifest.json'));
+    const manifest=install.manifest || (fs.existsSync(manifestFile) ? JSON.parse(Bundled.readRegular(manifestFile,Bundled.LIMITS.manifestBytes).bytes) : profile);
+    const libraryArchitectures=Native.readMachOArchitectures(library,{allowLibrary:true});
+    if (!libraryArchitectures.some(cpu=>architectureSupport(cpu).supported)) throw new Error("The Siglus library does not support this Mac's CPU.");
+    return {...install,needsRosetta:imageRequiresRosetta(libraryArchitectures),libraryArchitectures,libraryPath:library,profile,
+      sourceIdentity:Catalog.sourceIdentity(project,{manifest,receiptRevision:install.upstreamRevision})};
+  }
+  const profilePath=declaredFile('siglusProfile','siglus-profile.json');
   const manifestPath = project && path.join(install.installDir, "project-payload", Bundled.relativeFile(project.manifestRelative));
   const nativeApi = project?.capabilities?.nativeApi ?? install.catalogEntry?.nativeApi;
   const identity = file => { const stat = fs.lstatSync(file, { bigint: true }); if (!stat.isFile()) throw new Error("Siglus native payload is missing."); return [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":"); };

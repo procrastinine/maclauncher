@@ -11,6 +11,7 @@ function createManager(dependencies = {}) {
     repository: "procrastinine/maclauncher-builds", manifestRelative: "manifest.json", sourceRelative: null,
     executableRelative: "files/bin/RPGMakerDecrypter-cli", supportsDefault: true,
     validateManifest(manifest, record) {
+      if (Bundled.isManagedDeclaration(manifest)) return;
       if (manifest.managerId !== "rpgmaker-decrypter" || manifest.toolABI !== 1 ||
           !manifest.arch || Architecture.normalizeArchitecture(manifest.arch) !== manifest.arch || manifest.arch !== record.arch ||
           manifest.executableRelative !== "files/bin/RPGMakerDecrypter-cli")
@@ -18,11 +19,11 @@ function createManager(dependencies = {}) {
     },
     verifyPayload(selected) {
       Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
-      const image = MachO.assertSystemLibraryClosure(MachO.readMachOLoadCommands(selected.executablePath), {
+      const image = Bundled.isManagedDeclaration(selected.declaration) ? MachO.readMachOLoadCommands(selected.executablePath) : MachO.assertSystemLibraryClosure(MachO.readMachOLoadCommands(selected.executablePath), {
         fileType: 2, maximumMacOS: selected.declaration.minimumMacOS });
       const required = selected.declaration.arch === "universal" ? ["arm64", "x86_64"]
         : [selected.declaration.arch === "x64" ? "x86_64" : selected.declaration.arch];
-      if (image.architectures.length !== required.length || !required.every(architecture => image.architectures.includes(architecture)))
+      if (!Bundled.isManagedDeclaration(selected.declaration) && (image.architectures.length !== required.length || !required.every(architecture => image.architectures.includes(architecture))))
         throw new Error("The RPGMakerDecrypter executable differs from its package architecture.");
       execFileSync("/usr/bin/codesign", ["--verify", "--strict", selected.executablePath], { timeout: 30000, stdio: "pipe" });
     }, dependencies });

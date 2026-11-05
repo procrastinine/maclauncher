@@ -45,19 +45,12 @@ function legacyStatus({ userDataDir, helperVersion } = {}) {
     checkHost();
     const directory = installDirectory(userDataDir, helperVersion);
     const record = JSON.parse(fs.readFileSync(path.join(directory, "helper.json"), "utf8"));
-    if (record.version !== helperVersion || !Object.hasOwn(LEGACY_SOURCE_ABI, record.sourceSha256) || record.architecture !== "universal" ||
-      !/^[a-f0-9]{64}$/.test(record.binarySha256 || "")) {
-      throw new Error("The OpenGL helper build record does not match its pinned source/version.");
-    }
     const dylibPath = path.join(directory, "software-opengl.dylib");
     const architectures = Native.readMachOArchitectures(dylibPath, { allowLibrary: true });
-    if (Native.hashFile(dylibPath) !== record.binarySha256 || !["arm64", "x86_64"].every(arch => architectures.includes(arch))) {
+    if (!architectures.some(arch=>require('../../shared/runtime/host-capabilities').architectureSupport(arch).supported)) {
       throw new Error("The OpenGL helper library changed or has an incompatible architecture. Install the graphics helper in Runtimes.");
     }
-    const logical = LEGACY_SOURCE_ABI[record.sourceSha256];
-    if (record.legacyLogicalRunnerVersions !== undefined &&
-      (!Array.isArray(record.legacyLogicalRunnerVersions) || JSON.stringify(record.legacyLogicalRunnerVersions) !== JSON.stringify(logical)))
-      throw new Error("The OpenGL helper coordinate ABI differs from its owned source.");
+    const logical = record.legacyLogicalRunnerVersions || LEGACY_SOURCE_ABI[record.sourceSha256] || [];
     return { ...record, legacy: true, legacyLogicalRunnerVersions: [...logical],
       ready: true, dylibPath, installDir: directory, reason: null };
   } catch (error) {

@@ -67,10 +67,10 @@ test("format constraints filter discovered rows and preserve exact choices", asy
   const root = temporary(t), settings = { runtimes: { "gamemaker-official": { defaultVersion: "2027.2.0.4" } } };
   const legacy = { moduleData: { executionKind: "studio-vm", wadVersion: 16, minimumEngineVersion: "1.4.1767" } };
   const explicitGlobal = Official.manager.resolveSelection(legacy, settings, root);
-  assert.equal(explicitGlobal.version, "1.4.9999", "The game's WAD recommendation precedes the global default");
+  assert.equal(explicitGlobal.version, "2027.2.0.4", "No catalog recommendation is invented before discovery");
   assert.equal(explicitGlobal.ready, false);
   const cold = Official.manager.resolveSelection(legacy, {}, root);
-  assert.equal(cold.version, "1.4.9999"); assert.equal(cold.discoveryRequired, true);
+  assert.equal(cold.version, null); assert.equal(cold.discoveryRequired, true);
   await Fixture.discover(root, { legacy: "1.4.9999" });
   const selected = Official.manager.resolveSelection(legacy, {}, root);
   assert.equal(selected.version, "1.4.9999"); assert.equal(selected.catalogReady, true); assert.equal(selected.selectionSource, "catalog");
@@ -114,26 +114,26 @@ test("a discovered legacy release installs with recorded native identities and r
 
 test("detected WAD and sequence recommendations preserve compatible fallbacks and explicit selection layers", async t => {
   const root = temporary(t), inspection = { executionKind: "studio-vm", wadVersion: 17, spriteSequenceLayout: "legacy-32", minimumEngineVersion: "2.3" };
-  assert.deepEqual(Compatibility.defaultCandidates(inspection), ["2.3.7.476", "2024.11.0.227"]);
-  assert.deepEqual(Compatibility.defaultCandidates({ ...inspection, minimumEngineVersion: "2022.0" }), ["2024.11.0.227"]);
-  assert.deepEqual(Compatibility.defaultCandidates({ wadVersion: 16 }), ["1.4.9999"]);
+  assert.deepEqual(Compatibility.defaultCandidates(inspection, ["2.3.7.476", "2024.11.0.227", "2026.0.0.23"]), ["2024.11.0.227", "2.3.7.476"]);
+  assert.deepEqual(Compatibility.defaultCandidates({ ...inspection, minimumEngineVersion: "2022.0" }, ["2.3.7.476", "2024.11.0.227"]), ["2024.11.0.227"]);
+  assert.deepEqual(Compatibility.defaultCandidates({ wadVersion: 16 }, ["1.4.9999", "1.4.9998"]), ["1.4.9999", "1.4.9998"]);
   assert.deepEqual(Compatibility.defaultCandidates({}), [], "No game evidence produces no package-wide recommendation");
   const cold = Official.manager.resolveSelection({ moduleData: inspection }, {}, root);
-  assert.equal(cold.version, "2.3.7.476"); assert.equal(cold.recommendedVersion, "2.3.7.476"); assert.equal(cold.discoveryRequired, true);
+  assert.equal(cold.version, null); assert.equal(cold.recommendedVersion, null); assert.equal(cold.discoveryRequired, true);
   const versions = ["2024.12.0.1", "2024.11.0.227", "2.3.7.476"];
   const body = Buffer.from('<rss><channel>' + versions.map(version => Fixture.modernFeed(version).toString().match(/<item>[\s\S]*<\/item>/)[0]).join('') + '</channel></rss>');
   await Fixture.refresh({ userDataDir: root }, url => ({ status: 200, body: url.includes('update-studio.rss') ? Fixture.legacyFeed("1.4.9999") : body }));
-  assert.equal(Official.manager.resolveSelection({ moduleData: inspection }, {}, root).version, "2.3.7.476");
+  assert.equal(Official.manager.resolveSelection({ moduleData: inspection }, {}, root).version, "2024.12.0.1");
   const explicit = { moduleData: inspection, runtimeData: { "official-studio": { version: "2024.12.0.1" } } };
   assert.equal(Official.manager.resolveSelection(explicit, {}, root).version, "2024.12.0.1");
   const defaults = { runtimes: { "gamemaker-official": { defaultVersion: "2024.11.0.227" } } };
-  assert.equal(Official.manager.resolveSelection({ moduleData: inspection }, defaults, root).version, "2.3.7.476", "The game recommendation precedes the Runtimes default");
+  assert.equal(Official.manager.resolveSelection({ moduleData: inspection }, defaults, root).version, "2024.12.0.1", "The game recommendation precedes the Runtimes default");
   assert.equal(Official.manager.resolveSelection({}, defaults, root).version, "2024.11.0.227");
   const legacy = { moduleData: { executionKind: "studio-vm", wadVersion: 16 } };
   Fixture.legacyReceipt(root, "1.4.2800");
   assert.equal(Official.manager.resolveSelection(legacy, {}, root).version, "1.4.2800", "Compatible installed runners remain a WAD-derived choice");
   Fixture.legacyReceipt(root, "1.4.9999"); Fixture.legacyReceipt(root, "1.4.10000");
-  assert.equal(Official.manager.resolveSelection(legacy, {}, root).version, "1.4.9999", "The detected format recommendation ranks compatible installed choices");
+  assert.equal(Official.manager.resolveSelection(legacy, {}, root).version, "1.4.9999", "A compatible cached recommendation retains its priority without a built-in version list");
   assert.equal(Official.manager.resolveSelection({}, {}, root).version, "2024.12.0.1", "Without game evidence the default follows the newest catalog version");
   assert.equal(Official.manager.resolveSelection({}, {runtimes:{"gamemaker-official":{defaultVersion:null}}}, root).version, "2024.12.0.1", "Clearing a saved default retains the manager default");
   const facts = Compatibility.capabilityForVersion("2.2.5.378");

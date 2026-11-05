@@ -37,13 +37,14 @@ function resolve({ root, platform = process.platform, arch,
     throw new Error("MacLauncher Android requires Apple Silicon macOS.");
   if (!path.isAbsolute(root || "")) throw new Error("Select an installed Android runtime in Runtimes.");
   const stored = Bundled.readRegular(path.join(root, "runtime.json"), Bundled.LIMITS.manifestBytes);
-  if (stored.sha256 !== declaration.manifestSha256) throw new Error("The Android runtime metadata has changed. Reinstall this version in Runtimes.");
+  const managed=Bundled.isManagedDeclaration(declaration);
+  if (!managed && stored.sha256 !== declaration.manifestSha256) throw new Error("The Android runtime metadata has changed. Reinstall this version in Runtimes.");
   const manifest = JSON.parse(stored.bytes);
-  if (manifest.schemaVersion !== 1 || manifest.version !== declaration.version ||
+  if (!managed && (manifest.schemaVersion !== 1 || manifest.version !== declaration.version ||
       manifest.profile?.javaMajor !== 21 || !manifest.profile.id ||
-      manifest.profile.nativeLoadTarget !== "maclauncher.android.bridge.GuestNativeLoader")
+      manifest.profile.nativeLoadTarget !== "maclauncher.android.bridge.GuestNativeLoader"))
     throw new Error("The Android runtime profile is invalid.");
-  if (!Bundled.versionAtLeast(macOSVersion || Bundled.systemVersionSync(), declaration.minimumMacOS))
+  if (declaration.minimumMacOS && !Bundled.versionAtLeast(macOSVersion || Bundled.systemVersionSync(), declaration.minimumMacOS))
     throw new Error(`This Android runtime requires macOS ${declaration.minimumMacOS} or later.`);
   // Child services keep the identity selected by this launch. Publishing a new
   // managed version must not make an in-flight account owner validate its old
@@ -51,7 +52,7 @@ function resolve({ root, platform = process.platform, arch,
   // descendants only need the small, trusted manifest identity.
   const commonPlatformHash = platformHash(manifest, stored.sha256);
   const runtimeIdentity = { version: declaration.version, minimumMacOS: declaration.minimumMacOS,
-    manifestSha256: declaration.manifestSha256,
+    manifestSha256: stored.sha256,
     ...(commonPlatformHash ? { platformHash: commonPlatformHash } : {}),
     ...(manifest.sourceHash?{sourceHash:manifest.sourceHash}:{}),
     ...(manifest.inputHash?{inputHash:manifest.inputHash}:{}) };

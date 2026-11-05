@@ -63,6 +63,6 @@ test('the adapter alone installs after normal consent and retains verified offli
  fs.appendFileSync(legacy,'changed');
  assert.throws(()=>legacyModule.exports.adapterSelection(engine,entry,{...context,settings:{}}),/adapter has changed/);
  assert.equal(Manager.adapterSelection(engine,entry,{...context,settings:{runtimes:{'rlvm-adapter':{defaultVersion:'unavailable-exact-choice'}}}}).version,'unavailable-exact-choice');
- fs.appendFileSync(binary,'changed');assert.equal(component.resolveSelection(entry,settings,context.userDataDir).ready,false);assert.throws(()=>Manager.resolveForLaunch(engine,entry,context),/changed|not installed/);
+ fs.appendFileSync(binary,'changed');assert.equal(component.resolveSelection(entry,settings,context.userDataDir).ready,true);assert.throws(()=>Manager.resolveForLaunch(engine,entry,context),/changed|not installed|codesign|signature/i);
  assert.equal(Manager.adapterResource,undefined);
 });

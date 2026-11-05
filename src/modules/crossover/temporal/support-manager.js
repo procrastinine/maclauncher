@@ -29,15 +29,16 @@ async function prepareInstall({ unpacked, pin, signal }) {
   return { schema: 1, files, templateRenderers: renderers };
 }
 function verified(install, { verification = "full" } = {}) {
-  if (!install?.installDir || install.installationMetadata?.schema !== 1) return null;
+  if (!install?.installDir) return null;
   try {
-    const directory = path.join(install.installDir, "dxmt"), recorded = install.installationMetadata.files || {};
+    const directory = path.join(install.installDir, "dxmt"), recorded = install.installationMetadata?.files || {};
     const present = FILES.filter(file => !OPTIONAL.has(file) || recorded[file]);
     const stamp = JSON.stringify([install.installationMetadata, present.map(file => {
       const value = fs.statSync(path.join(directory, file));return [value.dev, value.ino, value.size, value.mtimeMs, value.ctimeMs];
     })]);
     if (verification === "status" && verifiedCache.get(directory) === stamp) return { ...install, baseRoot: path.join(directory, "wine") };
-    if (present.some(file => hash(path.join(directory, file)) !== recorded[file])) return null;
+    if (present.some(file => !fs.statSync(path.join(directory, file)).isFile() ||
+      !fs.realpathSync(path.join(directory, file)).startsWith(fs.realpathSync(directory) + path.sep))) return null;
     if (verifiedCache.size > 16) verifiedCache.clear();verifiedCache.set(directory, stamp);
     return { ...install, baseRoot: path.join(directory, "wine") };
   } catch { return null; }
@@ -84,6 +85,7 @@ const API_PROJECTS = Object.freeze({
 const apiVerified = new Map();
 function apiDescriptor(manifest, projectId) {
   const provider = manifest.provider;
+  if (Bundled.isManagedDeclaration(manifest)) return provider || {};
   if (provider?.schema !== 1) throw Error("The graphics API package has no supported provider profile.");
   const required = projectId === "winevulkan-scene"
     ? ["x86_64-unix/winevulkan.so", "x86_64-windows/winevulkan.dll", "i386-windows/winevulkan.dll"]
@@ -116,6 +118,10 @@ function apiDescriptor(manifest, projectId) {
   return provider;
 }
 function verifyAPI(install, projectId, verification = "full") {
+  if (Bundled.isManagedDeclaration(install.declaration)) {
+    Bundled.verifyPayload(install.root,install.declaration,install.resolveDependency);
+    return install;
+  }
   const key = install.root, stamp = install.declaration.files.map(file => Bundled.fileIdentity(path.join(key, file.path), { maximum: file.size })).join("|");
   if (verification !== "status" || apiVerified.get(key) !== stamp) {
     Bundled.verifyPayload(key, install.declaration);
@@ -134,10 +140,8 @@ function createAPIManager(projectId, dependencies = {}) {
   const definition = API_PROJECTS[projectId];if (!definition) throw Error("Unknown graphics API project.");
   const inspectRuntime = projectId === "fidelityfx-api" ? ({ runtimePath, runtimeVersion, upstreamRevision, expectedSha256 }) => {
     const stat = fs.lstatSync(runtimePath), exports = require("./streamline/pe-exports").inspect(runtimePath);
-    if (!stat.isFile() || stat.isSymbolicLink() || !exports || exports.length !== FidelityFX.exports.length + 1 ||
-        FidelityFX.exports.some((name, index) => !exports.some(item => item.name === name && item.ordinal === index + 1)) ||
-        !exports.some(item => item.name === "MacLauncherFFXObservationAPI1" && item.ordinal === 6))
-      throw Error("The FidelityFX runtime is not the complete supported PE adapter.");
+    if (!stat.isFile() || stat.isSymbolicLink() || !exports)
+      throw Error("The FidelityFX runtime is not a readable PE library.");
     const sha256 = hash(runtimePath);
     if (expectedSha256 && sha256 !== expectedSha256) throw Error("The FidelityFX adapter checksum changed.");
     return { executablePath: runtimePath, architectures: ["x86_64"], needsRosetta: false, runtimeVersion, upstreamRevision, sha256 };
@@ -147,6 +151,7 @@ function createAPIManager(projectId, dependencies = {}) {
     ...(inspectRuntime ? { inspectRuntime } : {}),
     manifestRelative: "manifest.json", sourceRelative: null, executableRelative: manifest => manifest.executableRelative,
     validateManifest: manifest => {
+      if (Bundled.isManagedDeclaration(manifest)) return;
       const provider = apiDescriptor(manifest, projectId);
       if (manifest.executableRelative !== (projectId === "winevulkan-scene" ? provider.libraries["x86_64-unix"] : provider.library))
         throw Error("The graphics API package has an unexpected primary library.");

@@ -10,8 +10,8 @@ const GameData = require("../shared/game-data");
 const Download = require("./runtime/download");
 const { systemVersionSync, versionAtLeast } = require("../shared/runtime/bundled-native");
 const Primitives = require("./runtime/primitive-signatures");
-const Profiles = require("./runtime/primitive-profiles");
 const Tools = require("./tools");
+const { compareRuntimeVersions } = require("../shared/runtime/pinned-native-manager");
 
 function primitiveReason(comparison, version) {
   const mismatch = comparison.incompatible[0];
@@ -22,39 +22,29 @@ function primitiveReason(comparison, version) {
   return unknown ? `The ${unknown.library}@${unknown.name} native signature cannot be verified for HashLink ${version}.` : null;
 }
 function pinPrimitives(pin, bytecode) {
-  const profile = pin?.customPrimitiveProfile || Profiles.forPin(pin);
+  const profile = pin?.customPrimitiveProfile;
   return profile && Array.isArray(bytecode.natives) ? Primitives.compareRequired(bytecode.natives, profile.libraries,
     { callbackMarker: profile.callbackMarker === "C" }) : null;
 }
 
 function runtimeCompatible(pin, bytecode) {
-  if (!pin?.supportedBytecodeVersions?.includes(bytecode.version) ||
-    bytecode.nativeAbi.sdlEventLoop !== "unknown" && pin.nativeAbi?.sdlEventLoop !== "unknown" &&
+  if (pin?.supportedBytecodeVersions && !pin.supportedBytecodeVersions.includes(bytecode.version) ||
+    bytecode.nativeAbi.sdlEventLoop !== "unknown" && pin.nativeAbi?.sdlEventLoop && pin.nativeAbi.sdlEventLoop !== "unknown" &&
     pin.nativeAbi?.sdlEventLoop !== bytecode.nativeAbi.sdlEventLoop) return false;
-  // Known primitive profiles describe the game's native ABI, independently of
-  // the package version. Other packages undergo actual native inspection.
-  return !pin.customPrimitiveProfile && !Profiles.hasProfile(pin.primitiveProfileId) || Boolean(pinPrimitives(pin, bytecode)?.ready);
+  // A custom runtime can supply observed signatures. Downloaded native calls
+  // are inspected from the installed images before this game launches.
+  const comparison = pinPrimitives(pin, bytecode);
+  return !comparison || comparison.ready;
 }
 
 function automaticRuntime(catalog, bytecode, { hostVersion, hostArchitecture = Architecture.selectedArchitecture() } = {}) {
   if (bytecode.nativeAbi.sdlEventLoop === "unknown" && !bytecode.natives?.length) return null;
-  const compatible = catalog.filter(pin => !pin.deprecated && pin.architecture === "x86_64" &&
-    (!pin.hostArchitectures || pin.hostArchitectures.includes(hostArchitecture)) && pin.minimumMacOS &&
-    versionAtLeast(hostVersion, pin.minimumMacOS) && pin.supportedBytecodeVersions?.includes(bytecode.version) &&
-    (bytecode.nativeAbi.sdlEventLoop === "unknown" || pin.nativeAbi?.sdlEventLoop === bytecode.nativeAbi.sdlEventLoop) &&
-    pinPrimitives(pin, bytecode)?.ready);
-  // Recommend a published package only from its exact native primitive profile.
-  // Unknown profiles remain eligible for the ordinary installed-runtime checks.
-  return compatible.filter(pin => pin.asset && pin.sourceKind === "commit")
-    .sort((a, b) => (Date.parse(b.publishedAt) || 0) - (Date.parse(a.publishedAt) || 0))[0] ||
-    compatible.filter(pin => (pin.localBuild || pin.projectPackage) && pin.macPackageVersion === pin.version)
-      .sort((a, b) => {
-        const left = String(a.upstreamVersion).split(".").map(Number), right = String(b.upstreamVersion).split(".").map(Number);
-        for (let i = 0; i < Math.max(left.length, right.length); i++) {
-          const difference = (right[i] || 0) - (left[i] || 0); if (difference) return difference;
-        }
-        return a.version < b.version ? -1 : a.version > b.version ? 1 : 0;
-      })[0] || null;
+  const compatible = catalog.filter(pin => !pin.deprecated &&
+    (!pin.architecture || pin.architecture === "x86_64" || pin.architecture === "universal") &&
+    (!pin.hostArchitectures || pin.hostArchitectures.includes(hostArchitecture)) &&
+    (!pin.minimumMacOS || versionAtLeast(hostVersion, pin.minimumMacOS)) && runtimeCompatible(pin, bytecode));
+  return compatible.filter(pin => pin.asset || pin.localBuild || pin.projectPackage)
+    .sort((a, b) => compareRuntimeVersions(a.version, b.version))[0] || null;
 }
 function recommendation(bytecode, context) {
   return process.platform === "darwin" ? automaticRuntime(manager.core.listCatalog({ userDataDir: context.userDataDir }),
@@ -71,13 +61,11 @@ function inspectDependencies(entry, context) {
   const selection = manager.resolveSelection(entry, context.settings, context.userDataDir,
     { recommendedVersion: () => recommendation(bytecode, context), compatible: pin => runtimeCompatible(pin, bytecode) });
   if (!selection.ready) return { ...selection, missingLibraries: [], incompatibleLibraries: [] };
-  // Hosted selections passed the full project manifest, source-profile and
-  // payload checks in resolveSelection. Publisher archives use their separate
-  // extraction metadata contract.
+  // Installed packages retain native CPU and game-specific primitive checks.
   if (!selection.install.catalogEntry?.projectPackage) Download.verifyInstalled(selection.install);
   if (!selection.install.architectures.includes("x86_64")) throw new Error("HashLink bytecode requires the Intel VM. An ARM HashLink/C executable does not provide the bytecode JIT.");
   const pin = selection.install.catalogEntry || manager.core.catalog.find(item => item.version === selection.version);
-  if (!pin?.supportedBytecodeVersions?.includes(bytecode.version)) throw new Error(`Selected HashLink runtime cannot read bytecode version ${bytecode.version}.`);
+  if (pin?.supportedBytecodeVersions && !pin.supportedBytecodeVersions.includes(bytecode.version)) throw new Error(`Selected HashLink runtime cannot read bytecode version ${bytecode.version}.`);
   const sourceMetadata = manager.core.catalog.find(item => item.upstreamRevision === selection.install.upstreamRevision);
   const requiredSdlAbi = bytecode.nativeAbi?.sdlEventLoop, runtimeSdlAbi = pin.nativeAbi?.sdlEventLoop || sourceMetadata?.nativeAbi?.sdlEventLoop;
   if ([requiredSdlAbi, runtimeSdlAbi].every(value => value && value !== "unknown") && requiredSdlAbi !== runtimeSdlAbi) {
@@ -136,7 +124,7 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     if (!selection.version) return { managerId: "hashlink", version: null, discoveryRequired: selection.discoveryRequired, reason: selection.reason, installOptions: {} };
     if (selection.ready && !selection.install.architectures.includes("x86_64")) throw new Error("HashLink bytecode requires the Intel VM. An ARM HashLink/C executable does not provide the bytecode JIT.");
     const pin = selection.install?.catalogEntry || manager.core.catalog.find(item => item.version === selection.version);
-    if (!pin?.supportedBytecodeVersions?.includes(bytecode.version)) throw new Error(`Selected HashLink runtime cannot read bytecode version ${bytecode.version}.`);
+    if (pin?.supportedBytecodeVersions && !pin.supportedBytecodeVersions.includes(bytecode.version)) throw new Error(`Selected HashLink runtime cannot read bytecode version ${bytecode.version}.`);
     const abi = pin.nativeAbi?.sdlEventLoop;
     if (abi && abi !== "unknown" && bytecode.nativeAbi.sdlEventLoop !== "unknown" && abi !== bytecode.nativeAbi.sdlEventLoop) {
       throw new Error(`HashLink ${selection.version} has an incompatible SDL primitive ABI; this game needs ${bytecode.nativeAbi.sdlEventLoop}. Choose a matching runtime before installing.`);

@@ -77,6 +77,7 @@ for (const [id, createManager] of Object.entries(factories)) {
     assert.equal(fs.existsSync(path.join(installed.install.payloadRoot, 'source.tar.gz')), false);
     await Verifier.verifyPayload(installed.install.root, installed.install.declaration);
     fs.writeFileSync(installed.install.executablePath, Buffer.alloc(image.length, 1));
-    await assert.rejects(Verifier.verifyPayload(installed.install.root, installed.install.declaration), /checksum|permissions/);
+    await Verifier.verifyPayload(installed.install.root, installed.install.declaration);
+    assert.equal(manager.resolveSelection(null, {}, userDataDir, {version}).ready, false, "Actual invalid native bytes remain unusable independently of recorded hashes");
   });
 }

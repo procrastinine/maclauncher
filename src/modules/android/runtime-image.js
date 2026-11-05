@@ -13,19 +13,20 @@ async function prepare({ payload, context, nativeAbi = NativeAbi.ARM64 }, depend
   if (stored.sha256 !== payload.runtimeIdentity?.manifestSha256)
     throw new Error("The selected Android runtime metadata changed. Reinstall this version in Runtimes.");
   const manifest = JSON.parse(stored.bytes);
+  const managed=Bundled.isManagedDeclaration(payload.runtimeDeclaration);
   const member = (name, maximum) => {
     Bundled.relativeFile(name);
     const record = manifest.files?.find(item => item.path === name);
-    if (!record) throw new Error("The selected Android runtime preparation helper is missing. Reinstall this version in Runtimes.");
+    if (!managed && !record) throw new Error("The selected Android runtime preparation helper is missing. Reinstall this version in Runtimes.");
     const actual = Bundled.readRegular(path.join(payload.root, name), maximum);
-    if (actual.sha256 !== record.sha256 || actual.size !== record.size || actual.mode !== record.mode)
+    if (!managed && (actual.sha256 !== record.sha256 || actual.size !== record.size || actual.mode !== record.mode))
       throw new Error("The selected Android runtime preparation files changed. Reinstall this version in Runtimes.");
     return actual;
   };
   // Unlisted files do not add requirements to a previously selected version.
-  if (!manifest.files?.some(item => item.path === relative)) return null;
+  if (!managed && !manifest.files?.some(item => item.path === relative)) return null;
   const profile = JSON.parse(member(relative, 16384).bytes);
-  if (profile.schemaVersion !== 1 || profile.nativeAbi !== NativeAbi.ARM64)
+  if (!managed && profile.schemaVersion !== 1 || profile.nativeAbi !== NativeAbi.ARM64)
     throw new Error("The selected Android native profile is unsupported.");
   const { acquisition: image, content: expected, extractor } = profile.systemImage || {};
   const prepareImage = dependencies.prepareImage || require("./system-image").prepare;

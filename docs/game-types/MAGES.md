@@ -36,7 +36,7 @@ Its packages are published by MacLauncher Builds and listed in **Runtimes → MA
 
 The player needs a supported layout of the original Windows executable, because it reads the input regions and mouse-selector behavior from that executable. The resulting input table is generated in the private session folder and records the recognized layout and UI-mode declarations before startup.
 
-Each package's manifest declares the versions of MacLauncher's Windows adaptation interfaces it uses, the checksum of its game profile and a check for the Bink 2 decoder. Play accepts any package whose interface versions and game profile this version of MacLauncher supports. A package that declares a newer interface version needs a newer MacLauncher, and a package without the Bink 2 decoder does not start. Installation checks the selected package, its native dependencies, its architecture and its macOS version. Runtimes lists each package's architectures and minimum macOS version.
+Each package's manifest declares the versions of MacLauncher's Windows adaptation interfaces it uses, the checksum of its game profile and a check for the Bink 2 decoder. Play reads the interfaces and game profile the package supplies without an app-version ceiling. A Windows HD game that needs the Bink 2 decoder requires that decoder. Installation checks the selected package, its native dependencies, its architecture and its macOS version. Runtimes lists each package's architectures and minimum macOS version.
 
 ### CrossOver and Sikarugir (Wine)
 

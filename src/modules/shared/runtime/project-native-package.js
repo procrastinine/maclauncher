@@ -4,7 +4,7 @@ const Catalog = require("./maclauncher-builds"), Bundled = require("./bundled-na
 
 async function extractArchive(archive, destination, signal) {
     const options = { ...(signal ? {signal} : {}), timeout: 120000, maxBuffer: 8 * 1024 * 1024 };
-    const listed = await execute("/usr/bin/tar", ["-tzf", archive], options), names = new Set();
+    const listed = await execute("/usr/bin/tar", ["-tf", archive], options), names = new Set();
     for (const original of listed.stdout.split("\n").filter(Boolean)) {
       const name = original.replace(/^\.\//, "").replace(/\/$/, "");
       if (!name) continue;
@@ -13,10 +13,10 @@ async function extractArchive(archive, destination, signal) {
         throw new Error("The hosted runtime archive layout is invalid.");
       names.add(name);
     }
-    const types = await execute("/usr/bin/tar", ["-tvzf", archive], options);
+    const types = await execute("/usr/bin/tar", ["-tvf", archive], options);
     if (types.stdout.trim().split("\n").some(line => !/^[d-]/.test(line)))
       throw new Error("The hosted runtime archive contains unsupported links.");
-    await execute("/usr/bin/tar", ["-xzf", archive, "-C", destination], options);
+    await execute("/usr/bin/tar", ["-xf", archive, "-C", destination], options);
   }
 
 // Each record identifies its source revision and carries the capabilities
@@ -43,7 +43,7 @@ function createProjectNativePackage({ projectId, repository, validateManifest, l
   }
   function inspect(root, pin, {userDataDir,verification="status",resolveDependency,installedDependencies,metadataOnly=false} = {}) {
     const record = recordFor(pin), P=require('./package-dependencies');
-    const wrapper=path.join(path.dirname(root),'project-package.json');
+    const parent=path.dirname(root),wrapper=path.join(parent,fs.existsSync(path.join(parent,'project-package.json'))?'project-package.json':'runtime-package.json');
     const outer=fs.existsSync(wrapper)?JSON.parse(Bundled.readRegular(wrapper,Bundled.LIMITS.manifestBytes).bytes):null;
     if(outer&&!installedDependencies)installedDependencies=P.load(userDataDir || (outer.dependencies?.length?P.userDataForPayload(root):undefined),outer.dependencies,{verification:'status'});
     resolveDependency ||= P.resolver(installedDependencies||new Map());
@@ -74,8 +74,7 @@ function createProjectNativePackage({ projectId, repository, validateManifest, l
   function supported(value) {
     const unavailable = [...value.unavailable || []];
     const usable = value.packages.flatMap(record => {
-      const recipe = recipes.get(record.version), upstreamRevision = record.source?.revision || recipe?.upstreamRevision;
-      if (!upstreamRevision) return unavailable.push({ version: record.version, reason: "This version does not identify its source revision." }), [];
+      const recipe = recipes.get(record.version), upstreamRevision = record.source?.revision || record.asset.sha256;
       return [{ ...recipe, ...record.capabilities, ...record, upstreamRevision, asset: record.asset, projectPackage: record, localBuild: false,
         architecture: record.arch === "x64" ? "x86_64" : record.arch,
         hostArchitectures: record.launcherArchitectures, minimumMacOS: record.minimumMacOS,
@@ -92,10 +91,7 @@ function createProjectNativePackage({ projectId, repository, validateManifest, l
     signal?.throwIfAborted();
     const record = recordFor(pin);
     const wrapperBytes = Bundled.readRegular(path.join(unpacked, "runtime-package.json"), Bundled.LIMITS.manifestBytes);
-    const wrapper = JSON.parse(wrapperBytes.bytes), P=require('./package-dependencies');
-    if (["id", "version", "arch", "minimumMacOS", "manifestRelative", "manifestSha256"]
-      .some(key => wrapper[key] !== record[key]) || JSON.stringify(wrapper.launcherArchitectures) !== JSON.stringify(record.launcherArchitectures))
-      throw new Error("The hosted runtime archive differs from its selected project or source identity.");
+    const wrapper = Bundled.managedDeclaration(JSON.parse(wrapperBytes.bytes)), P=require('./package-dependencies');
     const selected = inspect(path.join(unpacked,"files"),pin,{userDataDir,resolveDependency,installedDependencies,verification:'status',metadataOnly:true});
     // Before the transport rename, bind the unchanged wrapper explicitly.
     selected.declaration=P.bind(selected.root,record,selected.declaration,resolveDependency,path.join(unpacked,'runtime-package.json'),{normalizeFiles:files=>executionFiles(files,record)});
@@ -104,12 +100,10 @@ function createProjectNativePackage({ projectId, repository, validateManifest, l
     P.materialize(selected.root,wrapper,resolveDependency,{verify:false});
     Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
     if (dependencies.verifySignatures) await dependencies.verifySignatures(selected.payloadRoot, selected.manifest, { signal });
-    else for (const file of selected.manifest.files.filter(file => file.architectures))
-      await execute("/usr/bin/codesign", ["--verify", "--strict", path.join(selected.payloadRoot, file.path)],
-        { ...(signal ? {signal} : {}), timeout: 30000, maxBuffer: 1024 * 1024 });
+    else await Bundled.verifySignatures(selected.root,selected.declaration,{signal});
     fs.renameSync(path.join(unpacked, "files"), path.join(unpacked, "project-payload"));
     fs.renameSync(path.join(unpacked, "runtime-package.json"), path.join(unpacked, "project-package.json"));
-    const relative = value => path.posix.join("project-payload/files", value);
+    const relative = value => path.posix.join("project-payload",path.relative(selected.root,selected.payloadRoot).split(path.sep).join('/'),Bundled.relativeFile(value));
     return { manifestSha256: record.manifestSha256,
       sourceIdentity: Catalog.sourceIdentity(record, {manifest: selected.manifest, wrapper, receiptRevision: pin.upstreamRevision}),
       environmentRelative: Object.fromEntries(Object.entries(selected.manifest.environmentRelative || {}).map(([key, value]) => [key, relative(value)])),

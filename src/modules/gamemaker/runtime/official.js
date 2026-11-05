@@ -214,7 +214,7 @@ function resolveSelection(entry, settings, userDataDir) {
   const inspection = entry?.moduleData || {}, cached = Catalog.cachedCatalog(userDataDir)?.entries || [];
   const gameEvidence = inspection.wadVersion != null || Boolean(inspection.minimumEngineVersion || inspection.maximumOfficialRuntimeExclusive);
   const accepts = version => Compatibility.compatibility(inspection, version).compatible;
-  const recommendations = Compatibility.defaultCandidates(inspection);
+  const recommendations = Compatibility.defaultCandidates(inspection, cached.map(item => item.version));
   const priority = version => gameEvidence && recommendations.includes(version) ? recommendations.indexOf(version) : 1000;
   // The game's recommendation is its first format candidate that is installed,
   // otherwise the first one the cached catalog offers.

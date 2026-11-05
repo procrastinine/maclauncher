@@ -51,7 +51,9 @@ test("HashLink validates the native dependency closure and returns exact ABI and
   assert.equal(metadata.aliases.length, 1); assert.equal(Download.resolveExecutable(root), path.join(payload, "hl"));
   Download.verifyInstalled({ source: "download", installDir: root, installationMetadata: metadata });
   fs.appendFileSync(path.join(payload, "sdl.hdll"), "changed");
-  assert.throws(() => Download.verifyInstalled({ source: "download", installDir: root, installationMetadata: metadata }), /changed/);
+  assert.doesNotThrow(() => Download.verifyInstalled({ source: "download", installDir: root, installationMetadata: metadata }));
+  fs.unlinkSync(path.join(payload, "sdl.hdll"));
+  assert.throws(() => Download.verifyInstalled({ source: "download", installDir: root, installationMetadata: metadata }), /ENOENT|unavailable/);
 });
 
 test("HashLink rejects missing or foreign native dependencies before signing and reads its macOS floor from the package", async t => {

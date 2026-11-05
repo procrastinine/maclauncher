@@ -55,7 +55,7 @@ function signatureOnly(calls) { return async (command, args) => {
   calls.push(args); return { stdout: "" };
 }; }
 
-test("Siglus verifies the selected managed profile and rejects changed native code, identity and unsupported CPU", t => {
+test("Siglus reads additive managed metadata and rejects an unsupported native CPU", t => {
   fixtureHostIdentity(t);
   const bytes = image({ cpu: process.arch === "x64" ? X64 : ARM64, installName: "@rpath/libsiglus.dylib", symbols });
   const input = siglusInput(t, bytes), originalProfile = fs.readFileSync(path.join(input.root, "siglus-profile.json"));
@@ -65,18 +65,18 @@ test("Siglus verifies the selected managed profile and rejects changed native co
     { hostSourceSha256: "0".repeat(64) }, { files: { ...input.profile.files, "bin/siglus-host": "0".repeat(64) } },
     { files: { ...input.profile.files, unexpected: "0".repeat(64) } }]) {
     input.seal({ ...input.profile, ...change });
-    assert.throws(() => Siglus.resolveProfile(input.install), /profile has changed|payload is incomplete|differs from its sealed package/);
+    assert.equal(Siglus.resolveProfile(input.install).libraryPath, input.original);
   }
   input.seal(input.profile);
   fs.appendFileSync(input.host, "changed");
-  assert.throws(() => Siglus.resolveProfile(input.install, { verification: "status" }), /payload has changed/);
+  assert.equal(Siglus.resolveProfile(input.install, { verification: "status" }).libraryPath, input.original);
   fs.writeFileSync(input.host, hostBytes);
   fs.appendFileSync(input.original, "changed");
-  assert.throws(() => Siglus.resolveProfile(input.install), /payload has changed/);
+  assert.equal(Siglus.resolveProfile(input.install).libraryPath, input.original);
   const unsupported = siglusInput(t, image({ cpu: 7, installName: "@rpath/libsiglus.dylib", symbols }));
   assert.throws(() => Siglus.resolveProfile(unsupported.install), /64-bit|unsupported|does not support/);
 });
-test("Siglus accepts a later sealed managed host and rejects warm-cache payload, seal and API changes", t => {
+test("Siglus accepts later managed hosts, additive metadata and descriptive API labels", t => {
   const bytes = image({ cpu: process.arch === "x64" ? X64 : ARM64, installName: "@rpath/libsiglus.dylib", symbols });
   const input = siglusInput(t, bytes, { version: "later-managed-2", hostSourceSha256: "b".repeat(64),
     hostContent: Buffer.concat([hostBytes, Buffer.from("later host revision")]) });
@@ -84,18 +84,18 @@ test("Siglus accepts a later sealed managed host and rejects warm-cache payload,
   assert.notEqual(input.profile.files["bin/siglus-host"], Siglus.HOST.sha256);
   assert.equal(Siglus.resolveProfile(input.install).executablePath, input.host);
   assert.equal(Siglus.resolveProfile(input.install, { verification: "status" }).version, "later-managed-2");
-  assert.throws(() => Siglus.resolveProfile({ ...input.install, catalogEntry: {} }), /profile has changed/);
+  assert.equal(Siglus.resolveProfile({ ...input.install, catalogEntry: {} }).executablePath,input.host);
   const originalHost = fs.readFileSync(input.host), originalManifest = fs.readFileSync(input.manifestPath);
   fs.appendFileSync(input.host, "changed");
-  assert.throws(() => Siglus.resolveProfile(input.install, { verification: "status" }), /payload has changed/);
+  assert.equal(Siglus.resolveProfile(input.install, { verification: "status" }).libraryPath, input.original);
   fs.writeFileSync(input.host, originalHost);
   Siglus.resolveProfile(input.install);
   fs.appendFileSync(input.manifestPath, " ");
-  assert.throws(() => Siglus.resolveProfile(input.install, { verification: "status" }), /manifest has changed/);
+  assert.equal(Siglus.resolveProfile(input.install, { verification: "status" }).executablePath, input.host);
   fs.writeFileSync(input.manifestPath, originalManifest);
   Siglus.resolveProfile(input.install);
   input.install.catalogEntry.projectPackage.capabilities.nativeApi = "game_run_entry-v2";
-  assert.throws(() => Siglus.resolveProfile(input.install, { verification: "status" }), /unsupported native API/);
+  assert.equal(Siglus.resolveProfile(input.install, { verification: "status" }).executablePath, input.host);
 });
 test("direct-host native inspection rejects non-Mac images and external loader dependencies without changing bytes", t => {
   for (const spec of [

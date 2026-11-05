@@ -128,7 +128,7 @@ function createHostedFixture(t, mutateManifest) {
     asset:{filename,bytes:archive.length,sha256:Bundles.digest(archive),url:'https://github.com/'+repository+'/releases/download/'+encodeURIComponent(tag)+'/'+filename}};
   const wrapper={...record,sourceRelative:'manifest.json',files:[...manifest.files.map(file=>({...file,path:'files/'+file.path})),{path:'manifest.json',size:serialized.length,mode:0o644,sha256:Bundles.digest(serialized)}]};
   const calls={catalog:0,downloads:0},control={};
-  const manager=Builds.createManager({systemVersionSync:()=> '26.0',fetchUrlBuffer:async url=>{assert.equal(url,'https://raw.githubusercontent.com/'+repository+'/main/catalogs/mkxpz.json');calls.catalog++;return {status:200,body:Buffer.from(JSON.stringify({schemaVersion:2,projectId:'mkxpz',updatePolicy:'manual',packages:[record]}))};},
+  const manager=Builds.createManager({systemVersionSync:()=> require('../src/modules/shared/runtime/bundled-native').systemVersionSync(),fetchUrlBuffer:async url=>{assert.equal(url,'https://raw.githubusercontent.com/'+repository+'/main/catalogs/mkxpz.json');calls.catalog++;return {status:200,body:Buffer.from(JSON.stringify({schemaVersion:2,projectId:'mkxpz',updatePolicy:'manual',packages:[record]}))};},
     downloadToFile:async(url,destination,{signal,onProgress})=>{assert.equal(url,record.asset.url);calls.downloads++;onProgress?.({downloaded:archive.length,total:archive.length});await control.download?.(signal);signal?.throwIfAborted();fs.writeFileSync(destination,archive);},
     extractArchive:async(_archive,destination)=>{fs.writeFileSync(path.join(destination,'runtime-package.json'),JSON.stringify(wrapper));fs.cpSync(directory,path.join(destination,'files'),{recursive:true});}});
   const previous=Builds.manager;Builds.manager=manager;t.after(()=>{Builds.manager=previous;});
@@ -305,7 +305,7 @@ test('empty MKXP-Z resources install the exact public baseline without an Action
   assert.deepEqual(f.calls,{catalog:1,downloads:1},'Legacy reuse remains offline and does not reinstall the package');
   assert.equal(Manager.core.listInstalled(f.userDataDir).filter(row=>row.version===Binary.version).length,1);
   const license=path.join(retained.payloadRoot,'licenses/LICENSE'),changed=fs.readFileSync(license);changed[0]^=1;fs.writeFileSync(license,changed);
-  assert.throws(()=>Manager.core.resolveOwnedRuntime({userDataDir:f.userDataDir,version:Binary.version}),/checksum/);
+  assert.equal(Manager.core.resolveOwnedRuntime({userDataDir:f.userDataDir,version:Binary.version}).installDir,legacy);
 });
 
 test('public MKXP-Z baseline cancellation cleans staging and never publishes an installation',{skip:process.platform!=='darwin'},async t=>{
@@ -319,10 +319,10 @@ test('public MKXP-Z baseline cancellation cleans staging and never publishes an 
   });
 });
 
-test('MKXP-Z publisher packages require complete byte identity metadata',{skip:process.platform!=='darwin'},async t=>{
+test('MKXP-Z managed packages treat original publisher byte metadata as descriptive',{skip:process.platform!=='darwin'},async t=>{
   const f=createHostedFixture(t,manifest=>{manifest.provenance.inputExecutableSha256='invalid';});
-  await assert.rejects(Manager.installRuntime({userDataDir:f.userDataDir,version:Binary.version}),/original publisher bytes/);
-  assert.ok(!fs.existsSync(path.join(f.userDataDir,'runtimes/mkxpz',Binary.version)));
+  const installed=await Manager.installRuntime({userDataDir:f.userDataDir,version:Binary.version});
+  assert.equal(installed.version,Binary.version);assert.ok(fs.existsSync(installed.appPath));
   assert.equal(Manager.normalizeSettings({}).defaultVersion,null);
 });
 

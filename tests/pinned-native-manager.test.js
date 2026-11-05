@@ -744,7 +744,7 @@ test("reinstall atomically repairs damaged downloaded bytes and preserves them w
       extractArchive: async (_archive, destination) => fs.writeFileSync(path.join(destination, 'runner'), binary(process.arch === 'x64' ? 'x86_64' : 'arm64'), { mode: 0o755 }) } });
   const first = await runtime.installRuntime({ userDataDir: root, version: '1.2.0' });
   const executable = first.executablePath, record = fs.readFileSync(path.join(first.installDir, 'runtime.json'));
-  fs.appendFileSync(executable, 'damaged');
+  fs.writeFileSync(executable, 'damaged');
   assert.equal(runtime.getState({ userDataDir: root }).installed[0].ready, false);
   invalidArchive = true;
   await assert.rejects(runtime.installRuntime({ userDataDir: root, version: '1.2.0' }), /SHA-256/);
@@ -875,4 +875,17 @@ test("removing one copy of a version leaves other CPUs', earlier layouts' and re
   assert.equal(await remove(runtime, root), true);
   assert.ok(!fs.existsSync(current));
   assert.ok(fs.existsSync(earlier) && fs.existsSync(former), "copies of an earlier layout and a replaced manager stay");
+});
+
+
+test("downloaded launch identities describe the current executable without pinning receipt bytes", async t => {
+  const root=temporary(t), version="7.0", executable=path.join(root,"runtimes","identity-fixture",version,"runner");
+  fs.mkdirSync(path.dirname(executable),{recursive:true});fs.writeFileSync(executable,binary(process.arch==='x64'?'x86_64':'arm64'),{mode:0o755});
+  const initial=crypto.createHash('sha256').update(fs.readFileSync(executable)).digest('hex'),asset={url:'https://example.test/fixture.zip',filename:'fixture.zip',sha256:'a'.repeat(64)};
+  fs.writeFileSync(path.join(path.dirname(executable),'runtime.json'),JSON.stringify({version,upstreamRevision:'observed-source',source:'download',binarySha256:initial,executableRelative:'runner',archiveSha256:asset.sha256,catalogEntry:{version,upstreamRevision:'observed-source',asset}}));
+  const selected=require('../src/modules/shared/runtime/pinned-native-manager').createPinnedNativeManager({id:'identity-fixture',label:'Identity fixture',discoverCatalog:async()=>[]});
+  fs.appendFileSync(executable,'additive native content');
+  const result=selected.resolveSelection({runtimeData:{'identity-fixture':{version}}},{},root);
+  assert.equal(result.ready,true);assert.notEqual(result.install.binarySha256,initial);
+  assert.equal(result.install.binarySha256,result.install.sha256);
 });

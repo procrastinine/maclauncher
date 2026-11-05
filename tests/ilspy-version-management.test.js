@@ -274,7 +274,7 @@ test("macOS 13 uses the ready managed CLR8 floor once per state and installs wit
   assert.equal(verified.mock.callCount(), 2, "execution preparation still verifies the actual host");
   assert.equal(hostInstall.mock.callCount(), 0);
 });
-test("a missing or damaged managed CLR8 leaves the tool installable with a separate host", async t => {
+test("managed CLR8 does not pin unused framework bytes and a missing host remains installable", async t => {
   const { userDataDir, payload, directoryPath } = managedFna(t);
   Catalog.saveCatalog(userDataDir, Object.values(TOOL_FIXTURES));
   assert.equal(Manager.getState({ userDataDir }).catalog.installableVersions.includes(TOOL_VERSION), true);
@@ -287,11 +287,11 @@ test("a missing or damaged managed CLR8 leaves the tool installable with a separ
   for (const missing of [false, true]) {
     if (missing) fs.rmSync(directoryPath, { recursive: true });
     const state = Manager.getState({ userDataDir }), requirement = state.catalog.versionRequirements[TOOL_VERSION];
-    assert.equal(requirement.minimumMacOS, null); assert.equal(requirement.installReason, null);
+    assert.equal(requirement.minimumMacOS, missing ? null : "13.0"); assert.equal(requirement.installReason, null);
     assert.equal(state.catalog.installableVersions.includes(TOOL_VERSION), true);
     assert.equal((await installIlSpy({ userDataDir, version: TOOL_VERSION })).version, TOOL_VERSION);
   }
-  assert.equal(acquireTool.mock.callCount(), 2); assert.equal(hostInstall.mock.callCount(), 2);
+  assert.equal(acquireTool.mock.callCount(), 2); assert.equal(hostInstall.mock.callCount(), 1);
 });
 test("an installed tool's newer CLR minimum acquires a matching host instead of an older managed one", async t => {
   const { userDataDir } = managedFna(t), selected = pin("9.2.0.8100", "net8.0"); Catalog.saveCatalog(userDataDir, [selected]);

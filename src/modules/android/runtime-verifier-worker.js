@@ -55,8 +55,10 @@ function snapshot(root, declaration, resolveDependency) {
       const selected=target && typeof target==='object' ? resolveDependency(target,declaration.dependencies.find(dep=>dep.project===target.project)) : null;
       const local=typeof target==='string'&&Bundled.localMachO(declaration.files.find(file=>file.path===target))?path.join(root,target):null;
       const canonical=selected?.path || local || Bundled.appAlias(full);
-      if(!canonical || path.isAbsolute(fs.readlinkSync(full)) || fs.realpathSync(full)!==fs.realpathSync(canonical) ||
-          (selected || local) && fs.readlinkSync(full)!==path.relative(path.dirname(full),canonical))throw new Error("Bundled runtime has undeclared dependency aliases or symlinks.");
+      const managed=Bundled.isManagedDeclaration(declaration);
+      if(!canonical || path.isAbsolute(fs.readlinkSync(full)) || (managed ?
+          !fs.realpathSync(full).startsWith(fs.realpathSync(selected?.root || root)+path.sep) :
+          fs.realpathSync(full)!==fs.realpathSync(canonical) || (selected || local) && fs.readlinkSync(full)!==path.relative(path.dirname(full),canonical)))throw new Error("Bundled runtime has undeclared dependency aliases or symlinks.");
       files.push(relative);identities.push(relative+':'+fs.readlinkSync(full)+':'+Bundled.fileIdentity(canonical));return;
     }
     if (stat.isDirectory()) {
@@ -76,7 +78,7 @@ function snapshot(root, declaration, resolveDependency) {
 function verify(root, declaration, dependencyFiles = {}, dependencyPackages=[]) {
   const resolveDependency=(target,dependency)=>{
     const selected=dependencyFiles[target.project+':'+target.path];
-    if(!selected||JSON.stringify(selected.dependency)!==JSON.stringify(dependency))throw new Error("Android dependency selection changed.");
+    if(!selected||!Bundled.isManagedDeclaration(declaration)&&JSON.stringify(selected.dependency)!==JSON.stringify(dependency))throw new Error("Android dependency selection changed.");
     return selected;
   };
   root = path.resolve(root);

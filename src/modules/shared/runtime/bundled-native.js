@@ -173,6 +173,15 @@ function readRegular(file, maximum, { digestOnly = false, directories } = {}) {
 }
 
 function validateManifest(manifest, { managerId, version, upstreamRevision, arch, checkSourceIdentity = true } = {}) {
+  if (isManagedDeclaration(manifest)) {
+    const files = manifest.files || [];
+    if (!Array.isArray(files) || files.length > LIMITS.files) throw new Error("Runtime manifest exceeds its file limit.");
+    for (const file of files) relativeFile(file.path);
+    if (manifest.executableRelative !== undefined) relativeFile(manifest.executableRelative);
+    for (const value of Object.values(manifest.environmentRelative || {})) relativeFile(value);
+    for (const value of Object.values(manifest.runtimeFiles || {})) relativeFile(value);
+    return manifest;
+  }
   if (manifest?.schemaVersion !== 1 || !/^[a-z0-9-]+$/.test(manifest.managerId || "") ||
       !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(manifest.version || "") || checkSourceIdentity && !/^[a-f0-9]{40}$/.test(manifest.upstreamRevision || "") ||
       manifest.platform !== "darwin" || !["arm64", "x64", "universal"].includes(manifest.arch) ||
@@ -275,16 +284,17 @@ function validateLocalAlias(root,name,target,declaration,resolveDependency){
 
 function verifyPayload(root, manifest, resolveDependency) {
   const Contract = require("./package-contract.cjs");
-  if (manifest.id && Contract.packageDependencies(manifest.dependencies).length) {
+  const managed = isManagedDeclaration(manifest);
+  if (manifest.id && Contract.packageDependencies(manifest.dependencies,{managed}).length) {
     resolveDependency ||= dependencyContexts.get(manifest) || dependencyResolver(root,manifest);
     resolveDependency.verify?.();
   }
-  const aliases = Contract.packageAliases(manifest.aliases,manifest.files,manifest.dependencies)?.files || {};
+  const aliases = Contract.packageAliases(manifest.aliases,manifest.files || [],manifest.dependencies,{managed})?.files || {};
   const allowedAliases = new Set(), resolved = new Map();
   const dependencyFile = (target, dependency) => {
     const result = resolveDependency?.(target,dependency);
-    if (!result || !path.isAbsolute(result.path || "") || !SHA.test(result.sha256 || "") ||
-        !Number.isSafeInteger(result.size) || result.size<0 || !Number.isInteger(result.mode))
+    if (!result || !path.isAbsolute(result.path || "") || !managed && (!SHA.test(result.sha256 || "") ||
+        !Number.isSafeInteger(result.size) || result.size<0 || !Number.isInteger(result.mode)))
       throw new Error("A package dependency needs its exact installed sealed file.");
     // The resolver binds project/release/archive digest and only returns
     // canonical stored files from that dependency's verified declaration.
@@ -293,26 +303,29 @@ function verifyPayload(root, manifest, resolveDependency) {
   };
   for (const [name,target] of Object.entries(aliases)) {
     if (typeof target === "string") {
-      const fact=manifest.files.find(file=>file.path===target);if(!localMachO(fact))continue;
-      validateLocalAlias(root,name,target,manifest,resolveDependency);
-      const file=path.join(root,name),canonical=path.join(root,target);
-      if(!fs.lstatSync(file).isSymbolicLink()||fs.readlinkSync(file)!==path.relative(path.dirname(file),canonical)||
-         fs.realpathSync(file)!==fs.realpathSync(canonical)||!fs.realpathSync(canonical).startsWith(fs.realpathSync(root)+path.sep))
+      const fact=(manifest.files || []).find(file=>file.path===target),canonical=path.join(root,target);
+      if(managed?!isNativeFile(canonical):!localMachO(fact))continue;
+      if (!managed) validateLocalAlias(root,name,target,manifest,resolveDependency);
+      const file=path.join(root,name);
+      if(managed&&fs.lstatSync(file).isFile())continue;
+      if(!fs.lstatSync(file).isSymbolicLink()||!managed && (fs.readlinkSync(file)!==path.relative(path.dirname(file),canonical)||
+         fs.realpathSync(file)!==fs.realpathSync(canonical))||!fs.realpathSync(file).startsWith(fs.realpathSync(root)+path.sep)&&(!managed||fs.realpathSync(file)!==fs.realpathSync(canonical)))
         throw new Error('A local Mach-O alias differs from its canonical stored file.');
       allowedAliases.add(name);resolved.set(name,{...fact,path:canonical});continue;
     }
     const dependency = manifest.dependencies.find(item=>item.project===target.project);
     const selected = dependencyFile(target,dependency), file = path.join(root,name);
-    if (!fs.lstatSync(file).isSymbolicLink() || fs.readlinkSync(file)!==path.relative(path.dirname(file),selected.path) ||
-        fs.realpathSync(file)!==fs.realpathSync(selected.path))
+    if(managed&&fs.lstatSync(file).isFile())continue;
+    if (!fs.lstatSync(file).isSymbolicLink() || (managed ? !fs.realpathSync(file).startsWith(fs.realpathSync(selected.root || path.dirname(selected.path))+path.sep) :
+        fs.readlinkSync(file)!==path.relative(path.dirname(file),selected.path) || fs.realpathSync(file)!==fs.realpathSync(selected.path)))
       throw new Error("A dependency alias differs from its exact installed dependency.");
     allowedAliases.add(name); resolved.set(name,selected);
   }
-  const files = !manifest.aliases ? manifest.files : Contract.logicalFiles(manifest,(target,dependency)=>dependencyFile(target,dependency));
+  const files = !manifest.aliases ? manifest.files || [] : Contract.logicalFiles(manifest,(target,dependency)=>dependencyFile(target,dependency));
   const expected = files.map(file=>file.path).sort();
   const directories = new Set();
   const actualFiles = fileInventory(root,{allowedAliases,directories});
-  const managed = isManagedDeclaration(manifest), present = new Set(actualFiles);
+  const present = new Set(actualFiles);
   if (!managed && JSON.stringify(actualFiles) !== JSON.stringify(expected)) throw new Error("Bundled runtime file inventory differs from its manifest.");
   for (const file of files.filter(file => !managed || present.has(file.path))) {
     const full = resolved.get(file.path)?.path || path.join(root,file.path);
@@ -323,7 +336,7 @@ function verifyPayload(root, manifest, resolveDependency) {
           (actual.mode & ~0o111)===(file.mode & ~0o111) && (actual.mode & file.mode & 0o111)===(file.mode & 0o111))))
         throw new Error(`Bundled runtime checksum or permissions changed: ${file.path}`);
     }
-    if (file.architectures) {
+    if (!managed && file.architectures) {
       const architectures=file.format==="pe" ? [PE.readPeExports(full)?.architecture].filter(Boolean) : Native.readMachOArchitectures(full,{allowLibrary:true});
       if (JSON.stringify(architectures.sort())!==JSON.stringify([...file.architectures].sort())) throw new Error(`Bundled runtime ${file.format==="pe" ? "PE" : "Mach-O"} architecture changed: ${file.path}`);
     }
@@ -332,8 +345,8 @@ function verifyPayload(root, manifest, resolveDependency) {
 }
 function verifyStoredPayload(root, declaration, { managed = false } = {}) {
   const Contract = require("./package-contract.cjs");
-  Contract.packageDependencies(declaration.dependencies);
-  Contract.packageAliases(declaration.aliases,declaration.files,declaration.dependencies);
+  Contract.packageDependencies(declaration.dependencies,{managed});
+  Contract.packageAliases(declaration.aliases,declaration.files || [],declaration.dependencies,{managed});
   const stored = {...declaration,aliases:undefined,dependencies:undefined};
   return verifyPayload(root,managed ? managedDeclaration(stored) : stored);
 }
@@ -370,14 +383,27 @@ function verifyInstalled({ installDir, record, pin, managerId, verification = "f
 }
 
 
-async function verifySignatures(root, manifest, { signal } = {}) {
-  for (const file of manifest.files.filter(file => file.architectures && file.format !== "pe")) {
-    await run("/usr/bin/codesign", ["--verify", "--strict", path.join(root, file.path)], { ...(signal ? { signal } : {}), timeout: 30000, maxBuffer: 1024 * 1024 });
+function isNativeFile(file) {
+    const fd=fs.openSync(file,'r'),bytes=Buffer.alloc(8);let count;
+    try{count=fs.readSync(fd,bytes,0,8,0);}finally{fs.closeSync(fd);}
+    if(count<8)return false;
+    const magic=bytes.readUInt32BE(0);
+    return [0xfeedface,0xcefaedfe,0xfeedfacf,0xcffaedfe,0xbebafeca,0xbfbafeca,0xcafebabf].includes(magic) ||
+      magic===0xcafebabe&&bytes.readUInt32BE(4)<=32;
+}
+function nativeFiles(root, manifest) {
+  if (!isManagedDeclaration(manifest)) return manifest.files.filter(file => file.architectures && file.format !== "pe");
+  return fileInventory(root,{allowedAliases:new Set(Object.keys(manifest.aliases?.files || {}))})
+    .filter(name=>!fs.lstatSync(path.join(root,name)).isSymbolicLink()&&isNativeFile(path.join(root,name))).map(name=>({path:name}));
+}
+async function verifySignatures(root, manifest, { signal, execute = run } = {}) {
+  for (const file of nativeFiles(root,manifest)) {
+    await execute("/usr/bin/codesign", ["--verify", "--strict", path.join(root, file.path)], { ...(signal ? { signal } : {}), timeout: 30000, maxBuffer: 1024 * 1024 });
   }
 }
 
 function verifySignaturesSync(root, manifest) {
-  for (const file of manifest.files.filter(file => file.architectures && file.format !== "pe")) {
+  for (const file of nativeFiles(root,manifest)) {
     execFileSync("/usr/bin/codesign", ["--verify", "--strict", path.join(root, file.path)], { timeout: 30000, stdio: "pipe", maxBuffer: 1024 * 1024 });
   }
 }
@@ -548,6 +574,12 @@ function resolveInstalledAsset(install, name) {
   if (!realDirectory(path.dirname(file))) throw new Error("Installed runtime asset is missing or unsafe.");
   if (fs.lstatSync(file).isSymbolicLink()) {
     if (appAlias(file)) return file;
+    if (isManagedDeclaration(install.declaration)) {
+      const real = fs.realpathSync(file), root = fs.realpathSync(install.root || install.installDir);
+      if ((real === root || real.startsWith(root + path.sep) ||
+          install.dependencyReadRoots?.some(directory => real.startsWith(fs.realpathSync(directory) + path.sep))) && fs.statSync(real).isFile()) return file;
+      throw new Error("Installed runtime asset is outside its payload or dependency.");
+    }
     const relative = install.root && path.relative(install.root,file).split(path.sep).join('/');
     const target = install.declaration?.aliases?.files?.[relative];
     const dependency = install.declaration?.dependencies?.find(item=>item.project===target?.project);
@@ -560,5 +592,5 @@ function resolveInstalledAsset(install, name) {
   return file;
 }
 
-module.exports = { localMachO, validateLocalAlias, managedDeclaration, isManagedDeclaration, rememberDependencies, appBundleRoot, withAppBundle, dependencyResolver, LIMITS, appAlias, digest, relativeFile, realDirectory, readRegular, fileIdentity, clearManifestCache, validateManifest, validateRuntimeManifest, verifyStoredPayload, verifyPayload, verifySignatures,
+module.exports = { localMachO, isNativeFile, validateLocalAlias, managedDeclaration, isManagedDeclaration, rememberDependencies, appBundleRoot, withAppBundle, dependencyResolver, LIMITS, appAlias, digest, relativeFile, realDirectory, readRegular, fileIdentity, clearManifestCache, validateManifest, validateRuntimeManifest, verifyStoredPayload, verifyPayload, verifySignatures,
   fileInventory, verifyInstalled, bundledManifestPath, versionAtLeast, systemVersionSync, createBundledNativeRuntime, resolveInstalledEnvironment, resolveInstalledAsset };

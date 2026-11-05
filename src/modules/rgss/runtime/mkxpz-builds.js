@@ -12,6 +12,7 @@ function createManager(dependencies = {}) {
     filesPrefix: "files/",
     executableRelative: manifest => manifest.executableRelative,
     validateManifest(manifest, record) {
+      if (Bundled.isManagedDeclaration(manifest)) return;
       if (manifest.arch !== record.arch || record.arch === "universal" &&
           manifest.files.some(file => file.architectures && !["arm64", "x86_64"].every(arch => file.architectures.includes(arch))))
         throw new Error("The MKXP-Z package CPU coverage differs from its catalog.");
@@ -34,9 +35,7 @@ function createManager(dependencies = {}) {
     async verifyPayload(selected, { signal } = {}) {
       signal?.throwIfAborted();
       Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
-      for (const file of selected.declaration.files.filter(item => item.architectures))
-        await execute("/usr/bin/codesign", ["--verify", "--strict", path.join(selected.root, file.path)],
-          { signal, timeout: 30000, maxBuffer: 1024 * 1024 });
+      await Bundled.verifySignatures(selected.root,selected.declaration,{signal});
     }, dependencies });
 }
 

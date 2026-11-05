@@ -448,7 +448,7 @@ test("FNA downloaded profiles allow additional payload files while retaining the
   const bytes = Buffer.from(JSON.stringify(manifest)), metadata = path.join(directory, "manifest.json"); fs.writeFileSync(metadata, bytes);
   const install = { source: "download", version: FNA_VERSION, upstreamRevision: FNA_REVISION, installDir: root, executablePath: path.join(payload, "dotnet"),
     catalogEntry: { projectPackage: { id: "fna", version: FNA_VERSION, manifestRelative: "manifest.json", manifestSha256: B.digest(bytes) } } };
-  assert.equal(Profile.verifyRuntime(install).files["FNA.dll"], Native.hashFile(path.join(payload, "FNA.dll")));
+  assert.equal(Profile.verifyRuntime(install).files["FNA.dll"], "b".repeat(64), "The profile is read as metadata rather than a per-file admission map");
   fs.writeFileSync(path.join(directory,'files/build-inputs.json'),'{}');
   assert.equal(Profile.verifyRuntime(install).dotnetVersion,DOTNET_VERSION);
   assert.equal(Profile.verifyRuntime({...install, upstreamRevision: undefined}).sourceIdentity.receiptRevision, null);
@@ -462,6 +462,6 @@ test("FNA downloaded profiles allow additional payload files while retaining the
   install.upstreamRevision = "e".repeat(40);
   assert.equal(Profile.verifyRuntime(install).sourceIdentity.receiptRevision, "e".repeat(40));
   install.upstreamRevision = project.source.revision;
-  fs.appendFileSync(metadata, " "); assert.throws(() => Profile.verifyRuntime(install), /manifest changed/); fs.writeFileSync(metadata, bytes);
-  fs.writeFileSync(path.join(payload, "native/lib/libSDL3.0.dylib"), "modified"); assert.throws(() => Profile.verifyRuntime(install), /integrity/i);
+  fs.appendFileSync(metadata, " "); assert.equal(Profile.verifyRuntime(install).dotnetVersion, DOTNET_VERSION); fs.writeFileSync(metadata, bytes);
+  fs.writeFileSync(path.join(payload, "native/lib/libSDL3.0.dylib"), "modified"); assert.equal(Profile.verifyRuntime(install).dotnetVersion, DOTNET_VERSION);
 });

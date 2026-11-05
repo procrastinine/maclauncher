@@ -33,7 +33,7 @@ function validateSelection(value, { plan, dependencies } = {}) {
   const required = [...plan.packages, ...plan.supplementals], selected = new Map();
   for (const input of value.packages) {
     const record = Catalog.validateProjectCatalog({ schemaVersion: 2, projectId: input?.id, updatePolicy: 'manual', packages: [input] },
-      { projectId: input?.id, repository: value.repository, architecture: value.arch }).packages[0];
+      { projectId: input?.id, repository: value.repository, architecture: value.arch, managed:false }).packages[0];
     if (!record || selected.has(key(record)) || !B.versionAtLeast(value.maximumMacOS, record.minimumMacOS))
       throw new Error('The package lock contains an incompatible or repeated runtime.');
     selected.set(key(record), record);
@@ -71,7 +71,7 @@ function validateLock(value, { plans = {}, dependencies } = {}) {
   }
   if (used.size !== value.packages.length) throw new Error('The package lock contains a runtime that no launcher architecture includes.');
   return { schemaVersion: 2, repository: value.repository, architectures: [...value.architectures], maximumMacOS: value.maximumMacOS,
-    packages: value.packages.map(record => Catalog.validateProjectRecord(record, { projectId: record.id, repository: value.repository })) };
+    packages: value.packages.map(record => Catalog.validateProjectRecord(record, { projectId: record.id, repository: value.repository, managed:false })) };
 }
 
 function readLock({ repoRoot = ROOT, arch, dependencies } = {}) {
@@ -89,7 +89,7 @@ function createLock({ catalogs, architectures = ARCHITECTURES, maximumMacOS, rep
       const id = item.id || item.managerId;
       if (records.has(key(item))) continue;
       const catalog = JSON.parse(B.readRegular(path.join(catalogs, id + '.json'), 2 * 1024 ** 2).bytes);
-      const record = Catalog.validateProjectCatalog(catalog, { projectId: id, repository, architecture: arch }).packages
+      const record = Catalog.validateProjectCatalog(catalog, { projectId: id, repository, architecture: arch, managed:false }).packages
         .find(record => record.version === item.version && record.arch === item.arch);
       if (!record) throw new Error(`Missing published package identity: ${key(item)}.`);
       records.set(key(item), record);
@@ -99,7 +99,7 @@ function createLock({ catalogs, architectures = ARCHITECTURES, maximumMacOS, rep
     for(const dep of require('../src/modules/shared/runtime/package-contract.cjs').packageDependencies(record.dependencies)){
       if([...records.values()].some(row=>row.id===dep.project&&row.version===dep.release&&row.asset.sha256===dep.sha256))continue;
       const catalog=JSON.parse(B.readRegular(path.join(catalogs,dep.project+'.json'),2*1024**2).bytes);
-      const target=Catalog.validateProjectCatalog(catalog,{projectId:dep.project,repository}).packages.find(row=>row.version===dep.release&&row.asset.sha256===dep.sha256);
+      const target=Catalog.validateProjectCatalog(catalog,{projectId:dep.project,repository,managed:false}).packages.find(row=>row.version===dep.release&&row.asset.sha256===dep.sha256);
       if(!target)throw new Error('Missing exact published included dependency: '+dep.project+'/'+dep.release);
       records.set(key(target),target);visit(target);
     }

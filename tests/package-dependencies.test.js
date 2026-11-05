@@ -77,7 +77,7 @@ test('local aliases use clones/copy fallback and reject interrupted or changed m
  assert.equal(fs.lstatSync(path.join(directory,'alias.bin')).isFile(),true);assert.equal(B.verifyPayload(directory,declaration),true);
  P.materialize(directory,declaration,null);fs.writeFileSync(path.join(directory,'alias.bin'),'bad');assert.throws(()=>P.materialize(directory,declaration,null),/differs/);
 });
-test('one consented parent install fetches dependencies first, reuses them and retains them until the last consumer is removed',async t=>{
+test('one consented parent install reads its dependencies from the downloaded package, reuses and retains them until removal',async t=>{
  const directory=root(t),userDataDir=path.join(directory,'profile'),shared=await packageFor(directory,'shared-stack');
  const dep={project:shared.record.id,release:shared.record.version,sha256:shared.record.asset.sha256};
  const canonical=shared.facts.find(file=>file.path==='lib/shared.dylib');
@@ -88,19 +88,19 @@ test('one consented parent install fetches dependencies first, reuses them and r
  const catalogOptions={projectId:first.record.id,repository:'example/runtime-builds'};
  assert.equal(Catalog.validateProjectCatalog(catalog,catalogOptions).packages[0].launcherContract,2);
  const oldApp=Catalog.validateProjectCatalog(catalog,{...catalogOptions,launcherContract:1});
- assert.deepEqual(oldApp.packages,[]);assert.match(oldApp.unavailable[0].reason,/newer MacLauncher/);
+ assert.equal(oldApp.packages[0].version,first.record.version);assert.deepEqual(oldApp.unavailable,[]);
  const packages=new Map([shared,first,second].map(value=>[value.record.id,value])),events=[];
  const fetchUrlBuffer=async url=>{const id=decodeURIComponent(new URL(url).pathname.split('/').at(-1).replace(/\.json$/,''));const value=packages.get(id);return{status:200,body:Buffer.from(JSON.stringify({schemaVersion:2,projectId:id,updatePolicy:'manual',packages:[value.record]}))};};
  const download=async(url,file)=>{const selected=[...packages.values()].find(item=>item.record.asset.url===url);events.push(selected.record.id);fs.copyFileSync(selected.archive,file);return{sha256:selected.record.asset.sha256};};
  const create=id=>require('../src/modules/shared/runtime/project-build-manager').createProjectBuildManager({projectId:id,label:id,repository:'example/runtime-builds',manifestRelative:'manifest.json',sourceRelative:null,executableRelative:'entry.js',dataOnly:true,
   verifyPayload:selected=>B.verifyPayload(selected.root,selected.declaration,selected.resolveDependency),dependencies:{fetchUrlBuffer,downloadToFile:download,packageDependencies:{fetchCatalog:async options=>({packages:[packages.get(options.projectId).record]}),download,acquireLock:lock}}});
  const a=create(first.record.id),b=create(second.record.id);
- await a.installRuntime({userDataDir});assert.deepEqual(events,['shared-stack','first-consumer']);
+ await a.installRuntime({userDataDir});assert.deepEqual(events,['first-consumer','shared-stack']);
  const chosen=a.resolveSelection(null,{},userDataDir).install;assert.ok(chosen);
  const alias=path.join(chosen.root,'lib/shared.dylib');assert.equal(fs.lstatSync(alias).isSymbolicLink(),true);assert.equal(path.isAbsolute(fs.readlinkSync(alias)),false);
  assert.equal(B.verifyPayload(chosen.root,chosen.declaration,chosen.resolveDependency),true);
  assert.deepEqual(chosen.dependencyLibraryPaths,[],'Aliased dependencies need no extra loader path');
- await b.installRuntime({userDataDir});assert.deepEqual(events,['shared-stack','first-consumer','second-consumer']);
+ await b.installRuntime({userDataDir});assert.deepEqual(events,['first-consumer','shared-stack','second-consumer']);
  const secondInstall=b.resolveSelection(null,{},userDataDir).install;
  assert.deepEqual(secondInstall.dependencyLibraryPaths,[path.join(P.directory(userDataDir,dep),'files/lib')]);
  assert.equal(B.resolveInstalledEnvironment(secondInstall).DYLD_FALLBACK_LIBRARY_PATH,secondInstall.dependencyLibraryPaths[0]);
@@ -164,3 +164,10 @@ test('managed binding uses the downloaded declaration without demanding an ident
  assert.deepEqual(P.bind(directory,record,logical,null,file).files,outer.files);
 });
 module.exports={packageFor};
+
+test('managed dependency loader paths do not require a recorded file inventory', t => {
+ const directory=root(t),library=path.join(directory,'lib','future.dylib');fs.mkdirSync(path.dirname(library));fs.writeFileSync(library,'library fixture');
+ const declaration=B.managedDeclaration({dependencies:[]});
+ const installed=new Map([['future-library',{root:directory,declaration,children:new Map()}]]);
+ assert.deepEqual(P.loaderPaths({},installed),[path.dirname(library)]);
+});

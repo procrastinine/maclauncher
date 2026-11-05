@@ -10,7 +10,6 @@ const BacklogOverlay = require("./windows-backlog-overlay");
 const SoundEffectSession = require("./windows-sfx-session");
 const SoundEffectOverlay = require("./windows-sfx-overlay");
 const Bundle = require("../../shared/runtime/bundled-native");
-const ProjectCatalog = require("../../shared/runtime/maclauncher-builds");
 const GameData = require("../../shared/game-data");
 
 function sessionDirectory(entry, context) {
@@ -25,10 +24,11 @@ const ABIS = Object.freeze({ input: WindowsInput.ABI, audio: AudioSession.ABI, c
   backlog: BacklogOverlay.ABI, soundEffect: SoundEffectOverlay.ABI });
 const ABI_FIELDS = Object.freeze({ input: "windowsInputAbi", audio: "windowsAudioAbi", checkpoint: "windowsCheckpointAbi",
   backlog: "windowsBacklogAbi", soundEffect: "windowsSoundEffectAbi" });
-function declaredAbis(provenance = {}) {
+function declaredAbis(provenance = {}, { managed = false } = {}) {
   const declared = provenance.currentWindowsAbiProfile ||
     Object.fromEntries(Object.entries(ABI_FIELDS).flatMap(([name, field]) => provenance[field] ? [[name, provenance[field]]] : []));
   if (!declared || typeof declared !== "object" || Array.isArray(declared)) throw new Error("The Impacto runtime manifest is invalid.");
+  if (managed) return Object.fromEntries(Object.entries(declared).filter(([name,abi])=>ABIS[name]===abi));
   for (const [name, abi] of Object.entries(declared))
     if (ABIS[name] !== abi) throw new Error("This Impacto runtime requires a newer MacLauncher. Choose another version.");
   return declared;
@@ -38,22 +38,20 @@ function declaredAbis(provenance = {}) {
 // contracts it implements and the game profile it was built for.
 function verifyNativeProfile(install) {
   const downloaded = install?.source === "download";
+  if (downloaded) {
+    const runtimeRoot=install.payloadRoot || path.join(install.installDir,'project-payload/files');
+    const relative=install.declaration?.manifestRelative || install.catalogEntry?.projectPackage?.manifestRelative;
+    const manifest=install.manifest || JSON.parse(Bundle.readRegular(path.join(install.installDir,'project-payload',Bundle.relativeFile(relative)),Bundle.LIMITS.manifestBytes).bytes);
+    const profile=manifest.runtimeFiles?.windowsGameProfile;
+    const profileSource=profile ? path.join(runtimeRoot,Bundle.relativeFile(profile)) :
+      Managers.profileFor(manifest.provenance?.profileSha256) || path.join(__dirname,'windows-game.lua');
+    return {runtimeRoot,manifest,abis:declaredAbis(manifest.provenance,{managed:true}),profileSource};
+  }
   if (!install || !/^[a-f0-9]{40}$/.test(install.upstreamRevision || "") ||
       !["bundled", "download"].includes(install.source) || !path.isAbsolute(install.installDir || ""))
     throw new Error("Choose the Impacto Mac Windows HD runtime.");
-  let manifestPath = Bundle.bundledManifestPath(install), expectedManifestSha256 = install.bundledManifestSha256;
-  const runtimeRoot = path.join(install.installDir, downloaded ? "project-payload/files" : "files");
-  if (downloaded) {
-    // Catalog identity is scoped to the launcher build, independently of physical hardware.
-    const record = ProjectCatalog.validateProjectCatalog({ schemaVersion: 2, projectId: "impacto", updatePolicy: "manual",
-      packages: [install.catalogEntry?.projectPackage] }, { projectId: "impacto", repository: "procrastinine/maclauncher-builds",
-      architecture: process.arch }).packages[0];
-    if (!record || record.version !== install.version || record.asset.sha256 !== install.archiveSha256 ||
-        install.installationMetadata?.manifestSha256 !== record.manifestSha256)
-      throw new Error("The Impacto runtime differs from its selected download.");
-    manifestPath = path.join(install.installDir, "project-payload", record.manifestRelative);
-    expectedManifestSha256 = record.manifestSha256;
-  }
+  const manifestPath = Bundle.bundledManifestPath(install), expectedManifestSha256 = install.bundledManifestSha256;
+  const runtimeRoot = path.join(install.installDir, "files");
   const stored = Bundle.readRegular(manifestPath, Bundle.LIMITS.manifestBytes);
   stored.manifest = Bundle.validateManifest(JSON.parse(stored.bytes), {
     managerId: "impacto", version: install.version, upstreamRevision: install.upstreamRevision
@@ -63,7 +61,6 @@ function verifyNativeProfile(install) {
   const abis = declaredAbis(stored.manifest.provenance);
   const profileSource = Managers.profileFor(stored.manifest.provenance?.profileSha256);
   if (!profileSource) throw new Error("This Impacto runtime requires a newer MacLauncher game profile. Choose another version.");
-  if (downloaded) Bundle.verifyPayload(runtimeRoot, Bundle.managedDeclaration(stored.manifest));
   const executable = path.join(runtimeRoot, stored.manifest.executableRelative);
   if (executable !== install.executablePath || stored.manifest.executableRelative !== "Impacto.app/Contents/MacOS/Impacto")
     throw new Error("The Impacto runtime files differ from the selected package.");

@@ -1,7 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { inspectStudio, inspectClassic } = require("./inspect");
-const OfficialCompatibility = require("./runtime/official-compatibility");
 
 const DATA_FILES = ["data.win", "game.unx", "game.ios", "game.droid"];
 
@@ -61,9 +60,8 @@ function detectGame(context) {
         ...(inspection.butterscotchCandidate ? [{ runtimeId: "butterscotch", managerId: "butterscotch",
           compatibility: "format-candidate" }] : []),
         ...(inspection.executionKind === "studio-vm" && inspection.inventory?.EXTN === 0
-          ? OfficialCompatibility.defaultCandidates(inspection).map(version => ({ runtimeId: "official-studio", managerId: "gamemaker-official", version,
-            upstreamRevision: `vendor-runtime:${version}`, backend: "official-studio-vm",
-            capability: OfficialCompatibility.capabilityForVersion(version), compatibility: "format-candidate" })) : [])
+          ? [{ runtimeId: "official-studio", managerId: "gamemaker-official", backend: "official-studio-vm",
+            compatibility: "format-candidate" }] : [])
       ],
       compatibility: inspection.compatibility, codeCount: inspection.codeCount ?? null,
       extensionCount: inspection.inventory?.EXTN ?? null,

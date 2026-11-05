@@ -35,9 +35,9 @@ async function discover(routes) {
   Harness.network.routes = routes;
   try { return await Catalog.source.discover({}); } finally { Harness.network.routes = null; }
 }
-test("ScummVM parses stable universal-era versions and reads publisher checksums", () => {
+test("ScummVM parses every stable publisher version and reads publisher checksums", () => {
   assert.deepEqual(Catalog.parseVersions('<a href="2.9.1/">x</a><a href="/frs/scummvm/2026.4.0/">x</a><a href="2.4.0/">x</a><a href="2.9.1/">x</a><a href="2.9.0rc1/">x</a><a href="../">x</a>',
-    Catalog.SOURCE_URL), ["2026.4.0", "2.9.1"]);
+    Catalog.SOURCE_URL), ["2026.4.0", "2.9.1", "2.4.0"]);
   assert.equal(Catalog.parseDigest("a".repeat(64), "runtime.dmg"), "a".repeat(64));
   assert.equal(Catalog.parseDigest("b".repeat(64) + " *runtime.dmg\n", "runtime.dmg"), "b".repeat(64));
   assert.equal(Catalog.parseDigest("c".repeat(64) + "  other.dmg\n" + "b".repeat(64) + "  runtime.dmg\n", "runtime.dmg"), "b".repeat(64));

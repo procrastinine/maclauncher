@@ -15,11 +15,11 @@ function options(value) {
   const { projectId, repository } = identity(value);
   if (value.architecture !== undefined && !LAUNCHER_ARCHITECTURES.has(value.architecture))
     throw new Error("Choose an ARM or Intel launcher architecture.");
-  return { projectId, repository, architecture: value.architecture, launcherContract: contract(value.launcherContract === undefined ? 2 : value.launcherContract) };
+  return { projectId, repository, architecture: value.architecture, managed:value.managed !== false,
+    launcherContract:value.managed === false ? contract(value.launcherContract === undefined ? 2 : value.launcherContract) : value.launcherContract };
 }
 
-// A later record schema or launcher contract is reported, not misread. Unknown
-// fields are additive and ignored.
+// Managed catalogs are additive. App-lock readers opt into exact validation.
 /** Validate one record, for example an installed package's recorded catalog entry. */
 function validateProjectRecord(record, value = {}) {
   const selected = options(value), result = packageRecord(record, selected);
@@ -45,8 +45,8 @@ function sourceIdentity(record, {manifest, wrapper, sourceRelative, receiptRevis
  * listed in `unavailable` with its reason; only the catalog envelope is fatal. */
 function validateProjectCatalog(catalog, value = {}) {
   const selected = options(value), { projectId, architecture } = selected;
-  if (!object(catalog) || !Number.isSafeInteger(catalog.schemaVersion) || catalog.schemaVersion < 2 || catalog.projectId !== projectId ||
-      catalog.updatePolicy !== "manual" || !Array.isArray(catalog.packages))
+  if (!object(catalog) || !selected.managed && (!Number.isSafeInteger(catalog.schemaVersion) || catalog.schemaVersion < 2 || catalog.projectId !== projectId ||
+      catalog.updatePolicy !== "manual") || !Array.isArray(catalog.packages))
     throw new Error("The runtime catalog does not match the selected project or update policy.");
   const rows = Array.from(catalog.packages).map(record => {
     try { return { value: record, record: packageRecord(record, selected) }; }
@@ -54,7 +54,7 @@ function validateProjectCatalog(catalog, value = {}) {
   });
   const key = record => `${record.version}/${record.arch}`, counts = new Map();
   for (const { record } of rows) if (record) counts.set(key(record), (counts.get(key(record)) || 0) + 1);
-  for (const row of rows) if (row.record && counts.get(key(row.record)) > 1)
+  for (const row of rows) if (!selected.managed && row.record && counts.get(key(row.record)) > 1)
     Object.assign(row, { record: null, reason: "The runtime catalog repeats this version and architecture." });
   // Records for another known Mac CPU are not offered here. A record naming a
   // CPU this launcher does not know stays listed with its reason.

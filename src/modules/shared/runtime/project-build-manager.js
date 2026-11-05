@@ -8,12 +8,23 @@ const Architecture = require("./architecture");
 
 const Contract = require("./package-contract.cjs");
 function inspectPackage(root, record, { projectId, manifestRelative, sourceRelative, executableRelative, filesPrefix = "", dataOnly = false, validateManifest, validatePayload, resolveDependency, declaration, metadataOnly = false, managed = false }) {
-  if (record.id !== projectId || record.manifestRelative !== manifestRelative) throw new Error("The runtime package belongs to a different project or format.");
+  if (managed) manifestRelative = declaration?.manifestRelative || record.manifestRelative || manifestRelative;
+  if (!managed && (record.id !== projectId || record.manifestRelative !== manifestRelative)) throw new Error("The runtime package belongs to a different project or format.");
+  Bundled.relativeFile(manifestRelative);
   const stored = Bundled.readRegular(path.join(root, manifestRelative), Bundled.LIMITS.manifestBytes);
-  if (stored.sha256 !== record.manifestSha256 || stored.mode !== 0o644) throw new Error("The runtime package manifest changed.");
+  if (!managed && (stored.sha256 !== record.manifestSha256 || stored.mode !== 0o644)) throw new Error("The runtime package manifest changed.");
   const manifest = JSON.parse(stored.bytes);
+  if (managed) {
+    Bundled.managedDeclaration(manifest);
+    manifest.files ||= [];
+    manifest.dependencies ||= [];
+    Bundled.validateRuntimeManifest(manifest);
+    const declared = manifest.executableRelative || manifest.executable;
+    if (declared && fs.existsSync(path.join(root,Bundled.relativeFile(declared)))) filesPrefix = '';
+    else filesPrefix = declaration?.filesPrefix ?? manifest.filesPrefix ?? filesPrefix;
+  }
   validateManifest?.(manifest, record);
-  const { prefix, executable, files, primary } = Contract.manifestPayload(manifest, record, { executableRelative, filesPrefix, dataOnly, resolveDependency });
+  const { prefix, executable, files, primary } = Contract.manifestPayload(manifest, record, { executableRelative, filesPrefix, dataOnly, resolveDependency, managed });
   validatePayload?.(manifest, record, { primary, files });
   const sourcePath = typeof sourceRelative === "function" ? sourceRelative(manifest, record) : sourceRelative;
   for (const file of metadataOnly ? [] : [primary]) {
@@ -27,8 +38,9 @@ function inspectPackage(root, record, { projectId, manifestRelative, sourceRelat
       throw new Error("The runtime package source or executable differs from its manifest.");
   }
   files.push({ path: manifestRelative, size: stored.size, mode: 0o644, sha256: stored.sha256 });
+  const item = { ...record, manifestRelative, files };
   return require('./package-dependencies').attach({ root, primary, payloadRoot: path.join(root, prefix), manifest,
-    declaration: { ...record, files }, executablePath: path.join(root, prefix, executable),
+    declaration: managed ? Bundled.managedDeclaration(item) : item, executablePath: path.join(root, prefix, executable),
     sourceIdentity: Catalog.sourceIdentity(record, {manifest, sourceRelative: sourcePath}) },{resolveDependency});
 }
 
@@ -53,19 +65,17 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, label, re
   const sourceUrl = `https://github.com/${repository}`;
   const compatible = pin => {
     const record = pin.projectPackage || pin;
-    return record.manifestRelative === manifestRelative && (process.platform === "darwin" || Boolean(dependencies.systemVersionSync)) &&
+    return (process.platform === "darwin" || Boolean(dependencies.systemVersionSync)) &&
       (!pin.minimumMacOS || Bundled.versionAtLeast((dependencies.systemVersionSync || Bundled.systemVersionSync)(), pin.minimumMacOS)) &&
       (!(pin.hostArchitectures || record.launcherArchitectures) || (pin.hostArchitectures || record.launcherArchitectures).includes(require("./architecture").selectedArchitecture()));
   };
   const recordOptions = { projectId, repository, launcherContract };
   const publishedPins = catalog => {
-    // Another package layout belongs to a later package format.
-    const records = catalog.packages, later = records.filter(record => record.manifestRelative !== manifestRelative);
-    return [...records.filter(record => !later.includes(record)).map(record => ({ version: record.version, upstreamRevision: record.manifestSha256,
+    const records = catalog.packages;
+    return [...records.map(record => ({ version: record.version, upstreamRevision: record.source?.revision || record.asset.sha256,
       architecture: record.arch === "x64" ? "x86_64" : record.arch, hostArchitectures: record.launcherArchitectures,
       minimumMacOS: record.minimumMacOS, localBuild: false, projectPackage: record, asset: record.asset })),
-    ...Catalog.unavailablePins(projectId, [...later.map(record => ({ version: record.version, reason: "Requires a newer MacLauncher." })),
-      ...catalog.unavailable || []])];
+    ...Catalog.unavailablePins(projectId, catalog.unavailable || [])];
   };
   const core = createPinnedNativeManager({ id: projectId, label,
     sourceUrl, buildsRepository: repository, upstreamUrl, upstreamLabel, nativeLibrary, supportsDefault,
@@ -80,15 +90,10 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, label, re
       const catalog = await Catalog.fetchProjectCatalog({ ...recordOptions, signal }, dependencies);
       return publishedPins(catalog);
     },
-    resolveExecutable: (root, pin, options) => typeof executableRelative === "function" || typeof filesPrefix === "function"
-      ? inspect(path.join(root, "payload"), pin.projectPackage, options).executablePath
-      : path.join(root, "payload", filesPrefix, executableRelative),
+    resolveExecutable: (root, pin, options) => inspect(path.join(root, "payload"), pin.projectPackage, options).executablePath,
     prepareInstall: async ({ unpacked, pin, signal, userDataDir, resolveDependency, installedDependencies }) => {
       const record = Catalog.validateProjectRecord(pin.projectPackage, recordOptions);
-      const wrapper = JSON.parse(Bundled.readRegular(path.join(unpacked, "project-package.json"), Bundled.LIMITS.manifestBytes).bytes);
-      if (["id", "version", "arch", "minimumMacOS", "manifestRelative", "manifestSha256"].some(key => wrapper[key] !== record[key]) ||
-          JSON.stringify(wrapper.launcherArchitectures) !== JSON.stringify(record.launcherArchitectures))
-        throw new Error("The runtime archive belongs to a different project or version.");
+      const wrapper = Bundled.managedDeclaration(JSON.parse(Bundled.readRegular(path.join(unpacked, "project-package.json"), Bundled.LIMITS.manifestBytes).bytes));
       const P=require('./package-dependencies');
       const selected = inspect(path.join(unpacked, "payload"), record, {userDataDir,resolveDependency,installedDependencies,verification:"status",metadataOnly:true});
       if(wrapper.aliases)Bundled.verifyStoredPayload(selected.root,wrapper,{managed:true});
@@ -104,13 +109,13 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, label, re
       const options = { signal, timeout: 120000, maxBuffer: 8 * 1024 * 1024 };
       if (dependencies.extractArchive) await dependencies.extractArchive(archive, extracted, signal);
       else {
-        const list = await execute("/usr/bin/tar", ["-tzf", archive], options);
+        const list = await execute("/usr/bin/tar", ["-tf", archive], options);
         const names = list.stdout.trim().split("\n").map(name => name.replace(/^\.\//, "").replace(/\/$/, "")).filter(Boolean);
         if (names.length > Bundled.LIMITS.files * 2 || names.some(name => { try { Bundled.relativeFile(name); return false; } catch { return true; } }))
           throw new Error("The runtime archive contains an unsafe path.");
-        const types = await execute("/usr/bin/tar", ["-tvzf", archive], options);
+        const types = await execute("/usr/bin/tar", ["-tvf", archive], options);
         if (types.stdout.trim().split("\n").some(line => !/^[d-]/.test(line))) throw new Error("The runtime archive contains unsupported links.");
-        await execute("/usr/bin/tar", ["-xzf", archive, "-C", extracted], options);
+        await execute("/usr/bin/tar", ["-xf", archive, "-C", extracted], options);
       }
       fs.renameSync(path.join(extracted, "runtime-package.json"), path.join(unpacked, "project-package.json"));
       fs.renameSync(path.join(extracted, "files"), path.join(unpacked, "payload"));

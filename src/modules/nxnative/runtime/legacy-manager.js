@@ -10,14 +10,14 @@ function createManager(dependencies = {}, { projectId = "nxnative" } = {}) {
     executableRelative: "bin/nxnative", supportsDefault: true,
     validateManifest(manifest, record) {
       Bundled.validateManifest(manifest, { managerId: projectId, version: record.version, arch: record.arch });
+      if (Bundled.isManagedDeclaration(manifest)) return;
       if (manifest.executableRelative !== "bin/nxnative" || manifest.arch !== "arm64" ||
           !manifest.files.some(file => file.path === "runtime.json") || !manifest.files.some(file => file.path === "bin/nxnative-host"))
         throw new Error("The nxnative package has an unsupported runtime layout.");
     },
     async verifyPayload(selected, { signal } = {}) {
       Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
-      for (const file of selected.manifest.files.filter(file => file.architectures))
-        await (dependencies.execute || execute)("/usr/bin/codesign", ["--verify", "--strict", path.join(selected.payloadRoot, file.path)], { signal, timeout: 30000, maxBuffer: 1024 * 1024 });
+      await Bundled.verifySignatures(selected.root,selected.declaration,{signal,execute:dependencies.execute || execute});
     }, dependencies });
   return { ...base, async installRuntime(options = {}) {
     if (options.version && options.version !== "latest") return base.installRuntime(options);

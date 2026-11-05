@@ -9,6 +9,7 @@ function createManager(dependencies = {}) {
     repository: "procrastinine/maclauncher-builds", upstreamUrl: "https://github.com/mattias800/prosper",
     manifestRelative: "runtime.json", sourceRelative: "source.json", executableRelative: "bin/prosper-app", supportsDefault: true,
     validateManifest(manifest, record) {
+      if (Bundled.isManagedDeclaration(manifest)) return;
       if (manifest.managerId !== "prosper" || manifest.arch !== record.arch || manifest.gameArchitecture !== "x86_64" ||
           !/^[a-f0-9]{40}$/.test(manifest.upstreamRevision || ""))
         throw new Error("The Prosper runtime has an unsupported layout or source revision.");

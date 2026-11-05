@@ -30,6 +30,19 @@ function createManager({ dependencies = {} } = {}) {
     return [stat.dev, stat.ino, stat.size, stat.mode, stat.mtimeNs, stat.ctimeNs].join(":");
   }
   function verifyDisplayProfile(install) {
+    if (install.source === 'download') {
+      const profilePath = require("../../shared/runtime/bundled-native").resolveInstalledAsset(install, "fnaProfile") ||
+        require("../../shared/runtime/bundled-native").resolveInstalledAsset(install, "profile") || path.join(path.dirname(install.executablePath), "fna-runtime.json");
+      const identity = fileIdentity(profilePath), cached = profileDisplayCache.get(profilePath);
+      if (cached?.identity === identity) {
+        if (cached.error) throw new Error(cached.error);
+        return cached.profile;
+      }
+      const profile = Profile.requireOriginalGamePaths(Profile.verifyRuntime(install));
+      if (profileDisplayCache.size >= 32) profileDisplayCache.delete(profileDisplayCache.keys().next().value);
+      profileDisplayCache.set(profilePath, {identity, profile});
+      return profile;
+    }
     const root = path.dirname(install.executablePath), profilePath = path.join(root, "fna-runtime.json");
     const profileIdentity = fileIdentity(profilePath);
     let cached = profileDisplayCache.get(root);
@@ -76,7 +89,7 @@ function createManager({ dependencies = {} } = {}) {
     return { ...install, profile, runtimeVersion: profile.profile, upstreamRevision: profile.upstreamRevision };
   }, selection: install => ({ profile: install.profile }) });
   const resolve = manager.resolveSelection;
-  const hasCapability = pin => pin?.capabilities?.originalGamePaths === true || pin?.projectPackage?.capabilities?.originalGamePaths === true;
+  const hasCapability = pin => (pin?.capabilities?.originalGamePaths ?? pin?.projectPackage?.capabilities?.originalGamePaths) !== false;
   function compatible(pin, userDataDir, architecture) {
     const install = manager.core.resolveInstalled({userDataDir, version: pin.version, architecture});
     if (install) {

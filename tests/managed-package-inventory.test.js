@@ -8,7 +8,7 @@ const {image, ARM64, X64} = require('./fixtures/macho-image');
 for (const kind of ['project', 'native']) test(`${kind} managed installs accept independently described inventories and archive metadata`, async t => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'managed-inventory-')));
   t.after(() => fs.rmSync(root, {recursive:true,force:true}));
-  for (const placement of ['none', 'wrapper', 'inner', 'unlisted', 'beside', 'changed', 'omitted']) await t.test(placement, async () => {
+  for (const placement of ['none', 'wrapper', 'inner', 'unlisted', 'beside', 'changed', 'omitted','metadata','renamed','no-inventory']) await t.test(placement, async () => {
     const id = 'sample-inventory', directory = path.join(root,placement), prefix = kind === 'native' ? 'files/' : '';
     const fixture = packageFor(directory, {id, version:'9.0', architecture:process.arch, filesPrefix:prefix,
       manifest:{managerId:id, platform:'darwin', executableRelative:'bin/host', upstreamRevision:'a'.repeat(40),
@@ -18,7 +18,7 @@ for (const kind of ['project', 'native']) test(`${kind} managed installs accept 
         {path:'optional.txt',bytes:Buffer.from('optional data'),mode:0o644}]});
     const stage = path.join(directory,'archive-input'), payload = path.join(stage,'files');
     const wrapperFile = path.join(stage,'runtime-package.json'), wrapper = JSON.parse(fs.readFileSync(wrapperFile));
-    for (const name of ['none','changed','omitted'].includes(placement) ? [] : ['build-definition.json','build-inputs.json']) {
+    for (const name of ['wrapper','inner','unlisted','beside'].includes(placement) ? ['build-definition.json','build-inputs.json'] : []) {
       const bytes = Buffer.from('{}\n'), relative = prefix + name;
       fs.writeFileSync(placement === 'beside' ? path.join(stage,name) : path.join(payload,relative), bytes);
       const fact = {path:name,size:bytes.length,mode:0o644,sha256:B.digest(bytes)};
@@ -35,6 +35,24 @@ for (const kind of ['project', 'native']) test(`${kind} managed installs accept 
       fs.writeFileSync(path.join(payload,'manifest.json'),bytes);
       wrapper.manifestSha256 = fixture.record.manifestSha256 = B.digest(bytes);
       Object.assign(wrapper.files.find(file=>file.path==='manifest.json'),{sha256:B.digest(bytes),size:bytes.length});
+    }
+    if (placement === 'metadata') {
+      Object.assign(fixture.record,{schemaVersion:99,launcherContract:99,manifestSha256:'c'.repeat(64),sourceSha256:undefined,source:{extra:'observational'}});
+      Object.assign(wrapper,{schemaVersion:100,id:'another-label',version:'producer-label',sourceSha256:'not-a-pin',extra:{additive:true}});
+      Object.assign(fixture.manifest,{schemaVersion:100,managerId:'new-label',version:'manifest-label',upstreamRevision:'observational',extra:{additive:true}});
+      fs.writeFileSync(path.join(payload,'manifest.json'),JSON.stringify(fixture.manifest));
+    }
+    if (placement === 'renamed') {
+      const target=path.join(payload,prefix,'relocated/program');fs.mkdirSync(path.dirname(target),{recursive:true});
+      fs.renameSync(path.join(payload,prefix,'bin/host'),target);
+      fixture.manifest.executableRelative='relocated/program';
+      wrapper.manifestRelative='metadata/runtime-info.json';
+      fs.mkdirSync(path.join(payload,'metadata'));fs.unlinkSync(path.join(payload,'manifest.json'));
+      fs.writeFileSync(path.join(payload,wrapper.manifestRelative),JSON.stringify(fixture.manifest));
+    }
+    if (placement === 'no-inventory') {
+      delete fixture.manifest.files;delete wrapper.files;
+      fs.writeFileSync(path.join(payload,'manifest.json'),JSON.stringify(fixture.manifest));
     }
     fs.writeFileSync(wrapperFile,JSON.stringify(wrapper));
     execFileSync('/usr/bin/tar',['-czf',fixture.archive,'-C',stage,...fs.readdirSync(stage).sort()]);

@@ -19,7 +19,7 @@ A HashLink game needs two things from its runtime: a VM that reads its bytecode 
 
 The bytecode version, such as `HLB5`, is checked against the VM, and each native module's API is checked on its own. Bytecode can require the `std`, `fmt`, `ui`, `sdl` and `openal` modules. [HashLink 1.9](https://github.com/HaxeFoundation/hashlink/blob/1.9/libs/sdl/sdl.c) passed SDL events to the game as a typed Event argument, and [1.10 and later](https://github.com/HaxeFoundation/hashlink/blob/1.10/libs/sdl/sdl.c) changed that primitive to a dynamic argument. A newer VM that reads the same bytecode format can therefore reject bytecode that needs the older native ABI. The inspector reads the serialized argument type and tells typed Event arguments apart from dynamic ones.
 
-Before downloading or launching, the bytecode's requirements are compared with the recorded native signatures of the selected runtime. A selected version known to be incompatible is blocked before launch, and a primitive ABI that cannot be determined is reported as unknown. MacLauncher never coerces native types.
+Before launching, the bytecode's requirements are compared with native signatures read from the selected runtime's installed images. A selected version known to be incompatible is blocked before launch, and a primitive ABI that cannot be determined is reported as unknown. MacLauncher never coerces native types.
 
 The inspector shows the bytecode version, the bytecode file, the version source, a confidence level and the SDL primitive ABI. **Inspect bytecode**, in the inspector's **Advanced** group, uses the included metadata reader, which supports bytecode versions 2 to 6.
 
@@ -62,11 +62,7 @@ The Intel HashLink VM is the default runtime and runs as Intel 64-bit code, usin
 
 #### Version selection
 
-The game's bytecode recommends a published Intel package whose bytecode version, SDL event ABI and [primitive profile](#primitive-profiles) match, and whose macOS requirement this Mac meets. The newest matching public development snapshot comes first, and otherwise the matching MacLauncher Builds package with the newest upstream version.
-
-- Older imports that use typed SDL Events get a 1.9 package with the `typed-1.9-macos-v2` primitive profile, when their required primitives match.
-- Imports that use legacy `fmt` primitives, dynamic SDL events and OpenAL effects get a 1.12 package with the `legacy-dynamic-1.12-macos-v1` profile.
-- Dynamic imports alone do not identify a compatible runtime: the names and signatures of the required primitives must match the selected native modules.
+The game's bytecode recommends the newest catalog package whose declared bytecode and SDL event ABI requirements match and whose CPU and macOS requirements this Mac meets. No launcher-maintained package version or primitive-profile allowlist limits the catalog. Missing optional profile metadata does not hide a version. Before Play, the installed native modules must supply the function signatures this game calls.
 
 The global default applies when the bytecode gives no SDL or native primitive evidence, or when no listed package matches. The recommendation is used for preparation and launch checks but is not saved as a per-game choice.
 
@@ -83,20 +79,13 @@ MacLauncher Builds publishes two Mac packages, built from upstream HashLink 1.9 
 - The 1.9 packages keep the VM, the bytecode reader and the typed SDL primitive ABI at the exact upstream 1.9 commit. The build replaces the build machine's source, build, temporary, cache, home and workspace paths with neutral names in every compiled component.
 - The 1.12 packages keep the [HashLink 1.12](https://github.com/HaxeFoundation/hashlink/tree/68daa125ad115a1f1d1db65d38e6045858d55013) VM and native signatures: the older byte argument of `fmt@mp3_open`, dynamic SDL event callbacks and the complete set of OpenAL effects primitives. They include matching SDL2 and OpenAL Soft dependencies.
 
-The newer public snapshot has different `fmt` signatures and fewer OpenAL effects primitives. Two packages that share a bytecode format or SDL event ABI are therefore not interchangeable. Automatic selection compares every required native primitive before it chooses a profile, and it never rewrites bytecode or substitutes a different native type.
+The newer public snapshot has different `fmt` signatures and fewer OpenAL effects primitives. Two packages that share a bytecode format or SDL event ABI are therefore not interchangeable. Launch compares every required native primitive with the installed modules; it never rewrites bytecode or substitutes a different native type.
 
 Each package's MacLauncher Builds release commit contains the exact upstream commits, MacLauncher's Mac build changes, the notices and the build script.
 
 #### Primitive profiles
 
-A primitive profile is the exact set of native function signatures a package provides, and each profile belongs to one upstream revision:
-
-| Profile | Upstream revision | Native ABI |
-| --- | --- | --- |
-| `typed-1.9-macos-v2` | `4a4cfe91f3388a0b05bf2e45e7c4e38bae686dc6` | Typed SDL Event ABI with matching fmt, SDL and OpenAL modules |
-| `legacy-dynamic-1.12-macos-v1` | `68daa125ad115a1f1d1db65d38e6045858d55013` | Legacy fmt, dynamic SDL events and OpenAL effects |
-| `stock-2.0.0-d049add0a84d` | `d049add0a84dc6ae43088a6c386992dbba8604dc` | Public Intel development archive `8fd6d320861c4ca149a5eaff13f3b5ccc9c35d24c8a15147a3b12e9eef4e251b` |
-| `stock-2.0.0-10b77768ab91` | `10b77768ab913ab7ba4c776791d1db2d15db8db3` | Public Intel development archive `1638e5e881b4d8ef963f623c04abdf8057a88cac678960dc812d313c58b21e3d` |
+Native primitive profiles are observations of the installed images' function signatures. Their identifiers, source revisions and descriptive hashes do not admit or exclude downloadable versions. The actual signature comparison remains specific to the game's native calls.
 
 #### Local builds
 

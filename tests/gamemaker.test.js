@@ -519,7 +519,8 @@ test("game version evidence separates GEN8 tuple, WAD generation and structural 
   const game = detect(file);
   assert.ok(game.moduleData.candidateRuntimeBuilds.some(item => item.runtimeId === "butterscotch"));
   assert.ok(game.moduleData.candidateRuntimeBuilds.filter(item => item.runtimeId !== "official-studio").every(item => !Object.hasOwn(item, "version")));
-  assert.deepEqual(game.moduleData.candidateRuntimeBuilds.filter(item => item.runtimeId === "official-studio").map(item => item.version), ["2026.0.0.23", "2024.13.1.242"]);
+  assert.ok(game.moduleData.candidateRuntimeBuilds.some(item => item.runtimeId === "official-studio"));
+  assert.ok(game.moduleData.candidateRuntimeBuilds.every(item => !Object.hasOwn(item, "version")), "Detection identifies compatible engines without inventing download versions");
   assert.equal(game.moduleData.detectedVersion, "2024.13+");
 });
 
@@ -534,7 +535,7 @@ test("audio-group path evidence bounds official runner selection across the 2024
   assert.equal(OfficialLaunch.preflight(legacy, "2024.13.1.242").audioGroupLayout, "legacy-name-only-or-null-path");
   assert.equal(detect(legacy).moduleData.maximumOfficialRuntimeExclusive, "2024.14");
   assert.ok(detect(legacy).moduleData.candidateRuntimeBuilds.some(item => item.runtimeId === "official-studio"));
-  assert.deepEqual(detect(legacy).moduleData.candidateRuntimeBuilds.filter(item => item.runtimeId === "official-studio").map(item => item.version), ["2024.13.1.242"]);
+  assert.ok(detect(legacy).moduleData.candidateRuntimeBuilds.filter(item => item.runtimeId === "official-studio").every(item => !Object.hasOwn(item, "version")));
   const modern = audioArchive(root, "modern.win", true);
   assert.equal(Inspect.inspectStudio(modern).minimumEngineVersion, "2024.14");
   assert.throws(() => OfficialLaunch.preflight(modern, "2024.13.1.242"), /predates/);
@@ -594,9 +595,9 @@ test("explicit Play prepares exact runtimes and rejects unsupported formats befo
   const context = { userDataDir, settings: {}, runtimeSettings: { softwareOpenGLFallback: "disabled" }, runtimeId: "official-studio" };
   const earlier = entry(path.join(root, "earlier"), { wad: 16 });
   assert.ok(Module.filterRuntimeSupport(earlier, ["butterscotch", "official-studio"]).includes("official-studio"));
-  assert.equal(Official.manager.resolveSelection(earlier, {}, userDataDir).version, "1.4.9999");
+  assert.equal(Official.manager.resolveSelection(earlier, {}, userDataDir).version, null);
   const coldPlan = await Module.ensureRuntime(earlier, context);
-  assert.equal(coldPlan.managerId, "gamemaker-official"); assert.equal(coldPlan.version, "1.4.9999"); assert.equal(coldPlan.discoveryRequired, true);
+  assert.equal(coldPlan.managerId, "gamemaker-official"); assert.equal(coldPlan.version, null); assert.equal(coldPlan.discoveryRequired, true);
   const extensions = entry(path.join(root, "extensions"), { wad: 17, extensionCount: 1 });
   await assert.rejects(Module.ensureRuntime(extensions, context), /native extensions/);
   const yyc = entry(path.join(root, "yyc"), { wad: 17, code: "empty" });

@@ -10,7 +10,7 @@ const Launch = require("./launch");
 const RealLive = require("./rldev-tools");
 
 const manager = createManagedPythonTool({ id: "siglus-ssu", label: "Siglus SceneScript Utility",
-  upstream: Upstream.pypi({ project: "siglus-ssu", recognize: pythonWheel }), moduleName: "siglus_ssu", minimumVersion: "0.5.0", order: 265,
+  upstream: Upstream.pypi({ project: "siglus-ssu", recognize: pythonWheel }), moduleName: "siglus_ssu", order: 265,
   // test.py implements the upstream CLI's public round-trip compiler command;
   // it is application functionality rather than a fixture or test suite.
   requiredFiles: ["siglus_ssu/__main__.py", "siglus_ssu/const.py", "siglus_ssu/decompiler.py", "siglus_ssu/test.py"],

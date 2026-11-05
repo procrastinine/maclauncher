@@ -80,7 +80,7 @@ Each package contains .NET, FNA, the managed host, the supported XNA type-forwar
 
 The selected host must declare support for original game paths in its runtime profile. When the installed host lacks it, Play offers a compatible package and installs it after download consent. The host uses the game's entry assembly identity for FNA storage and content discovery.
 
-Packages install under `~/Library/Application Support/maclauncher/runtimes/fna/<profile>/`, and a downloaded package is checked against its complete file list before it runs. Each installation records its FNA, .NET, host, package and native versions, the upstream source and MacLauncher changes it was built from, and the hashes of critical dependencies.
+Packages install under `~/Library/Application Support/maclauncher/runtimes/fna/<architecture>/<version>/`. Downloaded packages use their catalog archive digest, safe declared paths and actual native requirements; their recorded file lists do not pin installation or Play. Each installation records its FNA, .NET, host, package and native versions, the upstream source and MacLauncher changes it was built from, and the hashes of critical dependencies.
 
 Game launches set the [SDL foreground hint](https://wiki.libsdl.org/SDL3/SDL_HINT_MAC_BACKGROUND_APP) for the game process only and use the shared native activation helper. The helper waits for a window owned by the game, makes at most one [AppKit activation request](https://developer.apple.com/documentation/appkit/nsapplication/activationoptions) and checks the actual foreground order. It gives up after eight seconds or when the game exits, never holds up the launcher, and neither requests Accessibility access nor changes system preferences.
 

@@ -11,6 +11,7 @@ const EXECUTABLE_RELATIVE = APP_RELATIVE + "/Contents/MacOS/Flash Player";
 
 function verifyProjector(selected) {
   Bundled.verifyPayload(selected.root, selected.declaration);
+  if (Bundled.isManagedDeclaration(selected.declaration)) return Bundled.verifySignatures(selected.root,selected.declaration);
   const appPath = path.join(selected.payloadRoot, APP_RELATIVE);
   const executablePath = path.join(selected.payloadRoot, EXECUTABLE_RELATIVE);
   const info = AppBundle.readInfoPlist(appPath);
@@ -29,6 +30,7 @@ function createManager({ dependencies = {} } = {}) {
     sourceRelative: null, filesPrefix: "files/", executableRelative: EXECUTABLE_RELATIVE,
     supportsDefault: true, dependencies,
     validateManifest(manifest) {
+      if (Bundled.isManagedDeclaration(manifest)) return;
       if (manifest.managerId !== ID || manifest.platform !== "darwin" ||
           manifest.executableRelative !== EXECUTABLE_RELATIVE)
         throw new Error("The Flash Player package has a different application layout.");
@@ -39,8 +41,9 @@ function createManager({ dependencies = {} } = {}) {
   manager.resolveSelection = (...args) => {
     const selection = resolve(...args);
     if (selection.install) {
-      selection.install.appPath = path.join(selection.install.payloadRoot, APP_RELATIVE);
-      selection.install.executablePath = path.join(selection.install.payloadRoot, EXECUTABLE_RELATIVE);
+      const executable=selection.install.executablePath;
+      const bundle=/^(.*\.app)\/Contents\/MacOS\//.exec(executable);
+      selection.install.appPath = bundle ? bundle[1] : path.dirname(executable);
     }
     return selection;
   };

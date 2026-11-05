@@ -54,9 +54,9 @@ Loose RealLive scenarios, unknown protected keys and AVG32 games are not support
 
 ### Siglus
 
-Siglus, the default runtime, uses siglus_rs. MacLauncher Builds packages a publisher release or compiles the declared source revision, retaining the source and download digests. Each package, built and attested on GitHub, contains the native library, a signed host program that calls the library's C API directly, and the required notices. The publisher's separate launcher UI is left out.
+Siglus, the default runtime, uses siglus_rs. MacLauncher Builds packages a publisher release or compiles the declared source revision, retaining the source and download digests. Each package, built and attested on GitHub, contains the native library, a signed host program that calls the library's C API directly, and license texts. The publisher's separate launcher UI is left out.
 
-**Runtimes → Siglus** lists the interpreter packages from the [MacLauncher Builds catalog](https://github.com/procrastinine/maclauncher-builds). Installation verifies the archive, its complete file list, the native architecture and the code signatures, and it never compiles a host or copies one from MacLauncher. Package metadata records the interpreter's upstream revision separately from the MacLauncher Builds source revision. Runtime files are installed in `~/Library/Application Support/maclauncher/runtimes/siglus/<architecture>/<version>/`.
+**Runtimes → Siglus** lists the interpreter packages from the [MacLauncher Builds catalog](https://github.com/procrastinine/maclauncher-builds). Installation verifies the catalog archive digest, safe paths, the native architecture and the code signatures, and it never compiles a host or copies one from MacLauncher. Package metadata records the interpreter's upstream revision separately from the MacLauncher Builds source revision. Runtime files are installed in `~/Library/Application Support/maclauncher/runtimes/siglus/<architecture>/<version>/`.
 
 When MacLauncher Builds builds a package, it checks the selected publisher download, the C API that the host calls, the CPU slices, the deployment version, the signatures and the system-library dependencies. [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds/tree/main/producers/vn-adaptations) contains the host source, compile arguments, hashes and packaging script.
 

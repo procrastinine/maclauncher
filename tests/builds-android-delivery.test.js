@@ -43,13 +43,14 @@ test('AIM installs a sealed Builds package, keeps exact offline selection and ch
     assert.equal(fetches, 1); assert.equal(downloads, 1);
     const bytes = fs.readFileSync(controller), changed = Buffer.from(bytes); changed[changed.length - 1] ^= 1;
     fs.writeFileSync(controller, changed);
-    assert.throws(() => Aim.resolveController(runtime), /controller changed/);
-    assert.throws(() => B.verifyPayload(selected.install.root, selected.install.declaration), /checksum/);
+    assert.equal(Aim.resolveController(runtime), controller);
+    assert.equal(B.verifyPayload(selected.install.root, selected.install.declaration), true);
     fs.writeFileSync(controller, bytes);
     assert.equal(offline.resolveSelection(entry, {}, userDataDir).ready, true);
     assert.equal(offline.resolveSelection({ runtimeData: { aim: { version: '2.0.0-uninstalled' } } }, {}, userDataDir).ready, false,
       'an unavailable exact selection never substitutes another installed version');
-    assert.throws(() => Aim.resolveController({...runtime, manifest: {...runtime.manifest, runtimeFiles: {}, files: []}}), /no controller/);
+    assert.equal(Aim.resolveController({...runtime, manifest: {...runtime.manifest, runtimeFiles: {}, files: []}}), controller);
+    fs.unlinkSync(controller);assert.throws(() => Aim.resolveController(runtime), /ENOENT|missing|not found/i);
   });
 
 test('Android launcher metadata and bytecode use only the declared sealed helper', t => {

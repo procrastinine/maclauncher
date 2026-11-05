@@ -19,9 +19,9 @@ function listedFiles(html, base) {
   }
   return [...found];
 }
-function parseVersions(html, base, minimumVersion = "2.5.0") {
+function parseVersions(html, base) {
   return listedFiles(html, base).map(name => /^(\d+(?:\.\d+)+)\/$/.exec(name)?.[1])
-    .filter(version => version && compareVersions(version, minimumVersion) >= 0).sort((a, b) => compareVersions(b, a));
+    .filter(Boolean).sort((a, b) => compareVersions(b, a));
 }
 // A published checksum file: the digest on the line naming the file, or a
 // lone digest. A digest stated for another file is not this file's.
@@ -33,7 +33,7 @@ function parseDigest(text, filename) {
   return null;
 }
 
-// downloads.scummvm.org lists one folder per version from 2.5.0, and each Mac
+// downloads.scummvm.org lists one folder per version, and each Mac
 // download has a published `.sha256` file beside it. The current disk image
 // name wins; a renamed or reformatted Mac download is followed. The
 // downloaded executables state their macOS requirement and CPUs.

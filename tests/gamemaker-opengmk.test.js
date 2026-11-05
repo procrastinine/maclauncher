@@ -192,3 +192,10 @@ test("Classic preflight is consumed once and rechecks changed game or runtime id
   assert.equal(parses, 10, "another installation is not the prepared selection");
   assert.equal(fs.existsSync(context.userDataDir), false);
 });
+
+
+test("managed Classic inspection accepts an additive report schema while checking the game API", () => {
+  assert.equal(OpenGMK.validateReport({...report(),schemaVersion:99,extra:true},{managed:true}).version,"8.1");
+  assert.throws(()=>OpenGMK.validateReport({...report(),schemaVersion:99}),/invalid Classic/);
+  assert.throws(()=>OpenGMK.validateReport({...report(),assetsVerified:false},{managed:true}),/invalid Classic/);
+});

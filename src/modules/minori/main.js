@@ -68,6 +68,13 @@ function readProfile(install) {
   const shipped = Bundle.resolveInstalledAsset(install, "profile");
   const directory = shipped ? path.dirname(shipped) : path.resolve(path.dirname(install.executablePath), "..");
   const file = shipped || path.join(directory, "profile.json");
+  if (Bundle.isManagedDeclaration(install.declaration)) {
+    const profile = fs.existsSync(file) ? JSON.parse(Bundle.readRegular(file, 64 * 1024).bytes) : {};
+    const probe = Bundle.resolveInstalledAsset(install, "pazProbe") || path.join(directory, "bin/maclauncher-minori-probe");
+    const movieDecoder = Bundle.resolveInstalledAsset(install, "movieDecoder") ||
+      (profile.movieDecoder && path.join(directory, "bin/maclauncher-minori-movie"));
+    return { directory, profile, probe, movieDecoder, identity: install.catalogEntry?.projectPackage?.asset?.sha256 || install.sha256 };
+  }
   const stat = fs.lstatSync(file);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 64 * 1024) throw new Error("Minori profile metadata is invalid.");
   const profile = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -110,7 +117,7 @@ function validVerification(result) {
 }
 async function verifyData(entry, context, distribution, { refresh = false } = {}) {
   const { root, data } = originalData(entry);
-  const identity = JSON.stringify([distribution.profile.version, distribution.profile.executables["maclauncher-minori-probe"],
+  const identity = JSON.stringify([distribution.identity || distribution.profile.version, distribution.profile.executables?.["maclauncher-minori-probe"] || distribution.probe,
     data.archives.map(archive => [archive.path, archive.identity]), data.originalRunnerIdentity]);
   const cacheFile = entry.gameId && context.userDataDir ? path.join(gameDirectory(entry, context), "verification.json") : null;
   let result = !refresh && verifiedData.get(identity);

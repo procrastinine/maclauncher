@@ -9,6 +9,7 @@ function createManager(dependencies = {}) {
     repository: "procrastinine/maclauncher-builds", upstreamUrl: "https://github.com/boykopovar/AnyPS5",
     manifestRelative: "runtime.json", sourceRelative: "source.json", executableRelative: "tools/relinker", supportsDefault: true,
     validateManifest(manifest, record) {
+      if (Bundled.isManagedDeclaration(manifest)) return;
       if (manifest.managerId !== "anyps5" || manifest.arch !== record.arch || !/^[a-f0-9]{40}$/.test(manifest.upstreamRevision || "") ||
           manifest.gameArchitecture !== "x86_64" || manifest.runtimeFiles?.libraries !== "libs" ||
           manifest.runtimeFiles?.unwrap !== "tools/unwrap-self.cjs" ||
@@ -18,9 +19,7 @@ function createManager(dependencies = {}) {
     },
     async verifyPayload(selected, { signal } = {}) {
       Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
-      for (const file of selected.manifest.files.filter(file => file.architectures))
-        await (dependencies.execute || execute)("/usr/bin/codesign", ["--verify", "--strict", path.join(selected.payloadRoot,file.path)],
-          { signal, timeout:30000, maxBuffer:1024*1024 });
+      await Bundled.verifySignatures(selected.root,selected.declaration,{signal,execute:dependencies.execute || execute});
     }, dependencies });
   return base;
 }

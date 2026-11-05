@@ -133,7 +133,7 @@ test("fresh Play defers discovery until consent and cached selection retains the
   const moduleData = Inspect.inspectStudio(target);
   const entry = { gamePath: target, moduleData: { ...moduleData, dataPath: target }, runtimeData: {} };
   const missing = Official.manager.resolveSelection(entry, {}, userDataDir);
-  assert.equal(missing.version, "2.3.7.476");
+  assert.equal(missing.version, null);
   assert.equal(missing.discoveryRequired, true);
   let refreshes = 0;
   const refresh = Official.manager.refreshCatalog;
@@ -147,11 +147,11 @@ test("fresh Play defers discovery until consent and cached selection retains the
     writeRuntimeCatalog({ userDataDir, managerId: "gamemaker-official", source: Catalog.FEEDS[0].url, entries });
   };
   const plan = await Module.ensureRuntime(entry, { runtimeId: "official-studio", settings: {}, userDataDir });
-  assert.equal(plan.version, "2.3.7.476"); assert.equal(plan.discoveryRequired, true); assert.equal(refreshes, 0);
+  assert.equal(plan.version, null); assert.equal(plan.discoveryRequired, true); assert.equal(refreshes, 0);
   await Official.manager.refreshCatalog({ userDataDir });
   assert.deepEqual(await Module.ensureRuntime(entry, { runtimeId: "official-studio", settings: {}, userDataDir }),
-    { managerId: "gamemaker-official", version: "2.3.7.476", installOptions: {} });
+    { managerId: "gamemaker-official", version: "2024.11.0.227", installOptions: {} });
   assert.equal(refreshes, 1);
-  assert.equal(Official.manager.resolveSelection(entry, {}, userDataDir).version, "2.3.7.476");
+  assert.equal(Official.manager.resolveSelection(entry, {}, userDataDir).version, "2024.11.0.227");
   assert.equal(fs.existsSync(path.join(userDataDir, "runtimes/gamemaker-official/2.3.7.476")), false, "cached selection does not install by itself");
 });

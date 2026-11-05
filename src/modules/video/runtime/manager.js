@@ -68,10 +68,7 @@ async function prepareInstall({ unpacked, pin, signal, logger }, dependencies = 
     ...(host?{decodedFrameAPI:host.decodedFrameAPI,libraryVersion:host.libraryVersion}:{}) };
 }
 function createManager(dependencies = {}) {
-  const manager = createPinnedNativeManager({ id: "mpv", label: "mpv", supportsDefault: true, projectBuilds:{projectId:"mpv",repository:"procrastinine/maclauncher-builds",upstreamMacDownloads:true,
-      validateManifest(manifest,pin){if(pin.decodedFrameAPI===1&&(
-        manifest.executableRelative!=="mpv.app/Contents/MacOS/mpv"||manifest.runtimeFiles?.decodedFrameManifest!=="video-runtime.json"||
-        !manifest.files.some(file=>file.path==="video-runtime.json")))throw Error("The managed decoded-video package is missing its GPU host contract.");}},
+  const manager = createPinnedNativeManager({ id: "mpv", label: "mpv", supportsDefault: true, projectBuilds:{projectId:"mpv",repository:"procrastinine/maclauncher-builds",upstreamMacDownloads:true},
     sourceUrl: Catalog.SOURCE_URL, upstream: Catalog.source,
     resolveExecutable: root => path.join(root, "mpv.app/Contents/MacOS/mpv"),
     prepareInstall: options => prepareInstall(options, dependencies), importLocal:true, dependencies });

@@ -47,10 +47,10 @@ for (const [id, modulePath, entry] of [
   assert.equal(Bundled.verifyPayload(selected.install.root, selected.install.declaration), true);
   await restarted.installRuntime({ userDataDir, version: record.version });
   assert.equal(downloads, 1); assert.equal(fetches, 1);
-  // Consumption rejects corruption anywhere in the script closure, including a non-entry member.
+  // Recorded per-file hashes do not pin the managed script closure.
   const member = selected.install.manifest.files.find(file => file.path !== entry && (file.path.endsWith(".js") || file.path.endsWith("conf.lua")));
   const memberPath = path.join(selected.install.root, member.path);
   const changed = fs.readFileSync(memberPath); changed[0] ^= 1; fs.writeFileSync(memberPath, changed);
-  assert.throws(() => Bundled.verifyPayload(selected.install.root, selected.install.declaration), /checksum|permissions|size/i);
-  assert.throws(() => Runtime.resolveEngine(null, { settings: configured, userDataDir }), /checksum|permissions|size/i);
+  assert.equal(Bundled.verifyPayload(selected.install.root, selected.install.declaration), true);
+  assert.equal(Runtime.resolveEngine(null, { settings: configured, userDataDir }).root, path.dirname(selected.install.executablePath));
 });

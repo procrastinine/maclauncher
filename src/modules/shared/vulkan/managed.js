@@ -13,14 +13,13 @@ function createManager(dependencies = {}) {
     executableRelative: manifest => manifest.executableRelative,
     validateManifest(manifest, record) {
       Bundled.validateRuntimeManifest(manifest, { managerId: projectId, version: record.version, arch: record.arch });
+      if (Bundled.isManagedDeclaration(manifest)) return;
       if (manifest.executableRelative !== "libvulkan_kosmickrisp.dylib" || manifest.runtimeFiles?.loader !== "libvulkan.1.dylib")
         throw new Error("The KosmicKrisp package differs from its GLES 3.2 profile.");
     },
     async verifyPayload(selected, { signal } = {}) {
       Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
-      for (const file of selected.manifest.files.filter(file => file.architectures))
-        await execute("/usr/bin/codesign", ["--verify", "--strict", path.join(selected.payloadRoot, file.path)],
-          { signal, timeout: 30000, maxBuffer: 1024 * 1024 });
+      await Bundled.verifySignatures(selected.root,selected.declaration,{signal});
     }, dependencies });
   return { ...manager, distributionRequired: false,
     ui: { groupId: "graphics", tabLabel: "Graphics", sectionLabel: "KosmicKrisp GLES 3.2", memberOrder: 22, management: "managed" } };
@@ -56,6 +55,7 @@ const manager = createManager();
 const sceneProjectId = "vulkan-moltenvk-scene", sceneSelectionId = "moltenvk:maclauncher-scene";
 function sceneDescriptor(manifest) {
   const provider = manifest.provider, library = manifest.files?.find(file => file.path === "libMoltenVK-scene.dylib");
+  if (Bundled.isManagedDeclaration(manifest)) return provider || {};
   if (provider?.schema !== 1 || provider.provider !== "moltenvk" ||
       provider.sceneOperationAPI !== 1 || ![undefined, 0, 1].includes(provider.sceneStagingAPI) || provider.sceneOperationResources !== "prepared-tracked-boundary" ||
       provider.originalOutputRetained !== true || provider.library !== "libMoltenVK-scene.dylib" || provider.minimumMacOS !== manifest.minimumMacOS ||
@@ -85,8 +85,9 @@ function createSceneProvider(selectedManager) {
     const result = selectedManager.resolveSelection(null, context.settings, context.userDataDir, { version, verification });
     if (!result.ready || !result.install) return null;
     const install = result.install, descriptor = sceneDescriptor(install.manifest);
+    if (!descriptor.library || descriptor.sceneOperationAPI !== 1) return null;
     if (verification === "full") Bundled.verifyPayload(install.root, install.declaration);
-    const library = path.join(install.payloadRoot, descriptor.library);
+    const library = path.join(install.payloadRoot, Bundled.relativeFile(descriptor.library));
     return { id: "moltenvk-scene:" + result.version, backend: "moltenvk", version: result.version, projectId: sceneProjectId,
       label: "MoltenVK · Scene support · " + result.version, minimumMacOS: install.manifest.minimumMacOS,
       library, driver: library, readable: [library], sceneOnly: true,

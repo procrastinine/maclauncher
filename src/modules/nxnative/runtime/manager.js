@@ -5,7 +5,7 @@ const { selectRuntimeVersion, managerDefaultVersion, usableDefaultVersion } = re
 const { createManager: createLegacyManager } = require("./legacy-manager");
 const NativeTools = require("./native-tools");
 
-const SOURCE_FILES = ["scripts/build_ipa_from_nsp.py", "dm/tools/nso2elf.py", "dm/host/front_mac.m", "LICENSE"];
+const SOURCE_FILES = ["scripts/build_ipa_from_nsp.py", "dm/tools/nso2elf.py", "dm/host/front_mac.m"];
 const gitVersion = version => /^git-[a-f0-9]{40}$/.test(version || "");
 
 function createManager(dependencies = {}) {
@@ -30,9 +30,9 @@ function createManager(dependencies = {}) {
   function fromSource(version, sourceInstall, settings, userDataDir) {
     const native = tools.resolveSelection(null, settings, userDataDir);
     return { version, sourceInstall, toolsVersion: native.version, toolsManagerId: NativeTools.ID,
-      install: native.install, ready: Boolean(sourceInstall && native.ready),
+      install: native.install, ready: Boolean(sourceInstall && native.ready && native.sourceRequirement),
       runtimeUses: runtimeUses(version, sourceInstall, native),
-      reason: !sourceInstall ? "The selected nxnative source is not installed." : native.reason || null };
+      reason: !sourceInstall ? "The selected nxnative source is not installed." : native.reason || (!native.sourceRequirement ? "The selected native tools do not expose source selection." : null) };
   }
   function resolveSelection(entry, settings, userDataDir, options = {}) {
     const version = configured(entry, settings, userDataDir, options);
@@ -47,7 +47,7 @@ function createManager(dependencies = {}) {
     getState(options = {}) {
       const state = source.getState(options), old = legacy.getState(options);
       const native = tools.resolveSelection(null, { runtimes: options.runtimeSettings || { nxnative: options.settings } }, options.userDataDir);
-      const sources = state.installed.filter(row => !row.custom).map(row => ({ ...row, ready: row.ready !== false && native.ready,
+      const sources = state.installed.filter(row => !row.custom).map(row => ({ ...row, ready: row.ready !== false && native.ready && Boolean(native.sourceRequirement),
         runtimeUses: runtimeUses(row.version, row, native),
         ...(!native.ready ? { reason: native.reason, status: "native-tools-required" } : {}) }));
       const installed = [...sources, ...old.installed.filter(row => !row.custom)];
@@ -56,12 +56,16 @@ function createManager(dependencies = {}) {
         return [version, { ...state.catalog.versionRequirements[version], available: present, requiresDownload: !present,
           requiresBuild: false, installLabel: "Install" }];
       }));
+      const {sourceCatalog}=require('../../shared/runtime/runtime-sources');
       const { sections, ...view } = { ...state, installed, catalog: { ...state.catalog, latestInstalledVersion: installed[0]?.version || null,
-        versionRequirements: { ...sourceRequirements, ...Object.fromEntries(old.installed.filter(row => !row.custom).map(row => [row.version,
+        versions:[...new Set([...state.catalog.versions,...old.catalog.versions])],
+        sources:[sourceCatalog(state.catalog,{id:'upstream',label:'Upstream',source:state.catalog.source}),
+          sourceCatalog(old.catalog,{id:'builds',label:'MacLauncher Builds',source:old.catalog.source})],
+        versionRequirements: { ...old.catalog.versionRequirements,...sourceRequirements, ...Object.fromEntries(old.installed.filter(row => !row.custom).map(row => [row.version,
           { available: row.ready !== false, requiresDownload: false, requiresBuild: false, installLabel: "Installed" }])) } } };
       const saved = source.normalizeSettings(options.settings).defaultVersion;
       const defaultVersion = selectRuntimeVersion({ defaultVersion: saved, fallback: managerDefaultVersion({
-        listed: state.catalog.versions.filter(version => !sourceRequirements[version]?.installReason),
+        listed: view.catalog.versions.filter(version => !view.catalog.versionRequirements[version]?.installReason),
         installed: installed.filter(row => row.ready !== false).map(row => row.version) }) }).version;
       view.defaultVersion = defaultVersion;view.defaultSource = saved ? "saved" : "manager";
       return { ...view, sections: [{ ...sections[0], ...view, id: "default", label: "nxnative versions" }] };

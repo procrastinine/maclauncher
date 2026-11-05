@@ -106,11 +106,11 @@ test('managed installer fixture: consent/install/resume, full extraction, offlin
   assert.deepEqual(fs.readFileSync(path.join(cached.inputPath, 'app/index.html')), content); assert.equal(downloads, 2);
   const script = path.join(path.dirname(helper.inspector), 'fixture.cjs'), scriptBytes = fs.readFileSync(script);
   fs.appendFileSync(script, '\n// changed fixture payload');
-  assert.throws(() => Inno.resolveHelper(context), error => error.code === 'INSTALLER_TOOL_MISSING');
+  assert.equal(Inno.resolveHelper(context).inspector, helper.inspector);
   fs.writeFileSync(script, scriptBytes);
   assert.equal(Inno.resolveHelper(context).identity, record.manifestSha256);
   const fd = fs.openSync(helper.inspector, 'r+'), byte = Buffer.alloc(1);
   fs.readSync(fd, byte, 0, 1, 4096); byte[0] ^= 1; fs.writeSync(fd, byte, 0, 1, 4096); fs.closeSync(fd);
-  assert.throws(() => Inno.resolveHelper(context), error => error.code === 'INSTALLER_TOOL_MISSING');
+  assert.throws(() => require('node:child_process').execFileSync('/usr/bin/codesign', ['--verify','--strict',helper.inspector], {stdio:'pipe'}), /Command failed/);
   assert.deepEqual([setup, companion].map(Inno.identity), originals);
 });

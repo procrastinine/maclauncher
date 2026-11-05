@@ -40,23 +40,21 @@ function resolveInput(entry) {
 function runtimePaths(install, { verify = true } = {}) {
   if (!install?.declaration || !path.isAbsolute(install.payloadRoot || "")) throw new Error("The selected nxnative runtime has no verified package.");
   if (verify) Bundled.verifyPayload(install.root, install.declaration);
-  const root = install.payloadRoot, config = readJson(path.join(root, "runtime.json"));
-  if (config.schemaVersion !== 1 || !["nxnative", "nxnative-tools"].includes(config.id) || config.architecture !== "arm64" || config.executableRelative !== "bin/nxnative" || config.runtimeFiles?.host !== "bin/nxnative-host")
+  const root = install.payloadRoot, config = readJson(path.join(root, Bundled.relativeFile(install.manifest?.runtimeFiles?.runtimeProfile || "runtime.json")));
+  const managed=Bundled.isManagedDeclaration(install.declaration);
+  if (!managed && (config.schemaVersion !== 1 || !["nxnative", "nxnative-tools"].includes(config.id) || config.architecture !== "arm64" || config.executableRelative !== "bin/nxnative" || config.runtimeFiles?.host !== "bin/nxnative-host"))
     throw new Error("The nxnative runtime configuration is unsupported.");
-  const cli = path.join(root, "bin/nxnative"), host = path.join(root, config.runtimeFiles.host);
+  const cli = managed ? install.executablePath : path.join(root, "bin/nxnative"), host = path.join(root, Bundled.relativeFile(config.runtimeFiles.host));
   if (fs.realpathSync(cli) !== fs.realpathSync(install.executablePath) || !Native.readMachOArchitectures(host).includes("arm64")) throw new Error("The nxnative runtime does not contain the selected Apple Silicon host.");
-  if (config.python?.delivery === "launcher" && (config.runtimeFiles.pythonPackages !== "python-packages" ||
+  if (config.python?.delivery === "launcher" && (!managed && config.runtimeFiles.pythonPackages !== "python-packages" ||
       !inside(fs.realpathSync(root), fs.realpathSync(path.join(root, config.runtimeFiles.pythonPackages)))))
     throw new Error("The nxnative Python package directory is invalid.");
-  return { root, cli, host, config, packageIdentity: install.declaration.manifestSha256 ||
+  return { root, cli, host, config, managed, packageIdentity: install.catalogEntry?.projectPackage?.asset.sha256 || install.declaration.manifestSha256 ||
     crypto.createHash("sha256").update(JSON.stringify(install.declaration)).digest("hex") };
 }
 async function runtimeForSelection(selection, context) {
   const runtime = runtimePaths(selection.install);
   if (!runtime.config.sourceRequirement) return runtime;
-  if (runtime.config.sourceRequirement.repository !== "https://github.com/seedds/nxnative.git" ||
-      runtime.config.sourceRequirement.adapter !== "maclauncher-nxnative-1")
-    throw new Error("The nxnative native tools require an unsupported source adapter.");
   return { ...runtime, source: await Source.resolveSource(selection.sourceInstall, context, sourceIdentity) };
 }
 function recordSelectionUse(entry, context, selection, runtime) {
@@ -209,9 +207,11 @@ function canonicalTarget(file) {
 const PATH_ENVIRONMENT = new Set(["NXNATIVE_PROFILE", "DM_ROOT", "DM_ROMFS", "DM_SAVE", "DM_TEMP", "DM_MSL_DIR", "DM_FONT_DIR", "DM_NVN_SHMAP", "DM_AOC_DIR", "DM_PSO_ARCHIVE"]);
 function validateLaunch(file, prepared, runtime, input, entry, context) {
   const launch = readJson(file), actualPrepared = fs.realpathSync(prepared);
-  if (launch.schemaVersion !== 1 || !path.isAbsolute(launch.command || "") || fs.realpathSync(launch.command) !== fs.realpathSync(runtime.host) ||
-      !Array.isArray(launch.args) || launch.args.length !== 1 || launch.args.some(value => typeof value !== "string" || value.length > 16384 || value.includes("\0")) ||
-      !path.isAbsolute(launch.args[0]) || !inside(actualPrepared, fs.realpathSync(launch.args[0])) ||
+  const argumentPathSafe=value=>[actualPrepared,runtime.root,input?.sourceRoot].filter(Boolean).some(root=>inside(fs.realpathSync(root),fs.realpathSync(value)));
+  if (!runtime.managed && launch.schemaVersion !== 1 || !path.isAbsolute(launch.command || "") ||
+      (runtime.managed ? !inside(fs.realpathSync(runtime.root),fs.realpathSync(launch.command)) : fs.realpathSync(launch.command) !== fs.realpathSync(runtime.host)) ||
+      !Array.isArray(launch.args) || !runtime.managed && launch.args.length !== 1 || launch.args.some(value => typeof value !== "string" || value.length > 16384 || value.includes("\0")) ||
+      (runtime.managed ? launch.args.some(value=>path.isAbsolute(value)&&!argumentPathSafe(value)) : !path.isAbsolute(launch.args[0]) || !inside(actualPrepared, fs.realpathSync(launch.args[0]))) ||
       !path.isAbsolute(launch.cwd || "") || !inside(actualPrepared, fs.realpathSync(launch.cwd)) || !launch.env || typeof launch.env !== "object" || Array.isArray(launch.env))
     throw new Error("The prepared Switch launch does not match the managed runtime and private game files.");
   const environment = {}, suppliedEnvironment = { ...launch.env };

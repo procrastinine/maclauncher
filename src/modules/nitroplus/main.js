@@ -31,6 +31,7 @@ function readProfile(install) {
   const shipped = Bundle.resolveInstalledAsset(install, "profile");
   const root = shipped ? path.dirname(shipped) : path.resolve(path.dirname(install.executablePath), "..");
   const file = shipped || path.join(root, "profile.json");
+  if (Bundle.isManagedDeclaration(install.declaration) && !fs.existsSync(file)) return { root, profile: {} };
   if (fs.statSync(file).size > 65536) throw new Error("Nitroplus profile exceeds its metadata limit.");
   return { root, profile: JSON.parse(fs.readFileSync(file, "utf8")) };
 }
@@ -40,16 +41,18 @@ function readProfile(install) {
 // and the launcher's save-directory and script-check interface.
 function verifyProfile(install) {
   const { profile } = readProfile(install), provenance = install.buildProvenance, revision = value => /^[a-f0-9]{40}$/.test(value || "");
-  if (!revision(profile.upstreamRevision) || profile.upstreamRevision !== install.upstreamRevision || !revision(profile.npaRevision) ||
+  if (!Bundle.isManagedDeclaration(install.declaration) && (!revision(profile.upstreamRevision) || profile.upstreamRevision !== install.upstreamRevision || !revision(profile.npaRevision) ||
       provenance && (provenance.sourceTreeSha256 !== profile.sourceTreeSha256 || provenance.overlaySha256 !== profile.overlaySha256 ||
-        !isDeepStrictEqual(provenance.additionalSources, profile.additionalSources))) {
+        !isDeepStrictEqual(provenance.additionalSources, profile.additionalSources)))) {
     throw new Error("The Nitroplus runtime profile differs from its package.");
   }
   const identity = `${install.version}:${install.sha256}`;
   if (profileCache.has(identity)) return profile;
   if (fs.statSync(install.executablePath).size > 16 * 1024 * 1024) throw new Error("Nitroplus executable exceeds the profile inspection limit.");
   const bytes = fs.readFileSync(install.executablePath);
-  if (![profile.upstreamRevision, profile.npaRevision, "MACLAUNCHER_NPENGINE_SAVE_DIR", "--check-scripts"].every(marker => bytes.includes(Buffer.from(marker)))) throw new Error("This interpreter lacks NPA/NSS or per-game save support. Select Automatic in Runtime Settings to use the recommended runtime.");
+  const markers = Bundle.isManagedDeclaration(install.declaration) ? ["MACLAUNCHER_NPENGINE_SAVE_DIR", "--check-scripts"] :
+    [profile.upstreamRevision, profile.npaRevision, "MACLAUNCHER_NPENGINE_SAVE_DIR", "--check-scripts"];
+  if (!markers.every(marker => bytes.includes(Buffer.from(marker)))) throw new Error("This interpreter lacks NPA/NSS or per-game save support. Select Automatic in Runtime Settings to use the recommended runtime.");
   if (profileCache.size >= 32) profileCache.delete(profileCache.values().next().value);
   profileCache.add(identity);
   return profile;

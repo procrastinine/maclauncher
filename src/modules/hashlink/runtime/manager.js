@@ -26,8 +26,8 @@ function createManager(dependencies = {}) { const base = createPinnedNativeManag
       const view = parent => {
         const versions = parent.versions.filter(version => family(version) === section.id);
         const catalog = sourceCatalog(parent, { id: section.id, label: section.label, source: parent.source, versions });
-        catalog.sources = (parent.sources || []).filter(source => section.id === "current" ? source.id === "upstream" : source.id === "builds").map(source => sourceCatalog(source, { ...source,
-          versions: source.versions.filter(version => family(version) === section.id) }));
+        catalog.sources = (parent.sources || []).map(source => sourceCatalog(source, { ...source,
+          versions: source.versions.filter(version => family(version) === section.id) })).filter(source => source.versions.length);
         catalog.sourceLinks = section.id === "current" ? [] : [{ label: "upstream code", url: "https://github.com/HaxeFoundation/hashlink" }];
         if (section.id !== "current") for (const source of catalog.sources) source.source = source.sourceUrl =
           `https://procrastinine.github.io/maclauncher-builds/#hashlink-${section.id.replace(".", "-")}`;

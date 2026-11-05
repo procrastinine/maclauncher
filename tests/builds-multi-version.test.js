@@ -20,7 +20,7 @@ test("revisions of one upstream version install side by side, keep a user defaul
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "builds-multi-version-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const source = path.join(root, "main.c"), executable = path.join(root, "native");
-  fs.writeFileSync(source, "int main(void){return 0;}\n"); execFileSync("clang", [source, "-o", executable]);
+  fs.writeFileSync(source, "int main(void){return 0;}\n"); execFileSync("clang", ["-mmacosx-version-min=13.0", source, "-o", executable]);
   const packages = new Map();
   function packageFor(version) {
     const directory = path.join(root, "package-" + version); fs.mkdirSync(directory);
@@ -134,10 +134,8 @@ test("every named catalog record is listed; records this launcher cannot use sho
   const rows = [later, { ...hostedRecord("0.41.0-MCLv3"), launcherContract: 3 }, damaged, otherCpu,
     { ...hostedRecord("0.41.0-MCLv2"), manifestRelative: "package.json" }, { ...hostedRecord("0.41.0-MCLv1"), launcherContract: 1, futureCapability: "x" },
     { version: "../escape" }, null];
-  const reasons = {
-    "0.41.0-MCLv5": "Requires a newer MacLauncher.", "0.41.0-MCLv3": "Requires a newer MacLauncher.",
-    "0.41.0-MCLv4": "The runtime download does not match its project, version, architecture or repository.",
-    "0.41.0-MCLv8": "Requires a newer MacLauncher.", "0.41.0-MCLv2": "Requires a newer MacLauncher." };
+  const reasons = {"0.41.0-MCLv5": "The runtime catalog needs its archive SHA-256.",
+    "0.41.0-MCLv4": "The runtime catalog needs its archive SHA-256."};
   const fetchUrlBuffer = async () => catalogResponse(rows);
   const project = createProjectBuildManager({ projectId, runtimeId, label: "Sample runtime", repository, manifestRelative: "runtime.json",
     sourceRelative: "source.tar.gz", executableRelative: "native", validateManifest: () => {}, verifyPayload: () => {},
@@ -149,10 +147,8 @@ test("every named catalog record is listed; records this launcher cannot use sho
     dependencies: { systemVersionSync: () => "26.0", projectBuilds: { fetchUrlBuffer: async () => catalogResponse([...rows.map(sourced),
       { ...hostedRecord("0.41.0-MCLv6"), source: { repository: "ExampleOwner/runtime-source", revision: "3".repeat(40) },
         capabilities: { decodedFrameAPI: 1, nativeAbi: { sdlEventLoop: "dynamic" } } }, hostedRecord("0.41.0-MCLv7")]) } } });
-  const nativeReasons = { ...reasons, "0.41.0-MCLv7": "This version does not identify its source revision." };
-  delete nativeReasons["0.41.0-MCLv2"];
-  for (const [manager, expected, installable] of [[project, reasons, ["0.41.0-MCLv1"]],
-    [native, nativeReasons, ["0.41.0-MCLv2", "0.41.0-MCLv1", "0.41.0-MCLv6"]]]) {
+  for (const [manager, expected, installable] of [[project, reasons, ["0.41.0-MCLv3", "0.41.0-MCLv8", "0.41.0-MCLv2", "0.41.0-MCLv1"]],
+    [native, reasons, ["0.41.0-MCLv3", "0.41.0-MCLv8", "0.41.0-MCLv2", "0.41.0-MCLv1", "0.41.0-MCLv6", "0.41.0-MCLv7"]]]) {
     await manager.refreshCatalog({ userDataDir, force: true });
     const { catalog } = manager.getState({ userDataDir }), builds = catalog.sources.find(source => source.id === "builds");
     assert.deepEqual(catalog.installableVersions, installable, "Only usable records are installable");
@@ -161,12 +157,9 @@ test("every named catalog record is listed; records this launcher cannot use sho
       assert.equal(catalog.versionRequirements[version].installReason, reason);
       assert.equal(catalog.versionRequirements[version].requiresDownload, true, "Runtimes keeps the row visible");
     }
-    if (process.platform === "darwin")
-      await assert.rejects(runRuntimeManagerAction({ manager, action: "install", payload: { version: "0.41.0-MCLv3" }, userDataDir,
-        readSettings: () => ({}), saveSettings: () => {} }), /Requires a newer MacLauncher/);
     const selected = manager.resolveSelection({ runtimeData: { [runtimeId]: { version: "0.41.0-MCLv5" }, [projectId]: { version: "0.41.0-MCLv5" } } }, {}, userDataDir);
     assert.equal(selected.ready, false);
-    assert.equal(selected.reason, "Requires a newer MacLauncher.", "A game set to that version reports why");
+    assert.equal(selected.reason, reasons["0.41.0-MCLv5"], "Missing archive integrity is reported independently of a schema number");
   }
   const later6 = native.core.listCatalog({ userDataDir }).find(entry => entry.version === "0.41.0-MCLv6");
   assert.equal(later6.upstreamRevision, "3".repeat(40), "The record's source names its revision");

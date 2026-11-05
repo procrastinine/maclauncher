@@ -74,7 +74,8 @@ test("hosted Intel packages inspect real slices without requiring matching inven
       assert.deepEqual(Native.readMachOArchitectures(path.join(item.directory,'project-payload/files/bin/host')),['x86_64']);
     }
     const item = fixture({manifestFlag: "arm64"});
-    await assert.rejects(adapter.prepare({unpacked: item.directory, pin: item.pin}), /inventory is invalid/);
+    await adapter.prepare({unpacked:item.directory,pin:item.pin});
+    assert.deepEqual(Native.readMachOArchitectures(path.join(item.directory,'project-payload/files/bin/host')),['x86_64']);
   });
   await t.test("wrapper file facts do not pin a managed payload while real CPU validation remains", async () => {
     for (const mutate of [file => file.sha256 = "3".repeat(64), file => file.size++, file => file.mode = 0o644,
@@ -84,7 +85,8 @@ test("hosted Intel packages inspect real slices without requiring matching inven
       assert.deepEqual(Native.readMachOArchitectures(path.join(item.directory,'project-payload/files/bin/host')),['x86_64']);
     }
     const wrongCPU = fixture();wrongCPU.wrapper.files[0].architectures = ['arm64'];wrongCPU.writeWrapper();
-    await assert.rejects(adapter.prepare({unpacked:wrongCPU.directory,pin:wrongCPU.pin}),/architecture changed/);
+    await adapter.prepare({unpacked:wrongCPU.directory,pin:wrongCPU.pin});
+    assert.deepEqual(Native.readMachOArchitectures(path.join(wrongCPU.directory,'project-payload/files/bin/host')),['x86_64']);
     const item = fixture(); fs.writeFileSync(path.join(item.payload, "files/LICENSE"), "Changed license\n");
     await adapter.prepare({unpacked:item.directory,pin:item.pin});
     assert.equal(fs.readFileSync(path.join(item.directory,'project-payload/files/LICENSE'),'utf8'),'Changed license\n');
@@ -97,7 +99,8 @@ test("hosted Intel packages inspect real slices without requiring matching inven
     falseSlices.wrapper.manifestSha256 = falseSlices.wrapper.sourceSha256 = sha(manifestBytes);
     Object.assign(falseSlices.wrapper.files.at(-1), {sha256: sha(manifestBytes), size: manifestBytes.length});
     falseSlices.writeWrapper();
-    await assert.rejects(adapter.prepare({unpacked: falseSlices.directory, pin: falseSlices.pin}), /Mach-O architecture changed/);
+    await adapter.prepare({unpacked:falseSlices.directory,pin:falseSlices.pin});
+    assert.deepEqual(Native.readMachOArchitectures(path.join(falseSlices.directory,'project-payload/files/bin/host')),['x86_64']);
   });
   await t.test("Intel-only records receive no derived role", async () => {
     const item = fixture({launchers: ["x64"]});

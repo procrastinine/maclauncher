@@ -1,110 +1,53 @@
 # Project runtime catalogs
 
-`maclauncher-builds.js` reads versioned runtime packages from an explicitly named
-GitHub repository and project. `fetchProjectCatalog(options, dependencies)` is an
-explicit refresh operation. Loading the module, constructing its catalog URL and
-calling `validateProjectCatalog` make no network requests. Existing runtime
-managers select when to offer refresh and installation actions. Download lists
-start empty. Explicit Refresh writes a local catalog; subsequent offline views
-use that cache. Module source pins and installed records do not seed downloads.
+`maclauncher-builds.js` reads runtime catalogs from an explicitly named GitHub
+repository and project. `fetchProjectCatalog(options, dependencies)` performs an
+explicit refresh. Importing the module, constructing a catalog URL and validating
+records make no network requests. Download lists use the last refreshed catalog;
+installed versions remain usable offline even after removal from the catalog.
 
-Both operations require `projectId` and an `owner/repository` value. Catalogs use
-schema version 2 or later, the matching `projectId`, a `manual` update policy and
-an ordered `packages` array. A package's project ID, version and architecture determine its
-release tag and filename. Download URLs must identify that exact repository,
-encoded tag and filename. Package records also retain manifest/source checksums,
-the archive checksum and size, launcher architectures and the minimum macOS
-version. Archives are limited to 4 GiB.
+Managed catalogs have a `packages` array. Each usable record supplies a safe
+version, an HTTPS archive URL and its SHA-256. Known CPU and macOS requirements
+control selection. Schema, launcher-contract and provenance fields do not impose
+an app-version ceiling. Additional fields and files are accepted. Unknown
+architecture labels do not establish native compatibility: installation inspects
+the actual executable. Invalid records are reported individually without hiding
+the catalog's other records.
 
-Each record is validated separately before optional filtering by launcher
-architecture. A record whose launcher architectures name only another known Mac
-CPU is not offered. An invalid record does not hide the catalog's other records. A
-record with a safe version that cannot be used is returned in `unavailable` with
-its reason, unless a usable record has the same version; this includes duplicate
-version/architecture pairs, records for other projects and download identities
-that do not match the selected project. A record without a safe version is
-omitted. Only a catalog for another project, another update policy or an earlier
-schema is rejected as a whole. `validateProjectRecord(record, options)` applies
-the same checks to one recorded entry and throws its reason. Returned records
-are copied and immutable, and unknown fields are ignored. Publisher ordering is
-retained; the helper does not choose a latest version, install packages or
-change runtime defaults.
+`validateProjectRecord(record, options)` applies the same rules to an installed
+record. `unavailablePins(projectId, rows)` retains unavailable catalog entries with
+their reasons. Returned records are copied and immutable; publisher ordering is
+preserved. Catalog reading does not choose a version or change runtime defaults.
+App-lock readers pass `managed: false` and retain exact package validation.
 
-A record with a schema version above 2, a `launcherContract` above the
-module's `launcherContract` option, or an architecture name this launcher does
-not know is listed with "Requires a newer MacLauncher." `launcherContract` is a positive integer and defaults to 1 for both
-records and modules. A project raises it when a package needs launcher behavior
-that earlier launchers lack, such as a changed controller protocol or package
-layout. Additive fields need no new contract. Both manager types pass the
-module's value, and `unavailablePins(projectId, rows)` turns unavailable records
-into download-list rows that show the reason and cannot be installed.
+`project-build-manager.js` connects catalog records to Runtimes, installation and
+per-game selection. `pinned-native-manager.js` also accepts a module's
+`projectBuilds` project and repository. A module can combine Builds packages with
+upstream downloads through `upstreamMacDownloads: true`. Source links and download
+lists remain separate, while installed versions and explicit choices are shared.
 
-A record may describe itself with `source` (`repository`, a 40-character
-`revision` and an optional `path`) and `capabilities`, an object of facts that
-modules read to match a game with a runtime, such as a native API name, feature
-list or supported data versions. Capability names start with a letter and
-contain only letters, digits and underscores; a record has at most 64 of them,
-nested at most three levels, in at most 8 KiB of JSON. Each module checks the
-values it reads, so an unexpected value fails that module's match rather than
-the catalog.
+A per-game choice takes precedence over the configured default. Automatic
+selection uses the shared version resolver and native CPU preference. The other
+CPU's builds remain available in the existing dropdown. Refresh does not change
+saved choices, and installing a version leaves other installed versions in place.
+Managers offer **Set default** unless they declare `supportsDefault: false`.
 
-`project-build-manager.js` connects these catalogs to the ordinary Runtimes
-Refresh, Install and version-selection actions. A record with another
-`manifestRelative` is listed as requiring a newer MacLauncher. It reuses pinned native
-installation and download coordination. Status and Play read only the local
-catalog. A per-game version takes precedence over the default version. Without
-either, selection uses the newest usable installed or included package, ordered
-by `version-order.js`. Packages that differ only by a build hash follow the
-cached catalog order (the earlier-listed wins), and require an explicit choice
-when one is not listed. No catalog entry is chosen automatically. Refresh lists available versions without changing selections,
-and installation does not set a default. Managers backed by a Builds project
-offer **Set default** unless they declare `supportsDefault: false`. Included
-packages run directly from app resources and cannot be removed separately. Each
-downloaded version retains its catalog identity and a separate sealed payload;
-installation verifies the archive, complete manifest inventory, source checksum,
-file modes and native architectures before publishing the version directory.
-The optional `retainedIncluded(options)` callback supplies trusted, physically retained included packages alongside the current `included(options)` package.
+Installation verifies the catalog's whole-archive SHA-256, extracts safe paths and
+resolves the package's declared manifest and executable. Manifest paths must stay
+inside the payload; dependency links must stay inside the payload or a declared
+dependency. Declared safe paths take precedence over module layout defaults.
+Additional metadata, source labels, per-file inventories and recorded file hashes
+do not pin a downloadable package. Native signatures, actual CPU and OS support,
+and operational bounds remain checked. A feature that needs a particular runtime
+API checks that API independently.
 
-A project can publish several versions, including several revisions of one
-upstream version such as `0.41.0-MCLv1` and `0.41.0-MCLv2`. Each version is a
-separate catalog record, download, installation directory and runtime lease.
-Installing one version leaves the others installed, and a version withdrawn from
-the catalog remains usable through its verified installation.
-An optional `runtimeId` maps per-game inspector choices to a project whose
-manager ID differs from its runtime ID. The module retains the selected runtime
-lease through preparation and execution.
+Downloaded dependencies use the same managed installer. Their own declarations
+supply dependency and alias paths. Source and provenance observations are retained
+in receipts without requiring equality between the producer and upstream trees.
+A missing source revision does not prevent installation. Runtime assets and
+environment paths resolve from the installed package.
 
-Modules can select `filesPrefix` and `sourceRelative` from the validated package
-using callbacks, alongside the existing executable selector. Returning `null`
-for `sourceRelative` keeps separately distributed corresponding source out of
-the installed runtime; the module checks its pinned source checksum. Existing
-packages keep their original layout and source handling.
-
-`pinned-native-manager.js` also accepts module-owned `projectBuilds` metadata with
-an explicit project ID and repository. Refresh reads the project's hosted catalog.
-Modules with compatible upstream macOS downloads also declare
-`upstreamMacDownloads: true` and query that publisher independently. Modules whose
-upstream releases do not provide compatible Mac packages link to upstream code
-without listing its other-platform releases. Every valid hosted record is
-listed and installable. Its `source.revision` identifies its source, and an
-installed record keeps the revision recorded at installation. A record with no
-source revision is listed with that reason and cannot be installed. The record's
-`capabilities` become fields of its catalog entry, before the entry's identity
-fields, so modules
-read the same names from hosted and upstream entries. The sealed manifest must
-name the same source revision, and the module's manifest validation receives
-that catalog entry at installation. The hosted archive replaces the download for
-that exact version, while included packages and explicit choices retain their
-existing behavior. A hosted installation verifies its sealed manifest, complete
-file inventory and signatures, and bypasses upstream compilation and installer
-preparation. Runtime resources remain beneath the version's `project-payload`
-directory and undergo full checksum verification before execution. Installed
-records and cached catalogs remain available offline.
-
-`catalog.sources` provides a separate download list, source URL, version labels,
-compatibility requirements and installation capability for each publisher.
-`catalog.sourceLinks` provides secondary code or publisher links. The installed
-list and exact per-game runtime identities remain shared across sources.
-Successful Refresh replaces available releases; removed releases remain usable
-through their verified installed records. Damaged downloads can be reinstalled
-from a complete verified staging directory with rollback of a failed replacement.
+Included packages run directly from app resources and cannot be removed
+separately. Their app-lock declarations retain complete inventory, per-file
+digests, permissions, source and metadata checks. Downloaded packages remain
+separate from these included identities and from per-game data.

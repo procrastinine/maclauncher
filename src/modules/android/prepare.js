@@ -127,7 +127,7 @@ async function copyOriginal(input, output, expected, signal) {
 async function describePayload(payload, signal, digests, execution = "jvm") {
   if (!["jvm", "art"].includes(execution)) throw new Error("Unknown Android execution engine.");
   if (!path.isAbsolute(payload?.root || "") || !/^[\w.-]{1,128}$/.test(payload?.profile?.id || "") ||
-      payload.profile.javaMajor !== 21 || !/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(payload.profile.nativeLoadTarget || ""))
+      !Number.isSafeInteger(payload.profile.javaMajor) || payload.profile.javaMajor < 1 || !/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(payload.profile.nativeLoadTarget || ""))
     throw new Error("The Android runtime compatibility profile is invalid.");
   const root = fs.realpathSync(payload.root), groups = {};
   // ART executes the original DEX. Only package metadata tools participate in

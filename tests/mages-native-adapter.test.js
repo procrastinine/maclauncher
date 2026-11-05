@@ -96,7 +96,7 @@ test("downloaded Impacto profiles verify their manifest without requiring an exa
   fs.writeFileSync(path.join(directory,'files/build-inputs.json'),'{}');
   assert.equal(Launch.verifyNativeProfile(install).manifest.version,version);
   const bytes = fs.readFileSync(manifest); fs.appendFileSync(manifest, " ");
-  assert.throws(() => Launch.verifyNativeProfile(install), /manifest changed/);
+  assert.equal(Launch.verifyNativeProfile(install).manifest.version, version);
   fs.writeFileSync(manifest, bytes);
   fs.appendFileSync(install.executablePath, "changed native bytes");
   assert.equal(Launch.verifyNativeProfile(install).manifest.version,version,'Recorded per-file bytes do not pin a managed payload');

@@ -111,7 +111,8 @@ test('managed RPGMakerDecrypter fixture: action cancellation, exact install, RGS
   const selected = restarted.resolveSelection(entry, context.settings, context.userDataDir);
   const executable = selected.install.executablePath;
   const fd = fs.openSync(executable, 'r+'); const original = Buffer.alloc(1); fs.readSync(fd, original, 0, 1, 4096); original[0] ^= 1; fs.writeSync(fd, original, 0, 1, 4096); fs.closeSync(fd);
-  assert.equal(restarted.resolveSelection(entry, context.settings, context.userDataDir).ready, false);
+  assert.equal(restarted.resolveSelection(entry, context.settings, context.userDataDir).ready, true, "Receipt digests do not pin downloaded executable bytes");
+  assert.throws(() => require("node:child_process").execFileSync("/usr/bin/codesign", ["--verify", "--strict", executable], {stdio:"pipe"}), /codesign|signature|Command failed/i);
 });
 
 test('RPGMakerDecrypter CPU builds coexist, select natively, and prepare Intel execution through shared Rosetta', {skip: process.platform !== 'darwin'}, async t => {
@@ -190,8 +191,8 @@ test('RPGMakerDecrypter future Universal package verifies both declared native s
   assert.equal(downloads, 1);
   assert.equal(manager.getState({userDataDir}).installed.length, 1);
 
-  // Keep a valid checksum/inventory for a thin ARM binary while claiming a
-  // Universal executable. Native inspection must still reject the missing slice.
+  // A package label does not override the executable's actual slices.
+  // ARM execution works; selecting Intel still fails actual CPU inspection.
   const thin = nativeTool(path.join(root, 'thin'), '', {architecture: 'arm64'});
   const wrong = packageFor(path.join(root, 'wrong'), {id: manager.id, version: 'fixture-wrong', architecture: 'universal',
     manifest: {managerId: manager.id, toolABI: 1, executableRelative: 'files/bin/RPGMakerDecrypter-cli'},
@@ -202,5 +203,7 @@ test('RPGMakerDecrypter future Universal package verifies both declared native s
   });
   const invalidProfile = path.join(root, 'invalid-profile');
   await invalid.refreshCatalog({userDataDir: invalidProfile, force: true});
-  await assert.rejects(invalid.installRuntime({userDataDir: invalidProfile, version: wrong.record.version, architecture: 'arm64'}), /architecture/i);
+  const native = await invalid.installRuntime({userDataDir: invalidProfile, version: wrong.record.version, architecture: 'arm64'});
+  assert.deepEqual(native.architectures, ['arm64']);
+  await assert.rejects(invalid.installRuntime({userDataDir: path.join(root, 'wrong-intel-profile'), version: wrong.record.version, architecture: 'x64'}), /CPU|architecture|x86_64/i);
 });

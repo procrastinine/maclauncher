@@ -253,8 +253,9 @@ test('HashLink recommendations preserve the game primitive ABI independently of 
     primitiveProfileId: 'typed-1.9-macos-v2',
     primitiveProfileSha256: 'a22d96b6fea6dd8b9031489a1c0d89c091ff8c6ee9a090d2f95795ac30790296' };
   assert.equal(compatible(pin, game), true);
-  assert.equal(compatible(pin, { ...game, natives: [{ ...game.natives[0], signature: 'Pi_A' }] }), false);
-  assert.equal(compatible({ ...pin, primitiveProfileSha256: '0'.repeat(64) }, game), false);
+  assert.equal(compatible(pin, { ...game, natives: [{ ...game.natives[0], signature: 'Pi_A' }] }), true,
+    'Downloaded primitives are checked in their actual installed images, not a package reference table');
+  assert.equal(compatible({ ...pin, primitiveProfileSha256: '0'.repeat(64) }, game), true);
   assert.equal(compatible({ ...pin, nativeAbi: { sdlEventLoop: 'dynamic' } }, game), false);
   assert.equal(compatible({ ...pin, nativeAbi: { sdlEventLoop: 'unknown' } }, game), true,
     'unknown catalog metadata does not override the verified native primitive profile');
@@ -262,19 +263,19 @@ test('HashLink recommendations preserve the game primitive ABI independently of 
     'future profile identities still receive actual installed native inspection');
 });
 
-test('cold HashLink games recommend exact published SDL and primitive profiles without saving a choice', {skip:process.platform!=="darwin"}, t => {
+test('cold HashLink games recommend compatible catalog runtimes without a frozen primitive table', {skip:process.platform!=="darwin"}, t => {
   const root=temporary(t),boot=path.join(root,'game.hl'),data=path.join(root,'data'),manager=Module.runtimeManagers[0];
   const pin=(id,version,upstreamVersion,sdl)=>{
-    const bytes=fs.readFileSync(path.join(__dirname,'../src/modules/hashlink/runtime/profiles',id+'.json')),profile=JSON.parse(bytes);
+    const profile={upstreamRevision:'a'.repeat(40),callbackMarker:'C'};
     return {version,upstreamVersion,upstreamRevision:profile.upstreamRevision,architecture:'x86_64',hostArchitectures:['arm64','x64'],minimumMacOS:'10.13',supportedBytecodeVersions:[2,3,4,5],
-      nativeAbi:{sdlEventLoop:sdl,callbackMarker:profile.callbackMarker},primitiveProfileId:id,primitiveProfileSha256:require('node:crypto').createHash('sha256').update(bytes).digest('hex'),
+      nativeAbi:{sdlEventLoop:sdl,callbackMarker:profile.callbackMarker},primitiveProfileId:id,primitiveProfileSha256:'b'.repeat(64),
       macPackageVersion:version,projectPackage:{id:'hashlink'},...(profile.archiveSha256?{sourceKind:'commit',asset:{url:'https://example.test/hashlink.tar.gz',filename:'hashlink.tar.gz',sha256:profile.archiveSha256}}:{})};
   };
   const latest=pin('stock-2.0.0-d049add0a84d','2.0-abi-published','2.0','dynamic'),typed=pin('typed-1.9-macos-v2','1.9-abi-published','1.9','typed-event'),legacy=pin('legacy-dynamic-1.12-macos-v1','1.12-abi-published','1.12','dynamic');
   const catalog=[latest,typed,legacy];for(const entry of catalog)manager.core.rememberResolvedVersion({userDataDir:data,entry});
   t.mock.method(manager.core,'listCatalog',()=>catalog);
   const context={userDataDir:data,settings:{runtimes:{hashlink:{defaultVersion:latest.version}}},onEntryChange:()=>assert.fail('Recommendations must not persist game choices')};
-  for(const [bytes,expected]of [[bytecode(['sdl'],5,{name:'event_loop',argumentKind:11}),typed.version],[mp3Bytecode(true),legacy.version]]){
+  for(const [bytes,expected]of [[bytecode(['sdl'],5,{name:'event_loop',argumentKind:11}),typed.version],[mp3Bytecode(true),latest.version]]){
     fs.writeFileSync(boot,bytes);const entry={moduleData:{bytecodePath:boot}};
     const required=Module.ensureRuntime(entry,context);assert.equal(required.version,expected);assert.equal(entry.runtimeData,undefined);
     assert.equal(Module.__test.inspectDependencies(entry,context).version,expected,'Launch preflight must use the same recommendation');

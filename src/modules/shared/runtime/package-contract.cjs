@@ -36,29 +36,29 @@ function relativeFile(value) {
     part !== "." && part !== ".." && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(part));
 }
 
-function packageDependencies(value) {
+function packageDependencies(value, { managed = false } = {}) {
   if (value === undefined) return [];
   if (!Array.isArray(value) || value.length > 128) throw new Error("Invalid package dependencies.");
   const projects = new Set();
   return value.map(item => {
-    if (!object(item) || Object.keys(item).sort().join(',') !== 'project,release,sha256' ||
+    if (!object(item) || !managed && Object.keys(item).sort().join(',') !== 'project,release,sha256' ||
         !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(item.project || '') || !version(item.release) || !checksum(item.sha256) || projects.has(item.project))
       throw new Error("Package dependencies require one exact release and archive digest per project.");
     projects.add(item.project); return Object.freeze({...item});
   });
 }
-function packageAliases(value, files, dependencies) {
+function packageAliases(value, files, dependencies, { managed = false } = {}) {
   if (value === undefined) return undefined;
-  if (!object(value) || value.schema !== 1 || Object.keys(value).sort().join(',') !== 'files,schema' || !object(value.files) ||
+  if (!object(value) || !managed && (value.schema !== 1 || Object.keys(value).sort().join(',') !== 'files,schema') || !object(value.files) ||
       Object.keys(value.files).length > B.LIMITS.files) throw new Error("Invalid package alias index.");
-  const stored = new Set(files.map(file => B.relativeFile(file.path))), projects = new Set(packageDependencies(dependencies).map(item => item.project));
+  const stored = new Set(files.map(file => B.relativeFile(file.path))), projects = new Set(packageDependencies(dependencies,{managed}).map(item => item.project));
   const names = new Set([...stored].map(name=>name.normalize('NFC').toLowerCase()));
   for (const [name, target] of Object.entries(value.files)) {
-    if (B.relativeFile(name) !== name || names.has(name.normalize('NFC').toLowerCase())) throw new Error("A package alias collides with a stored or logical path.");
+    if (B.relativeFile(name) !== name || !managed && names.has(name.normalize('NFC').toLowerCase())) throw new Error("A package alias collides with a stored or logical path.");
     names.add(name.normalize('NFC').toLowerCase());
     if (typeof target === 'string') {
-      if (B.relativeFile(target) !== target || !stored.has(target)) throw new Error("A local alias must name a canonical stored file.");
-    } else if (!object(target) || Object.keys(target).sort().join(',') !== 'path,project' || !projects.has(target.project) || B.relativeFile(target.path) !== target.path)
+      if (B.relativeFile(target) !== target || !managed && !stored.has(target)) throw new Error("A local alias must name a canonical stored file.");
+    } else if (!object(target) || !managed && Object.keys(target).sort().join(',') !== 'path,project' || !projects.has(target.project) || B.relativeFile(target.path) !== target.path)
       throw new Error("A dependency alias must name a canonical file in a declared dependency.");
   }
   for (const name of names) {
@@ -71,13 +71,14 @@ function packageAliases(value, files, dependencies) {
   return value;
 }
 function logicalFiles(declaration, resolveDependency) {
-  packageDependencies(declaration.dependencies);
-  const aliases = packageAliases(declaration.aliases, declaration.files, declaration.dependencies);
+  const managed=B.isManagedDeclaration(declaration);
+  packageDependencies(declaration.dependencies,{managed});
+  const aliases = packageAliases(declaration.aliases, declaration.files, declaration.dependencies,{managed});
   const stored = new Map(declaration.files.map(file=>[file.path,file]));
   const output = [...declaration.files];
   for (const [name,target] of Object.entries(aliases?.files || {})) {
     const source = typeof target === 'string' ? stored.get(target) : resolveDependency?.(target, declaration.dependencies.find(item=>item.project===target.project));
-    if (!source) throw new Error("A package alias target is absent from its exact dependency inventory.");
+    if (!source && !managed) throw new Error("A package alias target is absent from its exact dependency inventory.");
     output.push({...source,path:name});
   }
   return output;
@@ -96,36 +97,36 @@ function selectPackageRecord(records, { id, version: selectedVersion, arch = pro
   return eligible.sort((left, right) => rank(left) - rank(right))[0] || null;
 }
 
-function manifestPayload(manifest, record, { executableRelative, filesPrefix = "", dataOnly = false, resolveDependency } = {}) {
-  if (!object(manifest) || manifest.schemaVersion !== 1 || (manifest.packageVersion ?? manifest.version) !== record.version ||
-      manifest.minimumMacOS !== record.minimumMacOS || manifest.id !== undefined && manifest.id !== record.id)
+function manifestPayload(manifest, record, { executableRelative, filesPrefix = "", dataOnly = false, resolveDependency, managed = false } = {}) {
+  if (!object(manifest) || !managed && (manifest.schemaVersion !== 1 || (manifest.packageVersion ?? manifest.version) !== record.version ||
+      manifest.minimumMacOS !== record.minimumMacOS || manifest.id !== undefined && manifest.id !== record.id))
     throw new Error("The runtime package differs from its selected catalog entry.");
   const prefix = typeof filesPrefix === "function" ? filesPrefix(manifest, record) : filesPrefix;
   if (typeof prefix !== "string" || prefix && (!prefix.endsWith("/") || !relativeFile(prefix.slice(0, -1))))
     throw new Error("The runtime package directory is invalid.");
-  const executable = B.relativeFile(typeof executableRelative === "function" ? executableRelative(manifest, record) : executableRelative);
+  const executable = B.relativeFile(managed && (manifest.executableRelative || manifest.executable) || (typeof executableRelative === "function" ? executableRelative(manifest, record) : executableRelative));
   // Included packages seal their inventory in runtime-package.json; the helper
   // manifest describes its protocol and need not repeat that inventory.
-  const sealed = Array.isArray(record.files), inventory = sealed ? logicalFiles(record, resolveDependency).filter(file => file.path !== record.manifestRelative) : manifest.files;
-  if (!Array.isArray(inventory) || !inventory.length || inventory.length > B.LIMITS.files)
+  const sealed = !managed && Array.isArray(record.files), inventory = sealed ? logicalFiles(record, resolveDependency).filter(file => file.path !== record.manifestRelative) : manifest.files || [];
+  if (!Array.isArray(inventory) || !managed && !inventory.length || inventory.length > B.LIMITS.files)
     throw new Error("The runtime package differs from its selected catalog entry.");
   const names = new Set(), files = inventory.map(file => {
     const name = B.relativeFile((sealed ? "" : prefix) + B.relativeFile(file.path));
-    if (names.has(name) || !Number.isSafeInteger(file.size) || file.size < 0 || file.size > B.LIMITS.fileBytes ||
+    if (names.has(name) || !managed && (!Number.isSafeInteger(file.size) || file.size < 0 || file.size > B.LIMITS.fileBytes ||
         !Number.isInteger(file.mode) || file.mode < 0 || file.mode > 0o777 || !SHA256.test(file.sha256 || "") ||
         file.format !== undefined && !["mach-o", "pe"].includes(file.format) || file.format === "pe" && !file.architectures?.length ||
         file.architectures && (!Array.isArray(file.architectures) || !file.architectures.length ||
           file.architectures.some(arch => !(file.format === "pe" ? ["arm64", "x86_64", "x86"] : ["arm64", "x86_64"]).includes(arch)) ||
           file.format !== "pe" && !file.architectures.includes(file.executionArchitecture || (record.arch === "x64" ? "x86_64" : "arm64"))) ||
-        Object.hasOwn(file, "executionArchitecture") && (file.executionArchitecture !== "x86_64" || !file.architectures?.includes("x86_64")))
+        Object.hasOwn(file, "executionArchitecture") && (file.executionArchitecture !== "x86_64" || !file.architectures?.includes("x86_64"))))
       throw new Error("The runtime package file inventory is invalid.");
     names.add(name); return { ...file, path: name };
   });
-  const primary = files.find(file => file.path === prefix + executable);
+  const primary = files.find(file => file.path === prefix + executable) || (managed ? {path:prefix+executable} : null);
   const architectures = record.arch === "universal" ? ["arm64", "x86_64"] : [record.arch === "x64" ? "x86_64" : "arm64"];
-  if (!primary || !dataOnly && (!architectures.every(arch => primary.architectures?.includes(arch)) ||
+  if (!managed && (!primary || !dataOnly && (!architectures.every(arch => primary.architectures?.includes(arch)) ||
       primary.executionArchitecture && primary.executionArchitecture !== (record.arch === "x64" ? "x86_64" : "arm64")) ||
-      dataOnly && (manifest.kind !== "data" || files.some(file => file.architectures || file.format)) || names.has(record.manifestRelative))
+      dataOnly && (manifest.kind !== "data" || files.some(file => file.architectures || file.format)) || names.has(record.manifestRelative)))
     throw new Error("The runtime package source or executable identity is invalid.");
   return { prefix, executable, files, primary };
 }
@@ -203,8 +204,24 @@ function validateSourceArtifact(item) {
   return validatePublicMetadata(item);
 }
 
-function packageRecord(record, { projectId, repository, launcherContract = 1, publication = false, requireUrl = true }) {
+function packageRecord(record, { projectId, repository, launcherContract = 1, publication = false, requireUrl = true, managed = false }) {
   if (!object(record) || !version(record.version)) throw new Error("The runtime catalog contains an invalid package record.");
+  if (managed && !publication) {
+    if (!object(record.asset) || !checksum(record.asset.sha256)) throw new Error("The runtime catalog needs its archive SHA-256.");
+    const url = new URL(record.asset.url);
+    if (url.protocol !== 'https:') throw new Error("The runtime download requires HTTPS.");
+    const filename = record.asset.filename || decodeURIComponent(url.pathname.split('/').pop());
+    B.relativeFile(filename);
+    if (record.manifestRelative !== undefined) B.relativeFile(record.manifestRelative);
+    if (record.asset.bytes !== undefined && (!Number.isSafeInteger(record.asset.bytes) || record.asset.bytes < 1 || record.asset.bytes > MAX_ARCHIVE_BYTES))
+      throw new Error("The runtime download exceeds its size limit.");
+    const normalize = require('./architecture').normalizeArchitecture;
+    const arch = normalize(record.arch) || record.arch;
+    const launchers = Array.isArray(record.launcherArchitectures) ? record.launcherArchitectures.map(normalize).filter(Boolean) : arch === 'universal' ? ['arm64','x64'] : [arch];
+    return Object.freeze({...record,id:projectId,arch,launcherArchitectures:launchers.length?launchers:['arm64','x64'],
+      dependencies:packageDependencies(record.dependencies,{managed:true}),
+      asset:Object.freeze({...record.asset,filename})});
+  }
   if (!publication && (Number.isSafeInteger(record.schemaVersion) && record.schemaVersion > 2 || contract(record.launcherContract) > launcherContract ||
       laterArchitecture(record.arch) || Array.isArray(record.launcherArchitectures) && record.launcherArchitectures.some(laterArchitecture)))
     throw new Error("Requires a newer MacLauncher.");

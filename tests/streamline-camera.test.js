@@ -307,7 +307,8 @@ for (const layout of ["Frameworks", "SharedSupport"]) test(`DXMT camera support 
   assert.equal(fs.existsSync(app), false);assert.equal(fs.existsSync(path.join(unpacked, "wswine.bundle")), false);
   assert.deepEqual(Object.keys(metadata.files), Support.FILES);
   const install = { installDir: unpacked, installationMetadata: metadata };assert.equal(Support.verified(install).baseRoot, path.join(unpacked, "dxmt/wine"));
-  fs.writeFileSync(path.join(unpacked, "dxmt/wine/x86_64-windows/nvapi64.dll"), "changed");assert.equal(Support.verified(install), null);
+  fs.writeFileSync(path.join(unpacked, "dxmt/wine/x86_64-windows/nvapi64.dll"), "changed");assert.equal(Support.verified(install).baseRoot, path.join(unpacked, "dxmt/wine"));
+  fs.unlinkSync(path.join(unpacked, "dxmt/wine/x86_64-windows/nvapi64.dll"));assert.equal(Support.verified(install), null);
 });
 
 test("an explicit original-source camera view copies only code and retains old and new private bytes", async t => {

@@ -25,8 +25,8 @@ function inspectSource(dataPath) {
 // Runtime selection supplies only integrity-verified installed Mac builds.
 function parserRuntime(selection) { return selection?.install || null; }
 
-function validateReport(report) {
-  if (!report || report.schemaVersion !== 1 || report.engine !== "gamemaker-classic" ||
+function validateReport(report, { managed = false } = {}) {
+  if (!report || !managed && report.schemaVersion !== 1 || report.engine !== "gamemaker-classic" ||
     report.assetsVerified !== true || !["8.0", "8.1"].includes(report.version) || report.windowsExtensionHost !== false ||
     !Array.isArray(report.extensions) || report.extensions.length > 4096 ||
     !Array.isArray(report.externalDefinitions) || report.externalDefinitions.length > 4096) throw new Error("OpenGMK returned an invalid Classic asset/extension report.");
@@ -85,17 +85,19 @@ async function preflight(dataPath, selection, { signal, execute = run } = {}) {
     upstreamRevision: install.upstreamRevision, expectedSha256: install.binarySha256 });
   const before = Native.hashFile(dataPath);
   const options = { timeout: 30000, maxBuffer: 2 * 1024 * 1024, ...(signal ? { signal } : {}) };
-  const identity = (await execute(native.executablePath, ["--version"], options)).stdout.trim();
-  // The adapted executable reports its upstream version, source revision and overlay.
-  if (!new RegExp(`^OpenGMK \\S+ MacLauncher ${install.upstreamRevision} \\S+$`).test(identity))
-    throw new Error("OpenGMK executable source/overlay identity does not match the selected Mac build.");
+  if (install.source !== 'download') {
+    const identity = (await execute(native.executablePath, ["--version"], options)).stdout.trim();
+    // The adapted executable reports its upstream version, source revision and overlay.
+    if (!new RegExp(`^OpenGMK \\S+ MacLauncher ${install.upstreamRevision} \\S+$`).test(identity))
+      throw new Error("OpenGMK executable source/overlay identity does not match the selected Mac build.");
+  }
   let output;
   try { output = await execute(native.executablePath, [dataPath, "--strict", "--singlethread", "--inspect-json"], options); }
   catch (error) { throw new Error(`OpenGMK could not parse the original Classic assets: ${(error.stderr || error.message).trim().slice(-1200)}`); }
   if (Native.hashFile(dataPath) !== before) throw new Error("The original Classic executable changed during preflight.");
   let report;
   try { report = JSON.parse(output.stdout); } catch { throw new Error("OpenGMK returned an unreadable Classic asset report."); }
-  const inspected = validateReport(report);
+  const inspected = validateReport(report, {managed: install.source === "download"});
   if (inspected.version !== source.classicVersion) throw new Error("Classic runner and parsed game version disagree.");
   return { ...inspected, parserAvailable: true, sourceSha256: before };
 }

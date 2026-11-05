@@ -66,7 +66,7 @@ function prepareGame(entry, context) {
   const gameRoot = path.dirname(originalAssembly), runtimeRoot = selected.profile.root;
   const converted = context.runtimeSettings?.useRuntimeFramework !== false;
   const result = {gameRoot, assemblyPath: originalAssembly, originalAssembly, assemblyRoot: null, info,
-    hostPath: path.join(runtimeRoot, "MacLauncherFnaHost.dll"), runtimeRoot, selected,
+    hostPath: selected.profile.hostPath || path.join(runtimeRoot, "MacLauncherFnaHost.dll"), runtimeRoot, selected,
     frameworkVersion: converted ? selected.profile.frameworkVersion : info.detectedVersion, converted};
   // Only CPU-pinned reachable assemblies need derived bytes. Data, config,
   // assets and ordinary portable assemblies stay at their original paths.

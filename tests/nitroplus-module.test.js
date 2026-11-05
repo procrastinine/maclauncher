@@ -228,3 +228,17 @@ test("Nitroplus standalone preparation clears inherited dynamic-library fallback
     if (previous === undefined) delete process.env.DYLD_FALLBACK_LIBRARY_PATH; else process.env.DYLD_FALLBACK_LIBRARY_PATH = previous;
   }
 });
+
+
+test("managed Nitroplus profiles accept additive metadata while retaining the CLI the game calls", t => {
+  const root=temporary(t), runtime=install(root), B=require("../src/modules/shared/runtime/bundled-native");
+  runtime.declaration=B.managedDeclaration({});
+  runtime.upstreamRevision="producer-source";
+  const file=path.join(root,"profile.json"), profile={...JSON.parse(fs.readFileSync(file)),schemaVersion:99,upstreamRevision:"upstream-source",npaRevision:"future-source",extra:true};
+  fs.writeFileSync(file,JSON.stringify(profile));
+  assert.equal(Module.__test.verifyProfile(runtime).extra,true);
+  assert.equal(Module.__test.distribution(runtime).root,root);
+  const other=install(temporary(t),"missing-cli");other.declaration=B.managedDeclaration({});
+  fs.writeFileSync(other.executablePath,"no game preparation API");
+  assert.throws(()=>Module.__test.verifyProfile(other),/NPA\/NSS or per-game save support/);
+});

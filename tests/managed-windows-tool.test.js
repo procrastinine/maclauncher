@@ -21,7 +21,7 @@ test("managed PE tools discover only on an explicit action and cancellation down
   assert.equal(Harness.network.requests.length, requests); assert.equal(fs.existsSync(userDataDir), false);
 });
 
-test("upstream PE download verifies its checksum and rejects later changes", async t => {
+test("upstream PE download verifies its archive checksum without pinning installed bytes", async t => {
   const userDataDir = path.join(temporary(t), "profile"), bytes = pe();
   const sha256 = crypto.createHash("sha256").update(bytes).digest("hex"), tool = manager();
   const release = Harness.githubRelease("publisher/tool", "v1.0", ["tool.exe"]);
@@ -36,7 +36,8 @@ test("upstream PE download verifies its checksum and rejects later changes", asy
   assert.equal(fs.readFileSync(path.join(install.installDir, "licenses", "LICENSE.txt"), "utf8"), "MIT License");
   assert.equal(tool.resolveSelection({}, {}, userDataDir).ready, true);
   const changed = Buffer.from(bytes); changed[800] ^= 1; fs.writeFileSync(install.executablePath, changed);
-  assert.equal(tool.resolveSelection({}, {}, userDataDir).ready, false);
+  assert.equal(tool.resolveSelection({}, {}, userDataDir).ready, true);
+  fs.unlinkSync(install.executablePath);assert.equal(tool.resolveSelection({}, {}, userDataDir).ready, false);
 });
 
 test("upstream PE download from a repository without a license notice installs without one", async t => {

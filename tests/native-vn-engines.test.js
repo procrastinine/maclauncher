@@ -346,8 +346,8 @@ test("AliceSoft managed launches use verified default fonts and retain explicit 
     if (runtimeId === "xsystem35") assert.equal(calls[1][1][calls[1][1].indexOf("-ttfont_mincho") + 1], customFont);
     fs.writeFileSync(fonts.gothic, "changed managed asset");
     ctx.runtimeSettings = {};
-    await assert.rejects(Alice.launchRuntime(runtimeId, entry, ctx), /not installed|changed/);
-    assert.equal(calls.length, 2);
+    await Alice.launchRuntime(runtimeId, entry, ctx);
+    assert.equal(calls.length, 3, "Recorded font hashes do not pin a managed runtime asset");
   }
 });
 

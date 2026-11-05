@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const Catalogs = require("../src/modules/shared/runtime/maclauncher-builds");
 
 const repository = "ExampleOwner/runtime-builds";
-const options = { projectId: "sample-runtime", repository };
+const options = { projectId: "sample-runtime", repository, managed:false };
 function record(version = "1.2.3-macos-v2", arch = "arm64", projectId = options.projectId) {
   const tag = `${projectId}/v${version}/${arch}`;
   const filename = `${projectId}-${version}-${arch}.tar.gz`;

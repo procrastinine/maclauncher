@@ -27,6 +27,10 @@ function ensureRuntime(entry, context) {
 
 function resolveController(runtime) {
   const relative = runtime.manifest?.runtimeFiles?.controller || "bin/maclauncher-aim";
+  if (Bundled.isManagedDeclaration(runtime.declaration)) {
+    return require('../../../shared/runtime/local-native').resolveLocalRuntime({runtimePath:path.join(runtime.root,Bundled.relativeFile(relative)),
+      runtimeVersion:runtime.version,upstreamRevision:runtime.upstreamRevision || runtime.version}).executablePath;
+  }
   const record = runtime.manifest?.files?.find(file => file.path === relative);
   if (!record?.architectures?.includes("arm64") || !(record.mode & 0o111))
     throw new Error("This AIM version has no controller. Select an AIM package with controller support in Runtimes.");

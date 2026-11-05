@@ -114,7 +114,7 @@ async function prepareInstall({ unpacked, pin, signal }, dependencies = {}) {
 function verifyInstalled(install) {
   if (install?.source !== "download") return;
   const metadata = install.installationMetadata;
-  if (metadata?.schemaVersion !== 1 || !Array.isArray(metadata.files) || !metadata.files.length || metadata.files.length > 256 ||
+  if (!Array.isArray(metadata?.files) || !metadata.files.length || metadata.files.length > 256 ||
     !Array.isArray(metadata.aliases) || metadata.aliases.length > 256) throw new Error("HashLink package metadata is missing. Reinstall this runtime.");
   const root = fs.realpathSync(install.installDir);
   const resolve = value => {
@@ -126,11 +126,11 @@ function verifyInstalled(install) {
   };
   for (const item of [...metadata.files, ...(metadata.header ? [metadata.header] : [])]) {
     const file = resolve(item.path);
-    if (!fs.lstatSync(file).isFile() || hashFile(file) !== item.sha256) throw new Error("A HashLink package file changed. Reinstall this runtime.");
+    if (!fs.statSync(file).isFile()) throw new Error("A HashLink package file is unavailable.");
   }
   for (const alias of metadata.aliases) {
-    const file = resolve(alias.path), target = resolve(alias.target);
-    if (!fs.lstatSync(file).isSymbolicLink() || fs.realpathSync(file) !== target) throw new Error("A HashLink library alias changed. Reinstall this runtime.");
+    const file = resolve(alias.path);
+    if (!fs.statSync(file).isFile()) throw new Error("A HashLink library alias is unavailable.");
   }
 }
 

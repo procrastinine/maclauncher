@@ -9,6 +9,7 @@ function createManager(dependencies = {}) {
     manifestRelative: "manifest.json", sourceRelative: "manifest.json",
     executableRelative: "engine/main.lua", dataOnly: true, supportsDefault: true,
     validateManifest(manifest, record) {
+      if (Bundled.isManagedDeclaration(manifest)) return;
       if (manifest.kind !== "data" || manifest.loveVersion !== "11.5" ||
           !manifest.files.some(file => file.path === "engine/conf.lua"))
         throw new Error("The VNDS-LOVE package has an unsupported interpreter profile.");
@@ -21,6 +22,6 @@ function resolveEngine(entry, context) {
   const selected = manager.resolveSelection(entry, context.settings, context.userDataDir);
   if (!selected.ready || !selected.install) throw new Error(selected.reason || "The selected VNDS-LOVE version is not installed.");
   Bundled.verifyPayload(selected.install.root, selected.install.declaration);
-  return { ...selected.install, root: path.join(selected.install.payloadRoot, "engine"), profile: selected.install.manifest };
+  return { ...selected.install, root: path.dirname(selected.install.executablePath), profile: selected.install.manifest };
 }
 module.exports = { ...manager, createManager, resolveEngine };

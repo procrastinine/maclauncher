@@ -3,10 +3,10 @@ const { compareVersions } = require("../version");
 // VM bytecode and resource layouts define runtime compatibility. GEN8's stored
 // engine tuple does not identify an exact release.
 const GENERATIONS = Object.freeze([
-  Object.freeze({ id: "studio-1.4", minimum: "1.4", maximumExclusive: "2", formatCandidates: Object.freeze([16]), recommendedVersion: "1.4.9999" }),
+  Object.freeze({ id: "studio-1.4", minimum: "1.4", maximumExclusive: "2", formatCandidates: Object.freeze([16]) }),
   Object.freeze({ id: "studio-2-early", minimum: "2", maximumExclusive: "2.2", formatCandidates: Object.freeze([]) }),
   Object.freeze({ id: "studio-2.2", minimum: "2.2", maximumExclusive: "2.3", formatCandidates: Object.freeze([16]) }),
-  Object.freeze({ id: "studio-2.3", minimum: "2.3", maximumExclusive: null, formatCandidates: Object.freeze([17]), recommendedVersion: "2026.0.0.23" })
+  Object.freeze({ id: "studio-2.3", minimum: "2.3", maximumExclusive: null, formatCandidates: Object.freeze([17]) })
 ]);
 const OBSERVATIONS = Object.freeze({
   "1.4.9999": Object.freeze({ testedWadVersions: Object.freeze([16]), binarySha256: "dd8395d9dcdb5eb6e58641a730b22640d1909e72a55a48c3450cf6d0231040fa",
@@ -43,13 +43,9 @@ function compatibility(inspection, version) {
   return { compatible: true, capability, reason: null };
 }
 
-function defaultCandidates(inspection) {
-  let versions;
-  if (inspection?.wadVersion === 16) versions = ["1.4.9999"];
-  else if (inspection?.wadVersion === 17) versions = inspection.spriteSequenceLayout === "legacy-32"
-    ? ["2.3.7.476", "2024.11.0.227"] : ["2026.0.0.23", "2024.13.1.242", "2024.11.0.227"];
-  else return [];
-  return versions.filter(version => compatibility(inspection, version).compatible);
+function defaultCandidates(inspection, versions = []) {
+  return versions.filter(version => compatibility(inspection, version).compatible)
+    .sort((left, right) => compareVersions(right, left));
 }
 
 module.exports = { GENERATIONS, OBSERVATIONS, capabilityForVersion, compatibility, defaultCandidates };

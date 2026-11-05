@@ -52,7 +52,7 @@ test("Mac.apk discovery retains publisher identities and caches choices without 
   assert.equal(Harness.network.requests.length, before, "Cached choices stay offline");
 });
 
-test("Mac.apk restores an unlisted installed version from its receipt and rejects changed bytes", t => {
+test("Mac.apk restores an unlisted installed version without pinning recorded bytes", t => {
   if (process.platform !== "darwin") return t.skip("Native macOS executable inspection");
   const root = directory(t), version = "6.7.8", upstreamRevision = "e".repeat(40);
   const executableRelative = "Mac.apk.app/Contents/Resources/macapk-runtime";
@@ -70,7 +70,8 @@ test("Mac.apk restores an unlisted installed version from its receipt and reject
   assert.ok(managed.getState({ userDataDir: root }).installed.some(row => row.version === version));
   fs.appendFileSync(executable, "changed");
   const rejected = Manager.createManager().resolveSelection(entry, {}, root);
-  assert.equal(rejected.ready, false); assert.equal(rejected.version, version);
+  assert.equal(rejected.ready, true); assert.equal(rejected.version, version);
+  fs.unlinkSync(executable); assert.equal(managed.resolveSelection(entry, {}, root).ready, false);
   assert.equal(Harness.network.requests.length, before, "Receipt reuse stays offline");
 });
 

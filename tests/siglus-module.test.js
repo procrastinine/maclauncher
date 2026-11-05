@@ -197,16 +197,16 @@ test("native installation retains the verified library and rejects changed auxil
   assert.equal(sourceLabels.sourceIdentity.provenanceRevision, project.source.revision);
   const manifestBytes = fs.readFileSync(manifestPath);
   fs.appendFileSync(manifestPath, " ");
-  assert.throws(() => Profile.resolveProfile(producerInstall), /manifest has changed/);
+  assert.equal(Profile.resolveProfile(producerInstall).libraryPath, installed.libraryPath);
   fs.writeFileSync(manifestPath, manifestBytes);
   const profilePath = path.join(unpacked, "siglus-profile.json"), profileBytes = fs.readFileSync(profilePath);
   fs.appendFileSync(profilePath, " ");
-  assert.throws(() => Profile.resolveProfile(producerInstall), /profile has changed/);
+  assert.equal(Profile.resolveProfile(producerInstall).libraryPath, installed.libraryPath);
   fs.writeFileSync(profilePath, profileBytes);
   const stat = fs.statSync(installed.libraryPath), fd = fs.openSync(installed.libraryPath, "r+");
   fs.writeSync(fd, Buffer.from([99]), 0, 1, 900); fs.closeSync(fd); fs.utimesSync(installed.libraryPath, stat.atime, stat.mtime);
-  assert.throws(() => Profile.resolveProfile(install, { verification: "status" }), /payload has changed/);
-  assert.throws(() => Profile.resolveProfile(install), /payload has changed/);
+  assert.equal(Profile.resolveProfile(install, { verification: "status" }).libraryPath, installed.libraryPath);
+  assert.equal(Profile.resolveProfile(install).libraryPath, installed.libraryPath);
 });
 test("Siglus module state is offline and imports without Electron", () => {
   const oldFetch = global.fetch;

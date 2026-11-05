@@ -190,7 +190,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     };
     const preview = previewPin;
     const listed = nativeDefaults(remoteEntries.filter(pin => eligible(pin) && !assetReason(pin))).sort((a, b) => Number(preview(a)) - Number(preview(b)) || compareRuntimeVersions(a.version, b.version)).map(pin => pin.version);
-    const installed = listed.length ? [] : nativeDefaults(listRuntimeRows(userDataDir).filter(row => row.ready !== false && eligible({ ...(entries.get(row.version) || row), ...(row.minimumMacOS ? { minimumMacOS: row.minimumMacOS } : {}) }) &&
+    const installed = listed.length ? [] : nativeDefaults(listRuntimeRows(userDataDir).filter(row => row.ready !== false && eligible({ ...(row.catalogEntry || entries.get(row.version) || row), ...(row.minimumMacOS ? { minimumMacOS: row.minimumMacOS } : {}) }) &&
       (verification === "status" || resolveInstalled({ userDataDir, version: row.version, verification })))).map(row => row.version).sort(compareRuntimeVersions);
     return managerDefaultVersion({ listed, installed });
   }
@@ -465,15 +465,15 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       const record = JSON.parse(fs.readFileSync(recordPath, "utf8"));
       const pin = record.catalogEntry && validEntry(record.catalogEntry) && record.catalogEntry.version === normalized
         ? record.catalogEntry : entries.get(normalized);
-      if (record.version !== normalized || !pin.projectPackage && record.upstreamRevision !== pin.upstreamRevision || record.bundledExecution === "direct" ||
-        !/^[a-f0-9]{64}$/.test(record.binarySha256 || "") || !["local", "download", "bundled"].includes(record.source)) return null;
+      if (record.version !== normalized || record.source !== 'download' && !pin.projectPackage && record.upstreamRevision !== pin.upstreamRevision || record.bundledExecution === "direct" ||
+        record.source !== 'download' && !/^[a-f0-9]{64}$/.test(record.binarySha256 || "") || !["local", "download", "bundled"].includes(record.source)) return null;
       if (hostReason(pin)) return null;
       const runtimePath = record.source === "local" ? record.runtimePath : path.resolve(directory, record.executableRelative || "");
       cacheKey = JSON.stringify([identity(recordPath), runtimePath, identity(runtimePath), pin.upstreamRevision,
         record.source === "bundled" && record.bundledManifestSha256 ? identity(path.join(directory, "bundle-manifest.json")) : null]);
       const cached = displayCache.get(directory);
       if (record.source === "download" && (!runtimePath.startsWith(directory + path.sep) ||
-        (pin.asset?.sha256 ? record.archiveSha256 !== pin.asset.sha256
+        !pin.projectPackage && (pin.asset?.sha256 ? record.archiveSha256 !== pin.asset.sha256
           : pin.asset?.integrity === "publisher-md5" ? record.archiveMd5 !== pin.asset.md5 || record.artifactVerification?.verified !== true ||
             record.artifactVerification.archiveSha256 !== record.archiveSha256 || !/^[a-f0-9]{64}$/.test(record.archiveSha256 || "")
           : pin.asset?.integrity !== "recorded-local" ||
@@ -493,14 +493,14 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       if (verification === "status" && cached?.key === cacheKey) return cached.install;
       const native = inspectRuntime({ arch: ["arm64", "x64"].includes(Architecture.recordArchitecture(pin)) ? Architecture.recordArchitecture(pin) : installationArchitecture,
         hostArchitecture: dependencies.hostArch || require("./host-capabilities").getHostCapabilities().hardwareArch, runtimePath, runtimeVersion: normalized,
-        upstreamRevision: pin.upstreamRevision, expectedSha256: record.binarySha256, allowLibrary: nativeLibrary });
+        upstreamRevision: pin.upstreamRevision, expectedSha256: record.source === 'download' ? undefined : record.binarySha256, allowLibrary: nativeLibrary });
       // resolveLocalRuntime already hashes the executable against this record.
-      const installed = { ...record, ...native, version: normalized, runtimePath, installDir: directory,
+      const installed = { ...record, ...native, ...(record.source === 'download' ? {binarySha256: native.sha256} : {}), version: normalized, runtimePath, installDir: directory,
         ...(project ? {
-          root: project.root, declaration: project.declaration, resolveDependency: project.resolveDependency, dependencyLibraryPaths: project.dependencyLibraryPaths, dependencyReadRoots:project.dependencyReadRoots,
+          root: project.root, payloadRoot:project.payloadRoot, manifest:project.manifest, declaration: project.declaration, resolveDependency: project.resolveDependency, dependencyLibraryPaths: project.dependencyLibraryPaths, dependencyReadRoots:project.dependencyReadRoots,
           sourceIdentity: require("./maclauncher-builds").sourceIdentity(pin.projectPackage, {manifest: project.manifest, receiptRevision: record.upstreamRevision}),
-          environmentRelative: Object.fromEntries(Object.entries(project.manifest.environmentRelative || {}).map(([key, value]) => [key, path.posix.join("project-payload/files", value)])),
-          runtimeFiles: Object.fromEntries(Object.entries(project.manifest.runtimeFiles || {}).map(([key, value]) => [key, path.posix.join("project-payload/files", value)]))
+          environmentRelative: Object.fromEntries(Object.entries(project.manifest.environmentRelative || {}).map(([key, value]) => [key, path.join(path.relative(directory,project.payloadRoot),value)])),
+          runtimeFiles: Object.fromEntries(Object.entries(project.manifest.runtimeFiles || {}).map(([key, value]) => [key, path.join(path.relative(directory,project.payloadRoot),value)]))
         } : {}),
         ...(record.installationMetadata === undefined ? {} : { installationMetadata: installationEvidence(record.installationMetadata) }) };
       if(project) require('./package-dependencies').attach(installed,project);
@@ -536,9 +536,9 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
   function resolveInstalled(options = {}) {
     loadCatalog(options.userDataDir);
     const pin = entries.get(canonicalVersion(options.version));
-    if (hostReason(pin)) return null;
     const registered = resolveRegistration(options);
     if (registered) return registered;
+    if (hostReason(pin)) return null;
     // A damaged/incomplete user-selected registration must remain visible and
     // removable. Never silently substitute the app's included version for it.
     if (options.userDataDir) {
@@ -650,8 +650,8 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     const layer = selectRuntimeVersion({ manual, recommended: gameRecommendation, defaultVersion: saved,
       fallback: manual || gameRecommendation || saved ? null : managerDefault(userDataDir, { verification, compatible }) });
     const version = layer.version ? canonicalVersion(layer.version) : null, pin = version && entries.get(version);
-    const install = version && pin && !hostReason(pin) && (!compatible || compatible(pin)) &&
-      resolveInstalled({ userDataDir, version, verification });
+    const registered = version && pin && resolveInstalled({ userDataDir, version, verification });
+    const install = registered && (!compatible || compatible(registered.catalogEntry || pin)) ? registered : null;
     if (!version) return { version: null, install: null, ready: false, requiresDownload: true,
       discoveryRequired: remote.size === 0,
       reason: preferredArchitectures(remoteEntries).map(hostReason).find(Boolean) || `No ${label} versions are available to download.` };
@@ -704,18 +704,14 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     const staging = fs.mkdtempSync(path.join(destinationRoot, ".install-"));
     let preserveStaging = false, packageDependencies;
     try {
-      if (pin.projectPackage) packageDependencies = await require('./package-dependencies').prepare(pin.projectPackage, {
-        userDataDir, repository: buildsRepository || projectBuilds?.repository || 'procrastinine/maclauncher-builds', signal, logger, onProgress,
-        ...(dependencies.packageDependencies || {})
-      });
       const archivePath = path.join(staging, pin.asset.filename);
       onProgress?.({ downloaded: 0, total: pin.asset.bytes || null, detail: "Downloading…" });
       const fetched = dependencies.downloadToFile ? await dependencies.downloadToFile(pin.asset.url, archivePath, { signal, onProgress })
-        : await Upstream.download(Upstream.listedFile(pin.asset), archivePath, { signal, onProgress });
+        : await Upstream.download(Upstream.listedFile(pin.projectPackage ? {...pin.asset,bytes:undefined} : pin.asset), archivePath, { signal, onProgress });
       const archiveBytes = fs.statSync(archivePath).size;
       const progressBytes = { downloaded: archiveBytes, total: archiveBytes };
       onProgress?.({ ...progressBytes, detail: "Checking download…" });
-      if (pin.asset.bytes !== undefined && archiveBytes !== pin.asset.bytes) throw new Error(`${label} archive size does not match the selected release. No runtime was installed.`);
+      if (!pin.projectPackage && pin.asset.bytes !== undefined && archiveBytes !== pin.asset.bytes) throw new Error(`${label} archive size does not match the selected release. No runtime was installed.`);
       const archiveSha256 = fetched?.sha256 || hashFile(archivePath);
       if (pin.asset.sha256 && archiveSha256 !== pin.asset.sha256) throw new Error(`${label} archive SHA-256 does not match the pinned release. No runtime was installed.`);
       const archiveMd5 = pin.asset.integrity === "publisher-md5" ? hashFile(archivePath, "md5") : null;
@@ -733,6 +729,13 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       // Extraction happens only after checking a reviewed upstream artifact's digest.
       onProgress?.({ ...progressBytes, detail: "Extracting files…" });
       await (projectPackages && pin.projectPackage ? projectPackages.extract : dependencies.extractArchive || require("./release-files").extractArchive)(archivePath, unpacked, signal);
+      if (pin.projectPackage) {
+        const filename=path.join(unpacked,projectPackages?'runtime-package.json':'project-package.json');
+        const declaration=JSON.parse(require('./bundled-native').readRegular(filename,require('./bundled-native').LIMITS.manifestBytes).bytes);
+        packageDependencies=await require('./package-dependencies').prepare(declaration,{
+          userDataDir,repository:buildsRepository || projectBuilds?.repository || 'procrastinine/maclauncher-builds',signal,logger,onProgress,
+          ...(dependencies.packageDependencies || {})});
+      }
       onProgress?.({ ...progressBytes, detail: "Checking installation…" });
       const preparation = projectPackages && pin.projectPackage ? projectPackages.prepare : prepareInstall;
       const installationMetadata = preparation
@@ -752,13 +755,13 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       const native = inspectRuntime({ arch: target,
         hostArchitecture: dependencies.hostArch || require("./host-capabilities").getHostCapabilities().hardwareArch,
         runtimePath, runtimeVersion: normalized, upstreamRevision: pin.upstreamRevision, allowLibrary: nativeLibrary });
-      const floor = !pin.projectPackage && executableFloor(native.executablePath, target);
+      const floor = executableFloor(native.executablePath, target);
       if (floor && !versionAtLeast(installedPin.minimumMacOS || "0", floor)) installedPin = { ...installedPin, minimumMacOS: floor };
       if (hostReason(installedPin)) throw new Error(rememberFloor(userDataDir, pin, installedPin));
       const executableRelative = path.relative(unpacked, native.executablePath);
       if (!executableRelative || executableRelative.startsWith("..") || path.isAbsolute(executableRelative)) throw new Error("Pinned runtime executable escaped the installation.");
       publishRecord(unpacked, { version: normalized, upstreamRevision: pin.upstreamRevision,
-        architecture: pinArchitecture(pin) || (native.architectures?.includes("arm64") && native.architectures?.includes("x86_64") ? "universal" : native.architectures?.length === 1 ? Architecture.normalizeArchitecture(native.architectures[0]) : installationArchitecture),
+        architecture: native.architectures?.includes("arm64") && native.architectures?.includes("x86_64") ? "universal" : native.architectures?.length === 1 ? Architecture.normalizeArchitecture(native.architectures[0]) : pinArchitecture(pin) || installationArchitecture,
         catalogEntry: installedPin,
         binarySha256: hashFile(native.executablePath), executableRelative,
         archiveSha256, ...(archiveMd5 ? { archiveMd5 } : {}), ...(artifactVerification ? { artifactVerification } : {}),
@@ -768,7 +771,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
         source: "download", provenanceVerified: Boolean(pin.asset.sha256 || artifactVerification?.verified),
         integritySource: pin.asset.integritySource || (pin.asset.sha256 ? "publisher-sha256" : archiveMd5 ? "publisher-md5-and-signature" : "recorded-local"), installedAt: new Date().toISOString() });
       throwIfAborted(signal);
-      if (pin.projectPackage) require('./package-dependencies').relocateInstallation(unpacked,destination,pin.projectPackage,userDataDir);
+      if (pin.projectPackage) require('./package-dependencies').relocateInstallation(unpacked,destination,userDataDir);
       const previous = path.join(staging, "previous");
       if (replacing) fs.renameSync(destination, previous);
       try {

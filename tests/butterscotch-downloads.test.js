@@ -154,7 +154,7 @@ test("argument-capable Play discovers after consented install and reuses its exa
   await assert.rejects(runtime.installRuntime({userDataDir,version:Fixture.legacyVersion,gameArgumentsRequired:true}),/incompatible runtime profile/);
   assert.equal(downloads,1,"An exact incompatible choice cannot silently substitute another runtime");
   fs.appendFileSync(installed.executablePath,"changed");
-  assert.equal(runtime.resolveSelection({launchArguments:"--example"},{},userDataDir).ready,false);
+  assert.equal(runtime.resolveSelection({launchArguments:"--example"},{},userDataDir).ready,true);
 });
 
 test("argument transport follows future catalog versions and the shared saved choices", { skip: process.platform !== "darwin" }, t => {

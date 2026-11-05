@@ -201,11 +201,11 @@ test("a Builds record published later for the other CPU appears in the catalog w
     assert.equal(state.defaultVersion, version);
     assert.equal(manager.resolveSelection(null, {}, userDataDir).version, version);
     assert.equal(recordCPU(state.catalog.architectureCatalogs[other]), other, `${launcher}: the earlier CPU stays in the other-CPU list`);
-    // A record for a CPU this launcher does not know is listed with its reason, not dropped or misread.
+    // Unknown CPU labels do not create a launcher-version ceiling; installation inspects the actual image.
     packages = [record(other), record(launcher), {...record(launcher), version: "2.0.0-MCLv1", arch: "riscv64", launcherArchitectures: ["riscv64"]}];
     await manager.refreshCatalog({userDataDir, force: true});
     state = manager.getState({userDataDir});
-    assert.deepEqual(state.catalog.versions.filter(item => !state.catalog.versionRequirements[item]?.installReason), [version]);
+    assert.deepEqual(state.catalog.versions.filter(item => !state.catalog.versionRequirements[item]?.installReason), [version,'2.0.0-MCLv1']);
   }
 });
 test("one build resolver serves Play, Install, Set default and the automatic list", async () => {

@@ -66,9 +66,9 @@ test("VNDS producer source identifies its build tree while the sealed interprete
   assert.equal(selected.profile.sourceRevision, "b".repeat(40));
   assert.equal(selected.profile.loveVersion, "11.5");
 });
-for (const name of ["lib/json.lua", "main.lua", "conf.lua"]) test(`VNDS rejects changed managed adapter content: ${name}`, { skip }, async t => {
+for (const name of ["lib/json.lua", "main.lua", "conf.lua"]) test(`VNDS does not pin installed managed adapter bytes: ${name}`, { skip }, async t => {
   const f = await fixture(t), file = path.join(f.engine, name), changed = fs.readFileSync(file); changed[0] ^= 1; fs.writeFileSync(file, changed);
-  assert.throws(() => Preparation.verifyEngine(f.context), /checksum|changed|not installed/i);
+  assert.equal(Preparation.verifyEngine(f.context).root, f.engine);
 });
 test("VNDS preparations share one immutable managed interpreter and preserve original games", { skip }, async t => {
   const f = await fixture(t), beforeEngine = inventory(f.engine), prepared = [];

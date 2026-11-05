@@ -6,6 +6,7 @@ const { createProjectBuildManager } = require("../../shared/runtime/project-buil
 const SHA = /^[a-f0-9]{64}$/;
 
 function validateManifest(manifest) {
+  if (Bundled.isManagedDeclaration(manifest)) return;
   if (manifest.managerId !== "gamemaker-opengl-helper" || manifest.helperABI !== 1 || manifest.arch !== "universal" ||
       !SHA.test(manifest.source?.sourceSha256 || "") || !manifest.files.some(file => file.path === "helper.json") ||
       !Array.isArray(manifest.legacyLogicalRunnerVersions) || manifest.legacyLogicalRunnerVersions.some(version =>
@@ -15,6 +16,14 @@ function validateManifest(manifest) {
 function verifyInstall(install) {
   Bundled.verifyPayload(install.root, install.declaration);
   validateManifest(install.manifest);
+  if (Bundled.isManagedDeclaration(install.declaration)) {
+    const file=install.executablePath;
+    MachO.readMachOLoadCommands(file);
+    execFileSync('/usr/bin/codesign',['--verify','--strict',file],{timeout:30000,stdio:'pipe'});
+    return {version:install.version || install.manifest.version,profileVersion:install.manifest.version,
+      legacyLogicalRunnerVersions:install.manifest.legacyLogicalRunnerVersions || [],runnerChecksums:install.manifest.runnerChecksums,
+      ready:true,dylibPath:file,installDir:install.installDir || install.root,reason:null};
+  }
   const record = JSON.parse(Bundled.readRegular(path.join(install.payloadRoot, "helper.json"), Bundled.LIMITS.manifestBytes).bytes);
   const file = path.join(install.payloadRoot, "software-opengl.dylib");
   const primary = install.manifest.files.find(item => item.path === "software-opengl.dylib");
