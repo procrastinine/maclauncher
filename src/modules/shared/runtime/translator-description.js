@@ -48,7 +48,7 @@ function describeTranslator(root, { engine, source, version, component, id, apis
       if (/\.json$/i.test(file)) {
         try { if (JSON.parse(fs.readFileSync(file, 'utf8')).ICD) files.push(inspectFile({ path: file, relative })); } catch {}
       } else if (/\.(?:dll|so|dylib)$/i.test(file) || /\.framework\//.test(file) && !path.extname(file)) {
-        const facts = inspectFile({ path: file, relative });
+        const facts = inspectFile({ path: file, relative }, { engine });
         if (path.extname(file) || facts.format === 'macho') files.push(facts);
       }
     }
@@ -60,7 +60,7 @@ function describeTranslator(root, { engine, source, version, component, id, apis
   if (component !== 'vulkan-driver' && component !== 'video') form = pe?.form || form;
   const versionFile = path.join(root, 'version');
   if (fs.existsSync(versionFile) && fs.statSync(versionFile).isFile()) version = fs.readFileSync(versionFile, 'utf8').trim() || version;
-  version ||= pe?.version;
+  version ||= files.find(file => file.format === 'pe' && file.version)?.version;
   if (!apis.length) apis = [...new Set(files.flatMap(file => {
     const match = path.basename(file.path).match(/^d3d(\d+)(?:core)?\.dll$/i);
     if (match) return [`Direct3D ${match[1]}`];
@@ -77,7 +77,7 @@ function compareVersions(a, b) {
   for (let i = 0; i < Math.max(left.length, right.length); i++) if ((left[i] || 0) !== (right[i] || 0)) return (left[i] || 0) - (right[i] || 0);
   return 0;
 }
-function inspectFile(file) {
+function inspectFile(file, { engine } = {}) {
   const result = { ...file };
   try {
     const native = readMachOLoadCommands(file.path, { imports: true });
@@ -90,8 +90,10 @@ function inspectFile(file) {
   const pe = readPeExports(fs.realpathSync(file.path));
   if (pe) {
     const version = readPeVersion(file.path);
+    const identified = engine && new RegExp(`(?:^|\\W)${String(engine).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:$|\\W)`, 'i')
+      .test(`${version?.strings?.ProductName || ''} ${version?.strings?.FileDescription || ''}`);
     return { ...result, format: 'pe', form: pe.form, machine: pe.machine, macosFloor: null, unixImports: [],
-      version: version?.strings?.ProductVersion || version?.productVersion || null };
+      version: identified ? version?.strings?.ProductVersion || version?.productVersion || null : null };
   }
   return { ...result, format: file.path.endsWith('.json') ? 'json' : 'unknown', macosFloor: null, unixImports: [] };
 }

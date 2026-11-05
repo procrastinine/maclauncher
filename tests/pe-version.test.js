@@ -54,3 +54,31 @@ test("PE version inspection fails closed on bad magic, cyclic directories and re
   assert.equal(parseVersionResource(signature), null);
   assert.equal(parseVersionResource(Buffer.from("VS_VERSION_INFO")), null);
 });
+
+test("translator labels omit Wine-default PE versions unless product metadata identifies the engine", t => {
+  const { describeTranslator, label } = require("../src/modules/shared/runtime/translator-description");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "translator-version-")), file = path.join(root, "d3d11.dll");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const write = strings => {
+    const { bytes, peOffset } = peFixture({ is64: true, version: versionResource({
+      productVersion: [10, 0, 17763, 1], strings }) });
+    bytes.writeUInt16LE(0x2002, peOffset + 22); bytes.write("Wine builtin DLL\0", 64);
+    fs.writeFileSync(file, bytes);
+  };
+  const source = { label: "CrossOver 26.3" };
+  write({ ProductName: "Wine", FileDescription: "Wine builtin DLL", ProductVersion: "10.0.17763.1" });
+  for (const engine of ["dxmt", "dxvk"]) {
+    const description = describeTranslator(root, { engine, source });
+    assert.equal(description.version, "");
+    assert.equal(description.files[0].version, null);
+    assert.equal(label(description), `${engine.toUpperCase()} (CrossOver 26.3)`);
+  }
+  write({ ProductName: "DXMT", ProductVersion: "0.80" });
+  assert.equal(describeTranslator(root, { engine: "dxmt", source }).version, "0.80");
+  write({ FileDescription: "Direct3D implementation from DXVK", ProductVersion: "2.7" });
+  assert.equal(describeTranslator(root, { engine: "dxvk", source }).version, "2.7");
+  write({ ProductName: "Unfamiliar.Engine translator", ProductVersion: "custom release" });
+  assert.equal(describeTranslator(root, { engine: "unfamiliar.engine", source }).version, "custom release");
+  assert.equal(describeTranslator(root, { engine: "unfamiliarXengine", source }).version, "");
+  assert.equal(describeTranslator(root, { engine: "d3dmetal", source, version: "3.0" }).version, "3.0");
+});
