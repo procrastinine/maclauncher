@@ -731,3 +731,11 @@ test('publisher revision labels distinguish real nightly and source choices with
   const molten=runtimeVersionTagger({catalog:{versions:['1.4.2','1.4.2-rc1','1.0.37-Metal-3.0','1.0.37']}});
   assert.deepEqual(['1.4.2','1.4.2-rc1','1.0.37-Metal-3.0','1.0.37'].map(molten),['v1.4.2','v1.4.2-rc1','v1.0.37-Metal-3.0','v1.0.37']);
 });
+
+test('generic visibility matches any projected provider while scalar and exclusion behavior stay intact',()=>{
+ const show=provider=>({key:'setting',label:'Provider setting',type:'string',visibleWhen:[{key:'backend',equals:provider}]}),hide={key:'hidden',label:'Excluded provider',type:'string',hiddenWhen:[{key:'backend',equals:'first'}]};
+ for(const value of ['first',['first','second']]){assert.equal(components.isRuntimeSettingVisible(show('first'),{backend:value}),true);assert.equal(components.isRuntimeSettingVisible(show('third'),{backend:value}),false);assert.equal(components.isRuntimeSettingVisible(hide,{backend:value}),false);}
+ assert.equal(components.isRuntimeSettingVisible(show('second'),{backend:['first','second']}),true);
+ assert.equal(components.isRuntimeSettingVisible({...show('third'),visibleWhen:[{key:'backend',notEquals:'first'}]},{backend:['first','second']}),false);
+ assert.equal(components.isRuntimeSettingVisible(show('first'),{backend:[]}),false);
+});

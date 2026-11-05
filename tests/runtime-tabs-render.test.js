@@ -1105,3 +1105,14 @@ test('linked runtime choices persist one advertised patch and ordinary choices k
     }finally{h.close();}
   }
 });
+
+test('effective provider arrays expose all used settings without changing saved controls',async()=>{
+ for(const label of ['first',['first','second']]){
+  const state=require('./library-layout-fixture').createLibraryFixture(),writes=[];
+  const fields=[{key:'backend',label:'Selected policy',type:'select',default:'automatic',optionsAction:'choices',optionsKey:'policies'},...['first','second','third'].map(provider=>({key:provider,label:provider+' provider settings',type:'string',default:provider+' saved',visibleWhen:[{key:'backend',equals:provider}]}))];
+  state.modules[0].runtime.entries.managed.settings={fields,visibilityAction:'choices'};
+  const api={moduleSettingsAction:async()=>({policies:[{value:'automatic',label:'Runtime automatic'}],effectiveSettings:[{value:'backend',label}]}),setModuleRuntimeSettings:async(...args)=>writes.push(args),setGameRuntimeSettings:async()=>assert.fail('No game write')};
+  const h=componentHarness(RuntimeSettingsWindow,{api,state,context:{scope:'module',moduleId:'fixture',runtimeId:'managed'},error:null});
+  try{h.render();const markup=renderToStaticMarkup(await h.settle());assert.match(markup,/first provider settings/);assert.equal(markup.includes('second provider settings'),Array.isArray(label));assert.doesNotMatch(markup,/third provider settings/);assert.match(markup,/value="automatic"/);assert.deepEqual(writes,[]);}finally{h.close();}
+ }
+});

@@ -541,8 +541,8 @@ export function formatIconFallbackText(entry: RecentGame, moduleInfo: ModuleMani
 
 export function matchesConditionOnTarget(target: any, cond: ModuleUiCondition) {
   const value = getByPath(target, cond.key);
-  if (Object.prototype.hasOwnProperty.call(cond, "equals")) return value === cond.equals;
-  if (Object.prototype.hasOwnProperty.call(cond, "notEquals")) return value !== cond.notEquals;
+  if (Object.prototype.hasOwnProperty.call(cond, "equals")) return Array.isArray(value) ? value.includes(cond.equals) : value === cond.equals;
+  if (Object.prototype.hasOwnProperty.call(cond, "notEquals")) return Array.isArray(value) ? !value.includes(cond.notEquals) : value !== cond.notEquals;
   if (cond.truthy) return Boolean(value);
   if (cond.falsy) return !value;
   if (cond.endsWith) return typeof value === "string" && value.endsWith(cond.endsWith);

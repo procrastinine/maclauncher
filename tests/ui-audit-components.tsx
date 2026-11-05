@@ -8,6 +8,7 @@ export { positionHelpTip } from "../src/renderer/src/ui/components/help-tip-mode
 export { hasDisplayValue, presentModuleFields, moduleToolGroups } from "../src/renderer/src/ui/components/module-tools-model";
 export { RuntimeSettingsWindow } from "../src/renderer/src/ui/components/RuntimeSettingsWindow";
 export { loadSettingChoices, settingChoiceRequest } from "../src/renderer/src/ui/components/runtime-setting-choices";
+export { isRuntimeSettingVisible } from "../src/renderer/src/ui/ui-helpers";
 export { GameIcon, gameIconCandidates } from "../src/renderer/src/ui/components/GameIcon";
 export { LiveVariableScopeTabs, LiveVariablesWindow } from "../src/renderer/src/ui/components/LiveVariablesWindow";
 export { createStatusReader, startStatusPolling } from "../src/renderer/src/ui/components/live-variables-model";
