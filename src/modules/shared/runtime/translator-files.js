@@ -6,7 +6,8 @@ const { requiredMachine } = require('./binary-compatibility');
 
 const cpuFolder = machine => ({ 332: 'i386-windows', 34404: 'x86_64-windows', 43620: 'aarch64-windows' })[machine];
 function selectedDescriptions(plan) {
-  return [...Object.values(plan?.components || {}).filter(row => row.used && (!row.inherited || row.fallback)).map(row => row.used), ...(plan?.additional || [])];
+  return [...Object.values(plan?.components || {}).filter(row => row.used && (plan.runtime === 'sikarugir' || !row.inherited || row.fallback))
+    .map(row => ({ ...row.used, inherited: row.inherited })), ...(plan?.additional || [])];
 }
 function filesIdentity(descriptions) {
   return descriptions.map(item => [item.id, item.files.map(file => [file.path, fs.existsSync(file.path) ? fileDigest(file.path).sha256 : null])]);
@@ -22,7 +23,11 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal } = {}
   async function link(source, relative) {
     const target = path.join(root, relative); Writable.assertOwnDirectory(root, path.dirname(target));
     try { const current = fs.lstatSync(target); if (!current.isSymbolicLink() || fs.readlinkSync(target) !== source) throw new Error('The prepared translator link changed.'); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; await fs.promises.symlink(source, target); }
+    catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      try { await fs.promises.symlink(source, target); }
+      catch (race) { if (race.code !== 'EEXIST' || fs.readlinkSync(target) !== source) throw race; }
+    }
     return target;
   }
   for (const item of selected) {
@@ -33,7 +38,7 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal } = {}
     if (item.component === 'vulkan-driver') {
       const json = item.icd ? { path: item.icd } : item.files.find(file => file.format === 'json' && (() => { try { return Boolean(JSON.parse(fs.readFileSync(file.path)).ICD); } catch { return false; } })());
       const descriptor = json ? JSON.parse(fs.readFileSync(json.path, 'utf8')) : null;
-      const driver = json ? path.resolve(path.dirname(json.path), descriptor.ICD.library_path) : item.files.find(file => file.format === 'macho' && !/libvulkan(?:\.\d+)*\.dylib$/.test(file.path))?.path;
+      const driver = json ? path.resolve(path.dirname(json.path), descriptor.ICD.library_path) : item.entryPoint || item.files.find(file => file.format === 'macho' && !/libvulkan(?:\.\d+)*\.dylib$/.test(file.path))?.path;
       const loader = item.files.find(file => /libvulkan(?:\.\d+)*\.dylib$/.test(file.path))?.path;
       if (!driver) throw new Error('The selected Vulkan driver file is missing.');
       Object.assign(env, require('../vulkan').driverEnvironment({ driver, icd: json?.path, backend: item.engine }, root));
@@ -53,7 +58,7 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal } = {}
         if (item.component === 'd3d12' && !/^d3d12/i.test(path.basename(file.path))) continue;
         const architecture = cpuFolder(file.machine); if (!architecture) continue;
         const name = path.basename(file.path), module = name.replace(/\.dll$/i, '');
-        if (file.form === 'native') { native.push({ source: file.path, name, machine: file.machine }); dllOverrides.push(`${module}=n,b`); }
+        if (file.form === 'native') { if (!item.inherited) native.push({ source: file.path, name, machine: file.machine }); dllOverrides.push(`${module}=n,b`); }
         else { const relative = `lib/wine/${architecture}/${name}`; links[relative] = await link(file.path, relative); dllOverrides.push(`${module}=b`); }
       } else if (file.format === 'macho' && file.path.endsWith('.so')) {
         if (layout.architecture && !file.cpuSlices.includes(layout.architecture)) continue;
@@ -61,7 +66,8 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal } = {}
         if (path.basename(fs.realpathSync(source)) === 'libd3dshared.dylib') {
           const original = fs.realpathSync(source), external = path.join(root, 'external'); Writable.assertOwnDirectory(root, external);
           source = path.join(external, 'libd3dshared.dylib');
-          if (!fs.existsSync(source)) await cloneOrCopy(original, source, { signal, exclusive: true });
+          if (!fs.existsSync(source)) try { await cloneOrCopy(original, source, { signal, exclusive: true }); }
+          catch (race) { if (race.code !== 'EEXIST' || fileDigest(original).sha256 !== fileDigest(source).sha256) throw race; }
           const framework = path.join(path.dirname(original), 'D3DMetal.framework');
           if (fs.existsSync(framework)) await link(framework, 'external/D3DMetal.framework');
           env.CX_APPLEGPTK_LIBD3DSHARED_PATH = source;

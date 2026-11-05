@@ -233,7 +233,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   const executable = settings.executable ? path.resolve(match.sourceRoot, safeText(settings.executable, "Windows executable")) : match.windowsExecutablePath;
   const selectedExecutable = inside(match.sourceRoot, executable) ? readWindowsExecutable(executable) : null;
   if (!selectedExecutable) throw new Error("Windows executable must be a PE executable inside the game folder.");
-  const translatorPlan = await Translators.resolve(selected.install, 'crossover', context, { executableArchitecture: selectedExecutable.executableArchitecture, host });
+  const translatorPlan = await Translators.resolve(selected.install, 'crossover', context, { entry, executableArchitecture: selectedExecutable.executableArchitecture, host });
   settings = Translators.settingsForPlan(settings, translatorPlan);
   const translatorView = TranslatorFiles.selectedDescriptions(translatorPlan).length ? await TranslatorFiles.prepareTranslatorFiles(translatorPlan,
     { userDataDir: context.userDataDir, layout: translatorPlan.layout, signal: context.signal }) : null;
@@ -366,7 +366,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     if (!loader && !loaderFailure) loader = await prepareLoader();
     if (loader) {
       const values = () => ({ overrides: GraphicsLoader.environment(loader, overrides, { cameraBridge, sceneClosure, translatorView, installation: selected.install }),
-        environment: GraphicsLoader.environment(loader, environment, { cameraBridge, sceneClosure, installation: selected.install }) });
+        environment: GraphicsLoader.environment(loader, environment, { cameraBridge, sceneClosure, translatorView, installation: selected.install }) });
       let prepared;
       try { prepared = values(); }
       catch (error) {

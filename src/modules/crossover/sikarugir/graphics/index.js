@@ -121,7 +121,8 @@ async function linkFile(source, destination, signal) {
     if (!current.isSymbolicLink() || await fs.promises.realpath(destination) !== await fs.promises.realpath(source)) fail("The private renderer selection changed. Remove the game's runtime files and try again.");
     return;
   }
-  await fs.promises.symlink(source, destination);
+  try { await fs.promises.symlink(source, destination); }
+  catch (race) { if (race.code !== 'EEXIST') throw race; return linkFile(source, destination, signal); }
 }
 async function linkDirectory(source, destination, signal) {
   signal?.throwIfAborted();
@@ -131,7 +132,8 @@ async function linkDirectory(source, destination, signal) {
     if (!current.isSymbolicLink() || await fs.promises.realpath(destination) !== await fs.promises.realpath(source)) fail("The private Wine files changed. Remove the game's runtime files and try again.");
     return;
   }
-  await fs.promises.symlink(source, destination);
+  try { await fs.promises.symlink(source, destination); }
+  catch (race) { if (race.code !== 'EEXIST') throw race; return linkDirectory(source, destination, signal); }
 }
 async function cloneLoaderFile(source, destination, signal) {
   signal?.throwIfAborted();
@@ -146,7 +148,8 @@ async function cloneLoaderFile(source, destination, signal) {
     }
     return;
   }
-  await cloneOrCopy(source, destination, { signal, exclusive: true });
+  try { await cloneOrCopy(source, destination, { signal, exclusive: true }); }
+  catch (race) { if (race.code !== 'EEXIST') throw race; return cloneLoaderFile(source, destination, signal); }
   await fs.promises.chmod(destination, sourceStat.mode & 0o777);
   signal?.throwIfAborted();
 }
@@ -221,8 +224,18 @@ async function registerPrefixLibraries(prefixPath, viewRoot, dllRoot, signal, la
     }
   }
 }
-async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoot, host = {}, signal, executableArchitecture, cameraBridge, helperLibraries = [], translatorPlan, translatorView } = {}) {
+async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoot, host = {}, signal, executableArchitecture, cameraBridge, helperLibraries = [], translatorPlan, translatorView, environment, context, userDataDir } = {}) {
   signal?.throwIfAborted();
+  if (!translatorPlan && context) {
+    const shared = require('../../../shared/runtime/wine-translators');
+    if (environment) context.wineEnvironment = environment;
+    context.runtimeSettings ||= settings;
+    translatorPlan = context.translatorPlan?.layout?.root === wineLayout(install).root ? context.translatorPlan :
+      await shared.resolve(install, 'sikarugir', context, { executableArchitecture, host });
+    settings = shared.settingsForPlan(settings, translatorPlan);
+  }
+  if (translatorPlan && !translatorView) translatorView = await require('../../../shared/runtime/translator-files').prepareTranslatorFiles(translatorPlan,
+    { userDataDir: userDataDir || context?.userDataDir, layout: translatorPlan.layout, signal });
   const support = supportRoot(install), engine = engineRoot(install), hostInfo = {
     hardwareArch: require("../../../shared/runtime/host-capabilities").getHostCapabilities().hardwareArch, ...host };
   const layout = translatorPlan?.layout || wineLayout(install);
@@ -339,8 +352,9 @@ async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoo
     if (Object.keys(translatorView.links).some(name => name.endsWith(".dll"))) env.WINEDLLPATH = [...layout.windows.map(name => path.join(dllRoot, name)), dllRoot, layout.dllRoot].join(path.delimiter);
   }
   signal?.throwIfAborted();
-  return { ...selection, ...loader, env, dllOverrides,
-    ...(path.isAbsolute(prefixPath || "") ? { applyPrefix: () => registerPrefixLibraries(prefixPath, viewRoot, dllRoot, signal, layout) } : {}),
+  const writesBuiltinPrefix = !environment || Object.values(translatorPlan?.components || {}).some(row => row.used && !row.inherited && row.used.files.some(file => file.format === 'pe' && file.form === 'builtin'));
+  return { ...selection, ...loader, env, dllOverrides, translatorPlan,
+    ...(path.isAbsolute(prefixPath || "") && writesBuiltinPrefix ? { applyPrefix: () => registerPrefixLibraries(prefixPath, viewRoot, dllRoot, signal, layout) } : {}),
     capabilities, hardware, dlss, componentVersions: capabilities.componentVersions, viewRoot, prefixPath };
 }
 

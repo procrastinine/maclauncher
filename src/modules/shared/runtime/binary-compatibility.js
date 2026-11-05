@@ -56,6 +56,7 @@ function compatibility(description, record, { macOSVersion, executableArchitectu
   const warnings = [], machine = requiredMachine(executableArchitecture), expectedUnix = record.layout.architecture;
   const incompatible = reason => ({ compatible: false, reason, warnings });
   const requiredPaths = [];
+  if (description.entryPoint && description.component === 'vulkan-driver') requiredPaths.push(description.entryPoint);
   if (description.icd) {
     try { const icd = JSON.parse(fs.readFileSync(description.icd, 'utf8')); requiredPaths.push(path.resolve(path.dirname(description.icd), icd.ICD.library_path)); } catch {}
   }

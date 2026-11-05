@@ -23,7 +23,7 @@ async function translatorOptions(entry, payload, context, dependencies = {}) {
   const selected = preparedContext.wineEnvironment?.install ? { ready: true, install: preparedContext.wineEnvironment.install } : runtimeManager.resolveSelection(entry, draft.settings, draft.userDataDir, draft.runtimeSettings);
   if (!selected.install) return {};
   const install = selected.install;
-  const plan = await Translators.resolve(install, runtime, preparedContext, { ...dependencies, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
+  const plan = await Translators.resolve(install, runtime, preparedContext, { ...dependencies, entry, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
   return { ...Translators.optionLists(install, runtime, preparedContext, { ...dependencies, plan }), effectiveSettings: [
     { value: 'graphicsBackend', label: plan.components['d3d-renderer'].used?.engine || 'auto' },
     { value: 'vulkanBackend', label: plan.components['vulkan-driver'].used?.engine || 'auto' }
@@ -66,7 +66,7 @@ async function ensureRuntime(entry, context) {
   if (!selected.ready) throw new Error(selected.reason);
   const prepared = Translators.environmentContext(context, selected.install);
   if (prepared.wineEnvironment) context.wineEnvironment = prepared.wineEnvironment;
-  await Translators.resolve(prepared.wineEnvironment?.install || selected.install, "crossover", context, { executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
+  await Translators.resolve(prepared.wineEnvironment?.install || selected.install, "crossover", context, { entry, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
   return null;
 }
 async function launchRuntime(runtimeId, entry, context) {
@@ -102,7 +102,7 @@ async function resolveGraphicsInputs(entry, context = {}, resolved) {
   const prepared = Translators.environmentContext(context, selected.install);
   if (prepared.wineEnvironment) context.wineEnvironment = prepared.wineEnvironment;
   const install = prepared.wineEnvironment?.install || selected.install;
-  const translatorPlan = await Translators.resolve(install, runtimeId, context, { executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
+  const translatorPlan = await Translators.resolve(install, runtimeId, context, { entry, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
   const source = require("./temporal").resolvePlan(entry, context, { install, runtimeId, translatorPlan, settings: Translators.settingsForPlan(context.runtimeSettings || {}, translatorPlan), allowDownload: true })?.inputs;
   return require("./graphics-inputs").inputs(install, source, { fallback: runtimeId === "sikarugir" ? "x86_64" : null });
 }
@@ -131,7 +131,7 @@ module.exports = { id: manifest.id, manifest, detectGame: Detection.detectGame,
       const runtime = providerForEntry(entry, context)?.runtimeId;
       const preparedContext = selected.install ? Translators.environmentContext(context, selected.install) : context;
       const plan = selected.install ? await Translators.resolve(preparedContext.wineEnvironment?.install || selected.install, runtime, preparedContext,
-        { executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture }) : null;
+        { entry, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture }) : null;
       const rows = plan ? Translators.inspectorRows(plan) : entry.runtimeData?.[runtime]?.translatorRows || [];
       const details = rows.map(row => ({ label: row.label, value: row.used,
         detail: row.fallback ? 'Selected ' + row.selected + '. ' + row.reason : '' }));

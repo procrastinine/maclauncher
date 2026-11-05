@@ -122,7 +122,7 @@ async function prepare(installation, directory, { signal, execute = executeFile,
       });
       if (record.schema === 2 && record.sourceHash === sourceHash && (!scene || record.sceneIdentity === scene.identity) && filesMatch && linksMatch) return loader;
     } catch { /* An incomplete cache must not be executed. */ }
-    throw new Error("The prepared CrossOver graphics loader has changed. Remove the game's graphics-loader folder and try again.");
+    throw new Error("The prepared CrossOver graphics loader has changed. Remove the affected cached loader under the launcher's graphics/crossover-loaders folder and try again.");
   }
   const temporary = await fs.promises.mkdtemp(path.join(root, "prepare-"));
   const permissions = path.join(temporary, "entitlements.plist");
@@ -159,7 +159,11 @@ async function prepare(installation, directory, { signal, execute = executeFile,
       inputs: sources.map(item => ({ path: item.source, sha256: item.sha256 })),
       ...(scene ? { sceneIdentity: scene.identity } : {}) }) + "\n");
     signal?.throwIfAborted();
-    await fs.promises.rename(temporary, destination);
+    try { await fs.promises.rename(temporary, destination); }
+    catch (race) {
+      if (!['EEXIST', 'ENOTEMPTY'].includes(race.code)) throw race;
+      return prepare(installation, directory, { signal, execute, cameraBridge, sceneClosure, helperLibraries, translatorView, userDataDir });
+    }
     return loader;
   } finally { await fs.promises.rm(temporary, { recursive: true, force: true }); }
 }
@@ -195,6 +199,7 @@ function environment(loader, previous = {}, { cameraBridge, installation, sceneC
     if (Object.keys(translatorView.links).some(name => name.endsWith('.dll'))) values.WINEDLLPATH =
       [...layout.windows.map(name => path.join(wine, name)), wine, values.WINEDLLPATH || previous.WINEDLLPATH, layout.dllRoot].filter(Boolean).join(path.delimiter);
     if (translatorView.dllOverrides.length) values.WINEDLLOVERRIDES = [values.WINEDLLOVERRIDES || previous.WINEDLLOVERRIDES, ...translatorView.dllOverrides].filter(Boolean).join(';');
+    if (cameraBridge) values.CX_GRAPHICS_BACKEND = 'wined3d';
     if (values.CX_LIBVULKAN && (values.CX_GRAPHICS_BACKEND || previous.CX_GRAPHICS_BACKEND) !== 'wined3d') delete values.CX_LIBVULKAN;
   }
   return values;

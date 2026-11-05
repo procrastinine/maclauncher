@@ -12,7 +12,7 @@ const AUTOMATIC = 'automatic', INHERIT = 'inherit';
  * No version, hash, vendor-string or tested-version checks belong here.
  */
 function resolvePlan({ runtime = 'crossover', selections = {}, choices = [], included = [], environment = null, compatibility = {} } = {}) {
-  const components = {}, warnings = [];
+  const components = {};
   for (const component of COMPONENTS) {
     const value = selections[component] || (environment ? INHERIT : AUTOMATIC);
     const inherited = value === INHERIT && environment;
@@ -21,16 +21,19 @@ function resolvePlan({ runtime = 'crossover', selections = {}, choices = [], inc
     let used = selected, reason = null;
     if (!selected && value !== AUTOMATIC && value !== INHERIT) {
       reason = `The saved translator choice is unavailable: ${value}`;
-      warnings.push(`${reason}. Using ${runtime === 'crossover' ? "CrossOver's automatic choice" : "the Template's automatic choice"}.`);
     }
     if (selected && compatibility[selected.id]?.compatible === false) {
       reason = compatibility[selected.id].reason;
       used = included.find(item => item.component === component && item.engine === selected.engine && compatibility[item.id]?.compatible !== false) || null;
-      warnings.push(`${label(selected)} could not load: ${reason}. Using ${used ? label(used) : runtime === 'crossover' ? "CrossOver's automatic choice" : "the Template's automatic choice"}.`);
     }
     components[component] = { value, selected, used, inherited: Boolean(inherited), fallback: Boolean(reason), reason };
   }
-  return { runtime, components, warnings };
+  const plan = { runtime, components };
+  return { ...plan, warnings: fallbackWarnings(plan) };
+}
+function fallbackWarnings(plan) {
+  return Object.values(plan.components).filter(row => row.fallback).map(row =>
+    `${row.selected ? label(row.selected) : row.value} could not load: ${row.reason}. Using ${row.used ? label(row.used) : plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "the Template's automatic choice"}.`);
 }
 function options({ component, runtime = 'crossover', included = [], choices = [], environment = null } = {}) {
   const result = [];
@@ -40,4 +43,4 @@ function options({ component, runtime = 'crossover', included = [], choices = []
     result.push({ value: item.id, label: label(item) });
   return result;
 }
-module.exports = { AUTOMATIC, INHERIT, resolvePlan, options };
+module.exports = { AUTOMATIC, INHERIT, resolvePlan, options, fallbackWarnings };

@@ -57,7 +57,7 @@ function createProvider({ manager, launch = Launch, platform = process.platform,
       const prepared = Translators.environmentContext(context, selected.install);
       if (prepared.wineEnvironment) context.wineEnvironment = prepared.wineEnvironment;
       const install = prepared.wineEnvironment?.install || selected.install;
-      const translatorPlan = await Translators.resolve(install, "sikarugir", context, { executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
+      const translatorPlan = await Translators.resolve(install, "sikarugir", context, { entry, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
       const source = require("../temporal").resolvePlan(entry, context, { install, runtimeId: "sikarugir", translatorPlan, settings: Translators.settingsForPlan(context.runtimeSettings || {}, translatorPlan), allowDownload: true })?.inputs;
       return require("../graphics-inputs").inputs(install, source, { fallback: "x86_64" });
     },
@@ -76,7 +76,7 @@ function createProvider({ manager, launch = Launch, platform = process.platform,
       if (reference) {
         if (reference.kind !== "sikarugir-wrapper") throw new Error("Choose a Sikarugir wrapper for this runtime.");
         context.wineEnvironment = Environments.readEnvironment(reference);
-        await Translators.resolve(context.wineEnvironment.install, "sikarugir", context, { executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
+        await Translators.resolve(context.wineEnvironment.install, "sikarugir", context, { entry, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
         return null;
       }
       const selected = await runtimeManager().resolveForPlay(entry, context);
@@ -84,7 +84,7 @@ function createProvider({ manager, launch = Launch, platform = process.platform,
         if (!selected.install) return null;
         const prepared = Translators.environmentContext(context, selected.install);
         if (prepared.wineEnvironment) context.wineEnvironment = prepared.wineEnvironment;
-        await Translators.resolve(prepared.wineEnvironment?.install || selected.install, "sikarugir", context, { executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
+        await Translators.resolve(prepared.wineEnvironment?.install || selected.install, "sikarugir", context, { entry, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
         return null;
       }
       if (!selected.version && !selected.discoveryRequired) throw new Error(selected.reason || "No compatible Sikarugir version is available.");

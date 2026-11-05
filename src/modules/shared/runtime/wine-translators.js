@@ -4,6 +4,7 @@ const { wineLayout, wineRoot } = require('./wine-layout');
 const Binary = require('./binary-compatibility');
 const { systemVersionSync } = require('./bundled-native');
 const warn = require('../graphics-warning');
+const Architecture = require('./architecture');
 const SETTINGS = Object.freeze({ 'd3d-renderer': 'translatorRenderer', 'vulkan-driver': 'translatorVulkan', d3d12: 'translatorD3D12', video: 'translatorVideo' });
 
 function includedTranslators(install, runtime) {
@@ -69,32 +70,46 @@ function runtimeManagers() {
   const registry = require('../../registry');
   return [...registry.listSharedRuntimeManagers(), ...registry.listModuleIds().flatMap(id => registry.getModule(id)?.runtimeManagers || [])];
 }
-function managedTranslators(context, runtime, managers = runtimeManagers()) {
-  const choices = [];
+function managedTranslators(context, runtime, managers = runtimeManagers(), architecture) {
+  const choices = [], consumer = Architecture.normalizeArchitecture(architecture) || Architecture.selectedArchitecture();
   for (const manager of managers.filter(manager => manager.translatorEngine || manager.translator?.engine)) {
+    const inspect = () => {
     const state = manager.getState({ userDataDir: context.userDataDir, settings: context.settings?.runtimes?.[manager.id] });
-    for (const install of state.installed || []) {
-      const description = install.translator || install.installationMetadata?.translator;
-      if (!description) continue;
+    for (const version of new Set((state.installed || []).map(item => item.version))) {
+      const selection = manager.resolveSelection?.(null, context.settings, context.userDataDir, { version, architecture: consumer, verification: 'status' });
+      let install = selection?.install || state.installed.find(item => item.version === version && Architecture.matchesArchitecture(item, consumer));
+      if (!install) continue;
+      let description = install.translator || install.installationMetadata?.translator;
+      if (!description) {
+        try {
+          description = install.translator || install.installationMetadata?.translator || Description.describeTranslator(install.translatorRoot || install.payloadRoot || install.root || install.installDir,
+            { engine: manager.translatorEngine || manager.translator.engine, version: install.versionLabel || install.version, source: manager.id });
+        } catch (error) { warn(context.logger, `[translators] ${manager.label || manager.id}: ${error.message}`); continue; }
+      }
       if (description.source?.runtime === 'crossover' && runtime !== 'crossover') continue;
-      const root = install.translatorRoot || install.root || install.installDir;
-      const value = { ...description, id: `${manager.id}:${install.version}`, root,
-        managerId: manager.id, runtimeVersion: install.version,
+      const root = install.translatorRoot || install.payloadRoot || (install.installDir && path.join(install.installDir, install.installationMetadata?.translatorRelative || '')) || install.root;
+      const value = { ...description, id: `${manager.id}:${install.version}`, root, entryPoint: install.executablePath || description.entryPoint,
+        managerId: manager.id, runtimeVersion: install.version, architecture: Architecture.recordArchitecture(install) || selection?.architecture,
+        variant: install.variant, sectionId: install.sectionId || selection?.sectionId || 'default', buildKey: install.buildKey,
         files: description.files.map(file => ({ ...file, path: path.resolve(root, file.path) })) };
       choices.push(value);
       if (value.engine === 'd3dmetal') choices.push({ ...value, id: value.id + ':d3d12', component: 'd3d12' });
     }
+    };
+    Architecture.withArchitecture(consumer, inspect);
   }
   return choices;
 }
 function inventory(install, runtime, context, dependencies = {}) {
-  const result = includedTranslators(install, runtime), choices = dependencies.choices || managedTranslators(context, runtime, dependencies.managers);
+  const result = includedTranslators(install, runtime), managers = dependencies.managers || runtimeManagers();
+  const choices = dependencies.choices || managedTranslators(context, runtime, managers, result.layout.architecture);
   const current = context.wineEnvironment;
   const environment = current ? { label: runtime === 'crossover' ? 'Bottle setting' : 'Wrapper setting', selections: {} } : null;
   if (current) for (const [component, key] of [['d3d-renderer', 'graphicsBackend'], ['vulkan-driver', 'vulkanBackend']]) {
     const engine = current.settings?.[key];
-    environment.selections[component] = result.included.find(item => item.component === component && item.engine === engine) ||
-      { component, engine: engine || 'automatic', version: '', source: current.name, files: [] };
+    environment.selections[component] = result.included.find(item => item.component === component && item.engine === engine &&
+      (!item.templateComponent || item.templateComponent === engine)) ||
+      (engine && engine !== 'auto' && engine !== 'automatic' ? { component, engine, version: '', source: current.name, files: [] } : null);
   }
   const selections = Object.fromEntries(Object.entries(SETTINGS).map(([component, key]) => [component, context.runtimeSettings?.[key] || (current ? Plan.INHERIT : Plan.AUTOMATIC)]));
   // Existing explicit backend choices keep their saved meaning; no override stays automatic.
@@ -102,6 +117,20 @@ function inventory(install, runtime, context, dependencies = {}) {
     selections['d3d-renderer'] = result.included.find(item => item.component === 'd3d-renderer' && (item.templateComponent || item.engine) === context.runtimeSettings.graphicsBackend)?.id || Plan.AUTOMATIC;
   if (!context.runtimeSettings?.translatorVulkan && !current && context.runtimeSettings?.vulkanBackend && context.runtimeSettings.vulkanBackend !== 'auto')
     selections['vulkan-driver'] = result.included.find(item => item.component === 'vulkan-driver' && item.engine === context.runtimeSettings.vulkanBackend)?.id || Plan.AUTOMATIC;
+  const legacyBackend = context.runtimeSettings?.graphicsBackend || 'auto';
+  if (!context.runtimeSettings?.translatorRenderer && selections['d3d-renderer'] !== Plan.INHERIT &&
+      (legacyBackend === 'dxmt' || runtime === 'sikarugir' && legacyBackend === 'auto')) {
+    const manager = managers.find(item => item.translatorEngine === 'dxmt' || item.translator?.engine === 'dxmt');
+    const entry = dependencies.entry;
+    const version = context.runtimeSettings?.graphicsBridgeVersion;
+    const explicit = version && version !== 'auto' || entry?.runtimeData?.[manager?.id]?.version || context.settings?.runtimes?.[manager?.id]?.defaultVersion;
+    if (manager && explicit) {
+      const selected = manager.resolveSelection(entry, context.settings, context.userDataDir, { version: version && version !== 'auto' ? version : undefined,
+        architecture: Architecture.normalizeArchitecture(result.layout.architecture), verification: 'status' });
+      const legacy = choices.find(item => item.managerId === manager.id && item.runtimeVersion === selected.version);
+      selections['d3d-renderer'] = legacy?.id || `${manager.id}:${selected.version}`;
+    }
+  }
   return { ...result, choices, environment, selections, runtime };
 }
 function environmentContext(context, install) {
@@ -119,52 +148,55 @@ async function resolve(install, runtime, context, { executableArchitecture, host
     { executableArchitecture, macOSVersion: host.macOSVersion || systemVersionSync() });
   const plan = { ...Plan.resolvePlan({ ...input, compatibility }), layout: input.layout, compatibility, record };
   if (runtime === 'sikarugir') {
+    const automatic = row => row.value === Plan.AUTOMATIC || (row.fallback || row.inherited) && !row.used;
     // Preserve the Template's existing automatic composition in this one plan.
     const choose = (component, engine, templateComponent) => input.included.find(item => item.component === component && item.engine === engine &&
       (!templateComponent || item.templateComponent === templateComponent) && compatibility[item.id]?.compatible !== false);
     let hardware = host;
-    if (plan.components['vulkan-driver'].value === Plan.AUTOMATIC && host.physicalAppleGPU == null && choose('vulkan-driver', 'kosmickrisp'))
+    if (automatic(plan.components['vulkan-driver']) && host.physicalAppleGPU == null && choose('vulkan-driver', 'kosmickrisp'))
       hardware = await require('./graphics-hardware').graphicsHardware(host, { signal: context.signal });
     const vulkan = plan.components['vulkan-driver'];
-    if (vulkan.value === Plan.AUTOMATIC) vulkan.used = hardware.physicalAppleGPU === true ? choose('vulkan-driver', 'kosmickrisp') || choose('vulkan-driver', 'moltenvk') : choose('vulkan-driver', 'moltenvk');
+    if (automatic(vulkan)) vulkan.used = hardware.physicalAppleGPU === true ? choose('vulkan-driver', 'kosmickrisp') || choose('vulkan-driver', 'moltenvk') : choose('vulkan-driver', 'moltenvk');
     const renderer = plan.components['d3d-renderer'];
-    if (renderer.value === Plan.AUTOMATIC) {
+    if (automatic(renderer)) {
       renderer.used = choose('d3d-renderer', 'dxmt') || choose('d3d-renderer', 'wined3d');
-      const d9vk = vulkan.used?.engine === 'kosmickrisp' && choose('d3d-renderer', 'dxvk', 'd9vk');
+      const d9vk = context.wineEnvironment?.settings.d9vk !== false && vulkan.used?.engine === 'kosmickrisp' && choose('d3d-renderer', 'dxvk', 'd9vk');
       plan.additional = d9vk ? [d9vk] : [];
     }
     if (!context.runtimeSettings?.translatorRenderer && context.runtimeSettings?.graphicsBackend === 'dxvk') {
       const selected = choose('d3d-renderer', 'dxvk', vulkan.used?.engine === 'kosmickrisp' ? 'dxvk3' : 'dxvk') || renderer.used;
       renderer.selected = selected; renderer.used = selected;
     }
-    if (context.runtimeSettings?.cncDdraw === true) {
+    if ((context.runtimeSettings?.cncDdraw === Plan.INHERIT ? context.wineEnvironment?.settings.cncDdraw : context.runtimeSettings?.cncDdraw) === true) {
       if (executableArchitecture && !['x86', 'i386'].includes(executableArchitecture)) throw new Error('DirectDraw compatibility requires a 32-bit Windows executable.');
       const directDraw = input.included.find(item => item.templateComponent === 'cnc_ddraw');
       if (!directDraw) throw new Error('The selected Template has no DirectDraw compatibility libraries.');
       plan.additional = [...(plan.additional || []), directDraw];
     }
   }
-  if (plan.components.d3d12.used?.engine === 'vkd3d-proton' && plan.components['vulkan-driver'].used?.engine !== 'kosmickrisp')
-    plan.warnings.push('KosmicKrisp is recommended for vkd3d-proton. The saved selection is being used with the selected Vulkan driver.');
   for (const row of Object.values(plan.components)) if (row.used && compatibility[row.used.id]?.files) {
     const files = compatibility[row.used.id].files;
     row.used = { ...row.used, files, form: files.find(file => file.format === 'pe')?.form || row.used.form };
   }
+  plan.warnings = Plan.fallbackWarnings(plan);
+  if (plan.components.d3d12.used?.engine === 'vkd3d-proton' && plan.components['vulkan-driver'].used?.engine !== 'kosmickrisp')
+    plan.warnings.push('KosmicKrisp is recommended for vkd3d-proton. The saved selection is being used with the selected Vulkan driver.');
   const used = value => JSON.stringify(Object.values(value.components).map(row => [row.used?.id, row.used?.engine, row.used?.form, row.used?.root, row.used?.files?.map(file => [file.path, file.machine])]));
   const previous = context.translatorPlan;
   context.translatorPlan = plan;
   if (previous && used(previous) !== used(plan)) context.invalidateGraphicsPreparation?.();
   for (const warning of plan.warnings) warn(context.logger, `[translators] ${warning}`);
-  for (const row of Object.values(plan.components)) if (row.used?.managerId) context.recordRuntimeUse?.({ managerId: row.used.managerId, version: row.used.runtimeVersion, sourcePath: row.used.root });
+  for (const row of Object.values(plan.components)) if (row.used?.managerId) context.recordRuntimeUse?.({ managerId: row.used.managerId, version: row.used.runtimeVersion,
+    architecture: row.used.architecture, variant: row.used.variant, sectionId: row.used.sectionId, buildKey: row.used.buildKey, sourcePath: row.used.root });
   return plan;
 }
 function engines(plan) { return Object.fromEntries(Object.entries(plan.components).map(([component, row]) => [component, row.used?.engine || null])); }
 function settingsForPlan(settings, plan) {
   const result = { ...settings }, renderer = plan.components['d3d-renderer'].used, vulkan = plan.components['vulkan-driver'].used;
   if (renderer) result.graphicsBackend = renderer.engine;
-  else if (settings.translatorRenderer === Plan.AUTOMATIC) result.graphicsBackend = 'auto';
+  else if (settings.translatorRenderer === Plan.AUTOMATIC || plan.components['d3d-renderer'].fallback) result.graphicsBackend = 'auto';
   if (vulkan) result.vulkanBackend = vulkan.engine;
-  else if (settings.translatorVulkan === Plan.AUTOMATIC) result.vulkanBackend = 'auto';
+  else if (settings.translatorVulkan === Plan.AUTOMATIC || plan.components['vulkan-driver'].fallback) result.vulkanBackend = 'auto';
   return result;
 }
 function withSettings(manifest) {
