@@ -182,8 +182,10 @@ export function RuntimeSettingsWindow({
 
   const displaySettings = draft || savedSettings;
   const canEdit = Boolean(api && schema && displaySettings);
+  const visibilitySettings = { ...displaySettings };
+  for (const row of choices[schema?.inheritanceAction || ""]?.effectiveSettings || []) if (visibilitySettings[row.value] === "inherit") visibilitySettings[row.value] = row.label;
   const visibleFields = (schema?.fields || []).filter(field => field.key !== "networkIsolation" &&
-    (isGameScope || !field.gameOnly) && isRuntimeSettingVisible(field, displaySettings || {}) && (!fieldKeys || fieldKeys.includes(field.key)));
+    (isGameScope || !field.gameOnly) && isRuntimeSettingVisible(field, visibilitySettings) && (!fieldKeys || fieldKeys.includes(field.key)));
   const fileRequest = useMemo(() => settingChoiceRequest(api, context),
     [api?.moduleAction, api?.moduleSettingsAction, context.scope, context.moduleId, context.runtimeId, context.gamePath]);
 

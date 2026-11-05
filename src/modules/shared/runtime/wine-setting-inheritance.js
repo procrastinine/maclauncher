@@ -36,7 +36,7 @@ function choices(settings, schema, { reference = settings.environmentReference, 
     if (key === 'bottleTemplate') return record.metadata?.Template;
     return undefined;
   };
-  return { inheritedValues: schema.fields.filter(field => field.inheritFrom).map(field => {
+  return { effectiveSettings: Object.entries(record.settings || {}).filter(([,value]) => value !== undefined && typeof value !== "object").map(([key,value]) => ({value:key,label:String(value)})), inheritedValues: schema.fields.filter(field => field.inheritFrom).map(field => {
     const value = current(field.key);
     return { value: field.key, label: `${label} (${value === undefined || value === '' ? 'runtime default' : String(value)})` };
   }) };
