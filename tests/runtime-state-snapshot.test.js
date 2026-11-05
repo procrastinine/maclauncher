@@ -48,6 +48,24 @@ test("runtime snapshots serialize inventories nowhere and installed/catalog fact
   assert.deepEqual(snapshotRuntimeState(wire), wire, "already compact snapshots stay stable");
 });
 
+test("runtime snapshots omit nested installed native imports while retaining display and unknown metadata", () => {
+  const display = { version: "1.2.3", source: { label: "Official publisher", kind: "custom" }, apis: ["Video"],
+    architecture: "arm64", pluginDirectories: ["lib/plugins"], futureDisplay: { label: "Keep new metadata", values: [1, 2] } };
+  const translator = { ...display, files: [{ path: "lib/plugin.dylib", bytes: 4096 }],
+    unixImports: [{ path: "lib/plugin.dylib", imports: [{ name: "@loader_path/library.dylib", weak: false }], exports: ["plugin_init"] }] };
+  const row = { version: "1.2.3", ready: true, translator, installationMetadata: { translator: structuredClone(translator) } };
+  const raw = { id: "fixture", installed: [row], sections: [{ id: "default", installed: [structuredClone(row)] }],
+    catalog: { futureDisplay: { unixImports: "Not an installation inventory" } } };
+  const original = structuredClone(raw), wire = snapshotRuntimeState(raw), json = JSON.stringify(wire);
+  const restored = restoreRuntimeState(JSON.parse(json));
+  assert.deepEqual(restored.installed[0], { version: "1.2.3", ready: true, translator: display, installationMetadata: { translator: display } });
+  assert.equal(restored.sections[0].installed, restored.installed, "nested section rows still share installed display facts");
+  assert.deepEqual(restored.catalog, raw.catalog, "metadata outside installations remains untouched");
+  assert.ok(Buffer.byteLength(json) < Buffer.byteLength(JSON.stringify(raw)), "native inventories do not inflate the snapshot");
+  assert.deepEqual(raw, original, "complete canonical native facts stay available to preparation");
+  assert.deepEqual(snapshotRuntimeState(wire), wire, "compacting the snapshot again preserves its display facts");
+});
+
 test("architecture differences, section-only installs and escaped version keys survive JSON references and CPU filtering", () => {
   const raw = representative();
   raw.catalog.architectureCatalogs.x64.versionRequirements["1.0"].installReason = "Requires an Intel dependency";
