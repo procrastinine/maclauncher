@@ -75,19 +75,34 @@ function createManager({ discoverCatalog = Catalog.discover, dependencies = {} }
       throwIfAborted(context.signal);
       return manager.resolveSelection(entry, context.settings, context.userDataDir, { signal: context.signal });
     },
+    // Local preparation reads the included translator descriptions that
+    // installed rows summarize.
+    async prepareLocalState(options = {}) {
+      const Translators = require("../../../shared/runtime/wine-translators");
+      for (const row of base.core.listInstalled(options.userDataDir)) {
+        const result = row.ready === false ? null : resolvePayload(row, { verification: "status" });
+        if (result?.install) await Translators.describedIncluded(result.install, "sikarugir", options);
+      }
+    },
     getState(options = {}) {
       const state = base.getState(options), requirements = { ...state.catalog.versionRequirements };
-      for (const pin of base.core.catalog) requirements[pin.version] = { ...requirements[pin.version],
-        downloadBytes: pin.downloadBytes, engineVersion: pin.engineVersion, templateVersion: pin.template?.version,
-        description: "Wine engine and matching support libraries" };
       const installed = state.installed.map(row => {
         if (row.ready === false) return row;
         const result = resolvePayload(row, { verification: "status" });
         requirements[row.version] = { ...requirements[row.version], available: Boolean(result.install),
           ...(result.minimumMacOS ? { minimumMacOS: result.minimumMacOS, ...(result.install ? {} : { installReason: result.reason }) } : {}) };
-        return result.install ? { ...result.install, ready: true, status: "ready" }
-          : { ...row, ready: false, status: result.minimumMacOS ? "unsupported-host" : "damaged", error: result.reason };
+        if (!result.install) return { ...row, ready: false, status: result.minimumMacOS ? "unsupported-host" : "damaged", error: result.reason };
+        const componentSummary = options.componentSummaries === false ? "" : require("../../../shared/runtime/wine-translators").includedSummary(result.install, "sikarugir", options);
+        return { ...result.install, ready: true, status: "ready", ...(componentSummary ? { componentSummary } : {}) };
       });
+      // A listed version names its translator versions when an installed
+      // engine already uses the same Template release.
+      const templates = new Map(installed.filter(row => row.componentSummary).map(row => [row.templateVersion || row.catalogEntry?.template?.version, row.componentSummary]));
+      for (const pin of base.core.catalog) requirements[pin.version] = { ...requirements[pin.version],
+        downloadBytes: pin.downloadBytes, engineVersion: pin.engineVersion, templateVersion: pin.template?.version,
+        description: "Wine engine and matching support libraries",
+        contents: templates.has(pin.template?.version) ? `Includes ${templates.get(pin.template.version)}.`
+          : `The translator versions in Template ${pin.template?.version || "releases"} are known after download.` };
       const catalog = { ...state.catalog, delivery: "download", importable: false, versionRequirements: requirements,
         installableVersions: state.catalog.installableVersions.filter(version => !requirements[version]?.installReason),
         latestInstalledVersion: installed.find(row => row.ready)?.version || null,

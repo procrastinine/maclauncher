@@ -147,6 +147,8 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
       const pendingInstall = Boolean(version) && !isInstalled && !included;
       const blocked = pendingInstall && !canInstall;
       const reason = blocked ? presentation.installReason || "No compatible macOS download is available." : pendingInstall ? presentation.installReason || "" : "";
+      // What a version holds, such as its component versions or that they are known after download.
+      const contents = pendingInstall && typeof source.versionRequirements?.[version]?.contents === "string" ? source.versionRequirements[version].contents : "";
       return <div className="runtimeSource" data-runtime-source={source.id} key={source.id}>
         <div className="runtimeSourceHeader">
           <div className="runtimeSourceHeading">
@@ -212,6 +214,7 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
         {versions.length === 0 && !refreshing && source.status === "success" && !error &&
           <div className="dim runtimeAvailability">No downloadable versions found at this source.</div>}
         {reason && <div className="dim runtimeAvailability" id={`${fieldId}-reason`}>{reason}</div>}
+        {contents && <div className="dim runtimeAvailability" data-runtime-contents="true">{contents}</div>}
         {refreshing && <div className="dim runtimeActionStatus" role="status">Refreshing versions…</div>}
         {refreshMessage && !refreshing && <div className="dim runtimeActionStatus" role="status">{refreshMessage.startsWith("Versions updated at ") ? "Versions updated." : refreshMessage}</div>}
         {!refreshing && error && <div className="dim runtimeAvailability">{runtimeRefreshFailure(source.status === "error" ? source : null)}</div>}

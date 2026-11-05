@@ -135,7 +135,8 @@ function referencedComponents(engine, options = {}) {
     try {
       state = options.referenceStates?.get(managerId);
       if (!state) {
-        state = manager.getState({ ...options, settings: options.settings?.runtimes?.[managerId] });
+        // Host rows are read for their files; their translator summaries are not needed here.
+        state = manager.getState({ ...options, settings: options.settings?.runtimes?.[managerId], componentSummaries: false });
         options.referenceStates?.set(managerId, state);
       }
     } catch (error) { warn(`${runtime}: ${error.message}`); continue; }
@@ -168,6 +169,7 @@ function includedReferences(engine, options = {}) {
     rows.set(version, { version, versionLabel: translatorLabel(value, host), ready: true, included: true, readOnly: true, removable: false, supportsDefault: false,
       ...(sortVersion ? { sortVersion } : {}),
       ...(templateVersion || host.upstreamVersion ? { sortHostVersion: templateVersion || host.upstreamVersion } : {}),
+      ...(templateVersion ? { templateVersion } : {}), ...(value.templateComponent ? { templateComponent: value.templateComponent } : {}),
       reference, source: value.source, installDir: value.root, minimumMacOS: value.macosFloor, architectures, apis: value.apis,
       platformKey: architectures.join(", "), detail: value.version ? `Component ${value.version.replace(/\s+/g, " ")}` : sourceLabel });
     hostsByReference.set(version, { version: templateVersion || host.upstreamVersion || "", wineVersion: wineVersion || "",
@@ -232,8 +234,10 @@ function withIncludedReferences(manager) {
       `[translators] ${result.reason?.message || result.reason}`);
   };
   const getState = manager.getState;
+  // The references are read first, so catalog labels can name the component
+  // versions that installed hosts already show for the same release.
   manager.getState = function(options = {}) {
-    const state = getState.call(this, options), references = includedReferences(manager.translatorEngine, options);
+    const references = includedReferences(manager.translatorEngine, options), state = getState.call(this, { ...options, includedReferences: references });
     if (!references.length) return state;
     const display = section => ({ ...section, references, versionLabels: { ...section.versionLabels,
       ...Object.fromEntries(references.map(row => [row.version, row.versionLabel])) } });

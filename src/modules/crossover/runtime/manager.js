@@ -107,8 +107,18 @@ function knownApplications(userDataDir) {
 function normalizeSettings(value) {
   return { defaultVersion: typeof value?.defaultVersion === "string" && /^local-[a-f0-9]{16}$/.test(value.defaultVersion) ? value.defaultVersion : null };
 }
-function getState({ userDataDir, settings } = {}) {
-  const installed = listInstalled(userDataDir), versions = installed.filter(item => item.ready).map(item => item.version);
+// Local preparation reads the included translator descriptions that
+// installed rows summarize.
+async function prepareLocalState({ userDataDir, logger, signal } = {}) {
+  const Translators = require("../../shared/runtime/wine-translators");
+  for (const item of listInstalled(userDataDir)) if (item.ready) await Translators.describedIncluded(item, "crossover", { userDataDir, logger, signal });
+}
+function getState({ userDataDir, settings, logger, componentSummaries = true } = {}) {
+  const Translators = require("../../shared/runtime/wine-translators");
+  const installed = listInstalled(userDataDir).map(item => {
+    const componentSummary = item.ready && componentSummaries ? Translators.includedSummary(item, "crossover", { userDataDir, logger }) : "";
+    return componentSummary ? { ...item, componentSummary } : item;
+  }), versions = installed.filter(item => item.ready).map(item => item.version);
   const versionLabels = Object.fromEntries(installed.map(item => [item.version, item.versionLabel]));
   const catalog = { status: "success", versions, versionLabels, delivery: "local", installable: false,
     importable: true, importLabel: "Add CrossOver…", importInputKinds: ["file"], importExtensions: ["app"],
@@ -160,7 +170,7 @@ function resolveSelection(entry, settings, userDataDir, runtimeSettings) {
       ? "The selected CrossOver application is unavailable. Add its current location in Runtimes or select Automatic."
       : "CrossOver was not found. Add an installed CrossOver application in Runtimes.") };
 }
-const manager = { id: "crossover", label: "CrossOver", ui: { groupId: "crossover", tabLabel: "CrossOver", order: 200, memberOrder: 0 }, normalizeSettings, getState, importRuntime, uninstallRuntime, resolveSelection,
+const manager = { id: "crossover", label: "CrossOver", ui: { groupId: "crossover", tabLabel: "CrossOver", order: 200, memberOrder: 0 }, normalizeSettings, prepareLocalState, getState, importRuntime, uninstallRuntime, resolveSelection,
   refreshCatalog: async ({ userDataDir } = {}) => getState({ userDataDir }).catalog,
   applySettingsUpdate: (action, payload, settings) => action === "setDefault"
     ? { ...settings, defaultVersion: normalizeSettings({ defaultVersion: payload?.version }).defaultVersion } : settings,

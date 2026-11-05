@@ -5,7 +5,7 @@ const { archiveFormat } = require("./release-files");
 const dxvkUpstream = { id: "upstream", label: "DXVK", description: "Windows PE builds from DXVK and its historical projects. DXVK 2.x and 3.x require Vulkan 1.3 and the driver features supplied by compatible KosmicKrisp builds." };
 const dxvkMacOS = { id: "macos", label: "DXVK-macOS", secondary: true, description: "DXVK-macOS targets MoltenVK. CrossOver uses builtin-layout async packages; plain-layout packages are separate." };
 const macOSOfferForms = { crossover: "builtin" };
-const dxvkTemplate = { id: "template", label: "Sikarugir Template", secondary: true, description: "The dxvk variant supplies DXVK async and D9VK for MoltenVK; dxvk3 supplies DXVK for KosmicKrisp. Installed libraries supply their component versions and Direct3D API coverage." };
+const dxvkTemplate = { id: "template", label: "Sikarugir Template", secondary: true, description: "Managed copies of one Sikarugir Template folder, with the folder's licence and no Wine engine. The dxvk variant supplies DXVK async and D9VK for MoltenVK; dxvk3 supplies DXVK for KosmicKrisp. Installed libraries supply their component versions and Direct3D API coverage." };
 const definitions = {
   gstreamer: { label: "GStreamer codecs", groupId: "codecs", sourceName: "GStreamer", sourceDescription: "GStreamer runtime packages and prepared local codec folders. Included plugins remain with their source Wine runtime.",
     upstreamUrl: "https://gstreamer.freedesktop.org/download/", upstreamLabel: "GStreamer downloads", memberOrder: 30,
@@ -18,7 +18,7 @@ const definitions = {
       ["d9vk", "D9VK", "misyltoad/d9vk", null, null, { group: dxvkUpstream, variantLabel: "Historical D9VK", engine: "d9vk", componentLabel: "D9VK", description: "Historical D9VK releases published by misyltoad/d9vk. Its Direct3D 9 work was merged into DXVK." }],
       ...["dxvk", "dxvk3", "d9vk"].map(component => ["template-" + component, "Sikarugir Template · " + component, "Sikarugir-App/Template", null, component,
         { group: dxvkTemplate, variantLabel: component === "d9vk" ? "DXVK subset (d9vk)" : component,
-          description: "DXVK libraries from a Sikarugir Template component. Its installed files determine version and API coverage." }])] },
+          description: `Managed DXVK copies taken from the ${component} folder of a Sikarugir Template release, with the folder's licence and no Wine engine. Its installed files determine version and API coverage.` }])] },
   "vkd3d-proton": { label: "vkd3d-proton", groupId: "directx-vulkan", memberOrder: 3, names: ["vkd3d-proton"],
     sources: [["upstream", "vkd3d-proton", "HansKristian-Work/vkd3d-proton", null, null, { description: "vkd3d-proton releases published by HansKristian-Work/vkd3d-proton. Direct3D 12 requires the Vulkan features used by the selected release; a Vulkan version alone does not establish KosmicKrisp driver support." }]] },
   vkd3d: { label: "Wine vkd3d", groupId: "directx-vulkan", memberOrder: 4, referenceOnly: true, localOnly: true, names: [], sources: [],
@@ -26,7 +26,7 @@ const definitions = {
   d3dmetal: { label: "D3DMetal", groupId: "directx-metal", memberOrder: 1, names: ["d3dmetal", "apple_gptk", "redist"],
     sources: [{ id: "apple", label: "Apple Game Porting Toolkit", url: "https://developer.apple.com/games/game-porting-toolkit/", delivery: "local-files", registrationLabel: "Register Game Porting Toolkit…",
       description: "Apple distributes Game Porting Toolkit. Its download may require an Apple account and licence agreement. The downloaded disk image or an extracted folder can be registered here or dropped on this card. D3DMetal is taken from the evaluation environment inside the disk image.", discover: async () => [] },
-      ["template", "Sikarugir Template", "Sikarugir-App/Template", null, "d3dmetal", { secondary: true }]] },
+      ["template", "Sikarugir Template", "Sikarugir-App/Template", null, "d3dmetal"]] },
   dxmt: { label: "DXMT", groupId: "directx-metal", memberOrder: 0, names: ["dxmt"],
     sources: [["upstream", "DXMT", "3Shain/dxmt", name => /builtin/i.test(name)],
       ["template", "Sikarugir Template", "Sikarugir-App/Template", null, "dxmt"]] }
@@ -77,13 +77,20 @@ function catalogVersion(pin) {
 function catalogDescription(pin, source = translatorSource(pin)) {
   return pin ? { version: catalogVersion(pin), source } : {};
 }
-function versionLabel(pin, installed, label) {
+// An installed Sikarugir Template of the same release already shows the
+// version of a Template folder; other releases are known after download.
+function templateComponentLabel(pin, references = []) {
+  const release = templateName(pin)?.replace(/^Template /, "");
+  const row = release && pin?.component && references.find(item => item.templateVersion === release && item.templateComponent === pin.component);
+  return row?.versionLabel ? row.versionLabel.split(" · ")[0] : "";
+}
+function versionLabel(pin, installed, label, references) {
   pin ||= installed?.catalogEntry;
   const component = installed?.translator || installed?.installationMetadata?.translator;
   if (installed?.custom || installed?.source === "custom") return installed.versionLabel;
   if (!pin && !component?.version) return installed?.versionLabel;
   const template = templateName(pin);
-  if (template && !component?.version) return [template, pin?.component].filter(Boolean).join(" · ");
+  if (template && !component?.version) return [template, pin?.component, !installed && templateComponentLabel(pin, references)].filter(Boolean).join(" · ");
   if (installed) return require("./translator-label").label(Component.withCatalogFacts(
     component || { engine: label }, catalogDescription(pin), pin?.catalogSourceId));
   return template || catalogVersion(pin);
@@ -98,7 +105,7 @@ function catalogSource([id, label, repository, filter, component, presentation =
     if (templateName(pin)) return templateName(pin).replace(/^Template /, "");
     return VersionOrder().catalogVersion(pin);
   };
-  return { id, label, description: component ? `${projectLabel} copies taken from a Sikarugir Template release (${component}).` : `${label} releases published by ${repository}.`, url: `https://github.com/${repository}/releases`,
+  return { id, label, description: component ? `Managed ${projectLabel} copies taken from a Sikarugir Template release (${component} folder), with the folder's licence and no Wine engine. Copies included with an installed Sikarugir Template stay with it.` : `${label} releases published by ${repository}.`, url: `https://github.com/${repository}/releases`,
     versionOf, compareEntries: (a, b) => VersionOrder().compareVersions(versionOf(b), versionOf(a)),
     filterEntry: pin => !pin.asset?.filename || !filter || filter(pin.asset.filename),
     ...presentation, discover: async options => upstreamPins(await upstream.discover(options)) };
@@ -114,7 +121,9 @@ function createManager(engine, { dependencies = {} } = {}) {
   const manager = createPinnedNativeManager({ id: engine === "dxmt" ? "sikarugir-graphics-bridge" : "translator-" + engine,
     formerIds: engine === "dxmt" ? ["crossover-graphics-bridge"] : [], label: definition.label,
     upstreamUrl: definition.upstreamUrl, upstreamLabel: definition.upstreamLabel,
-    formatVersionLabel: (pin, installed) => versionLabel(pin, installed, catalogSources.find(source => source.id === pin?.catalogSourceId)?.componentLabel || definition.label),
+    formatVersionLabel: (pin, installed, options) => versionLabel(pin, installed, catalogSources.find(source => source.id === pin?.catalogSourceId)?.componentLabel || definition.label, options?.includedReferences),
+    versionContents: (pin, options) => templateName(pin) && !templateComponentLabel(pin, options?.includedReferences)
+      ? `The ${catalogSources.find(source => source.id === pin.catalogSourceId)?.componentLabel || definition.label} version in this Template release is known after download.` : null,
     discoverCatalog: () => [], ...(catalogSources.length ? { catalogSources } : {}), sourceUrl: definition.sourceUrl || downloadSource?.url || catalogSources[0]?.url || "https://gstreamer.freedesktop.org/", sourceLabel: "Source", sourceName: definition.sourceName, sourceDescription: definition.sourceDescription, nativeLibrary: true, cacheDownloads: true, supportsDefault: false, customRuntime: !definition.referenceOnly,
     resolveExecutable(root, _pin, { installationMetadata } = {}) {
       const stored = installationMetadata?.translator;

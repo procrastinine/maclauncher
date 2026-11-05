@@ -78,7 +78,7 @@ function executableFloor(file, architecture) {
 // query or from a local cache. Every pinned manager offers the user's own
 // default version, as other multi-version runtimes do, unless a game needs its
 // exact engine version.
-function createSingleArchitectureManager({ installationArchitecture, shareDiscovery, id, label, discoverCatalog, upstream, catalogSources, cacheDownloads = false, projectBuilds, buildsRepository, upstreamUrl, upstreamLabel, resolveExecutable, inspectRuntime = Native.resolveLocalRuntime, verifyArtifact, prepareInstall, buildRuntime, buildSourcePath, sourceUrl, sourceLabel, sourceName, sourceDescription, formatVersionLabel, buildHelpUrl, buildRequirements, bundledRuntime, legacyInstalledRuntime, formerIds = [], bundledExecution = "copy", distributionRequired = false, importLocal = false, nativeLibrary = false, supportsDefault = true, customRuntime = true, maxEntries = 500, dependencies = {} }) {
+function createSingleArchitectureManager({ installationArchitecture, shareDiscovery, id, label, discoverCatalog, upstream, catalogSources, cacheDownloads = false, projectBuilds, buildsRepository, upstreamUrl, upstreamLabel, resolveExecutable, inspectRuntime = Native.resolveLocalRuntime, verifyArtifact, prepareInstall, buildRuntime, buildSourcePath, sourceUrl, sourceLabel, sourceName, sourceDescription, formatVersionLabel, versionContents, buildHelpUrl, buildRequirements, bundledRuntime, legacyInstalledRuntime, formerIds = [], bundledExecution = "copy", distributionRequired = false, importLocal = false, nativeLibrary = false, supportsDefault = true, customRuntime = true, maxEntries = 500, dependencies = {} }) {
   if (typeof distributionRequired !== "boolean") throw new Error("Runtime distribution requirements must be explicit booleans.");
   if (typeof importLocal !== "boolean") throw new Error("Local runtime imports must be explicitly enabled.");
   if (typeof nativeLibrary !== "boolean") throw new Error("Native library runtimes must be explicitly enabled.");
@@ -863,7 +863,8 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     }
     return entries.get(version);
   }
-  function getState({ settings, userDataDir } = {}) {
+  function getState(options = {}) {
+    const { settings, userDataDir } = options;
     loadCatalog(userDataDir);
     const cfg = normalizeSettings(settings);
     const sortVersion = pin => String(sourceFor(pin)?.versionOf?.(pin) || VersionOrder().catalogVersion(pin));
@@ -902,10 +903,10 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     const sources = sourceUrl || [...entries.values()].map(pin => pin.sourceUrl || pin.asset?.url).find(Boolean) || null;
     const versionLabels = Object.fromEntries(visibleVersions.map(version => {
       const pin = entries.get(version);
-      return [version, formatVersionLabel?.(pin, installed.find(row => row.version === version)) || (/^(?:MCLv[1-9]\d*-\d{4}|.+-MCLv[1-9]\d*)$/.test(version) ? version : pin.versionLabel || version)];
+      return [version, formatVersionLabel?.(pin, installed.find(row => row.version === version), options) || (/^(?:MCLv[1-9]\d*-\d{4}|.+-MCLv[1-9]\d*)$/.test(version) ? version : pin.versionLabel || version)];
     }));
     if (formatVersionLabel) for (const row of installed) {
-      const label = formatVersionLabel(row.catalogEntry || entries.get(row.version), row);
+      const label = formatVersionLabel(row.catalogEntry || entries.get(row.version), row, options);
       if (label) versionLabels[row.version] = label;
     }
     const state = { supportsDefault, defaultVersion: cfg.defaultVersion || managerDefault(userDataDir), defaultSource: cfg.defaultVersion ? "saved" : "manager", installed, installing: null, variants: [], versionLabels,
@@ -921,8 +922,14 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
           const bundle = bundleAvailability.get(pin.version);
           const registration = installed.find(item => item.version === pin.version);
           const minimumMacOS = registration?.catalogEntry?.minimumMacOS || registration?.minimumMacOS || bundle?.minimumMacOS || pin.minimumMacOS || null;
+          const available = installed.some(item => item.version === pin.version && item.ready);
+          // A manager can describe what a listed version contains before it
+          // is downloaded, such as component versions.
+          let contents = null;
+          if (!available) try { contents = versionContents?.(pin, options) || null; } catch {}
           return [pin.version, { minimumMacOS, architecture: pinArchitecture(pin), installReason: hostReason({ ...pin, minimumMacOS: minimumMacOS || undefined }) || assetReason(pin) || pin.installReason || null,
-            included: includedVersions.includes(pin.version), available: installed.some(item => item.version === pin.version && item.ready),
+            ...(contents ? { contents } : {}),
+            included: includedVersions.includes(pin.version), available,
             ...(preview(pin) ? { prerelease: true } : {}),
             ...(Array.isArray(pin.hostArchitectures) && pin.hostArchitectures.length ? { hostArchitectures: pin.hostArchitectures.map(Architecture.normalizeArchitecture).filter(Boolean) } : {}),
             requiresDownload: !bundle && Boolean(pin.asset || (projectPackages || pin.projectPackage) && !pin.deprecated),

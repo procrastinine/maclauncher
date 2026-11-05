@@ -87,6 +87,28 @@ function includedTranslators(install, runtime, { engine: requestedEngine, descri
     version: d3d12Files[0].version || '', form: 'builtin', root: layout.root, files: d3d12Files }));
   return { included: result, warnings, layout, nativeRoots };
 }
+// An installed Wine runtime names the translator versions it includes, from
+// descriptions already prepared for its files; a component not described yet
+// is left out until local preparation reads it. Wine's own WineD3D and vkd3d
+// follow the Wine version.
+function includedSummary(install, runtime, { userDataDir, logger } = {}) {
+  if (!install || !userDataDir) return '';
+  let included;
+  try {
+    included = includedTranslators(install, runtime, { describe: (root, selection) =>
+      Description.cachedTranslator(root, { ...selection, userDataDir, logger }) }).included;
+  } catch { return ''; }
+  // Template folders are named when one engine has several versions.
+  const labels = new Map(), engines = new Map();
+  for (const value of included) {
+    if (value.hiddenChoice || value.engine === 'wined3d' || value.engine === 'vkd3d') continue;
+    const text = require('./translator-label').componentLabel(value), group = labels.get(text) || { engine: value.engine, folders: new Set() };
+    if (value.templateComponent) group.folders.add(value.templateComponent);
+    labels.set(text, group);
+    engines.set(value.engine, (engines.get(value.engine) || new Set()).add(text));
+  }
+  return [...labels].map(([text, { engine, folders }]) => engines.get(engine).size > 1 && folders.size ? `${text} (${[...folders].join(', ')})` : text).join(' · ');
+}
 function runtimeManagers() {
   const registry = require('../../registry');
   return [...registry.listSharedRuntimeManagers(), ...registry.listModuleIds().flatMap(id => registry.getModule(id)?.runtimeManagers || [])];
@@ -196,11 +218,10 @@ function reusableKey(install, runtime, context, dependencies) {
   // CPU applies only without one.
   return JSON.stringify([revision, runtime, host, context.userDataDir || null, context.settings?.runtimes ?? null, install ? null : dependencies.consumerArchitecture ?? null]);
 }
-async function inventoryFacts(install, runtime, context, dependencies) {
-  const { managers } = dependencies, pending = new Map();
-  const options = { userDataDir: context.userDataDir, logger: context.logger };
-  if (!dependencies.choices) for (const manager of managers.filter(item => item.translatorEngine || item.translator?.engine))
-    if (manager.prepareLocalState) await manager.prepareLocalState({ ...context, settings: context.settings?.runtimes?.[manager.id], runtimeSettings: context.settings?.runtimes });
+// Reads an installed Wine runtime's included translators, preparing each
+// description that is not retained yet. This runs in a backend lane.
+async function describedIncluded(install, runtime, context) {
+  const pending = new Map(), options = { userDataDir: context.userDataDir, logger: context.logger };
   const describe = (root, selection) => {
     const value = Description.cachedTranslator(root, { ...selection, ...options });
     if (!value) {
@@ -209,8 +230,7 @@ async function inventoryFacts(install, runtime, context, dependencies) {
     }
     return value;
   };
-  const Component = require('./component-runtime');
-  // These actions run in the existing backend lane. Yield between independent
+  // Yield between independent
   // roots, so a cold inventory can be canceled without holding up other work.
   const attempted = new Set();
   let includedInventory;
@@ -226,7 +246,15 @@ async function inventoryFacts(install, runtime, context, dependencies) {
       await new Promise(resolve => setImmediate(resolve));
     }
   }
+  return includedInventory;
+}
+async function inventoryFacts(install, runtime, context, dependencies) {
+  const { managers } = dependencies;
+  if (!dependencies.choices) for (const manager of managers.filter(item => item.translatorEngine || item.translator?.engine))
+    if (manager.prepareLocalState) await manager.prepareLocalState({ ...context, settings: context.settings?.runtimes?.[manager.id], runtimeSettings: context.settings?.runtimes });
+  const includedInventory = await describedIncluded(install, runtime, context);
   if (dependencies.choices) return { includedInventory, choices: dependencies.choices };
+  const Component = require('./component-runtime');
   const choices = managedTranslators(context, runtime, managers, includedInventory.layout?.architecture || dependencies.consumerArchitecture);
   const seen = new Set(choices.map(item => item.id));
   for (const manager of managers.filter(item => item.referenceManagerIds?.length))
@@ -439,4 +467,4 @@ function inspectorRows(plan) {
       ...(row.conflictRoles?.length ? { conflictRoles: row.conflictRoles } : {}) };
   }));
 }
-module.exports = { SETTINGS, includedTranslators, managedTranslators, inventory, optionsInventory, optionsPlan, resolve, engines, settingsForPlan, wineRoot, withSettings, optionLists, inspectorRows, presentInspectorRows, planInputs, samePlanInputs, environmentContext };
+module.exports = { SETTINGS, includedTranslators, includedSummary, describedIncluded, managedTranslators, inventory, optionsInventory, optionsPlan, resolve, engines, settingsForPlan, wineRoot, withSettings, optionLists, inspectorRows, presentInspectorRows, planInputs, samePlanInputs, environmentContext };

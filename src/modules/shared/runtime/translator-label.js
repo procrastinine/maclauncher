@@ -25,10 +25,16 @@ function hostLabel(host, source) {
   const version = template || host?.upstreamVersion;
   return displayText([name, version && !String(name).endsWith(` ${version}`) ? version : ""].filter(Boolean).join(" ") || host?.displayName || host?.name);
 }
+// A copy downloaded from a Template release is managed, while the copies in
+// an installed Sikarugir Template are included with it; the label says which.
+function sourceText(value, host) {
+  const source = hostLabel(host, value.source) || (typeof value.source === "string" ? value.source : "");
+  if (source === "custom") return "Registered";
+  return source && !host && !value.included && value.source?.kind === "template" ? `Managed copy from ${source}` : source;
+}
 function label(value, host, { folder = value?.labelFolder, hostVersionLabel, hostName } = {}) {
   if (!value) return "";
-  const source = hostLabel(host, value.source) || (typeof value.source === "string" ? value.source : "");
-  const parts = [componentLabel(value), source === "custom" ? "Registered" : source].filter(Boolean);
+  const parts = [componentLabel(value), sourceText(value, host)].filter(Boolean);
   for (const part of [folder, ...displayText(hostVersionLabel).split(/\s*·\s*/), hostName].map(displayText)) {
     if (part && !parts.some(existing => existing.includes(part))) parts.push(part);
   }

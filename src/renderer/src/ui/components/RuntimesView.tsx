@@ -668,6 +668,8 @@ export function RuntimesView({
                                 </HelpTip>}
                               </div>
                               {apis.length > 0 && <div className="dim">{apis.join(", ")}</div>}
+                              {typeof inst.componentSummary === "string" && inst.componentSummary &&
+                                <div className="dim" data-runtime-components="true">Includes {inst.componentSummary}</div>}
                               {inst.error && <div className="dim">{formatUserError(inst.error)}</div>}
                             </div>
                             {!inst.reference && <div className="saveRowActions">

@@ -313,6 +313,26 @@ test("Sikarugir installs paired archives atomically with one progress total and 
   assert.equal(restarted.resolveSelection({ runtimeData: { sikarugir: { version: newer.version } } }, { runtimes: { sikarugir: { defaultVersion: old.version } } }, root).version, newer.version);
 });
 
+test("Sikarugir names the translator versions of an installed engine and of listed engines with the same Template release", async t => {
+  const { peFixture } = require("./helpers/pe-fixture");
+  const root = temporary(t), installed = fixturePin(), sameTemplate = fixturePin("10.0_8");
+  const other = fixturePin("11.0_2", Buffer.from("engine archive"), Buffer.from("newer support archive"), "1.0.24");
+  const library = peFixture({ is64: true }).bytes; library.write("Wine builtin DLL\0", 64);
+  const manager = fixtureManager({ rows: [installed, sameTemplate, other], dependencies: { stageTemplateClosure: async options => {
+    const metadata = stage(options), renderer = path.join(options.destinationRoot, "Frameworks", "renderer", "dxmt");
+    write(path.join(renderer, "version"), "v0.80-244-g7c8dee1\n"); write(path.join(renderer, "wine", "x86_64-windows", "d3d11.dll"), library);
+    return metadata;
+  } } });
+  await manager.refreshCatalog({ userDataDir: root, force: true });
+  await manager.core.installVersion({ userDataDir: root, version: installed.version });
+  assert.equal(manager.getState({ userDataDir: root }).installed[0].componentSummary, undefined, "a state reads retained descriptions only");
+  await manager.prepareLocalState({ userDataDir: root, logger: { warn() {} } });
+  const state = manager.getState({ userDataDir: root }), requirements = state.catalog.versionRequirements;
+  assert.match(state.installed[0].componentSummary, /(?:^| · )DXMT 0\.80-244-g7c8dee1(?: · |$)/);
+  assert.equal(requirements[sameTemplate.version].contents, `Includes ${state.installed[0].componentSummary}.`);
+  assert.equal(requirements[other.version].contents, "The translator versions in Template 1.0.24 are known after download.");
+});
+
 test("Sikarugir download tasks display readable version labels while retaining the exact identifier", async t => {
   const root = temporary(t), row = fixturePin(), manager = fixtureManager({ rows: [row] });
   await manager.refreshCatalog({ userDataDir: root, force: true });
