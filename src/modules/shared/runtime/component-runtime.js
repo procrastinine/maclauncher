@@ -96,6 +96,7 @@ function includedReferences(engine, options = {}) {
   return [...rows.values()];
 }
 function withIncludedReferences(manager) {
+  manager.referenceManagerIds = [...new Set(Object.values(require("../../crossover/manifest.json").runtime.manager))];
   const getState = manager.getState;
   manager.getState = function(options = {}) {
     const state = getState.call(this, options), references = includedReferences(manager.translatorEngine, options);
