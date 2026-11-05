@@ -36,7 +36,7 @@ module.exports={id:manifest.id,manifest,detectGame,resolveSaveLocations,runtimeM
     const input=Input.prepare(entry,context,selected.install);
     const vulkan=Vulkan.resolve(context,vulkanOptions);
     if(!vulkan) throw new Error("A compatible Intel Vulkan runtime is required. Install one in Runtimes.");
-    const environment={...process.env,...Vulkan.environment(vulkan,launch.directory),...input,ANYPS5_VULKAN_LIBRARY:vulkan.library};
+    const environment={APS5_PLAYGO_UNLISTED_CHUNKS:"installed",...process.env,...Vulkan.environment(vulkan,launch.directory),...input,ANYPS5_VULKAN_LIBRARY:vulkan.library};
     delete environment.ANYPS5_MOUSE_ROUTING;
     Object.assign(environment,inputRouting);
     context.onEntryChange?.({defaultSaveDir:entry.defaultSaveDir,moduleData:entry.moduleData});

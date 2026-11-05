@@ -51,6 +51,9 @@ test('AnyPS5 dual-CPU catalogs choose the shared native build and enforce the pa
 });
 
 test('PS5 launch uses shared physical-host translation policy and keeps Intel Vulkan selection', async t => {
+  const savedPlayGo = process.env.APS5_PLAYGO_UNLISTED_CHUNKS;
+  delete process.env.APS5_PLAYGO_UNLISTED_CHUNKS;
+  t.after(() => { if (savedPlayGo === undefined) delete process.env.APS5_PLAYGO_UNLISTED_CHUNKS; else process.env.APS5_PLAYGO_UNLISTED_CHUNKS = savedPlayGo; });
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ps5-native-launch-'));
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
   const executable = path.join(root, 'game'); fs.writeFileSync(executable, require('./fixtures/macho-image').image({cpu: 0x01000007, fileType: 2, installName: null}));
@@ -87,10 +90,16 @@ test('PS5 launch uses shared physical-host translation policy and keeps Intel Vu
       assert.equal(canLaunchEntry({mod: composed, info: composed.manifest, entry, runtimeId, context: {arch: hardwareArch}}), true);
       await composed.launchRuntime(runtimeId, entry, {runtimeId, userDataDir: root, settings: {}, runtimeSettings: {}, ensureRosetta: async () => {prompts++;}});
       assert.equal(launched.at(-1).needsRosetta, hardwareArch === 'arm64');
-      if(runtimeId==='anyps5')assert.equal(launched.at(-1).options.cwd,root);
+      if(runtimeId==='anyps5') {
+        assert.equal(launched.at(-1).options.cwd,root);
+        assert.equal(launched.at(-1).options.env.APS5_PLAYGO_UNLISTED_CHUNKS,'installed');
+      }
       assert.equal(options.at(-1).architecture, 'x64');
     }
     assert.equal(prompts, hardwareArch === 'arm64' ? 2 : 0);
     Architecture.requiresRosetta.mock.restore();
   });
+  process.env.APS5_PLAYGO_UNLISTED_CHUNKS = 'absent';
+  const explicit = await anyps5.launchRuntime('anyps5', entry, {userDataDir: root, settings: {}, runtimeSettings: {}, ensureRosetta: async () => {}});
+  assert.equal(explicit.options.env.APS5_PLAYGO_UNLISTED_CHUNKS,'absent','An explicit inherited PlayGo policy is preserved');
 });

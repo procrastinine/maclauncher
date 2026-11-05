@@ -228,7 +228,7 @@ function validateLaunch(file, prepared, runtime, input, entry, context) {
   if ((!Object.hasOwn(suppliedEnvironment, "DM_PSO_ARCHIVE") || suppliedEnvironment.DM_PSO_ARCHIVE === "") && typeof suppliedEnvironment.DM_ROOT === "string")
     suppliedEnvironment.DM_PSO_ARCHIVE = path.join(suppliedEnvironment.DM_ROOT, "run", "pso_archive");
   for (const [key, value] of Object.entries(suppliedEnvironment)) {
-    if (typeof value !== "string" || value.includes("\0") || value.length > 16384 || key !== "NXNATIVE_PROFILE" && !/^DM_[A-Z0-9_]+$/.test(key)) throw new Error("The prepared Switch environment is invalid.");
+    if (typeof value !== "string" || value.includes("\0") || value.length > 16384 || key !== "NXNATIVE_PROFILE" && key !== "NXNATIVE_UPSCALER_KEYS" && !/^DM_[A-Z0-9_]+$/.test(key)) throw new Error("The prepared Switch environment is invalid.");
     if (PATH_ENVIRONMENT.has(key) && !(key === "DM_PSO_ARCHIVE" && value === "off")) {
       const roots = key === "DM_PSO_ARCHIVE" ? [actualPrepared] : [runtime.root, actualPrepared, input.sourceRoot];
       if (!path.isAbsolute(value) || !roots.some(root => inside(fs.realpathSync(root), canonicalTarget(value)))) throw new Error("The prepared Switch environment escapes its game and runtime folders.");
