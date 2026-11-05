@@ -887,7 +887,7 @@ test('translator source links use one caption with explicit project and Template
   for(const owner of require('../src/modules/shared/vulkan/libraries').managers) {
     const markup=render([{...owner.getState({}),id:owner.id,label:owner.label,ui:owner.ui}],owner.id);
     assert.match(markup,/class="runtimeSourceLink"[^>]*>Source<\/a>/);
-    assert.match(markup, new RegExp('class="runtimeSourceName">'+(owner.backend==='moltenvk'?'MoltenVK':'LWJGL')+'<\\/span>'));
+    assert.ok(markup.includes('class="runtimeSourceName">'+(owner.backend==='moltenvk'?'MoltenVK':'KosmicKrisp (LWJGL build)')+'</span>'));
     assert.doesNotMatch(markup,/class="runtimeSourceName">Source<\/span>|Releases published by the runtime project/);
     if(owner.backend==='moltenvk')assert.match(markup,/MoltenVK releases published by KhronosGroup\/MoltenVK/);
     else assert.match(markup,/KosmicKrisp Vulkan drivers published by LWJGL/);
