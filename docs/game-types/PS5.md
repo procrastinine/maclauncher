@@ -41,9 +41,11 @@ AnyPS5 supplies a PS5 runtime rather than a native macOS game engine. Preparatio
 
 The container is the runtime's working directory. Its `/data` path uses the game's private save directory and `_sd` uses a subfolder there. An explicit save-location setting redirects both paths into the chosen save folder. Save-data memory stays in the per-game container's `launch/_sd_mem/`, keyed by user and slot, separate from the original game files.
 
+PlayGo metadata describes which game chunks are installed. AnyPS5 treats an unlisted chunk as installed, including dumps without that metadata. An explicit `APS5_PLAYGO_UNLISTED_CHUNKS` environment value takes precedence.
+
 #### Vulkan
 
-AnyPS5's **Vulkan** setting selects an installed Vulkan implementation with Intel support, because ARM-only Vulkan libraries cannot load into the game process, which runs under Rosetta. Automatic prefers a compatible KosmicKrisp and offers to download it when needed. **Settings → PlayStation 5 → PS5 (AnyPS5)** sets the default for all games, and each game's runtime settings can override it. The list shows installed implementations.
+AnyPS5's **Vulkan** setting selects an installed Vulkan implementation with Intel support, because ARM-only Vulkan libraries cannot load into its x86-64 game process. Automatic prefers a compatible KosmicKrisp and offers to download it when needed. **Settings → PlayStation 5 → PS5 (AnyPS5)** sets the default for all games, and each game's runtime settings can override it. The list shows installed implementations.
 
 #### Controller bindings
 

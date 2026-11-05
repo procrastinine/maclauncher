@@ -44,7 +44,7 @@ A working setup has three components: the nxnative runtime, the native tools and
 
 On a first Play with nothing installed, MacLauncher asks before listing upstream commits and installing a snapshot, and asks again before downloading the native tools.
 
-**Build the upstream host when needed** is disabled by default and needs Xcode. During preparation, native tools that support this option build the selected snapshot's unmodified host when the packaged host is missing or comes from another revision. Builds are cached by snapshot revision and game title ID. Missing build tools or a build failure produces a warning and retains the packaged host. Earlier native-tools versions ignore this option.
+**Build the upstream host when needed** is disabled by default and needs Xcode. During preparation, native tools that support this option build the selected snapshot's unmodified host when the packaged host is missing or comes from another revision. Builds are cached by snapshot revision and game title ID. Missing build tools or a build failure produces a warning and retains the packaged host. Native-tools packages without upstream-host build support ignore this option.
 
 #### Metal compiler
 
