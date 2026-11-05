@@ -363,6 +363,51 @@ test("targeted runtime refresh updates source-owned references on first host add
   assert.deepEqual(events.map(row => row.id), [host.id, component.id, unrelated.id]);
 });
 
+test("runtime actions publish actual Included references after host installation and removal without a restart", async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-action-references-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", () => assert.fail("Host state changes must not refresh catalogs"));
+  const manifest = require("../src/modules/crossover/manifest.json"), Component = require("../src/modules/shared/runtime/component-runtime");
+  const { RELATIVE_PATHS } = require("../src/modules/crossover/sikarugir/graphics/closure");
+  const { image, X64 } = require("./fixtures/macho-image"), { peFixture } = require("./helpers/pe-fixture");
+  const put = (relative, bytes) => { const file = path.join(root, relative);fs.mkdirSync(path.dirname(file), { recursive: true });fs.writeFileSync(file, bytes);return file; };
+  const engineRoot = path.join(root, "host/wine"), templateRoot = path.join(root, "host/support");
+  put("host/wine/lib/wine/x86_64-unix/wine", image({ cpu: X64, fileType: 2 }));
+  const dll = peFixture({ is64: true });dll.bytes.writeUInt16LE(0x2002, dll.peOffset + 22);
+  put(path.join("host/support", RELATIVE_PATHS.renderers, "dxvk/x86_64-windows/d3d11.dll"), dll.bytes);
+  put(path.join("host/support", RELATIVE_PATHS.renderers, "dxvk/version"), "DXVK-Sikarugir-async-v1.10.3\nD9VK-Sikarugir-v2.3\n");
+  const copy = { version: "10.0_8-template-1.0.24", engineVersion: "10.0_8", templateVersion: "1.0.24",
+    engineRoot, templateRoot, installDir: path.join(root, "host"), ready: true };
+  const copies = [], events = [], published = new EventEmitter();let unrelatedReads = 0;
+  const host = { id: manifest.runtime.manager.sikarugir, core: { listInstalled: () => copies },
+    getState: () => ({ installed: [...copies] }),
+    installRuntime: async () => { copies.push(copy);return copy; },
+    uninstallRuntime: async () => { copies.length = 0;return true; } };
+  const component = Component.withIncludedReferences({ id: "fixture-dxvk", translatorEngine: "dxvk", getState: () => ({ installed: [] }) });
+  const unrelated = { id: "unrelated", getState() { unrelatedReads++;return { installed: [] }; } };
+  const mod = { manifest, runtimeManagers: [host, component, unrelated] };
+  const registry = { listModuleIds: () => [manifest.id], listModules: () => [manifest], getModule: () => mod,
+    getModuleInfo: () => manifest, getModuleDir: () => root, listSharedRuntimeManagers: () => [], getRuntimeManagerUi: () => null };
+  t.mock.method(require("../src/modules/registry"), "getModule", id => id === manifest.id ? mod : null);
+  const operations = createBackendOperations({ userDataDir: path.join(root, "data"), registry,
+    emit: (event, payload) => { if (event === "runtimeState") { events.push(payload);published.emit(payload.id, payload.state); } } });
+  t.after(() => operations.beginShutdown());
+  await operations.runtimeStates({}, [component.id]);assert.equal(events.at(-1).state.references, undefined);
+  for (const action of ["install", "uninstall"]) {
+    events.length = 0;const changed = once(published, component.id);
+    await operations.runtimeAction(host.id, action, { version: copy.version });
+    const [state] = await changed;
+    assert.deepEqual(events.map(event => event.id), [host.id, component.id]);
+    if (action === "install") {
+      assert.equal(state.references.length, 1);
+      assert.deepEqual(state.references[0].reference, { managerId: host.id, version: copy.version, path: copy.installDir });
+      assert.equal(state.references[0].readOnly, true);
+    } else { assert.equal(state.references, undefined);assert.deepEqual(state.installed, []); }
+  }
+  assert.equal(unrelatedReads, 0, "Host actions do not refresh unrelated managers");
+  assert.equal(fs.existsSync(path.join(templateRoot, RELATIVE_PATHS.renderers, "dxvk/version")), true, "Reference refresh never removes source files");
+});
+
 test("a failed runtime inventory is isolated and never hides other managers", async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-state-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

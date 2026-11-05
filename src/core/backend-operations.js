@@ -316,7 +316,7 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
             extensions: catalog.importExtensions || manager.importExtensions || [] });
         },
         chooseInstalledActionInput: descriptor => callHost("chooseInstalledActionInput", descriptor),
-        onStateChange: () => emit("runtimeState", { id: managerId, state: managerState(manager, launcher.loadSettings()) })
+        onStateChange: () => operations.runtimeStates(launcher.loadSettings(), [managerId])
       });
       return result;
     },
