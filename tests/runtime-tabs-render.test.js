@@ -880,7 +880,7 @@ test('translator source links use one caption with explicit project and Template
     const markup=render([state],owner.id);
     const links=[...markup.matchAll(/class="runtimeSourceLink"[^>]*>([^<]+)<\/a>/g)].map(match=>match[1]);
     assert.ok(links.length);if(engine!=='gstreamer')assert.ok(links.every(label=>label==='Source'));
-    if(engine==='dxvk') { assert.match(markup,/DXVK-macOS/);assert.match(markup,/builtin-layout async packages/);assert.match(markup,/DXVK components from Sikarugir Templates/); }
+    if(engine==='dxvk') { assert.match(markup,/DXVK-macOS/);assert.match(markup,/builtin-layout async packages/);assert.match(markup,/dxvk variant supplies DXVK async and D9VK for MoltenVK/);assert.match(markup,/dxvk3 supplies DXVK for KosmicKrisp/); }
     if(engine==='dxmt')assert.match(markup,/copies taken from a Sikarugir Template release/);
     if(engine==='gstreamer') { assert.match(markup,/GStreamer macOS runtime/);assert.match(markup,/Runtime framework packages published by GStreamer/);assert.match(markup,/runtimeSources/);assert.doesNotMatch(markup,/No downloadable versions/); }
   }
@@ -1290,4 +1290,32 @@ test('cached vkd3d publisher releases order numeric cores before letter revision
   const {compareVersions}=require('../src/modules/shared/runtime/version-order.mjs');
   assert.ok(compareVersions('v1.10.3-47-gb144ae28','v1.10.3')>0);assert.ok(compareVersions('1.4.2-rc1','1.4.2')<0);
   assert.equal(compareVersions('v3.0','3.0.0'),0);assert.equal(compareVersions('1.10.3-aaaaaaa','1.10.3-bbbbbbb'),0,'opaque hash-only variants retain publisher order');
+});
+
+test('cached GStreamer development series remain available while stable releases are preselected offline', t => {
+  const fs=require('node:fs'),os=require('node:os'),root=fs.mkdtempSync(path.join(os.tmpdir(),'gstreamer-stable-choice-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const CrossOver=require('../src/modules/crossover/runtime/manager'),Sika=require('../src/modules/crossover/sikarugir/runtime/manager');
+  t.mock.method(CrossOver.core,'listInstalled',()=>[]);const prior=Sika.core;Sika.core={...prior,listInstalled:()=>[]};t.after(()=>Sika.core=prior);
+  t.mock.method(globalThis,'fetch',()=>assert.fail('Stable catalog selection must not refresh'));
+  const {createManager}=require('../src/modules/shared/runtime/translator-managers'),owner=createManager('gstreamer');
+  const releases=['1.29.2','1.28.8','1.29.1','1.26.11'],entries=releases.map(release=>({version:release+'-universal',upstreamRevision:release+'-universal',catalogSourceId:'upstream',architecture:'universal',
+    sourceUrl:`https://gstreamer.freedesktop.org/data/pkg/osx/${release}/`,asset:{filename:`gstreamer-1.0-${release}-universal.pkg`,url:`https://gstreamer.freedesktop.org/data/pkg/osx/${release}/gstreamer-1.0-${release}-universal.pkg`,integrity:'recorded-local'}}));
+  const Catalog=require('../src/modules/shared/runtime/runtime-catalog');Catalog.writeRuntimeCatalog({userDataDir:root,managerId:owner.id,source:owner.getState({}).catalog.sourceUrl,entries});
+  const file=Catalog.catalogPath(root,owner.id),before=fs.readFileSync(file),state=owner.getState({userDataDir:root});
+  assert.equal(state.defaultVersion,'1.28.8-universal');assert.equal(state.catalog.versionRequirements['1.29.2-universal'].prerelease,true);assert.notEqual(state.catalog.versionRequirements['1.28.8-universal'].prerelease,true);
+  const runtime={...state,id:owner.id,label:owner.label,ui:owner.ui},markup=render([runtime],owner.id);
+  assert.match(markup,/value="1\.28\.8-universal" selected/);assert.match(markup,/value="1\.29\.2-universal"[^>]*>[^<]*pre-release/);
+  for(const entry of entries)assert.ok(state.catalog.versions.includes(entry.version));assert.deepEqual(fs.readFileSync(file),before);
+  const ui={remoteOpen:{},installVersion:{default:'1.29.2-universal'},installVariant:{},installedSort:{},pendingActions:{},messages:{},sourceErrors:{}};
+  assert.match(render([runtime],owner.id,{runtimeUi:{[owner.id]:ui}}),/value="1\.29\.2-universal" selected/,'explicit development choices are retained');
+  const {developmentRelease}=require('../src/modules/shared/runtime/gstreamer-source');assert.equal(developmentRelease({version:'7.43.1-universal'}),true);assert.equal(developmentRelease({version:'7.44.1-universal'}),false);assert.equal(developmentRelease({version:'publisher-build'}),false);
+});
+
+test('Template DXVK source describes its variant driver pairing without assigning package versions to components', () => {
+  const owner=require('../src/modules/shared/runtime/translator-managers').createManager('dxvk'),state=owner.getState({});
+  const template=state.catalog.sources.find(source=>source.id==='template');assert.equal(template.secondary,true);
+  assert.match(template.description,/dxvk variant supplies DXVK async and D9VK for MoltenVK/);assert.match(template.description,/dxvk3 supplies DXVK for KosmicKrisp/);
+  assert.match(template.description,/Installed libraries supply their component versions/);
+  const markup=render([{...state,id:owner.id,label:owner.label,ui:owner.ui}],owner.id);
+  assert.match(markup,/dxvk3 supplies DXVK for KosmicKrisp/);assert.match(markup,/data-runtime-source="template"/);
 });

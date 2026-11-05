@@ -182,7 +182,6 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       const declared = candidates.filter(pin => [installationArchitecture, "universal"].includes(pinArchitecture(pin)));
       return declared.length ? declared : candidates;
     };
-    const preview = previewPin;
     const listed = nativeDefaults(remoteEntries.filter(pin => eligible(pin) && !assetReason(pin))).sort((a, b) => Number(preview(a)) - Number(preview(b)) || compareRuntimeVersions(a.version, b.version)).map(pin => pin.version);
     const installed = nativeDefaults(listRuntimeRows(userDataDir).filter(row => row.ready !== false && eligible({ ...(row.catalogEntry || entries.get(row.version) || row), ...(row.minimumMacOS ? { minimumMacOS: row.minimumMacOS } : {}) }) &&
       (verification === "status" || resolveInstalled({ userDataDir, version: row.version, verification })))).map(row => row.version).sort(compareRuntimeVersions);
@@ -236,6 +235,8 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
   const versionFolders = (userDataDir, version) => installBases(userDataDir).flatMap(base =>
     [path.join(base, version), ...["arm64", "x64", "universal"].map(architecture => path.join(base, architecture, version))]);
   const entrySource = entry => entry.catalogSourceId || (entry.projectPackage ? "builds" : "upstream");
+  const sourceFor = pin => catalogSources?.find(source => source.id === entrySource(pin));
+  const preview = pin => previewPin(pin) || Boolean(sourceFor(pin)?.isPrerelease?.(pin));
   function mergeEntries(incoming, sourceId) {
     if (!Array.isArray(incoming)) throw new Error("Discovered runtime catalog is not a version list.");
     // Rows this launcher cannot read are left out. A discovery answer without a
@@ -845,7 +846,6 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
   function getState({ settings, userDataDir } = {}) {
     loadCatalog(userDataDir);
     const cfg = normalizeSettings(settings);
-    const sourceFor = pin => catalogSources?.find(source => source.id === entrySource(pin));
     const sortVersion = pin => String(sourceFor(pin)?.versionOf?.(pin) || require("./version-order.mjs").catalogVersion(pin));
     const installed = (userDataDir || bundledExecution === "direct" ? listRuntimeRows(userDataDir) : [])
       .map(row => ({ ...row, sortVersion: sortVersion(row.catalogEntry || entries.get(row.version) || row) }));
@@ -897,7 +897,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
           const minimumMacOS = registration?.catalogEntry?.minimumMacOS || registration?.minimumMacOS || bundle?.minimumMacOS || pin.minimumMacOS || null;
           return [pin.version, { minimumMacOS, architecture: pinArchitecture(pin), installReason: hostReason({ ...pin, minimumMacOS: minimumMacOS || undefined }) || assetReason(pin) || pin.installReason || null,
             included: includedVersions.includes(pin.version), available: installed.some(item => item.version === pin.version && item.ready),
-            ...(previewPin(pin) ? { prerelease: true } : {}),
+            ...(preview(pin) ? { prerelease: true } : {}),
             ...(Array.isArray(pin.hostArchitectures) && pin.hostArchitectures.length ? { hostArchitectures: pin.hostArchitectures.map(Architecture.normalizeArchitecture).filter(Boolean) } : {}),
             requiresDownload: !bundle && Boolean(pin.asset || (projectPackages || pin.projectPackage) && !pin.deprecated),
             requiresBuild: !bundle && !pin.asset && sourceAvailable && pin.localBuild !== false && !pin.deprecated,

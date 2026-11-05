@@ -5,7 +5,7 @@ const { archiveFormat } = require("./release-files");
 const dxvkUpstream = { id: "upstream", label: "DXVK", description: "Windows PE builds from DXVK and its historical projects. DXVK 2.x and 3.x require Vulkan 1.3 and the driver features supplied by compatible KosmicKrisp builds." };
 const dxvkMacOS = { id: "macos", label: "DXVK-macOS", secondary: true, description: "DXVK-macOS targets MoltenVK. CrossOver uses builtin-layout async packages; plain-layout packages are separate." };
 const macOSOfferForms = { crossover: "builtin" };
-const dxvkTemplate = { id: "template", label: "Sikarugir Template", secondary: true, description: "DXVK components from Sikarugir Templates. Installed libraries supply their component versions and Direct3D API coverage." };
+const dxvkTemplate = { id: "template", label: "Sikarugir Template", secondary: true, description: "The dxvk variant supplies DXVK async and D9VK for MoltenVK; dxvk3 supplies DXVK for KosmicKrisp. Installed libraries supply their component versions and Direct3D API coverage." };
 const definitions = {
   gstreamer: { label: "GStreamer codecs", groupId: "codecs", sourceName: "GStreamer", sourceDescription: "GStreamer runtime packages and prepared local codec folders. Included plugins remain with their source Wine runtime.",
     upstreamUrl: "https://gstreamer.freedesktop.org/download/", upstreamLabel: "GStreamer downloads", memberOrder: 30,

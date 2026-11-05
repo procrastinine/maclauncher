@@ -4,6 +4,13 @@ const { upstreamPins } = require("./pinned-native-manager");
 const Architecture = require("./architecture");
 const URL_ROOT = "https://gstreamer.freedesktop.org/data/pkg/osx/";
 
+// GStreamer's odd minor series are development releases. Package CPU suffixes
+// do not change the publisher's release series.
+function developmentRelease(pin) {
+  const minor = /^v?\d+\.(\d+)(?:\.|$)/.exec(pin.releaseVersion || pin.upstreamTag || pin.version || "");
+  return Boolean(minor && Number(minor[1]) % 2);
+}
+
 function links(document) {
   const found = new Map();
   for (const match of document.text.matchAll(/<a\b[^>]*href=["']([^"']+)["']/gi)) {
@@ -35,7 +42,8 @@ const upstream = Upstream.index({ locations: [URL_ROOT], hosts: ["gstreamer.free
             if (!digest) logger?.warn?.(`GStreamer checksum metadata is unavailable for ${name}.`);
           } catch (error) { if (error.name === "AbortError") throw error; logger?.warn?.(`GStreamer checksum metadata: ${error.message}`); }
         }
-        rows.push({ version: name.replace(/^gstreamer-1\.0-/i, "").replace(/\.pkg$/i, ""),
+        const version = name.replace(/^gstreamer-1\.0-/i, "").replace(/\.pkg$/i, "");
+        rows.push({ version, ...(developmentRelease({ version }) ? { prerelease: true } : {}),
           label: `GStreamer ${name.replace(/^gstreamer-1\.0-/i, "").replace(/\.pkg$/i, "")} runtime`,
           architecture: Architecture.assetArchitecture(name), sourceUrl: folder.href,
           files: [{ name, url: asset.href, ...(digest ? { digest, algorithm: "sha256" } : {}) }] });
@@ -53,5 +61,6 @@ const upstream = Upstream.index({ locations: [URL_ROOT], hosts: ["gstreamer.free
 
 const catalogSource = { id: "upstream", label: "GStreamer macOS runtime", url: URL_ROOT,
   description: "Runtime framework packages published by GStreamer. Development and debug packages are separate.",
+  isPrerelease: developmentRelease,
   discover: async options => upstreamPins(await upstream.discover(options)) };
-module.exports = { upstream, catalogSource };
+module.exports = { upstream, catalogSource, developmentRelease };
