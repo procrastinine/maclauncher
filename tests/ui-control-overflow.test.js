@@ -66,8 +66,8 @@ test("one release under differently separated labels reads as one release", asyn
     catalog: { versionLabels: { "1.0.0-preview.5f358ef1360b": "1.0.0 · preview 5f358ef" } } };
   const tag = runtimeVersionTagger(section);
   assert.equal(tag("1.0.0-preview.5f358ef1360b"), "v1.0.0-preview");
-  assert.equal(tag("1.0.0-preview.5f358ef1360b-MCLv2-1028-1"), "v1.0.0-preview · MacLauncher Builds");
-  assert.equal(tag("1.0.0-preview.5f358ef1360b-MCLv1-1028-1"), "v1.0.0-preview · MacLauncher Builds · earlier build");
+  assert.equal(tag("1.0.0-preview.5f358ef1360b-MCLv2-1028-1"), "v1.0.0-preview · MCLv2 · MacLauncher Builds");
+  assert.equal(tag("1.0.0-preview.5f358ef1360b-MCLv1-1028-1"), "v1.0.0-preview · MCLv1 · MacLauncher Builds");
   assert.equal(formatRuntimeVersionTag("10.0_8-template", { versionLabels: { "10.0_8-template": "10.0 · revision 8 · 2a6bcf2a · support 1.0.24 (4b5f89ee)" } }),
     "v10.0 · revision 8 · support 1.0.24");
 });

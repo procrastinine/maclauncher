@@ -187,10 +187,10 @@ export function formatRuntimeVersionTag(
 }
 
 /** Version labels for everything one runtime section lists. When two versions
- * read the same, a MacLauncher Builds package beside the publisher's own file
- * names its source, older package revisions of one upstream version read as
- * earlier builds, and other ties are numbered in list order. The exact version
- * remains the option value and tooltip. */
+ * read the same, each MacLauncher Builds package adds its package revision
+ * ("v2.4.2 · MCLv8"), and names its source when it sits beside the publisher's
+ * own file ("v2.4.2 · MCLv1 · MacLauncher Builds"). Other ties are numbered in
+ * list order. The exact version remains the option value and tooltip. */
 export function runtimeVersionTagger(
   runtimeSection: Record<string, any> | null | undefined,
   extra: Array<string | null | undefined> = []
@@ -218,12 +218,15 @@ export function runtimeVersionTagger(
   }
   const labels = new Map<string, string>();
   for (const { label, members } of groups.values()) {
-    const packaged = members.filter(version => packageRevision(version) !== null)
-      .sort((a, b) => (packageRevision(b) as number) - (packageRevision(a) as number));
+    const packaged = members.filter(version => packageRevision(version) !== null);
     const other = members.filter(version => packageRevision(version) === null);
     other.forEach((version, index) => labels.set(version, index ? `${label} (${index + 1})` : label));
-    packaged.forEach((version, index) => labels.set(version, [label, other.length ? "MacLauncher Builds" : "", index ? "earlier build" : ""]
-      .filter(Boolean).join(" · ") + (index > 1 ? ` (${index})` : "")));
+    for (const version of packaged) {
+      const revision = packageRevision(version);
+      // Packages sharing one revision, such as two build profiles, name their exact versions.
+      const name = packaged.some(item => item !== version && packageRevision(item) === revision) ? version : `MCLv${revision}`;
+      labels.set(version, members.length > 1 ? [label, name, other.length ? "MacLauncher Builds" : ""].filter(Boolean).join(" · ") : label);
+    }
   }
   return version => labels.get(version) ?? formatRuntimeVersionTag(version, runtimeSection);
 }

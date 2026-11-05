@@ -567,19 +567,30 @@ test('runtime version labels stay distinct when builds share an upstream version
   const { runtimeVersionTagger, runtimeVersionOptions, resolveRuntimeVersionLabel } = components;
   const tag = runtimeVersionTagger({ installed: [{ version: '0.41.0-MCLv6' }, { version: '0.41.0-MCLv7' }], catalog: { versions: ['0.42.0-MCLv1', '0.42.0'] } });
   assert.equal(tag('0.42.0'), 'v0.42.0');
-  assert.equal(tag('0.42.0-MCLv1'), 'v0.42.0 · MacLauncher Builds');
-  assert.equal(tag('0.41.0-MCLv7'), 'v0.41.0');
-  assert.equal(tag('0.41.0-MCLv6'), 'v0.41.0 · earlier build');
+  assert.equal(tag('0.42.0-MCLv1'), 'v0.42.0 · MCLv1 · MacLauncher Builds');
+  assert.equal(tag('0.41.0-MCLv7'), 'v0.41.0 · MCLv7');
+  assert.equal(tag('0.41.0-MCLv6'), 'v0.41.0 · MCLv6');
+  // Package revisions of one upstream version, and packages named only by their revision, read as their revisions.
+  const mkxpz = runtimeVersionTagger({ installed: [{ version: '2.4.2-MCLv8' }], catalog: { versions: ['2.4.2-MCLv7'] } });
+  assert.deepEqual(['2.4.2-MCLv8', '2.4.2-MCLv7'].map(mkxpz), ['v2.4.2 · MCLv8', 'v2.4.2 · MCLv7']);
+  const anyps5 = runtimeVersionTagger({ installed: [{ version: 'MCLv9' }], catalog: { versions: ['MCLv8'] } });
+  assert.deepEqual(['MCLv9', 'MCLv8'].map(anyps5), ['MCLv9', 'MCLv8']);
+  const many = runtimeVersionTagger({ catalog: { versions: ['2.4.2-MCLv8', '2.4.2-MCLv7', '2.4.2-MCLv6', '2.4.2'] } });
+  assert.deepEqual(['2.4.2-MCLv8', '2.4.2-MCLv7', '2.4.2-MCLv6', '2.4.2'].map(many),
+    ['v2.4.2 · MCLv8 · MacLauncher Builds', 'v2.4.2 · MCLv7 · MacLauncher Builds', 'v2.4.2 · MCLv6 · MacLauncher Builds', 'v2.4.2']);
+  // Two packages with one revision and date name their exact versions.
+  const profiles = runtimeVersionTagger({ catalog: { versions: ['MCLv1-1028-kag3-1', 'MCLv1-1028-1'] } });
+  assert.deepEqual(['MCLv1-1028-kag3-1', 'MCLv1-1028-1'].map(profiles),
+    ['Development build (Oct 28) · MCLv1-1028-kag3-1', 'Development build (Oct 28) · MCLv1-1028-1']);
   const dated = runtimeVersionTagger({ catalog: { versions: ['MCLv3-1007', 'MCLv2-1007', 'MCLv1-0921'] } });
   assert.deepEqual(['MCLv3-1007', 'MCLv2-1007', 'MCLv1-0921'].map(dated),
-    ['Development build (Oct 7)', 'Development build (Oct 7) · earlier build', 'Development build (Sep 21)']);
+    ['Development build (Oct 7) · MCLv3', 'Development build (Oct 7) · MCLv2', 'Development build (Sep 21)']);
   const hashed = runtimeVersionTagger({ catalog: { versions: ['0.1.0-afa08284-7f7f8af9', '0.1.0-8da3e063-ba5d556d', '0.1.0'] } });
   assert.deepEqual(['0.1.0-afa08284-7f7f8af9', '0.1.0-8da3e063-ba5d556d', '0.1.0'].map(hashed), ['v0.1.0', 'v0.1.0 (2)', 'v0.1.0 (3)']);
   assert.equal(resolveRuntimeVersionLabel('2026-01-12T18-22-32Z_794d1897abe529a23f3f2f9c4f72d711a3b18391', null), '2026-01-12');
   const options = runtimeVersionOptions([{ value: '', label: 'Default' }, { value: '1.0-MCLv1', label: '1.0-MCLv1' }, { value: '1.0-MCLv2', label: '1.0-MCLv2' }]);
   assert.equal(options[0].label, 'Default');
-  assert.equal(new Set(options.map(option => option.label)).size, options.length);
-  assert.ok(options.slice(1).every(option => !option.label.includes('MCLv')));
+  assert.deepEqual(options.map(option => option.label), ['Default', 'v1.0 · MCLv1', 'v1.0 · MCLv2']);
 });
 test('error formatting never shows a user name or password from a proxy or download URL', () => {
   const { formatUserError } = components;
