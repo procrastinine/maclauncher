@@ -327,9 +327,12 @@ async function confirmRuntimeInstallation(plan, entry, {signal} = {}) {
   // `signal` closes the dialog as cancelled when its request is superseded.
   if (signal?.aborted) return false;
   const versionLabel = [plan.label, plan.versionLabel || plan.version].filter(Boolean).join(" ");
+  // Optional companions of this download are listed with their version and size.
+  const companions = (Array.isArray(plan.companions) ? plan.companions : []).map(item =>
+    `Also downloads ${[item.label, item.versionLabel].filter(Boolean).join(" ")}${item.bytes > 0 ? ` (${Math.max(0.1, item.bytes / 1048576).toFixed(1)} MB)` : ""}. ${item.summary || ""}`.trim());
   const options = { type: "question", buttons: [plan.confirmLabel || "Download and Play", plan.cancelLabel || "Cancel"], defaultId: 0, cancelId: 1, ...(signal ? {signal} : {}),
     message: plan.message || `${plan.kind === "prerequisite" ? "Install" : "Download"} ${versionLabel}?`,
-    detail: plan.detail || (entry ? `Required to run ${entry.name || path.basename(entry.gamePath)}.` : "Required by this runtime.") };
+    detail: [plan.detail || (entry ? `Required to run ${entry.name || path.basename(entry.gamePath)}.` : "Required by this runtime."), ...companions].join("\n\n") };
   const owner = getLauncherDialogOwner();
   const choice = owner ? await dialog.showMessageBox(owner, options) : await dialog.showMessageBox(options);
   return choice.response === 0 ? plan.licenseRequired ? { approved: true, licenseAccepted: true } : true : false;

@@ -128,9 +128,16 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
   let plans = await runtimePlans(entry, mod, info, context, managers);
   const approved = new Set(), refreshed = new Set(), declined = new Set();
   const consentKey = plan => JSON.stringify([plan.managerId, Object.entries(plan.installOptions || {}).sort(([a], [b]) => a.localeCompare(b))]);
+  // A manager may remember an optional download that was declined or failed,
+  // so later Plays do not offer it again.
+  function skipped(plan) {
+    try { managers.find(manager => manager.id === plan.managerId)?.skipOptional?.(plan, { userDataDir: context.userDataDir }); }
+    catch (error) { context.logger?.warn?.("[runtimes] The optional download choice could not be kept.", error.message); }
+  }
   function useFallback(plan, error) {
     if (!plan.optional || (!plan.fallback && !plan.silentFallback) || context.signal?.aborted) return false;
     declined.add(consentKey(plan));
+    skipped(plan);
     if (plan.silentFallback) return true;
     const label = `${managers.find(manager => manager.id === plan.managerId)?.label || plan.label || plan.managerId} could not be installed. Using ${managers.find(manager => manager.id === plan.fallback.managerId)?.label || plan.fallback.label || plan.fallback.managerId}.`;
     context.logger?.warn?.("[runtimes] " + label, error.message);
@@ -153,32 +160,34 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
       const installedBefore = (state?.sections || [state]).flatMap(item => item?.installed || []).map(row => String(row?.version));
       return { manager, plan, requiresDownload, versionLabel, installedBefore };
     });
-    // Consent covers discovery and acquisition before either occurs.
+    // Consent covers discovery and acquisition before either occurs. Each
+    // download has its own dialog. An optional companion, such as a package
+    // matched to the selected runtime, is listed in the dialog of a required
+    // download of the same Play; without one it has its own dialog, and
+    // declining it continues Play.
     let fallbackRequired = false;
-    const pendingConsent = installations.filter(({ plan, requiresDownload }) =>
-      (requiresDownload || !plan.version || plan.discoveryRequired) && !approved.has(consentKey(plan)) && !declined.has(consentKey(plan)));
-    if (pendingConsent.some(({ plan }) => plan.groupConsent)) {
-      const required = pendingConsent.filter(({ plan }) => !plan.optional);
-      const first = required[0] || pendingConsent[0];
-      const components = pendingConsent.map(({ manager, plan, versionLabel }) => ({ ...plan,
-        label: plan.label || manager.label || manager.id, ...(versionLabel ? { versionLabel } : {}) }));
-      const accepted = await downloadApproved(context, { ...first.plan, label: first.plan.label || first.manager.label,
-        components, detail: components.map(plan => `${plan.label}${plan.bytes ? ` (${(plan.bytes / 1048576).toFixed(1)} MB)` : ''}`).join('\n') });
-      if (!accepted && required.length) return false;
-      for (const { plan } of pendingConsent) (accepted ? approved : declined).add(consentKey(plan));
-    }
+    const pending = ({ plan, requiresDownload }) => (requiresDownload || !plan.version || plan.discoveryRequired) &&
+      !approved.has(consentKey(plan)) && !declined.has(consentKey(plan));
+    const host = installations.find(item => !item.plan.optional && pending(item));
+    const companions = host ? installations.filter(item => item.plan.optional && item.plan.companion && pending(item)) : [];
     for (const { manager, plan, requiresDownload, versionLabel } of installations) {
       const key = consentKey(plan);
-      if (declined.has(key)) continue;
+      if (declined.has(key) || companions.some(item => item.plan === plan)) continue;
       if ((requiresDownload || !plan.version || plan.discoveryRequired) && !approved.has(key)) {
+        const listed = host?.plan === plan ? companions : [];
         if (!await downloadApproved(context, { ...plan, ...(versionLabel ? { versionLabel } : {}),
-          label: plan.label || manager.label || manager.id, requiresDownload })) {
+          label: plan.label || manager.label || manager.id, requiresDownload,
+          ...(listed.length ? { companions: listed.map(item => ({ label: item.plan.label || item.manager.label || item.manager.id,
+            ...(item.versionLabel || item.plan.version ? { versionLabel: item.versionLabel || item.plan.version } : {}),
+            ...(item.plan.bytes ? { bytes: item.plan.bytes } : {}), ...(item.plan.summary ? { summary: item.plan.summary } : {}) })) } : {}) })) {
           if (!plan.optional) return false;
           declined.add(key);
+          skipped(plan);
           fallbackRequired ||= Boolean(plan.fallback);
           continue;
         }
         approved.add(key);
+        for (const item of listed) approved.add(consentKey(item.plan));
       }
     }
     if (fallbackRequired) continue;

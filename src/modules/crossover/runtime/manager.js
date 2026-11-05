@@ -172,6 +172,8 @@ function resolveSelection(entry, settings, userDataDir, runtimeSettings) {
 }
 const manager = { id: "crossover", label: "CrossOver", ui: { groupId: "crossover", tabLabel: "CrossOver", order: 200, memberOrder: 0 }, normalizeSettings, prepareLocalState, getState, importRuntime, uninstallRuntime, resolveSelection,
   refreshCatalog: async ({ userDataDir } = {}) => {
+    // An explicit Refresh offers a declined graphics integration again.
+    require('./winemac').clearSkipped(userDataDir);
     await require('./winemac').prune(userDataDir);
     return getState({ userDataDir }).catalog;
   },

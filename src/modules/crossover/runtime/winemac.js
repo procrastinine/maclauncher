@@ -1,7 +1,9 @@
+const path = require('node:path');
 const Architecture = require('../../shared/runtime/architecture');
 const { createProjectBuildManager } = require('../../shared/runtime/project-build-manager');
 const Bundled = require('../../shared/runtime/bundled-native');
 const { compareRuntimeVersions } = require('../../shared/runtime/pinned-native-manager');
+const { readJsonObject, writeJsonAtomic } = require('../../../core/json-files');
 
 const id = 'maclauncher-crossover-winemac';
 function matches(profile, installation) {
@@ -22,26 +24,47 @@ function create({ dependencies = {}, applications = userDataDir => require('./ma
     },
     async verifyPayload(selected) { Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency); }, dependencies });
   const options = { architecture: 'x64' };
+  // Installed packages are listed by their records; the graphics loader
+  // checks the bytes of the library that a launch links.
   const rows = userDataDir => Architecture.withArchitecture('x64', () => base.core.listInstalled(userDataDir)).map(row => {
-    const selected = base.resolveSelection(null, {}, userDataDir, { ...options, version: row.version });
+    const selected = base.resolveSelection(null, {}, userDataDir, { ...options, version: row.version, verification: 'status' });
     return selected.ready ? selected.install : null;
   }).filter(Boolean);
-  function installed(installation, userDataDir) {
-    return rows(userDataDir).filter(row => matches(row.manifest.capabilities.runtimeProfile, installation))
+  function installed(installation, list) {
+    return list.filter(row => matches(row.manifest.capabilities.runtimeProfile, installation))
       .sort((a, b) => compareRuntimeVersions(a.version, b.version))[0] || null;
   }
+  // A declined or failed download is remembered for its CrossOver release and
+  // build, so Play offers it again only for another release or after an
+  // explicit CrossOver Refresh.
+  const skippedFile = userDataDir => path.join(userDataDir, 'runtimes', 'crossover-graphics-integration-skipped.json');
+  const releaseKey = installation => JSON.stringify([installation?.upstreamVersion, installation?.buildVersion]);
+  function skippedReleases(userDataDir) {
+    const releases = userDataDir && readJsonObject(skippedFile(userDataDir))?.releases;
+    return Array.isArray(releases) ? releases.filter(value => typeof value === 'string') : [];
+  }
+  function keepSkipped(userDataDir, releases) {
+    if (releases.length || skippedReleases(userDataDir).length) writeJsonAtomic(skippedFile(userDataDir), { schemaVersion: 1, releases: [...new Set(releases)] });
+  }
+  function skipOptional(plan, { userDataDir } = {}) {
+    if (!userDataDir || !plan?.release) return;
+    keepSkipped(userDataDir, [...skippedReleases(userDataDir), releaseKey({ upstreamVersion: plan.release.version, buildVersion: plan.release.build })]);
+  }
+  function clearSkipped(userDataDir) { if (userDataDir) keepSkipped(userDataDir, []); }
   const manager = { ...base, ui: { hidden: true }, distributionRequired: false };
+  // One package is kept for each registered CrossOver release: the newest
+  // revision. Nothing is inspected while no package is installed.
   async function prune(userDataDir) {
+    const list = rows(userDataDir), skipped = skippedReleases(userDataDir);
+    if (!list.length && !skipped.length) return;
     const registered = applications(userDataDir);
     // An unavailable registered application has no observable release. Retain
     // its package until that application is available or unregistered.
     if (registered.some(row => row.ready === false)) return;
-    const retained = new Set();
-    for (const installation of registered) {
-      const current = installed(installation, userDataDir);
-      if (current) retained.add(current.version);
-    }
-    for (const row of rows(userDataDir)) if (!retained.has(row.version)) {
+    const releases = new Set(registered.map(releaseKey));
+    if (skipped.some(release => !releases.has(release))) keepSkipped(userDataDir, skipped.filter(release => releases.has(release)));
+    const retained = new Set(registered.map(installation => installed(installation, list)?.version).filter(Boolean));
+    for (const row of list) if (!retained.has(row.version)) {
       try {
         await require('../../../core/coordinated-runtime-managers').withRuntimeMutation(
           { managerId: id, version: row.version, sourcePath: row.installDir },
@@ -56,27 +79,27 @@ function create({ dependencies = {}, applications = userDataDir => require('./ma
     if (plan?.runtime !== 'crossover' || !plan.components?.['vulkan-driver']?.used) return [];
     const installation = context.wineEnvironment?.install || require('./manager').resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings).install;
     if (!installation?.buildVersion) return [];
-    const current = installed(installation, context.userDataDir);
-    if (current) return [];
+    if (installed(installation, rows(context.userDataDir)) || skippedReleases(context.userDataDir).includes(releaseKey(installation))) return [];
     const pin = base.core.listDiscoveredCatalog({ userDataDir: context.userDataDir })
       .filter(pin => matches(capabilities(pin).runtimeProfile, installation))
       .sort((a, b) => compareRuntimeVersions(a.version, b.version))[0];
     if (!pin && base.getState({ userDataDir: context.userDataDir }).catalog?.status === 'success') return [];
+    const size = pin?.asset?.bytes > 0 ? ` Download size: ${Math.max(0.1, pin.asset.bytes / 1048576).toFixed(1)} MB.` : '';
+    const summary = `Adds Vulkan external memory, semaphore and fence sharing to CrossOver ${installation.upstreamVersion} (build ${installation.buildVersion}).`;
     return [{ managerId: id, version: pin?.version || null, ...(!pin ? { discoveryRequired: true } : {}),
-      installOptions: options, optional: true, silentFallback: true, groupConsent: true,
-      label: manager.label, ...(pin?.asset?.bytes ? { bytes: pin.asset.bytes } : {}) }];
+      installOptions: options, optional: true, silentFallback: true, companion: true,
+      release: { version: installation.upstreamVersion, build: installation.buildVersion },
+      label: manager.label, ...(pin?.asset?.bytes ? { bytes: pin.asset.bytes } : {}), summary, cancelLabel: 'Play Without It',
+      detail: `${summary}${size} ${entry?.name || 'The game'} also starts without it, with CrossOver's own Mac driver.` }];
   }
   async function select(installation, context) {
     try {
       if (context.translatorPlan?.runtime !== 'crossover' || !context.translatorPlan.components?.['vulkan-driver']?.used ||
           context.translatorPlan.layout?.unixName !== 'x86_64-unix') return null;
-      const current = installed(installation, context.userDataDir);
+      const current = installed(installation, rows(context.userDataDir));
       if (!current) return null;
-      const selected = manager.resolveSelection(null, context.settings, context.userDataDir, { ...options, version: current.version, verification: 'full' });
-      if (!selected.ready || !matches(selected.install.manifest.capabilities.runtimeProfile, installation)) return null;
-      Bundled.verifyPayload(selected.install.root, selected.install.declaration, selected.install.resolveDependency);
-      await context.useRuntime?.({ managerId: id, version: current.version, sourcePath: selected.install.installDir });
-      return { path: selected.install.executablePath, sha256: selected.install.manifest.files.find(file => file.path === selected.install.manifest.libraries['x86_64-unix'])?.sha256 };
+      await context.useRuntime?.({ managerId: id, version: current.version, sourcePath: current.installDir });
+      return { path: current.executablePath, sha256: current.manifest.files.find(file => file.path === current.manifest.libraries['x86_64-unix'])?.sha256 };
     } catch (error) { if (context.signal?.aborted) throw error; return null; }
   }
   const refresh = manager.refreshCatalog;
@@ -87,6 +110,6 @@ function create({ dependencies = {}, applications = userDataDir => require('./ma
     await prune(input.userDataDir);
     return result;
   };
-  return Object.assign(manager, { requirements, select, prune, matches });
+  return Object.assign(manager, { requirements, select, prune, matches, skipOptional, clearSkipped });
 }
 module.exports = Object.assign(create(), { create, matches });
