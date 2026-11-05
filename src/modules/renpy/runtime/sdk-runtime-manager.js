@@ -1,5 +1,5 @@
 const { selectRuntimeVersion, managerDefaultVersion } = require("../../shared/runtime/version-choices");
-const { compareVersions, newest } = require("../../shared/runtime/version-order");
+const { compareVersions, newest } = require("../../shared/runtime/version-order.mjs");
 const Core = require("./sdk-manager");
 const Custom = require("../../shared/runtime/custom-runtime");
 const Live2D = require("../live2d");

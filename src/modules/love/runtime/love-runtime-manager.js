@@ -1,5 +1,5 @@
 const { selectRuntimeVersion, managerDefaultVersion } = require("../../shared/runtime/version-choices");
-const { newest } = require("../../shared/runtime/version-order");
+const { newest } = require("../../shared/runtime/version-order.mjs");
 const Core = require("./love-runtime");
 const path = require("node:path");
 const Custom = require("../../shared/runtime/custom-runtime");

@@ -18,7 +18,7 @@ function compareRuntimeVersions(left, right) {
   const sourceID = /^(?=[a-f0-9]*[a-f])[a-f0-9]{7,}(?:[-_]|$)/i;
   if (sourceID.test(String(left)) || sourceID.test(String(right))) return 0;
   const stem = value => String(value).replace(/[-_][a-f0-9]{7,}(?:[-_].*)?$/i, "");
-  return require("./version-order").compareVersions(stem(right), stem(left));
+  return require("./version-order.mjs").compareVersions(stem(right), stem(left));
 }
 
 function hashFile(filePath, algorithm = "sha256") {
@@ -846,7 +846,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     loadCatalog(userDataDir);
     const cfg = normalizeSettings(settings);
     const sourceFor = pin => catalogSources?.find(source => source.id === entrySource(pin));
-    const sortVersion = pin => String(sourceFor(pin)?.versionOf?.(pin) || require("./version-order").catalogVersion(pin));
+    const sortVersion = pin => String(sourceFor(pin)?.versionOf?.(pin) || require("./version-order.mjs").catalogVersion(pin));
     const installed = (userDataDir || bundledExecution === "direct" ? listRuntimeRows(userDataDir) : [])
       .map(row => ({ ...row, sortVersion: sortVersion(row.catalogEntry || entries.get(row.version) || row) }));
     const verifiedMinimums = new Map(installed.map(item => [item.version, item.catalogEntry?.minimumMacOS || item.minimumMacOS]));

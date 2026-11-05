@@ -94,10 +94,10 @@ function catalogSource([id, label, repository, filter, component, presentation =
         architecture: "universal", label: versionLabel({ asset: { filename: asset.name }, upstreamTag: release.tag_name }, null, projectLabel || label), assets: [asset], details: { component, catalogSourceId: id, releaseVersion: release.tag_name, ...(presentation.engine ? { translatorEngine: presentation.engine } : {}) } })) });
   const versionOf = pin => {
     if (templateName(pin)) return templateName(pin).replace(/^Template /, "");
-    return require("./version-order").catalogVersion(pin);
+    return require("./version-order.mjs").catalogVersion(pin);
   };
   return { id, label, description: component ? `${projectLabel} copies taken from a Sikarugir Template release (${component}).` : `${label} releases published by ${repository}.`, url: `https://github.com/${repository}/releases`,
-    versionOf, compareEntries: (a, b) => require("./version-order").compareVersions(versionOf(b), versionOf(a)),
+    versionOf, compareEntries: (a, b) => require("./version-order.mjs").compareVersions(versionOf(b), versionOf(a)),
     filterEntry: pin => !pin.asset?.filename || !filter || filter(pin.asset.filename),
     ...presentation, discover: async options => upstreamPins(await upstream.discover(options)) };
 }

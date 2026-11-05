@@ -63,7 +63,7 @@ function formatVersionLabel(version) {
   return String(version || "");
 }
 
-const { compareVersions } = require("../../shared/runtime/version-order");
+const { compareVersions } = require("../../shared/runtime/version-order.mjs");
 
 function compareVersionsDesc(a, b) {
   return compareVersions(b, a);

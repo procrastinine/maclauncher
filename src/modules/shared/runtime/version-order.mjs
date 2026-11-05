@@ -6,7 +6,7 @@ function orderKey(value) {
   return String(value ?? "").trim().replace(/^v(?=\d)/i, "").replace(HASH, "");
 }
 
-function compareVersions(left, right) {
+export function compareVersions(left, right) {
   const a = orderKey(left), b = orderKey(right), release = /^(\d+(?:\.\d+)+)(.*)$/;
   const aa = release.exec(a), bb = release.exec(b);
   if (aa && bb) {
@@ -29,7 +29,7 @@ function compareVersions(left, right) {
 }
 
 // Publisher metadata orders a catalog; opaque download keys remain identities.
-function catalogVersion(pin = {}) {
+export function catalogVersion(pin = {}) {
   if (pin.projectPackage) return pin.version;
   if (pin.releaseVersion) return pin.releaseVersion;
   try {
@@ -44,7 +44,7 @@ function catalogVersion(pin = {}) {
  * version order (newest first): the earlier-listed wins. The result is null
  * when there is no item, or when such a tie includes a version the catalog does
  * not list. Equal versions keep input order. */
-function newest(items, { listed = [], versionOf = item => item.version } = {}) {
+export function newest(items, { listed = [], versionOf = item => item.version } = {}) {
   const sorted = [...items].sort((a, b) => compareVersions(versionOf(b), versionOf(a))), top = sorted[0];
   if (top === undefined) return null;
   const tied = sorted.filter(item => compareVersions(versionOf(item), versionOf(top)) === 0);
@@ -53,5 +53,3 @@ function newest(items, { listed = [], versionOf = item => item.version } = {}) {
   if (tied.some(item => rank(item) < 0)) return null;
   return tied.reduce((best, item) => rank(item) < rank(best) ? item : best);
 }
-
-module.exports = { compareVersions, catalogVersion, newest };

@@ -1,6 +1,6 @@
 const path = require("node:path");
 const { readJsonObject, writeJsonAtomic } = require("./json-files");
-const { compareVersions } = require("../modules/shared/runtime/version-order");
+const { compareVersions } = require("../modules/shared/runtime/version-order.mjs");
 const { usableDefaultVersion } = require("../modules/shared/runtime/version-choices");
 const Architecture = require("../modules/shared/runtime/architecture");
 const GameData = require("../modules/shared/game-data");

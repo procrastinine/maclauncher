@@ -159,7 +159,7 @@ function includedReferences(engine, options = {}) {
     host.qualifiers.hostName = host.name;
     row.versionLabel = translatorLabel(host.translator, host.install, host.qualifiers);
   }
-  const order = require("./version-order").compareVersions;
+  const order = require("./version-order.mjs").compareVersions;
   return result.sort((a, b) => order(hostsByReference.get(b.version).version, hostsByReference.get(a.version).version) ||
     order(hostsByReference.get(b.version).wineVersion, hostsByReference.get(a.version).wineVersion));
 }

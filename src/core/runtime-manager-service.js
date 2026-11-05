@@ -1,5 +1,5 @@
 const { isAbortError } = require("../modules/shared/runtime/download-utils");
-const { compareVersions } = require("../modules/shared/runtime/version-order");
+const { compareVersions } = require("../modules/shared/runtime/version-order.mjs");
 const Rosetta = require("../modules/shared/runtime/rosetta");
 const { coordinatorFor } = require("./runtime-coordinator");
 const { instrumentRuntimeManagers, withRuntimeCoordinator } = require("./coordinated-runtime-managers");

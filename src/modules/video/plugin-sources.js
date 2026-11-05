@@ -1,5 +1,5 @@
 const Upstream = require("../shared/runtime/upstream");
-const { compareVersions } = require("../shared/runtime/version-order");
+const { compareVersions } = require("../shared/runtime/version-order.mjs");
 const { throwIfAborted } = require("../shared/runtime/download-utils");
 
 const UOSC_SOURCE = "https://github.com/tomasklaen/uosc/releases/latest";
