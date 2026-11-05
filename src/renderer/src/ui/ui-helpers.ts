@@ -1,5 +1,6 @@
 import { resolveRuntimeSettingFallback, normalizeListValue, normalizeRuntimeSettingValue } from "../../../core/runtime-setting-values.mjs";
 import { sanitizeErrorMessage } from "../../../core/runtime-errors.mjs";
+import { compareVersions } from "../../../modules/shared/runtime/version-order.mjs";
 export { resolveRuntimeSettingFallback, normalizeListValue, normalizeRuntimeSettingValue };
 
 import type {
@@ -395,22 +396,8 @@ export function formatWhenMs(ts: number) {
   return new Date(ts).toLocaleString();
 }
 
-export function parseSemver(v: string): [number, number, number] | null {
-  const m = String(v || "").trim().replace(/^v/i, "").match(/^(\d+)\.(\d+)\.(\d+)$/);
-  if (!m) return null;
-  return [Number(m[1]), Number(m[2]), Number(m[3])];
-}
-
 export function compareSemver(a: string, b: string) {
-  const pa = parseSemver(a);
-  const pb = parseSemver(b);
-  // Other versions, such as 1.12-MCLv10, compare their digit runs as numbers.
-  if (!pa || !pb) return String(a || "").localeCompare(String(b || ""), undefined, { numeric: true });
-  for (let i = 0; i < 3; i++) {
-    const d = pa[i] - pb[i];
-    if (d !== 0) return d;
-  }
-  return 0;
+  return compareVersions(a, b);
 }
 
 export function sortInstalled(
@@ -436,6 +423,10 @@ export function sortInstalled(
       if (aIsDefault !== bIsDefault) return aIsDefault ? -1 : 1;
     }
     if (byVersion !== 0) return byVersion;
+    const byHost = sort === "oldest"
+      ? compareSemver(String(a.sortHostVersion || ""), String(b.sortHostVersion || ""))
+      : compareSemver(String(b.sortHostVersion || ""), String(a.sortHostVersion || ""));
+    if (byHost !== 0) return byHost;
     return String(a.installDir || "").localeCompare(String(b.installDir || ""));
   });
   return list;

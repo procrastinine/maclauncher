@@ -1027,34 +1027,48 @@ test('included translator references use host records and shared release facts w
   assert.equal(dxmt.getState(options).references,undefined);assert.match(render([{...dxmt.getState(options),id:dxmt.id,label:dxmt.label,ui:dxmt.ui}],dxmt.id),/No runtime versions installed yet/);
 });
 
-test('Installed ordering uses explicit host metadata while defaults and unknown versions keep their identities', t => {
+test('Installed ordering compares component releases before host releases and preserves identities', t => {
   const fs=require('node:fs'),os=require('node:os'),Component=require('../src/modules/shared/runtime/component-runtime');
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'installed-sort-facts-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const put=(relative,bytes)=>{const file=path.join(root,relative);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,bytes);return file;};
   const {image,X64}=require('./fixtures/macho-image'),{peFixture}=require('./helpers/pe-fixture');
-  const host=(name,runtime,facts)=>{
+  const host=(name,runtime,facts,componentVersion='')=>{
     const engineRoot=path.join(root,name,'wine'),templateRoot=path.join(root,name,'support');
     put(`${name}/wine/lib/wine/x86_64-unix/wine`,image({cpu:X64,fileType:2}));
     const pe=peFixture({is64:true});pe.bytes.writeUInt16LE(0x2002,pe.peOffset+22);
     const renderer=runtime==='crossover'?`${name}/wine/lib/dxvk`:`${name}/support/Frameworks/renderer/dxvk`;
-    put(renderer+'/d3d11.dll',pe.bytes);put(renderer+'/version','1.0');
+    put(renderer+'/d3d11.dll',pe.bytes);if(componentVersion)put(renderer+'/version',componentVersion);
     return {version:name,ready:true,installDir:path.join(root,name),engineRoot,templateRoot,...facts};
   };
-  const templates=[host('Z-older','sikarugir',{templateVersion:'1.0.9'}),
-    host('A-newer','sikarugir',{catalogEntry:{template:{version:'1.0.10'}}}),host('unknown','sikarugir',{})];
-  const crosses=[host('Cross','crossover',{upstreamVersion:'26.3'})],beforeHosts=structuredClone([templates,crosses]);
+  const templates=[host('Z-older','sikarugir',{templateVersion:'1.0.9'},'DXVK-Sikarugir-v3.1.1-async'),
+    host('A-newer','sikarugir',{catalogEntry:{template:{version:'1.0.10'}}},'DXVK-Sikarugir-v3.1.1-async'),host('unknown','sikarugir',{})];
+  const crosses=[host('Cross','crossover',{upstreamVersion:'26.3'},'1.10.3')],beforeHosts=structuredClone([templates,crosses]);
   const manifest=require('../src/modules/crossover/manifest.json');
   const managers=[['sikarugir',templates],['crossover',crosses]].map(([runtime,hosts])=>({id:manifest.runtime.manager[runtime],core:{listInstalled:()=>hosts},getState:()=>({versionLabels:{}})}));
   t.mock.method(require('../src/modules/registry'),'getModule',id=>id==='crossover'?{manifest,runtimeManagers:managers}:null);
   const references=Component.includedReferences('dxvk',{userDataDir:path.join(root,'data'),logger:{warn(){}}});
   const reference=host=>references.find(row=>row.reference.path===host.installDir);
-  assert.equal(reference(templates[0]).sortVersion,'1.0.9');assert.equal(reference(templates[1]).sortVersion,'1.0.10');
-  assert.equal(reference(crosses[0]).sortVersion,'26.3');assert.equal(Object.hasOwn(reference(templates[2]),'sortVersion'),false);
-  const refsBefore=structuredClone(references),included={...manager('host-facts',{}, {},[]),supportsDefault:false,references,
-    versionLabels:Object.fromEntries(references.map(row=>[row.version,row.versionLabel]))};
-  const includedMarkup=render([included]);
-  assert.ok(includedMarkup.indexOf('Template 1.0.10')<includedMarkup.indexOf('Template 1.0.9'),'real Installed references use Template facts instead of opaque path keys');
-  const installed=[{version:'opaque-z',sortVersion:'2.0',installDir:'/fixture/z',ready:true},
+  assert.equal(reference(templates[0]).sortVersion,'3.1.1-async');assert.equal(reference(templates[1]).sortVersion,'3.1.1-async');
+  assert.equal(reference(templates[0]).sortHostVersion,'1.0.9');assert.equal(reference(templates[1]).sortHostVersion,'1.0.10');
+  assert.equal(reference(crosses[0]).sortVersion,'1.10.3');assert.equal(reference(crosses[0]).sortHostVersion,'26.3');
+  assert.equal(Object.hasOwn(reference(templates[2]),'sortVersion'),false);
+  const managed={version:'macos-dxvk-v1.10.3',sortVersion:'v1.10.3',installDir:path.join(root,'managed'),ready:true};
+  const refsBefore=structuredClone(references),included={...manager('host-facts',{}, {},[managed]),supportsDefault:false,references,
+    versionLabels:{...Object.fromEntries(references.map(row=>[row.version,row.versionLabel])),[managed.version]:'DXVK 1.10.3 · DXVK-macOS'}};
+  for(const sort of ['newest','oldest']){
+    const markup=render([included],included.id,{runtimeUi:{[included.id]:{remoteOpen:{},installedSort:{default:sort},installVersion:{},installVariant:{},pendingActions:{},messages:{},sourceErrors:{}}}});
+    const rows=markup.split('class="saveRow"').slice(1),position=label=>rows.findIndex(row=>row.includes(label));
+    if(sort==='newest'){
+      assert.ok(position('Template 1.0.10')<position('Template 1.0.9'));
+      assert.ok(position('Template 1.0.9')<position('CrossOver 26.3'));
+      assert.ok(position('Template 1.0.9')<position('DXVK-macOS'));
+    }else{
+      assert.ok(position('CrossOver 26.3')<position('Template 1.0.9'));
+      assert.ok(position('DXVK-macOS')<position('Template 1.0.9'));
+      assert.ok(position('Template 1.0.9')<position('Template 1.0.10'));
+    }
+  }
+  const installed=[{version:'opaque-z',sortVersion:'v2.0',installDir:'/fixture/z',ready:true},
     {version:'opaque-a',sortVersion:'10.0',installDir:'/fixture/a',ready:true},
     {version:'3.0',installDir:'/fixture/m',ready:true},{version:'opaque-c',sortVersion:'10.0',installDir:'/fixture/b',ready:true}];
   const before=structuredClone(installed),runtime={...manager('ordered',{}, {},installed),defaultVersion:'opaque-z',
