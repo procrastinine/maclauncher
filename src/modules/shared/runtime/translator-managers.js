@@ -44,7 +44,9 @@ function catalogSource([id, label, repository, filter, component, presentation =
       (!component || /^Template-/i.test(asset.name))).map(asset => ({
         version: (id + "-" + asset.name.replace(/\.(?:tar\.(?:gz|xz|bz2)|t[gx]z|zip|tar)$/i, "")).replace(/[^a-z0-9._-]/ig, "-"),
         architecture: "universal", label: versionLabel({ asset: { filename: asset.name } }, null, projectLabel || label), assets: [asset], details: { component, catalogSourceId: id, ...(presentation.engine ? { translatorEngine: presentation.engine } : {}) } })) });
-  return { id, label, description: component ? `${projectLabel} copies taken from a Sikarugir Template release (${component}).` : `${label} releases published by ${repository}.`, url: `https://github.com/${repository}/releases`, ...presentation, discover: async options => upstreamPins(await upstream.discover(options)) };
+  return { id, label, description: component ? `${projectLabel} copies taken from a Sikarugir Template release (${component}).` : `${label} releases published by ${repository}.`, url: `https://github.com/${repository}/releases`,
+    ...(component ? { compareEntries: (a, b) => require("./version-order").compareVersions(templateName(b), templateName(a)) } : {}),
+    ...presentation, discover: async options => upstreamPins(await upstream.discover(options)) };
 }
 function createManager(engine, { dependencies = {} } = {}) {
   const definition = { ...definitions[engine], engine }, catalogSources = definition.sources.map(source => catalogSource(source, definition.label));

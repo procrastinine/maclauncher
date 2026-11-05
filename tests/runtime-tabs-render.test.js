@@ -947,7 +947,7 @@ test('included translator references use host records and shared release facts w
     write(path.join(support,'SharedSupport/renderer/dxvk3/d3d11.dll'),dll());
     write(path.join(support,'SharedSupport/renderer/dxvk3/version'),'3.1.1-gplasync');
     write(path.join(support,'Frameworks/GStreamer.framework/Versions/1.0/lib/gstreamer-1.0/libgstcoreelements.dylib'),image());
-    return {version:name,versionLabel:name,installDir,engineRoot:wine,templateRoot:support,templateVersion:version,ready:true};
+    return {version:name,versionLabel:name,installDir,engineRoot:wine,templateRoot:support,templateVersion:version,engineVersion:'10.0_8',ready:true};
   };
   templateHosts=[makeTemplate('Template-A','1.0.26'),makeTemplate('Template-B','1.0.27')];
   write(path.join(templateHosts[0].templateRoot,'Resources/vulkan/icd.d/optional.json'),'{');
@@ -973,14 +973,17 @@ test('included translator references use host records and shared release facts w
   assert.ok(state.references.every(row=>row.included&&row.readOnly&&row.removable===false&&row.supportsDefault===false));
   assert.ok(state.references.every(row=>row.platformKey==='x86_64'&&row.architectures.includes('x86_64')));
   assert.ok(state.references.every(row=>row.apis.includes('Direct3D 11')));
-  assert.ok(state.references.some(row=>row.versionLabel.includes('DXMT 0.80')&&row.versionLabel.includes('Alpha.app')));
-  assert.ok(state.references.some(row=>row.versionLabel.includes('DXMT 0.80')&&row.versionLabel.includes('Beta.app')));
-  assert.ok(state.references.some(row=>row.versionLabel.includes('v0.81')&&row.versionLabel.includes('Template 1.0.26')&&row.versionLabel.includes('Template-A')));
-  assert.ok(state.references.some(row=>row.versionLabel.includes('Template 1.0.27')&&row.versionLabel.includes('Template-B')));
+  assert.ok(state.references.some(row=>row.versionLabel==='DXMT (CrossOver 26.3) · Alpha.app'&&row.detail==='Component 0.80'));
+  assert.ok(state.references.some(row=>row.versionLabel==='DXMT (CrossOver 26.3) · Beta.app'&&row.detail==='Component 0.80'));
+  assert.ok(state.references.some(row=>row.versionLabel==='DXMT · Template 1.0.26 (Wine 10.0_8)'&&row.detail==='Component v0.81'));
+  assert.ok(state.references.some(row=>row.versionLabel==='DXMT · Template 1.0.27 (Wine 10.0_8)'));
+  assert.deepEqual(state.references.filter(row=>row.source.runtime==='sikarugir').map(row=>row.versionLabel),['DXMT · Template 1.0.27 (Wine 10.0_8)','DXMT · Template 1.0.26 (Wine 10.0_8)']);
   assert.equal(metal.getState(options).references.length,2,'D3D12 aliases do not duplicate the same source component');
-  assert.ok(metal.getState(options).references.every(row=>row.versionLabel.includes('D3DMetal 3.0')));
-  assert.ok(molten.getState(options).references.every(row=>row.versionLabel.includes('MoltenVK 1.2.10')&&row.platformKey==='x86_64'));
+  assert.ok(metal.getState(options).references.every(row=>row.versionLabel.startsWith('D3DMetal (CrossOver 26.3)')&&row.detail==='Component 3.0'));
+  assert.ok(molten.getState(options).references.every(row=>row.versionLabel.startsWith('MoltenVK (CrossOver 26.3)')&&row.detail==='Component 1.2.10'&&row.platformKey==='x86_64'));
   const dxvkState=dxvk.getState(options);
+  assert.ok(dxvkState.references.some(row=>row.versionLabel==='DXVK3 · Template 1.0.27 (Wine 10.0_8)'&&row.detail==='Component 3.1.1-gplasync'));
+  assert.ok(dxvkState.references.every(row=>!row.versionLabel.includes('DXVK DXVK')&&!row.versionLabel.includes('template-')));
   assert.equal(dxvkState.references.length,4,'usable siblings remain when an unsafe optional entry is skipped');assert.ok(warnings.some(row=>row.includes('dxvk')&&/outside.*root|escapes/.test(row)));
   const bounded=Wine.includedTranslators({crossoverRoot:first.wine},'crossover',{engine:'dxvk'}).included;
   assert.ok(bounded.some(row=>row.engine==='dxvk'));
@@ -994,7 +997,7 @@ test('included translator references use host records and shared release facts w
   assert.equal(wine.customRuntime,false);assert.equal(wine.registerCustomRuntime,undefined);assert.equal(wineState.supportsDefault,false);
   assert.equal(wineState.references.length,4);assert.deepEqual(wineState.installed,[]);assert.deepEqual(wineState.catalog.versions,[]);
   assert.ok(wineState.references.every(row=>row.readOnly&&row.included&&row.reference.managerId!=='translator-vkd3d-proton'));
-  assert.ok(wineState.references.some(row=>row.versionLabel.includes('Alpha.app')));assert.ok(wineState.references.some(row=>row.versionLabel.includes('Template-B')));
+  assert.ok(wineState.references.some(row=>row.versionLabel.includes('Alpha.app')));assert.ok(wineState.references.some(row=>row.versionLabel.includes('Template 1.0.27')));
   const wineMarkup=render([{...wineState,id:wine.id,label:wine.label,ui:wine.ui}],wine.id,{onRuntimeRegister(){assert.fail('No standalone Wine registration');}});
   assert.match(wineMarkup,/Included copies/);assert.match(wineMarkup,/Refresh included copies/);assert.match(wineMarkup,/href="https:\/\/gitlab\.winehq\.org\/wine\/vkd3d"/);
   assert.doesNotMatch(wineMarkup,/Imported files|Register custom|Load versions|No downloadable|saveRowActions|Set default|>Install<|>Repair</);
@@ -1044,10 +1047,11 @@ test('persisted generic-tag source labels render actual asset packages without R
   t.mock.method(CrossOver.core,'listInstalled',()=>[]);const original=Sika.core;Sika.core={...original,listInstalled:()=>[]};t.after(()=>{Sika.core=original;});
   t.mock.method(globalThis,'fetch',()=>assert.fail('Cached presentation must stay offline'));
   const manager=require('../src/modules/shared/runtime/translator-managers').createManager('dxmt'),source=manager.getState({}).catalog.sourceUrl;
-  const versions=['1.0.21','1.0.26'],entries=versions.map(version=>({version:'template-Template-'+version,upstreamRevision:'published-template-release',catalogSourceId:'template',component:'dxmt',architecture:'universal',
+  const versions=['1.0.1','1.0.10','1.0.2','1.0.27'],entries=versions.map(version=>({version:'template-Template-'+version,upstreamRevision:'published-template-release',catalogSourceId:'template',component:'dxmt',architecture:'universal',
     versionLabel:'v1.0 (Sikarugir Template)',asset:{filename:`Template-${version}.tar.xz`,url:`https://github.com/Sikarugir-App/Template/releases/download/v1.0/Template-${version}.tar.xz`,integrity:'recorded-local'}}));
   const Catalog=require('../src/modules/shared/runtime/runtime-catalog');Catalog.writeRuntimeCatalog({userDataDir:root,managerId:manager.id,entries,source});
   const file=Catalog.catalogPath(root,manager.id),before=fs.readFileSync(file),state=manager.getState({userDataDir:root});
+  assert.deepEqual(state.catalog.sources.find(row=>row.id==='template').versions,['template-Template-1.0.27','template-Template-1.0.10','template-Template-1.0.2','template-Template-1.0.1']);
   const markup=render([{...state,id:manager.id,label:manager.label,ui:manager.ui}],manager.id);
   for(const version of versions)assert.match(markup,new RegExp(`Template ${version.replaceAll('.','\\.')} · DXMT component`));
   for(const row of entries)assert.ok(markup.includes(`value="${row.version}"`));

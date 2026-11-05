@@ -251,8 +251,9 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     if (sourceId && !usable.length && (incoming.length || remoteEntries.some(entry => entrySource(entry) === sourceId)))
       throw new Error(`The ${label} release list has no version this MacLauncher can use. The previous list is kept.`);
     const selected = selectEntries(usable).map(entry => sourceId ? { ...entry, catalogSourceId: sourceId } : entry);
-    const combined = sourceId ? [...remoteEntries.filter(entry => entrySource(entry) !== sourceId), ...selected]
-      .sort((a, b) => sourceIds.indexOf(entrySource(a)) - sourceIds.indexOf(entrySource(b))) : selected;
+    const combined = sourceId ? [...remoteEntries.filter(entry => entrySource(entry) !== sourceId), ...selected] : selected;
+    if (catalogSources) combined.sort((a, b) => sourceIds.indexOf(entrySource(a)) - sourceIds.indexOf(entrySource(b)) ||
+      (catalogSources.find(source => source.id === entrySource(a))?.compareEntries?.(a, b) || 0));
     const deduplicated = new Map();
     for (const original of combined) {
       const version = canonicalVersion(original.version);

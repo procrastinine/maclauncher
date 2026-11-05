@@ -62,7 +62,7 @@ function configure(manager, definition) {
 // reader supplies every component path, version and binary fact.
 function includedReferences(engine, options = {}) {
   if (!options.userDataDir) return [];
-  const owner = require("../../registry").getModule("crossover"), rows = new Map();
+  const owner = require("../../registry").getModule("crossover"), rows = new Map(), hostsByReference = new Map();
   const Wine = require("./wine-translators"), Description = require("./translator-description");
   const warn = message => require("../graphics-warning")(options.logger || console, `[translators] ${message}`);
   for (const [runtime, managerId] of Object.entries(owner?.manifest?.runtime?.manager || {})) {
@@ -85,15 +85,27 @@ function includedReferences(engine, options = {}) {
           if (value.engine !== engine) continue;
           const version = `reference:${JSON.stringify([runtime, sourcePath, value.engine, value.root])}`;
           const architectures = [...new Set(value.files.flatMap(file => file.cpuSlices || (file.architecture ? [file.architecture] : [])))];
-          const label = [Description.label(value), host.versionLabel || path.basename(sourcePath), value.templateComponent].filter(Boolean).join(" · ");
+          const templateVersion = host.templateVersion || host.catalogEntry?.template?.version;
+          const wineVersion = host.engineVersion || host.wineVersion || host.catalogEntry?.engineVersion;
+          const sourceLabel = runtime === "crossover" ? `CrossOver ${host.upstreamVersion || ""}`.trim()
+            : templateVersion ? `Template ${templateVersion}${wineVersion ? ` (Wine ${wineVersion})` : ""}` : "Sikarugir";
+          const component = value.engine === "dxvk" && value.templateComponent ? value.templateComponent.toUpperCase() : Description.label({ engine: value.engine });
+          const label = runtime === "crossover" ? `${component} (${sourceLabel})` : `${component} · ${sourceLabel}`;
           rows.set(version, { version, versionLabel: label, ready: true, included: true, readOnly: true, removable: false, supportsDefault: false,
             reference: { managerId, version: host.version, path: sourcePath }, source: value.source, installDir: value.root,
-            minimumMacOS: value.macosFloor, architectures, apis: value.apis, platformKey: architectures.join(", "), detail: value.source.label });
+            minimumMacOS: value.macosFloor, architectures, apis: value.apis, platformKey: architectures.join(", "), detail: value.version ? `Component ${value.version}` : sourceLabel });
+          hostsByReference.set(version, { version: templateVersion || host.upstreamVersion || "", wineVersion: wineVersion || "",
+            name: host.displayName || host.name || path.basename(sourcePath) });
         }
       } catch (error) { warn(`${sourcePath}: ${error.message}`); }
     }
   }
-  return [...rows.values()];
+  const result = [...rows.values()], counts = new Map();
+  for (const row of result) counts.set(row.versionLabel, (counts.get(row.versionLabel) || 0) + 1);
+  for (const row of result) if (counts.get(row.versionLabel) > 1) row.versionLabel += ` · ${hostsByReference.get(row.version).name}`;
+  const order = require("./version-order").compareVersions;
+  return result.sort((a, b) => order(hostsByReference.get(b.version).version, hostsByReference.get(a.version).version) ||
+    order(hostsByReference.get(b.version).wineVersion, hostsByReference.get(a.version).wineVersion));
 }
 function withIncludedReferences(manager) {
   manager.referenceManagerIds = [...new Set(Object.values(require("../../crossover/manifest.json").runtime.manager))];
