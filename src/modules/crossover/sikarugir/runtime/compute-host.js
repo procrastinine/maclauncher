@@ -66,7 +66,7 @@ async function prepare(request,context={}){
   const viewIdentity=digest(JSON.stringify([hostPath,helperLibraries.map(item=>[item.name,digest(fs.readFileSync(item.windows)),digest(fs.readFileSync(item.unix))])])).slice(0,24);
   const settings={graphicsBackend:request.backend==="d3d12"?"d3dmetal":"wined3d",vulkanBackend:request.backend==="vulkan"?"kosmickrisp":"auto",synchronization:"auto",dlss:false,environment:[],windowsVersion:"win10"};
   const graphics=await Graphics.prepareGraphicsView({install,settings,prefixPath:prefix,viewRoot:path.join(directory,"views",viewIdentity),host:{hardwareArch:architecture()},executableArchitecture:"x64",helperLibraries,signal});
-  if(!request.prefixDirectory)await Launch.ensurePrefix(install,prefix,directory,settings,graphics,context);
+  if(!request.prefixDirectory)await Launch.ensurePrefix(install,require("../../../shared/runtime/wine-environment").privateEnvironment(userDataDir,directory,"prefix"),directory,settings,graphics,context);
   const {environment}=Launch.buildEnvironment(settings,install,directory,prefix,graphics,{baseEnvironment:require("../../../shared/runtime/macos-sandbox").environment(context.environment||process.env)});
   signal?.throwIfAborted();await context.useRuntime?.({managerId:"sikarugir",sectionId:"default",version:install.version,sourcePath:install.installDir});
   return {schema:1,backend:request.backend,executable:graphics.executablePath,arguments:[],environment,hostPath,nativeRoot,originalLibrary,

@@ -3,6 +3,7 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 const GameData = require("../../shared/game-data");
 const Writable = require("../../shared/writable-input");
+const Environments = require("../../shared/runtime/wine-environment");
 const Rosetta = require("../../shared/runtime/rosetta");
 const { isAbortError } = require("../../shared/runtime/download-utils");
 const warnGraphics = require("../../shared/graphics-warning");
@@ -154,7 +155,8 @@ function buildEnvironment(settings, installation, directory, bottlePath, { baseE
   return { environment, overrides, dll };
 }
 
-async function ensureBottle(installation, bottlePath, directory, settings, context, { run } = {}) {
+async function ensureBottle(installation, ownedEnvironment, directory, settings, context, { run } = {}) {
+  const bottlePath = Environments.assertPrivateEnvironment(ownedEnvironment, directory);
   const template = bottleTemplate(settings);
   Writable.assertOwnDirectory(directory, bottlePath, { create: false });
   const configPath = path.join(bottlePath, "cxbottle.conf");
@@ -314,7 +316,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   }
   context.graphicsInputs = require("../graphics-inputs").inputs(selected.install, cameraBridge?.inputs);
   Writable.assertOwnDirectory(directory, path.dirname(bottlePath));
-  await ensureBottle(selected.install, bottlePath, directory, settings, context, { run });
+  await ensureBottle(selected.install, Environments.privateEnvironment(context.userDataDir, directory, path.relative(directory, bottlePath)), directory, settings, context, { run });
   detachProfileAliases(bottlePath);
   // The vendor wrapper restores these trusted game-only values after its
   // protected shell/Perl launch; bottle setup stays on the stock runtime.

@@ -4,6 +4,7 @@ const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
 const GameData = require("../../shared/game-data");
 const Writable = require("../../shared/writable-input");
+const Environments = require("../../shared/runtime/wine-environment");
 const Rosetta = require("../../shared/runtime/rosetta");
 const { isAbortError } = require("../../shared/runtime/download-utils");
 const warnGraphics = require("../../shared/graphics-warning");
@@ -191,7 +192,8 @@ function prefixRuntime(installation, directory) {
   }
   return { executablePath: installation.executablePath, serverPath: installation.serverPath, env };
 }
-async function ensurePrefix(installation, prefixPath, directory, settings, graphics, context, { run = runSupervised } = {}) {
+async function ensurePrefix(installation, ownedEnvironment, directory, settings, graphics, context, { run = runSupervised } = {}) {
+  const prefixPath = Environments.assertPrivateEnvironment(ownedEnvironment, directory);
   Writable.assertOwnDirectory(directory, prefixPath, { create: false });
   const windowsVersion = settings.windowsVersion || "win10";
   if (!WINDOWS_VERSIONS.has(windowsVersion)) throw new Error("Unsupported Wine Windows version.");
@@ -319,7 +321,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const viewRoot = path.join(directory, "runtime-view", `${identity}-${variant}`);
   const graphics = await prepareGraphicsView({ install: selected.install, settings, prefixPath, viewRoot, host,
     cameraBridge, signal: context.signal, logger: context.logger, onProgress: context.onProgress, executableArchitecture: match.executableArchitecture });
-  await ensurePrefix(selected.install, prefixPath, directory, settings, graphics, context, { run: dependencies.run });
+  await ensurePrefix(selected.install, Environments.privateEnvironment(context.userDataDir, directory, path.relative(directory, prefixPath)), directory, settings, graphics, context, { run: dependencies.run });
   WindowsFiles.detachProfileAliases(prefixPath);
   await graphics.applyPrefix?.();
   context.signal?.throwIfAborted();
