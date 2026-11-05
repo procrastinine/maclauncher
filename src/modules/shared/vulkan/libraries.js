@@ -166,10 +166,12 @@ function createManager(backend, dependencies = {}) {
   } });
   const Component = require("../runtime/component-runtime"), customInspect = result.customRuntime.inspect;
   Custom.configure(result, { prepare: Component.prepareArchive, inspect(input, context) {
-    const root = Component.componentRoot(context.data?.root || input, { names: [backend], library: backend === "moltenvk" ? /^libMoltenVK\.dylib$/ : /^libvulkan_kosmickrisp\.dylib$/ });
-    const inspected = customInspect(root, context), translator = Component.description(root, { engine: backend, apis: ["Vulkan"] }, {
-      source: fs.existsSync(path.join(input, "Contents/SharedSupport/CrossOver")) ? { kind: "crossover", id: input, runtime: "crossover", label: "CrossOver" } : "custom" });
-    return { ...inspected, translator, translatorRoot: root };
+    const root = Component.componentRoot(context.data?.root || input, { names: [backend], library: backend === "moltenvk" ? /^lib(?:MoltenVK|MVK)\.dylib$/ : /^libvulkan_kosmickrisp\.dylib$/ });
+    const inspected = customInspect(root, context), source = Component.registrationSource(input, root);
+    const descriptions = inspected.installationMetadata.libraries.map(file => Component.description(path.join(inspected.installDir, file.file), { engine: backend, apis: ["Vulkan"] }, { source }));
+    const translator = { ...descriptions[0], files: descriptions.flatMap(item => item.files), unixImports: descriptions.flatMap(item => item.unixImports),
+      macosFloor: descriptions.map(item => item.macosFloor).filter(Boolean).sort(require("../runtime/translator-description").compareVersions).at(-1) || null };
+    return { ...inspected, translator, translatorRoot: translator.root };
   } });
   return result;
 }

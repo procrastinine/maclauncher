@@ -3,15 +3,32 @@ const Custom = require("./custom-runtime");
 
 // A component root is retained intact: libraries, notices and future companion
 // files belong to the publisher, rather than a launcher inventory.
-function componentRoot(input, { names }) {
+function componentRoot(input, { names, library }) {
   const stat = fs.statSync(input);
-  if (stat.isFile()) return path.dirname(input);
+  if (stat.isFile()) return library ? input : path.dirname(input);
+  const matches = name => names.includes(name.toLowerCase().replace(/\.framework$/, ""));
+  if (matches(path.basename(input))) return input;
   const files = require("./translator-description").describeTranslator(input, { engine: "dxvk" }).files;
   for (const file of files) {
-    const parts = file.relative.split(path.sep), index = parts.findIndex(part => names.includes(part.toLowerCase()));
+    const parts = file.relative.split(path.sep), index = parts.findIndex(matches);
     if (index >= 0) return path.join(input, ...parts.slice(0, index + 1));
   }
+  const selected = library && files.filter(file => library.test(path.basename(file.path)))
+    .sort((a, b) => a.relative.split(path.sep).length - b.relative.split(path.sep).length)[0];
+  if (selected) return selected.path;
+  if (/\.app$/i.test(input)) throw Error("The application's translator component could not be identified. Select its component folder or library.");
   return input;
+}
+function registrationSource(input, root = input) {
+  for (let current = fs.realpathSync(input);; current = path.dirname(current)) {
+    if (fs.existsSync(path.join(current, "Contents/SharedSupport/CrossOver")))
+      return { kind: "crossover", id: current, runtime: "crossover", label: "CrossOver" };
+    if (["SharedSupport", "Frameworks"].some(directory => fs.existsSync(path.join(current, "Contents", directory, "renderer"))))
+      return { kind: "sikarugir", id: current, runtime: "sikarugir", label: "Sikarugir" };
+    if (current === path.dirname(current)) break;
+  }
+  return /(?:^|\/)(?:Frameworks|SharedSupport)\/renderer(?:\/|$)/.test(root)
+    ? { kind: "sikarugir", id: input, runtime: "sikarugir", label: "Sikarugir" } : "custom";
 }
 function description(root, definition, options = {}) {
   return require("./translator-description").describeTranslator(root, { engine: definition.engine, apis: definition.apis || [], ...options });
@@ -28,9 +45,7 @@ function inspected(root, definition, options) {
 function configure(manager, definition) {
   Custom.configure(manager, { prepare: prepareArchive, inspect(input, { data } = {}) {
     const root = componentRoot(data?.root || input, definition);
-    const source = data?.source || (fs.existsSync(path.join(input, "Contents/SharedSupport/CrossOver"))
-      ? { kind: "crossover", id: input, runtime: "crossover", label: "CrossOver" }
-      : /(?:^|\/)Frameworks\/renderer(?:\/|$)/.test(root) ? { kind: "sikarugir", id: input, runtime: "sikarugir", label: "Sikarugir" } : "custom");
+    const source = data?.source || registrationSource(input, root);
     return inspected(root, definition, { source });
   } });
   const selection = manager.resolveSelection;
@@ -42,7 +57,7 @@ function configure(manager, definition) {
   };
   return manager;
 }
-module.exports = { componentRoot, description, inspected, configure };
+module.exports = { componentRoot, registrationSource, description, inspected, configure };
 
 // A downloaded local container is unpacked once into shared launcher storage.
 // Directory registrations stay at the supplied location and remain references.

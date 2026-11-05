@@ -16,6 +16,8 @@ Each catalog has its own Refresh control and publisher link. Release labels iden
 
 Directory and installed-application registrations reference the selected files. Archive registrations extract once into shared storage. Publisher archives are cached by asset identity across managers; installing another component from the same Template reuses that download. Template component installations retain their complete component tree, including notices, without installing another Wine engine. Removing a local registration preserves the original files.
 
+An installed application selection resolves its component folder, framework or driver library. An application whose component cannot be identified requires selection of the component folder or library. Selecting a component inside CrossOver retains the CrossOver-only source restriction.
+
 D3DMetal is downloaded from Sikarugir Template or supplied locally. MacLauncher does not host or build it. Apple's Game Porting Toolkit licence applies, including Apple hardware and distribution restrictions; the supplied notice remains with the component. Components registered from CrossOver are restricted to CrossOver launches.
 
 GStreamer plugin registration is intended for a prepared codec directory. An unmodified GStreamer SDK can load a second GStreamer core alongside Wine's core. Its plugin dependencies must resolve to the intended libraries before the directory is selected through `GST_PLUGIN_PATH`. Registration does not replace `winegstreamer` or another Wine module, relocate library imports, or supply a codec SDK download catalog.
