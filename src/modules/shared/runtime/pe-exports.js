@@ -1,4 +1,4 @@
-const fs = require("node:fs");
+const fs = require("node:fs"), path = require("node:path");
 
 const LIMITS = Object.freeze({ sections: 96, exportNames: 8192, exportBytes: 1024 * 1024,
   readBytes: 2 * 1024 * 1024, nameBytes: 512 });
@@ -7,7 +7,7 @@ const ARCHITECTURES = new Map([[0x14c, "x86"], [0x8664, "x86_64"], [0xaa64, "arm
 // IMAGE_EXPORT_DIRECTORY and file-backed RVAs, as defined by Microsoft's PE format.
 // Export names alone are not executable-code evidence: forwarded and data exports
 // remain distinct from targets in an executable section.
-function readPeExports(file, { detection, headersOnly = false } = {}) {
+function readPeExports(file, { detection, headersOnly = false, imports = false } = {}) {
   let fd;
   try {
     const stat = detection?.stat ? detection.stat(file) : fs.statSync(file);
@@ -55,12 +55,43 @@ function readPeExports(file, { detection, headersOnly = false } = {}) {
     const builtin = peOffset >= 80 && read(64, Math.min(64, peOffset - 64)).includes(Buffer.from('Wine builtin DLL\0'));
     const header = { architecture, machine: coff.readUInt16LE(4), format: 'pe', form: builtin ? 'builtin' : 'native',
       isDll: Boolean(coff.readUInt16LE(22) & 0x2000), sections };
-    if (headersOnly) return { ...header, bytesRead };
     function fileOffset(rva, size) {
       const section = sections.find(row => rva >= row.rva && rva - row.rva <= row.size && size <= row.size - (rva - row.rva));
       if (!section) throw new Error("PE export RVA is not file-backed.");
       return section.offset + rva - section.rva;
     }
+    if (imports) {
+      // These facts cover declared direct imports, not dynamic library loading.
+      header.peImports = []; header.importsComplete = true;
+      try {
+        const rva = directoryCount > 1 ? optional.readUInt32LE(directories + 8) : 0;
+        const size = directoryCount > 1 ? optional.readUInt32LE(directories + 12) : 0;
+        if (rva || size) {
+          if (!rva || size < 20) throw Error('Invalid PE import directory.');
+          let terminated = false;
+          for (let offset = 0; offset + 20 <= size; offset += 20) {
+            const descriptor = read(fileOffset(rva + offset, 20), 20);
+            if (descriptor.every(byte => byte === 0)) { terminated = true; break; }
+            const nameOffset = fileOffset(descriptor.readUInt32LE(12), 1);
+            const section = sections.find(row => nameOffset >= row.offset && nameOffset < row.offset + row.size);
+            const bytes = read(nameOffset, Math.min(LIMITS.nameBytes, section.offset + section.size - nameOffset)), end = bytes.indexOf(0);
+            if (end <= 0 || bytes.subarray(0, end).some(byte => byte < 0x20 || byte > 0x7e)) throw Error('Invalid PE import name.');
+            const name = path.win32.basename(bytes.toString('ascii', 0, end)).toLowerCase();
+            if (!name) throw Error('Empty PE import module name.');
+            if (!header.peImports.includes(name)) header.peImports.push(name);
+          }
+          if (!terminated) throw Error('PE import directory is incomplete.');
+        }
+      } catch (error) {
+        if (error.code === 'DETECTION_LIMIT') throw error;
+        header.importsComplete = false; header.importWarning = error.message;
+      }
+      if (directoryCount > 13 && (optional.readUInt32LE(directories + 13 * 8) || optional.readUInt32LE(directories + 13 * 8 + 4))) {
+        header.importsComplete = false;
+        header.importWarning = [header.importWarning, 'A delay-import directory is present and has not been inspected.'].filter(Boolean).join(' ');
+      }
+    }
+    if (headersOnly) return { ...header, bytesRead };
     const exportRva = optional.readUInt32LE(directories), exportBytes = optional.readUInt32LE(directories + 4);
     const exports = new Map();
     if (exportRva || exportBytes) {

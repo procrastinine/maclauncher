@@ -7,6 +7,24 @@ const warn = require('../graphics-warning');
 
 const cpuFolder = machine => ({ 332: 'i386-windows', 34404: 'x86_64-windows', 43620: 'aarch64-windows' })[machine];
 function selectedDescriptions(plan) {
+  if (plan?.apiMode) {
+    const selected = new Map();
+    const add = (description, inherited) => {
+      const key = description.id || description.root || description, current = selected.get(key);
+      if (current) { current.inherited &&= inherited; return; }
+      selected.set(key, { ...description, inherited });
+    };
+    for (const [role, row] of Object.entries(plan.components || {}))
+      if (role !== 'd3d-renderer' && row.used)
+        add(row.used, Boolean(row.inherited && !row.fallback));
+    for (const description of plan.additional || []) add(description, Boolean(description.inherited));
+    return [...selected.entries()].map(([key, description]) => ({ ...description, files: ['vulkan-driver', 'video'].includes(description.component) ? description.files : (plan.placements || [])
+      .filter(placement => (placement.description.id || placement.description.root || placement.description) === key)
+      .map(placement => {
+        const consumers = (placement.roles || []).map(role => plan.components?.[role]).filter(row => row?.used);
+        return { ...placement.file, inherited: consumers.length ? consumers.every(row => row.inherited && !row.fallback) : description.inherited };
+      }) }));
+  }
   return [...Object.values(plan?.components || {}).filter(row => row.used && (plan.runtime === 'sikarugir' || !row.inherited || row.fallback))
     .map(row => ({ ...row.used, inherited: row.inherited })), ...(plan?.additional || [])];
 }
@@ -44,11 +62,12 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logge
     return target;
   }
   try {
+  if (plan.apiMode && plan.runtime === 'crossover') env.CX_GRAPHICS_BACKEND = 'wined3d';
   for (const item of selected) {
     signal?.throwIfAborted();
-    if (plan.runtime === 'crossover' && item.included && item.component === 'd3d-renderer') { env.CX_GRAPHICS_BACKEND = item.backend || item.engine; continue; }
-    if (plan.runtime === 'crossover' && ['d3d-renderer', 'd3d12'].includes(item.component) && item.engine !== 'vkd3d') env.CX_GRAPHICS_BACKEND = 'wined3d';
-    if (item.engine === 'vkd3d') continue; // Wine's own d3d12 remains in its normal builtin tree.
+    if (!plan.apiMode && plan.runtime === 'crossover' && item.included && item.component === 'd3d-renderer') { env.CX_GRAPHICS_BACKEND = item.backend || item.engine; continue; }
+    if (plan.runtime === 'crossover' && ['d3d-renderer', 'd3d12'].includes(item.component) && (plan.apiMode || item.engine !== 'vkd3d')) env.CX_GRAPHICS_BACKEND = 'wined3d';
+    if (item.engine === 'vkd3d' && !plan.apiMode) continue; // Legacy Wine d3d12 stays in its normal builtin tree.
     if (item.component === 'vulkan-driver') {
       const json = item.icd ? { path: item.icd } : item.files.find(file => file.format === 'json' && (() => { try { return Boolean(JSON.parse(fs.readFileSync(file.path)).ICD); } catch { return false; } })());
       const descriptor = json ? JSON.parse(fs.readFileSync(json.path, 'utf8')) : null;
@@ -67,12 +86,12 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logge
       env.GST_PLUGIN_PATH = directories.join(path.delimiter); env.GST_PLUGIN_PATH_1_0 = env.GST_PLUGIN_PATH;
       continue;
     }
-    for (const file of plan.compatibility?.[item.id]?.files || item.files) {
+    for (const file of plan.apiMode ? item.files : plan.compatibility?.[item.id]?.files || item.files) {
       if (file.format === 'pe') {
-        if (item.component === 'd3d12' && !/^d3d12/i.test(path.basename(file.path))) continue;
+        if (!plan.apiMode && item.component === 'd3d12' && !/^d3d12/i.test(path.basename(file.path))) continue;
         const architecture = cpuFolder(file.machine); if (!architecture) continue;
         const name = path.basename(file.path), module = name.replace(/\.dll$/i, '');
-        if (file.form === 'native') { if (!item.inherited) native.push({ source: file.path, name, machine: file.machine }); dllOverrides.push(`${module}=n,b`); }
+        if (file.form === 'native') { if (!(plan.apiMode ? file.inherited : item.inherited)) native.push({ source: file.path, name, machine: file.machine }); dllOverrides.push(`${module}=n,b`); }
         else { const relative = `lib/wine/${architecture}/${name}`; links[relative] = await link(file.path, relative); dllOverrides.push(`${module}=b`); }
       } else if (file.format === 'macho' && file.path.endsWith('.so')) {
         if (layout.architecture && !file.cpuSlices.includes(layout.architecture)) continue;
@@ -90,7 +109,7 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logge
       }
     }
   }
-  const nativeFiles = selected.flatMap(item => plan.compatibility?.[item.id]?.files || item.files).filter(file => file.format === 'macho');
+  const nativeFiles = selected.flatMap(item => plan.apiMode ? item.files : plan.compatibility?.[item.id]?.files || item.files).filter(file => file.format === 'macho');
   const libraryPaths = [...new Set(nativeFiles.map(file => path.dirname(fs.realpathSync(file.path))))];
   const frameworkPaths = [...new Set(nativeFiles.flatMap(file => {
     const index = file.path.indexOf('.framework/'); return index < 0 ? [] : [path.dirname(file.path.slice(0, index + 10))];

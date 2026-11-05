@@ -8,6 +8,7 @@ function libraryAdapter(library) {
 const { systemVersionSync } = require("../../shared/runtime/bundled-native");
 const Host = require("../../shared/runtime/host-capabilities");
 const Requirements = require("../../shared/runtime/feature-requirements");
+const { usedForApi } = require("../../shared/runtime/translator-roles");
 const { isAbortError } = require("../../shared/runtime/download-utils");
 const warnGraphics = require("../../shared/graphics-warning");
 const FILES = Object.freeze(["x86_64-windows/d3d11.dll", "x86_64-windows/dxgi.dll", "x86_64-windows/nvngx.dll", "x86_64-unix/winemetal.so"]);
@@ -84,8 +85,10 @@ function matchingSupport(context, root, { entry, runtimeId = context.runtimeId |
 }
 function resolvePlan(entry, context = {}, { install, runtimeId = context.runtimeId || entry?.runtimeId || "crossover", settings = context.runtimeSettings || {}, host = {}, root, verify = false, allowDownload = false, automatic = false, translatorPlan = context.translatorPlan } = {}) {
   try {
+    const translator = usedForApi(translatorPlan, "d3d11");
+    if (Object.hasOwn(translatorPlan?.components || {}, "d3d11") && !translator) return null;
     if (Requirements.requirementSupport(Requirements.WINE_TEMPORAL, { ...Host.getHostCapabilities(), ...host }).supported === false ||
-      !install || !["auto", "dxmt"].includes(settings.graphicsBackend || "auto")) return null;
+      !install || !["auto", "dxmt"].includes(translator?.engine || settings.graphicsBackend || "auto")) return null;
     if ((settings.dllOverrides || []).some(rule => {
       const [names, order] = String(rule).split("=");
       return order?.trim().toLowerCase() !== "b" && order?.trim().toLowerCase() !== "builtin" && names.split(",").some(name => /^(?:\*|d3d10core|d3d11|dxgi|winemetal|nvapi64|nvngx)(?:\.dll)?$/i.test(name.trim()));
@@ -109,7 +112,6 @@ function resolvePlan(entry, context = {}, { install, runtimeId = context.runtime
       methods: [...(hasProjection ? ["fsr2", "fsr3"] : []), ...(hasXeSS ? ["metalfx"] : [])],
       routes: sources.map(row => ({source: row.adapter, depth:true,motionVectors:true,jitter:true,exposure:true,cameraProjection: row.adapter === "streamline", methods: row.adapter === "xess" ? ["metalfx"] : ["fsr2", "fsr3"]})) };
     let baseRoot, selectedSupport;
-    const translator = translatorPlan?.components["d3d-renderer"]?.used;
     if (translator && translator.engine !== "dxmt") return null;
     if (runtimeId === "sikarugir") {
       if (!path.isAbsolute(support || "")) return null;
@@ -119,7 +121,7 @@ function resolvePlan(entry, context = {}, { install, runtimeId = context.runtime
     } else if (runtimeId === "crossover" && path.isAbsolute(install.crossoverRoot || "")) {
       // CrossOver's automatic selector can choose another renderer. Its
       // projection adapter requires an explicit matching DXMT selection.
-      if (settings.graphicsBackend !== "dxmt") return null;
+      if (translator?.engine !== "dxmt" && settings.graphicsBackend !== "dxmt") return null;
       baseRoot = path.join(install.crossoverRoot, "lib/dxmt");
       if (!fs.existsSync(path.join(install.crossoverRoot, "lib/wine/x86_64-unix/wine"))) return null;
     } else return null;

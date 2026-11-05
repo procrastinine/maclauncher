@@ -123,12 +123,14 @@ function inspectFile(file) {
   } catch (error) {
     if (error.code !== 'MACHO_MALFORMED') result.inspectionWarning = error.message;
   }
-  const original = fs.realpathSync(file.path), exports = readPeExports(original), pe = exports || readPeExports(original, { headersOnly: true });
+  const original = fs.realpathSync(file.path), exports = readPeExports(original, { imports: true }), pe = exports || readPeExports(original, { headersOnly: true, imports: true });
   if (pe) {
     if (!exports) result.inspectionWarning = 'PE export inspection is incomplete; basic image facts are available.';
+    if (!pe.importsComplete) result.inspectionWarning = [result.inspectionWarning,
+      `PE import inspection is incomplete: ${pe.importWarning || 'unknown import metadata'}`].filter(Boolean).join(' ');
     // Replacement DLL resources report Windows component versions, not translator releases.
     return { ...result, format: 'pe', form: pe.form, machine: pe.machine, architecture: pe.architecture, macosFloor: null, unixImports: [],
-      apis: fileApis({ ...file, format: 'pe' }), version: null };
+      apis: fileApis({ ...file, format: 'pe' }), peImports: pe.peImports, importsComplete: pe.importsComplete, version: null };
   }
   return { ...result, format: file.path.endsWith('.json') ? 'json' : 'unknown', apis: [], macosFloor: null, unixImports: [] };
 }

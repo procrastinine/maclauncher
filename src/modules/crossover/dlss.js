@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { versionAtLeast, systemVersionSync } = require("../shared/runtime/bundled-native");
 const { inspectMachOExports } = require("../shared/runtime/macho-exports");
+const { usedForApi } = require("../shared/runtime/translator-roles");
 
 const DLLS = Object.freeze(["nvapi64", "nvngx"]);
 const ENVIRONMENT = Object.freeze(["DXMT_ENABLE_NVEXT", "D3DM_ENABLE_METALFX"]);
@@ -25,10 +26,16 @@ function hasLibraries(directory) {
 }
 
 function checkSelection(settings, { backend, dxmt = false, d3dmetal = false,
-  hardwareArch = require("../shared/runtime/host-capabilities").getHostCapabilities().hardwareArch, macOSVersion, executableArchitecture } = {}) {
+  hardwareArch = require("../shared/runtime/host-capabilities").getHostCapabilities().hardwareArch, macOSVersion, executableArchitecture, translatorPlan } = {}) {
   if (settings.dlss !== true) return { enabled: false, dxmt: false, d3dmetal: false };
   if (hardwareArch !== "arm64") throw new Error("MetalFX Temporal requires Apple Silicon.");
   if (executableArchitecture && executableArchitecture !== "x86_64") throw new Error("MetalFX Temporal requires a 64-bit Windows executable.");
+  const apiEngines = translatorPlan?.apiMode ? [usedForApi(translatorPlan, "d3d11")?.engine, usedForApi(translatorPlan, "d3d12")?.engine] : null;
+  if (apiEngines) {
+    dxmt = dxmt && apiEngines.includes("dxmt");
+    d3dmetal = d3dmetal && apiEngines.includes("d3dmetal");
+    backend = "auto"; // Global Wine redirection is transport, not the per-API renderer.
+  }
   if (!["auto", "dxmt", "d3dmetal"].includes(backend)) throw new Error("MetalFX Temporal requires DXMT or D3DMetal. Change Graphics or disable MetalFX Temporal.");
   macOSVersion ||= systemVersionSync();
   const supportsDxmt = dxmt && versionAtLeast(macOSVersion, "14.0.0");
@@ -45,10 +52,11 @@ function environment(selection) {
 }
 
 function hasPlanLibraries(plan, engine) {
-  const selected = plan.components["d3d-renderer"]?.used;
-  if (selected?.engine !== engine) return false;
-  const files = plan.compatibility?.[selected.id]?.files || selected.files;
-  return DLLS.every(name => files.some(file => file.format === "pe" && file.machine === 0x8664 && path.basename(file.path).toLowerCase() === name + ".dll" && fs.existsSync(file.path) && fs.statSync(file.path).size > 128));
+  return [usedForApi(plan, "d3d11"), usedForApi(plan, "d3d12")].filter(selected => selected?.engine === engine).some(selected => {
+    const files = plan.apiMode && Array.isArray(plan.placements) ? plan.placements.filter(item => item.description.id === selected.id &&
+      item.roles.some(role => role === "d3d11" || role === "d3d12")).map(item => item.file) : plan.compatibility?.[selected.id]?.files || selected.files;
+    return DLLS.every(name => files.some(file => file.format === "pe" && file.machine === 0x8664 && path.basename(file.path).toLowerCase() === name + ".dll" && fs.existsSync(file.path) && fs.statSync(file.path).size > 128));
+  });
 }
 async function hasD3DMetalPathBridge(engineRoot) {
   if (!path.isAbsolute(engineRoot || "")) return false;

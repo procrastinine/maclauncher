@@ -10,7 +10,11 @@ const launchIdentity = value => typeof value === "string" && /^[\w-]{1,128}$/.te
 function usedTranslatorPlan(plan) {
   if (!plan) return undefined;
   return {runtime: plan.runtime, components: Object.fromEntries(Object.entries(plan.components).map(([component, row]) =>
-    [component, {used: row.used ?? null}]))};
+    [component, {used: row.used ?? null}])), ...(plan.apiMode ? {
+    apiMode: true,
+    placements: (plan.placements || []).map(({file, description, roles}) => ({file, description, roles})),
+    groups: (plan.groups || []).map(({id, roles}) => ({id, roles}))
+  } : {})};
 }
 function payloadFiles(entry, userDataDir, launchId) {
   if (!launchIdentity(launchId)) throw new Error("The graphics launch identity is invalid.");
