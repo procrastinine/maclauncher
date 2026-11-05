@@ -113,6 +113,34 @@ test('the Template source is primary where it is the only download source and in
   assert.deepEqual(fs.readdirSync(path.join(metal, 'd3dmetal')).sort(), ['License.rtf', 'Read Me.rtf', 'wine'], "Apple's licence and read me stay with D3DMetal");
 });
 
+// Apple's D3DMetal layout in recent Templates: a framework with its release in
+// Info.plist, a bridge library, Wine modules and notices, and an apple_gptk link.
+function appleD3DMetal(put, renderer, release) {
+  const framework = `${renderer}/d3dmetal/external/D3DMetal.framework`;
+  put(`${framework}/Versions/A/D3DMetal`, image({ cpu: X64, installName: '@rpath/D3DMetal.framework/Versions/A/D3DMetal' }));
+  put(`${framework}/Versions/A/Resources/Info.plist`, '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict>' +
+    `<key>CFBundleIdentifier</key><string>com.apple.D3DMetal</string><key>CFBundleShortVersionString</key><string>${release}</string></dict></plist>`);
+  put(`${renderer}/d3dmetal/external/libd3dshared.dylib`, image({ cpu: X64, installName: '@rpath/libd3dshared.dylib' }));
+  put(`${renderer}/d3dmetal/wine/x86_64-windows/d3d12.dll`, builtin());
+  for (const name of ['License.rtf', 'Read Me.rtf']) put(`${renderer}/d3dmetal/${name}`, name);
+  return framework;
+}
+
+test('a D3DMetal Template install keeps the whole d3dmetal folder through the apple_gptk link and takes its release from the framework', async t => {
+  const { root, put } = scratch(t), { result } = configurations(t);
+  const renderer = 'metal/Template-1.0.27.app/Contents/SharedSupport/renderer', framework = path.join(root, appleD3DMetal(put, renderer, '9.1b2'));
+  for (const link of [['A', 'Versions/Current'], ['Versions/Current/D3DMetal', 'D3DMetal'], ['Versions/Current/Resources', 'Resources']])
+    fs.symlinkSync(link[0], path.join(framework, link[1]));
+  fs.symlinkSync('d3dmetal', path.join(root, renderer, 'apple_gptk'));
+  const unpacked = path.join(root, 'metal'), folder = path.join(root, renderer, 'd3dmetal');
+  assert.equal(require('../src/modules/shared/runtime/component-runtime').componentRoot(unpacked, { names: ['d3dmetal', 'apple_gptk', 'redist'] }), folder,
+    'the outermost component folder wins over a framework reached through the link');
+  const metadata = await result.get('translator-d3dmetal').prepareInstall({ unpacked,
+    pin: { version: 'template-Template-1.0.27', catalogSourceId: 'template', component: 'd3dmetal', asset: { filename: 'Template-1.0.27.tar.xz' } } });
+  assert.deepEqual(fs.readdirSync(path.join(unpacked, 'd3dmetal')).sort(), ['License.rtf', 'Read Me.rtf', 'external', 'wine']);
+  assert.equal(metadata.translator.version, '9.1b2', 'a folder with one framework bundle takes that bundle\'s release');
+});
+
 test('Runtimes names the translator versions of an installed Wine runtime and what a listed Template version holds', async () => {
   const { build } = require('vite'), Module = require('node:module'), React = require('react');
   const { renderToStaticMarkup } = require('react-dom/server');

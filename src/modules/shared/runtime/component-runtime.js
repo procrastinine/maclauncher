@@ -5,16 +5,27 @@ const { componentLabel, componentVersion, hostLabel, label: translatorLabel } = 
 const componentName = names => name => names.includes(name.toLowerCase().replace(/\.framework$/, ""));
 // A component root is retained intact: libraries, notices and future companion
 // files belong to the publisher, rather than a launcher inventory.
+// The outermost folder named for the component is its root. Real paths count
+// as well, so a linked alias of that folder, such as a Template's apple_gptk
+// link to d3dmetal, cannot select a narrower bundle nested inside it.
 function componentRoot(input, { names, library, entryLibrary }, translator) {
   const stat = fs.statSync(input);
   if (stat.isFile()) return entryLibrary ? path.dirname(fs.realpathSync(input)) : library ? input : path.dirname(input);
-  const matches = componentName(names);
+  const name = value => value.toLowerCase().replace(/\.framework$/, ""), matches = componentName(names);
   if (matches(path.basename(input))) return input;
   const files = (translator || require("./translator-description").describeTranslator(input, { engine: "dxvk" })).files;
-  for (const file of files) {
-    const parts = file.relative.split(path.sep), index = parts.findIndex(matches);
-    if (index >= 0) return path.join(input, ...parts.slice(0, index + 1));
+  const real = fs.realpathSync(input);
+  let found = null;
+  for (const file of files) for (const [base, candidate] of [[input, file.path], [real, file.realPath]]) {
+    const relative = candidate && path.relative(base, candidate);
+    if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) continue;
+    const parts = relative.split(path.sep), index = parts.findIndex(matches);
+    if (index < 0) continue;
+    const rank = [index, names.indexOf(name(parts[index]))];
+    if (!found || rank[0] < found.rank[0] || rank[0] === found.rank[0] && rank[1] < found.rank[1])
+      found = { rank, parts: parts.slice(0, index + 1) };
   }
+  if (found) return path.join(input, ...found.parts);
   const selected = library && files.filter(file => library.test(path.basename(file.path)))
     .sort((a, b) => a.relative.split(path.sep).length - b.relative.split(path.sep).length)[0];
   if (selected) return entryLibrary ? path.dirname(selected.realPath || fs.realpathSync(selected.path)) : selected.path;
