@@ -71,6 +71,67 @@ test("CrossOver graphics preparation signs only a private copy and reuses matchi
   assert.equal(fs.readFileSync(repaired, "utf8"), "supplied loader private signature");
   assert.equal(await Loader.prepare(selected, directory, { execute: () => assert.fail("repaired generation must be reused") }), repaired);
 });
+test("shared private loader preserves complete i386 and x86_64 Windows views with explicit translator overrides", async t => {
+  const { peFixture } = require("./helpers/pe-fixture"), { image, X64 } = require("./fixtures/macho-image");
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "crossover-wow64-loader-")));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const selected = { ...installation(root), architecture: "x64" }, vendor = selected.crossoverRoot;
+  const put = (file, bytes) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes); return file; };
+  const pe = is64 => {
+    const fixture = peFixture({ is64 }); fixture.bytes.writeUInt16LE(0x2002, fixture.peOffset + 22); return fixture.bytes;
+  };
+  const unix = path.join(vendor, "lib/wine/x86_64-unix"), unixLoader = path.join(unix, "wine");
+  put(unixLoader, image({ cpu: X64, fileType: 2 }));
+  const translatorView = { identity: "fixture-translator", links: {}, env: {}, libraryPaths: [], frameworkPaths: [], dllOverrides: [] };
+  for (const [architecture, is64] of [["i386-windows", false], ["x86_64-windows", true]]) {
+    const directory = path.join(vendor, "lib/wine", architecture);
+    for (const name of ["ntdll.dll", "apisetschema.dll", "kernel32.dll", "kernelbase.dll", "wow64.dll", "wow64cpu.dll", "wow64win.dll", "d3d11.dll", "future-component.dll"])
+      put(path.join(directory, name), pe(is64));
+    put(path.join(directory, "module-data.dat"), "vendor data");
+    put(path.join(directory, "locale/messages.dat"), "vendor nested data");
+    const override = put(path.join(root, "translator", architecture, "d3d11.dll"), Buffer.concat([pe(is64), Buffer.from(" selected translator")]));
+    translatorView.links[`lib/wine/${architecture}/d3d11.dll`] = override;
+  }
+  const originalLoaders = new Map([selected.loaderPath, unixLoader, path.join(unix, "ntdll.so")].map(file => [file, fs.readFileSync(file)]));
+  const userDataDir = path.join(root, "profile"), firstGame = path.join(root, "games/first"), secondGame = path.join(root, "games/second");
+  const execute = async (command, args) => {
+    assert.equal(command, "/usr/bin/codesign");
+    if (args[0] === "-d") { assert.ok(originalLoaders.has(args.at(-1))); return { stdout: permissions }; }
+    assert.ok(args.at(-1).startsWith(userDataDir + path.sep), "only the shared private staging copy is signed");
+    if (args.includes("--sign")) fs.appendFileSync(args.at(-1), " private signature");
+    return { stdout: "" };
+  };
+  const options = { execute, userDataDir, translatorView }, loader = await Loader.prepare(selected, firstGame, options);
+  const prepared = path.resolve(path.dirname(loader), "..");
+  for (const architecture of ["i386-windows", "x86_64-windows"]) {
+    const directory = path.join(vendor, "lib/wine", architecture), view = path.join(prepared, "lib/wine", architecture);
+    for (const name of fs.readdirSync(directory)) {
+      const relative = `lib/wine/${architecture}/${name}`, expected = translatorView.links[relative] || path.join(directory, name);
+      assert.equal(fs.lstatSync(path.join(view, name)).isSymbolicLink(), true, `${relative} is linked rather than copied`);
+      assert.equal(fs.realpathSync(path.join(view, name)), fs.realpathSync(expected), `${relative} keeps the vendor entry unless explicitly overridden`);
+    }
+  }
+  for (const name of ["bin/wineloader", "lib/wine/x86_64-unix/wine", "lib/wine/x86_64-unix/ntdll.so"])
+    assert.equal(fs.lstatSync(path.join(prepared, name)).isSymbolicLink(), false, `${name} retains its existing private copy`);
+  assert.equal(fs.realpathSync(path.join(prepared, "lib/wine/x86_64-unix/crypt32.so")), path.join(unix, "crypt32.so"));
+  const environment = Loader.environment(loader, {}, { installation: selected, translatorView });
+  assert.equal(environment.DYLD_LIBRARY_PATH, path.join(prepared, "lib/wine/x86_64-unix"));
+  for (const architecture of ["i386-windows", "x86_64-windows"]) assert.ok(environment.WINEDLLPATH.split(path.delimiter).includes(path.join(prepared, "lib/wine", architecture)));
+  const regularBytes = directory => fs.readdirSync(directory).reduce((bytes, name) => {
+    const file = path.join(directory, name), stat = fs.lstatSync(file);
+    return bytes + (stat.isSymbolicLink() ? 0 : stat.isDirectory() ? regularBytes(file) : stat.size);
+  }, 0);
+  const bytesBefore = regularBytes(userDataDir);
+  assert.equal(await Loader.prepare(selected, secondGame, { ...options, execute: () => assert.fail("a second game reuses the prepared shared loader") }), loader);
+  assert.equal(regularBytes(userDataDir), bytesBefore, "a second game adds zero payload bytes");
+  assert.equal(fs.existsSync(firstGame), false); assert.equal(fs.existsSync(secondGame), false);
+  const added = put(path.join(vendor, "lib/wine/i386-windows/added-module.dll"), pe(false));
+  const next = await Loader.prepare(selected, secondGame, options);
+  assert.notEqual(next, loader, "adding an ordinary vendor entry changes the shared view identity");
+  assert.equal(fs.existsSync(path.join(prepared, "lib/wine/i386-windows/added-module.dll")), false, "the earlier generation remains unchanged");
+  assert.equal(fs.realpathSync(path.resolve(path.dirname(next), "../lib/wine/i386-windows/added-module.dll")), added);
+  for (const [file, bytes] of originalLoaders) assert.deepEqual(fs.readFileSync(file), bytes, "vendor loaders and ntdll remain unchanged");
+});
 test("failed private loader signing leaves the supplied loader untouched and removes incomplete copies", async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "crossover-graphics-loader-"));t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const selected = installation(root), directory = path.join(root, "game");
@@ -111,6 +172,8 @@ test("private Vulkan selection binds the exact paired modules and x64 driver wit
   }
   const native = Buffer.alloc(56);
   for (const [offset, value] of [[0, 0xfeedfacf], [4, 0x01000007], [12, 6], [16, 1], [20, 24], [32, 0x32], [36, 24], [40, 1], [44, 0x0d0000], [48, 0x0d0000]]) native.writeUInt32LE(value, offset);
+  const childLoader = Buffer.from(native);childLoader.writeUInt32LE(2, 12);
+  write(path.join(selected.crossoverRoot, "lib/wine/x86_64-unix/wine"), childLoader);
   const driver = write(path.join(root, "driver", "libMoltenVK-scene.dylib"), native);
   const closure = { profile: profile.id, runtimeProfile: { id: profile.id, driverVersion: profile.driverVersion, unixCallCount: profile.unixCallCount, files: runtimeFiles },
     modules, driver: { path: driver, sha256: hash(driver) } };

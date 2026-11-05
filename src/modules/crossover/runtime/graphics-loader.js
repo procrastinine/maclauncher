@@ -74,10 +74,16 @@ async function prepare(installation, directory, { signal, execute = executeFile,
     if (fs.existsSync(path.join(vendor, "lib64"))) links.lib64 = path.join(vendor, "lib64");
   }
   for (const architecture of separateLoader ? layout.windows : []) {
+    // WoW64 also resolves builtins relative to the real ntdll.so's Wine root,
+    // before WINEDLLPATH. Keep each vendor Windows view complete, then apply
+    // the selected translator, camera and scene overrides below.
+    for (const name of fs.readdirSync(path.join(vendor, "lib/wine", architecture)).sort()) {
+      const relative = `lib/wine/${architecture}/${name}`;
+      links[relative] = path.join(vendor, relative);
+    }
     for (const name of ["ntdll.dll", "apisetschema.dll"]) {
       const relative = `lib/wine/${architecture}/${name}`, source = path.join(vendor, relative);
-      if (fs.existsSync(source)) links[relative] = source;
-      else if (architecture === layout.primaryWindows) throw new Error("CrossOver's graphics loader is incomplete.");
+      if (!fs.existsSync(source) && architecture === layout.primaryWindows) throw new Error("CrossOver's graphics loader is incomplete.");
     }
   }
   if (translatorView) Object.assign(links, translatorView.links);
@@ -135,8 +141,8 @@ async function prepare(installation, directory, { signal, execute = executeFile,
     const files = {};
     // Wine derives its child loader from the real path of ntdll.so. Keep a real
     // copy beside the distinct Unix loader so re-exec preserves both its address
-    // space layout and permission to load the adapter. Remaining libraries come
-    // from the supplied application through its normal WINEDLLPATH selection.
+    // space layout and permission to load the adapter. Vendor modules stay
+    // linked in the complete loader-relative view, beneath graphics overrides.
     for (const { name, source, mode, sign } of sources) {
       signal?.throwIfAborted();
       const copy = path.join(temporary, name);
