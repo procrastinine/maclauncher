@@ -17,6 +17,8 @@ const FORMS = Object.freeze(['builtin', 'native', 'icd', 'dylib']);
  * { symbol, library, weak? }; library is the Mach-O dependency install name.
  * source may be a catalog id, 'custom', or { kind, id, label, runtime? }.
  * Mixed packages use a per-file form. Unknown fields are retained and ignored.
+ * Optional pluginDirectories lists plugin search directories relative to root;
+ * dependency libraries remain in files without becoming plugin directories.
  * Binary facts are populated by inspectDescription, independently of labels.
  */
 function description(input) {
@@ -35,8 +37,20 @@ function label(value) {
   return [names[value.engine] || value.engine, value.version, source ? `(${source})` : ''].filter(Boolean).join(' ');
 }
 /** Synchronous custom-runtime.inspect seam. Walks the chosen component root. */
-function describeTranslator(root, { engine, source, version, component, id, apis = [], form, logger = console } = {}) {
+function describeTranslator(root, { engine, source, version, component, id, apis = [], form, pluginDirectories, logger = console } = {}) {
   root = fs.realpathSync(root);
+  if (pluginDirectories !== undefined) {
+    if (!Array.isArray(pluginDirectories)) throw new TypeError('Plugin directories must be root-relative paths.');
+    pluginDirectories = [...new Set(pluginDirectories.map(relative => {
+      if (typeof relative !== 'string' || !relative || path.isAbsolute(relative)) throw new TypeError('Plugin directories must be root-relative paths.');
+      const selected = path.resolve(root, relative);
+      if (selected !== root && !selected.startsWith(root + path.sep)) throw new Error('A plugin directory escapes its component root.');
+      const real = fs.realpathSync(selected);
+      if (real !== root && !real.startsWith(root + path.sep)) throw new Error('A plugin directory escapes its component root.');
+      if (!fs.statSync(real).isDirectory()) throw new TypeError('A plugin directory must be a directory.');
+      return path.relative(root, real) || '.';
+    }))];
+  }
   const files = [], visited = new Set(), warnings = [];
   function visit(file, entry) {
     const framework = file.match(/([^/]+)\.framework\//), required = /\.(?:dll|so|dylib)$/i.test(file) || framework?.[1] === path.basename(file);
@@ -104,7 +118,7 @@ function describeTranslator(root, { engine, source, version, component, id, apis
   const floors = files.flatMap(file => file.macosFloor ? [file.macosFloor] : []);
   for (const warning of warnings) warn(logger, `[translators] ${warning}`);
   return description({ id: id || `${engine}:${root}`, root, component, engine, source, version, apis, form, files,
-    warnings,
+    warnings, ...(pluginDirectories === undefined ? {} : { pluginDirectories }),
     macosFloor: floors.sort(compareVersions).at(-1) || null,
     unixImports: files.flatMap(file => file.unixImports || []) });
 }
