@@ -8,6 +8,11 @@ const root = path.resolve(__dirname, '..');
 const normalized = url => url.trim().replace(/\/+$/, '').toLowerCase();
 const projects = module => new Set((module.acknowledgments || []).map(item => normalized(item.url)));
 const allProjects = new Set([...shared, ...registry.listModules().flatMap(module => module.acknowledgments || [])].map(item => normalized(item.url)));
+const projectPage = (project, source) => {
+  const base = new URL(normalized(project)), page = new URL(normalized(source));
+  const prefix = base.pathname.replace(/\/+$/, '');
+  return base.origin === page.origin && (page.pathname === prefix || page.pathname.startsWith(prefix + '/'));
+};
 
 test('every registered runtime manager has a linked upstream project in Credits', () => {
   const upstream = {
@@ -109,12 +114,17 @@ test('every registered runtime manager has a linked upstream project in Credits'
       const catalog = manager.getState().catalog;
       const sources = [...(catalog.sources || [catalog]).map(source => source.sourceUrl), ...(catalog.sourceLinks || []).map(source => source.url)];
       assert.ok(sources.length, `${id}: retain its declared source projects`);
-      for (const url of sources) assert.ok(allProjects.has(normalized(url).replace(/\/releases$/, '')), `${id}: Credits must link its declared source ${url}`);
+      for (const url of sources) assert.ok([...allProjects].some(project => projectPage(project, url)), `${id}: Credits must link its declared source project ${url}`);
       continue;
     }
     assert.ok(upstream[id], `${id}: record its real upstream project when registering a manager`);
     assert.ok(allProjects.has(normalized(upstream[id])), `${id}: Credits must link its upstream`);
   }
+  const project = 'https://example.test/group/project';
+  assert.equal(projectPage(project, project + '/releases'), true);
+  assert.equal(projectPage(project, project + '-other/releases'), false);
+  assert.equal(projectPage(project, project + '/../other/releases'), false);
+  assert.equal(projectPage(project, 'https://other.test/group/project/releases'), false);
 });
 
 test('separate backend libraries and tools retain separate project links', () => {
