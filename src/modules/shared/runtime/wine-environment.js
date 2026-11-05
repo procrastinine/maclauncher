@@ -54,20 +54,20 @@ function environmentReference(value) {
 const textFile = file => { try { return fs.readFileSync(file, "utf8"); } catch { return ""; } };
 const fileExists = file => { try { return fs.statSync(file).isFile(); } catch { return false; } };
 function readIni(text) {
-  const result = {}; let section;
+  const result = Object.create(null); let section;
   for (const line of String(text).split(/\r?\n/)) {
     const header = line.match(/^\s*\[([^\]]+)\]/);
-    if (header) { section = result[header[1]] ||= {}; continue; }
+    if (header) { section = result[header[1]] ||= Object.create(null); continue; }
     const item = line.match(/^\s*"((?:\\.|[^"\\])*)"\s*=\s*"((?:\\.|[^"\\])*)"/);
     if (section && item) section[item[1].replace(/\\(["\\])/g, "$1")] = item[2].replace(/\\(["\\])/g, "$1");
   }
   return result;
 }
 function readRegistry(text) {
-  const result = {}; let section;
+  const result = Object.create(null); let section;
   for (const line of String(text).split(/\r?\n/)) {
     const header = line.match(/^\[([^\]]+)\]/);
-    if (header) { section = result[header[1].replace(/\\\\/g, "\\")] ||= {}; continue; }
+    if (header) { section = result[header[1].replace(/\\\\/g, "\\")] ||= Object.create(null); continue; }
     const item = line.match(/^"((?:\\.|[^"\\])*)"=(.*)$/);
     if (!section || !item) continue;
     const raw = item[2];
