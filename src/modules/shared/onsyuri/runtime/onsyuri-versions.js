@@ -70,16 +70,17 @@ function matchesOnsyuriAsset(name, { arch, variant } = {}) {
 // one that serves both) and one for the Web build.
 function recognizeRelease(release) {
   const version = normalizeOnsyuriVersion(release?.tag_name || release?.name);
+  const label = release?.tag_name || release?.name || version;
   const assets = Array.isArray(release?.assets) ? release.assets.filter(asset => asset && typeof asset.name === "string") : [];
   if (!version) return [];
   const rows = [];
   for (const arch of ["arm64", "x64"]) {
     const candidates = assets.filter(asset => matchesOnsyuriAsset(asset.name, { arch }));
     const asset = candidates.find(item => assetArchitecture(item.name) === arch) || candidates[0];
-    if (asset) rows.push({ version, architecture: arch, details: { section: "mac" }, assets: [asset] });
+    if (asset) rows.push({ version, label, architecture: arch, details: { section: "mac" }, assets: [asset] });
   }
   const web = assets.find(asset => matchesOnsyuriAsset(asset.name, { variant: "web" }));
-  if (web) rows.push({ version, details: { section: "web" }, assets: [web] });
+  if (web) rows.push({ version, label, details: { section: "web" }, assets: [web] });
   return rows;
 }
 

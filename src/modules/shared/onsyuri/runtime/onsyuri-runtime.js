@@ -26,7 +26,7 @@ const source = Upstream.github({ repository: "YuriSizuku/OnscripterYuri", prerel
 // Rows from releases in GitHub's shape, as earlier catalog caches hold them.
 function rowsFromReleases(releases) {
   return (Array.isArray(releases) ? releases : []).flatMap(release => Versions.recognizeRelease(release).map(row => ({
-    version: row.version, details: row.details, ...(row.architecture ? { architecture: row.architecture } : {}),
+    version: row.version, label: row.label, details: row.details, ...(row.architecture ? { architecture: row.architecture } : {}),
     files: row.assets.map(asset => Upstream.listedFile({ filename: asset.name, url: asset.browser_download_url, bytes: asset.size,
       assetId: asset.id, digest: Upstream.githubDigest(asset) })).filter(Boolean) })));
 }

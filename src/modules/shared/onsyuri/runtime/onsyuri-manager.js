@@ -98,7 +98,7 @@ function cachedRows(entry) {
   if (entry?.release) return Runtime.rowsFromReleases([entry.release]);
   const file = Upstream.listedFile(entry?.asset);
   return file && [SECTION_MAC, SECTION_WEB].includes(entry.section) && Versions.normalizeOnsyuriVersion(entry.version) === entry.version
-    ? [{ version: entry.version, details: { section: entry.section }, ...(entry.architecture ? { architecture: entry.architecture } : {}), files: [file] }] : [];
+    ? [{ version: entry.version, label: entry.versionLabel, details: { section: entry.section }, ...(entry.architecture ? { architecture: entry.architecture } : {}), files: [file] }] : [];
 }
 function loadUpstream(userDataDir) {
   if (!userDataDir || loadedUpstream.has(userDataDir)) return;
@@ -112,7 +112,7 @@ function saveUpstream(userDataDir) {
   if (!userDataDir) return;
   writeRuntimeCatalog({ userDataDir, managerId: "onsyuri", sourceId: "upstream", source: UPSTREAM_SOURCE,
     fetchedAt: catalogFetchedAt, sourceStates: { upstream: { status: macCatalog.status, fetchedAt: catalogFetchedAt, error: macCatalog.error } },
-    entries: upstreamRows.filter(row => row.files?.length).map(row => ({ version: row.version, section: row.details?.section,
+    entries: upstreamRows.filter(row => row.files?.length).map(row => ({ version: row.version, versionLabel: row.label, section: row.details?.section,
       ...(row.architecture ? { architecture: row.architecture } : {}), asset: Upstream.asset(row.files[0]) })) });
 }
 async function refreshCatalog({ logger, force, sectionId, userDataDir, signal, sourceId } = {}) {
@@ -193,7 +193,7 @@ function getState({ settings, userDataDir } = {}) {
     defaultVariant: cfg.mac.defaultVariant || defaultArchVariant(),
     installed: macInstalled,
     installing: null,
-    versionLabels: Object.fromEntries([...hostedPins.filter(Boolean), ...macInstalled].map(pin => [pin.version, /-MCLv[1-9]\d*$/.test(pin.version) ? pin.version : pin.versionLabel || pin.version])),
+    versionLabels: { ...Object.fromEntries(upstreamRows.filter(row=>row.label).map(row=>[row.version,row.label])), ...Object.fromEntries([...hostedPins.filter(Boolean), ...macInstalled].map(pin => [pin.version, /-MCLv[1-9]\d*$/.test(pin.version) ? pin.version : pin.versionLabel || pin.version])) },
     variants: ARCH_VARIANTS,
     notice: macInstalled.some(row => row.ready) || installableVersions.length ? null : MAC_NOTICE,
     installReason,
@@ -221,6 +221,7 @@ function getState({ settings, userDataDir } = {}) {
 
 
   const webState = {
+    versionLabels: Object.fromEntries(upstreamRows.filter(row=>row.label).map(row=>[row.version,row.label])),
     supportsDefault: true,
     defaultVersion: selectRuntimeVersion({ defaultVersion: cfg.web.defaultVersion, fallback: managerDefaultVersion({
       listed: webCatalog.versions, installed: webInstalled.filter(row => row.ready !== false).map(row => row.version) }) }).version,
@@ -230,6 +231,7 @@ function getState({ settings, userDataDir } = {}) {
     variants: [],
     catalog: {
       status: webCatalog.status,
+      versionLabels: Object.fromEntries(upstreamRows.filter(row=>row.label).map(row=>[row.version,row.label])),
       versions: webCatalog.versions,
       fetchedAt: webCatalog.fetchedAt,
       source: webCatalog.source || UPSTREAM_SOURCE,

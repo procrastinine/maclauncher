@@ -11,7 +11,7 @@ Translator versions use the shared runtime catalogs and local registration. Refr
 | Manager | Download sources | Local sources |
 | --- | --- | --- |
 | MoltenVK | KhronosGroup/MoltenVK | Library, folder, archive or installed runtime |
-| KosmicKrisp | Mesa distributions | Driver and loader folder, archive or installed runtime |
+| KosmicKrisp | LWJGL packages | Driver and loader folder, archive or installed runtime |
 | DXMT | 3Shain/dxmt builtin releases; Sikarugir Template | Folder, archive or installed runtime |
 | DXVK | doitsujin/dxvk; Gcenx/DXVK-macOS, with a separate async catalog; historical AlpyneDreams/d8vk and misyltoad/d9vk releases; Template dxvk, dxvk3 and d9vk | Folder, archive or installed runtime |
 | Wine vkd3d | Wine upstream source link | Read-only copies included with registered runtimes |
@@ -22,6 +22,8 @@ Translator versions use the shared runtime catalogs and local registration. Refr
 DXVK-macOS is shown as an optional macOS alternative to the runtime's own included or automatic choice. Upstream, async, historical D8VK/D9VK and Template sources remain under Additional sources. D8VK and D9VK retain their historical releases; their Direct3D 8 and 9 work is part of modern DXVK. Installed rows show API coverage read from the actual libraries, so each version can expose a different API set. Template package versions are distinct from installed component versions. The GStreamer panel registers prepared local codec folders, and D3DMetal links to Apple's official Game Porting Toolkit download page.
 
 Each catalog has its own Refresh control and publisher link. Release labels identify the source. Installed files supply PE machine and builtin/native form, Mach-O CPU slices, deployment targets and Unix imports. Release numbers and vendor labels do not determine compatibility.
+
+LWJGL's package version is shown as package provenance for its KosmicKrisp driver. A KosmicKrisp component version is shown only when component metadata supplies it. Releases and builds that share a short label retain their publisher revision or exact build identity rather than a numbered position in a list.
 
 Directory and installed-application registrations reference the selected files. Archive registrations extract once into shared storage. Publisher archives are cached by asset identity across managers; installing another component from the same Template reuses that download. Template component installations retain their complete component tree, including notices, without installing another Wine engine. Removing a local registration preserves the original files.
 

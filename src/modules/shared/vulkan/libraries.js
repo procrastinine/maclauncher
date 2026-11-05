@@ -47,7 +47,7 @@ const kosmickrisp = Upstream.index({ locations: [LWJGL_RELEASES], hosts: ["lwjgl
       const head = await read(url, { method: "HEAD" }).catch(() => null);
       if (head?.status !== 200) return null;
       const revision = await read(url + ".git").then(document => document?.status === 200 && /^[a-f0-9]{40}$/.exec(document.text.trim())?.[0]).catch(() => null);
-      return { version, label: "KosmicKrisp " + version, architecture: "arm64", sourceUrl: `${definitions.kosmickrisp.source}/${version}/macosx/arm64`,
+      return { version, label: `KosmicKrisp · LWJGL package ${version}`, architecture: "arm64", sourceUrl: `${definitions.kosmickrisp.source}/${version}/macosx/arm64`,
         ...(revision ? { revision } : {}), files: [{ name: definitions.kosmickrisp.library, url, bytes: head.headers["content-length"],
           ...(head.headers["x-amz-checksum-sha256"] ? { digest: head.headers["x-amz-checksum-sha256"], algorithm: "sha256" } : {}) }] };
     }));
@@ -119,9 +119,12 @@ function createManager(backend, dependencies = {}) {
   const definition = definitions[backend], loader = backend === "kosmickrisp" ? loaderSource(dependencies) : null;
   const manager = createPinnedNativeManager({ id: "vulkan-" + backend, label: definition.label, sourceUrl: definition.source, sourceLabel: "Source", sourceName: definition.sourceName, sourceDescription: definition.sourceDescription,
     nativeLibrary: true, cacheDownloads: true,
+    ...(backend === "kosmickrisp" ? { formatVersionLabel: (pin, installed) => pin ? [installed?.translator?.version ? `KosmicKrisp ${installed.translator.version}` : "KosmicKrisp", `LWJGL package ${pin.upstreamTag || pin.version}`].join(" · ") : undefined } : {}),
     inspectRuntime(options) {
       const native = require("../runtime/local-native").resolveLocalRuntime(options), root = path.dirname(native.executablePath);
-      const translator = require("../runtime/component-runtime").description(root, { engine: backend, apis: ["Vulkan"] }, { source: "upstream", version: options.runtimeVersion });
+      const translator = require("../runtime/component-runtime").description(root, { engine: backend, apis: ["Vulkan"] }, {
+        source: backend === "kosmickrisp" ? { kind: "upstream", id: definition.source, label: `LWJGL ${options.runtimeVersion} package` } : "upstream",
+        ...(backend === "kosmickrisp" ? {} : { version: options.runtimeVersion }) });
       return { ...native, translator, translatorRoot: root };
     }, upstream: backend === "moltenvk" ? moltenvk : kosmickrisp,
     resolveExecutable: root => path.join(root, definition.library),

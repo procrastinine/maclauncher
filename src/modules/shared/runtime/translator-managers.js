@@ -34,6 +34,7 @@ function translatorSource(pin) {
 }
 function versionLabel(pin, installed, label) {
   const template = templateName(pin), component = installed?.translator?.version;
+  if (pin?.component && pin.component.toLowerCase() !== label.toLowerCase()) label += ` (${pin.component})`;
   if (template) return component ? `${label} ${component} · ${template}` : `${template} · ${label} component`;
   return component ? `${label} ${component}` : assetName(pin?.asset) || installed?.versionLabel || pin?.versionLabel;
 }

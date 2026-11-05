@@ -586,7 +586,7 @@ test('runtime version labels stay distinct when builds share an upstream version
   assert.deepEqual(['MCLv3-1007', 'MCLv2-1007', 'MCLv1-0921'].map(dated),
     ['Development build (Oct 7) · MCLv3', 'Development build (Oct 7) · MCLv2', 'Development build (Sep 21)']);
   const hashed = runtimeVersionTagger({ catalog: { versions: ['0.1.0-afa08284-7f7f8af9', '0.1.0-8da3e063-ba5d556d', '0.1.0'] } });
-  assert.deepEqual(['0.1.0-afa08284-7f7f8af9', '0.1.0-8da3e063-ba5d556d', '0.1.0'].map(hashed), ['v0.1.0', 'v0.1.0 (2)', 'v0.1.0 (3)']);
+  assert.deepEqual(['0.1.0-afa08284-7f7f8af9', '0.1.0-8da3e063-ba5d556d', '0.1.0'].map(hashed), ['v0.1.0-afa08284-7f7f8af9', 'v0.1.0-8da3e063-ba5d556d', 'v0.1.0']);
   assert.equal(resolveRuntimeVersionLabel('2026-01-12T18-22-32Z_794d1897abe529a23f3f2f9c4f72d711a3b18391', null), '2026-01-12');
   const options = runtimeVersionOptions([{ value: '', label: 'Default' }, { value: '1.0-MCLv1', label: '1.0-MCLv1' }, { value: '1.0-MCLv2', label: '1.0-MCLv2' }]);
   assert.equal(options[0].label, 'Default');
@@ -719,4 +719,15 @@ test('schema-declared setting options retain linked patches and unrelated action
   assert.deepEqual(failures,[]);assert.deepEqual(settled,['choices']);assert.deepEqual(received,[result]);assert.equal(received[0].leftOptions[0],option);assert.equal(received[0].futureMetadata,result.futureMetadata);
   components.loadSettingChoices(['choices'],async()=>({...result,leftOptions:[{value:'invalid',label:123}]}),()=>assert.fail('Invalid declared choices'),(_action,error)=>failures.push(error),()=>{},[{key:'left',type:'select',label:'Left',optionsAction:'choices',optionsKey:'leftOptions'}]);
   await new Promise(resolve=>setImmediate(resolve));assert.equal(failures.length,1);
+});
+
+test('publisher revision labels distinguish real nightly and source choices without positional suffixes', () => {
+  const {runtimeVersionTagger,resolveRuntimeVersionLabel}=components;
+  const versions=['2026-10-30-a90c4c9a9190-appkit-arm64-13013297777','2026-10-30-405ae65a66fa-appkit-arm64-13012825371'];
+  const labels=Object.fromEntries(versions.map((version,index)=>[version,`2026-10-30 · ${index?'405ae65a66fa':'a90c4c9a9190'} (AppKit nightly, ARM)`]));
+  const tag=runtimeVersionTagger({versionLabels:labels,catalog:{versions}});
+  assert.deepEqual(versions.map(tag),Object.values(labels));assert.ok(versions.map(tag).every(label=>!/[()]\d+[()]/.test(label)));
+  const sha='0837e5326e710f49e2ab0a8d995da0708047442e';assert.equal(resolveRuntimeVersionLabel('git-'+sha,null),'Source revision '+sha);
+  const molten=runtimeVersionTagger({catalog:{versions:['1.4.2','1.4.2-rc1','1.0.37-Metal-3.0','1.0.37']}});
+  assert.deepEqual(['1.4.2','1.4.2-rc1','1.0.37-Metal-3.0','1.0.37'].map(molten),['v1.4.2','v1.4.2-rc1','v1.0.37-Metal-3.0','v1.0.37']);
 });

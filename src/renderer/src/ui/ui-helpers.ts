@@ -155,6 +155,8 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
  * else to read by, such as a package named only by its revision ("MCLv8"),
  * reads as itself, so each listed version stays recognizable. */
 function readableVersion(raw: string) {
+  const revision = /^(?:git-)?([a-f0-9]{40})$/i.exec(raw);
+  if (revision) return `Source revision ${revision[1]}`;
   // A package of an upstream with only commits is named MCLvN-MMDD after the
   // upstream commit date, sometimes followed by a build number or profile
   // ("-17", "-kag3-1").
@@ -190,8 +192,8 @@ export function formatRuntimeVersionTag(
 /** Version labels for everything one runtime section lists. When two versions
  * read the same, each MacLauncher Builds package adds its package revision
  * ("v2.4.2 · MCLv8"), and names its source when it sits beside the publisher's
- * own file ("v2.4.2 · MCLv1 · MacLauncher Builds"). Other ties are numbered in
- * list order. The exact version remains the option value and tooltip. */
+ * own file ("v2.4.2 · MCLv1 · MacLauncher Builds"). Other ties retain their
+ * publisher label or exact build identity rather than a list position. */
 export function runtimeVersionTagger(
   runtimeSection: Record<string, any> | null | undefined,
   extra: Array<string | null | undefined> = []
@@ -221,7 +223,13 @@ export function runtimeVersionTagger(
   for (const { label, members } of groups.values()) {
     const packaged = members.filter(version => packageRevision(version) !== null);
     const other = members.filter(version => packageRevision(version) === null);
-    other.forEach((version, index) => labels.set(version, index ? `${label} (${index + 1})` : label));
+    const complete = (version: string) => String(runtimeSection?.versionLabels?.[version] || runtimeSection?.catalog?.versionLabels?.[version] || version).trim();
+    for (const version of other) {
+      const raw = complete(version);
+      const identity = other.filter(item => complete(item) === raw).length === 1 ? raw : version;
+      const detailed = /^\d+(?:\.\d+)+/.test(identity) ? `v${identity}` : identity;
+      labels.set(version, other.length > 1 ? detailed : label);
+    }
     for (const version of packaged) {
       const revision = packageRevision(version);
       // Packages sharing one revision, such as two build profiles, name their exact versions.
