@@ -2,6 +2,8 @@
 
 **Runtimes → Graphics → Translators** manages the graphics components used by [CrossOver](CROSSOVER.md) and [Sikarugir](SIKARUGIR.md). Each installed version is stored once. Games, private graphics views and Windows prefix DLLs refer to that installation through links. A loader that needs its own signature, or a library that locates its framework beside itself, uses a shared prepared copy rather than a copy per game.
 
+Stale disposable graphics views are rebuilt in another shared generation. Previous generations remain in place until ordinary storage upkeep can retire them. Equivalent library links resolve to the same installed source.
+
 ## Versions and sources
 
 Translator versions use the shared runtime catalogs and local registration. Refresh reads one source's published releases. Status and registered-file inspection remain offline. CrossOver and Sikarugir use the same installed versions; selecting another game adds no translator payload copy.
@@ -38,6 +40,8 @@ Runtime Settings selects each component independently.
 | Video codecs | The runtime defaults or a registered GStreamer plugin folder. Wine's own video modules remain with Wine. |
 
 An existing bottle or wrapper first offers its current setting, read from its configuration without starting Wine. Automatic follows that runtime's existing behavior. Named choices show their version and source from release labels, component version files, framework metadata or the runtime's changelog; a component without readable version metadata still names its engine and source. Replacement DLL version resources report Windows component versions and do not supply translator release versions. Installed CrossOver components are used for CrossOver launches only.
+
+Unreadable optional labels and inaccessible unrelated package entries produce diagnostics. Basic PE machine and builtin/native facts remain available when optional export inspection is incomplete. Invalid required binaries and component path escapes remain errors.
 
 The Direct3D engine choice is also the DXMT version setting for camera support. The camera adapter keeps its own matching-library requirement. A mismatch leaves the selected renderer active and reports that camera support is unavailable.
 

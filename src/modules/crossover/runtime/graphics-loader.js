@@ -3,6 +3,7 @@ const { cloneOrCopy } = require("../../shared/copy-file");
 const { execFile } = require("node:child_process"), { promisify } = require("node:util");
 const Writable = require("../../shared/writable-input");
 const { wineLayout } = require("../../shared/runtime/wine-layout");
+const warn = require("../../shared/graphics-warning");
 const executeFile = promisify(execFile), MAXIMUM = 16 * 1024 * 1024;
 const digest = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 function sceneSelection(installation, closure) {
@@ -49,7 +50,7 @@ function entitlements(xml) {
   return existing.test(xml) ? xml.replace(existing, "$1<true/>")
     : xml.replace(/<\/dict>\s*<\/plist>\s*$/, `<key>${key}</key><true/></dict></plist>\n`);
 }
-async function prepare(installation, directory, { signal, execute = executeFile, cameraBridge, sceneClosure, helperLibraries = [], translatorView, userDataDir } = {}) {
+async function prepare(installation, directory, { signal, execute = executeFile, cameraBridge, sceneClosure, helperLibraries = [], translatorView, userDataDir, logger = console } = {}) {
   signal?.throwIfAborted();
   const vendor = fs.realpathSync(installation.crossoverRoot), layout = wineLayout(installation), unix = `lib/wine/${layout.unixName}`;
   const separateLoader = fs.existsSync(path.join(vendor, unix, "ntdll.so")) && fs.existsSync(path.join(vendor, unix, "wine"));
@@ -103,9 +104,9 @@ async function prepare(installation, directory, { signal, execute = executeFile,
     }
   }
   const sourceHash = digest(JSON.stringify([5, sources, links, helpers, scene?.identity, translatorView?.identity])), store = userDataDir || directory, root = path.join(store, userDataDir ? "graphics/crossover-loaders" : "graphics-loader");
-  const destination = path.join(root, sourceHash.slice(0, 24)), loader = path.join(destination, "bin/wineloader");
+  let destination = path.join(root, sourceHash.slice(0, 24));
   Writable.assertOwnDirectory(store, root);
-  if (fs.existsSync(destination)) {
+  while (fs.existsSync(destination)) {
     Writable.assertOwnDirectory(root, destination, { create: false });
     try {
       const record = JSON.parse(fs.readFileSync(path.join(destination, "loader.json"), "utf8"));
@@ -118,11 +119,12 @@ async function prepare(installation, directory, { signal, execute = executeFile,
       const linksMatch = Object.entries(links).every(([name, source]) => {
         const file = path.join(destination, name);
         Writable.assertOwnDirectory(destination, path.dirname(file), { create: false });
-        return fs.lstatSync(file).isSymbolicLink() && fs.readlinkSync(file) === source;
+        return fs.lstatSync(file).isSymbolicLink() && fs.realpathSync(file) === fs.realpathSync(source);
       });
-      if (record.schema === 2 && record.sourceHash === sourceHash && (!scene || record.sceneIdentity === scene.identity) && filesMatch && linksMatch) return loader;
+      if (record.schema === 2 && record.sourceHash === sourceHash && (!scene || record.sceneIdentity === scene.identity) && filesMatch && linksMatch) return path.join(destination, "bin/wineloader");
     } catch { /* An incomplete cache must not be executed. */ }
-    throw new Error("The prepared CrossOver graphics loader has changed. Remove the affected cached loader under the launcher's graphics/crossover-loaders folder and try again.");
+    warn(logger, "The prepared CrossOver graphics loader is stale. Preparing another shared generation; the old view is retained.");
+    destination = path.join(root, digest(path.basename(destination)).slice(0, 24));
   }
   const temporary = await fs.promises.mkdtemp(path.join(root, "prepare-"));
   const permissions = path.join(temporary, "entitlements.plist");
@@ -162,9 +164,9 @@ async function prepare(installation, directory, { signal, execute = executeFile,
     try { await fs.promises.rename(temporary, destination); }
     catch (race) {
       if (!['EEXIST', 'ENOTEMPTY'].includes(race.code)) throw race;
-      return prepare(installation, directory, { signal, execute, cameraBridge, sceneClosure, helperLibraries, translatorView, userDataDir });
+      return prepare(installation, directory, { signal, execute, cameraBridge, sceneClosure, helperLibraries, translatorView, userDataDir, logger });
     }
-    return loader;
+    return path.join(destination, "bin/wineloader");
   } finally { await fs.promises.rm(temporary, { recursive: true, force: true }); }
 }
 function environment(loader, previous = {}, { cameraBridge, installation, sceneClosure, translatorView } = {}) {

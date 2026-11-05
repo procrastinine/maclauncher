@@ -1,6 +1,7 @@
 const fs = require('node:fs'), path = require('node:path');
 const { readMachOLoadCommands } = require('./macho-load-commands');
 const { readPeExports } = require('./pe-exports');
+const warn = require('../graphics-warning');
 // Ordinary runtime managers expose these descriptions through their installed
 // records. Paths refer to installed files, never to a second translator cache.
 const COMPONENTS = Object.freeze(['d3d-renderer', 'vulkan-driver', 'd3d12', 'video']);
@@ -32,23 +33,52 @@ function label(value) {
   return [names[value.engine] || value.engine, value.version, source ? `(${source})` : ''].filter(Boolean).join(' ');
 }
 /** Synchronous custom-runtime.inspect seam. Walks the chosen component root. */
-function describeTranslator(root, { engine, source, version, component, id, apis = [], form } = {}) {
+function describeTranslator(root, { engine, source, version, component, id, apis = [], form, logger = console } = {}) {
   root = fs.realpathSync(root);
-  const files = [], visited = new Set();
-  function visit(file) {
-    const real = fs.realpathSync(file), stat = fs.statSync(file);
-    if (real !== root && !real.startsWith(root + path.sep)) throw new Error('A translator link escapes its component root.');
+  const files = [], visited = new Set(), warnings = [];
+  function visit(file, entry) {
+    const framework = file.match(/([^/]+)\.framework\//), required = /\.(?:dll|so|dylib)$/i.test(file) || framework?.[1] === path.basename(file);
+    const binary = required || framework && !path.extname(file), json = /\.json$/i.test(file);
+    if (entry?.isFile() && !binary && !json) return;
+    let real, stat;
+    try { real = fs.realpathSync(file); stat = fs.statSync(file); }
+    catch (error) {
+      if (file === root || required) throw error;
+      warnings.push(`Skipped inaccessible component entry ${file}: ${error.message}`); return;
+    }
+    if (real !== root && !real.startsWith(root + path.sep)) {
+      if (required) throw new Error('A translator link escapes its component root.');
+      if (json && stat.isFile()) {
+        let icd;
+        try { icd = JSON.parse(fs.readFileSync(file, 'utf8')).ICD; } catch {}
+        if (icd) throw new Error('A translator link escapes its component root.');
+      }
+      warnings.push(`Skipped component entry outside its root: ${file}`); return;
+    }
     if (stat.isDirectory()) {
       if (visited.has(real)) return;
       visited.add(real);
-      for (const name of fs.readdirSync(file).sort()) visit(path.join(file, name));
+      let entries;
+      try { entries = fs.readdirSync(file, { withFileTypes: true }); }
+      catch (error) {
+        if (file === root) throw error;
+        warnings.push(`Skipped inaccessible component directory ${file}: ${error.message}`); return;
+      }
+      for (const child of entries.sort((a, b) => a.name.localeCompare(b.name))) visit(path.join(file, child.name), child);
     } else if (stat.isFile()) {
       const relative = path.relative(root, file) || path.basename(file);
-      if (/\.json$/i.test(file)) {
-        try { if (JSON.parse(fs.readFileSync(file, 'utf8')).ICD) files.push(inspectFile({ path: file, relative })); } catch {}
-      } else if (/\.(?:dll|so|dylib)$/i.test(file) || /\.framework\//.test(file) && !path.extname(file)) {
+      if (json) {
+        try { if (JSON.parse(fs.readFileSync(file, 'utf8')).ICD) files.push(inspectFile({ path: file, relative })); }
+        catch (error) { warnings.push(`Could not inspect optional component metadata ${file}: ${error.message}`); }
+      } else if (binary) {
+        try { fs.accessSync(file, fs.constants.R_OK); }
+        catch (error) {
+          if (required || file === root) throw error;
+          warnings.push(`Skipped inaccessible component entry ${file}: ${error.message}`); return;
+        }
         const facts = inspectFile({ path: file, relative });
         if (path.extname(file) || facts.format === 'macho') files.push(facts);
+        if (facts.inspectionWarning) warnings.push(`${file}: ${facts.inspectionWarning}`);
       }
     }
   }
@@ -58,7 +88,13 @@ function describeTranslator(root, { engine, source, version, component, id, apis
   const pe = files.find(file => file.format === 'pe');
   if (component !== 'vulkan-driver' && component !== 'video') form = pe?.form || form;
   const versionFile = path.join(root, 'version');
-  if (fs.existsSync(versionFile) && fs.statSync(versionFile).isFile()) version = fs.readFileSync(versionFile, 'utf8').trim() || version;
+  try {
+    if (fs.statSync(versionFile).isFile()) {
+      if (!fs.realpathSync(versionFile).startsWith(root + path.sep)) throw new Error('Optional version text is outside its component root.');
+      version = fs.readFileSync(versionFile, 'utf8').trim() || version;
+    }
+  }
+  catch (error) { if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') warnings.push(`Could not read optional component version ${versionFile}: ${error.message}`); }
   if (!apis.length) apis = [...new Set(files.flatMap(file => {
     const match = path.basename(file.path).match(/^d3d(\d+)(?:core)?\.dll$/i);
     if (match) return [`Direct3D ${match[1]}`];
@@ -66,7 +102,9 @@ function describeTranslator(root, { engine, source, version, component, id, apis
     return [];
   }))];
   const floors = files.flatMap(file => file.macosFloor ? [file.macosFloor] : []);
+  for (const warning of warnings) warn(logger, `[translators] ${warning}`);
   return description({ id: id || `${engine}:${root}`, root, component, engine, source, version, apis, form, files,
+    warnings,
     macosFloor: floors.sort(compareVersions).at(-1) || null,
     unixImports: files.flatMap(file => file.unixImports || []) });
 }
@@ -85,10 +123,11 @@ function inspectFile(file) {
   } catch (error) {
     if (error.code !== 'MACHO_MALFORMED') result.inspectionWarning = error.message;
   }
-  const pe = readPeExports(fs.realpathSync(file.path));
+  const original = fs.realpathSync(file.path), exports = readPeExports(original), pe = exports || readPeExports(original, { headersOnly: true });
   if (pe) {
+    if (!exports) result.inspectionWarning = 'PE export inspection is incomplete; basic image facts are available.';
     // Replacement DLL resources report Windows component versions, not translator releases.
-    return { ...result, format: 'pe', form: pe.form, machine: pe.machine, macosFloor: null, unixImports: [],
+    return { ...result, format: 'pe', form: pe.form, machine: pe.machine, architecture: pe.architecture, macosFloor: null, unixImports: [],
       version: null };
   }
   return { ...result, format: file.path.endsWith('.json') ? 'json' : 'unknown', macosFloor: null, unixImports: [] };

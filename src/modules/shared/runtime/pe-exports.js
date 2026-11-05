@@ -7,7 +7,7 @@ const ARCHITECTURES = new Map([[0x14c, "x86"], [0x8664, "x86_64"], [0xaa64, "arm
 // IMAGE_EXPORT_DIRECTORY and file-backed RVAs, as defined by Microsoft's PE format.
 // Export names alone are not executable-code evidence: forwarded and data exports
 // remain distinct from targets in an executable section.
-function readPeExports(file, { detection } = {}) {
+function readPeExports(file, { detection, headersOnly = false } = {}) {
   let fd;
   try {
     const stat = detection?.stat ? detection.stat(file) : fs.statSync(file);
@@ -52,6 +52,10 @@ function readPeExports(file, { detection } = {}) {
       sections.push({ name: table.toString("ascii", start, start + 8).replace(/\0.*$/, ""),
         rva: table.readUInt32LE(start + 12), offset, size, executable: Boolean(table.readUInt32LE(start + 36) & 0x20000000) });
     }
+    const builtin = peOffset >= 80 && read(64, Math.min(64, peOffset - 64)).includes(Buffer.from('Wine builtin DLL\0'));
+    const header = { architecture, machine: coff.readUInt16LE(4), format: 'pe', form: builtin ? 'builtin' : 'native',
+      isDll: Boolean(coff.readUInt16LE(22) & 0x2000), sections };
+    if (headersOnly) return { ...header, bytesRead };
     function fileOffset(rva, size) {
       const section = sections.find(row => rva >= row.rva && rva - row.rva <= row.size && size <= row.size - (rva - row.rva));
       if (!section) throw new Error("PE export RVA is not file-backed.");
@@ -81,9 +85,7 @@ function readPeExports(file, { detection } = {}) {
         exports.set(name, { rva: address, forwarded, executable: !forwarded && Boolean(target?.executable) });
       }
     }
-    const builtin = peOffset >= 80 && read(64, Math.min(64, peOffset - 64)).includes(Buffer.from('Wine builtin DLL\0'));
-    return { architecture, machine: coff.readUInt16LE(4), format: 'pe', form: builtin ? 'builtin' : 'native',
-      isDll: Boolean(coff.readUInt16LE(22) & 0x2000), sections, exports, bytesRead };
+    return { ...header, exports, bytesRead };
   } catch (error) {
     if (error.code === "DETECTION_LIMIT") throw error;
     return null;

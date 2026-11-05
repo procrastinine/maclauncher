@@ -65,7 +65,11 @@ test("CrossOver graphics preparation signs only a private copy and reuses matchi
   assert.equal(calls.length, 6);
   assert.equal(await Loader.prepare(selected, directory, { execute: () => assert.fail("unchanged loader does not need signing") }), loader);
   assert.equal(fs.readdirSync(path.join(directory, "graphics-loader")).some(name => name.startsWith("prepare-")), false);
-  fs.writeFileSync(loader, "changed");await assert.rejects(Loader.prepare(selected, directory, { execute }), /has changed/);
+  fs.writeFileSync(loader, "changed");
+  const repaired = await Loader.prepare(selected, directory, { execute });
+  assert.notEqual(repaired, loader); assert.equal(fs.readFileSync(loader, "utf8"), "changed");
+  assert.equal(fs.readFileSync(repaired, "utf8"), "supplied loader private signature");
+  assert.equal(await Loader.prepare(selected, directory, { execute: () => assert.fail("repaired generation must be reused") }), repaired);
 });
 test("failed private loader signing leaves the supplied loader untouched and removes incomplete copies", async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "crossover-graphics-loader-"));t.after(() => fs.rmSync(root, { recursive: true, force: true }));

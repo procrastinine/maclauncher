@@ -3,6 +3,7 @@ const Writable = require('../writable-input');
 const { cloneOrCopy } = require('../copy-file');
 const { fileDigest } = require('./verified-identity');
 const { requiredMachine } = require('./binary-compatibility');
+const warn = require('../graphics-warning');
 
 const cpuFolder = machine => ({ 332: 'i386-windows', 34404: 'x86_64-windows', 43620: 'aarch64-windows' })[machine];
 function selectedDescriptions(plan) {
@@ -13,23 +14,36 @@ function filesIdentity(descriptions) {
   return descriptions.map(item => [item.id, item.files.map(file => [file.path, fs.existsSync(file.path) ? fileDigest(file.path).sha256 : null])]);
 }
 /** Shared, content-keyed links to ordinary runtime installations. No per-game payload copies. */
-async function prepareTranslatorFiles(plan, { userDataDir, layout, signal } = {}) {
+async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logger = console } = {}, previousIdentity) {
   const selected = selectedDescriptions(plan), links = {}, native = [], dllOverrides = [], env = {};
   const inputs = filesIdentity(selected);
-  const identity = crypto.createHash('sha256').update(JSON.stringify([layout.architecture, inputs])).digest('hex');
+  // Advance a stale generation deterministically; active paths are never moved or replaced.
+  const identity = crypto.createHash('sha256').update(JSON.stringify(previousIdentity ? [layout.architecture, inputs, previousIdentity] : [layout.architecture, inputs])).digest('hex');
   const store = path.join(userDataDir, 'graphics/wine-translators'), root = path.join(store, identity);
   Writable.assertOwnDirectory(userDataDir, store);
   Writable.assertOwnDirectory(store, root);
+  let stale;
   async function link(source, relative) {
+    const original = fs.realpathSync(source);
     const target = path.join(root, relative); Writable.assertOwnDirectory(root, path.dirname(target));
-    try { const current = fs.lstatSync(target); if (!current.isSymbolicLink() || fs.readlinkSync(target) !== source) throw new Error('The prepared translator link changed.'); }
+    try {
+      const current = fs.lstatSync(target);
+      if (!current.isSymbolicLink() || fs.realpathSync(target) !== original)
+        throw stale = new Error('The prepared translator link changed.');
+    }
     catch (error) {
       if (error.code !== 'ENOENT') throw error;
+      if (fs.lstatSync(target, { throwIfNoEntry: false })) throw stale = new Error('The prepared translator link is incomplete.');
       try { await fs.promises.symlink(source, target); }
-      catch (race) { if (race.code !== 'EEXIST' || fs.readlinkSync(target) !== source) throw race; }
+      catch (race) {
+        if (race.code !== 'EEXIST') throw race;
+        if (!fs.lstatSync(target, { throwIfNoEntry: false })?.isSymbolicLink() || !fs.existsSync(target) || fs.realpathSync(target) !== original)
+          throw stale = new Error('The prepared translator link changed during preparation.');
+      }
     }
     return target;
   }
+  try {
   for (const item of selected) {
     signal?.throwIfAborted();
     if (plan.runtime === 'crossover' && item.included && item.component === 'd3d-renderer') { env.CX_GRAPHICS_BACKEND = item.backend || item.engine; continue; }
@@ -84,6 +98,11 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal } = {}
   const record = path.join(root, 'prepared.json'), text = JSON.stringify({ inputs: inputs.flatMap(([, files]) => files.map(([path, sha256]) => ({ path, sha256 }))) }) + '\n';
   if (!fs.existsSync(record) || fs.readFileSync(record, 'utf8') !== text) Writable.atomicWrite(record, text, { root });
   return { root, identity, links, native, dllOverrides: [...new Set(dllOverrides)], env, libraryPaths, frameworkPaths };
+  } catch (error) {
+    if (error !== stale) throw error;
+    warn(logger, `[translators] ${error.message} Preparing another shared generation; the old view is retained.`);
+    return prepareTranslatorFiles(plan, { userDataDir, layout, signal, logger }, identity);
+  }
 }
 async function applyNativeLibraries(view, prefixPath, { signal } = {}) {
   const ledgerPath = path.join(prefixPath, '.maclauncher-translators.json');
