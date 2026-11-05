@@ -43,13 +43,14 @@ test('translator option role summaries omit derived inventories while preserving
   const video = { ...Description.describeTranslator(path.join(f.root, 'video'), { id: 'video-choice', engine: 'gstreamer', source, pluginDirectories: ['plugins'] }),
     futureVideo: { metadata: 'retained' } };
   assert.equal(supplied.files[0].format, 'pe'); assert.equal(supplied.files[0].machine, 0x8664);
-  assert.equal(video.files.find(file => file.path === pluginFile).format, 'macho'); assert.equal(video.unixImports.length, 1024);
+  const pluginFacts = video.files.find(file => file.path === pluginFile), usedImports = pluginFacts.slices[0].imports;
+  assert.equal(pluginFacts.format, 'macho'); assert.equal(usedImports.length, 1024);
   video.videoPreparation = { pluginDirectories: ['plugins'], excludedFiles: [],
-    bindings: video.unixImports.map(() => ({ source: privateFile, target: privateFile })), warnings: ['derived-only-preparation-warning'] };
+    bindings: usedImports.map(() => ({ source: privateFile, target: privateFile })), warnings: ['derived-only-preparation-warning'] };
   const plan = Plan.projectRoles(Plan.resolvePlan({ runtime: 'sikarugir', selections: { 'd3d-renderer': selected.id, video: video.id },
     included: [supplied], choices: [selected, video], compatibility: { [selected.id]: { compatible: false, reason: 'Actual fixture loading fact' } } }));
   plan.groups = [{ id: 'd3d11', roles: ['d3d11'], affectedRoles: ['d3d11'], label: 'Direct3D 11', reason: 'Shared closure', futureGroup: 'retained' }];
-  const before = structuredClone(plan), canonicalJson = JSON.stringify(plan), selectedFiles = selected.files, usedImports = video.unixImports;
+  const before = structuredClone(plan), canonicalJson = JSON.stringify(plan), selectedFiles = selected.files;
   const result = Plan.apiOptions(plan, { included: [supplied], choices: [selected, video], environment: { label: 'Wrapper setting' } });
   assert.deepEqual(result.translatorRoles.map(row => row.id), Roles.ROLES.map(role => role.id));
   assert.deepEqual(result.translatorGroups, plan.groups);
@@ -71,7 +72,8 @@ test('translator option role summaries omit derived inventories while preserving
   assert.ok(result.translatorD3D11Options.some(row => row.value === 'automatic'));
   assert.equal(JSON.stringify(result).includes('derived-only-preparation-warning'), false);
   assert.deepEqual(plan, before); assert.equal(JSON.stringify(plan), canonicalJson);
-  assert.equal(plan.components.d3d11.selected.files, selectedFiles); assert.equal(plan.components.video.used.unixImports, usedImports);
+  assert.equal(plan.components.d3d11.selected.files, selectedFiles);
+  assert.equal(plan.components.video.used.files.find(file => file.path === pluginFile).slices[0].imports, usedImports);
   assert.equal(plan.components.video.used.files.find(file => file.path === pluginFile).slices[0].imports.length, 1024);
   assert.equal(plan.components.video.used.videoPreparation.bindings.length, 1024);
 });
