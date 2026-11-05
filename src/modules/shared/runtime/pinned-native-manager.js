@@ -45,22 +45,20 @@ function hashFile(filePath, algorithm = "sha256") {
 function installationEvidence(value) {
   if (value === undefined) return undefined;
   if (!value || Array.isArray(value) || typeof value !== "object") throw new Error("Runtime installation metadata must be a serializable object.");
-  let nodes = 0;
-  function clone(current, depth = 0) {
-    if (++nodes > 4096 || depth > 12) throw new Error("Runtime installation metadata exceeds its structure limit.");
+  const active = new Set();
+  function clone(current) {
     if (current === null || typeof current === "boolean") return current;
     if (typeof current === "number" && Number.isFinite(current)) return current;
-    if (typeof current === "string" && current.length <= 16384) return current;
-    if (Array.isArray(current) && current.length <= 512) return Object.freeze(current.map(item => clone(item, depth + 1)));
-    if (current && typeof current === "object" && [Object.prototype, null].includes(Object.getPrototypeOf(current))) {
-      const pairs = Object.entries(current);
-      if (pairs.length <= 512 && pairs.every(([key]) => key.length <= 256)) return Object.freeze(Object.fromEntries(pairs.map(([key, item]) => [key, clone(item, depth + 1)])));
+    if (typeof current === "string") return current;
+    if (Array.isArray(current) || current && typeof current === "object" && [Object.prototype, null].includes(Object.getPrototypeOf(current))) {
+      if (active.has(current)) throw new Error("Runtime installation metadata contains a cycle.");
+      active.add(current);
+      try { return Object.freeze(Array.isArray(current) ? current.map(clone) : Object.fromEntries(Object.entries(current).map(([key, item]) => [key, clone(item)]))); }
+      finally { active.delete(current); }
     }
     throw new Error("Runtime installation metadata contains a non-serializable value.");
   }
-  const output = clone(value);
-  if (Buffer.byteLength(JSON.stringify(output)) > 65536) throw new Error("Runtime installation metadata exceeds its byte limit.");
-  return output;
+  return clone(value);
 }
 
 // An upstream executable's own deployment version is its macOS floor, so a
@@ -302,7 +300,6 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
         if (entries.has(name)) { pending.delete(name);continue; }
         const file = path.join(installDir(userDataDir, name), "runtime.json"), identity = metadataIdentity(file);
         try {
-          if (fs.statSync(file).size > 1024 * 1024) throw Error("Runtime metadata exceeds its limit.");
           const record = JSON.parse(fs.readFileSync(file, "utf8")), pin = record.catalogEntry;
           if (!validEntry(pin) || pin.version !== name || record.version !== name || !pin.projectPackage && record.upstreamRevision !== pin.upstreamRevision)
             throw Error("Runtime metadata does not match its version.");
@@ -416,7 +413,6 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     for (const candidate of versionFolders(userDataDir, normalized)) {
       try {
         const metadata = path.join(candidate, "runtime.json");
-        if (fs.statSync(metadata).size > 1024 * 1024) continue;
         const record = JSON.parse(fs.readFileSync(metadata, "utf8")), declared = pinArchitecture(record) || pinArchitecture(record.catalogEntry);
         if (record.version !== normalized || sharedPackage && record.archiveSha256 !== pin.asset.sha256) continue;
         const runtimePath = record.source === "local" ? record.runtimePath : path.join(candidate, record.executableRelative || "");
@@ -466,7 +462,6 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       normalized = normalizeVersion(version);
       directory = installDir(userDataDir, normalized);
       recordPath = path.join(directory, "runtime.json");
-      if (fs.statSync(recordPath).size > 1024 * 1024) throw new Error("The runtime version record is too large.");
       const record = JSON.parse(fs.readFileSync(recordPath, "utf8"));
       const pin = record.catalogEntry && validEntry(record.catalogEntry) && record.catalogEntry.version === normalized
         ? record.catalogEntry : entries.get(normalized);

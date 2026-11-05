@@ -5,7 +5,7 @@ const Architecture = require("./architecture");
 const { throwIfAborted } = require("./download-utils");
 
 // Archive formats the shared runtime installer extracts, in preference order.
-const ARCHIVE_FORMATS = Object.freeze([".zip", ".tar.gz", ".tgz", ".tar.xz", ".tar.zst", ".txz", ".tar.bz2", ".tbz2", ".dmg", ".tar"]);
+const ARCHIVE_FORMATS = Object.freeze([".zip", ".tar.gz", ".tgz", ".tar.xz", ".tar.zst", ".txz", ".tar.bz2", ".tbz2", ".dmg", ".tar", ".pkg"]);
 const MAC_WORDS = "mac|macos|macosx|osx|darwin|apple";
 // Files beside a Mac download: other systems and CPUs, symbols and sources.
 const OTHER_WORDS = "linux|windows|win|win32|win64|android|ios|web|wasm|freebsd|debug|symbols|dsym|dbg|src|source|sources|riscv64|ppc|ppc64|ppc64le|s390x|i386|i686|armhf|armv7";
@@ -71,6 +71,7 @@ async function extractArchive(archivePath, destination, signal) {
   if (!format) throw new Error("Unsupported runtime archive.");
   fs.mkdirSync(destination, { recursive: true });
   if (format === ".dmg") return require("./dmg").extractDmg(archivePath, destination, signal);
+  if (format === ".pkg") return require("./safe-archive").extractArchive(archivePath, destination, signal);
   const isZip = format === ".zip";
   return new Promise((resolve, reject) => {
     const child = spawn(isZip ? "/usr/bin/ditto" : "/usr/bin/tar",

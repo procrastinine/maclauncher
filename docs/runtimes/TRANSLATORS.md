@@ -37,7 +37,7 @@ The choice of translators is a major part of MacLauncher's support for Windows g
 | Wine vkd3d | Link to the Wine upstream source | Read-only copies included with registered runtimes |
 | vkd3d-proton | HansKristian-Work/vkd3d-proton | Folder or archive |
 | D3DMetal | Sikarugir Template | Apple Game Porting Toolkit disk image or folder; installed runtime |
-| GStreamer codecs | None | Prepared plugin folder together with the libraries its plugins depend on |
+| GStreamer codecs | Official GStreamer macOS runtime packages | Prepared plugin folder together with the libraries its plugins depend on |
 
 Wine runs as an x86-64 process, also on Apple Silicon through Rosetta. Every macOS library that it loads must therefore contain x86-64 code, and only installations with Intel code are listed for Wine games. KosmicKrisp itself requires Apple Silicon, so a Wine game uses an x86-64 build of it: a Sikarugir Template's driver, an installed MacLauncher KosmicKrisp package that includes an Intel (x86-64) build, or a locally registered build with Intel code. LWJGL's KosmicKrisp builds are ARM64-only, so they never reach Wine.
 
@@ -45,7 +45,7 @@ MacLauncher KosmicKrisp is an adapted build of KosmicKrisp. In addition to upstr
 
 Each catalog has its own Refresh control and publisher link, and each release label names its source, such as `(macOS async)`. The **Vulkan drivers** entry also holds **MoltenVK scene support**, a MacLauncher Builds package that CrossOver's [Vulkan scene support](CROSSOVER.md#vulkan-scene-support) uses.
 
-DXVK-macOS is offered as an optional macOS alternative to the runtime's own included or automatic choice. The upstream, async, historical D8VK and D9VK, and Template sources are listed under **Additional sources**. D8VK and D9VK keep their historical releases, although their Direct3D 8 and 9 work is part of modern DXVK. Installed rows show the API coverage read from the actual libraries, so each version can expose a different set of APIs. A Template's package version is distinct from the versions of the components installed from it. The GStreamer panel registers prepared local codec folders, and D3DMetal links to Apple's official Game Porting Toolkit download page.
+DXVK-macOS is offered as an optional macOS alternative to the runtime's own included or automatic choice. The upstream, async, historical D8VK and D9VK, and Template sources are listed under **Additional sources**. D8VK and D9VK keep their historical releases, although their Direct3D 8 and 9 work is part of modern DXVK. Installed rows show the API coverage read from the actual libraries, so each version can expose a different set of APIs. A Template's package version is distinct from the versions of the components installed from it. The GStreamer panel offers official runtime packages and prepared local codec folders, and D3DMetal links to Apple's official Game Porting Toolkit download page.
 
 For LWJGL's KosmicKrisp driver, the LWJGL package version is shown as the package it came from, and a KosmicKrisp component version appears only when the component's metadata supplies one. Releases and builds that share a short label keep their publisher revision or exact build identity rather than a numbered position in a list.
 
@@ -58,6 +58,10 @@ When an installed application is selected, MacLauncher finds the component folde
 D3DMetal is Apple's proprietary component. It is downloaded from the Sikarugir Template or supplied locally, for example from the user's own Game Porting Toolkit download; MacLauncher neither hosts nor builds it. Apple's Game Porting Toolkit license applies to it, including its Apple hardware and distribution restrictions, and the supplied notice stays with the component.
 
 GStreamer lists the plugin folders that come with registered CrossOver applications and Sikarugir Templates as read-only sources. A folder without component release metadata is named after its source runtime, since the ABI numbers in library file names do not give a codec version. Links to the official project and its downloads accompany local registration.
+
+Refresh reads the official macOS package index and its release directories. Runtime packages are separate from development and debug packages. Install verifies the publisher's checksum when available and extracts the framework into managed runtime storage. Package scripts and the system installer are not run, and files are not installed into `/Library/Frameworks`. The retained framework includes plugin and dependency libraries; plugin directories are recorded separately from those dependencies.
+
+Local GStreamer registration accepts a prepared codec directory. Plugin dependencies must resolve to the intended GStreamer and GObject libraries before selection through `GST_PLUGIN_PATH`. Acquiring a runtime package does not replace `winegstreamer` or another Wine module.
 
 GStreamer components retain their complete library and resource closure. Plugin search directories are separate from dependency directories. Preparation follows the selected Wine's actual native dependencies and shares established host libraries, including its GStreamer and GObject core. Loader-relative images use one shared prepared neighborhood; unchanged files and resources remain links. The component's dependency and framework directories are not added to global dynamic-library search paths. Wine's scanner and system-plugin paths remain in use, and no Wine module is replaced.
 

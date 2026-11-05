@@ -31,11 +31,18 @@ function registrationSource(input, root = input) {
     ? { kind: "sikarugir", id: input, runtime: "sikarugir", label: "Sikarugir" } : "custom";
 }
 function description(root, definition, options = {}) {
-  return require("./translator-description").describeTranslator(root, { engine: definition.engine, ...options });
+  const result = require("./translator-description").describeTranslator(root, { engine: definition.engine, ...options });
+  if (definition.pluginDirectory) {
+    const directories = [...new Set(result.files.filter(file => file.format === "macho" && path.basename(path.dirname(file.path)) === definition.pluginDirectory)
+      .map(file => path.dirname(file.relative)).filter(directory => directory !== "."))];
+    if (directories.length) result.pluginDirectories = directories;
+  }
+  return result;
 }
 function inspected(root, definition, options) {
   const translator = description(root, definition, options);
-  const file = translator.files.find(file => file.format === "macho" || file.format === "pe");
+  const file = definition.entryLibrary && translator.files.find(file => path.basename(file.path) === definition.entryLibrary) ||
+    translator.files.find(file => file.format === "macho" || file.format === "pe");
   if (!file) throw Error("The component contains no loadable library.");
   const executablePath = path.resolve(root, file.path);
   return { executablePath, installDir: root, root, payloadRoot: root, translatorRoot: root, translator,

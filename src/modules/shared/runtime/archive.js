@@ -6,7 +6,7 @@ const ReleaseFiles = require("./release-files");
 // extraction live in release-files.js; callers use it directly.
 function archiveKind(name) {
   const format = ReleaseFiles.archiveFormat(name);
-  return !format ? null : format === ".zip" || format === ".dmg" ? format.slice(1) : "tar";
+  return !format ? null : [".zip", ".dmg", ".pkg"].includes(format) ? format.slice(1) : "tar";
 }
 // A file name that names a Mac build: a platform word between separators.
 function isMacName(name) {

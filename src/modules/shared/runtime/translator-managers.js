@@ -3,7 +3,9 @@ const { createPinnedNativeManager, upstreamPins } = require("./pinned-native-man
 const Upstream = require("./upstream"), Component = require("./component-runtime");
 const { archiveFormat } = require("./release-files");
 const definitions = {
-  gstreamer: { label: "GStreamer codecs", groupId: "codecs", localOnly: true, sourceName: "GStreamer", sourceDescription: "Included plugins stay with the selected Wine runtime. Prepared codec folders can add plugins that use the same GStreamer and GObject libraries.", sourceLinks: [{ label: "GStreamer downloads", url: "https://gstreamer.freedesktop.org/download/" }], memberOrder: 30, names: ["gstreamer-1.0"], sources: [] },
+  gstreamer: { label: "GStreamer codecs", groupId: "codecs", sourceName: "GStreamer", sourceDescription: "GStreamer runtime packages and prepared local codec folders. Included plugins remain with their source Wine runtime.",
+    upstreamUrl: "https://gstreamer.freedesktop.org/download/", upstreamLabel: "GStreamer downloads", memberOrder: 30,
+    names: ["gstreamer", "gstreamer-1.0"], entryLibrary: "libgstreamer-1.0.0.dylib", pluginDirectory: "gstreamer-1.0", sources: [require("./gstreamer-source").catalogSource] },
   dxvk: { label: "DXVK", groupId: "directx-vulkan", memberOrder: 2, names: ["dxvk", "dxvk3", "d9vk"],
     sources: [["upstream", "DXVK", "doitsujin/dxvk", null, null, { secondary: true }], ["macos", "DXVK-macOS", "Gcenx/DXVK-macOS", name => !/async/i.test(name), null, { description: "CrossOver's included copy or automatic choice is the ordinary route; Sikarugir uses its Template. DXVK-macOS releases published by Gcenx/DXVK-macOS are an optional macOS alternative." }],
       ["async", "DXVK-macOS async", "Gcenx/DXVK-macOS", name => /async/i.test(name), null, { secondary: true, description: "DXVK-macOS async releases published by Gcenx/DXVK-macOS, with asynchronous shader compilation." }],
@@ -49,7 +51,7 @@ function catalogSource([id, label, repository, filter, component, presentation =
     ...presentation, discover: async options => upstreamPins(await upstream.discover(options)) };
 }
 function createManager(engine, { dependencies = {} } = {}) {
-  const definition = { ...definitions[engine], engine }, catalogSources = definition.sources.map(source => catalogSource(source, definition.label));
+  const definition = { ...definitions[engine], engine }, catalogSources = definition.sources.map(source => typeof source.discover === "function" ? source : catalogSource(source, definition.label));
   const manager = createPinnedNativeManager({ id: engine === "dxmt" ? "sikarugir-graphics-bridge" : "translator-" + engine,
     formerIds: engine === "dxmt" ? ["crossover-graphics-bridge"] : [], label: definition.label,
     upstreamUrl: definition.upstreamUrl, upstreamLabel: definition.upstreamLabel,
@@ -62,6 +64,11 @@ function createManager(engine, { dependencies = {} } = {}) {
     prepareInstall({ unpacked, pin }) {
       const selected = pin.component ? { ...definition, names: [pin.component] } : definition;
       const root = Component.componentRoot(unpacked, selected);
+      const resources = path.join(unpacked, "package-resources");
+      if (root !== unpacked && archiveFormat(pin.asset?.filename) === ".pkg" && fs.existsSync(resources)) {
+        try { require("../copy-file").cloneOrCopySync(resources, path.join(root, "package-resources")); }
+        catch (error) { console.warn("The optional package resources could not be retained:", error.message); }
+      }
       const translator = Component.description(root, definition, { engine: pin.translatorEngine || definition.engine, source: translatorSource(pin) });
       const files = Object.fromEntries(translator.files.filter(file => file.format !== "json").map(file => [file.relative, require("./pinned-native-manager").hashFile(file.path)]));
       translator.files = translator.files.map(file => {

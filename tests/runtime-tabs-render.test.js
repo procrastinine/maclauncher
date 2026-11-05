@@ -882,7 +882,7 @@ test('translator source links use one caption with explicit project and Template
     assert.ok(links.length);if(engine!=='gstreamer')assert.ok(links.every(label=>label==='Source'));
     if(engine==='dxvk') { assert.match(markup,/DXVK-macOS async/);assert.match(markup,/DXVK-macOS releases published by Gcenx\/DXVK-macOS/); }
     if(engine!=='gstreamer')assert.match(markup,/copies taken from a Sikarugir Template release/);
-    else { assert.match(markup,/class="runtimeSourceLink"[^>]*>GStreamer<\/a>/);assert.doesNotMatch(markup,/runtimeSources|Load versions|No downloadable versions/); }
+    else { assert.match(markup,/GStreamer macOS runtime/);assert.match(markup,/Runtime framework packages published by GStreamer/);assert.match(markup,/runtimeSources/);assert.doesNotMatch(markup,/No downloadable versions/); }
   }
   for(const owner of require('../src/modules/shared/vulkan/libraries').managers) {
     const markup=render([{...owner.getState({}),id:owner.id,label:owner.label,ui:owner.ui}],owner.id);
@@ -1006,8 +1006,8 @@ test('included translator references use host records and shared release facts w
   assert.equal(codecState.references.length,4);assert.deepEqual(codecState.installed,[]);
   assert.ok(codecState.references.every(row=>row.readOnly&&row.included&&row.versionLabel.includes('GStreamer')&&!/GStreamer (?:1\.0|26\.3)/.test(row.versionLabel)));
   const codecMarkup=render([{...codecState,id:codecs.id,label:codecs.label,ui:codecs.ui}],codecs.id,{onRuntimeRegister(){assert.fail('No registration during render');}});
-  assert.match(codecMarkup,/Included plugins stay with the selected Wine runtime/);assert.match(codecMarkup,/GStreamer downloads/);assert.match(codecMarkup,/Register custom/);assert.match(codecMarkup,/Alpha\.app/);
-  assert.doesNotMatch(codecMarkup,/No downloadable|Load versions|saveRowActions/);
+  assert.match(codecMarkup,/GStreamer macOS runtime/);assert.match(codecMarkup,/GStreamer downloads/);assert.match(codecMarkup,/Register custom/);assert.match(codecMarkup,/Alpha\.app/);
+  assert.doesNotMatch(codecMarkup,/No downloadable|saveRowActions/);
   assert.equal(dxmt.resolveSelection(null,null,userDataDir,{version:state.references[0].version}).install,null,'references are never managed choices');
   assert.deepEqual(require('../src/modules/shared/runtime/wine-translators').managedTranslators({userDataDir,settings:{}},'crossover',[dxmt,dxvk,metal,molten]),[],'per-game managed choices remain unchanged');
   const snapshot=structuredClone(state);
@@ -1027,13 +1027,13 @@ test('included translator references use host records and shared release facts w
   assert.equal(dxmt.getState(options).references,undefined);assert.match(render([{...dxmt.getState(options),id:dxmt.id,label:dxmt.label,ui:dxmt.ui}],dxmt.id),/No runtime versions installed yet/);
 });
 
-test('local codec registration and Apple upstream links use ordinary runtime presentation', () => {
+test('official codec catalog, local registration and Apple upstream links use ordinary runtime presentation', () => {
   const {createManager}=require('../src/modules/shared/runtime/translator-managers');
   const codecs=createManager('gstreamer'),local=codecs.getState({});
   const markup=render([{...local,id:codecs.id,label:codecs.label,ui:codecs.ui}],codecs.id,{onRuntimeRegister(){assert.fail('No registration during render');}});
-  assert.equal(codecs.delivery.catalog,'none');assert.equal(local.catalog.delivery,'local-files');
-  assert.match(markup,/Register custom/);assert.match(markup,/No codec folders registered/);assert.match(markup,/GStreamer downloads/);
-  assert.doesNotMatch(markup,/Load versions|No downloadable versions|data-runtime-source|>Install</);
+  assert.equal(codecs.delivery.catalog,'remote');assert.ok(local.catalog.sources.some(source=>source.id==='upstream'));
+  assert.match(markup,/Register custom/);assert.match(markup,/GStreamer macOS runtime/);assert.match(markup,/GStreamer downloads/);assert.match(markup,/Load versions/);
+  assert.doesNotMatch(markup,/No downloadable versions|>Install</);
   const metal=createManager('d3dmetal'),state=metal.getState({});
   assert.ok(state.catalog.sourceLinks.some(link=>link.url==='https://developer.apple.com/games/game-porting-toolkit/'));
   const apple=render([{...state,id:metal.id,label:metal.label,ui:metal.ui}],metal.id);
