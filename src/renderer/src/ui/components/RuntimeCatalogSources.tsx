@@ -1,10 +1,10 @@
 import React from "react";
 import type { DownloadTask, RuntimeRefreshOptions, RuntimeUiState } from "../types";
-import { architectureLabel, isPrereleaseVersion, isRuntimeVersionInstalled, runtimeVersionTagger, withAvailability } from "../ui-helpers";
+import { architectureLabel, isRuntimeVersionInstalled, runtimeVersionTagger, withAvailability } from "../ui-helpers";
 import { ErrorText } from "./ErrorText";
 import { RefreshIcon } from "../icons";
 import { Select } from "./Select";
-import { isRuntimeIncluded, runtimeCatalogPresentation, runtimeCatalogSources, runtimeRefreshFailure, runtimeSourceUrl, runtimeSourceUiKey } from "./runtime-tabs-model";
+import { isRuntimeIncluded, runtimeInstallVersion, runtimeCatalogPresentation, runtimeCatalogSources, runtimeRefreshFailure, runtimeSourceUrl, runtimeSourceUiKey } from "./runtime-tabs-model";
 
 type Props = {
   managerId: string;
@@ -88,10 +88,7 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
       const recommendation = source.recommendedVersion || section.catalog?.recommendedVersion;
       const sourceSection = { ...section, versionLabels: source.versionLabels || section.versionLabels, catalog: source };
       const versionTag = runtimeVersionTagger(sourceSection);
-      // Without a choice or recommendation, the newest release is preselected
-      // rather than a newer alpha, beta, release candidate or nightly.
-      const stable = versions.find(value => !isPrereleaseVersion(value, sourceSection));
-      const version = versions.includes(requested) ? requested : versions.includes(recommendation) ? recommendation : stable || versions[0] || "";
+      const version = runtimeInstallVersion(sourceSection, requested, recommendation);
       const presentation = runtimeCatalogPresentation(source, version, selectedVariant);
       const canInstallVersion = (value: string) => source.installable !== false && source.versionRequirements?.[value]?.installable !== false &&
         source.versionRequirements?.[value]?.variants?.[selectedVariant]?.installable !== false &&

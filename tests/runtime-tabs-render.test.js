@@ -6,7 +6,7 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { build } = require('vite');
 const { react, componentHarness } = require('./helpers/renderer-component');
-let RuntimesView, SettingsView, CreditsView, GameDetails, ReShadeFilterLibrary, RuntimeSettingsWindow, RuntimeCatalogSources;
+let RuntimesView, SettingsView, CreditsView, GameDetails, ReShadeFilterLibrary, RuntimeSettingsWindow, RuntimeCatalogSources, runtimeInstallVersion;
 test('cached runtime refresh failures show their failure date and redact errors and install tooltips', () => {
   const failedAt = Date.UTC(2026, 9, 24, 12), fetchedAt = Date.UTC(2026, 9, 20, 12);
   const error = 'request to https://fixture-user:fixture-password@github.com/example/runtime failed ECONNREFUSED';
@@ -32,7 +32,7 @@ test.before(async () => {
   compiled.paths = module.paths;
   compiled.require = id => id === 'react' ? react : Module.prototype.require.call(compiled, id);
   compiled._compile(bundle.output.find(chunk => chunk.type === 'chunk').code, compiled.id);
-  ({ RuntimesView, SettingsView, CreditsView, GameDetails, ReShadeFilterLibrary, RuntimeSettingsWindow, RuntimeCatalogSources } = compiled.exports);
+  ({ RuntimesView, SettingsView, CreditsView, GameDetails, ReShadeFilterLibrary, RuntimeSettingsWindow, RuntimeCatalogSources, runtimeInstallVersion } = compiled.exports);
 });
 const manager = (id, ui, catalog = {}, installed = []) => ({ id, label: `Backend ${id}`, ui,
   catalog: { status: 'idle', versions: [], ...catalog }, installed });
@@ -1318,4 +1318,18 @@ test('Template DXVK source describes its variant driver pairing without assignin
   assert.match(template.description,/Installed libraries supply their component versions/);
   const markup=render([{...state,id:owner.id,label:owner.label,ui:owner.ui}],owner.id);
   assert.match(markup,/dxvk3 supplies DXVK for KosmicKrisp/);assert.match(markup,/data-runtime-source="template"/);
+});
+
+test('fresh runtime UI initialization and source controls use the same stable choice while retaining explicit selections', () => {
+  const runtime=manager('gstreamer-fixture',{}, {status:'success',source:'https://gstreamer.freedesktop.org/data/pkg/osx/',versions:['1.29.2-universal','1.28.8-universal'],
+    recommendedVersion:'1.29.2-universal',installableVersions:['1.29.2-universal','1.28.8-universal'],versionRequirements:{'1.29.2-universal':{prerelease:true},'1.28.8-universal':{}}});
+  const section={...runtime,id:'default'},ui={remoteOpen:{},installVersion:{},installVariant:{},installedSort:{},pendingActions:{},messages:{},sourceErrors:{}};
+  const initialize=()=>{const current=ui.installVersion.default;ui.installVersion.default=current||runtimeInstallVersion(section);};
+  initialize();assert.equal(ui.installVersion.default,'1.28.8-universal');
+  assert.match(render([runtime],runtime.id,{runtimeUi:{[runtime.id]:ui}}),/value="1\.28\.8-universal" selected/);
+  ui.installVersion.default='1.29.2-universal';initialize();assert.equal(ui.installVersion.default,'1.29.2-universal');
+  assert.match(render([runtime],runtime.id,{runtimeUi:{[runtime.id]:ui}}),/value="1\.29\.2-universal" selected/);
+  ui.installVersion.default='unknown-prior-choice';initialize();assert.equal(ui.installVersion.default,'unknown-prior-choice','initialization never guesses a migration for prior UI values');
+  assert.equal(runtimeInstallVersion({catalog:{versions:['1.29.2-universal'],versionRequirements:{'1.29.2-universal':{prerelease:true}}}}),'1.29.2-universal','a development-only catalog remains usable');
+  assert.equal(runtimeInstallVersion({catalog:{versions:[null,17,'', '1.28.8-universal'],recommendedVersion:{unknown:true}}}),'1.28.8-universal','malformed optional choices cannot suppress usable siblings');
 });

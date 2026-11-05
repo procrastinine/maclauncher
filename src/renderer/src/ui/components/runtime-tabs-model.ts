@@ -1,6 +1,18 @@
 import type { RuntimeManagerState, RuntimeRefreshOptions } from "../types";
 import { sanitizeErrorMessage } from "../../../../core/runtime-errors.mjs";
 import packageInfo from "../../../../../package.json";
+import { isPrereleaseVersion } from "../ui-helpers";
+
+// Shared by initial UI state and the source/import controls. An explicit
+// choice stays selected; automatic choices prefer stable published releases.
+export function runtimeInstallVersion(section: Record<string, any> | null | undefined, requested?: string, recommended: unknown = section?.catalog?.recommendedVersion): string {
+  const versions: string[] = Array.isArray(section?.catalog?.versions)
+    ? section.catalog.versions.filter((value: unknown) => typeof value === "string" && value.trim()) : [];
+  if (requested && versions.includes(requested)) return requested;
+  const stable = versions.find(value => !isPrereleaseVersion(value, section));
+  if (typeof recommended === "string" && versions.includes(recommended) && (!stable || !isPrereleaseVersion(recommended, section))) return recommended;
+  return stable || versions[0] || "";
+}
 
 export function runtimeMinimumNotice(minimum: unknown) {
   const value = typeof minimum === "string" ? minimum.trim() : "";

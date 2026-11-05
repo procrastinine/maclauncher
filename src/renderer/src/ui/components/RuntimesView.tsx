@@ -14,7 +14,7 @@ import {
 import { DownloadIcon, RefreshIcon, TrashIcon } from "../icons";
 import { groupRuntimeManagers, resolveRuntimeTabSelection, runtimeGroupSections, runtimeSectionTabs,
   runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation,
-  runtimeRemovalPresentation, runtimeMinimumNotice, isRuntimeIncluded, isRuntimeSetupPending } from "./runtime-tabs-model";
+  runtimeRemovalPresentation, runtimeMinimumNotice, runtimeInstallVersion, isRuntimeIncluded, isRuntimeSetupPending } from "./runtime-tabs-model";
 import type { RuntimeTabGroup, RuntimeTabSection, RuntimeSectionTab } from "./runtime-tabs-model";
 import { HelpTip } from "./HelpTip";
 import { RuntimeCatalogSources } from "./RuntimeCatalogSources";
@@ -209,13 +209,8 @@ export function RuntimesView({
     event.preventDefault(); select(next);
     event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus({ preventScroll: true });
   }
-  const requestedRuntimeVersion =
-    activeRuntimeManager && activeRuntimeSectionId
-      ? activeRuntimeUi.installVersion[activeRuntimeSectionId] || activeRuntimeSection?.catalog?.recommendedVersion || activeRuntimeSection?.catalog?.versions?.[0] || ""
-      : "";
-  const availableVersions: string[] = activeRuntimeSection?.catalog?.versions || [];
-  const activeRuntimeInstallVersion = availableVersions.includes(requestedRuntimeVersion)
-    ? requestedRuntimeVersion : availableVersions[0] || "";
+  const activeRuntimeInstallVersion = runtimeInstallVersion(activeRuntimeSection,
+    activeRuntimeSectionId ? activeRuntimeUi.installVersion[activeRuntimeSectionId] : undefined);
   const activeRuntimeInstallVariant =
     activeRuntimeManager && activeRuntimeSectionId
       ? activeRuntimeUi.installVariant[activeRuntimeSectionId] || ""

@@ -6,3 +6,4 @@ export { ReShadeFilterLibrary } from "../src/renderer/src/ui/components/ReShadeF
 
 export { RuntimeSettingsWindow } from "../src/renderer/src/ui/components/RuntimeSettingsWindow";
 export { RuntimeCatalogSources } from "../src/renderer/src/ui/components/RuntimeCatalogSources";
+export { runtimeInstallVersion } from "../src/renderer/src/ui/components/runtime-tabs-model";

@@ -50,7 +50,7 @@ import { AppActionPicker } from "./components/AppActionPicker";
 import { RuntimesView } from "./components/RuntimesView";
 import { resolveInspectorRuntimeSection, runtimeInspectorStatusAction } from "./components/runtime-inspector-model";
 import { groupRuntimeManagers, managedRuntimeSections, runtimeManagementPresentation, runtimePendingAction, runtimeRemovalPresentation,
-  runtimeRefreshPayload, runtimeSourceUiKey } from "./components/runtime-tabs-model";
+  runtimeRefreshPayload, runtimeSourceUiKey, runtimeInstallVersion } from "./components/runtime-tabs-model";
 import { nextInspectorSelection } from "./components/game-row-selection-model";
 import { GameRow } from "./components/GameRow";
 import { GameDetails, type GameDetailsState } from "./components/GameDetails";
@@ -265,11 +265,8 @@ export default function App() {
         const installVariant = { ...current.installVariant };
         const installedSort = { ...current.installedSort };
         for (const section of sections) {
-          const versions = Array.isArray(section.catalog?.versions) ? section.catalog.versions : [];
           const currentVersion = installVersion[section.id];
-          const fallback = versions[0] || "";
-          const nextVersion =
-            currentVersion && versions.includes(currentVersion) ? currentVersion : fallback;
+          const nextVersion = currentVersion || runtimeInstallVersion(section);
           if (installVersion[section.id] !== nextVersion) {
             installVersion[section.id] = nextVersion;
             managerChanged = true;
