@@ -377,7 +377,7 @@ function createLauncher({
         const environment = await ReShade.prepare(context.effectsEntry || entry, { userDataDir, app, signal: graphicsSignal, runtimeId, logger, settings:context.settings,
         downloads:context.downloads,confirmRuntimeInstall:context.confirmRuntimeInstall,onRuntimeStateChange:context.onRuntimeStateChange,
         ...(graphicsRoot ? { root: fs.realpathSync(graphicsRoot) } : {}), ...graphicsDiagnostics,
-        graphicsInputs: context.graphicsInputs,
+        graphicsInputs: context.graphicsInputs, translatorPlan: context.translatorPlan,
         graphicsArchitecture: context.graphicsInputs?.architecture || info.runtime?.entries?.[runtimeId]?.graphicsArchitecture,
         // A runtime whose own process submits frames through the library, such
         // as a window capture session, keeps the capabilities of its host.

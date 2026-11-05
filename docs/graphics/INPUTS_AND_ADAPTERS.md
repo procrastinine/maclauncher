@@ -12,6 +12,8 @@ This page describes each frame source and scene producer, the module contract fo
 
 A runtime's `graphicsHost` declaration selects an attachment contract. It does not identify the frame source that the game actually uses while rendering. A Java game, for example, can present an OpenGL framebuffer, a Metal drawable or a software bitmap. Wine can present Metal through a Direct3D translator, or OpenGL through WineD3D. These routes use the same adapters as native applications.
 
+CrossOver and Sikarugir resolve their shared translator plan before graphics preparation. ReShade binds only the component records that the plan actually uses after fallback; an unresolved vendor automatic choice stays unresolved. Metal and OpenGL output retain their existing presentation adapters, and depth, motion and camera inputs come from the active frame supplier. Translator names do not create scene data or select a separate effect implementation. Running edits and screenshots retain the launch's resolved plan; a later saved translator choice applies to a later launch.
+
 The shared image pipeline receives completed color images. A frame source can be direct access to the render target, an operating-system window stream, a texture the runtime supplies, or an upload of a software image:
 
 | Frame source | Attachment and GPU handoff | Scene data this route supplies |

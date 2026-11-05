@@ -5,6 +5,13 @@ const Publication = require("./publication"), crypto = require("node:crypto");
 const payloadCache = new Map(), recoveries = new Map();
 const hash = value => crypto.createHash("sha256").update(value).digest("hex");
 const launchIdentity = value => typeof value === "string" && /^[\w-]{1,128}$/.test(value);
+// Bind graphics to the resolved loader choices, including null vendor automatic.
+// Selection requests and compatibility discovery do not describe a running frame.
+function usedTranslatorPlan(plan) {
+  if (!plan) return undefined;
+  return {runtime: plan.runtime, components: Object.fromEntries(Object.entries(plan.components).map(([component, row]) =>
+    [component, {used: row.used ?? null}]))};
+}
 function payloadFiles(entry, userDataDir, launchId) {
   if (!launchIdentity(launchId)) throw new Error("The graphics launch identity is invalid.");
   const root = path.join(userDataDir, "graphics", "payload-bindings");
@@ -190,5 +197,5 @@ function bind(entry, pid, {userDataDir} = {}) {
   if(launch.effectPlanLiveResources?.xess)require("../runtime/gpu-compute-broker").bind(launch.effectPlanLiveResources.xess,pid);
   return true;
 }
-module.exports = {matches, read, bind, isCurrent, supportsPlan, nodeUnavailableReason,resolveNeuralNode, modelForNode, allowsModel, allowsNeural, acceptsNeuralModels, resolveModel, attachmentUnavailable,
+module.exports = {usedTranslatorPlan, matches, read, bind, isCurrent, supportsPlan, nodeUnavailableReason,resolveNeuralNode, modelForNode, allowsModel, allowsNeural, acceptsNeuralModels, resolveModel, attachmentUnavailable,
   preparePayload, payload, resolvePayload};

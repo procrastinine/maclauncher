@@ -18,6 +18,7 @@ function supported(root) {
   catch { return false; }
 }
 function context(options = {}, entry) {
+  options = {...options, translatorPlan: LaunchBinding.usedTranslatorPlan(options.translatorPlan)};
   const ReShade = require("../reshade"), Publication = require("../reshade/publication");
   const payloadEntry = entry || options.payloadEntry;
   const retained = (options.running || options.live) && payloadEntry ? LaunchBinding.payload(payloadEntry, options) : null;
@@ -92,7 +93,7 @@ function discovery(options, root, identifying) {
   };
   if (options.inventoryRevision === undefined) return read();
   const inventoryKey = JSON.stringify([options.inventoryRevision, root, identifying, options.platform || null, options.userDataDir || null,
-    options.graphicsHost || null, options.graphicsArchitecture || null, options.graphicsInputs || null, options.macOSVersion || null, options.graphicsHardware || null]);
+    options.graphicsHost || null, options.graphicsArchitecture || null, options.graphicsInputs || null, options.macOSVersion || null, options.graphicsHardware || null, options.translatorPlan || null]);
   let found = discoveries.get(inventoryKey);
   if (!found) {
     found = {...read(), inventoryKey};
@@ -166,7 +167,8 @@ function selectedNodeCatalog(plan, rows, ctx) {
 function editorContext(entry, options) {
   const launch = options.running ? options.launchBinding || LaunchBinding.read(entry, options) : null;
   const activeOptions = launch ? {...options, graphicsHost: launch.graphicsHost || options.graphicsHost,
-    graphicsArchitecture: launch.graphicsArchitecture || options.graphicsArchitecture, graphicsInputs: launch.graphicsInputs || options.graphicsInputs} : options;
+    graphicsArchitecture: launch.graphicsArchitecture || options.graphicsArchitecture, graphicsInputs: launch.graphicsInputs || options.graphicsInputs,
+    translatorPlan: Object.hasOwn(launch, "translatorPlan") ? launch.translatorPlan : options.translatorPlan} : options;
   return {launch, ctx: context({...activeOptions,payloadEntry:entry,discoverAllProviders:true})};
 }
 function info(entry, options = {}) {
@@ -184,9 +186,11 @@ function info(entry, options = {}) {
     ...(stored.source === "invalid" ? {graphicsPlanError: stored.error} : {}), ...(notices.length ? {notices} : {}),
     nodeCatalog:selectedNodeCatalog(editorPlan,rows,ctx),
     graphicsInputs:ctx.graphicsInputs||null,
+    ...(ctx.translatorPlan ? {translatorPlan: ctx.translatorPlan} : {}),
     graphicsHardware:ctx.graphicsCapabilities.hardware,
     ...(launch ? {activeLaunch: {launchId: launch.launchId, pid: launch.pid, runtimeId: launch.runtimeId,
-      graphicsHost: ctx.graphicsHost, graphicsArchitecture: ctx.graphicsArchitecture, graphicsInputs: ctx.graphicsInputs}} : {}),
+      graphicsHost: ctx.graphicsHost, graphicsArchitecture: ctx.graphicsArchitecture, graphicsInputs: ctx.graphicsInputs,
+      ...(ctx.translatorPlan ? {translatorPlan: ctx.translatorPlan} : {})}} : {}),
     shaderBindingsNextLaunch: ctx.graphicsInputs?.shaderBindingsNextLaunch === true,
     sourceResolution: sourceResolution(ctx, launch) };
 }
@@ -351,6 +355,8 @@ async function prepare(entry, options = {}) {
   // and the source-resolution request remain available for the next activation.
   if (savedPlan!==requestedPlan) entry = {...entry, effects: savedPlan};
   const currentLaunch = options.live ? LaunchBinding.read(entry, options) : null;
+  if (currentLaunch && Object.hasOwn(currentLaunch, "translatorPlan"))
+    options = {...options, translatorPlan: currentLaunch.translatorPlan};
   options.publication?.observe(file(entry, options.userDataDir), {root: options.userDataDir});
   if (options.live || options.isCurrent) options.publication?.guard(() => options.live ? LaunchBinding.isCurrent(entry, currentLaunch, options) : options.isCurrent() === true);
   // The reason explains to the editor why the running game keeps its current
@@ -528,7 +534,7 @@ async function prepare(entry, options = {}) {
     if (projection?.retained.has(node.id)) {nodes.push(projection.retained.get(node.id));continue;}
     const requirements = capabilities.nodes[node.id].requirements;
     // A shader row also depends on the game's depth input.
-    const rowKey = preparedRows && digest([ctx.root, ctx.graphicsHost || null, ctx.graphicsArchitecture || null, ctx.graphicsInputs || null,
+    const rowKey = preparedRows && digest([ctx.root, ctx.graphicsHost || null, ctx.graphicsArchitecture || null, ctx.graphicsInputs || null, ctx.translatorPlan || null,
       require("../reshade").stateSettings(ctx.settings), node, capabilities.nodes[node.id], ...(node.kind === "shader" && plan.depthInput ? [plan.depthInput] : [])]);
     const kept = rowKey && preparedRows.get(node.id), before = {...environment}, facts = {...capabilities.nodes[node.id]}, at = nodes.length;
     let reusable = false;

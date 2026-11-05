@@ -302,6 +302,7 @@ function launchLog(directory) {
   return file;
 }
 async function prepare(entry, options = {}) {
+  options = {...options, translatorPlan: LaunchBinding.usedTranslatorPlan(options.translatorPlan)};
   const Effects = require("../effects/runtime");
   // Every launch runs from `entry.effects`. A record whose one-time upgrade
   // could not be written is upgraded again here; an unreadable plan is bypassed.
@@ -330,7 +331,8 @@ async function prepare(entry, options = {}) {
     Object.assign(launch, {graphicsHost: options.graphicsHost,
       // Missing adapter metadata defaults to the launcher process ABI, not the hardware CPU.
       graphicsArchitecture: options.graphicsArchitecture || options.graphicsInputs?.architecture || process.arch,
-      graphicsInputs: options.graphicsInputs || null});
+      graphicsInputs: options.graphicsInputs || null,
+      ...(options.translatorPlan ? {translatorPlan: options.translatorPlan} : {})});
     // The saved plan revision this launch prepared, for its graphics status.
     if (stored.source !== "invalid" && stored.revision) launch.effectPlanRevision = stored.revision;
     const optionalChannel = (warning, message, prepare) => {

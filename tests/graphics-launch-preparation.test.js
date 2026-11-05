@@ -12,9 +12,20 @@ test('initial Play graphics Off retries only graphics with latest settings while
   await Models.prepare(require('../src/modules/shared/effects/plan').execution(candidate.effects),{...options,launchPreparation:true,ensureNeuralModel:()=>{startedResolve();return shared;}},{neural:{listModels:()=>[]},provider:{supportedMethods:['mlx-dlss']}});
   return {GRAPHICS_STATE:candidate.effects.enabled===false?'off':'on'};
  });
- const context=launcher.getLaunchContext(entry,undefined,{gameEffects:true,signal:wholePlay.signal});context.effectsEntry=structuredClone(entry);let refreshed=0;context.refreshGraphicsPreparation=async()=>{refreshed++;context.effectsEntry=structuredClone(entry);};
+ const context=launcher.getLaunchContext(entry,undefined,{gameEffects:true,signal:wholePlay.signal,graphicsRuntimeRoot:root});context.effectsEntry=structuredClone(entry);let refreshed=0;context.refreshGraphicsPreparation=async()=>{refreshed++;context.effectsEntry=structuredClone(entry);};
  const prepared=context.getGameEffectsEnvironment();await started;
  Store.writeGameRecord(root,{...entry,effects:{...entry.effects,enabled:false}});fs.writeFileSync(path.join(root,'settings.json'),JSON.stringify({runtimes:{'graphics-neural-models':{defaultVersions:{'mlx-dlss':'latest-choice'}}}}));
  assert.equal(context.invalidateGraphicsPreparation(),true);assert.deepEqual(await prepared,{GRAPHICS_STATE:'off'});assert.equal(wholePlay.signal.aborted,false);assert.equal(otherJob.signal.aborted,false);assert.equal(sharedComplete,false);assert.equal(refreshed,1);assert.deepEqual(seen.map(x=>x.enabled),[true,false]);assert.equal(seen[1].settings.runtimes['graphics-neural-models'].defaultVersions['mlx-dlss'],'latest-choice');assert.equal(context.graphicsPreparationFailure,undefined);
  finishModel();await new Promise(resolve=>setImmediate(resolve));assert.equal(sharedComplete,true);assert.deepEqual(await context.getGameEffectsEnvironment(),{GRAPHICS_STATE:'off'});assert.equal(seen.length,2,'late acquisition cannot revive the old snapshot');
+});
+
+test('graphics preparation receives the single post-fallback translator plan from runtime context',async t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'translator-graphics-preparation-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const plan=require('../src/modules/shared/runtime/translator-plan').resolvePlan({runtime:'crossover'});
+ const inputs={architecture:'x86_64',depth:false},manifest={id:'fixture',runtime:{supported:['crossover'],default:'crossover',entries:{crossover:{graphicsHost:'window'}}}};
+ const mod={manifest,resolveGraphicsInputs:(_entry,context)=>{context.translatorPlan=plan;return inputs;}},registry={listModules:()=>[manifest],getModule:()=>mod,getModuleInfo:()=>manifest};
+ const launcher=createLauncher({userDataDir:root,registry}),entry={gameId:'translator-context',moduleId:'fixture',runtimeId:'crossover',gamePath:'/fixture',effects:{schema:2,mode:'advanced',enabled:true,video:[]}};
+ Store.writeGameRecord(root,entry);t.mock.method(require('../src/modules/shared/reshade/live-resources'),'supported',()=>true);
+ let called=0;t.mock.method(ReShade,'prepare',async(_entry,options)=>{called++;assert.equal(options.translatorPlan,plan);assert.equal(options.translatorPlan.components['d3d-renderer'].used,null);assert.deepEqual(options.graphicsInputs,inputs);assert.equal(options.graphicsHost,'window');return {GRAPHICS_STATE:'dormant'};});
+ const context=launcher.getLaunchContext(entry,undefined,{gameEffects:true,graphicsRuntimeRoot:root});assert.deepEqual(await context.getGameEffectsEnvironment(),{GRAPHICS_STATE:'dormant'});assert.equal(called,1);
 });
