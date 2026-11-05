@@ -33,7 +33,7 @@ function bound(value, maximum, label) {
 function version(value) { return `${value >>> 16}.${(value >>> 8) & 255}.${value & 255}`; }
 function identity(stat) { return [stat.dev, stat.ino, stat.mode, stat.size, stat.mtimeNs, stat.ctimeNs].join(":"); }
 
-function inspect(readRange, size, { architecture, signal } = {}) {
+function inspect(readRange, size, { architecture, signal, imports: inspectImports = false } = {}) {
   abort(signal);
   let bytesRead = 0;
   const read = (offset, count) => {
@@ -93,7 +93,7 @@ function inspect(readRange, size, { architecture, signal } = {}) {
     range(headerSize, length, slice.size, "load commands");
     if (length < count * 8) fail("Load command count exceeds its byte range.");
     const commands = read(slice.offset + headerSize, length), dependencies = [], runPaths = [], builds = [], dyldEnvironment = [];
-    let position = 0, installName = null, dynamicLinker = null;
+    let position = 0, installName = null, dynamicLinker = null, symtab = null;
     const commandPath = (command, offset, minimum) => {
       if (offset < minimum || offset >= command.length) fail("Invalid load-command path offset.");
       const end = command.indexOf(0, offset);
@@ -110,7 +110,10 @@ function inspect(readRange, size, { architecture, signal } = {}) {
       if (commandSize < 8 || commandSize % (wide ? 8 : 4) !== 0) fail("Invalid load-command size or alignment.");
       range(position, commandSize, commands.length, "load command");
       const command = commands.subarray(position, position + commandSize);
-      if (DYLIBS.has(kind) || kind === 0xd) {
+      if (kind === 2 && inspectImports) {
+        if (commandSize !== 24 || symtab) fail('Invalid symbol-table command.');
+        symtab = { offset: u32(command, 8), count: u32(command, 12), strings: u32(command, 16), bytes: u32(command, 20) };
+      } else if (DYLIBS.has(kind) || kind === 0xd) {
         if (commandSize < 24) fail("Truncated dylib command.");
         const name = commandPath(command, u32(command, 8), 24);
         const record = { path: name, kind: DYLIBS.get(kind) || "id", currentVersion: version(u32(command, 16)), compatibilityVersion: version(u32(command, 20)) };
@@ -139,12 +142,32 @@ function inspect(readRange, size, { architecture, signal } = {}) {
     if (position !== commands.length) fail("Trailing bytes outside the declared load commands.");
     if (builds.length > 1 && builds.some(build => build.platform !== builds[0].platform || build.minimumOS !== builds[0].minimumOS))
       fail("Conflicting native platform or deployment versions.");
-    const build = builds[0];
+    const build = builds[0], imports = [];
+    if (inspectImports && symtab) {
+      const stride = wide ? 16 : 12;
+      range(symtab.offset, symtab.count * stride, slice.size, 'symbol table');
+      range(symtab.strings, symtab.bytes, slice.size, 'symbol strings');
+      const records = read(slice.offset + symtab.offset, symtab.count * stride), strings = read(slice.offset + symtab.strings, symtab.bytes);
+      for (let i = 0; i < symtab.count; i++) {
+        const offset = i * stride, type = records[offset + 4];
+        if (type & 0xe0 || !(type & 1) || (type & 0x0e) !== 0) continue;
+        const value = wide ? (little ? records.readBigUInt64LE(offset + 8) : records.readBigUInt64BE(offset + 8)) : u32(records, offset + 8);
+        if (value !== 0 && value !== 0n) continue; // Common definitions are not imports.
+        const index = u32(records, offset), end = strings.indexOf(0, index);
+        if (!index) continue;
+        if (index >= strings.length || end < index) fail('Invalid undefined-symbol string.');
+        const name = utf8.decode(strings.subarray(index, end)), desc = little ? records.readUInt16LE(offset + 6) : records.readUInt16BE(offset + 6);
+        const ordinal = desc >>> 8, dependency = ordinal > 0 && ordinal < 0xfe ? dependencies[ordinal - 1] : null;
+        imports.push({ symbol: name.replace(/^_/, ''), ordinal, library: dependency?.path || null,
+          weak: Boolean(desc & 0x40) || dependency?.kind === 'weak' });
+      }
+    }
     return { architecture: CPUS.get(cpu) || `cpu-${cpu.toString(16)}`, cpuType: cpu, cpuSubtype: subtype,
       fileType, wordSize: wide ? 64 : 32, endianness: little ? "little" : "big",
       platform: build?.platform ?? null, minimumMacOS: build?.platform === 1 ? build.minimumOS : null,
       minimumOS: build?.minimumOS ?? null, sdkVersion: build?.sdkVersion ?? null,
-      installName, dependencies, runPaths, dynamicLinker, dyldEnvironment };
+      installName, dependencies, runPaths, dynamicLinker, dyldEnvironment,
+      ...(inspectImports ? { imports, importsComplete: Boolean(symtab) } : {}) };
   });
   abort(signal);
   return { architectures: images.map(image => image.architecture), slices: images, bytesRead };

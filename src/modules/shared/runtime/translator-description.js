@@ -1,4 +1,7 @@
 const fs = require('node:fs'), path = require('node:path');
+const { readMachOLoadCommands } = require('./macho-load-commands');
+const { readPeExports } = require('./pe-exports');
+const { readPeVersion } = require('./pe-version');
 // Ordinary runtime managers expose these descriptions through their installed
 // records. Paths refer to installed files, never to a second translator cache.
 const COMPONENTS = Object.freeze(['d3d-renderer', 'vulkan-driver', 'd3d12', 'video']);
@@ -32,23 +35,55 @@ function label(value) {
 }
 /** Synchronous custom-runtime.inspect seam. Walks the chosen component root. */
 function describeTranslator(root, { engine, source, version, component, id, apis = [], form } = {}) {
-  root = path.resolve(root);
+  root = fs.realpathSync(root);
   const files = [], visited = new Set();
   function visit(file) {
     const real = fs.realpathSync(file), stat = fs.statSync(file);
+    if (real !== root && !real.startsWith(root + path.sep)) throw new Error('A translator link escapes its component root.');
     if (stat.isDirectory()) {
       if (visited.has(real)) return;
       visited.add(real);
       for (const name of fs.readdirSync(file).sort()) visit(path.join(file, name));
     } else if (stat.isFile()) {
-      const relative = path.relative(root, file);
+      const relative = path.relative(root, file) || path.basename(file);
       if (/\.(?:dll|so|dylib|json)$/i.test(file) || /\.framework\//.test(file) && !path.extname(file))
-        files.push({ path: file, relative });
+        files.push(inspectFile({ path: file, relative }));
     }
   }
   visit(root);
   component ||= ['moltenvk', 'kosmickrisp'].includes(engine) ? 'vulkan-driver' : engine === 'vkd3d-proton' ? 'd3d12' : engine === 'gstreamer' ? 'video' : 'd3d-renderer';
   form ||= component === 'vulkan-driver' ? 'icd' : component === 'video' ? 'dylib' : 'builtin';
-  return description({ id: id || `${engine}:${root}`, root, component, engine, source, version, apis, form, files });
+  const pe = files.find(file => file.format === 'pe');
+  if (component !== 'vulkan-driver' && component !== 'video') form = pe?.form || form;
+  const versionFile = path.join(root, 'version');
+  if (fs.existsSync(versionFile) && fs.statSync(versionFile).isFile()) version = fs.readFileSync(versionFile, 'utf8').trim() || version;
+  version ||= pe?.version;
+  const floors = files.flatMap(file => file.macosFloor ? [file.macosFloor] : []);
+  return description({ id: id || `${engine}:${root}`, root, component, engine, source, version, apis, form, files,
+    macosFloor: floors.sort(compareVersions).at(-1) || null,
+    unixImports: files.flatMap(file => file.unixImports || []) });
 }
-module.exports = { COMPONENTS, ENGINES, FORMS, description, label, describeTranslator };
+function compareVersions(a, b) {
+  const left = String(a).split('.').map(Number), right = String(b).split('.').map(Number);
+  for (let i = 0; i < Math.max(left.length, right.length); i++) if ((left[i] || 0) !== (right[i] || 0)) return (left[i] || 0) - (right[i] || 0);
+  return 0;
+}
+function inspectFile(file) {
+  const result = { ...file };
+  try {
+    const native = readMachOLoadCommands(file.path, { imports: true });
+    return { ...result, format: 'macho', form: file.path.endsWith('.so') ? 'builtin' : 'dylib', cpuSlices: native.architectures,
+      slices: native.slices, macosFloor: native.slices.map(slice => slice.minimumMacOS).filter(Boolean).sort(compareVersions).at(-1) || null,
+      unixImports: native.slices.flatMap(slice => slice.imports.map(item => ({ ...item, architecture: slice.architecture }))) };
+  } catch (error) {
+    if (error.code !== 'MACHO_MALFORMED') result.inspectionWarning = error.message;
+  }
+  const pe = readPeExports(fs.realpathSync(file.path));
+  if (pe) {
+    const version = readPeVersion(file.path);
+    return { ...result, format: 'pe', form: pe.form, machine: pe.machine, macosFloor: null, unixImports: [],
+      version: version?.strings?.ProductVersion || version?.productVersion || null };
+  }
+  return { ...result, format: file.path.endsWith('.json') ? 'json' : 'unknown', macosFloor: null, unixImports: [] };
+}
+module.exports = { COMPONENTS, ENGINES, FORMS, description, label, describeTranslator, inspectFile, compareVersions };

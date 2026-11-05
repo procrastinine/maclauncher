@@ -81,7 +81,9 @@ function readPeExports(file, { detection } = {}) {
         exports.set(name, { rva: address, forwarded, executable: !forwarded && Boolean(target?.executable) });
       }
     }
-    return { architecture, isDll: Boolean(coff.readUInt16LE(22) & 0x2000), sections, exports, bytesRead };
+    const builtin = peOffset >= 80 && read(64, Math.min(64, peOffset - 64)).includes(Buffer.from('Wine builtin DLL\0'));
+    return { architecture, machine: coff.readUInt16LE(4), format: 'pe', form: builtin ? 'builtin' : 'native',
+      isDll: Boolean(coff.readUInt16LE(22) & 0x2000), sections, exports, bytesRead };
   } catch (error) {
     if (error.code === "DETECTION_LIMIT") throw error;
     return null;
