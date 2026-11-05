@@ -60,7 +60,7 @@ WINE on the Mac runs Intel code, so on Apple Silicon it needs [Rosetta 2](https:
 
 MacLauncher's [graphics layer](/maclauncher/graphics/) works on WINE games just as it does on native ones. On Apple Silicon, WINE games can also feed MacLauncher's [temporal upscalers](/maclauncher/graphics/upscaling/#temporal-upscalers), which need information from the game's renderer. Compatible 64-bit games pass [MetalFX](https://developer.apple.com/documentation/metalfx) temporal upscaling through their own [DLSS](https://www.nvidia.com/en-us/geforce/technologies/dlss/) setting, and games that use AMD's FSR 2 or 3 hand over their camera data through DXMT.
 
-For FSR, Play downloads only the DXMT libraries it needs, not another WINE engine. **Runtimes → Graphics → Translators → DXMT** keeps one set of these library versions, with one default, for both Sikarugir and CrossOver, and each game's **DXMT support** setting can choose a different version.
+For FSR, Play downloads only the DXMT libraries it needs, not another WINE engine. **Runtimes → Graphics → Translators → DXMT** keeps one set of these library versions, with one default, for both Sikarugir and CrossOver, and each game's **Direct3D engine** setting can choose a different version.
 
 ## What to expect
 

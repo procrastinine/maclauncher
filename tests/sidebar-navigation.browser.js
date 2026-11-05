@@ -124,7 +124,7 @@ module.exports = async function sidebarNavigationBrowserTests(page, fixture, out
   await page.evaluate(() => window.__sidebarTest.broadcast({ utilityWindow: { view: 'runtimes', managerId: 'sikarugir-graphics-bridge', revision: 1 } }));
   await page.getByRole('tab', { name: 'DXMT', exact: true }).waitFor();
   await page.waitForFunction(() => document.querySelector('input[aria-label="Search runtimes"]').value === '');
-  assert(await runtimeNav.getByRole('button', { name: 'Graphics', exact: true }).getAttribute('aria-current') === 'page', 'Explicit runtime navigation must reveal selected group');
+  assert(await runtimeNav.getByRole('button', { name: 'Translators', exact: true }).getAttribute('aria-current') === 'page', 'Explicit runtime navigation must reveal selected group');
   assert(await page.getByRole('tab', { name: 'DXMT', exact: true }).getAttribute('aria-selected') === 'true', 'Deep link must open the exact requested runtime sub-tab');
   await runtimeSearch.fill('no-matching-runtime-572');
   await page.evaluate(() => window.__sidebarTest.broadcast({ utilityWindow: { view: 'runtimes', managerId: 'sikarugir-graphics-bridge', revision: 2 } }));
@@ -132,7 +132,7 @@ module.exports = async function sidebarNavigationBrowserTests(page, fixture, out
   assert(await page.getByRole('tab', { name: 'DXMT', exact: true }).getAttribute('aria-selected') === 'true', 'Repeating a deep link must reveal its current selection');
   await runtimeNav.getByRole('button', { name: 'GameMaker', exact: true }).click();
   await page.getByRole('tab', { name: 'Butterscotch', exact: true }).click();
-  await runtimeNav.getByRole('button', { name: 'Graphics', exact: true }).click();
+  await runtimeNav.getByRole('button', { name: 'Translators', exact: true }).click();
   assert(await page.getByRole('tab', { name: 'DXMT', exact: true }).getAttribute('aria-selected') === 'true', 'Group navigation must preserve remembered runtime sub-tab');
   await runtimeNav.getByRole('button', { name: 'GameMaker', exact: true }).click();
   assert(await page.getByRole('tab', { name: 'Butterscotch', exact: true }).getAttribute('aria-selected') === 'true', 'Returning to GameMaker must restore Butterscotch');
