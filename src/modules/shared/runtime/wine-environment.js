@@ -17,8 +17,8 @@ function privateEnvironment(userDataDir, directory, relativePath) {
     throw new Error("A private Windows environment requires its launcher data directory.");
   }
   const relative = path.relative(userDataDir, directory).split(path.sep);
-  const game = relative.length === 3 && relative[0] === "games" && /^[\w-]+$/.test(relative[1]) &&
-    ["crossover", "sikarugir"].includes(relative[2]);
+  const game = relative.length === 4 && relative[0] === "games" && /^[\w-]+$/.test(relative[1]) &&
+    relative[2] === "runtimes" && ["crossover", "sikarugir"].includes(relative[3]);
   const compute = relative.length === 3 && relative[0] === "graphics" && relative[1] === "compute-hosts" && /^[a-f0-9]+$/.test(relative[2]);
   const prefixPath = path.resolve(directory, relativePath);
   if ((!game && !compute) || prefixPath === path.resolve(directory) || !inside(directory, prefixPath)) {
