@@ -243,6 +243,17 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
       await Promise.allSettled(localPreparations);
       return true;
     },
+    // A spare game worker lets each module read what its games share, such as
+    // installed runtimes, before a game is assigned to the worker.
+    async warmGameLane(settings) {
+      for (const id of registry.listModuleIds()) {
+        const warm = registry.getModule(id)?.warmBackendLane;
+        if (typeof warm !== "function") continue;
+        try { await warm({ settings, userDataDir, logger }); }
+        catch (error) { logger.debug?.(`[backend] ${id} lane preparation failed`, error.message); }
+      }
+      return true;
+    },
     async moduleStates(settings) {
       for (const id of registry.listModuleIds()) {
         const mod = registry.getModule(id);

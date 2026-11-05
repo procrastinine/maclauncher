@@ -3025,7 +3025,8 @@ async function init() {
     syncCheatsFiles(games);
     // The window paints stored records immediately. Backend inventories and
     // metadata validation never delay opening Electron or handle selection.
-    void refreshRuntimeSnapshots();
+    // After the startup inventory, one spare worker prepares the next game's lane.
+    void refreshRuntimeSnapshots().then(() => backendService.prepareSpareLane(loadSettings()));
     void refreshModuleSnapshots();
     void refreshLibraryMetadata(games, settings);
     void moduleAppActions.maintain({ userDataDir, logger });

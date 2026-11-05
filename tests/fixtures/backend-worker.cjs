@@ -1,6 +1,6 @@
 const { parentPort, workerData } = require("node:worker_threads");
 const { untilTestEnds } = require("../helpers/fixture-process");
-let inventoryNotices = 0;
+let inventoryNotices = 0, warmed = null;
 parentPort.on("message", async message => {
   if (message.type === "runtimeInventoryChanged") { inventoryNotices++; return; }
   if (message.type === "callbackResult") {
@@ -12,6 +12,12 @@ parentPort.on("message", async message => {
     const end = performance.now() + message.args[0];
     while (performance.now() < end) {} // Deliberately models synchronous runtime hashing.
     parentPort.postMessage({ type: "result", id: message.id, result: true });
+  } else if (message.method === "warmGameLane") {
+    warmed = message.args[0];
+    parentPort.postMessage({ type: "event", event: "runtimeInventoryChanged", payload: {} });
+    parentPort.postMessage({ type: "result", id: message.id, result: true });
+  } else if (message.method === "warmed") {
+    parentPort.postMessage({ type: "result", id: message.id, result: warmed });
   } else if (message.method === "emitEvent") {
     parentPort.postMessage({ type: "event", event: message.args[0], payload: {} });
     parentPort.postMessage({ type: "result", id: message.id, result: true });

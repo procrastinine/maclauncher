@@ -192,7 +192,9 @@ function reusableKey(install, runtime, context, dependencies) {
   if (revision === null || dependencies.choices) return null;
   const host = install && ['executablePath', 'installDir', 'crossoverRoot', 'templateRoot', 'supportRoot', 'version', 'versionLabel', 'upstreamVersion', 'engineVersion', 'architecture']
     .map(field => install[field] ?? null);
-  return JSON.stringify([revision, runtime, host, context.userDataDir || null, context.settings?.runtimes ?? null, dependencies.consumerArchitecture ?? null]);
+  // An installed Wine's own layout selects the translator CPU; the consumer's
+  // CPU applies only without one.
+  return JSON.stringify([revision, runtime, host, context.userDataDir || null, context.settings?.runtimes ?? null, install ? null : dependencies.consumerArchitecture ?? null]);
 }
 async function inventoryFacts(install, runtime, context, dependencies) {
   const { managers } = dependencies, pending = new Map();

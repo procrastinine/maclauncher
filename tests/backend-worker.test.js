@@ -190,6 +190,20 @@ test("a runtime change in one lane tells every other lane to read runtimes again
   assert.deepEqual(await Promise.all(["game:a", "game:b", "state"].map(lane => service.request(lane, "inventoryNotices"))), [1, 2, 1]);
 });
 
+test("a prepared spare worker becomes the next game's lane and another is prepared after it", { timeout: 10000 }, async t => {
+  const events = [], service = createBackendService({ workerPath, onEvent: (event, _payload, lane) => events.push([event, lane]) });
+  t.after(() => service.close());
+  assert.equal(service.prepareSpareLane({ revision: 1 }), true);
+  assert.equal(service.prepareSpareLane({ revision: 1 }), false, "one spare at a time");
+  await new Promise(resolve => setTimeout(resolve, 500));
+  assert.deepEqual(await service.request("game:first", "warmed"), { revision: 1 });
+  assert.equal(await service.request("state", "warmed"), null, "only game lanes adopt the spare");
+  await new Promise(resolve => setTimeout(resolve, 2300));
+  assert.deepEqual(await service.request("game:second", "warmed"), { revision: 1 });
+  assert.deepEqual(events, [], "a spare's events before its assignment reach no window or lane");
+  assert.equal(await service.request("game:first", "inventoryNotices"), 0);
+});
+
 test("native host callbacks roundtrip asynchronously and preserve structured errors", async t => {
   const client = new BackendWorkerClient({ workerPath, callbacks: { choose: async descriptor => ({ path: descriptor.path }) } });
   t.after(() => client.close());

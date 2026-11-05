@@ -45,6 +45,16 @@ function recordedLaunch(entry, runtimeId, context, install) {
 async function currentPlan(entry, runtimeId, context, install) {
   return Translators.optionsPlan(await Translators.optionsInventory(install, runtimeId, context, { entry, reuse: true }), context);
 }
+// A spare backend lane reads the installed default Wine runtimes' translator
+// choices before a game is assigned to it; the game's first inspector request
+// then reuses them.
+async function warmBackendLane(context) {
+  for (const [runtime, runtimeManager] of [['crossover', manager], ['sikarugir', require('./sikarugir/runtime/manager')]]) {
+    const selected = runtimeManager.resolveSelection({}, context.settings, context.userDataDir, {});
+    if (selected?.ready === false || !selected?.install) continue;
+    await Translators.optionsInventory(selected.install, runtime, { ...context, runtimeSettings: {} }, { reuse: true });
+  }
+}
 async function runtimeStatus(entry, _payload, context) {
   const runtime = providerForEntry(entry, context)?.runtimeId;
   const selectedManager = runtimeManagers.find(candidate => candidate.id === providerForEntry(entry, context)?.managerId) || manager;
@@ -155,7 +165,7 @@ module.exports = { id: manifest.id, manifest, detectGame: Detection.detectGame,
   metadataSources: ["sikarugir/provider.js", "../shared/executable-candidates.js", "../shared/runtime/providers.js"],
   graphicsComputeHosts:[require("./runtime/compute-host"),require("./sikarugir/runtime/compute-host")],
   runtimeManagers, runtimeProviders, runtimeProvider: crossoverProvider,
-  resolveGraphicsInputs,
+  resolveGraphicsInputs, warmBackendLane,
   getRuntimeRequirements: (entry, context) => require("./temporal").requirements(entry, context),
   normalizeRuntimeId: runtimeId => providerForRuntime(runtimeId) ? runtimeId : manifest.runtime.default,
   filterRuntimeSupport: (entry, supported, settings, context) => supported.filter(runtimeId =>
