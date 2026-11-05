@@ -212,5 +212,15 @@ function assertWritableRegistry(record) {
   }
 }
 
+function wrapperForPrefix(prefixPath, reference) {
+  if (!path.isAbsolute(prefixPath || "")) return null;
+  const supplied = environmentReference(reference), wrapperPath = path.resolve(prefixPath, "../../..");
+  if (supplied && supplied.kind !== "sikarugir-wrapper") throw new Error("An existing Windows environment requires its own Wine engine.");
+  if (!supplied && path.relative(wrapperPath, prefixPath) !== path.join("Contents", "SharedSupport", "prefix")) return null;
+  const record = readEnvironment(supplied || { kind: "sikarugir-wrapper", path: wrapperPath });
+  if (fs.realpathSync(record.prefixPath) !== fs.realpathSync(prefixPath)) throw new Error("The selected wrapper does not own this Windows prefix.");
+  return record;
+}
+
 module.exports = { INHERIT, inside, privateEnvironment, assertPrivateEnvironment, environmentReference,
-  readIni, readRegistry, readEnvironment, discoverEnvironments, environmentActions, saveLocations, assertWritableRegistry };
+  readIni, readRegistry, readEnvironment, discoverEnvironments, environmentActions, saveLocations, assertWritableRegistry, wrapperForPrefix };

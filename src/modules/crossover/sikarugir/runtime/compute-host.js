@@ -2,6 +2,7 @@
 const fs=require("node:fs"),path=require("node:path"),crypto=require("node:crypto");
 const Manager=require("./manager"),Launch=require("../launch"),Graphics=require("../graphics");
 const Writable=require("../../../shared/writable-input"),Rosetta=require("../../../shared/runtime/rosetta");
+const Environments=require("../../../shared/runtime/wine-environment");
 const Catalog=require("./catalog"),{versionAtLeast,systemVersionSync}=require("../../../shared/runtime/bundled-native");
 const {confirmToolInstall}=require("../../../shared/runtime/tool-install"),{withRuntimeMutation}=require("../../../../core/coordinated-runtime-managers");
 const architecture=()=>require("../../../shared/runtime/host-capabilities").getHostCapabilities().hardwareArch;
@@ -40,7 +41,8 @@ function regular(file){const actual=fs.realpathSync(file);if(!fs.statSync(actual
 async function prepare(request,context={}){
   const {userDataDir,signal}=context;signal?.throwIfAborted();
   if(!["d3d12","vulkan"].includes(request.backend))throw Error("Choose a supported GPU compute backend.");
-  const selected=state(context);let install=selected.installs[request.backend];
+  const existing=Environments.wrapperForPrefix(request.prefixDirectory,context.runtimeSettings?.environmentReference||context.environmentReference);
+  const selected=existing?{installs:{[request.backend]:{...existing.install,version:existing.path}},plans:{}}:state(context);let install=selected.installs[request.backend];
   if(!install&&selected.plans[request.backend]){
     if(request.prefixDirectory)throw Error("The selected existing GPU environment requires its installed runtime.");
     const plan=selected.plans[request.backend];
@@ -67,8 +69,9 @@ async function prepare(request,context={}){
   const settings={graphicsBackend:request.backend==="d3d12"?"d3dmetal":"wined3d",vulkanBackend:request.backend==="vulkan"?"kosmickrisp":"auto",synchronization:"auto",dlss:false,environment:[],windowsVersion:"win10"};
   const graphics=await Graphics.prepareGraphicsView({install,settings,prefixPath:prefix,viewRoot:path.join(directory,"views",viewIdentity),host:{hardwareArch:architecture()},executableArchitecture:"x64",helperLibraries,signal});
   if(!request.prefixDirectory)await Launch.ensurePrefix(install,require("../../../shared/runtime/wine-environment").privateEnvironment(userDataDir,directory,"prefix"),directory,settings,graphics,context);
-  const {environment}=Launch.buildEnvironment(settings,install,directory,prefix,graphics,{baseEnvironment:require("../../../shared/runtime/macos-sandbox").environment(context.environment||process.env)});
-  signal?.throwIfAborted();await context.useRuntime?.({managerId:"sikarugir",sectionId:"default",version:install.version,sourcePath:install.installDir});
+  const baseEnvironment=existing?(context.environment||process.env):require("../../../shared/runtime/macos-sandbox").environment(context.environment||process.env);
+  const {environment}=Launch.buildEnvironment(settings,install,directory,prefix,graphics,{baseEnvironment,existingEnvironment:existing});
+  signal?.throwIfAborted();if(!existing)await context.useRuntime?.({managerId:"sikarugir",sectionId:"default",version:install.version,sourcePath:install.installDir});
   return {schema:1,backend:request.backend,executable:graphics.executablePath,arguments:[],environment,hostPath,nativeRoot,originalLibrary,
     ...(originalLibraries?{originalLibraries}:{}),
     resources:{read:[hostPath,...(originalLibraries||[originalLibrary]),...helperLibraries.flatMap(item=>[item.windows,item.unix])],
