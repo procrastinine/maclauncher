@@ -114,6 +114,7 @@ function includedReferences(engine, options = {}) {
           const sourceLabel = hostLabel(host, value.source);
           const label = translatorLabel(value, host);
           rows.set(version, { version, versionLabel: label, ready: true, included: true, readOnly: true, removable: false, supportsDefault: false,
+            ...(templateVersion || host.upstreamVersion ? { sortVersion: templateVersion || host.upstreamVersion } : {}),
             reference: { managerId, version: host.version, path: sourcePath }, source: value.source, installDir: value.root,
             minimumMacOS: value.macosFloor, architectures, apis: value.apis, platformKey: architectures.join(", "), detail: value.version ? `Component ${value.version.replace(/\s+/g, " ")}` : sourceLabel });
           hostsByReference.set(version, { version: templateVersion || host.upstreamVersion || "", wineVersion: wineVersion || "",

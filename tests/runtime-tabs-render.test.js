@@ -1027,6 +1027,50 @@ test('included translator references use host records and shared release facts w
   assert.equal(dxmt.getState(options).references,undefined);assert.match(render([{...dxmt.getState(options),id:dxmt.id,label:dxmt.label,ui:dxmt.ui}],dxmt.id),/No runtime versions installed yet/);
 });
 
+test('Installed ordering uses explicit host metadata while defaults and unknown versions keep their identities', t => {
+  const fs=require('node:fs'),os=require('node:os'),Component=require('../src/modules/shared/runtime/component-runtime');
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'installed-sort-facts-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const put=(relative,bytes)=>{const file=path.join(root,relative);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,bytes);return file;};
+  const {image,X64}=require('./fixtures/macho-image'),{peFixture}=require('./helpers/pe-fixture');
+  const host=(name,runtime,facts)=>{
+    const engineRoot=path.join(root,name,'wine'),templateRoot=path.join(root,name,'support');
+    put(`${name}/wine/lib/wine/x86_64-unix/wine`,image({cpu:X64,fileType:2}));
+    const pe=peFixture({is64:true});pe.bytes.writeUInt16LE(0x2002,pe.peOffset+22);
+    const renderer=runtime==='crossover'?`${name}/wine/lib/dxvk`:`${name}/support/Frameworks/renderer/dxvk`;
+    put(renderer+'/d3d11.dll',pe.bytes);put(renderer+'/version','1.0');
+    return {version:name,ready:true,installDir:path.join(root,name),engineRoot,templateRoot,...facts};
+  };
+  const templates=[host('Z-older','sikarugir',{templateVersion:'1.0.9'}),
+    host('A-newer','sikarugir',{catalogEntry:{template:{version:'1.0.10'}}}),host('unknown','sikarugir',{})];
+  const crosses=[host('Cross','crossover',{upstreamVersion:'26.3'})],beforeHosts=structuredClone([templates,crosses]);
+  const manifest=require('../src/modules/crossover/manifest.json');
+  const managers=[['sikarugir',templates],['crossover',crosses]].map(([runtime,hosts])=>({id:manifest.runtime.manager[runtime],core:{listInstalled:()=>hosts},getState:()=>({versionLabels:{}})}));
+  t.mock.method(require('../src/modules/registry'),'getModule',id=>id==='crossover'?{manifest,runtimeManagers:managers}:null);
+  const references=Component.includedReferences('dxvk',{userDataDir:path.join(root,'data'),logger:{warn(){}}});
+  const reference=host=>references.find(row=>row.reference.path===host.installDir);
+  assert.equal(reference(templates[0]).sortVersion,'1.0.9');assert.equal(reference(templates[1]).sortVersion,'1.0.10');
+  assert.equal(reference(crosses[0]).sortVersion,'26.3');assert.equal(Object.hasOwn(reference(templates[2]),'sortVersion'),false);
+  const refsBefore=structuredClone(references),included={...manager('host-facts',{}, {},[]),supportsDefault:false,references,
+    versionLabels:Object.fromEntries(references.map(row=>[row.version,row.versionLabel]))};
+  const includedMarkup=render([included]);
+  assert.ok(includedMarkup.indexOf('Template 1.0.10')<includedMarkup.indexOf('Template 1.0.9'),'real Installed references use Template facts instead of opaque path keys');
+  const installed=[{version:'opaque-z',sortVersion:'2.0',installDir:'/fixture/z',ready:true},
+    {version:'opaque-a',sortVersion:'10.0',installDir:'/fixture/a',ready:true},
+    {version:'3.0',installDir:'/fixture/m',ready:true},{version:'opaque-c',sortVersion:'10.0',installDir:'/fixture/b',ready:true}];
+  const before=structuredClone(installed),runtime={...manager('ordered',{}, {},installed),defaultVersion:'opaque-z',
+    versionLabels:{'opaque-z':'Older fact','opaque-a':'Newest fact','3.0':'Unknown fact','opaque-c':'Tied fact'}};
+  const ordered=sort=>render([runtime],runtime.id,{runtimeUi:{[runtime.id]:{remoteOpen:{},installedSort:{default:sort},
+    installVersion:{},installVariant:{},pendingActions:{},messages:{},sourceErrors:{}}}});
+  const assertOrder=(sort,labels)=>{const markup=ordered(sort),rows=markup.split('class="saveRow"').slice(1),
+    positions=labels.map(label=>rows.findIndex(row=>row.includes(label)));assert.ok(positions.every((position,index)=>position>=0&&(!index||position>positions[index-1])),sort);return markup;};
+  assertOrder('newest',['Newest fact','Tied fact','Unknown fact','Older fact']);
+  assertOrder('oldest',['Older fact','Unknown fact','Newest fact','Tied fact']);
+  assertOrder('path',['Newest fact','Tied fact','Unknown fact','Older fact']);
+  const defaults=assertOrder('default',['Older fact','Newest fact','Tied fact','Unknown fact']).split('class="saveRow"').slice(1);
+  assert.match(defaults.find(row=>row.includes('Older fact')),/badgeAccent/);assert.doesNotMatch(defaults.find(row=>row.includes('Newest fact')),/badgeAccent/);
+  assert.equal(runtime.defaultVersion,'opaque-z');assert.deepEqual(installed,before);assert.deepEqual(references,refsBefore);assert.deepEqual([templates,crosses],beforeHosts);
+});
+
 test('official codec catalog, local registration and Apple upstream links use ordinary runtime presentation', t => {
   const {createManager}=require('../src/modules/shared/runtime/translator-managers');
   const codecs=createManager('gstreamer'),local=codecs.getState({});

@@ -426,8 +426,8 @@ export function sortInstalled(
     }
     const byVersion =
       sort === "oldest"
-        ? compareSemver(String(a.version || ""), String(b.version || ""))
-        : compareSemver(String(b.version || ""), String(a.version || ""));
+        ? compareSemver(String(a.sortVersion || a.version || ""), String(b.sortVersion || b.version || ""))
+        : compareSemver(String(b.sortVersion || b.version || ""), String(a.sortVersion || a.version || ""));
     if (sort === "default" && defaultVersion) {
       const aIsDefault =
         a.version === defaultVersion && (defaultVariant ? a.variant === defaultVariant : true);
