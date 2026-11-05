@@ -69,7 +69,8 @@ async function checkGameAvailability(entry, { userDataDir, stat = PathStat.statP
   const remaining = timeoutMs - (Date.now() - probe.started);
   if (remaining <= 0) return describe(TIMED_OUT, file);
   let timer;
-  const timeout = new Promise(resolve => { timer = setTimeout(resolve, remaining, TIMED_OUT); timer.unref?.(); });
+  // The probe threads never keep the process running, so this wait does.
+  const timeout = new Promise(resolve => { timer = setTimeout(resolve, remaining, TIMED_OUT); });
   try {
     const code = await Promise.race([probe.result, timeout]);
     return code ? describe(code, file) : AVAILABLE;
