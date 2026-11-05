@@ -437,6 +437,8 @@ export type RecentGame = {
   iconPath: string | null;
   iconSource: string | null;
   iconUrl: string | null;
+  /** Present while the main process is still decoding the game's icon file. */
+  iconPending?: boolean;
   lastPlayedAt: number | null;
   /** Present while the game's original files cannot be reached, such as on a disconnected drive. */
   availability?: GameFilesAvailability;

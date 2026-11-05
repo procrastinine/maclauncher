@@ -128,3 +128,23 @@ test("backend runtime-state emission projects a copy instead of exporting manage
   assert.equal(restoreRuntimeState(sent).sections[0].installed[0].version, "1.0");
   assert.equal(raw.installed[0].declaration.files.length, 1500);
 });
+
+test("backend lanes send states limited to builds this Mac can run, ready for the main process to pass on", async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-state-runnable-"));t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const raw = representative();
+  raw.catalog.architectureCatalogs.sparc = structuredClone(raw.catalog.architectureCatalogs.x64);
+  raw.sections[0].catalog = { versions: ["1.0"], architectureCatalogs: { arm64: { versions: ["1.0"] }, sparc: { versions: ["1.0"] } } };
+  const manager = { id: raw.id, label: raw.label, getState: () => raw }, events = [];
+  const registry = { listModuleIds: () => ["fixture"], listModules: () => [{ id: "fixture" }], getModule: () => ({ runtimeManagers: [manager] }),
+    getModuleInfo: () => ({ id: "fixture" }), getModuleDir: () => root, listSharedRuntimeManagers: () => [], getRuntimeManagerUi: () => null };
+  const backend = require("../src/core/backend-operations").createBackendOperations({ userDataDir: root, registry, emit: (event, payload) => events.push({ event, payload }) });
+  await backend.runtimeStates({ runtimes: {} });backend.beginShutdown();
+  const sent = events.find(event => event.event === "runtimeState").payload.state, restored = restoreRuntimeState(sent);
+  assert.equal(sent.runtimeSnapshotVersion, 1, "the lane sends the encoded form");
+  const runnable = cpus => cpus.filter(cpu => require("../src/modules/shared/runtime/host-capabilities").architectureSupport(cpu).supported);
+  assert.deepEqual(Object.keys(restored.catalog.architectureCatalogs).sort(), runnable(["arm64", "x64"]));
+  assert.deepEqual(Object.keys(restored.sections[0].catalog.architectureCatalogs), runnable(["arm64"]));
+  assert.ok(raw.catalog.architectureCatalogs.sparc, "the manager's own state is unchanged");
+  const source = fs.readFileSync(path.join(__dirname, "../src/main/main.js"), "utf8");
+  assert.equal(/snapshotRuntimeState|withRunnableBuilds/.test(source), false, "the main process does not encode or filter runtime states again");
+});

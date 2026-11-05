@@ -17,6 +17,7 @@ const { processStopBinding, requestProcessStop, afterProcessStop } = require("./
 const { createAbortError } = require("../modules/shared/runtime/download-utils");
 const { COMPLETION_DIAGNOSTIC_WAIT_MS } = require("./game-process-events");
 const { snapshotRuntimeState } = require("./runtime-state-snapshot.mjs");
+const { withRunnableBuilds } = require("../modules/shared/runtime/host-settings");
 
 function listRuntimeManagers(registry) {
   const managers = new Map();
@@ -185,8 +186,10 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
   function managerState(manager, settings, referenceStates) {
     try {
       const state = manager.getState({ settings: settings?.runtimes?.[manager.id], runtimeSettings: settings?.runtimes, userDataDir, logger, referenceStates });
-      return snapshotRuntimeState({ label: manager.label || manager.id, ...state, id: manager.id,
-        ui: registry.getRuntimeManagerUi(manager.id) || state.ui || manager.ui || undefined });
+      // States leave the lane encoded and limited to builds this Mac can run, so
+      // the main process stores and sends them without encoding them again.
+      return snapshotRuntimeState(withRunnableBuilds({ label: manager.label || manager.id, ...state, id: manager.id,
+        ui: registry.getRuntimeManagerUi(manager.id) || state.ui || manager.ui || undefined }));
     } catch (error) {
       logger.error(`[runtime:${manager.id}] state failed`, error.message);
       return { id: manager.id, label: manager.label || manager.id, installed: [],

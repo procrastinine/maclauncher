@@ -43,7 +43,7 @@ const { mergeDetectedEntry } = require("./launch-utils");
 const { DownloadManager } = require("../modules/shared/runtime/download-manager");
 const { createAppUpdater } = require("./app-update");
 const { isAbortError } = require("../modules/shared/runtime/download-utils");
-const { unavailableReason, withRunnableBuilds } = require("../modules/shared/runtime/host-settings");
+const { unavailableReason } = require("../modules/shared/runtime/host-settings");
 const ReShade = require("../modules/shared/reshade");
 const ReShadeFilters = require("../modules/shared/reshade/filter-library");
 const GraphicsImports = require("../modules/shared/reshade/imports");
@@ -204,11 +204,13 @@ let snapshotSaveTimer;
 let snapshotWrite = Promise.resolve();
 const snapshotFile = path.join(userDataDir, "ui-state-cache.json");
 // Cache identity follows the launcher CPU because its default runtime catalogs differ under Rosetta.
+// Format 2 holds runtime states as backend lanes send them: encoded and limited to runnable builds.
+const SNAPSHOT_FORMAT = 2;
 try {
   const stat = fs.lstatSync(snapshotFile);
   if (stat.isFile() && !stat.isSymbolicLink() && stat.size <= 8 * 1024 ** 2) {
     const cached = sanitizeRuntimeErrors(JSON.parse(fs.readFileSync(snapshotFile, "utf8")));
-    if (cached.platform === process.platform && cached.arch === process.arch && cached.version === app.getVersion()) {
+    if (cached.format === SNAPSHOT_FORMAT && cached.platform === process.platform && cached.arch === process.arch && cached.version === app.getVersion()) {
       Object.assign(runtimeStateSnapshots, cached.runtimeManagers || {});
       Object.assign(moduleStateSnapshots, cached.moduleStates || {});
     }
@@ -217,7 +219,7 @@ try {
 function saveStateSnapshotsSoon() {
   clearTimeout(snapshotSaveTimer);
   snapshotSaveTimer = setTimeout(() => {
-    const value = JSON.stringify(sanitizeRuntimeErrors({ platform: process.platform, arch: process.arch, version: app.getVersion(),
+    const value = JSON.stringify(sanitizeRuntimeErrors({ format: SNAPSHOT_FORMAT, platform: process.platform, arch: process.arch, version: app.getVersion(),
       runtimeManagers: runtimeStateSnapshots, moduleStates: moduleStateSnapshots }));
     snapshotWrite = snapshotWrite.catch(() => {}).then(async () => {
       const temporary = snapshotFile + ".tmp";
@@ -992,45 +994,89 @@ function resolveModuleDefaultIconPath(moduleId) {
 }
 
 const iconDataUrlCache = new Map();
+const sameIconFile = (cached, stat) => cached && cached.mtimeMs === stat.mtimeMs && cached.ctimeMs === stat.ctimeMs && cached.ino === stat.ino && cached.size === stat.size;
 
-function iconUrlForPath(iconPath) {
+// A decoded preview, or null for a file that is not a readable image, is kept
+// per file version so a state rebuild never decodes the same file again.
+function decodeIcon(iconPath, stat) {
+  let url = null;
+  try {
+    const img = nativeImage.createFromPath(iconPath);
+    if (img && !img.isEmpty()) {
+      const size = img.getSize();
+      const longest = Math.max(size.width, size.height);
+      const preview = longest > 128 ? img.resize({
+        width: Math.max(1, Math.round(size.width * 128 / longest)),
+        height: Math.max(1, Math.round(size.height * 128 / longest)),
+        quality: "best"
+      }) : img;
+      const encoded = preview.toDataURL();
+      if (encoded && typeof encoded === "string") url = encoded;
+    }
+  } catch {}
+  iconDataUrlCache.set(iconPath, { mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs, ino: stat.ino, size: stat.size, url });
+  // Room for every library icon, so a state rebuild in a large library never
+  // decodes and resizes all icons again.
+  const limit = Math.max(256, 2 * (gameRecordsCache?.length || 0) + 64);
+  while (iconDataUrlCache.size > limit) iconDataUrlCache.delete(iconDataUrlCache.keys().next().value);
+  return url;
+}
+
+function iconFile(iconPath) {
   if (!iconPath) return null;
   try {
     const stat = fs.statSync(iconPath);
-    if (!stat.isFile()) return null;
-    const cached = iconDataUrlCache.get(iconPath);
-    if (cached && cached.mtimeMs === stat.mtimeMs && cached.ctimeMs === stat.ctimeMs && cached.ino === stat.ino && cached.size === stat.size) {
-      iconDataUrlCache.delete(iconPath); iconDataUrlCache.set(iconPath, cached);
-      return cached.url;
-    }
-    const img = nativeImage.createFromPath(iconPath);
-    if (!img || img.isEmpty()) return null;
-    const size = img.getSize();
-    const longest = Math.max(size.width, size.height);
-    const preview = longest > 128 ? img.resize({
-      width: Math.max(1, Math.round(size.width * 128 / longest)),
-      height: Math.max(1, Math.round(size.height * 128 / longest)),
-      quality: "best"
-    }) : img;
-    const url = preview.toDataURL();
-    if (!url || typeof url !== "string") return null;
-    iconDataUrlCache.set(iconPath, { mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs, ino: stat.ino, size: stat.size, url });
-    // Room for every library icon, so a state rebuild in a large library never
-    // decodes and resizes all icons again.
-    const limit = Math.max(256, 2 * (gameRecordsCache?.length || 0) + 64);
-    while (iconDataUrlCache.size > limit) iconDataUrlCache.delete(iconDataUrlCache.keys().next().value);
-    return url;
-  } catch {
-    iconDataUrlCache.delete(iconPath);
-    return null;
+    return stat.isFile() ? stat : null;
+  } catch { return null; }
+}
+
+function iconUrlForPath(iconPath) {
+  const stat = iconFile(iconPath);
+  if (!stat) { iconDataUrlCache.delete(iconPath); return null; }
+  const cached = iconDataUrlCache.get(iconPath);
+  if (sameIconFile(cached, stat)) {
+    iconDataUrlCache.delete(iconPath); iconDataUrlCache.set(iconPath, cached);
+    return cached.url;
   }
+  return decodeIcon(iconPath, stat);
 }
 
 function canRenderIconPath(iconPath) {
   return Boolean(iconUrlForPath(iconPath));
 }
 
+// Library rows never wait for icon decoding. An icon file not decoded yet is
+// shown as pending; short decoding slices follow, then one state rebuild
+// carries the images, or the module icon where a file is not a readable image.
+const ICON_DECODE_SLICE_MS = 8;
+const pendingIcons = new Set();
+let iconGeneration = 0, iconPendingReads = 0, iconDecoding = false;
+function libraryIcon(iconPath) {
+  const stat = iconFile(iconPath);
+  if (!stat) return null;
+  const cached = iconDataUrlCache.get(iconPath);
+  if (sameIconFile(cached, stat)) return cached.url ? { url: cached.url } : null;
+  iconPendingReads += 1;
+  pendingIcons.add(iconPath);
+  if (!iconDecoding) { iconDecoding = true; setImmediate(decodePendingIcons); }
+  return { pending: true };
+}
+function decodePendingIcons() {
+  const started = performance.now();
+  for (const iconPath of pendingIcons) {
+    pendingIcons.delete(iconPath);
+    const stat = iconFile(iconPath);
+    if (stat && !sameIconFile(iconDataUrlCache.get(iconPath), stat)) decodeIcon(iconPath, stat);
+    if (performance.now() - started >= ICON_DECODE_SLICE_MS) break;
+  }
+  if (pendingIcons.size) { setImmediate(decodePendingIcons); return; }
+  iconDecoding = false;
+  iconGeneration += 1;
+  scheduleStateRebuild();
+}
+
 function normalizeGameEntry(entry, settings, precomputed = null) {
+  const renders = candidate => precomputed?.libraryIcons ? Boolean(libraryIcon(candidate)) : canRenderIconPath(candidate);
   const moduleId = resolveModuleId(entry);
   const mod = Modules.getModule(moduleId);
   const moduleInfo = Modules.getModuleInfo(moduleId);
@@ -1083,10 +1129,10 @@ function normalizeGameEntry(entry, settings, precomputed = null) {
 
   const importPath = resolveImportPath(entry);
   const defaultCandidate = resolveModuleDefaultIconPath(moduleId);
-  const moduleDefaultIconPath = defaultCandidate && canRenderIconPath(defaultCandidate) ? defaultCandidate : null;
+  const moduleDefaultIconPath = defaultCandidate && renders(defaultCandidate) ? defaultCandidate : null;
   const iconWaits = GameAvailability.insideRoot(entry, entry.iconPath, { userDataDir }) && !gameAvailability.known(entry);
   const rawCandidate = iconWaits || GameAvailability.affectsPath(unavailable, entry.iconPath) ? null : normalizeIconPath(entry.iconPath);
-  const rawIconPath = rawCandidate && canRenderIconPath(rawCandidate) ? rawCandidate : null;
+  const rawIconPath = rawCandidate && renders(rawCandidate) ? rawCandidate : null;
   let iconPath = rawIconPath;
   let iconSource =
     typeof entry.iconSource === "string" && entry.iconSource.trim()
@@ -1327,11 +1373,14 @@ function decorateRecentEntry(entry, settings) {
   // Whether the checks are current matters only to an unsaved network setting.
   const key = JSON.stringify([graphicsWarnings, launchNotices, checks.checks, typeof entry.networkAccess !== "boolean" && checks.current, availabilityKnown]) + inputs;
   const previous = recentDecorationCache.get(entry.gameId || entry.gamePath);
-  if (previous?.key === key) return previous.value;
-  const {effectsNotices: _notices, ...normalized} = normalizeGameEntry(entry, settings, checks);
-  const value = { ...normalized, ...graphicsView(entry), iconUrl: iconUrlForPath(normalized.iconPath), ...(graphicsWarnings?.length ? {graphicsWarnings} : {}),
-    ...(launchNotices?.length ? {launchNotices} : {}), ...(availability ? {availability} : {}) };
-  recentDecorationCache.set(entry.gameId || entry.gamePath, { key, value });
+  // A row decorated while an icon was pending is decorated again once that decoding round ends.
+  if (previous?.key === key && (previous.iconGeneration === undefined || previous.iconGeneration === iconGeneration)) return previous.value;
+  const pendingBefore = iconPendingReads;
+  const {effectsNotices: _notices, ...normalized} = normalizeGameEntry(entry, settings, { ...checks, libraryIcons: true });
+  const icon = libraryIcon(normalized.iconPath);
+  const value = { ...normalized, ...graphicsView(entry), iconUrl: icon?.url || null, ...(icon?.pending ? {iconPending: true} : {}),
+    ...(graphicsWarnings?.length ? {graphicsWarnings} : {}), ...(launchNotices?.length ? {launchNotices} : {}), ...(availability ? {availability} : {}) };
+  recentDecorationCache.set(entry.gameId || entry.gamePath, { key, value, ...(iconPendingReads !== pendingBefore ? { iconGeneration } : {}) });
   return value;
 }
 
@@ -1981,18 +2030,9 @@ function removeEphemeralEntry(gamePath, { gameId } = {}) {
   return true;
 }
 
-// A runtimeState event replaces its manager's stored state object, so an
-// unchanged manager reuses its encoded snapshot when the library state is rebuilt.
+// Backend lanes send runtime states already encoded and limited to this Mac's
+// runnable builds, so the library state carries them unchanged.
 const LOADING_RUNTIME_STATE = { installed: [], catalog: { versions: [], loading: true } };
-const encodedRuntimeStates = new WeakMap();
-function encodedRuntimeState(state) {
-  let encoded = encodedRuntimeStates.get(state);
-  if (!encoded) {
-    encoded = require("../core/runtime-state-snapshot.mjs").snapshotRuntimeState(withRunnableBuilds(state));
-    encodedRuntimeStates.set(state, encoded);
-  }
-  return encoded;
-}
 function buildRuntimeManagerState(settings) {
   const out = {};
   for (const manager of listRuntimeManagers()) {
@@ -2003,7 +2043,7 @@ function buildRuntimeManagerState(settings) {
     if (unavailableReason(ui?.hostFeature)) continue;
     out[manager.id] = {
       label: manager.label || manager.id,
-      ...encodedRuntimeState(state),
+      ...state,
       id: manager.id,
       ui
     };
@@ -3196,6 +3236,9 @@ async function init() {
     return;
   }
 
+  // The first library state and the window's native creation run as separate
+  // tasks, so input and timers are handled between them.
+  await new Promise(resolve => setTimeout(resolve, 0));
   await ensureLauncherWindow({background:backgroundStartup});
   gameImports.setImporter(GraphicsImports.createImporter({ userDataDir, importGame: importGameIntoLibrary,
     importModel: importNeuralModelFile, onGraphicsImported: async () => {
