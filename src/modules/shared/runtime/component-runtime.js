@@ -79,7 +79,7 @@ function includedReferences(engine, options = {}) {
       if (seen.has(sourcePath)) continue;
       seen.add(sourcePath);
       try {
-        const inventory = Wine.includedTranslators(host, runtime);
+        const inventory = Wine.includedTranslators(host, runtime, { engine });
         for (const message of inventory.warnings) warn(`${sourcePath}: ${message}`);
         for (const value of inventory.included) {
           if (value.engine !== engine) continue;

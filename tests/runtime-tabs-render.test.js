@@ -921,6 +921,7 @@ test('included translator references use host records and shared release facts w
     for(const name of ['wine','cxbottle'])write(path.join(wine,'bin',name),'#!/usr/bin/perl\n',0o755);
     for(const name of ['wineloader','wineserver'])write(path.join(wine,'bin',name),image(2),0o755);
     write(path.join(wine,'lib/wine/x86_64-unix/wine'),image(2),0o755);
+    write(path.join(wine,'lib/wine/x86_64-windows/d3d12.dll'),dll());
     write(path.join(wine,'lib/dxmt/x86_64-windows/d3d11.dll'),dll());
     write(path.join(wine,'lib/dxvk/x86_64-windows/d3d11.dll'),dll());
     write(path.join(wine,'lib64/libMoltenVK.dylib'),image());
@@ -945,7 +946,20 @@ test('included translator references use host records and shared release facts w
   write(path.join(templateHosts[0].templateRoot,'Resources/vulkan/icd.d/optional.json'),'{');
   // Bad optional component metadata cannot hide another component or host.
   fs.symlinkSync(path.join(root,'outside'),path.join(first.wine,'lib/dxvk/escape'));fs.mkdirSync(path.join(root,'outside'));
+  const Description=require('../src/modules/shared/runtime/translator-description'),described=[],inspected=[];
+  const describe=Description.describeTranslator,inspect=Description.inspectFile;
+  t.mock.method(Description,'describeTranslator',(root,options)=>{described.push(options.engine);return describe(root,options);});
+  t.mock.method(Description,'inspectFile',file=>{inspected.push(file.path);return inspect(file);});
+  warnings.length=0;
   const state=dxmt.getState(options),section=state.sections[0];
+  assert.deepEqual(described,['dxmt','dxmt','dxmt','dxmt'],'per-manager references inspect only the requested engine');
+  assert.deepEqual(inspected,[],'unrelated builtin Wine D3D12 binaries are not inspected');
+  assert.deepEqual(warnings,[],'unrelated malformed optional components are not inspected');
+  const Wine=require('../src/modules/shared/runtime/wine-translators');
+  const unfiltered=Wine.includedTranslators(templateHosts[0],'sikarugir');
+  assert.ok(unfiltered.included.some(row=>row.engine==='dxvk'));assert.ok(unfiltered.included.some(row=>row.engine==='wined3d'));
+  assert.ok(unfiltered.warnings.length,'ordinary unfiltered inventory retains optional metadata warnings');
+  assert.ok(Wine.includedTranslators(templateHosts[0],'sikarugir',{engine:'dxmt'}).included.every(row=>row.engine==='dxmt'));
   assert.equal(state.references.length,4);assert.deepEqual(state.installed,before.installed);assert.deepEqual(state.catalog,before.catalog);assert.equal(state.defaultVersion,before.defaultVersion);
   assert.equal(new Set(state.references.map(row=>row.version)).size,4);
   assert.ok(state.references.every(row=>row.included&&row.readOnly&&row.removable===false&&row.supportsDefault===false));

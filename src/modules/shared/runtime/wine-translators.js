@@ -7,10 +7,11 @@ const warn = require('../graphics-warning');
 const Architecture = require('./architecture');
 const SETTINGS = Object.freeze({ 'd3d-renderer': 'translatorRenderer', 'vulkan-driver': 'translatorVulkan', d3d12: 'translatorD3D12', video: 'translatorVideo' });
 
-function includedTranslators(install, runtime) {
+function includedTranslators(install, runtime, { engine: requestedEngine } = {}) {
   const layout = wineLayout(install), result = [], warnings = [];
   const source = { kind: runtime, id: install.version || layout.root, runtime, label: runtime === 'crossover' ? `CrossOver ${install.upstreamVersion || ''}`.trim() : `Sikarugir Template ${install.templateVersion || ''}`.trim() };
   const add = (root, engine, component, extra = {}) => {
+    if (requestedEngine && engine !== requestedEngine) return;
     if (!fs.existsSync(root)) return;
     try {
       let value = Description.describeTranslator(root, { engine, component, source, ...extra });
@@ -47,9 +48,10 @@ function includedTranslators(install, runtime) {
     }
     const vulkan = path.join(support, RELATIVE_PATHS.vulkan);
     if (fs.existsSync(vulkan)) for (const name of fs.readdirSync(vulkan).filter(name => name.endsWith('.json'))) {
+      const engine = /kosmickrisp/i.test(name) ? 'kosmickrisp' : /moltenvk/i.test(name) ? 'moltenvk' : null;
+      if (requestedEngine && engine !== requestedEngine) continue;
       try {
         const descriptor = JSON.parse(fs.readFileSync(path.join(vulkan, name), 'utf8')), library = path.resolve(vulkan, descriptor.ICD.library_path);
-        const engine = /kosmickrisp/i.test(name) ? 'kosmickrisp' : /moltenvk/i.test(name) ? 'moltenvk' : null;
         if (engine) {
           const before = result.length; add(library, engine, 'vulkan-driver', { form: 'icd' });
           if (result.length > before) {
@@ -61,9 +63,9 @@ function includedTranslators(install, runtime) {
       } catch (error) { warnings.push(error.message); }
     }
   }
-  result.push(Description.description({ id: 'included:d3d-renderer:wined3d', included: true, component: 'd3d-renderer', engine: 'wined3d', source,
+  if (!requestedEngine || requestedEngine === 'wined3d') result.push(Description.description({ id: 'included:d3d-renderer:wined3d', included: true, component: 'd3d-renderer', engine: 'wined3d', source,
     version: install.wineVersion || install.engineVersion || '', form: 'builtin', root: layout.root, files: [] }));
-  const d3d12Files = layout.primaryWindowsRoot && fs.existsSync(layout.primaryWindowsRoot) ? fs.readdirSync(layout.primaryWindowsRoot).filter(name => /^d3d12.*\.dll$/i.test(name)).map(name => Description.inspectFile({ path: path.join(layout.primaryWindowsRoot, name), relative: `${layout.primaryWindows}/${name}` })) : [];
+  const d3d12Files = (!requestedEngine || requestedEngine === 'vkd3d') && layout.primaryWindowsRoot && fs.existsSync(layout.primaryWindowsRoot) ? fs.readdirSync(layout.primaryWindowsRoot).filter(name => /^d3d12.*\.dll$/i.test(name)).map(name => Description.inspectFile({ path: path.join(layout.primaryWindowsRoot, name), relative: `${layout.primaryWindows}/${name}` })) : [];
   if (d3d12Files.length) result.push(Description.description({ id: 'included:d3d12:vkd3d', included: true, component: 'd3d12', engine: 'vkd3d', source,
     version: d3d12Files[0].version || '', form: 'builtin', root: layout.root, files: d3d12Files }));
   return { included: result, warnings, layout };
