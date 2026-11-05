@@ -12,6 +12,8 @@ const definitions = {
       ...["dxvk", "dxvk3", "d9vk"].map(component => ["template-" + component, "Sikarugir Template · " + component, "Sikarugir-App/Template", null, component, { secondary: true, ...(component === "d9vk" ? { description: "D9VK copies taken from a Sikarugir Template release. This is the older Direct3D 8/9 variant." } : {}) }])] },
   "vkd3d-proton": { label: "vkd3d-proton", groupId: "directx-vulkan", memberOrder: 3, names: ["vkd3d-proton"],
     sources: [["upstream", "vkd3d-proton", "HansKristian-Work/vkd3d-proton"]] },
+  vkd3d: { label: "Wine vkd3d", groupId: "directx-vulkan", memberOrder: 4, referenceOnly: true, localOnly: true, names: [], sources: [],
+    sourceName: "Wine vkd3d", sourceUrl: "https://gitlab.winehq.org/wine/vkd3d", sourceDescription: "Wine vkd3d copies included with registered Wine runtimes remain in their source runtime." },
   d3dmetal: { label: "D3DMetal", groupId: "directx-metal", upstreamUrl: "https://developer.apple.com/games/game-porting-toolkit/", upstreamLabel: "Apple Game Porting Toolkit downloads", memberOrder: 1, names: ["d3dmetal", "apple_gptk", "redist"],
     sources: [["template", "Sikarugir Template", "Sikarugir-App/Template", null, "d3dmetal"]] },
   dxmt: { label: "DXMT", groupId: "directx-metal", memberOrder: 0, names: ["dxmt"],
@@ -49,7 +51,7 @@ function createManager(engine, { dependencies = {} } = {}) {
     formerIds: engine === "dxmt" ? ["crossover-graphics-bridge"] : [], label: definition.label,
     upstreamUrl: definition.upstreamUrl, upstreamLabel: definition.upstreamLabel,
     formatVersionLabel: (pin, installed) => versionLabel(pin, installed, catalogSources.find(source => source.id === pin?.catalogSourceId)?.componentLabel || definition.label),
-    discoverCatalog: () => [], ...(catalogSources.length ? { catalogSources } : {}), sourceUrl: catalogSources[0]?.url || "https://gstreamer.freedesktop.org/", sourceLabel: "Source", sourceName: definition.sourceName, sourceDescription: definition.sourceDescription, nativeLibrary: true, cacheDownloads: true,
+    discoverCatalog: () => [], ...(catalogSources.length ? { catalogSources } : {}), sourceUrl: definition.sourceUrl || catalogSources[0]?.url || "https://gstreamer.freedesktop.org/", sourceLabel: "Source", sourceName: definition.sourceName, sourceDescription: definition.sourceDescription, nativeLibrary: true, cacheDownloads: true, supportsDefault: !definition.referenceOnly, customRuntime: !definition.referenceOnly,
     resolveExecutable(root) { return Component.inspected(Component.componentRoot(root, definition), definition).executablePath; },
     inspectRuntime({ runtimePath, runtimeRoot, runtimeSource, runtimeCatalogEntry }) {
       return Component.inspected(Component.componentRoot(runtimeRoot || path.dirname(runtimePath), definition), definition, { engine: runtimeCatalogEntry?.translatorEngine || definition.engine, source: runtimeCatalogEntry ? translatorSource(runtimeCatalogEntry) : runtimeSource || "upstream" });
@@ -78,12 +80,14 @@ function createManager(engine, { dependencies = {} } = {}) {
     manager.getState = function(options = {}) {
       const state = getState.call(this, options);
       const local = section => ({ ...section, sourceLinks: [{ label: definition.sourceName, url: section.catalog.sourceUrl }],
+        ...(definition.referenceOnly ? { managementTitle: "Included copies", installedTitle: "Included" } : {}),
         catalog: { ...section.catalog, delivery: "local-files", status: "success", installable: false, importable: false,
-          refreshLabel: "Refresh registrations", emptyLabel: "No codec folders registered.", error: null } });
+          refreshLabel: definition.referenceOnly ? "Refresh included copies" : "Refresh registrations",
+          emptyLabel: definition.referenceOnly ? "No included copies found in registered runtimes." : "No codec folders registered.", error: null } });
       return { ...local(state), sections: state.sections?.map(local) };
     };
     manager.refreshCatalog = async options => manager.getState(options).catalog;
   }
-  return Component.withIncludedReferences(Component.configure(manager, definition));
+  return Component.withIncludedReferences(definition.referenceOnly ? manager : Component.configure(manager, definition));
 }
 module.exports = { definitions, catalogSource, createManager, assetName, templateName, versionLabel };

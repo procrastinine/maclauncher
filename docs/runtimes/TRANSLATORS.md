@@ -1,6 +1,6 @@
 # Graphics translators
 
-**Runtimes → Graphics** organizes translators by their output: **DirectX → Vulkan** contains DXVK and vkd3d-proton, **DirectX → Metal** contains DXMT and D3DMetal, **Vulkan drivers** contains MoltenVK and KosmicKrisp, and **Video codecs** contains GStreamer. These groups manage the components used by [CrossOver](CROSSOVER.md) and [Sikarugir](SIKARUGIR.md). Each installed version is stored once. Games, private graphics views and Windows prefix DLLs refer to that installation through links. A loader that needs its own signature, or a library that locates its framework beside itself, uses a shared prepared copy rather than a copy per game.
+**Runtimes → Graphics** organizes translators by their output: **DirectX → Vulkan** contains DXVK, Wine vkd3d and vkd3d-proton, **DirectX → Metal** contains DXMT and D3DMetal, **Vulkan drivers** contains MoltenVK and KosmicKrisp, and **Video codecs** contains GStreamer. These groups manage the components used by [CrossOver](CROSSOVER.md) and [Sikarugir](SIKARUGIR.md). Each installed version is stored once. Games, private graphics views and Windows prefix DLLs refer to that installation through links. A loader that needs its own signature, or a library that locates its framework beside itself, uses a shared prepared copy rather than a copy per game.
 
 Stale disposable graphics views are rebuilt in another shared generation. Previous generations remain in place until ordinary storage upkeep can retire them. Equivalent library links resolve to the same installed source.
 
@@ -14,6 +14,7 @@ Translator versions use the shared runtime catalogs and local registration. Refr
 | KosmicKrisp | Mesa distributions | Driver and loader folder, archive or installed runtime |
 | DXMT | 3Shain/dxmt builtin releases; Sikarugir Template | Folder, archive or installed runtime |
 | DXVK | doitsujin/dxvk; Gcenx/DXVK-macOS, with a separate async catalog; historical AlpyneDreams/d8vk and misyltoad/d9vk releases; Template dxvk, dxvk3 and d9vk | Folder, archive or installed runtime |
+| Wine vkd3d | Wine upstream source link | Read-only copies included with registered runtimes |
 | vkd3d-proton | HansKristian-Work/vkd3d-proton | Folder or archive |
 | D3DMetal | Sikarugir Template | Apple Game Porting Toolkit disk image or folder; installed runtime |
 | GStreamer codecs | Local registration | Prepared plugin folder with its matching dependency closure |
@@ -24,7 +25,7 @@ Each catalog has its own Refresh control and publisher link. Release labels iden
 
 Directory and installed-application registrations reference the selected files. Archive registrations extract once into shared storage. Publisher archives are cached by asset identity across managers; installing another component from the same Template reuses that download. Template component installations retain their complete component tree, including notices, without installing another Wine engine. Removing a local registration preserves the original files.
 
-Installed lists also show matching components included with registered CrossOver applications and Sikarugir Templates. These rows name the source, component version and binary CPU architectures, carry an Included label and reference the original files. Source-owned rows have no install, repair, default or removal actions.
+Installed lists also show matching components included with registered CrossOver applications and Sikarugir Templates. These rows name the source, component version and binary CPU architectures, carry an Included label and reference the original files. Source-owned rows have no install, repair, default or removal actions. Wine vkd3d has its own Included copies panel; these copies remain with Wine and are separate from vkd3d-proton. Its upstream source archives are not presented as Windows runtime downloads.
 
 An installed application selection resolves its component folder, framework or driver library. An application whose component cannot be identified requires selection of the component folder or library. Selecting a component inside CrossOver retains the CrossOver-only source restriction.
 

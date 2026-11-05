@@ -921,7 +921,8 @@ test('included translator references use host records and shared release facts w
     for(const name of ['wine','cxbottle'])write(path.join(wine,'bin',name),'#!/usr/bin/perl\n',0o755);
     for(const name of ['wineloader','wineserver'])write(path.join(wine,'bin',name),image(2),0o755);
     write(path.join(wine,'lib/wine/x86_64-unix/wine'),image(2),0o755);
-    write(path.join(wine,'lib/wine/x86_64-windows/d3d12.dll'),dll());
+    const builtin=dll();builtin.write('Wine builtin DLL\0',64);
+    write(path.join(wine,'lib/wine/x86_64-windows/d3d12.dll'),builtin);
     write(path.join(wine,'lib/dxmt/x86_64-windows/d3d11.dll'),dll());
     write(path.join(wine,'lib/dxvk/x86_64-windows/d3d11.dll'),dll());
     write(path.join(wine,'lib64/libMoltenVK.dylib'),image());
@@ -936,6 +937,8 @@ test('included translator references use host records and shared release facts w
   const makeTemplate=(name,version)=>{
     const installDir=path.join(root,name),wine=path.join(installDir,'wine'),support=path.join(installDir,'support');
     write(path.join(wine,'lib/wine/x86_64-unix/wine'),image(2),0o755);
+    const builtin=dll();builtin.write('Wine builtin DLL\0',64);
+    write(path.join(wine,'lib/wine/x86_64-windows/d3d12.dll'),builtin);
     write(path.join(support,'SharedSupport/renderer/dxmt/d3d11.dll'),dll());
     write(path.join(support,'SharedSupport/renderer/dxmt/version'),'v0.81');
     write(path.join(support,'SharedSupport/renderer/dxvk3/d3d11.dll'),dll());
@@ -974,6 +977,15 @@ test('included translator references use host records and shared release facts w
   assert.ok(molten.getState(options).references.every(row=>row.versionLabel.includes('MoltenVK 1.2.10')&&row.platformKey==='x86_64'));
   assert.equal(dxvk.getState(options).references.length,3,'only the escaped component is omitted');assert.ok(warnings.some(row=>row.includes('dxvk')&&row.includes('escapes')));
   assert.equal(owners.createManager('vkd3d-proton').getState(options).references,undefined,'builtin Wine choices are not mislabeled as vkd3d-proton');
+  const wine=registry.listSharedRuntimeManagers().find(manager=>manager.id==='translator-vkd3d'),wineState=wine.getState(options);
+  assert.equal(wine.customRuntime,false);assert.equal(wine.registerCustomRuntime,undefined);assert.equal(wineState.supportsDefault,false);
+  assert.equal(wineState.references.length,4);assert.deepEqual(wineState.installed,[]);assert.deepEqual(wineState.catalog.versions,[]);
+  assert.ok(wineState.references.every(row=>row.readOnly&&row.included&&row.reference.managerId!=='translator-vkd3d-proton'));
+  assert.ok(wineState.references.some(row=>row.versionLabel.includes('Alpha.app')));assert.ok(wineState.references.some(row=>row.versionLabel.includes('Template-B')));
+  const wineMarkup=render([{...wineState,id:wine.id,label:wine.label,ui:wine.ui}],wine.id,{onRuntimeRegister(){assert.fail('No standalone Wine registration');}});
+  assert.match(wineMarkup,/Included copies/);assert.match(wineMarkup,/Refresh included copies/);assert.match(wineMarkup,/href="https:\/\/gitlab\.winehq\.org\/wine\/vkd3d"/);
+  assert.doesNotMatch(wineMarkup,/Imported files|Register custom|Load versions|No downloadable|saveRowActions|Set default|>Install<|>Repair</);
+  assert.equal(fs.existsSync(path.join(userDataDir,'runtimes',wine.id)),false,'Wine source-owned references create no receipt or payload');
   assert.equal(dxmt.resolveSelection(null,null,userDataDir,{version:state.references[0].version}).install,null,'references are never managed choices');
   assert.deepEqual(require('../src/modules/shared/runtime/wine-translators').managedTranslators({userDataDir,settings:{}},'crossover',[dxmt,dxvk,metal,molten]),[],'per-game managed choices remain unchanged');
   const snapshot=structuredClone(state);

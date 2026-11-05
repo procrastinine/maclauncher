@@ -209,7 +209,7 @@ export function runtimeSummaryPresentation(section: Record<string, any> | null |
   const messageIncludesTime = Boolean(message?.startsWith("Versions updated at "));
   return {
     versionCount: versions.length, includedCount, installedCount,
-    installedTitle: localFiles ? "Imported files" : local ? "Registered applications" : includedCount ? installedCount ? "Included & installed" : "Included" : "Installed",
+    installedTitle: text(section?.installedTitle) || (localFiles ? "Imported files" : local ? "Registered applications" : includedCount ? installedCount ? "Included & installed" : "Included" : "Installed"),
     latestAvailableVersion: !local && latestAvailable !== selected ? latestAvailable : "",
     latestInstalledVersion: !local && latestInstalled !== latestAvailable && latestInstalled !== selected ? latestInstalled : "",
     checkedAt: typeof checkedAt === "number" && checkedAt > 0 && checkedAt <= 8.64e15 ? checkedAt : null,

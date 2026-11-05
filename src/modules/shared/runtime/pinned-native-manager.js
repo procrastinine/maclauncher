@@ -81,7 +81,7 @@ function executableFloor(file, architecture) {
 // query or from a local cache. Every pinned manager offers the user's own
 // default version, as other multi-version runtimes do, unless a game needs its
 // exact engine version.
-function createSingleArchitectureManager({ installationArchitecture, shareDiscovery, id, label, discoverCatalog, upstream, catalogSources, cacheDownloads = false, projectBuilds, buildsRepository, upstreamUrl, upstreamLabel, resolveExecutable, inspectRuntime = Native.resolveLocalRuntime, verifyArtifact, prepareInstall, buildRuntime, buildSourcePath, sourceUrl, sourceLabel, sourceName, sourceDescription, formatVersionLabel, buildHelpUrl, buildRequirements, bundledRuntime, legacyInstalledRuntime, formerIds = [], bundledExecution = "copy", distributionRequired = false, importLocal = false, nativeLibrary = false, supportsDefault = true, maxEntries = 500, dependencies = {} }) {
+function createSingleArchitectureManager({ installationArchitecture, shareDiscovery, id, label, discoverCatalog, upstream, catalogSources, cacheDownloads = false, projectBuilds, buildsRepository, upstreamUrl, upstreamLabel, resolveExecutable, inspectRuntime = Native.resolveLocalRuntime, verifyArtifact, prepareInstall, buildRuntime, buildSourcePath, sourceUrl, sourceLabel, sourceName, sourceDescription, formatVersionLabel, buildHelpUrl, buildRequirements, bundledRuntime, legacyInstalledRuntime, formerIds = [], bundledExecution = "copy", distributionRequired = false, importLocal = false, nativeLibrary = false, supportsDefault = true, customRuntime = true, maxEntries = 500, dependencies = {} }) {
   if (typeof distributionRequired !== "boolean") throw new Error("Runtime distribution requirements must be explicit booleans.");
   if (typeof importLocal !== "boolean") throw new Error("Local runtime imports must be explicitly enabled.");
   if (typeof nativeLibrary !== "boolean") throw new Error("Native library runtimes must be explicitly enabled.");
@@ -982,6 +982,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       getInstallDir: ({ userDataDir, version }) => { loadCatalog(userDataDir); return installDir(userDataDir, version); },
       get catalog() { return [...entries.values()]; } }
   };
+  if (!customRuntime) { manager.customRuntime = false; return manager; }
   Custom.configure(manager, { defaultsPath: () => ["defaultVersion"], providers: [{ core: manager.core,
     lists: { listInstalled: "default" }, resolves: { resolveInstalled: "default", resolveRegistered: "default" },
     versions: ["normalizeVersion"], directories: ["getInstallDir"] }], inspect(runtimePath, { verification } = {}) {

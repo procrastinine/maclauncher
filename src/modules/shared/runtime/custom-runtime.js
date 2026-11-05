@@ -326,7 +326,7 @@ function forManager(manager) {
 function bindProvider(manager, core, descriptor) { return forManager(manager).bindProvider(core, descriptor); }
 function instrumentManagers(values) {
   for (const manager of values) {
-    if (!manager?.id) continue;
+    if (!manager?.id || manager.customRuntime === false) continue;
     const owner = descriptorOwners.get(manager.customRuntime);
     if (owner && owner !== manager) configure(manager);
     managers.set(manager.id, manager);
