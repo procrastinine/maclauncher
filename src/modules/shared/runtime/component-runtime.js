@@ -102,16 +102,34 @@ function includedReferences(engine, options = {}) {
             reference: { managerId, version: host.version, path: sourcePath }, source: value.source, installDir: value.root,
             minimumMacOS: value.macosFloor, architectures, apis: value.apis, platformKey: architectures.join(", "), detail: value.version ? `Component ${value.version.replace(/\s+/g, " ")}` : sourceLabel });
           hostsByReference.set(version, { version: templateVersion || host.upstreamVersion || "", wineVersion: wineVersion || "",
-            name: host.displayName || host.name || path.basename(sourcePath), folder: value.templateComponent });
+            name: host.displayName || host.name, folder: value.templateComponent, manager, hostVersion: host.version });
         }
       } catch (error) { warn(`${sourcePath}: ${error.message}`); }
     }
   }
-  const result = [...rows.values()], counts = new Map();
+  const result = [...rows.values()], folders = new Map();
+  for (const row of result) {
+    const variants = folders.get(row.versionLabel) || new Set();
+    variants.add(hostsByReference.get(row.version).folder);
+    folders.set(row.versionLabel, variants);
+  }
+  for (const row of result) if (folders.get(row.versionLabel).size > 1) {
+    const host = hostsByReference.get(row.version);
+    if (host.folder) row.versionLabel += ` · ${host.folder}`;
+  }
+  const counts = new Map(), hostStates = new Map();
   for (const row of result) counts.set(row.versionLabel, (counts.get(row.versionLabel) || 0) + 1);
   for (const row of result) if (counts.get(row.versionLabel) > 1) {
     const host = hostsByReference.get(row.version);
-    row.versionLabel += ` · ${host.folder || host.name}`;
+    if (!hostStates.has(host.manager)) {
+      try { hostStates.set(host.manager, host.manager.getState(options).versionLabels || {}); }
+      catch (error) { warn(error.message); hostStates.set(host.manager, {}); }
+    }
+    // Use the host manager's presentation, never its opaque install key or
+    // folder name. Omit provenance already stated in the component label.
+    const displayed = hostStates.get(host.manager)[host.hostVersion] || host.name || "";
+    const suffix = displayed.split(/\s*·\s*/).filter(part => part && !row.versionLabel.includes(part)).join(" · ");
+    if (suffix) row.versionLabel += ` · ${suffix}`;
   }
   const order = require("./version-order").compareVersions;
   return result.sort((a, b) => order(hostsByReference.get(b.version).version, hostsByReference.get(a.version).version) ||
