@@ -121,7 +121,11 @@ function buildEnvironment(settings, installation, directory, prefixPath, graphic
   if (settings.locale) {
     const locale = safeText(settings.locale, "Locale");
     if (!/^[A-Za-z0-9_.@-]+$/.test(locale)) throw new Error("Locale must use a locale identifier, such as ja_JP.UTF-8.");
-    environment.LANG = locale; environment.LC_ALL = locale;
+    environment.LANG = locale; environment.LC_ALL = locale; environment.LC_MESSAGES = locale;
+  }
+  if (installation.needsRosetta) {
+    environment.ROSETTA_ADVERTISE_AVX = settings.advertiseAvx === false || settings.advertiseAvx === "off" ? "0" : "1";
+    environment.DOTNET_EnableWriteXorExecute = "0";
   }
   environment.WINEDEBUG = settings.wineDebug ? safeText(settings.wineDebug, "Wine debug channels") : "-all";
   const dll = dllOverrides(settings, graphics.dllOverrides);

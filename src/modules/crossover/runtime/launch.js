@@ -131,26 +131,28 @@ function buildEnvironment(settings, installation, directory, bottlePath, { baseE
   if (backend !== "auto") {
     overrides.CX_GRAPHICS_BACKEND = backend;
     // CrossOver versions before its unified graphics selector use these flags.
+    if (Number.parseInt(installation.upstreamVersion, 10) < 25) {
     overrides.WINED3DMETAL = backend === "d3dmetal" ? "1" : "0";
     overrides.WINEDXVK = backend === "dxvk" ? "1" : "0";
+    }
   }
   const sync = settings.synchronization || "auto";
   if (!["auto", "msync", "esync", "off"].includes(sync)) throw new Error("Unsupported CrossOver synchronization mode.");
   if (sync !== "auto") {
     overrides.WINEMSYNC = sync === "msync" ? "1" : "0";
-    overrides.WINEESYNC = sync === "esync" ? "1" : "0";
+    if (Number.parseInt(installation.upstreamVersion, 10) < 25) overrides.WINEESYNC = sync === "esync" ? "1" : "0";
   }
   if (settings.locale) {
     const locale = safeText(settings.locale, "Locale");
     if (!/^[A-Za-z0-9_.@-]+$/.test(locale)) throw new Error("Locale must use a locale identifier, such as ja_JP.UTF-8.");
-    overrides.LANG = locale; overrides.LC_ALL = locale;
+    overrides.LANG = locale; overrides.LC_ALL = locale; overrides.LC_MESSAGES = locale;
   }
   if (settings.wineDebug) overrides.WINEDEBUG = safeText(settings.wineDebug, "Wine debug channels");
   Object.assign(overrides, parseEnvironment(settings.environment));
   const dll = dllOverrides(settings);
   if (dll) overrides.WINEDLLOVERRIDES = dll;
   Object.assign(environment, overrides, { CX_ROOT: installation.crossoverRoot,
-    CX_HOME: path.join(directory, "crossover-home"), CX_BOTTLE: bottlePath,
+    CX_BOTTLE: bottlePath,
     CX_BOTTLE_PATH: path.dirname(bottlePath), WINEPREFIX: bottlePath });
   return { environment, overrides, dll };
 }

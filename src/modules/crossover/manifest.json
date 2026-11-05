@@ -24,7 +24,10 @@
     "allowUnmarkedDirectory": true
   },
   "runtime": {
-    "capabilities": ["bepinex", "temporal-integration"],
+    "capabilities": [
+      "bepinex",
+      "temporal-integration"
+    ],
     "default": "sikarugir",
     "supported": [
       "sikarugir",
@@ -63,7 +66,15 @@
     },
     "entries": {
       "crossover": {
-        "input": {"fileExtensions":[".exe"],"binaryFormats":["pe"],"webContent":true},
+        "input": {
+          "fileExtensions": [
+            ".exe"
+          ],
+          "binaryFormats": [
+            "pe"
+          ],
+          "webContent": true
+        },
         "label": "CrossOver",
         "graphicsHost": "window",
         "settings": {
@@ -79,7 +90,8 @@
             "arguments": [],
             "wineDebug": "",
             "dlss": false,
-            "graphicsBridgeVersion": "auto"
+            "graphicsBridgeVersion": "auto",
+            "advertiseAvx": true
           },
           "fields": [
             {
@@ -247,12 +259,27 @@
               "type": "string",
               "label": "Wine debug channels (optional)",
               "description": "Wine channel filters, such as -all or +seh."
+            },
+            {
+              "key": "advertiseAvx",
+              "type": "boolean",
+              "label": "Advertise AVX under Rosetta",
+              "advanced": true,
+              "section": "Compatibility"
             }
           ]
         }
       },
       "sikarugir": {
-        "input": {"fileExtensions":[".exe"],"binaryFormats":["pe"],"webContent":true},
+        "input": {
+          "fileExtensions": [
+            ".exe"
+          ],
+          "binaryFormats": [
+            "pe"
+          ],
+          "webContent": true
+        },
         "label": "Sikarugir (Wine)",
         "graphicsHost": "window",
         "graphicsArchitecture": "x86_64",
@@ -277,7 +304,8 @@
             "arguments": [],
             "wineDebug": "",
             "dlss": false,
-            "graphicsBridgeVersion": "auto"
+            "graphicsBridgeVersion": "auto",
+            "advertiseAvx": true
           },
           "fields": [
             {
@@ -466,6 +494,13 @@
               "type": "string",
               "label": "Wine debug channels (optional)",
               "description": "Wine channel filters, such as -all or +seh."
+            },
+            {
+              "key": "advertiseAvx",
+              "type": "boolean",
+              "label": "Advertise AVX under Rosetta",
+              "advanced": true,
+              "section": "Compatibility"
             }
           ]
         }
