@@ -1175,7 +1175,8 @@ test('persisted generic-tag source labels render actual asset packages without R
   const file=Catalog.catalogPath(root,manager.id),before=fs.readFileSync(file),state=manager.getState({userDataDir:root});
   assert.deepEqual(state.catalog.sources.find(row=>row.id==='template').versions,['template-Template-1.0.27','template-Template-1.0.10','template-Template-1.0.2','template-Template-1.0.1']);
   const markup=render([{...state,id:manager.id,label:manager.label,ui:manager.ui}],manager.id);
-  for(const version of versions)assert.match(markup,new RegExp(`Template ${version.replaceAll('.','\\.')} · DXMT component`));
+  // Download labels name the Template release and its component folder.
+  for(const version of versions)assert.match(markup,new RegExp(`Template ${version.replaceAll('.','\\.')} · dxmt`));
   for(const row of entries)assert.ok(markup.includes(`value="${row.version}"`));
   assert.doesNotMatch(markup,/\(2\)|earlier build|v1\.0 \(Sikarugir Template\)/);assert.deepEqual(fs.readFileSync(file),before);
 });
