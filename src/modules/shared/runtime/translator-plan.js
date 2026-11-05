@@ -17,6 +17,7 @@ function projectRoles(plan) {
   return plan;
 }
 const serves = (description, role) => !description?.apis?.length || description.apis.some(api => role.apis.includes(api));
+const findChoice = (choices, value) => choices.find(item => item.id === value) || choices.find(item => item.aliases?.includes(value)) || null;
 const identity = description => description && `${description.id}:${description.root || ''}`;
 function filesForRole(description, role) {
   const files = description?.files || [], primary = files.filter(file => Roles.fileApis(file).some(api => role.apis.includes(api)));
@@ -108,7 +109,7 @@ function resolveApiRoles(plan, { selections = {}, choices = [], included = [], c
   for (const role of Roles.DIRECT3D_ROLES) {
     const value = selections[role.id]; if (!value) continue;
     const inherited = value === INHERIT;
-    const selected = inherited ? environment?.[role.id] || original[role.id].used : [...included, ...choices].find(item => item.id === value) || null;
+    const selected = inherited ? environment?.[role.id] || original[role.id].used : findChoice([...included, ...choices], value);
     let used = value === AUTOMATIC ? automatic[role.id] || null : selected, reason = null;
     if (value !== AUTOMATIC && value !== INHERIT && !selected) reason = `The saved translator choice is unavailable: ${value}`;
     if (selected && !serves(selected, role)) reason = `The selected component has no ${role.label} library.`;
@@ -197,7 +198,7 @@ function resolvePlan({ runtime = 'crossover', selections = {}, choices = [], inc
     const value = selections[component] || (environment ? INHERIT : AUTOMATIC);
     const inherited = value === INHERIT && environment;
     const selected = inherited ? environment.selections?.[component] || null
-      : [...included, ...choices].find(item => item.id === value && item.component === component) || null;
+      : findChoice([...included, ...choices].filter(item => item.component === component), value);
     let used = selected, reason = null;
     if (!selected && value !== AUTOMATIC && value !== INHERIT) {
       reason = `The saved translator choice is unavailable: ${value}`;
@@ -215,12 +216,13 @@ function fallbackWarnings(plan) {
   return [...new Set(Object.values(plan.components).filter(row => row.fallback).map(row =>
     `${row.selected ? label(row.selected) : row.value} could not load: ${row.reason}. Using ${row.used ? label(row.used) : plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "the Template's automatic choice"}.`))];
 }
-function options({ component, runtime = 'crossover', included = [], choices = [], environment = null } = {}) {
+function options({ component, runtime = 'crossover', included = [], choices = [], environment = null, selections = {} } = {}) {
   const result = [];
   if (environment) result.push({ value: INHERIT, label: `${environment.label || (runtime === 'crossover' ? 'Bottle setting' : 'Wrapper setting')}: ${label(environment.selections?.[component]) || 'Automatic'}` });
   result.push({ value: AUTOMATIC, label: runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice" });
+  const selected = findChoice([...included, ...choices].filter(item => item.component === component), selections[component]);
   for (const item of [...included, ...choices]) if (item.component === component)
-    result.push({ value: item.id, label: label(item) });
+    result.push({ value: item === selected ? selections[component] : item.id, label: label(item) });
   return result;
 }
 module.exports = { AUTOMATIC, INHERIT, resolvePlan, options, fallbackWarnings, projectRoles, resolveApiRoles, apiOptions, filesForRole, ROLES: Roles.ROLES };

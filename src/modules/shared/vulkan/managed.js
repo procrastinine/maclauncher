@@ -20,7 +20,8 @@ function normalizeSelection(value, logger = console) {
 }
 
 function createManager(dependencies = {}) {
-  const manager = createProjectBuildManager({ projectId, formerIds: [formerProjectId], label: "MacLauncher KosmicKrisp", repository, sourceLabel: "Source", upstreamUrl: "https://gitlab.freedesktop.org/mesa/mesa", nativeLibrary: true,
+  const formerIds = [formerProjectId];
+  const manager = createProjectBuildManager({ projectId, formerIds, label: "MacLauncher KosmicKrisp", repository, sourceLabel: "Source", upstreamUrl: "https://gitlab.freedesktop.org/mesa/mesa", nativeLibrary: true,
     manifestRelative: "manifest.json", sourceRelative: null, filesPrefix: "files/",
     executableRelative: manifest => manifest.executableRelative,
     validateManifest(manifest, record) {
@@ -47,7 +48,10 @@ function createManager(dependencies = {}) {
   }
   const withPreviousSettings = settings => settings?.runtimes?.[projectId] !== undefined ? settings :
     { ...settings, runtimes: { ...settings?.runtimes, [projectId]: previousSettings(settings?.runtimes) } };
+  const withPreviousEntry = entry => entry?.runtimeData?.[projectId] !== undefined || entry?.runtimeData?.[formerProjectId] === undefined ? entry :
+    { ...entry, runtimeData: { ...entry.runtimeData, [projectId]: entry.runtimeData[formerProjectId] } };
   function resolveSelection(entry, settings, data, options = {}) {
+    entry = withPreviousEntry(entry);
     const effective = withPreviousSettings(settings);
     const result = manager.resolveSelection(entry, effective, data, options);
     if (effective.runtimes?.[projectId]?.defaultVersion && !settings?.runtimes?.[projectId] &&
@@ -57,8 +61,8 @@ function createManager(dependencies = {}) {
     }
     return result;
   }
-  return { ...manager, translatorEngine: "kosmickrisp", distributionRequired: false,
-    chooseArchitecture: (entry, settings, data, options) => manager.chooseArchitecture(entry, withPreviousSettings(settings), data, options),
+  return { ...manager, formerIds, translatorEngine: "kosmickrisp", distributionRequired: false,
+    chooseArchitecture: (entry, settings, data, options) => manager.chooseArchitecture(withPreviousEntry(entry), withPreviousSettings(settings), data, options),
     resolveSelection,
     getState: (options = {}) => manager.getState({ ...options,
       settings: options.settings ?? options.runtimeSettings?.[projectId] ?? previousSettings(options.runtimeSettings, options.logger) }),

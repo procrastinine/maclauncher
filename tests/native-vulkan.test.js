@@ -160,6 +160,24 @@ test("saved MacLauncher KosmicKrisp choices request exact consented installation
   assert.deepEqual(versions,[undefined,"older","older"]);
 });
 
+test("KosmicKrisp per-game former manager version and CPU remain readable without changing the record", t => {
+  const Managed = require("../src/modules/shared/vulkan/managed");
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "kosmickrisp-game-choice-"));
+  t.after(() => fs.rmSync(userDataDir, {recursive: true, force: true}));
+  const manager = Managed.createManager({systemVersionSync: () => "27.0", hostCapabilities: {platform: "darwin", hardwareArch: "arm64", macOSVersion: "27.0"},
+    fetchUrlBuffer: () => assert.fail("per-game version and CPU reads remain offline")});
+  const entry = {runtimeData: {[Managed.formerProjectId]: {version: "27.0.0-devel-MCLv8", architecture: "x64", note: "retained"}}};
+  const before = JSON.stringify(entry);
+  assert.equal(manager.chooseArchitecture(entry, {}, userDataDir), "x64");
+  const selection = manager.resolveSelection(entry, {}, userDataDir, {verification: "status"});
+  assert.equal(selection.version, "27.0.0-devel-MCLv8"); assert.equal(selection.architecture, "x64");
+  assert.equal(manager.chooseArchitecture(entry, {}, userDataDir, {architecture: "arm64"}), "arm64");
+  const current = {runtimeData: {...entry.runtimeData, [manager.id]: {version: "27.0.0-devel-MCLv12", architecture: "arm64"}}};
+  const preferred = manager.resolveSelection(current, {}, userDataDir, {verification: "status"});
+  assert.equal(preferred.version, "27.0.0-devel-MCLv12"); assert.equal(preferred.architecture, "arm64");
+  assert.equal(JSON.stringify(entry), before);
+});
+
 test("MacLauncher KosmicKrisp retains earlier selections, installations and catalog downloads", {skip: process.platform !== "darwin" || process.arch !== "arm64"}, async t => {
   const Managed = require("../src/modules/shared/vulkan/managed"), Bundled = require("../src/modules/shared/runtime/bundled-native");
   const { createProjectBuildManager } = require("../src/modules/shared/runtime/project-build-manager");
@@ -208,6 +226,10 @@ test("MacLauncher KosmicKrisp retains earlier selections, installations and cata
     assert.equal(manager.resolveSelection(null, settings, userDataDir).version, older);
     assert.equal(manager.resolveSelection(null, settings, userDataDir).ready, true);
     assert.equal(manager.getState({userDataDir, runtimeSettings: settings.runtimes}).defaultVersion, older);
+    const game = {runtimeData: {[legacyId]: {version: older, architecture: "arm64"}}}, gameBefore = JSON.stringify(game);
+    const gameSelection = manager.resolveSelection(game, {}, userDataDir, {verification: "status"});
+    assert.equal(gameSelection.version, older); assert.equal(gameSelection.architecture, "arm64"); assert.equal(gameSelection.ready, true);
+    assert.equal(gameSelection.install.installDir, installed[0].installDir); assert.equal(JSON.stringify(game), gameBefore);
     for (const request of ["kosmickrisp:maclauncher-gles32", "kosmickrisp-gles32:" + older]) {
       context.runtimeSettings.vulkanRuntime = request;
       assert.equal(Vulkan.resolve(context, options).version, older);

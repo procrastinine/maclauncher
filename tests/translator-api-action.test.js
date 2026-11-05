@@ -79,6 +79,51 @@ test('real translator options action resolves draft API roles and advertises ato
   assert.equal(plan.compatibility['fixture-dxvk:native'].compatible, true);
 });
 
+test('saved KosmicKrisp manager IDs retain their installed choice through both Wine actions and resolvers', async t => {
+  const f = fixture(t), Managed = require('../src/modules/shared/vulkan/managed'), Plan = require('../src/modules/shared/runtime/translator-plan');
+  const version = '27.0.0-devel-MCLv8', saved = `${Managed.formerProjectId}:${version}`, canonical = `${Managed.projectId}:${version}`;
+  const relative = `profile/runtimes/${Managed.formerProjectId}/x64/${version}/payload/files`;
+  const driver = f.put(`${relative}/libvulkan_kosmickrisp.dylib`, image({ cpu: X64 }));
+  f.put(`${relative}/libvulkan.1.dylib`, image({ cpu: X64 }));
+  const root = path.dirname(driver), installed = { version, architecture: 'x64', translatorRoot: root, installDir: root,
+    executablePath: driver, translator: Description.describeTranslator(root, { engine: 'kosmickrisp', source: Managed.formerProjectId, version }) };
+  const manager = Managed.createManager();
+  t.mock.method(manager, 'getState', () => ({ installed: [installed] }));
+  t.mock.method(manager, 'resolveSelection', (_entry, _settings, _data, options) => {
+    assert.equal(options.version, version); assert.equal(options.architecture, 'x64');
+    return { ready: true, install: installed, architecture: 'x64' };
+  });
+  const registry = require('../src/modules/registry');
+  t.mock.method(registry, 'listSharedRuntimeManagers', () => [manager]); t.mock.method(registry, 'listModuleIds', () => []);
+  const Main = require('../src/modules/crossover/main');
+  fs.mkdirSync(path.join(f.root, 'template'));
+  for (const runtime of ['crossover', 'sikarugir']) {
+    const runtimeManager = require(runtime === 'crossover' ? '../src/modules/crossover/runtime/manager' : '../src/modules/crossover/sikarugir/runtime/manager');
+    const install = runtime === 'crossover' ? f.install : { ...f.install, templateRoot: path.join(f.root, 'template') };
+    t.mock.method(runtimeManager, 'resolveSelection', () => ({ ready: true, install }));
+    const context = { ...f.context({ translatorVulkan: saved }), runtimeId: runtime }, entry = { ...f.entry, runtimeId: runtime };
+    const before = JSON.stringify({ entry, settings: context.settings, runtimeSettings: context.runtimeSettings });
+    const result = await Main.actions.listTranslatorOptions(entry, {}, context);
+    assert.ok(result.translatorVulkanOptions.some(row => row.value === saved));
+    assert.equal(result.translatorVulkanOptions.some(row => row.value === canonical), false, 'the selected alias keeps one option for the installed copy');
+    assert.equal(result.effectiveSettings.find(row => row.value === 'vulkanBackend').label, 'kosmickrisp');
+    const plan = await Translators.resolve(install, runtime, context, { host: f.host, executableArchitecture: 'x86_64', managers: [manager] });
+    const selected = plan.components['vulkan-driver'];
+    assert.equal(selected.value, saved); assert.equal(selected.selected.id, canonical); assert.equal(selected.used.id, canonical);
+    assert.equal(selected.used.root, root); assert.equal(selected.fallback, false); assert.equal(selected.reason, null);
+    assert.ok(selected.used.files.some(file => file.path === driver));
+    assert.equal(Translators.settingsForPlan(context.runtimeSettings, plan).translatorVulkan, saved);
+    assert.equal(JSON.stringify({ entry, settings: context.settings, runtimeSettings: context.runtimeSettings }), before, 'actions and resolution retain the original saved state');
+  }
+  const choice = { id: canonical, aliases: [saved], component: 'vulkan-driver', engine: 'kosmickrisp', root, files: [] };
+  assert.equal(Plan.resolvePlan({ choices: [choice], selections: { 'vulkan-driver': saved } }).components['vulkan-driver'].used, choice);
+  const opaque = { ...choice, id: saved, aliases: [] };
+  assert.equal(Plan.resolvePlan({ choices: [choice, opaque], selections: { 'vulkan-driver': saved } }).components['vulkan-driver'].used, opaque, 'an exact opaque ID takes precedence over alias metadata');
+  assert.deepEqual(Plan.options({ component: 'vulkan-driver', choices: [choice, opaque], selections: { 'vulkan-driver': saved } }).map(row => row.value), ['automatic', canonical, saved]);
+  const unavailable = Plan.resolvePlan({ choices: [choice], selections: { 'vulkan-driver': saved + ':unknown' } }).components['vulkan-driver'];
+  assert.equal(unavailable.used, null); assert.equal(unavailable.fallback, true); assert.equal(unavailable.value, saved + ':unknown');
+});
+
 test('real API resolver and both Wine environment builders compose all actual used settings once', async t => {
   const f = fixture(t), settings = { translatorRenderer: 'included:d3d-renderer:dxmt', translatorD3D9: 'fixture-dxvk:native',
     dxvkHud: 'fps', dxmtConfig: 'fixture_config=1', dlss: false }, context = f.context(settings);

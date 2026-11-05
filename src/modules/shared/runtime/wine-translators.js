@@ -97,6 +97,7 @@ function managedTranslators(context, runtime, managers = runtimeManagers(), arch
       if (description.source?.runtime === 'crossover' && runtime !== 'crossover') continue;
       const root = install.translatorRoot || install.payloadRoot || (install.installDir && path.join(install.installDir, install.installationMetadata?.translatorRelative || '')) || install.root;
       const value = { ...description, id: `${manager.id}:${install.version}`, root, entryPoint: install.executablePath || description.entryPoint,
+        aliases: [...(description.aliases || []), ...(manager.formerIds || []).map(id => `${id}:${install.version}`)],
         managerId: manager.id, settingsEngine: manager.translatorEngine || manager.translator?.engine, runtimeVersion: install.version, architecture: Architecture.recordArchitecture(install) || selection?.architecture,
         variant: install.variant, sectionId: install.sectionId || selection?.sectionId || 'default', buildKey: install.buildKey,
         files: description.files.map(file => ({ ...file, path: path.resolve(root, file.path) })) };
