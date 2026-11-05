@@ -39,7 +39,15 @@ function includedTranslators(install, runtime, { engine: requestedEngine } = {})
     for (const engine of ['dxmt', 'dxvk']) add(path.join(layout.root, 'lib', engine), engine, 'd3d-renderer');
     add(path.join(layout.root, 'lib64/apple_gptk'), 'd3dmetal', 'd3d-renderer');
     add(path.join(layout.root, 'lib64/libMoltenVK.dylib'), 'moltenvk', 'vulkan-driver', { form: 'dylib' });
-    add(path.join(layout.root, 'lib64/gstreamer-1.0'), 'gstreamer', 'video', { form: 'dylib' });
+    if (!requestedEngine || requestedEngine === 'gstreamer') {
+      let version = '';
+      try {
+        const core = Description.describeTranslator(path.join(layout.root, 'lib64/libgstreamer-1.0.0.dylib'),
+          { engine: 'gstreamer', component: 'video', source, form: 'dylib' });
+        version = require('./gstreamer-source').libraryVersion(core);
+      } catch (error) { if (error.code !== 'ENOENT') warnings.push(`gstreamer: ${error.message}`); }
+      add(path.join(layout.root, 'lib64/gstreamer-1.0'), 'gstreamer', 'video', { form: 'dylib', version });
+    }
   } else {
     const { RELATIVE_PATHS, templateRenderers, gstreamerPaths } = require('../../crossover/sikarugir/graphics/closure');
     const support = install.templateRoot || install.supportRoot || path.join(install.installDir, 'support');

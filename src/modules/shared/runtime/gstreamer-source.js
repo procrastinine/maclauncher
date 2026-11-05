@@ -63,4 +63,21 @@ const catalogSource = { id: "upstream", label: "GStreamer macOS runtime", url: U
   description: "Runtime framework packages published by GStreamer. Development and debug packages are separate.",
   isPrerelease: developmentRelease,
   discover: async options => upstreamPins(await upstream.discover(options)) };
-module.exports = { upstream, catalogSource, developmentRelease };
+// GStreamer's Darwin library version is minor * 100 + micro + 1.
+// Decode only a consistent core-library identity; framework plist versions
+// (including their nano field) retain precedence in the shared reader.
+function libraryVersion(description) {
+  const versions = new Set();
+  for (const file of description?.files || []) {
+    const abi = /^libgstreamer-(\d+)\./.exec(path.basename(file.path));
+    if (!abi) continue;
+    for (const slice of file.slices || []) {
+      const [current, minor, patch] = String(slice.installName?.currentVersion || "").split(".").map(Number);
+      if (!Number.isSafeInteger(current) || current < 1 || minor !== 0 || patch !== 0) return "";
+      const release = current - 1;
+      versions.add(`${abi[1]}.${Math.floor(release / 100)}.${release % 100}`);
+    }
+  }
+  return versions.size === 1 ? [...versions][0] : "";
+}
+module.exports = { upstream, catalogSource, developmentRelease, libraryVersion };

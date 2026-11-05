@@ -457,7 +457,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     return [stat.dev, stat.ino, stat.size, stat.mode, stat.mtimeNs, stat.ctimeNs].join(":");
   }
   function resolveRegistration({ userDataDir, version, verification = "full" } = {}) {
-    let directory, cacheKey, normalized, recordPath, runtimePath;
+    let directory, cacheKey, normalized, recordPath, runtimePath, pin;
     try {
       if (!["full", "status"].includes(verification)) return null;
       loadCatalog(userDataDir);
@@ -465,7 +465,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       directory = installDir(userDataDir, normalized);
       recordPath = path.join(directory, "runtime.json");
       const record = JSON.parse(fs.readFileSync(recordPath, "utf8"));
-      const pin = record.catalogEntry && validEntry(record.catalogEntry) && record.catalogEntry.version === normalized
+      pin = record.catalogEntry && validEntry(record.catalogEntry) && record.catalogEntry.version === normalized
         ? record.catalogEntry : entries.get(normalized);
       if (!pin || record.version !== normalized) throw new Error("The runtime version record does not match the selected version.");
       if (record.source !== 'download' && !pin.projectPackage && record.upstreamRevision !== pin.upstreamRevision)
@@ -522,7 +522,9 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
             : `No ${Architecture.architectureLabel(installationArchitecture)} copy is installed.`
           : error?.code === "ENOENT" && error.path === runtimePath ? `The runtime executable is missing: ${path.basename(runtimePath)}.`
           : sanitizeErrorMessage(error?.message || String(error));
-        rememberDisplay(directory, cacheKey, null, `${label} ${normalized || version}: ${detail}`);
+        let displayLabel = `${label} ${normalized || version}`;
+        try { displayLabel = formatVersionLabel?.(pin || entries.get(normalized), { version: normalized || version, ready: false }) || displayLabel; } catch {}
+        rememberDisplay(directory, cacheKey, null, `${displayLabel}: ${detail}`);
       }
       return null;
     }

@@ -22,7 +22,7 @@ function hostLabel(host, source) {
   const version = template || host?.upstreamVersion;
   return displayText([name, version && !String(name).endsWith(` ${version}`) ? version : ""].filter(Boolean).join(" ") || host?.displayName || host?.name);
 }
-function label(value, host, { folder, hostVersionLabel, hostName } = {}) {
+function label(value, host, { folder = value?.labelFolder, hostVersionLabel, hostName } = {}) {
   if (!value) return "";
   const source = hostLabel(host, value.source) || (typeof value.source === "string" ? value.source : "");
   const parts = [componentLabel(value), source].filter(Boolean);
@@ -31,4 +31,14 @@ function label(value, host, { folder, hostVersionLabel, hostName } = {}) {
   }
   return displayText(parts.join(" · "));
 }
-module.exports = { componentVersion, componentLabel, hostLabel, label };
+function registeredLabels(rows) {
+  const primary = row => row.translator && label(row.translator, undefined, { folder: null });
+  const counts = new Map();
+  for (const row of rows) if (row.translator) counts.set(primary(row), (counts.get(primary(row)) || 0) + 1);
+  return rows.map(row => {
+    if (!row.translator) return row;
+    const translator = { ...row.translator, labelFolder: counts.get(primary(row)) > 1 ? row.registrationName : undefined };
+    return { ...row, translator, versionLabel: label(translator) };
+  });
+}
+module.exports = { componentVersion, componentLabel, hostLabel, label, registeredLabels };

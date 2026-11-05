@@ -95,7 +95,7 @@ function pathName(target) {
 function metadata(row, install = {}) {
   return { ...install, version: row.path, runtimePath: install.runtimePath || install.executablePath || row.path, sectionId: row.sectionId,
     source: "custom", custom: true, external: true, imported: true, readOnly: false, removable: true,
-    registeredAt: row.registeredAt, versionLabel: install.versionLabel || pathName(row.path),
+    registeredAt: row.registeredAt, registrationName: pathName(row.path), versionLabel: install.versionLabel || pathName(row.path),
     removalLabel: "Remove registration", removalConfirm: "Remove this runtime from the list? The selected files remain in their original location." };
 }
 function inspect(manager, row, userDataDir, verification = "status") {
@@ -106,7 +106,7 @@ function inspect(manager, row, userDataDir, verification = "status") {
 }
 function listFor(manager, { sectionId, userDataDir } = {}) {
   if (!manager) return [];
-  return records(userDataDir, manager.id).filter(row => !sectionId || row.sectionId === sectionId).map(row => {
+  const rows = records(userDataDir, manager.id).filter(row => !sectionId || row.sectionId === sectionId).map(row => {
     try { return inspect(manager, row, userDataDir); }
     catch (error) {
       // A moved or deleted runtime is reported plainly instead of as a file-system error.
@@ -114,6 +114,7 @@ function listFor(manager, { sectionId, userDataDir } = {}) {
       return metadata(row, { installDir: row.path, ready: false, status: "unavailable", reason, error: reason });
     }
   });
+  return require('./translator-label').registeredLabels(rows);
 }
 function list({ managerId, ...options } = {}) { return listFor(managers.get(managerId), options); }
 function resolveFor(manager, { sectionId, userDataDir, version, allowInstallable = false } = {}) {
@@ -121,7 +122,13 @@ function resolveFor(manager, { sectionId, userDataDir, version, allowInstallable
   if (!manager) return null;
   const row = records(userDataDir, manager.id).find(row => row.path === version && (!sectionId || row.sectionId === sectionId));
   if (!row) return null;
-  try { const install = inspect(manager, row, userDataDir, "full"); return install.ready || allowInstallable && install.installable ? install : null; } catch { return null; }
+  try {
+    const install = inspect(manager, row, userDataDir, "full");
+    if (!install.ready && !(allowInstallable && install.installable)) return null;
+    if (!install.translator) return install;
+    const siblings = listFor(manager, { sectionId, userDataDir }).filter(item => item.version !== install.version);
+    return require('./translator-label').registeredLabels([...siblings, install]).find(item => item.version === install.version);
+  } catch { return null; }
 }
 function resolve({ managerId, ...options } = {}) { return resolveFor(managers.get(managerId), options); }
 function inspectNative(runtimePath, { allowLibrary = false, candidates = [], preferredExecutable } = {}) {
