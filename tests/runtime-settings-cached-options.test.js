@@ -94,6 +94,23 @@ test('without cached lists, the recorded launch of a game names its saved choice
   assert.doesNotMatch(rendered.markup, /Other recorded component/, 'a recorded row names only the value it was recorded for');
 });
 
+test('a game-scoped runtime settings window receives its game, saved override and launch rows, while utility windows omit games', async t => {
+  storage(t); const data = fixture(), game = data.state.recents[0];
+  Object.assign(game, { moduleId: 'fixture', runtimeId: 'managed', runtimeSettings: { managed: { left: 'opaque:game-override', right: '' } },
+    runtimeData: { managed: { translatorPlanInputs: { settings: { left: 'opaque:game-override' } },
+      translatorRows: [{ id: 'left', label: 'left choice', selected: 'Game override component', used: 'Game override component' }] } } });
+  const { createUtilityWindowController } = require('../src/main/utility-windows');
+  const { EventEmitter } = require('node:events');
+  const window = () => Object.assign(new EventEmitter(), { isDestroyed: () => false, isMinimized: () => false, show() {}, focus() {}, showInactive() {} });
+  const controller = createUtilityWindowController({ createWindow: window, loadView: async () => {} });
+  const settings = await controller.open({ view: 'settings' }), runtimeSettings = window();
+  assert.deepEqual(controller.stateForWindow(settings, data.state).recents, []);
+  // The game's runtime settings window is its own window, not a utility view.
+  data.state = controller.stateForWindow(runtimeSettings, data.state);
+  data.context = { scope: 'game', moduleId: 'fixture', runtimeId: 'managed', gamePath: game.gamePath };
+  assert.match(select(render(data).markup, 'left choice'), /selected="">Game override component<\/option>/);
+});
+
 test('without cached lists or a recorded launch, installed runtime inventories name saved translator choices', t => {
   storage(t); const data = fixture(), game = data.state.recents[0];
   const saved = { left: 'translator-fixture:upstream-1.0', right: 'included:d3d-renderer:dxvk' };
