@@ -90,15 +90,23 @@ test('actual provider status rows render selected to used for every API, Vulkan 
   }
 });
 
-test('last-launch translator rows remain visible before status arrives and stale other-runtime status cannot replace them', t => {
+test('before status arrives a recorded game shows a pending line, never recorded rows, and other-runtime status cannot replace it', t => {
   for (const runtime of manifest.runtime.supported) {
     const saved = rowsFor(runtime), props = propsFor(runtime, { [runtime]: { translatorRows: saved } });
-    const initial = renderRows(t, props).markup; assert.ok(initial.includes('requested')); assert.ok(initial.includes(' → '));
+    const initial = renderRows(t, props).markup;
+    assert.equal(initial.includes('requested'), false, 'recorded rows may describe other settings');
+    assert.equal(initial.includes(' → '), false);
+    assert.match(initial, /aria-busy="true".*Translators.*Checking…/s);
     props.runtimeStatusEntry = { runtimeId: runtime === 'crossover' ? 'sikarugir' : 'crossover', status: { translatorRows: [{ label: 'Wrong runtime', selected: 'Wrong', used: 'Wrong' }] } };
-    assert.equal(renderRows(t, props).markup.includes('Wrong runtime'), false);
+    const other = renderRows(t, props).markup;
+    assert.equal(other.includes('Wrong runtime'), false); assert.ok(other.includes('Checking…'));
+    assert.equal(renderRows(t, propsFor(runtime)).markup.includes('Checking…'), false, 'a game without a recorded Play shows no pending line');
     props.runtimeStatusEntry = { runtimeId: runtime, status: { translatorRows: [{ id: 'fresh', label: 'Fresh status', selected: 'New selection', used: 'New used', reason: 'Actual new reason.' }] } };
     const current = renderRows(t, props).markup;
     assert.ok(current.includes('New selection → New used')); assert.ok(current.includes('Actual new reason.'));
     assert.equal(current.includes('Required fixture symbol is absent.'), false);
+    assert.equal(current.includes('Checking…'), false);
+    props.runtimeStatusEntry = { runtimeId: runtime, status: null };
+    assert.equal(renderRows(t, props).markup.includes('Checking…'), false, 'a failed status request ends the pending line');
   }
 });

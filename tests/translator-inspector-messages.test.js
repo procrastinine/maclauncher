@@ -64,7 +64,8 @@ test('actual provider status presents legacy recorded fallbacks without parsing 
     fallback: true, reason: 'Arbitrary old diagnostic text, intentionally not a recognized message.', future: { retained: true } }];
   const before = structuredClone(legacy), entry = { ...createLibraryFixture().recents[0], runtimeId: 'crossover', runtimeData: { crossover: { translatorRows: legacy } }, runtimeSettings: {} };
   const initial = markup(t, entry, Main.manifest, null);
-  assert.ok(initial.includes('Recorded selected renderer → Recorded actual renderer')); assert.equal(initial.includes(legacy[0].reason), false);
+  assert.ok(initial.includes('Checking…')); assert.equal(initial.includes('Recorded selected renderer'), false, 'recorded rows wait for the status that presents them');
+  assert.equal(initial.includes(legacy[0].reason), false);
   const composed = Providers.composeRuntimeProviders({ manifest: { id: 'fixture-engine', runtime: { supported: [], entries: {} } } }, Main.runtimeProviders);
   const status = await composed.actions.runtimeStatus(entry, {}, { runtimeId: 'crossover', runtimeSettings: {}, settings: {}, userDataDir: os.tmpdir() });
   const row = status.translatorRows[0];

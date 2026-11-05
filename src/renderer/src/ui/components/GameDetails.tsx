@@ -315,9 +315,13 @@ export const GameDetails = memo(function GameDetails({
     runtimeStatusEntry && runtimeStatusEntry.runtimeId === g.runtimeId
       ? runtimeStatusEntry.status
       : null;
+  // Translator rows come only from this runtime's current status. Until it
+  // arrives, a game whose last Play recorded translators shows a pending line
+  // rather than recorded rows that may describe other settings.
   const translatorRows: { id?: string; label: string; selected: string; used: string; reason?: string | null; reasonCode?: string | null; fallback?: boolean }[] =
-    Array.isArray(runtimeStatus?.translatorRows) ? runtimeStatus.translatorRows :
-      Array.isArray(g.runtimeData?.[g.runtimeId]?.translatorRows) ? g.runtimeData[g.runtimeId].translatorRows : [];
+    Array.isArray(runtimeStatus?.translatorRows) ? runtimeStatus.translatorRows : [];
+  const translatorsPending = runtimeStatusEntry?.runtimeId !== g.runtimeId &&
+    Array.isArray(g.runtimeData?.[g.runtimeId]?.translatorRows) && g.runtimeData[g.runtimeId].translatorRows.length > 0;
   const translatorLabels = new Set(translatorRows.map(row => row.label));
   const runtimeVersionChoices = runtimeInspectorVersions(runtimeSection, runtimeVersionOverride);
   const runtimeDefaultVersion = runtimeSection?.defaultVersion || "";
@@ -739,6 +743,10 @@ export const GameDetails = memo(function GameDetails({
 
           </>}
 
+          {translatorsPending && <div className="detailRow" aria-busy="true">
+            <div className="detailLabel">Translators</div>
+            <div className="detailValue dim">Checking…</div>
+          </div>}
           {translatorRows.map((row, index) => (
             <div className="detailRow" key={`translator:${row.id || index}`}>
               <div className="detailLabel">{row.label}</div>
