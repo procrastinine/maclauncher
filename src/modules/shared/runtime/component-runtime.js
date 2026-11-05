@@ -1,5 +1,6 @@
 const fs = require("node:fs"), path = require("node:path");
 const Custom = require("./custom-runtime");
+const { componentLabel, hostLabel, label: translatorLabel } = require("./translator-label");
 
 // A component root is retained intact: libraries, notices and future companion
 // files belong to the publisher, rather than a launcher inventory.
@@ -71,7 +72,7 @@ function configure(manager, definition) {
 function includedReferences(engine, options = {}) {
   if (!options.userDataDir) return [];
   const owner = require("../../registry").getModule("crossover"), rows = new Map(), hostsByReference = new Map();
-  const Wine = require("./wine-translators"), Description = require("./translator-description");
+  const Wine = require("./wine-translators");
   const warn = message => require("../graphics-warning")(options.logger || console, `[translators] ${message}`);
   for (const [runtime, managerId] of Object.entries(owner?.manifest?.runtime?.manager || {})) {
     const manager = owner.runtimeManagers.find(item => item.id === managerId);
@@ -95,22 +96,23 @@ function includedReferences(engine, options = {}) {
           const architectures = [...new Set(value.files.flatMap(file => file.cpuSlices || (file.architecture ? [file.architecture] : [])))];
           const templateVersion = host.templateVersion || host.catalogEntry?.template?.version;
           const wineVersion = host.engineVersion || host.wineVersion || host.catalogEntry?.engineVersion;
-          const sourceLabel = runtime === "crossover" ? `CrossOver ${host.upstreamVersion || ""}`.trim()
-            : templateVersion ? `Template ${templateVersion}${wineVersion ? ` (Wine ${wineVersion})` : ""}` : "Sikarugir";
-          const component = value.engine === "dxvk" && value.templateComponent ? value.templateComponent.toUpperCase() : Description.label({ engine: value.engine });
-          const label = runtime === "crossover" ? `${component} (${sourceLabel})` : `${component} · ${sourceLabel}`;
+          const sourceLabel = hostLabel(host, value.source);
+          const label = translatorLabel(value, host);
           rows.set(version, { version, versionLabel: label, ready: true, included: true, readOnly: true, removable: false, supportsDefault: false,
             reference: { managerId, version: host.version, path: sourcePath }, source: value.source, installDir: value.root,
-            minimumMacOS: value.macosFloor, architectures, apis: value.apis, platformKey: architectures.join(", "), detail: value.version ? `Component ${value.version}` : sourceLabel });
+            minimumMacOS: value.macosFloor, architectures, apis: value.apis, platformKey: architectures.join(", "), detail: value.version ? `Component ${value.version.replace(/\s+/g, " ")}` : sourceLabel });
           hostsByReference.set(version, { version: templateVersion || host.upstreamVersion || "", wineVersion: wineVersion || "",
-            name: host.displayName || host.name || path.basename(sourcePath) });
+            name: host.displayName || host.name || path.basename(sourcePath), folder: value.templateComponent });
         }
       } catch (error) { warn(`${sourcePath}: ${error.message}`); }
     }
   }
   const result = [...rows.values()], counts = new Map();
   for (const row of result) counts.set(row.versionLabel, (counts.get(row.versionLabel) || 0) + 1);
-  for (const row of result) if (counts.get(row.versionLabel) > 1) row.versionLabel += ` · ${hostsByReference.get(row.version).name}`;
+  for (const row of result) if (counts.get(row.versionLabel) > 1) {
+    const host = hostsByReference.get(row.version);
+    row.versionLabel += ` · ${host.folder || host.name}`;
+  }
   const order = require("./version-order").compareVersions;
   return result.sort((a, b) => order(hostsByReference.get(b.version).version, hostsByReference.get(a.version).version) ||
     order(hostsByReference.get(b.version).wineVersion, hostsByReference.get(a.version).wineVersion));
@@ -127,7 +129,7 @@ function withIncludedReferences(manager) {
   };
   return manager;
 }
-module.exports = { componentRoot, registrationSource, description, inspected, configure, includedReferences, withIncludedReferences };
+module.exports = { componentRoot, registrationSource, description, inspected, configure, componentLabel, hostLabel, includedReferences, withIncludedReferences };
 
 // A downloaded local container is unpacked once into shared launcher storage.
 // Directory registrations stay at the supplied location and remain references.

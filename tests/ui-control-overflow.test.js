@@ -44,12 +44,12 @@ test("automatic defaults retain exact identity in the title and explicit titles 
 test("package version labels keep upstream distinctions and explicit release names", async () => {
   const [, { resolveRuntimeVersionLabel, formatRuntimeVersionTag }] = await loaded;
   assert.equal(formatRuntimeVersionTag("v0.7.7beta-MCLv1"), "0.7.7 beta");
-  assert.equal(formatRuntimeVersionTag("MCLv1-1003"), "Development build (Oct 3)");
+  assert.equal(formatRuntimeVersionTag("MCLv1-1003"), "MCLv1 (Oct 3)");
   assert.equal(formatRuntimeVersionTag("MCLv7"), "MCLv7");
   assert.equal(formatRuntimeVersionTag("5f358ef1360b"), "5f358ef1360b");
-  assert.equal(formatRuntimeVersionTag("MCLv1-1028-kag3-1"), "Development build (Oct 28)");
-  assert.equal(formatRuntimeVersionTag("MCLv1-1025-17"), "Development build (Oct 25)");
-  assert.equal(formatRuntimeVersionTag("MCLv1-1003", { versionLabels: { "MCLv1-1003": "MCLv1-1003" } }), "Development build (Oct 3)");
+  assert.equal(formatRuntimeVersionTag("MCLv1-1028-kag3-1"), "MCLv1 (Oct 28)");
+  assert.equal(formatRuntimeVersionTag("MCLv1-1025-17"), "MCLv1 (Oct 25)");
+  assert.equal(formatRuntimeVersionTag("MCLv1-1003", { versionLabels: { "MCLv1-1003": "MCLv1-1003" } }), "MCLv1 (Oct 3)");
   assert.equal(formatRuntimeVersionTag("5.3.2p3"), "v5.3.2p3");
   assert.equal(formatRuntimeVersionTag("0.1.0-alpha2"), "v0.1.0-alpha2");
   assert.equal(resolveRuntimeVersionLabel("MCLv1-1003", { versionLabels: { "MCLv1-1003": "Spring release" } }), "Spring release");
@@ -81,4 +81,16 @@ test("catalog pre-releases are marked once and never preferred as stable", async
   assert.equal(isPrereleaseVersion("2.1.0", section), true);
   assert.equal(isPrereleaseVersion("2.0.0", section), false);
   assert.equal(isPrereleaseVersion("v1.0.0-nightly", null), true);
+});
+
+test("matching release labels distinguish their declared sources without exposing install keys", async () => {
+  const [, { runtimeVersionTagger }] = await loaded;
+  const section = { versionLabels: { "upstream-package-1.9": "1.9", "macos-package-1.9": "1.9" },
+    catalog: { versions: ["upstream-package-1.9", "macos-package-1.9"], sources: [
+      { label: "Project", versions: ["upstream-package-1.9"] },
+      { label: "Project macOS", versions: ["macos-package-1.9"] }
+    ] } };
+  const tag = runtimeVersionTagger(section);
+  assert.equal(tag("upstream-package-1.9"), "v1.9 · Project");
+  assert.equal(tag("macos-package-1.9"), "v1.9 · Project macOS");
 });

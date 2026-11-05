@@ -41,20 +41,38 @@ function templateName(pin) {
 }
 function translatorSource(pin) {
   const template = templateName(pin);
-  return template ? { kind: "template", id: pin?.catalogSourceId || "template", label: template } : pin?.catalogSourceId || "upstream";
+  const repository = /github\.com\/[^/]+\/([^/]+)/i.exec(pin?.sourceUrl || pin?.asset?.url || "")?.[1];
+  return { kind: template ? "template" : "upstream", id: pin?.catalogSourceId || "upstream",
+    label: template ? `Sikarugir ${template}` : repository || "Upstream" };
 }
 function versionLabel(pin, installed, label) {
-  const template = templateName(pin), component = installed?.translator?.version;
-  if (pin?.component && pin.component.toLowerCase() !== label.toLowerCase()) label += ` (${pin.component})`;
-  if (template) return component ? `${label} ${component} · ${template}` : `${template} · ${label} component`;
-  return component ? `${label} ${component}` : assetName(pin?.asset) || installed?.versionLabel || pin?.versionLabel;
+  pin ||= installed?.catalogEntry;
+  const template = templateName(pin), component = installed?.translator;
+  if (template) return component?.version ? `${Component.componentLabel(component)} · Sikarugir ${template}` : [template, pin?.component].filter(Boolean).join(" · ");
+  const name = assetName(pin?.asset);
+  const releaseTag = /\/releases\/tag\/([^/]+)/.exec(pin?.sourceUrl || "")?.[1];
+  let release = releaseTag || pin?.upstreamTag || name || pin?.versionLabel || installed?.versionLabel || "";
+  try { release = decodeURIComponent(release); } catch {}
+  const match = /v?(\d+(?:\.\d+)+(?:-\d+-g[a-f0-9]+)?(?:[-.]?(?:alpha|beta|rc)\d*)?[a-z]?)/i.exec(name || release);
+  const version = match?.[1] || release;
+  const qualifiers = [];
+  if (/\bmacos\b/i.test(name)) qualifiers.push("macOS build");
+  if (/\basync\b/i.test(name)) qualifiers.push("async");
+  if (/\bbuiltin\b/i.test(name)) qualifiers.push("builtin");
+  if (/\bcrossover\b/i.test(name.replace(/_/g, " "))) qualifiers.push("CrossOver build");
+  const date = /(?:^|[-_])(\d{4})(\d{2})(\d{2})(?:[-_]|$)/.exec(name);
+  if (/\brepack\b/i.test(name)) qualifiers.push(`repack${date ? ` ${date[1]}-${date[2]}-${date[3]}` : ""}`);
+  else if (date) qualifiers.push(`${date[1]}-${date[2]}-${date[3]}`);
+  if (/\bnative\b/i.test(name)) qualifiers.push("native");
+  const readable = [version, ...qualifiers].filter(Boolean).join(" · ");
+  return installed ? `${component?.version ? Component.componentLabel(component) : `${label} ${readable}`} · ${translatorSource(pin).label}` : readable;
 }
 function catalogSource([id, label, repository, filter, component, presentation = {}], projectLabel = component) {
   const upstream = Upstream.github({ repository, prerelease: true, allArchitectures: true, recognize: release =>
     (release.assets || []).filter(asset => archiveFormat(asset.name) && (!filter || filter(asset.name)) &&
       (!component || /^Template-/i.test(asset.name))).map(asset => ({
         version: (id + "-" + asset.name.replace(/\.(?:tar\.(?:gz|xz|bz2)|t[gx]z|zip|tar)$/i, "")).replace(/[^a-z0-9._-]/ig, "-"),
-        architecture: "universal", label: versionLabel({ asset: { filename: asset.name } }, null, projectLabel || label), assets: [asset], details: { component, catalogSourceId: id, releaseVersion: release.tag_name, ...(presentation.engine ? { translatorEngine: presentation.engine } : {}) } })) });
+        architecture: "universal", label: versionLabel({ asset: { filename: asset.name }, upstreamTag: release.tag_name }, null, projectLabel || label), assets: [asset], details: { component, catalogSourceId: id, releaseVersion: release.tag_name, ...(presentation.engine ? { translatorEngine: presentation.engine } : {}) } })) });
   const versionOf = pin => {
     if (templateName(pin)) return templateName(pin).replace(/^Template /, "");
     return require("./version-order").catalogVersion(pin);

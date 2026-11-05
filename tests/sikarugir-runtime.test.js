@@ -212,7 +212,7 @@ test("Sikarugir discovers all compatible engine assets and identifies both archi
   assert.ok(rows[0].version.length < 60);
   assert.equal(rows[0].asset.sha256, "c".repeat(64));
   assert.equal(rows[0].template.asset.sha256, "f".repeat(64));
-  assert.match(rows[0].versionLabel, /support 1\.0\.21 \(ffffffff\)/);
+  assert.equal(rows[0].versionLabel, "Wine 11.0 (rev 2) · Template 1.0.21");
   assert.match(rows[0].upstreamRevision, /^WS12WineSikarugir11\.0_2:sha256:/);
   const updatedSupport = { version: "1.0.21", asset: { sha256: "1".repeat(64) } };
   assert.notEqual(rows[0].version, Catalog.snapshotVersion("11.0_2", "c".repeat(64), updatedSupport));
@@ -321,7 +321,7 @@ test("Sikarugir download tasks display readable version labels while retaining t
     runTask: async (meta, runner) => { metadata = meta; return runner({ signal: null, onProgress: () => {} }); }
   } });
   assert.equal(metadata.version, row.version); assert.equal(metadata.detail, row.versionLabel);
-  assert.match(metadata.detail, /revision 1.*support 1\.0\.21/);
+  assert.equal(metadata.detail, "Wine 11.0 (rev 1) · Template 1.0.21");
 });
 
 test("Sikarugir rejects support checksum mismatch and cancellation without publishing partial installs", async t => {

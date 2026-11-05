@@ -63,11 +63,18 @@ function snapshotVersion(engineVersion, engineIdentity, template) {
   ])).digest("hex").slice(0, 24);
   return `${folderPart(engineVersion)}-template-${folderPart(template?.version)}-${digest}`;
 }
-const short = asset => (asset.sha256 || asset.digest?.value || "").slice(0, 8) || `#${asset.assetId || asset.bytes || "?"}`;
+function versionLabel(pin, installed) {
+  const record = pin || installed?.catalogEntry || installed;
+  const engine = record?.engineVersion || installed?.engineVersion;
+  const template = record?.template?.version || installed?.templateVersion;
+  if (!engine) return record?.versionLabel;
+  const [version, revision] = engine.split("_");
+  return `Wine ${version}${revision ? ` (rev ${Number(revision)})` : ""}${template ? ` · Template ${template}` : ""}`;
+}
 function entryFor(engine, asset, template, releaseTag = "v1.0") {
   return {
     version: snapshotVersion(engine.version, identity(asset), template),
-    versionLabel: `${engine.major}.${engine.minor} · revision ${engine.revision} · ${short(asset)} · support ${template.version} (${short(template.asset)})`,
+    versionLabel: versionLabel({ engineVersion: engine.version, template }),
     engineVersion: engine.version, engineName: asset.filename.replace(ARCHIVE, ""),
     // A binary asset's identity names the consumed engine. The release
     // repository is a packaging catalog and does not identify its Wine source.
@@ -108,4 +115,4 @@ async function discover(options = {}) {
 discover.allArchitectures = true;
 
 module.exports = { SOURCE_URL, engines, templates,
-  parseEngineName, parseTemplateName, archives, snapshotVersion, entryFor, validateEntry, discover };
+  parseEngineName, parseTemplateName, archives, snapshotVersion, versionLabel, entryFor, validateEntry, discover };

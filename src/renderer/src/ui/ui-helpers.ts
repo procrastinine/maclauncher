@@ -160,10 +160,10 @@ function readableVersion(raw: string) {
   // A package of an upstream with only commits is named MCLvN-MMDD after the
   // upstream commit date, sometimes followed by a build number or profile
   // ("-17", "-kag3-1").
-  const build = raw.match(/^MCLv\d+(?:-(\d{2})(\d{2}))?(?:-[a-z0-9][\w.-]*)?$/i);
+  const build = raw.match(/^(MCLv\d+)(?:-(\d{2})(\d{2}))?(?:-[a-z0-9][\w.-]*)?$/i);
   if (build) {
-    const month = MONTHS[Number(build[1]) - 1], day = Number(build[2]);
-    return month && day ? `Development build (${month} ${day})` : raw;
+    const month = MONTHS[Number(build[2]) - 1], day = Number(build[3]);
+    return month && day ? `${build[1]} (${month} ${day})` : raw;
   }
   // A workflow build named by its time and commit reads as its date.
   const snapshot = raw.match(/^(\d{4}-\d{2}-\d{2})T\d{2}-\d{2}-\d{2}Z[_-][0-9a-f]{7,40}$/i);
@@ -224,9 +224,12 @@ export function runtimeVersionTagger(
     const packaged = members.filter(version => packageRevision(version) !== null);
     const other = members.filter(version => packageRevision(version) === null);
     const complete = (version: string) => String(runtimeSection?.versionLabels?.[version] || runtimeSection?.catalog?.versionLabels?.[version] || version).trim();
+    const sourceLabel = (version: string) => runtimeSection?.catalog?.sources?.find((source: any) => source.versions?.includes(version))?.label;
+    const sourced = (version: string) => [complete(version), sourceLabel(version)].filter(Boolean).join(" · ");
     for (const version of other) {
       const raw = complete(version);
-      const identity = other.filter(item => complete(item) === raw).length === 1 ? raw : version;
+      const identity = other.filter(item => complete(item) === raw).length === 1 ? raw
+        : sourceLabel(version) ? sourced(version) : raw;
       const detailed = /^\d+(?:\.\d+)+/.test(identity) ? `v${identity}` : identity;
       labels.set(version, other.length > 1 ? detailed : label);
     }

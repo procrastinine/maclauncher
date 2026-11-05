@@ -581,10 +581,10 @@ test('runtime version labels stay distinct when builds share an upstream version
   // Two packages with one revision and date name their exact versions.
   const profiles = runtimeVersionTagger({ catalog: { versions: ['MCLv1-1028-kag3-1', 'MCLv1-1028-1'] } });
   assert.deepEqual(['MCLv1-1028-kag3-1', 'MCLv1-1028-1'].map(profiles),
-    ['Development build (Oct 28) · MCLv1-1028-kag3-1', 'Development build (Oct 28) · MCLv1-1028-1']);
+    ['MCLv1 (Oct 28) · MCLv1-1028-kag3-1', 'MCLv1 (Oct 28) · MCLv1-1028-1']);
   const dated = runtimeVersionTagger({ catalog: { versions: ['MCLv3-1007', 'MCLv2-1007', 'MCLv1-0921'] } });
   assert.deepEqual(['MCLv3-1007', 'MCLv2-1007', 'MCLv1-0921'].map(dated),
-    ['Development build (Oct 7) · MCLv3', 'Development build (Oct 7) · MCLv2', 'Development build (Sep 21)']);
+    ['MCLv3 (Oct 7)', 'MCLv2 (Oct 7)', 'MCLv1 (Sep 21)']);
   const hashed = runtimeVersionTagger({ catalog: { versions: ['0.1.0-afa08284-7f7f8af9', '0.1.0-8da3e063-ba5d556d', '0.1.0'] } });
   assert.deepEqual(['0.1.0-afa08284-7f7f8af9', '0.1.0-8da3e063-ba5d556d', '0.1.0'].map(hashed), ['v0.1.0-afa08284-7f7f8af9', 'v0.1.0-8da3e063-ba5d556d', 'v0.1.0']);
   assert.equal(resolveRuntimeVersionLabel('2026-01-12T18-22-32Z_794d1897abe529a23f3f2f9c4f72d711a3b18391', null), '2026-01-12');
