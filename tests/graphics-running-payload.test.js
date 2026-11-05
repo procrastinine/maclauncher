@@ -23,13 +23,18 @@ test('a cross-process receipt restores an old sealed payload while external-root
 
 test('a fresh reader recovers the selected bundled payload with its alias declaration', t => {
   const f=fixture(t),root=f.publish('selected',['bilinear']);
+  const Native=require('../src/modules/shared/runtime/bundled-native');
   const declaration=JSON.parse(fs.readFileSync(f.declaration)),selected=declaration[0];
+  for(const file of selected.files)file.mode=fs.statSync(path.join(root,file.path)).mode&0o777;
   selected.aliases={schema:1,files:{'effects/alternate.fx':'effects/grayscale.fx'}};
   fs.copyFileSync(path.join(root,'effects/grayscale.fx'),path.join(root,'effects/alternate.fx'));
   fs.writeFileSync(f.declaration,JSON.stringify(declaration));
   const reader=Publication.createReader(f.declaration,console,[f.resources]);
-  const recovered=reader.forRoot(root);
+  const recovered=reader.restoreSealed(root).manifest;
+  assert.equal(Native.verifyPayload(root,recovered),true);
   assert.deepEqual(recovered.aliases,selected.aliases);
   assert.deepEqual(recovered.files,selected.files);
+  assert.equal(reader.forRoot(root),recovered);
   assert.equal(reader.restoreSealed(root).manifest,recovered);
+  assert.throws(()=>Native.verifyPayload(root,{...recovered,aliases:undefined}),/Bundled runtime file inventory differs from its manifest/);
 });
