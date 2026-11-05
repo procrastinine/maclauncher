@@ -22,6 +22,10 @@ MacLauncher finds CrossOver at `/Applications/CrossOver.app` and `~/Applications
 
 Each registered application is a separate choice, even when several copies report the same version. Play chooses one in the [usual order](README.md#versions): the game's **Version** selection, then a saved default, then the newest registered application that is ready. When the first application is added and no default is saved yet, it becomes the default.
 
+Vulkan launches can use an optional CrossOver graphics integration package matched to the application's exact release and build. Its download is included in the Play download consent. Declining the download, an unavailable matching package or a download failure keeps CrossOver's supplied module. This internal dependency has no separate Runtimes control and never modifies the CrossOver application.
+
+One integration revision is retained for each registered CrossOver release. Play preparation and Refresh remove revisions that no registered application needs, after games release them. Registered applications whose location is temporarily unavailable retain their integration packages.
+
 An application updated in the same location keeps its selection and its existing bottles. If the selected application is missing, however, MacLauncher does not substitute another copy. The application can be used again once it is restored to its registered location, or once its new location is added in **Runtimes** and selected.
 
 ## Bottles and private game files

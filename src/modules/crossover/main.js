@@ -134,10 +134,13 @@ const crossoverProvider = { runtimeId: "crossover", runtime: manifest.runtime.en
     actions: crossoverActions, settingsActions: crossoverSettingsActions,
     supports: manifest.supports, decorateEntry: Detection.decorateEntry,
     supportsEntry, canLaunchRuntime, ensureRuntime, launchRuntime, resolveSaveLocations,
-    getRuntimeRequirements: (entry, context) => require("./temporal").requirements(entry, { ...context, runtimeId: "crossover" }),
+    getRuntimeRequirements: async (entry, context) => [
+      ...await require("./temporal").requirements(entry, { ...context, runtimeId: "crossover" }),
+      ...await require('./runtime/winemac').requirements(entry, { ...context, runtimeId: 'crossover' })
+    ],
     resolveGraphicsInputs: (entry, context) => resolveGraphicsInputs(entry, context) };
 const runtimeProviders = [crossoverProvider, sikarugirProvider];
-const runtimeManagers = [manager, sikarugirManager, ...Object.values(require("./temporal/support-manager").managers)];
+const runtimeManagers = [manager, sikarugirManager, require('./runtime/winemac'), ...Object.values(require("./temporal/support-manager").managers)];
 const providerForRuntime = runtimeId => runtimeProviders.find(provider => provider.runtimeId === runtimeId);
 const providerForEntry = (entry, context) => providerForRuntime(context?.runtimeId || entry?.runtimeId || manifest.runtime.default);
 async function resolveGraphicsInputs(entry, context = {}, resolved, plan) {
@@ -166,7 +169,10 @@ module.exports = { id: manifest.id, manifest, detectGame: Detection.detectGame,
   graphicsComputeHosts:[require("./runtime/compute-host"),require("./sikarugir/runtime/compute-host")],
   runtimeManagers, runtimeProviders, runtimeProvider: crossoverProvider,
   resolveGraphicsInputs, warmBackendLane,
-  getRuntimeRequirements: (entry, context) => require("./temporal").requirements(entry, context),
+  getRuntimeRequirements: async (entry, context) => [
+    ...await require("./temporal").requirements(entry, context),
+    ...await require('./runtime/winemac').requirements(entry, context)
+  ],
   normalizeRuntimeId: runtimeId => providerForRuntime(runtimeId) ? runtimeId : manifest.runtime.default,
   filterRuntimeSupport: (entry, supported, settings, context) => supported.filter(runtimeId =>
     providerForRuntime(runtimeId)?.supportsEntry(entry, settings, context)),

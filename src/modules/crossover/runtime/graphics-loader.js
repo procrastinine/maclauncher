@@ -50,7 +50,7 @@ function entitlements(xml) {
   return existing.test(xml) ? xml.replace(existing, "$1<true/>")
     : xml.replace(/<\/dict>\s*<\/plist>\s*$/, `<key>${key}</key><true/></dict></plist>\n`);
 }
-async function prepare(installation, directory, { signal, execute = executeFile, cameraBridge, sceneClosure, helperLibraries = [], translatorView, userDataDir, logger = console } = {}) {
+async function prepare(installation, directory, { signal, execute = executeFile, cameraBridge, sceneClosure, winemac, helperLibraries = [], translatorView, userDataDir, logger = console } = {}) {
   signal?.throwIfAborted();
   const vendor = fs.realpathSync(installation.crossoverRoot), layout = wineLayout(installation), unix = `lib/wine/${layout.unixName}`;
   const separateLoader = fs.existsSync(path.join(vendor, unix, "ntdll.so")) && fs.existsSync(path.join(vendor, unix, "wine"));
@@ -100,6 +100,11 @@ async function prepare(installation, directory, { signal, execute = executeFile,
     for (const name of ["winemetal", "nvapi64", "d3d10core"]) links[`lib/wine/${layout.primaryWindows}/${name}.dll`] = path.join(cameraBridge.baseRoot, layout.primaryWindows, name + ".dll");
   }
   if (scene) Object.assign(links, scene.links);
+  if (winemac) {
+    if (!separateLoader || layout.unixName !== 'x86_64-unix' || digest(fs.readFileSync(winemac.path)) !== winemac.sha256)
+      throw new Error('The optional CrossOver graphics integration is unavailable.');
+    links[`${unix}/winemac.so`] = winemac.path;
+  }
   const helpers = [];
   if (helperLibraries.length && !separateLoader) throw new Error("The selected Wine loader cannot attach its native graphics helper.");
   for (const helper of helperLibraries) {
@@ -113,7 +118,7 @@ async function prepare(installation, directory, { signal, execute = executeFile,
       links[name] = source;helpers.push({ name, source, sha256: digest(fs.readFileSync(source)) });
     }
   }
-  const sourceHash = digest(JSON.stringify([5, sources, links, helpers, scene?.identity, translatorView?.identity])), store = userDataDir || directory, root = path.join(store, userDataDir ? "graphics/crossover-loaders" : "graphics-loader");
+  const sourceHash = digest(JSON.stringify([5, sources, links, helpers, scene?.identity, translatorView?.identity, ...(winemac ? [winemac.sha256] : [])])), store = userDataDir || directory, root = path.join(store, userDataDir ? "graphics/crossover-loaders" : "graphics-loader");
   let destination = path.join(root, sourceHash.slice(0, 24));
   Writable.assertOwnDirectory(store, root);
   while (fs.existsSync(destination)) {
@@ -174,7 +179,7 @@ async function prepare(installation, directory, { signal, execute = executeFile,
     try { await fs.promises.rename(temporary, destination); }
     catch (race) {
       if (!['EEXIST', 'ENOTEMPTY'].includes(race.code)) throw race;
-      return prepare(installation, directory, { signal, execute, cameraBridge, sceneClosure, helperLibraries, translatorView, userDataDir, logger });
+      return prepare(installation, directory, { signal, execute, cameraBridge, sceneClosure, winemac, helperLibraries, translatorView, userDataDir, logger });
     }
     return path.join(destination, "bin/wineloader");
   } finally { await fs.promises.rm(temporary, { recursive: true, force: true }); }

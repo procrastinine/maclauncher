@@ -129,8 +129,9 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
   const approved = new Set(), refreshed = new Set(), declined = new Set();
   const consentKey = plan => JSON.stringify([plan.managerId, Object.entries(plan.installOptions || {}).sort(([a], [b]) => a.localeCompare(b))]);
   function useFallback(plan, error) {
-    if (!plan.optional || !plan.fallback || context.signal?.aborted) return false;
+    if (!plan.optional || (!plan.fallback && !plan.silentFallback) || context.signal?.aborted) return false;
     declined.add(consentKey(plan));
+    if (plan.silentFallback) return true;
     const label = `${managers.find(manager => manager.id === plan.managerId)?.label || plan.label || plan.managerId} could not be installed. Using ${managers.find(manager => manager.id === plan.fallback.managerId)?.label || plan.fallback.label || plan.fallback.managerId}.`;
     context.logger?.warn?.("[runtimes] " + label, error.message);
     report({ phase: "prepare", label, managerId: plan.managerId });
@@ -154,8 +155,21 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
     });
     // Consent covers discovery and acquisition before either occurs.
     let fallbackRequired = false;
+    const pendingConsent = installations.filter(({ plan, requiresDownload }) =>
+      (requiresDownload || !plan.version || plan.discoveryRequired) && !approved.has(consentKey(plan)) && !declined.has(consentKey(plan)));
+    if (pendingConsent.some(({ plan }) => plan.groupConsent)) {
+      const required = pendingConsent.filter(({ plan }) => !plan.optional);
+      const first = required[0] || pendingConsent[0];
+      const components = pendingConsent.map(({ manager, plan, versionLabel }) => ({ ...plan,
+        label: plan.label || manager.label || manager.id, ...(versionLabel ? { versionLabel } : {}) }));
+      const accepted = await downloadApproved(context, { ...first.plan, label: first.plan.label || first.manager.label,
+        components, detail: components.map(plan => `${plan.label}${plan.bytes ? ` (${(plan.bytes / 1048576).toFixed(1)} MB)` : ''}`).join('\n') });
+      if (!accepted && required.length) return false;
+      for (const { plan } of pendingConsent) (accepted ? approved : declined).add(consentKey(plan));
+    }
     for (const { manager, plan, requiresDownload, versionLabel } of installations) {
       const key = consentKey(plan);
+      if (declined.has(key)) continue;
       if ((requiresDownload || !plan.version || plan.discoveryRequired) && !approved.has(key)) {
         if (!await downloadApproved(context, { ...plan, ...(versionLabel ? { versionLabel } : {}),
           label: plan.label || manager.label || manager.id, requiresDownload })) {

@@ -59,7 +59,7 @@ function inspectApplication(runtimePath) {
   const loaderArchitectures = readMachOArchitectures(loaderPath);
   const architectures = graphicsExecutablePath === loaderPath ? loaderArchitectures : readMachOArchitectures(graphicsExecutablePath);
   const serverArchitectures = readMachOArchitectures(serverPath);
-  const install = { version: identity(appPath), upstreamVersion, versionLabel: `${upstreamVersion} · ${path.basename(appPath)}`,
+  const install = { version: identity(appPath), upstreamVersion, buildVersion: info?.CFBundleVersion || null, versionLabel: `${upstreamVersion} · ${path.basename(appPath)}`,
     appPath, installDir: appPath, runtimePath: appPath, executablePath, bottleToolPath, loaderPath, serverPath,
     crossoverRoot: root, graphicsExecutablePath, architectures, loaderArchitectures, serverArchitectures,
     needsRosetta: [loaderArchitectures, architectures, serverArchitectures].some(list => imageRequiresRosetta(list)),
@@ -171,7 +171,10 @@ function resolveSelection(entry, settings, userDataDir, runtimeSettings) {
       : "CrossOver was not found. Add an installed CrossOver application in Runtimes.") };
 }
 const manager = { id: "crossover", label: "CrossOver", ui: { groupId: "crossover", tabLabel: "CrossOver", order: 200, memberOrder: 0 }, normalizeSettings, prepareLocalState, getState, importRuntime, uninstallRuntime, resolveSelection,
-  refreshCatalog: async ({ userDataDir } = {}) => getState({ userDataDir }).catalog,
+  refreshCatalog: async ({ userDataDir } = {}) => {
+    await require('./winemac').prune(userDataDir);
+    return getState({ userDataDir }).catalog;
+  },
   applySettingsUpdate: (action, payload, settings) => action === "setDefault"
     ? { ...settings, defaultVersion: normalizeSettings({ defaultVersion: payload?.version }).defaultVersion } : settings,
   updateSettingsAfterInstall: (settings, installed) => normalizeSettings(settings).defaultVersion

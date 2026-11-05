@@ -277,6 +277,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   const originalRoot = match.sourceRoot, recovery = { overrides: {}, omitted: new Set(), libraries: [] };
   let gameRoot = originalRoot, executablePath = executable, cameraView;
   const GraphicsLoader = require("./graphics-loader");
+  let winemac = await require('./winemac').select(selected.install, context);
   let loader, loaderFailure;
   const restoreScene = cause => {
     if (!cameraView || !scenePlan) return;
@@ -284,9 +285,10 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     GameView.prepared(cameraView, { libraries: cameraBridge?.libraries || [] });
   };
   const prepareLoader = async () => {
-    try { return await GraphicsLoader.prepare(selected.install, directory, { signal: context.signal, cameraBridge, sceneClosure, translatorView, userDataDir: context.userDataDir }); }
+    try { return await GraphicsLoader.prepare(selected.install, directory, { signal: context.signal, cameraBridge, sceneClosure, winemac, translatorView, userDataDir: context.userDataDir }); }
     catch (error) {
       if (context.signal?.aborted || isAbortError(error)) throw error;
+      if (winemac) { winemac = null; return prepareLoader(); }
       if (sceneClosure) {
         sceneClosure = null;
         restoreScene(error);
@@ -362,7 +364,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     if ((overrides.CX_GRAPHICS_BACKEND || environment.CX_GRAPHICS_BACKEND) !== 'wined3d') { delete overrides.CX_LIBVULKAN; delete environment.CX_LIBVULKAN; }
     if (translatorView.dllOverrides.length) { dll = [dll, ...translatorView.dllOverrides].filter(Boolean).join(';'); overrides.WINEDLLOVERRIDES = dll; environment.WINEDLLOVERRIDES = dll; }
   }
-  if (overrides.DYLD_INSERT_LIBRARIES || cameraBridge || sceneClosure || translatorView && Object.keys(translatorView.links).length) {
+  if (overrides.DYLD_INSERT_LIBRARIES || cameraBridge || sceneClosure || winemac || translatorView && Object.keys(translatorView.links).length) {
     if (!loader && !loaderFailure) loader = await prepareLoader();
     if (loader) {
       const values = () => ({ overrides: GraphicsLoader.environment(loader, overrides, { cameraBridge, sceneClosure, translatorView, installation: selected.install }),
