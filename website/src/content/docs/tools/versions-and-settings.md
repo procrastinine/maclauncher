@@ -35,7 +35,7 @@ Some runtimes can use a copy you already have. **Register custom…** adds your 
 
 ### Downloads
 
-You don't have to refresh before playing. If a game needs a runtime and no version list has been loaded yet, the download prompt that **Play** shows covers looking up the versions too, and MacLauncher installs the runtime's default version, which is the newest one that runs on your Mac unless you've chosen another. Development builds published through GitHub Actions, such as LÖVE nightlies and MKXP-Z's upstream builds, download without a GitHub account or any developer tools. A MacLauncher Builds package of a project that publishes no releases of its own is listed by the date of the upstream code it was built from, such as **Development build (Oct 28)**.
+You don't have to refresh before playing. If a game needs a runtime and no version list has been loaded yet, the download prompt that **Play** shows covers looking up the versions too, and MacLauncher installs the runtime's default version, which is the newest one that runs on your Mac unless you've chosen another. Development builds published through GitHub Actions, such as LÖVE nightlies and MKXP-Z's upstream builds, download without a GitHub account or any developer tools. A MacLauncher Builds package of a project that publishes no releases of its own is listed by the date of the upstream code it was built from, such as **Development build (Oct 28)**. A package with no upstream version or date is listed by its own version, such as **MCLv8**.
 
 Downloads run in the background while you keep using the launcher. A download button in the Runtimes window lists everything in progress, with a progress bar and a cancel button for each.
 
