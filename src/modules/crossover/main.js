@@ -126,8 +126,10 @@ async function launchRuntime(runtimeId, entry, context) {
   Processes.installStopHandler(context, launch);
   const args = launch.existingEnvironment ? Processes.externalArguments(launch.install.executablePath, launch.args, launch.environment) :
     ["-c", Launch.SUPERVISOR, "maclauncher-crossover", launch.install.executablePath, launch.install.serverPath, ...launch.args];
-  return context.spawnDetachedChecked("/bin/sh", args,
+  const child = await context.spawnDetachedChecked("/bin/sh", args,
   { cwd: launch.workingDirectory || launch.gameRoot, env: launch.environment, graphicsExecutable: launch.environment.WINELOADER || launch.install.loaderPath }, false);
+  require("../shared/runtime/wine-activation").followWineActivation(child, context);
+  return child;
 }
 const resolveSaveLocations = (_entry, context) => ({ primaryDirectory: null, directories: Environments.saveLocations(context?.runtimeSettings) });
 const crossoverProvider = { runtimeId: "crossover", runtime: manifest.runtime.entries.crossover, managerId: "crossover",

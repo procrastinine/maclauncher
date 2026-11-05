@@ -104,6 +104,7 @@ function createProvider({ manager, launch = Launch, platform = process.platform,
         const child = await context.spawnDetachedChecked("/bin/sh", args,
         { cwd: plan.workingDirectory || path.dirname(plan.executablePath), env: plan.environment, stdio: ["ignore", "pipe", "pipe"], graphicsExecutable: plan.winePath }, false);
         log.attach(child);
+        require("../../shared/runtime/wine-activation").followWineActivation(child, context);
         return child;
       } catch (error) { log.close(); throw error; }
     }

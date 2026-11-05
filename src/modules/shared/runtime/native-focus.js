@@ -9,11 +9,16 @@ function logActivation(write) {
   try { void Promise.resolve(write()).catch(() => {}); } catch {}
 }
 
-function activationScript({ pid, executablePath, launchedAt }) {
-  if (!Number.isInteger(pid) || pid <= 0 || !path.isAbsolute(executablePath || "") || executablePath.includes("\0") ||
-      !Number.isFinite(launchedAt) || launchedAt <= 0) throw new Error("An owned native process identity is required.");
-  const expected = fs.realpathSync(executablePath);
-  const identity = fs.statSync(expected, { bigint: true });
+// `executablePath: null` is reserved for a caller that has just matched the PID
+// to its own process tree, such as a Wine process whose executable is a
+// temporary loader link. `yieldFrom` activates only while that application
+// (the launcher) is still frontmost, as an application yielding its activation.
+function activationScript({ pid, executablePath, launchedAt, yieldFrom = null }) {
+  if (!Number.isInteger(pid) || pid <= 0 || executablePath !== null && (!path.isAbsolute(executablePath || "") || executablePath.includes("\0")) ||
+      !Number.isFinite(launchedAt) || launchedAt <= 0 || yieldFrom !== null && (!Number.isInteger(yieldFrom) || yieldFrom <= 0))
+    throw new Error("An owned native process identity is required.");
+  const expected = executablePath === null ? null : fs.realpathSync(executablePath);
+  const identity = expected === null ? null : fs.statSync(expected, { bigint: true });
   return `ObjC.import("AppKit");
 ObjC.import("Foundation");
 ObjC.import("CoreGraphics");
@@ -23,7 +28,8 @@ const controllerApp = $.NSApplication.sharedApplication;
 controllerApp.setActivationPolicy($.NSApplicationActivationPolicyProhibited);
 controllerApp.finishLaunching;
 const expected = ${JSON.stringify(expected)}, earliest = ${(launchedAt - 2000) / 1000};
-const expectedDevice = ${JSON.stringify(identity.dev.toString())}, expectedInode = ${JSON.stringify(identity.ino.toString())};
+const expectedDevice = ${JSON.stringify(identity && identity.dev.toString())}, expectedInode = ${JSON.stringify(identity && identity.ino.toString())};
+const yieldFrom = ${JSON.stringify(yieldFrom)};
 const workspace = $.NSWorkspace.sharedWorkspace;
 const initialFront = workspace.frontmostApplication;
 const initialFrontPid = initialFront && !initialFront.isNil() ? Number(initialFront.processIdentifier) : null;
@@ -42,17 +48,22 @@ function windows() {
 function pause(seconds) {
   $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(seconds));
 }
-let result = "not-registered";
-for (let attempt = 0; attempt < 24; attempt++) {
+// Another application in front keeps its activation; only the launcher yields.
+const yielding = yieldFrom === null || initialFrontPid === yieldFrom || initialFrontPid === ${pid};
+let result = yielding ? "not-registered" : "launcher-inactive";
+for (let attempt = 0; yielding && attempt < 24; attempt++) {
   const app = $.NSRunningApplication.runningApplicationWithProcessIdentifier(${pid});
   if (app && !app.isNil() && !app.terminated && app.executableURL && !app.executableURL.isNil()) {
-    const actual = ObjC.unwrap(app.executableURL.URLByResolvingSymlinksInPath.path);
-    // AppKit may spell /private/tmp as /tmp even after URL resolution.
-    // Compare the actual file identity, never a guessed path substitution.
-    const attributes = $.NSFileManager.defaultManager.attributesOfItemAtPathError(actual, null);
-    const sameFile = attributes && !attributes.isNil() &&
-      ObjC.unwrap(attributes.objectForKey($.NSFileSystemNumber).stringValue) === expectedDevice &&
-      ObjC.unwrap(attributes.objectForKey($.NSFileSystemFileNumber).stringValue) === expectedInode;
+    let sameFile = expected === null;
+    if (!sameFile) {
+      const actual = ObjC.unwrap(app.executableURL.URLByResolvingSymlinksInPath.path);
+      // AppKit may spell /private/tmp as /tmp even after URL resolution.
+      // Compare the actual file identity, never a guessed path substitution.
+      const attributes = $.NSFileManager.defaultManager.attributesOfItemAtPathError(actual, null);
+      sameFile = attributes && !attributes.isNil() &&
+        ObjC.unwrap(attributes.objectForKey($.NSFileSystemNumber).stringValue) === expectedDevice &&
+        ObjC.unwrap(attributes.objectForKey($.NSFileSystemFileNumber).stringValue) === expectedInode;
+    }
     const date = app.launchDate;
     if (!sameFile || date && !date.isNil() && Number(date.timeIntervalSince1970) < earliest) {
       result = "identity-changed"; break;
@@ -108,6 +119,22 @@ async function focusOwnedNativeGame(child, { executablePath, launchedAt = Date.n
   } finally { child.removeListener?.("exit", stop); }
 }
 
+/** Activates a process the caller has matched to its own launch, while `yieldFrom` is frontmost. */
+async function focusOwnedProcess(pid, { launchedAt, yieldFrom = null, signal, logger, run = execute, platform = process.platform } = {}) {
+  if (platform !== "darwin" || signal?.aborted) return { activated: false, reason: "not-running" };
+  try {
+    const script = activationScript({ pid, executablePath: null, launchedAt, yieldFrom });
+    const result = await run("/usr/bin/osascript", ["-l", "JavaScript", "-e", script], { signal, timeout: 8000, maxBuffer: 4096 });
+    const reason = result.stdout.trim();
+    logActivation(() => logger?.debug?.("[runtime] window activation", { pid, reason }));
+    return { activated: reason === "activated" || reason === "already-frontmost", reason };
+  } catch (error) {
+    const reason = signal?.aborted ? "game-exited" : error.message;
+    if (!signal?.aborted) logActivation(() => logger?.warn?.(`[runtime] window activation: ${reason}`));
+    return { activated: false, reason };
+  }
+}
+
 function foregroundEnvironment(environment = process.env, { platform = process.platform } = {}) {
   // SDL otherwise defaults to background activation on newer macOS versions.
   // This is a child-only game launch hint, not a global system preference.
@@ -128,4 +155,4 @@ async function spawnForegroundNativeGame({ context, executablePath, args = [], o
   return child;
 }
 
-module.exports = { activationScript, focusOwnedNativeGame, foregroundEnvironment, spawnForegroundNativeGame };
+module.exports = { activationScript, focusOwnedNativeGame, focusOwnedProcess, foregroundEnvironment, spawnForegroundNativeGame };
