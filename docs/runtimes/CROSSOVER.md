@@ -86,3 +86,5 @@ Runtime Settings groups the basic launch choices separately from advanced Displa
 Compatibility options include Rosetta AVX advertisement and per-engine controls: DXVK async, DXMT frame-rate presets and MetalFX spatial, D3DMetal frame limits and Metal 4, MoltenVK fast math, argument buffers and UE4 compatibility, and WineD3D configuration. Diagnostics offers Metal and DXVK HUDs and the Wine crash dialog. Engine options appear with the corresponding engine selection. Explicit environment entries override these controls.
 
 Additional Windows versions include Windows 8.1, 8, Vista, XP 64-bit and Windows Server variants. CrossOver's per-launch Windows version changes the reported version within the current bottle. Existing Windows environment selections retain their separate storage locations.
+
+For an existing environment, each setting defaults to **Bottle setting** with its current value read offline. **Custom setting** enables an override for that control. Registry-backed overrides write into the selected bottle; its original files and Windows environment remain in place.

@@ -26,6 +26,7 @@ export function normalizeListValue(value, separator) {
 }
 
 export function normalizeRuntimeSettingValue(field, value, fallback) {
+  if (field?.inheritFrom && value === "inherit") return value;
   const type = typeof field?.type === "string" ? field.type : "string";
   if (type === "boolean") {
     if (value === true || value === false) return value;

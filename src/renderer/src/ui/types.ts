@@ -91,6 +91,7 @@ export type RuntimeSettingField = {
   description?: string;
   section?: string;
   advanced?: boolean;
+  inheritFrom?: string;
   min?: number;
   max?: number;
   step?: number;
@@ -113,6 +114,7 @@ export type RuntimeSettingField = {
 };
 
 export type RuntimeSettingsSchema = {
+  inheritanceAction?: string;
   defaults?: Record<string, unknown>;
   fields: RuntimeSettingField[];
   provider?: { readAction: string; writeAction: string; gameOnly?: boolean };

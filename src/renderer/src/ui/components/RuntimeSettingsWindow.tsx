@@ -208,7 +208,10 @@ export function RuntimeSettingsWindow({
     finally { if (pickerScope.current === scope) setPickingField(null); }
   }
 
-  const choiceActions = JSON.stringify([...new Set((schema?.fields || []).filter(field => (isGameScope || !field.gameOnly) && isRuntimeSettingVisible(field, displaySettings || {})).map(field => field.optionsAction).filter(Boolean))]);
+  const inheritanceReference = schema?.fields.find(field => field.inheritFrom)?.inheritFrom;
+  const inheritanceValue = inheritanceReference ? displaySettings?.[inheritanceReference] : undefined;
+  const externalSettings = Boolean(inheritanceValue && inheritanceValue !== "private");
+  const choiceActions = JSON.stringify([...new Set((schema?.fields || []).filter(field => (isGameScope || !field.gameOnly) && isRuntimeSettingVisible(field, displaySettings || {})).map(field => field.optionsAction).concat(externalSettings ? schema?.inheritanceAction : undefined).filter(Boolean))]);
   useEffect(() => {
     const scope = JSON.stringify([context.moduleId, context.gamePath, context.runtimeId, isGameScope, choiceActions]);
     if (choiceScope.current !== scope) { setChoices({}); choiceScope.current = scope; }
@@ -217,11 +220,11 @@ export function RuntimeSettingsWindow({
     const request = settingChoiceRequest(api, context);
     if (!actions.length || !request) return;
     setChoiceLoading(Object.fromEntries(actions.map(action => [action, true])));
-    return loadSettingChoices(actions, request,
+    return loadSettingChoices(actions, action => request(action, { environmentReference: inheritanceValue }),
       (action, groups) => setChoices(previous => ({ ...previous, [action]: groups })),
       (_action, error) => setChoiceError(error instanceof Error ? error.message : String(error)),
       action => setChoiceLoading(previous => ({ ...previous, [action]: false })));
-  }, [api?.moduleAction, api?.moduleSettingsAction, context.moduleId, context.gamePath, context.runtimeId, isGameScope, choiceActions, choiceRevision]);
+  }, [api?.moduleAction, api?.moduleSettingsAction, context.moduleId, context.gamePath, context.runtimeId, isGameScope, choiceActions, choiceRevision, inheritanceValue]);
 
   saveCallback.current = async currentDraft => {
     if (!api || !schema) return;
@@ -262,6 +265,7 @@ export function RuntimeSettingsWindow({
 
   function onFieldChange(key: string, value: any) {
     const nextDraft = { ...(draftRef.current || savedSettings || {}), [key]: value };
+    for (const field of schema?.fields || []) if (field.inheritFrom === key) nextDraft[field.key] = value && value !== "private" ? "inherit" : baseDefaults?.[field.key];
     draftRef.current = nextDraft;
     setDraft(nextDraft);
     setDirty(true);
@@ -416,7 +420,21 @@ export function RuntimeSettingsWindow({
                   </React.Fragment>
                 );
               }).map((control, index) => ({ field: visibleFields[index], control }))}
-              render={(field, control) => renderField ? renderField(field, control, onFieldChange) : control} />
+              render={(field, control) => {
+                const rendered = renderField ? renderField(field, control, onFieldChange) : control;
+                if (!externalSettings || !field.inheritFrom) return rendered;
+                const inherited = displaySettings[field.key] === "inherit";
+                const current = choices[schema.inheritanceAction || ""]?.inheritedValues?.find(row => row.value === field.key)?.label || "Current environment value unavailable";
+                return <React.Fragment key={field.key}>
+                  <div className="settingsRow"><div className="settingsLabel">{field.label}</div><div className="settingsControl">
+                    <Select className="input" aria-label={field.label + " source"} value={inherited ? "inherit" : "custom"}
+                      onChange={event => onFieldChange(field.key, event.target.value === "inherit" ? "inherit" : baseDefaults?.[field.key])}>
+                      <option value="inherit">{current}</option><option value="custom">Custom setting</option>
+                    </Select>
+                  </div></div>
+                  {!inherited && rendered}
+                </React.Fragment>;
+              }} />
               {showReset && visibleFields.some(field => field.type !== "display") && <div className="runtimeSettingsActions">
                 <button
                   className="btn"

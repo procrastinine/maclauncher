@@ -287,10 +287,11 @@ export function normalizeRuntimeSettings(
   const out: Record<string, any> = {};
   for (const field of schema.fields) {
     if (!field.key || field.type === "display") continue;
-    const fallback = Object.prototype.hasOwnProperty.call(base, field.key)
+    const external = field.inheritFrom && (raw[field.inheritFrom] ?? base[field.inheritFrom]);
+    const fallback = external && external !== "private" && external !== "" ? "inherit" : Object.prototype.hasOwnProperty.call(base, field.key)
       ? base[field.key]
       : resolveRuntimeSettingFallback(field);
-    out[field.key] = normalizeRuntimeSettingValue(field, (raw as any)[field.key], fallback);
+    out[field.key] = normalizeRuntimeSettingValue(field, (raw as any)[field.key] ?? fallback, fallback);
   }
   return out;
 }

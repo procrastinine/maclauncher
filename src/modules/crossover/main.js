@@ -9,8 +9,13 @@ function graphicsBridgeVersions(runtimeId, context) {
   if (!support) throw new Error("Choose a Windows runtime.");
   return { graphicsBridgeVersions: [{ value: "auto", label: "Automatic" }, ...versionChoices(support, context)] };
 }
-const graphicsBridgeActions = { listGraphicsBridgeVersions: (entry, _payload, context) => graphicsBridgeVersions(context.runtimeId || entry.runtimeId, context) };
-const graphicsBridgeSettingsActions = { listGraphicsBridgeVersions: (payload, context) => graphicsBridgeVersions(payload?.runtimeId, context) };
+function wineSettingInheritance(entry, payload, context) {
+  const runtimeId = context.runtimeId || payload?.runtimeId || entry.runtimeId;
+  return require('../shared/runtime/wine-setting-inheritance').choices(context.runtimeSettings || {}, manifest.runtime.entries[runtimeId].settings,
+    { reference: payload?.environmentReference || context.runtimeSettings?.environmentReference });
+}
+const graphicsBridgeActions = { listWineSettingInheritance: wineSettingInheritance, listGraphicsBridgeVersions: (entry, _payload, context) => graphicsBridgeVersions(context.runtimeId || entry.runtimeId, context) };
+const graphicsBridgeSettingsActions = { listWineSettingInheritance: (payload, context) => wineSettingInheritance({}, payload, context), listGraphicsBridgeVersions: (payload, context) => graphicsBridgeVersions(payload?.runtimeId, context) };
 function graphicsBackendOptions(entry, context, { runtimeManager = manager, host } = {}) {
   const selected = runtimeManager.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
   const field = manifest.runtime.entries.crossover.settings.fields.find(field => field.key === "graphicsBackend");

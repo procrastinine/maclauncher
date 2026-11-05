@@ -8,21 +8,28 @@ function text(value) {
   return result;
 }
 function toggle(value) { return value === true || value === 'on' || value === '1' ? '1' : '0'; }
+const ENGINE_SETTINGS = {
+  dxvkAsync: { component: 'd3d-renderer', engine: 'dxvk', variable: 'DXVK_ASYNC', toggle: true },
+  dxvkHud: { component: 'd3d-renderer', engine: 'dxvk', variable: 'DXVK_HUD' },
+  dxmtConfig: { component: 'd3d-renderer', engine: 'dxmt', variable: 'DXMT_CONFIG' },
+  metalFxSpatial: { component: 'd3d-renderer', engine: 'dxmt', variable: 'DXMT_METALFX_SPATIAL_SWAPCHAIN', toggle: true },
+  d3dMetalMaxFps: { component: 'd3d-renderer', engine: 'd3dmetal', variable: 'D3DM_MAX_FPS' },
+  d3dMetal4: { component: 'd3d-renderer', engine: 'd3dmetal', variable: 'D3DM_MTL4', toggle: true },
+  wineD3dConfig: { component: 'd3d-renderer', engine: 'wined3d', variable: 'WINE_D3D_CONFIG' },
+  moltenVkFastMath: { component: 'vulkan-driver', engine: 'moltenvk', variable: 'MVK_CONFIG_FAST_MATH_ENABLED', toggle: true },
+  moltenVkArgumentBuffers: { component: 'vulkan-driver', engine: 'moltenvk', variable: 'MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS', toggle: true },
+  moltenVkUe4: { component: 'vulkan-driver', engine: 'moltenvk', variable: 'MVK_CONFIG_UE4_HACK_ENABLED', toggle: true },
+};
 function environment(settings, { needsRosetta = false, engines = {} } = {}) {
   const env = {};
   const set = (key, name, transform = text) => { if (!inherit(settings[key])) env[name] = transform(settings[key]); };
-  if (needsRosetta) { env.DOTNET_EnableWriteXorExecute = '0'; env.ROSETTA_ADVERTISE_AVX = '1'; }
+  if (needsRosetta) {
+    env.DOTNET_EnableWriteXorExecute = '0';
+    if (!settings.environmentReference || settings.environmentReference === 'private') env.ROSETTA_ADVERTISE_AVX = '1';
+  }
   set('advertiseAvx', 'ROSETTA_ADVERTISE_AVX', toggle);
   set('metalHud', 'MTL_HUD_ENABLED', toggle);
-  if (engines['d3d-renderer'] === 'dxvk') { set('dxvkAsync', 'DXVK_ASYNC', toggle); set('dxvkHud', 'DXVK_HUD'); }
-  if (engines['d3d-renderer'] === 'dxmt') { set('dxmtConfig', 'DXMT_CONFIG'); set('metalFxSpatial', 'DXMT_METALFX_SPATIAL_SWAPCHAIN', toggle); }
-  if (engines['d3d-renderer'] === 'd3dmetal') { set('d3dMetalMaxFps', 'D3DM_MAX_FPS'); set('d3dMetal4', 'D3DM_MTL4', toggle); }
-  if (engines['d3d-renderer'] === 'wined3d') set('wineD3dConfig', 'WINE_D3D_CONFIG');
-  if (engines['vulkan-driver'] === 'moltenvk') {
-    set('moltenVkFastMath', 'MVK_CONFIG_FAST_MATH_ENABLED', toggle);
-    set('moltenVkArgumentBuffers', 'MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS', toggle);
-    set('moltenVkUe4', 'MVK_CONFIG_UE4_HACK_ENABLED', toggle);
-  }
+  for (const [key, spec] of Object.entries(ENGINE_SETTINGS)) if (engines[spec.component] === spec.engine) set(key, spec.variable, spec.toggle ? toggle : text);
   return env;
 }
 function registry(settings, { executable = '' } = {}) {
@@ -61,4 +68,5 @@ function desktopArguments(settings, args, { crossover = false } = {}) {
   if (!/^\d{3,5}x\d{3,5}$/.test(settings.virtualDesktop)) throw new Error('Virtual desktop must use WIDTHxHEIGHT.');
   return crossover ? ['--desktop', 'MacLauncher', ...args] : ['explorer.exe', `/desktop=MacLauncher,${settings.virtualDesktop}`, ...args];
 }
-module.exports = { WINDOWS_VERSIONS, inherit, environment, registry, applyRegistry, desktopArguments };
+function explicitSettings(settings) { return Object.fromEntries(Object.entries(settings).filter(([,value]) => value !== 'inherit')); }
+module.exports = { explicitSettings, ENGINE_SETTINGS, WINDOWS_VERSIONS, inherit, environment, registry, applyRegistry, desktopArguments };
