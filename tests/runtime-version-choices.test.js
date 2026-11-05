@@ -110,10 +110,11 @@ test("shared selection layers preserve manager defaults, game recommendations an
   assert.equal(manager.resolveSelection(null, settings, userDataDir, { version: "2.0" }).ready, false, "Exact identity verification remains active");
 });
 
-test("manager defaults prefer the published list, use ready installed order only without a list, and treat cleared values as absent", () => {
-  assert.equal(managerDefaultVersion({ listed: ["2.0", "1.0"], installed: ["9.0"] }), "2.0");
+test("manager defaults prefer eligible installed order, fall back to published versions, and treat cleared values as absent", () => {
+  assert.equal(managerDefaultVersion({ listed: ["2.0", "1.0"], installed: ["9.0"] }), "9.0");
   assert.equal(managerDefaultVersion({ listed: [], installed: ["9.0", "8.0"] }), "9.0");
   assert.equal(managerDefaultVersion({ listed: [null, "auto", ""], installed: [" 8.0 "] }), "8.0");
+  assert.equal(managerDefaultVersion({ listed: ["2.0", "1.0"], installed: [null, "auto", ""] }), "2.0");
   assert.equal(managerDefaultVersion({}), null);
   for (const defaultVersion of [undefined, null, "", "auto"]) assert.deepEqual(selectRuntimeVersion({ defaultVersion,
     fallback: managerDefaultVersion({listed:["2.0"]}) }), {version:"2.0",source:"default"});

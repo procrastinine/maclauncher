@@ -41,13 +41,12 @@ function selectRuntimeVersion({ manual, recommended, defaultVersion, fallback } 
   return { version: null, source: null };
 }
 
-/** A manager's own default when none is saved: the newest compatible stable
- * published version, or the newest ready installed version when nothing is
- * listed. Lists are newest first; a version missing locally downloads with
- * consent, and an installed one plays offline. */
+/** A manager's own default when none is saved: a ready compatible installed
+ * version, or a compatible published version when none is installed.
+ * Callers supply eligible candidates in preference order. */
 function managerDefaultVersion({ listed = [], installed = [] } = {}) {
-  return selectRuntimeVersion({ manual: listed.find(value => selectRuntimeVersion({ manual: value }).version),
-    fallback: installed.find(value => selectRuntimeVersion({ manual: value }).version) }).version;
+  return selectRuntimeVersion({ manual: installed.find(value => selectRuntimeVersion({ manual: value }).version),
+    fallback: listed.find(value => selectRuntimeVersion({ manual: value }).version) }).version;
 }
 
 /** The saved default while it can still be used: a custom runtime path, a

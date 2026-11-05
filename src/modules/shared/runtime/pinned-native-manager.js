@@ -191,7 +191,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     };
     const preview = previewPin;
     const listed = nativeDefaults(remoteEntries.filter(pin => eligible(pin) && !assetReason(pin))).sort((a, b) => Number(preview(a)) - Number(preview(b)) || compareRuntimeVersions(a.version, b.version)).map(pin => pin.version);
-    const installed = listed.length ? [] : nativeDefaults(listRuntimeRows(userDataDir).filter(row => row.ready !== false && eligible({ ...(row.catalogEntry || entries.get(row.version) || row), ...(row.minimumMacOS ? { minimumMacOS: row.minimumMacOS } : {}) }) &&
+    const installed = nativeDefaults(listRuntimeRows(userDataDir).filter(row => row.ready !== false && eligible({ ...(row.catalogEntry || entries.get(row.version) || row), ...(row.minimumMacOS ? { minimumMacOS: row.minimumMacOS } : {}) }) &&
       (verification === "status" || resolveInstalled({ userDataDir, version: row.version, verification })))).map(row => row.version).sort(compareRuntimeVersions);
     return managerDefaultVersion({ listed, installed });
   }

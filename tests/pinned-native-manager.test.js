@@ -819,6 +819,51 @@ test("reinstall atomically repairs damaged downloaded bytes and preserves them w
   assert.equal(cached.resolveSelection({}, { runtimes: { "fixture-native": { defaultVersion: "1.2.0" } } }, root).version, "1.2.0");
 });
 
+test("automatic defaults use a compatible installed consumer build before a newer cached download", async t => {
+  const Architecture = require("../src/modules/shared/runtime/architecture");
+  for (const consumer of ["arm64", "x64"]) {
+    const root = temporary(t), other = consumer === "arm64" ? "x64" : "arm64";
+    let hostVersion = "100.0";
+    const row = (version, architecture, extra = {}) => ({ version, architecture, upstreamRevision: "source-" + version,
+      asset: { filename: version + ".zip", url: "https://example.test/" + version + ".zip", sha256: "a".repeat(64) }, ...extra });
+    const published = [row("3.0.0", consumer), row("2.0.0", consumer, { minimumMacOS: "99.0" }),
+      row("1.0.0", consumer), row("9.0.0", other)];
+    const runtime = Architecture.withArchitecture(consumer, () => manager({
+      discoverCatalog: async () => published, dependencies: { systemVersionSync: () => hostVersion,
+        hostArch: "arm64", hostCapabilities: { platform: "darwin", hardwareArch: "arm64", rosettaAvailable: true },
+        downloadToFile: () => assert.fail("Automatic selection must not download") } }));
+    await runtime.refreshCatalog({ userDataDir: root });
+    const register = (version, architecture) => Architecture.withArchitecture(architecture, () => {
+      const file = path.join(root, version + "-" + architecture);
+      fs.writeFileSync(file, binary(architecture === "x64" ? "x86_64" : "arm64"), { mode: 0o755 });
+      return runtime.core.registerLocal({ userDataDir: root, version, runtimePath: file });
+    });
+    const select = options => runtime.resolveSelection({}, {}, root, { architecture: consumer, ...options });
+    register("2.0.0", consumer);hostVersion = "13.0";
+    assert.equal(select().version, "3.0.0", "An installed build above the actual macOS floor is ineligible");
+    assert.equal(select().requiresDownload, true, "The catalog is used when no eligible installed copy exists");
+    register("1.0.0", consumer);register("9.0.0", other);
+    const automatic = select();
+    assert.equal(automatic.version, "1.0.0");assert.equal(automatic.ready, true);assert.equal(automatic.requiresDownload, false);
+    assert.equal(Architecture.recordArchitecture(automatic.install), consumer, "A newer other-CPU copy does not displace this consumer's installed build");
+    assert.equal(runtime.getState({ userDataDir: root }).defaultVersion, "1.0.0", "Runtimes and Play agree on the automatic default");
+    const incompatible = select({ compatible: pin => pin.version === "3.0.0" });
+    assert.equal(incompatible.version, "3.0.0");assert.equal(incompatible.ready, false);
+    const saved = runtime.resolveSelection({}, { runtimes: { [runtime.id]: { defaultVersion: "3.0.0" } } }, root, { architecture: consumer });
+    assert.equal(saved.version, "3.0.0");assert.equal(saved.ready, false, "A listed saved choice remains explicit even when not installed");
+    const withdrawn = runtime.resolveSelection({}, { runtimes: { [runtime.id]: { defaultVersion: "unavailable-choice" } } }, root, { architecture: consumer });
+    assert.equal(withdrawn.version, "1.0.0");assert.equal(withdrawn.ready, true, "A withdrawn unavailable default uses the ordinary installed fallback");
+    assert.equal(select({ recommendedVersion: "3.0.0" }).version, "3.0.0");
+    const game = runtime.resolveSelection({ runtimeData: { [runtime.id]: { version: "3.0.0" } } }, {}, root, { architecture: consumer });
+    assert.equal(game.version, "3.0.0");assert.equal(game.ready, false);
+    const cached = Architecture.withArchitecture(consumer, () => manager({
+      discoverCatalog: () => assert.fail("Reading an existing catalog must stay offline"), dependencies: {
+        systemVersionSync: () => hostVersion, hostArch: "arm64",
+        hostCapabilities: { platform: "darwin", hardwareArch: "arm64", rosettaAvailable: true } } }));
+    assert.equal(cached.resolveSelection({}, {}, root, { architecture: consumer }).version, "1.0.0");
+  }
+});
+
 test("catalog selection stays with its launcher data directory", async t => {
   const root = temporary(t), first = path.join(root, "first"), second = path.join(root, "second");
   const runtime = manager({ discoverCatalog: async () => [{version:"7.0",upstreamRevision:"source-seven",
