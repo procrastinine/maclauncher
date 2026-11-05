@@ -466,7 +466,9 @@ test("short original drive mappings preserve conflicting old entries and reject 
 });
 
 test("incomplete Wine preparation is removed while a completed prefix and its saves survive a retry failure", async t => {
-  const directory = fixture(t), install = installation(directory), prefix = path.join(directory, "prefix"), graphics = {};
+  const userDataDir = fixture(t), directory = path.join(userDataDir, "games", "guard-test", "runtimes", "sikarugir"), install = installation(userDataDir), prefix = path.join(directory, "prefix"), graphics = {};
+  fs.mkdirSync(directory, { recursive: true });
+  const owned = require("../src/modules/shared/runtime/wine-environment").privateEnvironment(userDataDir, directory, "prefix");
   const messages = [], context = { logger: { warn: message => { messages.push(message); } } };
   const run = async (_wine, _server, args) => {
     fs.mkdirSync(prefix, { recursive: true });
@@ -474,14 +476,14 @@ test("incomplete Wine preparation is removed while a completed prefix and its sa
     if (args[0] === "winecfg.exe") throw Object.assign(new Error("configuration failed"), { exitCode: 3,
       stderr: "x".repeat(20000) + "missing runtime library", stdout: "y".repeat(5000) });
   };
-  await assert.rejects(Launch.ensurePrefix(install, prefix, directory, {}, graphics, context, { run }), /could not create/);
+  await assert.rejects(Launch.ensurePrefix(install, owned, directory, {}, graphics, context, { run }), /could not create/);
   assert.equal(fs.existsSync(prefix), false);
   const details = JSON.parse(messages[0].slice(messages[0].indexOf("{")));
   assert.equal(details.stage, "winecfg"); assert.equal(details.message, "configuration failed"); assert.equal(details.exitCode, 3);
   assert.equal(details.stderr.length, 8192); assert.match(details.stderr, /missing runtime library$/); assert.equal(details.stdout.length, 2048);
   fs.mkdirSync(prefix); fs.writeFileSync(path.join(prefix, "system.reg"), "registry"); fs.writeFileSync(path.join(prefix, "user.reg"), "registry");
   fs.writeFileSync(path.join(prefix, "saved.dat"), "save");
-  await assert.rejects(Launch.ensurePrefix(install, prefix, directory, {}, graphics, context, { run }), /could not create/);
+  await assert.rejects(Launch.ensurePrefix(install, owned, directory, {}, graphics, context, { run }), /could not create/);
   assert.equal(fs.readFileSync(path.join(prefix, "saved.dat"), "utf8"), "save");
 });
 

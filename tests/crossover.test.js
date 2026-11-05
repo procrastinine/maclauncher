@@ -460,7 +460,7 @@ test("CrossOver app changes reuse one per-game bottle while Windows templates re
   assert.equal((await launch({ version: first.version })).bottlePath, a.bottlePath);
   assert.equal(fs.readFileSync(path.join(a.bottlePath, "saved-profile.dat"), "utf8"), "first app save");
   assert.equal(calls, 2, "CrossOver app changes reuse the existing bottle; a new Windows template has its own bottle");
-  await assert.rejects(Launch.ensureBottle(first, a.bottlePath, a.directory,
+  await assert.rejects(Launch.ensureBottle(first, require("../src/modules/shared/runtime/wine-environment").privateEnvironment(userDataDir, a.directory, path.relative(a.directory, a.bottlePath)), a.directory,
     { bottleTemplate: "unsupported" }, {}, { run }), /Unsupported CrossOver Windows bottle type/);
 });
 
@@ -759,8 +759,10 @@ test("CrossOver Stop terminates an independently grouped Windows process before 
 });
 
 test("CrossOver removes failed initial environments and retries without deleting completed bottles", async t => {
-  const directory = fixture(t), runtimePath = app(path.join(directory, "CrossOver.app"));
+  const userDataDir = fixture(t), directory = path.join(userDataDir, "games", "guard-test", "runtimes", "crossover"), runtimePath = app(path.join(userDataDir, "CrossOver.app"));
   const install = Manager.core.inspectApplication(runtimePath), bottle = path.join(directory, "bottles", "game");
+  fs.mkdirSync(directory, { recursive: true });
+  const owned = require("../src/modules/shared/runtime/wine-environment").privateEnvironment(userDataDir, directory, "bottles/game");
   let calls = 0;
   const run = async () => {
     calls++;
@@ -770,11 +772,11 @@ test("CrossOver removes failed initial environments and retries without deleting
     if (calls === 1) throw new Error("interrupted creation");
     return { stdout: "", stderr: "" };
   };
-  await assert.rejects(Launch.ensureBottle(install, bottle, directory, {}, {}, { run }), /could not create/);
+  await assert.rejects(Launch.ensureBottle(install, owned, directory, {}, {}, { run }), /could not create/);
   assert.equal(fs.existsSync(bottle), false);
-  await Launch.ensureBottle(install, bottle, directory, {}, {}, { run });
+  await Launch.ensureBottle(install, owned, directory, {}, {}, { run });
   fs.writeFileSync(path.join(bottle, "saved-game.dat"), "save");
-  await Launch.ensureBottle(install, bottle, directory, {}, {}, { run });
+  await Launch.ensureBottle(install, owned, directory, {}, {}, { run });
   assert.equal(calls, 2);
   assert.equal(fs.readFileSync(path.join(bottle, "saved-game.dat"), "utf8"), "save");
 });
