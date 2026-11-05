@@ -62,7 +62,9 @@ function createManager(engine, { dependencies = {} } = {}) {
       const root = Component.componentRoot(unpacked, selected);
       const translator = Component.description(root, definition, { engine: pin.translatorEngine || definition.engine, source: translatorSource(pin) });
       const files = Object.fromEntries(translator.files.filter(file => file.format !== "json").map(file => [file.relative, require("./pinned-native-manager").hashFile(file.path)]));
-      translator.files = translator.files.map(file => ({ ...file, path: file.relative }));
+      translator.files = translator.files.map(file => {
+        const stored = { ...file, path: file.relative }; delete stored.realPath; return stored;
+      });
       delete translator.root; delete translator.id;
       const relative = path.relative(unpacked, root);
       if (relative) {
