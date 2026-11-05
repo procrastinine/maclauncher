@@ -49,6 +49,8 @@ function createManager(engine, { dependencies = {} } = {}) {
       }
       return { translator, files, translatorRelative: relative ? definition.names[0] : "" };
     }, dependencies: { extractArchive: require("./safe-archive").extractArchive, ...dependencies } });
+  manager.translatorEngine = engine;
+  manager.ui = { groupId: "translators", tabLabel: "Translators", sectionLabel: definition.label, management: "managed" };
   return Component.configure(manager, definition);
 }
 module.exports = { definitions, catalogSource, createManager };

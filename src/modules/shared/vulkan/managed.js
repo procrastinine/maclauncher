@@ -21,7 +21,7 @@ function createManager(dependencies = {}) {
       Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
       await Bundled.verifySignatures(selected.root,selected.declaration,{signal});
     }, dependencies });
-  return { ...manager, distributionRequired: false,
+  return { ...manager, translatorEngine: "kosmickrisp", distributionRequired: false,
     ui: { groupId: "translators", tabLabel: "Translators", sectionLabel: "KosmicKrisp GLES 3.2", memberOrder: 22, management: "managed", hostFeature: "METAL4" } };
 }
 
@@ -77,7 +77,7 @@ function createSceneManager(dependencies = {}) {
       Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
       await Bundled.verifySignatures(selected.root, selected.declaration, { signal });
     }, dependencies });
-  return { ...result, distributionRequired: false,
+  return { ...result, translatorEngine: "moltenvk", distributionRequired: false,
     ui: { groupId: "translators", tabLabel: "Translators", sectionLabel: "MoltenVK scene support", memberOrder: 25, management: "managed" } };
 }
 function createSceneProvider(selectedManager) {
