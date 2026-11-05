@@ -393,10 +393,44 @@ test("local registration records SHA identity, rejects replaced executables and 
   assert.equal(runtime.core.resolveInstalled({ userDataDir: root, version: "1.2.0" }), null);
   const damaged = runtime.getState({ userDataDir: root }).sections[0].installed[0];
   assert.equal(damaged.version, "1.2.0"); assert.equal(damaged.ready, false); assert.equal(damaged.status, "damaged");
-  assert.match(damaged.error, /changed/);
+  assert.match(damaged.error, /checksum changed/);
+  assert.match(runtime.resolveSelection({}, {}, root, { version: "1.2.0" }).reason, /checksum changed/);
   runtime.uninstallRuntime({ userDataDir: root, version: "1.2.0", installDir: root });
   assert.equal(fs.existsSync(executable), true);
   assert.equal(fs.existsSync(path.join(root, "runtimes", "fixture-native", "1.2.0")), false);
+});
+
+test("selection and Runtimes expose the blocking inspection reason and recover after repair", { skip: process.platform !== "darwin" }, async t => {
+  const root = temporary(t), executable = path.join(root, "runtime"), component = path.join(root, "required-component");
+  fs.writeFileSync(executable, binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 });
+  fs.writeFileSync(component, "present");
+  const runtime = await listed({ inspectRuntime(options) {
+    if (!fs.existsSync(component)) throw new Error("Required runtime library libfixture.dylib is missing.");
+    return require("../src/modules/shared/runtime/local-native").resolveLocalRuntime(options);
+  } }, root);
+  runtime.core.registerLocal({ userDataDir: root, version: "1.2.0", runtimePath: executable });
+  fs.unlinkSync(component);
+  const failed = runtime.resolveSelection({}, {}, root, { version: "1.2.0" });
+  assert.equal(failed.ready, false);
+  assert.match(failed.reason, /Required runtime library libfixture\.dylib is missing/);
+  const damaged = runtime.getState({ userDataDir: root }).installed.find(row => row.version === "1.2.0");
+  assert.match(damaged.error, /Required runtime library libfixture\.dylib is missing/);
+  assert.doesNotMatch(failed.reason, /executable changed/);
+  fs.writeFileSync(component, "repaired");
+  assert.equal(runtime.resolveSelection({}, {}, root, { version: "1.2.0", verification: "status" }).ready, true,
+    "repairing a blocking component recovers status without touching the primary executable or version record");
+  assert.equal(runtime.resolveSelection({}, {}, root, { version: "1.2.0" }).ready, true);
+  assert.equal(runtime.getState({ userDataDir: root }).installed.find(row => row.version === "1.2.0").error, undefined);
+});
+
+test("an absent selected build names its CPU instead of suggesting changed executable bytes", async t => {
+  const root = temporary(t), runtime = await listed({}, root);
+  for (const [architecture, label] of [["arm64", "Apple Silicon"], ["x64", "Intel"]]) {
+    const selection = runtime.resolveSelection({}, {}, root, { version: "1.2.0", architecture });
+    assert.equal(selection.ready, false);
+    assert.match(selection.reason, new RegExp("not installed for " + label));
+    assert.doesNotMatch(selection.reason, /executable changed/);
+  }
 });
 
 test("incomplete native build directories remain visible and removable in runtime UI state", async t => {
@@ -610,11 +644,21 @@ test("runtime broadcasts reuse native display checks while selection and Reload 
   assert.equal(nativeChecks, 1); assert.equal(fullChecks, 0);
   auxiliaryDamaged = true;
   assert.equal(runtime.resolveSelection(null, null, root, { version: "1.2.0" }).ready, false);
-  assert.equal(fullChecks, 1);
+  assert.ok(fullChecks > 0, "selection fully verifies the auxiliary payload");
+  const failedChecks = fullChecks;
   assert.equal(runtime.getState({ userDataDir: root }).installed[0].ready, false, "a failed full check stays visible after warm broadcasts");
+  assert.ok(fullChecks > failedChecks, "status fully rechecks a known failure instead of accepting the weaker check");
   auxiliaryDamaged = false;
+  const beforeRepair = fullChecks;
+  assert.equal(runtime.getState({ userDataDir: root }).installed[0].ready, true, "status recovers after auxiliary repair without touching the executable or record");
+  assert.ok(fullChecks > beforeRepair, "recovery requires a successful full payload check");
+  const healthyNative = nativeChecks, healthyFull = fullChecks;
+  for (let i = 0; i < 30; i++) assert.equal(runtime.getState({ userDataDir: root }).installed[0].ready, true);
+  assert.equal(nativeChecks, healthyNative, "healthy broadcasts add no native inspection");
+  assert.equal(fullChecks, healthyFull, "healthy broadcasts add no full payload checks");
+  const beforeReload = fullChecks;
   await runtime.refreshCatalog({ userDataDir: root, force: true });
-  assert.equal(fullChecks, 2);
+  assert.equal(fullChecks, beforeReload + 1, "explicit Reload still fully verifies the installed payload");
   assert.equal(runtime.getState({ userDataDir: root }).installed[0].ready, true);
   runtime.uninstallRuntime({ userDataDir: root, version: "1.2.0" });
   assert.deepEqual(runtime.getState({ userDataDir: root }).installed, []);

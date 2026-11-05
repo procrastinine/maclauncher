@@ -220,6 +220,8 @@ test("one build resolver serves Play, Install, Set default and the automatic lis
   assert.equal(Architecture.chooseArchitecture({launcher: "x64", offers: only(["arm64"]), host: intelMac}), "x64");
   assert.equal(Architecture.chooseArchitecture({launcher: "arm64", saved: "x64", offers: only(["arm64"]), host: appleSilicon}), "arm64");
   assert.equal(Architecture.chooseArchitecture({launcher: "arm64", saved: "x64", offers: only(["arm64", "x64"]), host: appleSilicon}), "x64");
+  assert.equal(Architecture.chooseArchitecture({launcher: "arm64", saved: "x64", installed: only(["arm64"]), offers: only(["arm64"]), host: appleSilicon}), "arm64");
+  assert.equal(Architecture.chooseArchitecture({launcher: "x64", saved: "arm64", installed: only(["x64"]), offers: only(["arm64", "x64"]), host: intelMac}), "x64");
   assert.equal(Architecture.chooseArchitecture({request: {architecture: "x64"}, launcher: "arm64", offers: only(["arm64"]), host: appleSilicon}), "x64");
   assert.equal(Architecture.chooseArchitecture({launcher: "x64", offers: only([]), host: appleSilicon}), "x64");
   // A manager whose Intel list is empty, in the Intel app on Apple Silicon.
@@ -262,4 +264,54 @@ test("an Apple Silicon installation in the shared legacy folder is automatic in 
   assert.equal(intelApp.offersBuild({userDataDir: directory, architecture: "arm64"}), true);
   assert.equal(intelApp.getState({userDataDir: directory}).automaticArchitecture, "arm64");
   assert.equal(intelApp.resolveSelection({}, {}, directory).architecture, "arm64");
+});
+
+test("a selected installed Intel version wins over a missing native build unless its CPU is explicit", {skip: process.platform !== "darwin"}, async t => {
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-installed-version-"));
+  t.after(() => fs.rmSync(userDataDir, {recursive: true, force: true}));
+  const id = "installed-choice", host = {platform: "darwin", hardwareArch: "arm64", rosettaAvailable: true};
+  let downloads = 0;
+  const manager = Architecture.withArchitecture("arm64", () => createPinnedNativeManager({id, label: "Installed choice", importLocal: true,
+    discoverCatalog: async () => ["arm64", "x64"].map(architecture => ({version: "1.0", architecture, upstreamRevision: architecture,
+      asset: {url: `https://example.test/${architecture}.zip`, filename: architecture + ".zip", sha256: (architecture === "arm64" ? "a" : "b").repeat(64)}})),
+    dependencies: {hostCapabilities: host, hostArch: "arm64", downloadToFile: () => { downloads++; assert.fail("A verified installed version must not download"); }}}));
+  await manager.refreshCatalog({userDataDir, force: true});
+  const file = path.join(userDataDir, "intel-runtime");fs.writeFileSync(file, executable("x64"), {mode: 0o755});
+  const imported = await manager.importRuntime({userDataDir, architecture: "x64", version: "1.0", runtimePath: file});
+  const entry = {runtimeId: id, runtimeData: {[id]: {version: "1.0"}}};
+  for (const [game, settings, options] of [[entry, {}, {}], [{}, {runtimes: {[id]: {defaultVersion: "1.0"}}}, {}], [{}, {}, {version: "1.0"}], [{}, {}, {}]]) {
+    const selection = manager.resolveSelection(game, settings, userDataDir, options);
+    assert.equal(selection.architecture, "x64");
+    assert.equal(selection.ready, true);
+    assert.equal(selection.requiresDownload, false);
+    assert.equal(selection.install.installDir, imported.installDir);
+  }
+  const Preparation = require("../src/core/runtime-preparation"), mod = {id, runtimeManagers: [manager]};
+  assert.equal(await Preparation.prepareForLaunch({entry, mod, info: {runtime: {manager: {[id]: id}}},
+    context: {userDataDir, settings: {}, runtimeId: id, confirmRuntimeInstall: () => assert.fail("Installed selection needs no consent")},
+    registry: {listModuleIds: () => [id], getModule: () => mod}, install: () => assert.fail("Installed selection needs no installer")}), true);
+  const explicit = manager.resolveSelection(entry, {}, userDataDir, {architecture: "arm64"});
+  assert.equal(explicit.architecture, "arm64");
+  assert.equal(explicit.ready, false);
+  assert.equal(explicit.requiresDownload, true);
+  assert.equal(manager.resolveSelection({...entry, runtimeData: {[id]: {version: "1.0", architecture: "arm64"}}}, {}, userDataDir).architecture, "arm64");
+  assert.equal(downloads, 0);
+});
+
+test("a saved CPU without a build gives way to the installed runnable CPU without downloading", {skip: process.platform !== "darwin"}, async t => {
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-saved-cpu-fallback-"));
+  t.after(() => fs.rmSync(userDataDir, {recursive: true, force: true}));
+  const id = "saved-cpu-fallback", host = {platform: "darwin", hardwareArch: "arm64", rosettaAvailable: true};
+  const manager = Architecture.withArchitecture("arm64", () => createPinnedNativeManager({id, label: "Saved CPU fallback", importLocal: true,
+    discoverCatalog: async () => [{version: "1.0", architecture: "arm64", upstreamRevision: "arm64",
+      asset: {url: "https://example.test/arm64.zip", filename: "arm64.zip", sha256: "a".repeat(64)}}],
+    dependencies: {hostCapabilities: host, hostArch: "arm64", downloadToFile: () => assert.fail("The installed ARM copy must not download")}}));
+  await manager.refreshCatalog({userDataDir, force: true});
+  const file = path.join(userDataDir, "arm-runtime"); fs.writeFileSync(file, executable("arm64"), {mode: 0o755});
+  const imported = await manager.importRuntime({userDataDir, architecture: "arm64", version: "1.0", runtimePath: file});
+  const selected = manager.resolveSelection({runtimeId: id, runtimeData: {[id]: {version: "1.0", architecture: "x64"}}}, {}, userDataDir);
+  assert.equal(selected.architecture, "arm64");
+  assert.equal(selected.ready, true);
+  assert.equal(selected.requiresDownload, false);
+  assert.equal(selected.install.installDir, imported.installDir);
 });

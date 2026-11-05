@@ -27,6 +27,11 @@ test("the inspector lists damaged installations for repair and hides builds this
     { version: "/Applications/Runtime.app", ready: false, external: true }] };
   assert.deepEqual(model.runtimeInspectorVersions(section), ["3.0", "2.0", "1.5"]);
   assert.deepEqual(model.runtimeInspectorVersions(section, "1.4"), ["3.0", "2.0", "1.5", "1.4"], "A saved choice stays visible");
+  const missing = model.runtimeInspectorVersionOptions({ ...section, catalog: { versions: ["9.0-rc1"] } }, "9.0-rc1");
+  assert.equal(missing.filter(option => option.version === "9.0-rc1").length, 1);
+  assert.ok(missing.find(option => option.version === "9.0-rc1").label.endsWith(" (not installed)"));
+  assert.ok(!model.runtimeInspectorVersions({ ...section, catalog: { versions: ["9.0-rc1"] } }).includes("9.0-rc1"),
+    "A catalog-only candidate is not offered without a saved choice");
   assert.equal(model.runtimeInspectorInstall(section, "2.0").availability, "needsRepair");
   assert.equal(model.runtimeInspectorInstall(section, "1.4").availability, "unavailable");
   assert.equal(model.runtimeInspectorInstall(section, "9.0").availability, null);
@@ -36,6 +41,65 @@ test("the inspector lists damaged installations for repair and hides builds this
   for (const version of ["3.0", "1.4", "1.3", "/Applications/Runtime.app", "9.0"]) assert.equal(model.runtimeInspectorRepair(section, version), null, version);
   // A usable copy of the same version needs no repair.
   assert.equal(model.runtimeInspectorRepair({ installed: [{ version: "2.0", ready: false }, { version: "2.0", ready: true }] }, "2.0"), null);
+});
+
+test("the inspector separates installed CPU copies and stores the selected CPU with the plain version", async t => {
+  const model = await compile("../src/renderer/src/ui/components/runtime-inspector-model.ts", "runtime-cpu-model.cjs");
+  const version = "MCLv8", installed = [
+    { version, architecture: "arm64", variant: "architecture:arm64", ready: true },
+    { version, architecture: "x64", variant: "architecture:x64", ready: true }
+  ];
+  const section = { installed }, options = model.runtimeInspectorVersionOptions(section);
+  const plain = model.runtimeInspectorVersionOptions({ installed: [installed[0]] })[0];
+  assert.equal(plain.value, version);
+  assert.equal(plain.architecture, undefined, "An unlabelled single-CPU option does not pin the CPU");
+  assert.deepEqual(options.map(option => option.label), [plain.label + " (Apple Silicon)", plain.label + " (Intel)"],
+    "CPU suffixes compose the shared version label without replacing its wording");
+  assert.deepEqual(model.runtimeInspectorVersions(section), [version], "The existing plain version API stays unchanged");
+  const { react, componentHarness } = require("./helpers/renderer-component");
+  const { GameDetails } = await compile("../src/renderer/src/ui/components/GameDetails.tsx", "runtime-cpu-details.cjs", react);
+  const state = require("./library-layout-fixture").createLibraryFixture(), updates = [], repairs = [];
+  Object.assign(state.runtimeManagers["fixture-manager"], { launcherArchitecture: "arm64", defaultArchitecture: "arm64" });
+  for (const item of state.runtimeManagers["fixture-manager"].sections) {
+    item.installed = installed; item.defaultVersion = version; item.variants = []; item.defaultVariant = undefined;
+  }
+  const actions = new Proxy({ onSetRuntimeData: (...args) => updates.push(args), onInstallRuntime: (...args) => repairs.push(args) },
+    { get: (target, key) => target[key] || (async () => {}) });
+  const nodes = node => React.isValidElement(node) ? [node, ...React.Children.toArray(node.props.children).flatMap(nodes)] : [];
+  const render = runtimeData => {
+    const harness = componentHarness(GameDetails.type, { g: { ...state.recents[0], runtimeData: { managed: runtimeData } }, state,
+      moduleInfo: state.modules[0], actions, moduleActionResults: {}, moduleActionBusy: {}, moduleActionError: null, runtimeStatusEntry: null });
+    t.after(() => harness.close());
+    return nodes(harness.render());
+  };
+  const picker = all => all.find(node => node.props["aria-label"] === "Managed runtime version");
+  const first = picker(render({ version, architecture: "arm64", variant: "architecture:arm64" }));
+  const renderedOptions = nodes(first).filter(node => node.type === "option").slice(1);
+  assert.deepEqual(renderedOptions.map(node => React.Children.toArray(node.props.children).join("")), options.map(option => option.label));
+  const intel = renderedOptions.find(node => String(node.props.children).endsWith("(Intel)"));
+  first.props.onChange({ target: { value: intel.props.value } });
+  assert.deepEqual(updates, [[state.recents[0].gamePath, "managed", { version, architecture: "x64", variant: null }]],
+    "The UI-only option key is not stored as a version, and a stale CPU variant is cleared");
+  first.props.onChange({ target: { value: "" } });
+  assert.deepEqual(updates[1], [state.recents[0].gamePath, "managed", { version: null, architecture: null, variant: null }],
+    "Default clears only the explicit CPU choice and its legacy architecture variant");
+  assert.equal(picker(render({ version, architecture: "x64" })).props.value, intel.props.value);
+  for (const item of state.runtimeManagers["fixture-manager"].sections) item.installed = [installed[0]];
+  picker(render({ version, architecture: "x64", variant: "architecture:x64" })).props.onChange({ target: { value: version } });
+  assert.deepEqual(updates.at(-1), [state.recents[0].gamePath, "managed", { version, architecture: null, variant: null }],
+    "Picking a single-CPU version clears the saved CPU and its legacy variant");
+  picker(render({ version: "missing", architecture: "x64" })).props.onChange({ target: { value: "missing" } });
+  assert.deepEqual(updates.at(-1), [state.recents[0].gamePath, "managed", { version: "missing", architecture: null }],
+    "A missing saved version also leaves installed-copy selection automatic");
+  const intelDamaged = { ...installed[1], ready: false, status: "damaged" };
+  for (const item of state.runtimeManagers["fixture-manager"].sections) item.installed = [installed[0], intelDamaged];
+  const damaged = render({ version, architecture: "x64" });
+  damaged.find(node => node.props["aria-label"] === "Repair runtime version").props.onClick();
+  assert.deepEqual(repairs, [["fixture-manager", "stable", version, "architecture:x64", undefined]],
+    "Repair targets the selected Intel copy even while the Apple Silicon copy works");
+  state.runtimeManagers["fixture-manager"].defaultArchitecture = "x64";
+  render({}).find(node => node.props["aria-label"] === "Repair runtime version").props.onClick();
+  assert.deepEqual(repairs[1], repairs[0], "The explicit global CPU default also selects its own repair target");
 });
 
 test("Repair beside the Version menu reinstalls the game's damaged version through the shared install action", async t => {
@@ -68,6 +132,8 @@ test("Repair beside the Version menu reinstalls the game's damaged version throu
   assert.equal(other.some(node => node.props["aria-label"] === "Repair runtime version"), false, "A usable choice needs no repair");
   assert.deepEqual(optionLabels(render({ version: "1.5" })).slice(1).map(([value]) => value), ["2.0", "1.5", "1.0"],
     "A saved choice this Mac cannot run stays visible");
+  assert.ok(optionLabels(render({ version: "9.0" })).some(([value, label]) => value === "9.0" && label === "v9.0 (not installed)"),
+    "A saved absent version is shown plainly as not installed");
 });
 
 test("installing a damaged version replaces the damaged copy in the shared install; usable, unavailable and included copies stay", async t => {

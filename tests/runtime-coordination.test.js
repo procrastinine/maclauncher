@@ -179,6 +179,73 @@ test("ordinary imports retain manager-wide protection unless their manager suppl
   assert.equal(coordinator.snapshot().active.length, 0);
 });
 
+test("coordinated installs verify the selected CPU before reusing a same-version copy", async t => {
+  const { instrumentRuntimeManagers, withRuntimeCoordinator } = require("../src/core/coordinated-runtime-managers");
+  const Architecture = require("../src/modules/shared/runtime/architecture");
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-coordinated-cpu-"));
+  t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
+  const coordinator = createRuntimeCoordinator(), client = coordinator.client(), checks = [];
+  const rows = [{ version: "8", architecture: "x64", ready: true, installDir: path.join(userDataDir, "runtimes/engine/x64/8") }];
+  let installations = 0;
+  const manager = { id: "engine", chooseArchitecture: () => "arm64", getState: () => ({ installed: rows }),
+    resolveSelection(_entry, _settings, _data, options) {
+      checks.push(options);
+      const architecture = Architecture.requestedArchitecture(options) || this.chooseArchitecture();
+      const install = rows.find(row => row.version === options.version && Architecture.matchesArchitecture(row, architecture));
+      return { version: options.version, architecture, install: install || null, ready: Boolean(install) };
+    },
+    async installRuntime(payload) {
+      installations++;
+      const install = { version: payload.version, architecture: payload.architecture, ready: true,
+        installDir: path.join(userDataDir, "runtimes/engine", payload.architecture, payload.version) };
+      rows.push(install); return install;
+    }
+  };
+  instrumentRuntimeManagers([manager]);
+  const install = architecture => withRuntimeCoordinator(client, userDataDir,
+    () => manager.installRuntime({ userDataDir, version: "8", architecture }));
+  assert.equal((await install("arm64")).architecture, "arm64", "the existing Intel copy cannot satisfy an explicit ARM action");
+  assert.equal(installations, 1);
+  assert.equal((await install("arm64")).architecture, "arm64");
+  assert.equal((await install("x64")).architecture, "x64");
+  assert.equal(installations, 1, "the manager's verified copy is reused for each CPU, even with both copies installed");
+  assert.ok(checks.every(options => options.verification === "full"));
+  assert.equal(coordinator.snapshot().active.length, 0);
+});
+
+test("coordinated reuse retains manager-owned Universal, shared-package and optional-component admission", async t => {
+  const { instrumentRuntimeManagers, withRuntimeCoordinator } = require("../src/core/coordinated-runtime-managers");
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-coordinated-ready-"));
+  t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
+  for (const kind of ["universal", "shared-intel", "optional-component"]) await t.test(kind, async () => {
+    const coordinator = createRuntimeCoordinator(), client = coordinator.client();
+    const row = { version: "1", architecture: kind === "universal" ? "universal" : "x64", ready: true,
+      ...(kind === "optional-component" ? { optionalComponentMissing: true } : {}) };
+    let calls = 0;
+    const manager = { id: kind, chooseArchitecture: () => "arm64", getState: () => ({ installed: [row] }),
+      // The manager owns whether this package can satisfy the build choice:
+      // a Universal image, a shared Intel-only package, or a ready runtime
+      // whose missing companion is explicitly non-blocking.
+      resolveSelection: (_entry, _settings, _data, options) => ({ version: options.version, ready: true, install: row }),
+      installRuntime: async () => { calls++; throw new Error("A verified runtime must not download again"); }
+    };
+    instrumentRuntimeManagers([manager]);
+    assert.equal((await withRuntimeCoordinator(client, userDataDir,
+      () => manager.installRuntime({ userDataDir, version: "1", architecture: "arm64" }))).version, "1");
+    assert.equal(calls, 0);
+  });
+  const coordinator = createRuntimeCoordinator(), client = coordinator.client();
+  let blockingComponentMissing = true, calls = 0;
+  const row = { version: "1", architecture: "arm64", ready: true };
+  const manager = { id: "blocking-component", chooseArchitecture: () => "arm64", getState: () => ({ installed: [row] }),
+    resolveSelection: () => ({ version: "1", ready: !blockingComponentMissing, install: row }),
+    installRuntime: async () => { calls++; blockingComponentMissing = false; return row; }
+  };
+  instrumentRuntimeManagers([manager]);
+  await withRuntimeCoordinator(client, userDataDir, () => manager.installRuntime({ userDataDir, version: "1", architecture: "arm64" }));
+  assert.equal(calls, 1, "a stale ready display row cannot conceal a missing blocking component");
+});
+
 test("two preparing readers can hand off one shared library publication without deadlocking", async t => {
   const { createRuntimeUseScope, withRuntimeCoordinator, withRuntimeUseScope, withRuntimeMutation } = require("../src/core/coordinated-runtime-managers");
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-preparing-write-")); t.after(() => fs.rmSync(root, { recursive: true, force: true }));

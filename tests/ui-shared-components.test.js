@@ -150,6 +150,9 @@ test('availability uses one vocabulary for options, rows and badges', () => {
   assert.equal(ui.withAvailability('1.2.0', 'installed'), '1.2.0 · Installed');
   assert.equal(ui.withAvailability('1.2.0'), '1.2.0');
   assert.equal(ui.withAvailability('1.2.0', null), '1.2.0');
+  for (const label of ['1.2.0 (not installed)', '1.2.0 · Needs repair', '1.2.0 · Unavailable']) {
+    for (const state of ['notInstalled', 'needsRepair', 'unavailable']) assert.equal(ui.withAvailability(label, state), label);
+  }
   const badges = ['neutral', 'positive', 'warning', 'danger'].map(tone =>
     renderToStaticMarkup(React.createElement(ui.StatusBadge, { tone, title: 'Detail' }, 'State')));
   assert.deepEqual(badges, ['<span class="badge" title="Detail">State</span>', '<span class="badge badgeAccent" title="Detail">State</span>',
@@ -255,6 +258,7 @@ test('the Lossless Scaling section reports LS1 and LSFG families separately', t 
   const models = require('../src/modules/shared/reshade/runtime/models-manager');
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lossless-families-'));
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
+  t.mock.method(require('../src/modules/shared/reshade'), 'runtimeRoot', () => userDataDir);
   const section = models.getState({ userDataDir }).sections[0];
   assert.equal(section.label, 'Lossless Scaling');
   assert.equal(models.ui.sectionLabel, 'Lossless Scaling');

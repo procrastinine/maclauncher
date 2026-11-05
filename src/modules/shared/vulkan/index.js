@@ -93,32 +93,18 @@ function installed(context, dependencies = {}) {
 function choices(context, dependencies = {}) {
   const available = installed(context, dependencies);
   const rows = available.map(item => ({ value: item.id, label: choiceLabel(item.backend, item.label, dependencies) }));
-  const add = (value, label) => { if (!rows.some(row => row.value === value)) rows.push({ value, label: label + " (download)" }); };
-  for (const manager of dependencies.managers || managers) {
-    if (unavailableReason(manager.backend, dependencies)) continue;
-    const state = manager.getState({ userDataDir: context.userDataDir, settings: context.settings?.runtimes?.[manager.id] });
-    const catalog = state.catalog?.architectureCatalogs?.[dependencies.architecture] || state.catalog;
-    const listed = catalog?.installableVersions || catalog?.versions || [];
-    for (const version of listed) {
-      const pin = manager.core.listCatalog({ userDataDir: context.userDataDir, architecture: dependencies.architecture }).find(pin => pin.version === version);
-      if (pin?.deprecated || pin && !Architecture.matchesArchitecture(pin, dependencies.architecture || Architecture.selectedArchitecture()) || catalog?.versionRequirements?.[version]?.installReason) continue;
-      add(manager.backend + ":" + version, choiceLabel(manager.backend,
-        state.versionLabels?.[version] || state.catalog?.versionLabels?.[version] || definitions[manager.backend].label + " " + version, dependencies));
+  const request = context.runtimeSettings?.vulkanRuntime || "auto";
+  if (request !== "auto" && !rows.some(row => row.value === request)) {
+    const owner = managed.providers.find(item => item.selectionId === request || request.startsWith(item.prefix));
+    const backend = owner ? owner.selectionId.split(":")[0] : request.split(":")[0];
+    const unversioned = owner?.selectionId === request || request === backend + ":auto";
+    const selected = unversioned && available.find(item => owner ? item.projectId === owner.projectId : item.backend === backend && !item.projectId);
+    if (selected) rows.find(row => row.value === selected.id).value = request;
+    else {
+      const version = unversioned ? "" : owner ? request.slice(owner.prefix.length) : request.slice(backend.length + 1);
+      const label = (owner?.manager.label || definitions[backend]?.label || backend) + (version ? " " + version : "");
+      rows.push({ value: request, label: choiceLabel(backend, label, dependencies) + " (not installed)" });
     }
-    const automaticId = manager.backend + ":auto";
-    if (context.runtimeSettings?.vulkanRuntime === automaticId) {
-      const ready = rows.some(row => row.value.startsWith(manager.backend + ":"));
-      rows.push({ value: automaticId, label: choiceLabel(manager.backend, definitions[manager.backend].label, dependencies) + (ready ? "" : " (download)") });
-    } else if (!listed.length && !rows.some(row => row.value.startsWith(manager.backend + ":")))
-      add(automaticId, choiceLabel(manager.backend, definitions[manager.backend].label, dependencies));
-  }
-  for (const item of managed.providers) {
-    if (unavailableReason(item.selectionId.split(":")[0], dependencies)) continue;
-    const manager = dependencies.adaptedManager || item.manager;
-    const selection = managedSelection(item, context, dependencies, undefined, available);
-    const label = choiceLabel(item.selectionId.split(":")[0], manager.label, dependencies);
-    if (selection.ready && context.runtimeSettings?.vulkanRuntime === item.selectionId) rows.push({ value: item.selectionId, label });
-    else if (!selection.ready && (selection.version || selection.discoveryRequired)) add(item.selectionId, label);
   }
   return { vulkanRuntimes: [{ value: "auto", label: "Automatic" }, ...rows] };
 }

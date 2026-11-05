@@ -32,19 +32,27 @@ function matchesArchitecture(record, architecture = selectedArchitecture()) {
 }
 // One build choice for a manager: an explicit request, then a saved choice (a
 // caller's preference, the game's saved build, then the manager's saved
-// default), then the launcher's CPU. With `offers(cpu)` telling whether a CPU
+// default). For a selected version, `installed(cpu)` prefers the launcher's
+// existing copy, then any runnable installed copy. With `offers(cpu)` telling whether a CPU
 // lists or holds a build, a saved or automatic choice without one gives way to
 // the launcher's CPU and then to another CPU this Mac runs, such as Apple
 // Silicon builds in the Intel app on Apple Silicon. Universal builds count for
 // every CPU. An explicit request stays as given, and so does the preferred CPU
 // when no CPU has a build.
-function chooseArchitecture({ request, saved, entry, settings, managerId, launcher = selectedArchitecture(), offers, host } = {}) {
+function chooseArchitecture({ request, saved, entry, settings, managerId, launcher = selectedArchitecture(), offers, installed, host } = {}) {
   const requested = requestedArchitecture(request);
   if (requested) return requested;
   const preferred = targetArchitecture(saved || entry?.runtimeData?.[managerId]?.architecture ||
     settings?.runtimes?.[managerId]?.defaultArchitecture);
-  if (typeof offers !== "function") return preferred || launcher;
   const runnable = architecture => architecture === launcher || architectureSupport(architecture, host || getHostCapabilities()).supported;
+  // For a selected version, prefer an existing runnable copy. A saved CPU is
+  // still preferred when runnable and a build exists for it.
+  if (typeof installed === "function") {
+    if (preferred && runnable(preferred) && (installed(preferred) || typeof offers !== "function" || offers(preferred))) return preferred;
+    const present = [...new Set([launcher, "arm64", "x64"])].find(architecture => runnable(architecture) && installed(architecture));
+    if (present) return present;
+  }
+  if (typeof offers !== "function") return preferred || launcher;
   return [...new Set([preferred, launcher, "arm64", "x64"])].find(architecture => architecture && runnable(architecture) && offers(architecture)) ||
     preferred || launcher;
 }

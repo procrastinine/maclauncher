@@ -58,8 +58,7 @@ test("native Vulkan choices use matching installed images and preserve file-only
   const adaptedRecord = { id: "kosmickrisp-gles32:fixture", backend: "kosmickrisp", projectId: "vulkan-kosmickrisp-gles32",
     label: "KosmicKrisp · GLES 3.2", library: loader, driver, readable: [driver, loader] };
   const withAdapted = { ...dependencies, adapted: { installed: () => [adaptedRecord], resolve: item => { fullChecks++; return item; } } };
-  assert.deepEqual(Vulkan.choices(context, withAdapted).vulkanRuntimes.map(item => item.value), ["auto", "kosmickrisp:fixture", adaptedRecord.id,
-    "kosmickrisp:maclauncher-gles32", "moltenvk:maclauncher-scene"]);
+  assert.deepEqual(Vulkan.choices(context, withAdapted).vulkanRuntimes.map(item => item.value), ["auto", "kosmickrisp:fixture", adaptedRecord.id]);
   assert.equal(Vulkan.resolve({ ...context, runtimeSettings: {} }, withAdapted).id, "kosmickrisp:fixture");
   assert.equal(fullChecks, 0);
   assert.equal(Vulkan.resolve({ ...context, runtimeSettings: { vulkanRuntime: adaptedRecord.id } }, withAdapted), adaptedRecord);
@@ -72,8 +71,9 @@ test("native Vulkan choices use matching installed images and preserve file-only
   assert.equal(env.VK_ICD_FILENAMES, env.VK_DRIVER_FILES);
   // A loader with a different CPU architecture cannot accompany an arm64 driver.
   build(loader, "x86_64");
-  assert.deepEqual(Vulkan.choices(context, dependencies).vulkanRuntimes.map(item => item.value), ["auto", "kosmickrisp:auto",
-    "kosmickrisp:maclauncher-gles32", "moltenvk:maclauncher-scene"]);
+  const unavailable = Vulkan.choices(context, dependencies).vulkanRuntimes;
+  assert.deepEqual(unavailable.map(item => item.value), ["auto", "kosmickrisp:fixture"]);
+  assert.match(unavailable[1].label, /\(not installed\)$/);
   assert.throws(() => Vulkan.resolve(context, dependencies), /unavailable for this Mac/);
   assert.equal(Vulkan.resolve({ ...context, runtimeSettings: {} }, dependencies), null);
   build(loader, "arm64");
@@ -86,7 +86,7 @@ test("Vulkan managers and installed-choice queries never fetch during ordinary r
   const managers = registry.listSharedRuntimeManagers();
   for (const id of ["vulkan-moltenvk", "vulkan-kosmickrisp"]) assert.ok(managers.some(manager => manager.id === id));
   assert.deepEqual(Vulkan.choices({ userDataDir: path.join(os.tmpdir(), "no-vulkan-runtime-" + process.pid) }, { adapted: noAdapted }).vulkanRuntimes.map(row => row.value),
-    ["auto", "moltenvk:auto", "kosmickrisp:auto", "kosmickrisp:maclauncher-gles32", "moltenvk:maclauncher-scene"]);
+    ["auto"]);
 });
 
 test("managed GLES 3.2 starts with empty download choices and no app fallback", t => {

@@ -1,5 +1,5 @@
 import type { ModuleManifest, RuntimeManagerState } from "../types";
-import { compareSemver, resolveRuntimeSection, resolveRuntimeSections } from "../ui-helpers";
+import { architectureLabel, compareSemver, resolveRuntimeSection, resolveRuntimeSections, runtimeVersionTagger } from "../ui-helpers";
 import { installedRuntimeAvailability } from "../../../../core/runtime-install-availability.mjs";
 
 function inspectorSections(moduleInfo: ModuleManifest | null, runtimeId: string, manager: RuntimeManagerState | null) {
@@ -47,11 +47,33 @@ export function runtimeInspectorVersions(section: Record<string, any> | null, se
     .filter(Boolean).sort((left, right) => compareSemver(right, left));
 }
 
+function installedArchitecture(row: Record<string, any>) {
+  const value = row.architecture || (typeof row.variant === "string" && row.variant.startsWith("architecture:") ? row.variant.slice(13) : "");
+  return value === "x86_64" ? "x64" : value;
+}
+
+/** Separate locally installed CPU copies without changing the stored version.
+ * Version wording stays with the same tagger used by the other runtime menus. */
+export function runtimeInspectorVersionOptions(section: Record<string, any> | null, selectedVersion = "",
+  tag = runtimeVersionTagger(section, runtimeInspectorVersions(section, selectedVersion))) {
+  return runtimeInspectorVersions(section, selectedVersion).flatMap<{ value: string; version: string; architecture?: string; label: string }>(version => {
+    const present = (Array.isArray(section?.installed) ? section.installed : []).some((row: any) => row?.version === version);
+    const label = tag(version) + (present ? "" : " (not installed)");
+    const cpus = [...new Set<string>((Array.isArray(section?.installed) ? section.installed : [])
+      .filter((row: any) => row?.version === version && installedRuntimeAvailability(row) !== "unavailable")
+      .map((row: any) => installedArchitecture(row)).filter((cpu: string) => cpu === "arm64" || cpu === "x64"))];
+    if (cpus.length < 2) return [{ value: version, version, architecture: undefined, label }];
+    return cpus.map(architecture => ({ value: JSON.stringify([version, architecture]), version, architecture,
+      label: `${label} (${architectureLabel(architecture)})` }));
+  });
+}
+
 /** The installation of one version, of the given variant when one is given: a
  * usable one first, then one that needs repair, then one this Mac cannot run. */
-export function runtimeInspectorInstall(section: Record<string, any> | null, version: string, variant = "") {
+export function runtimeInspectorInstall(section: Record<string, any> | null, version: string, variant = "", architecture = "") {
   const rows = (Array.isArray(section?.installed) ? section.installed : [])
-    .filter((row: any) => version && row?.version === version && (!variant || row.variant === variant));
+    .filter((row: any) => version && row?.version === version && (!variant || row.variant === variant) &&
+      (!architecture || installedArchitecture(row) === architecture || installedArchitecture(row) === "universal"));
   for (const availability of ["installed", "needsRepair", "unavailable"] as const) {
     const install = rows.find((row: any) => installedRuntimeAvailability(row) === availability);
     if (install) return { availability, install: install as Record<string, any> };
@@ -62,8 +84,8 @@ export function runtimeInspectorInstall(section: Record<string, any> | null, ver
 /** What Repair installs again for a damaged or incomplete installation: the
  * same version, section, variant and build. A build named by an architecture
  * variant carries its architecture in that variant. */
-export function runtimeInspectorRepair(section: Record<string, any> | null, version: string, variant = "") {
-  const { availability, install } = runtimeInspectorInstall(section, version, variant);
+export function runtimeInspectorRepair(section: Record<string, any> | null, version: string, variant = "", selectedArchitecture = "") {
+  const { availability, install } = runtimeInspectorInstall(section, version, variant, selectedArchitecture);
   if (availability !== "needsRepair" || !install) return null;
   const architectureVariant = typeof install.variant === "string" && install.variant.startsWith("architecture:");
   const architecture = !architectureVariant && typeof install.architecture === "string" && install.architecture !== "universal"
@@ -73,8 +95,9 @@ export function runtimeInspectorRepair(section: Record<string, any> | null, vers
 }
 
 export function runtimeInspectorVersionPatch(moduleInfo: ModuleManifest | null, runtimeId: string,
-  manager: RuntimeManagerState | null, version: string): Record<string, string | null> {
+  manager: RuntimeManagerState | null, version: string, architecture?: string | null): Record<string, string | null> {
   const patch: Record<string, string | null> = { version: version || null };
+  if (architecture !== undefined) patch.architecture = architecture || null;
   const key = moduleInfo?.runtime?.managerSectionOverrideKey?.[runtimeId];
   if (!version || !key || !moduleInfo?.runtime?.inspectorSections?.[runtimeId]) return patch;
   const section = inspectorSections(moduleInfo, runtimeId, manager).find(section =>

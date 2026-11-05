@@ -8,7 +8,9 @@ const { versionChoices } = require("../shared/runtime/version-choices");
 function graphicsBridgeVersions(runtimeId, context) {
   const support = require("./temporal/support-manager").forRuntime(runtimeId);
   if (!support) throw new Error("Choose a Windows runtime.");
-  return { graphicsBridgeVersions: [{ value: "auto", label: "Automatic" }, ...versionChoices(support, context)] };
+  const field = manifest.runtime.entries[runtimeId]?.settings?.fields?.find(field => field.optionsAction === "listGraphicsBridgeVersions");
+  return { graphicsBridgeVersions: [{ value: "auto", label: "Automatic" },
+    ...versionChoices(support, { ...context, selectedVersion: field?.key ? context.runtimeSettings?.[field.key] : undefined })] };
 }
 function wineSettingInheritance(entry, payload, context) {
   const runtimeId = context.runtimeId || payload?.runtimeId || entry.runtimeId;

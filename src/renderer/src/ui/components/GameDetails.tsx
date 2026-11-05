@@ -26,7 +26,7 @@ import { moduleToolGroups, presentModuleFields } from "./module-tools-model";
 import { isRuntimeManageable } from "./runtime-tabs-model";
 import { RuntimeDescription } from "./RuntimeDescription";
 import { resolveInspectorRuntimeSection, runtimeInspectorInstall, runtimeInspectorRepair, runtimeInspectorVersions,
-  runtimeInspectorVersionPatch } from "./runtime-inspector-model";
+  runtimeInspectorVersionOptions, runtimeInspectorVersionPatch } from "./runtime-inspector-model";
 import { EffectsControls } from "./EffectsControls";
 import { ErrorText } from "./ErrorText";
 import { StatusBadge } from "./StatusBadge";
@@ -309,6 +309,7 @@ export const GameDetails = memo(function GameDetails({
     ? `Automatic (${runtimeAutoSection.label})`
     : "Automatic";
   const runtimeVersionOverride = resolveRuntimeVersionOverride(moduleInfo, g.runtimeId, g, runtimeSectionId);
+  const runtimeArchitectureOverride = g.runtimeData?.[g.runtimeId]?.architecture || "";
   const runtimeVariantOverride = g.runtimeData?.[g.runtimeId]?.variant || "";
   const runtimeStatus =
     runtimeStatusEntry && runtimeStatusEntry.runtimeId === g.runtimeId
@@ -362,6 +363,11 @@ export const GameDetails = memo(function GameDetails({
       (!runtimeRecommendedVariant || item.variant === runtimeRecommendedVariant)));
   const runtimeVersionTag = runtimeVersionTagger(runtimeSection,
     [...runtimeVersionChoices, runtimeRecommendation?.version, runtimeStatusDefaultVersion]);
+  const runtimeVersionOptions = runtimeInspectorVersionOptions(runtimeSection, runtimeVersionOverride, runtimeVersionTag);
+  const runtimePreferredArchitecture = runtimeArchitectureOverride || runtimeSection?.defaultArchitecture ||
+    runtimeManagerState?.defaultArchitecture || runtimeSection?.launcherArchitecture || runtimeManagerState?.launcherArchitecture;
+  const runtimeVersionOption = runtimeVersionOptions.find(option => option.version === runtimeVersionOverride && option.architecture === runtimePreferredArchitecture) ||
+    runtimeVersionOptions.find(option => option.version === runtimeVersionOverride);
   const runtimeDefaultLabel = runtimeRecommendation || runtimeDefaultVersion || runtimeStatusDefaultVersion
     ? runtimeVersionTag(runtimeRecommendation?.version || runtimeDefaultVersion || runtimeStatusDefaultVersion)
     : "";
@@ -382,12 +388,13 @@ export const GameDetails = memo(function GameDetails({
   // Automatic entry names) is one of them, Repair installs it again through the
   // same install action as Reinstall in Runtimes.
   const runtimeVariantInUse = runtimeHasMultipleVariants ? runtimeEffectiveVariantOverride || runtimeDefaultVariant : "";
-  const runtimeVersionAvailability = (version: string) => {
-    const { availability } = runtimeInspectorInstall(runtimeSection, version, runtimeVariantInUse);
+  const runtimeVersionAvailability = (version: string, architecture = "") => {
+    const { availability } = runtimeInspectorInstall(runtimeSection, version, runtimeVariantInUse, architecture);
     return availability === "installed" ? null : availability;
   };
   const runtimeRepair = runtimeInspectorRepair(runtimeSection,
-    runtimeVersionOverride || runtimeRecommendation?.version || runtimeDefaultVersion || runtimeStatusDefaultVersion, runtimeVariantInUse);
+    runtimeVersionOverride || runtimeRecommendation?.version || runtimeDefaultVersion || runtimeStatusDefaultVersion, runtimeVariantInUse,
+    runtimeVersionOption?.architecture || runtimePreferredArchitecture);
   const libsDependencies = (moduleState?.libs?.dependencies || []) as Array<{
     id: string;
     label: string;
@@ -648,16 +655,19 @@ export const GameDetails = memo(function GameDetails({
                 <div className="detailActions">
                   <Select aria-label={runtimeVersionLabelText}
                     className="input"
-                    value={runtimeVersionOverride}
-                    onChange={e =>
-                      onSetRuntimeData(g.gamePath, g.runtimeId,
-                        runtimeInspectorVersionPatch(moduleInfo, g.runtimeId, runtimeManagerState, e.target.value))
-                    }
+                    value={runtimeVersionOption?.value || runtimeVersionOverride}
+                    onChange={e => {
+                      const option = runtimeVersionOptions.find(option => option.value === e.target.value);
+                      const patch = runtimeInspectorVersionPatch(moduleInfo, g.runtimeId, runtimeManagerState,
+                        option?.version || e.target.value, option?.architecture ?? null);
+                      if (runtimeVariantOverride.startsWith("architecture:")) patch.variant = null;
+                      onSetRuntimeData(g.gamePath, g.runtimeId, patch);
+                    }}
                   >
                     <option value="" title={runtimeRecommendation?.version || runtimeStatusDefaultVersion || runtimeDefaultVersion || undefined}>{runtimeDefaultLabel ? `${runtimeAutomaticLabel} (${runtimeDefaultLabel})` : runtimeAutomaticLabel}</option>
-                    {runtimeVersionChoices.map(v => (
-                      <option key={v} value={v}>
-                        {withAvailability(runtimeVersionTag(v), runtimeVersionAvailability(v))}
+                    {runtimeVersionOptions.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {withAvailability(option.label, runtimeVersionAvailability(option.version, option.architecture))}
                       </option>
                     ))}
                   </Select>

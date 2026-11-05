@@ -9,16 +9,34 @@ const automatic = { value: "auto", label: "Automatic" };
 const manifest = { runtime: { entries: { demo: { settings: { fields: [
   { key: "version", type: "select", optionsAction: "listRuntimeVersions", optionsKey: "runtimeVersions", options: [automatic] }] } } } } };
 
-test("version settings list installed and installable versions in provider order after the field's fixed options", () => {
+test("version settings list installed copies and retain a saved missing choice after fixed options", () => {
   const manager = { id: "demo", getState: ({ userDataDir }) => {
     assert.equal(userDataDir, "/data");
-    return { installed: [{ version: "1.2.0-aaaaaaa" }, { version: "0.9" }, { version: "3.0" }], versionLabels: { "1.10": "1.10 · Mac build" },
+    return { installed: [{ version: "1.2.0-aaaaaaa" }, { version: "0.9" },
+      { version: "broken", ready: false, status: "damaged" }, { version: "3.0", ready: false, status: "unsupported-host" }],
+      versionLabels: { "1.10": "1.10 · Mac build" },
       catalog: { versions: ["3.0", "2.0", "1.10", "1.2.0-bbbbbbb", "1.2.0-aaaaaaa"],
         versionRequirements: { "2.0": { installReason: "Requires a newer MacLauncher." }, "3.0": { installReason: "Requires macOS 99." } } } };
   } };
   assert.deepEqual(runtimeVersionChoices(manifest, manager, { userDataDir: "/data" }).runtimeVersions, [automatic,
-    { value: "1.10", label: "1.10 · Mac build" }, { value: "1.2.0-bbbbbbb", label: "1.2.0-bbbbbbb" },
-    { value: "1.2.0-aaaaaaa", label: "1.2.0-aaaaaaa" }, { value: "0.9", label: "0.9" }, { value: "3.0", label: "3.0" }]);
+    { value: "1.2.0-aaaaaaa", label: "1.2.0-aaaaaaa" }, { value: "0.9", label: "0.9" },
+    { value: "broken", label: "broken · Needs repair" }]);
+  const saved = runtimeVersionChoices(manifest, manager, { userDataDir: "/data", runtimeSettings: { version: "1.10" } }).runtimeVersions;
+  assert.deepEqual(saved.at(-1), { value: "1.10", label: "1.10 · Mac build (not installed)" });
+  assert.equal(saved.filter(option => option.value === "1.10").length, 1);
+  assert.ok(!saved.some(option => option.value === "1.2.0-bbbbbbb"), "A cached RC or release is not an installed choice");
+});
+
+test("the choices helper reads the declared version field and keeps its fixed choices", () => {
+  const localManifest = { runtime: { entries: { demo: { settings: { fields: [{ key: "runtimeEdition",
+    optionsAction: "listRuntimeVersions", options: [automatic, { value: "system", label: "System" }] }] } } } } };
+  const manager = { id: "demo", getState: () => ({ installed: [{ version: "1.0" }],
+    catalog: { versions: ["2.0-rc1"] } }) };
+  assert.deepEqual(runtimeVersionChoices(localManifest, manager, { runtimeSettings: { runtimeEdition: "2.0-rc1", version: "ignored" } }).runtimeVersions,
+    [automatic, { value: "system", label: "System" }, { value: "1.0", label: "1.0" },
+      { value: "2.0-rc1", label: "2.0-rc1 (not installed)" }]);
+  assert.deepEqual(runtimeVersionChoices(localManifest, manager, { runtimeSettings: { runtimeEdition: "system" } }).runtimeVersions,
+    [automatic, { value: "system", label: "System" }, { value: "1.0", label: "1.0" }]);
 });
 
 test("modules with listed runtime versions offer them in game and runtime settings", t => {

@@ -123,8 +123,8 @@ test("KosmicKrisp choices use compact CPU labels and retain their order", t => {
     const choices = Vulkan.choices(context, selected).vulkanRuntimes;
     assert.ok(choices.some(row => row.value === "moltenvk:fixture"));
     const kosmic = choices.filter(row => row.value.startsWith("kosmickrisp"));
-    assert.ok(kosmic.some(row => row.value === Managed.selectionId));
-    assert.ok(kosmic.length > 1);
+    assert.ok(!kosmic.some(row => row.value === Managed.selectionId), "An uninstalled provider is not an inspector choice");
+    assert.ok(kosmic.length > 0);
     const cpu = architecture === "x64" ? "Intel" : "Apple Silicon";
     assert.ok(kosmic.every(row => row.label.includes("(" + cpu + ")")));
     assert.ok(kosmic.every(row => !row.label.includes("Intel build for Intel programs")));
@@ -237,7 +237,7 @@ test("unversioned managed Vulkan choices skip an ARM-only install for an Intel c
     assert.deepEqual(Vulkan.requirements(context, dependencies), [{ managerId: provider.projectId,
       version: "newer", requiresDownload: true, installOptions: { architecture: "x64" } }]);
     assert.equal(calls.at(-1).version, "newer");
-    assert.ok(Vulkan.choices(context, dependencies).vulkanRuntimes.some(row => row.value === provider.selectionId && row.label.endsWith("(download)")));
+    assert.ok(Vulkan.choices(context, dependencies).vulkanRuntimes.some(row => row.value === provider.selectionId && row.label.endsWith("(not installed)")));
     context.runtimeSettings.vulkanRuntime = provider.prefix + "older";
     assert.throws(() => Vulkan.requirements(context, dependencies), /no compatible x64 library/,
       "an exact game version is not replaced by another catalog version");
@@ -252,4 +252,17 @@ test("unversioned managed Vulkan choices skip an ARM-only install for an Intel c
       version: "newer", requiresDownload: true, installOptions: { architecture: "x64" } }],
     "a compatible saved default is not replaced by another installed version");
   });
+});
+
+test("inspector Vulkan choices omit cached catalog releases and retain only a missing saved choice", t => {
+  const { context, managers, dependencies } = fixture(t);
+  managers[1].present = false;
+  managers[0].getState = () => ({ catalog: { versions: ["fixture", "1.4.0-rc1", "1.4.0-rc2"] } });
+  managers[0].core.listCatalog = () => ["fixture", "1.4.0-rc1", "1.4.0-rc2"].map(version => ({ version, architecture: "x64" }));
+  const selected = { ...dependencies, hostCapabilities: apple };
+  assert.deepEqual(Vulkan.choices(context, selected).vulkanRuntimes.map(row => row.value), ["auto", "moltenvk:fixture"]);
+  context.runtimeSettings.vulkanRuntime = "moltenvk:1.4.0-rc1";
+  const choices = Vulkan.choices(context, selected).vulkanRuntimes;
+  assert.deepEqual(choices.map(row => row.value), ["auto", "moltenvk:fixture", "moltenvk:1.4.0-rc1"]);
+  assert.match(choices.at(-1).label, /1\.4\.0-rc1 \(not installed\)$/);
 });

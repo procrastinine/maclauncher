@@ -77,7 +77,7 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, label, re
       minimumMacOS: record.minimumMacOS, localBuild: false, projectPackage: record, asset: record.asset })),
     ...Catalog.unavailablePins(projectId, catalog.unavailable || [])];
   };
-  const core = createPinnedNativeManager({ id: projectId, label,
+  const core = createPinnedNativeManager({ id: projectId, runtimeId, label,
     sourceUrl, buildsRepository: repository, upstreamUrl, upstreamLabel, nativeLibrary, supportsDefault,
     // An included package counts as a build for the CPU it runs on.
     includedBuilds: options => includedPackages(options).all.some(item => item.present && item.ready),

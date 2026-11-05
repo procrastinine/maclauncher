@@ -179,7 +179,16 @@ function instrumentRuntimeManagers(managers) {
           const context = stateContext();
           return installedRows(manager, userDataDir, context.settings, context.runtimeSettings);
         };
-        const ready = () => {
+        const ready = async () => {
+          // A version may have several CPU builds. Let the manager verify the
+          // exact action's build and its blocking components before reusing it.
+          if (typeof manager.chooseArchitecture === "function" && typeof manager.resolveSelection === "function") {
+            const context = stateContext();
+            const selection = await manager.resolveSelection(null, { runtimes: context.runtimeSettings }, userDataDir,
+              { ...data, verification: "full" });
+            return selection?.ready === true && selection.install && managerVersion(manager, selection.version) === managerVersion(manager, data.version)
+              ? { ...selection.install, version: selection.version } : null;
+          }
           const installed = selectInstalled(rows(), data, manager);
           return installed && installed.ready !== false ? installed : null;
         };
@@ -298,7 +307,7 @@ function instrumentRuntimeManagers(managers) {
         }
         if (action === "uninstall") validateRemoval();
         if (action === "install" && version) {
-          const installed = ready();
+          const installed = await ready();
           if (installed) return installedResult(installed);
         }
         // Content-addressed importers can coordinate publication after inspection
@@ -312,7 +321,7 @@ function instrumentRuntimeManagers(managers) {
         try {
           return await withRuntimeMutation(identity, async () => {
             if (action === "install" && version) {
-              const installed = ready();
+              const installed = await ready();
               if (installed) return installedResult(installed);
             }
             if (action === "uninstall") validateRemoval();

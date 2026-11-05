@@ -1,20 +1,30 @@
-// Version choices for a runtime setting: the manager's installed versions and
-// the listed versions this Mac can install, in catalog order. Only the local
-// catalog cache is read; listing does not choose a version.
-function versionChoices(manager, { userDataDir } = {}) {
-  const state = manager.getState({ userDataDir }), requirements = state.catalog?.versionRequirements || {};
-  const installed = (state.installed || []).map(row => row.version);
-  const listed = (state.catalog?.versions || []).filter(version => !requirements[version]?.installReason);
-  const versions = [...new Set([...listed, ...installed])]
+const { installedRuntimeAvailability } = require("../../../core/runtime-install-availability.mjs");
+
+// Inspector choices are installed copies. The saved choice stays visible when
+// absent; other versions are acquired from Runtimes or consented Play.
+function versionChoices(manager, { userDataDir, selectedVersion } = {}) {
+  const state = manager.getState({ userDataDir }), rows = state.installed || [];
+  const installed = rows.filter(row => installedRuntimeAvailability(row) !== "unavailable");
+  const versions = [...new Set(installed.map(row => row.version))]
     .filter(version => typeof version === "string" && version);
-  return versions.slice(0, 255).map(version => ({ value: version, label: state.versionLabels?.[version] || version }));
+  const saved = selectRuntimeVersion({ manual: selectedVersion }).version;
+  if (typeof saved === "string" && !versions.includes(saved)) versions.push(saved);
+  return versions.map(version => {
+    const copies = rows.filter(row => row.version === version), label = state.versionLabels?.[version] || version;
+    const status = copies.some(row => installedRuntimeAvailability(row) === "installed") ? ""
+      : copies.some(row => installedRuntimeAvailability(row) === "needsRepair") ? " · Needs repair"
+      : copies.length ? " · Unavailable" : " (not installed)";
+    return { value: version, label: label + status };
+  });
 }
 
 /** The `listRuntimeVersions` result for a manager's version field: the
  * field's fixed options, such as an automatic choice, then the versions. */
-function runtimeVersionChoices(manifest, manager, context) {
+function runtimeVersionChoices(manifest, manager, context = {}) {
   const field = manifest.runtime?.entries?.[manager.id]?.settings?.fields?.find(item => item.optionsAction === "listRuntimeVersions");
-  return { runtimeVersions: [...field?.options || [], ...versionChoices(manager, context)] };
+  const selected = field?.key ? context.runtimeSettings?.[field.key] : undefined;
+  const selectedVersion = field?.options?.some(option => option.value === selected) ? undefined : selected;
+  return { runtimeVersions: [...field?.options || [], ...versionChoices(manager, { ...context, selectedVersion })] };
 }
 
 /** The version a game uses, in layer order: the game's manual choice, then the

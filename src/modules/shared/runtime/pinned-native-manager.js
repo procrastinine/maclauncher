@@ -444,10 +444,13 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       if (!directory || key.startsWith(directory + path.sep)) displayCache.delete(key);
     }
   }
-  function rememberDisplay(directory, key, install) {
+  function rememberDisplay(directory, key, install, error) {
     displayCache.delete(directory);
     if (displayCache.size >= DISPLAY_CACHE_LIMIT) displayCache.delete(displayCache.keys().next().value);
-    displayCache.set(directory, { key, install });
+    displayCache.set(directory, { key, install, ...(error ? { error } : {}) });
+  }
+  function registrationFailure(userDataDir, version) {
+    try { return displayCache.get(installDir(userDataDir, version))?.error; } catch { return null; }
   }
   function identity(file) {
     const stat = fs.statSync(file, { bigint: true });
@@ -455,24 +458,32 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     return [stat.dev, stat.ino, stat.size, stat.mode, stat.mtimeNs, stat.ctimeNs].join(":");
   }
   function resolveRegistration({ userDataDir, version, verification = "full" } = {}) {
-    let directory, cacheKey;
+    let directory, cacheKey, normalized, recordPath, runtimePath;
     try {
       if (!["full", "status"].includes(verification)) return null;
       loadCatalog(userDataDir);
-      const normalized = normalizeVersion(version);
+      normalized = normalizeVersion(version);
       directory = installDir(userDataDir, normalized);
-      const recordPath = path.join(directory, "runtime.json");
-      if (fs.statSync(recordPath).size > 1024 * 1024) return null;
+      recordPath = path.join(directory, "runtime.json");
+      if (fs.statSync(recordPath).size > 1024 * 1024) throw new Error("The runtime version record is too large.");
       const record = JSON.parse(fs.readFileSync(recordPath, "utf8"));
       const pin = record.catalogEntry && validEntry(record.catalogEntry) && record.catalogEntry.version === normalized
         ? record.catalogEntry : entries.get(normalized);
-      if (record.version !== normalized || record.source !== 'download' && !pin.projectPackage && record.upstreamRevision !== pin.upstreamRevision || record.bundledExecution === "direct" ||
-        record.source !== 'download' && !/^[a-f0-9]{64}$/.test(record.binarySha256 || "") || !["local", "download", "bundled"].includes(record.source)) return null;
+      if (!pin || record.version !== normalized) throw new Error("The runtime version record does not match the selected version.");
+      if (record.source !== 'download' && !pin.projectPackage && record.upstreamRevision !== pin.upstreamRevision)
+        throw new Error("The runtime source revision differs from its version record.");
+      if (record.bundledExecution === "direct") return null;
+      if (record.source !== 'download' && !/^[a-f0-9]{64}$/.test(record.binarySha256 || ""))
+        throw new Error("The runtime version record has no valid executable SHA-256.");
+      if (!["local", "download", "bundled"].includes(record.source)) throw new Error("The runtime version record has an unknown installation source.");
       if (hostReason(pin)) return null;
-      const runtimePath = record.source === "local" ? record.runtimePath : path.resolve(directory, record.executableRelative || "");
+      runtimePath = record.source === "local" ? record.runtimePath : path.resolve(directory, record.executableRelative || "");
       cacheKey = JSON.stringify([identity(recordPath), runtimePath, identity(runtimePath), pin.upstreamRevision,
         record.source === "bundled" && record.bundledManifestSha256 ? identity(path.join(directory, "bundle-manifest.json")) : null]);
       const cached = displayCache.get(directory);
+      // A known full failure cannot be cleared by a weaker display check.
+      // Recheck fully so repairing an auxiliary file can also recover status.
+      if (verification === "status" && cached?.error && cached.key === cacheKey) verification = "full";
       if (record.source === "download" && (!runtimePath.startsWith(directory + path.sep) ||
         !pin.projectPackage && (pin.asset?.sha256 ? record.archiveSha256 !== pin.asset.sha256
           : pin.asset?.integrity === "publisher-md5" ? record.archiveMd5 !== pin.asset.md5 || record.artifactVerification?.verified !== true ||
@@ -480,18 +491,17 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
           : pin.asset?.integrity !== "recorded-local" ||
             (pin.asset.assetId ? record.assetId !== pin.asset.assetId : record.artifactId !== pin.asset.artifactId ||
               (pin.asset.artifactId || pin.asset.bytes !== undefined ? record.archiveBytes !== pin.asset.bytes : record.assetUrl !== pin.asset.url)) ||
-            !/^[a-f0-9]{64}$/.test(record.archiveSha256 || "")))) return null;
+            !/^[a-f0-9]{64}$/.test(record.archiveSha256 || "")))) throw new Error("The runtime archive identity differs from its version record.");
       if (record.source === "bundled" && (!runtimePath.startsWith(directory + path.sep) ||
         !(legacyInstalledRuntime || bundledRuntime)?.verifyInstalled({ installDir: directory, record, pin, verification }))) {
-        rememberDisplay(directory, cacheKey, null);
-        return null;
+        throw new Error("The bundled runtime failed verification.");
       }
       let project;
       if (projectPackages && pin.projectPackage && record.source === "download") {
         project = projectPackages.inspectInstalled(directory, pin, { verification, userDataDir });
-        if (runtimePath !== project.executablePath) return null;
+        if (runtimePath !== project.executablePath) throw new Error("The runtime executable path differs from its package declaration.");
       }
-      if (verification === "status" && cached?.key === cacheKey) return cached.install;
+      if (verification === "status" && cached?.install && cached.key === cacheKey) return cached.install;
       const native = inspectRuntime({ arch: ["arm64", "x64"].includes(Architecture.recordArchitecture(pin)) ? Architecture.recordArchitecture(pin) : installationArchitecture,
         hostArchitecture: dependencies.hostArch || require("./host-capabilities").getHostCapabilities().hardwareArch, runtimePath, runtimeRoot: directory, runtimeSource: pin.catalogSourceId, runtimeLabel: pin.versionLabel, runtimeVersion: normalized,
         upstreamRevision: pin.upstreamRevision, expectedSha256: record.source === 'download' ? undefined : record.binarySha256, allowLibrary: nativeLibrary });
@@ -507,8 +517,15 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       if(project) require('./package-dependencies').attach(installed,project);
       rememberDisplay(directory, cacheKey, installed);
       return installed;
-    } catch {
-      if (directory && cacheKey) rememberDisplay(directory, cacheKey, null);
+    } catch (error) {
+      if (directory && (cacheKey || fs.existsSync(directory))) {
+        const detail = error?.code === "ENOENT" && error.path === recordPath
+          ? fs.existsSync(directory) ? "This runtime installation is incomplete: its version record is missing."
+            : `No ${Architecture.architectureLabel(installationArchitecture)} copy is installed.`
+          : error?.code === "ENOENT" && error.path === runtimePath ? `The runtime executable is missing: ${path.basename(runtimePath)}.`
+          : sanitizeErrorMessage(error?.message || String(error));
+        rememberDisplay(directory, cacheKey, null, `${label} ${normalized || version}: ${detail}`);
+      }
       return null;
     }
   }
@@ -574,7 +591,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
         runtimePath: typeof record?.runtimePath === "string" ? record.runtimePath : null,
         installedAt: typeof record?.installedAt === "string" ? record.installedAt : null,
         upstreamRevision: entries.get(version).upstreamRevision,
-        error: hostReason(pin) || (record ? "The runtime executable or its version record changed. Remove this registration and install/register the selected version again."
+        error: hostReason(pin) || registrationFailure(userDataDir, version) || (record ? "The runtime executable or its version record changed. Remove this registration and install/register the selected version again."
           : "This runtime installation or build is incomplete. Remove it before retrying.") }];
     });
   }
@@ -661,7 +678,8 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       ? `${label} ${version} is not available. Available versions: ${versions.join(", ")}.`
       : hostReason(entries.get(version)) || (compatible && !compatible(entries.get(version)) ? `${label} ${version} has an incompatible runtime profile.` : null) || includedFailures.get(version)?.error ||
         (userDataDir && listRuntimeRows(userDataDir).find(row => row.version === version && row.status === "unsupported-host")?.error) ||
-        (pin.projectPackage?.unavailable && pin.installReason) || `${label} ${version} is not installed, or its executable changed.` };
+        (pin.projectPackage?.unavailable && pin.installReason) || registrationFailure(userDataDir, version) ||
+        `${label} ${version} is not installed for ${Architecture.architectureLabel(installationArchitecture)}.` };
   }
   async function installVersion({ userDataDir, version, signal, onProgress, logger, sourceDir, replace = false } = {}) {
     if (process.platform !== "darwin") throw new Error(`${label} installation requires macOS.`);
@@ -780,7 +798,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
         fs.renameSync(unpacked, destination);
         clearDisplayCache(userDataDir);
         const installed = resolveInstalled({ userDataDir, version: normalized });
-        if (!installed) throw new Error("Installed runtime failed its version and executable integrity check.");
+        if (!installed) throw new Error(registrationFailure(userDataDir, normalized) || "Installed runtime failed its version and executable integrity check.");
         return installed;
       } catch (error) {
         if (replacing) {

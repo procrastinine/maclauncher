@@ -1,5 +1,6 @@
 const Architecture = require("./architecture");
 const { architectureSupport } = require("./host-capabilities");
+const { selectRuntimeVersion } = require("./version-choices");
 const ARCHITECTURES = ["arm64", "x64"];
 const variantArchitecture = value => typeof value === "string" && value.startsWith("architecture:")
   ? Architecture.normalizeArchitecture(value.slice(13)) : null;
@@ -39,11 +40,29 @@ function createArchitectureManager(config, createManager) {
       typeof config.includedBuilds === "function" && Architecture.withArchitecture(architecture, () => config.includedBuilds(options)));
   const runtimeSettings = settings => !settings || settings.runtimes ? settings : { runtimes: { [config.id]: settings } };
   // Play, Runtimes and the inspector share this choice: an explicit request,
-  // then the saved build choices, then the launcher's CPU, then another CPU
-  // this Mac runs when the launcher's CPU has no build.
-  facade.chooseArchitecture = (entry, settings, userDataDir, options = {}) => Architecture.chooseArchitecture({ request: options, entry,
-    settings: runtimeSettings(settings), managerId: config.id, launcher: current, offers: offers({ userDataDir }),
-    host: config.dependencies?.hostCapabilities });
+  // then saved CPU choices, then an installed copy of the selected version,
+  // then the launcher's catalog CPU or another CPU this Mac runs.
+  facade.chooseArchitecture = (entry, settings, userDataDir, options = {}) => {
+    const configured = runtimeSettings(settings);
+    let version = selectRuntimeVersion({ manual: options.version,
+      recommended: entry?.runtimeData?.[config.runtimeId || config.id]?.version,
+      defaultVersion: configured?.runtimes?.[config.id]?.defaultVersion }).version;
+    if (!version) {
+      const automatic = Architecture.chooseArchitecture({ request: options, entry, settings: configured, managerId: config.id,
+        launcher: current, offers: offers({ userDataDir }), host: config.dependencies?.hostCapabilities });
+      if (typeof instance(automatic).resolveSelection === "function")
+        version = call(automatic, "resolveSelection", [entry, settings, userDataDir, { ...options, verification: "status" }])?.version;
+    }
+    return Architecture.chooseArchitecture({ request: options, entry,
+      saved: entry?.runtimeData?.[config.runtimeId || config.id]?.architecture,
+      settings: configured, managerId: config.id, launcher: current, offers: offers({ userDataDir }),
+      ...(version ? { installed: architecture => {
+        if (typeof instance(architecture).resolveSelection !== "function") return false;
+        const selection = call(architecture, "resolveSelection", [entry, settings, userDataDir,
+          { ...options, version, verification: "status" }]);
+        return selection?.ready === true && Boolean(selection.install) && Architecture.matchesArchitecture(selection.install, architecture);
+      } } : {}), host: config.dependencies?.hostCapabilities });
+  };
   facade.offersBuild = (options = {}) => offers(options)(selected(options));
   facade.launcherArchitecture = current;
   const call = (architecture, method, args) => Architecture.withArchitecture(architecture,
@@ -81,7 +100,7 @@ function createArchitectureManager(config, createManager) {
     facade[method] = (payload = {}, ...args) => {
       // An installation without a build choice uses the build Play would use.
       const architecture = method === "installRuntime" && !Architecture.requestedArchitecture(payload) && Architecture.selectedArchitecture() === current
-        ? facade.chooseArchitecture(null, payload.settings, payload.userDataDir) : selected(payload);
+        ? facade.chooseArchitecture(null, payload.settings, payload.userDataDir, { version: payload.version }) : selected(payload);
       const next = { ...payload, architecture,
         ...(variantArchitecture(payload.variant) ? { variant: undefined } : {}) };
       return call(architecture, method, [next, ...args]);

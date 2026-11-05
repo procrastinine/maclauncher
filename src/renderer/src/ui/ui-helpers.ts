@@ -29,6 +29,7 @@ export function availabilityLabel(state: Availability): string {
   return AVAILABILITY_LABELS[state];
 }
 export function withAvailability(label: string, state?: Availability | null): string {
+  if (label.endsWith(" (not installed)") || Object.values(AVAILABILITY_LABELS).some(value => label.endsWith(` · ${value}`))) return label;
   return state ? `${label} · ${AVAILABILITY_LABELS[state]}` : label;
 }
 
