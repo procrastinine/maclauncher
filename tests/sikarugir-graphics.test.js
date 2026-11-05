@@ -49,7 +49,8 @@ function fixture(t, { rendererParent = "Frameworks" } = {}) {
   put(path.join(gst, "lib", "gstreamer-1.0", "plugin.dylib"), image({ cpu: X64, minimumOS: 0x000b0000 }));
   put(path.join(gst, "libexec", "gstreamer-1.0", "gst-plugin-scanner"), "scanner");
   const engineRoot = path.join(root, "engine", "wswine.bundle");
-  put(path.join(engineRoot, "lib", "wine", "x86_64-unix", "ntdll.so"));
+  // The Wine layout reads its CPU from the actual Unix ntdll image.
+  put(path.join(engineRoot, "lib", "wine", "x86_64-unix", "ntdll.so"), image({ cpu: X64 }));
   put(path.join(engineRoot, "bin", "wine")); put(path.join(engineRoot, "bin", "wineserver"));
   for (const architecture of ["i386-windows", "x86_64-windows"]) for (const name of ["ntdll", "apisetschema"]) {
     builtinDll(path.join(engineRoot, "lib", "wine", architecture, name + ".dll"), architecture, name);
