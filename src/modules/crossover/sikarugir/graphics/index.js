@@ -245,10 +245,10 @@ async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoo
   hostInfo.physicalAppleGPU = hardware.physicalAppleGPU;
   if (!translatorPlan) capabilities = capabilitiesFor(install, support, hostInfo);
   if (cameraBridge) capabilities.dxmt = true;
-  const selection = translatorPlan ? { graphicsBackend: translatorPlan.components["d3d-renderer"].used?.engine || "auto",
+  const selection = translatorPlan ? { graphicsBackend: translatorPlan.apiMode ? 'wined3d' : translatorPlan.components["d3d-renderer"].used?.engine || "auto",
     vulkanBackend: translatorPlan.components["vulkan-driver"].used?.engine || "auto", components: [] } : selectGraphics(settings, capabilities, executableArchitecture);
   const rendererRoot = path.join(support, "Frameworks", "renderer");
-  const dlss = DLSS.checkSelection(settings, { ...hostInfo, executableArchitecture,
+  const dlss = DLSS.checkSelection(settings, { ...hostInfo, executableArchitecture, translatorPlan,
     backend: selection.components.includes("dxmt") ? "dxmt" : selection.graphicsBackend === "auto" ? "wined3d" : selection.graphicsBackend,
     dxmt: settings.dlss === true && (translatorPlan ? Boolean(cameraBridge) || DLSS.hasPlanLibraries(translatorPlan, "dxmt") : capabilities.dxmt && (Boolean(cameraBridge) || DLSS.hasLibraries(path.join(rendererRoot, "dxmt", "wine", layout.primaryWindows)))),
     d3dmetal: settings.dlss === true && (translatorPlan ? DLSS.hasPlanLibraries(translatorPlan, "d3dmetal") : capabilities.d3dmetal && DLSS.hasLibraries(path.join(rendererRoot, "d3dmetal", "wine", layout.primaryWindows))) });

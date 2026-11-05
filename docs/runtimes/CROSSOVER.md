@@ -45,7 +45,8 @@ Settings holds the defaults, and each game's Runtime Settings can override them.
 | Setting | Behavior |
 | --- | --- |
 | Environment | Per-game private bottle or an existing bottle reference. |
-| Direct3D engine | Automatic, engines supplied by the selected runtime, or a specific managed translator version. Each choice names its engine, version and source. |
+| Default Direct3D engine | The existing global renderer policy: Automatic, an engine supplied by CrossOver or a managed translator version. |
+| Direct3D 8, 9, 10 / 10.1 and 11 | API-specific installed choices with their actual versions and sources. Shared DLL/helper scopes are linked. Unset choices preserve the default policy. |
 | Vulkan driver | CrossOver’s driver or a specific managed MoltenVK or KosmicKrisp version. |
 | Game temporal integration | Exposes MetalFX Temporal through a 64-bit game's DLSS integration. Listed for Unity and Windows games. See [Temporal upscaling](#temporal-upscaling). |
 | Direct3D 12 | Wine vkd3d, D3DMetal or a managed Direct3D 12 translator. KosmicKrisp is recommended for vkd3d-proton. |
@@ -62,7 +63,7 @@ The graphics and synchronization choices follow the [CrossOver Mac user guide](h
 
 ## Translators
 
-[Translator management](TRANSLATORS.md) groups DirectX → Vulkan, DirectX → Metal, Vulkan drivers and video codecs separately. Runtime settings separate the Direct3D engine, Vulkan driver and Direct3D 12 choices. Versions and sources come from installed files. Existing environments also offer their current Bottle setting or Wrapper setting. A runtime version is installed once; private graphics views and prefix DLLs link to that installation. Prepared loader trees are shared between games using the same inputs.
+[Translator management](TRANSLATORS.md) groups DirectX → Vulkan, DirectX → Metal, Vulkan drivers and video codecs separately. Runtime settings organize Direct3D 8 through 12. Versions, API scope and sources come from installed files. CrossOver's unresolved Automatic remains a global choice; independent overrides use a concrete shared default and the private loader. Existing environments also offer their current Bottle setting or Wrapper setting. A runtime version is installed once; private graphics views and prefix DLLs link to that installation. Prepared loader trees are shared between games using the same inputs.
 
 ## Graphics
 

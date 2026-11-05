@@ -39,11 +39,12 @@ GStreamer plugin registration is intended for a prepared codec directory. An unm
 
 ## Selection
 
-Runtime Settings selects each component independently.
+Runtime Settings selects installed components by API and shows shared library scopes.
 
 | Component | Choices |
 | --- | --- |
-| Direct3D engine | The runtime's automatic choice, its named engines, and managed DXMT, DXVK or D3DMetal versions. DXVK packages can provide different Direct3D API sets. |
+| Default Direct3D engine | The existing shared renderer policy, including runtime automatic and named installed versions. |
+| Direct3D 8, 9, 10 / 10.1 and 11 | Installed implementations with the corresponding DLLs. Modern DXVK can serve several APIs; historical D8VK and D9VK remain specific source/version choices. |
 | Vulkan driver | The runtime's automatic driver, its named drivers, and managed MoltenVK or KosmicKrisp versions. |
 | Direct3D 12 | Wine vkd3d, D3DMetal or a managed Direct3D 12 translator. KosmicKrisp is recommended for vkd3d-proton. |
 | Video codecs | The runtime defaults or a registered GStreamer plugin folder. Wine's own video modules remain with Wine. |
@@ -52,7 +53,13 @@ An existing bottle or wrapper first offers its current setting, read from its co
 
 Unreadable optional labels and inaccessible unrelated package entries produce diagnostics. Basic PE machine and builtin/native facts remain available when optional export inspection is incomplete. Invalid required binaries and component path escapes remain errors.
 
-The Direct3D engine choice is also the DXMT version setting for camera support. The camera adapter keeps its own matching-library requirement. A mismatch leaves the selected renderer active and reports that camera support is unavailable.
+Unset API choices retain the existing shared renderer policy. No saved choices or runtime defaults are migrated when the settings are displayed. A linked choice changes its advertised API scope together. Automatic and existing Bottle setting or Wrapper setting remain available.
+
+Direct3D APIs can share DXGI, native Unix modules and Windows thunks. A physical DLL/module binding has one source; conflicting providers use the existing coherent composition with the selected intent and reason retained in the inspector. Direct PE imports and matching Unix module facts identify companions. Incomplete companion information retains the package as an atomic group instead of predicting an ABI from engine names or versions.
+
+CrossOver selects its included renderer through one global backend. Its unresolved automatic choice stays global. Independent overrides use a concrete shared default and the private loader; an override that cannot preserve the global automatic composition keeps that composition active and reports the coupling. Selecting each API individually is not required. CrossOver's application files remain unchanged.
+
+The used Direct3D 11 DXMT version also supplies the camera adapter. The adapter keeps its own matching-library requirement. A mismatch leaves the selected renderer active and reports that camera support is unavailable. Engine settings apply to every engine actually used by the final API bindings.
 
 ## Loading
 
@@ -68,7 +75,7 @@ Play checks the files that the selected Wine process and Windows executable will
 
 When loading is impossible, Play uses the same engine supplied by the selected CrossOver or Template. If that engine is unavailable, it uses the runtime's automatic choice. The saved choice remains selected. The warning and inspector show the selected engine, the engine used and the reason. Software version numbers, vendor strings and tested-version lists do not decide translator compatibility.
 
-The inspector shows the effective Direct3D engine, Vulkan driver and Direct3D 12 choice. CrossOver's automatic engine remains labeled automatic when its own final choice is unresolved. WineVulkan scene capture uses its matching scene closure; a separate Vulkan driver override, including KosmicKrisp, leaves that scene closure unavailable.
+The inspector shows selected and used components for Direct3D 8 through 12, the Vulkan driver and video codecs. CrossOver's automatic engine remains labeled automatic when its own final choice is unresolved. Camera, DLSS and graphics consumers use the final API bindings. WineVulkan scene capture uses its matching scene closure; a separate Vulkan driver override, including KosmicKrisp, leaves that scene closure unavailable. API selection alone does not provide NGX interception through Vulkan/KosmicKrisp.
 
 ## Sources and notices
 

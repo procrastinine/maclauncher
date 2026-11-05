@@ -53,7 +53,8 @@ Settings holds the defaults, and each game's Runtime Settings can override them.
 | Setting | Behavior |
 | --- | --- |
 | Environment | Per-game private prefix or an existing Sikarugir wrapper reference. |
-| Direct3D engine | Automatic, engines supplied by the selected runtime, or a specific managed translator version. Each choice names its engine, version and source. |
+| Default Direct3D engine | Automatic, engines supplied by the selected runtime or a managed translator version. Unset API choices retain this policy. |
+| Direct3D 8, 9, 10 / 10.1 and 11 | Installed choices for each API, with shared DLL/helper scopes linked and selected-versus-used reporting. |
 | Game temporal integration | Exposes MetalFX Temporal through a compatible 64-bit game's DLSS integration. Listed for Unity and Windows games. See [Game temporal integration](#game-temporal-integration). |
 | Direct3D 12 | Wine vkd3d, D3DMetal or a managed Direct3D 12 translator. KosmicKrisp is recommended for vkd3d-proton. |
 | Video codecs | The runtime defaults or a registered GStreamer codec folder. |
@@ -72,7 +73,7 @@ The optional **Enable BepInEx winhttp override**, listed for Unity and Windows g
 
 ## Translators
 
-[Translator management](TRANSLATORS.md) groups DirectX → Vulkan, DirectX → Metal, Vulkan drivers and video codecs separately. Runtime settings separate the Direct3D engine, Vulkan driver and Direct3D 12 choices. Versions and sources come from installed files. Existing environments also offer their current Bottle setting or Wrapper setting. A runtime version is installed once; private graphics views and prefix DLLs link to that installation. Prepared loader trees are shared between games using the same inputs.
+[Translator management](TRANSLATORS.md) groups DirectX → Vulkan, DirectX → Metal, Vulkan drivers and video codecs separately. Runtime settings organize Direct3D 8 through 12. Versions, API scope and sources come from installed files. Shared DXGI/native closures use one coherent physical binding set in the private graphics view. Existing environments also offer their current Bottle setting or Wrapper setting. A runtime version is installed once; private graphics views and prefix DLLs link to that installation. Prepared loader trees are shared between games using the same inputs.
 
 ## Graphics
 

@@ -50,6 +50,7 @@ test('graphics API binding retains actual placements and canonical null without 
   for (const row of Object.values(plan.components)) Object.defineProperty(row, 'selected', { get() { assert.fail('graphics must not inspect requested selections'); } });
   Object.defineProperty(plan.groups[0], 'selected', { get() { assert.fail('graphics must not inspect UI choice intent'); } });
   const snapshot = Binding.usedTranslatorPlan(plan);
+  assert.equal(Object.hasOwn(snapshot.components, 'd3d-renderer'), false, 'an unused aggregate cannot describe the API-mode graphics source');
   assert.deepEqual(snapshot.components.d3d10, { used: null });
   assert.equal(snapshot.components.d3d11.used, plan.components.d3d11.used);
   assert.deepEqual(snapshot.placements, plan.placements);

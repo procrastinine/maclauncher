@@ -29,7 +29,7 @@ function environment(settings, { needsRosetta = false, engines = {} } = {}) {
   }
   set('advertiseAvx', 'ROSETTA_ADVERTISE_AVX', toggle);
   set('metalHud', 'MTL_HUD_ENABLED', toggle);
-  for (const [key, spec] of Object.entries(ENGINE_SETTINGS)) if (engines[spec.component] === spec.engine) set(key, spec.variable, spec.toggle ? toggle : text);
+  for (const [key, spec] of Object.entries(ENGINE_SETTINGS)) if ([].concat(engines[spec.component] || []).includes(spec.engine)) set(key, spec.variable, spec.toggle ? toggle : text);
   return env;
 }
 function registry(settings, { executable = '' } = {}) {

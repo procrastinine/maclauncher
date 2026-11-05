@@ -27,7 +27,7 @@ async function translatorOptions(entry, payload, context, dependencies = {}) {
   const install = selected.install;
   const plan = await Translators.resolve(install, runtime, preparedContext, { ...dependencies, entry, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
   return { ...Translators.optionLists(install, runtime, preparedContext, { ...dependencies, plan }), effectiveSettings: [
-    { value: 'graphicsBackend', label: plan.components['d3d-renderer'].used?.engine || 'auto' },
+    { value: 'graphicsBackend', label: Translators.engines(plan)['d3d-renderer'] || 'auto' },
     { value: 'vulkanBackend', label: plan.components['vulkan-driver'].used?.engine || 'auto' }
   ] };
 }

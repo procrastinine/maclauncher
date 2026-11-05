@@ -4,6 +4,7 @@ const { cloneOrCopy } = require('../copy-file');
 const { fileDigest } = require('./verified-identity');
 const { requiredMachine } = require('./binary-compatibility');
 const warn = require('../graphics-warning');
+const { DIRECT3D_ROLES } = require('./translator-roles');
 
 const cpuFolder = machine => ({ 332: 'i386-windows', 34404: 'x86_64-windows', 43620: 'aarch64-windows' })[machine];
 function selectedDescriptions(plan) {
@@ -25,8 +26,9 @@ function selectedDescriptions(plan) {
         return { ...placement.file, inherited: consumers.length ? consumers.every(row => row.inherited && !row.fallback) : description.inherited };
       }) }));
   }
-  return [...Object.values(plan?.components || {}).filter(row => row.used && (plan.runtime === 'sikarugir' || !row.inherited || row.fallback))
-    .map(row => ({ ...row.used, inherited: row.inherited })), ...(plan?.additional || [])];
+  return [...Object.entries(plan?.components || {}).filter(([key, row]) => !DIRECT3D_ROLES.some(role => role.id === key && key !== 'd3d12') &&
+    row.used && (plan.runtime === 'sikarugir' || !row.inherited || row.fallback))
+    .map(([, row]) => ({ ...row.used, inherited: row.inherited })), ...(plan?.additional || [])];
 }
 function filesIdentity(descriptions) {
   return descriptions.map(item => [item.id, item.files.map(file => [file.path, fs.existsSync(file.path) ? fileDigest(file.path).sha256 : null])]);

@@ -1,6 +1,7 @@
 const { COMPONENTS, label } = require('./translator-description');
 const AUTOMATIC = 'automatic', INHERIT = 'inherit';
 const Roles = require('./translator-roles');
+const path = require('node:path');
 
 // Legacy settings are projected for display and consumers without writing or
 // changing their existing automatic/backend choice.
@@ -14,6 +15,148 @@ function projectRoles(plan) {
     plan.components[role.id] = { ...base, used: supported ? used : null, projected: true };
   }
   return plan;
+}
+const serves = (description, role) => !description?.apis?.length || description.apis.some(api => role.apis.includes(api));
+const identity = description => description && `${description.id}:${description.root || ''}`;
+function filesForRole(description, role) {
+  const files = description?.files || [], primary = files.filter(file => Roles.fileApis(file).some(api => role.apis.includes(api)));
+  if (!primary.length || primary.some(file => file.importsComplete !== true)) return files;
+  const otherImports = new Set(files.filter(file => file.format === 'pe' && Roles.fileApis(file).length && !primary.includes(file)).flatMap(file => file.peImports || []));
+  const wanted = new Set([...primary, ...files.filter(file => file.format === 'pe' && !Roles.fileApis(file).length &&
+    path.basename(file.path).toLowerCase() !== 'dxgi.dll' && !otherImports.has(path.basename(file.path).toLowerCase()))]);
+  // DXGI is shared by the DXGI-based APIs; this is an API relationship, not an
+  // engine/version rule. Other companions follow actual direct PE imports.
+  if (['d3d10', 'd3d11', 'd3d12'].includes(role.id)) for (const file of files)
+    if (file.format === 'pe' && path.basename(file.path).toLowerCase() === 'dxgi.dll') wanted.add(file);
+  for (const file of wanted) for (const name of file.peImports || []) for (const candidate of files)
+    if (candidate.format === 'pe' && path.basename(candidate.path).toLowerCase() === name.toLowerCase()) wanted.add(candidate);
+  const native = new Set(files.filter(file => {
+    if (file.format !== 'macho') return false;
+    const counterpart = file.path.endsWith('.so') && files.find(other => other.format === 'pe' &&
+      path.basename(other.path).toLowerCase() === path.basename(file.path).replace(/\.so$/, '.dll').toLowerCase());
+    return !counterpart || wanted.has(counterpart);
+  }));
+  for (const file of native) for (const dependency of (file.slices || []).flatMap(slice => slice.dependencies || []))
+    for (const candidate of files) if (candidate.format === 'macho' && path.basename(candidate.path) === path.basename(dependency.path)) native.add(candidate);
+  return files.filter(file => file.format === 'pe' ? wanted.has(file) : file.format === 'macho' ? native.has(file) : true);
+}
+function placementKey(file) {
+  const name = path.basename(file.path).toLowerCase();
+  return file.format === 'pe' ? `pe:${file.machine}:${name}` : file.format === 'macho' && file.path.endsWith('.so') ? `unix:${name}` : `source:${file.path}`;
+}
+function physicalPlacements(plan) {
+  const placements = new Map(), conflicts = [];
+  for (const role of Roles.DIRECT3D_ROLES) {
+    const description = plan.components[role.id]?.used;
+    if (!description) continue;
+    for (const file of filesForRole(description, role)) {
+      const key = placementKey(file), previous = placements.get(key);
+      if (previous && previous.file.path !== file.path) { conflicts.push({ key, roles: [...previous.roles, role.id] }); continue; }
+      if (previous) previous.roles.push(role.id);
+      else placements.set(key, { file, description, roles: [role.id] });
+    }
+  }
+  for (const description of (plan.additional || []).filter(item => !item.apis?.length)) for (const file of description.files || []) {
+    const key = placementKey(file), previous = placements.get(key);
+    if (previous && previous.file.path !== file.path) conflicts.push({ key, roles: [...previous.roles] });
+    else if (!previous) placements.set(key, { file, description, roles: [] });
+  }
+  return { placements: [...placements.values()], conflicts };
+}
+function apiGroups(plan) {
+  if (plan.runtime === 'crossover' && !plan.components['d3d-renderer'].used && !plan.apiMode) {
+    const roles = Roles.DIRECT3D_ROLES.map(role => role.id);
+    return [{ id: roles.join('+'), roles, affectedRoles: roles, label: 'CrossOver shared automatic choice',
+      reason: 'CrossOver selects one global backend. Independent overrides need a concrete shared default; automatic remains unchanged otherwise.' }];
+  }
+  const groups = [];
+  for (const role of Roles.DIRECT3D_ROLES) {
+    const row = plan.components[role.id], selected = row?.used;
+    let group = groups.find(item => item.description === identity(selected) && selected);
+    if (!group) { group = { description: identity(selected), roles: [], reason: selected ? 'Shared component closure' : 'Runtime automatic choice' }; groups.push(group); }
+    group.roles.push(role.id);
+  }
+  return groups.map(group => ({ id: group.roles.join('+'), roles: group.roles, affectedRoles: group.roles,
+    label: group.roles.map(id => Roles.ROLES.find(role => role.id === id).label).join(' / '), reason: group.reason }));
+}
+function resolveApiRoles(plan, { selections = {}, choices = [], included = [], compatibility = {}, apiCompatibility = {}, automatic = {}, environment } = {}) {
+  projectRoles(plan);
+  const original = Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id, { ...plan.components[role.id] }]));
+  const requested = Roles.DIRECT3D_ROLES.some(role => role.id !== 'd3d12' && selections[role.id]);
+  if (!requested) { plan.groups = apiGroups(plan); return plan; }
+  for (const role of Roles.DIRECT3D_ROLES) {
+    const value = selections[role.id]; if (!value) continue;
+    const inherited = value === INHERIT;
+    const selected = inherited ? environment?.[role.id] || original[role.id].used : [...included, ...choices].find(item => item.id === value) || null;
+    let used = value === AUTOMATIC ? automatic[role.id] || null : selected, reason = null;
+    if (value !== AUTOMATIC && value !== INHERIT && !selected) reason = `The saved translator choice is unavailable: ${value}`;
+    if (selected && !serves(selected, role)) reason = `The selected component has no ${role.label} library.`;
+    const checked = item => apiCompatibility[role.id]?.[item.id] || compatibility[item.id];
+    if (selected && checked(selected)?.compatible === false) reason = checked(selected).reason;
+    if (reason) used = selected && included.find(item => item.engine === selected.engine && serves(item, role) && checked(item)?.compatible !== false) || automatic[role.id] || null;
+    if (reason && !used && plan.runtime === 'crossover') used = original[role.id].used;
+    plan.components[role.id] = { value, selected, used, inherited, fallback: Boolean(reason), reason, scopeKnown: Boolean(selected?.apis?.length) };
+  }
+  for (const role of Roles.DIRECT3D_ROLES) {
+    const row = plan.components[role.id], files = row.used && apiCompatibility[role.id]?.[row.used.id]?.files;
+    if (files) row.used = { ...row.used, files };
+  }
+  plan.apiMode = true;
+  let physical = physicalPlacements(plan);
+  if (physical.conflicts.length) {
+    // A conflicting namespace cannot hold two files. Retain the requested
+    // intent, and restore the existing coherent group rather than pick a DLL.
+    const affected = new Set(physical.conflicts.flatMap(item => item.roles));
+    for (const role of Roles.DIRECT3D_ROLES) if (affected.has(role.id)) {
+      const row = plan.components[role.id]; row.used = original[role.id].used;
+      row.fallback = true; row.reason = `Shared physical binding conflict: ${physical.conflicts.filter(item => item.roles.includes(role.id)).map(item => item.key).join(', ')}`;
+    }
+    physical = physicalPlacements(plan);
+  }
+  const changed = Roles.DIRECT3D_ROLES.some(role => identity(plan.components[role.id].used) !== identity(original[role.id].used));
+  if ((plan.runtime === 'crossover' && !plan.components['d3d-renderer'].used && changed) || physical.conflicts.length) {
+    for (const role of Roles.DIRECT3D_ROLES) {
+      const row = plan.components[role.id];
+      if (identity(row.used) !== identity(original[role.id].used)) {
+        row.used = original[role.id].used; row.fallback = true;
+        row.reason = plan.runtime === 'crossover' ? 'CrossOver uses one global backend. The existing automatic composition is retained for this linked selection.' :
+          'The requested libraries share a physical binding. The existing coherent composition is retained.';
+      }
+    }
+    plan.apiMode = false;
+  }
+  if (!changed) plan.apiMode = false;
+  if (plan.apiMode) plan.additional = (plan.additional || []).filter(item => !item.apis?.length ||
+    Roles.DIRECT3D_ROLES.some(role => identity(plan.components[role.id].used) === identity(item)));
+  plan.placements = plan.apiMode ? physical.placements : [];
+  plan.groups = apiGroups(plan);
+  return plan;
+}
+function apiOptions(plan, { choices = [], included = [], environment = null, selections = {} } = {}) {
+  const result = {};
+  for (const role of Roles.DIRECT3D_ROLES) {
+    const rows = [];
+    if (environment) rows.push({ value: INHERIT, label: environment.label || 'Environment setting' });
+    rows.push({ value: AUTOMATIC, label: plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice" });
+    for (const item of [...included, ...choices]) if (!item.hiddenChoice &&
+      (['d3d-renderer', 'd3d12'].includes(item.component) || item.apis?.some(api => Roles.DIRECT3D_ROLES.some(known => known.apis.includes(api)))) && serves(item, role)) {
+      const files = filesForRole(item, role), keys = new Set(files.map(placementKey));
+      const affected = Roles.DIRECT3D_ROLES.filter(other => other.id === role.id ||
+        (plan.components[other.id]?.used && filesForRole(plan.components[other.id].used, other).some(file => keys.has(placementKey(file)) && files.some(own => placementKey(own) === placementKey(file) && own.path !== file.path))));
+      const patch = Object.fromEntries(affected.map(other => [other.settingsKey, serves(item, other) ? item.id : AUTOMATIC]));
+      rows.push({ value: item.id, label: label(item), apis: item.apis, source: item.source, form: item.form, scopeKnown: Boolean(item.apis?.length),
+        reason: plan.runtime === 'crossover' && !plan.components['d3d-renderer'].used ? 'CrossOver automatic is global; the current automatic path stays active until the shared default is concrete.' :
+          affected.length > 1 ? 'These API choices share a physical library binding and change together.' : undefined,
+        groupId: affected.map(item => item.id).join('+'), affectedRoles: affected.map(item => item.id), runtimeSettingsPatch: patch });
+    }
+    const current = plan.components[role.id];
+    if (!selections[role.id]) rows.unshift({ value: '', label: `Existing selection: ${current.used ? label(current.used) : 'Automatic'}` });
+    result[role.optionsKey] = rows;
+  }
+  result.translatorGroups = plan.groups || apiGroups(plan);
+  result.translatorRoles = Roles.ROLES.map(role => ({ ...role, groupId: result.translatorGroups.find(group => group.roles.includes(role.id))?.id || role.id,
+    ...plan.components[role.id] }));
+  return result;
 }
 
 /**
@@ -47,8 +190,8 @@ function resolvePlan({ runtime = 'crossover', selections = {}, choices = [], inc
   return { ...plan, warnings: fallbackWarnings(plan) };
 }
 function fallbackWarnings(plan) {
-  return Object.values(plan.components).filter(row => row.fallback).map(row =>
-    `${row.selected ? label(row.selected) : row.value} could not load: ${row.reason}. Using ${row.used ? label(row.used) : plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "the Template's automatic choice"}.`);
+  return [...new Set(Object.values(plan.components).filter(row => row.fallback).map(row =>
+    `${row.selected ? label(row.selected) : row.value} could not load: ${row.reason}. Using ${row.used ? label(row.used) : plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "the Template's automatic choice"}.`))];
 }
 function options({ component, runtime = 'crossover', included = [], choices = [], environment = null } = {}) {
   const result = [];
@@ -58,4 +201,4 @@ function options({ component, runtime = 'crossover', included = [], choices = []
     result.push({ value: item.id, label: label(item) });
   return result;
 }
-module.exports = { AUTOMATIC, INHERIT, resolvePlan, options, fallbackWarnings, projectRoles, ROLES: Roles.ROLES };
+module.exports = { AUTOMATIC, INHERIT, resolvePlan, options, fallbackWarnings, projectRoles, resolveApiRoles, apiOptions, filesForRole, ROLES: Roles.ROLES };

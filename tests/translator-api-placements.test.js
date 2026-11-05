@@ -77,4 +77,9 @@ test('API placements preserve inherited native DLLs when another role explicitly
   assert.equal(fs.existsSync(d3d11), true);
   await Files.applyNativeLibraries({ native: [] }, prefix);
   assert.equal(fs.readFileSync(original9, 'utf8'), 'original d3d9'); assert.equal(fs.readFileSync(original11, 'utf8'), 'original d3d11');
+  const legacy = await Files.prepareTranslatorFiles({ runtime: 'crossover', components: {
+    'd3d-renderer': row(description), d3d9: row(description), d3d11: row(description) } }, { userDataDir: path.join(root, 'profile'), layout });
+  assert.equal(legacy.native.length, 2, 'projected roles must not duplicate legacy prefix placements or lose backups');
+  await Files.applyNativeLibraries(legacy, prefix); await Files.applyNativeLibraries({ native: [] }, prefix);
+  assert.equal(fs.readFileSync(original9, 'utf8'), 'original d3d9'); assert.equal(fs.readFileSync(original11, 'utf8'), 'original d3d11');
 });

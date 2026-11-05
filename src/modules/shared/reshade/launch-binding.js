@@ -9,7 +9,7 @@ const launchIdentity = value => typeof value === "string" && /^[\w-]{1,128}$/.te
 // Selection requests and compatibility discovery do not describe a running frame.
 function usedTranslatorPlan(plan) {
   if (!plan) return undefined;
-  return {runtime: plan.runtime, components: Object.fromEntries(Object.entries(plan.components).map(([component, row]) =>
+  return {runtime: plan.runtime, components: Object.fromEntries(Object.entries(plan.components).filter(([component]) => !plan.apiMode || component !== 'd3d-renderer').map(([component, row]) =>
     [component, {used: row.used ?? null}])), ...(plan.apiMode ? {
     apiMode: true,
     placements: (plan.placements || []).map(({file, description, roles}) => ({file, description, roles})),
