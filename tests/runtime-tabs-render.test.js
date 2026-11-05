@@ -964,6 +964,7 @@ test('included translator references use host records and shared release facts w
   assert.equal(new Set(state.references.map(row=>row.version)).size,4);
   assert.ok(state.references.every(row=>row.included&&row.readOnly&&row.removable===false&&row.supportsDefault===false));
   assert.ok(state.references.every(row=>row.platformKey==='x86_64'&&row.architectures.includes('x86_64')));
+  assert.ok(state.references.every(row=>row.apis.includes('Direct3D 11')));
   assert.ok(state.references.some(row=>row.versionLabel.includes('DXMT 0.80')&&row.versionLabel.includes('Alpha.app')));
   assert.ok(state.references.some(row=>row.versionLabel.includes('DXMT 0.80')&&row.versionLabel.includes('Beta.app')));
   assert.ok(state.references.some(row=>row.versionLabel.includes('v0.81')&&row.versionLabel.includes('Template 1.0.26')&&row.versionLabel.includes('Template-A')));
@@ -978,6 +979,7 @@ test('included translator references use host records and shared release facts w
   const snapshot=structuredClone(state);
   const markup=render([{...state,id:dxmt.id,label:dxmt.label,ui:dxmt.ui}],dxmt.id);
   assert.match(markup,/>Included<\/span>/);assert.match(markup,/Alpha\.app/);assert.match(markup,/Template 1\.0\.27/);assert.match(markup,/x86_64/);
+  assert.match(markup,/class="dim">Direct3D 11<\/div>/);
   assert.doesNotMatch(markup,/saveRowActions|Set default|aria-label="(?:Uninstall|Remove|Delete)|>Reinstall<|>Repair<|<option[^>]*value="reference:/);
   // Even an attached action/default marker cannot turn a reference into a control.
   const row=section.references[0];row.actions=[{id:'repair',label:'Repair reference'}];section.defaultVersion=row.version;
@@ -1039,4 +1041,18 @@ test('secondary source disclosure preserves every DXVK source, version and insta
   for(const id of sourceIds){assert.ok(markup.includes(`data-runtime-source="${id}"`));if(id!=='macos'){assert.ok(!primary.includes(`data-runtime-source="${id}"`));assert.ok(additional.includes(`data-runtime-source="${id}"`));}}
   for(const entry of entries)assert.ok(markup.includes(`value="${entry.version}"`));
   assert.equal((markup.match(/>Install<\/button>/g)||[]).length,sourceIds.length);
+});
+
+test('translator API coverage comes from actual installed libraries rather than manager hints', t => {
+  const fs=require('node:fs'),os=require('node:os'),root=fs.mkdtempSync(path.join(os.tmpdir(),'translator-apis-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const {peFixture}=require('./helpers/pe-fixture'),{createManager}=require('../src/modules/shared/runtime/translator-managers');
+  const owner=createManager('dxvk');
+  const inspect=(name,libraries)=>{const dir=path.join(root,name);fs.mkdirSync(dir);for(const library of libraries){const {bytes,peOffset}=peFixture({is64:true});bytes.writeUInt16LE(0x2002,peOffset+22);fs.writeFileSync(path.join(dir,library),bytes);}return owner.customRuntime.inspect(dir);};
+  const modern=inspect('modern',['d3d8.dll','d3d9.dll','d3d11.dll']),old=inspect('old',['d3d9.dll']),unknown=inspect('unknown',['publisher-future.dll']);
+  assert.deepEqual(modern.translator.apis,['Direct3D 11','Direct3D 8','Direct3D 9']);assert.deepEqual(old.translator.apis,['Direct3D 9']);assert.deepEqual(unknown.translator.apis,[]);
+  const state=owner.getState({}),rows=[modern,old,unknown].map((row,index)=>({...row,version:['modern','old','unknown'][index],ready:true}));
+  state.installed=rows;state.sections=state.sections.map(section=>({...section,installed:rows}));
+  const markup=render([{...state,id:owner.id,label:owner.label,ui:owner.ui}],owner.id);
+  assert.match(markup,/class="dim">Direct3D 8, Direct3D 9, Direct3D 11<\/div>/);assert.match(markup,/class="dim">Direct3D 9<\/div>/);
+  assert.doesNotMatch(markup,/Direct3D 10/);assert.match(markup,/unknown/,'unrecognized API metadata does not hide an installed library');
 });

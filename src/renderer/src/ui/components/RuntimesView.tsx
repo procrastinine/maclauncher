@@ -638,6 +638,8 @@ export function RuntimesView({
                           typeof inst.detail === "string" && inst.detail.trim()
                             ? inst.detail.trim()
                             : "";
+                        const apis = (Array.isArray(inst.apis) ? inst.apis : Array.isArray(inst.translator?.apis) ? inst.translator.apis : [])
+                          .filter((api: unknown): api is string => typeof api === "string").sort((a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }));
                         return (
                           <div
                             className="saveRow"
@@ -667,6 +669,7 @@ export function RuntimesView({
                                   {(!isRuntimeIncluded(inst) || inst.reference) && inst.installDir && <p className="mono">{inst.installDir}</p>}
                                 </HelpTip>}
                               </div>
+                              {apis.length > 0 && <div className="dim">{apis.join(", ")}</div>}
                               {inst.error && <div className="dim">{formatUserError(inst.error)}</div>}
                             </div>
                             {!inst.reference && <div className="saveRowActions">

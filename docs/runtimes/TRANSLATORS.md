@@ -13,12 +13,12 @@ Translator versions use the shared runtime catalogs and local registration. Refr
 | MoltenVK | KhronosGroup/MoltenVK | Library, folder, archive or installed runtime |
 | KosmicKrisp | Mesa distributions | Driver and loader folder, archive or installed runtime |
 | DXMT | 3Shain/dxmt builtin releases; Sikarugir Template | Folder, archive or installed runtime |
-| DXVK | doitsujin/dxvk; Gcenx/DXVK-macOS, with a separate async catalog; Template dxvk, dxvk3 and d9vk | Folder, archive or installed runtime |
+| DXVK | doitsujin/dxvk; Gcenx/DXVK-macOS, with a separate async catalog; historical AlpyneDreams/d8vk and misyltoad/d9vk releases; Template dxvk, dxvk3 and d9vk | Folder, archive or installed runtime |
 | vkd3d-proton | HansKristian-Work/vkd3d-proton | Folder or archive |
 | D3DMetal | Sikarugir Template | Apple Game Porting Toolkit disk image or folder; installed runtime |
 | GStreamer codecs | Local registration | Prepared plugin folder with its matching dependency closure |
 
-DXVK-macOS is shown as an optional macOS alternative to the runtime's own included or automatic choice. Upstream, async and Template sources remain under Additional sources; D9VK is the older Direct3D 8/9 variant. Template package versions are distinct from installed component versions. The GStreamer panel registers prepared local codec folders, and D3DMetal links to Apple's official Game Porting Toolkit download page.
+DXVK-macOS is shown as an optional macOS alternative to the runtime's own included or automatic choice. Upstream, async, historical D8VK/D9VK and Template sources remain under Additional sources. D8VK and D9VK retain their historical releases; their Direct3D 8 and 9 work is part of modern DXVK. Installed rows show API coverage read from the actual libraries, so each version can expose a different API set. Template package versions are distinct from installed component versions. The GStreamer panel registers prepared local codec folders, and D3DMetal links to Apple's official Game Porting Toolkit download page.
 
 Each catalog has its own Refresh control and publisher link. Release labels identify the source. Installed files supply PE machine and builtin/native form, Mach-O CPU slices, deployment targets and Unix imports. Release numbers and vendor labels do not determine compatibility.
 
@@ -67,4 +67,4 @@ The inspector shows the effective Direct3D engine, Vulkan driver and Direct3D 12
 
 ## Sources and notices
 
-[DXMT](https://github.com/3Shain/dxmt/releases) carries its release licence; v0.80 uses MIT and later source uses LGPL-2.1-or-later. [DXVK](https://github.com/doitsujin/dxvk) and [Gcenx's macOS and async builds](https://github.com/Gcenx/DXVK-macOS) use the zlib licence. [vkd3d-proton](https://github.com/HansKristian-Work/vkd3d-proton) uses LGPL-2.1. [Sikarugir Template](https://github.com/Sikarugir-App/Template/releases) supplies its component notices. [GStreamer](https://gstreamer.freedesktop.org/) and codec dependencies retain their own licences.
+[DXMT](https://github.com/3Shain/dxmt/releases) carries its release licence; v0.80 uses MIT and later source uses LGPL-2.1-or-later. [DXVK](https://github.com/doitsujin/dxvk), [D8VK](https://github.com/AlpyneDreams/d8vk), [D9VK](https://github.com/misyltoad/d9vk) and [Gcenx's macOS and async builds](https://github.com/Gcenx/DXVK-macOS) use the zlib licence. [vkd3d-proton](https://github.com/HansKristian-Work/vkd3d-proton) uses LGPL-2.1. [Sikarugir Template](https://github.com/Sikarugir-App/Template/releases) supplies its component notices. [GStreamer](https://gstreamer.freedesktop.org/) and codec dependencies retain their own licences.

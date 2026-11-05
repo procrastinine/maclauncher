@@ -31,7 +31,7 @@ function registrationSource(input, root = input) {
     ? { kind: "sikarugir", id: input, runtime: "sikarugir", label: "Sikarugir" } : "custom";
 }
 function description(root, definition, options = {}) {
-  return require("./translator-description").describeTranslator(root, { engine: definition.engine, apis: definition.apis || [], ...options });
+  return require("./translator-description").describeTranslator(root, { engine: definition.engine, ...options });
 }
 function inspected(root, definition, options) {
   const translator = description(root, definition, options);
@@ -88,7 +88,7 @@ function includedReferences(engine, options = {}) {
           const label = [Description.label(value), host.versionLabel || path.basename(sourcePath), value.templateComponent].filter(Boolean).join(" · ");
           rows.set(version, { version, versionLabel: label, ready: true, included: true, readOnly: true, removable: false, supportsDefault: false,
             reference: { managerId, version: host.version, path: sourcePath }, source: value.source, installDir: value.root,
-            minimumMacOS: value.macosFloor, architectures, platformKey: architectures.join(", "), detail: value.source.label });
+            minimumMacOS: value.macosFloor, architectures, apis: value.apis, platformKey: architectures.join(", "), detail: value.source.label });
         }
       } catch (error) { warn(`${sourcePath}: ${error.message}`); }
     }

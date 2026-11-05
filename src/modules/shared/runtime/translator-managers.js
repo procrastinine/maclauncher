@@ -4,15 +4,17 @@ const Upstream = require("./upstream"), Component = require("./component-runtime
 const { archiveFormat } = require("./release-files");
 const definitions = {
   gstreamer: { label: "GStreamer codecs", groupId: "codecs", localOnly: true, sourceName: "GStreamer", sourceDescription: "GStreamer publishes multimedia libraries and plugins. Prepared codec folders are registered locally.", memberOrder: 30, names: ["gstreamer-1.0"], sources: [] },
-  dxvk: { label: "DXVK", groupId: "directx-vulkan", memberOrder: 2, apis: ["Direct3D 9", "Direct3D 10", "Direct3D 11"], names: ["dxvk", "dxvk3", "d9vk"],
+  dxvk: { label: "DXVK", groupId: "directx-vulkan", memberOrder: 2, names: ["dxvk", "dxvk3", "d9vk"],
     sources: [["upstream", "DXVK", "doitsujin/dxvk", null, null, { secondary: true }], ["macos", "DXVK-macOS", "Gcenx/DXVK-macOS", name => !/async/i.test(name), null, { description: "CrossOver's included copy or automatic choice is the ordinary route; Sikarugir uses its Template. DXVK-macOS releases published by Gcenx/DXVK-macOS are an optional macOS alternative." }],
       ["async", "DXVK-macOS async", "Gcenx/DXVK-macOS", name => /async/i.test(name), null, { secondary: true, description: "DXVK-macOS async releases published by Gcenx/DXVK-macOS, with asynchronous shader compilation." }],
+      ["d8vk", "D8VK", "AlpyneDreams/d8vk", null, null, { secondary: true, engine: "d8vk", componentLabel: "D8VK", description: "Historical D8VK releases published by AlpyneDreams/d8vk. Its Direct3D 8 work was merged into DXVK; modern DXVK packages can include this API." }],
+      ["d9vk", "D9VK", "misyltoad/d9vk", null, null, { secondary: true, engine: "d9vk", componentLabel: "D9VK", description: "Historical D9VK releases published by misyltoad/d9vk. Its Direct3D 9 work was merged into DXVK; installed libraries determine each package's API coverage." }],
       ...["dxvk", "dxvk3", "d9vk"].map(component => ["template-" + component, "Sikarugir Template · " + component, "Sikarugir-App/Template", null, component, { secondary: true, ...(component === "d9vk" ? { description: "D9VK copies taken from a Sikarugir Template release. This is the older Direct3D 8/9 variant." } : {}) }])] },
-  "vkd3d-proton": { label: "vkd3d-proton", groupId: "directx-vulkan", memberOrder: 3, apis: ["Direct3D 12"], names: ["vkd3d-proton"],
+  "vkd3d-proton": { label: "vkd3d-proton", groupId: "directx-vulkan", memberOrder: 3, names: ["vkd3d-proton"],
     sources: [["upstream", "vkd3d-proton", "HansKristian-Work/vkd3d-proton"]] },
-  d3dmetal: { label: "D3DMetal", groupId: "directx-metal", upstreamUrl: "https://developer.apple.com/games/game-porting-toolkit/", upstreamLabel: "Apple Game Porting Toolkit downloads", memberOrder: 1, apis: ["Direct3D 11", "Direct3D 12"], names: ["d3dmetal", "apple_gptk", "redist"],
+  d3dmetal: { label: "D3DMetal", groupId: "directx-metal", upstreamUrl: "https://developer.apple.com/games/game-porting-toolkit/", upstreamLabel: "Apple Game Porting Toolkit downloads", memberOrder: 1, names: ["d3dmetal", "apple_gptk", "redist"],
     sources: [["template", "Sikarugir Template", "Sikarugir-App/Template", null, "d3dmetal"]] },
-  dxmt: { label: "DXMT", groupId: "directx-metal", memberOrder: 0, apis: ["Direct3D 10", "Direct3D 11"], names: ["dxmt"],
+  dxmt: { label: "DXMT", groupId: "directx-metal", memberOrder: 0, names: ["dxmt"],
     sources: [["upstream", "DXMT", "3Shain/dxmt", name => /builtin/i.test(name)],
       ["template", "Sikarugir Template", "Sikarugir-App/Template", null, "dxmt"]] }
 };
@@ -38,7 +40,7 @@ function catalogSource([id, label, repository, filter, component, presentation =
     (release.assets || []).filter(asset => archiveFormat(asset.name) && (!filter || filter(asset.name)) &&
       (!component || /^Template-/i.test(asset.name))).map(asset => ({
         version: (id + "-" + asset.name.replace(/\.(?:tar\.(?:gz|xz|bz2)|t[gx]z|zip|tar)$/i, "")).replace(/[^a-z0-9._-]/ig, "-"),
-        architecture: "universal", label: versionLabel({ asset: { filename: asset.name } }, null, projectLabel || label), assets: [asset], details: { component, catalogSourceId: id } })) });
+        architecture: "universal", label: versionLabel({ asset: { filename: asset.name } }, null, projectLabel || label), assets: [asset], details: { component, catalogSourceId: id, ...(presentation.engine ? { translatorEngine: presentation.engine } : {}) } })) });
   return { id, label, description: component ? `${projectLabel} copies taken from a Sikarugir Template release (${component}).` : `${label} releases published by ${repository}.`, url: `https://github.com/${repository}/releases`, ...presentation, discover: async options => upstreamPins(await upstream.discover(options)) };
 }
 function createManager(engine, { dependencies = {} } = {}) {
@@ -46,16 +48,16 @@ function createManager(engine, { dependencies = {} } = {}) {
   const manager = createPinnedNativeManager({ id: engine === "dxmt" ? "sikarugir-graphics-bridge" : "translator-" + engine,
     formerIds: engine === "dxmt" ? ["crossover-graphics-bridge"] : [], label: definition.label,
     upstreamUrl: definition.upstreamUrl, upstreamLabel: definition.upstreamLabel,
-    formatVersionLabel: (pin, installed) => versionLabel(pin, installed, definition.label),
+    formatVersionLabel: (pin, installed) => versionLabel(pin, installed, catalogSources.find(source => source.id === pin?.catalogSourceId)?.componentLabel || definition.label),
     discoverCatalog: () => [], ...(catalogSources.length ? { catalogSources } : {}), sourceUrl: catalogSources[0]?.url || "https://gstreamer.freedesktop.org/", sourceLabel: "Source", sourceName: definition.sourceName, sourceDescription: definition.sourceDescription, nativeLibrary: true, cacheDownloads: true,
     resolveExecutable(root) { return Component.inspected(Component.componentRoot(root, definition), definition).executablePath; },
     inspectRuntime({ runtimePath, runtimeRoot, runtimeSource, runtimeCatalogEntry }) {
-      return Component.inspected(Component.componentRoot(runtimeRoot || path.dirname(runtimePath), definition), definition, { source: runtimeCatalogEntry ? translatorSource(runtimeCatalogEntry) : runtimeSource || "upstream" });
+      return Component.inspected(Component.componentRoot(runtimeRoot || path.dirname(runtimePath), definition), definition, { engine: runtimeCatalogEntry?.translatorEngine || definition.engine, source: runtimeCatalogEntry ? translatorSource(runtimeCatalogEntry) : runtimeSource || "upstream" });
     },
     prepareInstall({ unpacked, pin }) {
       const selected = pin.component ? { ...definition, names: [pin.component] } : definition;
       const root = Component.componentRoot(unpacked, selected);
-      const translator = Component.description(root, definition, { source: translatorSource(pin) });
+      const translator = Component.description(root, definition, { engine: pin.translatorEngine || definition.engine, source: translatorSource(pin) });
       const files = Object.fromEntries(translator.files.filter(file => file.format !== "json").map(file => [file.relative, require("./pinned-native-manager").hashFile(file.path)]));
       translator.files = translator.files.map(file => ({ ...file, path: file.relative }));
       delete translator.root; delete translator.id;
