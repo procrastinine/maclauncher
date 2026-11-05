@@ -174,7 +174,7 @@ function createManager(backend, dependencies = {}) {
     const root = Component.componentRoot(context.data?.root || input, { names: [backend], library: backend === "moltenvk" ? /^lib(?:MoltenVK|MVK)\.dylib$/ : /^libvulkan_kosmickrisp\.dylib$/ });
     const inspected = customInspect(root, context), source = Component.registrationSource(input, root);
     const descriptions = inspected.installationMetadata.libraries.map(file => Component.description(path.join(inspected.installDir, file.file), { engine: backend, apis: ["Vulkan"] }, { source }));
-    const translator = { ...descriptions[0], files: descriptions.flatMap(item => item.files), unixImports: descriptions.flatMap(item => item.unixImports),
+    const translator = { ...descriptions[0], files: descriptions.flatMap(item => item.files),
       macosFloor: descriptions.map(item => item.macosFloor).filter(Boolean).sort(require("../runtime/translator-description").compareVersions).at(-1) || null };
     return { ...inspected, translator, translatorRoot: translator.root };
   } });

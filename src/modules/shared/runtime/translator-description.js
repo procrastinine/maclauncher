@@ -11,10 +11,10 @@ const FORMS = Object.freeze(['builtin', 'native', 'icd', 'dylib']);
 
 /**
  * A description has id, component, engine, version, source, apis, form, root,
- * files, macosFloor and unixImports. Each file has path (absolute), optional
+ * files and macosFloor. Each file has path (absolute), optional
  * relative (installation-relative placement), form, apis, machine (PE number),
- * cpuSlices (Mach-O names), macosFloor and unixImports. Imports are
- * { symbol, library, weak? }; library is the Mach-O dependency install name.
+ * cpuSlices (Mach-O names), macosFloor and slices. Mach-O slice imports keep
+ * { symbol, library, weak? }; library is the dependency install name.
  * source may be a catalog id, 'custom', or { kind, id, label, runtime? }.
  * Mixed packages use a per-file form. Unknown fields are retained and ignored.
  * Optional pluginDirectories lists plugin search directories relative to root;
@@ -25,9 +25,9 @@ function description(input) {
   if (!input || !input.component || !input.engine || !input.form)
     throw new TypeError('A translator component, engine and form are required.');
   if (!Array.isArray(input.files)) throw new TypeError('Translator files are required.');
-  const files = input.files.map(file => ({ ...file, ...(file.format === 'pe' ? { apis: fileApis(file) } : {}) }));
-  return { ...input, apis: input.apis?.length ? [...input.apis] : apisForFiles(files), files,
-    unixImports: [...(input.unixImports || [])], version: String(input.version || '') };
+  const { unixImports: _legacyImports, ...value } = input;
+  const files = input.files.map(({ unixImports: _legacyFileImports, ...file }) => ({ ...file, ...(file.format === 'pe' ? { apis: fileApis(file) } : {}) }));
+  return { ...value, apis: input.apis?.length ? [...input.apis] : apisForFiles(files), files, version: String(input.version || '') };
 }
 function label(value) {
   if (!value) return '';
@@ -119,8 +119,7 @@ function describeTranslator(root, { engine, source, version, component, id, apis
   for (const warning of warnings) warn(logger, `[translators] ${warning}`);
   return description({ id: id || `${engine}:${root}`, root, component, engine, source, version, apis, form, files,
     warnings, ...(pluginDirectories === undefined ? {} : { pluginDirectories }),
-    macosFloor: floors.sort(compareVersions).at(-1) || null,
-    unixImports: files.flatMap(file => file.unixImports || []) });
+    macosFloor: floors.sort(compareVersions).at(-1) || null });
 }
 function compareVersions(a, b) {
   const left = String(a).split('.').map(Number), right = String(b).split('.').map(Number);
@@ -128,12 +127,11 @@ function compareVersions(a, b) {
   return 0;
 }
 function inspectFile(file) {
-  const result = { ...file };
+  const { unixImports: _legacyImports, ...result } = file;
   try {
     const native = readMachOLoadCommands(file.path, { imports: true });
     return { ...result, realPath: fs.realpathSync(file.path), format: 'macho', form: file.path.endsWith('.so') ? 'builtin' : 'dylib', apis: [], cpuSlices: native.architectures,
-      slices: native.slices, macosFloor: native.slices.map(slice => slice.minimumMacOS).filter(Boolean).sort(compareVersions).at(-1) || null,
-      unixImports: native.slices.flatMap(slice => slice.imports.map(item => ({ ...item, architecture: slice.architecture }))) };
+      slices: native.slices, macosFloor: native.slices.map(slice => slice.minimumMacOS).filter(Boolean).sort(compareVersions).at(-1) || null };
   } catch (error) {
     if (error.code !== 'MACHO_MALFORMED') result.inspectionWarning = error.message;
   }
@@ -143,9 +141,9 @@ function inspectFile(file) {
     if (!pe.importsComplete) result.inspectionWarning = [result.inspectionWarning,
       `PE import inspection is incomplete: ${pe.importWarning || 'unknown import metadata'}`].filter(Boolean).join(' ');
     // Replacement DLL resources report Windows component versions, not translator releases.
-    return { ...result, realPath: original, format: 'pe', form: pe.form, machine: pe.machine, architecture: pe.architecture, macosFloor: null, unixImports: [],
+    return { ...result, realPath: original, format: 'pe', form: pe.form, machine: pe.machine, architecture: pe.architecture, macosFloor: null,
       apis: fileApis({ ...file, format: 'pe' }), peImports: pe.peImports, importsComplete: pe.importsComplete, version: null };
   }
-  return { ...result, format: file.path.endsWith('.json') ? 'json' : 'unknown', apis: [], macosFloor: null, unixImports: [] };
+  return { ...result, format: file.path.endsWith('.json') ? 'json' : 'unknown', apis: [], macosFloor: null };
 }
 module.exports = { COMPONENTS, ENGINES, FORMS, description, label, describeTranslator, inspectFile, compareVersions };

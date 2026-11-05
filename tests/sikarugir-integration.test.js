@@ -295,7 +295,7 @@ test("ordinary Play obtains one consent, prepares the Windows environment and ru
   assert.equal(plan.components["vulkan-driver"].used.icd,
     path.join(root, "runtime-payloads", "engine-12", "support", RELATIVE_PATHS.vulkan, "MoltenVK_icd.json"));
   assert.equal(plan.components["d3d-renderer"].fallback, false);
-  assert.deepEqual(plan.components["d3d-renderer"].used.unixImports.map(({ symbol, library }) => ({ symbol, library })),
+  assert.deepEqual(plan.components["d3d-renderer"].used.files.flatMap(file => (file.slices || []).flatMap(slice => slice.imports || [])).map(({ symbol, library }) => ({ symbol, library })),
     [{ symbol: "wine_unix_call", library: "@rpath/ntdll.so" }]);
   assert.ok(plan.record.modules["ntdll.so"].exports.includes("wine_unix_call"));
   assert.equal(spawned.command, "/bin/sh"); assert.equal(spawned.args[2], "maclauncher-sikarugir");
