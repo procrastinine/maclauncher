@@ -205,7 +205,8 @@ test("Windows publisher launch entries preserve saved relative executable roots 
   const launch = await Launch.prepareLaunch(entry, { userDataDir,
     settings: { runtimes: { crossover: { defaultVersion: installed.version } } }, runtimeSettings: settings }, { run });
   assert.equal(launch.executablePath, chosen); assert.equal(launch.workingDirectory, path.dirname(chosen));
-  assert.equal(launch.args[launch.args.indexOf("--") + 1], chosen);
+  assert.equal(launch.args[launch.args.indexOf("--") + 1], "G:\\bin\\Chosen.exe");
+  assert.equal(launch.windowsWorkingDirectory, "G:\\bin");
   assert.equal(entry.runtimeData.crossover.sourceRoot, content);
   assert.deepEqual(commands, [installed.bottleToolPath], "preparation uses only the injected synthetic bottle command");
   const sikarugir = require("../src/modules/crossover/sikarugir/launch").executableEvidence(entry, settings);
@@ -607,11 +608,11 @@ test("CrossOver Play automatically creates a private bottle and launches the sel
   assert.equal(calls[0].options.env.WINEPREFIX, launch.bottlePath);
   assert.equal(launch.args[launch.args.indexOf("--dll") + 1], "winhttp=n,b");
   assert.ok(launch.args.includes("--wait-children"));
-  assert.deepEqual(launch.args.slice(launch.args.indexOf("--")), ["--", launch.executablePath, "-windowed", ...context.gameArguments]);
+  assert.deepEqual(launch.args.slice(launch.args.indexOf("--")), ["--", launch.windowsExecutablePath, "-windowed", ...context.gameArguments]);
   assert.equal(calls[0].args.some(arg => context.gameArguments.includes(arg)), false, "bottle setup does not receive game arguments");
   assert.equal(fs.realpathSync(launch.executablePath), fs.realpathSync(original));
   assert.equal(fs.realpathSync(launch.gameRoot), fs.realpathSync(game));
-  assert.equal(launch.args[launch.args.indexOf("--workdir") + 1], path.dirname(launch.executablePath));
+  assert.equal(launch.args[launch.args.indexOf("--workdir") + 1], launch.windowsWorkingDirectory);
   assert.equal(fs.existsSync(path.join(launch.directory, "game")), false);
   assert.equal(fs.existsSync(path.join(launch.directory, "game-files.json")), false);
   assert.equal(entry.runtimeData.crossover.gameRoot, launch.gameRoot);
@@ -691,7 +692,7 @@ test("CrossOver transports trusted game effects through its vendor environment a
   assert.match(camera.args[camera.args.indexOf("--env") + 1], /MACLAUNCHER_DXMT_BASE_LIBRARY=/);
   assert.equal(camera.bottlePath, disabled.bottlePath);assert.equal(preparation.length, 1);
   assert.equal(camera.workingDirectory, path.dirname(path.join(game, "Game.exe")));
-  assert.equal(camera.args[camera.args.indexOf("--workdir") + 1], camera.workingDirectory, "camera adaptation keeps the original cwd");
+  assert.equal(camera.args[camera.args.indexOf("--workdir") + 1], camera.windowsWorkingDirectory, "camera adaptation keeps the mapped original cwd");
 });
 
 test("CrossOver loader failure preserves ordinary vendor launch, Steam and final game environment", async t => {
@@ -732,7 +733,7 @@ test("CrossOver loader failure preserves ordinary vendor launch, Steam and final
   for (const key of ['RESHADE_EFFECT_PLAN', 'RESHADE_LIVE_EFFECTS', 'WINELOADER', 'CX_WINELOADER']) assert.equal(options.env[key], undefined);
   assert.equal(options.env.CUSTOM, 'kept');assert.equal(options.env.WINEDLLOVERRIDES, 'winhttp=n,b');
   assert.equal(options.env.WINEPREFIX, ready.bottlePath);
-  assert.deepEqual(args.slice(args.indexOf('--')), ['--', ready.executablePath, '-windowed', ...context.gameArguments]);
+  assert.deepEqual(args.slice(args.indexOf('--')), ['--', ready.windowsExecutablePath, '-windowed', ...context.gameArguments]);
   assert.doesNotMatch(args[args.indexOf('--env') + 1], /libreshade|RESHADE_EFFECT_PLAN/);
   assert.match(warnings[0][0], /vendor renderer without shared graphics/);
   assert.deepEqual(settings, requested);assert.deepEqual(fs.readFileSync(original), fs.readFileSync(ready.executablePath));

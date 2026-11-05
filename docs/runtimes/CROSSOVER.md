@@ -30,7 +30,7 @@ An application updated in the same location keeps its selection and its existing
 
 ## Bottles and private game files
 
-Ordinary Play passes the original Windows executable to CrossOver and uses the executable's folder as the working directory, so game assets, portable saves and configuration stay at their original paths. Play makes no copy of the game and no folder of links to it. It also neither reads nor updates the private game folders of earlier MacLauncher versions, and their files and records stay untouched.
+Ordinary Play uses a prefix-local Windows drive letter for the game root and passes the executable and working directory through that drive, so game assets, portable saves and configuration stay at their original paths. The mapping keeps the Windows root short regardless of the Mac folder depth. Existing drive mappings are preserved and matching mappings are reused. Game files and the native working directory stay at their original locations; Play makes no copy of the game and no folder of links to it. It also neither reads nor updates the private game folders of earlier MacLauncher versions, and their files and records stay untouched.
 
 Executable selection follows an explicit Windows executable choice, the publisher's Windows entry recorded with a Steam download, the detected engine's Windows entry, the recorded game program, then executable discovery. Steam downloads retain the publisher's default Windows entry from the app metadata already used for the download. Reading that receipt is offline; missing or invalid entries fall through to the other choices. Every entry must be a Windows PE executable inside the game folder.
 

@@ -402,7 +402,9 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     warnGraphics(context.logger, "CrossOver graphics loader could not be prepared. Using the vendor renderer without shared graphics processing.", context.graphicsBridgeFailure.reason);
   }
   const workingDirectory = path.dirname(executable);
-  const args = ["--bottle", bottlePath, "--wait-children", "--workdir", workingDirectory];
+  const { windowsExecutablePath, windowsWorkingDirectory } = require("../../shared/runtime/wine-game-paths").prepareGamePaths(bottlePath,
+    { gameRoot, executablePath, workingRoot: originalRoot, workingDirectory });
+  const args = ["--bottle", bottlePath, "--wait-children", "--workdir", windowsWorkingDirectory];
   if (!WineSettings.inherit(settings.windowsVersion)) {
     if (!Object.hasOwn(WineSettings.WINDOWS_VERSIONS, settings.windowsVersion)) throw new Error("Unsupported Wine Windows version.");
     args.push("--winver", settings.windowsVersion);
@@ -416,7 +418,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   if (dll) args.push("--dll", dll);
   if (settings.wineDebug) args.push("--debugmsg", safeText(settings.wineDebug, "Wine debug channels"));
   if (settings.wineDebug) args.push("--cx-log", path.join(directory, "wine.log"));
-  args.push("--", executablePath, ...argumentsList, ...(context.gameArguments || []));
+  args.push("--", windowsExecutablePath, ...argumentsList, ...(context.gameArguments || []));
   if (cameraView) {
     GameView.remember(entry, context, "crossover", cameraView, recovery);
     GameView.watch(entry, context, directory, "crossover", cameraView);
@@ -428,7 +430,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     translatorRows: Translators.inspectorRows(translatorPlan),
     translatorPlanInputs: Translators.planInputs(context.runtimeSettings, context.wineEnvironment?.install || selected.install), cameraAdapterNotice: context.cameraAdapterNotice || null, graphicsInputs: context.graphicsInputs } };
   context.onEntryChange?.(entry);
-  return { ...selected, directory, gameRoot, workingDirectory, bottlePath, executablePath, environment, args, translatorPlan, existingEnvironment };
+  return { ...selected, directory, gameRoot, workingDirectory, bottlePath, executablePath, windowsExecutablePath, windowsWorkingDirectory, environment, args, translatorPlan, existingEnvironment };
 }
 
 module.exports = { runtimeDirectory, buildEnvironment, parseEnvironment, wineEnvironmentString, dllOverrides,

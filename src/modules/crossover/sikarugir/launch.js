@@ -253,29 +253,6 @@ function executableEvidence(entry, settings = {}) {
   const match = Detection.readWindowsExecutable(real);
   return match ? { ...match, sourceRoot: root } : null;
 }
-function mapGameDrive(directory, prefixPath, gameRoot, executablePath) {
-  Writable.assertOwnDirectory(directory, prefixPath, { create: false });
-  const root = fs.realpathSync(gameRoot), executable = fs.realpathSync(executablePath);
-  if (!Detection.inside(root, executable)) throw new Error("The selected Windows executable escapes the selected game folder.");
-  const relative = path.relative(root, executable);
-  if (!relative || relative.split(path.sep).some(name => /[\\:\0\r\n]/.test(name))) {
-    throw new Error("The Windows executable path contains unsupported filename characters.");
-  }
-  const dosdevices = path.join(prefixPath, "dosdevices");
-  Writable.assertOwnDirectory(directory, dosdevices);
-  // A short drive path preserves Windows MAX_PATH compatibility without a
-  // game mirror. Existing mappings, including old private G: links, stay.
-  for (const drive of "ghijklmnopqrstuvwxy") {
-    const mapping = path.join(dosdevices, drive + ":");
-    let stat; try { stat = fs.lstatSync(mapping); } catch (error) { if (error.code !== "ENOENT") throw error; }
-    if (stat) {
-      let target; try { if (stat.isSymbolicLink()) target = fs.realpathSync(mapping); } catch {}
-      if (target !== root) continue;
-    } else fs.symlinkSync(path.relative(fs.realpathSync(dosdevices), root), mapping, "dir");
-    return drive.toUpperCase() + ":\\" + relative.split(path.sep).join("\\");
-  }
-  return executablePath;
-}
 async function prepareLaunch(entry, context, dependencies = {}) {
   const manager = dependencies.manager || require("./runtime/manager");
   const prepareGraphicsView = dependencies.prepareGraphicsView || require("./graphics").prepareGraphicsView;
@@ -353,10 +330,9 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   await TranslatorFiles.applyNativeLibraries(translatorView, prefixPath, { signal: context.signal });
   await graphics.applyPrefix?.();
   context.signal?.throwIfAborted();
-  // Wine accepts Unix absolute paths. Long paths retain a short Windows drive
-  // rooted at the original game; mappings from earlier Plays stay untouched.
-  const windowsExecutablePath = !existingEnvironment && executablePath.length >= 240 ? mapGameDrive(directory, prefixPath, gameRoot, executablePath) : executablePath;
   const workingDirectory = path.dirname(match.windowsExecutablePath);
+  const { windowsExecutablePath, windowsWorkingDirectory } = require("../../shared/runtime/wine-game-paths").prepareGamePaths(prefixPath,
+    { gameRoot, executablePath, workingRoot: originalRoot, workingDirectory });
   let { environment } = buildEnvironment(settings, selected.install, directory, prefixPath, graphics, { ...dependencies, translatorPlan, existingEnvironment });
   // Apply launcher-owned optional effects only to the game, after stock Wine
   // finishes prefix initialization. User-supplied loader paths remain blocked.
@@ -367,14 +343,14 @@ async function prepareLaunch(entry, context, dependencies = {}) {
       else delete environment[key];
     }
   }
-  await WineSettings.applyRegistry({ ...context.runtimeSettings, ...settings }, { executable: path.basename(windowsExecutablePath),
+  await WineSettings.applyRegistry({ ...context.runtimeSettings, ...settings }, { executable: path.basename(executablePath),
     assertWritable: existingEnvironment ? () => Environments.assertWritableRegistry(existingEnvironment) : undefined }, args => {
     const options = { cwd: directory, env: environment, signal: context.signal, timeout: 30000 };
     return dependencies.run ? dependencies.run(selected.install.executablePath, selected.install.serverPath, args, options) : existingEnvironment
       ? require("../../shared/runtime/wine-processes").runTool(selected.install.executablePath, args, options)
       : runSupervised(selected.install.executablePath, selected.install.serverPath, args, options);
   });
-  const args = WineSettings.desktopArguments(settings, [...(existingEnvironment ? ["start.exe", "/wait", "/unix"] : []), windowsExecutablePath, ...(Array.isArray(settings.arguments) ? settings.arguments : []).map(value => safeText(value, "Game arguments")),
+  const args = WineSettings.desktopArguments(settings, ["start.exe", "/d", windowsWorkingDirectory, "/exec", windowsExecutablePath, ...(Array.isArray(settings.arguments) ? settings.arguments : []).map(value => safeText(value, "Game arguments")),
     ...(context.gameArguments || [])]);
   if (cameraBridge && cameraView) {
     GameView.remember(entry, context, "sikarugir", cameraView, recovery);
@@ -387,9 +363,9 @@ async function prepareLaunch(entry, context, dependencies = {}) {
     translatorRows: Translators.inspectorRows(translatorPlan),
     translatorPlanInputs: Translators.planInputs(context.runtimeSettings, context.wineEnvironment?.install || selected.install), cameraAdapterNotice: context.cameraAdapterNotice || null, graphicsInputs: context.graphicsInputs } };
   context.onEntryChange?.(entry);
-  return { ...selected, directory, gameRoot, workingDirectory, prefixPath, viewRoot, executablePath, windowsExecutablePath, graphics, environment, args, translatorPlan,
+  return { ...selected, directory, gameRoot, workingDirectory, prefixPath, viewRoot, executablePath, windowsExecutablePath, windowsWorkingDirectory, graphics, environment, args, translatorPlan,
     existingEnvironment, winePath: graphics.executablePath || selected.install.executablePath, serverPath: graphics.serverPath || selected.install.serverPath };
 }
 
 module.exports = { SUPERVISOR, supervisorArguments, PROTECTED_ENVIRONMENT, runtimeDirectory, safeText, parseEnvironment, dllOverrides,
-  buildEnvironment, runSupervised, prefixRuntime, ensurePrefix, executableEvidence, mapGameDrive, prepareLaunch };
+  buildEnvironment, runSupervised, prefixRuntime, ensurePrefix, executableEvidence, prepareLaunch };

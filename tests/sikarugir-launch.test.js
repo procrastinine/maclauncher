@@ -12,6 +12,7 @@ const { untilTestEnds } = require("./helpers/fixture-process");
 const Detection = require("../src/modules/crossover/detect");
 const WindowsFiles = require("../src/modules/crossover/runtime/launch");
 const Launch = require("../src/modules/crossover/sikarugir/launch");
+const GamePaths = require("../src/modules/shared/runtime/wine-game-paths");
 const Provider = require("../src/modules/crossover/sikarugir/provider");
 
 function fixture(t) {
@@ -198,16 +199,17 @@ test("ordinary Wine uses original files without staging or reconciling earlier v
   fs.writeFileSync(path.join(entry.gamePath, "asset.dat"), "one");
   const launch = await Launch.prepareLaunch(entry, context, dependencies);
   assert.equal(launch.gameRoot, fs.realpathSync(entry.gamePath));
-  assert.equal(launch.args[0], path.join(launch.gameRoot, "Game.exe"));
+  assert.equal(launch.windowsExecutablePath, "G:\\Game.exe");
+  assert.equal(launch.windowsWorkingDirectory, "G:\\");
   assert.equal(fs.existsSync(path.join(managed, "game-files.json")), false);
-  const mapping = path.join(launch.prefixPath, "dosdevices", "g:");fs.mkdirSync(path.dirname(mapping), {recursive: true});fs.symlinkSync(old, mapping);
+  const mapping = path.join(launch.prefixPath, "dosdevices", "y:");fs.symlinkSync(old, mapping);
   fs.writeFileSync(path.join(entry.gamePath, "asset.dat"), "two");
   fs.writeFileSync(path.join(launch.gameRoot, "Save02.dat"), "original portable save");
   const again = await Launch.prepareLaunch(entry, context, dependencies);
   assert.equal(again.gameRoot, launch.gameRoot);assert.equal(fs.readFileSync(path.join(again.gameRoot, "asset.dat"), "utf8"), "two");
   assert.equal(fs.readFileSync(path.join(entry.gamePath, "Save02.dat"), "utf8"), "original portable save");
   assert.equal(fs.readFileSync(path.join(old, "Save01.dat"), "utf8"), "earlier private save");
-  assert.equal(fs.readlinkSync(mapping), old, "the earlier G: mapping is untouched");
+  assert.equal(fs.readlinkSync(mapping), old, "the earlier Y: mapping is untouched");
   assert.equal(dependencies.calls.length, 2, "warm Play does not initialize its prefix again");
 });
 
@@ -232,10 +234,10 @@ test("ordinary Wine preparation configures its private prefix silently and prese
   assert.equal(dependencies.calls[0].command, install.executablePath); assert.equal(dependencies.calls[0].server, install.serverPath);
   assert.equal(dependencies.calls[0].options.env.WINEPREFIX, launch.prefixPath);
   assert.equal(dependencies.calls[0].options.env.WINEDLLOVERRIDES, undefined, "game renderer and mod overrides wait until preparation finishes");
-  assert.deepEqual(launch.args, [launch.executablePath, "-windowed", "literal;$()", ...context.gameArguments]);
-  assert.equal(launch.windowsExecutablePath, launch.executablePath);
+  assert.deepEqual(launch.args, ["start.exe", "/d", launch.windowsWorkingDirectory, "/exec", launch.windowsExecutablePath, "-windowed", "literal;$()", ...context.gameArguments]);
+  assert.equal(launch.windowsExecutablePath, "G:\\Game.exe");
   assert.equal(fs.realpathSync(launch.gameRoot), fs.realpathSync(entry.gamePath));
-  assert.equal(fs.existsSync(path.join(launch.prefixPath, "dosdevices", "g:")), false);
+  assert.equal(fs.realpathSync(path.join(launch.prefixPath, "dosdevices", "g:")), fs.realpathSync(entry.gamePath));
   assert.equal(launch.environment.WINEDLLOVERRIDES, "d3d11,dxgi=b;winhttp=n,b");
   assert.equal(fs.lstatSync(path.join(launch.prefixPath, "drive_c", "users", "player", "Documents")).isDirectory(), true);
   fs.writeFileSync(path.join(launch.gameRoot, "settings.ini"), "private");
@@ -449,8 +451,8 @@ test("long original game paths keep a short Wine path without a private game mir
   const context = { userDataDir: path.join(directory, "data"), settings: {}, runtimeSettings: {} };
   const launch = await Launch.prepareLaunch(entry, context, adapters(installation(directory)));
   assert.ok(launch.executablePath.length > 260);
-  assert.equal(launch.args[0], "G:\\Game files\\遊戯.exe");
-  assert.ok(launch.args[0].length < 40, "the actual Windows executable path stays below MAX_PATH");
+  assert.equal(launch.windowsExecutablePath, "G:\\Game files\\遊戯.exe");
+  assert.ok(launch.windowsExecutablePath.length < 40, "the actual Windows executable path stays below MAX_PATH");
   assert.equal(fs.realpathSync(launch.executablePath), fs.realpathSync(original));
   assert.equal(fs.realpathSync(launch.gameRoot), fs.realpathSync(source));
   const mapping = path.join(launch.prefixPath, "dosdevices", "g:");
@@ -466,15 +468,15 @@ test("short original drive mappings preserve conflicting old entries and reject 
   const executable = pe(path.join(gameRoot, "Game.exe")), dosdevices = path.join(prefix, "dosdevices"), mapping = path.join(dosdevices, "g:");
   fs.mkdirSync(dosdevices, { recursive: true });
   fs.writeFileSync(mapping, "existing mapping file");
-  assert.equal(Launch.mapGameDrive(directory, prefix, gameRoot, executable), "H:\\Game.exe");
+  assert.equal(GamePaths.prepareGamePaths(prefix, { gameRoot, executablePath: executable }).windowsExecutablePath, "H:\\Game.exe");
   assert.equal(fs.readFileSync(mapping, "utf8"), "existing mapping file");
   fs.unlinkSync(mapping);
   const outside = path.join(directory, "outside"); fs.mkdirSync(outside); fs.writeFileSync(path.join(outside, "save.dat"), "outside save");
   fs.symlinkSync(outside, mapping, "dir");
-  assert.equal(Launch.mapGameDrive(directory, prefix, gameRoot, executable), "H:\\Game.exe");
+  assert.equal(GamePaths.prepareGamePaths(prefix, { gameRoot, executablePath: executable }).windowsExecutablePath, "H:\\Game.exe");
   assert.equal(fs.readlinkSync(mapping), outside);
   fs.unlinkSync(mapping);fs.unlinkSync(path.join(dosdevices, "h:")); fs.rmdirSync(dosdevices); fs.symlinkSync(outside, dosdevices, "dir");
-  assert.throws(() => Launch.mapGameDrive(directory, prefix, gameRoot, executable), /must not be aliases/);
+  assert.throws(() => GamePaths.prepareGamePaths(prefix, { gameRoot, executablePath: executable }).windowsExecutablePath, /must not be aliases/);
   assert.equal(fs.existsSync(path.join(outside, "g:")), false);
   assert.equal(fs.readFileSync(path.join(outside, "save.dat"), "utf8"), "outside save");
 });
