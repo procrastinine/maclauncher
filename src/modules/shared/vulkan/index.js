@@ -1,6 +1,6 @@
 const fs = require("node:fs"), path = require("node:path");
 const { managers, definitions, inspect } = require("./libraries");
-const { hashFile } = require("../runtime/pinned-native-manager");
+const { hashFile, compareRuntimeVersions } = require("../runtime/pinned-native-manager");
 const { readMachOLoadCommands } = require("../runtime/macho-load-commands");
 const managed = require("./managed");
 const Custom = require("../runtime/custom-runtime");
@@ -21,6 +21,34 @@ function consumerContext(context, dependencies, projectId) {
   if (!dependencies.architecture) return context;
   return { ...context, settings: { ...context.settings, runtimes: { ...context.settings?.runtimes,
     [projectId]: { ...context.settings?.runtimes?.[projectId], defaultArchitecture: dependencies.architecture } } } };
+}
+function managedSelection(provider, context, dependencies, version, available) {
+  const manager = dependencies.adaptedManager || provider.manager;
+  const options = { version, verification: "status", ...(dependencies.architecture ? { architecture: dependencies.architecture } : {}) };
+  const selection = manager.resolveSelection(null, context.settings, context.userDataDir, options);
+  if (version || !dependencies.architecture) return selection;
+  // An unversioned library choice belongs to the consuming process. A runtime
+  // this Mac can execute may still have no library slice for that process.
+  const usable = (available || installed(context, dependencies)).filter(item => item.projectId === provider.projectId);
+  const present = usable.find(item => item.version === selection.version);
+  if (present) return present.version === selection.version ? selection
+    : manager.resolveSelection(null, context.settings, context.userDataDir, { ...options, version: present.version });
+  const state = manager.getState({ userDataDir: context.userDataDir, settings: context.settings?.runtimes?.[manager.id] });
+  const catalog = state.catalog?.architectureCatalogs?.[dependencies.architecture] || state.catalog;
+  const pins = manager.core.listCatalog({ userDataDir: context.userDataDir, architecture: dependencies.architecture });
+  const listed = catalog?.installableVersions || catalog?.versions || [];
+  const candidates = listed.filter(value => {
+    const pin = pins.find(item => item.version === value);
+    return pin && !pin.deprecated && !pin.installReason && Architecture.matchesArchitecture(pin, dependencies.architecture) &&
+      !catalog.versionRequirements?.[value]?.installReason;
+  });
+  // Keep a compatible saved/default version even if another version is
+  // installed. Only a wrong-CPU choice gives way to a different version.
+  const selectedVersion = candidates.includes(selection.version) ? selection.version
+    : usable[0]?.version || candidates.sort(compareRuntimeVersions)[0];
+  if (!selectedVersion) return { ...selection, version: null, ready: false, install: null, discoveryRequired: !listed.length };
+  return selectedVersion === selection.version ? selection
+    : manager.resolveSelection(null, context.settings, context.userDataDir, { ...options, version: selectedVersion });
 }
 
 function installed(context, dependencies = {}) {
@@ -63,7 +91,8 @@ function installed(context, dependencies = {}) {
   return dependencies.preferredBackend ? result.sort((a, b) => Number(b.backend === dependencies.preferredBackend) - Number(a.backend === dependencies.preferredBackend)) : result;
 }
 function choices(context, dependencies = {}) {
-  const rows = installed(context, dependencies).map(item => ({ value: item.id, label: choiceLabel(item.backend, item.label, dependencies) }));
+  const available = installed(context, dependencies);
+  const rows = available.map(item => ({ value: item.id, label: choiceLabel(item.backend, item.label, dependencies) }));
   const add = (value, label) => { if (!rows.some(row => row.value === value)) rows.push({ value, label: label + " (download)" }); };
   for (const manager of dependencies.managers || managers) {
     if (unavailableReason(manager.backend, dependencies)) continue;
@@ -86,8 +115,7 @@ function choices(context, dependencies = {}) {
   for (const item of managed.providers) {
     if (unavailableReason(item.selectionId.split(":")[0], dependencies)) continue;
     const manager = dependencies.adaptedManager || item.manager;
-    const selection = manager.resolveSelection(null, context.settings, context.userDataDir,
-      { verification: "status", ...(dependencies.architecture ? { architecture: dependencies.architecture } : {}) });
+    const selection = managedSelection(item, context, dependencies, undefined, available);
     const label = choiceLabel(item.selectionId.split(":")[0], manager.label, dependencies);
     if (selection.ready && context.runtimeSettings?.vulkanRuntime === item.selectionId) rows.push({ value: item.selectionId, label });
     else if (!selection.ready && (selection.version || selection.discoveryRequired)) add(item.selectionId, label);
@@ -168,7 +196,8 @@ function requirements(context, dependencies = {}) {
   const prefix = managedRequest.prefix, manager = dependencies.adaptedManager || managedRequest.manager;
   const version = request.startsWith(prefix) ? request.slice(prefix.length) : undefined;
   const installOptions = dependencies.architecture ? { architecture: dependencies.architecture } : {};
-  const selection = manager.resolveSelection(null, context.settings, context.userDataDir, { version, verification: "status", ...installOptions });
+  const available = dependencies.architecture ? installed(context, dependencies) : null;
+  const selection = managedSelection(managedRequest, context, dependencies, version, available);
   if (!selection.version && selection.discoveryRequired) return [{ managerId: manager.id, version: null,
     discoveryRequired: true, requiresDownload: true, installOptions }];
   if (!selection.version) throw new Error(selection.reason || "A compatible " + manager.label + " package is unavailable.");
@@ -178,7 +207,7 @@ function requirements(context, dependencies = {}) {
       throw new Error("The selected " + manager.label + " runtime has no compatible " + dependencies.architecture + " library.");
   }
   if (selection.ready) {
-    if (dependencies.architecture && !installed(context, dependencies).some(item => item.projectId === managedRequest.projectId && item.version === selection.version))
+    if (dependencies.architecture && !available.some(item => item.projectId === managedRequest.projectId && item.version === selection.version))
       throw new Error("The selected " + manager.label + " runtime has no compatible " + dependencies.architecture + " library.");
     context.recordRuntimeUse?.({ managerId: manager.id, version: selection.version, sectionId: "default", sourcePath: selection.install.installDir });
     return [];
