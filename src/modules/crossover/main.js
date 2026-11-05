@@ -38,7 +38,7 @@ async function translatorOptions(entry, payload, context, dependencies = {}) {
 // Wine installation are unchanged.
 function recordedLaunch(entry, runtimeId, context, install) {
   const record = entry.runtimeData?.[runtimeId];
-  return record?.translatorRows?.length && record.translatorPlanKey === Translators.planKey(context.runtimeSettings, install) ? record : null;
+  return record?.translatorRows?.length && Translators.samePlanInputs(record.translatorPlanInputs, context.runtimeSettings, install) ? record : null;
 }
 // The plan for the current settings from installed descriptions, without
 // Play's file checks.

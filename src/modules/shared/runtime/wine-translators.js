@@ -385,11 +385,13 @@ function optionLists(install, runtime, context, dependencies = {}) {
     selections: Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id, context.runtimeSettings?.[role.settingsKey]])) }) };
 }
 // The settings and Wine installation that decide a translator plan. Rows
-// recorded at Play describe the current settings while this key is unchanged.
-function planKey(settings = {}, install) {
-  return JSON.stringify([install?.executablePath || null, install?.versionLabel || install?.upstreamVersion || install?.engineVersion || null,
-    settings.environmentReference ?? null, settings[SETTINGS['d3d-renderer']] ?? '', ...Roles.ROLES.map(role => settings[role.settingsKey] ?? '')]);
+// recorded at Play describe the current settings while these are unchanged.
+function planInputs(settings = {}, install) {
+  return { wine: [install?.executablePath || null, install?.versionLabel || install?.upstreamVersion || install?.engineVersion || null],
+    environmentReference: settings.environmentReference ?? null,
+    settings: Object.fromEntries([SETTINGS['d3d-renderer'], ...Roles.ROLES.map(role => role.settingsKey)].map(key => [key, settings[key] ?? ''])) };
 }
+const samePlanInputs = (recorded, settings, install) => Boolean(recorded) && JSON.stringify(recorded) === JSON.stringify(planInputs(settings, install));
 function presentInspectorRows(rows) {
   return rows.map(row => {
     const reasonCode = row.reasonCode || (row.fallback ? 'recorded-fallback' : null);
@@ -411,4 +413,4 @@ function inspectorRows(plan) {
       ...(row.conflictRoles?.length ? { conflictRoles: row.conflictRoles } : {}) };
   }));
 }
-module.exports = { SETTINGS, includedTranslators, managedTranslators, inventory, optionsInventory, optionsPlan, resolve, engines, settingsForPlan, wineRoot, withSettings, optionLists, inspectorRows, presentInspectorRows, planKey, environmentContext };
+module.exports = { SETTINGS, includedTranslators, managedTranslators, inventory, optionsInventory, optionsPlan, resolve, engines, settingsForPlan, wineRoot, withSettings, optionLists, inspectorRows, presentInspectorRows, planInputs, samePlanInputs, environmentContext };

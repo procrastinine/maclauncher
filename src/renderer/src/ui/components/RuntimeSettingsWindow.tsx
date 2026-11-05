@@ -115,6 +115,9 @@ export function RuntimeSettingsWindow({
     if (!isGameScope) return null;
     return (state?.recents || []).find(g => g.gamePath === context.gamePath) || null;
   }, [state, isGameScope, context.gamePath]);
+  const launchRecord = gameEntry?.runtimeData?.[context.runtimeId];
+  const launchRows: any[] = Array.isArray(launchRecord?.translatorRows) ? launchRecord.translatorRows : [];
+  const launchSettings: Record<string, unknown> | undefined = launchRecord?.translatorPlanInputs?.settings;
   const gameOverride = useMemo(() => {
     if (controlled) return controlled.values;
     if (!isGameScope) return null;
@@ -346,7 +349,9 @@ export function RuntimeSettingsWindow({
                   const listed: RuntimeSettingOption[] = choices[field.optionsAction]?.[field.optionsKey || field.key] || field.options || [];
                   const options = field.optionsAction === "listRuntimeVersions" ? runtimeVersionOptions(listed) : listed;
                   const scope = settingChoiceScope(choices[field.optionsAction], field, options.find(option => option.value === selected));
-                  const recordedLabel = recordedChoices[field.optionsAction]?.[field.optionsKey || field.key]?.find((option: RuntimeSettingOption) => option.value === selected)?.label;
+                  // A cached list, or the game's last launch, names a saved choice before its list arrives.
+                  const recordedLabel = recordedChoices[field.optionsAction]?.[field.optionsKey || field.key]?.find((option: RuntimeSettingOption) => option.value === selected)?.label ||
+                    (selected && launchSettings?.[field.key] === selected ? launchRows.find((row: any) => row?.id === field.key)?.selected : undefined);
                   const loading = choiceLoading[field.optionsAction] === true;
                   const disabled = fieldsDisabled || (field.gameOnly === true && !isGameScope) || (loading && !choices[field.optionsAction] && !options.length);
                   return <React.Fragment key={field.key}>

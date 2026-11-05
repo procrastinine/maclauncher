@@ -81,6 +81,19 @@ test('a new settings render synchronously uses persistent provider choices, labe
     'different inputs do not reuse stale selectable groups or atomic patches');
 });
 
+test('without cached lists, the recorded launch of a game names its saved choices instead of a loading placeholder', t => {
+  storage(t); const data = fixture(), game = data.state.recents[0];
+  Object.assign(game, { moduleId: 'fixture', runtimeId: 'managed', runtimeSettings: { managed: data.inputs.runtimeSettings },
+    runtimeData: { managed: { translatorPlanInputs: { settings: { left: data.inputs.runtimeSettings.left, right: 'opaque:other' } },
+      translatorRows: [{ id: 'left', label: 'left choice', selected: 'Recorded component 3', used: 'Recorded component 3' },
+        { id: 'right', label: 'right choice', selected: 'Other recorded component', used: 'Other recorded component' }] } } });
+  data.context = { scope: 'game', moduleId: 'fixture', runtimeId: 'managed', gamePath: game.gamePath };
+  const rendered = render(data);
+  assert.match(select(rendered.markup, 'left choice'), /selected="">Recorded component 3<\/option>/);
+  assert.doesNotMatch(rendered.markup, /Loading saved selection/);
+  assert.doesNotMatch(rendered.markup, /Other recorded component/, 'a recorded row names only the value it was recorded for');
+});
+
 test('canceled and invalid refreshes preserve cached choices, report only real failure and permit successful recovery', async t => {
   storage(t); const data = fixture(); await receive(data, data.result);
   let finish; const failures = [], diagnostics = [];

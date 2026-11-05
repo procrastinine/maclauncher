@@ -99,13 +99,13 @@ test('the inspector uses rows recorded at Play only while the translator setting
   const composed = Providers.composeRuntimeProviders({ manifest: { id: 'fixture-engine', runtime: { supported: [], entries: {} } } }, Main.runtimeProviders);
   const runtimeSettings = settingsFor(f.owner), recorded = [{ id: 'translatorD3D8', component: 'd3d8', label: 'Direct3D 8', selected: 'Recorded', used: 'Recorded', fallback: false }];
   const status = entry => composed.actions.runtimeStatus(entry, {}, { runtimeId: 'crossover', runtimeSettings, settings: {}, userDataDir: os.tmpdir() });
-  const entry = key => ({ gamePath: '/fixture/game', runtimeId: 'crossover', runtimeData: { crossover: { translatorRows: recorded, translatorPlanKey: key } } });
-  const unchanged = await status(entry(Translators.planKey(runtimeSettings, install)));
+  const entry = inputs => ({ gamePath: '/fixture/game', runtimeId: 'crossover', runtimeData: { crossover: { translatorRows: recorded, translatorPlanInputs: inputs } } });
+  const unchanged = await status(entry(Translators.planInputs(runtimeSettings, install)));
   assert.deepEqual(unchanged.translatorRows.map(row => row.used), ['Recorded']); assert.equal(inventories, 0);
-  const changed = await status(entry(Translators.planKey({ ...runtimeSettings, translatorD3D9: f.dxvk.id }, install)));
+  const changed = await status(entry(Translators.planInputs({ ...runtimeSettings, translatorD3D9: f.dxvk.id }, install)));
   assert.equal(changed.translatorRows.find(row => row.component === 'd3d8').used, Description.label(f.wined3d)); assert.ok(inventories > 0);
   inventories = 0;
   const older = await status(entry(undefined));
   assert.equal(older.translatorRows.find(row => row.component === 'd3d8').used, Description.label(f.wined3d)); assert.ok(inventories > 0);
-  assert.notEqual(Translators.planKey(runtimeSettings, install), Translators.planKey(runtimeSettings, { ...install, executablePath: '/other/wine' }));
+  assert.equal(Translators.samePlanInputs(Translators.planInputs(runtimeSettings, install), runtimeSettings, { ...install, executablePath: '/other/wine' }), false);
 });
