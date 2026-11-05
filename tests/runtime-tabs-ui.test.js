@@ -405,3 +405,25 @@ test('effective manager defaults remain visible when installed and only saved de
     } finally {h.close();}
   }
 });
+
+test('translator member declarations order Direct3D, Vulkan and codecs and identify their catalog projects', () => {
+  const sources = require('../src/modules/shared/runtime/translator-managers');
+  const managers = [require('../src/modules/crossover/temporal/support-manager'),
+    ...require('../src/modules/shared/translators/runtime/managers'),
+    ...require('../src/modules/shared/vulkan/libraries').managers,
+    require('../src/modules/shared/vulkan/managed').manager];
+  const states = managers.map(owner => ({ id: owner.id, label: owner.label, ui: owner.ui, sections: [{ id: 'default', label: 'Versions' }] }));
+  modelTest(`const groups=groupRuntimeManagers(${JSON.stringify(states)});
+    assert.deepEqual(runtimeGroupSections(groups.find(group=>group.id==='translators'),sections).map(row=>row.managerId),
+      ['sikarugir-graphics-bridge','translator-d3dmetal','translator-dxvk','translator-vkd3d-proton','vulkan-moltenvk','vulkan-kosmickrisp','vulkan-kosmickrisp-gles32','translator-gstreamer']);`);
+  const dxvk = sources.createManager('dxvk').getState({}).catalog;
+  assert.deepEqual(dxvk.sources.slice(0,3).map(source=>source.label), ['DXVK','DXVK-macOS','DXVK-macOS async']);
+  for (const engine of ['dxvk','dxmt']) {
+    const state = sources.createManager(engine).getState({});
+    for (const source of state.catalog.sources) {
+      assert.equal(source.sourceLabel,'Source');
+      if (source.id.startsWith('template')) assert.match(source.description,/copies taken from a Sikarugir Template release/);
+      else assert.match(source.description,/releases published by/);
+    }
+  }
+});

@@ -870,3 +870,17 @@ test('Settings section links select a module for both namespaced and direct iden
     assert.doesNotMatch(markup, /aria-label="Show game icons"/);
   }
 });
+
+test('translator source links use one caption with explicit project and Template provenance', () => {
+  const create = require('../src/modules/shared/runtime/translator-managers').createManager;
+  for (const engine of ['dxvk','dxmt','gstreamer']) {
+    const owner=create(engine), state={...owner.getState({}),id:owner.id,label:owner.label,ui:owner.ui};
+    const markup=render([state],owner.id);
+    const links=[...markup.matchAll(/class="runtimeSourceLink"[^>]*>([^<]+)<\/a>/g)].map(match=>match[1]);
+    assert.ok(links.length);assert.ok(links.every(label=>label==='Source'));
+    if(engine==='dxvk') { assert.match(markup,/DXVK-macOS async/);assert.match(markup,/DXVK-macOS releases published by Gcenx\/DXVK-macOS/); }
+    if(engine!=='gstreamer')assert.match(markup,/copies taken from a Sikarugir Template release/);
+  }
+  const owner=require('../src/modules/shared/vulkan/libraries').managers[0];
+  assert.match(render([{...owner.getState({}),id:owner.id,label:owner.label,ui:owner.ui}],owner.id),/class="runtimeSourceLink"[^>]*>Source<\/a>/);
+});

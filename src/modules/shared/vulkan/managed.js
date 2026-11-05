@@ -8,7 +8,7 @@ const projectId = "vulkan-kosmickrisp-gles32";
 const selectionId = "kosmickrisp:maclauncher-gles32";
 
 function createManager(dependencies = {}) {
-  const manager = createProjectBuildManager({ projectId, label: "KosmicKrisp", repository, upstreamUrl: "https://gitlab.freedesktop.org/mesa/mesa", nativeLibrary: true,
+  const manager = createProjectBuildManager({ projectId, label: "KosmicKrisp", repository, sourceLabel: "Source", upstreamUrl: "https://gitlab.freedesktop.org/mesa/mesa", nativeLibrary: true,
     manifestRelative: "manifest.json", sourceRelative: null, filesPrefix: "files/",
     executableRelative: manifest => manifest.executableRelative,
     validateManifest(manifest, record) {
@@ -67,7 +67,7 @@ function sceneDescriptor(manifest) {
 }
 function createSceneManager(dependencies = {}) {
   const result = createProjectBuildManager({ projectId: sceneProjectId, label: "MoltenVK scene support",
-    repository, upstreamUrl: "https://github.com/KhronosGroup/MoltenVK", nativeLibrary: true,
+    repository, sourceLabel: "Source", upstreamUrl: "https://github.com/KhronosGroup/MoltenVK", nativeLibrary: true,
     manifestRelative: "manifest.json", sourceRelative: null, executableRelative: manifest => manifest.executableRelative,
     validateManifest(manifest, record) {
       Bundled.validateRuntimeManifest(manifest, { managerId: sceneProjectId, version: record.version, arch: record.arch });

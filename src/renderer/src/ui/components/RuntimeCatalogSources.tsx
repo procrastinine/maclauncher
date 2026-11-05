@@ -140,7 +140,7 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
         <div className="runtimeSourceHeader">
           <div className="runtimeSourceHeading">
             <span className="runtimeSourceName">{label}</span>
-            {url && <span>{link(url, source.explicit ? "Releases" : presentation.sourceLabel || "Source")}</span>}
+            {url && <span>{link(url, source.sourceLabel || (source.explicit ? "Releases" : presentation.sourceLabel || "Source"))}</span>}
             {sourceLinks.map((item: any) => <span key={item.href} className="runtimeUpstreamCode">({link(item.href, item.label)})</span>)}
           </div>
           <div className="runtimeSourceRefreshActions">

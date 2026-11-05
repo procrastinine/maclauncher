@@ -47,7 +47,7 @@ function inspectPackage(root, record, { projectId, manifestRelative, sourceRelat
 /** Project catalogs are queried only by Refresh. Included packages remain in
  * place; downloaded packages use the ordinary immutable version installation.
  * Runtimes offers Set default unless a module declares otherwise. */
-function createProjectBuildManager({ projectId, runtimeId = projectId, label, repository, upstreamUrl, upstreamLabel, included, retainedIncluded, manifestRelative, sourceRelative,
+function createProjectBuildManager({ projectId, runtimeId = projectId, label, repository, upstreamUrl, upstreamLabel, sourceLabel, included, retainedIncluded, manifestRelative, sourceRelative,
   executableRelative, filesPrefix = "", validateManifest, verifyPayload, inspectRuntime, dataOnly = false, nativeLibrary = false, supportsDefault = true, launcherContract = 2, dependencies = {} }) {
   if (typeof dataOnly !== "boolean" || dataOnly && inspectRuntime) throw new Error("Data packages use sealed regular-file inspection.");
   const format = { projectId, manifestRelative, sourceRelative, executableRelative, filesPrefix, dataOnly, validateManifest };
@@ -78,7 +78,7 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, label, re
     ...Catalog.unavailablePins(projectId, catalog.unavailable || [])];
   };
   const core = createPinnedNativeManager({ id: projectId, runtimeId, label,
-    sourceUrl, buildsRepository: repository, upstreamUrl, upstreamLabel, nativeLibrary, supportsDefault,
+    sourceUrl, sourceLabel, buildsRepository: repository, upstreamUrl, upstreamLabel, nativeLibrary, supportsDefault,
     // An included package counts as a build for the CPU it runs on.
     includedBuilds: options => includedPackages(options).all.some(item => item.present && item.ready),
     ...(dataOnly ? { inspectRuntime({ runtimePath, runtimeVersion, upstreamRevision, expectedSha256 }) {

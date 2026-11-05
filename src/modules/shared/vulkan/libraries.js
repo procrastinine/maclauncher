@@ -117,7 +117,7 @@ async function installLoader(unpacked, loader, signal) {
 }
 function createManager(backend, dependencies = {}) {
   const definition = definitions[backend], loader = backend === "kosmickrisp" ? loaderSource(dependencies) : null;
-  const manager = createPinnedNativeManager({ id: "vulkan-" + backend, label: definition.label, sourceUrl: definition.source,
+  const manager = createPinnedNativeManager({ id: "vulkan-" + backend, label: definition.label, sourceUrl: definition.source, sourceLabel: "Source",
     nativeLibrary: true, cacheDownloads: true,
     inspectRuntime(options) {
       const native = require("../runtime/local-native").resolveLocalRuntime(options), root = path.dirname(native.executablePath);
