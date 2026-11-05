@@ -10,6 +10,9 @@ const { isAbortError } = require("../../shared/runtime/download-utils");
 const warnGraphics = require("../../shared/graphics-warning");
 const manager = require("./manager");
 const DLSS = require("../dlss");
+const Translators = require("../../shared/runtime/wine-translators");
+const TranslatorFiles = require("../../shared/runtime/translator-files");
+const { wineLayout } = require("../../shared/runtime/wine-layout");
 const { findWindowsExecutable, readWindowsExecutable, inside } = require("../detect");
 
 const PROTECTED_ENVIRONMENT = new Set(["HOME", "PATH", "TMPDIR", "WINEPREFIX", "WINEARCH", "WINELOADER", "WINESERVER", "WINEDLLPATH",
@@ -116,18 +119,22 @@ function bottleTemplate(settings) {
   if (!["win11_64", "win10_64", "win7_64", "winxp_64"].includes(template)) throw new Error("Unsupported CrossOver Windows bottle type.");
   return template;
 }
-function buildEnvironment(settings, installation, directory, bottlePath, { baseEnvironment = process.env, host = {}, executableArchitecture, cameraBridge, existingEnvironment } = {}) {
+function buildEnvironment(settings, installation, directory, bottlePath, { baseEnvironment = process.env, host = {}, executableArchitecture, cameraBridge, translatorPlan, existingEnvironment } = {}) {
   const environment = { ...baseEnvironment };
   for (const name of [...PROTECTED_ENVIRONMENT].filter(name => name.startsWith("WINE") || name.startsWith("CX_"))) delete environment[name];
   for (const name of MANAGED_ENVIRONMENT) delete environment[name];
   const overrides = {};
   const backend = settings.graphicsBackend || "auto";
-  if (!["auto", "d3dmetal", "dxmt", "dxvk", "wined3d"].includes(backend)) throw new Error("Unsupported CrossOver graphics backend.");
-  const backendReason = require("./backend-support").reason(installation, backend, host);
+  const managedRenderer = translatorPlan?.components["d3d-renderer"].used && !translatorPlan.components["d3d-renderer"].used.included;
+  if (!managedRenderer && !["auto", "d3dmetal", "dxmt", "dxvk", "wined3d"].includes(backend)) throw new Error("Unsupported CrossOver graphics backend.");
+  const backendReason = translatorPlan?.components["d3d-renderer"].used ? null : require("./backend-support").reason(installation, backend, host);
   if (backendReason) throw new Error(backendReason);
+  const windows = TranslatorFiles.cpuFolder(require("../../shared/runtime/binary-compatibility").requiredMachine(executableArchitecture)) || wineLayout(installation).primaryWindows;
+  const vendorLibraries = engine => windows ? DLSS.hasLibraries(path.join(installation.crossoverRoot,
+    ...(engine === 'dxmt' ? ['lib', 'dxmt'] : ['lib64', 'apple_gptk', 'wine']), windows)) : false;
   const dlss = DLSS.checkSelection(settings, { ...host, executableArchitecture, backend,
-    dxmt: settings.dlss === true && (Boolean(cameraBridge) || DLSS.hasLibraries(path.join(installation.crossoverRoot, "lib", "dxmt", "x86_64-windows"))),
-    d3dmetal: settings.dlss === true && DLSS.hasLibraries(path.join(installation.crossoverRoot, "lib64", "apple_gptk", "wine", "x86_64-windows")) });
+    dxmt: settings.dlss === true && (Boolean(cameraBridge) || (translatorPlan?.components['d3d-renderer'].used ? DLSS.hasPlanLibraries(translatorPlan, 'dxmt') : vendorLibraries('dxmt'))),
+    d3dmetal: settings.dlss === true && (translatorPlan?.components['d3d-renderer'].used ? DLSS.hasPlanLibraries(translatorPlan, 'd3dmetal') : vendorLibraries('d3dmetal')) });
   Object.assign(overrides, DLSS.environment(dlss));
   if (backend !== "auto") {
     overrides.CX_GRAPHICS_BACKEND = backend;
@@ -149,7 +156,7 @@ function buildEnvironment(settings, installation, directory, bottlePath, { baseE
     overrides.LANG = locale; overrides.LC_ALL = locale; overrides.LC_MESSAGES = locale;
   }
   if (settings.wineDebug) overrides.WINEDEBUG = safeText(settings.wineDebug, "Wine debug channels");
-  Object.assign(overrides, WineSettings.environment(settings, { needsRosetta: installation.needsRosetta, engines: { "d3d-renderer": backend, "vulkan-driver": settings.vulkanBackend } }), parseEnvironment(settings.environment));
+  Object.assign(overrides, WineSettings.environment(settings, { needsRosetta: installation.needsRosetta, engines: translatorPlan ? Translators.engines(translatorPlan) : {} }), parseEnvironment(settings.environment));
   const dll = dllOverrides(settings);
   if (dll) overrides.WINEDLLOVERRIDES = dll;
   Object.assign(environment, overrides, { CX_ROOT: installation.crossoverRoot,
@@ -221,22 +228,26 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   if (existingEnvironment?.running) { settings = { ...settings, synchronization: existingEnvironment.settings.synchronization, retina: Environments.INHERIT }; }
   const selected = manager.resolveSelection(entry, context.settings, context.userDataDir, settings);
   if (!selected.ready) throw new Error(selected.reason);
-  const Temporal = require("../temporal");
-  const scenePlan = Temporal.resolveScenePlan(entry, context, { install: selected.install, settings, verify: true, root: graphicsRoot });
-  let sceneClosure = scenePlan?.packageReady ? scenePlan.sceneClosure : null;
-  // A Vulkan scene source does not request a different Direct3D renderer.
-  if (scenePlan) settings = { ...settings, dlss: context.runtimeSettings?.dlss === true };
-  let cameraBridge = Temporal.resolvePlan(entry, context,
-    { install: selected.install, settings, runtimeId: "crossover", root: graphicsRoot, host, verify: true, automatic: settings.dlss !== true });
-  if (cameraBridge) settings = { ...settings, dlss: true };
-  if (cameraBridge?.dependency) await context.useRuntime?.(cameraBridge.dependency);
-  for (const dependency of scenePlan?.dependencies || []) await context.useRuntime?.(dependency);
   const match = findWindowsExecutable(entry);
   if (!match) throw new Error("No Windows executable was found in this game folder.");
   const executable = settings.executable ? path.resolve(match.sourceRoot, safeText(settings.executable, "Windows executable")) : match.windowsExecutablePath;
   const selectedExecutable = inside(match.sourceRoot, executable) ? readWindowsExecutable(executable) : null;
   if (!selectedExecutable) throw new Error("Windows executable must be a PE executable inside the game folder.");
-  if (selectedExecutable.executableArchitecture === "arm64") throw new Error("This Windows ARM64 executable is not supported by the CrossOver backend. Use an x86 or x64 Windows build.");
+  const translatorPlan = await Translators.resolve(selected.install, 'crossover', context, { executableArchitecture: selectedExecutable.executableArchitecture, host });
+  settings = Translators.settingsForPlan(settings, translatorPlan);
+  const translatorView = TranslatorFiles.selectedDescriptions(translatorPlan).length ? await TranslatorFiles.prepareTranslatorFiles(translatorPlan,
+    { userDataDir: context.userDataDir, layout: translatorPlan.layout, signal: context.signal }) : null;
+  const Temporal = require("../temporal");
+  const scenePlan = Temporal.resolveScenePlan(entry, context, { install: selected.install, settings, translatorPlan, verify: true, root: graphicsRoot });
+  let sceneClosure = scenePlan?.packageReady ? scenePlan.sceneClosure : null;
+  // A Vulkan scene source does not request a different Direct3D renderer.
+  if (scenePlan) settings = { ...settings, dlss: context.runtimeSettings?.dlss === true };
+  let cameraBridge = Temporal.resolvePlan(entry, context,
+    { install: selected.install, settings, translatorPlan, runtimeId: "crossover", root: graphicsRoot, host, verify: true, automatic: settings.dlss !== true });
+  if (cameraBridge) settings = { ...settings, dlss: true };
+  if (cameraBridge?.dependency) await context.useRuntime?.(cameraBridge.dependency);
+  for (const dependency of scenePlan?.dependencies || []) await context.useRuntime?.(dependency);
+  if (selectedExecutable.executableArchitecture === "arm64" && !translatorPlan.layout.windows.includes("aarch64-windows")) throw new Error("This Windows ARM64 executable is not supported by the CrossOver backend. Use an x86 or x64 Windows build.");
   const directory = runtimeDirectory(entry, context);
   const GameView = require("../temporal/game-view");GameView.clearWatch(context);
   const template = bottleTemplate(settings);
@@ -247,13 +258,13 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   let environment, overrides, dll;
   try {
     ({environment, overrides, dll} = buildEnvironment(settings, selected.install, directory, bottlePath,
-      {executableArchitecture: selectedExecutable.executableArchitecture, cameraBridge, host, existingEnvironment}));
+      {executableArchitecture: selectedExecutable.executableArchitecture, cameraBridge, translatorPlan, existingEnvironment, host}));
   } catch (error) {
     if (context.signal?.aborted || isAbortError(error) || settings.dlss !== true) throw error;
     // Only accept a fallback if the ordinary vendor settings validate too.
     // A bad executable, renderer, environment or DLL rule remains an error.
     ({environment, overrides, dll} = buildEnvironment({...settings, dlss: false}, selected.install, directory, bottlePath,
-      {executableArchitecture: selectedExecutable.executableArchitecture, host, existingEnvironment}));
+      {executableArchitecture: selectedExecutable.executableArchitecture, translatorPlan, existingEnvironment, host}));
     cameraBridge = null;
     context.graphicsBridgeFailure = {provider: "crossover-camera", reason: String(error.message || error)};
     warnGraphics(context.logger, "CrossOver temporal integration is unavailable. Using the selected vendor graphics backend.", context.graphicsBridgeFailure.reason);
@@ -273,7 +284,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     GameView.prepared(cameraView, { libraries: cameraBridge?.libraries || [] });
   };
   const prepareLoader = async () => {
-    try { return await GraphicsLoader.prepare(selected.install, directory, { signal: context.signal, cameraBridge, sceneClosure }); }
+    try { return await GraphicsLoader.prepare(selected.install, directory, { signal: context.signal, cameraBridge, sceneClosure, translatorView, userDataDir: context.userDataDir }); }
     catch (error) {
       if (context.signal?.aborted || isAbortError(error)) throw error;
       if (sceneClosure) {
@@ -281,9 +292,10 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
         restoreScene(error);
         context.graphicsBridgeFailure = { provider: "crossover-vulkan", reason: String(error.message || error) };
         warnGraphics(context.logger, "CrossOver Vulkan scene support could not be prepared. Using the selected vendor renderer.", context.graphicsBridgeFailure.reason);
-        try { return await GraphicsLoader.prepare(selected.install, directory, { signal: context.signal, cameraBridge }); }
+        try { return await GraphicsLoader.prepare(selected.install, directory, { signal: context.signal, cameraBridge, translatorView, userDataDir: context.userDataDir }); }
         catch (failure) { if (context.signal?.aborted || isAbortError(failure)) throw failure;error = failure; }
       }
+      if (translatorView && Object.keys(translatorView.links).length) throw error;
       loaderFailure = error;return null;
     }
   };
@@ -344,10 +356,16 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     environment = await context.applyGameEnvironment(environment);
     overrides = await context.applyGameEnvironment(overrides);
   }
-  if (overrides.DYLD_INSERT_LIBRARIES || cameraBridge || sceneClosure) {
+  await TranslatorFiles.applyNativeLibraries(translatorView || { native: [] }, bottlePath, { signal: context.signal });
+  if (translatorView) {
+    Object.assign(overrides, translatorView.env); Object.assign(environment, translatorView.env);
+    if ((overrides.CX_GRAPHICS_BACKEND || environment.CX_GRAPHICS_BACKEND) !== 'wined3d') { delete overrides.CX_LIBVULKAN; delete environment.CX_LIBVULKAN; }
+    if (translatorView.dllOverrides.length) { dll = [dll, ...translatorView.dllOverrides].filter(Boolean).join(';'); overrides.WINEDLLOVERRIDES = dll; environment.WINEDLLOVERRIDES = dll; }
+  }
+  if (overrides.DYLD_INSERT_LIBRARIES || cameraBridge || sceneClosure || translatorView && Object.keys(translatorView.links).length) {
     if (!loader && !loaderFailure) loader = await prepareLoader();
     if (loader) {
-      const values = () => ({ overrides: GraphicsLoader.environment(loader, overrides, { cameraBridge, sceneClosure, installation: selected.install }),
+      const values = () => ({ overrides: GraphicsLoader.environment(loader, overrides, { cameraBridge, sceneClosure, translatorView, installation: selected.install }),
         environment: GraphicsLoader.environment(loader, environment, { cameraBridge, sceneClosure, installation: selected.install }) });
       let prepared;
       try { prepared = values(); }
@@ -405,9 +423,9 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     windowsExecutablePath: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture,
     sourceRoot: match.sourceRoot, gameRoot, bottlePath, applicationPath: selected.install.appPath,
     ...(existingEnvironment ? { environmentReference: existingEnvironment.reference } : {}),
-    graphicsInputs: context.graphicsInputs } };
+    translatorRows: Translators.inspectorRows(translatorPlan), cameraAdapterNotice: context.cameraAdapterNotice || null, graphicsInputs: context.graphicsInputs } };
   context.onEntryChange?.(entry);
-  return { ...selected, directory, gameRoot, workingDirectory, bottlePath, executablePath, environment, args, existingEnvironment };
+  return { ...selected, directory, gameRoot, workingDirectory, bottlePath, executablePath, environment, args, translatorPlan, existingEnvironment };
 }
 
 module.exports = { runtimeDirectory, buildEnvironment, parseEnvironment, wineEnvironmentString, dllOverrides,

@@ -44,12 +44,19 @@ function environment(selection) {
   return { DXMT_ENABLE_NVEXT: selection.dxmt ? "1" : "0", D3DM_ENABLE_METALFX: selection.d3dmetal ? "1" : "0" };
 }
 
+function hasPlanLibraries(plan, engine) {
+  const selected = plan.components["d3d-renderer"]?.used;
+  if (selected?.engine !== engine) return false;
+  const files = plan.compatibility?.[selected.id]?.files || selected.files;
+  return DLLS.every(name => files.some(file => file.format === "pe" && file.machine === 0x8664 && path.basename(file.path).toLowerCase() === name + ".dll" && fs.existsSync(file.path) && fs.statSync(file.path).size > 128));
+}
 async function hasD3DMetalPathBridge(engineRoot) {
   if (!path.isAbsolute(engineRoot || "")) return false;
   try {
-    const names = await inspectMachOExports(path.join(engineRoot, "lib", "wine", "x86_64-unix", "ntdll.so"), { arch: "x64" });
+    const layout = require("../shared/runtime/wine-layout").wineLayout({ wineRoot: engineRoot });
+    const names = await inspectMachOExports(path.join(layout.unixRoot, "ntdll.so"), { arch: layout.architecture });
     return ["ntdll_get_unix_file_name", "ntdll_get_dos_file_name"].every(name => names.includes(name));
   } catch { return false; }
 }
 
-module.exports = { DLLS, ENVIRONMENT, withTemporalSelection, hasLibraries, checkSelection, environment, hasD3DMetalPathBridge };
+module.exports = { DLLS, ENVIRONMENT, withTemporalSelection, hasLibraries, hasPlanLibraries, checkSelection, environment, hasD3DMetalPathBridge };

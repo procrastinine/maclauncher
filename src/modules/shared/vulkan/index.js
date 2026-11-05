@@ -218,10 +218,19 @@ function environment(selection, directory) {
   if (!selection) return {};
   const env = { KL_MVK_DYLIB: selection.library };
   if (selection.backend === "kosmickrisp") {
-    const file = path.join(directory, "vulkan-icd.json");
-    require("../writable-input").atomicWrite(file, JSON.stringify({ file_format_version: "1.0.0", ICD: { library_path: selection.driver, api_version: "1.4.0" } }) + "\n", { root: directory });
-    env.VK_DRIVER_FILES = env.VK_ICD_FILENAMES = file;
+    Object.assign(env, driverEnvironment({ ...selection, apiVersion: '1.4.0' }, directory));
   }
   return env;
 }
-module.exports = { installed, choices, resolve, requirements, environment };
+function driverEnvironment({ driver, icd, backend, apiVersion = '1.0.0' }, directory) {
+  const descriptor = icd ? JSON.parse(fs.readFileSync(icd, 'utf8')) : { file_format_version: '1.0.0', ICD: { api_version: apiVersion } };
+  driver ||= icd && path.resolve(path.dirname(icd), descriptor.ICD.library_path);
+  if (!path.isAbsolute(driver || '') || !fs.statSync(driver).isFile()) throw new Error('The selected Vulkan driver is missing.');
+  descriptor.ICD = { ...descriptor.ICD, library_path: driver, is_portability_driver: false };
+  const file = path.join(directory, 'vulkan-icd.json');
+  const text = JSON.stringify(descriptor) + '\n';
+  if (!fs.existsSync(file) || fs.lstatSync(file).isSymbolicLink() || fs.readFileSync(file, 'utf8') !== text)
+    require('../writable-input').atomicWrite(file, text, { root: directory });
+  return { VK_DRIVER_FILES: file, VK_ICD_FILENAMES: file };
+}
+module.exports = { installed, choices, resolve, requirements, environment, driverEnvironment };

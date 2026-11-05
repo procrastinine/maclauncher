@@ -8,6 +8,7 @@ const Closure = require("./closure");
 const Hardware = require("./hardware");
 const DLSS = require("../../dlss");
 const Writable = require("../../../shared/writable-input");
+const { wineLayout } = require("../../../shared/runtime/wine-layout");
 
 const GRAPHICS_BACKENDS = Object.freeze(["auto", "wined3d", "dxmt", "dxvk", "d3dmetal"]);
 const VULKAN_BACKENDS = Object.freeze(["auto", "moltenvk", "kosmickrisp"]);
@@ -46,7 +47,7 @@ function capabilitiesFor(install, support, host = {}) {
     const minimumMacOS = measured && apiFloor && versionAtLeast(apiFloor, measured) ? apiFloor : measured;
     return recorded[name] === true && Requirements.requirementSupport({ ...required, minimumMacOS }, actual).supported !== false;
   };
-  const engine = engineRoot(install), modern = fs.existsSync(path.join(engine, "lib", "wine", "x86_64-unix", "ntdll.so")) &&
+  const engine = engineRoot(install), modern = fs.existsSync(path.join(engine, "lib", "wine", wineLayout(install).unixName, "ntdll.so")) &&
     !fs.existsSync(path.join(engine, "lib", "wine", "x86_32on64-unix", "ntdll.so"));
   return { ...install.capabilities, wined3d: true, dxmt: modern && capable("dxmt"), dxvk: modern && capable("dxvk"),
     dxvk3: modern && capable("dxvk3", Requirements.WINE_MODERN_VULKAN),
@@ -109,7 +110,7 @@ async function linkFile(source, destination, signal) {
       const header = Buffer.alloc(128), coff = Buffer.alloc(24);
       if ((await handle.read(header, 0, header.length, 0)).bytesRead !== header.length || header.readUInt16LE(0) !== 0x5a4d ||
         !header.subarray(64).includes(Buffer.from("Wine builtin DLL\0"))) fail("The selected renderer requires a supported Wine builtin DLL package.");
-      const pe = header.readUInt32LE(60), machine = path.basename(path.dirname(destination)) === "i386-windows" ? 0x14c : 0x8664;
+      const pe = header.readUInt32LE(60), machine = require("../../../shared/runtime/binary-compatibility").requiredMachine(path.basename(path.dirname(destination)).replace(/-windows$/, "")) || 0x8664;
       if (pe < 80 || pe > stat.size - coff.length || (await handle.read(coff, 0, coff.length, pe)).bytesRead !== coff.length ||
         coff.readUInt32LE(0) !== 0x4550 || coff.readUInt16LE(4) !== machine || !(coff.readUInt16LE(22) & 0x2000))
         fail("A selected renderer DLL does not match its Windows architecture.");
@@ -151,9 +152,9 @@ async function cloneLoaderFile(source, destination, signal) {
 }
 async function prepareLoaderView(engine, viewRoot, install, signal) {
   const wineRoot = path.join(viewRoot, "wine"), dllRoot = path.join(wineRoot, "lib", "wine");
-  const bin = path.join(wineRoot, "bin"), unix = path.join(dllRoot, "x86_64-unix");
+  const layout = wineLayout(install), bin = path.join(wineRoot, "bin"), unix = path.join(dllRoot, layout.unixName);
   for (const directory of [wineRoot, bin, path.join(wineRoot, "lib"), dllRoot,
-    ...["i386-windows", "x86_64-windows", "x86_64-unix"].map(name => path.join(dllRoot, name))]) ownDirectory(directory);
+    ...[...layout.windows, layout.unixName].map(name => path.join(dllRoot, name))]) ownDirectory(directory);
   // Wine derives its primary builtin directory from the real path of ntdll.so.
   // A separate loader and ntdll copy give selected renderer links priority,
   // while WINEDLLPATH supplies the unchanged shared engine as a fallback.
@@ -164,14 +165,14 @@ async function prepareLoaderView(engine, viewRoot, install, signal) {
   // Newer engines re-exec a separate loader with the address-space layout
   // required by Windows. Reusing bin/wine here can retain its 4 GB PAGEZERO
   // mapping and prevent Wine from reserving the shared user-data address.
-  const unixLoader = path.join(engine, "lib", "wine", "x86_64-unix", "wine");
+  const unixLoader = path.join(engine, "lib", "wine", layout.unixName, "wine");
   if (fs.existsSync(unixLoader)) await cloneLoaderFile(unixLoader, path.join(unix, "wine"), signal);
   else await linkFile(executablePath, path.join(unix, "wine"), signal);
-  for (const architecture of ["i386-windows", "x86_64-windows"]) {
+  for (const architecture of layout.windows) {
     for (const name of ["ntdll.dll", "apisetschema.dll"]) {
       const source = path.join(engine, "lib", "wine", architecture, name);
       if (fs.existsSync(source)) await linkFile(source, path.join(dllRoot, architecture, name), signal);
-      else if (architecture === "x86_64-windows") fail("The selected Wine engine is incomplete. Reinstall this version.");
+      else if (architecture === layout.primaryWindows) fail("The selected Wine engine is incomplete. Reinstall this version.");
     }
   }
   await linkDirectory(path.join(engine, "share"), path.join(wineRoot, "share"), signal);
@@ -194,23 +195,25 @@ async function clearUnusedRenderers(dllRoot, renderers, components, signal) {
     }
   }
 }
-async function registerPrefixLibraries(prefixPath, viewRoot, dllRoot, signal) {
+async function registerPrefixLibraries(prefixPath, viewRoot, dllRoot, signal, layout = {}) {
   // Wine 11 requires builtin files to exist in the prefix after bootstrap.
   // Existing prefix DLLs remain authoritative; only links into our renderer
   // views are replaced or removed as the selected renderer changes.
-  const names = [...new Set([...Object.values(CORE_DLLS).flat(), ...DLSS.DLLS])];
+
   const views = path.dirname(viewRoot);
-  for (const [architecture, system] of [["x86_64-windows", "system32"], ["i386-windows", "syswow64"]]) {
+  for (const architecture of layout.windows || fs.readdirSync(dllRoot).filter(name => name.endsWith("-windows"))) {
+    const system = architecture === "i386-windows" ? "syswow64" : "system32";
     const directory = path.join(prefixPath, "drive_c", "windows", system);
     Writable.assertOwnDirectory(prefixPath, directory);
-    for (const name of names) {
+    const names = [...new Set([...(fs.existsSync(path.join(dllRoot, architecture)) ? fs.readdirSync(path.join(dllRoot, architecture)) : []), ...fs.readdirSync(directory)])].filter(name => name.endsWith(".dll"));
+    for (const filename of names) {
       signal?.throwIfAborted();
-      const filename = name + ".dll", destination = path.join(directory, filename), source = path.join(dllRoot, architecture, filename);
+      const destination = path.join(directory, filename), source = path.join(dllRoot, architecture, filename);
       const current = await fs.promises.lstat(destination).catch(error => { if (error.code !== "ENOENT") throw error; return null; });
       if (current) {
         if (!current.isSymbolicLink()) continue;
         const linked = path.resolve(directory, await fs.promises.readlink(destination));
-        if (!Closure.inside(views, linked) || !linked.endsWith(path.join("wine", "lib", "wine", architecture, filename))) continue;
+        if ((!Closure.inside(views, linked) && !Closure.inside(path.join(path.dirname(path.dirname(prefixPath)), "runtime-view"), linked)) || !linked.endsWith(path.join("wine", "lib", "wine", architecture, filename))) continue;
         if (linked === source && fs.existsSync(source)) continue;
         await fs.promises.unlink(destination);
       }
@@ -218,22 +221,24 @@ async function registerPrefixLibraries(prefixPath, viewRoot, dllRoot, signal) {
     }
   }
 }
-async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoot, host = {}, signal, executableArchitecture, cameraBridge, helperLibraries = [] } = {}) {
+async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoot, host = {}, signal, executableArchitecture, cameraBridge, helperLibraries = [], translatorPlan, translatorView } = {}) {
   signal?.throwIfAborted();
   const support = supportRoot(install), engine = engineRoot(install), hostInfo = {
     hardwareArch: require("../../../shared/runtime/host-capabilities").getHostCapabilities().hardwareArch, ...host };
-  let capabilities = capabilitiesFor(install, support, hostInfo);
+  const layout = translatorPlan?.layout || wineLayout(install);
+  let capabilities = translatorPlan ? { ...install.capabilities, wined3d: true, componentVersions: {} } : capabilitiesFor(install, support, hostInfo);
   const hardware = capabilities.kosmickrisp && (!settings.vulkanBackend || settings.vulkanBackend === "auto")
     ? await Hardware.graphicsHardware(hostInfo, { signal }) : { physicalAppleGPU: hostInfo.physicalAppleGPU === true, source: "not-required" };
   hostInfo.physicalAppleGPU = hardware.physicalAppleGPU;
-  capabilities = capabilitiesFor(install, support, hostInfo);
+  if (!translatorPlan) capabilities = capabilitiesFor(install, support, hostInfo);
   if (cameraBridge) capabilities.dxmt = true;
-  const selection = selectGraphics(settings, capabilities, executableArchitecture);
+  const selection = translatorPlan ? { graphicsBackend: translatorPlan.components["d3d-renderer"].used?.engine || "auto",
+    vulkanBackend: translatorPlan.components["vulkan-driver"].used?.engine || "auto", components: [] } : selectGraphics(settings, capabilities, executableArchitecture);
   const rendererRoot = path.join(support, "Frameworks", "renderer");
   const dlss = DLSS.checkSelection(settings, { ...hostInfo, executableArchitecture,
     backend: selection.components.includes("dxmt") ? "dxmt" : selection.graphicsBackend === "auto" ? "wined3d" : selection.graphicsBackend,
-    dxmt: settings.dlss === true && capabilities.dxmt && (Boolean(cameraBridge) || DLSS.hasLibraries(path.join(rendererRoot, "dxmt", "wine", "x86_64-windows"))),
-    d3dmetal: settings.dlss === true && capabilities.d3dmetal && DLSS.hasLibraries(path.join(rendererRoot, "d3dmetal", "wine", "x86_64-windows")) });
+    dxmt: settings.dlss === true && (translatorPlan ? Boolean(cameraBridge) || DLSS.hasPlanLibraries(translatorPlan, "dxmt") : capabilities.dxmt && (Boolean(cameraBridge) || DLSS.hasLibraries(path.join(rendererRoot, "dxmt", "wine", layout.primaryWindows)))),
+    d3dmetal: settings.dlss === true && (translatorPlan ? DLSS.hasPlanLibraries(translatorPlan, "d3dmetal") : capabilities.d3dmetal && DLSS.hasLibraries(path.join(rendererRoot, "d3dmetal", "wine", layout.primaryWindows))) });
   if (dlss.d3dmetal && !await DLSS.hasD3DMetalPathBridge(engine))
     fail("The selected Wine engine cannot expose MetalFX Temporal through D3DMetal's game integration. Choose DXMT, select a compatible newer Wine version, or disable MetalFX Temporal.");
   const destination = prospectiveRealPath(viewRoot || ".");
@@ -250,36 +255,43 @@ async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoo
     if (!fs.statSync(windows).isFile() || !fs.statSync(unix).isFile() ||
         path.basename(windows) !== item.name + ".dll" || path.basename(unix) !== item.name + ".so")
       fail("The GPU helper pair is unavailable.");
-    const image = require("../../../shared/runtime/macho-load-commands").readMachOLoadCommands(unix, { architecture: "x86_64", signal });
-    if (!image.slices.some(slice => slice.architecture === "x86_64" && slice.platform === 1)) fail("The GPU helper requires an Intel macOS library.");
+    const image = require("../../../shared/runtime/macho-load-commands").readMachOLoadCommands(unix, { architecture: layout.architecture, signal });
+    if (!image.slices.some(slice => slice.architecture === layout.architecture && slice.platform === 1)) fail("The GPU helper requires an Intel macOS library.");
     helperNames.add(item.name); helpers.push({ name: item.name, windows, unix });
   }
-  const loader = selection.components.length || helpers.length ? await prepareLoaderView(engine, viewRoot, install, signal) : {
+  const loader = selection.components.length || helpers.length || translatorView && Object.keys(translatorView.links).length ? await prepareLoaderView(engine, viewRoot, install, signal) : {
     wineRoot: engine, dllRoot: path.join(viewRoot, "dlls"), executablePath: install.executablePath || path.join(engine, "bin", "wine"),
     serverPath: install.serverPath || path.join(engine, "bin", "wineserver") };
   const dllRoot = loader.dllRoot, dllOverrides = [], selectedUnix = [];
   ownDirectory(dllRoot);
-  for (const architecture of ["i386-windows", "x86_64-windows", "x86_64-unix"]) ownDirectory(path.join(dllRoot, architecture));
-  await clearUnusedRenderers(dllRoot, renderers, selection.components, signal);
+  for (const architecture of [...layout.windows, layout.unixName]) ownDirectory(path.join(dllRoot, architecture));
+  if (!translatorPlan) await clearUnusedRenderers(dllRoot, renderers, selection.components, signal);
+  if (translatorView) {
+    for (const [relative, original] of Object.entries(translatorView.links)) {
+      const source = cameraBridge ? require("../../temporal").rendererFile(cameraBridge, path.basename(path.dirname(relative)), path.basename(relative), original) : original;
+      await linkFile(source, path.join(loader.wineRoot, relative), signal);
+    }
+    dllOverrides.push(...translatorView.dllOverrides);
+  }
   for (const helper of helpers) {
-    await linkFile(helper.windows, path.join(dllRoot, "x86_64-windows", helper.name + ".dll"), signal);
-    await linkFile(helper.unix, path.join(dllRoot, "x86_64-unix", helper.name + ".so"), signal);
+    await linkFile(helper.windows, path.join(dllRoot, layout.primaryWindows, helper.name + ".dll"), signal);
+    await linkFile(helper.unix, path.join(dllRoot, layout.unixName, helper.name + ".so"), signal);
     dllOverrides.push(helper.name + "=b");
   }
   for (const name of selection.components) {
     const root = name === "dxmt" && cameraBridge ? cameraBridge.baseRoot : path.join(renderers, name, "wine"),
       modules = name === "dxmt" && dlss.dxmt ? [...CORE_DLLS[name], ...DLSS.DLLS] : CORE_DLLS[name];
-    for (const architecture of ["i386-windows", "x86_64-windows"]) {
+    for (const architecture of ["i386-windows", layout.primaryWindows]) {
       for (const module of modules) {
         const source = require("../../temporal").rendererFile(name === "dxmt" ? cameraBridge : null, architecture, module + ".dll", path.join(root, architecture, module + ".dll"));
         if (fs.existsSync(source)) await linkFile(source, path.join(dllRoot, architecture, module + ".dll"), signal);
       }
     }
-    const unix = path.join(root, "x86_64-unix");
+    const unix = path.join(root, layout.unixName);
     if (fs.existsSync(unix)) {
       selectedUnix.push(unix);
       for (const file of await fs.promises.readdir(unix)) if (/\.(?:so|dylib)$/.test(file)) await linkFile(require("../../temporal").rendererFile(name === "dxmt" ? cameraBridge : null,
-        "x86_64-unix", file, path.join(unix, file)), path.join(dllRoot, "x86_64-unix", file), signal);
+        layout.unixName, file, path.join(unix, file)), path.join(dllRoot, layout.unixName, file), signal);
     }
     dllOverrides.push(modules.join(",") + "=b");
   }
@@ -287,7 +299,7 @@ async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoo
     await linkFile(cameraBridge.dxmt.native, path.join(dllRoot, "x86_64-unix/maclauncher-dxmt-original.so"), signal);
   const gstreamer = path.join(frameworks, "GStreamer.framework", "Versions", "1.0"), gstLib = path.join(gstreamer, "lib");
   const external = selection.components.includes("d3dmetal") ? path.join(renderers, "d3dmetal", "external") : null;
-  const libraryPaths = [path.join(dllRoot, "x86_64-unix"), ...selectedUnix, ...(external ? [external] : []), path.join(engine, "lib", "wine", "x86_64-unix"), frameworks,
+  const libraryPaths = [path.join(dllRoot, layout.unixName), ...selectedUnix, ...(external ? [external] : []), path.join(engine, "lib", "wine", layout.unixName), frameworks,
     ...(fs.existsSync(gstLib) ? [gstLib] : [])];
   const env = { WINEDLLPATH: path.join(engine, "lib", "wine"), DYLD_LIBRARY_PATH: libraryPaths.join(path.delimiter), DYLD_FALLBACK_LIBRARY_PATH: libraryPaths.join(path.delimiter),
     DYLD_FRAMEWORK_PATH: [frameworks, ...(external ? [external] : [])].join(path.delimiter),
@@ -300,7 +312,7 @@ async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoo
     const scanner = path.join(gstreamer, "libexec", "gstreamer-1.0", "gst-plugin-scanner");
     if (fs.existsSync(scanner)) env.GST_PLUGIN_SCANNER_1_0 = scanner;
   }
-  if (selection.vulkanBackend !== "auto") {
+  if (!translatorPlan && selection.vulkanBackend !== "auto") {
     const icd = path.join(viewRoot, "vulkan-icd.json"), sourceIcd = path.join(support, Closure.RELATIVE_PATHS.vulkan,
       selection.vulkanBackend === "kosmickrisp" ? "kosmickrisp_mesa_icd.json" : "MoltenVK_icd.json");
     const descriptor = JSON.parse(Closure.boundedText(sourceIcd));
@@ -320,9 +332,15 @@ async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoo
     env.VK_DRIVER_FILES = icd; env.VK_ICD_FILENAMES = icd;
     env.MVK_CONFIG_LOG_LEVEL = "0";
   }
+  if (translatorView) {
+    Object.assign(env, translatorView.env);
+    env.DYLD_LIBRARY_PATH = [path.join(dllRoot, layout.unixName), ...translatorView.libraryPaths, env.DYLD_LIBRARY_PATH].filter(Boolean).join(path.delimiter);
+    env.DYLD_FRAMEWORK_PATH = [...translatorView.frameworkPaths, env.DYLD_FRAMEWORK_PATH].filter(Boolean).join(path.delimiter);
+    if (Object.keys(translatorView.links).some(name => name.endsWith(".dll"))) env.WINEDLLPATH = [...layout.windows.map(name => path.join(dllRoot, name)), dllRoot, layout.dllRoot].join(path.delimiter);
+  }
   signal?.throwIfAborted();
   return { ...selection, ...loader, env, dllOverrides,
-    ...(path.isAbsolute(prefixPath || "") ? { applyPrefix: () => registerPrefixLibraries(prefixPath, viewRoot, dllRoot, signal) } : {}),
+    ...(path.isAbsolute(prefixPath || "") ? { applyPrefix: () => registerPrefixLibraries(prefixPath, viewRoot, dllRoot, signal, layout) } : {}),
     capabilities, hardware, dlss, componentVersions: capabilities.componentVersions, viewRoot, prefixPath };
 }
 

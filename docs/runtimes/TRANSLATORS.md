@@ -1,4 +1,8 @@
-# Translator runtimes
+# Graphics translators
+
+**Runtimes → Graphics → Translators** manages the graphics components used by [CrossOver](CROSSOVER.md) and [Sikarugir](SIKARUGIR.md). Each installed version is stored once. Games, private graphics views and Windows prefix DLLs refer to that installation through links. A loader that needs its own signature, or a library that locates its framework beside itself, uses a shared prepared copy rather than a copy per game.
+
+## Versions and sources
 
 Translator versions use the shared runtime catalogs and local registration. Refresh reads one source's published releases. Status and registered-file inspection remain offline. CrossOver and Sikarugir use the same installed versions; selecting another game adds no translator payload copy.
 
@@ -21,6 +25,37 @@ An installed application selection resolves its component folder, framework or d
 D3DMetal is downloaded from Sikarugir Template or supplied locally. MacLauncher does not host or build it. Apple's Game Porting Toolkit licence applies, including Apple hardware and distribution restrictions; the supplied notice remains with the component. Components registered from CrossOver are restricted to CrossOver launches.
 
 GStreamer plugin registration is intended for a prepared codec directory. An unmodified GStreamer SDK can load a second GStreamer core alongside Wine's core. Its plugin dependencies must resolve to the intended libraries before the directory is selected through `GST_PLUGIN_PATH`. Registration does not replace `winegstreamer` or another Wine module, relocate library imports, or supply a codec SDK download catalog.
+
+## Selection
+
+Runtime Settings selects each component independently.
+
+| Component | Choices |
+| --- | --- |
+| Direct3D engine | The runtime's automatic choice, its named engines, and managed DXMT, DXVK or D3DMetal versions. DXVK packages can provide different Direct3D API sets. |
+| Vulkan driver | The runtime's automatic driver, its named drivers, and managed MoltenVK or KosmicKrisp versions. |
+| Direct3D 12 | Wine vkd3d, D3DMetal or a managed Direct3D 12 translator. vkd3d-proton appears with KosmicKrisp. |
+| Video codecs | The runtime defaults or a registered GStreamer plugin folder. Wine's own video modules remain with Wine. |
+
+An existing bottle or wrapper first offers its current setting, read from its configuration without starting Wine. Automatic follows that runtime's existing behavior. Named choices show their version and source from installed files; a component without readable version metadata still names its engine and source. Installed CrossOver components are used for CrossOver launches only.
+
+The Direct3D engine choice is also the DXMT version setting for camera support. The camera adapter keeps its own matching-library requirement. A mismatch leaves the selected renderer active and reports that camera support is unavailable.
+
+## Loading
+
+CrossOver's own engines use its graphics backend selector. Replacement Wine builtin DLLs use private Windows DLL directories, with their Unix modules beside the private Wine loader. D3DMetal selects its matching bridge and framework together. Upstream native Windows DLLs use links in the bottle's `system32` or `syswow64` directory and native DLL overrides. An existing DLL is preserved before replacement and restored when that selection is removed.
+
+CrossOver Vulkan overrides place the selected Vulkan entry library at the private `libMoltenVK.dylib` location. KosmicKrisp uses the Khronos loader there and an explicit driver description naming the selected driver. This route applies across CrossOver backends; the additional `CX_LIBVULKAN` value is used only with WineD3D.
+
+Sikarugir uses the same selected components through its private graphics view and Vulkan driver description. Its Wine engine, Template and registered wrapper engine remain in place.
+
+## Compatibility and inspector
+
+Play checks the files that the selected Wine process and Windows executable will load. An unused CPU variant in a multi-architecture installation does not affect the selection. A missing required file, absent PE machine or native CPU slice, a binary's declared macOS minimum above the running system, or a required Unix import absent from its actual Wine dependency can prevent loading. Weak imports, system-library imports and incomplete inspection do not establish a failure.
+
+When loading is impossible, Play uses the same engine supplied by the selected CrossOver or Template. If that engine is unavailable, it uses the runtime's automatic choice. The saved choice remains selected. The warning and inspector show the selected engine, the engine used and the reason. Software version numbers, vendor strings and tested-version lists do not decide translator compatibility.
+
+The inspector shows the effective Direct3D engine, Vulkan driver and Direct3D 12 choice. CrossOver's automatic engine remains labeled automatic when its own final choice is unresolved. WineVulkan scene capture uses its matching scene closure; a separate Vulkan driver override, including KosmicKrisp, leaves that scene closure unavailable.
 
 ## Sources and notices
 

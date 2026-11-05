@@ -43,6 +43,12 @@ function adapters(install) {
   let version = "WS12WineSikarugir11.0_1";
   const calls = [], graphicsCalls = [];
   return { calls, graphicsCalls, setVersion: value => { version = value; },
+    resolveTranslators: async (_install, runtime, context) => {
+      const selected = { id: "fixture-dxmt", engine: "dxmt", component: "d3d-renderer", form: "builtin", root: install.wineRoot, files: [], source: "synthetic Template" };
+      const plan = require("../src/modules/shared/runtime/translator-plan").resolvePlan({ runtime, choices: [selected], selections: { "d3d-renderer": selected.id } });
+      plan.layout = require("../src/modules/shared/runtime/wine-layout").wineLayout(install);
+      context.translatorPlan = plan; return plan;
+    },
     manager: { resolveSelection: () => ({ ready: true, version, install }) },
     host: { platform: "darwin", hardwareArch: "arm64", macOSVersion: "26.0" },
     rosetta: { isAvailable: () => true, ensure: () => assert.fail("Rosetta should already be available") },

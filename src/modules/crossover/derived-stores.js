@@ -1,4 +1,14 @@
 const fs = require("node:fs"), path = require("node:path");
+const { fileDigest } = require('../shared/runtime/verified-identity');
+
+function currentTree(directory, recordName) {
+  return name => {
+    try {
+      const record = JSON.parse(fs.readFileSync(path.join(directory, name, recordName), 'utf8'));
+      return !Array.isArray(record.inputs) || record.inputs.every(item => fileDigest(item.path).sha256 === item.sha256);
+    } catch { return false; }
+  };
+}
 
 // Derived Windows-runtime data; see core/storage-maintenance.js.
 function loaderFolders(context) {
@@ -8,6 +18,7 @@ function loaderFolders(context) {
     for (const item of fs.readdirSync(hosts, { withFileTypes: true }))
       if (item.isDirectory()) folders.push(path.join(hosts, item.name, "graphics-loader"));
   } catch {}
+  folders.push(path.join(context.userDataDir, "graphics/crossover-loaders"));
   return folders;
 }
 module.exports = [
@@ -36,6 +47,21 @@ module.exports = [
     directories: loaderFolders,
     match: /^[0-9a-f]{24}$/,
     newest: 2,
+    keep: directory => currentTree(directory, 'loader.json'),
+    minAgeMs: 24 * 60 * 60 * 1000
+  },
+  {
+    id: 'wine-translator-views',
+    directories: ({ userDataDir }) => [path.join(userDataDir, 'graphics/wine-translators')],
+    match: /^[a-f0-9]{64}$/,
+    keep: directory => currentTree(directory, 'prepared.json'),
+    minAgeMs: 24 * 60 * 60 * 1000
+  },
+  {
+    id: 'sikarugir-graphics-views',
+    directories: ({ userDataDir }) => [path.join(userDataDir, 'graphics/sikarugir-views')],
+    match: /^[a-f0-9]{20}-[a-f0-9]{12}-[a-f0-9]{64}$/,
+    keep: directory => currentTree(directory, 'prepared.json'),
     minAgeMs: 24 * 60 * 60 * 1000
   },
   {

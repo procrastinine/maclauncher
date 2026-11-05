@@ -1,6 +1,6 @@
 # CrossOver
 
-CrossOver is a Windows compatibility runtime supplied by a [CrossOver application](https://www.codeweavers.com/crossover) already installed on the Mac. MacLauncher uses it for [Windows games](../game-types/WINDOWS.md) and for compatible Windows executables of other game types. It requires a licensed CrossOver application with its own prerequisites; CodeWeavers handles CrossOver downloads, licenses and application updates, and MacLauncher does not bundle, copy or download any CrossOver binaries. [Sikarugir (Wine)](SIKARUGIR.md) is the alternative that MacLauncher downloads itself.
+CrossOver is a Windows compatibility runtime supplied by a [CrossOver application](https://www.codeweavers.com/crossover) already installed on the Mac. MacLauncher uses it for [Windows games](../game-types/WINDOWS.md) and for compatible Windows executables of other game types. It requires a licensed CrossOver application with its own prerequisites; CodeWeavers handles CrossOver downloads, licenses and application updates, and MacLauncher does not bundle or download CrossOver. [Sikarugir (Wine)](SIKARUGIR.md) is the alternative that MacLauncher downloads itself.
 
 ## When CrossOver is offered
 
@@ -45,9 +45,11 @@ Settings holds the defaults, and each game's Runtime Settings can override them.
 | Setting | Behavior |
 | --- | --- |
 | Environment | Per-game private bottle or an existing bottle reference. |
-| Graphics | Automatic, D3DMetal, DXMT, DXVK or WineD3D. Automatic keeps CrossOver's own choice. Availability depends on the application, Mac and macOS version. |
+| Direct3D engine | Automatic, engines supplied by the selected runtime, or a specific managed translator version. Each choice names its engine, version and source. |
+| Vulkan driver | CrossOver’s driver or a specific managed MoltenVK or KosmicKrisp version. |
 | Game temporal integration | Exposes MetalFX Temporal through a 64-bit game's DLSS integration. Listed for Unity and Windows games. See [Temporal upscaling](#temporal-upscaling). |
-| DXMT support | The DXMT library version for FSR2/3 camera support. Automatic uses the default from Runtimes. |
+| Direct3D 12 | Wine vkd3d, D3DMetal or a managed Direct3D 12 translator. vkd3d-proton is offered with KosmicKrisp. |
+| Video codecs | The runtime defaults or a registered GStreamer codec folder. |
 | Synchronization | Automatic, MSync, ESync or Off. ESync is for older CrossOver versions; newer releases may not support it. |
 | Language locale | An optional locale identifier, such as `ja_JP.UTF-8`. |
 | Windows environment | Windows 10, Windows 11, Windows 7 or Windows XP, in a 64-bit bottle when the selected application includes one. Each choice uses its own bottle. |
@@ -58,13 +60,17 @@ Settings holds the defaults, and each game's Runtime Settings can override them.
 
 The graphics and synchronization choices follow the [CrossOver Mac user guide](https://www.codeweavers.com/support/docs/crossover-mac/index). The BepInEx option follows BepInEx's [Wine instructions](https://docs.bepinex.dev/articles/advanced/proton_wine.html).
 
+## Translators
+
+[Translator selection](TRANSLATORS.md) separates the Direct3D engine, Vulkan driver and Direct3D 12 choices. Versions and sources come from installed files. Existing environments also offer their current Bottle setting or Wrapper setting. A runtime version is installed once; private graphics views and prefix DLLs link to that installation. Prepared loader trees are shared between games using the same inputs.
+
 ## Graphics
 
-Each renderer has requirements of its own, separate from those of CrossOver's Wine. In CrossOver 26.3, DXMT requires macOS 14, and D3DMetal with its libraries requires Apple Silicon and macOS 15.4. MacLauncher reads the minimum macOS version that the installed renderer libraries declare, leaves renderers that cannot run on the Mac out of the **Graphics** choices, and checks the selection again before it creates the game's Windows environment. Automatic keeps CrossOver's own renderer choice, and WineD3D is offered regardless of these requirements. [System requirements](SYSTEM_REQUIREMENTS.md#windows-compatibility-runtimes) lists the related components.
+The selected translator is checked against the actual Wine CPU, PE machine, native macOS floor and required Wine imports. Missing files or a proven missing requirement select the same engine supplied by this CrossOver, or CrossOver’s automatic choice. Other unknown metadata leaves the selection active. The inspector names the selected and used engines and explains a fallback. [System requirements](SYSTEM_REQUIREMENTS.md#windows-compatibility-runtimes) lists the related components.
 
 Per-game ReShade effects use the shared [graphics pipeline](../graphics/SHARED_PROCESSING.md) with the selected CrossOver application, graphics backend and Windows environment. Effects switch while the game runs.
 
-Shared graphics controls use private copies of CrossOver's small Wine loaders, prepared automatically with permission to load the graphics adapter. The copies keep the original loaders' other entitlements and are reused between launches. CrossOver's application, license files and installed libraries stay in place, and the game's existing bottle and saves are kept.
+Shared graphics controls use private copies of CrossOver's small Wine loaders, prepared automatically with permission to load the graphics adapter. The copies keep the original loaders' other entitlements and are cached once by their source and translator inputs for reuse between games. CrossOver's application, license files and installed libraries stay in place, and the game's existing bottle and saves are kept.
 
 If the graphics loader cannot be prepared, the game runs with the selected vendor renderer and its existing bottle, without shared graphics effects for that launch. Saved graphics selections are kept.
 
@@ -76,7 +82,7 @@ Graphics providers must match the architecture of the native Wine process that r
 
 Enabled temporal rows in the Advanced graphics settings prepare the same game integration and dependencies as the Simple temporal settings. Disabled rows add no temporal requirements.
 
-FSR2/3 temporal replacement also requires a supported Streamline interposer and a DXMT camera adapter matching the selected renderer's native library and Windows thunk. CrossOver uses this adapter only when DXMT is selected explicitly. The camera adapter is included with MacLauncher; the DXMT support libraries are separate. Compatible installed Wine support libraries are reused. Otherwise, Play downloads the matching Template support package and keeps only its DXMT libraries, with no additional Wine engine. **Runtimes → Graphics → Translators → DXMT** manages these libraries. CrossOver and Sikarugir share one set of installed versions and one default. Versions identify an upstream DXMT release or a Sikarugir Template component. Versions that earlier MacLauncher releases installed for CrossOver remain installed and are used from their existing folder. The version and default are independent of the selected CrossOver application, and the per-game **DXMT support** setting can override that default.
+FSR2/3 temporal replacement also requires a supported Streamline interposer and a DXMT camera adapter matching the selected renderer's native library and Windows thunk. CrossOver uses this adapter only when DXMT is selected explicitly. The camera adapter is included with MacLauncher; the DXMT support libraries are separate. **Runtimes → Graphics → Translators** manages the shared DXMT versions. The Direct3D engine choice selects one version for rendering and camera support. The camera adapter reports a mismatch without changing the selected renderer.
 
 Preparation uses private copies of the game and loader. The private renderer selection turns off CrossOver's automatic DLL redirection for that launch and selects the matching DXMT libraries directly. Camera values are tied to the game's exact frame and viewport, and unsupported projections keep the game's original scaler.
 

@@ -82,7 +82,7 @@ function matchingSupport(context, root, { entry, runtimeId = context.runtimeId |
   }
   return null;
 }
-function resolvePlan(entry, context = {}, { install, runtimeId = context.runtimeId || entry?.runtimeId || "crossover", settings = context.runtimeSettings || {}, host = {}, root, verify = false, allowDownload = false, automatic = false } = {}) {
+function resolvePlan(entry, context = {}, { install, runtimeId = context.runtimeId || entry?.runtimeId || "crossover", settings = context.runtimeSettings || {}, host = {}, root, verify = false, allowDownload = false, automatic = false, translatorPlan = context.translatorPlan } = {}) {
   try {
     if (Requirements.requirementSupport(Requirements.WINE_TEMPORAL, { ...Host.getHostCapabilities(), ...host }).supported === false ||
       !install || !["auto", "dxmt"].includes(settings.graphicsBackend || "auto")) return null;
@@ -109,6 +109,8 @@ function resolvePlan(entry, context = {}, { install, runtimeId = context.runtime
       methods: [...(hasProjection ? ["fsr2", "fsr3"] : []), ...(hasXeSS ? ["metalfx"] : [])],
       routes: sources.map(row => ({source: row.adapter, depth:true,motionVectors:true,jitter:true,exposure:true,cameraProjection: row.adapter === "streamline", methods: row.adapter === "xess" ? ["metalfx"] : ["fsr2", "fsr3"]})) };
     let baseRoot, selectedSupport;
+    const translator = translatorPlan?.components["d3d-renderer"]?.used;
+    if (translator && translator.engine !== "dxmt") return null;
     if (runtimeId === "sikarugir") {
       if (!path.isAbsolute(support || "")) return null;
       const engine = install.engineRoot || install.wineRoot || (install.executablePath && path.dirname(path.dirname(install.executablePath)));
@@ -121,6 +123,16 @@ function resolvePlan(entry, context = {}, { install, runtimeId = context.runtime
       baseRoot = path.join(install.crossoverRoot, "lib/dxmt");
       if (!fs.existsSync(path.join(install.crossoverRoot, "lib/wine/x86_64-unix/wine"))) return null;
     } else return null;
+    if (translator?.engine === "dxmt") {
+      baseRoot = require("../../shared/runtime/wine-layout").wineRoot(translator.root);
+      const dxmt = payload(root, baseRoot, { verify, macOSVersion: host.macOSVersion });
+      if (!dxmt) {
+        context.cameraAdapterNotice = `The camera adapter does not match the selected ${require("../../shared/runtime/translator-description").label(translator)}.`;
+        warnGraphics(context.logger, `[translators] ${context.cameraAdapterNotice}`);
+        return null;
+      }
+      return { dxmt, baseRoot, sourceRoot: match.sourceRoot, libraries: sources, inputs, dependency: translator.managerId ? { managerId: translator.managerId, version: translator.runtimeVersion, sourcePath: translator.root } : null };
+    }
     const manager = require("./support-manager").forRuntime(runtimeId), explicit = settings.graphicsBridgeVersion && settings.graphicsBridgeVersion !== "auto" ||
       entry?.runtimeData?.[manager.id]?.version || context.settings?.runtimes?.[manager.id]?.defaultVersion;
     if (explicit || !payload(root, baseRoot, { verify, macOSVersion: host.macOSVersion })) {
@@ -226,7 +238,7 @@ function sceneDemand(entry, context = {}, {root} = {}) {
 }
 function resolveScenePlan(entry, context = {}, { install, settings = context.runtimeSettings || {}, verify = false,
   requested, root,
-  support, vulkan } = {}) {
+  support, vulkan, translatorPlan = context.translatorPlan } = {}) {
   // Pure demand precedes DLL inspection, package reads and private preparation.
   if (requested === false || !install?.crossoverRoot || !path.isAbsolute(install.crossoverRoot)) return null;
   const demanded = sceneDemand(entry, context, {root});
@@ -236,6 +248,11 @@ function resolveScenePlan(entry, context = {}, { install, settings = context.run
     const [names, order] = String(rule).split("=");
     return !["b", "builtin"].includes(order?.trim().toLowerCase()) && names.split(",").some(name => /^(?:\*|winevulkan)(?:\.dll)?$/i.test(name.trim()));
   })) return null;
+  const driver = translatorPlan?.components["vulkan-driver"];
+  if (driver?.used?.engine === "kosmickrisp" || driver?.used && !driver.inherited) {
+    context.graphicsBridgeFailure = { provider: "crossover-vulkan", reason: "WineVulkan scene support is unavailable with the selected Vulkan driver override." };
+    return null;
+  }
   const sources = sceneLibraries(entry, settings);if (!sources.length) return null;
   support ||= require("./support-manager");vulkan ||= require("../../shared/vulkan/managed");
   const verification = verify ? "full" : "status", selections = {};

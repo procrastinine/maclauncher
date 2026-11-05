@@ -275,6 +275,8 @@ The gear beside a game's runtime opens that game's runtime settings in a dedicat
 
 ### Runtimes window
 
+The Graphics heading contains a Translators tab for MoltenVK, KosmicKrisp, DXMT and the other managed Wine graphics components. Each keeps its version controls and installation identity. The Windows runtime settings select named engines and versions separately for Direct3D, Vulkan and Direct3D 12; the inspector reports the effective choices and any fallback. [Graphics translators](../runtimes/TRANSLATORS.md) specifies their loading and compatibility behavior.
+
 Runtimes opens in a separate, nonmodal macOS window. Reopening it focuses the same window and keeps its selection and version choices, and a game's **Runtimes** action selects the relevant manager. The native close controls or Cmd-W close it, and the library stays usable during runtime operations. The window shows downloadable game runtimes, tools and registered local applications. Core graphics components and the internal helpers that ship with the app are kept apart from the game-runtime choices.
 
 #### Sidebar and search

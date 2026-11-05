@@ -33,7 +33,7 @@ async function prepare(request,context={}){
   const bottlePath=request.prefixDirectory?fs.realpathSync(request.prefixDirectory):path.join(directory,"bottle");
   if(request.prefixDirectory){if(!fs.statSync(bottlePath).isDirectory()||!fs.existsSync(path.join(bottlePath,"system.reg"))||!fs.existsSync(path.join(bottlePath,"cxbottle.conf")))throw Error("The selected Windows GPU environment is incomplete.");}
   else await Launch.ensureBottle(install,require("../../shared/runtime/wine-environment").privateEnvironment(userDataDir,directory,"bottle"),directory,{bottleTemplate:"win10_64",graphicsBackend:"d3dmetal"},context);
-  const loader=await Loader.prepare(install,directory,{signal,execute:context.execute,helperLibraries:request.helperLibraries||[]});
+  const loader=await Loader.prepare(install,directory,{userDataDir:context.userDataDir,signal,execute:context.execute,helperLibraries:request.helperLibraries||[]});
   const settings={graphicsBackend:"d3dmetal",synchronization:"auto",dlss:false,environment:{}};
   const built=Launch.buildEnvironment(settings,install,directory,bottlePath,{baseEnvironment:sanitized(context.environment||process.env),executableArchitecture:"x86_64"});
   const overrides={...built.overrides,...Loader.environment(loader,built.environment,{installation:install})};

@@ -13,6 +13,8 @@ const { systemVersionSync } = require("../../shared/runtime/bundled-native");
 const WindowsFiles = require("../runtime/launch");
 const Detection = require("../detect");
 const DLSS = require("../dlss");
+const Translators = require("../../shared/runtime/wine-translators");
+const TranslatorFiles = require("../../shared/runtime/translator-files");
 
 const PROTECTED_ENVIRONMENT = new Set(["HOME", "PATH", "TMPDIR", "WINEPREFIX", "WINEARCH", "WINELOADER", "WINESERVER",
   "WINEDLLPATH", "WINEDLLOVERRIDES", "WINEMSYNC", "WINEESYNC", "DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH",
@@ -100,7 +102,7 @@ function dllOverrides(settings, graphicsOverrides = []) {
   }
   return values.join(";");
 }
-function buildEnvironment(settings, installation, directory, prefixPath, graphics = {}, { baseEnvironment = process.env, existingEnvironment } = {}) {
+function buildEnvironment(settings, installation, directory, prefixPath, graphics = {}, { baseEnvironment = process.env, translatorPlan, existingEnvironment } = {}) {
   const environment = { ...baseEnvironment };
   for (const key of Object.keys(environment)) {
     if (/^(?:WINE|CX_|DYLD_|GST_|SikarugirAppWine)/.test(key) || [...DLSS.ENVIRONMENT, "MACLAUNCHER_DXMT_BASE_LIBRARY", "NODE_OPTIONS", "ELECTRON_RUN_AS_NODE", "ELECTRON_RENDERER_URL", "VITE_DEV_SERVER_URL", "VK_DRIVER_FILES", "VK_ICD_FILENAMES"].includes(key)) delete environment[key];
@@ -111,7 +113,7 @@ function buildEnvironment(settings, installation, directory, prefixPath, graphic
   if (!existingEnvironment && ["msync", "esync"].includes(synchronization) && capabilities[synchronization] !== true) {
     throw new Error(`The selected Sikarugir version does not support ${synchronization === "msync" ? "MSync" : "ESync"}. Select Automatic or Off in Runtime Settings.`);
   }
-  Object.assign(environment, existingEnvironment?.environment || {}, graphics.env || {}, WineSettings.environment(settings, { needsRosetta: installation.needsRosetta, engines: { "d3d-renderer": settings.graphicsBackend, "vulkan-driver": settings.vulkanBackend } }), parseEnvironment(settings.environment));
+  Object.assign(environment, existingEnvironment?.environment || {}, graphics.env || {}, WineSettings.environment(settings, { needsRosetta: installation.needsRosetta, engines: translatorPlan ? Translators.engines(translatorPlan) : {} }), parseEnvironment(settings.environment));
   // The producer's Wine 11 loader requires this initialization marker before
   // loading Windows libraries, including wineboot in a fresh prefix.
   if (/^11(?:[._]|$)/.test(installation.engineVersion || "")) environment.SikarugirAppWine11 = "1";
@@ -293,7 +295,10 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const Temporal = require("../temporal");
   const capabilities = require("../../shared/runtime/host-capabilities").getHostCapabilities();
   const host = dependencies.host || capabilities;
-  let cameraBridge = Temporal.resolvePlan(entry, context, { install: selected.install, settings, host,
+  const translatorPlan = await (dependencies.resolveTranslators || Translators.resolve)(selected.install, "sikarugir", context, { executableArchitecture: match.executableArchitecture, host });
+  settings = Translators.settingsForPlan(settings, translatorPlan);
+  const translatorView = await TranslatorFiles.prepareTranslatorFiles(translatorPlan, { userDataDir: context.userDataDir, layout: translatorPlan.layout, signal: context.signal });
+  let cameraBridge = Temporal.resolvePlan(entry, context, { install: selected.install, settings, translatorPlan, host,
     runtimeId: "sikarugir", verify: true, root: dependencies.graphicsRoot, automatic: settings.dlss !== true });
   if (cameraBridge) settings = { ...settings, dlss: true };
   if (cameraBridge?.dependency) await context.useRuntime?.(cameraBridge.dependency);
@@ -321,8 +326,10 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   }
   if (!cameraBridge) {GameView.discard(cameraView);cameraView = null;}
   context.graphicsInputs = require("../graphics-inputs").inputs(selected.install, cameraBridge?.inputs, { fallback: "x86_64" });
-  const identity = crypto.createHash("sha256").update(JSON.stringify([selected.version,
-    selected.install.sha256 || selected.install.digest || null])).digest("hex").slice(0, 20);
+  const nativeInputs = [selected.install.executablePath, selected.install.serverPath,
+    ...(translatorPlan.layout.unixRoot ? ["ntdll.so", "wine"].map(name => path.join(translatorPlan.layout.unixRoot, name)).filter(file => fs.existsSync(file)) : [])]
+    .map(file => ({ path: file, sha256: require("../../shared/runtime/verified-identity").fileDigest(file).sha256 }));
+  const identity = crypto.createHash("sha256").update(JSON.stringify(nativeInputs)).digest("hex").slice(0, 20);
   const windowsVersion = settings.windowsVersion || "win10";
   if (!WINDOWS_VERSIONS.has(windowsVersion)) throw new Error("Unsupported Wine Windows version.");
   const previousVersions = require('../manifest.json').runtime.entries.sikarugir.settings.fields.find(field => field.key === 'windowsVersion').options;
@@ -332,20 +339,25 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const variant = crypto.createHash("sha256").update(JSON.stringify([2, settings.graphicsBackend || "auto", settings.vulkanBackend || "auto",
     settings.cncDdraw === true, match.executableArchitecture, ...(settings.dlss === true ? ["dlss"] : []),
     ...(cameraBridge ? [cameraBridge.dxmt.identity, cameraBridge.baseRoot] : [])])).digest("hex").slice(0, 12);
-  const viewRoot = path.join(directory, "runtime-view", `${identity}-${variant}`);
+  const views = path.join(context.userDataDir, "graphics/sikarugir-views");
+  Writable.assertOwnDirectory(context.userDataDir, views);
+  const viewRoot = path.join(views, `${identity}-${variant}-${translatorView.identity}`);
+  Writable.assertOwnDirectory(views, viewRoot);
   const graphics = await prepareGraphicsView({ install: selected.install, settings, prefixPath, viewRoot, host,
-    environment: existingEnvironment, cameraBridge, signal: context.signal, logger: context.logger, onProgress: context.onProgress, executableArchitecture: match.executableArchitecture });
+    environment: existingEnvironment, cameraBridge, translatorPlan, translatorView, signal: context.signal, logger: context.logger, onProgress: context.onProgress, executableArchitecture: match.executableArchitecture });
+  Writable.atomicWrite(path.join(viewRoot, "prepared.json"), JSON.stringify({ inputs: [...nativeInputs, { path: path.join(translatorView.root, "prepared.json"), sha256: require("../../shared/runtime/verified-identity").fileDigest(path.join(translatorView.root, "prepared.json")).sha256 }] }) + "\n", { root: viewRoot });
   if (!existingEnvironment) {
     await ensurePrefix(selected.install, Environments.privateEnvironment(context.userDataDir, directory, path.relative(directory, prefixPath)), directory, { ...settings, windowsVersion: environmentVersion }, graphics, context, { run: dependencies.run });
     WindowsFiles.detachProfileAliases(prefixPath);
   }
+  await TranslatorFiles.applyNativeLibraries(translatorView, prefixPath, { signal: context.signal });
   await graphics.applyPrefix?.();
   context.signal?.throwIfAborted();
   // Wine accepts Unix absolute paths. Long paths retain a short Windows drive
   // rooted at the original game; mappings from earlier Plays stay untouched.
   const windowsExecutablePath = !existingEnvironment && executablePath.length >= 240 ? mapGameDrive(directory, prefixPath, gameRoot, executablePath) : executablePath;
   const workingDirectory = path.dirname(match.windowsExecutablePath);
-  let { environment } = buildEnvironment(settings, selected.install, directory, prefixPath, graphics, { ...dependencies, existingEnvironment });
+  let { environment } = buildEnvironment(settings, selected.install, directory, prefixPath, graphics, { ...dependencies, translatorPlan, existingEnvironment });
   // Apply launcher-owned optional effects only to the game, after stock Wine
   // finishes prefix initialization. User-supplied loader paths remain blocked.
   if (context.applyGameEnvironment) environment = await context.applyGameEnvironment(environment);
@@ -372,9 +384,9 @@ async function prepareLaunch(entry, context, dependencies = {}) {
     sourceRoot: match.sourceRoot, gameRoot, prefixPath, viewRoot, graphicsBackend: graphics.graphicsBackend,
     ...(existingEnvironment ? { environmentReference: existingEnvironment.reference } : {}),
     vulkanBackend: graphics.vulkanBackend, dlss: graphics.dlss?.enabled === true, componentVersions: graphics.componentVersions,
-    graphicsInputs: context.graphicsInputs } };
+    translatorRows: Translators.inspectorRows(translatorPlan), cameraAdapterNotice: context.cameraAdapterNotice || null, graphicsInputs: context.graphicsInputs } };
   context.onEntryChange?.(entry);
-  return { ...selected, directory, gameRoot, workingDirectory, prefixPath, viewRoot, executablePath, windowsExecutablePath, graphics, environment, args,
+  return { ...selected, directory, gameRoot, workingDirectory, prefixPath, viewRoot, executablePath, windowsExecutablePath, graphics, environment, args, translatorPlan,
     existingEnvironment, winePath: graphics.executablePath || selected.install.executablePath, serverPath: graphics.serverPath || selected.install.serverPath };
 }
 

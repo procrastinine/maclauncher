@@ -39,8 +39,9 @@ function inspectApplication(runtimePath) {
   // Modern Wine re-execs this separate loader after reserving its Windows
   // address space. Graphics providers load into that process, whose available
   // architectures can differ from the front loader's universal slices.
-  const childLoader = path.join(root, "lib", "wine", "x86_64-unix", "wine");
-  const graphicsExecutablePath = fs.existsSync(childLoader) ? childLoader : loaderPath;
+  const layout = require("../../shared/runtime/wine-layout").wineLayout({ crossoverRoot: root });
+  const childLoader = layout.unixRoot && path.join(layout.unixRoot, "wine");
+  const graphicsExecutablePath = childLoader && fs.existsSync(childLoader) ? childLoader : loaderPath;
   const commands = [...new Set([executablePath, bottleToolPath, loaderPath, serverPath, graphicsExecutablePath])];
   const signature = [path.join(appPath, "Contents", "Info.plist"), ...commands]
     .map(file => { const stat = fs.statSync(file); return [fs.realpathSync(file), stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs, stat.mode]; });

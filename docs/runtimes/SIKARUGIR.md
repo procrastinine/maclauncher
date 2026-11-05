@@ -53,10 +53,11 @@ Settings holds the defaults, and each game's Runtime Settings can override them.
 | Setting | Behavior |
 | --- | --- |
 | Environment | Per-game private prefix or an existing Sikarugir wrapper reference. |
-| Graphics | Automatic, DXMT, DXVK, D3DMetal or WineD3D. Availability depends on the selected engine, Mac and macOS version. |
+| Direct3D engine | Automatic, engines supplied by the selected runtime, or a specific managed translator version. Each choice names its engine, version and source. |
 | Game temporal integration | Exposes MetalFX Temporal through a compatible 64-bit game's DLSS integration. Listed for Unity and Windows games. See [Game temporal integration](#game-temporal-integration). |
-| DXMT support | The DXMT library version for FSR2/3 camera support. Automatic uses the default from Runtimes. |
-| Vulkan driver | Automatic, MoltenVK or KosmicKrisp. Applies to Vulkan graphics, separately from the Direct3D renderer. |
+| Direct3D 12 | Wine vkd3d, D3DMetal or a managed Direct3D 12 translator. vkd3d-proton is offered with KosmicKrisp. |
+| Video codecs | The runtime defaults or a registered GStreamer codec folder. |
+| Vulkan driver | Automatic, a driver supplied by the runtime, or a specific managed MoltenVK or KosmicKrisp version. |
 | DirectDraw compatibility | The optional CNC-DDraw wrapper for 32-bit games with a software DirectDraw renderer. Off by default and independent of the Direct3D settings. |
 | Synchronization | Automatic, MSync or Off. MSync requires support in the selected engine. |
 | Language locale | An optional locale, such as `ja_JP.UTF-8` or `en_US.UTF-8`. |
@@ -69,13 +70,17 @@ Settings holds the defaults, and each game's Runtime Settings can override them.
 
 The optional **Enable BepInEx winhttp override**, listed for Unity and Windows games, loads a `winhttp.dll` that the game already supplies before Wine's built-in library. It does not install BepInEx, mods or DLLs, and explicit DLL overrides take precedence. The [BepInEx Wine guide](https://docs.bepinex.dev/articles/advanced/proton_wine.html) describes this setting.
 
+## Translators
+
+[Translator selection](TRANSLATORS.md) separates the Direct3D engine, Vulkan driver and Direct3D 12 choices. Versions and sources come from installed files. Existing environments also offer their current Bottle setting or Wrapper setting. A runtime version is installed once; private graphics views and prefix DLLs link to that installation. Prepared loader trees are shared between games using the same inputs.
+
 ## Graphics
 
 Per-game ReShade effects use the shared [graphics pipeline](../graphics/SHARED_PROCESSING.md) with the selected Wine version, graphics backend and Windows environment. Effects switch while the game runs, and the shared Wine installation stays unchanged.
 
 With **Automatic** graphics, Direct3D 10 and 11 use DXMT. On a confirmed physical Apple M-series GPU with macOS 26 or later, Automatic enables KosmicKrisp, and Direct3D 8 and 9 use D9VK. Virtual or unrecognized GPUs, and older systems, use WineD3D for Direct3D 8 and 9 and MoltenVK for Vulkan.
 
-The Vulkan driver is chosen separately from the Direct3D renderer and also applies to games that use Vulkan directly. Automatic prefers KosmicKrisp when its macOS, architecture and physical GPU checks pass, and uses MoltenVK otherwise. An explicit graphics choice without matching runtime components reports its requirements and is never changed silently.
+The Vulkan driver is chosen separately from the Direct3D renderer and also applies to games that use Vulkan directly. Automatic prefers KosmicKrisp when its macOS, architecture and physical GPU checks pass, and uses MoltenVK otherwise. A selected translator that cannot load falls back to the same engine supplied by the runtime, or to its automatic choice. The warning and inspector name both versions and the reason.
 
 Installation identifies the renderers supplied by the selected Template and records their component version labels and minimum macOS versions. Platform API requirements and the installed native dependencies determine each renderer's minimum independently of the Wine engine.
 
@@ -103,7 +108,7 @@ D3DMetal also needs a Wine engine with the path conversion functions used to exp
 
 FSR2/3 camera support also requires a compatible Streamline interposer and a camera adapter matching the selected DXMT native library and Windows thunk. The camera adapter is included with MacLauncher. Preparation adds the matched libraries and Streamline adapter only to the optional camera launch folder. The original interposer stays next to its proxy for normal plugin lookup, with its complete export interface. Camera constants are matched to the exact frame, viewport and queued depth and motion textures, and unsupported projections keep the game's original scaler. Turning on game temporal integration before launch also prepares camera support for live changes of the temporal method.
 
-**Runtimes → Graphics → Translators → DXMT** manages compatible library versions separately from the Wine engine. Sikarugir and CrossOver share one set of installed versions and one default. Versions identify an upstream DXMT release or a Sikarugir Template component. Compatible installed libraries are reused, and missing support libraries are downloaded when FSR2/3 is selected. The per-game **DXMT support** setting can override the runtime default without changing the selected engine or its other support libraries.
+**Runtimes → Graphics → Translators** manages DXMT versions independently of the Wine engine. The Direct3D engine choice also selects the DXMT version used by the camera adapter. If that version does not match the adapter, the inspector states that camera support is unavailable; the selected DXMT continues to render.
 
 A camera adapter, or the automatic in-game XeSS compatibility adapter, that needs a DLL beside the app uses a separate launch folder containing copies of only the executable and selected DLLs; other assets reference the originals. The working directory remains the original executable folder. Files that the game creates, or replaces atomically, relative to the executable can stay in that adapter folder, which is kept. When an adapter folder is no longer used, original resources are never deleted, renamed or replaced, and earlier adapter folders stay intact. Ordinary Play bypasses these folders. If adapter preparation fails, the original executable runs with the selected backend and other available effects.
 
