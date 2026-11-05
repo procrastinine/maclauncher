@@ -1,11 +1,11 @@
 const { COMPONENTS, label } = require('./translator-description');
-const AUTOMATIC = 'automatic', INHERIT = 'environment';
+const AUTOMATIC = 'automatic', INHERIT = 'inherit';
 
 /**
  * One offline decision shared by Wine providers.
  * choices: installed descriptions (id is the persisted choice value).
  * included: descriptions supplied by this Wine/Template.
- * selections: { [component]: id | 'automatic' | 'environment' }.
+ * selections: { [component]: id | 'automatic' | 'inherit' }.
  * environment: { label, selections: { [component]: description } } from the
  * shared existing-environment reader. INHERIT means preserve that setting.
  * compatibility: { [id]: { compatible, reason? } }, binary facts only.

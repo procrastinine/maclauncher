@@ -19,9 +19,8 @@ const FORMS = Object.freeze(['builtin', 'native', 'icd', 'dylib']);
  * Binary facts are populated by inspectDescription, independently of labels.
  */
 function description(input) {
-  if (!input || !COMPONENTS.includes(input.component) || !ENGINES.includes(input.engine))
-    throw new TypeError('A translator component and engine are required.');
-  if (!FORMS.includes(input.form)) throw new TypeError('A translator form is required.');
+  if (!input || !input.component || !input.engine || !input.form)
+    throw new TypeError('A translator component, engine and form are required.');
   if (!Array.isArray(input.files)) throw new TypeError('Translator files are required.');
   return { ...input, apis: [...(input.apis || [])], files: input.files.map(file => ({ ...file })),
     unixImports: [...(input.unixImports || [])], version: String(input.version || '') };
