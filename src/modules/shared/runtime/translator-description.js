@@ -1,7 +1,6 @@
 const fs = require('node:fs'), path = require('node:path');
 const { readMachOLoadCommands } = require('./macho-load-commands');
 const { readPeExports } = require('./pe-exports');
-const { readPeVersion } = require('./pe-version');
 // Ordinary runtime managers expose these descriptions through their installed
 // records. Paths refer to installed files, never to a second translator cache.
 const COMPONENTS = Object.freeze(['d3d-renderer', 'vulkan-driver', 'd3d12', 'video']);
@@ -48,7 +47,7 @@ function describeTranslator(root, { engine, source, version, component, id, apis
       if (/\.json$/i.test(file)) {
         try { if (JSON.parse(fs.readFileSync(file, 'utf8')).ICD) files.push(inspectFile({ path: file, relative })); } catch {}
       } else if (/\.(?:dll|so|dylib)$/i.test(file) || /\.framework\//.test(file) && !path.extname(file)) {
-        const facts = inspectFile({ path: file, relative }, { engine });
+        const facts = inspectFile({ path: file, relative });
         if (path.extname(file) || facts.format === 'macho') files.push(facts);
       }
     }
@@ -60,7 +59,6 @@ function describeTranslator(root, { engine, source, version, component, id, apis
   if (component !== 'vulkan-driver' && component !== 'video') form = pe?.form || form;
   const versionFile = path.join(root, 'version');
   if (fs.existsSync(versionFile) && fs.statSync(versionFile).isFile()) version = fs.readFileSync(versionFile, 'utf8').trim() || version;
-  version ||= files.find(file => file.format === 'pe' && file.version)?.version;
   if (!apis.length) apis = [...new Set(files.flatMap(file => {
     const match = path.basename(file.path).match(/^d3d(\d+)(?:core)?\.dll$/i);
     if (match) return [`Direct3D ${match[1]}`];
@@ -77,7 +75,7 @@ function compareVersions(a, b) {
   for (let i = 0; i < Math.max(left.length, right.length); i++) if ((left[i] || 0) !== (right[i] || 0)) return (left[i] || 0) - (right[i] || 0);
   return 0;
 }
-function inspectFile(file, { engine } = {}) {
+function inspectFile(file) {
   const result = { ...file };
   try {
     const native = readMachOLoadCommands(file.path, { imports: true });
@@ -89,11 +87,9 @@ function inspectFile(file, { engine } = {}) {
   }
   const pe = readPeExports(fs.realpathSync(file.path));
   if (pe) {
-    const version = readPeVersion(file.path);
-    const identified = engine && new RegExp(`(?:^|\\W)${String(engine).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:$|\\W)`, 'i')
-      .test(`${version?.strings?.ProductName || ''} ${version?.strings?.FileDescription || ''}`);
+    // Replacement DLL resources report Windows component versions, not translator releases.
     return { ...result, format: 'pe', form: pe.form, machine: pe.machine, macosFloor: null, unixImports: [],
-      version: identified ? version?.strings?.ProductVersion || version?.productVersion || null : null };
+      version: null };
   }
   return { ...result, format: file.path.endsWith('.json') ? 'json' : 'unknown', macosFloor: null, unixImports: [] };
 }

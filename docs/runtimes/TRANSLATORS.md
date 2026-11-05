@@ -37,7 +37,7 @@ Runtime Settings selects each component independently.
 | Direct3D 12 | Wine vkd3d, D3DMetal or a managed Direct3D 12 translator. KosmicKrisp is recommended for vkd3d-proton. |
 | Video codecs | The runtime defaults or a registered GStreamer plugin folder. Wine's own video modules remain with Wine. |
 
-An existing bottle or wrapper first offers its current setting, read from its configuration without starting Wine. Automatic follows that runtime's existing behavior. Named choices show their version and source from installed files; a component without readable version metadata still names its engine and source. PE version labels are used when the product name or file description identifies the translator; generic Wine version resources are omitted. Installed CrossOver components are used for CrossOver launches only.
+An existing bottle or wrapper first offers its current setting, read from its configuration without starting Wine. Automatic follows that runtime's existing behavior. Named choices show their version and source from release labels, component version files, framework metadata or the runtime's changelog; a component without readable version metadata still names its engine and source. Replacement DLL version resources report Windows component versions and do not supply translator release versions. Installed CrossOver components are used for CrossOver launches only.
 
 The Direct3D engine choice is also the DXMT version setting for camera support. The camera adapter keeps its own matching-library requirement. A mismatch leaves the selected renderer active and reports that camera support is unavailable.
 

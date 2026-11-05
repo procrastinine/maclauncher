@@ -55,30 +55,38 @@ test("PE version inspection fails closed on bad magic, cyclic directories and re
   assert.equal(parseVersionResource(Buffer.from("VS_VERSION_INFO")), null);
 });
 
-test("translator labels omit Wine-default PE versions unless product metadata identifies the engine", t => {
+test("translator labels use component metadata instead of replacement DLL Windows versions", t => {
   const { describeTranslator, label } = require("../src/modules/shared/runtime/translator-description");
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "translator-version-")), file = path.join(root, "d3d11.dll");
+  const { includedTranslators } = require("../src/modules/shared/runtime/wine-translators");
+  const { image, X64 } = require("./fixtures/macho-image");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "translator-version-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const write = strings => {
-    const { bytes, peOffset } = peFixture({ is64: true, version: versionResource({
-      productVersion: [10, 0, 17763, 1], strings }) });
-    bytes.writeUInt16LE(0x2002, peOffset + 22); bytes.write("Wine builtin DLL\0", 64);
-    fs.writeFileSync(file, bytes);
+  const write = (relative, bytes) => {
+    const file = path.join(root, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes);
   };
   const source = { label: "CrossOver 26.3" };
-  write({ ProductName: "Wine", FileDescription: "Wine builtin DLL", ProductVersion: "10.0.17763.1" });
   for (const engine of ["dxmt", "dxvk"]) {
-    const description = describeTranslator(root, { engine, source });
+    const { bytes, peOffset } = peFixture({ is64: true, version: versionResource({
+      productVersion: [10, 0, 17763, 1], strings: { ProductName: engine.toUpperCase(), ProductVersion: "10.0.17763.1",
+        OriginalFilename: "D3D11.dll", ...(engine === "dxmt" ? { CompanyName: "DXMT", FileVersion: "10.0.17763.1 (WinBuild.160101.0800)" } : {}) } }) });
+    bytes.writeUInt16LE(0x2002, peOffset + 22); bytes.write("Wine builtin DLL\0", 64);
+    write(`lib/${engine}/x86_64-windows/d3d11.dll`, bytes);
+    const description = describeTranslator(path.join(root, "lib", engine), { engine, source });
     assert.equal(description.version, "");
     assert.equal(description.files[0].version, null);
     assert.equal(label(description), `${engine.toUpperCase()} (CrossOver 26.3)`);
   }
-  write({ ProductName: "DXMT", ProductVersion: "0.80" });
-  assert.equal(describeTranslator(root, { engine: "dxmt", source }).version, "0.80");
-  write({ FileDescription: "Direct3D implementation from DXVK", ProductVersion: "2.7" });
-  assert.equal(describeTranslator(root, { engine: "dxvk", source }).version, "2.7");
-  write({ ProductName: "Unfamiliar.Engine translator", ProductVersion: "custom release" });
-  assert.equal(describeTranslator(root, { engine: "unfamiliar.engine", source }).version, "custom release");
-  assert.equal(describeTranslator(root, { engine: "unfamiliarXengine", source }).version, "");
-  assert.equal(describeTranslator(root, { engine: "d3dmetal", source, version: "3.0" }).version, "3.0");
+  write("changelog.html", "<p>Update to DXMT v0.72</p><p>Update to DXVK 1.10.3.</p><p>Update to MoltenVK 1.2.10.</p>");
+  write("lib64/libMoltenVK.dylib", image({ cpu: X64 }));
+  write("lib64/apple_gptk/D3DMetal.framework/Versions/A/D3DMetal", image({ cpu: X64 }));
+  write("lib64/apple_gptk/D3DMetal.framework/Versions/A/Resources/version.plist",
+    "<plist><dict><key>CFBundleShortVersionString</key><string>3.0</string></dict></plist>");
+  const { included } = includedTranslators({ crossoverRoot: root, upstreamVersion: "26.3" }, "crossover");
+  assert.equal(label(included.find(row => row.engine === "dxmt")), "DXMT 0.72 (CrossOver 26.3)");
+  assert.equal(label(included.find(row => row.engine === "dxvk")), "DXVK 1.10.3 (CrossOver 26.3)");
+  assert.equal(label(included.find(row => row.engine === "d3dmetal")), "D3DMetal 3.0 (CrossOver 26.3)");
+  assert.equal(label(included.find(row => row.engine === "moltenvk")), "MoltenVK 1.2.10 (CrossOver 26.3)");
+  assert.equal(describeTranslator(path.join(root, "lib/dxmt"), { engine: "dxmt", source, version: "release-label" }).version, "release-label");
+  write("lib/dxmt/version", "0.80");
+  assert.equal(describeTranslator(path.join(root, "lib/dxmt"), { engine: "dxmt", source }).version, "0.80");
 });
