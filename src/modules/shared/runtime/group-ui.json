@@ -1,4 +1,5 @@
 {
   "graphics": { "category": "graphics" },
+  "translators": { "category": "graphics" },
   "tools": { "position": "last", "category": "tools" }
 }

@@ -67,7 +67,7 @@ function createManager({ dependencies = {} } = {}) {
     if (!selected.install) return selected;
     const install = verified(selected.install, options);return { ...selected, install, ready: Boolean(install), reason: install ? null : "The DXMT camera libraries changed. Reinstall this version." };
   };
-  return { ...base, ui: { groupId: "graphics", tabLabel: "Graphics", sectionLabel: "DXMT support", memberOrder: 26, management: "managed" }, resolveSelection,
+  return { ...base, ui: { groupId: "translators", tabLabel: "Translators", sectionLabel: "DXMT support", memberOrder: 26, management: "managed" }, resolveSelection,
     getState(options = {}) {
       const state = base.getState(options), installed = state.installed.map(item => verified(item, { verification: "status" }) ? item : { ...item, ready: false, status: "damaged" });
       return withoutLabels({ ...state, installed, sections: state.sections.map(section => ({ ...section, installed, label: "DXMT support",

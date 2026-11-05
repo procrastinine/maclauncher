@@ -148,7 +148,7 @@ function createManager(backend, dependencies = {}) {
       return { backend, minimumMacOS, libraries: files.map(file => ({ file, sha256: hashFile(path.join(unpacked, file)) })) };
     }, dependencies: { ...dependencies, extractArchive: (archive, output, signal) => backend === "moltenvk" ? extract(archive, output, signal)
       : cloneOrCopy(archive, path.join(output, definition.library), { signal }) } });
-  const result = { ...manager, upstream: loader ? [kosmickrisp, loader] : moltenvk, backend, ui: { groupId: "graphics", tabLabel: "Graphics", sectionLabel: definition.label, memberOrder: backend === "moltenvk" ? 20 : 21, management: "managed", ...(backend === "kosmickrisp" ? { hostFeature: "METAL4" } : {}) } };
+  const result = { ...manager, upstream: loader ? [kosmickrisp, loader] : moltenvk, backend, ui: { groupId: "translators", tabLabel: "Translators", sectionLabel: definition.label, memberOrder: backend === "moltenvk" ? 20 : 21, management: "managed", ...(backend === "kosmickrisp" ? { hostFeature: "METAL4" } : {}) } };
   Custom.configure(result, { inspect(runtimePath) {
     const native = Custom.inspectExecutable(runtimePath, { candidates: [definition.library, "MoltenVK", "Versions/A/MoltenVK"], allowLibrary: true });
     native.executablePath = fs.realpathSync(native.executablePath);
