@@ -112,7 +112,8 @@ test('every registered runtime manager has a linked upstream project in Credits'
     const { id } = manager;
     if (definitions[manager.translatorEngine]) {
       const catalog = manager.getState().catalog;
-      const sources = [...(catalog.sources || [catalog]).map(source => source.sourceUrl), ...(catalog.sourceLinks || []).map(source => source.url)];
+      const sources = [...(catalog.sources || [catalog]).flatMap(source => [source.sourceUrl,
+        ...(source.variants || []).map(variant => variant.catalog.sourceUrl)]), ...(catalog.sourceLinks || []).map(source => source.url)];
       assert.ok(sources.length, `${id}: retain its declared source projects`);
       for (const url of sources) assert.ok([...allProjects].some(project => projectPage(project, url)), `${id}: Credits must link its declared source project ${url}`);
       continue;
