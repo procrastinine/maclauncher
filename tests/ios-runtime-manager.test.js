@@ -73,7 +73,7 @@ test("PlayCover discovers labeled prereleases on explicit refresh and preserves 
   Harness.network.routes = Harness.githubRoutes(repository, releases);
   try { await runtime.refreshCatalog({ userDataDir }); } finally { Harness.network.routes = null; }
   const state = runtime.getState({ userDataDir, settings });
-  assert.deepEqual(state.catalog.versions, ["4.0.0-prerelease", "3.1.0", "4.0.0-rc.2", "2.0.0"]);
+  assert.deepEqual(state.catalog.versions, ["4.0.0-rc.2", "4.0.0-prerelease", "3.1.0", "2.0.0"]);
   assert.equal(requests(), start + 1);
   assert.ok(state.catalog.installableVersions.includes("4.0.0-rc.2"), "published PlayCover disk images are directly installable");
   assert.ok(!state.catalog.installableVersions.includes("2.0.0"));
