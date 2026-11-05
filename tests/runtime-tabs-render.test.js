@@ -928,6 +928,7 @@ test('included translator references use host records and shared release facts w
     write(path.join(wine,'lib/dxmt/x86_64-windows/d3d11.dll'),dll());
     write(path.join(wine,'lib/dxvk/x86_64-windows/d3d11.dll'),dll());
     write(path.join(wine,'lib64/libMoltenVK.dylib'),image());
+    write(path.join(wine,'lib64/gstreamer-1.0/libgstcoreelements.dylib'),image());
     write(path.join(wine,'changelog.html'),'Update to DXMT v0.80\nUpdate to DXVK v2.7\nUpdate to MoltenVK v1.2.10');
     const framework=path.join(wine,'lib64/apple_gptk/external/D3DMetal.framework/Versions/A');
     write(path.join(framework,'D3DMetal'),image());
@@ -945,6 +946,7 @@ test('included translator references use host records and shared release facts w
     write(path.join(support,'SharedSupport/renderer/dxmt/version'),'v0.81');
     write(path.join(support,'SharedSupport/renderer/dxvk3/d3d11.dll'),dll());
     write(path.join(support,'SharedSupport/renderer/dxvk3/version'),'3.1.1-gplasync');
+    write(path.join(support,'Frameworks/GStreamer.framework/Versions/1.0/lib/gstreamer-1.0/libgstcoreelements.dylib'),image());
     return {version:name,versionLabel:name,installDir,engineRoot:wine,templateRoot:support,templateVersion:version,ready:true};
   };
   templateHosts=[makeTemplate('Template-A','1.0.26'),makeTemplate('Template-B','1.0.27')];
@@ -997,6 +999,12 @@ test('included translator references use host records and shared release facts w
   assert.match(wineMarkup,/Included copies/);assert.match(wineMarkup,/Refresh included copies/);assert.match(wineMarkup,/href="https:\/\/gitlab\.winehq\.org\/wine\/vkd3d"/);
   assert.doesNotMatch(wineMarkup,/Imported files|Register custom|Load versions|No downloadable|saveRowActions|Set default|>Install<|>Repair</);
   assert.equal(fs.existsSync(path.join(userDataDir,'runtimes',wine.id)),false,'Wine source-owned references create no receipt or payload');
+  const codecs=owners.createManager('gstreamer'),codecState=codecs.getState(options);
+  assert.equal(codecState.references.length,4);assert.deepEqual(codecState.installed,[]);
+  assert.ok(codecState.references.every(row=>row.readOnly&&row.included&&row.versionLabel.includes('GStreamer')&&!/GStreamer (?:1\.0|26\.3)/.test(row.versionLabel)));
+  const codecMarkup=render([{...codecState,id:codecs.id,label:codecs.label,ui:codecs.ui}],codecs.id,{onRuntimeRegister(){assert.fail('No registration during render');}});
+  assert.match(codecMarkup,/Included plugins stay with the selected Wine runtime/);assert.match(codecMarkup,/GStreamer downloads/);assert.match(codecMarkup,/Register custom/);assert.match(codecMarkup,/Alpha\.app/);
+  assert.doesNotMatch(codecMarkup,/No downloadable|Load versions|saveRowActions/);
   assert.equal(dxmt.resolveSelection(null,null,userDataDir,{version:state.references[0].version}).install,null,'references are never managed choices');
   assert.deepEqual(require('../src/modules/shared/runtime/wine-translators').managedTranslators({userDataDir,settings:{}},'crossover',[dxmt,dxvk,metal,molten]),[],'per-game managed choices remain unchanged');
   const snapshot=structuredClone(state);
@@ -1021,7 +1029,7 @@ test('local codec registration and Apple upstream links use ordinary runtime pre
   const codecs=createManager('gstreamer'),local=codecs.getState({});
   const markup=render([{...local,id:codecs.id,label:codecs.label,ui:codecs.ui}],codecs.id,{onRuntimeRegister(){assert.fail('No registration during render');}});
   assert.equal(codecs.delivery.catalog,'none');assert.equal(local.catalog.delivery,'local-files');
-  assert.match(markup,/Register custom/);assert.match(markup,/No codec folders registered/);
+  assert.match(markup,/Register custom/);assert.match(markup,/No codec folders registered/);assert.match(markup,/GStreamer downloads/);
   assert.doesNotMatch(markup,/Load versions|No downloadable versions|data-runtime-source|>Install</);
   const metal=createManager('d3dmetal'),state=metal.getState({});
   assert.ok(state.catalog.sourceLinks.some(link=>link.url==='https://developer.apple.com/games/game-porting-toolkit/'));

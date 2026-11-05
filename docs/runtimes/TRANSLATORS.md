@@ -31,6 +31,8 @@ An installed application selection resolves its component folder, framework or d
 
 D3DMetal is downloaded from Sikarugir Template or supplied locally. MacLauncher does not host or build it. Apple's Game Porting Toolkit licence applies, including Apple hardware and distribution restrictions; the supplied notice remains with the component. Components registered from CrossOver are restricted to CrossOver launches.
 
+GStreamer shows the plugin folders included with registered CrossOver applications and Sikarugir Templates as read-only sources. A folder without component release metadata names its source runtime; library ABI filenames do not supply a codec version. Official project and download links accompany local registration.
+
 GStreamer plugin registration is intended for a prepared codec directory. An unmodified GStreamer SDK can load a second GStreamer core alongside Wine's core. Its plugin dependencies must resolve to the intended libraries before the directory is selected through `GST_PLUGIN_PATH`. Registration does not replace `winegstreamer` or another Wine module, relocate library imports, or supply a codec SDK download catalog.
 
 ## Selection

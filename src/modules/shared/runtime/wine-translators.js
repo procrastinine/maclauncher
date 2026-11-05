@@ -37,9 +37,11 @@ function includedTranslators(install, runtime, { engine: requestedEngine } = {})
     for (const engine of ['dxmt', 'dxvk']) add(path.join(layout.root, 'lib', engine), engine, 'd3d-renderer');
     add(path.join(layout.root, 'lib64/apple_gptk'), 'd3dmetal', 'd3d-renderer');
     add(path.join(layout.root, 'lib64/libMoltenVK.dylib'), 'moltenvk', 'vulkan-driver', { form: 'dylib' });
+    add(path.join(layout.root, 'lib64/gstreamer-1.0'), 'gstreamer', 'video', { form: 'dylib' });
   } else {
     const { RELATIVE_PATHS, templateRenderers } = require('../../crossover/sikarugir/graphics/closure');
     const support = install.templateRoot || install.supportRoot || path.join(install.installDir, 'support');
+    add(path.join(support, RELATIVE_PATHS.frameworks, 'GStreamer.framework/Versions/1.0/lib/gstreamer-1.0'), 'gstreamer', 'video', { form: 'dylib' });
     const rendererPath = fs.existsSync(path.join(support, RELATIVE_PATHS.renderers)) ? RELATIVE_PATHS.renderers : templateRenderers(support, install.templateVersion);
     const renderers = rendererPath && path.join(support, rendererPath);
     if (renderers) for (const name of fs.readdirSync(renderers).sort()) {

@@ -504,6 +504,7 @@ export function RuntimesView({
                         onChange={event=>setItemGroup({section:groupKey,id:event.target.value})}>
                         <option value="all">All operations</option>{itemGroups.map((group:Record<string,any>)=><option key={group.id} value={group.id}>{group.label}</option>)}
                       </select></div>}
+                    {managementPresentation.local && activeRuntimeSection.catalog?.description && <p className="dim">{activeRuntimeSection.catalog.description}</p>}
                     {activeRuntimeSection.sourceLinks?.length > 0 && <div className="detailActions runtimeSourceLinks">
                       {activeRuntimeSection.sourceLinks.map((link:Record<string,any>)=><a key={link.url} href={link.url} className="runtimeSourceLink"
                         onClick={event=>{event.preventDefault();onOpenSource?.(link.url);}}>{link.label}</a>)}
