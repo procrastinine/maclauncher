@@ -57,7 +57,56 @@ function configure(manager, definition) {
   };
   return manager;
 }
-module.exports = { componentRoot, registrationSource, description, inspected, configure };
+// Source-owned copies are presentation references, never managed installations.
+// The host manifest supplies the runtime/manager associations; the shared Wine
+// reader supplies every component path, version and binary fact.
+function includedReferences(engine, options = {}) {
+  if (!options.userDataDir) return [];
+  const owner = require("../../registry").getModule("crossover"), rows = new Map();
+  const Wine = require("./wine-translators"), Description = require("./translator-description");
+  const warn = message => require("../graphics-warning")(options.logger || console, `[translators] ${message}`);
+  for (const [runtime, managerId] of Object.entries(owner?.manifest?.runtime?.manager || {})) {
+    const manager = owner.runtimeManagers.find(item => item.id === managerId);
+    if (!manager) continue;
+    let hosts;
+    try {
+      hosts = [...manager.core.listInstalled(options.userDataDir), ...Custom.forManager(manager).list(options.userDataDir)];
+    } catch (error) { warn(`${runtime}: ${error.message}`); continue; }
+    const seen = new Set();
+    for (const host of hosts) {
+      if (host.ready === false) continue;
+      const sourcePath = host.appPath || host.installDir || host.engineRoot;
+      if (seen.has(sourcePath)) continue;
+      seen.add(sourcePath);
+      try {
+        const inventory = Wine.includedTranslators(host, runtime);
+        for (const message of inventory.warnings) warn(`${sourcePath}: ${message}`);
+        for (const value of inventory.included) {
+          if (value.engine !== engine) continue;
+          const version = `reference:${JSON.stringify([runtime, sourcePath, value.engine, value.root])}`;
+          const architectures = [...new Set(value.files.flatMap(file => file.cpuSlices || (file.architecture ? [file.architecture] : [])))];
+          const label = [Description.label(value), host.versionLabel || path.basename(sourcePath), value.templateComponent].filter(Boolean).join(" · ");
+          rows.set(version, { version, versionLabel: label, ready: true, included: true, readOnly: true, removable: false, supportsDefault: false,
+            reference: { managerId, version: host.version, path: sourcePath }, source: value.source, installDir: value.root,
+            minimumMacOS: value.macosFloor, architectures, platformKey: architectures.join(", "), detail: value.source.label });
+        }
+      } catch (error) { warn(`${sourcePath}: ${error.message}`); }
+    }
+  }
+  return [...rows.values()];
+}
+function withIncludedReferences(manager) {
+  const getState = manager.getState;
+  manager.getState = function(options = {}) {
+    const state = getState.call(this, options), references = includedReferences(manager.translatorEngine, options);
+    if (!references.length) return state;
+    const display = section => ({ ...section, references, versionLabels: { ...section.versionLabels,
+      ...Object.fromEntries(references.map(row => [row.version, row.versionLabel])) } });
+    return { ...display(state), sections: state.sections?.map(display) };
+  };
+  return manager;
+}
+module.exports = { componentRoot, registrationSource, description, inspected, configure, includedReferences, withIncludedReferences };
 
 // A downloaded local container is unpacked once into shared launcher storage.
 // Directory registrations stay at the supplied location and remain references.

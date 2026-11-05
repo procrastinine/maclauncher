@@ -22,6 +22,8 @@ Each catalog has its own Refresh control and publisher link. Release labels iden
 
 Directory and installed-application registrations reference the selected files. Archive registrations extract once into shared storage. Publisher archives are cached by asset identity across managers; installing another component from the same Template reuses that download. Template component installations retain their complete component tree, including notices, without installing another Wine engine. Removing a local registration preserves the original files.
 
+Installed lists also show matching components included with registered CrossOver applications and Sikarugir Templates. These rows name the source, component version and binary CPU architectures, carry an Included label and reference the original files. Source-owned rows have no install, repair, default or removal actions.
+
 An installed application selection resolves its component folder, framework or driver library. An application whose component cannot be identified requires selection of the component folder or library. Selecting a component inside CrossOver retains the CrossOver-only source restriction.
 
 D3DMetal is downloaded from Sikarugir Template or supplied locally. MacLauncher does not host or build it. Apple's Game Porting Toolkit licence applies, including Apple hardware and distribution restrictions; the supplied notice remains with the component. Components registered from CrossOver are restricted to CrossOver launches.

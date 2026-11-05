@@ -173,7 +173,7 @@ function createManager(backend, dependencies = {}) {
       macosFloor: descriptions.map(item => item.macosFloor).filter(Boolean).sort(require("../runtime/translator-description").compareVersions).at(-1) || null };
     return { ...inspected, translator, translatorRoot: translator.root };
   } });
-  return result;
+  return Component.withIncludedReferences(result);
 }
 const managers = Object.keys(definitions).map(backend => createManager(backend));
 module.exports = { managers, definitions, createManager, inspect, moltenvkAsset, findFile, sources: { moltenvk, kosmickrisp }, loaderSource };

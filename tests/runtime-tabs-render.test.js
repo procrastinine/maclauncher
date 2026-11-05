@@ -891,3 +891,88 @@ test('translator source links use one caption with explicit project and Template
     else assert.match(markup,/KosmicKrisp Vulkan drivers published by LWJGL/);
   }
 });
+
+test('included translator references use host records and shared release facts without managed installs or mutation controls', t => {
+  const fs=require('node:fs'),os=require('node:os');
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'translator-references-'));
+  const previousHome=process.env.HOME;process.env.HOME=path.join(root,'home');fs.mkdirSync(process.env.HOME);
+  t.after(()=>{process.env.HOME=previousHome;fs.rmSync(root,{recursive:true,force:true});});
+  t.mock.method(globalThis,'fetch',()=>assert.fail('Reference status must stay offline'));
+  const write=(file,bytes,mode=0o644)=>{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,bytes,{mode});return file;};
+  const image=(type=6,cpu=0x1000007)=>{const bytes=Buffer.alloc(56);bytes.writeUInt32LE(0xfeedfacf);bytes.writeUInt32LE(cpu,4);bytes.writeUInt32LE(type,12);bytes.writeUInt32LE(1,16);bytes.writeUInt32LE(24,20);bytes.writeUInt32LE(0x32,32);bytes.writeUInt32LE(24,36);bytes.writeUInt32LE(1,40);bytes.writeUInt32LE(14<<16,44);return bytes;};
+  const dll=()=>{const {bytes,peOffset}=require('./helpers/pe-fixture').peFixture({is64:true});bytes.writeUInt16LE(0x2002,peOffset+22);return bytes;};
+  const owners=require('../src/modules/shared/runtime/translator-managers');
+  const CrossOver=require('../src/modules/crossover/runtime/manager');
+  const registeredCrossOver=CrossOver.core.listInstalled;
+  t.mock.method(CrossOver.core,'listInstalled',directory=>registeredCrossOver(directory,{automaticPaths:[]}));
+  const registry=require('../src/modules/registry'),sikarugir=registry.getModule('crossover').runtimeManagers.find(owner=>owner.id==='sikarugir');
+  const originalCore=sikarugir.core;let templateHosts=[];
+  // Only record enumeration is stubbed. The real reader inspects fixture hosts,
+  // with no fabricated installation receipts, executable code or Wine process.
+  sikarugir.core={...originalCore,listInstalled:()=>templateHosts};t.after(()=>{sikarugir.core=originalCore;});
+  const userDataDir=path.join(root,'data'),warnings=[],options={userDataDir,logger:{warn:message=>warnings.push(message)}};
+  t.mock.method(console,'warn',message=>warnings.push(message));
+  const dxmt=owners.createManager('dxmt'),dxvk=owners.createManager('dxvk'),metal=owners.createManager('d3dmetal');
+  const molten=require('../src/modules/shared/vulkan/libraries').createManager('moltenvk');
+  const before=dxmt.getState(options);assert.equal(before.references,undefined);assert.deepEqual(before.installed,[]);
+  const makeHost=(name,version)=>{
+    const app=path.join(root,name+'.app'),wine=path.join(app,'Contents/SharedSupport/CrossOver');
+    write(path.join(app,'Contents/Info.plist'),`<plist><dict><key>CFBundleShortVersionString</key><string>${version}</string></dict></plist>`);
+    for(const name of ['wine','cxbottle'])write(path.join(wine,'bin',name),'#!/usr/bin/perl\n',0o755);
+    for(const name of ['wineloader','wineserver'])write(path.join(wine,'bin',name),image(2),0o755);
+    write(path.join(wine,'lib/wine/x86_64-unix/wine'),image(2),0o755);
+    write(path.join(wine,'lib/dxmt/x86_64-windows/d3d11.dll'),dll());
+    write(path.join(wine,'lib/dxvk/x86_64-windows/d3d11.dll'),dll());
+    write(path.join(wine,'lib64/libMoltenVK.dylib'),image());
+    write(path.join(wine,'changelog.html'),'Update to DXMT v0.80\nUpdate to DXVK v2.7\nUpdate to MoltenVK v1.2.10');
+    const framework=path.join(wine,'lib64/apple_gptk/external/D3DMetal.framework/Versions/A');
+    write(path.join(framework,'D3DMetal'),image());
+    write(path.join(framework,'Resources/version.plist'),'<plist><dict><key>CFBundleShortVersionString</key><string>3.0</string></dict></plist>');
+    CrossOver.importRuntime({userDataDir,runtimePath:app});return {app,wine};
+  };
+  const first=makeHost('Alpha','26.3'),second=makeHost('Beta','26.3');
+  const registration=fs.readFileSync(CrossOver.__test.registryPath(userDataDir));
+  const makeTemplate=(name,version)=>{
+    const installDir=path.join(root,name),wine=path.join(installDir,'wine'),support=path.join(installDir,'support');
+    write(path.join(wine,'lib/wine/x86_64-unix/wine'),image(2),0o755);
+    write(path.join(support,'SharedSupport/renderer/dxmt/d3d11.dll'),dll());
+    write(path.join(support,'SharedSupport/renderer/dxmt/version'),'v0.81');
+    write(path.join(support,'SharedSupport/renderer/dxvk3/d3d11.dll'),dll());
+    write(path.join(support,'SharedSupport/renderer/dxvk3/version'),'3.1.1-gplasync');
+    return {version:name,versionLabel:name,installDir,engineRoot:wine,templateRoot:support,templateVersion:version,ready:true};
+  };
+  templateHosts=[makeTemplate('Template-A','1.0.26'),makeTemplate('Template-B','1.0.27')];
+  write(path.join(templateHosts[0].templateRoot,'Resources/vulkan/icd.d/optional.json'),'{');
+  // Bad optional component metadata cannot hide another component or host.
+  fs.symlinkSync(path.join(root,'outside'),path.join(first.wine,'lib/dxvk/escape'));fs.mkdirSync(path.join(root,'outside'));
+  const state=dxmt.getState(options),section=state.sections[0];
+  assert.equal(state.references.length,4);assert.deepEqual(state.installed,before.installed);assert.deepEqual(state.catalog,before.catalog);assert.equal(state.defaultVersion,before.defaultVersion);
+  assert.equal(new Set(state.references.map(row=>row.version)).size,4);
+  assert.ok(state.references.every(row=>row.included&&row.readOnly&&row.removable===false&&row.supportsDefault===false));
+  assert.ok(state.references.every(row=>row.platformKey==='x86_64'&&row.architectures.includes('x86_64')));
+  assert.ok(state.references.some(row=>row.versionLabel.includes('DXMT 0.80')&&row.versionLabel.includes('Alpha.app')));
+  assert.ok(state.references.some(row=>row.versionLabel.includes('DXMT 0.80')&&row.versionLabel.includes('Beta.app')));
+  assert.ok(state.references.some(row=>row.versionLabel.includes('v0.81')&&row.versionLabel.includes('Template 1.0.26')&&row.versionLabel.includes('Template-A')));
+  assert.ok(state.references.some(row=>row.versionLabel.includes('Template 1.0.27')&&row.versionLabel.includes('Template-B')));
+  assert.equal(metal.getState(options).references.length,2,'D3D12 aliases do not duplicate the same source component');
+  assert.ok(metal.getState(options).references.every(row=>row.versionLabel.includes('D3DMetal 3.0')));
+  assert.ok(molten.getState(options).references.every(row=>row.versionLabel.includes('MoltenVK 1.2.10')&&row.platformKey==='x86_64'));
+  assert.equal(dxvk.getState(options).references.length,3,'only the escaped component is omitted');assert.ok(warnings.some(row=>row.includes('dxvk')&&row.includes('escapes')));
+  assert.equal(owners.createManager('vkd3d-proton').getState(options).references,undefined,'builtin Wine choices are not mislabeled as vkd3d-proton');
+  assert.equal(dxmt.resolveSelection(null,null,userDataDir,{version:state.references[0].version}).install,null,'references are never managed choices');
+  assert.deepEqual(require('../src/modules/shared/runtime/wine-translators').managedTranslators({userDataDir,settings:{}},'crossover',[dxmt,dxvk,metal,molten]),[],'per-game managed choices remain unchanged');
+  const snapshot=structuredClone(state);
+  const markup=render([{...state,id:dxmt.id,label:dxmt.label,ui:dxmt.ui}],dxmt.id);
+  assert.match(markup,/>Included<\/span>/);assert.match(markup,/Alpha\.app/);assert.match(markup,/Template 1\.0\.27/);assert.match(markup,/x86_64/);
+  assert.doesNotMatch(markup,/saveRowActions|Set default|aria-label="(?:Uninstall|Remove|Delete)|>Reinstall<|>Repair<|<option[^>]*value="reference:/);
+  // Even an attached action/default marker cannot turn a reference into a control.
+  const row=section.references[0];row.actions=[{id:'repair',label:'Repair reference'}];section.defaultVersion=row.version;
+  const protectedMarkup=render([{...state,id:dxmt.id,label:dxmt.label,ui:dxmt.ui}],dxmt.id,{onRuntimeInstalledAction(){assert.fail('No reference action');}});
+  assert.doesNotMatch(protectedMarkup,/Repair reference|saveRowActions|Set default/);
+  assert.deepEqual(fs.readFileSync(CrossOver.__test.registryPath(userDataDir)),registration);
+  assert.equal(fs.existsSync(path.join(userDataDir,'runtimes',dxmt.id)),false,'no managed receipt or payload created');
+  assert.deepEqual(snapshot.installed,[]);assert.deepEqual(snapshot.catalog,before.catalog);
+  templateHosts=[];
+  CrossOver.__test.writeRegistry(userDataDir,{applications:[],ignoredPaths:[]});
+  assert.equal(dxmt.getState(options).references,undefined);assert.match(render([{...dxmt.getState(options),id:dxmt.id,label:dxmt.label,ui:dxmt.ui}],dxmt.id),/No runtime versions installed yet/);
+});

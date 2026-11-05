@@ -234,9 +234,10 @@ export function RuntimesView({
   const activeRuntimeRefreshAllLabel = refreshing ? "Refreshing all versions" : "All versions";
   const runtimeMessage = activeRuntimeSectionId ? activeRuntimeUi.messages?.[activeRuntimeSectionId] : null;
   const setupActions = (activeRuntimeSection?.setupActions || activeRuntimeManager?.setupActions || []).filter(matchesItemGroup);
-  const activeRuntimeInstalled = Array.isArray(activeRuntimeSection?.installed)
-    ? activeRuntimeSection.installed.filter(matchesItemGroup)
-    : [];
+  const activeRuntimeInstalled = [
+    ...(Array.isArray(activeRuntimeSection?.installed) ? activeRuntimeSection.installed : []),
+    ...(Array.isArray(activeRuntimeSection?.references) ? activeRuntimeSection.references : [])
+  ].filter(matchesItemGroup);
   const activeRuntimeVariants = !activeRuntimeSection?.architectureVariants && Array.isArray(activeRuntimeSection?.variants)
     ? activeRuntimeSection.variants
     : [];
@@ -618,7 +619,7 @@ export function RuntimesView({
                         const installArchitecture = (row: Record<string, any>) => buildArchitecture(row, activeRuntimeSection, activeRuntimeInstalledSorted);
                         const installBuild = installArchitecture(inst);
                         const defaultFor = defaultSelections?.filter((row: Record<string, any>) => row.version === inst.version).map((row: Record<string, any>) => row.label) || [];
-                        const isDefault =
+                        const isDefault = !inst.reference && (
                           defaultSelections ? defaultFor.length > 0 : (activeRuntimeSupportsDefault || inst.custom) && inst.version === activeRuntimeSection.defaultVersion &&
                           // A version installed only for another CPU, such as an Intel-only
                           // build on Apple Silicon, is still the default.
@@ -626,7 +627,7 @@ export function RuntimesView({
                             !activeRuntimeInstalledSorted.some(row => row.version === inst.version && row.ready !== false && [preferredArchitecture, "universal"].includes(installArchitecture(row)))) &&
                           (activeRuntimeSection.defaultVariant
                             ? inst.variant === activeRuntimeSection.defaultVariant
-                            : true);
+                            : true));
                         const incompleteDefault = defaultSelections?.some((row: Record<string, any>) => row.version !== inst.version && row.compatibleVersions?.includes(inst.version));
                         const variantLabel = activeRuntimeHasMultipleVariants
                           ? activeRuntimeVariants.find(
@@ -663,12 +664,12 @@ export function RuntimesView({
                                   {installDetail && <p>{installDetail}</p>}
                                   {Object.entries(inst.libraries || {}).map(([id, library]: [string, any]) => library.ready &&
                                     <p key={id}>{library.label || id} {library.version || library.apiProfile || ""}</p>)}
-                                  {!isRuntimeIncluded(inst) && inst.installDir && <p className="mono">{inst.installDir}</p>}
+                                  {(!isRuntimeIncluded(inst) || inst.reference) && inst.installDir && <p className="mono">{inst.installDir}</p>}
                                 </HelpTip>}
                               </div>
                               {inst.error && <div className="dim">{formatUserError(inst.error)}</div>}
                             </div>
-                            <div className="saveRowActions">
+                            {!inst.reference && <div className="saveRowActions">
                               {onRuntimeInstalledAction && (inst.actions || []).filter((action: any) => action.available !== false).map((action: any) =>
                                 <button className="btn" key={action.id} disabled={runtimeBusy}
                                   onClick={() => onRuntimeInstalledAction(activeRuntimeManager.id, activeRuntimeSection.id, inst.version, action.id, inst.architecture)}>
@@ -710,7 +711,7 @@ export function RuntimesView({
                               >
                                 <TrashIcon />
                               </button>}
-                            </div>
+                            </div>}
                           </div>
                         );
                       })}

@@ -51,6 +51,6 @@ function createManager(engine, { dependencies = {} } = {}) {
     }, dependencies: { extractArchive: require("./safe-archive").extractArchive, ...dependencies } });
   manager.translatorEngine = engine;
   manager.ui = { groupId: "translators", tabLabel: "Translators", sectionLabel: definition.label, memberOrder: definition.memberOrder, management: "managed" };
-  return Component.configure(manager, definition);
+  return Component.withIncludedReferences(Component.configure(manager, definition));
 }
 module.exports = { definitions, catalogSource, createManager };

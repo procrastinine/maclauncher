@@ -198,7 +198,8 @@ export function runtimeSummaryPresentation(section: Record<string, any> | null |
   const localFiles = catalog?.delivery === "local-files";
   const local = catalog?.delivery === "local" || localFiles;
   const versions = [...new Set(runtimeCatalogSources(catalog).flatMap(source => source.versions))];
-  const installed = Array.isArray(section?.installed) ? section.installed : [];
+  const installed = [...(Array.isArray(section?.installed) ? section.installed : []),
+    ...(Array.isArray(section?.references) ? section.references : [])];
   const includedCount = installed.filter(isRuntimeIncluded).length;
   const installedCount = installed.length - includedCount;
   const latestAvailable = versions.includes(catalog?.latestAvailableVersion) ? text(catalog.latestAvailableVersion) : text(versions[0]);
