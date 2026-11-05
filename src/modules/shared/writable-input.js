@@ -13,6 +13,17 @@ const inside = (root, file) => {
 function lstat(file) {
   try { return fs.lstatSync(file); } catch (error) { if (error.code === "ENOENT") return null; throw error; }
 }
+function assertPreservesExternalEnvironments(entry, target) {
+  const rows = [...Object.values(entry?.runtimeSettings || {}), ...Object.values(entry?.runtimeData || {})];
+  for (const row of rows) {
+    let reference = row?.environmentReference;
+    if (typeof reference === "string") { try { reference = JSON.parse(reference); } catch { continue; } }
+    if (!reference || reference.kind === "private" || !path.isAbsolute(reference.path || "")) continue;
+    const canonical = value => { try { return fs.realpathSync(value); } catch { return path.resolve(value); } };
+    const root = canonical(reference.path), candidate = canonical(target);
+    if (inside(root, candidate) || inside(candidate, root)) throw new Error("This operation would remove or move an external Windows environment. Its directory was left in place.");
+  }
+}
 function assertOwnDirectory(root, directory, { create = true } = {}) {
   root = path.resolve(root); directory = path.resolve(directory);
   if (!inside(root, directory)) throw new Error("Output escapes its owned game directory.");
@@ -90,4 +101,4 @@ function runPrepared(entry, context, prepare, action) {
 }
 
 module.exports = { sourceRoot, runtimeEntry, sourceEntry,
-  contentReadRoots, prepareModuleInput, applyInputChanges, runPrepared, atomicCopy, atomicWrite, assertOwnDirectory };
+  contentReadRoots, prepareModuleInput, applyInputChanges, runPrepared, atomicCopy, atomicWrite, assertOwnDirectory, assertPreservesExternalEnvironments };

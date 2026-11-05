@@ -124,6 +124,7 @@ function cleanupOrphanedPartitions({ userDataDir } = {}) {
 function cleanupGameDir({ userDataDir, gameId } = {}) {
   if (!userDataDir || !gameId) return false;
   const gameDir = GameData.resolveGameDir(userDataDir, gameId);
+  require("../modules/shared/writable-input").assertPreservesExternalEnvironments(require("./game-store").readGameRecord(userDataDir, gameId), gameDir);
   safeRm(gameDir);
   return true;
 }

@@ -85,6 +85,7 @@ function deleteGameData(userDataDir, gameId) {
   if (!gameId) return false;
   validateGameId(gameId);
   const dir = GameData.resolveGameDir(userDataDir, gameId);
+  require("../modules/shared/writable-input").assertPreservesExternalEnvironments(readGameRecord(userDataDir, gameId), dir);
   try {
     fs.rmSync(dir, { recursive: true, force: true });
     return true;

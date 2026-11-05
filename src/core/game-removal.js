@@ -18,6 +18,9 @@ function createGameRemoval({ userDataDir, registry, lifecycle, listRuntimeManage
       const assertAvailable = () => { if (isGameRunning(current)) throw inUseError(); };
       assertAvailable();
       const settings = readSettings();
+      const Writable = require("../modules/shared/writable-input");
+      Writable.assertPreservesExternalEnvironments(current, GameData.resolveGameDir(userDataDir, current.gameId));
+      if (trash) Writable.assertPreservesExternalEnvironments(current, current.gamePath);
       require("./backcompat/game-removal").assertRetainedGameDataRemoval(current, settings, userDataDir, retainedGameDataAcknowledgment);
       if (trash) {
         if (typeof trashItem !== "function") throw new Error("A Trash service is required to remove original game files.");

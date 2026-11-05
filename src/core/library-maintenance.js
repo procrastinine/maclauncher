@@ -30,6 +30,7 @@ async function trashLibraryGames(entries, trashItem, stat = fs.statSync) {
   const removedPaths = [], failures = [];
   for (const entry of entries) {
     try {
+      require("../modules/shared/writable-input").assertPreservesExternalEnvironments(entry, entry.gamePath);
       if (!isMissingGamePath(entry.gamePath, stat)) await trashItem(entry.gamePath);
       removedPaths.push(entry.gamePath);
     } catch (error) {
