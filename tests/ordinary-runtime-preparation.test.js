@@ -525,7 +525,7 @@ test("Ren'Py SDK planning keeps game generation and version evidence and exact g
   assert.equal((await Renpy.ensureRuntime(entry, ctx)).version, "8.4.1");
 });
 
-test("saved Android GLES 3.2 selection joins ordinary consent, installation and offline reuse", async t => {
+test("saved Android MacLauncher KosmicKrisp selection joins ordinary consent, installation and offline reuse", async t => {
   const Included = require("../src/modules/shared/runtime/included-helpers");
   const pin = Included.declared(require("../src/modules/android/distribution-included.json"), {id: "android-launcher"});
   if (!pin || !fs.existsSync(path.join(Included.nativeRoot(), pin.directoryRelative, pin.manifestRelative)))
@@ -541,7 +541,7 @@ test("saved Android GLES 3.2 selection joins ordinary consent, installation and 
   t.mock.method(manager, "installRuntime", async options => {
     events.push(["install",options.version]); ready = true;
   });
-  const ctx = {...context("klepton"),runtimeSettings:{vulkanRuntime:"kosmickrisp:maclauncher-gles32"},
+  const ctx = {...context("klepton"),runtimeSettings:{vulkanRuntime:"kosmickrisp:maclauncher"},
     confirmRuntimeInstall: async plan => {events.push(["consent",plan.managerId,plan.version]);return approved;},
     recordRuntimeUse: row => uses.push(row)};
   const prepare = () => prepareForLaunch({entry:{},mod:Android,info:Android.manifest,context:ctx,

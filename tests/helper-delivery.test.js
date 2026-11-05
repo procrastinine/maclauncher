@@ -96,13 +96,13 @@ test("all three scene adapters retain discovery plans for a selected scene effec
   assert.ok(plan.requirements.every(row => row.discoveryRequired && row.version === null));
 });
 
-test("preferred Vulkan and explicit GLES 3.2 are downloadable from an empty profile", t => {
+test("preferred Vulkan and explicit MacLauncher KosmicKrisp are downloadable from an empty profile", t => {
   const context = { userDataDir: profile(t), settings: {}, runtimeSettings: {} }, dependencies = { required: true, preferredBackend: "kosmickrisp" };
   assert.equal(Vulkan.requirements(context, dependencies)[0].managerId, "vulkan-kosmickrisp");
   const choices = Vulkan.choices(context).vulkanRuntimes;
   assert.ok(choices.some(row => row.value === "kosmickrisp:auto" && /download/.test(row.label)));
-  assert.ok(choices.some(row => row.value === "kosmickrisp:maclauncher-gles32" && /download/.test(row.label)));
-  context.runtimeSettings.vulkanRuntime = "kosmickrisp:maclauncher-gles32";
+  assert.ok(choices.some(row => row.value === "kosmickrisp:maclauncher" && /download/.test(row.label)));
+  context.runtimeSettings.vulkanRuntime = "kosmickrisp:maclauncher";
   assert.equal(Vulkan.requirements(context)[0].discoveryRequired, true);
   context.runtimeSettings = { angleBackend: "vulkan" };
   assert.equal(Registry.getModule("android").getRuntimeRequirements({}, { ...context, runtimeId: "klepton" })[0].managerId, "vulkan-moltenvk");

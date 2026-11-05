@@ -4,24 +4,65 @@ const Bundled = require("../runtime/bundled-native");
 const { createProjectBuildManager } = require("../runtime/project-build-manager");
 const repository = "procrastinine/maclauncher-builds";
 
-const projectId = "vulkan-kosmickrisp-gles32";
-const selectionId = "kosmickrisp:maclauncher-gles32";
+const projectId = "maclauncher-kosmickrisp";
+const formerProjectId = "vulkan-kosmickrisp-gles32";
+const selectionId = "kosmickrisp:maclauncher";
+const prefix = projectId + ":";
+
+function normalizeSelection(value, logger = console) {
+  if (value === "kosmickrisp:maclauncher-gles32") return selectionId;
+  if (typeof value === "string") {
+    if (!value.startsWith("kosmickrisp-gles32:")) return value;
+    try { return prefix + manager.core.normalizeVersion(value.slice("kosmickrisp-gles32:".length)); } catch {}
+  }
+  logger?.warn?.("[runtimes] The saved MacLauncher KosmicKrisp choice could not be read; using Automatic.");
+  return "auto";
+}
 
 function createManager(dependencies = {}) {
-  const manager = createProjectBuildManager({ projectId, label: "KosmicKrisp GLES 3.2", repository, sourceLabel: "Source", upstreamUrl: "https://gitlab.freedesktop.org/mesa/mesa", nativeLibrary: true,
+  const manager = createProjectBuildManager({ projectId, formerIds: [formerProjectId], label: "MacLauncher KosmicKrisp", repository, sourceLabel: "Source", upstreamUrl: "https://gitlab.freedesktop.org/mesa/mesa", nativeLibrary: true,
     manifestRelative: "manifest.json", sourceRelative: null, filesPrefix: "files/",
     executableRelative: manifest => manifest.executableRelative,
     validateManifest(manifest, record) {
-      Bundled.validateRuntimeManifest(manifest, { managerId: projectId, version: record.version, arch: record.arch });
+      Bundled.validateRuntimeManifest(manifest, { managerId: record.id, version: record.version, arch: record.arch });
       if (Bundled.isManagedDeclaration(manifest)) return;
       if (manifest.executableRelative !== "libvulkan_kosmickrisp.dylib" || manifest.runtimeFiles?.loader !== "libvulkan.1.dylib")
-        throw new Error("The KosmicKrisp package differs from its GLES 3.2 profile.");
+        throw new Error("The MacLauncher KosmicKrisp package has no Vulkan driver or loader.");
     },
     async verifyPayload(selected, { signal } = {}) {
       Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
       await Bundled.verifySignatures(selected.root,selected.declaration,{signal});
     }, dependencies });
+  function previousSettings(runtimes, logger = dependencies.logger || console) {
+    const previous = runtimes?.[formerProjectId];
+    if (previous === undefined) return undefined;
+    if (previous && typeof previous === "object" && !Array.isArray(previous) &&
+        (previous.defaultVersion == null || typeof previous.defaultVersion === "string")) try {
+      const normalized = manager.normalizeSettings(previous);
+      if (normalized.defaultVersion) manager.core.normalizeVersion(normalized.defaultVersion);
+      return normalized;
+    } catch {}
+    logger?.warn?.("[runtimes] The saved MacLauncher KosmicKrisp settings could not be read; using the manager default.");
+    return undefined;
+  }
+  const withPreviousSettings = settings => settings?.runtimes?.[projectId] !== undefined ? settings :
+    { ...settings, runtimes: { ...settings?.runtimes, [projectId]: previousSettings(settings?.runtimes) } };
+  function resolveSelection(entry, settings, data, options = {}) {
+    const effective = withPreviousSettings(settings);
+    const result = manager.resolveSelection(entry, effective, data, options);
+    if (effective.runtimes?.[projectId]?.defaultVersion && !settings?.runtimes?.[projectId] &&
+        !options.version && !result.ready && result.discoveryRequired) {
+      (dependencies.logger || console).warn?.("[runtimes] The saved MacLauncher KosmicKrisp version is unavailable; using the manager default.");
+      return manager.resolveSelection(entry, settings, data, options);
+    }
+    return result;
+  }
   return { ...manager, translatorEngine: "kosmickrisp", distributionRequired: false,
+    chooseArchitecture: (entry, settings, data, options) => manager.chooseArchitecture(entry, withPreviousSettings(settings), data, options),
+    resolveSelection,
+    getState: (options = {}) => manager.getState({ ...options,
+      settings: options.settings ?? options.runtimeSettings?.[projectId] ?? previousSettings(options.runtimeSettings, options.logger) }),
+    installRuntime: (options = {}) => manager.installRuntime({ ...options, settings: withPreviousSettings(options.settings) }),
     ui: { groupId: "vulkan-drivers", sectionLabel: manager.label, memberOrder: 22, management: "managed", hostFeature: "METAL4" } };
 }
 
@@ -30,22 +71,23 @@ function createProvider(manager) {
     const result = manager.resolveSelection(null, context.settings, context.userDataDir, { version, verification });
     if (!result.ready || !result.install) return null;
     const install = result.install;
-    return { id: "kosmickrisp-gles32:" + result.version, backend: "kosmickrisp", version: result.version,
+    return { id: prefix + result.version, backend: "kosmickrisp", version: result.version,
       projectId, label: manager.label + " " + result.version, minimumMacOS: install.manifest.minimumMacOS,
       library: path.join(install.payloadRoot, install.manifest.runtimeFiles.loader), driver: install.executablePath,
       readable: install.manifest.files.filter(file => file.architectures).map(file => path.join(install.payloadRoot, file.path)) };
   }
   return {
     installed(context) {
-      const state = manager.getState(context);
-      return state.installed.flatMap(item => {
+      const state = manager.getState({ userDataDir: context.userDataDir,
+        settings: context.settings?.runtimes?.[manager.id], runtimeSettings: context.settings?.runtimes, logger: context.logger });
+      return [...state.installed].sort((a, b) => Number(b.version === state.defaultVersion) - Number(a.version === state.defaultVersion)).flatMap(item => {
         try { const row = selected(item.version, context, "status"); return row ? [row] : []; }
         catch { return []; }
       });
     },
     resolve(item, context) {
       const result = selected(item.version, context, "full");
-      if (!result) throw new Error("The selected KosmicKrisp GLES 3.2 package is unavailable. Install this version in Runtimes.");
+      if (!result) throw new Error("The selected MacLauncher KosmicKrisp package is unavailable. Install this version in Runtimes.");
       return result;
     }
   };
@@ -106,7 +148,7 @@ function createSceneProvider(selectedManager) {
   } };
 }
 const provider = createProvider(manager), sceneManager = createSceneManager(), sceneProvider = createSceneProvider(sceneManager);
-const providers = Object.freeze([{ manager, provider, projectId, selectionId, prefix: "kosmickrisp-gles32:" },
+const providers = Object.freeze([{ manager, provider, projectId, selectionId, prefix },
   { manager: sceneManager, provider: sceneProvider, projectId: sceneProjectId, selectionId: sceneSelectionId, prefix: "moltenvk-scene:" }]);
-module.exports = { manager, provider, createManager, createProvider, selectionId, projectId,
+module.exports = { manager, provider, createManager, createProvider, selectionId, projectId, formerProjectId, normalizeSelection,
   sceneManager, sceneProvider, sceneProjectId, sceneSelectionId, sceneDescriptor, createSceneManager, createSceneProvider, providers };

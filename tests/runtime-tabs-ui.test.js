@@ -216,7 +216,7 @@ test('declarative categories head runtime groups in order, alphabetize label-sor
 test('KosmicKrisp products keep distinct translator tabs and compact version labels', () => {
   const adapted = require('../src/modules/shared/vulkan/managed');
   const stock = require('../src/modules/shared/vulkan/libraries').managers.find(manager => manager.id === 'vulkan-kosmickrisp');
-  assert.equal(adapted.manager.label, 'KosmicKrisp GLES 3.2');
+  assert.equal(adapted.manager.label, 'MacLauncher KosmicKrisp');
   const version = '27.0.0-devel-MCLv11';
   const provider = adapted.createProvider({ label: adapted.manager.label, resolveSelection: () => ({ ready: true, version,
     install: { payloadRoot: '/runtime', executablePath: '/runtime/driver.dylib', manifest: {
@@ -228,8 +228,8 @@ test('KosmicKrisp products keep distinct translator tabs and compact version lab
     const groups = groupRuntimeManagers(${JSON.stringify(states)});
     const choices = runtimeGroupSections(groups.find(group => group.id === 'vulkan-drivers'), sections);
     assert.deepEqual(choices.map(choice => [choice.managerId, choice.label]),
-      [['vulkan-kosmickrisp', 'KosmicKrisp'], ['vulkan-kosmickrisp-gles32', 'KosmicKrisp GLES 3.2']]);
-    assert.deepEqual(runtimeSectionTabs(choices).map(tab => tab.label), ['KosmicKrisp', 'KosmicKrisp GLES 3.2']);
+      [['vulkan-kosmickrisp', 'KosmicKrisp'], ['maclauncher-kosmickrisp', 'MacLauncher KosmicKrisp']]);
+    assert.deepEqual(runtimeSectionTabs(choices).map(tab => tab.label), ['KosmicKrisp', 'MacLauncher KosmicKrisp']);
   `);
 });
 
@@ -439,7 +439,7 @@ test('translator member declarations separate DirectX targets, Vulkan drivers an
     for(const [id,label,members] of [
       ['directx-vulkan','DirectX → Vulkan',['translator-dxvk','translator-vkd3d-proton','translator-vkd3d']],
       ['directx-metal','DirectX → Metal',['sikarugir-graphics-bridge','translator-d3dmetal']],
-      ['vulkan-drivers','Vulkan drivers',['vulkan-moltenvk','vulkan-kosmickrisp','vulkan-kosmickrisp-gles32']],
+      ['vulkan-drivers','Vulkan drivers',['vulkan-moltenvk','vulkan-kosmickrisp','maclauncher-kosmickrisp']],
       ['codecs','Video codecs',['translator-gstreamer']]]){
       const group=groups.find(group=>group.id===id);assert.equal(group.label,label);
       assert.deepEqual(runtimeGroupSections(group,sections).map(row=>row.managerId),members);

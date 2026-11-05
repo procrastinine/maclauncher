@@ -47,7 +47,7 @@ function inspectPackage(root, record, { projectId, manifestRelative, sourceRelat
 /** Project catalogs are queried only by Refresh. Included packages remain in
  * place; downloaded packages use the ordinary immutable version installation.
  * Runtimes offers Set default unless a module declares otherwise. */
-function createProjectBuildManager({ projectId, runtimeId = projectId, label, repository, upstreamUrl, upstreamLabel, sourceLabel, included, retainedIncluded, manifestRelative, sourceRelative,
+function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds = [], label, repository, upstreamUrl, upstreamLabel, sourceLabel, included, retainedIncluded, manifestRelative, sourceRelative,
   executableRelative, filesPrefix = "", validateManifest, verifyPayload, inspectRuntime, dataOnly = false, nativeLibrary = false, supportsDefault = true, launcherContract = 2, dependencies = {} }) {
   if (typeof dataOnly !== "boolean" || dataOnly && inspectRuntime) throw new Error("Data packages use sealed regular-file inspection.");
   const format = { projectId, manifestRelative, sourceRelative, executableRelative, filesPrefix, dataOnly, validateManifest };
@@ -56,7 +56,8 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, label, re
     const outer = fs.existsSync(wrapper) ? JSON.parse(Bundled.readRegular(wrapper,Bundled.LIMITS.manifestBytes).bytes) : null;
     if (outer && !installedDependencies) installedDependencies = P.load(userDataDir || (outer.dependencies?.length?P.userDataForPayload(root):undefined),outer.dependencies,{verification:'status'});
     resolveDependency ||= P.resolver(installedDependencies || new Map());
-    const selected = inspectPackage(root,record,{...format,resolveDependency,declaration:outer,metadataOnly,managed:Boolean(outer)});
+    const selected = inspectPackage(root,record,{...format,projectId: formerIds.includes(record.id) ? record.id : projectId,
+      resolveDependency,declaration:outer,metadataOnly,managed:Boolean(outer)});
     if (outer) selected.declaration=P.bind(root,record,selected.declaration,resolveDependency,wrapper);
     selected.dependencyLibraryPaths=P.loaderPaths(selected.declaration,installedDependencies||new Map());
     selected.dependencyReadRoots=P.readRoots(installedDependencies||new Map());
@@ -70,15 +71,21 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, label, re
       (!(pin.hostArchitectures || record.launcherArchitectures) || (pin.hostArchitectures || record.launcherArchitectures).includes(require("./architecture").selectedArchitecture()));
   };
   const recordOptions = { projectId, repository, launcherContract };
+  const optionsForRecord = record => ({ ...recordOptions, projectId: formerIds.includes(record.id) ? record.id : projectId });
   const publishedPins = catalog => {
     const records = catalog.packages;
     return [...records.map(record => ({ version: record.version, upstreamRevision: record.source?.revision || record.asset.sha256,
       architecture: record.arch === "x64" ? "x86_64" : record.arch, hostArchitectures: record.launcherArchitectures,
       minimumMacOS: record.minimumMacOS, localBuild: false, projectPackage: record, asset: record.asset })),
-    ...Catalog.unavailablePins(projectId, catalog.unavailable || [])];
+    ...Catalog.unavailablePins(catalog.projectId, catalog.unavailable || [])];
   };
-  const core = createPinnedNativeManager({ id: projectId, runtimeId, label,
+  const discover = async (id, { signal }) => publishedPins(await Catalog.fetchProjectCatalog({ ...recordOptions, projectId: id, signal }, dependencies));
+  const core = createPinnedNativeManager({ id: projectId, runtimeId, formerIds, label,
     sourceUrl, sourceLabel, buildsRepository: repository, upstreamUrl, upstreamLabel, nativeLibrary, supportsDefault,
+    ...(formerIds.length ? { catalogSources: [projectId, ...formerIds].map((id, index) => ({
+      id: index ? id : "builds", label: index ? "MacLauncher Builds · earlier releases" : "MacLauncher Builds",
+      url: `https://procrastinine.github.io/maclauncher-builds/#${id}`, discover: options => discover(id, options)
+    })) } : {}),
     // An included package counts as a build for the CPU it runs on.
     includedBuilds: options => includedPackages(options).all.some(item => item.present && item.ready),
     ...(dataOnly ? { inspectRuntime({ runtimePath, runtimeVersion, upstreamRevision, expectedSha256 }) {
@@ -86,13 +93,10 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, label, re
       if (expectedSha256 && stored.sha256 !== expectedSha256) throw new Error("The managed script entry changed.");
       return { executablePath: runtimePath, runtimePath, runtimeVersion, upstreamRevision, architecture: process.arch, ready: true };
     } } : inspectRuntime ? { inspectRuntime } : {}),
-    discoverCatalog: async ({ signal }) => {
-      const catalog = await Catalog.fetchProjectCatalog({ ...recordOptions, signal }, dependencies);
-      return publishedPins(catalog);
-    },
+    discoverCatalog: options => discover(projectId, options),
     resolveExecutable: (root, pin, options) => inspect(path.join(root, "payload"), pin.projectPackage, options).executablePath,
     prepareInstall: async ({ unpacked, pin, signal, userDataDir, resolveDependency, installedDependencies }) => {
-      const record = Catalog.validateProjectRecord(pin.projectPackage, recordOptions);
+      const record = Catalog.validateProjectRecord(pin.projectPackage, optionsForRecord(pin.projectPackage));
       const wrapper = Bundled.managedDeclaration(JSON.parse(Bundled.readRegular(path.join(unpacked, "project-package.json"), Bundled.LIMITS.manifestBytes).bytes));
       const P=require('./package-dependencies');
       const selected = inspect(path.join(unpacked, "payload"), record, {userDataDir,resolveDependency,installedDependencies,verification:"status",metadataOnly:true});
@@ -181,7 +185,7 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, label, re
       const selected = core.resolveSelection(entry, settings, userDataDir, { ...options, version });
       if (selected.install) {
         try {
-          const record = Catalog.validateProjectRecord(selected.install.catalogEntry.projectPackage, recordOptions);
+          const record = Catalog.validateProjectRecord(selected.install.catalogEntry.projectPackage, optionsForRecord(selected.install.catalogEntry.projectPackage));
           const inspected=inspect(path.join(selected.install.installDir, "payload"), record, {userDataDir,verification:options.verification});
           require('./package-dependencies').attach(Object.assign(selected.install,inspected),inspected);
         } catch (error) { return { version, ready: false, install: null, reason: error.message }; }

@@ -55,15 +55,15 @@ test("native Vulkan choices use matching installed images and preserve file-only
   const selected = Vulkan.resolve(context, dependencies);
   assert.equal(selected.library, loader); assert.deepEqual(selected.readable, [driver, loader]);
   let fullChecks = 0;
-  const adaptedRecord = { id: "kosmickrisp-gles32:fixture", backend: "kosmickrisp", projectId: "vulkan-kosmickrisp-gles32",
-    label: "KosmicKrisp · GLES 3.2", library: loader, driver, readable: [driver, loader] };
+  const adaptedRecord = { id: "maclauncher-kosmickrisp:fixture", backend: "kosmickrisp", projectId: "maclauncher-kosmickrisp",
+    label: "MacLauncher KosmicKrisp", library: loader, driver, readable: [driver, loader] };
   const withAdapted = { ...dependencies, adapted: { installed: () => [adaptedRecord], resolve: item => { fullChecks++; return item; } } };
   assert.deepEqual(Vulkan.choices(context, withAdapted).vulkanRuntimes.map(item => item.value), ["auto", "kosmickrisp:fixture", adaptedRecord.id]);
   assert.equal(Vulkan.resolve({ ...context, runtimeSettings: {} }, withAdapted).id, "kosmickrisp:fixture");
   assert.equal(fullChecks, 0);
   assert.equal(Vulkan.resolve({ ...context, runtimeSettings: { vulkanRuntime: adaptedRecord.id } }, withAdapted), adaptedRecord);
   assert.equal(fullChecks, 1);
-  assert.equal(Vulkan.resolve({ ...context, runtimeSettings: { vulkanRuntime: "kosmickrisp:maclauncher-gles32" } }, withAdapted), adaptedRecord);
+  assert.equal(Vulkan.resolve({ ...context, runtimeSettings: { vulkanRuntime: "kosmickrisp:maclauncher" } }, withAdapted), adaptedRecord);
   assert.equal(fullChecks, 2);
   const env = Vulkan.environment(selected, root);
   assert.equal(env.KL_MVK_DYLIB, loader);
@@ -89,7 +89,7 @@ test("Vulkan managers and installed-choice queries never fetch during ordinary r
     ["auto"]);
 });
 
-test("managed GLES 3.2 starts with empty download choices and no app fallback", t => {
+test("managed MacLauncher KosmicKrisp starts with empty download choices and no app fallback", t => {
   const Managed = require("../src/modules/shared/vulkan/managed");
   let queries = 0;
   const manager = Managed.createManager({ fetchUrlBuffer: () => { queries++; assert.fail("status must stay offline"); } });
@@ -106,7 +106,7 @@ test("managed GLES 3.2 starts with empty download choices and no app fallback", 
   assert.equal(fs.existsSync(path.join(root, "runtimes")), false);
 });
 
-test("managed GLES 3.2 selections retain the complete closure and full launch verification", () => {
+test("managed MacLauncher KosmicKrisp selections retain the complete closure and full launch verification", () => {
   const Managed = require("../src/modules/shared/vulkan/managed"), calls = [];
   const payloadRoot = path.join(os.tmpdir(), "managed-vulkan-payload");
   const manifest = { minimumMacOS: "27.0", runtimeFiles: { loader: "libvulkan.1.dylib" }, files: [
@@ -115,6 +115,7 @@ test("managed GLES 3.2 selections retain the complete closure and full launch ve
     {path: "libCompiler.dylib", architectures: ["arm64"]}, {path: "LICENSE"}] };
   let ready = true;
   const provider = Managed.createProvider({
+    label: "MacLauncher KosmicKrisp",
     getState: () => ({installed: [{version:"selected"}]}),
     resolveSelection: (_entry, _settings, _data, options) => {
       calls.push(options);
@@ -123,9 +124,9 @@ test("managed GLES 3.2 selections retain the complete closure and full launch ve
   });
   const context = {userDataDir: os.tmpdir(), settings:{}};
   const installed = provider.installed(context)[0];
-  assert.equal(installed.id, "kosmickrisp-gles32:selected");
-  assert.equal(installed.label, "KosmicKrisp selected");
-  assert.equal(Managed.createManager().ui.sectionLabel, "KosmicKrisp");
+  assert.equal(installed.id, "maclauncher-kosmickrisp:selected");
+  assert.equal(installed.label, "MacLauncher KosmicKrisp selected");
+  assert.equal(Managed.createManager().ui.sectionLabel, "MacLauncher KosmicKrisp");
   assert.equal(installed.readable.length, 3);
   assert.equal(installed.library, path.join(payloadRoot, "libvulkan.1.dylib"));
   assert.equal(installed.minimumMacOS, "27.0");
@@ -135,15 +136,15 @@ test("managed GLES 3.2 selections retain the complete closure and full launch ve
   assert.throws(() => provider.resolve(installed, context), /Install this version in Runtimes/);
 });
 
-test("saved GLES 3.2 choices request exact consented installation and reuse installed packages", () => {
-  const uses = [], versions = [], context = {userDataDir: os.tmpdir(), settings:{}, runtimeSettings:{vulkanRuntime:"kosmickrisp:maclauncher-gles32"}, recordRuntimeUse: row => uses.push(row)};
+test("saved MacLauncher KosmicKrisp choices request exact consented installation and reuse installed packages", () => {
+  const uses = [], versions = [], context = {userDataDir: os.tmpdir(), settings:{}, runtimeSettings:{vulkanRuntime:"kosmickrisp:maclauncher"}, recordRuntimeUse: row => uses.push(row)};
   let ready = false;
-  const manager = {id:"vulkan-kosmickrisp-gles32",resolveSelection: (_entry,_settings,_data,options) => {
+  const manager = {id:"maclauncher-kosmickrisp",resolveSelection: (_entry,_settings,_data,options) => {
     versions.push(options.version); return {version:options.version || "recommended",ready,install:ready ? {installDir:"/installed/native"} : null};
   }};
   const dependencies = {adaptedManager:manager};
   assert.deepEqual(Vulkan.requirements(context, dependencies), [{managerId:manager.id,version:"recommended",requiresDownload:true,installOptions:{}}]);
-  context.runtimeSettings.vulkanRuntime = "kosmickrisp-gles32:older";
+  context.runtimeSettings.vulkanRuntime = "maclauncher-kosmickrisp:older";
   assert.equal(Vulkan.requirements(context, dependencies)[0].version, "older");
   ready = true;
   assert.deepEqual(Vulkan.requirements(context, dependencies), []);
@@ -157,6 +158,127 @@ test("saved GLES 3.2 choices request exact consented installation and reuse inst
     assert.deepEqual(Vulkan.requirements(context, dependencies), [{managerId, version, requiresDownload:true, installOptions:{}}]);
   }
   assert.deepEqual(versions,[undefined,"older","older"]);
+});
+
+test("MacLauncher KosmicKrisp retains earlier selections, installations and catalog downloads", {skip: process.platform !== "darwin" || process.arch !== "arm64"}, async t => {
+  const Managed = require("../src/modules/shared/vulkan/managed"), Bundled = require("../src/modules/shared/runtime/bundled-native");
+  const { createProjectBuildManager } = require("../src/modules/shared/runtime/project-build-manager");
+  const { nativeTool, packageFor } = require("./helpers/managed-tool-fixture.cjs");
+  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "kosmickrisp-rename-"));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const legacyId = "vulkan-kosmickrisp-gles32", older = "27.0.0-devel-MCLv8", newer = "27.0.0-devel-MCLv9";
+  const binary = nativeTool(path.join(root, "native"), "", {architecture: "arm64"}).binary;
+  const fixtures = [older, newer, "27.0.0-devel-MCLv12"].map((version, index) => packageFor(path.join(root, version), {
+    id: index < 2 ? legacyId : Managed.projectId, version, architecture: "arm64", filesPrefix: "files/",
+    manifest: {managerId: index < 2 ? legacyId : Managed.projectId, platform: "darwin", executableRelative: "libvulkan_kosmickrisp.dylib",
+      runtimeFiles: {loader: "libvulkan.1.dylib"}, upstreamRevision: "a".repeat(40), dependencies: [],
+      notices: [{name: "Fixture", license: "MIT", sourceUrl: "https://example.com/source", path: "LICENSE"}]},
+    entries: ["libvulkan_kosmickrisp.dylib", "libvulkan.1.dylib"].map(name => ({path: name, bytes: binary, mode: 0o755, architectures: ["arm64"]}))
+      .concat([{path: "LICENSE", bytes: Buffer.from("fixture license\n"), mode: 0o644}])
+  }));
+  const catalog = id => ({schemaVersion: 2, projectId: id, updatePolicy: "manual", packages: fixtures.filter(item => item.record.id === id).map(item => item.record)});
+  let offline = false;
+  const requests = [];
+  const dependencies = {systemVersionSync: () => "27.0", fetchUrlBuffer: async url => {
+    assert.equal(offline, false, "status and selection never fetch"); requests.push(url);
+    const id = url.endsWith("/" + legacyId + ".json") ? legacyId : Managed.projectId;
+    return {status: 200, body: Buffer.from(JSON.stringify(catalog(id)))};
+  }, downloadToFile: async (url, destination) => {
+    assert.equal(offline, false); requests.push(url);
+    const fixture = fixtures.find(item => item.record.asset.url === url);
+    assert.ok(fixture, "downloads keep the published asset identity");
+    fs.copyFileSync(fixture.archive, destination);
+  }};
+  const legacy = createProjectBuildManager({projectId: legacyId, label: "KosmicKrisp GLES 3.2", repository: "procrastinine/maclauncher-builds",
+    manifestRelative: "manifest.json", sourceRelative: null, filesPrefix: "files/", nativeLibrary: true,
+    executableRelative: manifest => manifest.executableRelative,
+    verifyPayload: selected => Bundled.verifyPayload(selected.root, selected.declaration), dependencies});
+  const userDataDir = path.join(root, "existing-profile");
+  await legacy.refreshCatalog({userDataDir, force: true});
+  const installed = [];
+  for (const version of [older, newer]) installed.push(await legacy.installRuntime({userDataDir, version, architecture: "arm64"}));
+  const manager = Managed.createManager(dependencies), provider = Managed.createProvider(manager);
+  const settings = {runtimes: {[legacyId]: {defaultVersion: older, defaultArchitecture: "arm64"}}};
+  const context = {userDataDir, settings, runtimeSettings: {vulkanRuntime: "kosmickrisp:maclauncher-gles32"}};
+  const options = {managers: [], adaptedManager: manager, adapted: provider, architecture: "arm64",
+    hostCapabilities: {platform: "darwin", hardwareArch: "arm64", macOSVersion: "27.0"}};
+  offline = true;
+  await t.test("saved manager defaults and both old Vulkan choices retain the same installed version", () => {
+    const before = JSON.stringify(settings), count = requests.length;
+    assert.equal(manager.resolveSelection(null, settings, userDataDir).version, older);
+    assert.equal(manager.resolveSelection(null, settings, userDataDir).ready, true);
+    assert.equal(manager.getState({userDataDir, runtimeSettings: settings.runtimes}).defaultVersion, older);
+    for (const request of ["kosmickrisp:maclauncher-gles32", "kosmickrisp-gles32:" + older]) {
+      context.runtimeSettings.vulkanRuntime = request;
+      assert.equal(Vulkan.resolve(context, options).version, older);
+      assert.deepEqual(Vulkan.requirements(context, options), []);
+      const choices = Vulkan.choices(context, options).vulkanRuntimes;
+      assert.ok(choices.some(row => row.value === request && !row.label.includes("not installed")), "the saved alias remains selected");
+    }
+    const explicit = {runtimes: {...settings.runtimes, [manager.id]: {defaultVersion: newer}}};
+    assert.equal(manager.resolveSelection(null, explicit, userDataDir).version, newer);
+    assert.equal(manager.getState({userDataDir, settings: explicit.runtimes[manager.id], runtimeSettings: explicit.runtimes}).defaultVersion, newer);
+    const cleared = {runtimes: {...settings.runtimes, [manager.id]: {defaultVersion: null}}};
+    assert.equal(manager.resolveSelection(null, cleared, userDataDir).version, newer, "an explicit new default reset supersedes the former saved default");
+    assert.equal(JSON.stringify(settings), before, "reading old settings never rewrites them");
+    assert.equal(requests.length, count);
+  });
+  await t.test("old runtime directories and receipts remain recognized in place without mutation", () => {
+    const formerRoot = path.join(userDataDir, "runtimes", legacyId);
+    const snapshot = directory => fs.readdirSync(directory, {recursive: true, withFileTypes: true}).map(entry => {
+      const file = path.join(entry.parentPath || entry.path, entry.name), stat = fs.statSync(file);
+      return [path.relative(directory, file), stat.ino, stat.size, stat.mtimeMs, stat.isFile() ? hashFile(file) : null];
+    }).sort((a, b) => a[0].localeCompare(b[0]));
+    const before = snapshot(formerRoot), count = requests.length;
+    assert.equal(fs.existsSync(path.join(userDataDir, "runtimes", manager.id)), false);
+    const state = manager.getState({userDataDir, runtimeSettings: settings.runtimes});
+    assert.deepEqual(new Set(state.installed.filter(row => row.ready).map(row => row.installDir)), new Set(installed.map(row => row.installDir)));
+    for (const item of installed) {
+      const selected = manager.resolveSelection(null, settings, userDataDir, {version: item.version, verification: "full"});
+      assert.equal(selected.ready, true);
+      assert.equal(selected.install.installDir, item.installDir);
+      const row = provider.installed(context).find(row => row.version === item.version);
+      assert.equal(row.id, "maclauncher-kosmickrisp:" + item.version);
+      assert.ok(provider.resolve(row, context).driver.startsWith(item.installDir + path.sep));
+    }
+    assert.deepEqual(snapshot(formerRoot), before, "old runtime bytes, paths and filesystem identities stay intact");
+    assert.equal(fs.existsSync(path.join(userDataDir, "runtimes", manager.id)), false);
+    assert.equal(requests.length, count);
+  });
+  await t.test("unreadable former settings and unavailable former choices warn and use normal fallback", () => {
+    const warnings = [], logger = {warn: (...args) => warnings.push(args.join(" "))};
+    const badSettings = {runtimes: {[legacyId]: {defaultVersion: {version: older}}}};
+    const tolerant = Managed.createManager({...dependencies, logger});
+    assert.equal(tolerant.resolveSelection(null, badSettings, userDataDir).version, newer);
+    assert.ok(warnings.length > 0);
+    const previous = JSON.stringify(context), count = requests.length;
+    for (const request of ["kosmickrisp-gles32:unknown-version", "kosmickrisp-gles32:../invalid"]) {
+      const oldContext = {...context, logger, runtimeSettings: {vulkanRuntime: request}};
+      const number = warnings.length;
+      assert.equal(Vulkan.resolve(oldContext, options).version, older);
+      assert.deepEqual(Vulkan.requirements(oldContext, options), []);
+      assert.ok(warnings.length > number);
+    }
+    assert.equal(JSON.stringify(context), previous);
+    assert.equal(requests.length, count);
+  });
+  await t.test("Runtimes discovers both catalogs and installs the old MCLv8 arm64 publication", async () => {
+    offline = false;
+    const freshData = path.join(root, "fresh-profile"), fresh = Managed.createManager(dependencies);
+    assert.deepEqual(fresh.getState({userDataDir: freshData}).catalog.versions, []);
+    const count = requests.length;
+    await fresh.refreshCatalog({userDataDir: freshData, force: true});
+    for (const id of [Managed.projectId, legacyId]) assert.ok(requests.slice(count).some(url => url.endsWith("/catalogs/" + id + ".json")));
+    const state = fresh.getState({userDataDir: freshData});
+    assert.ok(state.catalog.installableVersions.includes(older));
+    assert.ok(state.catalog.installableVersions.includes(fixtures[2].record.version));
+    const selected = await fresh.installRuntime({userDataDir: freshData, version: older, architecture: "arm64"});
+    assert.equal(selected.version, older);
+    offline = true;
+    const reloaded = Managed.createManager(dependencies);
+    assert.equal(reloaded.resolveSelection(null, {}, freshData, {version: older}).ready, true);
+    assert.ok(reloaded.getState({userDataDir: freshData}).catalog.installableVersions.includes(older));
+  });
 });
 
 test("managed Vulkan profiles accept published revisions and retain source and payload integrity", {skip: process.platform !== "darwin"}, t => {

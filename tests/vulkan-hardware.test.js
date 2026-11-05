@@ -35,13 +35,13 @@ function fixture(t, architecture = "x64") {
     };
     return manager;
   });
-  const kosmic = managers[1], adapted = { id: "kosmickrisp-gles32:fixture", backend: "kosmickrisp",
-    projectId: "vulkan-kosmickrisp-gles32", version: "fixture", label: "KosmicKrisp GLES 3.2",
+  const kosmic = managers[1], adapted = { id: "maclauncher-kosmickrisp:fixture", backend: "kosmickrisp",
+    projectId: "maclauncher-kosmickrisp", version: "fixture", label: "MacLauncher KosmicKrisp",
     library: path.join(kosmic.install.installDir, "libvulkan.1.dylib"), driver: kosmic.install.executablePath,
     readable: kosmic.install.installationMetadata.libraries.map(row => path.join(kosmic.install.installDir, row.file)) };
   const context = { userDataDir: root, settings: { runtimes: { "vulkan-kosmickrisp": {
     defaultVersion: "fixture", defaultArchitecture: "arm64" }, [Managed.projectId]: { defaultArchitecture: "arm64" } } }, runtimeSettings: { vulkanRuntime: "auto" } };
-  const managedManager = { id: Managed.projectId, label: "KosmicKrisp GLES 3.2", present: false, catalogReady: true,
+  const managedManager = { id: Managed.projectId, label: "MacLauncher KosmicKrisp", present: false, catalogReady: true,
     pin: { version: "fixture", architecture }, selections: [],
     core: { listCatalog: () => [managedManager.pin] },
     getState: () => ({ catalog: { versions: managedManager.catalogReady ? ["fixture"] : [] },
@@ -97,7 +97,7 @@ test("saved KosmicKrisp selections retain their identity and reject only known i
   managedManager.present = true;
   const selected = { ...dependencies,
     adapted: { installed: () => [adapted], resolve: item => item } };
-  for (const request of ["kosmickrisp:fixture", "kosmickrisp:auto", "kosmickrisp-gles32:fixture", "kosmickrisp:maclauncher-gles32"]) {
+  for (const request of ["kosmickrisp:fixture", "kosmickrisp:auto", "maclauncher-kosmickrisp:fixture", "kosmickrisp:maclauncher"]) {
     context.runtimeSettings.vulkanRuntime = request;
     const saved = JSON.stringify(context);
     for (const hostCapabilities of [intel, { ...apple, macOSVersion: "15.7" }]) {
