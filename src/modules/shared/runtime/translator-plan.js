@@ -56,7 +56,7 @@ const physicalSource = file => file.realPath || file.path;
 function sameComponent(first, second, role) {
   if (first.engine !== second.engine) return false;
   const a = role ? filesForRole(first, role) : first.files || [], b = role ? filesForRole(second, role) : second.files || [];
-  if (!a.length || !b.length) return first.root && first.root === second.root && a.length === b.length;
+  if (!a.length || !b.length) return first.id === second.id && first.root && first.root === second.root && a.length === b.length;
   if (a.length !== b.length) return false;
   return a.every(file => b.some(other => {
     if (logicalPlacementKey(file) !== logicalPlacementKey(other) || file.form !== other.form) return false;

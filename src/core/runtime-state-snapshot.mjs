@@ -48,8 +48,8 @@ export function snapshotRuntimeState(input) {
   function clean(value, installation = false) {
     if (Array.isArray(value)) return value.map(item => clean(item, installation));
     if (!plain(value)) return value;
-    // Installation file/import inventories and sealed payload manifests stay with their managers.
-    return Object.fromEntries(Object.entries(value).filter(([key]) => !installation || key !== "files" && key !== "manifest" && key !== "unixImports")
+    // Installation file inventories and sealed payload manifests stay with their managers.
+    return Object.fromEntries(Object.entries(value).filter(([key]) => !installation || key !== "files" && key !== "manifest")
       .map(([key, item]) => {
         if (key !== "installed" || !Array.isArray(item)) return [key, clean(item, installation)];
         const installed = item.map(row => clean(row, true));

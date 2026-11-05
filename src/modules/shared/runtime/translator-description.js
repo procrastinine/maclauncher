@@ -13,8 +13,7 @@ function observedIdentity(file) {
   catch (error) { return ['ENOENT', 'ENOTDIR'].includes(error.code) ? error.code : null; }
 }
 function copyDescription(value) {
-  const { source, ...facts } = value;
-  return { ...structuredClone(facts), source };
+  return structuredClone(value);
 }
 // Ordinary runtime managers expose these descriptions through their installed
 // records. Paths refer to installed files, never to a second translator cache.
@@ -51,11 +50,7 @@ function installationDescription(input) {
       ({ ...slice, importsComplete: false })) } : {}) })) };
 }
 function label(value) {
-  if (!value) return '';
-  const names = { d3dmetal: 'D3DMetal', dxmt: 'DXMT', dxvk: 'DXVK', wined3d: 'WineD3D',
-    moltenvk: 'MoltenVK', kosmickrisp: 'KosmicKrisp', 'vkd3d-proton': 'vkd3d-proton', gstreamer: 'GStreamer' };
-  const source = displayText(typeof value.source === 'object' && value.source ? value.source.label || value.source.id : value.source);
-  return [names[value.engine] || value.engine, value.version, source ? `(${source})` : ''].map(displayText).filter(Boolean).join(' ');
+  return require('./translator-label').label(value);
 }
 function displayText(value) { return String(value ?? '').replace(/[\s\x00-\x1f\x7f]+/g, ' ').trim(); }
 /** Synchronous custom-runtime.inspect seam; unchanged observed files reuse facts. */

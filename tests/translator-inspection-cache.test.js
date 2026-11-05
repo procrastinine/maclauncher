@@ -26,10 +26,11 @@ test('component inspection reuses unchanged file facts and warns once without sh
   assert.ok(after > 0); assert.equal(first.files[0].machine, 0x8664);
   assert.ok(warnings.some(message => /PE export inspection is incomplete/.test(message)));
   const count = warnings.length;
-  first.files.length = 0; first.apis.push('caller-only');
+  first.files.length = 0; first.apis.push('caller-only'); first.source.label = 'caller-only';
   const second = D.describeTranslator(f.root, options);
   assert.equal(reads, after); assert.equal(warnings.length, count);
   assert.equal(second.files.length, 1); assert.deepEqual(second.apis, ['Direct3D 11']);
+  assert.equal(second.source.label, 'Scratch host'); assert.equal(options.source.label, 'Scratch host');
   const previous = fs.statSync(f.file), changed = Buffer.from(f.bytes); changed[64] = 88;
   fs.writeFileSync(f.file, changed); fs.utimesSync(f.file, previous.atime, previous.mtime);
   assert.equal(D.describeTranslator(f.root, options).files[0].form, 'native');

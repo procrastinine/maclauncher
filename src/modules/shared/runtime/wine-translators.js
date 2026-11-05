@@ -10,7 +10,8 @@ const SETTINGS = Object.freeze({ 'd3d-renderer': 'translatorRenderer', 'vulkan-d
 
 function includedTranslators(install, runtime, { engine: requestedEngine } = {}) {
   const layout = wineLayout(install), result = [], warnings = [], nativeRoots = [];
-  const source = { kind: runtime, id: install.version || layout.root, runtime, label: runtime === 'crossover' ? `CrossOver ${install.upstreamVersion || ''}`.trim() : `Sikarugir Template ${install.templateVersion || ''}`.trim() };
+  const source = { kind: runtime, id: install.version || layout.root, runtime,
+    label: require('./translator-label').hostLabel(install, { label: runtime === 'crossover' ? 'CrossOver' : 'Sikarugir Template' }) };
   const add = (root, engine, component, extra = {}) => {
     if (requestedEngine && engine !== requestedEngine) return;
     if (!fs.existsSync(root)) return;
