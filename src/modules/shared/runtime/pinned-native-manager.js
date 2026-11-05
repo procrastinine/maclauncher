@@ -597,7 +597,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     fs.mkdirSync(directory, { recursive: true });
     const temp = path.join(directory, `.runtime-${crypto.randomUUID()}.json`);
     try {
-      fs.writeFileSync(temp, JSON.stringify(record, null, 2) + "\n", { flag: "wx" });
+      fs.writeFileSync(temp, JSON.stringify(record) + "\n", { flag: "wx" });
       fs.renameSync(temp, path.join(directory, "runtime.json"));
     } finally {
       fs.rmSync(temp, { force: true });

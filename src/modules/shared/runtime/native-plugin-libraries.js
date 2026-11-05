@@ -60,8 +60,10 @@ async function resolvePluginLibraries(description, record, options = {}) {
       };
       const checked = Binary.compatibility({ ...description, files: [file], requiredPaths: [file.path] }, record, options);
       if (!checked.compatible) { reject(checked.reason); continue; }
+      const actualFile = checked.files?.[0] || file;
+      selected.set(file.path, { file: actualFile, optionalRoot });
       warnings.push(...checked.warnings.map(warning => `${path.basename(file.path)}: ${warning}`));
-      const native = image(file);
+      const native = image(actualFile);
       if (!native) continue;
       const runPaths = Binary.nativeRunPaths(file.path, native, record.executablePath, inherited);
       const pathContexts = [...(native.runPaths || []).flatMap(value =>

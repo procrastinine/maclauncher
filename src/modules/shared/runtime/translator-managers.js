@@ -71,10 +71,7 @@ function createManager(engine, { dependencies = {} } = {}) {
       }
       const translator = Component.description(root, definition, { engine: pin.translatorEngine || definition.engine, source: translatorSource(pin) });
       const files = Object.fromEntries(translator.files.filter(file => file.format !== "json").map(file => [file.relative, require("./pinned-native-manager").hashFile(file.path)]));
-      translator.files = translator.files.map(file => {
-        const stored = { ...file, path: file.relative }; delete stored.realPath; return stored;
-      });
-      delete translator.root; delete translator.id;
+      const stored = require("./translator-description").installationDescription(translator);
       const relative = path.relative(unpacked, root);
       if (relative) {
         const temporary = path.join(path.dirname(unpacked), "component");
@@ -82,7 +79,7 @@ function createManager(engine, { dependencies = {} } = {}) {
         for (const name of fs.readdirSync(unpacked)) fs.rmSync(path.join(unpacked, name), { recursive: true, force: true });
         fs.renameSync(temporary, path.join(unpacked, definition.names[0]));
       }
-      return { translator, files, translatorRelative: relative ? definition.names[0] : "" };
+      return { translator: stored, files, translatorRelative: relative ? definition.names[0] : "" };
     }, dependencies: { extractArchive: require("./safe-archive").extractArchive, ...dependencies } });
   manager.translatorEngine = engine;
   manager.ui = { groupId: definition.groupId, sectionLabel: definition.label, memberOrder: definition.memberOrder, management: "managed" };

@@ -154,10 +154,8 @@ function createManager(backend, dependencies = {}) {
         for (const slice of native.slices) if (versionAtLeast(slice.minimumMacOS, minimumMacOS)) minimumMacOS = slice.minimumMacOS;
       }
       const translator = require("../runtime/component-runtime").description(unpacked, { engine: backend, apis: ["Vulkan"] }, { source: "upstream" });
-      translator.files = translator.files.map(file => {
-        const stored = { ...file, path: file.relative }; delete stored.realPath; return stored;
-      });delete translator.root;delete translator.id;
-      return { translator, backend, minimumMacOS, libraries: files.map(file => ({ file, sha256: hashFile(path.join(unpacked, file)) })) };
+      const stored = require("../runtime/translator-description").installationDescription(translator);
+      return { translator: stored, backend, minimumMacOS, libraries: files.map(file => ({ file, sha256: hashFile(path.join(unpacked, file)) })) };
     }, dependencies: { ...dependencies, extractArchive: (archive, output, signal) => backend === "moltenvk" ? extract(archive, output, signal)
       : cloneOrCopy(archive, path.join(output, definition.library), { signal }) } });
   const result = { ...manager, upstream: loader ? [kosmickrisp, loader] : moltenvk, backend, translatorEngine: backend, ui: { groupId: "vulkan-drivers", sectionLabel: definition.label, memberOrder: backend === "moltenvk" ? 20 : 21, management: "managed", ...(backend === "kosmickrisp" ? { hostFeature: "METAL4" } : {}) } };

@@ -33,7 +33,8 @@ function registrationSource(input, root = input) {
 function description(root, definition, options = {}) {
   const result = require("./translator-description").describeTranslator(root, { engine: definition.engine, ...options });
   if (definition.pluginDirectory) {
-    const directories = [...new Set(result.files.filter(file => file.format === "macho" && path.basename(path.dirname(file.path)) === definition.pluginDirectory)
+    const directories = [...new Set(result.files.filter(file => file.format === "macho" &&
+      (!file.slices?.length || file.slices.some(slice => slice.fileType !== 2)) && path.basename(path.dirname(file.path)) === definition.pluginDirectory)
       .map(file => path.dirname(file.relative)).filter(directory => directory !== "."))];
     if (directories.length) result.pluginDirectories = directories;
   }

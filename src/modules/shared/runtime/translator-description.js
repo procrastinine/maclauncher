@@ -29,6 +29,14 @@ function description(input) {
   const files = input.files.map(({ unixImports: _legacyFileImports, ...file }) => ({ ...file, ...(file.format === 'pe' ? { apis: fileApis(file) } : {}) }));
   return { ...value, apis: input.apis?.length ? [...input.apis] : apisForFiles(files), files, version: String(input.version || '') };
 }
+// Installation metadata retains placement facts; imports are inspected again
+// from the selected files before preparation, rather than persisted per symbol.
+function installationDescription(input) {
+  const { root: _root, id: _id, ...value } = description(input);
+  return { ...value, files: value.files.map(({ realPath: _realPath, ...file }) => ({ ...file, path: file.relative,
+    ...(file.format === 'macho' && Array.isArray(file.slices) ? { slices: file.slices.map(({ imports: _imports, ...slice }) =>
+      ({ ...slice, importsComplete: false })) } : {}) })) };
+}
 function label(value) {
   if (!value) return '';
   const names = { d3dmetal: 'D3DMetal', dxmt: 'DXMT', dxvk: 'DXVK', wined3d: 'WineD3D',
@@ -146,4 +154,4 @@ function inspectFile(file) {
   }
   return { ...result, format: file.path.endsWith('.json') ? 'json' : 'unknown', apis: [], macosFloor: null };
 }
-module.exports = { COMPONENTS, ENGINES, FORMS, description, label, describeTranslator, inspectFile, compareVersions };
+module.exports = { COMPONENTS, ENGINES, FORMS, description, installationDescription, label, describeTranslator, inspectFile, compareVersions };
