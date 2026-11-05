@@ -20,13 +20,17 @@ test("Wine graphics retains explicit source metadata and does not invent pixel c
 test("Sikarugir declares the native architecture verified by its payload resolver", () => {
   assert.equal(require("../src/modules/crossover/manifest.json").runtime.entries.sikarugir.graphicsArchitecture, "x86_64");
 });
-test("CrossOver reports loader architecture even without a temporal camera bridge", t => {
+test("CrossOver reports loader architecture even without a temporal camera bridge", async t => {
   const Module = require("../src/modules/crossover/main"), Temporal = require("../src/modules/crossover/temporal");
   t.mock.method(Temporal, "resolvePlan", () => null);
-  const selected = {ready: true, install: {architectures: ["x86_64"]}};
-  assert.deepEqual(Module.resolveGraphicsInputs({}, {runtimeId: "crossover"}, selected), {architecture: "x86_64"});
+  // An empty CrossOver root supplies no included translators.
+  const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
+  const crossoverRoot = fs.mkdtempSync(path.join(os.tmpdir(), "crossover-graphics-inputs-"));
+  t.after(() => fs.rmSync(crossoverRoot, {recursive: true, force: true}));
+  const selected = {ready: true, install: {architectures: ["x86_64"], crossoverRoot}};
+  assert.deepEqual(await Module.resolveGraphicsInputs({}, {runtimeId: "crossover"}, selected), {architecture: "x86_64"});
   t.mock.method(Temporal, "resolvePlan", () => ({inputs: {cameraProjection: true, sourceResolution: false, methods: ["fsr2"]}}));
   selected.install.architectures = ["arm64"];
-  assert.deepEqual(Module.resolveGraphicsInputs({}, {runtimeId: "crossover"}, selected),
+  assert.deepEqual(await Module.resolveGraphicsInputs({}, {runtimeId: "crossover"}, selected),
     {architecture: "arm64", cameraProjection: true, sourceResolution: false, methods: ["fsr2"]});
 });
