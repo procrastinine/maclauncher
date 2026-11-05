@@ -7,9 +7,24 @@ function orderKey(value) {
 }
 
 function compareVersions(left, right) {
-  const a = orderKey(left), b = orderKey(right), release = /^(\d+(?:\.\d+)+)(?:-(.+))?$/;
+  const a = orderKey(left), b = orderKey(right), release = /^(\d+(?:\.\d+)+)(.*)$/;
   const aa = release.exec(a), bb = release.exec(b);
-  if (aa && bb && aa[1] === bb[1] && Boolean(aa[2]) !== Boolean(bb[2])) return aa[2] ? -1 : 1;
+  if (aa && bb) {
+    const av = aa[1].split("."), bv = bb[1].split(".");
+    for (let index = 0; index < Math.max(av.length, bv.length); index++) {
+      const compared = (av[index] || "0").localeCompare(bv[index] || "0", undefined, { numeric: true });
+      if (compared) return compared;
+    }
+    const suffixA = aa[2], suffixB = bb[2];
+    if (!suffixA || !suffixB) {
+      const suffix = suffixA || suffixB;
+      if (!suffix) return 0;
+      // git-describe counts commits after a release, unlike a dash prerelease.
+      const before = suffix.startsWith("-") && !/^-\d+-g[a-f0-9]+$/i.test(suffix);
+      return suffixA ? before ? -1 : 1 : before ? 1 : -1;
+    }
+    return suffixA.localeCompare(suffixB, undefined, { numeric: true, sensitivity: "base" });
+  }
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 }
 

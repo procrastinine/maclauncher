@@ -1257,3 +1257,23 @@ test('Gcenx inspected source metadata declares offered PE forms without changing
     assert.equal(pin.version,'unchanged-'+builtin);
   }
 });
+
+test('cached vkd3d publisher releases order numeric cores before letter revisions and retain build identities', t => {
+  const fs=require('node:fs'),os=require('node:os'),root=fs.mkdtempSync(path.join(os.tmpdir(),'vkd3d-release-order-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const CrossOver=require('../src/modules/crossover/runtime/manager'),Sika=require('../src/modules/crossover/sikarugir/runtime/manager');
+  t.mock.method(CrossOver.core,'listInstalled',()=>[]);const prior=Sika.core;Sika.core={...prior,listInstalled:()=>[]};t.after(()=>Sika.core=prior);
+  t.mock.method(globalThis,'fetch',()=>assert.fail('Cached release ordering stays offline'));
+  const owner=require('../src/modules/shared/runtime/translator-managers').createManager('vkd3d-proton');
+  const released=[['3.0b','2025-12-10T09:49:00Z'],['3.0a','2025-11-18T16:58:49Z'],['3.0.1','2026-05-06T11:35:27Z'],['3.0','2025-11-17T15:54:20Z'],['3.1','2026-10-28T10:19:54Z']];
+  const entries=released.map(([version,publishedAt])=>({version:'upstream-vkd3d-proton-'+version+'.tar.zst',upstreamRevision:'published-'+version,catalogSourceId:'upstream',publishedAt,architecture:'universal',
+    sourceUrl:'https://github.com/HansKristian-Work/vkd3d-proton/releases/tag/v'+version,asset:{filename:'vkd3d-proton-'+version+'.tar.zst',url:'https://github.com/HansKristian-Work/vkd3d-proton/releases/download/v'+version+'/vkd3d-proton-'+version+'.tar.zst',integrity:'recorded-local'}}));
+  const Catalog=require('../src/modules/shared/runtime/runtime-catalog');Catalog.writeRuntimeCatalog({userDataDir:root,managerId:owner.id,entries,source:owner.getState({}).catalog.sourceUrl});
+  const file=Catalog.catalogPath(root,owner.id),before=fs.readFileSync(file),state=owner.getState({userDataDir:root});
+  assert.deepEqual(state.catalog.versions,['3.1','3.0.1','3.0b','3.0a','3.0'].map(v=>'upstream-vkd3d-proton-'+v+'.tar.zst'));
+  const markup=render([{...state,id:owner.id,label:owner.label,ui:owner.ui}],owner.id);
+  assert.ok(markup.indexOf('>v3.0.1</option>')<markup.indexOf('>v3.0b</option>'));assert.match(markup,/value="upstream-vkd3d-proton-3\.1\.tar\.zst" selected/);
+  assert.deepEqual(fs.readFileSync(file),before);
+  const {compareVersions}=require('../src/modules/shared/runtime/version-order');
+  assert.ok(compareVersions('v1.10.3-47-gb144ae28','v1.10.3')>0);assert.ok(compareVersions('1.4.2-rc1','1.4.2')<0);
+  assert.equal(compareVersions('v3.0','3.0.0'),0);assert.equal(compareVersions('1.10.3-aaaaaaa','1.10.3-bbbbbbb'),0,'opaque hash-only variants retain publisher order');
+});
