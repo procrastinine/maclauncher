@@ -18,11 +18,11 @@ function wineSettingInheritance(entry, payload, context) {
 async function translatorOptions(entry, payload, context, dependencies = {}) {
   const runtime = context.runtimeId || payload?.runtimeId || entry.runtimeId || 'crossover';
   const draft = { ...context, runtimeSettings: { ...context.runtimeSettings, ...payload?.runtimeSettings } };
+  const preparedContext = Translators.environmentContext(draft);
   const runtimeManager = dependencies.runtimeManager || (runtime === 'sikarugir' ? require('./sikarugir/runtime/manager') : manager);
-  const selected = runtimeManager.resolveSelection(entry, draft.settings, draft.userDataDir, draft.runtimeSettings);
+  const selected = preparedContext.wineEnvironment?.install ? { ready: true, install: preparedContext.wineEnvironment.install } : runtimeManager.resolveSelection(entry, draft.settings, draft.userDataDir, draft.runtimeSettings);
   if (!selected.install) return {};
-  const preparedContext = Translators.environmentContext(draft, selected.install);
-  const install = preparedContext.wineEnvironment?.install || selected.install;
+  const install = selected.install;
   const plan = await Translators.resolve(install, runtime, preparedContext, { ...dependencies, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
   return { ...Translators.optionLists(install, runtime, preparedContext, { ...dependencies, plan }), effectiveSettings: [
     { value: 'graphicsBackend', label: plan.components['d3d-renderer'].used?.engine || 'auto' },
@@ -104,7 +104,7 @@ async function resolveGraphicsInputs(entry, context = {}, resolved) {
   const install = prepared.wineEnvironment?.install || selected.install;
   const translatorPlan = await Translators.resolve(install, runtimeId, context, { executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
   const source = require("./temporal").resolvePlan(entry, context, { install, runtimeId, translatorPlan, settings: Translators.settingsForPlan(context.runtimeSettings || {}, translatorPlan), allowDownload: true })?.inputs;
-  return require("./graphics-inputs").inputs(selected.install, source, { fallback: runtimeId === "sikarugir" ? "x86_64" : null });
+  return require("./graphics-inputs").inputs(install, source, { fallback: runtimeId === "sikarugir" ? "x86_64" : null });
 }
 
 module.exports = { id: manifest.id, manifest, detectGame: Detection.detectGame,

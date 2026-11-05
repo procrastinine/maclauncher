@@ -59,7 +59,7 @@ function createProvider({ manager, launch = Launch, platform = process.platform,
       const install = prepared.wineEnvironment?.install || selected.install;
       const translatorPlan = await Translators.resolve(install, "sikarugir", context, { executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
       const source = require("../temporal").resolvePlan(entry, context, { install, runtimeId: "sikarugir", translatorPlan, settings: Translators.settingsForPlan(context.runtimeSettings || {}, translatorPlan), allowDownload: true })?.inputs;
-      return require("../graphics-inputs").inputs(selected.install, source, { fallback: "x86_64" });
+      return require("../graphics-inputs").inputs(install, source, { fallback: "x86_64" });
     },
     getRuntimeRequirements: (entry, context) => {
       const existing = Environments.readEnvironment(context.runtimeSettings?.environmentReference);
@@ -75,7 +75,9 @@ function createProvider({ manager, launch = Launch, platform = process.platform,
       const reference = Environments.environmentReference(context.runtimeSettings?.environmentReference);
       if (reference) {
         if (reference.kind !== "sikarugir-wrapper") throw new Error("Choose a Sikarugir wrapper for this runtime.");
-        Environments.readEnvironment(reference); return null;
+        context.wineEnvironment = Environments.readEnvironment(reference);
+        await Translators.resolve(context.wineEnvironment.install, "sikarugir", context, { executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
+        return null;
       }
       const selected = await runtimeManager().resolveForPlay(entry, context);
       if (selected.ready) {

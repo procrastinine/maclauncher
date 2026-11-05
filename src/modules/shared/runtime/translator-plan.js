@@ -19,6 +19,10 @@ function resolvePlan({ runtime = 'crossover', selections = {}, choices = [], inc
     const selected = inherited ? environment.selections?.[component] || null
       : [...included, ...choices].find(item => item.id === value && item.component === component) || null;
     let used = selected, reason = null;
+    if (!selected && value !== AUTOMATIC && value !== INHERIT) {
+      reason = `The saved translator choice is unavailable: ${value}`;
+      warnings.push(`${reason}. Using ${runtime === 'crossover' ? "CrossOver's automatic choice" : "the Template's automatic choice"}.`);
+    }
     if (selected && compatibility[selected.id]?.compatible === false) {
       reason = compatibility[selected.id].reason;
       used = included.find(item => item.component === component && item.engine === selected.engine && compatibility[item.id]?.compatible !== false) || null;

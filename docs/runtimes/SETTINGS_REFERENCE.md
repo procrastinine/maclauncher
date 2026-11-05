@@ -1163,7 +1163,7 @@ Runtimes tabs: CrossOver (managed); Sikarugir (managed); Graphics → Translator
 | --- | --- | --- | --- |
 | Direct3D engine | Runtime automatic | Named installed engines and managed versions | [Translator selection](TRANSLATORS.md). |
 | Game temporal integration | On/Off | Off | Expose the game's DLSS option through MetalFX Temporal. A shared temporal upscaler also enables this integration automatically. Requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26.4 or later, with matching NVAPI/NGX libraries. DLSS must be enabled in the game settings. Changes apply on the next launch. |
-| Direct3D 12 | Runtime automatic | Wine vkd3d, D3DMetal, managed versions | vkd3d-proton is offered with KosmicKrisp. |
+| Direct3D 12 | Runtime automatic | Wine vkd3d, D3DMetal, managed versions | KosmicKrisp is recommended for vkd3d-proton. |
 | Video codecs | Runtime default | Runtime default or registered codec folder | GStreamer plugins use the selected folder. |
 | Vulkan driver | Runtime automatic | Installed MoltenVK and KosmicKrisp versions | [Translator selection](TRANSLATORS.md). |
 | DirectDraw compatibility | On/Off | Off | Use CNC-DDraw for 32-bit games with a software DirectDraw renderer. Direct3D settings remain separate. |
@@ -1183,7 +1183,7 @@ Runtimes tabs: CrossOver (managed); Sikarugir (managed); Graphics → Translator
 | --- | --- | --- | --- |
 | Direct3D engine | Runtime automatic | Named installed engines and managed versions | [Translator selection](TRANSLATORS.md). |
 | Game temporal integration | On/Off | Off | Expose the game's DLSS option through MetalFX Temporal. A shared temporal upscaler also enables this integration automatically. Requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later, with matching NVAPI/NGX libraries. DLSS must be enabled in the game settings. Changes apply on the next launch. |
-| Direct3D 12 | Runtime automatic | Wine vkd3d, D3DMetal, managed versions | vkd3d-proton is offered with KosmicKrisp. |
+| Direct3D 12 | Runtime automatic | Wine vkd3d, D3DMetal, managed versions | KosmicKrisp is recommended for vkd3d-proton. |
 | Video codecs | Runtime default | Runtime default or registered codec folder | GStreamer plugins use the selected folder. |
 | Synchronization | Automatic; MSync; ESync (older CrossOver versions); Off | Automatic |  |
 | Language locale | Text |  | Optional locale identifier, such as ja_JP.UTF-8 or en_US.UTF-8. |

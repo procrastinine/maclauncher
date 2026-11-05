@@ -34,7 +34,7 @@ Runtime Settings selects each component independently.
 | --- | --- |
 | Direct3D engine | The runtime's automatic choice, its named engines, and managed DXMT, DXVK or D3DMetal versions. DXVK packages can provide different Direct3D API sets. |
 | Vulkan driver | The runtime's automatic driver, its named drivers, and managed MoltenVK or KosmicKrisp versions. |
-| Direct3D 12 | Wine vkd3d, D3DMetal or a managed Direct3D 12 translator. vkd3d-proton appears with KosmicKrisp. |
+| Direct3D 12 | Wine vkd3d, D3DMetal or a managed Direct3D 12 translator. KosmicKrisp is recommended for vkd3d-proton. |
 | Video codecs | The runtime defaults or a registered GStreamer plugin folder. Wine's own video modules remain with Wine. |
 
 An existing bottle or wrapper first offers its current setting, read from its configuration without starting Wine. Automatic follows that runtime's existing behavior. Named choices show their version and source from installed files; a component without readable version metadata still names its engine and source. Installed CrossOver components are used for CrossOver launches only.

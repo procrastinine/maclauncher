@@ -105,9 +105,12 @@ function inventory(install, runtime, context, dependencies = {}) {
   return { ...result, choices, environment, selections, runtime };
 }
 function environmentContext(context, install) {
-  if (context.wineEnvironment || !context.runtimeSettings?.environmentReference || context.runtimeSettings.environmentReference === 'private') return context;
+  const value = context.runtimeSettings?.environmentReference;
+  if (value === undefined) return context;
   const reader = require('./wine-environment');
-  const reference = reader.environmentReference(context.runtimeSettings.environmentReference);
+  const reference = reader.environmentReference(value);
+  if (!reference) return context.wineEnvironment ? { ...context, wineEnvironment: null } : context;
+  if (context.wineEnvironment?.reference?.path === reference.path && context.wineEnvironment?.kind === reference.kind) return context;
   return reference ? { ...context, wineEnvironment: reader.readEnvironment(reference, { userDataDir: context.userDataDir, crossoverRoot: install?.crossoverRoot }) } : context;
 }
 async function resolve(install, runtime, context, { executableArchitecture, host = {}, ...dependencies } = {}) {
@@ -142,7 +145,7 @@ async function resolve(install, runtime, context, { executableArchitecture, host
     }
   }
   if (plan.components.d3d12.used?.engine === 'vkd3d-proton' && plan.components['vulkan-driver'].used?.engine !== 'kosmickrisp')
-    plan.warnings.push('vkd3d-proton is offered with KosmicKrisp. The saved selection is being used with the selected Vulkan driver.');
+    plan.warnings.push('KosmicKrisp is recommended for vkd3d-proton. The saved selection is being used with the selected Vulkan driver.');
   for (const row of Object.values(plan.components)) if (row.used && compatibility[row.used.id]?.files) {
     const files = compatibility[row.used.id].files;
     row.used = { ...row.used, files, form: files.find(file => file.format === 'pe')?.form || row.used.form };
@@ -182,9 +185,9 @@ function withSettings(manifest) {
   return result;
 }
 function optionLists(install, runtime, context, dependencies = {}) {
-  const input = inventory(install, runtime, context, dependencies), plan = dependencies.plan || Plan.resolvePlan(input), vulkan = plan.components['vulkan-driver'].used;
+  const input = inventory(install, runtime, context, dependencies), plan = dependencies.plan || Plan.resolvePlan(input);
   return Object.fromEntries(Object.entries(SETTINGS).map(([component, key]) => {
-    const rows = Plan.options({ ...input, component, included: input.included.filter(item => !item.hiddenChoice), choices: input.choices.filter(item => item.engine !== 'vkd3d-proton' || vulkan?.engine === 'kosmickrisp') });
+    const rows = Plan.options({ ...input, component, included: input.included.filter(item => !item.hiddenChoice) });
     if (!context.runtimeSettings?.[key]) {
       const current = rows.find(row => row.value === (plan.components[component].selected?.id || input.selections[component]));
       if (current) current.value = ''; // The unset control preserves its existing saved backend.
@@ -196,7 +199,7 @@ function inspectorRows(plan) {
   const labels = { 'd3d-renderer': 'Direct3D', 'vulkan-driver': 'Vulkan', d3d12: 'Direct3D 12', video: 'Video codecs' };
   return Object.entries(SETTINGS).map(([component, key]) => {
     const row = plan.components[component];
-    return { id: key, component, label: labels[component], selected: row.selected ? Description.label(row.selected) : row.inherited ? 'Inherited' : plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice",
+    return { id: key, component, label: labels[component], selected: row.selected ? Description.label(row.selected) : row.fallback ? row.value : row.inherited ? 'Inherited' : plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice",
       used: row.used ? Description.label(row.used) : plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice", reason: row.reason, fallback: row.fallback };
   });
 }

@@ -48,7 +48,7 @@ Settings holds the defaults, and each game's Runtime Settings can override them.
 | Direct3D engine | Automatic, engines supplied by the selected runtime, or a specific managed translator version. Each choice names its engine, version and source. |
 | Vulkan driver | CrossOver’s driver or a specific managed MoltenVK or KosmicKrisp version. |
 | Game temporal integration | Exposes MetalFX Temporal through a 64-bit game's DLSS integration. Listed for Unity and Windows games. See [Temporal upscaling](#temporal-upscaling). |
-| Direct3D 12 | Wine vkd3d, D3DMetal or a managed Direct3D 12 translator. vkd3d-proton is offered with KosmicKrisp. |
+| Direct3D 12 | Wine vkd3d, D3DMetal or a managed Direct3D 12 translator. KosmicKrisp is recommended for vkd3d-proton. |
 | Video codecs | The runtime defaults or a registered GStreamer codec folder. |
 | Synchronization | Automatic, MSync, ESync or Off. ESync is for older CrossOver versions; newer releases may not support it. |
 | Language locale | An optional locale identifier, such as `ja_JP.UTF-8`. |
