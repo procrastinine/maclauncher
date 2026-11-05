@@ -526,6 +526,10 @@ test("Ren'Py SDK planning keeps game generation and version evidence and exact g
 });
 
 test("saved Android GLES 3.2 selection joins ordinary consent, installation and offline reuse", async t => {
+  const Included = require("../src/modules/shared/runtime/included-helpers");
+  const pin = Included.declared(require("../src/modules/android/distribution-included.json"), {id: "android-launcher"});
+  if (!pin || !fs.existsSync(path.join(Included.nativeRoot(), pin.directoryRelative, pin.manifestRelative)))
+    return t.skip("Requires the prepared included Android launcher payload");
   const Android = require("../src/modules/android/custom-main");
   const manager = require("../src/modules/shared/vulkan/managed").manager;
   const events = [], uses = [];
