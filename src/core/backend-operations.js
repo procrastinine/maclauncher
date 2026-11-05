@@ -341,7 +341,8 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
           if (JSON.stringify(GameStore.readGameRecord(userDataDir, entry.gameId)) !== before) emit("entryChanged", { gameId: entry.gameId, gamePath: entry.gamePath });
           // Local graphics callbacks stay inside the process; inspector IPC
           // carries only the selected runtime and its serializable capabilities.
-          if (action === "graphicsInputs") return {runtimeId: result.runtimeId, graphicsInputs: result.graphicsInputs};
+          if (action === "graphicsInputs") return {runtimeId: result.runtimeId, graphicsInputs: result.graphicsInputs,
+            ...(result.filesUnavailable ? {filesUnavailable: true} : {})};
           return result ?? true;
         });
       } finally {

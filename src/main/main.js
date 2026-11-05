@@ -3620,10 +3620,16 @@ async function gameEffectsOptions(entry, settings = loadSettings()) {
   // Device metadata does not hold the graph editor or any graphics edit open.
   // A newer included helper can query hardware for an older active processor.
   void Hardware.inspect(hardwareRoot).then(() => graphicsCatalog.refresh());
-  const result = await launcherService.runAction(launch?.runtimeId ? {...entry, runtimeId: launch.runtimeId} : entry, "graphicsInputs", {}, { settings });
+  // A launch binding records its graphics inputs. Otherwise the game's backend
+  // lane resolves them, so game files and translator plans stay off this thread.
+  const effective = launch?.runtimeId ? {...entry, runtimeId: launch.runtimeId} : entry;
+  const recorded = launch && Object.hasOwn(launch, "graphicsInputs");
+  const result = recorded ? null : await backendService.request(`game:${entry.gameId || entry.gamePath}`, "moduleAction", effective, "graphicsInputs", {}, settings);
+  // Module graphics callbacks prepare game content, so they wait for the game's files.
+  const callbacks = result?.filesUnavailable ? {} : launcherService.graphicsCallbacks(effective, settings);
   const graphicsHardware = Hardware.snapshot(hardwareRoot);
-  const runtimeId = launch?.runtimeId || result?.runtimeId;
-  const graphicsInputs = launch && Object.hasOwn(launch, "graphicsInputs") ? launch.graphicsInputs : result?.graphicsInputs || null;
+  const runtimeId = launch?.runtimeId || result?.runtimeId || callbacks.runtimeId;
+  const graphicsInputs = recorded ? launch.graphicsInputs : result?.graphicsInputs || null;
   if (session && !session.graphicsRuntimeUse) session.graphicsRuntimeUse = require("./graphics-runtime-use").createGraphicsRuntimeUse({
     session, isCurrent,
     coordinator: settingsCoordinator, managers: listRuntimeManagers(), userDataDir, readSettings: loadSettings
@@ -3636,8 +3642,8 @@ async function gameEffectsOptions(entry, settings = loadSettings()) {
     graphicsArchitecture: launch?.graphicsArchitecture || graphicsInputs?.architecture || info?.runtime?.entries?.[runtimeId]?.graphicsArchitecture,
     running: sessions.length > 0, runningPids, launchBinding, graphicsPayload, isCurrent, useRuntime, graphicsRuntimeUse: session?.graphicsRuntimeUse,
     useModel: useRuntime ? version => useRuntime({managerId: "graphics-models", version}) : undefined,
-    prepareEffectsEntry: result?.prepareEffectsEntry,
-    withGraphicsUpdate: result?.withGraphicsUpdate,
+    prepareEffectsEntry: callbacks.prepareEffectsEntry,
+    withGraphicsUpdate: callbacks.withGraphicsUpdate,
     graphicsInputs, graphicsHardware, inventoryRevision: graphicsCatalog.revision() };
 }
 // Graphics state has one owner (src/main/graphics-status.js): desired,

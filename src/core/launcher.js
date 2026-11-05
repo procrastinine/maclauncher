@@ -834,6 +834,27 @@ function createLauncher({
     return gameLifecycle.use(entry, () => runActionOnce(entry, actionId, payload, options));
   }
 
+  // The runtime that graphics inspection uses for an entry.
+  function graphicsTarget(entry, settings = loadSettings()) {
+    const effective = structuredClone(entry), moduleId = resolveModuleId(effective);
+    const mod = registry.getModule(moduleId), info = registry.getModuleInfo(moduleId);
+    effective.runtimeId = resolveRuntimeForEntry(effective.runtimeId, mod, info, effective,
+      resolveModuleSettings(settings, moduleId), settings);
+    return { mod, info, runtimeId: effective.runtimeId, effective };
+  }
+  // A module's graphics callbacks stay in the calling process and read no game
+  // files. Serializable graphics inputs come from the graphicsInputs action.
+  function graphicsCallbacks(entry, settings = loadSettings(), target = graphicsTarget(entry, settings)) {
+    const { mod, runtimeId, effective } = target;
+    if (typeof mod?.prepareEffectsEntry !== "function" && typeof mod?.withGraphicsUpdate !== "function") return { runtimeId };
+    const context = target.context ||= getLaunchContext(effective, settings, { runtimeId });
+    return { runtimeId,
+      ...(typeof mod.prepareEffectsEntry === "function" ? {prepareEffectsEntry: value => mod.prepareEffectsEntry(value, context)} : {}),
+      ...(typeof mod.withGraphicsUpdate === "function" ? {
+        withGraphicsUpdate: (value, options, publish) => mod.withGraphicsUpdate(value, context, options, publish)
+      } : {}) };
+  }
+
   async function runActionOnce(entry, actionId, payload = {}, { settings = loadSettings(), signal, runtimeId } = {}) {
     signal?.throwIfAborted();
     const moduleId = resolveModuleId(entry), mod = registry.getModule(moduleId), info = registry.getModuleInfo(moduleId);
@@ -857,25 +878,17 @@ function createLauncher({
       : await GameAvailability.checkGameAvailability(entry, { userDataDir });
     signal?.throwIfAborted();
     if (actionId === "graphicsInputs") {
-      const effective = structuredClone(entry), moduleId = resolveModuleId(effective);
-      const mod = registry.getModule(moduleId), info = registry.getModuleInfo(moduleId);
-      const runtimeId = resolveRuntimeForEntry(effective.runtimeId, mod, info, effective,
-        resolveModuleSettings(settings, moduleId), settings);
-      effective.runtimeId = runtimeId;
+      const target = graphicsTarget(entry, settings), { mod, info, runtimeId, effective } = target;
       // Effect settings stay editable without the game's files; only the
       // runtime's declared inputs apply until the files return.
-      if (!availability.available) return { runtimeId, graphicsInputs: require("../modules/shared/runtime/native-graphics-inputs")
+      if (!availability.available) return { runtimeId, filesUnavailable: true, graphicsInputs: require("../modules/shared/runtime/native-graphics-inputs")
         .withInputs({}, { runtimeId, graphicsInputs: null, declaredArchitecture: info.runtime?.entries?.[runtimeId]?.graphicsArchitecture }) };
-      const context = getLaunchContext(effective, settings, { runtimeId });
+      const context = target.context = getLaunchContext(effective, settings, { runtimeId });
       const prepared = prepareModuleInput(effective, registry, context);
       const graphicsInputs = require("../modules/shared/runtime/native-graphics-inputs").withInputs(prepared, {
         runtimeId, graphicsInputs: await mod?.resolveGraphicsInputs?.(prepared, context) || null,
         declaredArchitecture: info.runtime?.entries?.[runtimeId]?.graphicsArchitecture });
-      return { runtimeId, graphicsInputs,
-        ...(typeof mod?.prepareEffectsEntry === "function" ? {prepareEffectsEntry: value => mod.prepareEffectsEntry(value, context)} : {}),
-        ...(typeof mod?.withGraphicsUpdate === "function" ? {
-          withGraphicsUpdate: (value, options, publish) => mod.withGraphicsUpdate(value, context, options, publish)
-        } : {}) };
+      return { graphicsInputs, ...graphicsCallbacks(entry, settings, target) };
     }
     if (availability && !availability.available) throw GameAvailability.unavailableError(availability);
     if (actionId === "runtimeRecommendation") {
@@ -955,7 +968,7 @@ function createLauncher({
   }
 
   return {
-    userDataDir, loadSettings, resolveEntry, launchEntry, runAction, getLaunchContext, getGameLaunchContext, persistEntry,
+    userDataDir, loadSettings, resolveEntry, launchEntry, runAction, graphicsCallbacks, getLaunchContext, getGameLaunchContext, persistEntry,
     resolveModuleNativeLaunchPath, resolveRuntimeForEntry, resolveRuntimeSupportForEntry, resolveEntryRuntimeId, resolveEntryChecks,
     getResolvedModuleSettings,
     resolveModuleSettings, resolveToolsButtonVisible, normalizeCheatsForModule, writeCheatsFile,

@@ -295,7 +295,7 @@ test("Play, tools and saves explain missing files while settings work, and Play 
   await assert.rejects(operations.moduleAction(entry, "inspect", {}, {}), unavailable);
   await assert.rejects(operations.moduleAction(entry, "explainDetection", {}, {}), unavailable);
   const graphics = await operations.moduleAction(entry, "graphicsInputs", {}, {});
-  assert.deepEqual(graphics, { runtimeId: "runner", graphicsInputs: null }, "effect settings stay editable");
+  assert.deepEqual(graphics, { runtimeId: "runner", graphicsInputs: null, filesUnavailable: true }, "effect settings stay editable");
   assert.equal(JSON.stringify(await operations.refreshSaveLocations(entry, {})), before);
   await assert.rejects(operations.saveInfo(entry, {}), error => error.code === GameAvailability.CODE && /saves are unavailable/.test(error.message));
   await assert.rejects(operations.selectSaveLocation(entry, path.join(gamePath, "save"), {}), unavailable);

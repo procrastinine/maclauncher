@@ -27,7 +27,8 @@ function fixture(t, {live = false} = {}) {
     findGameByPath: (games, gamePath) => games.find(game => game.gamePath === gamePath), resolveModuleId: game => game.moduleId,
     Modules: { getModuleInfo: () => ({ runtime: { entries: { player: { graphicsHost: "window" } } } }) },
     graphicsInputsResult: { runtimeId: "player", graphicsInputs: { depth: true } },
-    launcherService: { runAction: async (_entry, action) => { assert.equal(action, "graphicsInputs");return context.graphicsInputsResult; } },
+    // Graphics inputs come from the game's backend lane; callbacks stay in main.
+    launcherService: { graphicsCallbacks: () => ({ runtimeId: context.graphicsInputsResult.runtimeId }) },
     runningGameSessions: new Map(live ? [[entry.gamePath, new Map([[session.id, session]])]] : []),
     ipcMain: { handle: (name, handler) => handlers.set(name, handler) },
     saveGameRecord: entry => saved.push(structuredClone(entry)), cachedState: null,
@@ -46,7 +47,10 @@ function fixture(t, {live = false} = {}) {
       if (id === "../modules/shared/reshade/hardware-support") return {inspect: async () => undefined, snapshot: () => ({state: "unknown"})};
       assert.equal(id, "../modules/shared/reshade/live-controls");return { write: entry => calls.push(["controls", entry]) };
     },
-    backendService: {invalidateGraphicsPreparation: async entry => {invalidated.push(entry.gameId);return false;}},
+    backendService: {invalidateGraphicsPreparation: async entry => {invalidated.push(entry.gameId);return false;},
+      request: async (lane, method, _entry, action) => {
+        assert.deepEqual([lane, method, action], [`game:${entry.gameId}`, "moduleAction", "graphicsInputs"]);return structuredClone(context.graphicsInputsResult);
+      }},
     refreshRuntimeSnapshots: async ids => calls.push(["refresh", ids])
   };
   const source = fs.readFileSync(path.join(__dirname, "../src/main/main.js"), "utf8");
@@ -117,6 +121,20 @@ test("effects metadata follows the effective runtime returned by the read-only g
   f.context.graphicsInputsResult.graphicsInputs.architecture = "arm64";
   await f.invoke("getGameEffectParameters", f.entry.gamePath, "node", shaderPlan());
   assert.equal(f.calls.find(row => row[0] === "describe")[3].graphicsArchitecture, "arm64");
+});
+test("effects metadata resolves graphics inputs on the game's backend lane and keeps module callbacks for available files", async t => {
+  const f = fixture(t), callbacks = [];
+  const prepareEffectsEntry = entry => entry, withGraphicsUpdate = async () => null;
+  f.context.launcherService.graphicsCallbacks = (entry, settings) => { callbacks.push(entry.gameId);return { runtimeId: "player", prepareEffectsEntry, withGraphicsUpdate }; };
+  await f.invoke("getGameEffects", f.entry.gamePath);
+  let options = f.calls.filter(row => row[0] === "info").at(-1)[1];
+  assert.deepEqual(options.graphicsInputs, { depth: true });assert.equal(options.prepareEffectsEntry, prepareEffectsEntry);assert.equal(options.withGraphicsUpdate, withGraphicsUpdate);
+  assert.deepEqual(callbacks, [f.entry.gameId]);
+  f.context.graphicsInputsResult = { runtimeId: "player", graphicsInputs: null, filesUnavailable: true };
+  await f.invoke("getGameEffects", f.entry.gamePath);
+  options = f.calls.filter(row => row[0] === "info").at(-1)[1];
+  assert.equal(options.graphicsInputs, null);assert.equal(options.prepareEffectsEntry, undefined);assert.equal(options.withGraphicsUpdate, undefined);
+  assert.equal(options.graphicsHost, "window");assert.deepEqual(callbacks, [f.entry.gameId], "callbacks wait for the game's files");
 });
 test("live publication reports the prepared document without rewriting the requested model choice", async t => {
   const f = fixture(t, {live: true});

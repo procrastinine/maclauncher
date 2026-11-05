@@ -145,7 +145,7 @@ Some renderers run part of the effect chain themselves, as the video module's mp
 
 ## Renderer input declarations
 
-A module may export `resolveGraphicsInputs(entry, context)` to describe the selected renderer's inputs and native controls. The inspector shows the same metadata together with runtime status. These status reads use installed metadata, so they never start a renderer or use the network.
+A module may export `resolveGraphicsInputs(entry, context)` to describe the selected renderer's inputs and native controls. The inspector shows the same metadata together with runtime status. These status reads use installed metadata, so they never start a renderer or use the network. Graphics settings request the inputs from the game's backend worker, so reading game files never blocks the launcher's main process. While a game runs, the inputs recorded with its launch apply.
 
 | Field | Meaning |
 | --- | --- |
