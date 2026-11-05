@@ -355,7 +355,8 @@ export function RuntimeSettingsWindow({
                     (selected && launchSettings?.[field.key] === selected ? launchRows.find((row: any) => row?.id === field.key)?.selected : undefined) ||
                     inventoryChoiceLabel(selected, context.runtimeId, state.runtimeManagers);
                   const loading = choiceLoading[field.optionsAction] === true;
-                  const disabled = fieldsDisabled || (field.gameOnly === true && !isGameScope) || (loading && !choices[field.optionsAction] && !options.length);
+                  // Static options lack the list's linked settings, so a select waits for its list and keeps the saved label meanwhile.
+                  const disabled = fieldsDisabled || (field.gameOnly === true && !isGameScope) || (loading && !choices[field.optionsAction]);
                   return <React.Fragment key={field.key}>
                     {typeof notice === "string" && notice && <div className="dim">{notice}</div>}
                     <div className="settingsRow">

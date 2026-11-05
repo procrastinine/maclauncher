@@ -5,13 +5,15 @@ const { build } = require('vite');
 const { createLibraryFixture } = require('./library-layout-fixture');
 let choices, RuntimeSettingsWindow;
 
-async function compile(relative) {
+async function compile(relative, react) {
   const bundled = await build({ configFile: false, logLevel: 'silent', build: {
     ssr: path.join(__dirname, '..', relative), write: false,
     rollupOptions: { external: id => /^react(?:-dom)?(?:\/|$)/.test(id), output: { format: 'cjs', codeSplitting: false } }
   } });
   const compiled = new Module(path.join(__dirname, 'cached-options-' + path.basename(relative) + '.cjs'), module);
-  compiled.paths = module.paths; compiled._compile(bundled.output.find(chunk => chunk.type === 'chunk').code, compiled.id);
+  compiled.paths = module.paths;
+  if (react) compiled.require = id => id === 'react' ? react : Module.prototype.require.call(compiled, id);
+  compiled._compile(bundled.output.find(chunk => chunk.type === 'chunk').code, compiled.id);
   return compiled.exports;
 }
 test.before(async () => {
@@ -134,6 +136,40 @@ test('without cached lists or a recorded launch, installed runtime inventories n
   assert.equal(label('included:d3d-renderer:dxvk', 'managed', managers), undefined, 'several copies of one engine are not guessed');
   assert.equal(label('translator-missing:1.0', 'managed', managers), undefined);
   assert.equal(label('local-runtime-version', 'managed', managers), undefined);
+});
+
+// Finds a React element in an unrendered tree, including rows passed as props.
+function element(node, match) {
+  if (!node || typeof node !== 'object') return undefined;
+  if (node.props && match(node)) return node;
+  for (const value of Array.isArray(node) ? node : Object.values(node.props || node)) { const found = element(value, match); if (found) return found; }
+  return undefined;
+}
+
+test('a select waits for its list while it loads, so static options cannot save without the list\'s linked settings', async t => {
+  storage(t); const data = fixture(), game = data.state.recents[0];
+  Object.assign(game, { moduleId: 'fixture', runtimeId: 'managed', runtimeSettings: { managed: data.inputs.runtimeSettings },
+    runtimeData: { managed: { translatorPlanInputs: { settings: { left: data.inputs.runtimeSettings.left } },
+      translatorRows: [{ id: 'left', label: 'left choice', selected: 'Recorded component 3', used: 'Recorded component 3' }] } } });
+  const { react, componentHarness } = require('./helpers/renderer-component');
+  const { RuntimeSettingsWindow: Window } = await compile('src/renderer/src/ui/components/RuntimeSettingsWindow.tsx', react);
+  let deliver;
+  const api = { moduleAction: () => new Promise(resolve => { deliver = resolve; }), setGameRuntimeSettings: async () => assert.fail('nothing is saved') };
+  const harness = componentHarness(Window, { api, state: data.state, error: null,
+    context: { scope: 'game', moduleId: 'fixture', runtimeId: 'managed', gamePath: game.gamePath } });
+  const left = tree => element(tree, node => node.props['aria-label'] === 'left choice' && 'value' in node.props);
+  try {
+    harness.render();
+    const pending = left(await harness.settle());
+    assert.equal(pending.props.disabled, true, 'only static options are present while the list loads');
+    assert.equal(pending.props.value, data.inputs.runtimeSettings.left);
+    assert.ok(element(pending.props.children, node => node.type === 'option' && node.props.value === data.inputs.runtimeSettings.left && node.props.children === 'Recorded component 3'),
+      'the saved choice keeps its label');
+    deliver(data.result);
+    const loaded = left(await harness.settle());
+    assert.equal(loaded.props.disabled, false);
+    assert.ok(element(loaded.props.children, node => node.type === 'option' && node.props.children === 'Prepared component 3'));
+  } finally { harness.close(); }
 });
 
 test('canceled and invalid refreshes preserve cached choices, report only real failure and permit successful recovery', async t => {
