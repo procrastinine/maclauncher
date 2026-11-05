@@ -39,7 +39,7 @@ You don't have to refresh before playing. If a game needs a runtime and no versi
 
 Downloads run in the background while you keep using the launcher. A download button in the Runtimes window lists everything in progress, with a progress bar and a cancel button for each.
 
-The graphics components are managed the same way, under **Runtimes → Graphics**: shader collections, imported shaders, presets, neural models and the upscaling and frame-generation components. See [Graphics and effects](/maclauncher/graphics/).
+The graphics components are managed the same way, under **Runtimes → Effects**: shader collections, imported shaders, presets, neural models and the upscaling and frame-generation components. See [Graphics and effects](/maclauncher/graphics/).
 
 ## Per-game choices
 
@@ -76,7 +76,7 @@ The **Settings** window (Cmd+,) holds preferences, and the only thing in it that
 - **Launcher**: appearance (System, Light or Dark), whether the library shows game icons and runtime tags, the default **Network access** for new games, **Steam client on Play**, the [graphics shortcuts and screenshot folder](/maclauncher/graphics/composing-effects/#shortcuts-and-screenshots), **Check for Updates…** with the result of the last check, and **Check for updates at launch**, which is off by default.
 - One section per game type, with its **Default runtime** and a tab for each runtime's settings. A tab shows **Modified** when its settings differ from the defaults.
 
-Changes save as you make them and show up in every open window straight away. Graphics presets and the shader library live in **Runtimes → Graphics**.
+Changes save as you make them and show up in every open window straight away. Graphics presets and the shader library live in **Runtimes → Effects**.
 
 ## Shortcuts
 

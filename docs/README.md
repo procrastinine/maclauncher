@@ -44,7 +44,7 @@ The app itself includes the core graphics component and internal helpers for imp
 
 ## Graphics and effects
 
-Shared graphics controls add shaders, upscaling, neural reconstruction and frame generation to game runtimes and video playback. Custom effects can come from local ReShade `.fx`, RetroArch `.slangp`/`.slang` and mpv/libplacebo `.glsl`/`.hook` shaders, with editable parameters. Downloadable shader collections are available from **Runtimes → Graphics → Shaders**.
+Shared graphics controls add shaders, upscaling, neural reconstruction and frame generation to game runtimes and video playback. Custom effects can come from local ReShade `.fx`, RetroArch `.slangp`/`.slang` and mpv/libplacebo `.glsl`/`.hook` shaders, with editable parameters. Downloadable shader collections are available from **Runtimes → Effects → Shaders**.
 
 The **Simple** controls choose a shader, a scaling method and frame generation. **Advanced…** combines effects in any order, each with its own settings and bypass control, and saves reusable presets. Effects can change while the game runs, and the game keeps its window and fullscreen behavior. The [graphics guide](graphics/README.md) describes the methods and the extra frame inputs that temporal effects and video-plane shaders use.
 

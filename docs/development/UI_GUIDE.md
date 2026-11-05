@@ -277,7 +277,7 @@ The sidebar starts with **Search settings**, followed by the sections. The first
 - **Updates**: the **Check for Updates…** button, with the result of the latest check beside it. While an update downloads, the button becomes **Cancel Download** and the result shows the progress; once the update is ready, it becomes **Restart to Update**. The button opens the same native dialogs as the menu command;
 - **Check for updates at launch**, which is off by default.
 
-The macOS Game section follows Launcher and holds the native macOS app runtime. The other sections come from the module manifests and follow in alphabetical order. The shader library and presets, however, are in Runtimes → Graphics, and a Settings link to Graphics opens that view.
+The macOS Game section follows Launcher and holds the native macOS app runtime. The other sections come from the module manifests and follow in alphabetical order. The shader library and presets, however, are in Runtimes → Effects.
 
 **Search settings** matches section labels, runtime names and runtime IDs and keeps the selected section open. When nothing matches, the sidebar shows **No matching sections**. Cmd-F focuses search. Up, Down, Home and End move through the sidebar, Up or Down from the search field moves to the results, and Enter opens the first result. Escape clears the search. Only the selected section's settings are rendered.
 
@@ -325,7 +325,7 @@ Sidebar entries are grouped under headings, in this order:
 - **Game engines**, listed alphabetically.
 - **Consoles and mobile**: PS5 (AnyPS5), Prosper, Switch (nxnative), MacLauncher Android, Mac.apk, AIM and PlayCover.
 - **Compatibility**: CrossOver, Sikarugir, DOSBox and 32-bit Mac.
-- **Graphics**: the Graphics, DirectX → Vulkan, DirectX → Metal, Vulkan drivers and Video codecs entries.
+- **Graphics**: the Effects, DirectX → Vulkan, DirectX → Metal, Vulkan drivers and Video codecs entries.
 - **Tools**, a single entry set apart by a divider line, without a heading that would repeat its name.
 
 Each module classifies its runtime groups in its manifest, and an unclassified group appears under Game engines. Search filters the entries under every heading and shows only the headings with matches. The Settings sidebar, by contrast, is a single list without headings.
@@ -372,9 +372,9 @@ Besides downloads, a runtime can come from an application already on the Mac or 
 
 For custom files, **Register custom…** follows the Installed list and opens a native file and folder picker for the current list of compatible runtimes. Custom executables, applications and complete runtime folders then join its installed choices, and download sources use the same registration control. **Remove registration** leaves the selected files in place. [Custom runtime layouts](../runtimes/CUSTOM_RUNTIME_LAYOUTS.md) describes the files each runtime needs.
 
-#### Graphics
+#### Effects
 
-The Graphics entry manages what the inspector's graphics menus can offer: upscaling and frame-generation components, imported shaders and saved presets. Its subtabs include **Providers**, **Shaders** and **Presets**.
+The Effects entry manages what the inspector's graphics menus can offer: upscaling and frame-generation components, imported shaders and saved presets. Its subtabs include **Providers**, **Shaders** and **Presets**.
 
 - **Providers** lists the components under **Upscaling and frame generation**, each with its availability. Lossless Scaling shows two lines with separate availability, LS1 spatial upscaling and LSFG frame generation, derived from the imported model files. Components whose files MacLauncher stores have **Manage**, which shows their management card below; each imported Lossless Scaling file names the families it provides.
 - **Shaders** holds the shader library, which **Manage filters…** in the inspector opens, and has two tabs. **Library** is a table of imported shaders with Name, Input → output, Origin / status and Actions columns, a search field and a type filter. In this table, **Source** expands a row to show its file path with a **Replace file…** chooser, and **Remove** leaves the files in place. Names save on Enter or when focus leaves the field, and Escape discards an edit.
