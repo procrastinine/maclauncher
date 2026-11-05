@@ -38,7 +38,7 @@ test('shared settings and runtimes keep static detail in help while preserving c
   const section = { ...state.runtimeManagers['fixture-manager'].sections[0], description: 'Catalog explanation.',
     componentsTitle: 'Components', componentsDescription: 'Component explanation.',
     components: [{ id: 'part', label: 'Runtime part', available: false, status: 'Not installed', description: 'Part explanation.' }],
-    installed: [{ version: '2.0', platformKey: 'mac-arm64', installDir: '/Runtimes/2.0', minimumMacOS: '13.0',
+    installed: [{ version: '2.0', platformKey: 'mac-arm64', installDir: '/Runtimes/2.0', minimumMacOS: '14.0',
       detail: 'Installation detail.', ready: false, error: 'Reinstall this version.', libraries: { graphics: { ready: true, label: 'Graphics library', version: '1.0' } } }],
     catalog: { versions: ['3.0', '2.0'], installable: false, installReason: 'Requires an additional tool.' } };
   const runtimes = render(RuntimesView, { runtimeManagers: [{ id: 'fixture-manager', label: 'Fixture runtimes', sections: [section] }],
@@ -47,7 +47,7 @@ test('shared settings and runtimes keep static detail in help while preserving c
     onRuntimeRefresh() {}, onRuntimeInstall() {}, onRuntimeSetDefault() {}, onRuntimeUninstall() {}, onCancelDownload() {} });
   assert.match(runtimes, /popover="auto" class="helpPopover">Component explanation\./);
   assert.match(runtimes, /class="runtimeCatalogDetails"><p>Catalog explanation\.<\/p>/);
-  assert.match(runtimes, /popover="auto" class="helpPopover"><p>mac-arm64<\/p><p>Requires macOS 13\.0 or later\.<\/p>/);
+  assert.match(runtimes, /popover="auto" class="helpPopover"><p>mac-arm64<\/p><p>Requires macOS 14\.0 or later\.<\/p>/);
   assert.doesNotMatch(runtimes, /class="runtimePanelSubtitle"|class="dim mono ellipsis runtimePath"|<div class="dim">Installation detail\./);
   assert.doesNotMatch(runtimes, /class="runtimeSectionHint"/);
   // The install reason is shown once, beside the install control.
@@ -56,8 +56,23 @@ test('shared settings and runtimes keep static detail in help while preserving c
   assert.match(runtimes, /class="dim">Reinstall this version\./);
 });
 
+// The renderer model uses bundler resolution (extensionless and JSON imports),
+// so the checks import the same module after one Vite build.
+let model, directory;
+test.before(async () => {
+  const { build } = require('vite'), fs = require('node:fs'), os = require('node:os');
+  const bundle = await build({ configFile: false, logLevel: 'silent', build: {
+    ssr: path.resolve(__dirname, '../src/renderer/src/ui/components/runtime-tabs-model.ts'), write: false,
+    rollupOptions: { output: { format: 'es', codeSplitting: false } }
+  } });
+  directory = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-tabs-model-'));
+  const file = path.join(directory, 'runtime-tabs-model.mjs');
+  fs.writeFileSync(file, bundle.output.find(chunk => chunk.type === 'chunk').code);
+  model = pathToFileURL(file).href;
+});
+test.after(() => directory && require('node:fs').rmSync(directory, { recursive: true, force: true }));
+
 function modelTest(body) {
-  const model = pathToFileURL(path.resolve(__dirname, '../src/renderer/src/ui/components/runtime-tabs-model.ts')).href;
   const script = `import assert from 'node:assert/strict';
     const { groupRuntimeManagers, runtimeGroupSections, runtimeSectionTabs, resolveRuntimeTabSelection, runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation, runtimeRemovalPresentation, isRuntimeManageable, managedRuntimeSections } = await import(${JSON.stringify(model)});
     const manager = (id, label, ui, names = ['Versions']) => ({ id, label, ui,
@@ -445,14 +460,15 @@ test('translator member declarations separate DirectX targets, Vulkan drivers an
       assert.deepEqual(runtimeGroupSections(group,sections).map(row=>row.managerId),members);
     }
     assert.equal(groups.some(group=>group.id==='translators'),false);`);
+  // Grouped catalogs are one card each, with their member catalogs as variants.
   const dxvk = sources.createManager('dxvk').getState({}).catalog;
-  assert.deepEqual(dxvk.sources.slice(0,3).map(source=>source.label), ['DXVK','DXVK-macOS','DXVK-macOS async']);
-  for (const engine of ['dxvk','dxmt']) {
-    const state = sources.createManager(engine).getState({});
-    for (const source of state.catalog.sources) {
-      assert.equal(source.sourceLabel,'Source');
-      if (source.id.startsWith('template')) assert.match(source.description,/copies taken from a Sikarugir Template release/);
-      else assert.match(source.description,/releases published by/);
-    }
+  assert.deepEqual(dxvk.sources.map(source=>source.label), ['DXVK','DXVK-macOS','Sikarugir Template']);
+  assert.deepEqual(dxvk.sources.map(source=>source.variants.map(variant=>variant.id)),
+    [['upstream','d8vk','d9vk'],['macos','async'],['template-dxvk','template-dxvk3','template-d9vk']]);
+  for (const source of dxvk.sources) { assert.equal(source.sourceLabel,'Source'); assert.ok(source.description); }
+  for (const source of sources.createManager('dxmt').getState({}).catalog.sources) {
+    assert.equal(source.sourceLabel,'Source');
+    if (source.id.startsWith('template')) assert.match(source.description,/copies taken from a Sikarugir Template release/);
+    else assert.match(source.description,/releases published by/);
   }
 });
