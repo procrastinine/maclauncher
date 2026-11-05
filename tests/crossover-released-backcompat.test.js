@@ -34,6 +34,11 @@ function fixture(t, runtimeId) {
   t.mock.method(Temporal, "resolvePlan", () => null);t.mock.method(Temporal, "resolveScenePlan", () => null);
   return {root, userDataDir, sourceRoot, original, entry, directory, mirrorRoot};
 }
+// A Windows launch path resolves through the profile's own drive mapping.
+function driveTarget(profile, windowsPath) {
+  const [drive, ...parts] = windowsPath.split("\\");
+  return path.join(fs.realpathSync(path.join(profile, "dosdevices", drive.toLowerCase())), ...parts.filter(Boolean));
+}
 function unchangedFile(file) {const info = fs.statSync(file);return {bytes: fs.readFileSync(file).toString("hex"), ino: info.ino, mtimeMs: info.mtimeMs};}
 
 for (const runtimeId of ["crossover", "sikarugir"]) test("released " + runtimeId + " bytes recover into the actual current working directory and preserve Windows profile identity", async t => {
@@ -84,9 +89,13 @@ for (const runtimeId of ["crossover", "sikarugir"]) test("released " + runtimeId
   assert.equal(launch.bottlePath || launch.prefixPath, profile, "released per-game Windows save environment adopts its stable identity");
   assert.deepEqual(unchangedFile(path.join(profile, "drive_c/users/player/profile.sav")), before, "migration and current planning leave profile bytes, inode and mtime unchanged");
   assert.equal(descriptors.some(row => row.mirrorRoot === profile || profile.startsWith(row.mirrorRoot + path.sep)), false);
-  if (runtimeId === "crossover") assert.equal(launch.args[launch.args.indexOf("--workdir") + 1], launch.workingDirectory);
-  else {
-    assert.equal(launch.args[0], f.original);
+  assert.equal(driveTarget(profile, launch.windowsWorkingDirectory), fs.realpathSync(launch.workingDirectory));
+  assert.equal(driveTarget(profile, launch.windowsExecutablePath), fs.realpathSync(f.original));
+  if (runtimeId === "crossover") {
+    assert.equal(launch.args[launch.args.indexOf("--workdir") + 1], launch.windowsWorkingDirectory);
+    assert.equal(launch.args[launch.args.indexOf("--") + 1], launch.windowsExecutablePath);
+  } else {
+    assert.deepEqual(launch.args.slice(0, 5), ["start.exe", "/d", launch.windowsWorkingDirectory, "/exec", launch.windowsExecutablePath]);
     const saves = require("../src/modules/crossover/sikarugir/provider").resolveSaveLocations(f.entry, context);
     assert.equal(saves.primaryDirectory, launch.workingDirectory);assert.ok(saves.directories.some(row => row.directory === path.join(profile, "drive_c/users")));
   }

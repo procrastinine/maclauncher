@@ -305,10 +305,9 @@ test("ordinary Play obtains one consent, prepares the Windows environment and ru
   assert.equal(spawned.options.env.WINEMSYNC, "1");
   assert.match(spawned.options.env.WINEDLLOVERRIDES, /winhttp=n,b/);
   assert.match(spawned.options.env.WINEDLLOVERRIDES, /d3d10core=b;d3d11=b;dxgi=b;winemetal=b/);
-  assert.equal(fs.realpathSync(spawned.args.at(-2)), fs.realpathSync(original));
-  assert.equal(spawned.args.at(-1), "--windowed");
+  assert.deepEqual(spawned.args.slice(-6), ["start.exe", "/d", "G:\\", "/exec", "G:\\Game.exe", "--windowed"]);
   const gameDrive = path.join(state.prefixPath, "dosdevices", "g:");
-  assert.equal(fs.existsSync(gameDrive), false);
+  assert.equal(fs.realpathSync(path.join(gameDrive, "Game.exe")), fs.realpathSync(original), "the prefix's own game drive maps the original folder");
   assert.equal(fs.realpathSync(state.gameRoot), fs.realpathSync(source));
   assert.deepEqual(fs.readFileSync(path.join(state.gameRoot, "Game.exe")), before);
   const privateWine = path.join(state.viewRoot, "wine"), installedWine = path.join(root, "runtime-payloads", "engine-12");
@@ -437,8 +436,8 @@ test("Stop ends only the selected private prefix and keeps independently spawned
       const prefix = entry.runtimeData.sikarugir.prefixPath;
       await waitUntil(() => fs.existsSync(path.join(prefix, "windows-ready")));
       windowsPids.push(Number(fs.readFileSync(path.join(prefix, "windows.pid"), "utf8")));
-      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(prefix, "wine-arguments.json"))), [path.join(entry.runtimeData.sikarugir.gameRoot, "Game.exe")]);
-      assert.equal(fs.existsSync(path.join(prefix, "dosdevices", "g:")), false);
+      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(prefix, "wine-arguments.json"))), ["start.exe", "/d", "G:\\", "/exec", "G:\\Game.exe"]);
+      assert.equal(fs.realpathSync(path.join(prefix, "dosdevices", "g:")), fs.realpathSync(entry.runtimeData.sikarugir.gameRoot));
       const environment = JSON.parse(fs.readFileSync(path.join(prefix, "windows-environment.json")));
       const privateDllRoot = path.join(entry.runtimeData.sikarugir.viewRoot, "wine", "lib", "wine");
       assert.deepEqual(environment.dlls.split(path.delimiter), [path.join(privateDllRoot, "i386-windows"),
