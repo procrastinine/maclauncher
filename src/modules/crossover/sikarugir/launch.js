@@ -111,7 +111,7 @@ function buildEnvironment(settings, installation, directory, prefixPath, graphic
   if (["msync", "esync"].includes(synchronization) && capabilities[synchronization] !== true) {
     throw new Error(`The selected Sikarugir version does not support ${synchronization === "msync" ? "MSync" : "ESync"}. Select Automatic or Off in Runtime Settings.`);
   }
-  Object.assign(environment, graphics.env || {}, parseEnvironment(settings.environment));
+  Object.assign(environment, graphics.env || {}, WineSettings.environment(settings, { needsRosetta: installation.needsRosetta, engines: { "d3d-renderer": settings.graphicsBackend, "vulkan-driver": settings.vulkanBackend } }), parseEnvironment(settings.environment));
   // The producer's Wine 11 loader requires this initialization marker before
   // loading Windows libraries, including wineboot in a fresh prefix.
   if (/^11(?:[._]|$)/.test(installation.engineVersion || "")) environment.SikarugirAppWine11 = "1";
@@ -124,7 +124,6 @@ function buildEnvironment(settings, installation, directory, prefixPath, graphic
     if (!/^[A-Za-z0-9_.@-]+$/.test(locale)) throw new Error("Locale must use a locale identifier, such as ja_JP.UTF-8.");
     environment.LANG = locale; environment.LC_ALL = locale; environment.LC_MESSAGES = locale;
   }
-  Object.assign(environment, WineSettings.environment(settings, { needsRosetta: installation.needsRosetta, engines: { "d3d-renderer": settings.graphicsBackend, "vulkan-driver": settings.vulkanBackend } }), parseEnvironment(settings.environment));
   environment.WINEDEBUG = settings.wineDebug ? safeText(settings.wineDebug, "Wine debug channels") : "-all";
   const dll = dllOverrides(settings, graphics.dllOverrides);
   if (dll) environment.WINEDLLOVERRIDES = dll;
