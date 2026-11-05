@@ -124,6 +124,8 @@ test("managed GLES 3.2 selections retain the complete closure and full launch ve
   const context = {userDataDir: os.tmpdir(), settings:{}};
   const installed = provider.installed(context)[0];
   assert.equal(installed.id, "kosmickrisp-gles32:selected");
+  assert.equal(installed.label, "KosmicKrisp selected");
+  assert.equal(Managed.createManager().ui.sectionLabel, "KosmicKrisp");
   assert.equal(installed.readable.length, 3);
   assert.equal(installed.library, path.join(payloadRoot, "libvulkan.1.dylib"));
   assert.equal(installed.minimumMacOS, "27.0");

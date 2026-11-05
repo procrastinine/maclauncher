@@ -116,7 +116,7 @@ test("saved KosmicKrisp selections retain their identity and reject only known i
     "unknown host facts keep their existing eligibility");
 });
 
-test("Intel KosmicKrisp choices are labelled for Apple Silicon while ARM choices retain their labels and order", t => {
+test("KosmicKrisp choices use compact CPU labels and retain their order", t => {
   for (const architecture of ["x64", "arm64"]) {
     const { context, dependencies } = fixture(t, architecture);
     const selected = { ...dependencies, hostCapabilities: apple };
@@ -125,7 +125,9 @@ test("Intel KosmicKrisp choices are labelled for Apple Silicon while ARM choices
     const kosmic = choices.filter(row => row.value.startsWith("kosmickrisp"));
     assert.ok(kosmic.some(row => row.value === Managed.selectionId));
     assert.ok(kosmic.length > 1);
-    assert.ok(kosmic.every(row => /Intel build for Intel programs on Apple Silicon/.test(row.label) === (architecture === "x64")));
+    const cpu = architecture === "x64" ? "Intel" : "Apple Silicon";
+    assert.ok(kosmic.every(row => row.label.includes("(" + cpu + ")")));
+    assert.ok(kosmic.every(row => !row.label.includes("Intel build for Intel programs")));
     if (architecture === "arm64") {
       assert.equal(Vulkan.resolve(context, { ...selected, preferredBackend: undefined }).backend, "moltenvk");
       for (const manager of dependencies.managers) manager.present = false;
@@ -176,7 +178,7 @@ test("first Intel Vulkan Play offers the managed Intel package once and installs
     const result = await prepareFixture(t, { host: { ...apple, launcherArch } });
     assert.deepEqual(result.events, ["consent:" + Managed.projectId, "refresh:" + Managed.projectId, "install:" + Managed.projectId, "prepare"]);
     assert.equal(result.resolved.projectId, Managed.projectId);
-    assert.ok(result.offered[0].label.includes("Intel build for Intel programs on Apple Silicon"));
+    assert.equal(result.offered[0].label, "KosmicKrisp (Intel)");
     assert.ok(result.managedManager.selections.every(architecture => architecture === "x64"), "provider resolution follows the consumer despite saved ARM defaults");
     assert.deepEqual(result.warnings, []);
   });
@@ -210,4 +212,44 @@ test("working MoltenVK suppresses a new offer and Intel hardware only offers Mol
   const incompatible = await prepareFixture(t, { host: intel });
   assert.deepEqual(incompatible.events, ["consent:vulkan-moltenvk", "refresh:vulkan-moltenvk", "install:vulkan-moltenvk", "prepare"]);
   assert.equal(incompatible.resolved.backend, "moltenvk");
+});
+
+test("unversioned managed Vulkan choices skip an ARM-only install for an Intel consumer", async t => {
+  for (const provider of Managed.providers) await t.test(provider.projectId, t => {
+    const { context, adapted } = fixture(t, "arm64"), calls = [];
+    context.runtimeSettings.vulkanRuntime = provider.selectionId;
+    context.settings.runtimes[provider.projectId] = { defaultVersion: "older", defaultArchitecture: "arm64" };
+    const oldInstall = { version: "older", installDir: path.dirname(adapted.driver) };
+    const pins = [{ version: "older", architecture: "arm64" }, { version: "newer", architecture: "x64" }];
+    const installs = new Map([["older", oldInstall]]);
+    const manager = { id: provider.projectId, label: "Managed Vulkan",
+      core: { listCatalog: () => pins },
+      getState: () => ({ catalog: { versions: pins.map(pin => pin.version), installableVersions: pins.map(pin => pin.version) } }),
+      resolveSelection(_entry, settings, _data, options) {
+        calls.push(options);
+        const version = options.version || settings.runtimes[this.id].defaultVersion;
+        return { version, ready: installs.has(version), install: installs.get(version) || null };
+      }
+    };
+    const dependencies = { architecture: "x64", hostCapabilities: apple, managers: [], adaptedManager: manager,
+      adapted: { installed: () => [{ ...adapted, version: "older", projectId: provider.projectId }] } };
+    const saved = JSON.stringify(context.settings);
+    assert.deepEqual(Vulkan.requirements(context, dependencies), [{ managerId: provider.projectId,
+      version: "newer", requiresDownload: true, installOptions: { architecture: "x64" } }]);
+    assert.equal(calls.at(-1).version, "newer");
+    assert.ok(Vulkan.choices(context, dependencies).vulkanRuntimes.some(row => row.value === provider.selectionId && row.label.endsWith("(download)")));
+    context.runtimeSettings.vulkanRuntime = provider.prefix + "older";
+    assert.throws(() => Vulkan.requirements(context, dependencies), /no compatible x64 library/,
+      "an exact game version is not replaced by another catalog version");
+    assert.equal(JSON.stringify(context.settings), saved, "manager defaults remain unchanged");
+    const other = fixture(t, "x64").adapted;
+    pins.push({ version: "other", architecture: "x64" });
+    installs.set("other", { version: "other", installDir: path.dirname(other.driver) });
+    dependencies.adapted.installed = () => [{ ...other, version: "other", projectId: provider.projectId }];
+    context.runtimeSettings.vulkanRuntime = provider.selectionId;
+    context.settings.runtimes[provider.projectId].defaultVersion = "newer";
+    assert.deepEqual(Vulkan.requirements(context, dependencies), [{ managerId: provider.projectId,
+      version: "newer", requiresDownload: true, installOptions: { architecture: "x64" } }],
+    "a compatible saved default is not replaced by another installed version");
+  });
 });
