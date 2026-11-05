@@ -6,7 +6,7 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { build } = require('vite');
 const { react, componentHarness } = require('./helpers/renderer-component');
-let RuntimesView, SettingsView, CreditsView, GameDetails, ReShadeFilterLibrary;
+let RuntimesView, SettingsView, CreditsView, GameDetails, ReShadeFilterLibrary, RuntimeSettingsWindow;
 test('cached runtime refresh failures show their failure date and redact errors and install tooltips', () => {
   const failedAt = Date.UTC(2026, 9, 24, 12), fetchedAt = Date.UTC(2026, 9, 20, 12);
   const error = 'request to https://fixture-user:fixture-password@github.com/example/runtime failed ECONNREFUSED';
@@ -32,7 +32,7 @@ test.before(async () => {
   compiled.paths = module.paths;
   compiled.require = id => id === 'react' ? react : Module.prototype.require.call(compiled, id);
   compiled._compile(bundle.output.find(chunk => chunk.type === 'chunk').code, compiled.id);
-  ({ RuntimesView, SettingsView, CreditsView, GameDetails, ReShadeFilterLibrary } = compiled.exports);
+  ({ RuntimesView, SettingsView, CreditsView, GameDetails, ReShadeFilterLibrary, RuntimeSettingsWindow } = compiled.exports);
 });
 const manager = (id, ui, catalog = {}, installed = []) => ({ id, label: `Backend ${id}`, ui,
   catalog: { status: 'idle', versions: [], ...catalog }, installed });
@@ -1067,4 +1067,22 @@ test('translator API coverage comes from actual installed libraries rather than 
   const markup=render([{...state,id:owner.id,label:owner.label,ui:owner.ui}],owner.id);
   assert.match(markup,/class="dim">Direct3D 8, Direct3D 9, Direct3D 11<\/div>/);assert.match(markup,/class="dim">Direct3D 9<\/div>/);
   assert.doesNotMatch(markup,/Direct3D 10/);assert.match(markup,/unknown/,'unrecognized API metadata does not hide an installed library');
+});
+
+test('linked runtime choices persist one advertised patch and ordinary choices keep single-field behavior', async () => {
+  function nodes(value){if(!value||typeof value!=='object')return [];if(Array.isArray(value))return value.flatMap(nodes);return [value,...nodes(value.props?.children),...nodes(value.props?.rows),...nodes(value.control)];}
+  for(const scope of ['module','game']){
+    const state=require('./library-layout-fixture').createLibraryFixture(),calls=[],context={scope,moduleId:'fixture',runtimeId:'managed',...(scope==='game'?{gamePath:state.recents[0].gamePath}:{})};
+    const fields=[{key:'left',label:'First API',type:'select',default:'saved-unknown',optionsAction:'choices',optionsKey:'leftOptions'},{key:'right',label:'Second API',type:'select',default:'keep',optionsAction:'choices',optionsKey:'rightOptions'},{key:'other',label:'Unrelated',type:'string',default:'preserve'}];
+    state.modules[0].runtime.entries.managed.settings={fields};
+    const result={leftOptions:[{value:'linked',label:'Linked component',groupId:'pair',runtimeSettingsPatch:{left:'linked',right:'partner'}},{value:'ordinary',label:'Single component'}],rightOptions:[{value:'keep',label:'Current'},{value:'partner',label:'Partner'}],translatorRoles:[{id:'first',label:'First API',settingsKey:'left',optionsKey:'leftOptions',groupId:'pair'}],translatorGroups:[{id:'pair',label:'First and second APIs',reason:'Shared physical library'}],unknownMetadata:[{future:'kept'}]};
+    const api={moduleAction:async()=>result,moduleSettingsAction:async()=>result,setModuleRuntimeSettings:async(...args)=>calls.push(['module',...args]),setGameRuntimeSettings:async(...args)=>calls.push(['game',...args])};
+    const h=componentHarness(RuntimeSettingsWindow,{api,state,context,error:null});
+    try{h.render();let tree=await h.settle(),markup=renderToStaticMarkup(tree);assert.match(markup,/Shared physical library/);assert.match(markup,/value="saved-unknown"/);
+      let select=nodes(tree).find(node=>node.props?.['aria-label']==='First API');await select.props.onChange({target:{value:'linked'}});
+      assert.equal(calls.length,1);assert.equal(calls[0][0],scope);assert.deepEqual(calls[0].at(-1),{left:'linked',right:'partner',other:'preserve'});
+      tree=await h.settle();select=nodes(tree).find(node=>node.props?.['aria-label']==='First API');await select.props.onChange({target:{value:'ordinary'}});
+      assert.equal(calls.length,2);assert.deepEqual(calls[1].at(-1),{left:'ordinary',right:'partner',other:'preserve'});
+    }finally{h.close();}
+  }
 });

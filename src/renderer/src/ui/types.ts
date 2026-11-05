@@ -84,6 +84,15 @@ export type ModuleUi = {
   cheatsMode?: "default" | "patches";
 };
 
+export type RuntimeSettingOption = {
+  value: string;
+  label: string;
+  runtimeSettingsPatch?: Record<string, unknown>;
+  groupId?: string;
+  affectedRoles?: string[];
+  [key: string]: unknown;
+};
+
 export type RuntimeSettingField = {
   hidden?: boolean; inheritanceInOptions?: boolean;
   key: string;
@@ -97,7 +106,7 @@ export type RuntimeSettingField = {
   max?: number;
   step?: number;
   default?: unknown;
-  options?: Array<{ value: string; label: string }>;
+  options?: RuntimeSettingOption[];
   optionsAction?: string;
   optionsKey?: string;
   pickerAction?: string;

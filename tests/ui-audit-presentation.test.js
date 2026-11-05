@@ -709,3 +709,14 @@ test('runtime summaries keep description, requirements, setup and data details t
   assert.doesNotMatch(markup, /<p class="dim">(?:Compatible application|macOS 15|Automatic setup|Separate application)/);
 });
 
+
+test('schema-declared setting options retain linked patches and unrelated action metadata', async () => {
+  const option={value:'opaque:publisher-choice',label:'Prepared component',runtimeSettingsPatch:{left:'opaque:publisher-choice',right:'opaque:related-choice'}};
+  const result={leftOptions:[option],translatorRoles:[{id:'api-role',label:'API scope',settingsKey:'left',optionsKey:'leftOptions',groupId:'shared'}],translatorGroups:[{id:'shared',label:'Linked APIs',reason:'Shared physical binding'}],futureMetadata:{publisher:'unchanged'},unrelated:[{notAnOption:true}]};
+  const received=[],failures=[],settled=[];
+  components.loadSettingChoices(['choices'],async()=>result,(_action,value)=>received.push(value),(_action,error)=>failures.push(error),action=>settled.push(action),[{key:'left',type:'select',label:'Left',optionsAction:'choices',optionsKey:'leftOptions'}]);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(failures,[]);assert.deepEqual(settled,['choices']);assert.deepEqual(received,[result]);assert.equal(received[0].leftOptions[0],option);assert.equal(received[0].futureMetadata,result.futureMetadata);
+  components.loadSettingChoices(['choices'],async()=>({...result,leftOptions:[{value:'invalid',label:123}]}),()=>assert.fail('Invalid declared choices'),(_action,error)=>failures.push(error),()=>{},[{key:'left',type:'select',label:'Left',optionsAction:'choices',optionsKey:'leftOptions'}]);
+  await new Promise(resolve=>setImmediate(resolve));assert.equal(failures.length,1);
+});

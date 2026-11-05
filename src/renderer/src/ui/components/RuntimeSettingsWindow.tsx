@@ -1,7 +1,7 @@
 import { Select } from "./Select";
 import { RefreshIcon } from "../icons";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import type { LauncherApi, LauncherState, RuntimeSettingsContext, RuntimeSettingField, RuntimeSettingsSchema } from "../types";
+import type { LauncherApi, LauncherState, RuntimeSettingsContext, RuntimeSettingField, RuntimeSettingOption, RuntimeSettingsSchema } from "../types";
 import {
   buildRuntimeSettingsDefaults,
   formatModuleLabel,
@@ -24,7 +24,7 @@ import { CommitNumberInput, CommitTextArea, CommitTextInput } from "./CommitInpu
 import { ErrorText } from "./ErrorText";
 import { Toggle } from "./FieldRow";
 import { createQueuedWriter, type QueuedWriter } from "./queued-write-model";
-import { loadSettingChoices, settingChoiceRequest, type SettingChoices } from "./runtime-setting-choices";
+import { loadSettingChoices, settingChoiceRequest, settingChoiceScope, type SettingChoices } from "./runtime-setting-choices";
 import { RuntimeFileSetting } from "./RuntimeFileSetting";
 
 export type RuntimeSettingsApi = Pick<LauncherApi, "setModuleRuntimeSettings" | "setGameRuntimeSettings"> & Partial<Pick<LauncherApi, "moduleAction" | "moduleSettingsAction">>;
@@ -227,7 +227,7 @@ export function RuntimeSettingsWindow({
     return loadSettingChoices(actions, action => request(action, { environmentReference: inheritanceValue, runtimeSettings: displaySettings }),
       (action, groups) => setChoices(previous => ({ ...previous, [action]: groups })),
       (_action, error) => setChoiceError(error instanceof Error ? error.message : String(error)),
-      action => setChoiceLoading(previous => ({ ...previous, [action]: false })));
+      action => setChoiceLoading(previous => ({ ...previous, [action]: false })), schema?.fields);
   }, [api?.moduleAction, api?.moduleSettingsAction, context.moduleId, context.gamePath, context.runtimeId, isGameScope, choiceActions, choiceRevision, inheritanceValue, visibilityRevision]);
 
   saveCallback.current = async currentDraft => {
@@ -268,8 +268,14 @@ export function RuntimeSettingsWindow({
   }
 
   function onFieldChange(key: string, value: any) {
-    const nextDraft = { ...(draftRef.current || savedSettings || {}), [key]: value };
-    for (const field of schema?.fields || []) if (field.inheritFrom === key) nextDraft[field.key] = value && value !== "private" ? "inherit" : baseDefaults?.[field.key];
+    return onFieldsChange({ [key]: value });
+  }
+  function onFieldsChange(patch: Record<string, unknown>) {
+    const nextDraft = { ...(draftRef.current || savedSettings || {}), ...patch };
+    for (const field of schema?.fields || []) if (field.inheritFrom && Object.hasOwn(patch, field.inheritFrom)) {
+      const value = patch[field.inheritFrom];
+      nextDraft[field.key] = value && value !== "private" ? "inherit" : baseDefaults?.[field.key];
+    }
     draftRef.current = nextDraft;
     setDraft(nextDraft);
     setDirty(true);
@@ -323,17 +329,20 @@ export function RuntimeSettingsWindow({
                   request={fileRequest} onChange={value => onFieldChange(field.key, value)} />;
                 if (field.optionsAction) {
                   const selected = String((displaySettings as any)[field.key] || "");
-                  const listed = choices[field.optionsAction]?.[field.optionsKey || field.key] || field.options || [];
+                  const listed: RuntimeSettingOption[] = choices[field.optionsAction]?.[field.optionsKey || field.key] || field.options || [];
                   const options = field.optionsAction === "listRuntimeVersions" ? runtimeVersionOptions(listed) : listed;
+                  const scope = settingChoiceScope(choices[field.optionsAction], field, options.find(option => option.value === selected));
                   const loading = choiceLoading[field.optionsAction] === true;
                   const disabled = fieldsDisabled || (field.gameOnly === true && !isGameScope) || (loading && !choices[field.optionsAction]);
                   return <div className="settingsRow" key={field.key}>
-                    <div className="settingsLabel">{field.label}{field.description && <HelpTip label={`About ${field.label}`}>{field.description}</HelpTip>}</div>
+                    <div className="settingsLabel">{field.label}{field.description && <HelpTip label={`About ${field.label}`}>{field.description}</HelpTip>}
+                      {scope && <div className="dim">{scope}</div>}</div>
                     <div className="settingsControl">
                       <Select className="input" aria-label={field.label} value={selected} disabled={disabled}
-                        onChange={event => onFieldChange(field.key, event.target.value)}>
+                        onChange={event => { const value = event.target.value, option = options.find(option => option.value === value);
+                          return onFieldsChange(option?.runtimeSettingsPatch || { [field.key]: value }); }}>
                         {!options.some(option => option.value === selected) && <option value={selected}>{selected ? (loading || !choices[field.optionsAction] ? "Loading saved selection…" : "Selected option unavailable") : "Off"}</option>}
-                        {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        {options.map(option => <option key={option.value} value={option.value} title={settingChoiceScope(choices[field.optionsAction!], field, option) || undefined}>{option.label}</option>)}
                       </Select>
                       <button type="button" className="btn iconOnly" title={`Refresh ${field.label}`} aria-label={`Refresh ${field.label}`} disabled={disabled || loading}
                         onClick={() => setChoiceRevision(value => value + 1)}><RefreshIcon /></button>
@@ -432,7 +441,7 @@ export function RuntimeSettingsWindow({
                 const rendered = renderField ? renderField(field, control, onFieldChange) : control;
                 if (!externalSettings || !field.inheritFrom || field.inheritanceInOptions) return rendered;
                 const inherited = displaySettings[field.key] === "inherit";
-                const current = choices[schema.inheritanceAction || ""]?.inheritedValues?.find(row => row.value === field.key)?.label || "Current environment value unavailable";
+                const current = choices[schema.inheritanceAction || ""]?.inheritedValues?.find((row: RuntimeSettingOption) => row.value === field.key)?.label || "Current environment value unavailable";
                 return <React.Fragment key={field.key}>
                   <div className="settingsRow"><div className="settingsLabel">{field.label}</div><div className="settingsControl">
                     <Select className="input" aria-label={field.label + " source"} value={inherited ? "inherit" : "custom"}

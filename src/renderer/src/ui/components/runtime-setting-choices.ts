@@ -1,7 +1,13 @@
-import type { LauncherApi, RuntimeSettingsContext } from "../types";
+import type { LauncherApi, RuntimeSettingField, RuntimeSettingOption, RuntimeSettingsContext } from "../types";
 import { isRuntimeSettingChoiceValue } from "../../../../core/runtime-setting-values.mjs";
 
-export type SettingChoices = Record<string, Array<{ value: string; label: string }>>;
+export type SettingChoices = Record<string, any>;
+
+export function settingChoiceScope(choices: SettingChoices | undefined, field: RuntimeSettingField, option?: RuntimeSettingOption) {
+  const role = Array.isArray(choices?.translatorRoles) ? choices.translatorRoles.find((row: any) => row?.settingsKey === field.key) : null;
+  const group = Array.isArray(choices?.translatorGroups) ? choices.translatorGroups.find((row: any) => row?.id === (option?.groupId || role?.groupId)) : null;
+  return [...new Set([group?.label, group?.reason, role?.reason].filter(value => typeof value === "string" && value))].join(" · ");
+}
 
 export function settingChoiceRequest(
   api: Partial<Pick<LauncherApi, "moduleAction" | "moduleSettingsAction">> | undefined,
@@ -22,21 +28,23 @@ export function loadSettingChoices(
   request: (action: string) => Promise<unknown>,
   receive: (action: string, choices: SettingChoices) => void,
   failed: (action: string, error: unknown) => void,
-  settled: (action: string) => void
+  settled: (action: string) => void,
+  fields: RuntimeSettingField[] = []
 ) {
   let active = true;
   for (const action of actions) {
     void Promise.resolve().then(() => request(action)).then(result => {
       if (!active) return;
-      if (!result || typeof result !== "object" || Array.isArray(result) || Object.keys(result).length > 16)
+      if (!result || typeof result !== "object" || Array.isArray(result))
         throw new Error("Local setting choices are unavailable.");
-      const groups: SettingChoices = {};
-      for (const [key, options] of Object.entries(result)) {
-        if (!Array.isArray(options) || options.length > 256 || options.some(option => !option ||
+      const groups: SettingChoices = { ...result };
+      for (const key of new Set(fields.filter(field => field.optionsAction === action).map(field => field.optionsKey || field.key))) {
+        const options = groups[key];
+        if (options === undefined) continue;
+        if (!Array.isArray(options) || options.some(option => !option ||
             !isRuntimeSettingChoiceValue(option.value) || typeof option.label !== "string" ||
-            option.label.length > 512 || /[\x00-\x1f\x7f]/.test(option.value + option.label)))
+            /[\x00-\x1f\x7f]/.test(option.value + option.label)))
           throw new Error("Local setting choices are invalid.");
-        groups[key] = options;
       }
       receive(action, groups);
     }).catch(error => { if (active) failed(action, error); })

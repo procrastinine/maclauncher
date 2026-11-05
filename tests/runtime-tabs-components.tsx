@@ -3,3 +3,5 @@ export { SettingsView } from "../src/renderer/src/ui/components/SettingsView";
 export { CreditsView } from "../src/renderer/src/ui/components/CreditsView";
 export { GameDetails } from "../src/renderer/src/ui/components/GameDetails";
 export { ReShadeFilterLibrary } from "../src/renderer/src/ui/components/ReShadeFilterLibrary";
+
+export { RuntimeSettingsWindow } from "../src/renderer/src/ui/components/RuntimeSettingsWindow";
