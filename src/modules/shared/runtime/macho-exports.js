@@ -133,8 +133,9 @@ async function readCommands(read, slice, requestedCpu) {
 }
 
 function parseTrie(bytes) {
-  if (!bytes.length) return [];
+  if (!bytes.length) return { exports: [], reexports: [], complete: true };
   const nodes = new Map(), occupied = new Uint8Array(bytes.length), active = new Set(), symbols = new Set();
+  const reexports = [];
   let visits = 0, stringWork = 0;
   function uleb(cursor, end) {
     let value = 0n;
@@ -167,12 +168,12 @@ function parseTrie(bytes) {
     const cursor = { position: offset }, terminalSize = offsetValue(cursor, bytes.length);
     range(cursor.position, terminalSize, bytes.length, "export terminal");
     const terminalEnd = cursor.position + terminalSize;
-    let defined = false;
+    let defined = false, reexport = null;
     if (terminalSize) {
       const flags = offsetValue(cursor, terminalEnd);
       if (flags > 0x3f || (flags & 3) === 3 || ((flags & 8) && (flags & 0x30))) fail("Unsupported export terminal flags.");
-      uleb(cursor, terminalEnd); // address, or an ordinal for a reexport
-      if (flags & 8) decode(string(cursor, terminalEnd));
+      const address = uleb(cursor, terminalEnd); // address, or an ordinal for a reexport
+      if (flags & 8) reexport = { ordinal: Number(address), imported: decode(string(cursor, terminalEnd)) };
       else {
         if (flags & 0x10) uleb(cursor, terminalEnd); // resolver address, never invoked
         defined = true;
@@ -194,7 +195,7 @@ function parseTrie(bytes) {
     }
     for (let i = offset; i < cursor.position; i += 1) if (occupied[i]) fail("Overlapping export trie nodes.");
     occupied.fill(1, offset, cursor.position);
-    const value = { defined, children };
+    const value = { defined, children, reexport };
     nodes.set(offset, value);
     return value;
   }
@@ -208,6 +209,10 @@ function parseTrie(bytes) {
     active.add(item.offset);
     const value = node(item.offset);
     if (value.defined) addSymbol(symbols, decode(item.prefix));
+    if (value.reexport) {
+      const symbol = normalized(decode(item.prefix));
+      reexports.push({ symbol, ordinal: value.reexport.ordinal, imported: value.reexport.imported ? normalized(value.reexport.imported) : symbol });
+    }
     stack.push({ offset: item.offset, leave: true });
     for (let i = value.children.length - 1; i >= 0; i -= 1) {
       const child = value.children[i];
@@ -216,12 +221,12 @@ function parseTrie(bytes) {
       stack.push({ offset: child.offset, prefix: Buffer.concat([item.prefix, child.edge], length), depth: item.depth + 1 });
     }
   }
-  return [...symbols].sort();
+  return { exports: [...symbols].sort(), reexports, complete: true };
 }
 
 async function parseSymbols(read, commands) {
   const table = commands.symtab;
-  if (!table) return [];
+  if (!table) return { exports: [], reexports: [], complete: false };
   const stride = commands.wide ? 16 : 12, count = bounded(table.count, LIMITS.symbolRecords, "Symbol record count");
   bounded(table.stringsSize, LIMITS.stringTableBytes, "String table bytes");
   range(table.offset, count * stride, commands.slice.size, "symbol table");
@@ -237,15 +242,16 @@ async function parseSymbols(read, commands) {
     }
     [start, length] = commands.dysymtab.external;
   }
-  if (!length) return [];
+  if (!length) return { exports: [], reexports: [], complete: true };
   const records = await read(commands.slice.offset + table.offset + start * stride, length * stride);
   const strings = await read(commands.slice.offset + table.stringsOffset, table.stringsSize);
   const names = new Map(), symbols = new Set();
-  let stringWork = 0;
+  let stringWork = 0, complete = true;
   for (let i = 0; i < length; i += 1) {
     const offset = i * stride;
     const index = commands.little ? records.readUInt32LE(offset) : records.readUInt32BE(offset);
     const type = records[offset + 4], kind = type & 0x0e;
+    if (kind === 10) complete = false; // N_INDR needs a target relationship.
     if (index && index >= strings.length) fail("Invalid symbol string offset.");
     // N_INDR is not proof of a definition in this image; unresolved aliases
     // and imports must not qualify a native API implementation.
@@ -259,7 +265,7 @@ async function parseSymbols(read, commands) {
     }
     addSymbol(symbols, names.get(index));
   }
-  return [...symbols].sort();
+  return { exports: [...symbols].sort(), reexports: [], complete };
 }
 
 async function inspectFile(handle, size, cpu) {
@@ -286,7 +292,7 @@ async function inspectFile(handle, size, cpu) {
  * Stat/realpath reads also participate in the backend's file-observation cache.
  * The optional filesystem seam is for bounded-read/cache tests and Node hosts.
  */
-function createMachOExportInspector({ fileSystem = fs.promises } = {}) {
+function createMachOExportInspector({ fileSystem = fs.promises, details = false } = {}) {
   const cache = new Map();
   // The default slice belongs to the consuming process; callers can request a different runtime CPU.
   return async function inspectMachOExports(file, { arch = process.arch } = {}) {
@@ -299,7 +305,8 @@ function createMachOExportInspector({ fileSystem = fs.promises } = {}) {
     const previous = cache.get(key);
     if (previous?.identity === identity) {
       cache.delete(key); cache.set(key, previous);
-      return [...await previous.result];
+      const info = await previous.result;
+      return details ? structuredClone(info) : [...info.exports];
     }
     const entry = { identity, result: null };
     entry.result = (async () => {
@@ -313,10 +320,11 @@ function createMachOExportInspector({ fileSystem = fs.promises } = {}) {
     })();
     cache.set(key, entry);
     while (cache.size > LIMITS.cacheEntries) cache.delete(cache.keys().next().value);
-    try { return [...await entry.result]; }
+    try { const info = await entry.result; return details ? structuredClone(info) : [...info.exports]; }
     catch (error) { if (cache.get(key) === entry) cache.delete(key); throw error; }
   };
 }
 
 const inspectMachOExports = createMachOExportInspector();
-module.exports = { inspectMachOExports, createMachOExportInspector };
+const inspectMachOExportInfo = createMachOExportInspector({ details: true });
+module.exports = { inspectMachOExports, inspectMachOExportInfo, createMachOExportInspector };
