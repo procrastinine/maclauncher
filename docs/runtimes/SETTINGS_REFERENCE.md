@@ -1164,7 +1164,7 @@ Runtimes tabs: CrossOver (managed); Sikarugir (managed); Graphics â†’ DirectX â†
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
 | Default Direct3D engine | Runtime automatic, the runtime's named engines and versions installed in Runtimes | Runtime automatic | Applies to every Direct3D API without a choice of its own. [Translator selection](TRANSLATORS.md). |
-| Direct3D 8 / 9 / 10 / 11 | Actual installed API implementations, Automatic or environment inheritance | Existing selection | Shared DXGI/native scopes change together. Missing or incompatible selections retain selected-versus-used reasons and the coherent fallback. |
+| Direct3D 8 / 9 / 10 / 11 | Installed implementations of that API, Automatic, or the wrapper's own setting | Existing selection | **Existing selection** keeps the default Direct3D engine for that API. Choices that share DXGI or native modules change together. A missing or incompatible choice falls back to a consistent set of components, and the inspector shows the selected and used components with the reason. |
 | Direct3D 12 | Automatic, Wine vkd3d, D3DMetal and versions installed in Runtimes | Runtime automatic | KosmicKrisp is recommended for vkd3d-proton. |
 | Vulkan driver | Automatic, installed MoltenVK and KosmicKrisp versions | Runtime automatic | [Translator selection](TRANSLATORS.md). |
 | Video codecs | Runtime default or registered codec folder | Runtime default | GStreamer plugins use the selected folder. |
@@ -1185,7 +1185,7 @@ Runtimes tabs: CrossOver (managed); Sikarugir (managed); Graphics â†’ DirectX â†
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
 | Default Direct3D engine | Runtime automatic, the runtime's named engines and versions installed in Runtimes | Runtime automatic | Applies to every Direct3D API without a choice of its own. [Translator selection](TRANSLATORS.md). |
-| Direct3D 8 / 9 / 10 / 11 | Actual installed API implementations, Automatic or environment inheritance | Existing selection | Shared physical DLL scopes change together; unresolved CrossOver Automatic stays global. |
+| Direct3D 8 / 9 / 10 / 11 | Installed implementations of that API, Automatic, or the bottle's own setting | Existing selection | **Existing selection** keeps the default Direct3D engine for that API. Choices that share DLLs change together. While CrossOver's automatic choice is unresolved, it applies to every API. |
 | Direct3D 12 | Automatic, Wine vkd3d, D3DMetal and versions installed in Runtimes | Runtime automatic | KosmicKrisp is recommended for vkd3d-proton. |
 | Vulkan driver | Automatic, installed MoltenVK and KosmicKrisp versions | Runtime automatic | [Translator selection](TRANSLATORS.md). |
 | Video codecs | Runtime default or registered codec folder | Runtime default | GStreamer plugins use the selected folder. |

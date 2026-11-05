@@ -102,6 +102,7 @@ Most of the above runtimes are existing tools with MacLauncher managing them. Ho
 - Similarly, a [macOS port of AnyPS5](docs/game-types/PS5.md).
 - Also, custom macOS ports of [ONScripter-EN](docs/game-types/NSCRIPTER.md), [AI5](docs/game-types/AI5.md), [KAG3](docs/game-types/KIRIKIRI.md), and [ReMinori](docs/game-types/MINORI.md).
 - Automatic [offline Steam API support](docs/runtimes/STEAM_API.md) (for things needing Steam API before play).
+- [KosmicKrisp GLES 3.2](src/modules/shared/vulkan/README.md), our own build of KosmicKrisp that adds the Vulkan features upstream is missing (transform feedback, wireframe/point fill, single-texel buffer alignment and variable multisample rate), implemented on Metal rather than stubbed. This lets ANGLE do OpenGL ES 3.2 for Android games, and lets DXVK and vkd3d-proton run on KosmicKrisp in CrossOver and Sikarugir.
 
 # MacLauncher as a graphics and effects layer
 

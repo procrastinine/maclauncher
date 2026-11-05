@@ -96,7 +96,14 @@ KosmicKrisp runs only on Apple Silicon, yet WINE needs an Intel build of it, bec
 
 ### KosmicKrisp GLES 3.2
 
-MacLauncher publishes its own build of KosmicKrisp in MacLauncher Builds. It adds three Vulkan features that upstream KosmicKrisp lacks: geometry shaders, transform feedback and generated-primitive queries. With those, ANGLE, the layer that provides OpenGL ES to Android games, can offer OpenGL ES 3.2 when it renders through Vulkan. Like KosmicKrisp itself, the build needs an Apple Silicon Mac with macOS 26 or later. A package that includes an Intel (x86-64) build also serves WINE games, which list it as a Vulkan driver.
+MacLauncher publishes its own build of KosmicKrisp in MacLauncher Builds. It adds Vulkan features that upstream KosmicKrisp lacks, each one implemented on Metal rather than stubbed:
+
+- transform feedback and primitives-generated queries, which DXVK uses for Direct3D's stream output, and which ANGLE, the layer that provides OpenGL ES to Android games, needs to offer OpenGL ES 3.2 when it renders through Vulkan
+- wireframe and point fill modes, which DXVK requires
+- texel buffer views aligned to a single texel, which vkd3d-proton requires
+- rendering without attachments at differing sample counts, which Direct3D 11.1 and 12 need
+
+Like KosmicKrisp itself, the build needs an Apple Silicon Mac with macOS 26 or later. It also comes as an Intel build, so CrossOver and Sikarugir games can choose it as their **Vulkan driver** and run DXVK, vkd3d-proton or a Vulkan game on it. CrossOver includes only MoltenVK, so this build also brings KosmicKrisp to CrossOver games.
 
 ### MoltenVK or KosmicKrisp
 

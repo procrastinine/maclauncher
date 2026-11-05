@@ -118,7 +118,7 @@ For a game in an existing wrapper, each setting defaults to **Wrapper setting**,
 
 ## Translators
 
-[Graphics translators](TRANSLATORS.md) describes how the translator choices are installed, loaded and checked. Runtimes groups the translators as DirectX → Vulkan, DirectX → Metal, Vulkan drivers and video codecs, and Runtime Settings arranges the Direct3D choices from Direct3D 8 to 12. Their versions, API scope and sources come from installed files. Direct3D APIs that share DXGI or native modules use one coherent set of physical bindings in the private graphics view. For a game in an existing wrapper, each control also offers the wrapper's current setting. A runtime version is installed once, and private graphics views and prefix DLLs link to that installation. Prepared loader trees are shared between games that use the same inputs.
+[Graphics translators](TRANSLATORS.md) describes how the translator choices are installed, loaded and checked. Runtimes groups the translators as DirectX → Vulkan, DirectX → Metal, Vulkan drivers and video codecs, and Runtime Settings arranges the Direct3D choices from Direct3D 8 to 12. Their versions, API scope and sources come from installed files. Direct3D APIs that share DXGI or native modules use one consistent set of those files in the private graphics view. For a game in an existing wrapper, each control also offers the wrapper's current setting. A runtime version is installed once, and private graphics views and prefix DLLs link to that installation. Prepared loader trees are shared between games that use the same inputs.
 
 DXMT, DXVK, DXVK3, D9VK and D3DMetal can be installed from Template component catalogs without installing another Wine engine. Registered folders stay at their original locations.
 

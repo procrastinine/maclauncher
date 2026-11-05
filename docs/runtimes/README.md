@@ -109,7 +109,7 @@ Each downloadable runtime lists its published versions in a catalog, and Play pi
 
 An explicitly chosen version is never replaced with a different version. When it cannot be installed or is incompatible, Play instead reports the specific reason, such as a required engine ABI, CPU architecture or macOS version.
 
-The inspector lists locally installed versions and runtime libraries, not catalog-only downloads. When a version has both Intel and Apple Silicon copies installed, its entries carry **(Intel)** and **(Apple Silicon)**; selecting one saves that CPU for the game. A single installed copy keeps its plain version label. A saved choice whose installation is absent remains visible once as **(not installed)**, and Play uses normal download consent if needed. Damaged installed copies remain visible as **Needs repair**.
+The inspector lists the versions and runtime libraries installed on the Mac; versions that a catalog only offers for download do not appear there. When both Intel and Apple Silicon copies of a version are installed, its entries carry **(Intel)** and **(Apple Silicon)**, and selecting one saves that CPU for the game. A version with a single installed copy keeps its plain label. A saved choice that is no longer installed stays in the list once, marked **(not installed)**, and Play asks for the usual download consent if it is needed. Damaged copies also stay visible, marked **Needs repair**.
 
 The inspector also records the game's engine and bytecode versions with their source and confidence, and runtime selection applies the game type's format and version requirements. Each [game-type page](../game-types/README.md) describes its formats and architectures.
 
@@ -198,7 +198,7 @@ Some catalogs also publish builds for another architecture that the Mac can run.
 
 An Intel Mac lists only Intel and Universal builds, and a runtime with no build it can run lists no version. Builds for both architectures can be installed at the same time; an installed version built for an architecture other than the automatic one carries an **Intel** or **Apple Silicon** label. A source that has been loaded but lists no build for the selected architecture shows a note and the small reload button, while **Load versions** appears only for a source that has not been loaded. [System requirements](SYSTEM_REQUIREMENTS.md) lists the architectures of each runtime.
 
-For a selected version, a verified installed copy takes precedence over downloading another CPU build. The launcher's CPU is preferred among installed copies, followed by any CPU the Mac can run, including Intel through Rosetta on Apple Silicon. An explicit CPU choice remains authoritative. A missing blocking runtime component can require repair; a missing optional companion does not require downloading the base runtime again.
+For a selected version, a verified installed copy is used before another CPU build is downloaded. Among installed copies, the launcher's own CPU comes first, followed by any other CPU the Mac can run, including Intel through Rosetta on Apple Silicon. An explicit CPU choice is always followed. A missing component that the runtime cannot run without can require a repair, whereas a missing optional companion never causes the base runtime to be downloaded again.
 
 ### Default versions
 
