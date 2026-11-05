@@ -877,10 +877,10 @@ test('translator source links use one caption with explicit project and Template
     const owner=create(engine), state={...owner.getState({}),id:owner.id,label:owner.label,ui:owner.ui};
     const markup=render([state],owner.id);
     const links=[...markup.matchAll(/class="runtimeSourceLink"[^>]*>([^<]+)<\/a>/g)].map(match=>match[1]);
-    assert.ok(links.length);assert.ok(links.every(label=>label==='Source'));
+    assert.ok(links.length);if(engine!=='gstreamer')assert.ok(links.every(label=>label==='Source'));
     if(engine==='dxvk') { assert.match(markup,/DXVK-macOS async/);assert.match(markup,/DXVK-macOS releases published by Gcenx\/DXVK-macOS/); }
     if(engine!=='gstreamer')assert.match(markup,/copies taken from a Sikarugir Template release/);
-    else { assert.match(markup,/class="runtimeSourceName">GStreamer<\/span>/);assert.match(markup,/GStreamer publishes multimedia libraries and plugins/); }
+    else { assert.match(markup,/class="runtimeSourceLink"[^>]*>GStreamer<\/a>/);assert.doesNotMatch(markup,/runtimeSources|Load versions|No downloadable versions/); }
   }
   for(const owner of require('../src/modules/shared/vulkan/libraries').managers) {
     const markup=render([{...owner.getState({}),id:owner.id,label:owner.label,ui:owner.ui}],owner.id);
@@ -975,4 +975,34 @@ test('included translator references use host records and shared release facts w
   templateHosts=[];
   CrossOver.__test.writeRegistry(userDataDir,{applications:[],ignoredPaths:[]});
   assert.equal(dxmt.getState(options).references,undefined);assert.match(render([{...dxmt.getState(options),id:dxmt.id,label:dxmt.label,ui:dxmt.ui}],dxmt.id),/No runtime versions installed yet/);
+});
+
+test('local codec registration and Apple upstream links use ordinary runtime presentation', () => {
+  const {createManager}=require('../src/modules/shared/runtime/translator-managers');
+  const codecs=createManager('gstreamer'),local=codecs.getState({});
+  const markup=render([{...local,id:codecs.id,label:codecs.label,ui:codecs.ui}],codecs.id,{onRuntimeRegister(){assert.fail('No registration during render');}});
+  assert.equal(codecs.delivery.catalog,'none');assert.equal(local.catalog.delivery,'local-files');
+  assert.match(markup,/Register custom/);assert.match(markup,/No codec folders registered/);
+  assert.doesNotMatch(markup,/Load versions|No downloadable versions|data-runtime-source|>Install</);
+  const metal=createManager('d3dmetal'),state=metal.getState({});
+  assert.ok(state.catalog.sourceLinks.some(link=>link.url==='https://developer.apple.com/games/game-porting-toolkit/'));
+  const apple=render([{...state,id:metal.id,label:metal.label,ui:metal.ui}],metal.id);
+  assert.match(apple,/href="https:\/\/developer\.apple\.com\/games\/game-porting-toolkit\/"[^>]*>Apple Game Porting Toolkit downloads<\/a>/);
+  assert.match(apple,/Sikarugir Template/);
+});
+
+test('persisted generic-tag source labels render actual asset packages without Refresh or positional ties', t => {
+  const fs=require('node:fs'),os=require('node:os'),root=fs.mkdtempSync(path.join(os.tmpdir(),'cached-template-presentation-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const CrossOver=require('../src/modules/crossover/runtime/manager'),Sika=require('../src/modules/crossover/sikarugir/runtime/manager');
+  t.mock.method(CrossOver.core,'listInstalled',()=>[]);const original=Sika.core;Sika.core={...original,listInstalled:()=>[]};t.after(()=>{Sika.core=original;});
+  t.mock.method(globalThis,'fetch',()=>assert.fail('Cached presentation must stay offline'));
+  const manager=require('../src/modules/shared/runtime/translator-managers').createManager('dxmt'),source=manager.getState({}).catalog.sourceUrl;
+  const versions=['1.0.21','1.0.26'],entries=versions.map(version=>({version:'template-Template-'+version,upstreamRevision:'published-template-release',catalogSourceId:'template',component:'dxmt',architecture:'universal',
+    versionLabel:'v1.0 (Sikarugir Template)',asset:{filename:`Template-${version}.tar.xz`,url:`https://github.com/Sikarugir-App/Template/releases/download/v1.0/Template-${version}.tar.xz`,integrity:'recorded-local'}}));
+  const Catalog=require('../src/modules/shared/runtime/runtime-catalog');Catalog.writeRuntimeCatalog({userDataDir:root,managerId:manager.id,entries,source});
+  const file=Catalog.catalogPath(root,manager.id),before=fs.readFileSync(file),state=manager.getState({userDataDir:root});
+  const markup=render([{...state,id:manager.id,label:manager.label,ui:manager.ui}],manager.id);
+  for(const version of versions)assert.match(markup,new RegExp(`Template ${version.replaceAll('.','\\.')} · DXMT component`));
+  for(const row of entries)assert.ok(markup.includes(`value="${row.version}"`));
+  assert.doesNotMatch(markup,/\(2\)|earlier build|v1\.0 \(Sikarugir Template\)/);assert.deepEqual(fs.readFileSync(file),before);
 });
