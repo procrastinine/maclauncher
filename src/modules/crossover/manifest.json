@@ -59,7 +59,6 @@
       "sikarugir-graphics-bridge": {
         "groupId": "translators",
         "tabLabel": "Translators",
-        "sectionLabel": "DXMT support",
         "memberOrder": 26,
         "management": "managed"
       }

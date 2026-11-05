@@ -257,7 +257,7 @@ test('registry metadata exposes manageable production groups while exposing mana
       [['Sikarugir', 'sikarugir']]);
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'crossover'), sections).map(choice => [choice.label, choice.managerId]),
       [['CrossOver', 'crossover']]);
-    assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'translators'), sections).filter(choice => choice.label === 'DXMT support')
+    assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'translators'), sections).filter(choice => choice.label === 'DXMT')
       .map(choice => choice.managerId), ['sikarugir-graphics-bridge']);
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.label === 'Flash'), sections).map(choice => [choice.label, choice.managerId]),
       [['Flash Player', 'flash-projector'], ['Ruffle', 'ruffle'], ['JPEXS FFDec', 'ffdec']]);
