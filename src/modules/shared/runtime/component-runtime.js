@@ -117,7 +117,8 @@ function includedReferences(engine, options = {}) {
             reference: { managerId, version: host.version, path: sourcePath }, source: value.source, installDir: value.root,
             minimumMacOS: value.macosFloor, architectures, apis: value.apis, platformKey: architectures.join(", "), detail: value.version ? `Component ${value.version.replace(/\s+/g, " ")}` : sourceLabel });
           hostsByReference.set(version, { version: templateVersion || host.upstreamVersion || "", wineVersion: wineVersion || "",
-            name: host.displayName || host.name, folder: value.templateComponent, manager, hostVersion: host.version });
+            name: host.displayName || host.name, folder: value.templateComponent, manager, hostVersion: host.version,
+            translator: value, install: host, qualifiers: {} });
         }
       } catch (error) { warn(`${sourcePath}: ${error.message}`); }
     }
@@ -130,7 +131,8 @@ function includedReferences(engine, options = {}) {
   }
   for (const row of result) if (folders.get(row.versionLabel).size > 1) {
     const host = hostsByReference.get(row.version);
-    if (host.folder) row.versionLabel += ` · ${host.folder}`;
+    host.qualifiers.folder = host.folder;
+    row.versionLabel = translatorLabel(host.translator, host.install, host.qualifiers);
   }
   const counts = new Map(), hostStates = new Map();
   for (const row of result) counts.set(row.versionLabel, (counts.get(row.versionLabel) || 0) + 1);
@@ -140,11 +142,21 @@ function includedReferences(engine, options = {}) {
       try { hostStates.set(host.manager, host.manager.getState(options).versionLabels || {}); }
       catch (error) { warn(error.message); hostStates.set(host.manager, {}); }
     }
-    // Use the host manager's presentation, never its opaque install key or
-    // folder name. Omit provenance already stated in the component label.
-    const displayed = hostStates.get(host.manager)[host.hostVersion] || host.name || "";
-    const suffix = displayed.split(/\s*·\s*/).filter(part => part && !row.versionLabel.includes(part)).join(" · ");
-    if (suffix) row.versionLabel += ` · ${suffix}`;
+    // The shared producer omits host provenance already stated in the label.
+    host.qualifiers.hostVersionLabel = hostStates.get(host.manager)[host.hostVersion] || host.name || "";
+    row.versionLabel = translatorLabel(host.translator, host.install, host.qualifiers);
+  }
+  counts.clear();
+  for (const row of result) {
+    const host = hostsByReference.get(row.version);
+    const key = JSON.stringify([row.versionLabel, host.qualifiers.hostVersionLabel]);
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  for (const row of result) {
+    const host = hostsByReference.get(row.version);
+    if (counts.get(JSON.stringify([row.versionLabel, host.qualifiers.hostVersionLabel])) < 2) continue;
+    host.qualifiers.hostName = host.name;
+    row.versionLabel = translatorLabel(host.translator, host.install, host.qualifiers);
   }
   const order = require("./version-order").compareVersions;
   return result.sort((a, b) => order(hostsByReference.get(b.version).version, hostsByReference.get(a.version).version) ||

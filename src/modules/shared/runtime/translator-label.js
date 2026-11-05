@@ -18,9 +18,13 @@ function hostLabel(host, source) {
   const version = template || host?.upstreamVersion;
   return displayText([name, version && !String(name).endsWith(` ${version}`) ? version : ""].filter(Boolean).join(" ") || host?.displayName || host?.name);
 }
-function label(value, host) {
+function label(value, host, { folder, hostVersionLabel, hostName } = {}) {
   if (!value) return "";
   const source = hostLabel(host, value.source) || (typeof value.source === "string" ? value.source : "");
-  return displayText([componentLabel(value), source].filter(Boolean).join(" · "));
+  const parts = [componentLabel(value), source].filter(Boolean);
+  for (const part of [folder, ...displayText(hostVersionLabel).split(/\s*·\s*/), hostName].map(displayText)) {
+    if (part && !parts.some(existing => existing.includes(part))) parts.push(part);
+  }
+  return displayText(parts.join(" · "));
 }
 module.exports = { componentLabel, hostLabel, label };
