@@ -63,7 +63,10 @@ function readInfoPlist(appPath, { detection } = {}) {
 }
 
 function readInfoPlistUncached(appPath, { detection } = {}) {
-  const infoPath = plistPath(appPath);
+  return readPlistFile(plistPath(appPath), { detection });
+}
+
+function readPlistFile(infoPath, { detection } = {}) {
   const raw = readBundleBytes(infoPath, detection, MAX_PLIST_BYTES);
   if (!raw || raw.length < 16) return null;
 
@@ -367,6 +370,7 @@ function copyAppBundle(sourceAppPath, destAppPath) {
 }
 
 module.exports = {
+  readPlistFile,
   readInfoPlist,
   inspectApplicationBundle,
   readAppBundleExecutableName,
