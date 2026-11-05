@@ -150,10 +150,12 @@ test("Sikarugir failed and canceled renderer repairs preserve the previous regis
   const install = await manager.core.installVersion({ userDataDir: root, version: pin.version });
   omitLegacyRenderers(install);
   const recordFile = path.join(install.installDir, "runtime.json"), before = fs.readFileSync(recordFile);
-  failure = "checksum";
+  // Verified archives are reused from the download cache; removing it makes each repair download again.
+  const clearDownloads = () => fs.rmSync(path.join(root, "runtimes", "artifacts"), { recursive: true, force: true });
+  failure = "checksum";clearDownloads();
   await assert.rejects(manager.installRuntime({ userDataDir: root, version: pin.version }), /Template-1\.0\.24\.tar\.xz does not match the checksum its publisher lists/);
   assert.deepEqual(fs.readFileSync(recordFile), before);
-  failure = "cancel";
+  failure = "cancel";clearDownloads();
   const controller = new AbortController();
   await assert.rejects(manager.installRuntime({ userDataDir: root, version: pin.version, signal: controller.signal }), { name: "AbortError" });
   assert.deepEqual(fs.readFileSync(recordFile), before);
@@ -349,6 +351,8 @@ test("Sikarugir rejects support checksum mismatch and cancellation without publi
   await manager.refreshCatalog({ userDataDir: root, force: true });
   for (const architecture of ["arm64", "x64"]) {
     const catalogs = readCatalogs();
+    // The verified support archive from an earlier attempt is cached for every CPU; a new download is checked again.
+    fs.rmSync(path.join(root, "runtimes", "artifacts"), { recursive: true, force: true });
     served[row.template.asset.url] = Buffer.from("broken support!");
     await assert.rejects(manager.core.installVersion({ userDataDir: root, version: row.version, architecture }), /Template-1\.0\.21\.tar\.xz does not match the checksum its publisher lists/);
     served[row.template.asset.url] = Buffer.from("support archive");
