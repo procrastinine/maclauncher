@@ -310,7 +310,7 @@ async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoo
   }
   if (cameraBridge && selection.components.includes("dxmt") && dlss.dxmt)
     await linkFile(cameraBridge.dxmt.native, path.join(dllRoot, "x86_64-unix/maclauncher-dxmt-original.so"), signal);
-  const gstreamer = path.join(frameworks, "GStreamer.framework", "Versions", "1.0"), gstLib = path.join(gstreamer, "lib");
+  const gstreamer = Closure.gstreamerPaths(support), gstLib = gstreamer.lib;
   const external = selection.components.includes("d3dmetal") ? path.join(renderers, "d3dmetal", "external") : null;
   const libraryPaths = [path.join(dllRoot, layout.unixName), ...selectedUnix, ...(external ? [external] : []), path.join(engine, "lib", "wine", layout.unixName), frameworks,
     ...(fs.existsSync(gstLib) ? [gstLib] : [])];
@@ -320,9 +320,9 @@ async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoo
   Object.assign(env, DLSS.environment(dlss));
   if (selection.components.includes("dxmt") && dlss.dxmt) Object.assign(env, require("../../temporal").environment(cameraBridge, dllRoot));
   if (fs.existsSync(gstLib)) {
-    env.GST_PLUGIN_SYSTEM_PATH_1_0 = path.join(gstLib, "gstreamer-1.0");
+    env.GST_PLUGIN_SYSTEM_PATH_1_0 = gstreamer.plugins;
     env.GST_PLUGIN_PATH_1_0 = "";
-    const scanner = path.join(gstreamer, "libexec", "gstreamer-1.0", "gst-plugin-scanner");
+    const scanner = gstreamer.scanner;
     if (fs.existsSync(scanner)) env.GST_PLUGIN_SCANNER_1_0 = scanner;
   }
   if (!translatorPlan && selection.vulkanBackend !== "auto") {

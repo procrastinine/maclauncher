@@ -31,7 +31,10 @@ function selectedDescriptions(plan) {
     .map(([, row]) => ({ ...row.used, inherited: row.inherited })), ...(plan?.additional || [])];
 }
 function filesIdentity(descriptions) {
-  return descriptions.map(item => [item.id, item.files.map(file => [file.path, fs.existsSync(file.path) ? fileDigest(file.path).sha256 : null])]);
+  return descriptions.map(item => [item.id, item.files.map(file => [file.path, fs.existsSync(file.path) ? fileDigest(file.path).sha256 : null]),
+    ...(item.videoPreparation ? [[item.videoPreparation.pluginDirectories, item.videoPreparation.excludedFiles,
+      item.videoPreparation.bindings.map(binding => [binding.source, binding.target, fileDigest(binding.target).sha256]),
+      item.videoPreparation.hostFiles.map(file => [file.path, fileDigest(file.path).sha256])]] : [])]);
 }
 /** Shared, content-keyed links to ordinary runtime installations. No per-game payload copies. */
 async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logger = console } = {}, previousIdentity) {
@@ -84,8 +87,12 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logge
       continue;
     }
     if (item.component === 'video') {
-      const directories = [...new Set(item.files.filter(file => file.format === 'macho').map(file => path.dirname(file.path)))];
-      env.GST_PLUGIN_PATH = directories.join(path.delimiter); env.GST_PLUGIN_PATH_1_0 = env.GST_PLUGIN_PATH;
+      if (plan.components.video?.inherited && !plan.components.video.fallback) continue;
+      const preparation = item.videoPreparation || { pluginDirectories: item.pluginDirectories?.length ? item.pluginDirectories :
+        [...new Set(item.files.filter(file => file.format === 'macho').map(file => path.relative(item.root, path.dirname(file.path)) || '.'))] };
+      const view = await require('./native-library-view').prepareNativeLibraryView(item, { root: path.join(root, 'video'),
+        ...preparation, signal, logger });
+      env.GST_PLUGIN_PATH = view.pluginDirectories.join(path.delimiter); env.GST_PLUGIN_PATH_1_0 = env.GST_PLUGIN_PATH;
       continue;
     }
     for (const file of plan.apiMode ? item.files : plan.compatibility?.[item.id]?.files || item.files) {
@@ -111,7 +118,7 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logge
       }
     }
   }
-  const nativeFiles = selected.flatMap(item => plan.apiMode ? item.files : plan.compatibility?.[item.id]?.files || item.files).filter(file => file.format === 'macho');
+  const nativeFiles = selected.filter(item => item.component !== 'video').flatMap(item => plan.apiMode ? item.files : plan.compatibility?.[item.id]?.files || item.files).filter(file => file.format === 'macho');
   const libraryPaths = [...new Set(nativeFiles.map(file => path.dirname(fs.realpathSync(file.path))))];
   const frameworkPaths = [...new Set(nativeFiles.flatMap(file => {
     const index = file.path.indexOf('.framework/'); return index < 0 ? [] : [path.dirname(file.path.slice(0, index + 10))];
@@ -120,7 +127,7 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logge
   if (!fs.existsSync(record) || fs.readFileSync(record, 'utf8') !== text) Writable.atomicWrite(record, text, { root });
   return { root, identity, links, native, dllOverrides: [...new Set(dllOverrides)], env, libraryPaths, frameworkPaths };
   } catch (error) {
-    if (error !== stale) throw error;
+    if (error !== stale && error.code !== 'NATIVE_LIBRARY_VIEW_STALE') throw error;
     warn(logger, `[translators] ${error.message} Preparing another shared generation; the old view is retained.`);
     return prepareTranslatorFiles(plan, { userDataDir, layout, signal, logger }, identity);
   }

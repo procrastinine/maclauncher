@@ -1167,7 +1167,7 @@ Runtimes tabs: CrossOver (managed); Sikarugir (managed); Graphics â†’ DirectX â†
 | Direct3D 8 / 9 / 10 / 11 | Installed implementations of that API, Automatic, or the wrapper's own setting | Existing selection | **Existing selection** keeps the default Direct3D engine for that API. Choices that share DXGI or native modules change together. A missing or incompatible choice falls back to a consistent set of components, and the inspector shows the selected and used components with the reason. |
 | Direct3D 12 | Automatic, Wine vkd3d, D3DMetal and versions installed in Runtimes | Runtime automatic | KosmicKrisp is recommended for vkd3d-proton. |
 | Vulkan driver | Automatic, installed MoltenVK and KosmicKrisp versions | Runtime automatic | [Translator selection](TRANSLATORS.md). |
-| Video codecs | Runtime default or registered codec folder | Runtime default | GStreamer plugins use the selected folder. |
+| Video codecs | Runtime default or installed codec component | Runtime default | Plugin-only search paths use a shared dependency view and the runtime's established core; optional unusable plugins are reported separately. |
 | Game temporal integration | On/Off | Off | Expose the game's DLSS option through MetalFX Temporal. A shared temporal upscaler also enables this integration automatically. Requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26.4 or later, with matching NVAPI/NGX libraries. DLSS must be enabled in the game settings. Changes apply on the next launch. |
 | DirectDraw compatibility | On/Off | Off | Use CNC-DDraw for 32-bit games with a software DirectDraw renderer. Direct3D settings remain separate. |
 | Synchronization | Automatic; MSync; Off | Automatic | Availability depends on the selected Wine version. |
@@ -1188,7 +1188,7 @@ Runtimes tabs: CrossOver (managed); Sikarugir (managed); Graphics â†’ DirectX â†
 | Direct3D 8 / 9 / 10 / 11 | Installed implementations of that API, Automatic, or the bottle's own setting | Existing selection | **Existing selection** keeps the default Direct3D engine for that API. Choices that share DLLs change together. While CrossOver's automatic choice is unresolved, it applies to every API. |
 | Direct3D 12 | Automatic, Wine vkd3d, D3DMetal and versions installed in Runtimes | Runtime automatic | KosmicKrisp is recommended for vkd3d-proton. |
 | Vulkan driver | Automatic, installed MoltenVK and KosmicKrisp versions | Runtime automatic | [Translator selection](TRANSLATORS.md). |
-| Video codecs | Runtime default or registered codec folder | Runtime default | GStreamer plugins use the selected folder. |
+| Video codecs | Runtime default or installed codec component | Runtime default | Plugin-only search paths use a shared dependency view and the runtime's established core; optional unusable plugins are reported separately. |
 | Game temporal integration | On/Off | Off | Expose the game's DLSS option through MetalFX Temporal. A shared temporal upscaler also enables this integration automatically. Requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later, with matching NVAPI/NGX libraries. DLSS must be enabled in the game settings. Changes apply on the next launch. |
 | Synchronization | Automatic; MSync; ESync (older CrossOver versions); Off | Automatic |  |
 | Language locale | Text |  | Optional locale identifier, such as ja_JP.UTF-8 or en_US.UTF-8. |

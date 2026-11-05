@@ -187,8 +187,10 @@ test('API-mode preparation retains exact independent Vulkan and video source fil
   }
   const view = await Files.prepareTranslatorFiles(plan, { userDataDir: context.userDataDir, layout: plan.layout });
   assert.equal(JSON.parse(fs.readFileSync(view.env.VK_DRIVER_FILES, 'utf8')).ICD.library_path, driver);
-  assert.deepEqual(new Set(view.env.GST_PLUGIN_PATH.split(path.delimiter)),
-    new Set([path.join(f.root, 'video/plugins'), path.join(f.root, 'video/plugins/more')]));
+  const pluginRoots = view.env.GST_PLUGIN_PATH.split(path.delimiter);
+  assert.deepEqual(new Set(pluginRoots.map(directory => path.relative(path.join(view.root, 'video'), directory))),
+    new Set(['plugins', 'plugins/more']));
+  assert.equal(fs.realpathSync(path.join(pluginRoots[0], 'a.dylib')), path.join(f.root, 'video/plugins/a.dylib'));
   assert.equal(view.links['lib/wine/x86_64-unix/libMoltenVK.dylib'], path.join(f.root, 'vulkan/libvulkan.1.dylib'));
 });
 

@@ -9,7 +9,7 @@ const Roles = require('./translator-roles');
 const SETTINGS = Object.freeze({ 'd3d-renderer': 'translatorRenderer', 'vulkan-driver': 'translatorVulkan', d3d12: 'translatorD3D12', video: 'translatorVideo' });
 
 function includedTranslators(install, runtime, { engine: requestedEngine } = {}) {
-  const layout = wineLayout(install), result = [], warnings = [];
+  const layout = wineLayout(install), result = [], warnings = [], nativeRoots = [];
   const source = { kind: runtime, id: install.version || layout.root, runtime, label: runtime === 'crossover' ? `CrossOver ${install.upstreamVersion || ''}`.trim() : `Sikarugir Template ${install.templateVersion || ''}`.trim() };
   const add = (root, engine, component, extra = {}) => {
     if (requestedEngine && engine !== requestedEngine) return;
@@ -40,9 +40,12 @@ function includedTranslators(install, runtime, { engine: requestedEngine } = {})
     add(path.join(layout.root, 'lib64/libMoltenVK.dylib'), 'moltenvk', 'vulkan-driver', { form: 'dylib' });
     add(path.join(layout.root, 'lib64/gstreamer-1.0'), 'gstreamer', 'video', { form: 'dylib' });
   } else {
-    const { RELATIVE_PATHS, templateRenderers } = require('../../crossover/sikarugir/graphics/closure');
+    const { RELATIVE_PATHS, templateRenderers, gstreamerPaths } = require('../../crossover/sikarugir/graphics/closure');
     const support = install.templateRoot || install.supportRoot || path.join(install.installDir, 'support');
-    add(path.join(support, RELATIVE_PATHS.frameworks, 'GStreamer.framework/Versions/1.0/lib/gstreamer-1.0'), 'gstreamer', 'video', { form: 'dylib' });
+    const gstreamer = gstreamerPaths(support);
+    add(gstreamer.plugins, 'gstreamer', 'video', { form: 'dylib' });
+    // This is the same explicit DYLD root used by the Sikarugir launcher.
+    if (fs.existsSync(gstreamer.lib)) nativeRoots.push(gstreamer.lib);
     const rendererPath = fs.existsSync(path.join(support, RELATIVE_PATHS.renderers)) ? RELATIVE_PATHS.renderers : templateRenderers(support, install.templateVersion);
     const renderers = rendererPath && path.join(support, rendererPath);
     if (renderers) for (const name of fs.readdirSync(renderers).sort()) {
@@ -72,7 +75,7 @@ function includedTranslators(install, runtime, { engine: requestedEngine } = {})
     version: install.wineVersion || install.engineVersion || '', form: 'builtin', root: layout.root, files: direct3DFiles.filter(file => !d3d12Files.includes(file)) }));
   if ((!requestedEngine || requestedEngine === 'vkd3d') && d3d12Files.length) result.push(Description.description({ id: 'included:d3d12:vkd3d', included: true, component: 'd3d12', engine: 'vkd3d', source,
     version: d3d12Files[0].version || '', form: 'builtin', root: layout.root, files: d3d12Files }));
-  return { included: result, warnings, layout };
+  return { included: result, warnings, layout, nativeRoots };
 }
 function runtimeManagers() {
   const registry = require('../../registry');
@@ -152,7 +155,10 @@ function environmentContext(context, install) {
   return reference ? { ...context, wineEnvironment: reader.readEnvironment(reference, { userDataDir: context.userDataDir, crossoverRoot: install?.crossoverRoot }) } : context;
 }
 async function resolve(install, runtime, context, { executableArchitecture, host = {}, ...dependencies } = {}) {
-  const input = inventory(install, runtime, context, dependencies), record = await Binary.wineCompatibilityRecord(install), compatibility = {};
+  const input = inventory(install, runtime, context, dependencies);
+  // CrossOver resolves its own LC_RPATH edges. Only an existing launcher-owned
+  // search context may override those edges, never a package's nearby names.
+  const record = await Binary.wineCompatibilityRecord(install, { nativeRoots: input.nativeRoots }), compatibility = {};
   for (const description of [...input.included, ...input.choices]) compatibility[description.id] = Binary.compatibility(description, record,
     { executableArchitecture, macOSVersion: host.macOSVersion || systemVersionSync() });
   const roleRequested = Roles.DIRECT3D_ROLES.some(role => role.id !== 'd3d12' && context.runtimeSettings?.[role.settingsKey]);
@@ -171,6 +177,14 @@ async function resolve(install, runtime, context, { executableArchitecture, host
         { executableArchitecture, macOSVersion: host.macOSVersion || systemVersionSync() })];
     }))])) : {};
   const plan = { ...Plan.resolvePlan({ ...input, compatibility }), layout: input.layout, compatibility, record };
+  const videoRow = plan.components.video, selectedVideo = videoRow.selected || videoRow.used;
+  if (selectedVideo && fs.existsSync(selectedVideo.root) && !(videoRow.inherited && !videoRow.fallback)) {
+    const video = await require('./native-plugin-libraries').resolvePluginLibraries(selectedVideo, record,
+      { executableArchitecture, macOSVersion: host.macOSVersion || systemVersionSync() });
+    compatibility[selectedVideo.id] = { ...compatibility[selectedVideo.id], compatible: true, reason: null,
+      warnings: video.warnings, files: video.description.files };
+    videoRow.used = video.description; videoRow.fallback = false; videoRow.reason = null;
+  }
   let automaticRenderer = null, automaticAdditional = [];
   if (runtime === 'sikarugir') {
     const automatic = row => row.value === Plan.AUTOMATIC || (row.fallback || row.inherited) && !row.used;
@@ -216,6 +230,7 @@ async function resolve(install, runtime, context, { executableArchitecture, host
       role.id === 'd3d12' ? null : [input.environment?.selections?.['d3d-renderer']].find(item => item &&
         (!item.apis?.length || item.apis.some(api => role.apis.includes(api)))) || null])) : null });
   plan.warnings = Plan.fallbackWarnings(plan);
+  plan.warnings.push(...(plan.components.video.used?.videoPreparation?.warnings || []));
   if (plan.components.d3d12.used?.engine === 'vkd3d-proton' && plan.components['vulkan-driver'].used?.engine !== 'kosmickrisp')
     plan.warnings.push('KosmicKrisp is recommended for vkd3d-proton. The saved selection is being used with the selected Vulkan driver.');
   const used = value => JSON.stringify([value.apiMode, Object.values(value.components).map(row => [row.used?.id, row.used?.engine, row.used?.form, row.used?.root, row.used?.files?.map(file => [file.path, file.machine])]),

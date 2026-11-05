@@ -122,6 +122,8 @@ For a game in an existing wrapper, each setting defaults to **Wrapper setting**,
 
 DXMT, DXVK, DXVK3, D9VK and D3DMetal can be installed from Template component catalogs without installing another Wine engine. Registered folders stay at their original locations.
 
+Video components retain Sikarugir's scanner, system-plugin paths and established GStreamer/GObject core. Only selected plugin directories enter the plugin search path; private dependency neighborhoods use the shared prepared view. Optional unusable plugins are reported while usable siblings remain available. Inherited video settings do not add another component view.
+
 ## Graphics
 
 Per-game ReShade effects use the shared [graphics pipeline](../graphics/SHARED_PROCESSING.md) with the selected Wine version, graphics backend and Windows environment. Effects can be switched while the game runs, and the shared Wine installation stays unchanged.

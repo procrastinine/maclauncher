@@ -109,6 +109,8 @@ For a game in an existing bottle, each setting defaults to **Bottle setting**, f
 
 Translator catalogs and local registrations share their runtime storage with Sikarugir. Components installed inside CrossOver are referenced in place and are used for CrossOver launches only.
 
+Video components add only their plugin directories. Their private preparation reuses CrossOver's established native core dependencies and preserves its scanner and system-plugin defaults. Component dependency directories do not enter global library search paths; optional unusable plugins are reported separately from usable siblings.
+
 ## Graphics
 
 Before each launch, the selected translator is checked against the actual Wine CPU, PE machine type, native macOS minimum and required Wine imports. When a file is missing or a requirement is proven missing, the same engine included with this CrossOver is used instead, or CrossOver's automatic choice when it has no such engine. Metadata that cannot be read leaves the selection active. The inspector names the selected and used engines and explains any fallback, and [System requirements](SYSTEM_REQUIREMENTS.md#windows-compatibility-runtimes) lists the related components.

@@ -7,6 +7,11 @@ const { TEMPLATE_RENDERERS } = require("../../../shared/runtime/feature-requirem
 
 // Installed support copies always use this layout, whatever the Template's own.
 const RELATIVE_PATHS = Object.freeze({ frameworks: "Frameworks", renderers: "Frameworks/renderer", vulkan: "Resources/vulkan/icd.d" });
+function gstreamerPaths(support) {
+  const root = path.join(support, RELATIVE_PATHS.frameworks, 'GStreamer.framework/Versions/1.0');
+  const lib = path.join(root, 'lib');
+  return { root, lib, plugins: path.join(lib, 'gstreamer-1.0'), scanner: path.join(root, 'libexec/gstreamer-1.0/gst-plugin-scanner') };
+}
 // Lowest macOS versions for optional components. A component library that
 // declares a later deployment target raises its floor. D3DMetal's compiler
 // dependency floor is recorded with the shared Template requirements.
@@ -183,4 +188,4 @@ async function stageTemplateClosure({ templateRoot, destinationRoot, signal, tem
   } catch (error) { await fs.promises.rm(destination, { recursive: true, force: true }); throw error; }
 }
 
-module.exports = { RELATIVE_PATHS, MINIMUM_MACOS, templateContents, templateRenderers, stageTemplateClosure, inspectTemplateClosure, inside, boundedText };
+module.exports = { RELATIVE_PATHS, MINIMUM_MACOS, gstreamerPaths, templateContents, templateRenderers, stageTemplateClosure, inspectTemplateClosure, inside, boundedText };
