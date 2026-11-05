@@ -1981,17 +1981,29 @@ function removeEphemeralEntry(gamePath, { gameId } = {}) {
   return true;
 }
 
+// A runtimeState event replaces its manager's stored state object, so an
+// unchanged manager reuses its encoded snapshot when the library state is rebuilt.
+const LOADING_RUNTIME_STATE = { installed: [], catalog: { versions: [], loading: true } };
+const encodedRuntimeStates = new WeakMap();
+function encodedRuntimeState(state) {
+  let encoded = encodedRuntimeStates.get(state);
+  if (!encoded) {
+    encoded = require("../core/runtime-state-snapshot.mjs").snapshotRuntimeState(withRunnableBuilds(state));
+    encodedRuntimeStates.set(state, encoded);
+  }
+  return encoded;
+}
 function buildRuntimeManagerState(settings) {
   const out = {};
   for (const manager of listRuntimeManagers()) {
     if (!manager || typeof manager.getState !== "function") continue;
-    const state = runtimeStateSnapshots[manager.id] || { installed: [], catalog: { versions: [], loading: true } };
+    const state = runtimeStateSnapshots[manager.id] || LOADING_RUNTIME_STATE;
     const ui = Modules.getRuntimeManagerUi(manager.id) || state.ui || manager.ui || undefined;
     // A runtime this Mac can never run, such as an Apple-Silicon-only host on an Intel Mac, is not offered.
     if (unavailableReason(ui?.hostFeature)) continue;
     out[manager.id] = {
       label: manager.label || manager.id,
-      ...require("../core/runtime-state-snapshot.mjs").snapshotRuntimeState(withRunnableBuilds(state)),
+      ...encodedRuntimeState(state),
       id: manager.id,
       ui
     };

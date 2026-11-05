@@ -13,12 +13,16 @@ const { systemVersionSync, versionAtLeast } = require("./bundled-native");
 const Custom = require("./custom-runtime");
 const { selectRuntimeVersion, managerDefaultVersion } = require("./version-choices");
 
+// Catalog sorts compare often enough that each comparison reuses one module lookup.
+let versionOrder;
+const VersionOrder = () => versionOrder ||= require("./version-order.mjs");
+
 // Release stems retain their committed ordering; source hashes identify builds.
 function compareRuntimeVersions(left, right) {
   const sourceID = /^(?=[a-f0-9]*[a-f])[a-f0-9]{7,}(?:[-_]|$)/i;
   if (sourceID.test(String(left)) || sourceID.test(String(right))) return 0;
   const stem = value => String(value).replace(/[-_][a-f0-9]{7,}(?:[-_].*)?$/i, "");
-  return require("./version-order.mjs").compareVersions(stem(right), stem(left));
+  return VersionOrder().compareVersions(stem(right), stem(left));
 }
 
 function hashFile(filePath, algorithm = "sha256") {
@@ -862,7 +866,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
   function getState({ settings, userDataDir } = {}) {
     loadCatalog(userDataDir);
     const cfg = normalizeSettings(settings);
-    const sortVersion = pin => String(sourceFor(pin)?.versionOf?.(pin) || require("./version-order.mjs").catalogVersion(pin));
+    const sortVersion = pin => String(sourceFor(pin)?.versionOf?.(pin) || VersionOrder().catalogVersion(pin));
     const installed = (userDataDir || bundledExecution === "direct" ? listRuntimeRows(userDataDir) : [])
       .map(row => {
         const pin = row.catalogEntry || entries.get(row.version) || row, translator = row.translator || row.installationMetadata?.translator;

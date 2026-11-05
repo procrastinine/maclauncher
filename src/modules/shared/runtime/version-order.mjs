@@ -2,6 +2,11 @@
 // runs compare as numbers. Build hashes identify builds but do not order them.
 const HASH = /[-_][a-f0-9]{7,}(?=$|[-_.])/gi;
 
+// Shared collators order exactly like localeCompare with the same options,
+// without building a collator for every comparison.
+const NUMERIC = new Intl.Collator(undefined, { numeric: true });
+const NUMERIC_BASE = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
 function orderKey(value) {
   return String(value ?? "").trim().replace(/^v(?=\d)/i, "").replace(HASH, "");
 }
@@ -12,7 +17,7 @@ export function compareVersions(left, right) {
   if (aa && bb) {
     const av = aa[1].split("."), bv = bb[1].split(".");
     for (let index = 0; index < Math.max(av.length, bv.length); index++) {
-      const compared = (av[index] || "0").localeCompare(bv[index] || "0", undefined, { numeric: true });
+      const compared = NUMERIC.compare(av[index] || "0", bv[index] || "0");
       if (compared) return compared;
     }
     const suffixA = aa[2], suffixB = bb[2];
@@ -23,9 +28,9 @@ export function compareVersions(left, right) {
       const before = suffix.startsWith("-") && !/^-\d+-g[a-f0-9]+$/i.test(suffix);
       return suffixA ? before ? -1 : 1 : before ? 1 : -1;
     }
-    return suffixA.localeCompare(suffixB, undefined, { numeric: true, sensitivity: "base" });
+    return NUMERIC_BASE.compare(suffixA, suffixB);
   }
-  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+  return NUMERIC_BASE.compare(a, b);
 }
 
 // Publisher metadata orders a catalog; opaque download keys remain identities.

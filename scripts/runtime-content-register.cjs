@@ -23,9 +23,15 @@ require('node:module').syncBuiltinESMExports();
 function install(root) {
   if (typeof registerHooks !== 'function') throw new Error('Development runtime import checks require Node 22.15 or later.');
   root = fs.realpathSync(root);
+  // Resolution hooks run for every require call, including cached modules, so
+  // each resolved file is checked once per thread.
+  const checked = new Set();
   return registerHooks({ resolve(specifier, context, nextResolve) {
     const result = nextResolve(specifier, context);
-    if (result.url.startsWith('file:')) assertOwnedImport(root, fileURLToPath(result.url));
+    if (result.url.startsWith('file:') && !checked.has(result.url)) {
+      assertOwnedImport(root, fileURLToPath(result.url));
+      checked.add(result.url);
+    }
     return result;
   } });
 }
