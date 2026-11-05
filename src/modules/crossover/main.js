@@ -25,7 +25,7 @@ async function translatorOptions(entry, payload, context, dependencies = {}) {
   const selected = preparedContext.wineEnvironment?.install ? { ready: true, install: preparedContext.wineEnvironment.install } : runtimeManager.resolveSelection(entry, draft.settings, draft.userDataDir, draft.runtimeSettings);
   const install = selected.ready === false ? null : selected.install;
   const consumerArchitecture = selected.architecture;
-  const input = await Translators.optionsInventory(install, runtime, preparedContext, { ...dependencies, entry, consumerArchitecture });
+  const input = await Translators.optionsInventory(install, runtime, preparedContext, { ...dependencies, entry, consumerArchitecture, reuse: true });
   const plan = Translators.optionsPlan(input, preparedContext);
   return { ...Translators.optionLists(install, runtime, preparedContext, { ...dependencies, plan, inventory: input, consumerArchitecture }),
     ...(!install ? { notice: 'Included choices appear when the selected runtime is installed.' +
@@ -43,7 +43,7 @@ function recordedLaunch(entry, runtimeId, context, install) {
 // The plan for the current settings from installed descriptions, without
 // Play's file checks.
 async function currentPlan(entry, runtimeId, context, install) {
-  return Translators.optionsPlan(await Translators.optionsInventory(install, runtimeId, context, { entry }), context);
+  return Translators.optionsPlan(await Translators.optionsInventory(install, runtimeId, context, { entry, reuse: true }), context);
 }
 async function runtimeStatus(entry, _payload, context) {
   const runtime = providerForEntry(entry, context)?.runtimeId;

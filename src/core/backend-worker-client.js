@@ -5,6 +5,7 @@ const { createRuntimeCoordinator, coordinatorFor, isRuntimeProcessAlive } = requ
 const { stopProcessTree, normalizeShutdownGraceMs } = require("./process-stop");
 const { createAbortError } = require("../modules/shared/runtime/download-utils");
 const { bindProcessStop, processStopBinding } = require("./process-lifecycle");
+const InventoryRevision = require("./runtime-inventory-revision");
 
 function errorRecord(error) {
   return { message: String(error?.message || error), name: error?.name || "Error",
@@ -280,6 +281,9 @@ function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
         if (clients.get(lane) !== client) return;
         if (event === "downloads") downloads.set(lane, payload);
         if ((event === "toolLaunch" || event === "gameProcess") && payload.process) payload = { ...payload, child: client.process(payload.process) };
+        // Other lanes stop reusing display inventories after a runtime change.
+        if (InventoryRevision.EVENTS.has(event)) for (const [other, value] of clients)
+          if (other !== lane && !value.closed) value.worker.postMessage({ type: "runtimeInventoryChanged" });
         onEvent?.(event, payload, lane);
         if (event === "activity") idle(lane, client);
       });

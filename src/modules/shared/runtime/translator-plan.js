@@ -73,7 +73,9 @@ function sameComponent(first, second, role) {
   return a.every(file => b.some(other => {
     if (logicalPlacementKey(file) !== logicalPlacementKey(other) || file.form !== other.form) return false;
     if (physicalSource(file) === physicalSource(other)) return true;
-    try { return fs.realpathSync(file.path) === fs.realpathSync(other.path) || fileDigest(file.path).sha256 === fileDigest(other.path).sha256; }
+    // Files of different sizes differ without reading their bytes.
+    try { return fs.realpathSync(file.path) === fs.realpathSync(other.path) ||
+      fs.statSync(file.path).size === fs.statSync(other.path).size && fileDigest(file.path).sha256 === fileDigest(other.path).sha256; }
     catch { return false; } // Unknown file facts do not hide a choice.
   }));
 }

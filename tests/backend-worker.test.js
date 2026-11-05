@@ -180,6 +180,16 @@ test("synchronous runtime work cannot block the host event loop or another game 
   assert.ok(ticks >= 15, "host timers stopped during synchronous backend work");
 });
 
+test("a runtime change in one lane tells every other lane to read runtimes again", async t => {
+  const service = createBackendService({ workerPath, onEvent() {} }); t.after(() => service.close());
+  await Promise.all(["game:a", "game:b", "state"].map(lane => service.request(lane, "echo")));
+  await service.request("game:a", "emitEvent", "runtimeInventoryChanged");
+  await service.request("game:b", "emitEvent", "runtimeState");
+  await service.request("state", "emitEvent", "downloads");
+  await service.request("state", "emitEvent", "settingsChanged");
+  assert.deepEqual(await Promise.all(["game:a", "game:b", "state"].map(lane => service.request(lane, "inventoryNotices"))), [1, 2, 1]);
+});
+
 test("native host callbacks roundtrip asynchronously and preserve structured errors", async t => {
   const client = new BackendWorkerClient({ workerPath, callbacks: { choose: async descriptor => ({ path: descriptor.path }) } });
   t.after(() => client.close());

@@ -163,7 +163,39 @@ function inventory(install, runtime, context, dependencies = {}) {
 // remain in resolve(), after Play has selected its runtime and executable.
 async function optionsInventory(install, runtime, context, dependencies = {}) {
   context = { ...context, referenceStates: new Map() };
-  const managers = dependencies.managers || runtimeManagers(), pending = new Map();
+  const managers = dependencies.managers || runtimeManagers();
+  const key = dependencies.reuse ? reusableKey(install, runtime, context, dependencies) : null;
+  let facts;
+  if (key) {
+    let pending = reusable.get(key);
+    if (!pending) {
+      pending = inventoryFacts(install, runtime, context, { ...dependencies, managers });
+      reusable.set(key, pending);
+      while (reusable.size > 8) reusable.delete(reusable.keys().next().value);
+      pending.catch(() => { if (reusable.get(key) === pending) reusable.delete(key); });
+    }
+    try { facts = structuredClone(await pending); }
+    catch (error) {
+      // Another request's cancellation does not cancel this one.
+      if (error?.name !== 'AbortError' || context.signal?.aborted) throw error;
+      facts = await inventoryFacts(install, runtime, context, { ...dependencies, managers });
+    }
+  } else facts = await inventoryFacts(install, runtime, context, { ...dependencies, managers });
+  return inventory(install, runtime, context, { ...dependencies, managers, includedInventory: facts.includedInventory, choices: facts.choices });
+}
+// Display inventories are reused within a backend lane until its runtime
+// inventory revision changes, so one selection's status, choices and effects
+// read installed runtimes once. Play always reads them again.
+const reusable = new Map();
+function reusableKey(install, runtime, context, dependencies) {
+  const revision = require('../../../core/runtime-inventory-revision').current();
+  if (revision === null || dependencies.choices) return null;
+  const host = install && ['executablePath', 'installDir', 'crossoverRoot', 'templateRoot', 'supportRoot', 'version', 'versionLabel', 'upstreamVersion', 'engineVersion', 'architecture']
+    .map(field => install[field] ?? null);
+  return JSON.stringify([revision, runtime, host, context.userDataDir || null, context.settings?.runtimes ?? null, dependencies.consumerArchitecture ?? null]);
+}
+async function inventoryFacts(install, runtime, context, dependencies) {
+  const { managers } = dependencies, pending = new Map();
   const options = { userDataDir: context.userDataDir, logger: context.logger };
   if (!dependencies.choices) for (const manager of managers.filter(item => item.translatorEngine || item.translator?.engine))
     if (manager.prepareLocalState) await manager.prepareLocalState({ ...context, settings: context.settings?.runtimes?.[manager.id], runtimeSettings: context.settings?.runtimes });
@@ -192,21 +224,20 @@ async function optionsInventory(install, runtime, context, dependencies = {}) {
       await new Promise(resolve => setImmediate(resolve));
     }
   }
-  const input = inventory(install, runtime, context, { ...dependencies, managers, includedInventory });
-  if (!dependencies.choices) {
-    const seen = new Set(input.choices.map(item => item.id));
-    for (const manager of managers.filter(item => item.referenceManagerIds?.length))
-      for (const item of Component.referencedComponents(manager.translatorEngine || manager.translator.engine, context)) {
-        const value = item.description;
-        if (value.source?.runtime === 'crossover' && runtime !== 'crossover' || seen.has(item.id)) continue;
-        seen.add(item.id);
-        input.choices.push({ ...value, id: item.id, included: false, managerId: item.reference.managerId,
-          runtimeVersion: item.reference.version, architecture: Architecture.recordArchitecture(item.install),
-          variant: item.install.variant, sectionId: item.install.sectionId || 'default', buildKey: item.install.buildKey,
-          reference: item.reference });
-      }
-  }
-  return input;
+  if (dependencies.choices) return { includedInventory, choices: dependencies.choices };
+  const choices = managedTranslators(context, runtime, managers, includedInventory.layout?.architecture || dependencies.consumerArchitecture);
+  const seen = new Set(choices.map(item => item.id));
+  for (const manager of managers.filter(item => item.referenceManagerIds?.length))
+    for (const item of Component.referencedComponents(manager.translatorEngine || manager.translator.engine, context)) {
+      const value = item.description;
+      if (value.source?.runtime === 'crossover' && runtime !== 'crossover' || seen.has(item.id)) continue;
+      seen.add(item.id);
+      choices.push({ ...value, id: item.id, included: false, managerId: item.reference.managerId,
+        runtimeVersion: item.reference.version, architecture: Architecture.recordArchitecture(item.install),
+        variant: item.install.variant, sectionId: item.install.sectionId || 'default', buildKey: item.install.buildKey,
+        reference: item.reference });
+    }
+  return { includedInventory, choices };
 }
 function optionsPlan(input, context) {
   return Plan.resolveApiRoles(Plan.resolvePlan(input), { ...input,

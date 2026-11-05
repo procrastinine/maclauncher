@@ -172,6 +172,16 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     }
   });
   function context(settings) { return { settings, runtimeSettings: settings?.runtimes, userDataDir, logger, app, ui, fs, path, downloads }; }
+  // A state whose installed and included rows differ from the last one this
+  // lane reported is an inventory change; other lanes then read runtimes again.
+  const inventoryFingerprints = new Map();
+  function emitRuntimeState(manager, state) {
+    emit("runtimeState", { id: manager.id, state });
+    const fingerprint = JSON.stringify([state.installed, state.references, state.sections?.map(section => [section.installed, section.references])]);
+    if (inventoryFingerprints.get(manager.id) === fingerprint) return;
+    inventoryFingerprints.set(manager.id, fingerprint);
+    emit("runtimeInventoryChanged", { managerId: manager.id });
+  }
   function managerState(manager, settings, referenceStates) {
     try {
       const state = manager.getState({ settings: settings?.runtimes?.[manager.id], runtimeSettings: settings?.runtimes, userDataDir, logger, referenceStates });
@@ -223,10 +233,10 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
         if (typeof manager.prepareLocalState === "function") {
           localPreparations.push(Promise.resolve().then(() => manager.prepareLocalState({...context(settings), settings: settings?.runtimes?.[manager.id], referenceStates}))
             .catch(error => logger.warn(`[runtime:${manager.id}] local state could not be prepared`, error.message))
-            .then(() => emit("runtimeState", {id: manager.id, state: managerState(manager, settings, referenceStates)})));
+            .then(() => emitRuntimeState(manager, managerState(manager, settings, referenceStates))));
           continue;
         }
-        emit("runtimeState", { id: manager.id, state: managerState(manager, settings, referenceStates) });
+        emitRuntimeState(manager, managerState(manager, settings, referenceStates));
         // Cancellation and new jobs get an opportunity between independent inventories.
         await new Promise(resolve => setImmediate(resolve));
       }
@@ -296,29 +306,32 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     async runtimeAction(managerId, action, payload) {
       const manager = managers.find(item => item.id === managerId);
       if (!manager) throw new Error("Runtime manager not found.");
-      const result = await runRuntimeManagerAction({ manager, action, payload, userDataDir, logger, downloads, runtimeCoordinator,
-        prerequisiteContext: { settings: launcher.loadSettings(), confirmRuntimeInstall: plan => callHost("confirmRuntimeInstall", plan) },
-        readSettings: () => launcher.loadSettings().runtimes?.[managerId],
-        saveSettings: async (next, previous) => {
-          const before = launcher.loadSettings().runtimes;
-          await runtimeCoordinator.applySettings({ runtimes: { [managerId]: previous } }, { runtimes: { [managerId]: next } });
-          emit("settingsChanged", { managerId });
-          if (!isDeepStrictEqual(before, launcher.loadSettings().runtimes)) emit("runtimeChanged", {});
-        },
-        chooseImportPath: () => {
-          if (action === "registerCustom") return callHost("chooseImportPath", {
-            label: `Register ${manager.label || manager.id}`, kinds: ["file", "directory"], extensions: [], buttonLabel: "Register"
-          });
-          const state = managerState(manager, launcher.loadSettings());
-          const catalog = state.sections?.find(section => section.id === (payload?.sectionId || "default"))?.catalog || state.catalog || {};
-          return callHost("chooseImportPath", { label: catalog.importLabel || manager.importLabel || `Import ${manager.label || manager.id}`,
-            kinds: catalog.importInputKinds || manager.importInputKinds || ["directory"],
-            extensions: catalog.importExtensions || manager.importExtensions || [] });
-        },
-        chooseInstalledActionInput: descriptor => callHost("chooseInstalledActionInput", descriptor),
-        onStateChange: () => operations.runtimeStates(launcher.loadSettings(), [managerId])
-      });
-      return result;
+      // Installs, removals, registrations and refreshed catalogs change what
+      // translator choices list, whether or not the action succeeds.
+      try {
+        return await runRuntimeManagerAction({ manager, action, payload, userDataDir, logger, downloads, runtimeCoordinator,
+          prerequisiteContext: { settings: launcher.loadSettings(), confirmRuntimeInstall: plan => callHost("confirmRuntimeInstall", plan) },
+          readSettings: () => launcher.loadSettings().runtimes?.[managerId],
+          saveSettings: async (next, previous) => {
+            const before = launcher.loadSettings().runtimes;
+            await runtimeCoordinator.applySettings({ runtimes: { [managerId]: previous } }, { runtimes: { [managerId]: next } });
+            emit("settingsChanged", { managerId });
+            if (!isDeepStrictEqual(before, launcher.loadSettings().runtimes)) emit("runtimeChanged", {});
+          },
+          chooseImportPath: () => {
+            if (action === "registerCustom") return callHost("chooseImportPath", {
+              label: `Register ${manager.label || manager.id}`, kinds: ["file", "directory"], extensions: [], buttonLabel: "Register"
+            });
+            const state = managerState(manager, launcher.loadSettings());
+            const catalog = state.sections?.find(section => section.id === (payload?.sectionId || "default"))?.catalog || state.catalog || {};
+            return callHost("chooseImportPath", { label: catalog.importLabel || manager.importLabel || `Import ${manager.label || manager.id}`,
+              kinds: catalog.importInputKinds || manager.importInputKinds || ["directory"],
+              extensions: catalog.importExtensions || manager.importExtensions || [] });
+          },
+          chooseInstalledActionInput: descriptor => callHost("chooseInstalledActionInput", descriptor),
+          onStateChange: () => operations.runtimeStates(launcher.loadSettings(), [managerId])
+        });
+      } finally { emit("runtimeInventoryChanged", { managerId }); }
     },
     async moduleAction(entry, action, payload, settings, options = {}) {
       if (shuttingDown) throw createAbortError("Launcher is closing.");

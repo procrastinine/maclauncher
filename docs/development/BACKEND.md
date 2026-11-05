@@ -120,6 +120,8 @@ The Electron app runs backend calls in Node worker threads. `src/core/backend-wo
 
 Running-process and save-root state is shared across workers. A game's worker stays alive until the processes it started exit. Pending completion diagnostics can keep an exited process's worker for up to 1.5 seconds while its output drains, and the game's running state clears immediately. The number of idle workers is limited, and idle workers are disposed. A manager that fails produces an error snapshot for that manager instead of failing the whole library state.
 
+Each worker counts runtime inventory changes. A runtime action, a runtime or settings change, and a runtime state whose installed or included rows differ from the worker's previous state for that manager advance the count in the worker that reports them, and the adapter tells every other worker to advance its own. Translator choices, inspector rows and graphics inputs reuse one read of installed runtimes within a worker until the count changes, or until the runtime settings or the selected Wine installation differ. Play always reads installed runtimes again.
+
 Modules can be imported both on the main Node thread and in backend workers. A module with its own worker uses a dedicated entry file, and only that entry file installs task handlers or closes its message port.
 
 ### State updates

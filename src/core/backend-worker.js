@@ -23,14 +23,20 @@ const callHost = (method, ...args) => requestHost(method, args);
 callHost.withSignal = (signal, method, ...args) => requestHost(method, args, signal);
 require("../modules/shared/runtime/github-transport").configureHostTransport(callHost);
 require("./json-files").onUnreadablePreserved(notice => parentPort.postMessage({ type: "event", event: "unreadablePreserved", payload: notice }));
+const InventoryRevision = require("./runtime-inventory-revision");
+InventoryRevision.activate();
 const operations = createBackendOperations({ ...workerData, getRunning: () => running,
-  emit: (event, payload) => parentPort.postMessage({ type: "event", event, payload }),
+  emit: (event, payload) => {
+    if (InventoryRevision.EVENTS.has(event)) InventoryRevision.advance();
+    parentPort.postMessage({ type: "event", event, payload });
+  },
   callHost, runtimeCoordinator: remoteRuntimeCoordinator(callHost)
 });
 
 parentPort.on("message", async message => {
   if (message.type === "beginShutdown") { operations.beginShutdown(); return; }
   if (message.type === "running") { running = message.running; return; }
+  if (message.type === "runtimeInventoryChanged") { InventoryRevision.advance(); return; }
   if (message.type === "callbackResult") {
     const callback = callbacks.get(message.id);
     if (!callback) return;
