@@ -1,6 +1,6 @@
 # Graphics translators
 
-**Runtimes → Graphics → Translators** manages the graphics components used by [CrossOver](CROSSOVER.md) and [Sikarugir](SIKARUGIR.md). Each installed version is stored once. Games, private graphics views and Windows prefix DLLs refer to that installation through links. A loader that needs its own signature, or a library that locates its framework beside itself, uses a shared prepared copy rather than a copy per game.
+**Runtimes → Graphics** organizes translators by their output: **DirectX → Vulkan** contains DXVK and vkd3d-proton, **DirectX → Metal** contains DXMT and D3DMetal, **Vulkan drivers** contains MoltenVK and KosmicKrisp, and **Video codecs** contains GStreamer. These groups manage the components used by [CrossOver](CROSSOVER.md) and [Sikarugir](SIKARUGIR.md). Each installed version is stored once. Games, private graphics views and Windows prefix DLLs refer to that installation through links. A loader that needs its own signature, or a library that locates its framework beside itself, uses a shared prepared copy rather than a copy per game.
 
 Stale disposable graphics views are rebuilt in another shared generation. Previous generations remain in place until ordinary storage upkeep can retire them. Equivalent library links resolve to the same installed source.
 

@@ -226,7 +226,7 @@ test('KosmicKrisp products keep distinct translator tabs and compact version lab
     sections: [{ id: 'default', label: 'Versions' }] }));
   modelTest(`
     const groups = groupRuntimeManagers(${JSON.stringify(states)});
-    const choices = runtimeGroupSections(groups.find(group => group.id === 'translators'), sections);
+    const choices = runtimeGroupSections(groups.find(group => group.id === 'vulkan-drivers'), sections);
     assert.deepEqual(choices.map(choice => [choice.managerId, choice.label]),
       [['vulkan-kosmickrisp', 'KosmicKrisp'], ['vulkan-kosmickrisp-gles32', 'KosmicKrisp GLES 3.2']]);
     assert.deepEqual(runtimeSectionTabs(choices).map(tab => tab.label), ['KosmicKrisp', 'KosmicKrisp GLES 3.2']);
@@ -272,12 +272,12 @@ test('registry metadata exposes manageable production groups while exposing mana
     assert.equal(groups.at(-1).id, 'tools');
     assert.equal(groups.filter(group => group.label === 'GameMaker').length, 1);
     assert.equal(groups.some(group => group.label === 'Butterscotch'), false);
-    // CrossOver and Sikarugir share one DXMT support package, listed once under Translators.
+    // CrossOver and Sikarugir share one DXMT support package under DirectX to Metal.
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'sikarugir'), sections).map(choice => [choice.label, choice.managerId]),
       [['Sikarugir', 'sikarugir']]);
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'crossover'), sections).map(choice => [choice.label, choice.managerId]),
       [['CrossOver', 'crossover']]);
-    assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'translators'), sections).filter(choice => choice.label === 'DXMT')
+    assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'directx-metal'), sections).filter(choice => choice.label === 'DXMT')
       .map(choice => choice.managerId), ['sikarugir-graphics-bridge']);
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.label === 'Flash'), sections).map(choice => [choice.label, choice.managerId]),
       [['Flash Player', 'flash-projector'], ['Ruffle', 'ruffle'], ['JPEXS FFDec', 'ffdec']]);
@@ -426,17 +426,25 @@ test('effective manager defaults remain visible when installed and only saved de
   }
 });
 
-test('translator member declarations order Direct3D, Vulkan and codecs and identify their catalog projects', () => {
+test('translator member declarations separate DirectX targets, Vulkan drivers and codecs and identify their catalog projects', () => {
   const sources = require('../src/modules/shared/runtime/translator-managers');
   const registry = require('../src/modules/registry');
   const managers = [...registry.listSharedRuntimeManagers(), ...registry.listModules().flatMap(mod => registry.getModule(mod.id)?.runtimeManagers || [])];
   const unique = [...new Map(managers.map(owner => [owner.id, owner])).values()];
   const providerUi = require('../src/modules/shared/reshade/runtime/provider-library-ui.json');
-  const states = unique.map(owner => ({ id: owner.id, label: owner.label, ui: { ...(registry.getRuntimeManagerUi(owner.id) || owner.ui), ...providerUi[owner.id] },
-    sections: [{ id: 'default', label: 'Versions' }] }));
+  const groupUi = require('../src/modules/shared/runtime/group-ui.json');
+  const states = unique.map(owner => { const ui={ ...(registry.getRuntimeManagerUi(owner.id) || owner.ui), ...providerUi[owner.id] }; return { id: owner.id, label: owner.label, ui: {...ui,...groupUi[ui.groupId]},
+    sections: [{ id: 'default', label: 'Versions' }] }; });
   modelTest(`const groups=groupRuntimeManagers(${JSON.stringify(states)});
-    assert.deepEqual(runtimeGroupSections(groups.find(group=>group.id==='translators'),sections).map(row=>row.managerId),
-      ['sikarugir-graphics-bridge','translator-d3dmetal','translator-dxvk','translator-vkd3d-proton','vulkan-moltenvk','vulkan-kosmickrisp','vulkan-kosmickrisp-gles32','translator-gstreamer']);`);
+    for(const [id,label,members] of [
+      ['directx-vulkan','DirectX → Vulkan',['translator-dxvk','translator-vkd3d-proton']],
+      ['directx-metal','DirectX → Metal',['sikarugir-graphics-bridge','translator-d3dmetal']],
+      ['vulkan-drivers','Vulkan drivers',['vulkan-moltenvk','vulkan-kosmickrisp','vulkan-kosmickrisp-gles32']],
+      ['codecs','Video codecs',['translator-gstreamer']]]){
+      const group=groups.find(group=>group.id===id);assert.equal(group.label,label);
+      assert.deepEqual(runtimeGroupSections(group,sections).map(row=>row.managerId),members);
+    }
+    assert.equal(groups.some(group=>group.id==='translators'),false);`);
   const dxvk = sources.createManager('dxvk').getState({}).catalog;
   assert.deepEqual(dxvk.sources.slice(0,3).map(source=>source.label), ['DXVK','DXVK-macOS','DXVK-macOS async']);
   for (const engine of ['dxvk','dxmt']) {

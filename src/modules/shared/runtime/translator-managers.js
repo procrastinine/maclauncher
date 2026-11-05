@@ -3,16 +3,16 @@ const { createPinnedNativeManager, upstreamPins } = require("./pinned-native-man
 const Upstream = require("./upstream"), Component = require("./component-runtime");
 const { archiveFormat } = require("./release-files");
 const definitions = {
-  gstreamer: { label: "GStreamer codecs", localOnly: true, sourceName: "GStreamer", sourceDescription: "GStreamer publishes multimedia libraries and plugins. Prepared codec folders are registered locally.", memberOrder: 30, names: ["gstreamer-1.0"], sources: [] },
-  dxvk: { label: "DXVK", memberOrder: 2, apis: ["Direct3D 9", "Direct3D 10", "Direct3D 11"], names: ["dxvk", "dxvk3", "d9vk"],
+  gstreamer: { label: "GStreamer codecs", groupId: "codecs", localOnly: true, sourceName: "GStreamer", sourceDescription: "GStreamer publishes multimedia libraries and plugins. Prepared codec folders are registered locally.", memberOrder: 30, names: ["gstreamer-1.0"], sources: [] },
+  dxvk: { label: "DXVK", groupId: "directx-vulkan", memberOrder: 2, apis: ["Direct3D 9", "Direct3D 10", "Direct3D 11"], names: ["dxvk", "dxvk3", "d9vk"],
     sources: [["upstream", "DXVK", "doitsujin/dxvk", null, null, { secondary: true }], ["macos", "DXVK-macOS", "Gcenx/DXVK-macOS", name => !/async/i.test(name), null, { description: "CrossOver's included copy or automatic choice is the ordinary route; Sikarugir uses its Template. DXVK-macOS releases published by Gcenx/DXVK-macOS are an optional macOS alternative." }],
       ["async", "DXVK-macOS async", "Gcenx/DXVK-macOS", name => /async/i.test(name), null, { secondary: true, description: "DXVK-macOS async releases published by Gcenx/DXVK-macOS, with asynchronous shader compilation." }],
       ...["dxvk", "dxvk3", "d9vk"].map(component => ["template-" + component, "Sikarugir Template · " + component, "Sikarugir-App/Template", null, component, { secondary: true, ...(component === "d9vk" ? { description: "D9VK copies taken from a Sikarugir Template release. This is the older Direct3D 8/9 variant." } : {}) }])] },
-  "vkd3d-proton": { label: "vkd3d-proton", memberOrder: 3, apis: ["Direct3D 12"], names: ["vkd3d-proton"],
+  "vkd3d-proton": { label: "vkd3d-proton", groupId: "directx-vulkan", memberOrder: 3, apis: ["Direct3D 12"], names: ["vkd3d-proton"],
     sources: [["upstream", "vkd3d-proton", "HansKristian-Work/vkd3d-proton"]] },
-  d3dmetal: { label: "D3DMetal", upstreamUrl: "https://developer.apple.com/games/game-porting-toolkit/", upstreamLabel: "Apple Game Porting Toolkit downloads", memberOrder: 1, apis: ["Direct3D 11", "Direct3D 12"], names: ["d3dmetal", "apple_gptk", "redist"],
+  d3dmetal: { label: "D3DMetal", groupId: "directx-metal", upstreamUrl: "https://developer.apple.com/games/game-porting-toolkit/", upstreamLabel: "Apple Game Porting Toolkit downloads", memberOrder: 1, apis: ["Direct3D 11", "Direct3D 12"], names: ["d3dmetal", "apple_gptk", "redist"],
     sources: [["template", "Sikarugir Template", "Sikarugir-App/Template", null, "d3dmetal"]] },
-  dxmt: { label: "DXMT", memberOrder: 0, apis: ["Direct3D 10", "Direct3D 11"], names: ["dxmt"],
+  dxmt: { label: "DXMT", groupId: "directx-metal", memberOrder: 0, apis: ["Direct3D 10", "Direct3D 11"], names: ["dxmt"],
     sources: [["upstream", "DXMT", "3Shain/dxmt", name => /builtin/i.test(name)],
       ["template", "Sikarugir Template", "Sikarugir-App/Template", null, "dxmt"]] }
 };
@@ -69,7 +69,7 @@ function createManager(engine, { dependencies = {} } = {}) {
       return { translator, files, translatorRelative: relative ? definition.names[0] : "" };
     }, dependencies: { extractArchive: require("./safe-archive").extractArchive, ...dependencies } });
   manager.translatorEngine = engine;
-  manager.ui = { groupId: "translators", tabLabel: "Translators", sectionLabel: definition.label, memberOrder: definition.memberOrder, management: "managed" };
+  manager.ui = { groupId: definition.groupId, sectionLabel: definition.label, memberOrder: definition.memberOrder, management: "managed" };
   if (definition.localOnly) {
     manager.delivery = { ...manager.delivery, catalog: "none" };
     const getState = manager.getState;

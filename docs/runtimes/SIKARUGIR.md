@@ -72,7 +72,7 @@ The optional **Enable BepInEx winhttp override**, listed for Unity and Windows g
 
 ## Translators
 
-[Translator selection](TRANSLATORS.md) separates the Direct3D engine, Vulkan driver and Direct3D 12 choices. Versions and sources come from installed files. Existing environments also offer their current Bottle setting or Wrapper setting. A runtime version is installed once; private graphics views and prefix DLLs link to that installation. Prepared loader trees are shared between games using the same inputs.
+[Translator management](TRANSLATORS.md) groups DirectX → Vulkan, DirectX → Metal, Vulkan drivers and video codecs separately. Runtime settings separate the Direct3D engine, Vulkan driver and Direct3D 12 choices. Versions and sources come from installed files. Existing environments also offer their current Bottle setting or Wrapper setting. A runtime version is installed once; private graphics views and prefix DLLs link to that installation. Prepared loader trees are shared between games using the same inputs.
 
 ## Graphics
 
@@ -108,7 +108,7 @@ D3DMetal also needs a Wine engine with the path conversion functions used to exp
 
 FSR2/3 camera support also requires a compatible Streamline interposer and a camera adapter matching the selected DXMT native library and Windows thunk. The camera adapter is included with MacLauncher. Preparation adds the matched libraries and Streamline adapter only to the optional camera launch folder. The original interposer stays next to its proxy for normal plugin lookup, with its complete export interface. Camera constants are matched to the exact frame, viewport and queued depth and motion textures, and unsupported projections keep the game's original scaler. Turning on game temporal integration before launch also prepares camera support for live changes of the temporal method.
 
-**Runtimes → Graphics → Translators** manages DXMT versions independently of the Wine engine. The Direct3D engine choice also selects the DXMT version used by the camera adapter. If that version does not match the adapter, the inspector states that camera support is unavailable; the selected DXMT continues to render.
+**Runtimes → Graphics → DirectX → Metal** manages DXMT versions independently of the Wine engine. The Direct3D engine choice also selects the DXMT version used by the camera adapter. If that version does not match the adapter, the inspector states that camera support is unavailable; the selected DXMT continues to render.
 
 A camera adapter, or the automatic in-game XeSS compatibility adapter, that needs a DLL beside the app uses a separate launch folder containing copies of only the executable and selected DLLs; other assets reference the originals. The working directory remains the original executable folder. Files that the game creates, or replaces atomically, relative to the executable can stay in that adapter folder, which is kept. When an adapter folder is no longer used, original resources are never deleted, renamed or replaced, and earlier adapter folders stay intact. Ordinary Play bypasses these folders. If adapter preparation fails, the original executable runs with the selected backend and other available effects.
 

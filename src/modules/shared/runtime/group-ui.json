@@ -1,5 +1,8 @@
 {
-  "graphics": { "category": "graphics" },
-  "translators": { "category": "graphics" },
-  "tools": { "position": "last", "category": "tools" }
+  "graphics": {"category": "graphics"},
+  "tools": {"position": "last", "category": "tools"},
+  "directx-vulkan": {"category": "graphics", "tabLabel": "DirectX → Vulkan", "order": 10},
+  "directx-metal": {"category": "graphics", "tabLabel": "DirectX → Metal", "order": 11},
+  "vulkan-drivers": {"category": "graphics", "tabLabel": "Vulkan drivers", "order": 12},
+  "codecs": {"category": "graphics", "tabLabel": "Video codecs", "order": 13}
 }

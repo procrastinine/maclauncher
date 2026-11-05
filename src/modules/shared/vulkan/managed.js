@@ -22,7 +22,7 @@ function createManager(dependencies = {}) {
       await Bundled.verifySignatures(selected.root,selected.declaration,{signal});
     }, dependencies });
   return { ...manager, translatorEngine: "kosmickrisp", distributionRequired: false,
-    ui: { groupId: "translators", tabLabel: "Translators", sectionLabel: manager.label, memberOrder: 22, management: "managed", hostFeature: "METAL4" } };
+    ui: { groupId: "vulkan-drivers", sectionLabel: manager.label, memberOrder: 22, management: "managed", hostFeature: "METAL4" } };
 }
 
 function createProvider(manager) {
@@ -78,7 +78,7 @@ function createSceneManager(dependencies = {}) {
       await Bundled.verifySignatures(selected.root, selected.declaration, { signal });
     }, dependencies });
   return { ...result, translatorEngine: "moltenvk", distributionRequired: false,
-    ui: { groupId: "translators", tabLabel: "Translators", sectionLabel: "MoltenVK scene support", memberOrder: 25, management: "managed" } };
+    ui: { groupId: "vulkan-drivers", sectionLabel: "MoltenVK scene support", memberOrder: 25, management: "managed" } };
 }
 function createSceneProvider(selectedManager) {
   function selected(version, context, verification) {

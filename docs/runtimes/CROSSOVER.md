@@ -62,7 +62,7 @@ The graphics and synchronization choices follow the [CrossOver Mac user guide](h
 
 ## Translators
 
-[Translator selection](TRANSLATORS.md) separates the Direct3D engine, Vulkan driver and Direct3D 12 choices. Versions and sources come from installed files. Existing environments also offer their current Bottle setting or Wrapper setting. A runtime version is installed once; private graphics views and prefix DLLs link to that installation. Prepared loader trees are shared between games using the same inputs.
+[Translator management](TRANSLATORS.md) groups DirectX → Vulkan, DirectX → Metal, Vulkan drivers and video codecs separately. Runtime settings separate the Direct3D engine, Vulkan driver and Direct3D 12 choices. Versions and sources come from installed files. Existing environments also offer their current Bottle setting or Wrapper setting. A runtime version is installed once; private graphics views and prefix DLLs link to that installation. Prepared loader trees are shared between games using the same inputs.
 
 ## Graphics
 
@@ -82,7 +82,7 @@ Graphics providers must match the architecture of the native Wine process that r
 
 Enabled temporal rows in the Advanced graphics settings prepare the same game integration and dependencies as the Simple temporal settings. Disabled rows add no temporal requirements.
 
-FSR2/3 temporal replacement also requires a supported Streamline interposer and a DXMT camera adapter matching the selected renderer's native library and Windows thunk. CrossOver uses this adapter only when DXMT is selected explicitly. The camera adapter is included with MacLauncher; the DXMT support libraries are separate. **Runtimes → Graphics → Translators** manages the shared DXMT versions. The Direct3D engine choice selects one version for rendering and camera support. The camera adapter reports a mismatch without changing the selected renderer.
+FSR2/3 temporal replacement also requires a supported Streamline interposer and a DXMT camera adapter matching the selected renderer's native library and Windows thunk. CrossOver uses this adapter only when DXMT is selected explicitly. The camera adapter is included with MacLauncher; the DXMT support libraries are separate. **Runtimes → Graphics → DirectX → Metal** manages the shared DXMT versions. The Direct3D engine choice selects one version for rendering and camera support. The camera adapter reports a mismatch without changing the selected renderer.
 
 Preparation uses private copies of the game and loader. The private renderer selection turns off CrossOver's automatic DLL redirection for that launch and selects the matching DXMT libraries directly. Camera values are tied to the game's exact frame and viewport, and unsupported projections keep the game's original scaler.
 
