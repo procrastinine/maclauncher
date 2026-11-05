@@ -87,8 +87,8 @@ function resolveLocalRuntime({ runtimePath, runtimeVersion, upstreamRevision, ex
     throw error;
   }
   if (!stat.isFile()) throw new Error("Choose a macOS runtime executable or .app.");
-  if (!(stat.mode & 0o111)) throw new Error("Selected runtime does not have executable permission.");
-  fs.accessSync(executablePath, fs.constants.X_OK);
+  if (!allowLibrary && !(stat.mode & 0o111)) throw new Error("Selected runtime does not have executable permission.");
+  fs.accessSync(executablePath, allowLibrary ? fs.constants.R_OK : fs.constants.X_OK);
   const architectures = readMachOArchitectures(executablePath, { allowLibrary });
   if (requiredArchitecture && !architectures.includes(requiredArchitecture === "x64" ? "x86_64" : requiredArchitecture))
     throw new Error(`${runtimeLabel} ${runtimeVersion} requires a ${requiredArchitecture === "x64" ? "x86_64" : requiredArchitecture} executable.`);

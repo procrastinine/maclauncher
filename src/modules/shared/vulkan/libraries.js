@@ -118,7 +118,12 @@ async function installLoader(unpacked, loader, signal) {
 function createManager(backend, dependencies = {}) {
   const definition = definitions[backend], loader = backend === "kosmickrisp" ? loaderSource(dependencies) : null;
   const manager = createPinnedNativeManager({ id: "vulkan-" + backend, label: definition.label, sourceUrl: definition.source,
-    nativeLibrary: true, upstream: backend === "moltenvk" ? moltenvk : kosmickrisp,
+    nativeLibrary: true, cacheDownloads: true,
+    inspectRuntime(options) {
+      const native = require("../runtime/local-native").resolveLocalRuntime(options), root = path.dirname(native.executablePath);
+      const translator = require("../runtime/component-runtime").description(root, { engine: backend }, { source: "upstream", version: options.runtimeVersion });
+      return { ...native, translator, translatorRoot: root };
+    }, upstream: backend === "moltenvk" ? moltenvk : kosmickrisp,
     resolveExecutable: root => path.join(root, definition.library),
     prepareInstall: async ({ unpacked, signal }) => {
       if (backend === "moltenvk") {
@@ -145,7 +150,9 @@ function createManager(backend, dependencies = {}) {
         const native = inspect(path.join(unpacked, file), { signal, macOSVersion: (dependencies.systemVersionSync || systemVersionSync)() });
         for (const slice of native.slices) if (versionAtLeast(slice.minimumMacOS, minimumMacOS)) minimumMacOS = slice.minimumMacOS;
       }
-      return { backend, minimumMacOS, libraries: files.map(file => ({ file, sha256: hashFile(path.join(unpacked, file)) })) };
+      const translator = require("../runtime/component-runtime").description(unpacked, { engine: backend }, { source: "upstream" });
+      translator.files = translator.files.map(file => ({ ...file, path: file.relative }));delete translator.root;delete translator.id;
+      return { translator, backend, minimumMacOS, libraries: files.map(file => ({ file, sha256: hashFile(path.join(unpacked, file)) })) };
     }, dependencies: { ...dependencies, extractArchive: (archive, output, signal) => backend === "moltenvk" ? extract(archive, output, signal)
       : cloneOrCopy(archive, path.join(output, definition.library), { signal }) } });
   const result = { ...manager, upstream: loader ? [kosmickrisp, loader] : moltenvk, backend, ui: { groupId: "translators", tabLabel: "Translators", sectionLabel: definition.label, memberOrder: backend === "moltenvk" ? 20 : 21, management: "managed", ...(backend === "kosmickrisp" ? { hostFeature: "METAL4" } : {}) } };
@@ -156,6 +163,13 @@ function createManager(backend, dependencies = {}) {
       ...(backend === "kosmickrisp" ? [path.join(root, "libvulkan.1.dylib")] : [])];
     for (const file of files) inspect(file, { architecture: native.architectures[0] === "x86_64" ? "x64" : "arm64" });
     return { ...native, installDir: root, installationMetadata: { backend, libraries: files.map(file => ({ file: path.basename(file), sha256: hashFile(file) })) } };
+  } });
+  const Component = require("../runtime/component-runtime"), customInspect = result.customRuntime.inspect;
+  Custom.configure(result, { prepare: Component.prepareArchive, inspect(input, context) {
+    const root = Component.componentRoot(context.data?.root || input, { names: [backend], library: backend === "moltenvk" ? /^libMoltenVK\.dylib$/ : /^libvulkan_kosmickrisp\.dylib$/ });
+    const inspected = customInspect(root, context), translator = Component.description(root, { engine: backend }, {
+      source: fs.existsSync(path.join(input, "Contents/SharedSupport/CrossOver")) ? { kind: "crossover", id: input, runtime: "crossover", label: "CrossOver" } : "custom" });
+    return { ...inspected, translator, translatorRoot: root };
   } });
   return result;
 }

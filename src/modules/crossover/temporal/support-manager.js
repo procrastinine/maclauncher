@@ -1,82 +1,10 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
-const { cloneOrCopySync } = require("../../shared/copy-file");
-const { createPinnedNativeManager } = require("../../shared/runtime/pinned-native-manager");
 const { createProjectBuildManager } = require("../../shared/runtime/project-build-manager");
 const Bundled = require("../../shared/runtime/bundled-native");
-const Upstream = require("../../shared/runtime/upstream");
-const { extractArchive } = require("../sikarugir/runtime/archive");
 const Catalog = require("./catalog");
-const { archives, parseTemplateName } = require("../sikarugir/runtime/catalog");
-const { templateContents, templateRenderers } = require("../sikarugir/graphics/closure");
-const FILES = Object.freeze(["wine/x86_64-unix/winemetal.so", "wine/x86_64-windows/winemetal.dll", "wine/x86_64-windows/nvapi64.dll", "wine/x86_64-windows/d3d10core.dll", "LICENSE", "version"]);
-// The notice and version text are copied when the package still ships them.
-const OPTIONAL = new Set(["LICENSE", "version"]);
 const hash = file => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
-const verifiedCache = new Map();
-async function prepareInstall({ unpacked, pin, signal }) {
-  const contents = templateContents(unpacked, pin.version), renderers = templateRenderers(contents, pin.version);
-  if (!renderers) throw Error("The DXMT support archive is incomplete.");
-  const source = path.join(contents, renderers, "dxmt"), target = path.join(unpacked, "dxmt"), files = {};
-  for (const relative of FILES) {
-    signal?.throwIfAborted();const file = path.join(source, relative);
-    if (OPTIONAL.has(relative) && !fs.existsSync(file)) continue;
-    const stat = fs.statSync(file);
-    if (!stat.isFile() || stat.size > 128 * 1024 * 1024 || !fs.realpathSync(file).startsWith(fs.realpathSync(source) + path.sep)) throw Error("The DXMT support archive is incomplete.");
-    const destination = path.join(target, relative);fs.mkdirSync(path.dirname(destination), { recursive: true });
-    cloneOrCopySync(file, destination, { exclusive: true });files[relative] = hash(destination);
-  }
-  for (const name of fs.readdirSync(unpacked)) if (name !== "dxmt") fs.rmSync(path.join(unpacked, name), { recursive: true, force: true });
-  return { schema: 1, files, templateRenderers: renderers };
-}
-function verified(install, { verification = "full" } = {}) {
-  if (!install?.installDir) return null;
-  try {
-    const directory = path.join(install.installDir, "dxmt"), recorded = install.installationMetadata?.files || {};
-    const present = FILES.filter(file => !OPTIONAL.has(file) || recorded[file]);
-    const stamp = JSON.stringify([install.installationMetadata, present.map(file => {
-      const value = fs.statSync(path.join(directory, file));return [value.dev, value.ino, value.size, value.mtimeMs, value.ctimeMs];
-    })]);
-    if (verification === "status" && verifiedCache.get(directory) === stamp) return { ...install, baseRoot: path.join(directory, "wine") };
-    if (present.some(file => !fs.statSync(path.join(directory, file)).isFile() ||
-      !fs.realpathSync(path.join(directory, file)).startsWith(fs.realpathSync(directory) + path.sep))) return null;
-    if (verifiedCache.size > 16) verifiedCache.clear();verifiedCache.set(directory, stamp);
-    return { ...install, baseRoot: path.join(directory, "wine") };
-  } catch { return null; }
-}
-// Sikarugir's support Templates carry the DXMT libraries, one package per
-// Template version; DXMT runs on Apple Silicon. Each version reads as its
-// Template release number.
-const templates = Upstream.github({ repository: "Sikarugir-App/Template", allArchitectures: true,
-  recognize: release => archives(release, parseTemplateName).map(row => ({ ...row,
-    details: { hostArchitectures: ["arm64"] } })) });
-// Catalogs and installation records saved by earlier launchers can carry a
-// composed label such as "DXMT · support 1.0.21"; versions show as published.
-const withoutLabels = value => Array.isArray(value) ? value.map(withoutLabels) : value && typeof value === "object"
-  ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, key === "versionLabels" ? {} : withoutLabels(item)])) : value;
-// One DXMT support package serves CrossOver and Sikarugir: both hosts list,
-// install and reuse the same versions. The id keeps the folder that earlier
-// launchers used for Sikarugir; versions installed through their separate
-// CrossOver tab are used in place.
-function createManager({ dependencies = {} } = {}) {
-  const base = createPinnedNativeManager({ id: "sikarugir-graphics-bridge", formerIds: ["crossover-graphics-bridge"], label: "DXMT support", nativeLibrary: true,
-    sourceUrl: Catalog.SOURCE_URL, upstream: templates,
-    resolveExecutable: root => path.join(root, "dxmt/wine/x86_64-unix/winemetal.so"), prepareInstall,
-    dependencies: { ...dependencies, extractArchive: dependencies.extractArchive || extractArchive } });
-  const resolveSelection = (entry, settings, userDataDir, options = {}) => {
-    const selected = base.resolveSelection(entry, settings, userDataDir, options);
-    if (!selected.install) return selected;
-    const install = verified(selected.install, options);return { ...selected, install, ready: Boolean(install), reason: install ? null : "The DXMT camera libraries changed. Reinstall this version." };
-  };
-  return { ...base, ui: { groupId: "translators", tabLabel: "Translators", sectionLabel: "DXMT support", memberOrder: 26, management: "managed" }, resolveSelection,
-    getState(options = {}) {
-      const state = base.getState(options), installed = state.installed.map(item => verified(item, { verification: "status" }) ? item : { ...item, ready: false, status: "damaged" });
-      return withoutLabels({ ...state, installed, sections: state.sections.map(section => ({ ...section, installed, label: "DXMT support",
-        description: "DXMT libraries for temporal upscaling in CrossOver and Sikarugir, from Sikarugir's support Template releases. The camera adapter is included with MacLauncher; matching libraries are reused from an installed Wine engine or downloaded after consent." })) });
-    },
-    core: { ...base.core, get catalog() { return base.core.catalog; },
-      resolveInstalled: options => verified(base.core.resolveInstalled(options), options), listInstalled: userDataDir => base.core.listInstalled(userDataDir).map(item => verified(item)).filter(Boolean) }
-  };
-}
+function createManager(options) { return require("../../shared/runtime/translator-managers").createManager("dxmt", options); }
+
 const WineVulkan = Catalog.VULKAN_PROFILE, FidelityFX = Catalog.FIDELITYFX_PROFILE;
 const API_PROJECTS = Object.freeze({
   "winevulkan-scene": { label: "WineVulkan scene adapter", source: "https://www.codeweavers.com/crossover/source" },
@@ -175,4 +103,4 @@ function createAPIManager(projectId, dependencies = {}) {
 const apiManagers = Object.freeze(Object.fromEntries(Object.keys(API_PROJECTS).map(id => [id, createAPIManager(id)])));
 const support = createManager(), managers = Object.freeze({ [support.id]: support, ...apiManagers });
 module.exports = { ...support, managers, apiManagers, forRuntime: runtimeId => ["crossover", "sikarugir"].includes(runtimeId) ? support : null,
-  createManager, createAPIManager, apiDescriptor, verifyAPI, FILES, prepareInstall, verified };
+  createManager, createAPIManager, apiDescriptor, verifyAPI };
