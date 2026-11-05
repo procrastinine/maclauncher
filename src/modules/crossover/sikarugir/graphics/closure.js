@@ -50,6 +50,9 @@ function templateRenderers(root, version) {
   const modern = typeof version === "string" && versionAtLeast(version, "1.0.24");
   const preferred = modern ? ["SharedSupport/renderer", "Frameworks/renderer"] : ["Frameworks/renderer", "SharedSupport/renderer"];
   for (const relative of preferred) if (directory(relative)) return relative;
+  // An installation without Template contents, such as an engine alone, has
+  // no renderer folder.
+  if (!directory("")) return null;
   // A later Template may move the packages again. Search the contents only
   // when neither known layout exists, without following directory aliases.
   const found = [];

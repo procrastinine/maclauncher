@@ -18,7 +18,8 @@ function includedTranslators(install, runtime, { engine: requestedEngine, descri
     try {
       let value = (describe || Description.describeTranslator)(root, { engine, component, source, ...extra });
       if (!value) return;
-      value = { ...value, included: true, id: `included:${component}:${extra.templateComponent || engine}`, ...extra };
+      // A supplied version is the reader's fallback; the component's own version text precedes it.
+      value = { ...value, included: true, id: `included:${component}:${extra.templateComponent || engine}`, ...extra, version: value.version };
       if (!value.version && runtime === 'crossover') {
         try {
           const name = Description.label({ engine }).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

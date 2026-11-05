@@ -205,7 +205,7 @@ test("a Builds record published later for the other CPU appears in the catalog w
     packages = [record(other), record(launcher), {...record(launcher), version: "2.0.0-MCLv1", arch: "riscv64", launcherArchitectures: ["riscv64"]}];
     await manager.refreshCatalog({userDataDir, force: true});
     state = manager.getState({userDataDir});
-    assert.deepEqual(state.catalog.versions.filter(item => !state.catalog.versionRequirements[item]?.installReason), [version,'2.0.0-MCLv1']);
+    assert.deepEqual(state.catalog.versions.filter(item => !state.catalog.versionRequirements[item]?.installReason), ['2.0.0-MCLv1',version]);
   }
 });
 test("one build resolver serves Play, Install, Set default and the automatic list", async () => {

@@ -107,7 +107,7 @@ test("Unity starts with an empty catalog and local state/default selection never
     assert.equal(state.catalog.installable, false);
     const selection = manager.resolveSelection({ moduleData: { detectedVersion: "2020.1.17f1" } }, {}, userDataDir);
     assert.equal(selection.version, "2020.1.17f1"); assert.equal(selection.ready, false);
-    assert.deepEqual(manager.applySettingsUpdate("setDefault", {}, {}), { defaultVersion: null }, "Empty preferences normalize without choosing a runtime");
+    assert.deepEqual(manager.applySettingsUpdate("setDefault", { version: "2020.1.17f1" }, {}), {}, "Unity has no default version, so Set default leaves preferences unchanged");
   }
   assert.equal(lookups(), before);
   assert.equal(fs.existsSync(path.join(userDataDir, "runtimes", "unity", "catalog.json")), false);

@@ -7,7 +7,7 @@ function effectiveSection(section, settings = {}) {
   const saved = selectRuntimeVersion({ defaultVersion: settings.defaultVersion }).version;
   return { ...section, defaultVersion: saved || managerDefaultVersion({
     listed: (section.catalog?.versions || []).filter(version => !section.catalog?.versionRequirements?.[version]?.installReason),
-    installed: (section.installed || []).filter(row => row.ready !== false).map(row => row.version)
+    installed: (section.installed || []).filter(row => row.ready !== false && (!section.defaultVariant || row.variant === section.defaultVariant)).map(row => row.version)
   }), defaultSource: saved ? "saved" : "manager" };
 }
 const Godot = require("../src/modules/godot/main");
@@ -411,7 +411,7 @@ test("Ruffle Play keeps an exact global choice instead of substituting another i
 });
 
 test("shared preparation uses effective manager defaults, exact overrides and CPU compatibility", async () => {
-  for(const [override,expected] of [[{},"3"],[{version:"2"},null],[{version:"4"},"4"],[{version:"1"},"1"]]) {
+  for(const [override,expected] of [[{},null],[{version:"2"},null],[{version:"4"},"4"],[{version:"1"},"1"]]) {
     const installs=[],uses=[];
     const section=effectiveSection({supportsDefault:true,defaultVariant:"arm64",installed:[
       {version:"4",variant:"x64",ready:true},{version:"3",variant:"arm64",ready:false},{version:"2",variant:"arm64",ready:true}
@@ -558,4 +558,36 @@ test("saved Android MacLauncher KosmicKrisp selection joins ordinary consent, in
   assert.deepEqual(events,[]);
   assert.equal(uses[0].managerId,manager.id);
   assert.equal(uses[0].sourcePath,"/installed/graphics");
+});
+
+test("Play preparation with a ready installed runtime stays offline despite a newer cached release", {skip: process.platform !== "darwin"}, async t => {
+  const {createPinnedNativeManager} = require("../src/modules/shared/runtime/pinned-native-manager");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "installed-play-offline-"));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const pins = ["2.0.0", "1.0.0"].map(version => ({version, upstreamRevision: "a".repeat(40)}));
+  const options = {id: "installed-play-fixture", runtimeId: "runner", label: "Installed Play fixture",
+    dependencies: {systemVersionSync: () => "26.0"}};
+  // Create the ordinary on-disk catalog and installation receipt, then read
+  // them through a fresh production manager during Play preparation.
+  const publisher = createPinnedNativeManager({...options, discoverCatalog: async () => pins});
+  await publisher.refreshCatalog({userDataDir: root, force: true});
+  const executable = path.join(root, "native-fixture"), bytes = Buffer.alloc(32);
+  bytes.writeUInt32LE(0xfeedfacf);bytes.writeUInt32LE(process.arch === "x64" ? 0x01000007 : 0x0100000c, 4);bytes.writeUInt32LE(2, 12);
+  fs.writeFileSync(executable, bytes, {mode: 0o755});
+  publisher.core.registerLocal({userDataDir: root, version: "1.0.0", runtimePath: executable});
+  const blocked = [], deny = kind => () => {blocked.push(kind);assert.fail("Installed Play reached " + kind);};
+  t.mock.method(globalThis, "fetch", deny("fetch"));
+  for (const protocol of ["node:http", "node:https"]) for (const method of ["request", "get"])
+    t.mock.method(require(protocol), method, deny(protocol + "." + method));
+  const manager = createPinnedNativeManager({...options, discoverCatalog: deny("catalog discovery"),
+    dependencies: {...options.dependencies, fetchUrlBuffer: deny("catalog transport"), downloadToFile: deny("download")}});
+  const mod = {id: "installed-play-module", runtimeManagers: [manager]};
+  const ctx = {...context("runner"), userDataDir: root, confirmRuntimeInstall: deny("consent")};
+  assert.equal(await prepareForLaunch({entry: {}, mod, info: {runtime: {manager: {runner: manager.id}}}, context: ctx,
+    registry: {listModuleIds: () => [mod.id], getModule: () => mod},
+    runAction: deny("extra action"), install: deny("installation")}), true);
+  const selected = manager.resolveSelection({}, ctx.settings, root);
+  assert.equal(selected.version, "1.0.0");assert.equal(selected.ready, true);assert.equal(selected.requiresDownload, false);
+  assert.deepEqual(manager.getState({userDataDir: root}).catalog.versions, ["2.0.0", "1.0.0"]);
+  assert.deepEqual(blocked, [], "Play uses the verified installed receipt without discovery, transport, consent or download");
 });

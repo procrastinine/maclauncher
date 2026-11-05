@@ -48,7 +48,7 @@ test("failed refresh retains the exact valid cache and successful refresh replac
   } });
   assert.deepEqual(manager.getState({ userDataDir }).catalog.versions, []);
   const first = await manager.refreshCatalog({ userDataDir, latestOnly: false });
-  assert.deepEqual(first.versions, ["1.2.3", "1.2.3-macos-v7", "older"]);
+  assert.deepEqual(first.versions, ["older", "1.2.3", "1.2.3-macos-v7"], "lists sort newest first by release version");
   const cacheFile = path.join(userDataDir, "runtimes", "retained-cache", "catalog.json"), cacheBytes = fs.readFileSync(cacheFile);
   fail = true;
   await assert.rejects(manager.refreshCatalog({ userDataDir, latestOnly: true }), /Offline/);
@@ -132,7 +132,7 @@ test("refresh replaces its remote list and canonicalizes numeric tags", async t 
   assert.deepEqual(manager.getState({ userDataDir }).catalog.versions, ["1.8.0", "1.7.0"]);
   await manager.refreshCatalog({ userDataDir, force: true });
   const catalog = manager.getState({ userDataDir }).catalog;
-  assert.deepEqual(catalog.versions, ["1.8.0", "1.9.0"]);
+  assert.deepEqual(catalog.versions, ["1.9.0", "1.8.0"], "lists sort newest first while the cache keeps discovery order");
   assert.equal(catalog.recommendedVersion, undefined);
   assert.ok(catalog.versions.includes(manager.resolveSelection({}, {}, userDataDir).version), "The manager default selects a listed release");
   const settings = { runtimes: { "catalog-test": { defaultVersion: "1.8.0" } } };
@@ -159,16 +159,16 @@ test("removed and replaced remote builds keep installed identities across restar
   manager.core.registerLocal({ userDataDir, version: "A", runtimePath: executable });
   manager.core.registerLocal({ userDataDir, version: "B", runtimePath: executable });
   await manager.refreshCatalog({ userDataDir, force: true });
-  assert.deepEqual(manager.getState({ userDataDir }).catalog.versions, ["B", "C"]);
+  assert.deepEqual(manager.getState({ userDataDir }).catalog.versions, ["C", "B"]);
   assert.equal(manager.getState({ userDataDir }).catalog.installableVersions.includes("A"), false);
   const restarted = make();
   assert.equal(restarted.core.resolveInstalled({ userDataDir, version: "A" }).upstreamRevision, revision("a"));
   assert.equal(restarted.core.resolveInstalled({ userDataDir, version: "B" }).upstreamRevision, revision("b"));
   assert.equal(restarted.core.catalog.find(pin => pin.version === "B").upstreamRevision, revision("c"));
   assert.equal(restarted.getState({ userDataDir }).installed.filter(row => row.ready).length, 2);
-  assert.deepEqual(restarted.getState({ userDataDir }).catalog.versions, ["B", "C"]);
+  assert.deepEqual(restarted.getState({ userDataDir }).catalog.versions, ["C", "B"]);
   restarted.uninstallRuntime({ userDataDir, version: "A" });
-  assert.deepEqual(restarted.getState({ userDataDir }).catalog.versions, ["B", "C"]);
+  assert.deepEqual(restarted.getState({ userDataDir }).catalog.versions, ["C", "B"]);
   await assert.rejects(() => restarted.installRuntime({ userDataDir, version: "A" }), /no longer/);
 });
 

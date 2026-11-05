@@ -97,13 +97,19 @@ test("managed Wine defaults survive storage and combine with per-engine and per-
   assert.equal(fs.existsSync(path.join(userDataDir, "runtimes", "crossover", "settings.json")), false);
 });
 
-test("Windows runtime status follows the selected provider and reports its readable snapshot label", t => {
+test("Windows runtime status follows the selected provider and reports its readable snapshot label", async t => {
   const module = require("../src/modules/crossover/main");
   const wine = require("../src/modules/crossover/sikarugir/runtime/manager");
   const crossover = require("../src/modules/crossover/runtime/manager");
   const settings = { runtimes: { sikarugir: { defaultVersion: "selected-snapshot" } } };
   const runtimeSettings = { graphicsBackend: "dxmt" };
-  const userDataDir = path.join(os.tmpdir(), "windows-status");
+  // Status describes the translators each selected Wine root loads; empty roots
+  // supply none, and applications installed on this Mac stay out of the list.
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "windows-status-"));
+  t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
+  crossover.__test.writeRegistry(userDataDir, { applications: [], ignoredPaths: crossover.__test.AUTOMATIC_PATHS });
+  const wineRoot = path.join(userDataDir, "selected"), crossoverRoot = path.join(userDataDir, "local");
+  for (const root of [wineRoot, crossoverRoot]) fs.mkdirSync(root);
   const calls = [];
   t.mock.method(wine, "resolveSelection", (entry, selectedSettings, directory, options) => {
     calls.push("sikarugir");
@@ -111,18 +117,20 @@ test("Windows runtime status follows the selected provider and reports its reada
     assert.equal(directory, userDataDir);
     assert.equal(options, runtimeSettings);
     return { ready: true, version: "selected-snapshot", versionLabel: "11.0 · support 1.0.21",
-      install: { executablePath: "/selected/wine", engineVersion: "11.0_1" } };
+      install: { executablePath: path.join(wineRoot, "bin/wine"), engineRoot: wineRoot, installDir: wineRoot, engineVersion: "11.0_1" } };
   });
   t.mock.method(crossover, "resolveSelection", () => {
     calls.push("crossover");
-    return { ready: true, version: "local-app", install: { executablePath: "/local/wine", upstreamVersion: "26.3" } };
+    return { ready: true, version: "local-app", install: { executablePath: path.join(crossoverRoot, "bin/wine"), crossoverRoot, upstreamVersion: "26.3" } };
   });
   const entry = { runtimeId: "crossover" };
   const context = { settings, userDataDir, runtimeSettings, runtimeId: "sikarugir" };
-  const selected = module.actions.runtimeStatus(entry, {}, context);
-  assert.equal(selected.install.executablePath, "/selected/wine");
+  const selected = await module.actions.runtimeStatus(entry, {}, context);
+  assert.equal(selected.version, "selected-snapshot");
+  assert.equal(Object.hasOwn(selected, "install"), false, "status leaves installation paths with the runtime");
   assert.equal(selected.versionLabel, "11.0 · support 1.0.21");
-  const local = module.actions.runtimeStatus(entry, {}, { ...context, runtimeId: "crossover" });
+  const local = await module.actions.runtimeStatus(entry, {}, { ...context, runtimeId: "crossover" });
+  assert.equal(local.version, "local-app");
   assert.equal(local.versionLabel, "26.3");
   assert.deepEqual(calls, ["sikarugir", "crossover"]);
 });

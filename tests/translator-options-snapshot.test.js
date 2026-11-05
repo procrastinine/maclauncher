@@ -33,7 +33,9 @@ function plugin() {
 
 test('translator option role summaries omit derived inventories while preserving the full canonical plan and display contract', t => {
   const f = fixture(t), source = { kind: 'custom', id: 'fixture-source', label: 'Fixture source', futureSource: 'retained' };
-  f.put('included/d3d11.dll', dll()); f.put('selected/d3d11.dll', dll());
+  // Identical copies share one option, so the selected copy differs from the included one.
+  const differing = dll(); differing.write('selected', 100);
+  f.put('included/d3d11.dll', dll()); f.put('selected/d3d11.dll', differing);
   const pluginFile = f.put('video/plugins/libgstfixture.dylib', plugin());
   const privateFile = f.put('video/private/libfixture.dylib', image({ cpu: X64 }));
   const supplied = { ...Description.describeTranslator(path.join(f.root, 'included'), { id: 'included-renderer', engine: 'future-engine', source, version: 'included-release' }),
@@ -62,13 +64,17 @@ test('translator option role summaries omit derived inventories while preserving
   const eleven = result.translatorRoles.find(row => row.id === 'd3d11');
   assert.equal(eleven.settingsKey, 'translatorD3D11'); assert.equal(eleven.optionsKey, 'translatorD3D11Options'); assert.equal(eleven.groupId, 'd3d11');
   assert.equal(eleven.value, selected.id); assert.equal(eleven.selected.id, selected.id); assert.equal(eleven.used.id, supplied.id);
-  assert.equal(eleven.fallback, true); assert.equal(eleven.reason, 'Actual fixture loading fact'); assert.equal(eleven.inherited, false);
+  // Role summaries carry the reason code; the plan keeps the detailed loading fact.
+  assert.equal(eleven.fallback, true); assert.equal(eleven.reason, 'load-impossible'); assert.equal(eleven.inherited, false);
+  assert.equal(plan.components.d3d11.reason, 'Actual fixture loading fact');
   assert.equal(eleven.selected.engineLabel, 'Future project'); assert.equal(eleven.used.settingsEngine, 'declared-settings');
   assert.deepEqual(eleven.used.source, source); assert.deepEqual(eleven.used.apis, ['Direct3D 11']);
   assert.equal(result.translatorRoles.find(row => row.id === 'video').used.futureVideo.metadata, 'retained');
   const option = result.translatorD3D11Options.find(row => row.value === supplied.id);
   assert.deepEqual(option.runtimeSettingsPatch, { translatorD3D11: supplied.id });
-  assert.equal(result.translatorD3D11Options[0].value, ''); assert.ok(result.translatorD3D11Options.some(row => row.value === 'inherit'));
+  // Without a choice of its own, the API keeps the default Direct3D engine.
+  assert.ok(result.translatorD3D11Options.some(row => row.value === '' && row.label === 'Default Direct3D engine'));
+  assert.ok(result.translatorD3D11Options.some(row => row.value === 'inherit'));
   assert.ok(result.translatorD3D11Options.some(row => row.value === 'automatic'));
   assert.equal(JSON.stringify(result).includes('derived-only-preparation-warning'), false);
   assert.deepEqual(plan, before); assert.equal(JSON.stringify(plan), canonicalJson);
@@ -82,6 +88,6 @@ test('translator option role summaries preserve canonical null Automatic and inh
   const plan = Plan.projectRoles(Plan.resolvePlan({ runtime: 'crossover', environment: { label: 'Bottle setting', selections: {} } }));
   const before = structuredClone(plan), result = Plan.apiOptions(plan, { environment: { label: 'Bottle setting' } });
   for (const row of result.translatorRoles) { assert.equal(row.selected, null); assert.equal(row.used, null); assert.equal(row.inherited, true); }
-  assert.ok(result.translatorGroups.some(group => /global backend/.test(group.reason)));
+  assert.ok(result.translatorGroups.some(group => group.reason === 'runtime-global-automatic'));
   assert.deepEqual(plan, before);
 });
