@@ -30,7 +30,7 @@ test("MKXP-Z keeps exact global/game choices", t => {
   assert.equal(missing.ready,false);assert.equal(missing.version,"missing");
 });
 
-test("MKXP-Z defaults prefer listed releases and fall back to ready installed versions", t => {
+test("MKXP-Z defaults prefer ready installations and fall back to listed releases", t => {
   const userDataDir=makeTempDir("maclauncher-mkxpz-default-");t.after(()=>fs.rmSync(userDataDir,{recursive:true,force:true}));
   const older={version:"1.0.0",appPath:"/installed/Older.app",ready:true},newer={version:"2.0.0",appPath:"/installed/Newer.app",ready:true};
   let listed=[], installed=[older,{version:"3.0.0",ready:false,status:"damaged",error:"damaged"},newer];
@@ -42,11 +42,16 @@ test("MKXP-Z defaults prefer listed releases and fall back to ready installed ve
     assert.equal(Manager.resolveSelection({}, {runtimes:{mkxpz:settings}}, userDataDir).install,newer);
   }
   listed=["4.0.0"];
-  assert.equal(Manager.resolveSelection({}, {}, userDataDir).version,"4.0.0");
-  assert.equal(Manager.resolveSelection({}, {}, userDataDir).ready,false);
+  assert.equal(Manager.resolveSelection({}, {}, userDataDir).version,newer.version);
+  assert.equal(Manager.resolveSelection({}, {}, userDataDir).ready,true);
+  const explicit=Manager.resolveSelection({runtimeData:{mkxpz:{version:"4.0.0"}}},{},userDataDir);
+  assert.equal(explicit.version,"4.0.0");assert.equal(explicit.ready,false);
   assert.equal(Manager.getState({userDataDir,settings:{defaultVersion:older.version}}).defaultSource,"saved");
   assert.equal(Manager.resolveSelection({}, {runtimes:{mkxpz:{defaultVersion:older.version}}},userDataDir).install,older);
   assert.equal(Manager.resolveSelection({runtimeData:{mkxpz:{version:newer.version}}},{},userDataDir).install,newer);
+  installed=[];
+  assert.equal(Manager.resolveSelection({}, {}, userDataDir).version,"4.0.0");
+  assert.equal(Manager.resolveSelection({}, {}, userDataDir).ready,false);
 });
 
 test("owned NFC builds bind the full source adaptation and executable without claiming publisher bytes", () => {

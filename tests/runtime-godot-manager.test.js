@@ -210,7 +210,7 @@ test("Godot full refresh is not suppressed by an in-flight reduced request", asy
   }
 });
 
-test("Godot effective defaults prefer stable published versions and clear back to the manager", async () => {
+test("Godot effective defaults prefer ready installations and clear back to the manager", async () => {
   const fetch = Manager.core.fetchAvailableVersions, list = Manager.core.listInstalled;
   try {
     Manager.core.listInstalled = () => [{version:"4.6-stable",ready:true,variant:"mono"}];
@@ -218,12 +218,12 @@ test("Godot effective defaults prefer stable published versions and clear back t
     await Manager.refreshCatalog({force:true});
     for (const settings of [{},{defaultVersion:null}]) {
       const state = Manager.getState({settings,userDataDir:"/unused"});
-      assert.equal(state.defaultVersion,"4.7-stable");assert.equal(state.defaultSource,"manager");
-      assert.equal(state.sections.find(row=>row.id==='4').defaultVersion,"4.7-stable");
+      assert.equal(state.defaultVersion,"4.6-stable");assert.equal(state.defaultSource,"manager");
+      assert.equal(state.sections.find(row=>row.id==='4').defaultVersion,"4.6-stable");
       assert.equal(state.sections.find(row=>row.id==='3').defaultVersion,"3.6-stable");
     }
-    const saved=Manager.getState({settings:{defaultVersion:"4.6-stable"},userDataDir:"/unused"});
-    assert.equal(saved.defaultVersion,"4.6-stable");assert.equal(saved.defaultSource,"saved");
+    const saved=Manager.getState({settings:{defaultVersion:"4.7-stable"},userDataDir:"/unused"});
+    assert.equal(saved.defaultVersion,"4.7-stable");assert.equal(saved.defaultSource,"saved");
     assert.equal(Manager.updateSettingsAfterInstall({}, {version:"4.7-stable"},{}).defaultVersions[4],"4.7-stable");
     assert.deepEqual(Manager.updateSettingsAfterInstall({defaultVersion:"4.6-stable"},{version:"4.7-stable"},{}),{defaultVersion:"4.6-stable"});
     Manager.core.fetchAvailableVersions = async () => ({versions:[]});await Manager.refreshCatalog({force:true});

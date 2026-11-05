@@ -190,7 +190,7 @@ test("Install sets a newer default only for runtimes and sections that declare i
   assert.equal(await run(undefined), null, "Runtimes without the declaration keep the user's default");
 });
 
-test('registered-only runtimes provide a manager default while published and saved defaults retain priority', async t => {
+test('registered runtimes fill catalog-only defaults while saved and manager choices retain priority', async t => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'registered-default-'));
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
   const Custom = require('../src/modules/shared/runtime/custom-runtime');
@@ -213,6 +213,8 @@ test('registered-only runtimes provide a manager default while published and sav
   assert.equal(manager.getState({ userDataDir }).defaultVersion, '9.0');
   assert.equal(manager.resolveSelection({}, {}, userDataDir).version, '9.0');
   published = null;catalogOnly = 'sdk-abcdef';
-  assert.equal(manager.getState({ userDataDir }).defaultVersion, catalogOnly, 'A catalog-only manager supplies its published default before a registered path');
+  assert.equal(manager.getState({ userDataDir }).defaultVersion, runtimePath, 'A ready registered copy is preferred when the manager has only a catalog');
+  assert.equal(manager.resolveSelection({}, {}, userDataDir).version, runtimePath);
+  assert.equal(manager.resolveSelection({}, {}, userDataDir).ready, true);
   assert.equal(manager.getState({ userDataDir }).defaultSource, 'manager');
 });

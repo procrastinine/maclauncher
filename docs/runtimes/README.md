@@ -105,7 +105,7 @@ Each downloadable runtime lists its published versions in a catalog, and Play pi
 
 1. The version chosen for the game.
 2. The version recommended by the game's own data. Recommendations come from detected formats, ABIs and engine versions, such as GameMaker WAD and sequence layouts, Ren'Py SDK versions, Java bytecode lines, KiriKiri native APIs and Butterscotch launch arguments, and from known compatibility mappings for particular games.
-3. The runtime default. A saved default takes precedence over the manager default, which is the newest compatible stable version in the catalog, or the newest ready installed version when the catalog lists no compatible version. Clearing a saved default restores the manager default.
+3. The runtime default. A saved default takes precedence over the manager default, which prefers a ready compatible installed version. When no usable installed version is available, the manager selects a compatible stable version from the catalog. Clearing a saved default restores the manager default.
 
 An explicitly chosen version is never replaced with a different version. When it cannot be installed or is incompatible, Play instead reports the specific reason, such as a required engine ABI, CPU architecture or macOS version.
 
