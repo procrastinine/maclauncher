@@ -4,15 +4,15 @@ const Upstream = require("./upstream"), Component = require("./component-runtime
 const { archiveFormat } = require("./release-files");
 const definitions = {
   gstreamer: { label: "GStreamer codecs", names: ["gstreamer-1.0"], sources: [] },
-  dxvk: { label: "DXVK", names: ["dxvk", "dxvk3", "d9vk"],
+  dxvk: { label: "DXVK", apis: ["Direct3D 9", "Direct3D 10", "Direct3D 11"], names: ["dxvk", "dxvk3", "d9vk"],
     sources: [["upstream", "Upstream", "doitsujin/dxvk"], ["macos", "macOS", "Gcenx/DXVK-macOS", name => !/async/i.test(name)],
       ["async", "macOS async", "Gcenx/DXVK-macOS", name => /async/i.test(name)],
       ...["dxvk", "dxvk3", "d9vk"].map(component => ["template-" + component, "Sikarugir Template · " + component, "Sikarugir-App/Template", null, component])] },
-  "vkd3d-proton": { label: "vkd3d-proton", names: ["vkd3d-proton"],
+  "vkd3d-proton": { label: "vkd3d-proton", apis: ["Direct3D 12"], names: ["vkd3d-proton"],
     sources: [["upstream", "Upstream", "HansKristian-Work/vkd3d-proton"]] },
-  d3dmetal: { label: "D3DMetal", names: ["d3dmetal", "apple_gptk", "redist"],
+  d3dmetal: { label: "D3DMetal", apis: ["Direct3D 11", "Direct3D 12"], names: ["d3dmetal", "apple_gptk", "redist"],
     sources: [["template", "Sikarugir Template", "Sikarugir-App/Template", null, "d3dmetal"]] },
-  dxmt: { label: "DXMT", names: ["dxmt"],
+  dxmt: { label: "DXMT", apis: ["Direct3D 10", "Direct3D 11"], names: ["dxmt"],
     sources: [["upstream", "Upstream", "3Shain/dxmt", name => /builtin/i.test(name)],
       ["template", "Sikarugir Template", "Sikarugir-App/Template", null, "dxmt"]] }
 };

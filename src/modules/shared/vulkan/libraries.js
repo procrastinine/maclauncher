@@ -121,7 +121,7 @@ function createManager(backend, dependencies = {}) {
     nativeLibrary: true, cacheDownloads: true,
     inspectRuntime(options) {
       const native = require("../runtime/local-native").resolveLocalRuntime(options), root = path.dirname(native.executablePath);
-      const translator = require("../runtime/component-runtime").description(root, { engine: backend }, { source: "upstream", version: options.runtimeVersion });
+      const translator = require("../runtime/component-runtime").description(root, { engine: backend, apis: ["Vulkan"] }, { source: "upstream", version: options.runtimeVersion });
       return { ...native, translator, translatorRoot: root };
     }, upstream: backend === "moltenvk" ? moltenvk : kosmickrisp,
     resolveExecutable: root => path.join(root, definition.library),
@@ -150,7 +150,7 @@ function createManager(backend, dependencies = {}) {
         const native = inspect(path.join(unpacked, file), { signal, macOSVersion: (dependencies.systemVersionSync || systemVersionSync)() });
         for (const slice of native.slices) if (versionAtLeast(slice.minimumMacOS, minimumMacOS)) minimumMacOS = slice.minimumMacOS;
       }
-      const translator = require("../runtime/component-runtime").description(unpacked, { engine: backend }, { source: "upstream" });
+      const translator = require("../runtime/component-runtime").description(unpacked, { engine: backend, apis: ["Vulkan"] }, { source: "upstream" });
       translator.files = translator.files.map(file => ({ ...file, path: file.relative }));delete translator.root;delete translator.id;
       return { translator, backend, minimumMacOS, libraries: files.map(file => ({ file, sha256: hashFile(path.join(unpacked, file)) })) };
     }, dependencies: { ...dependencies, extractArchive: (archive, output, signal) => backend === "moltenvk" ? extract(archive, output, signal)
@@ -167,7 +167,7 @@ function createManager(backend, dependencies = {}) {
   const Component = require("../runtime/component-runtime"), customInspect = result.customRuntime.inspect;
   Custom.configure(result, { prepare: Component.prepareArchive, inspect(input, context) {
     const root = Component.componentRoot(context.data?.root || input, { names: [backend], library: backend === "moltenvk" ? /^libMoltenVK\.dylib$/ : /^libvulkan_kosmickrisp\.dylib$/ });
-    const inspected = customInspect(root, context), translator = Component.description(root, { engine: backend }, {
+    const inspected = customInspect(root, context), translator = Component.description(root, { engine: backend, apis: ["Vulkan"] }, {
       source: fs.existsSync(path.join(input, "Contents/SharedSupport/CrossOver")) ? { kind: "crossover", id: input, runtime: "crossover", label: "CrossOver" } : "custom" });
     return { ...inspected, translator, translatorRoot: root };
   } });

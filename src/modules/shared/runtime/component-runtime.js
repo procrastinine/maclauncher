@@ -14,7 +14,7 @@ function componentRoot(input, { names }) {
   return input;
 }
 function description(root, definition, options = {}) {
-  return require("./translator-description").describeTranslator(root, { engine: definition.engine, ...options });
+  return require("./translator-description").describeTranslator(root, { engine: definition.engine, apis: definition.apis || [], ...options });
 }
 function inspected(root, definition, options) {
   const translator = description(root, definition, options);
