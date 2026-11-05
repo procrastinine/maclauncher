@@ -411,10 +411,6 @@ export function sortInstalled(
     if (sort === "path") {
       return String(a.installDir || "").localeCompare(String(b.installDir || ""));
     }
-    const byVersion =
-      sort === "oldest"
-        ? compareSemver(String(a.sortVersion || a.version || ""), String(b.sortVersion || b.version || ""))
-        : compareSemver(String(b.sortVersion || b.version || ""), String(a.sortVersion || a.version || ""));
     if (sort === "default" && defaultVersion) {
       const aIsDefault =
         a.version === defaultVersion && (defaultVariant ? a.variant === defaultVariant : true);
@@ -422,6 +418,14 @@ export function sortInstalled(
         b.version === defaultVersion && (defaultVariant ? b.variant === defaultVariant : true);
       if (aIsDefault !== bIsDefault) return aIsDefault ? -1 : 1;
     }
+    const aVersion = String(a.sortVersion || (a.translator || a.reference ? "" : a.version) || "");
+    const bVersion = String(b.sortVersion || (b.translator || b.reference ? "" : b.version) || "");
+    if (Boolean(aVersion) !== Boolean(bVersion)) return aVersion ? -1 : 1;
+    if (!aVersion && !bVersion) {
+      const byLabel = String(a.versionLabel || a.label || "").localeCompare(String(b.versionLabel || b.label || ""), undefined, { numeric: true });
+      return byLabel || String(a.installDir || "").localeCompare(String(b.installDir || ""));
+    }
+    const byVersion = sort === "oldest" ? compareSemver(aVersion, bVersion) : compareSemver(bVersion, aVersion);
     if (byVersion !== 0) return byVersion;
     const byHost = sort === "oldest"
       ? compareSemver(String(a.sortHostVersion || ""), String(b.sortHostVersion || ""))

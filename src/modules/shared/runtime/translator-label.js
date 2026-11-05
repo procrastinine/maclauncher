@@ -38,7 +38,10 @@ function registeredLabels(rows) {
   return rows.map(row => {
     if (!row.translator) return row;
     const translator = { ...row.translator, labelFolder: counts.get(primary(row)) > 1 ? row.registrationName : undefined };
-    return { ...row, translator, versionLabel: label(translator) };
+    const result = { ...row, translator, versionLabel: label(translator) }, sortVersion = componentVersion(translator);
+    if (sortVersion) result.sortVersion = sortVersion;
+    else delete result.sortVersion;
+    return result;
   });
 }
 module.exports = { componentVersion, componentLabel, hostLabel, label, registeredLabels };

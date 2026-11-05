@@ -1042,7 +1042,9 @@ test('Installed ordering compares component releases before host releases and pr
   };
   const templates=[host('Z-older','sikarugir',{templateVersion:'1.0.9'},'DXVK-Sikarugir-v3.1.1-async'),
     host('A-newer','sikarugir',{catalogEntry:{template:{version:'1.0.10'}}},'DXVK-Sikarugir-v3.1.1-async'),host('unknown','sikarugir',{})];
-  const crosses=[host('Cross','crossover',{upstreamVersion:'26.3'},'1.10.3')],beforeHosts=structuredClone([templates,crosses]);
+  const crosses=[host('Cross','crossover',{upstreamVersion:'26.3'},'1.10.3'),
+    host('Cross-B','crossover',{upstreamVersion:'26.10'},'3.1.1'),host('Cross-C','crossover',{upstreamVersion:'26.9'},'3.1.1'),
+    host('Cross-D','crossover',{upstreamVersion:'26.7'},'1.10.3')],beforeHosts=structuredClone([templates,crosses]);
   const manifest=require('../src/modules/crossover/manifest.json');
   const managers=[['sikarugir',templates],['crossover',crosses]].map(([runtime,hosts])=>({id:manifest.runtime.manager[runtime],core:{listInstalled:()=>hosts},getState:()=>({versionLabels:{}})}));
   t.mock.method(require('../src/modules/registry'),'getModule',id=>id==='crossover'?{manifest,runtimeManagers:managers}:null);
@@ -1083,6 +1085,25 @@ test('Installed ordering compares component releases before host releases and pr
   const defaults=assertOrder('default',['Older fact','Newest fact','Tied fact','Unknown fact']).split('class="saveRow"').slice(1);
   assert.match(defaults.find(row=>row.includes('Older fact')),/badgeAccent/);assert.doesNotMatch(defaults.find(row=>row.includes('Newest fact')),/badgeAccent/);
   assert.equal(runtime.defaultVersion,'opaque-z');assert.deepEqual(installed,before);assert.deepEqual(references,refsBefore);assert.deepEqual([templates,crosses],beforeHosts);
+  const Labels=require('../src/modules/shared/runtime/translator-label'),ordinary={version:'ordinary',sortVersion:'7.0'};
+  const customInput=[{version:'/fixture/custom-newer',registrationName:'newer',translator:{engine:'dxvk',version:'DXVK-Sikarugir-v3.1.1-async',source:'custom'}},
+    {version:'/fixture/custom-older',registrationName:'older',translator:{engine:'dxvk',version:'DXVK-Sikarugir-async-v1.10.3 D9VK-Sikarugir-v2.3',source:'custom'}},
+    {version:'/fixture/9.99-z',registrationName:'Zulu',sortVersion:'stale',translator:{engine:'dxvk',version:'',source:'custom'}},
+    {version:'/fixture/0.01-a',registrationName:'Alpha',translator:{engine:'dxvk',version:'',source:'custom'}}];
+  const customBefore=structuredClone(customInput),custom=Labels.registeredLabels(customInput);
+  assert.equal(custom[0].sortVersion,'3.1.1-async');assert.equal(custom[1].sortVersion,'1.10.3');
+  assert.ok(custom.slice(2).every(row=>!Object.hasOwn(row,'sortVersion')));assert.equal(Labels.registeredLabels([ordinary])[0],ordinary);
+  const mixed={...included,installed:custom,versionLabels:{...included.versionLabels,...Object.fromEntries(custom.map(row=>[row.version,row.versionLabel]))}};
+  for(const sort of ['newest','oldest']){
+    const markup=render([mixed],mixed.id,{runtimeUi:{[mixed.id]:{remoteOpen:{},installedSort:{default:sort},installVersion:{},installVariant:{},pendingActions:{},messages:{},sourceErrors:{}}}});
+    const labels=markup.split('class="saveRow"').slice(1).map(row=>/<div class="saveName">([^<]+)/.exec(row)?.[1]);
+    const unknown=[reference(templates[2]).versionLabel,...custom.slice(2).map(row=>row.versionLabel)].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+    assert.deepEqual(labels.slice(-unknown.length),unknown,'unknown components follow every known release, in visible-label order');
+    assert.ok(sort==='oldest'?labels.indexOf(custom[1].versionLabel)<labels.indexOf(custom[0].versionLabel):labels.indexOf(custom[0].versionLabel)<labels.indexOf(custom[1].versionLabel));
+    const expected=['DXVK 3.1.1 · CrossOver 26.10','DXVK 3.1.1 · CrossOver 26.9','DXVK 1.10.3 · CrossOver 26.7','DXVK 1.10.3 · CrossOver 26.3'];
+    assert.deepEqual(labels.filter(label=>expected.includes(label)),sort==='oldest'?[...expected].reverse():expected,'the four-host subsequence stays exact');
+  }
+  assert.deepEqual(customInput,customBefore);assert.deepEqual(references,refsBefore);
 });
 
 test('official codec catalog, local registration and Apple upstream links use ordinary runtime presentation', t => {
