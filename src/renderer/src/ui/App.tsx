@@ -640,9 +640,11 @@ export default function App() {
     return out;
   }, [state?.modules]);
 
+  // Only the Credits window lists acknowledgments.
+  const creditsOpen = utilityWindowContext?.view === "credits";
   const acknowledgments = useMemo(
-    () => collectAcknowledgments(state?.modules || [], sharedAcknowledgments),
-    [state?.modules]
+    () => creditsOpen ? collectAcknowledgments(state?.modules || [], sharedAcknowledgments) : [],
+    [creditsOpen, state?.modules]
   );
 
   const runtimeManagers = useMemo(

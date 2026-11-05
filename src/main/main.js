@@ -2116,7 +2116,7 @@ const utilityWindows = createUtilityWindowController({
     attachDevToolsShortcut(win);
     if (activate) attachDevToolsAutoOpen(win, view);
   },
-  onContextChange: () => broadcastState()
+  onContextChange: win => sendState(win)
 });
 const downloadManager = new DownloadManager({
   onChange: () => {
@@ -2307,16 +2307,19 @@ function broadcastActivity({ runningChanged = false } = {}) {
   }
 }
 
+function sendState(win, state = getLauncherState()) {
+  if (!launcherWindows.has(win)) return;
+  try {
+    activityDelivery.supersede(win);
+    win.webContents.send("launcher:state", utilityWindows.stateForWindow(win, state));
+  } catch {}
+}
+
 function broadcastState() {
   if (launcherWindows.size === 0) return;
   updateBackendRunning();
   const state = getLauncherState();
-  for (const win of launcherWindows) {
-    try {
-      activityDelivery.supersede(win);
-      win.webContents.send("launcher:state", utilityWindows.stateForWindow(win, state));
-    } catch {}
-  }
+  for (const win of launcherWindows) sendState(win, state);
   // Settings and runtime inventories reach open graphics views; no view, no build.
   graphicsCatalog.refresh();
 }

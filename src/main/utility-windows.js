@@ -45,8 +45,8 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
         if (!win.isDestroyed()) win.destroy();
         throw error;
       });
+      // The new page reads its request with its first state; nothing is resent.
       await record.ready;
-      onContextChange(win);
       return focus(win,activate);
     } catch (error) {
       forget(record);
@@ -55,9 +55,11 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
     }
   }
 
+  // Settings, Runtimes, Credits and the other utility views show no library
+  // rows, so their state leaves out the games and their icon previews.
   function stateForWindow(win, state) {
     const request = byWindow.get(win)?.context;
-    return request && state ? { ...state, utilityWindow: { ...request } } : state;
+    return request && state ? { ...state, recents: [], utilityWindow: { ...request } } : state;
   }
   return { open, stateForWindow };
 }

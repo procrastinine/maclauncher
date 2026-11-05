@@ -124,7 +124,7 @@ test("all utility windows receive the same current shared state without a diverg
   assert.equal(f.controller.stateForWindow(library, before), before);
   for (const win of windows) {
     const shown = f.controller.stateForWindow(win, before);
-    assert.equal(shown.recents, before.recents);
+    assert.deepEqual(shown.recents, [], "utility views show no library rows");
     assert.equal(shown.launcherSettings, before.launcherSettings);
     shown.utilityWindow.view = "changed";
   }
@@ -536,4 +536,14 @@ test("runtime import and download sheets follow the focused registered window an
   library.destroy();
   await api.chooseImportPath({ label: "Import", kinds: ["file"], extensions: [] });
   assert.equal(calls.at(-1).length, 2, "No closed native window is passed as a sheet parent");
+});
+
+test('utility windows receive the launcher state without library rows, other windows receive it whole', async () => {
+  const f = fixture(), win = await f.controller.open({ view: 'runtimes', managerId: 'translator-dxvk' });
+  const state = { recents: [{ gamePath: '/game', iconUrl: 'data:image/png;base64,' + 'a'.repeat(1000) }], runtimeManagers: { dxvk: {} }, modules: [] };
+  const sent = f.controller.stateForWindow(win, state);
+  assert.deepEqual(sent.recents, []);
+  assert.equal(sent.runtimeManagers, state.runtimeManagers);
+  assert.equal(sent.utilityWindow.managerId, 'translator-dxvk');
+  assert.equal(f.controller.stateForWindow({}, state), state, 'the library and per-game windows keep every game');
 });
