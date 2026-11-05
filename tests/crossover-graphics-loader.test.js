@@ -6,6 +6,9 @@ function installation(root) {
   const crossoverRoot = path.join(root, "vendor"), loaderPath = path.join(crossoverRoot, "bin/wineloader");
   for (const [name, bytes] of Object.entries({ "bin/wineloader": "supplied loader", "bin/wineserver": "server",
     "lib/wine/x86_64-unix/wine": "distinct child loader", "lib/wine/x86_64-unix/ntdll.so": "supplied ntdll", "lib/wine/x86_64-unix/crypt32.so": "supplied unix module",
+    "lib/dxvk/x86_64-windows/d3d11.dll": "included DXVK",
+    "lib/dxmt/x86_64-windows/dxgi.dll": "included DXMT",
+    "lib/other-backend/data": "other vendor closure",
     "lib64/library.dylib": "supplied dependency",
     "lib/wine/x86_64-windows/ntdll.dll": "PE ntdll", "lib/wine/x86_64-windows/apisetschema.dll": "api sets", "share/wine/data": "data" })) {
     const file = path.join(crossoverRoot, name);fs.mkdirSync(path.dirname(file), { recursive: true });fs.writeFileSync(file, bytes, { mode: 0o755 });
@@ -103,6 +106,10 @@ test("shared private loader preserves complete i386 and x86_64 Windows views wit
   };
   const options = { execute, userDataDir, translatorView }, loader = await Loader.prepare(selected, firstGame, options);
   const prepared = path.resolve(path.dirname(loader), "..");
+  for (const name of ["dxvk", "dxmt", "other-backend"])
+    assert.equal(fs.realpathSync(path.join(prepared, "lib", name)), path.join(vendor, "lib", name));
+  assert.equal(fs.readFileSync(path.join(prepared, "lib/dxvk/x86_64-windows/d3d11.dll"), "utf8"), "included DXVK");
+
   for (const architecture of ["i386-windows", "x86_64-windows"]) {
     const directory = path.join(vendor, "lib/wine", architecture), view = path.join(prepared, "lib/wine", architecture);
     for (const name of fs.readdirSync(directory)) {

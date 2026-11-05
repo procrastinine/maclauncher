@@ -71,6 +71,10 @@ async function prepare(installation, directory, { signal, execute = executeFile,
     for (const name of fs.readdirSync(path.join(vendor, unix)).sort()) {
       if (name !== "ntdll.so" && /\.(?:so|dylib)$/.test(name)) links[`${unix}/${name}`] = path.join(vendor, unix, name);
     }
+    // Keep backend redirects relative to the private Wine root faithful to
+    // the vendor layout; the wine view retains its explicit overrides below.
+    for (const name of fs.readdirSync(path.join(vendor, "lib")).sort())
+      if (name !== "wine") links[`lib/${name}`] = path.join(vendor, "lib", name);
     if (fs.existsSync(path.join(vendor, "lib64"))) links.lib64 = path.join(vendor, "lib64");
   }
   for (const architecture of separateLoader ? layout.windows : []) {
