@@ -43,7 +43,7 @@ function includedTranslators(install, runtime, { engine: requestedEngine } = {})
     const { RELATIVE_PATHS, templateRenderers, gstreamerPaths } = require('../../crossover/sikarugir/graphics/closure');
     const support = install.templateRoot || install.supportRoot || path.join(install.installDir, 'support');
     const gstreamer = gstreamerPaths(support);
-    add(gstreamer.plugins, 'gstreamer', 'video', { form: 'dylib' });
+    add(gstreamer.plugins, 'gstreamer', 'video', { form: 'dylib', frameworkRoot: gstreamer.root });
     // This is the same explicit DYLD root used by the Sikarugir launcher.
     if (fs.existsSync(gstreamer.lib)) nativeRoots.push(gstreamer.lib);
     const rendererPath = fs.existsSync(path.join(support, RELATIVE_PATHS.renderers)) ? RELATIVE_PATHS.renderers : templateRenderers(support, install.templateVersion);
@@ -113,8 +113,9 @@ function managedTranslators(context, runtime, managers = runtimeManagers(), arch
   return choices;
 }
 function inventory(install, runtime, context, dependencies = {}) {
-  const result = includedTranslators(install, runtime), managers = dependencies.managers || runtimeManagers();
-  const choices = dependencies.choices || managedTranslators(context, runtime, managers, result.layout.architecture);
+  const result = install ? includedTranslators(install, runtime) : { included: [], warnings: [], layout: null };
+  const managers = dependencies.managers || runtimeManagers();
+  const choices = dependencies.choices || managedTranslators(context, runtime, managers, result.layout?.architecture);
   const current = context.wineEnvironment;
   const environment = current ? { label: runtime === 'crossover' ? 'Bottle setting' : 'Wrapper setting', selections: {} } : null;
   if (current) for (const [component, key] of [['d3d-renderer', 'graphicsBackend'], ['vulkan-driver', 'vulkanBackend']]) {
@@ -138,7 +139,7 @@ function inventory(install, runtime, context, dependencies = {}) {
     const explicit = version && version !== 'auto' || entry?.runtimeData?.[manager?.id]?.version || context.settings?.runtimes?.[manager?.id]?.defaultVersion;
     if (manager && explicit) {
       const selected = manager.resolveSelection(entry, context.settings, context.userDataDir, { version: version && version !== 'auto' ? version : undefined,
-        architecture: Architecture.normalizeArchitecture(result.layout.architecture), verification: 'status' });
+        architecture: Architecture.normalizeArchitecture(result.layout?.architecture), verification: 'status' });
       const legacy = choices.find(item => item.managerId === manager.id && item.runtimeVersion === selected.version);
       selections['d3d-renderer'] = legacy?.id || `${manager.id}:${selected.version}`;
     }
@@ -268,7 +269,9 @@ function settingsForPlan(settings, plan) {
 function withSettings(manifest) {
   const result = structuredClone(manifest);
   const controls = [{ label: 'Default Direct3D engine', settingsKey: SETTINGS['d3d-renderer'],
-    optionsKey: SETTINGS['d3d-renderer'] + 'Options' }, ...Roles.ROLES];
+    optionsKey: SETTINGS['d3d-renderer'] + 'Options', description: 'Sets the renderer for Direct3D versions without an override.' },
+    ...Roles.ROLES.map(role => ({ ...role, description: role.apis.length ? `Chooses the installed translator for ${role.label}. Shared libraries can also update linked Direct3D choices.` :
+      role.id === 'vulkan-driver' ? 'Chooses the Vulkan driver used by translators that render through Vulkan.' : 'Adds codec plugins to the runtime’s video support.' }))];
   for (const runtime of ['crossover', 'sikarugir']) {
     const schema = result.runtime.entries[runtime].settings;
     schema.visibilityAction = 'listTranslatorOptions';
@@ -277,12 +280,10 @@ function withSettings(manifest) {
     for (const field of schema.fields) if (['graphicsBackend', 'vulkanBackend', 'graphicsBridgeVersion'].includes(field.key)) field.hidden = true;
     for (const role of controls) schema.defaults[role.settingsKey] = '';
     schema.fields.splice(Math.max(0, index), 0, ...controls.map(role => {
-      const legacy = Object.values(SETTINGS).includes(role.settingsKey);
       return { key: role.settingsKey, type: 'select', label: role.label, optionsAction: 'listTranslatorOptions', optionsKey: role.optionsKey,
-        options: [{ value: '', label: legacy ? runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice" : 'Existing selection' }],
+        options: [{ value: '', label: runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice" }],
         inheritFrom: 'environmentReference', inheritanceInOptions: true, section: 'Basic',
-        description: legacy ? 'Versions and sources are read from installed files. Changes apply on the next launch.' :
-          'Shared libraries link affected API choices. Existing choices remain unchanged until edited.' };
+        description: role.description };
     }));
   }
   return result;

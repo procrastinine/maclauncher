@@ -301,7 +301,7 @@ test('translator schema follows canonical role order and explains CrossOver glob
   t.mock.method(runtimeManager, 'resolveSelection', () => ({ ready: true, install: f.install }));
   const context = f.context({}), result = await require('../src/modules/crossover/main').actions.listTranslatorOptions(f.entry, {}, context);
   const global = result.translatorGroups.find(group => group.roles.length === Roles.DIRECT3D_ROLES.length);
-  assert.ok(global); assert.match(global.reason, /global backend/i);
+  assert.ok(global); assert.equal(global.reason, 'runtime-global-automatic');
   for (const role of Roles.DIRECT3D_ROLES) assert.equal(result.translatorRoles.find(item => item.id === role.id).used, null);
   assert.deepEqual(context.runtimeSettings, {});
 });

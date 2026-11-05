@@ -328,13 +328,17 @@ export function RuntimeSettingsWindow({
                   key={field.key} field={field} value={String(displaySettings[field.key] || "")} disabled={fieldsDisabled}
                   request={fileRequest} onChange={value => onFieldChange(field.key, value)} />;
                 if (field.optionsAction) {
+                  const firstInGroup = visibleFields.find(row => row.optionsAction === field.optionsAction)?.key === field.key;
+                  const notice = firstInGroup && choices[field.optionsAction]?.notice;
                   const selected = String((displaySettings as any)[field.key] || "");
                   const listed: RuntimeSettingOption[] = choices[field.optionsAction]?.[field.optionsKey || field.key] || field.options || [];
                   const options = field.optionsAction === "listRuntimeVersions" ? runtimeVersionOptions(listed) : listed;
                   const scope = settingChoiceScope(choices[field.optionsAction], field, options.find(option => option.value === selected));
                   const loading = choiceLoading[field.optionsAction] === true;
                   const disabled = fieldsDisabled || (field.gameOnly === true && !isGameScope) || (loading && !choices[field.optionsAction]);
-                  return <div className="settingsRow" key={field.key}>
+                  return <React.Fragment key={field.key}>
+                    {typeof notice === "string" && notice && <div className="dim">{notice}</div>}
+                    <div className="settingsRow">
                     <div className="settingsLabel">{field.label}{field.description && <HelpTip label={`About ${field.label}`}>{field.description}</HelpTip>}
                       {scope && <div className="dim">{scope}</div>}</div>
                     <div className="settingsControl">
@@ -344,14 +348,15 @@ export function RuntimeSettingsWindow({
                         {!options.some(option => option.value === selected) && <option value={selected}>{selected ? (loading || !choices[field.optionsAction] ? "Loading saved selection…" : "Selected option unavailable") : "Off"}</option>}
                         {options.map(option => <option key={option.value} value={option.value} title={settingChoiceScope(choices[field.optionsAction!], field, option) || undefined}>{option.label}</option>)}
                       </Select>
-                      <button type="button" className="btn iconOnly" title={`Refresh ${field.label}`} aria-label={`Refresh ${field.label}`} disabled={disabled || loading}
-                        onClick={() => setChoiceRevision(value => value + 1)}><RefreshIcon /></button>
+                      {firstInGroup && <button type="button" className="btn iconOnly" title="Refresh choices" aria-label="Refresh choices" disabled={disabled || loading}
+                        onClick={() => setChoiceRevision(value => value + 1)}><RefreshIcon /></button>}
                       {field.pickerAction && <button type="button" className="btn" disabled={disabled || pickingField === field.key}
                         onClick={() => void pickSettingFile(field.key, field.pickerAction!, field.pickerResultKey || "filePath")}>
                         {field.pickerLabel || "Choose…"}
                       </button>}
                     </div>
-                  </div>;
+                    </div>
+                  </React.Fragment>;
                 }
                 if (field.type === "boolean") {
                   return (

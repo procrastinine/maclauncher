@@ -1,8 +1,21 @@
 const fs = require('node:fs'), path = require('node:path');
 const { readMachOLoadCommands } = require('./macho-load-commands');
 const { readPeExports } = require('./pe-exports');
+const { readPlistFile } = require('./app-bundle');
 const { fileApis, apisForFiles } = require('./translator-roles');
 const warn = require('../graphics-warning');
+const { fileIdentity } = require('./verified-identity');
+const inspections = new Map();
+function observedIdentity(file) {
+  const identity = fileIdentity(file);
+  if (identity) return JSON.stringify(identity);
+  try { fs.lstatSync(file); return null; }
+  catch (error) { return ['ENOENT', 'ENOTDIR'].includes(error.code) ? error.code : null; }
+}
+function copyDescription(value) {
+  const { source, ...facts } = value;
+  return { ...structuredClone(facts), source };
+}
 // Ordinary runtime managers expose these descriptions through their installed
 // records. Paths refer to installed files, never to a second translator cache.
 const COMPONENTS = Object.freeze(['d3d-renderer', 'vulkan-driver', 'd3d12', 'video']);
@@ -41,11 +54,28 @@ function label(value) {
   if (!value) return '';
   const names = { d3dmetal: 'D3DMetal', dxmt: 'DXMT', dxvk: 'DXVK', wined3d: 'WineD3D',
     moltenvk: 'MoltenVK', kosmickrisp: 'KosmicKrisp', 'vkd3d-proton': 'vkd3d-proton', gstreamer: 'GStreamer' };
-  const source = typeof value.source === 'object' ? value.source.label || value.source.id : value.source;
-  return [names[value.engine] || value.engine, value.version, source ? `(${source})` : ''].filter(Boolean).join(' ');
+  const source = displayText(typeof value.source === 'object' && value.source ? value.source.label || value.source.id : value.source);
+  return [names[value.engine] || value.engine, value.version, source ? `(${source})` : ''].map(displayText).filter(Boolean).join(' ');
 }
-/** Synchronous custom-runtime.inspect seam. Walks the chosen component root. */
-function describeTranslator(root, { engine, source, version, component, id, apis = [], form, pluginDirectories, logger = console } = {}) {
+function displayText(value) { return String(value ?? '').replace(/[\s\x00-\x1f\x7f]+/g, ' ').trim(); }
+/** Synchronous custom-runtime.inspect seam; unchanged observed files reuse facts. */
+function describeTranslator(root, options = {}) {
+  const { logger, ...selection } = options;
+  let key;
+  try { key = JSON.stringify([fs.realpathSync(root), selection]); }
+  catch { return inspectDescription(root, options); }
+  const previous = inspections.get(key);
+  if (previous && previous.observed.every(([file, identity]) => observedIdentity(file) === identity)) return copyDescription(previous.value);
+  const observed = new Map(), observe = file => { if (!observed.has(file)) observed.set(file, observedIdentity(file)); };
+  const value = inspectDescription(root, options, observe);
+  let result;
+  try { result = copyDescription(value); } catch { return value; }
+  if ([...observed].every(([file, identity]) => identity !== null && observedIdentity(file) === identity)) inspections.set(key, { value, observed: [...observed] });
+  else inspections.delete(key);
+  return result;
+}
+function inspectDescription(root, { engine, source, version, component, id, apis = [], form, pluginDirectories, frameworkRoot, logger = console } = {}, observe = () => {}) {
+  observe(root);
   root = fs.realpathSync(root);
   if (pluginDirectories !== undefined) {
     if (!Array.isArray(pluginDirectories)) throw new TypeError('Plugin directories must be root-relative paths.');
@@ -64,6 +94,7 @@ function describeTranslator(root, { engine, source, version, component, id, apis
     const framework = file.match(/([^/]+)\.framework\//), required = /\.(?:dll|so|dylib)$/i.test(file) || framework?.[1] === path.basename(file);
     const binary = required || framework && !path.extname(file), json = /\.json$/i.test(file);
     if (entry?.isFile() && !binary && !json) return;
+    observe(file);
     let real, stat;
     try { real = fs.realpathSync(file); stat = fs.statSync(file); }
     catch (error) {
@@ -112,13 +143,32 @@ function describeTranslator(root, { engine, source, version, component, id, apis
   const pe = files.find(file => file.format === 'pe');
   if (component !== 'vulkan-driver' && component !== 'video') form = pe?.form || form;
   const versionFile = path.join(root, 'version');
+  observe(versionFile);
+  let componentVersion;
   try {
     if (fs.statSync(versionFile).isFile()) {
       if (!fs.realpathSync(versionFile).startsWith(root + path.sep)) throw new Error('Optional version text is outside its component root.');
-      version = fs.readFileSync(versionFile, 'utf8').trim() || version;
+      componentVersion = displayText(fs.readFileSync(versionFile, 'utf8'));
+      version = componentVersion || version;
     }
   }
   catch (error) { if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') warnings.push(`Could not read optional component version ${versionFile}: ${error.message}`); }
+  if (!componentVersion) {
+    let infoFile;
+    try {
+      if (frameworkRoot) observe(frameworkRoot);
+      const metadataRoot = frameworkRoot ? fs.realpathSync(frameworkRoot) : root;
+      infoFile = path.join(metadataRoot, 'Resources/Info.plist');
+      observe(infoFile);
+      if (!fs.statSync(infoFile).isFile()) throw new Error('The optional framework property list is not a regular file.');
+      if (!fs.realpathSync(infoFile).startsWith(metadataRoot + path.sep)) throw new Error('Optional framework metadata is outside its root.');
+      const plist = readPlistFile(infoFile), frameworkVersion = typeof plist?.CFBundleShortVersionString === 'string' ? displayText(plist.CFBundleShortVersionString) : '';
+      if (frameworkVersion) version = frameworkVersion;
+      else warnings.push(`Could not read optional framework version ${infoFile}: CFBundleShortVersionString is unavailable.`);
+    } catch (error) {
+      if (frameworkRoot || error.code !== 'ENOENT' && error.code !== 'ENOTDIR') warnings.push(`Could not read optional framework version ${infoFile || String(frameworkRoot || root)}: ${error.message}`);
+    }
+  }
   apis = [...new Set([...apisForFiles(files), ...files.flatMap(file => {
     if (file.format === 'json') { try { const api = JSON.parse(fs.readFileSync(file.path, 'utf8')).ICD?.api_version; return api ? [`Vulkan ${api}`] : []; } catch {} }
     return [];

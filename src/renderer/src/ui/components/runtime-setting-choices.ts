@@ -3,12 +3,8 @@ import { isRuntimeSettingChoiceValue } from "../../../../core/runtime-setting-va
 
 export type SettingChoices = Record<string, any>;
 
-export function settingChoiceScope(choices: SettingChoices | undefined, field: RuntimeSettingField, option?: RuntimeSettingOption) {
-  const roles = Array.isArray(choices?.translatorRoles) ? choices.translatorRoles : [];
-  const role = roles.find((row: any) => row?.settingsKey === field.key);
-  const group = Array.isArray(choices?.translatorGroups) ? choices.translatorGroups.find((row: any) => row?.id === (option?.groupId || role?.groupId)) : null;
-  const affected = Array.isArray(option?.affectedRoles) ? roles.filter((row: any) => option.affectedRoles!.includes(row?.id)).map((row: any) => row.label).join(" / ") : "";
-  return [...new Set([group?.label || affected, option?.reason, group?.reason, role?.reason].filter(value => typeof value === "string" && value))].join(" · ");
+export function settingChoiceScope(_choices: SettingChoices | undefined, _field: RuntimeSettingField, option?: RuntimeSettingOption) {
+  return option?.heldBack === true && typeof option.notice === "string" ? option.notice : "";
 }
 
 export function settingChoiceRequest(
@@ -43,10 +39,18 @@ export function loadSettingChoices(
       for (const key of new Set(fields.filter(field => field.optionsAction === action).map(field => field.optionsKey || field.key))) {
         const options = groups[key];
         if (options === undefined) continue;
-        if (!Array.isArray(options) || options.some(option => !option ||
-            !isRuntimeSettingChoiceValue(option.value) || typeof option.label !== "string" ||
-            /[\x00-\x1f\x7f]/.test(option.value + option.label)))
-          throw new Error("Local setting choices are invalid.");
+        if (!Array.isArray(options)) {
+          console.warn("Skipped an invalid local setting choice list.", action, key);
+          groups[key] = [];
+          continue;
+        }
+        const usable = options.filter(option => option &&
+          isRuntimeSettingChoiceValue(option.value) && typeof option.label === "string" &&
+          !/[\x00-\x1f\x7f]/.test(option.value + option.label));
+        if (usable.length !== options.length) {
+          console.warn("Skipped invalid local setting choices.", action, key);
+          groups[key] = usable;
+        }
       }
       receive(action, groups);
     }).catch(error => { if (active) failed(action, error); })

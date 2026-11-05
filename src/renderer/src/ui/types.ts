@@ -134,6 +134,7 @@ export type RuntimeSettingsSchema = {
 
 export type RuntimeEntry = {
   label?: string;
+  statusAction?: string;
   description?: string;
   requirements?: string;
   preparation?: string;

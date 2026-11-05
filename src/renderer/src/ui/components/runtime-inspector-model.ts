@@ -1,6 +1,11 @@
-import type { ModuleManifest, RuntimeManagerState } from "../types";
-import { architectureLabel, compareSemver, resolveRuntimeSection, resolveRuntimeSections, runtimeVersionTagger } from "../ui-helpers";
+import type { ModuleManifest, RecentGame, RuntimeManagerState } from "../types";
+import { architectureLabel, compareSemver, resolveRuntimeSection, resolveRuntimeSections, resolveRuntimeVersionOverride, runtimeVersionTagger } from "../ui-helpers";
 import { installedRuntimeAvailability } from "../../../../core/runtime-install-availability.mjs";
+
+export function runtimeInspectorStatusAction(moduleInfo: ModuleManifest | null, runtimeId: string, game: RecentGame, sectionId: string | null) {
+  return moduleInfo?.runtime?.entries?.[runtimeId]?.statusAction ||
+    (resolveRuntimeVersionOverride(moduleInfo, runtimeId, game, sectionId) ? null : moduleInfo?.runtime?.preLaunch?.[runtimeId]?.statusAction) || null;
+}
 
 function inspectorSections(moduleInfo: ModuleManifest | null, runtimeId: string, manager: RuntimeManagerState | null) {
   const policy = moduleInfo?.runtime?.inspectorSections?.[runtimeId];

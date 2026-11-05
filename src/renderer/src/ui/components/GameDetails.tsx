@@ -315,6 +315,10 @@ export const GameDetails = memo(function GameDetails({
     runtimeStatusEntry && runtimeStatusEntry.runtimeId === g.runtimeId
       ? runtimeStatusEntry.status
       : null;
+  const translatorRows: { id?: string; label: string; selected: string; used: string; reason?: string | null }[] =
+    Array.isArray(runtimeStatus?.translatorRows) ? runtimeStatus.translatorRows :
+      Array.isArray(g.runtimeData?.[g.runtimeId]?.translatorRows) ? g.runtimeData[g.runtimeId].translatorRows : [];
+  const translatorLabels = new Set(translatorRows.map(row => row.label));
   const runtimeVersionChoices = runtimeInspectorVersions(runtimeSection, runtimeVersionOverride);
   const runtimeDefaultVersion = runtimeSection?.defaultVersion || "";
   const runtimeLabel = formatRuntimeLabel(g.runtimeId, moduleInfo);
@@ -735,7 +739,15 @@ export const GameDetails = memo(function GameDetails({
 
           </>}
 
-          {Array.isArray(runtimeStatus?.details) && runtimeStatus.details.map((row: {label: string; value: string; detail?: string}, index: number) => (
+          {translatorRows.map((row, index) => (
+            <div className="detailRow" key={`translator:${row.id || index}`}>
+              <div className="detailLabel">{row.label}</div>
+              <div className="detailValue">{row.selected} → {row.used}
+                {row.selected !== row.used && row.reason && <div className="detailMeta">{row.reason}</div>}
+              </div>
+            </div>
+          ))}
+          {Array.isArray(runtimeStatus?.details) && runtimeStatus.details.filter((row: {label: string}) => !translatorLabels.has(row.label)).map((row: {label: string; value: string; detail?: string}, index: number) => (
             <div className="detailRow" key={index}>
               <div className="detailLabel">{row.label}</div>
               <div className="detailValue">{row.value}{row.detail && <div className="detailMeta">{row.detail}</div>}</div>

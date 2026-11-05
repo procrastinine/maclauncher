@@ -717,8 +717,8 @@ test('schema-declared setting options retain linked patches and unrelated action
   components.loadSettingChoices(['choices'],async()=>result,(_action,value)=>received.push(value),(_action,error)=>failures.push(error),action=>settled.push(action),[{key:'left',type:'select',label:'Left',optionsAction:'choices',optionsKey:'leftOptions'}]);
   await new Promise(resolve=>setImmediate(resolve));
   assert.deepEqual(failures,[]);assert.deepEqual(settled,['choices']);assert.deepEqual(received,[result]);assert.equal(received[0].leftOptions[0],option);assert.equal(received[0].futureMetadata,result.futureMetadata);
-  components.loadSettingChoices(['choices'],async()=>({...result,leftOptions:[{value:'invalid',label:123}]}),()=>assert.fail('Invalid declared choices'),(_action,error)=>failures.push(error),()=>{},[{key:'left',type:'select',label:'Left',optionsAction:'choices',optionsKey:'leftOptions'}]);
-  await new Promise(resolve=>setImmediate(resolve));assert.equal(failures.length,1);
+  components.loadSettingChoices(['choices'],async()=>({...result,leftOptions:[{value:'invalid',label:123}]}),(_action,value)=>received.push(value),(_action,error)=>failures.push(error),()=>{},[{key:'left',type:'select',label:'Left',optionsAction:'choices',optionsKey:'leftOptions'}]);
+  await new Promise(resolve=>setImmediate(resolve));assert.equal(failures.length,0);assert.deepEqual(received[1].leftOptions,[]);assert.equal(received[1].futureMetadata,result.futureMetadata);
 });
 
 test('publisher revision labels distinguish real nightly and source choices without positional suffixes', () => {

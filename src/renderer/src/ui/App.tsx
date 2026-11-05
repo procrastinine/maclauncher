@@ -34,7 +34,6 @@ import {
   resolveRuntimeSection,
   resolveRuntimeSectionId,
   resolveRuntimeSections,
-  resolveRuntimeVersionOverride,
   resolveModuleRuntimeSettings,
   resolveRuntimeSettingsSchema,
   normalizeRuntimeSettings
@@ -49,7 +48,7 @@ import { revealGraphicsSection } from "./components/EffectsControls";
 import { CreditsView } from "./components/CreditsView";
 import { AppActionPicker } from "./components/AppActionPicker";
 import { RuntimesView } from "./components/RuntimesView";
-import { resolveInspectorRuntimeSection } from "./components/runtime-inspector-model";
+import { resolveInspectorRuntimeSection, runtimeInspectorStatusAction } from "./components/runtime-inspector-model";
 import { groupRuntimeManagers, managedRuntimeSections, runtimeManagementPresentation, runtimePendingAction, runtimeRemovalPresentation,
   runtimeRefreshPayload, runtimeSourceUiKey } from "./components/runtime-tabs-model";
 import { nextInspectorSelection } from "./components/game-row-selection-model";
@@ -396,11 +395,10 @@ export default function App() {
 
   const runtimeInspectionKey = useMemo(() => {
     if (!inspectionGame) return "";
-    const preLaunch = inspectionModule?.runtime?.preLaunch?.[inspectionGame.runtimeId];
     const graphicsHost = inspectionModule?.runtime?.entries?.[inspectionGame.runtimeId]?.graphicsHost;
     const inspectGraphics = ["window", "catalyst", "remote", "explicit"].includes(graphicsHost || "");
     const sectionId = resolveRuntimeSectionId(inspectionModule, inspectionGame.runtimeId, inspectionGame, { managerState: inspectionManager });
-    const statusAction = resolveRuntimeVersionOverride(inspectionModule, inspectionGame.runtimeId, inspectionGame, sectionId) ? null : preLaunch?.statusAction || null;
+    const statusAction = runtimeInspectorStatusAction(inspectionModule, inspectionGame.runtimeId, inspectionGame, sectionId);
     const recommend = Boolean(inspectionModule?.runtime?.manager?.[inspectionGame.runtimeId]);
     if (!statusAction && !inspectGraphics && !recommend) return "";
     const section = resolveInspectorRuntimeSection(inspectionModule, inspectionGame.runtimeId, inspectionManager || null, sectionId);
