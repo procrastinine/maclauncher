@@ -5,7 +5,7 @@ const Architecture = require("./architecture");
 const { throwIfAborted } = require("./download-utils");
 
 // Archive formats the shared runtime installer extracts, in preference order.
-const ARCHIVE_FORMATS = Object.freeze([".zip", ".tar.gz", ".tgz", ".tar.xz", ".txz", ".tar.bz2", ".tbz2", ".dmg", ".tar"]);
+const ARCHIVE_FORMATS = Object.freeze([".zip", ".tar.gz", ".tgz", ".tar.xz", ".tar.zst", ".txz", ".tar.bz2", ".tbz2", ".dmg", ".tar"]);
 const MAC_WORDS = "mac|macos|macosx|osx|darwin|apple";
 // Files beside a Mac download: other systems and CPUs, symbols and sources.
 const OTHER_WORDS = "linux|windows|win|win32|win64|android|ios|web|wasm|freebsd|debug|symbols|dsym|dbg|src|source|sources|riscv64|ppc|ppc64|ppc64le|s390x|i386|i686|armhf|armv7";
