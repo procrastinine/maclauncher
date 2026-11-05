@@ -1,5 +1,20 @@
 const { COMPONENTS, label } = require('./translator-description');
 const AUTOMATIC = 'automatic', INHERIT = 'inherit';
+const Roles = require('./translator-roles');
+
+// Legacy settings are projected for display and consumers without writing or
+// changing their existing automatic/backend choice.
+function projectRoles(plan) {
+  for (const role of Roles.DIRECT3D_ROLES) {
+    if (role.id === 'd3d12') continue;
+    const base = plan.components['d3d-renderer'];
+    const additional = (plan.additional || []).find(item => item.apis?.some(api => role.apis.includes(api)));
+    const used = additional || base.used;
+    const supported = !used?.apis?.length || used.apis.some(api => role.apis.includes(api));
+    plan.components[role.id] = { ...base, used: supported ? used : null, projected: true };
+  }
+  return plan;
+}
 
 /**
  * One offline decision shared by Wine providers.
@@ -43,4 +58,4 @@ function options({ component, runtime = 'crossover', included = [], choices = []
     result.push({ value: item.id, label: label(item) });
   return result;
 }
-module.exports = { AUTOMATIC, INHERIT, resolvePlan, options, fallbackWarnings };
+module.exports = { AUTOMATIC, INHERIT, resolvePlan, options, fallbackWarnings, projectRoles, ROLES: Roles.ROLES };

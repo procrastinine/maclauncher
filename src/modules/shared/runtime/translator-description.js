@@ -1,6 +1,7 @@
 const fs = require('node:fs'), path = require('node:path');
 const { readMachOLoadCommands } = require('./macho-load-commands');
 const { readPeExports } = require('./pe-exports');
+const { fileApis, apisForFiles } = require('./translator-roles');
 const warn = require('../graphics-warning');
 // Ordinary runtime managers expose these descriptions through their installed
 // records. Paths refer to installed files, never to a second translator cache.
@@ -11,7 +12,7 @@ const FORMS = Object.freeze(['builtin', 'native', 'icd', 'dylib']);
 /**
  * A description has id, component, engine, version, source, apis, form, root,
  * files, macosFloor and unixImports. Each file has path (absolute), optional
- * relative (installation-relative placement), form, machine (PE number),
+ * relative (installation-relative placement), form, apis, machine (PE number),
  * cpuSlices (Mach-O names), macosFloor and unixImports. Imports are
  * { symbol, library, weak? }; library is the Mach-O dependency install name.
  * source may be a catalog id, 'custom', or { kind, id, label, runtime? }.
@@ -22,7 +23,8 @@ function description(input) {
   if (!input || !input.component || !input.engine || !input.form)
     throw new TypeError('A translator component, engine and form are required.');
   if (!Array.isArray(input.files)) throw new TypeError('Translator files are required.');
-  return { ...input, apis: [...(input.apis || [])], files: input.files.map(file => ({ ...file })),
+  const files = input.files.map(file => ({ ...file, ...(file.format === 'pe' ? { apis: fileApis(file) } : {}) }));
+  return { ...input, apis: input.apis?.length ? [...input.apis] : apisForFiles(files), files,
     unixImports: [...(input.unixImports || [])], version: String(input.version || '') };
 }
 function label(value) {
@@ -95,12 +97,10 @@ function describeTranslator(root, { engine, source, version, component, id, apis
     }
   }
   catch (error) { if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') warnings.push(`Could not read optional component version ${versionFile}: ${error.message}`); }
-  if (!apis.length) apis = [...new Set(files.flatMap(file => {
-    const match = path.basename(file.path).match(/^d3d(\d+)(?:core)?\.dll$/i);
-    if (match) return [`Direct3D ${match[1]}`];
+  apis = [...new Set([...apisForFiles(files), ...files.flatMap(file => {
     if (file.format === 'json') { try { const api = JSON.parse(fs.readFileSync(file.path, 'utf8')).ICD?.api_version; return api ? [`Vulkan ${api}`] : []; } catch {} }
     return [];
-  }))];
+  })])];
   const floors = files.flatMap(file => file.macosFloor ? [file.macosFloor] : []);
   for (const warning of warnings) warn(logger, `[translators] ${warning}`);
   return description({ id: id || `${engine}:${root}`, root, component, engine, source, version, apis, form, files,
@@ -117,7 +117,7 @@ function inspectFile(file) {
   const result = { ...file };
   try {
     const native = readMachOLoadCommands(file.path, { imports: true });
-    return { ...result, format: 'macho', form: file.path.endsWith('.so') ? 'builtin' : 'dylib', cpuSlices: native.architectures,
+    return { ...result, format: 'macho', form: file.path.endsWith('.so') ? 'builtin' : 'dylib', apis: [], cpuSlices: native.architectures,
       slices: native.slices, macosFloor: native.slices.map(slice => slice.minimumMacOS).filter(Boolean).sort(compareVersions).at(-1) || null,
       unixImports: native.slices.flatMap(slice => slice.imports.map(item => ({ ...item, architecture: slice.architecture }))) };
   } catch (error) {
@@ -128,8 +128,8 @@ function inspectFile(file) {
     if (!exports) result.inspectionWarning = 'PE export inspection is incomplete; basic image facts are available.';
     // Replacement DLL resources report Windows component versions, not translator releases.
     return { ...result, format: 'pe', form: pe.form, machine: pe.machine, architecture: pe.architecture, macosFloor: null, unixImports: [],
-      version: null };
+      apis: fileApis({ ...file, format: 'pe' }), version: null };
   }
-  return { ...result, format: file.path.endsWith('.json') ? 'json' : 'unknown', macosFloor: null, unixImports: [] };
+  return { ...result, format: file.path.endsWith('.json') ? 'json' : 'unknown', apis: [], macosFloor: null, unixImports: [] };
 }
 module.exports = { COMPONENTS, ENGINES, FORMS, description, label, describeTranslator, inspectFile, compareVersions };
