@@ -95,6 +95,7 @@ function inspectLayout(layout, { inputPath, detection } = {}) {
   }
   if (!boot) throw new Error("No validated SC3 boot program was found in script.mpk.");
   const runner = executableMetadata(layout, inputPath, detection), patch = patchMetadata(layout, detection);
+  const launcher = findEntry(layout.rootEntries, "Launcher.exe", "file");
   const product = runner.originalRunner?.strings?.ProductName?.trim();
   const isSteins = /^steins\s*;\s*gate$/i.test(product || "");
   const windows = script.members.has("_startup_win.scx");
@@ -106,7 +107,8 @@ function inspectLayout(layout, { inputPath, detection } = {}) {
     assetDir: layout.assetDir, scriptArchivePath: script.file, systemArchivePath: system.file,
     archiveFormat: script.format, scriptFormat: "SC3", scriptCount: candidates.length,
     scriptIndexBytes: script.bytesRead, systemIndexBytes: system.bytesRead, boot,
-    ...runner, editionId, edition, editionSource: [runner.originalRunner?.source, windows && "script.mpk!/_STARTUP_WIN.SCX", bink2 && "bink2w32.dll", steam && "steam_api.dll"].filter(Boolean).join("; "),
+    ...runner, executablePath: launcher ? path.join(layout.root, launcher.name) : runner.originalRunnerPath,
+    editionId, edition, editionSource: [runner.originalRunner?.source, windows && "script.mpk!/_STARTUP_WIN.SCX", bink2 && "bink2w32.dll", steam && "steam_api.dll"].filter(Boolean).join("; "),
     patch, compatibility: compatibility(editionId), nativeSupport: { supported: manifest.supports.launch && editionId === "steins-gate-windows-hd",
       scope: "Original Windows HD data", reason: compatibility(editionId), impacto: IMPACTO },
     detectedVersion: "unknown", detectedVersionConfidence: "unknown",

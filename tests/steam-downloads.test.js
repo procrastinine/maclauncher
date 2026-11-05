@@ -1,7 +1,7 @@
 const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os"), crypto = require("node:crypto");
 const { EventEmitter } = require("node:events");
-const { createSteamDownloads, normalizeVersions, protoField, protoFields, containedFile, sharedLibrary } = require("../src/core/steam-downloads");
+const { createSteamDownloads, normalizeVersions, readDefaultWindowsExecutable, protoField, protoFields, containedFile, sharedLibrary } = require("../src/core/steam-downloads");
 const bytes = Buffer.from("Steam fixture content\n"), sha = crypto.createHash("sha1").update(bytes).digest("hex");
 const info = { common: { name: "Sample game", type: "Game", oslist: "windows,macos,linux" }, depots: {
   branches: { public: { buildid: "73", timeupdated: "1700000000" }, previous: { buildid: "21" }, secret: { pwdrequired: "1" } },
@@ -108,6 +108,32 @@ test("download selects common and platform depots, checks files and publishes a 
   assert.equal(metadata.buildId, "73"); assert.equal(metadata.versionName, "Build 73"); assert.equal(metadata.importPath, result.path);
   const index = JSON.parse(fs.readFileSync(path.join(root, "steam/installations.json"))); assert.equal(index[0].path, result.path);
   assert.equal(service.markImported(job.id).downloads[0].imported, true);
+});
+test("Steam manual download records publisher default Windows launch without another appinfo request", async t => {
+  const imported = [], { root, service } = fixture(t, { onDownloaded: async job => imported.push(JSON.parse(fs.readFileSync(path.join(job.path, '.maclauncher-steam.json'), 'utf8'))) });
+  await connect(service); const client = Client.instances.at(-1), metadata = structuredClone(info); let requests = 0;
+  metadata.config = { launch: {
+    0: { executable: 'Configure.exe', type: 'option', config: { oslist: 'windows' } },
+    1: { executable: 'bin\\Game.exe', type: 'default', arguments: '--publisher-mode', config: { oslist: 'windows', osarch: '64' } }
+  } };
+  client.getProductInfo = async ids => { requests++; return { apps: Object.fromEntries(ids.map(id => [id, { appinfo: structuredClone(metadata) }])) }; };
+  const versions = await service.getVersions(710000, { refresh: true }), before = requests;
+  const job = service.download({ appId: 710000, platform: 'windows', architecture: '64' });
+  const completed = await until(() => service.snapshot().downloads.find(row => row.id === job.id && (row.imported || row.status === 'error')));
+  assert.equal(completed.status, 'completed', completed.error); assert.equal(requests, before);
+  const receipt = JSON.parse(fs.readFileSync(path.join(completed.path, '.maclauncher-steam.json'), 'utf8'));
+  assert.deepEqual(receipt.defaultWindowsLaunch, versions.defaultWindowsLaunch); assert.equal(receipt.defaultWindowsLaunch.id, '1');
+  assert.equal(readDefaultWindowsExecutable(completed.path), path.join(completed.path, 'bin/Game.exe'));
+  assert.deepEqual(imported[0].defaultWindowsLaunch, receipt.defaultWindowsLaunch);
+  const installed = JSON.parse(fs.readFileSync(path.join(root, 'steam/installations.json'), 'utf8'));
+  assert.deepEqual(installed[0].defaultWindowsLaunch, receipt.defaultWindowsLaunch);
+  const legacy = fixture(t), oldCatalog = structuredClone(versions); delete oldCatalog.defaultWindowsLaunch;
+  fs.mkdirSync(path.join(legacy.root, 'steam/catalog'), { recursive: true });
+  fs.writeFileSync(path.join(legacy.root, 'steam/catalog/710000.json'), JSON.stringify(oldCatalog));
+  await connect(legacy.service); const oldClient = Client.instances.at(-1); let additionalReads = 0;
+  oldClient.getProductInfo = async () => { additionalReads++; throw Error('An older cache must not force a metadata request.'); };
+  const cached = await legacy.service.getVersions(710000);
+  assert.equal(cached.defaultWindowsLaunch, undefined); assert.equal(additionalReads, 0);
 });
 test("manual historical manifest IDs reach Steam intact and failed import preserves completed download", async t => {
   const { service } = fixture(t, { onDownloaded: async () => { throw new Error("no supported game"); } }); await connect(service);

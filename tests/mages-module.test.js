@@ -52,6 +52,39 @@ test("wrapper folders, archive imports and case variants resolve one original co
   game(path.join(parent, "another"), { pe: false }); assert.equal(Mages.detectGame({ rootDir: parent, inputPath: parent }), null);
 });
 
+test("MAGES. Windows playback uses its sibling launcher without changing the original Impacto program or identity", t => {
+  const root = fixture(t); game(root);
+  const executable = strings => {
+    const value = peFixture({ version: versionResource({ strings }) });
+    value.bytes.writeUInt16LE(0x102, value.peOffset + 22);
+    value.bytes.writeUInt16LE(2, value.optional + 68);
+    return value.bytes;
+  };
+  const original = path.join(root, "Game.exe"), launcher = path.join(root, "LaUnChEr.ExE");
+  fs.writeFileSync(original, executable({ ProductName: "Steins;Gate", CompanyName: "MAGES." }));
+  const before = Mages.detectGame({ rootDir: root, inputPath: root });
+  const Windows = require("../src/modules/crossover/detect");
+  assert.equal(before.moduleData.executablePath, original);
+  assert.equal(before.moduleData.editionId, "steins-gate-windows-hd");
+  assert.equal(before.moduleData.nativeSupport.supported, true);
+  assert.equal(Windows.findWindowsExecutable(before).windowsExecutablePath, original);
+  const files = [original, path.join(root, "USRDIR/script.mpk"), path.join(root, "USRDIR/system.mpk")], hashes = files.map(hash);
+  fs.writeFileSync(launcher, executable({ ProductName: "MAGES fixture launcher", CompanyName: "MAGES." }));
+  for (const inputPath of [root, original, path.join(root, "USRDIR/script.mpk")]) {
+    const after = Mages.detectGame({ rootDir: root, inputPath });
+    assert.equal(after.moduleData.executablePath, launcher);
+    assert.equal(after.moduleData.originalRunnerPath, original);
+    assert.equal(after.gamePath, before.gamePath);
+    assert.equal(after.runtimeId, "impacto");
+    assert.deepEqual({ ...after.moduleData, executablePath: original }, before.moduleData);
+    assert.deepEqual(after.detectionEvidence, before.detectionEvidence);
+    const selected = Windows.findWindowsExecutable(after);
+    assert.equal(selected.windowsExecutablePath, launcher);
+    assert.equal(selected.executableArchitecture, "x86");
+  }
+  assert.deepEqual(files.map(hash), hashes);
+});
+
 test("import participates in detection budgets without reading full assets and propagates budget exhaustion", t => {
   const root = fixture(t); game(root); const reads = [], detection = { stat: fs.statSync, readdir: dir => fs.readdirSync(dir, { withFileTypes: true }),
     readText: (file, max) => { assert.ok(fs.statSync(file).size <= max); return fs.readFileSync(file, "utf8"); },

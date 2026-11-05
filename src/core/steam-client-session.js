@@ -410,7 +410,8 @@ function createSteamClientSession(options = {}) {
         }
         signal.throwIfAborted(); assertGeneration(currentGeneration);
         const metadata = { schema: 1, appId, name: record.name, platform, branch, buildId: identity.buildId, versionName: identity.versionName, version: identity.versionName, importPath: finalPath, path: finalPath, createdAt: record.createdAt, complete: true,
-          depots: selectedDepots, architecture, downloadIdentity: record.downloadIdentity };
+          depots: selectedDepots, architecture, downloadIdentity: record.downloadIdentity,
+          ...(platform === "windows" && versions.defaultWindowsLaunch ? { defaultWindowsLaunch: versions.defaultWindowsLaunch } : {}) };
         writeJsonAtomic(path.join(stage, ".maclauncher-steam.json"), metadata); fs.renameSync(stage, finalPath); stage = null;
         // A damaged index is kept beside it; one that cannot be read is not replaced.
         const installations = readJsonDocument(path.join(root, "installations.json"), { array: true }) || [];

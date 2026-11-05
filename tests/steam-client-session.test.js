@@ -7,6 +7,7 @@ const { EventEmitter } = require("node:events");
 const { execFileSync } = require("node:child_process");
 const { setTimeout: delay } = require("node:timers/promises");
 const { createSteamConsoleRelay, createSteamClientSession, createSteamPublicAppInfoClient, parseClientAppInfo, sendClientCommand, dispatchClientCommand, CANCELLATION_NOTICE } = require("../src/core/steam-client-session");
+const { readDefaultWindowsExecutable } = require("../src/core/steam-downloads");
 
 test('Steam falls back to its working executable when the quiet channel is unavailable', async () => {
   const calls = [], args = ['-silent', '+licenses_print'];
@@ -124,6 +125,36 @@ test("client reuse accepts Android and publishes only its platform and shared de
   assert.equal(result.status, "completed", result.error);
   assert.deepEqual(selected, ["481", "483"]); assert.deepEqual(imported, ["android"]);
   assert.equal(path.basename(path.dirname(result.path)), "android");
+});
+test("Steam client download records publisher default Windows launch from its existing cached appinfo", async t => {
+  const f = fixture(t), imported = []; let metadataReads = 0, depotRequests = 0;
+  const metadata = { common: { oslist: 'windows' }, config: { launch: {
+    0: { executable: 'Configure.exe', type: 'option', config: { oslist: 'windows' } },
+    1: { executable: 'bin\\Game.exe', type: 'default', arguments: '--publisher-mode', config: { oslist: 'windows' } }
+  } }, depots: { branches: { public: {} }, 481: { manifests: { public: { gid: '100' } } } } };
+  const source = path.join(f.homeDir, 'Library/Application Support/Steam/steamapps/content/app_480/depot_481');
+  fs.mkdirSync(source, { recursive: true }); fs.writeFileSync(path.join(source, 'payload.txt'), 'fixture content');
+  const session = createSteamClientSession({ ...f, isRunning: () => true, pollInterval: 2, quietMs: 3,
+    loadLibrary: async () => [], getCachedAppInfo: async () => { metadataReads++; return metadata; },
+    onDownloaded: async job => imported.push(JSON.parse(fs.readFileSync(path.join(job.path, '.maclauncher-steam.json'), 'utf8'))),
+    execute: async (_executable, args) => {
+      markers(f.logPath, args);
+      if (args.includes('+licenses_print')) return append(f.logPath, 'License packageID 1:\n');
+      assert.ok(args.includes('+download_depot'), 'No extra appinfo command or client launch is needed');
+      depotRequests++; append(f.logPath, `Depot download complete : "${source}"\n`);
+    } });
+  t.after(() => session.dispose()); await session.connect();
+  const versions = await session.getVersions(480), before = metadataReads;
+  const job = session.download({ appId: 480, platform: 'windows' });
+  await waitFor(() => session.snapshot().downloads.find(row => row.id === job.id)?.imported || session.snapshot().downloads.find(row => row.id === job.id)?.status === 'error');
+  const completed = session.snapshot().downloads.find(row => row.id === job.id);
+  assert.equal(completed.status, 'completed', completed.error); assert.equal(metadataReads, before); assert.equal(depotRequests, 1);
+  const receipt = JSON.parse(fs.readFileSync(path.join(completed.path, '.maclauncher-steam.json'), 'utf8'));
+  assert.deepEqual(receipt.defaultWindowsLaunch, versions.defaultWindowsLaunch); assert.equal(receipt.defaultWindowsLaunch.id, '1');
+  assert.equal(readDefaultWindowsExecutable(completed.path), path.join(completed.path, 'bin/Game.exe'));
+  assert.deepEqual(imported[0].defaultWindowsLaunch, receipt.defaultWindowsLaunch);
+  const index = JSON.parse(fs.readFileSync(path.join(f.userDataDir, 'steam/installations.json'), 'utf8'));
+  assert.deepEqual(index[0].defaultWindowsLaunch, receipt.defaultWindowsLaunch);
 });
 
 test("client reuse publishes selected historical manifests into managed or custom folders without modifying Steam content", async t => {

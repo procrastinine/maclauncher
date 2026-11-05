@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { executablePriority, executableRole } = require("../shared/executable-candidates");
+const { readDefaultWindowsExecutable } = require("../../core/steam-downloads");
 
 const LIMITS = Object.freeze({ directories: 256, entries: 8192, executables: 128, depth: 8 });
 // Third-party installers, redistributables and bundled Java runtimes.
@@ -78,13 +79,14 @@ function isNativeImport(entry) {
 // The game's own folder: a folder game path, or the folder holding a single-file
 // game. A content root inside it, such as a data or resources folder, does not
 // narrow the search. A content root or recorded release folder that encloses it,
-// such as the NW.js release around an imported www folder, widens it.
+// such as the NW.js release around an imported www folder, widens it. The
+// original folder import also retains a downloaded release's root receipt.
 function searchRoot(entry) {
   const directory = file => {
     const info = typeof file === "string" && path.isAbsolute(file) ? stat(file) : null;
     return info?.isDirectory() ? file : info?.isFile() ? path.dirname(file) : null;
   };
-  const enclosing = [entry.contentRootDir, entry.releaseRootDir]
+  const enclosing = [entry.contentRootDir, entry.releaseRootDir, entry.importPath]
     .filter(folder => typeof folder === "string" && path.isAbsolute(folder) && stat(folder)?.isDirectory());
   let root = directory(entry.gamePath) || enclosing[0] || null;
   for (const folder of enclosing) if (root && inside(folder, root)) root = folder;
@@ -123,12 +125,14 @@ function findWindowsExecutable(entry, { detection, selectedPath } = {}) {
     return readWindowsExecutable(file, detection);
   };
   const imported = typeof entry.importPath === "string" && path.isAbsolute(entry.importPath) ? entry.importPath : null;
-  // Deliberately selected executable and engine-provided paths precede guesses.
+  // User selections precede the publisher's recorded entry, then the module's
+  // entry and detection's cached game file. All pass the same file checks.
   // A game file chosen by detection, rather than by the user, counts only when it
   // is not an installer or other support program, such as a setup package.
-  for (const file of [selectedPath, entry.runtimeData?.crossover?.windowsExecutablePath,
-    entry.moduleData?.executablePath, entry.moduleData?.exePath, entry.windowsExecutablePath,
+  for (const file of [selectedPath,
     stat(imported)?.isFile() ? imported : null,
+    readDefaultWindowsExecutable(root), entry.moduleData?.executablePath, entry.moduleData?.exePath,
+    entry.runtimeData?.crossover?.windowsExecutablePath, entry.windowsExecutablePath,
     stat(entry.gamePath)?.isFile() && executableRole(entry.gamePath) !== "support" ? entry.gamePath : null]) {
     const match = check(file);
     if (match) return { ...match, sourceRoot: root };
@@ -198,20 +202,23 @@ function detectGame(context) {
   let match;
   if (context.stat?.isFile()) match = check(context.inputPath);
   else if (context.stat?.isDirectory()) {
-    const children = context.detection?.readdir ? context.detection.readdir(sourceRoot) : fs.readdirSync(sourceRoot, { withFileTypes: true });
-    if (children.length > LIMITS.entries) throw Object.assign(new Error("The Windows game folder contains too many entries. Select a Windows executable directly."), { code: "DETECTION_LIMIT" });
-    const candidates = [];
-    for (const item of children) {
-      // Installers, redistributables and bundled tools never identify a Windows game.
-      if (!item.isFile() && !item.isSymbolicLink() || executableRole(item.name) === "support") continue;
-      const executable = check(path.join(sourceRoot, item.name));
-      if (!executable) continue;
-      candidates.push({ executable, priority: executablePriority(executable.windowsExecutablePath) });
+    match = check(readDefaultWindowsExecutable(sourceRoot));
+    if (!match) {
+      const children = context.detection?.readdir ? context.detection.readdir(sourceRoot) : fs.readdirSync(sourceRoot, { withFileTypes: true });
+      if (children.length > LIMITS.entries) throw Object.assign(new Error("The Windows game folder contains too many entries. Select a Windows executable directly."), { code: "DETECTION_LIMIT" });
+      const candidates = [];
+      for (const item of children) {
+        // Installers, redistributables and bundled tools never identify a Windows game.
+        if (!item.isFile() && !item.isSymbolicLink() || executableRole(item.name) === "support") continue;
+        const executable = check(path.join(sourceRoot, item.name));
+        if (!executable) continue;
+        candidates.push({ executable, priority: executablePriority(executable.windowsExecutablePath) });
+      }
+      candidates.sort((a, b) => b.priority - a.priority);
+      const strongest = candidates.filter(candidate => candidate.priority === candidates[0].priority);
+      if (strongest.length > 1) throw Object.assign(new Error("Multiple Windows executables were found in this folder. Select one .exe file to identify the game."), { code: "DETECTION_CONFLICT" });
+      match = strongest[0]?.executable;
     }
-    candidates.sort((a, b) => b.priority - a.priority);
-    const strongest = candidates.filter(candidate => candidate.priority === candidates[0].priority);
-    if (strongest.length > 1) throw Object.assign(new Error("Multiple Windows executables were found in this folder. Select one .exe file to identify the game."), { code: "DETECTION_CONFLICT" });
-    match = strongest[0]?.executable;
   }
   if (!match) return null;
   const { windowsExecutablePath, executableArchitecture } = match;

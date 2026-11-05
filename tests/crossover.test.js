@@ -102,6 +102,75 @@ test("CrossOver finds nested game executables, respects deliberate selections an
   assert.equal(Detection.detectGame({ rootDir: game, inputPath: nested, stat: fs.statSync(nested) }).moduleData.executablePath, nested);
 });
 
+test("Windows publisher launch entries follow deliberate files and precede fresh module and cached evidence", t => {
+  const directory = fs.realpathSync(fixture(t)), root = path.join(directory, "Release");
+  const game = pe(path.join(root, "Game.exe")), moduleLauncher = pe(path.join(root, "ModuleLauncher.exe"));
+  const publisher = pe(path.join(root, "bin/Publisher.exe"), { machine: 0x8664 }), user = pe(path.join(root, "User.exe"));
+  const outside = pe(path.join(directory, "Outside.exe"), { machine: 0x8664 });
+  fs.symlinkSync(path.relative(root, outside), path.join(root, "Escape.exe"));
+  fs.writeFileSync(path.join(root, "Invalid.exe"), "not an executable");
+  const receiptPath = path.join(root, ".maclauncher-steam.json"), metadata = {
+    schema: 1, appId: 123, name: "Publisher game", platform: "windows", complete: true, path: root, importPath: root,
+    branch: "public", architecture: "all", depots: []
+  };
+  const receipt = value => fs.writeFileSync(receiptPath, typeof value === "string" ? value : JSON.stringify({ ...metadata, ...value }));
+  const entry = { name: "Publisher game", moduleId: "mages", gamePath: game, contentRootDir: root, importPath: root,
+    moduleData: { executablePath: moduleLauncher }, runtimeData: { crossover: {
+      detectionComplete: true, windowsExecutablePath: game, executableArchitecture: "x86", sourceRoot: root } } };
+  const original = structuredClone(entry), bytes = new Map([game, moduleLauncher, publisher, user, outside].map(file => [file, fs.readFileSync(file)]));
+  assert.equal(Detection.findWindowsExecutable(entry).windowsExecutablePath, moduleLauncher, "fresh module evidence replaces a former generic Game.exe choice");
+  receipt({ defaultWindowsLaunch: { executable: "bin/Publisher.exe" } });
+  const selected = Detection.findWindowsExecutable(entry);
+  assert.equal(selected.windowsExecutablePath, publisher); assert.equal(selected.executableArchitecture, "x86_64");
+  assert.equal(Detection.decorateEntry(entry).runtimeData.crossover.windowsExecutablePath, publisher);
+  assert.equal(Detection.findWindowsExecutable(entry, { selectedPath: user }).windowsExecutablePath, user);
+  assert.equal(Detection.findWindowsExecutable({ ...entry, importPath: user }).windowsExecutablePath, user);
+  assert.equal(Detection.findWindowsExecutable({ ...entry, importPath: game }).windowsExecutablePath, game, "an explicitly imported former executable remains deliberate");
+  for (const [name, value] of [
+    ["old receipt without launch data", {}], ["malformed receipt", "{"],
+    ["missing executable", { defaultWindowsLaunch: { executable: "bin/Missing.exe" } }],
+    ["invalid executable", { defaultWindowsLaunch: { executable: "Invalid.exe" } }],
+    ["invalid field", { defaultWindowsLaunch: { executable: 42 } }],
+    ["parent traversal", { defaultWindowsLaunch: { executable: "../Outside.exe" } }],
+    ["absolute external path", { defaultWindowsLaunch: { executable: outside } }],
+    ["escaping executable alias", { defaultWindowsLaunch: { executable: "Escape.exe" } }]
+  ]) {
+    receipt(value);
+    assert.equal(Detection.findWindowsExecutable(entry).windowsExecutablePath, moduleLauncher, `${name} leaves current module evidence available`);
+  }
+  fs.rmSync(receiptPath);
+  assert.equal(Detection.findWindowsExecutable(entry).windowsExecutablePath, moduleLauncher, "a missing optional receipt leaves ordinary selection available");
+  assert.deepEqual(entry, original, "reading launch evidence does not rewrite saved entry data");
+  for (const [file, contents] of bytes) assert.deepEqual(fs.readFileSync(file), contents);
+});
+
+test("Windows publisher launch entries resolve generic folders and remain reachable from nested module roots", t => {
+  const directory = fs.realpathSync(fixture(t)), root = path.join(directory, "Downloaded");
+  const game = pe(path.join(root, "Game.exe")), user = pe(path.join(root, "User.exe"));
+  const moduleLauncher = pe(path.join(root, "content/ModuleLauncher.exe")), publisher = pe(path.join(root, "bin/Publisher.exe"), { machine: 0x8664 });
+  const receiptPath = path.join(root, ".maclauncher-steam.json"), metadata = {
+    schema: 1, appId: 123, name: "Publisher game", platform: "windows", complete: true, path: root, importPath: root,
+    branch: "public", architecture: "all", depots: [], defaultWindowsLaunch: { executable: "bin/Publisher.exe" }
+  };
+  fs.writeFileSync(receiptPath, JSON.stringify(metadata));
+  const context = { rootDir: root, inputPath: root, stat: fs.statSync(root) };
+  assert.equal(Detection.detectGame(context).moduleData.executablePath, publisher, "the recorded publisher default resolves an otherwise ambiguous folder");
+  assert.equal(Detection.detectGame({ ...context, inputPath: user, stat: fs.statSync(user) }).moduleData.executablePath, user);
+  const content = path.join(root, "content"), entry = { name: "Publisher game", moduleId: "mages", gamePath: content, contentRootDir: content,
+    importPath: root, moduleData: { executablePath: moduleLauncher }, runtimeData: { crossover: {
+      detectionComplete: true, windowsExecutablePath: game, executableArchitecture: "x86", sourceRoot: root } } };
+  const match = Detection.findWindowsExecutable(entry);
+  assert.equal(match.windowsExecutablePath, publisher); assert.equal(match.sourceRoot, root);
+  const { importPath: _importPath, ...fromModule } = entry;
+  assert.equal(Detection.decorateEntry(fromModule, { inputPath: root }).runtimeData.crossover.windowsExecutablePath, publisher,
+    "Registry's existing provider inputPath makes the original receipt root available");
+  const unrelated = path.join(directory, "Unrelated"); fs.mkdirSync(unrelated);
+  assert.equal(Detection.findWindowsExecutable({ ...fromModule, runtimeData: {}, importPath: unrelated }).windowsExecutablePath, moduleLauncher,
+    "an unrelated imported directory does not become a release root");
+  fs.writeFileSync(receiptPath, JSON.stringify({ ...metadata, defaultWindowsLaunch: undefined }));
+  assert.throws(() => Detection.detectGame(context), error => error.code === "DETECTION_CONFLICT", "old receipts do not guess between unrelated programs");
+});
+
 test("CrossOver generic Windows fallback checks only top-level valid executables and never guesses among them", t => {
   const directory = fixture(t), game = path.join(directory, "Unknown");
   const nested = pe(path.join(game, "bin", "Game.exe"));

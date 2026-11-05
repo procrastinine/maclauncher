@@ -40,7 +40,7 @@ function steamArchitectureCatalog(info = {}, depots = []) {
     if (!oses.length) oses = /\.app(?:\/|$)/i.test(option.executable || "") ? ["macos"] : /\.exe$/i.test(option.executable || "") ? ["windows"] : appPlatforms.length === 1 ? appPlatforms : [];
     const config = architectureConfig({ ...option, ...option.config });
     for (const os of oses) for (const arch of config.architectures) evidence[os].add(arch);
-    return { id, executable: String(option.executable || ""), description: String(option.description || ""), platforms: oses, architectures: config.architectures,
+    return { ...option, id, executable: String(option.executable || ""), description: String(option.description || ""), platforms: oses, architectures: config.architectures,
       architectureBits: config.architectureBits, architectureCpu: config.architectureCpu, architectureSource: config.architectures.length ? "launch" : "unspecified" };
   });
   for (const depot of depots) for (const os of depot.platforms.length ? depot.platforms : appPlatforms) for (const arch of depot.architectures) evidence[os].add(arch);
@@ -64,7 +64,10 @@ function steamArchitectureCatalog(info = {}, depots = []) {
     if (os === "macos" && architectures[os].includes("arm64") && matching.some(depot => depot.architectureBits.includes("64") && !depot.architectureCpu.length))
       architectureNotes[os] += " Apple Silicon support is advertised, and its files can share a depot marked 64-bit.";
   }
-  return { architectureSchema: 1, platformSchema: 1, architectures, architectureLabels, architectureNotes, launchOptions };
+  const defaults = launchOptions.filter(option => option.executable && String(option.type || option.config?.type || "").toLowerCase() === "default" &&
+    platforms(option.config?.oslist || option.oslist).includes("windows"));
+  return { architectureSchema: 1, platformSchema: 1, architectures, architectureLabels, architectureNotes, launchOptions,
+    defaultWindowsLaunch: defaults.length === 1 ? defaults[0] : null };
 }
 function steamLibraryArchitectures(info = {}) {
   const depots = Object.entries(info.depots || {}).filter(([id, depot]) => /^\d+$/.test(id) && depot && typeof depot === "object")

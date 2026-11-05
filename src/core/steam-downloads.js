@@ -8,6 +8,17 @@ const { ARCHITECTURES, STEAM_PLATFORMS: PLATFORMS, steamPlatforms: platforms, ar
 const HISTORY_NOTE = "Steam lists current publisher branches. Earlier manifests appear after they have been observed; a known depot and manifest ID can also be entered. Steam may restrict access to older or shared content.";
 const clone = value => JSON.parse(JSON.stringify(value));
 function readJson(file, fallback) { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; } }
+function readDefaultWindowsExecutable(root) {
+  if (typeof root !== "string" || !path.isAbsolute(root)) return null;
+  const receipt = readJson(path.join(root, ".maclauncher-steam.json"));
+  if (receipt?.complete !== true || receipt.platform !== "windows") return null;
+  const executable = receipt.defaultWindowsLaunch?.executable;
+  if (typeof executable !== "string" || !executable.trim() || /[\x00-\x1f\x7f]/.test(executable) || path.win32.parse(executable).root) return null;
+  const relative = executable.replace(/\\/g, "/");
+  if (path.posix.isAbsolute(relative) || relative.split("/").includes("..")) return null;
+  const candidate = path.resolve(root, relative);
+  return candidate === path.resolve(root) ? null : candidate;
+}
 function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const temp = `${file}.${crypto.randomUUID()}.tmp`;
@@ -502,7 +513,8 @@ function createSteamDownloads(options = {}) {
         for (const { output, target } of symlinks) { signal.throwIfAborted(); checkParent(stage, output); if (fs.existsSync(output)) throw publicError("Steam supplied conflicting symbolic links."); fs.symlinkSync(target, output); }
         signal.throwIfAborted();
         const metadata = { schema: 1, appId, name: record.name, platform, branch, buildId: identity.buildId, versionName: identity.versionName, version: identity.versionName, importPath: finalPath, path: finalPath, createdAt: record.createdAt, complete: true,
-          depots: selectedDepots, architecture, downloadIdentity: record.downloadIdentity };
+          depots: selectedDepots, architecture, downloadIdentity: record.downloadIdentity,
+          ...(platform === "windows" && versions.defaultWindowsLaunch ? { defaultWindowsLaunch: versions.defaultWindowsLaunch } : {}) };
         writeJson(path.join(stage, ".maclauncher-steam.json"), metadata);
         // A full random installation ID prevents collisions with any prior files.
         // A private sibling stage becomes visible only after every file verifies.
@@ -533,4 +545,4 @@ function createSteamDownloads(options = {}) {
   return { snapshot, connect, submitAuth, disconnect, loadLibrary, getVersions, download, cancel, markImported, dispose };
 }
 
-module.exports = { createSteamDownloads, normalizeVersions, describeSteamSelection, localAccount, sharedLibrary, protoField, protoFields, containedFile, transferFile, HISTORY_NOTE };
+module.exports = { createSteamDownloads, normalizeVersions, describeSteamSelection, readDefaultWindowsExecutable, localAccount, sharedLibrary, protoField, protoFields, containedFile, transferFile, HISTORY_NOTE };
