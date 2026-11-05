@@ -68,7 +68,7 @@ CAS Sharpen uses AMD's MIT-licensed CAS implementation from SweetFX source revis
 
 ## Runtime and tool packages
 
-The source inventory covers every configured app submodule, including reference projects and tools. Copied shader sources and archive adaptations retain their original source commits without duplicate checkout declarations. Producer dependencies stay in the Builds or Android source repository that consumes them. MacLauncher's own versioned helpers are recorded separately from upstream projects. [Runtime distribution](RUNTIME_DISTRIBUTION.md) lists the native package versions and where each comes from.
+The source inventory describes the app's declared adaptations and their inputs. Submodules need no separate inventory entry merely because they are present; their Gitlinks supply their checkout revisions. Copied shader sources and archive adaptations retain their original source commits without duplicate checkout declarations. Producer dependencies stay in the Builds or Android source repository that consumes them. MacLauncher's own versioned helpers are recorded separately from upstream projects. [Runtime distribution](RUNTIME_DISTRIBUTION.md) lists the native package versions and where each comes from.
 
 Every Git source that MacLauncher uses is tracked as a Git submodule at an exact commit, including small tools, build dependencies and nested sources. A new upstream version is compared against that commit and against the module's adaptations, and the checkouts are never edited. Submodules used only as references can stay uninitialized and are excluded from the app. Downloads that are only binaries record exact versions and checksums and need no source checkout.
 
@@ -129,7 +129,7 @@ node scripts/check-upstream-overlays.cjs
 node scripts/check-upstream-overlays.cjs --json
 ```
 
-The audit runs offline. It compares the Git index, the checked-out commits, the commits recorded by modules and catalogs, adaptation versions, archive checksums, the hashes of MacLauncher's files and the source guards, which are the expected hashes of the upstream files that an adaptation changes. New submodules and new adaptations need inventory entries. Uninitialized dependencies are reported separately, and the audit does not fetch, initialize or modify them. Git's automatic fetching of missing partial-clone objects is turned off. An unresolved license still limits how its component can be distributed.
+The audit runs offline over the declared inventory entries. It compares their Gitlinks, checkout origins and commits, declared pin and adaptation-version references, archive checksums and upstream source guards. Owned adaptation entries are checked for safe paths. Declared recipe entries and callable adaptation operations are also checked. Uninitialized dependencies are reported separately, and the audit does not fetch, initialize or modify them. Git's automatic fetching of missing partial-clone objects is turned off. An unresolved license still limits how its component can be distributed.
 
 A catalog reference into an array selects an exact version record regardless of its position. Missing or duplicate records fail the audit, and adding a new version does not change how an earlier one is identified.
 
