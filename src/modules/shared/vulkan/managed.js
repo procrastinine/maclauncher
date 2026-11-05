@@ -22,7 +22,7 @@ function createManager(dependencies = {}) {
       await Bundled.verifySignatures(selected.root,selected.declaration,{signal});
     }, dependencies });
   return { ...manager, distributionRequired: false,
-    ui: { groupId: "graphics", tabLabel: "Graphics", sectionLabel: "KosmicKrisp GLES 3.2", memberOrder: 22, management: "managed", hostFeature: "METAL4" } };
+    ui: { groupId: "translators", tabLabel: "Translators", sectionLabel: "KosmicKrisp GLES 3.2", memberOrder: 22, management: "managed", hostFeature: "METAL4" } };
 }
 
 function createProvider(manager) {
@@ -78,7 +78,7 @@ function createSceneManager(dependencies = {}) {
       await Bundled.verifySignatures(selected.root, selected.declaration, { signal });
     }, dependencies });
   return { ...result, distributionRequired: false,
-    ui: { groupId: "graphics", tabLabel: "Graphics", sectionLabel: "MoltenVK scene support", memberOrder: 25, management: "managed" } };
+    ui: { groupId: "translators", tabLabel: "Translators", sectionLabel: "MoltenVK scene support", memberOrder: 25, management: "managed" } };
 }
 function createSceneProvider(selectedManager) {
   function selected(version, context, verification) {
