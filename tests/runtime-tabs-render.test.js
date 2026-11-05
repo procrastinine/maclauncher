@@ -204,7 +204,7 @@ test('included shaders do not register a runtime manager or shader-pack navigati
   const markup = render([manager('other', { tabLabel: 'Other' })]);
   assert.doesNotMatch(markup, /ReShade ·|Shader packs|runtime-panel-reshade-shaders/);
 });
-test('CrossOver and Sikarugir manage one shared DXMT support download and default under Graphics', () => {
+test('CrossOver and Sikarugir manage one shared DXMT support download and default under Translators', () => {
   const registry = require('../src/modules/registry');
   const source = require('../src/modules/crossover/temporal/support-manager');
   const engineSources = [require('../src/modules/crossover/runtime/manager'),
@@ -213,15 +213,17 @@ test('CrossOver and Sikarugir manage one shared DXMT support download and defaul
   const state = source.getState(), version = state.catalog.versions[0] || '1.0.21', install = { version, ready: true };
   const bridge = { ...state, id: source.id, label: source.label, ui: registry.getRuntimeManagerUi(source.id) || source.ui,
     sections: state.sections.map(section => ({ ...section, catalog: { ...section.catalog, versions: [version] }, installed: [install], defaultVersion: null })) };
+  assert.deepEqual(engines.map(engine => engine.id), ['crossover', 'sikarugir']);
+  assert.equal(bridge.id, 'sikarugir-graphics-bridge');
   const markup = render([...engines, bridge], bridge.id);
-  for (const label of ['CrossOver', 'Sikarugir', 'Graphics']) assert.match(markup, new RegExp(`class="launcherSidebarItem[^>]*>${label}</button>`));
-  assert.match(markup, /role="tab"[^>]*aria-selected="true"[^>]*>DXMT support<\/button>/);
-  assert.match(markup, /id="runtime-group-panel-graphics"/);
+  for (const label of ['CrossOver', 'Sikarugir', 'Translators']) assert.match(markup, new RegExp(`class="launcherSidebarItem[^>]*>${label}</button>`));
+  assert.match(markup, /class="runtimePanelTitle">DXMT support<\/div>/);
+  assert.match(markup, /id="runtime-group-panel-translators"/);
   assert.match(markup, />Installed<\/button>/);
   assert.match(markup, /Set default/);
-  assert.equal(markup.match(/>DXMT support<\/button>/g).length, 1);
+  assert.equal(markup.match(/class="runtimePanelTitle">DXMT support<\/div>/g).length, 1);
   assert.doesNotMatch(markup, /DXMT · support/);
-  for (const engine of engines) assert.doesNotMatch(render([...engines, bridge], engine.id), />DXMT support<\/button>/, `${engine.id}: no separate copy`);
+  for (const engine of engines) assert.doesNotMatch(render([...engines, bridge], engine.id), /class="runtimePanelTitle">DXMT support<\/div>/, `${engine.id}: no separate copy`);
 });
 test('inactive scene adapters stay internally managed without Graphics tabs or phantom Presets', () => {
   const registry = require('../src/modules/registry');

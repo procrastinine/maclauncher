@@ -252,12 +252,12 @@ test('registry metadata exposes manageable production groups while exposing mana
     assert.equal(groups.at(-1).id, 'tools');
     assert.equal(groups.filter(group => group.label === 'GameMaker').length, 1);
     assert.equal(groups.some(group => group.label === 'Butterscotch'), false);
-    // CrossOver and Sikarugir share one DXMT support package, listed once under Graphics.
+    // CrossOver and Sikarugir share one DXMT support package, listed once under Translators.
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'sikarugir'), sections).map(choice => [choice.label, choice.managerId]),
       [['Sikarugir', 'sikarugir']]);
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'crossover'), sections).map(choice => [choice.label, choice.managerId]),
       [['CrossOver', 'crossover']]);
-    assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'graphics'), sections).filter(choice => choice.label === 'DXMT support')
+    assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'translators'), sections).filter(choice => choice.label === 'DXMT support')
       .map(choice => choice.managerId), ['sikarugir-graphics-bridge']);
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.label === 'Flash'), sections).map(choice => [choice.label, choice.managerId]),
       [['Flash Player', 'flash-projector'], ['Ruffle', 'ruffle'], ['JPEXS FFDec', 'ffdec']]);
