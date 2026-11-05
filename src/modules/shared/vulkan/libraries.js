@@ -8,8 +8,8 @@ const { systemVersionSync, versionAtLeast } = require("../runtime/bundled-native
 const Custom = require("../runtime/custom-runtime");
 const run = promisify(execFile);
 const definitions = {
-  moltenvk: { label: "MoltenVK", library: "libMoltenVK.dylib", source: "https://github.com/KhronosGroup/MoltenVK/releases" },
-  kosmickrisp: { label: "KosmicKrisp", library: "libvulkan_kosmickrisp.dylib", source: "https://www.lwjgl.org/browse/release" }
+  moltenvk: { label: "MoltenVK", sourceName: "MoltenVK", sourceDescription: "MoltenVK releases published by KhronosGroup/MoltenVK.", library: "libMoltenVK.dylib", source: "https://github.com/KhronosGroup/MoltenVK/releases" },
+  kosmickrisp: { label: "KosmicKrisp", sourceName: "LWJGL", sourceDescription: "KosmicKrisp Vulkan drivers published by LWJGL.", library: "libvulkan_kosmickrisp.dylib", source: "https://www.lwjgl.org/browse/release" }
 };
 
 // A library must match its consumer process; callers override the launcher ABI for another runtime.
@@ -117,7 +117,7 @@ async function installLoader(unpacked, loader, signal) {
 }
 function createManager(backend, dependencies = {}) {
   const definition = definitions[backend], loader = backend === "kosmickrisp" ? loaderSource(dependencies) : null;
-  const manager = createPinnedNativeManager({ id: "vulkan-" + backend, label: definition.label, sourceUrl: definition.source, sourceLabel: "Source",
+  const manager = createPinnedNativeManager({ id: "vulkan-" + backend, label: definition.label, sourceUrl: definition.source, sourceLabel: "Source", sourceName: definition.sourceName, sourceDescription: definition.sourceDescription,
     nativeLibrary: true, cacheDownloads: true,
     inspectRuntime(options) {
       const native = require("../runtime/local-native").resolveLocalRuntime(options), root = path.dirname(native.executablePath);

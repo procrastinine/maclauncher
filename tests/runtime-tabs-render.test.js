@@ -880,7 +880,14 @@ test('translator source links use one caption with explicit project and Template
     assert.ok(links.length);assert.ok(links.every(label=>label==='Source'));
     if(engine==='dxvk') { assert.match(markup,/DXVK-macOS async/);assert.match(markup,/DXVK-macOS releases published by Gcenx\/DXVK-macOS/); }
     if(engine!=='gstreamer')assert.match(markup,/copies taken from a Sikarugir Template release/);
+    else { assert.match(markup,/class="runtimeSourceName">GStreamer<\/span>/);assert.match(markup,/GStreamer publishes multimedia libraries and plugins/); }
   }
-  const owner=require('../src/modules/shared/vulkan/libraries').managers[0];
-  assert.match(render([{...owner.getState({}),id:owner.id,label:owner.label,ui:owner.ui}],owner.id),/class="runtimeSourceLink"[^>]*>Source<\/a>/);
+  for(const owner of require('../src/modules/shared/vulkan/libraries').managers) {
+    const markup=render([{...owner.getState({}),id:owner.id,label:owner.label,ui:owner.ui}],owner.id);
+    assert.match(markup,/class="runtimeSourceLink"[^>]*>Source<\/a>/);
+    assert.match(markup, new RegExp('class="runtimeSourceName">'+(owner.backend==='moltenvk'?'MoltenVK':'LWJGL')+'<\\/span>'));
+    assert.doesNotMatch(markup,/class="runtimeSourceName">Source<\/span>|Releases published by the runtime project/);
+    if(owner.backend==='moltenvk')assert.match(markup,/MoltenVK releases published by KhronosGroup\/MoltenVK/);
+    else assert.match(markup,/KosmicKrisp Vulkan drivers published by LWJGL/);
+  }
 });

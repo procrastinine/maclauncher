@@ -55,12 +55,6 @@
         "management": "managed",
         "order": 201,
         "category": "compatibility"
-      },
-      "sikarugir-graphics-bridge": {
-        "groupId": "translators",
-        "tabLabel": "Translators",
-        "memberOrder": 26,
-        "management": "managed"
       }
     },
     "entries": {

@@ -117,7 +117,7 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
           const href = runtimeSourceUrl(item?.url);
           return href ? [{ href, label: item.label || "upstream code" }] : [];
         }) : [];
-      const label = source.label || source.sourceLabel || (url ? "Upstream" : "Versions");
+      const label = source.label || (url ? "Upstream" : "Versions");
       const pending = ui.pendingActions?.[key];
       const refreshing = pending === "refreshCatalog" || source.status === "loading";
       const sourceBusy = busy || Boolean(pending) || refreshing;

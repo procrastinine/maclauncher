@@ -3,7 +3,7 @@ const { createPinnedNativeManager, upstreamPins } = require("./pinned-native-man
 const Upstream = require("./upstream"), Component = require("./component-runtime");
 const { archiveFormat } = require("./release-files");
 const definitions = {
-  gstreamer: { label: "GStreamer codecs", memberOrder: 30, names: ["gstreamer-1.0"], sources: [] },
+  gstreamer: { label: "GStreamer codecs", sourceName: "GStreamer", sourceDescription: "GStreamer publishes multimedia libraries and plugins. Prepared codec folders are registered locally.", memberOrder: 30, names: ["gstreamer-1.0"], sources: [] },
   dxvk: { label: "DXVK", memberOrder: 2, apis: ["Direct3D 9", "Direct3D 10", "Direct3D 11"], names: ["dxvk", "dxvk3", "d9vk"],
     sources: [["upstream", "DXVK", "doitsujin/dxvk"], ["macos", "DXVK-macOS", "Gcenx/DXVK-macOS", name => !/async/i.test(name)],
       ["async", "DXVK-macOS async", "Gcenx/DXVK-macOS", name => /async/i.test(name)],
@@ -28,7 +28,7 @@ function createManager(engine, { dependencies = {} } = {}) {
   const definition = { ...definitions[engine], engine }, catalogSources = definition.sources.map(source => catalogSource(source, definition.label));
   const manager = createPinnedNativeManager({ id: engine === "dxmt" ? "sikarugir-graphics-bridge" : "translator-" + engine,
     formerIds: engine === "dxmt" ? ["crossover-graphics-bridge"] : [], label: definition.label,
-    discoverCatalog: () => [], ...(catalogSources.length ? { catalogSources } : {}), sourceUrl: catalogSources[0]?.url || "https://gstreamer.freedesktop.org/", sourceLabel: "Source", nativeLibrary: true, cacheDownloads: true,
+    discoverCatalog: () => [], ...(catalogSources.length ? { catalogSources } : {}), sourceUrl: catalogSources[0]?.url || "https://gstreamer.freedesktop.org/", sourceLabel: "Source", sourceName: definition.sourceName, sourceDescription: definition.sourceDescription, nativeLibrary: true, cacheDownloads: true,
     resolveExecutable(root) { return Component.inspected(Component.componentRoot(root, definition), definition).executablePath; },
     inspectRuntime({ runtimePath, runtimeRoot, runtimeSource, runtimeLabel, runtimeVersion }) {
       return Component.inspected(Component.componentRoot(runtimeRoot || path.dirname(runtimePath), definition), definition, { source: runtimeSource || "upstream", version: runtimeLabel || runtimeVersion });

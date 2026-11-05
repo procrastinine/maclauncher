@@ -428,11 +428,12 @@ test('effective manager defaults remain visible when installed and only saved de
 
 test('translator member declarations order Direct3D, Vulkan and codecs and identify their catalog projects', () => {
   const sources = require('../src/modules/shared/runtime/translator-managers');
-  const managers = [require('../src/modules/crossover/temporal/support-manager'),
-    ...require('../src/modules/shared/translators/runtime/managers'),
-    ...require('../src/modules/shared/vulkan/libraries').managers,
-    require('../src/modules/shared/vulkan/managed').manager];
-  const states = managers.map(owner => ({ id: owner.id, label: owner.label, ui: owner.ui, sections: [{ id: 'default', label: 'Versions' }] }));
+  const registry = require('../src/modules/registry');
+  const managers = [...registry.listSharedRuntimeManagers(), ...registry.listModules().flatMap(mod => registry.getModule(mod.id)?.runtimeManagers || [])];
+  const unique = [...new Map(managers.map(owner => [owner.id, owner])).values()];
+  const providerUi = require('../src/modules/shared/reshade/runtime/provider-library-ui.json');
+  const states = unique.map(owner => ({ id: owner.id, label: owner.label, ui: { ...(registry.getRuntimeManagerUi(owner.id) || owner.ui), ...providerUi[owner.id] },
+    sections: [{ id: 'default', label: 'Versions' }] }));
   modelTest(`const groups=groupRuntimeManagers(${JSON.stringify(states)});
     assert.deepEqual(runtimeGroupSections(groups.find(group=>group.id==='translators'),sections).map(row=>row.managerId),
       ['sikarugir-graphics-bridge','translator-d3dmetal','translator-dxvk','translator-vkd3d-proton','vulkan-moltenvk','vulkan-kosmickrisp','vulkan-kosmickrisp-gles32','translator-gstreamer']);`);
