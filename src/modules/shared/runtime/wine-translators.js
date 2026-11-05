@@ -161,7 +161,7 @@ async function resolve(install, runtime, context, { executableArchitecture, host
     if (automatic(renderer)) {
       renderer.used = choose('d3d-renderer', 'dxmt') || choose('d3d-renderer', 'wined3d');
       const d9vk = context.wineEnvironment?.settings.d9vk !== false && vulkan.used?.engine === 'kosmickrisp' && choose('d3d-renderer', 'dxvk', 'd9vk');
-      plan.additional = d9vk ? [d9vk] : [];
+      plan.additional = d9vk ? [{ ...d9vk, inherited: renderer.inherited && !renderer.fallback }] : [];
     }
     if (!context.runtimeSettings?.translatorRenderer && context.runtimeSettings?.graphicsBackend === 'dxvk') {
       const selected = choose('d3d-renderer', 'dxvk', vulkan.used?.engine === 'kosmickrisp' ? 'dxvk3' : 'dxvk') || renderer.used;
@@ -171,7 +171,7 @@ async function resolve(install, runtime, context, { executableArchitecture, host
       if (executableArchitecture && !['x86', 'i386'].includes(executableArchitecture)) throw new Error('DirectDraw compatibility requires a 32-bit Windows executable.');
       const directDraw = input.included.find(item => item.templateComponent === 'cnc_ddraw');
       if (!directDraw) throw new Error('The selected Template has no DirectDraw compatibility libraries.');
-      plan.additional = [...(plan.additional || []), directDraw];
+      plan.additional = [...(plan.additional || []), { ...directDraw, inherited: context.runtimeSettings?.cncDdraw === Plan.INHERIT }];
     }
   }
   for (const row of Object.values(plan.components)) if (row.used && compatibility[row.used.id]?.files) {

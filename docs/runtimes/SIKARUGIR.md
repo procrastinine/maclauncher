@@ -40,7 +40,7 @@ Save tools use the original game folder as the primary location and list the sel
 
 Each game's Runtime Settings offers **Environment**: **Private (MacLauncher)**, Sikarugir wrappers discovered under `~/Applications/Sikarugir`, or **Choose…** for another wrapper. Listing and current values are read offline from the wrapper's Info.plist and registry files.
 
-A selection stores a reference and leaves the wrapper in place. MacLauncher composes the launch with that wrapper's own Wine engine, prefix and support files. The wrapper's launcher, custom shell commands and startup/shutdown scripts are not executed. Selected settings and translator files may change the prefix. Its profile mappings, HOME and temporary-directory behavior stay as supplied. Logs stay in MacLauncher's data.
+A selection stores a reference and leaves the wrapper in place. MacLauncher composes the launch with that wrapper's own Wine engine, prefix and support files. The wrapper's launcher, custom shell commands and startup/shutdown scripts are not executed. Explicit setting or translator overrides may change the prefix. Inherited translator settings leave its DLL files unchanged. Its profile mappings, HOME and temporary-directory behavior stay as supplied. Logs stay in MacLauncher's data.
 
 An incomplete or missing wrapper reports an error and is not recreated. Removing a game leaves the wrapper intact; removal is refused if its directory contains the external environment. **Open Windows files** opens the selected prefix, and its Windows profiles are alternate save locations.
 
