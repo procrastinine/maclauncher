@@ -3,6 +3,7 @@ const { readMachOLoadCommands } = require('./macho-load-commands');
 const { inspectMachOExportInfo } = require('./macho-exports');
 const { inspectFile, compareVersions } = require('./translator-description');
 const { wineLayout } = require('./wine-layout');
+const { binaryFiles } = require('./binary-files');
 
 // Per-installed-engine record, invalidated by file identity, never version.
 async function wineCompatibilityRecord(install) {
@@ -43,14 +44,11 @@ function moduleExport(record, name, symbol, visited = new Set()) {
 function compatibility(description, record, { macOSVersion, executableArchitecture } = {}) {
   const warnings = [], machine = requiredMachine(executableArchitecture), expectedUnix = record.layout.architecture;
   const incompatible = reason => ({ compatible: false, reason, warnings });
-  const files = [];
-  for (const file of description.files || []) {
-    // Alternate PE/Unix architecture folders are installed once and serve other consumers.
-    const parent = (file.relative || '').split('/').find(part => part.endsWith('-windows') || part.endsWith('-unix'));
-    if (parent?.endsWith('-windows') && machine && requiredMachine(parent.slice(0, -8)) !== machine) continue;
-    if (parent?.endsWith('-unix') && record.layout.unixName && parent !== record.layout.unixName) continue;
+  const selected = binaryFiles(description.files || [], { machine, architecture: expectedUnix });
+  if (selected.missing.length) return incompatible(selected.missing[0].reason);
+  for (const file of selected.files) {
     if (!fs.existsSync(file.path)) return incompatible(`Required file is missing: ${file.path}`);
-    const actual = inspectFile(file); files.push(actual);
+    const actual = file;
     if (actual.format === 'pe' && machine && actual.machine !== machine) return incompatible(`${path.basename(file.path)} has no PE machine for ${executableArchitecture}`);
     if (actual.format !== 'macho') { if (actual.format === 'unknown') warnings.push(`Could not inspect ${file.path}`); continue; }
     if (expectedUnix && !actual.cpuSlices.includes(expectedUnix)) return incompatible(`${path.basename(file.path)} has no ${expectedUnix} CPU slice`);
@@ -68,8 +66,6 @@ function compatibility(description, record, { macOSVersion, executableArchitectu
       if (found == null) warnings.push(`Could not establish export ${item.symbol} from ${name}`);
     }
   }
-  if (machine && description.files?.some(file => file.format === 'pe') && !files.some(file => file.format === 'pe'))
-    return incompatible(`No translator PE files for ${executableArchitecture}`);
-  return { compatible: true, reason: null, warnings };
+  return { compatible: true, reason: null, warnings, files: selected.files };
 }
 module.exports = { wineCompatibilityRecord, compatibility, requiredMachine, moduleExport };
