@@ -91,7 +91,7 @@ function normalizeSettings(environment, metadata, registry, wrapper) {
     highResolution: value("Mac Driver", "RetinaMode"), dpi: user["Control Panel\\Desktop"]?.LogPixels,
     optionAsAlt: value("Mac Driver", "LeftOptionIsAlt"), commandAsControl: value("Mac Driver", "LeftCommandIsCtrl"),
     mouseCapture: value("DirectInput", "MouseWarpOverride"), fullscreenCapture: value("Mac Driver", "CaptureDisplaysForFullscreen"),
-    verticalSync: value("Mac Driver", "AllowVSync"), cncDdraw: wrapper ? Boolean(Number(metadata.CNC_DDRAW)) : undefined,
+    verticalSync: value("Mac Driver", "AllowVerticalSync"), cncDdraw: wrapper ? Boolean(Number(metadata.CNC_DDRAW)) : undefined,
     d9vk: wrapper ? Boolean(Number(metadata.D9VK)) : undefined };
   return settings;
 }
