@@ -113,7 +113,9 @@ function managedFixture(t, { installed = [], approval = true, native = false } =
     return Graphics.prepareGraphicsView(options);
   };
   const run = async (_wine, _server, args, options) => {
-    calls.push({ stage: args[0] === "wineboot.exe" ? "boot" : "windows-version", args });
+    const stage = args[0] === "wineboot.exe" ? "boot" : args[0] === "winecfg.exe" ? "prefix-windows-version"
+      : args[0] === "reg.exe" && args[2]?.startsWith("HKCU\\Software\\Wine\\AppDefaults\\") ? "app-windows-version" : args[0];
+    calls.push({ stage, args });
     write(path.join(options.env.WINEPREFIX, "system.reg"), "registry");
     write(path.join(options.env.WINEPREFIX, "user.reg"), "registry");
     return { stdout: "", stderr: "" };
@@ -274,7 +276,10 @@ test("ordinary Play obtains one consent, prepares the Windows environment and ru
   assert.equal(calls.length, 0, "import does not prepare or download Wine");
   const result = await core.launchEntry(entry);
   assert.equal(result.kind, "process"); assert.equal(result.runtimeId, "sikarugir");
-  assert.deepEqual(calls.map(call => call.stage), ["check", "consent", "install", "graphics", "boot", "windows-version", "spawn"]);
+  assert.deepEqual(calls.map(call => call.stage), ["check", "consent", "install", "graphics", "boot", "prefix-windows-version", "app-windows-version", "spawn"]);
+  assert.deepEqual(calls.find(call => call.stage === "prefix-windows-version").args, ["winecfg.exe", "-v", "win10"]);
+  assert.deepEqual(calls.find(call => call.stage === "app-windows-version").args,
+    ["reg.exe", "add", "HKCU\\Software\\Wine\\AppDefaults\\Game.exe", "/v", "Version", "/t", "REG_SZ", "/d", "win10", "/f"]);
   const prompt = calls.find(call => call.stage === "consent").plan;
   assert.equal(prompt.managerId, "sikarugir"); assert.equal(prompt.version, "engine-12");
   assert.equal(prompt.requiresDownload, true);
@@ -337,12 +342,14 @@ test("offline replay retains selected versions, global and game settings, privat
   core.runtimeSettingsStore.writeDefaults("sikarugir", registry().getModuleInfo("crossover"), { wineDebug: "-all", synchronization: "off" });
   const defaultsPath = path.join(userDataDir, "runtimes", "sikarugir", "settings.json"), defaultsBytes = fs.readFileSync(defaultsPath);
   const original = pe(path.join(root, "Unknown", "Game.exe"));
+  const executableBytes = fs.readFileSync(original);
   const entry = await core.resolveEntry(original);
   entry.runtimeData.sikarugir = { ...entry.runtimeData.sikarugir, version: "engine-11" };
   entry.runtimeSettings = { sikarugir: { locale: "ja_JP.UTF-8", arguments: ["--windowed"] } };
   entry.networkAccess = true; // launch routing, not network policy, is under test
   core.persistEntry(entry);
   const first = await core.launchEntry(entry), initial = { ...entry.runtimeData.sikarugir };
+  const prefixMarker = fs.readFileSync(path.join(initial.prefixPath, "maclauncher-prefix.json"));
   assert.equal(initial.installedVersion, "engine-11");
   assert.equal(calls.some(call => ["consent", "install"].includes(call.stage)), false);
   const firstSpawn = calls.find(call => call.stage === "spawn");
@@ -356,7 +363,11 @@ test("offline replay retains selected versions, global and game settings, privat
   assert.equal(rediscovered.runtimeData.sikarugir.version, "engine-11");
   assert.deepEqual(rediscovered.runtimeSettings.sikarugir, entry.runtimeSettings.sikarugir);
   await core.launchEntry(rediscovered);
-  assert.deepEqual(calls.map(call => call.stage), ["check", "graphics", "spawn"]);
+  assert.deepEqual(calls.map(call => call.stage), ["check", "graphics", "app-windows-version", "spawn"]);
+  assert.deepEqual(calls.find(call => call.stage === "app-windows-version").args,
+    ["reg.exe", "add", "HKCU\\Software\\Wine\\AppDefaults\\Game.exe", "/v", "Version", "/t", "REG_SZ", "/d", "win10", "/f"]);
+  assert.deepEqual(fs.readFileSync(original), executableBytes);
+  assert.deepEqual(fs.readFileSync(path.join(initial.prefixPath, "maclauncher-prefix.json")), prefixMarker);
   assert.equal(rediscovered.runtimeData.sikarugir.prefixPath, initial.prefixPath);
   assert.equal(fs.readFileSync(path.join(initial.gameRoot, "Save01.dat"), "utf8"), "private game save");
   assert.equal(fs.readFileSync(path.join(initial.prefixPath, "drive_c", "users", "wine", "Documents", "save.dat"), "utf8"), "private Windows save");
