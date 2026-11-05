@@ -14,8 +14,8 @@ function unavailableReason(backend, dependencies) {
   return support.supported === false ? support.reason : null;
 }
 function choiceLabel(backend, label, dependencies) {
-  return backend === "kosmickrisp" && (dependencies.architecture || Architecture.selectedArchitecture()) === "x64"
-    ? label + " · Intel build for Intel programs on Apple Silicon" : label;
+  return backend === "kosmickrisp"
+    ? label + " (" + Architecture.architectureLabel(dependencies.architecture || Architecture.selectedArchitecture()) + ")" : label;
 }
 function consumerContext(context, dependencies, projectId) {
   if (!dependencies.architecture) return context;
@@ -135,8 +135,8 @@ function requirements(context, dependencies = {}) {
           preferred = requirements({ ...context, runtimeSettings: { ...context.runtimeSettings, vulkanRuntime: managed.selectionId } }, dependencies)[0];
         } catch (error) { context.logger?.warn?.("[runtimes] The Intel KosmicKrisp package is unavailable; using MoltenVK.", error.message); }
         if (preferred) return [{ ...preferred, optional: true, cancelLabel: "Use MoltenVK",
-          label: choiceLabel("kosmickrisp", "KosmicKrisp GLES 3.2", dependencies),
-          detail: "Intel build for Intel programs on Apple Silicon. MoltenVK is used if this download is skipped or fails.", fallback: fallback()[0] }];
+          label: choiceLabel("kosmickrisp", "KosmicKrisp", dependencies),
+          detail: "Intel programs on Apple Silicon. Skipping uses MoltenVK.", fallback: fallback()[0] }];
       }
       return fallback();
     }

@@ -8,7 +8,7 @@ const projectId = "vulkan-kosmickrisp-gles32";
 const selectionId = "kosmickrisp:maclauncher-gles32";
 
 function createManager(dependencies = {}) {
-  const manager = createProjectBuildManager({ projectId, label: "KosmicKrisp GLES 3.2", repository, upstreamUrl: "https://gitlab.freedesktop.org/mesa/mesa", nativeLibrary: true,
+  const manager = createProjectBuildManager({ projectId, label: "KosmicKrisp", repository, upstreamUrl: "https://gitlab.freedesktop.org/mesa/mesa", nativeLibrary: true,
     manifestRelative: "manifest.json", sourceRelative: null, filesPrefix: "files/",
     executableRelative: manifest => manifest.executableRelative,
     validateManifest(manifest, record) {
@@ -22,7 +22,7 @@ function createManager(dependencies = {}) {
       await Bundled.verifySignatures(selected.root,selected.declaration,{signal});
     }, dependencies });
   return { ...manager, distributionRequired: false,
-    ui: { groupId: "translators", tabLabel: "Translators", sectionLabel: "KosmicKrisp GLES 3.2", memberOrder: 22, management: "managed", hostFeature: "METAL4" } };
+    ui: { groupId: "translators", tabLabel: "Translators", sectionLabel: "KosmicKrisp", memberOrder: 22, management: "managed", hostFeature: "METAL4" } };
 }
 
 function createProvider(manager) {
@@ -31,7 +31,7 @@ function createProvider(manager) {
     if (!result.ready || !result.install) return null;
     const install = result.install;
     return { id: "kosmickrisp-gles32:" + result.version, backend: "kosmickrisp", version: result.version,
-      projectId, label: "KosmicKrisp · GLES 3.2 · " + result.version, minimumMacOS: install.manifest.minimumMacOS,
+      projectId, label: "KosmicKrisp " + result.version, minimumMacOS: install.manifest.minimumMacOS,
       library: path.join(install.payloadRoot, install.manifest.runtimeFiles.loader), driver: install.executablePath,
       readable: install.manifest.files.filter(file => file.architectures).map(file => path.join(install.payloadRoot, file.path)) };
   }

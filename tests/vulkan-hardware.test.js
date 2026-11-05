@@ -116,7 +116,7 @@ test("saved KosmicKrisp selections retain their identity and reject only known i
     "unknown host facts keep their existing eligibility");
 });
 
-test("Intel KosmicKrisp choices are labelled for Apple Silicon while ARM choices retain their labels and order", t => {
+test("KosmicKrisp choices use compact CPU labels and retain their order", t => {
   for (const architecture of ["x64", "arm64"]) {
     const { context, dependencies } = fixture(t, architecture);
     const selected = { ...dependencies, hostCapabilities: apple };
@@ -125,7 +125,9 @@ test("Intel KosmicKrisp choices are labelled for Apple Silicon while ARM choices
     const kosmic = choices.filter(row => row.value.startsWith("kosmickrisp"));
     assert.ok(kosmic.some(row => row.value === Managed.selectionId));
     assert.ok(kosmic.length > 1);
-    assert.ok(kosmic.every(row => /Intel build for Intel programs on Apple Silicon/.test(row.label) === (architecture === "x64")));
+    const cpu = architecture === "x64" ? "Intel" : "Apple Silicon";
+    assert.ok(kosmic.every(row => row.label.includes("(" + cpu + ")")));
+    assert.ok(kosmic.every(row => !row.label.includes("Intel build for Intel programs")));
     if (architecture === "arm64") {
       assert.equal(Vulkan.resolve(context, { ...selected, preferredBackend: undefined }).backend, "moltenvk");
       for (const manager of dependencies.managers) manager.present = false;
@@ -176,7 +178,7 @@ test("first Intel Vulkan Play offers the managed Intel package once and installs
     const result = await prepareFixture(t, { host: { ...apple, launcherArch } });
     assert.deepEqual(result.events, ["consent:" + Managed.projectId, "refresh:" + Managed.projectId, "install:" + Managed.projectId, "prepare"]);
     assert.equal(result.resolved.projectId, Managed.projectId);
-    assert.ok(result.offered[0].label.includes("Intel build for Intel programs on Apple Silicon"));
+    assert.equal(result.offered[0].label, "KosmicKrisp (Intel)");
     assert.ok(result.managedManager.selections.every(architecture => architecture === "x64"), "provider resolution follows the consumer despite saved ARM defaults");
     assert.deepEqual(result.warnings, []);
   });

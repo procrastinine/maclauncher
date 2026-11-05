@@ -47,7 +47,7 @@ const kosmickrisp = Upstream.index({ locations: [LWJGL_RELEASES], hosts: ["lwjgl
       const head = await read(url, { method: "HEAD" }).catch(() => null);
       if (head?.status !== 200) return null;
       const revision = await read(url + ".git").then(document => document?.status === 200 && /^[a-f0-9]{40}$/.exec(document.text.trim())?.[0]).catch(() => null);
-      return { version, label: "KosmicKrisp · LWJGL " + version, architecture: "arm64", sourceUrl: `${definitions.kosmickrisp.source}/${version}/macosx/arm64`,
+      return { version, label: "KosmicKrisp " + version, architecture: "arm64", sourceUrl: `${definitions.kosmickrisp.source}/${version}/macosx/arm64`,
         ...(revision ? { revision } : {}), files: [{ name: definitions.kosmickrisp.library, url, bytes: head.headers["content-length"],
           ...(head.headers["x-amz-checksum-sha256"] ? { digest: head.headers["x-amz-checksum-sha256"], algorithm: "sha256" } : {}) }] };
     }));
