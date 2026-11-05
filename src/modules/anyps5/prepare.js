@@ -130,8 +130,10 @@ async function prepareGame(entry,context,install,dependencies={}) {
   const compiledNames=new Set(modules.map(file=>file.name+".guest.prx"));
   const files=assetFiles.filter(file=>!compiledNames.has(file.name));
   const recordPath=path.join(root,"preparation.json"), previous=readRecord(recordPath);
-  const identity=crypto.createHash("sha256").update(JSON.stringify([2,program.sourceRoot,program.programRoot,program.assetRoot,program.executablePath,install.version,
-    install.manifestSha256||install.binarySha256||install.upstreamRevision,files.map(file=>[file.name,file.stamp]),programFiles.map(file=>[file.name,file.stamp])])).digest("hex");
+  // --registry writes conversion outputs; its symbol/ABI rules are compiled into the relinker.
+  const runtime=runtimePaths(install);
+  const identity=crypto.createHash("sha256").update(JSON.stringify([3,program.sourceRoot,program.programRoot,program.assetRoot,program.executablePath,
+    Native.hashFile(runtime.relinker),Native.hashFile(runtime.unwrap),files.map(file=>[file.name,file.stamp]),programFiles.map(file=>[file.name,file.stamp])])).digest("hex");
   bindLibraries(directory,runtimePaths(install).libraries);
   if(previous?.schemaVersion===2 && previous.identity===identity && previous.generated?.length && previous.generated.every(file=>{
     try { const output=path.join(directory,file.path),stat=fs.lstatSync(output);return stat.isFile()&&!stat.isSymbolicLink()&&Native.hashFile(output)===file.sha256; } catch { return false; }

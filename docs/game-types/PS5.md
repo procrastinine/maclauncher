@@ -37,7 +37,7 @@ AnyPS5 versions are supplied by MacLauncher Builds, whose catalog **Refresh** re
 
 #### Preparation and saves
 
-AnyPS5 supplies a PS5 runtime rather than a native macOS game engine. Preparation builds the per-game runtime container that it needs: game resources are copied into its `app0/` folder, and PS5 executables and nested modules are converted into Mach-O files. Original programs stay unchanged. The conversion is cached by game input and runtime version, and changes to private resources are preserved during conversion updates. Shared runtime libraries are linked rather than copied.
+AnyPS5 supplies a PS5 runtime rather than a native macOS game engine. Preparation builds the per-game runtime container that it needs: game resources are copied into its `app0/` folder, and PS5 executables and nested modules are converted into Mach-O files. Original programs stay unchanged. The conversion is cached by game input and the contents of the relinker and SELF extraction helper. Runtime versions with identical converter inputs reuse the conversion, and changes to private resources are preserved during conversion updates. Shared runtime libraries follow the selected install through a directory link.
 
 The container is the runtime's working directory. Its `/data` path uses the game's private save directory and `_sd` uses a subfolder there. An explicit save-location setting redirects both paths into the chosen save folder. Save-data memory stays in the per-game container's `launch/_sd_mem/`, keyed by user and slot, separate from the original game files.
 
