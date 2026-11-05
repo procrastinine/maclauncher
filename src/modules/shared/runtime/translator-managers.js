@@ -25,7 +25,7 @@ const definitions = {
     sourceName: "Wine vkd3d", sourceUrl: "https://gitlab.winehq.org/wine/vkd3d", sourceDescription: "Wine vkd3d copies included with registered Wine runtimes remain in their source runtime." },
   d3dmetal: { label: "D3DMetal", groupId: "directx-metal", memberOrder: 1, names: ["d3dmetal", "apple_gptk", "redist"],
     sources: [{ id: "apple", label: "Apple Game Porting Toolkit", url: "https://developer.apple.com/games/game-porting-toolkit/", delivery: "local-files", registrationLabel: "Register Game Porting Toolkit…",
-      description: "Apple distributes Game Porting Toolkit. Its download may require an Apple account and licence agreement. The downloaded disk image or extracted folder can be registered here.", discover: async () => [] },
+      description: "Apple distributes Game Porting Toolkit. Its download may require an Apple account and licence agreement. The downloaded disk image or an extracted folder can be registered here or dropped on this card. D3DMetal is taken from the evaluation environment inside the disk image.", discover: async () => [] },
       ["template", "Sikarugir Template", "Sikarugir-App/Template", null, "d3dmetal", { secondary: true }]] },
   dxmt: { label: "DXMT", groupId: "directx-metal", memberOrder: 0, names: ["dxmt"],
     sources: [["upstream", "DXMT", "3Shain/dxmt", name => /builtin/i.test(name)],

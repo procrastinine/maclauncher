@@ -80,7 +80,7 @@ type RuntimesViewProps = {
     architecture?: string
   ) => unknown;
   onRuntimeImport?: (managerId: string, sectionId: string, version?: string) => void;
-  onRuntimeRegister?: (managerId: string, sectionId: string) => void;
+  onRuntimeRegister?: (managerId: string, sectionId: string, runtimePath?: string) => void;
   onRuntimeSetupAction?: (managerId: string, sectionId: string, setupActionId: string, toolVersion?: string) => void;
   onRuntimeInstalledAction?: (managerId: string, sectionId: string, version: string, installedActionId: string, architecture?: string) => void;
   onRuntimeSetDefault: (
@@ -529,7 +529,8 @@ export function RuntimesView({
                       <RuntimeCatalogSources managerId={activeRuntimeManager.id} section={activeRuntimeSection}
                         ui={activeRuntimeUi} busy={runtimeBusy} variant={activeRuntimeResolvedInstallVariant}
                         downloads={activeRuntimeDownloads} onOpenSource={onOpenSource}
-                        onRegister={activeRuntimeSection.customRuntime && onRuntimeRegister ? () => onRuntimeRegister(activeRuntimeManager.id, activeRuntimeSection.id) : undefined}
+                        onRegister={activeRuntimeSection.customRuntime && onRuntimeRegister ? runtimePath => onRuntimeRegister(activeRuntimeManager.id, activeRuntimeSection.id, runtimePath) : undefined}
+                        pathForFile={filterApi?.getPathForFile}
                         onRefresh={options => onRuntimeRefresh(activeRuntimeManager.id, activeRuntimeSection.id, options)}
                         onSelect={(key, field, value) => updateRuntimeUiSection(activeRuntimeManager.id, key, field, value)}
                         onInstall={(version, variant, architecture) => architecture ? onRuntimeInstall(activeRuntimeManager.id, activeRuntimeSection.id, version, variant, architecture) : onRuntimeInstall(activeRuntimeManager.id, activeRuntimeSection.id, version, variant)} />

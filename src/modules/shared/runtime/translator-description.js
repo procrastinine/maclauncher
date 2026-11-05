@@ -65,9 +65,12 @@ function label(value) {
   return require('./translator-label').label(value);
 }
 function displayText(value) { return String(value ?? '').replace(/[\s\x00-\x1f\x7f]+/g, ' ').trim(); }
+// Raised when inspectDescription learns new facts, so retained descriptions
+// are prepared again once.
+const DESCRIPTION_FORMAT = 2;
 function inspectionKey(root, options) {
   const { logger, userDataDir, signal, ...selection } = options;
-  return JSON.stringify([fs.realpathSync(root), selection]);
+  return JSON.stringify([fs.realpathSync(root), selection, DESCRIPTION_FORMAT]);
 }
 function unchangedInspection(entry) {
   return entry && Array.isArray(entry.observed) && entry.observed.length &&
@@ -230,6 +233,23 @@ function inspectDescription(root, { engine, source, version, component, id, apis
       else warnings.push(`Could not read optional framework version ${infoFile}: CFBundleShortVersionString is unavailable.`);
     } catch (error) {
       if (frameworkRoot || error.code !== 'ENOENT' && error.code !== 'ENOTDIR') warnings.push(`Could not read optional framework version ${infoFile || String(frameworkRoot || root)}: ${error.message}`);
+    }
+  }
+  // Without version text, a component takes the version of the framework
+  // named after its engine, such as D3DMetal.framework, from the Resources
+  // beside the framework binary: version.plist first, then Info.plist.
+  if (!version) {
+    const binary = files.find(file => file.format === 'macho' && path.basename(file.path).toLowerCase() === engine &&
+      file.relative.toLowerCase().includes(`${engine}.framework${path.sep}`));
+    if (binary) for (const name of ['version.plist', 'Info.plist']) {
+      const file = path.join(path.dirname(binary.realPath || fs.realpathSync(binary.path)), 'Resources', name);
+      observe(file);
+      try {
+        const real = fs.realpathSync(file);
+        if (!real.startsWith(root + path.sep) || !fs.statSync(real).isFile()) continue;
+        const value = readPlistFile(real)?.CFBundleShortVersionString;
+        if (typeof value === 'string' && displayText(value)) { version = displayText(value); break; }
+      } catch (error) { if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') warnings.push(`Could not read optional framework version ${file}: ${error.message}`); }
     }
   }
   apis = [...new Set([...apisForFiles(files), ...files.flatMap(file => {

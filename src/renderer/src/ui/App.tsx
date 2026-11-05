@@ -992,8 +992,8 @@ export default function App() {
     return onRuntimeAction(managerId, "import", { sectionId, ...(version ? { version } : {}) });
   }
 
-  async function onRuntimeRegister(managerId: string, sectionId: string) {
-    return onRuntimeAction(managerId, "registerCustom", { sectionId });
+  async function onRuntimeRegister(managerId: string, sectionId: string, runtimePath?: string) {
+    return onRuntimeAction(managerId, "registerCustom", { sectionId, ...(runtimePath ? { runtimePath } : {}) });
   }
 
   async function onRuntimeSetupAction(managerId: string, sectionId: string, setupActionId: string, toolVersion?: string) {

@@ -2,12 +2,13 @@ const fs = require("node:fs"), path = require("node:path");
 const Custom = require("./custom-runtime");
 const { componentLabel, componentVersion, hostLabel, label: translatorLabel } = require("./translator-label");
 
+const componentName = names => name => names.includes(name.toLowerCase().replace(/\.framework$/, ""));
 // A component root is retained intact: libraries, notices and future companion
 // files belong to the publisher, rather than a launcher inventory.
 function componentRoot(input, { names, library, entryLibrary }, translator) {
   const stat = fs.statSync(input);
   if (stat.isFile()) return entryLibrary ? path.dirname(fs.realpathSync(input)) : library ? input : path.dirname(input);
-  const matches = name => names.includes(name.toLowerCase().replace(/\.framework$/, ""));
+  const matches = componentName(names);
   if (matches(path.basename(input))) return input;
   const files = (translator || require("./translator-description").describeTranslator(input, { engine: "dxvk" })).files;
   for (const file of files) {
@@ -72,7 +73,7 @@ function configure(manager, definition) {
     return { ...data, root, source };
   };
   Custom.configure(manager, { async prepare(input, options) {
-    return prepareComponent(input, options, await prepareArchive(input, options));
+    return prepareComponent(input, options, await prepareArchive(input, { ...options, names: definition.names }));
   }, inspect(input, context = {}) {
     const { data, userDataDir, verification } = context;
     let root = data?.root || input;
@@ -245,18 +246,42 @@ module.exports = { componentRoot, registrationSource, description, inspected, co
 
 // A downloaded local container is unpacked once into shared launcher storage.
 // Directory registrations stay at the supplied location and remain references.
-async function prepareArchive(input, { userDataDir } = {}) {
+async function prepareArchive(input, { userDataDir, names, signal } = {}) {
   if (!require("./release-files").archiveFormat(input)) return {};
   const sha256 = require("./pinned-native-manager").hashFile(input);
   const base = path.join(userDataDir, "runtimes", "imports"), root = path.join(base, sha256);
   if (!fs.existsSync(root)) {
     fs.mkdirSync(base, { recursive: true });const staging = fs.mkdtempSync(path.join(base, ".import-"));
     try {
-      if (/\.dmg$/i.test(input)) await require("./dmg").extractDmg(input, staging);
+      if (/\.dmg$/i.test(input)) await importDmg(input, staging, names, signal);
       else await require("./safe-archive").extractArchive(input, staging);
       fs.renameSync(staging, root);
     } finally { fs.rmSync(staging, { recursive: true, force: true }); }
   }
   return { root, source: "custom" };
+}
+// A disk image volume that holds the component is copied whole, with the
+// publisher's notices. A distribution volume without the component, such as
+// Apple's Game Porting Toolkit, is searched for a disk image at its top level
+// that holds the component, and only that image's volume is copied.
+async function importDmg(image, destination, names, signal, nested = false) {
+  const Dmg = require("./dmg");
+  return Dmg.withMountedDmg(image, signal, {}, async volume => {
+    if (!names?.length || holdsComponent(volume, names)) { await Dmg.copyVolume(volume, destination, signal); return true; }
+    if (nested) return false;
+    for (const item of fs.readdirSync(volume, { withFileTypes: true }))
+      if (item.isFile() && !item.name.startsWith(".") && /\.dmg$/i.test(item.name) &&
+        await importDmg(path.join(volume, item.name), destination, names, signal, true)) return true;
+    await Dmg.copyVolume(volume, destination, signal);
+    return true;
+  });
+}
+function holdsComponent(directory, names, depth = 6) {
+  for (const item of fs.readdirSync(directory, { withFileTypes: true })) {
+    if (item.name.startsWith(".") || item.isSymbolicLink()) continue;
+    if (componentName(names)(item.name)) return true;
+    if (depth > 1 && item.isDirectory() && holdsComponent(path.join(directory, item.name), names, depth - 1)) return true;
+  }
+  return false;
 }
 module.exports.prepareArchive = prepareArchive;

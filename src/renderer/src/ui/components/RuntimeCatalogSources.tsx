@@ -17,7 +17,8 @@ type Props = {
   onInstall: (version: string, variant?: string, architecture?: string) => void;
   onRefresh: (options: RuntimeRefreshOptions) => void;
   onOpenSource?: (url: string) => void;
-  onRegister?: () => void;
+  onRegister?: (runtimePath?: string) => void;
+  pathForFile?: (file: File) => string | null;
 };
 
 function sourceDescription(source: Record<string, any>, url: string | null) {
@@ -33,7 +34,7 @@ function sourceDescription(source: Record<string, any>, url: string | null) {
   return `Runtime downloads from ${parsed.hostname}.`;
 }
 
-export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, downloads, onSelect, onInstall, onRefresh, onOpenSource, onRegister }: Props) {
+export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, downloads, onSelect, onInstall, onRefresh, onOpenSource, onRegister, pathForFile }: Props) {
   // The automatic CPU is the one Play uses: the launcher's own, or another CPU
   // this Mac runs when the launcher's CPU has no build.
   const defaultArchitecture = section.automaticArchitecture || section.launcherArchitecture || section.catalog?.architecture;
@@ -125,7 +126,16 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
       const reload = (latestOnly?: boolean) => onRefresh({ ...(source.explicit ? { sourceId: source.id } : {}),
         ...(latestOnly === undefined ? {} : { latestOnly }) });
       const fieldId = `runtime-version-${encodeURIComponent(managerId)}-${encodeURIComponent(section.id)}-${encodeURIComponent(source.id)}`;
-      if (source.delivery === "local-files") return <div className="runtimeSource" data-runtime-source={source.id} key={source.id}>
+      // A file or folder dropped on a local-files card is registered like a chosen one.
+      const registerDrop = !sourceBusy && onRegister ? (event: React.DragEvent) => {
+        const file = event.dataTransfer.files?.[0] as (File & { path?: string }) | undefined;
+        const runtimePath = file && (file.path || pathForFile?.(file));
+        if (!runtimePath) return;
+        event.preventDefault(); onRegister(runtimePath);
+      } : undefined;
+      if (source.delivery === "local-files") return <div className="runtimeSource" data-runtime-source={source.id} key={source.id}
+        onDragOver={registerDrop ? event => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; } } : undefined}
+        onDrop={registerDrop}>
         <div className="runtimeSourceHeader"><div className="runtimeSourceHeading">
           <span className="runtimeSourceName">{label}</span>{url && link(url, source.sourceLabel || "Source")}
         </div></div>

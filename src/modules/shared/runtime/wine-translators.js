@@ -19,18 +19,11 @@ function includedTranslators(install, runtime, { engine: requestedEngine, descri
       let value = (describe || Description.describeTranslator)(root, { engine, component, source, ...extra });
       if (!value) return;
       value = { ...value, included: true, id: `included:${component}:${extra.templateComponent || engine}`, ...extra };
-      if (!value.version) {
-        const framework = value.files.find(file => /D3DMetal\.framework/.test(file.path));
-        if (framework) {
-          const plist = path.join(framework.path.slice(0, framework.path.indexOf('D3DMetal.framework')), 'D3DMetal.framework/Versions/A/Resources/version.plist');
-          try { value.version = fs.readFileSync(plist, 'utf8').match(/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/)?.[1] || ''; } catch {}
-        }
-        if (!value.version && runtime === 'crossover') {
-          try {
-            const name = Description.label({ engine }).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            value.version = fs.readFileSync(path.join(layout.root, 'changelog.html'), 'utf8').match(new RegExp(`Update to ${name}\\s+v?(\\d+(?:\\.\\d+)+(?:[a-z]\\d*)?)`, 'i'))?.[1] || '';
-          } catch {}
-        }
+      if (!value.version && runtime === 'crossover') {
+        try {
+          const name = Description.label({ engine }).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          value.version = fs.readFileSync(path.join(layout.root, 'changelog.html'), 'utf8').match(new RegExp(`Update to ${name}\\s+v?(\\d+(?:\\.\\d+)+(?:[a-z]\\d*)?)`, 'i'))?.[1] || '';
+        } catch {}
       }
       result.push(value);
       if (engine === 'd3dmetal' && component === 'd3d-renderer') result.push({ ...value, component: 'd3d12', id: 'included:d3d12:d3dmetal' });

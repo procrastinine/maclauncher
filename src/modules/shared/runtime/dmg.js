@@ -19,17 +19,32 @@ const TOOLS = {
 };
 const mounted = mount => { try { return fs.statSync(mount).dev !== fs.statSync(path.dirname(mount)).dev; } catch { return false; } };
 
-// Without a payload name, the volume's visible files are copied; its
-// Applications link and hidden layout files stay behind.
-async function extractDmg(archivePath, destination, signal, { payloadName, project = "Runtime", run = execute, copy = copyAppBundle } = {}) {
-  if (!archivePath.endsWith(".dmg")) throw new Error(`${project} requires a macOS disk image.`);
-  if (payloadName !== undefined && (typeof payloadName !== "string" || !payloadName || path.basename(payloadName) !== payloadName || [".", ".."].includes(payloadName)))
-    throw new Error("Invalid disk image payload name.");
+// An image with a licence agreement, such as Apple's Game Porting Toolkit
+// evaluation environment, carries an LPic resource in its UDIF trailer.
+// `diskutil image attach` waits for that agreement without returning, so such
+// an image is attached with hdiutil.
+function hasLicenceAgreement(image) {
+  let fd;
+  try {
+    fd = fs.openSync(image, "r");
+    const size = fs.fstatSync(fd).size, trailer = Buffer.alloc(512);
+    if (size < 512 || fs.readSync(fd, trailer, 0, 512, size - 512) !== 512 || trailer.toString("latin1", 0, 4) !== "koly") return false;
+    const offset = Number(trailer.readBigUInt64BE(216)), length = Number(trailer.readBigUInt64BE(224));
+    if (!length || length > 16 * 1024 * 1024 || offset + length > size) return false;
+    const xml = Buffer.alloc(length);
+    fs.readSync(fd, xml, 0, length, offset);
+    return xml.includes("<key>LPic</key>");
+  } catch { return false; }
+  finally { if (fd !== undefined) fs.closeSync(fd); }
+}
+
+// Runs `use(volume)` while the image is attached read-only, then detaches it.
+async function withMountedDmg(archivePath, signal, { run = execute } = {}, use) {
   throwIfAborted(signal);
   const mount = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-runtime-mount-"));
   let attached = false, tool = null;
   try {
-    for (const name of ["diskutil", "hdiutil"]) {
+    for (const name of hasLicenceAgreement(archivePath) ? ["hdiutil"] : ["diskutil", "hdiutil"]) {
       tool = name;
       try {
         const [command, args] = TOOLS[name].attach(archivePath, mount);
@@ -42,16 +57,9 @@ async function extractDmg(archivePath, destination, signal, { payloadName, proje
     }
     attached = true;
     throwIfAborted(signal);
-    if (payloadName) {
-      // A publisher may move the payload into a folder on the volume.
-      const source = locatePackaged(mount, payloadName);
-      if (!source) throw new Error(`The ${project} disk image does not contain ${payloadName}.`);
-      copy(source, path.join(destination, payloadName));
-    } else for (const item of fs.readdirSync(mount, { withFileTypes: true })) {
-      if (item.name.startsWith(".") || item.isSymbolicLink()) continue;
-      await run("/usr/bin/ditto", [path.join(mount, item.name), path.join(destination, item.name)], { signal, timeout: 600000, maxBuffer: 64 * 1024 });
-    }
+    const result = await use(mount);
     throwIfAborted(signal);
+    return result;
   } finally {
     // An interrupted attach can already have mounted the image. Cleanup must
     // also run after cancellation, without inheriting the cancelled signal.
@@ -68,4 +76,27 @@ async function extractDmg(archivePath, destination, signal, { payloadName, proje
   }
 }
 
-module.exports = { extractDmg };
+// A volume's visible files are copied; its Applications link and hidden
+// layout files stay behind.
+async function copyVolume(volume, destination, signal, { run = execute } = {}) {
+  for (const item of fs.readdirSync(volume, { withFileTypes: true })) {
+    if (item.name.startsWith(".") || item.isSymbolicLink()) continue;
+    await run("/usr/bin/ditto", [path.join(volume, item.name), path.join(destination, item.name)], { signal, timeout: 600000, maxBuffer: 64 * 1024 });
+  }
+}
+
+// Without a payload name, the volume's visible files are copied.
+async function extractDmg(archivePath, destination, signal, { payloadName, project = "Runtime", run = execute, copy = copyAppBundle } = {}) {
+  if (!archivePath.endsWith(".dmg")) throw new Error(`${project} requires a macOS disk image.`);
+  if (payloadName !== undefined && (typeof payloadName !== "string" || !payloadName || path.basename(payloadName) !== payloadName || [".", ".."].includes(payloadName)))
+    throw new Error("Invalid disk image payload name.");
+  return withMountedDmg(archivePath, signal, { run }, async mount => {
+    if (!payloadName) return copyVolume(mount, destination, signal, { run });
+    // A publisher may move the payload into a folder on the volume.
+    const source = locatePackaged(mount, payloadName);
+    if (!source) throw new Error(`The ${project} disk image does not contain ${payloadName}.`);
+    copy(source, path.join(destination, payloadName));
+  });
+}
+
+module.exports = { extractDmg, withMountedDmg, copyVolume, hasLicenceAgreement };

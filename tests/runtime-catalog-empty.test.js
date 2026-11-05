@@ -77,3 +77,24 @@ test('populated catalogs preserve saved exact choices and normal install and ref
     assert.deepEqual(f.installed, [['1.0', undefined]]);
   } finally { f.harness.close(); }
 });
+test('a file dropped on a local-files card registers its path like a chosen file', () => {
+  const f = fixture({ sources: [{ id: 'apple', label: 'Apple Game Porting Toolkit', delivery: 'local-files', registrationLabel: 'Register Game Porting Toolkit…',
+    source: 'https://developer.apple.com/games/game-porting-toolkit/', status: 'idle', versions: [] }] });
+  const registered = [], file = { name: 'Game_Porting_Toolkit.dmg' };
+  f.props.onRegister = runtimePath => registered.push(runtimePath);
+  f.props.pathForFile = value => value === file ? '/Users/example/Downloads/Game_Porting_Toolkit.dmg' : null;
+  try {
+    const card = elements(f.harness.render()).find(node => node.props?.['data-runtime-source'] === 'apple');
+    let prevented = 0;
+    const event = files => ({ dataTransfer: { files, types: files.length ? ['Files'] : [], dropEffect: 'none' }, preventDefault: () => { prevented++; } });
+    const over = event([file]); card.props.onDragOver(over);
+    assert.equal(over.dataTransfer.dropEffect, 'copy');
+    card.props.onDrop(event([]));
+    assert.deepEqual(registered, [], 'a drop without a file leaves the drop to the window');
+    card.props.onDrop(event([file]));
+    assert.deepEqual(registered, ['/Users/example/Downloads/Game_Porting_Toolkit.dmg']);
+    assert.equal(prevented, 2);
+    elements(f.harness.render()).find(node => node.type === 'button' && node.props.children === 'Register Game Porting Toolkit…').props.onClick();
+    assert.deepEqual(registered, ['/Users/example/Downloads/Game_Porting_Toolkit.dmg', undefined], 'the button still opens the chooser');
+  } finally { f.harness.close(); }
+});
