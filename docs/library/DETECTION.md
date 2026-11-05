@@ -1,8 +1,8 @@
 # Game detection
 
-When a game is imported, detection identifies its game type (the engine), its data format and its version, and the result decides which runtime is used. If an unrecognized plain folder contains one item after macOS metadata is ignored, detection repeats with that item, through successive single-item folders, and imports the recognized inner item directly. Recognized folders and macOS bundles retain their existing detection. Detection runs offline in the backend and never executes the selected files; runtime and native-library requirements are checked later, before launch.
+When a game is imported, detection identifies its game type (the engine), its data format and its version, and the result decides which runtime is used. If an unrecognized plain folder contains a single item, not counting macOS metadata, detection repeats with that item, continuing through any further single-item folders, and imports the recognized inner item directly. This does not apply to recognized folders or to macOS bundles. Detection runs offline in the backend and never executes the selected files; runtime and native-library requirements are checked later, before launch.
 
-Each module checks the layout, formats and versions of its own engine. The pipeline in `src/modules/detection.js` handles everything shared: it normalizes the input, caches filesystem facts, runs the checks in stages, combines the matches, reports conflicts and explains its decisions. `src/modules/registry.js` supplies the modules it discovers and keeps the public synchronous API. The pipeline never branches on engine IDs and has no central table of engine extensions.
+The work is divided between engine modules and a shared pipeline. Each engine's module checks the layout, formats and versions of that engine, while the pipeline in `src/modules/detection.js` handles everything they share: it normalizes the input, caches filesystem facts, runs the checks in stages, combines the matches, reports conflicts and explains its decisions. `src/modules/registry.js` supplies the modules it discovers and keeps the public synchronous API. The pipeline never branches on engine IDs and has no central table of engine extensions.
 
 ## Versions and diagnostics
 
@@ -70,7 +70,7 @@ Game executables rank above setup, configuration, settings, launcher, uninstalle
 
 ### Fallbacks
 
-Fallback checks run only after the specific layouts and packaged-game checks fail. They run in groups of descending `priority`: every eligible check in a group runs, and a group that recognizes the game stops the weaker groups. Web content comes before the generic macOS game check, which comes before the generic Windows check. Native apps of a specific engine keep that engine's module.
+Fallback checks classify the inputs that no specific layout or packaged-game check recognizes, so they run only after those checks fail. They run in groups of descending `priority`: every eligible check in a group runs, and a group that recognizes the game stops the weaker groups. Web content comes before the generic macOS game check, which comes before the generic Windows check. Native apps of a specific engine keep that engine's module.
 
 The macOS fallback accepts these selections:
 
@@ -84,7 +84,7 @@ A folder matches the generic Windows check only when it has exactly one valid Wi
 
 ### Conflicts
 
-A validated file that was selected directly ranks above a sibling layout that only provides context. A module marks such a file through its game path, `moduleData.packagedPath` or explicit `detectionEvidence` of the form `{ type: "selected-artifact", path }`; packaged engines that keep the parent folder as their game path use this. All specific directory layouts have equal strength, and duplicate matches for the same module and game path are merged.
+A validated file that was selected directly ranks above a sibling layout that only provides context. A module marks such a file through its game path, `moduleData.packagedPath` or explicit `detectionEvidence` of the form `{ type: "selected-artifact", path }`, and packaged engines that keep the parent folder as their game path mark their selected file in this way. All specific directory layouts have equal strength, and duplicate matches for the same module and game path are merged.
 
 Two equally strong matches for independent games or engines produce `DETECTION_CONFLICT` with the evidence for every candidate. Neither the order of the labels nor the order of the file names chooses one silently. A `DETECTION_CONFLICT` reported by a module keeps its message and trace, and detection does not fall through to another detector. Fallback matches of equal priority go through the same conflict checks.
 
@@ -110,7 +110,7 @@ Most game-type pages describe their own detection. For these game types, the che
 
 ## Module declarations
 
-A module declares its detection in `manifest.detection`, or a backend module overrides it with its own `detection`. The declarations decide cheaply which probes run and which module owns an extension; each module's detector still makes the final decision, and modules without declarations are probed directly. Existing modules use declarations, including the RPG Maker variants, Ren'Py, GameMaker Classic and Studio, GameMaker HTML5, Godot, LÖVE, Java, Flash, Construct, Tyrano, NScripter, HashLink, Haxe native builds, GemRB, Ikemen, KiriKiri, AliceSoft, Web and the generic app modules.
+Declarations let the pipeline decide cheaply which probes run and which module owns an extension. A module declares its detection in `manifest.detection`, or a backend module overrides it with its own `detection`. Each module's detector still makes the final decision, and modules without declarations are probed directly. Existing modules use declarations, including the RPG Maker variants, Ren'Py, GameMaker Classic and Studio, GameMaker HTML5, Godot, LÖVE, Java, Flash, Construct, Tyrano, NScripter, HashLink, Haxe native builds, GemRB, Ikemen, KiriKiri, AliceSoft, Web and the generic app modules.
 
 | Field | Meaning |
 | --- | --- |
@@ -134,11 +134,11 @@ A module declares its detection in `manifest.detection`, or a backend module ove
 
 The registry builds the import dialog's file filter from these declarations and from app and ELF capabilities, so a new module's formats appear in the dialog automatically. All Files stays available for inputs without an extension.
 
-Modules receive cached helpers as their second detection argument and as `context.detection`: `stat`, `readdir`, `readBytes`, `readText`, `findIndexHtml`, `fileFacts`, `readZipEntries`, `readArchiveEntries`, `readAsarHeader` and `memo(namespace, key, callback)`. The helpers share format metadata between engine probes, and standalone module calls work without them.
+So that engine probes can share format metadata, modules receive cached helpers as their second detection argument and as `context.detection`: `stat`, `readdir`, `readBytes`, `readText`, `findIndexHtml`, `fileFacts`, `readZipEntries`, `readArchiveEntries`, `readAsarHeader` and `memo(namespace, key, callback)`. Standalone module calls work without them.
 
 ## Caching, concurrency and limits
 
-Each detection call has its own session. The session caches stat results, directory entries, partial reads, HTML entry resolution, file and container facts, ZIP directories, archive listings and ASAR headers. Nothing is cached across calls, so a new call sees the current filesystem. A `package.json` main entry must be a local HTML file inside its content root; path traversal, symbolic links that escape the root and directories named like `index.html` are rejected.
+Each detection call has its own session, which caches stat results, directory entries, partial reads, HTML entry resolution, file and container facts, ZIP directories, archive listings and ASAR headers. Nothing is cached across calls, so a new call sees the current filesystem. A `package.json` main entry must be a local HTML file inside its content root; path traversal, symbolic links that escape the root and directories named like `index.html` are rejected.
 
 The registry keeps `detectGame(path, options?)` and adds `detectGameAsync(path, options?)`. Async-only modules may export `detectGameAsync(context, helpers)`. Truly asynchronous probes overlap, up to a fixed number at a time, within a stage or fallback priority group. Synchronous CPU checks stay synchronous unless their declaration moves expensive file probes to worker threads. Workers import backend modules, never game scripts or a game's executable entry points, and worker errors keep their detection codes. When a probe reports a conflict or a limit, the checks already running finish before the error is reported, and no weaker fallback group starts.
 

@@ -21,7 +21,7 @@ This page covers the remaining game types that MacLauncher plays on a Mac, from 
 
 ### 32-bit Mac apps
 
-macOS [dropped support for 32-bit apps](https://support.apple.com/en-us/103076) in Catalina, which stranded a lot of older Mac games. MacLauncher can run them again with the 32-bit Mac runtime, [mac32](https://github.com/Shagulka/mac32), which loads a 32-bit Intel app inside a 64-bit process and bridges its system calls to current macOS. It is picked automatically for apps that are only 32-bit, such as the old Mac build of [Portal 2](https://store.steampowered.com/app/620/Portal_2/). Each mac32 release states the macOS version it needs, which MacLauncher reads from the download, and on Apple Silicon it also needs [Rosetta](https://support.apple.com/en-us/102527).
+macOS [dropped support for 32-bit apps](https://support.apple.com/en-us/103076) in Catalina, which stranded a lot of older Mac games. MacLauncher can run them again with the 32-bit Mac runtime, [mac32](https://github.com/Shagulka/mac32), which loads a 32-bit Intel app inside a 64-bit process and bridges its system calls to current macOS. MacLauncher picks it automatically for apps that are only 32-bit, such as the old Mac build of [Portal 2](https://store.steampowered.com/app/620/Portal_2/). Each mac32 release states the macOS version it needs, which MacLauncher reads from the download, and on Apple Silicon it also needs [Rosetta](https://support.apple.com/en-us/102527).
 
 Guides: [macOS Game](https://github.com/procrastinine/maclauncher/blob/master/docs/game-types/MACOS.md), [32-bit Mac](https://github.com/procrastinine/maclauncher/blob/master/docs/game-types/MACOS.md#32-bit-mac)
 
@@ -51,7 +51,7 @@ Guide: [Infinity Engine](https://github.com/procrastinine/maclauncher/blob/maste
 
 ## Half-Life
 
-[Half-Life](https://store.steampowered.com/app/70/HalfLife/) runs on [Xash3D FWGS](https://github.com/FWGS/xash3d-fwgs), an open-source engine compatible with GoldSrc, the engine Valve built for the original game. It plays your copy's data as a native Mac program on Apple Silicon or Intel, without WINE. Import your Half-Life folder, such as the Steam installation, and press **Play**: the engine and Half-Life's game code are downloaded the first time.
+[Half-Life](https://store.steampowered.com/app/70/HalfLife/) runs on [Xash3D FWGS](https://github.com/FWGS/xash3d-fwgs), an open-source engine compatible with GoldSrc, the engine Valve built for the original game. Xash3D FWGS plays the data from your own copy as a native Mac program, on Apple Silicon or Intel, without WINE. Import your Half-Life folder, such as the Steam installation, and press **Play**: the engine and Half-Life's game code are downloaded the first time.
 
 Mods that run on Half-Life's own game code, such as map packs, work the same way when you import the mod's folder from inside the Half-Life folder. Mods that bring their own Windows game code, Opposing Force and Blue Shift among them, can't load into a Mac engine, so they run through [Sikarugir or CrossOver](/maclauncher/games/windows/) from the Half-Life entry instead.
 

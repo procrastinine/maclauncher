@@ -39,9 +39,7 @@ Downloads follow the store's rules. You can download what your account owns or w
 
 ## Accounts
 
-You can use more than one account per store.
-
-For Steam, you can reuse the account signed in to the Steam app on your Mac. MacLauncher talks to the running client and doesn't copy your credentials. You can also sign in to any number of additional accounts inside the External window, with [Steam Guard](https://help.steampowered.com/en/faqs/view/06B0-26E6-2CF8-254C) and QR sign-in supported. Remembered sign-ins are protected by the macOS Keychain, and passwords are never stored.
+You can use more than one account per store. For Steam, you can reuse the account signed in to the Steam app on your Mac. MacLauncher talks to the running client and doesn't copy your credentials. You can also sign in to any number of additional accounts inside the External window, with [Steam Guard](https://help.steampowered.com/en/faqs/view/06B0-26E6-2CF8-254C) and QR sign-in supported. Remembered sign-ins are protected by the macOS Keychain, and passwords are never stored.
 
 Epic, GOG and itch.io have their own sign-ins in their tabs. Google Play accounts are shared with the Android runtimes, with a choice of device profiles.
 

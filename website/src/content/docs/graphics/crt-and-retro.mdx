@@ -25,7 +25,7 @@ import paletteAfter from "../../../assets/graphics/color-hd-palette.webp";
 import paletteBeforeDetail from "../../../assets/graphics/color-hd-source-detail.webp";
 import paletteAfterDetail from "../../../assets/graphics/color-hd-palette-detail.webp";
 
-For decades, pixel art was drawn for cathode-ray tube (CRT) televisions and monitors, and CRT shaders give pixel-art games on a Mac the look of those screens. Artists knew that the electron beam would soften their pixels, that dark scanlines would separate the rows, and that the picture would glow through a phosphor mask, and they drew with that in mind. The [CRT Pixels](https://primagames.com/featured/interview-crt-pixels-jordan-starkweather-tells-us-why-retro-games-need-retro-screens) project made this widely known with side-by-side close-ups of real tubes. On a modern display every pixel is a hard-edged square, which is crisp but differs from what the artists saw.
+CRT shaders give pixel-art games on a Mac the look of the cathode-ray tube (CRT) televisions and monitors they were drawn for. For decades, artists making pixel art knew that the electron beam would soften their pixels, that dark scanlines would separate the rows, and that the picture would glow through a phosphor mask, and they drew with that in mind. The [CRT Pixels](https://primagames.com/featured/interview-crt-pixels-jordan-starkweather-tells-us-why-retro-games-need-retro-screens) project made this widely known with side-by-side close-ups of real tubes. On a modern display, by contrast, every pixel is a hard-edged square, which is crisp but differs from what the artists saw.
 
 <Compare
   before={nearest}
@@ -55,7 +55,7 @@ MacLauncher's own **CRT** effect works with every game, and its parameters contr
 
 **Simulated content height** sets how many scanlines to draw; its default of 240 matches many classic games. Set it to the game's original height and the scanlines keep that spacing however you resize the window, or set it to 0 to follow the image size.
 
-**Scanline beam width** and **Scanline darkness** set how thick the lit lines are and how dark the gaps between them get. **Pixel softness** and **Phosphor glow** add the gentle blur and bloom of a real tube. **Screen curvature**, **Rounded corners**, **Edge shading** and **Screen edge fade** shape the glass, and **CRT strength** blends the whole effect with the original image.
+The scanlines themselves are shaped by **Scanline beam width** and **Scanline darkness**, which set how thick the lit lines are and how dark the gaps between them get. **Pixel softness** and **Phosphor glow** add the gentle blur and bloom of a real tube, while **Screen curvature**, **Rounded corners**, **Edge shading** and **Screen edge fade** shape the glass. Finally, **CRT strength** blends the whole effect with the original image.
 
 ## More CRT shaders
 
@@ -82,7 +82,7 @@ MacLauncher also includes several established CRT shaders, each with a different
 - <span id="crt-royale"></span>**[CRT Royale](https://github.com/akgunter/crt-royale-reshade)** is Alex Gunter's [ReShade](https://reshade.me/) port of TroggleMonkey's widely used shader.
 - <span id="retroarch-crt-shaders"></span>**CRT Lottes**, **CRT Easymode**, **GTU** and **zfast CRT** come from [RSRetroArch](https://github.com/Matsilagi/RSRetroArch)'s ReShade ports of the [RetroArch](https://www.retroarch.com/) originals.
 
-Several of these were written for emulators, where the shader knows the console's real resolution. They have **Screen** or **Frame** width and height parameters, which should be set to the game's original resolution so the scanlines line up with its pixels. The Lottes, Easymode, GTU and zfast samples above use Sonic the Hedgehog 2's 320×240, while CRT Royale is shown at its default settings.
+Several of these were written for emulators, where the shader knows the console's real resolution. To get the same result here, set their **Screen** or **Frame** width and height parameters to the game's original resolution, so the scanlines line up with its pixels. The Lottes, Easymode, GTU and zfast samples above use Sonic the Hedgehog 2's 320×240, while CRT Royale is shown at its default settings.
 
 The [libretro Slang collection](https://github.com/libretro/slang-shaders), available from **Runtimes → Graphics → Shaders → Collections**, adds CRT halation along with pixel-art scalers, dedithering and restoration filters. You can also import any `.slangp` preset you already use in RetroArch, including CRT presets. [Shader collections and imports](/maclauncher/graphics/shaders/) describes both.
 
@@ -97,7 +97,7 @@ Color effects can go before or after it, depending on whether you want to grade 
 
 ## Palette and other retro looks
 
-The included **Pixel palette** effect reduces each color channel to a few levels, with optional ordered dithering, which gives any game the limited colors of old hardware:
+To give any game the limited colors of old hardware, the included **Pixel palette** effect reduces each color channel to a few levels, with optional ordered dithering:
 
 <Compare
   before={paletteBefore}
@@ -120,9 +120,9 @@ The included **Pixel palette** effect reduces each color channel to a few levels
 
 ## Motion clarity
 
-A CRT also drew each frame as a brief flash of light. Modern displays keep each frame lit until the next one replaces it, which makes moving objects look less sharp. The **Motion clarity** control in the chain's **Output** section recreates some of the CRT's sharpness. **Black frame insertion** shows dark frames between real ones, and **CRT beam** scheduling spreads each frame over several subframes to imitate a scanning beam. **Subframes**, **Visible duty** and **Brightness** adjust the scheduling, and **Auto** turns it on when a shader in the chain asks for it. The display's refresh rate limits how much room there is for subframes, so high-refresh displays benefit most.
+A CRT also drew each frame as a brief flash of light, whereas modern displays keep each frame lit until the next one replaces it, which makes moving objects look less sharp. To recreate some of the CRT's sharpness, the chain's **Output** section has a **Motion clarity** control. Its **Black frame insertion** shows dark frames between real ones, while **CRT beam** scheduling spreads each frame over several subframes to imitate a scanning beam. **Subframes**, **Visible duty** and **Brightness** adjust the scheduling, and **Auto** turns it on when a shader in the chain asks for it. The display's refresh rate limits how much room there is for subframes, so high-refresh displays benefit most.
 
-The graphics guide lists the CRT effect's parameters under [included effects](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#included-effects) and describes [motion clarity](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#motion-clarity) in full.
+MacLauncher's graphics guide lists the CRT effect's parameters under [included effects](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#included-effects) and describes [motion clarity](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#motion-clarity) in full.
 
 ## Further reading
 

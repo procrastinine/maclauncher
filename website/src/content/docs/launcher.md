@@ -16,9 +16,9 @@ The library opens straight away with the details MacLauncher saved last time, an
 
 **Add game…** opens a file picker for game folders and launchable files such as `.app`, `.exe`, `.jar`, `.swf` and `.love`. You can also drag folders and files onto the window, including Android `.apk` packages and iOS `.ipa` archives. MacLauncher detects what kind of game each one is and adds it to the library.
 
-Several games dragged in at once import as one batch, with **Adding N of M** and a progress bar. A failed item doesn't stop the rest. The summary lists each item that didn't import with the reason, a **Choose game file…** button and **Retry**.
+Several games dragged in at once import as one batch, with **Adding N of M** and a progress bar. A failed item doesn't stop the rest. Instead, a summary lists each item that didn't import, with the reason, a **Choose game file…** button and **Retry**.
 
-The same drop target accepts shaders (`.fx`, `.glsl`, `.hook`, `.slang`, `.slangp`) and neural models (`.dlssmodel`). Shaders join the [shader library](/maclauncher/graphics/shaders/#the-shader-library) and models join the [model library](/maclauncher/graphics/neural-restoration/#getting-models) instead of the game list.
+The window also accepts dropped shaders (`.fx`, `.glsl`, `.hook`, `.slang`, `.slangp`) and neural models (`.dlssmodel`). These go into the [shader library](/maclauncher/graphics/shaders/#the-shader-library) and the [model library](/maclauncher/graphics/neural-restoration/#getting-models) instead of the game list.
 
 ### Search, filters and sorting
 
@@ -37,25 +37,23 @@ A star beside each game marks it as a favorite. In the **Default** sort, favorit
 
 ### Selecting several games
 
-**Select** turns the list into checkboxes. Shift-click selects a range, and Cmd+A selects every visible game. A selection offers these actions:
+To act on several games at once, click **Select**, which turns the list into checkboxes. Shift-click selects a range, and Cmd+A selects every visible game. A selection offers these actions:
 
 - **Forget selected** removes the games from the library and deletes MacLauncher's own data for them. The game files stay where they are.
 - **Move to Trash…** also moves the games' files to the Trash.
 - **Select all missing** checks the visible games on disk and selects the ones whose files are gone, ready to forget. **Detect all missing** marks them without selecting them. Games on an unplugged drive count as missing too, so connect your drives first if you only want to clear out games you've deleted.
 
-Both removals ask once in a macOS dialog first.
+Both removals ask for confirmation once, in a macOS dialog.
 
 ### Each row
 
-Every row shows the game's name, game type, last-played time and path. A **runtime** tag appears when the game uses a runtime other than its game type's default, and **Modified** appears when that runtime's settings differ from the defaults. A save label shows whether the game uses a custom save folder. **Play**/**Stop**, **Shortcut** and **Forget** work directly from the row, without opening the inspector. When a game's files can't be found, its row says **Unavailable** and its icon is dimmed; hover over the label to see why.
+Every row shows the game's name, game type, last-played time and path. A **runtime** tag appears when the game uses a runtime other than its game type's default, and **Modified** appears when that runtime's settings differ from the defaults. A save label also shows whether the game uses a custom save folder. **Play**/**Stop**, **Shortcut** and **Forget** work directly from the row, without opening the inspector. When a game's files can't be found, its row says **Unavailable** and its icon is dimmed; hover over the label to see why.
 
-When looking for a Windows game's icon in a folder, MacLauncher skips installers and crash reporters and tries the game before configuration tools or launchers. A packaged game whose file name looks like an installer's can still supply its own artwork.
+To find the icon of a Windows game in a folder, MacLauncher skips installers and crash reporters and tries the game before configuration tools or launchers. A packaged game whose file name looks like an installer's can still supply its own artwork, however.
 
 ### Games on an external drive
 
-Games are big, so many people keep them on an external drive that isn't always plugged in. When a game's files aren't on disk, because the drive is disconnected or the folder has moved, MacLauncher leaves the game exactly as it was. It stays in the library with its saves, settings, runtime versions, snapshots and effects. Nothing is detected again, rebuilt or deleted, and MacLauncher doesn't go looking through the missing folder.
-
-An icon kept in a game's folder appears once MacLauncher has checked that the files are available.
+Games are big, so many people keep them on an external drive that isn't always plugged in. When a game's files aren't on disk, because the drive is disconnected or the folder has moved, MacLauncher leaves the game exactly as it was. It stays in the library with its saves, settings, runtime versions, snapshots and effects. Nothing is detected again, rebuilt or deleted, and MacLauncher doesn't go looking through the missing folder. An icon kept in the game's folder appears only once MacLauncher has checked that the files are available.
 
 While a game is unavailable, **Play** explains why it can't start, and patches and tools that need the game's files are switched off. Favorites, notes, launch arguments, runtime choices and settings, network access, effects and **Forget** still work. Saves that MacLauncher keeps in its own storage stay usable, while saves stored inside the game folder wait for the drive.
 
@@ -83,7 +81,7 @@ This section holds the runtime, its version and settings, launch arguments, netw
 
 ### Patches
 
-Some game types support reversible patches to the game's files. RPG Maker MV games can swap in an updated graphics library, and games with in-game cheat tools can have those tools injected. Each patch shows its status (Not patched, Patched or Partial) with **Patch** and **Unpatch** buttons, and asks before changing anything.
+Some game types support reversible patches to the game's files. For example, RPG Maker MV games can swap in an updated graphics library, and games with in-game cheat tools can have those tools injected. Each patch shows its status (Not patched, Patched or Partial) with **Patch** and **Unpatch** buttons, and asks before changing anything.
 
 ### Tools
 
@@ -95,7 +93,7 @@ This section holds the game's effect chain. While the section is closed, its hea
 
 ### Notes
 
-Notes are plain text of your own, kept with the game in the library. **Save notes** or Cmd-S saves them, and so does clicking elsewhere. Notes are deleted when the game is forgotten.
+Notes are plain text of your own, kept with the game in the library. They're saved with **Save notes**, with Cmd-S or by clicking elsewhere, and they're deleted when the game is forgotten.
 
 ## Windows and menus
 
@@ -106,4 +104,4 @@ Notes are plain text of your own, kept with the game in the library. **Save note
 
 Each window opens once, and opening it again brings the existing window forward. Closing the library leaves the other windows open, and the Dock icon or **View → Library** brings it back. **Help → Show Log in Finder** reveals MacLauncher's log for troubleshooting.
 
-The [UI guide](https://github.com/procrastinine/maclauncher/blob/master/docs/development/UI_GUIDE.md) describes every control in full, including the [library](https://github.com/procrastinine/maclauncher/blob/master/docs/development/UI_GUIDE.md#library) and the [inspector](https://github.com/procrastinine/maclauncher/blob/master/docs/development/UI_GUIDE.md#inspector).
+MacLauncher's [UI guide](https://github.com/procrastinine/maclauncher/blob/master/docs/development/UI_GUIDE.md) describes every control in full, including the [library](https://github.com/procrastinine/maclauncher/blob/master/docs/development/UI_GUIDE.md#library) and the [inspector](https://github.com/procrastinine/maclauncher/blob/master/docs/development/UI_GUIDE.md#inspector).

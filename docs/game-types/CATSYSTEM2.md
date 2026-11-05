@@ -1,6 +1,6 @@
 # CatSystem2
 
-CatSystem2 is a Windows visual novel engine. Its games keep their scenes and other data in KIF archives, the `.int` files, which can be encrypted. Without a native CatSystem2 interpreter, MacLauncher identifies CatSystem2 games, decodes their archives and scripts in the inspector, and plays the original Windows executable through CrossOver or Sikarugir (Wine).
+CatSystem2 is a Windows visual novel engine. Its games keep their scenes and other data in KIF archives, the `.int` files, which can be encrypted. No native CatSystem2 interpreter is available, so MacLauncher plays these games by running the original Windows executable through CrossOver or Sikarugir (Wine). It also identifies CatSystem2 games and decodes their archives and scripts in the inspector.
 
 | Runtime | Description |
 | --- | --- |
@@ -9,33 +9,33 @@ CatSystem2 is a Windows visual novel engine. Its games keep their scenes and oth
 
 ## Detection and versions
 
-Detection requires both a structurally valid `scene.int` KIF archive and an independently identified original CatSystem2 executable. It checks the selected folder and its `data/` subfolder and keeps file name case. The engine version is the fixed PE version of the original executable; a loader's product version is not treated as the engine version. Nothing is extracted during import.
+A game is detected as CatSystem2 only when it has both a structurally valid `scene.int` KIF archive and an independently identified original CatSystem2 executable. Detection looks in the selected folder and its `data/` subfolder, keeps file name case and extracts nothing during import. The engine version is the fixed PE version of the original executable, whereas a loader's product version is not treated as the engine version.
 
 The inspector shows the archive format, the native requirements and the support status.
 
 ## Script and archive export
 
-**Export scripts**, in the inspector's **Scripts** group, decodes CatScene programs (`.cst`), localization tables (`.cstl`) and compressed front-end text (`.fes`) directly from the original archives. For each member, the output contains the decoded file, typed JSON and a readable UTF-8 transcript. Command lines and unknown line types are preserved.
+**Export scripts**, in the inspector's **Scripts** group, decodes CatScene programs (`.cst`), localization tables (`.cstl`) and compressed front-end text (`.fes`) directly from the original archives. The output for each member contains the decoded file, typed JSON and a readable UTF-8 transcript, and command lines and unknown line types are preserved.
 
-The **Advanced** group adds:
+The inspector's **Advanced** group adds three more tools:
 
 - **Inspect archives**, which reports the formats, encryption, members and original engine version.
 - **Inspect scripts**, which reports the script count, languages and unknown line types without exporting anything.
-- **Export scene archive**, which exports `scene.int` by default. The backend API can select another identified `.int` archive by file name.
+- **Export scene archive**, which exports `scene.int` by default. Through the backend API, another identified `.int` archive can be selected by file name.
 
-Exports are written to `userData/games/<gameId>/modules/catsystem2/`. Each archive generation is exported to its own folder, named by its numeric index, even when generations repeat file names, so an export never silently picks one generation.
+Exports are written to `userData/games/<gameId>/modules/catsystem2/`. A patched archive can keep several generations of one member, which are versions with the same file name. Each generation is exported to its own folder, named by its numeric index, so an export never silently picks one of them.
 
 ## Archive formats and images
 
-Encrypted KIF archives are read with the MacLauncher KIF cipher helper 1.0.0, a universal Intel and Apple Silicon executable included with MacLauncher. It requires macOS 11.0, uses the system CommonCrypto library and is checked before each use against its recorded source, executable, manifest, CPU slices and signature. The original `KEY_CODE` and `V_CODE2` resources are read by a PE parser with size limits. The keys stay in memory and reach the helper over standard input.
+Reading an encrypted KIF archive needs the game's keys and a cipher implementation. The keys come from the original executable's `KEY_CODE` and `V_CODE2` resources, which a PE parser with size limits reads. They stay in memory and reach the cipher over standard input. The cipher itself is the MacLauncher KIF cipher helper 1.0.0, a universal Intel and Apple Silicon executable included with MacLauncher. It requires macOS 11.0 and uses the system CommonCrypto library, and before each use it is checked against its recorded source, executable, manifest, CPU slices and signature.
 
 - The reader supports the published KIF layout with 64-byte names, the 1999 Mersenne Twister seed recurrence, Beaufort-encoded names and little-endian Blowfish blocks. The final incomplete block of an encrypted member stays plaintext.
 - CatScene tables and zlib lengths are checked. CSTL files need their zero reserved header and valid UTF-8 language records.
-- Text is decoded with the included `cp932-2.01-eudc-ml1` mapping, independent of Node's ICU version. App builds, checkout setup and local packaging generate this table with one preparation step, from public Unicode mapping text with a recorded checksum. FES text is decoded as strict CP932 by default; when CP932 rejects the bytes, the reader falls back to strict UTF-8 and records which encoding it used.
+- Text is decoded with the included `cp932-2.01-eudc-ml1` mapping, so decoding does not depend on Node's ICU version. This mapping table is generated from public Unicode mapping text with a recorded checksum, by a single preparation step that app builds, checkout setup and local packaging all use. FES text is decoded as strict CP932 by default; when CP932 rejects the bytes, the reader falls back to strict UTF-8 and records which encoding it used.
 - Unknown key resources and archive variants fail with a specific format error.
 - Index reading, decompression and exports have overall byte and count limits, and an operation stops if a source file changes while it runs.
 
-The included HG-3 image reader supports lossless 24-bit and 32-bit frames within size limits, cropped RGBA output, canvas offsets and repeated frame IDs. It adapts algorithms from [TriggersTools.CatSystem2](https://github.com/trigger-segfault/TriggersTools.CatSystem2). Decoding images never runs KCS or FES programs.
+For HG-3 images, MacLauncher includes its own reader, which adapts algorithms from [TriggersTools.CatSystem2](https://github.com/trigger-segfault/TriggersTools.CatSystem2). It supports lossless 24-bit and 32-bit frames within size limits, cropped RGBA output, canvas offsets and repeated frame IDs. Decoding images never runs KCS or FES programs.
 
 ## Runtimes
 
@@ -53,4 +53,4 @@ MacLauncher's archive, script and text readers follow the [KIF](https://github.c
 
 The [HG-3 reader](../../src/modules/catsystem2/image-hg3.js) is written for Node and keeps the [MIT notice](../../src/modules/catsystem2/resources/TriggersTools-MIT.txt) of the code it adapts.
 
-The cipher helper's C source is [kif-crypto.c](../../src/modules/catsystem2/runtime/kif-crypto.c), and its [build script](../../src/modules/catsystem2/runtime/stage-crypto.cjs) uses Apple's Command Line Tools. Both are kept in the matching MacLauncher release commit. [Runtime distribution](../runtimes/RUNTIME_DISTRIBUTION.md) describes the included helpers.
+The cipher helper's C source is [kif-crypto.c](../../src/modules/catsystem2/runtime/kif-crypto.c), and its [build script](../../src/modules/catsystem2/runtime/stage-crypto.cjs) uses Apple's Command Line Tools. Both files are part of the matching MacLauncher release commit. [Runtime distribution](../runtimes/RUNTIME_DISTRIBUTION.md) describes the included helpers.

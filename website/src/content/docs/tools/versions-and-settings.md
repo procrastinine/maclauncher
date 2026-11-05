@@ -25,7 +25,7 @@ Many runtimes have two sources: the upstream project's own releases, and [MacLau
 
 MacLauncher comes as two apps, and each one downloads runtimes built for its own processor: the Apple Silicon app prefers Apple Silicon builds and the Intel app prefers Intel builds, even when it runs on an Apple Silicon Mac through Rosetta. A universal build, which contains both, serves either app.
 
-When a runtime is published for both processors, a **Build** menu above its version list switches to the other processor's versions. Builds for both can be installed side by side. One built for the other processor carries an **Intel** or **Apple Silicon** tag, while builds for the app's own processor and universal builds have none, and **Set default** on such a build makes it that runtime's default.
+When a runtime is published for both processors, a **Build** menu above its version list switches to the other processor's versions. Builds for both can be installed side by side. Builds for the app's own processor and universal builds have no tag, while one built for the other processor carries an **Intel** or **Apple Silicon** tag. **Set default** on such a build makes it that runtime's default.
 
 An Apple Silicon build runs only on an Apple Silicon Mac, while Intel builds also run on Apple Silicon through [Rosetta](https://support.apple.com/en-us/102527). If Rosetta isn't installed yet, Play offers to install it, and macOS shows Apple's license prompt. A build your Mac can't run stays in the list, along with what it needs. [Macs and macOS versions](/maclauncher/macs-and-macos/) explains which runtimes and features depend on the processor or the macOS version.
 
@@ -35,11 +35,11 @@ Some runtimes can use a copy you already have. **Register custom…** adds your 
 
 ### Downloads
 
-You don't have to refresh before playing. If a game needs a runtime and no version list has been loaded yet, the download prompt that **Play** shows covers looking up the versions too, and MacLauncher installs the runtime's default version, which is the newest one that runs on your Mac unless you've chosen another. Development builds published through GitHub Actions, such as LÖVE nightlies and MKXP-Z's upstream builds, download without a GitHub account or any developer tools. A MacLauncher Builds package of a project that publishes no releases of its own is listed by the date of the upstream code it was built from, such as **Development build (Oct 28)**. A package with no upstream version or date is listed by its own version, such as **MCLv8**.
+You don't have to refresh before playing. If a game needs a runtime and no version list has been loaded yet, the download prompt that **Play** shows covers looking up the versions too, and MacLauncher installs the runtime's default version, which is the newest one that runs on your Mac unless you've chosen another. Development builds published through GitHub Actions, such as LÖVE nightlies and MKXP-Z's upstream builds, download without a GitHub account or any developer tools. A MacLauncher Builds package of a project that publishes no releases of its own is listed by the date of the upstream code it was built from, such as **Development build (Oct 28)**. A package with neither an upstream version nor a date is listed by its own version instead, such as **MCLv8**.
 
 Downloads run in the background while you keep using the launcher. A download button in the Runtimes window lists everything in progress, with a progress bar and a cancel button for each.
 
-**Runtimes → Graphics** manages the graphics components the same way: shader collections, imported shaders, presets, neural models and the upscaling and frame-generation components. See [Graphics and effects](/maclauncher/graphics/).
+The graphics components are managed the same way, under **Runtimes → Graphics**: shader collections, imported shaders, presets, neural models and the upscaling and frame-generation components. See [Graphics and effects](/maclauncher/graphics/).
 
 ## Per-game choices
 
@@ -47,7 +47,7 @@ A game's inspector lets you override almost everything for that game alone.
 
 ### Runtime and version
 
-You can pick a different runtime or pin an exact version. The first entry in the version menu is the game's **Recommended** version when its files call for one, and otherwise the **Default**. [Choosing a runtime](/maclauncher/background/choosing-a-runtime/) explains which runtime suits which game.
+You can pick a different runtime or choose an exact version. The first entry in the version menu is the game's **Recommended** version when its files call for one, and otherwise the **Default**. [Choosing a runtime](/maclauncher/background/choosing-a-runtime/) explains which runtime suits which game.
 
 ### Runtime settings
 
@@ -59,7 +59,7 @@ Launch arguments are extra command-line arguments passed to the game, for exampl
 
 ### Network access
 
-Every game runs cut off from the Internet and your local network unless you allow it. The **Network access** checkbox turns access on for this game, and the default for newly added games is in **Settings → Launcher**. The block covers the game and everything it starts, native code included, and if MacLauncher can't put it in place, the game doesn't start. Changes apply the next time the game starts. A few games need access, for example web games that load their content from a website.
+Every game runs cut off from the Internet and your local network unless you allow it. A few games need access, for example web games that load their content from a website, and for those the **Network access** checkbox turns it on for this game; the default for newly added games is in **Settings → Launcher**. Changes apply the next time the game starts. The block covers the game and everything it starts, native code included, and if MacLauncher can't put it in place, the game doesn't start.
 
 ### Steam client on Play
 
@@ -84,7 +84,7 @@ Changes save as you make them and show up in every open window straight away. Gr
 
 ## Launching without the library
 
-If you run MacLauncher from source, the same backend works from the terminal:
+If you run MacLauncher from source, its backend, the part that detects, prepares and launches games, also works from the terminal:
 
 ```sh
 pnpm launch --game /path/to/game --wait      # play

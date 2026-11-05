@@ -77,7 +77,7 @@ export const ARTICLES = {
   credits: page("Credits and licenses", "about/credits/"),
   updates: page("How MacLauncher is updated", "help/faq/#how-is-maclauncher-updated"),
   windowsGames: page("Windows games through WINE", "games/windows/"),
-  windowsGraphics: page("Graphics effects in WINE games", "games/windows/#graphics-effects"),
+  windowsGraphics: page("Graphics effects in WINE games", "windows/effects-and-upscaling/#effects"),
   games: page("Games and runtimes", "games/"),
 
   graphics: page("Graphics and effects", "graphics/"),
@@ -166,8 +166,8 @@ export const RUNTIME_ANCHORS: Record<string, string[]> = {
 const choice = (title: string, anchor: string) => page(title, `background/choosing-a-runtime/#${anchor}`);
 // Runtimes shared by many game types, with a section of their own.
 const SHARED_RUNTIMES: Record<string, Article[]> = {
-  crossover: [choice("When to use CrossOver", "crossover"), page("CrossOver", "games/windows/#crossover")],
-  sikarugir: [choice("When to use Sikarugir", "sikarugir"), page("Sikarugir (WINE)", "games/windows/#sikarugir")],
+  crossover: [choice("When to use CrossOver", "crossover"), page("CrossOver", "windows/crossover-and-sikarugir/#crossover")],
+  sikarugir: [choice("When to use Sikarugir", "sikarugir"), page("Sikarugir (WINE)", "windows/crossover-and-sikarugir/#sikarugir")],
   native: [desktop("When a game ships its own Mac build", "when-a-game-ships-its-own-mac-build")],
   mac32: [more("32-bit Mac apps", "32-bit-mac-apps")],
   klepton: [choice("MacLauncher Android", "maclauncher-android")],

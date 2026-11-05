@@ -14,7 +14,7 @@ import frameA from "../../../assets/graphics/frame-generation-1.webp";
 import frameB from "../../../assets/graphics/frame-generation-2.webp";
 import frameC from "../../../assets/graphics/frame-generation-3.webp";
 
-Frame generation makes motion look smoother in games that run at a low frame rate on your Mac. Some games are locked to 30 fps, and in others the game, or the effect chain on top of it, keeps the GPU busy. A frame generator compares two real frames, estimates how things moved between them, and draws one or more in-between images to show in the gaps.
+Frame generation makes motion look smoother in games that run at a low frame rate on your Mac. Some games are locked to 30 fps, and in others the game, or the effect chain on top of it, keeps the GPU busy. To smooth their motion, a frame generator compares two real frames, estimates how things moved between them, and draws one or more in-between images to show in the gaps.
 
 In the example below, [RIFE](https://github.com/hzwer/Practical-RIFE) fills the gap in a quick camera move. The two real frames are cut from one screenshot of The Witcher 3: Wild Hunt, and RIFE drew the middle one.
 
@@ -34,50 +34,50 @@ Frame generation changes only what the display shows: the game still runs at its
 
 ## Two kinds of generators
 
-Image-pair generators need only the finished images, so they work with every game:
+Frame generators come in two kinds, depending on what they work from. The first kind, image-pair generators, need only the finished images, so they work with every game:
 
 - <span id="lsfg"></span>**[Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) (LSFG)** is the frame generator from Lossless Scaling, using the files from your own purchased copy. It has Quality and Performance modes, 16-bit or 32-bit precision and a motion-estimation scale, and it handles HDR images.
 - <span id="rife"></span>**RIFE** 4.6 is an open neural interpolation model, running through [MLX](https://github.com/ml-explore/mlx) on the GPU.
 - <span id="mlx-interpolation"></span>**MLX interpolation** is NVIDIA's DLSS frame-generation model, running through [MLX-DLSS](https://github.com/iamwavecut/MLX-DLSS).
-- <span id="videotoolbox-interpolation"></span>**VideoToolbox interpolation** is the low-latency frame interpolation in Apple's [VideoToolbox](https://developer.apple.com/documentation/videotoolbox) framework, and it runs on the Mac's Neural Engine. It needs macOS 26 or later.
-- <span id="metalfx-image-interpolation"></span>**MetalFX image interpolation** feeds the [MetalFX](https://developer.apple.com/documentation/metalfx) frame interpolator with motion that VideoToolbox estimates from the two images, so it needs nothing from the game's renderer. It needs macOS 26 or later and a supported GPU.
-- <span id="vision-optical-flow"></span>**Vision optical flow** is adapted from [MetalDuck](https://github.com/Nycolazs/MetalDuck). Apple's [Vision](https://developer.apple.com/documentation/vision) framework measures how each part of the picture moved between the two frames, and the generator shifts both frames along that motion. Where the measurement can't be trusted, it blends the two frames instead. It runs on every Mac that MacLauncher supports.
+- <span id="videotoolbox-interpolation"></span>**VideoToolbox interpolation** is the low-latency frame interpolation built into Apple's [VideoToolbox](https://developer.apple.com/documentation/videotoolbox) framework. It runs on the Mac's Neural Engine and needs macOS 26 or later.
+- <span id="metalfx-image-interpolation"></span>**MetalFX image interpolation** runs the [MetalFX](https://developer.apple.com/documentation/metalfx) frame interpolator on motion that VideoToolbox estimates from the two images, so it needs nothing from the game's renderer. Like VideoToolbox interpolation, it needs macOS 26 or later, and it also needs a supported GPU.
+- <span id="vision-optical-flow"></span>**Vision optical flow**, adapted from [MetalDuck](https://github.com/Nycolazs/MetalDuck), runs on every Mac that MacLauncher supports. It uses Apple's [Vision](https://developer.apple.com/documentation/vision) framework to measure how each part of the picture moved between the two frames, then shifts both frames along that motion. Where the measurement can't be trusted, it blends the two frames instead.
 
 The last three use frameworks that come with macOS, so they need no downloads or model files.
 
-The row's **Frame multiplier** sets how many images a generator adds between a pair of real frames. At 3×, for example, it draws two images for every real frame, which takes a 30 fps game toward 90 fps. Most image-pair generators go up to 5×, or four images per pair, while VideoToolbox interpolation offers 2× and 4× and MetalFX image interpolation offers 2×. Image-pair generators also detect repeated frames and scene cuts and skip generation across them, which avoids smeared transitions.
+Each frame generation row has a **Frame multiplier**, which sets how many images its generator adds between a pair of real frames. At 3×, for example, a generator draws two images for every real frame, which takes a 30 fps game toward 90 fps. Most image-pair generators go up to 5×, or four images per pair, while VideoToolbox interpolation offers 2× and 4× and MetalFX image interpolation offers 2×. Image-pair generators also detect repeated frames and scene cuts and skip generation across them, which avoids smeared transitions.
 
-Scene generators use the game's depth, motion vectors and camera data, like the [temporal upscalers](/maclauncher/graphics/upscaling/#temporal-upscalers). They draw one image in the middle of each interval between real frames, and they run in games whose runtime supplies that data:
+The second kind, scene generators, use the game's depth, motion vectors and camera data, like the [temporal upscalers](/maclauncher/graphics/upscaling/#temporal-upscalers). They draw one image in the middle of each interval between real frames, and they run in games whose runtime supplies that data:
 
 - <span id="metalfx-frame-interpolation"></span>**MetalFX frame interpolation** needs macOS 26 or later and a supported GPU.
 - <span id="fsr-3-frame-interpolation"></span>**[FSR 3](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK) frame interpolation** is AMD's optical-flow and interpolation passes, ported to [Metal](https://developer.apple.com/metal/).
-- <span id="xess-frame-generation"></span>**[Intel XeSS](https://github.com/intel/xess) frame generation** uses XeSS-FG components that you import separately, and runs through D3DMetal or KosmicKrisp on Apple Silicon.
+- <span id="xess-frame-generation"></span>**[Intel XeSS](https://github.com/intel/xess) frame generation** uses XeSS-FG components that you import separately, and runs through D3DMetal on Apple Silicon.
 
 ## Automatic
 
-**Automatic** is a generator choice of its own. It runs VideoToolbox interpolation, MetalFX image interpolation or Vision optical flow, preferring them in that order, and measures how long each pair of frames takes. When the generator in use can't keep up with the game's frame rate, the row moves to the next one straight away. After ten seconds with time to spare, it returns to a preferred generator, but never within thirty seconds of leaving it, so the row doesn't flip back and forth. Only the generators that offer the row's multiplier take part: at 3×, that is Vision optical flow alone. A row set to one particular generator always keeps it.
+Besides the individual generators, a frame generation row can use **Automatic**, which picks among VideoToolbox interpolation, MetalFX image interpolation and Vision optical flow while the game runs. It prefers them in that order and measures how long each pair of frames takes. When the generator in use can't keep up with the game's frame rate, the row moves to the next one straight away. After ten seconds with time to spare, it returns to a preferred generator, but never within thirty seconds of leaving it, so the row doesn't flip back and forth. Only the generators that offer the row's multiplier take part, which at 3× leaves Vision optical flow alone. A row set to one particular generator, on the other hand, always keeps it.
 
 ## Keep static content
 
-A generator estimates motion across the whole picture, so a menu, subtitle or health bar that stays still while the scene behind it moves can be dragged along with the scene and smeared in the generated images. **Keep static content**, an option of image-pair generator rows that is off by default for games and on by default for window graphics, repairs those areas after generation. It compares the two real frames around each pixel, and wherever they match, it returns the generated pixel to the real one, so interface elements and text stay sharp.
+A generator estimates motion across the whole picture, so a menu, subtitle or health bar that stays still while the scene behind it moves can be dragged along with the scene and smeared in the generated images. To repair those areas after generation, image-pair generator rows have an option, **Keep static content**, which is off by default for games and on by default for [window graphics](/maclauncher/graphics/window-graphics/). It compares the two real frames around each pixel, and wherever they match, it returns the generated pixel to the real one, so interface elements and text stay sharp.
 
-The comparison sees only the two real frames. A small object that moves quickly across a detailed area that otherwise stays the same can therefore go missing from the generated images, and turning the option off brings it back.
+The comparison sees only the two real frames, however. A small object that moves quickly across a detailed area that otherwise stays the same can therefore go missing from the generated images, and turning the option off brings it back.
 
 ## Pacing
 
 Generated frames look smooth only when they are evenly timed, so the chain's **Output** section has shared pacing settings. **Frame pacing** is either Fixed or Adaptive; Adaptive pacing varies generation, up to the row's multiplier, to approach a **Target frame rate** between 30 and 240 fps, within the display's actual refresh rate. **Smooth cadence** favors evenly spaced frames. These settings change only the images sent to the display, never the game's simulation.
 
-<span id="display-limited-generation"></span>With window graphics, a generator draws only the images that the display can actually show, under Fixed and Adaptive pacing alike. For example, a window captured at 60 fps already fills a 60 Hz display, so a 2× row passes the real frames through and its **Details** give the reason. At 30 fps, the same display has room for one generated image between each pair of real frames. Each image is also timed to fall between two display refreshes, which keeps two images from landing on the same refresh and keeps small timing variations from moving an image to the wrong one.
+<span id="display-limited-generation"></span>With window graphics, a generator draws only the images that the display can actually show, under Fixed and Adaptive pacing alike. For example, a window captured at 60 fps already fills a 60 Hz display, so a 2× row passes the real frames through and its **Details** give the reason. At 30 fps, on the other hand, the same display has room for one generated image between each pair of real frames. Each image is also timed to fall between two display refreshes, which keeps two images from landing on the same refresh and keeps small timing variations from moving an image to the wrong one.
 
 A game whose frame rate swings up and down can be held at a steady rate with the [Frame-rate cap](/maclauncher/graphics/composing-effects/#frame-rate-cap) in the same section, and the [performance overlay](/maclauncher/graphics/composing-effects/#performance-overlay) shows the captured, displayed and generated frame rates during play.
 
-For decoded video with content timestamps, generation fills the whole gap between two decoded frames, even at low frame rates or in slowed playback. Playback works one frame ahead so the in-between images can fill that gap, and file export uses the same timing and saves those images at their places in the video's timeline.
+In videos with content timestamps, generation fills the whole gap between two decoded frames, even at low frame rates or in slowed playback. For this, playback works one frame ahead, and file export uses the same timing, saving the in-between images at their places in the video's timeline.
 
 A frame generation row can sit anywhere in the chain. Placed after an expensive neural model, for example, it lets the model run only on the real frames at the game's own frame rate.
 
 ## Getting Lossless Scaling files
 
-LS1 and LSFG need model files from a copy of Lossless Scaling that you own. **Runtimes → Graphics → Upscaling** offers four ways to get them:
+Both LSFG and LS1, the [Lossless Scaling upscaler](/maclauncher/graphics/upscaling/#lossless-scaling-ls1), need model files from a copy of Lossless Scaling that you own. **Runtimes → Graphics → Upscaling** offers four ways to get them:
 
 - **Import Lossless Scaling DLL…** reads the DLL from a local copy, including one installed through CrossOver.
 - **Find in Steam / CrossOver** searches Steam libraries and standard CrossOver bottles on your Mac, without going online.

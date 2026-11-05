@@ -1,6 +1,6 @@
 # Verifying MacLauncher
 
-This guide explains how everything we build for MacLauncher is made and how anyone can check it. MacLauncher and the runtime packages compiled for it are built from public source code and public recipes on machines that GitHub runs (Mac or Linux), never on machines that the project's owner controls. For each release archive, GitHub signs a build record naming the exact source commit, workflow and build run. Checking that record confirms that a downloaded archive is the unchanged output of that build. The MacLauncher Builds verification table lists older, locally built packages and unchanged publisher files separately from these signed builds. Anyone with a Mac can also rebuild the app from the same source and compare the result.
+This guide explains how MacLauncher's own builds are made and how anyone can check them. MacLauncher and the runtime packages compiled for it are built from public source code and public recipes on machines that GitHub runs (Mac or Linux), never on machines that the project's owner controls. For each release archive, GitHub signs a build record naming the exact source commit, workflow and build run. Checking that record confirms that a downloaded archive is the unchanged output of that build. The MacLauncher Builds verification table lists older, locally built packages and unchanged publisher files separately from these signed builds. Anyone with a Mac can also rebuild the app from the same source and compare the result.
 
 ## How an app release is built
 
@@ -16,7 +16,7 @@ An attestation shows where a file came from. It does not show that a recipe is s
 
 The commands below use the GitHub CLI, `gh`.
 
-1. Download the archive and manifest from the same release. This example uses the Apple Silicon app; the Intel app uses `MacLauncher-Intel.app.zip` and `MacLauncher-x64.build-manifest.json`.
+1. The archive and its manifest are downloaded from the same release. This example uses the Apple Silicon app; the Intel app uses `MacLauncher-Intel.app.zip` and `MacLauncher-x64.build-manifest.json`.
 
    ```sh
    tag=v0.6.0
@@ -24,7 +24,7 @@ The commands below use the GitHub CLI, `gh`.
      --pattern MacLauncher.app.zip --pattern MacLauncher-arm64.build-manifest.json
    ```
 
-2. Check the build record of both files against the app workflow and the release's exact commit. Set `commit` to the full 40-character commit that the release tag's source link shows.
+2. The build record of both files is checked against the app workflow and the release's exact commit. Here `commit` is the full 40-character commit that the release tag's source link shows.
 
    ```sh
    commit=<40-character-app-source-commit>
@@ -39,7 +39,7 @@ The commands below use the GitHub CLI, `gh`.
 
    Each check succeeds only for a file that the app workflow built from that commit on a GitHub-hosted Mac; `--deny-self-hosted-runners` rejects builds on machines that the repository owner supplies. Because one attestation covers both files, both checks report the same build run and the same pair of files. The SHA-256 that `shasum` prints must equal `appArchiveSha256` in the manifest. In the manifest, `sourceCommit`, `arch` and `version` identify the app, and `toolchain` records the Node, pnpm, Xcode, macOS SDK and macOS versions on the build machine.
 
-3. Optionally, rebuild the same source on a Mac with the same CPU by following [Rebuild the app](#rebuild-the-app), then compare the two archives and the files inside them. The bytes can differ even when nothing was added: ZIP archives store timestamps, each build gets its own local (ad hoc) code signature, and a change of build tools changes the output. Any difference needs a closer look, because differing bytes alone cannot show whether the programs behave the same.
+3. Optionally, the same source can be rebuilt on a Mac with the same CPU, as [Rebuild the app](#rebuild-the-app) describes, and the two archives and the files inside them compared. The bytes can differ even when nothing was added: ZIP archives store timestamps, each build gets its own local (ad hoc) code signature, and a change of build tools changes the output. Any difference needs a closer look, because differing bytes alone cannot show whether the programs behave the same.
 
 ## Included packages
 
@@ -47,13 +47,13 @@ The manifest lists every included package under `publishedInputs.builds`. Each e
 
 These records connect an app to public source code in four steps. The app's build record covers its manifest, the manifest gives the SHA-256 of each included package, each package's build record names the MacLauncher Builds workflow and commit that built it, and that commit holds the package's public recipe.
 
-To check an included package, download it from the URL in the manifest, compare its SHA-256 with the manifest, and follow [Verifying MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds/blob/main/VERIFYING.md). Its build record must name `procrastinine/maclauncher-builds/.github/workflows/runtime-build.yml`, the source commit given in the manifest and a GitHub-hosted runner.
+Checking an included package starts from the manifest: the package is downloaded from the URL listed there and its SHA-256 compared with the manifest's value, and the remaining checks follow [Verifying MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds/blob/main/VERIFYING.md). Its build record must name `procrastinine/maclauncher-builds/.github/workflows/runtime-build.yml`, the source commit given in the manifest and a GitHub-hosted runner.
 
 The app workflow makes the same checks on its own. Before it assembles the app, it verifies the build record of each included package, and afterwards it compares the files taken from each package with the files in the finished app. GitHub signs the manifest together with the final ZIP only after the finished app and its ZIP pass these checks. Each release keeps both manifests next to the two app archives, and the build run keeps its complete output as downloadable Actions artifacts until GitHub's retention period ends.
 
 ## Files from other publishers
 
-Besides our own builds, MacLauncher uses finished programs and data files from their publishers. These are checked in other ways. Several rely on a Developer ID signature, the code signature that Apple issues for software distributed outside the App Store; its team ID identifies the company that signed it.
+Besides its own builds, MacLauncher uses finished programs and data files from their publishers. These are checked in other ways. Several rely on a Developer ID signature, the code signature that Apple issues for software distributed outside the App Store; its team ID identifies the company that signed it.
 
 | Component | How it is checked |
 | --- | --- |
@@ -88,6 +88,6 @@ pnpm run package:mac -- --dir --arm64 \
 node scripts/ci-macos.cjs finalize
 ```
 
-For the Intel app, use an Intel build of Node, `MACLAUNCHER_APP_ARCH=x64` and `--x64`. A local build checks the build records of the included packages just as the app workflow does, and it writes an archive and manifest under `dist/ci/`. Only a build running on GitHub Actions can obtain a signed build record from GitHub, so a local rebuild produces none.
+The Intel app is rebuilt the same way with an Intel build of Node, `MACLAUNCHER_APP_ARCH=x64` and `--x64`. A local build checks the build records of the included packages just as the app workflow does, and it writes an archive and manifest under `dist/ci/`. Only a build running on GitHub Actions can obtain a signed build record from GitHub, so a local rebuild produces none.
 
 The app ZIP is not designed to come out byte for byte identical from every build. The ZIP format keeps file metadata such as timestamps, and code signatures and build tools can vary between builds. A rebuilt archive that differs therefore casts no doubt on the original's build record. A build record, in turn, cannot explain why an executable changed; that takes a comparison of the source, compiler, SDK, dependencies and the files that differ.

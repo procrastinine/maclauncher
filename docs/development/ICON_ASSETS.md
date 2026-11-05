@@ -4,7 +4,7 @@ This page describes the icon artwork that ships with MacLauncher: the app icon, 
 
 ## App icon
 
-The MacLauncher app mark is an open doorway with a warm launch arrow on a teal tile. Three files in the repository carry the same design:
+MacLauncher's app mark is an open doorway with a warm launch arrow on a teal tile. The same design is kept in three files in the repository:
 
 | File | Use |
 | --- | --- |
@@ -16,11 +16,13 @@ The MacLauncher app mark is an open doorway with a warm launch arrow on a teal t
 
 ## Icons in the launcher
 
-The library and the inspector both use the `GameIcon` component. It shows the artwork extracted from the game, executable or app first. When there is none, or it cannot be decoded, the main process supplies the game's bundled engine icon instead, and unknown game types show a gamepad symbol. Images keep their aspect ratio, and the renderer never fetches artwork from the network. Bundled engine artwork sits directly on the launcher surface, without an extra background tile or inset, and monochrome engine logos use a light foreground for the dark interface.
+Wherever a game's icon appears, in the library or in the inspector, the launcher draws it with the same `GameIcon` component. This component prefers the artwork extracted from the game, executable or app. When there is none, or when it cannot be decoded, the main process supplies the game's bundled engine icon instead, and a game of an unknown type shows a gamepad symbol. Images keep their aspect ratio, and the renderer never fetches artwork from the network. Bundled engine artwork is drawn directly on the launcher surface, without an extra background tile or inset, and monochrome engine logos use a light foreground for the dark interface.
 
 ## Engine icons
 
-Every registered module declares `icon.path` and `icon.kind` in its manifest. The icons are stored at `resources/icon.png` in each module, so the backend's existing default-icon lookup also uses them for normalized game records. The main process reads these files whenever a game has no usable artwork of its own, so each module image ships once and the renderer bundle holds no copies. The module's `resources/icon.json` records the artwork's source, license, modifications and exact SHA-256. Upstream artwork is copied into the module resources, and the app reads its included resources to display icons.
+Each module supplies the default icon for its engine. Every registered module declares this icon in its manifest, with `icon.path` and `icon.kind`, and stores the image at `resources/icon.png`. Because the location is the same in every module, the backend's default-icon lookup also uses these images for normalized game records. Whenever a game has no usable artwork of its own, the main process reads the module's file, so each module image ships once and the renderer bundle holds no copies. Beside each image, `resources/icon.json` records the artwork's source, license, modifications and exact SHA-256. Upstream artwork is copied into the module resources, and the app reads these included resources to display icons.
+
+The artwork comes from these sources:
 
 | Game types | Artwork source |
 | --- | --- |
@@ -34,9 +36,9 @@ Every registered module declares `icon.path` and `icon.kind` in its manifest. Th
 | Flash | Ruffle application artwork, MIT or Apache 2.0 |
 | RPG Maker MV/MZ/RGSS, FNA/XNA, Unity, Java, NScripter, Tyrano, Ikemen/MUGEN, AI5, Siglus, Nitroplus, Minori, FAVORITE/FVP, BGI, CatSystem2, VNDS, web, video and generic app | A distinct category symbol for each, made for MacLauncher |
 
-Licenses and source attribution are stored next to the assets. Names and marks identify the underlying engine or runtime and imply no endorsement. Runtime version selection in the backend does not depend on icon artwork.
+Licenses and source attribution are stored next to the assets. The names and marks identify the underlying engine or runtime and imply no endorsement, and runtime version selection in the backend does not depend on icon artwork.
 
-MacLauncher's own SVG assets are rendered to their checked-in PNG files with:
+MacLauncher's own SVG assets are rendered to the PNG files checked into the repository with this command:
 
 ```sh
 rsvg-convert --width 256 --height 256 --keep-aspect-ratio --output icon.png icon.svg

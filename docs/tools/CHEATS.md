@@ -1,10 +1,10 @@
 # Cheats
 
-RPG Maker MV and MZ, RPG Maker XP/VX/VX Ace and Ren'Py games have cheats. The inspector's **Cheats** button opens them for the selected game. Each game type defines its own cheat fields, MacLauncher stores the settings for each game, and changes reach a running game immediately.
+Cheats are available for RPG Maker MV and MZ, RPG Maker XP/VX/VX Ace and Ren'Py games, and the inspector's **Cheats** button opens them for the selected game. Each game type defines its own cheat fields, MacLauncher stores the settings for each game, and changes reach a running game immediately.
 
 ## Cheats window
 
-The **Cheats** window shows the number and toggle fields of the game type's cheat schema, grouped by category. It has an enable toggle and a reset to defaults. Changes are saved automatically and apply at once when the game is running. Where the game type has an in-game Tools overlay, a per-game option hides its Tools button.
+The **Cheats** window groups the game type's number and toggle fields by category. It has an enable toggle and a reset to defaults. Changes are saved automatically and apply at once when the game is running. Where the game type has an in-game Tools overlay, a per-game option hides its Tools button.
 
 For Ren'Py, the window holds only the [cheat add-ons](#renpy-cheat-add-ons): it has no cheat fields and no save or reset buttons.
 
@@ -32,7 +32,7 @@ A `patch.json` file in the `maclauncher` plugin folder records the patch state. 
 
 ## RPG Maker XP/VX/VX Ace cheat menu
 
-RGSS games have an in-game cheat menu. F8 opens it, and Cmd-Shift-T and Cmd-Option-T also work when the runtime exposes those keycodes. The menu shows the same fields as the Cheats window and writes changes back to the cheat file, which keeps the two in sync.
+RPG Maker XP/VX/VX Ace (RGSS) games have an in-game cheat menu. F8 opens it, and Cmd-Shift-T and Cmd-Option-T also work when the runtime exposes those keycodes. The menu shows the same fields as the Cheats window and writes changes back to the cheat file, which keeps the two in sync.
 
 The menu also has item grants, teleport slots, party and enemy tools, level, stats and gold edits, and ASAC scripts when the game has them. Teleport slots are saved next to the cheat file as `<cheatsFile>.rgss-teleports.json`. The `debugEnabled` toggle enables debug mode, and F9 opens it when the game has `Scene_Debug`. Version-specific stat labels are SP, STR, DEX, AGI and INT for RGSS1 (XP), SPI for RGSS2 (VX), and MAT, MDF and LUK for RGSS3 (VX Ace).
 
@@ -54,9 +54,9 @@ A conditional feature appears only when the game's engine scripts have the liste
 The Ren'Py Cheats window installs two optional community add-ons into the game folder:
 
 - Universal Ren'Py Walkthrough System copies the five v2 `__urw/urw_*.rpy` scripts into `<game>/game/__urw/`.
-- Universal Ren'Py Mod uses a supplied `0x52_URM.rpa`. The native file dialog selects the first copy; its RPA header is checked before a private copy is remembered. Installations copy it into `<game>/game/` and reuse the remembered file offline. **Choose another Universal Ren'Py Mod file…** replaces the remembered copy.
+- Universal Ren'Py Mod is installed from a supplied `0x52_URM.rpa`. The first copy is selected in a native file dialog, and its RPA header is checked before MacLauncher remembers a private copy. Each installation then copies the remembered file into `<game>/game/` and works offline. **Choose another Universal Ren'Py Mod file…** replaces the remembered copy.
 
-Installing the v2 walkthrough system removes the legacy `_urw` and `_urwdisp` scripts and their compiled files, so hooks are not installed twice. MacLauncher replaces the add-on's own updater with an update notice. This keeps MacLauncher's compatibility patches and avoids the updater's TLS bypass and unchecked archive extraction. A remove button is enabled only when the add-on's files are present in the game folder.
+Installing the v2 walkthrough system removes the legacy `_urw` and `_urwdisp` scripts and their compiled files, so hooks are not installed twice. To keep its compatibility patches, and to avoid the updater's TLS bypass and unchecked archive extraction, MacLauncher replaces the add-on's own updater with an update notice. A remove button is enabled only when the add-on's files are present in the game folder.
 
 ## Diagnostics
 

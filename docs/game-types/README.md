@@ -6,7 +6,7 @@ Each page below covers one game type: accepted inputs, detection and version evi
 
 ## Game types and their runtimes
 
-Game types are listed by the name the app shows. *Windows runtimes* means [Sikarugir (Wine)](../runtimes/SIKARUGIR.md) and [CrossOver](../runtimes/CROSSOVER.md), which a game type offers when the game includes a compatible Windows executable.
+The table lists game types by the name the app shows. In it, *Windows runtimes* means [Sikarugir (Wine)](../runtimes/SIKARUGIR.md) and [CrossOver](../runtimes/CROSSOVER.md), which a game type offers when the game includes a compatible Windows executable.
 
 | Game type | Default runtime | Other runtimes |
 | --- | --- | --- |
@@ -55,23 +55,23 @@ Game types are listed by the name the app shows. *Windows runtimes* means [Sikar
 | [Windows Game](WINDOWS.md) | Sikarugir (Wine) | CrossOver |
 | [WOLF RPG Editor](WOLFRPG.md) | Browser Woditor | Windows runtimes |
 
-Window entries are not imported: a window graphics session for another app's window or a display creates one while it runs.
+Window entries are not imported. MacLauncher creates one for each window graphics session, which applies graphics to another app's window or to a display, and the entry exists only while that session runs.
 
-RPG Maker MV and MZ are two versions of one engine with the same runtimes, so they share a page. Prosper and 32-bit Mac, which the settings reference lists separately, are runtimes: Prosper of [PlayStation 5](PS5.md#prosper) and 32-bit Mac of [macOS Game](MACOS.md#32-bit-mac).
+RPG Maker MV and MZ are two versions of one engine with the same runtimes, so they share a page. Prosper and 32-bit Mac are listed separately in the settings reference, but they are runtimes: Prosper belongs to [PlayStation 5](PS5.md#prosper) and 32-bit Mac to [macOS Game](MACOS.md#32-bit-mac).
 
 ## Runtimes shared by several game types
 
 ### Web runtimes
 
-Construct, GameMaker HTML5, RPG Maker MV and MZ, Tyrano and Web games run in [Electron or NW.js](../runtimes/WEB_RUNTIMES.md). Electron is included with MacLauncher, and NW.js versions are downloaded separately. **NW.js (Patched)** adds the game type's optional compatibility settings; GameMaker HTML5 does not offer it.
+Construct, GameMaker HTML5, RPG Maker MV and MZ, Tyrano and Web games run in [Electron or NW.js](../runtimes/WEB_RUNTIMES.md). Electron is included with MacLauncher, whereas NW.js versions are downloaded separately. A third choice, **NW.js (Patched)**, adds the game type's optional compatibility settings, although GameMaker HTML5 does not offer it.
 
 ### The game's own Mac build
 
-When a game includes a compatible macOS build of its engine, its game type offers that build as the **Game's macOS app** runtime. The table above lists the game types that do. Mac apps without a recognized engine are [macOS Game](MACOS.md) entries, and apps whose executable is i386 only use [32-bit Mac](MACOS.md#32-bit-mac).
+When a game includes a compatible macOS build of its engine, its game type offers that build as the **Game's macOS app** runtime. The table above lists the game types that do. Mac apps without a recognized engine become [macOS Game](MACOS.md) entries instead, and those whose executable is i386 only use [32-bit Mac](MACOS.md#32-bit-mac).
 
 ### Windows runtimes
 
-Sikarugir and CrossOver play the [Windows Game](WINDOWS.md) type and are also offered for other game types whose files include a compatible x86 or x64 Windows executable, without changing the detected engine and version, the engine's tools or its default runtime. BGI / Ethornell, CatSystem2 and Haxe native builds have no runtime that plays them on macOS, so Play runs their Windows executable through one of these two. [Windows executables in other game types](WINDOWS.md#windows-executables-in-other-game-types) describes the rules.
+Sikarugir and CrossOver play the [Windows Game](WINDOWS.md) type. They are also offered for other game types whose files include a compatible x86 or x64 Windows executable, and offering them does not change the detected engine and version, the engine's tools or its default runtime. For BGI / Ethornell, CatSystem2 and Haxe native builds, which have no runtime that plays them on macOS, Play runs the Windows executable through one of these two. [Windows executables in other game types](WINDOWS.md#windows-executables-in-other-game-types) describes the rules.
 
 ### Inspection-only runtimes
 
@@ -83,6 +83,6 @@ MacLauncher includes its core graphics component and internal helpers but no gam
 
 ## Tools
 
-Each game-type page describes its own inspector tools, and [game inspection and source tools](../tools/README.md) lists every tool, output and limit by game type. A game keeps its detected engine's tools when another runtime, such as a Windows runtime, is selected. Internal extraction helpers, including Python and 7-Zip, are included and have no runtime choices.
+Each game-type page describes its own inspector tools, and [game inspection and source tools](../tools/README.md) lists every tool, output and limit by game type. A game keeps its detected engine's tools even when another runtime, such as a Windows runtime, is selected. Internal extraction helpers, including Python and 7-Zip, are included with MacLauncher and have no runtime choices.
 
 Some tools apply to every game type that supports them: [save snapshots](../tools/SAVE_SNAPSHOTS.md), [cheats](../tools/CHEATS.md), [native binary inspection](../tools/NATIVE_INSPECTION.md) and the [installer reader](../tools/INSTALLERS.md). [Game preparation and storage](../library/GAME_PREPARATION.md) describes how original files are handled.

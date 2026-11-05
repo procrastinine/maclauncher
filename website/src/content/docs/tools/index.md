@@ -13,8 +13,10 @@ Besides importing and playing games, MacLauncher has tools for working with the 
 
 ## How the tools work
 
+All of the tools share a few rules:
+
 - Generated files, caches, private copies and exports live in MacLauncher's own storage, apart from the game's files, and **Forget** cleans them up.
-- Runtimes expose their settings, you can pass any launch flags you like, and every game can override the defaults and turn its own network access on or off.
+- Every runtime's settings can be changed, and you can pass any launch flags you like. Each game can also override the defaults and turn its own network access on or off.
 - Runtimes, tools, store downloads and accounts can all be managed by version, and a default applies when you don't choose one.
 
 A game's decompilers and extractors belong to its [game type](/maclauncher/background/choosing-a-runtime/#game-types-and-runtimes), so they stay available whichever runtime plays it, including Sikarugir or CrossOver.

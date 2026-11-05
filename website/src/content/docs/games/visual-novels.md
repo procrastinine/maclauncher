@@ -8,7 +8,7 @@ sidebar:
   order: 2
 ---
 
-[Visual novels](https://en.wikipedia.org/wiki/Visual_novel) that were only ever released for Windows can often run natively on a Mac, because most visual-novel engines are interpreters: the game is a set of script and asset archives, and the engine reads them. Fan and preservation communities have written open-source interpreters for many of these engines, and MacLauncher builds and manages them for macOS, with proper fonts, audio and fullscreen.
+[Visual novels](https://en.wikipedia.org/wiki/Visual_novel) that were only ever released for Windows can often run natively on a Mac, with proper fonts, audio and fullscreen. This is possible because most visual-novel engines are interpreters: the game is a set of script and asset archives, and the engine reads them. Fan and preservation communities have written open-source interpreters for many of these engines, and MacLauncher builds and manages them for macOS.
 
 [Ren'Py](/maclauncher/games/desktop-engines/#renpy), the most popular modern engine, is covered on the desktop engines page, and Tyrano runs with the other [web games](/maclauncher/games/desktop-engines/#web-games) there.
 
@@ -33,7 +33,7 @@ Each engine below is its own game type, linked to its guide.
 
 When a game includes a compatible Windows executable, its game type also offers [Sikarugir and CrossOver](/maclauncher/games/windows/) as runtimes.
 
-Support depends on the engine and its format, and the same game can use different engines or formats across platforms and re-releases. To find out which engine a release uses, [VNDB](https://vndb.org/), the visual novel database, lists the engine on many release pages. Each interpreter supports the formats its own project supports, and some engines changed formats over the years, so the guides list exactly which variants work.
+Support depends on the engine and its format, and the same game can use different engines or formats across platforms and re-releases. To find out which engine a release uses, check [VNDB](https://vndb.org/), the visual novel database, which lists the engine on many release pages. Each interpreter supports the formats its own project supports, and some engines changed formats over the years, so the guides list exactly which variants work.
 
 ## What to expect
 
@@ -43,7 +43,7 @@ Interpreters such as siglus_rs and RFVP keep their own save files, separate from
 
 ### Fonts and languages
 
-Many visual novels are Japanese and expect Japanese system fonts. The native interpreters handle text shaping and fonts themselves, and fan translations and patches that the engine supports keep working.
+Many visual novels are Japanese and expect Japanese system fonts. The native interpreters, however, handle text shaping and fonts themselves, and fan translations and patches that the engine supports also keep working.
 
 ### Script tools
 

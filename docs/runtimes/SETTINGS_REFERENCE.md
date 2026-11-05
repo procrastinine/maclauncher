@@ -1,6 +1,8 @@
 # Runtime settings and inspector actions
 
-This reference lists, for each game type, its playback backends, every runtime setting and every inspector action. Runtime settings appear in **Settings** as module defaults and in a game's **Runtime Settings** as per-game overrides; settings marked *per game* exist only in the inspector. Settings marked *(Advanced)* follow the others inside a collapsed **Advanced** group whenever a backend also has common settings. Provider backends, marked *(provider)*, are offered for game types whose input they accept; their settings are listed under their own game type. Runtime guides describe the behavior behind each setting and action.
+This reference lists, for each game type, its playback backends, every runtime setting and every inspector action, while the runtime guides describe the behavior behind each setting and action. Runtime settings appear in two places: in **Settings** as module defaults and in a game's **Runtime Settings** as per-game overrides. Settings marked *per game* are the exception, because they exist only in the inspector. When a backend also has common settings, those marked *(Advanced)* follow the others inside a collapsed **Advanced** group.
+
+Some backends belong to another game type and are offered wherever they accept the game's input. These provider backends are marked *(provider)*, and their settings are listed under their own game type.
 
 | Game type | Default backend | Backends |
 | --- | --- | --- |
@@ -1077,8 +1079,8 @@ Runtimes tabs: mpv player → Player (managed); mpv player → Plugins (managed)
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| uosc controls | On/Off | On | Use uosc for the playback controls and timeline. Play offers a missing plugin as an optional download. Skip continues playback with the standard controls. |
-| Timeline previews | On/Off | On | Generate thumbnail previews while hovering over the timeline with thumbfast. Play offers a missing plugin as an optional download. Skip continues playback without previews. Requires uosc or another thumbfast-compatible interface. |
+| uosc controls | On/Off | On | Use uosc for the playback controls and timeline. When the plugin is missing, Play offers it as an optional download, and Skip continues playback with the standard controls. |
+| Timeline previews | On/Off | On | Generate thumbnail previews while hovering over the timeline with thumbfast. When the plugin is missing, Play offers it as an optional download, and Skip continues playback without previews. Requires uosc or another thumbfast-compatible interface. |
 | Configuration folder | Path (with picker) |  | Optional mpv configuration folder containing mpv.conf, input.conf, scripts, script-opts, fonts and other mpv resources. The selected folder is read directly. |
 | Additional configuration files | List |  | Absolute paths, one per line. Files load in order after the configuration folder. mpv include entries can reference further configuration and resources. |
 | Additional scripts | List |  | Absolute paths to Lua or JavaScript scripts, or mpv script folders, one per line. The original files stay in place. |
@@ -1137,7 +1139,7 @@ Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOve
 
 ## Window
 
-Module `window`. Entries exist only while a [window graphics session](../game-types/WINDOW.md) runs.
+Module `window`. Its library entries exist only while a [window graphics session](../game-types/WINDOW.md) runs.
 
 Backends: Window capture (default).
 
@@ -1155,15 +1157,15 @@ Module `crossover`.
 
 Backends: Sikarugir (Wine) (default), CrossOver.
 
-Runtimes tabs: CrossOver (managed); Sikarugir (managed); Graphics → Translators (managed).
+Runtimes tabs: CrossOver (managed); Sikarugir (managed); Graphics → DirectX → Vulkan, DirectX → Metal, Vulkan drivers and Video codecs (managed).
 
 ### Sikarugir (Wine) settings
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Default Direct3D engine | Runtime automatic, named installed engines and managed versions | Runtime automatic | Existing renderer policy for unset API choices. [Translator selection](TRANSLATORS.md). |
+| Default Direct3D engine | Runtime automatic, the runtime's named engines and versions installed in Runtimes | Runtime automatic | Applies to every Direct3D API without a choice of its own. [Translator selection](TRANSLATORS.md). |
 | Direct3D 8 / 9 / 10 / 11 | Actual installed API implementations, Automatic or environment inheritance | Existing selection | Shared DXGI/native scopes change together. Missing or incompatible selections retain selected-versus-used reasons and the coherent fallback. |
-| Direct3D 12 | Automatic, Wine vkd3d, D3DMetal, managed versions | Runtime automatic | KosmicKrisp is recommended for vkd3d-proton. |
+| Direct3D 12 | Automatic, Wine vkd3d, D3DMetal and versions installed in Runtimes | Runtime automatic | KosmicKrisp is recommended for vkd3d-proton. |
 | Vulkan driver | Automatic, installed MoltenVK and KosmicKrisp versions | Runtime automatic | [Translator selection](TRANSLATORS.md). |
 | Video codecs | Runtime default or registered codec folder | Runtime default | GStreamer plugins use the selected folder. |
 | Game temporal integration | On/Off | Off | Expose the game's DLSS option through MetalFX Temporal. A shared temporal upscaler also enables this integration automatically. Requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26.4 or later, with matching NVAPI/NGX libraries. DLSS must be enabled in the game settings. Changes apply on the next launch. |
@@ -1182,9 +1184,9 @@ Runtimes tabs: CrossOver (managed); Sikarugir (managed); Graphics → Translator
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Default Direct3D engine | Runtime automatic, named installed engines and managed versions | Runtime automatic | Existing renderer policy for unset API choices. [Translator selection](TRANSLATORS.md). |
+| Default Direct3D engine | Runtime automatic, the runtime's named engines and versions installed in Runtimes | Runtime automatic | Applies to every Direct3D API without a choice of its own. [Translator selection](TRANSLATORS.md). |
 | Direct3D 8 / 9 / 10 / 11 | Actual installed API implementations, Automatic or environment inheritance | Existing selection | Shared physical DLL scopes change together; unresolved CrossOver Automatic stays global. |
-| Direct3D 12 | Automatic, Wine vkd3d, D3DMetal, managed versions | Runtime automatic | KosmicKrisp is recommended for vkd3d-proton. |
+| Direct3D 12 | Automatic, Wine vkd3d, D3DMetal and versions installed in Runtimes | Runtime automatic | KosmicKrisp is recommended for vkd3d-proton. |
 | Vulkan driver | Automatic, installed MoltenVK and KosmicKrisp versions | Runtime automatic | [Translator selection](TRANSLATORS.md). |
 | Video codecs | Runtime default or registered codec folder | Runtime default | GStreamer plugins use the selected folder. |
 | Game temporal integration | On/Off | Off | Expose the game's DLSS option through MetalFX Temporal. A shared temporal upscaler also enables this integration automatically. Requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later, with matching NVAPI/NGX libraries. DLSS must be enabled in the game settings. Changes apply on the next launch. |

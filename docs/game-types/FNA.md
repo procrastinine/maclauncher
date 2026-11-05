@@ -4,7 +4,7 @@ This game type covers managed .NET games written for XNA 4 or for FNA. MacLaunch
 
 ## Detection and versions
 
-A PE/CLI reader with fixed limits parses ECMA-335 metadata without loading the game. It reports:
+To identify an FNA or XNA game without loading it, MacLauncher parses the game's ECMA-335 metadata with a PE/CLI reader that has fixed limits. The reader reports:
 
 - the game assembly version;
 - the reachable FNA or XNA reference;
@@ -14,29 +14,29 @@ A PE/CLI reader with fixed limits parses ECMA-335 metadata without loading the g
 - Windows desktop API types;
 - exact native P/Invoke library and symbol names, with the assembly or embedded resource they come from.
 
-A string that only mentions `FNA.dll` is not enough to match. Detection follows at most 32 assembly sources and three dependency levels, and checks executable and runtime-config pairs first in self-contained exports.
+A string that only mentions `FNA.dll` is not enough to match. Detection follows at most 32 assembly sources and three dependency levels, and in self-contained exports it checks executable and runtime-config pairs first.
 
-Embedded DLLs are read as byte ranges inside their original PE, including nested resources; detection never extracts or runs them. Other game types share this reader, which normally inspects metadata only; for FNA it also reads resource descriptors and reuses the detection session's file, byte and result caches. A change to the parent PE or to the FNA detection code refreshes the stored facts once.
+Embedded DLLs, including those in nested resources, are read as byte ranges inside their original PE, and detection never extracts or runs them. The same reader is shared with other game types, where it normally inspects metadata only. For FNA, it also reads resource descriptors and reuses the detection session's file, byte and result caches. The stored facts are refreshed once when the parent PE or the FNA detection code changes.
 
-Inspection reads at most 32 MiB and accepts embedded DLLs up to 8 MiB each. Referenced dependencies that are compressed, malformed, mismatched or over the limit are listed in `dependencyInspection`. When their requirements cannot be inspected safely, Play stops before installing a runtime. Dependency CLR architecture flags are recorded separately from the entry point's original flags.
+Inspection reads at most 32 MiB and accepts embedded DLLs of up to 8 MiB each. Referenced dependencies that are compressed, malformed, mismatched or over the limit are listed in `dependencyInspection`, and when their requirements cannot be inspected safely, Play stops before it installs a runtime. The CLR architecture flags of dependencies are recorded separately from the entry point's original flags.
 
-The game's assembly versions, FNA references, target frameworks and CLR metadata are recorded separately from the selected host. A CLR metadata string such as `v4.0.30319` does not identify an installed runtime.
+The game's assembly versions, FNA references, target frameworks and CLR metadata are recorded separately from the selected host. A CLR metadata string such as `v4.0.30319`, for example, does not identify an installed runtime.
 
 ## Preparation
 
-Play uses the original game directory for content, configuration, relative file access and working data. Portable assemblies run from their original paths. The installed FNA host and the selected framework stay in the managed runtime package; preparation neither copies them into a game folder nor links game assets.
+Play runs FNA games from the original game directory, which supplies content, configuration, relative file access and working data. Portable assemblies also run from their original paths. The FNA host and the selected framework, on the other hand, stay in the installed runtime package: preparation does not copy them into a game folder, and it does not link game assets either.
 
-Portable x64 PE32+ assemblies need conversion only for the ARM64 host. Their CLR metadata must be IL-only, allow a 64-bit host and contain neither a native entry point nor managed native or ReadyToRun code. Only the PE machine field changes, in a converted copy under `userData/games/<gameId>/modules/fna/assemblies/`. Preparation examines the entry assembly and the managed dependencies it reaches, not the game’s assets. Intel hosts use compatible x64 assemblies directly.
+The exception is the ARM64 host, on which portable x64 PE32+ assemblies need conversion. An assembly can be converted only when its CLR metadata is IL-only, allows a 64-bit host and contains neither a native entry point nor managed native or ReadyToRun code. Conversion changes nothing but the PE machine field, and the converted copy is written under `userData/games/<gameId>/modules/fna/assemblies/`. For this step, preparation examines the entry assembly and the managed dependencies it reaches, not the game's assets. Intel hosts need no conversion and use compatible x64 assemblies directly.
 
-When conversion is needed, the host looks among the converted assemblies first, then in the original game directory. The original directory remains the working directory and application base directory even when the entry assembly needs conversion. Selected FNA and XNA facades load from the runtime package. The host’s .NET configuration disables roll-forward.
+When conversion is needed, the host looks for assemblies among the converted copies first and then in the original game directory. Even when the entry assembly itself is converted, the original directory remains the working directory and the application base directory. The selected FNA and XNA facades are loaded from the runtime package, and the host's .NET configuration disables roll-forward.
 
-Conversion inputs and outputs are checked before reuse. A file whose precise identity is unchanged reuses its recorded checksum, and a file with only coarse timestamps is checked byte by byte. Unchanged inputs are not copied again. When a source changes during hashing or copying, the earlier converted files stay intact, and a converted copy that was modified is kept rather than overwritten.
+Conversion inputs and outputs are checked before they are reused. A recorded checksum is reused for a file whose precise identity has not changed, while a file with only coarse timestamps is checked byte by byte. Unchanged inputs are not copied again. If a source changes while it is being hashed or copied, the earlier converted files stay intact. A converted copy that was modified is likewise kept instead of being overwritten.
 
-Files in the private overlays of earlier MacLauncher versions are recovered once into the original game directory, as [Earlier private game folders](../library/GAME_PREPARATION.md#earlier-private-game-folders) describes. Missing files are restored; an original file that differs stays unchanged, and the private version is kept beside it as a separate copy. When recovery would be unsafe or the original folder is unavailable, the private data stays intact. Play does not read these earlier overlays.
+Earlier MacLauncher versions placed a private overlay in front of each game. Files in those overlays are recovered once into the original game directory, as [Earlier private game folders](../library/GAME_PREPARATION.md#earlier-private-game-folders) describes. Missing files are restored; an original file that differs stays unchanged, and the private version is kept beside it as a separate copy. When recovery would be unsafe or the original folder is unavailable, the private data stays intact. Play does not read these earlier overlays.
 
 ### Steam API
 
-When the game imports the [Steam API](../runtimes/STEAM_API.md), MacLauncher sets up a Mac Steam API library automatically; a DLL name alone does not trigger it. The game's own compatible Mac library takes priority. Otherwise, the included helper supplies the supported exports after checking the game process's CPU and the game's local App ID. Small per-game aliases handle [CLR library-name probing](https://learn.microsoft.com/en-us/dotnet/standard/native-interop/native-library-loading), including Windows `.dll` names, without changing the game or copying the helper. Local Steam state stays under the game's module data. Each native export and encrypted-ticket library keeps its own dependency requirement.
+A game that imports the [Steam API](../runtimes/STEAM_API.md) needs a Mac Steam API library, and MacLauncher sets one up automatically; a DLL name alone does not trigger this. A compatible Mac library that ships with the game takes priority. Otherwise, MacLauncher uses its included Steam API helper, which provides the supported exports after it has checked the game process's CPU and the game's local App ID. The CLR looks for a native library under several names, including Windows `.dll` names, and small per-game aliases answer this [CLR library-name probing](https://learn.microsoft.com/en-us/dotnet/standard/native-interop/native-library-loading) without changing the game or copying the helper. Local Steam state stays under the game's module data, and each native export and encrypted-ticket library keeps its own dependency requirement.
 
 ## Settings
 
@@ -49,48 +49,48 @@ Graphics selection is automatic. Runtime Settings provide:
 
 ## Compatibility limits
 
-Portable managed games run with automatic framework substitution and IL conversion. Windows Forms, WPF, native Windows DLLs and 32-bit CLR execution need the [Windows runtimes](#crossover-and-sikarugir-wine), and the native FNA runtime has no XNA video decoder. C# decompilation is available for every inspected managed assembly.
+Portable managed games run with automatic framework substitution and IL conversion. Windows Forms, WPF, native Windows DLLs and 32-bit CLR execution, however, need the [Windows runtimes](#crossover-and-sikarugir-wine), and the native FNA runtime has no XNA video decoder. C# decompilation is available for every inspected managed assembly either way.
 
-The checks for Windows desktop APIs cover Windows Forms, WPF dispatchers and System.Drawing graphics; the portable drawing structs remain usable. The `32BITREQUIRED` header flag is kept as recorded; it declares the CLR process architecture a game requires but does not, on its own, prove a native pointer layout. Games that convert callback pointers to 32-bit integers or import x86 Windows DLLs need compatible API implementations and calling conventions, which portable IL conversion does not supply.
+The checks for Windows desktop APIs cover Windows Forms, WPF dispatchers and System.Drawing graphics, while the portable drawing structs remain usable. The `32BITREQUIRED` header flag is kept as recorded: it declares the CLR process architecture that a game requires, but on its own it does not prove a native pointer layout. Games that convert callback pointers to 32-bit integers or import x86 Windows DLLs need compatible API implementations and calling conventions, and portable IL conversion does not provide these.
 
 ## Decompilation
 
-The inspector's **Decompile** action runs [ILSpy](https://github.com/icsharpcode/ILSpy) on a .NET host. **Runtimes → Tools → ILSpy**, shared with [Unity](UNITY.md#source-export), lists the ILSpy versions. Reload checks ILSpy's NuGet history, within fixed limits, together with each package's target framework and publisher digest. When no version is listed or installed yet, the first decompilation checks that history after download consent and installs the newest compatible release. Each listed version records its host requirements, and changing the decompiler does not change the FNA runtime.
+The inspector's **Decompile** action recovers C# source by running [ILSpy](https://github.com/icsharpcode/ILSpy) on a .NET host. ILSpy versions are listed in **Runtimes → Tools → ILSpy**, which [Unity](UNITY.md#source-export) shares. Reload reads ILSpy's NuGet history within fixed limits, together with each package's target framework and publisher digest. If no version is listed or installed yet, the first decompilation reads that history after download consent and installs the newest compatible release. Each listed version records its host requirements, and changing the decompiler does not change the FNA runtime.
 
 | ILSpy target framework | .NET host | macOS |
 | --- | --- | --- |
 | .NET **8** | Reuses an installed FNA runtime with a matching .NET **8** host | The installed FNA runtime's minimum |
 | .NET **8** or later, without a matching FNA host | Separate Apple Silicon or Intel host for the same .NET major version, using the newest runtime that Microsoft lists for that version | The minimum that the host's own binaries declare, read at installation |
 
-A package that contains builds for several frameworks uses the newest supported framework. When NuGet's metadata omits the package's file list, the framework is read from the downloaded package. A version published as separate runtime-specific packages, where `ilspycmd` itself holds only a pointer to them, installs from its framework-dependent `ilspycmd.any` package. Versions that target only a framework older than .NET 8 are listed with the reason they cannot be installed.
+When a package contains builds for several frameworks, the newest supported framework is used, and when NuGet's metadata omits the package's file list, the framework is read from the downloaded package. Some versions are published as separate runtime-specific packages, with `ilspycmd` itself holding only a pointer to them; such a version installs from its framework-dependent `ilspycmd.any` package. Versions that target only a framework older than .NET 8 are listed with the reason they cannot be installed.
 
-Tools install under `userData/runtimes/fna-tools/ilspy/<version>/`, and the separate shared hosts under `userData/runtimes/dotnet-tools/<version>/<architecture>/`, where the architecture is `arm64` or `x64`, so hosts for both architectures can be installed side by side. No .NET SDK is required, and tool update checks are disabled.
+ILSpy versions are installed under `userData/runtimes/fna-tools/ilspy/<version>/`, and the separate shared hosts under `userData/runtimes/dotnet-tools/<version>/<architecture>/`, where the architecture is `arm64` or `x64`, so hosts for both architectures can be installed side by side. No .NET SDK is required, and tool update checks are disabled.
 
-C# project exports go to `userData/games/<gameId>/modules/fna/decompiled/<toolVersion>/`. Each export records the original assembly, its version and hash, and the exact tool and runtime used. An existing export that has been edited is preserved before a new export replaces it. Decompilation never runs the game, so it also works for managed games the native host cannot launch, including assemblies flagged for a 32-bit CLR. **Reveal source** opens the export.
+Each decompilation produces a C# project in `userData/games/<gameId>/modules/fna/decompiled/<toolVersion>/`, which records the original assembly, its version and hash, and the exact tool and runtime used. If an existing export has been edited, it is preserved before a new export replaces it. Because decompilation never runs the game, it also works for managed games that the native host cannot launch, including assemblies flagged for a 32-bit CLR. **Reveal source** opens the export.
 
-The same action is available through the core API and as `pnpm launch --game <path> --action decompile`. The optional JSON payload `{"version":"9.1.0.7988"}` chooses an explicitly listed tool version.
+The same action is available through the core API and as `pnpm launch --game <path> --action decompile`. Its optional JSON payload, such as `{"version":"9.1.0.7988"}`, selects an explicitly listed tool version.
 
 ## Runtimes
 
 ### FNA
 
-FNA is the default runtime. MacLauncher Builds supplies complete runtime packages, and **Runtimes → FNA** lists them separately from the upstream FNA source releases, which appear for reference.
+FNA is the default runtime, and MacLauncher Builds publishes complete runtime packages for it. **Runtimes → FNA** lists these packages separately from the upstream FNA source releases, which appear for reference.
 
-Each package contains .NET, FNA, the managed host, the supported XNA type-forwarding facades and the native graphics and audio libraries. It also includes the stock shader resources declared by upstream `FNA.Core.csproj`, and the host resolves native libraries by their canonical ABI names. Runtime packages contain no game assets, and Runtimes lists each package's architectures and minimum macOS.
+Each package contains .NET, FNA, MacLauncher's .NET host for FNA games, the supported XNA type-forwarding facades and the native graphics and audio libraries. It also includes the stock shader resources declared by upstream `FNA.Core.csproj`, and the host resolves native libraries by their canonical ABI names. Runtime packages contain no game assets, and Runtimes lists each package's architectures and minimum macOS.
 
-The selected host must declare support for original game paths in its runtime profile. When the installed host lacks it, Play offers a compatible package and installs it after download consent. The host uses the game's entry assembly identity for FNA storage and content discovery.
+Running games from their original paths needs host support, which the selected host must declare in its runtime profile. If the installed host does not declare it, Play offers a compatible package and installs it after download consent. For FNA storage and content discovery, the host uses the identity of the game's entry assembly.
 
-Packages install under `~/Library/Application Support/maclauncher/runtimes/fna/<architecture>/<version>/`. Downloaded packages use their catalog archive digest, safe declared paths and actual native requirements; their recorded file lists do not pin installation or Play. Each installation records its FNA, .NET, host, package and native versions, the upstream source and MacLauncher changes it was built from, and the hashes of critical dependencies.
+Packages are installed under `~/Library/Application Support/maclauncher/runtimes/fna/<architecture>/<version>/`. Installation and Play rely on a downloaded package's catalog archive digest, safe declared paths and actual native requirements, while the package's recorded file list restricts neither of them. Each installation records its FNA, .NET, host, package and native versions, the upstream source and MacLauncher changes it was built from, and the hashes of critical dependencies.
 
-Game launches set the [SDL foreground hint](https://wiki.libsdl.org/SDL3/SDL_HINT_MAC_BACKGROUND_APP) for the game process only and use the shared native activation helper. The helper waits for a window owned by the game, makes at most one [AppKit activation request](https://developer.apple.com/documentation/appkit/nsapplication/activationoptions) and checks the actual foreground order. It gives up after eight seconds or when the game exits, never holds up the launcher, and neither requests Accessibility access nor changes system preferences.
+To bring the game to the front, each launch sets the [SDL foreground hint](https://wiki.libsdl.org/SDL3/SDL_HINT_MAC_BACKGROUND_APP) for the game process only and uses the shared native activation helper. This helper waits for a window owned by the game, makes at most one [AppKit activation request](https://developer.apple.com/documentation/appkit/nsapplication/activationoptions) and checks the actual foreground order. It gives up after eight seconds or when the game exits, never holds up the launcher, and neither requests Accessibility access nor changes system preferences.
 
 ### Game's macOS app
 
-An imported macOS app that ships its own executable, including one started by a shell launcher, runs that executable by default. A containing folder with one recognized app can be imported directly. The FNA runtime remains available for compatible game data. ReShade effects apply through the shared launch controls without replacing the supplied runtime.
+Some FNA games are published as macOS apps that ship their own executable, which may be started by a shell launcher. Such an app runs its own executable by default, and a containing folder with one recognized app can be imported directly. The FNA runtime remains available for compatible game data, and ReShade effects apply through the shared launch controls without replacing the runtime that the app ships.
 
 ### CrossOver and Sikarugir (Wine)
 
-Compatible x86 and x64 Windows exports can use [Sikarugir (Wine)](../runtimes/SIKARUGIR.md) or an available [CrossOver](../runtimes/CROSSOVER.md) application instead, including games whose Windows-only dependencies prevent native FNA playback. These runtimes keep their own private writable files and Windows environments, and C# decompilation stays available. [Windows Game](WINDOWS.md#windows-executables-in-other-game-types) describes how they are offered.
+Compatible x86 and x64 Windows exports can use [Sikarugir (Wine)](../runtimes/SIKARUGIR.md) or an available [CrossOver](../runtimes/CROSSOVER.md) application instead. These runtimes also cover games whose Windows-only dependencies prevent native FNA playback. They keep their own private writable files and Windows environments, and C# decompilation stays available with them. [Windows Game](WINDOWS.md#windows-executables-in-other-game-types) describes how they are offered.
 
 ## Module source
 

@@ -5,6 +5,7 @@ export const sidebar = [
   { label: "Start here", items: ["introduction", "getting-started", "macs-and-macos", "launcher"] },
   { label: "Background", items: ["background/how-games-run", "background/choosing-a-runtime"] },
   { label: "Games and runtimes", items: [{ autogenerate: { directory: "games" } }] },
+  { label: "Windows games and WINE", items: [{ autogenerate: { directory: "windows" } }] },
   { label: "Graphics and effects", items: [{ autogenerate: { directory: "graphics" } }] },
   { label: "Tinker tools", items: [{ autogenerate: { directory: "tools" } }] },
   { label: "Help", items: ["help/faq"] },

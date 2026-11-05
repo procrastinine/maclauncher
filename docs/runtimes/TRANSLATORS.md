@@ -1,82 +1,126 @@
 # Graphics translators
 
-**Runtimes → Graphics** organizes translators by their output: **DirectX → Vulkan** contains DXVK, Wine vkd3d and vkd3d-proton, **DirectX → Metal** contains DXMT and D3DMetal, **Vulkan drivers** contains MoltenVK and KosmicKrisp, and **Video codecs** contains GStreamer. These groups manage the components used by [CrossOver](CROSSOVER.md) and [Sikarugir](SIKARUGIR.md). Each installed version is stored once. Games, private graphics views and Windows prefix DLLs refer to that installation through links. A loader that needs its own signature, or a library that locates its framework beside itself, uses a shared prepared copy rather than a copy per game.
+Windows games draw with Microsoft's Direct3D, and some draw with Vulkan, while macOS provides Metal. [CrossOver](CROSSOVER.md) and [Sikarugir](SIKARUGIR.md) therefore rely on graphics translators: libraries that carry a game's Direct3D or Vulkan calls to Metal, either directly or through a Vulkan driver that runs on Metal. Each Wine distribution brings its own set. CrossOver includes engines such as D3DMetal, DXMT and DXVK and chooses among them with its own graphics selector, and Sikarugir supplies its engines in the Template that accompanies each Wine version.
 
-Stale disposable graphics views are rebuilt in another shared generation. Previous generations remain in place until ordinary storage upkeep can retire them. Equivalent library links resolve to the same installed source.
+The choice of translators is a major part of MacLauncher's support for Windows games. Each game can choose a default Direct3D engine, a translator for each Direct3D version from 8 to 12, a Vulkan driver and video codecs, and Settings holds the default choices for all games. The choices include the copies that come with the selected Wine, upstream releases, files registered locally and the user's own copy of Apple's Game Porting Toolkit. MacLauncher keeps these versions outside the Wine distributions, whereas community tools such as [CXPatcher](https://github.com/italomandara/CXPatcher) update translators by patching a copy of the CrossOver application. Compared with running the same game in CrossOver or Sikarugir alone, this changes several things:
+
+- A game can use a newer or older translator than the one its Wine distribution includes, and other games keep their own choices. The CrossOver application, Sikarugir engines and Templates are never modified for this.
+- Versions installed in Runtimes are stored apart from CrossOver and the Templates, so updating or replacing those leaves the installed versions and the games' choices of them in place.
+- Each translator version is installed once, and every game and Windows environment that uses it links to that single installation.
+- Compatibility is decided from the translator's actual files when Play starts. A choice that cannot load falls back to the same engine from the selected Wine, and the inspector names both.
+- [Graphics effects](../graphics/SHARED_PROCESSING.md) and temporal upscaling are prepared for the translator that the game actually uses after any fallback.
+
+## Translators and drivers
+
+| Translator | Graphics API | Role |
+| --- | --- | --- |
+| DXMT | Direct3D 10 and 11 | Translates to Metal. |
+| D3DMetal | Direct3D 11 and 12 | Apple's translator to Metal, from the Game Porting Toolkit. |
+| DXVK | Direct3D 8, 9, 10 and 11 | Translates to Vulkan. Its packages differ in the Direct3D versions they include: Sikarugir Templates have `dxvk`, `dxvk3` and `d9vk` variants, and Gcenx's macOS builds have async variants. The historical D8VK and D9VK releases cover Direct3D 8 and 9, work that modern DXVK includes. |
+| vkd3d-proton | Direct3D 12 | Translates to Vulkan. |
+| Wine vkd3d | Direct3D 12 | Wine's own Direct3D 12 libraries. |
+| WineD3D | Direct3D | Wine's built-in Direct3D translation. |
+| MoltenVK | Vulkan | Vulkan driver that runs on Metal. |
+| KosmicKrisp | Vulkan | Vulkan driver from Mesa that runs on Metal on Apple Silicon. |
+| GStreamer codecs | Video | Plugins for Wine's video playback. |
 
 ## Versions and sources
 
-Translator versions use the shared runtime catalogs and local registration. Refresh reads one source's published releases. Status and registered-file inspection remain offline. CrossOver and Sikarugir use the same installed versions; selecting another game adds no translator payload copy.
+**Runtimes → Graphics** groups the translators by what they produce. **DirectX → Vulkan** holds DXVK, Wine vkd3d and vkd3d-proton, **DirectX → Metal** holds DXMT and D3DMetal, **Vulkan drivers** holds MoltenVK and KosmicKrisp, and **Video codecs** holds GStreamer. Each translator has its own section there, and its versions come from the shared runtime catalogs or from local registration. CrossOver and Sikarugir use the same installed versions, so selecting a translator for another game adds no copy of its files. Refresh reads the published releases of one source, while status and the inspection of registered files work offline.
 
 | Manager | Download sources | Local sources |
 | --- | --- | --- |
 | MoltenVK | KhronosGroup/MoltenVK | Library, folder, archive or installed runtime |
-| KosmicKrisp | LWJGL packages | Driver and loader folder, archive or installed runtime |
+| KosmicKrisp | LWJGL's KosmicKrisp builds of Mesa; MacLauncher Builds' KosmicKrisp GLES 3.2 build | Driver and loader folder, archive or installed runtime |
 | DXMT | 3Shain/dxmt builtin releases; Sikarugir Template | Folder, archive or installed runtime |
 | DXVK | doitsujin/dxvk; Gcenx/DXVK-macOS, with a separate async catalog; historical AlpyneDreams/d8vk and misyltoad/d9vk releases; Template dxvk, dxvk3 and d9vk | Folder, archive or installed runtime |
-| Wine vkd3d | Wine upstream source link | Read-only copies included with registered runtimes |
+| Wine vkd3d | Link to the Wine upstream source | Read-only copies included with registered runtimes |
 | vkd3d-proton | HansKristian-Work/vkd3d-proton | Folder or archive |
 | D3DMetal | Sikarugir Template | Apple Game Porting Toolkit disk image or folder; installed runtime |
-| GStreamer codecs | Local registration | Prepared plugin folder with its matching dependency closure |
+| GStreamer codecs | None | Prepared plugin folder together with the libraries its plugins depend on |
 
-DXVK-macOS is shown as an optional macOS alternative to the runtime's own included or automatic choice. Upstream, async, historical D8VK/D9VK and Template sources remain under Additional sources. D8VK and D9VK retain their historical releases; their Direct3D 8 and 9 work is part of modern DXVK. Installed rows show API coverage read from the actual libraries, so each version can expose a different API set. Template package versions are distinct from installed component versions. The GStreamer panel registers prepared local codec folders, and D3DMetal links to Apple's official Game Porting Toolkit download page.
+Wine runs as an x86-64 process, also on Apple Silicon through Rosetta. Every macOS library that it loads must therefore contain x86-64 code, and only installations with Intel code are listed for Wine games. KosmicKrisp itself requires Apple Silicon, so a Wine game uses an x86-64 build of it: a Sikarugir Template's driver, an installed KosmicKrisp GLES 3.2 package that includes an Intel (x86-64) build, or a locally registered build with Intel code. LWJGL's KosmicKrisp builds are ARM64-only, so they never reach Wine.
 
-Each catalog has its own Refresh control and publisher link. Release labels identify the source. Installed files supply PE machine and builtin/native form, Mach-O CPU slices, deployment targets and Unix imports. Release numbers and vendor labels do not determine compatibility.
+Each catalog has its own Refresh control and publisher link, and each release label names its source, such as `(macOS async)`. The **Vulkan drivers** entry also holds **MoltenVK scene support**, a MacLauncher Builds package that CrossOver's [Vulkan scene support](CROSSOVER.md#vulkan-scene-support) uses.
 
-LWJGL's package version is shown as package provenance for its KosmicKrisp driver. A KosmicKrisp component version is shown only when component metadata supplies it. Releases and builds that share a short label retain their publisher revision or exact build identity rather than a numbered position in a list.
+DXVK-macOS is offered as an optional macOS alternative to the runtime's own included or automatic choice. The upstream, async, historical D8VK and D9VK, and Template sources are listed under **Additional sources**. D8VK and D9VK keep their historical releases, although their Direct3D 8 and 9 work is part of modern DXVK. Installed rows show the API coverage read from the actual libraries, so each version can expose a different set of APIs. A Template's package version is distinct from the versions of the components installed from it. The GStreamer panel registers prepared local codec folders, and D3DMetal links to Apple's official Game Porting Toolkit download page.
 
-Directory and installed-application registrations reference the selected files. Archive registrations extract once into shared storage. Publisher archives are cached by asset identity across managers; installing another component from the same Template reuses that download. Template component installations retain their complete component tree, including notices, without installing another Wine engine. Removing a local registration preserves the original files.
+For LWJGL's KosmicKrisp driver, the LWJGL package version is shown as the package it came from, and a KosmicKrisp component version appears only when the component's metadata supplies one. Releases and builds that share a short label keep their publisher revision or exact build identity rather than a numbered position in a list.
 
-Installed lists also show matching components included with registered CrossOver applications and Sikarugir Templates. These rows name the component variant and source once, with the component version in the row details and CPU architectures alongside it. Template and Wine engine versions are separate fields, such as Template 1.0.24 (Wine 10.0_8). Template download and Included lists use newest-first numeric release order. Multiple copies of the same source retain their application or registration names. Included rows reference the original files and have no install, repair, default or removal actions. Wine vkd3d has its own Included copies panel; these copies remain with Wine and are separate from vkd3d-proton. Its upstream source archives are not presented as Windows runtime downloads.
+A registered folder or installed application is used by reference to the selected files, which stay where they are. A registered archive or disk image, by contrast, is extracted once into shared storage. Publisher archives are cached by their asset identity across managers, so installing another component from the same Template reuses the earlier download. A Template component installation keeps its complete component tree, including notices, and installs no other Wine engine. Removing a local registration leaves the original files in place.
 
-An installed application selection resolves its component folder, framework or driver library. An application whose component cannot be identified requires selection of the component folder or library. Selecting a component inside CrossOver retains the CrossOver-only source restriction.
+The installed lists also show matching components that come with registered CrossOver applications and Sikarugir Templates. Each of these Included rows names the component variant and its source once, and its details give the component version alongside its CPU architectures. Template and Wine engine versions are separate fields, as in Template 1.0.24 (Wine 10.0_8). Template downloads and Included rows are listed newest first in numeric release order, and several copies from the same source keep their application or registration names. Included rows refer to the original files and, because they belong to their source, have no install, repair, default or removal actions. Wine vkd3d has its own panel of included copies; these copies stay with Wine and are separate from vkd3d-proton, and Wine's upstream source archives are not offered as Windows runtime downloads.
 
-D3DMetal is downloaded from Sikarugir Template or supplied locally. MacLauncher does not host or build it. Apple's Game Porting Toolkit licence applies, including Apple hardware and distribution restrictions; the supplied notice remains with the component. Components registered from CrossOver are restricted to CrossOver launches.
+When an installed application is selected, MacLauncher finds the component folder, framework or driver library inside it. If the component cannot be identified, the component folder or library has to be selected directly. Components registered from CrossOver, including one selected inside a CrossOver application, are used for CrossOver launches only.
 
-GStreamer shows the plugin folders included with registered CrossOver applications and Sikarugir Templates as read-only sources. A folder without component release metadata names its source runtime; library ABI filenames do not supply a codec version. Official project and download links accompany local registration.
+D3DMetal is Apple's proprietary component. It is downloaded from the Sikarugir Template or supplied locally, for example from the user's own Game Porting Toolkit download; MacLauncher neither hosts nor builds it. Apple's Game Porting Toolkit license applies to it, including its Apple hardware and distribution restrictions, and the supplied notice stays with the component.
 
-GStreamer plugin registration is intended for a prepared codec directory. An unmodified GStreamer SDK can load a second GStreamer core alongside Wine's core. Its plugin dependencies must resolve to the intended libraries before the directory is selected through `GST_PLUGIN_PATH`. Registration does not replace `winegstreamer` or another Wine module, relocate library imports, or supply a codec SDK download catalog.
+GStreamer lists the plugin folders that come with registered CrossOver applications and Sikarugir Templates as read-only sources. A folder without component release metadata is named after its source runtime, since the ABI numbers in library file names do not give a codec version. Links to the official project and its downloads accompany local registration.
+
+GStreamer registration is meant for a prepared codec folder, because an unmodified GStreamer SDK can load a second GStreamer core alongside Wine's own. The plugins' dependencies must therefore resolve to the intended libraries before the folder is selected; it then reaches Wine through `GST_PLUGIN_PATH`. Registration does not replace `winegstreamer` or any other Wine module, does not relocate library imports and does not supply a download catalog for codec SDKs.
+
+## Installed versions and links
+
+A translator version is stored once, in its manager's installation, and games refer to it through links. These links sit in two places. Shared graphics views are keyed by the Wine CPU and the checksums of the selected files, so every game with the same selection reuses one view. Native DLLs, in addition, are linked into the Windows environment that uses them. Equivalent library links resolve to the same installed source.
+
+Real copies are made only where a link cannot work. A Wine loader that must carry its own code signature is copied, and so is D3DMetal's `libd3dshared.dylib`, which looks for its framework beside itself. These copies, too, are prepared once for each set of inputs and shared between games.
+
+A shared graphics view that has gone stale is rebuilt as a new shared generation. Earlier generations stay in place until ordinary storage upkeep can remove them.
 
 ## Selection
 
-Runtime Settings selects installed components by API and shows shared library scopes.
+Runtime Settings selects installed components for each graphics API and shows which choices share libraries. Settings holds the default of each control for all games, and a game's Runtime Settings can override it. Versions and sources are read from installed files, and a change applies on the next launch. A saved choice names one installed version, so installing a newer version adds a choice without changing the games that use an older one.
 
-| Component | Choices |
+| Control | Choices |
 | --- | --- |
-| Default Direct3D engine | The existing shared renderer policy, including runtime automatic and named installed versions. |
-| Direct3D 8, 9, 10 / 10.1 and 11 | Installed implementations with the corresponding DLLs. Modern DXVK can serve several APIs; historical D8VK and D9VK remain specific source/version choices. |
-| Direct3D 12 | Wine vkd3d, D3DMetal or a managed Direct3D 12 translator. KosmicKrisp is recommended for vkd3d-proton. |
-| Vulkan driver | The runtime's automatic driver, its named drivers, and managed MoltenVK or KosmicKrisp versions. |
-| Video codecs | The runtime defaults or a registered GStreamer plugin folder. Wine's own video modules remain with Wine. |
+| Default Direct3D engine | The shared renderer choice for every Direct3D API without a choice of its own: the runtime's automatic choice, the engines that come with the selected runtime, and named versions installed in Runtimes. |
+| Direct3D 8, 9, 10 / 10.1 and 11 | Installed implementations that contain the corresponding DLLs. Modern DXVK can serve several of these APIs, while the historical D8VK and D9VK releases remain choices with their own source and version. |
+| Direct3D 12 | Wine vkd3d, D3DMetal, or a vkd3d-proton or D3DMetal version installed in Runtimes. KosmicKrisp is recommended for vkd3d-proton. |
+| Vulkan driver | The runtime's automatic driver, the drivers that come with the selected runtime, and MoltenVK or KosmicKrisp versions installed in Runtimes. |
+| Video codecs | The runtime defaults or a registered GStreamer plugin folder. Wine's own video modules stay with Wine. |
 
-An existing bottle or wrapper first offers its current setting, read from its configuration without starting Wine. Automatic follows that runtime's existing behavior. Named choices show their version and source from release labels, component version files, framework metadata or the runtime's changelog; a component without readable version metadata still names its engine and source. Replacement DLL version resources report Windows component versions and do not supply translator release versions. Installed CrossOver components are used for CrossOver launches only.
+Each list follows the same order. When a game runs in an existing CrossOver bottle or Sikarugir wrapper, the list opens with **Bottle setting** or **Wrapper setting** and its current value, which is read from the environment's configuration without starting Wine. Next comes the runtime's automatic choice, labeled **CrossOver's automatic choice** or **Template's automatic choice**, which keeps that runtime's usual behavior. The named choices follow, each with its engine, version and source, such as the DXMT version that a CrossOver release includes. Versions are read from release labels, component version files, framework metadata or the runtime's changelog. The version resources of replacement DLLs report Windows component versions, so they do not supply translator release versions. A component without readable version metadata still shows its engine and source. Components that come from CrossOver are listed only for CrossOver launches.
 
-Unreadable optional labels and inaccessible unrelated package entries produce diagnostics. Basic PE machine and builtin/native facts remain available when optional export inspection is incomplete. Invalid required binaries and component path escapes remain errors.
+An optional label that cannot be read, or an unrelated package entry that cannot be accessed, produces a diagnostic. The basic PE machine type and builtin or native form stay available when the optional inspection of exports is incomplete. Invalid required binaries and component paths that escape their folder remain errors.
 
-Unset API choices retain the existing shared renderer policy. No saved choices or runtime defaults are migrated when the settings are displayed. A linked choice changes its advertised API scope together. Automatic and existing Bottle setting or Wrapper setting remain available.
+A Direct3D API without a choice of its own keeps the default Direct3D engine. Displaying the settings migrates no saved choices or runtime defaults. Linked choices change their advertised API scope together, and **Automatic** and an existing environment's **Bottle setting** or **Wrapper setting** remain available.
 
-Direct3D APIs can share DXGI, native Unix modules and Windows thunks. A physical DLL/module binding has one source; conflicting providers use the existing coherent composition with the selected intent and reason retained in the inspector. Direct PE imports and matching Unix module facts identify companions. Incomplete companion information retains the package as an atomic group instead of predicting an ABI from engine names or versions.
+Direct3D APIs can share DXGI, native Unix modules and Windows thunks, and each physical DLL or module binding has a single source. When the selected providers conflict, the launch keeps the existing coherent combination, and the inspector retains the selected choice and the reason. Companion files are identified from direct PE imports and matching Unix modules. When that information is incomplete, the package stays together as one group instead of an ABI being predicted from engine names or versions.
 
-CrossOver selects its included renderer through one global backend. Its unresolved automatic choice stays global. A concrete shared default or a complete explicit API composition uses the private loader. A partial override that still depends on unresolved global Automatic keeps the existing composition active and reports the coupling. Selecting each API individually is not required when a concrete shared default supplies the remaining APIs. CrossOver's application files remain unchanged.
+CrossOver selects its included renderer through one global backend, so its automatic choice, while unresolved, stays global. A specific default Direct3D engine, or an explicit choice for every API, uses the private loader instead. A partial override that still depends on CrossOver's unresolved automatic choice keeps the existing combination active and reports that coupling. Choosing each API separately is unnecessary when a specific default Direct3D engine supplies the remaining APIs. CrossOver's application files remain unchanged.
 
-The used Direct3D 11 DXMT version also supplies the camera adapter. The adapter keeps its own matching-library requirement. A mismatch leaves the selected renderer active and reports that camera support is unavailable. Engine settings apply to every engine actually used by the final API bindings.
+A game saved by an earlier MacLauncher version keeps its earlier **Graphics** and **DXMT support** selections, and on Sikarugir its earlier Vulkan driver, until a Direct3D engine or Vulkan driver is chosen in the new controls. The new choice then takes their place; the earlier controls are no longer shown.
+
+The DXMT version actually used for Direct3D 11 also supplies camera support. Because the camera adapter still requires its own matching libraries, a DXMT version that does not match it stays active as the renderer, and the inspector reports that camera support is unavailable. Engine settings apply to every engine that the final API bindings actually use.
 
 ## Loading
 
-CrossOver's own engines use its graphics backend selector. Replacement Wine builtin DLLs use private Windows DLL directories, with their Unix modules beside the private Wine loader. D3DMetal selects its matching bridge and framework together. Upstream native Windows DLLs use links in the bottle's `system32` or `syswow64` directory and native DLL overrides. An existing DLL is preserved before replacement and restored when that selection is removed.
+How a selected component is loaded depends on its source and form. CrossOver's own engines are chosen through CrossOver's graphics backend selector. A Direct3D engine from any other source is loaded in one of two ways:
 
-CrossOver Vulkan overrides place the selected Vulkan entry library at the private `libMoltenVK.dylib` location. KosmicKrisp uses the Khronos loader there and an explicit driver description naming the selected driver. This route applies across CrossOver backends; the additional `CX_LIBVULKAN` value is used only with WineD3D.
+- Replacement Wine builtin DLLs are placed in private Windows DLL directories, with their Unix modules beside the private Wine loader. D3DMetal's matching bridge and framework are selected together.
+- Upstream native Windows DLLs, on the other hand, are linked into the environment's `system32` or `syswow64` directory and enabled with native DLL overrides. An existing DLL is set aside before it is replaced and restored when that selection is removed. Native DLLs are not placed for a **Bottle setting** or **Wrapper setting**, so the environment keeps its own files.
 
-Sikarugir uses the same selected components through its private graphics view and Vulkan driver description. Its Wine engine, Template and registered wrapper engine remain in place.
+For a Vulkan driver override in CrossOver, the selected Vulkan library is placed at the private `libMoltenVK.dylib` location. With KosmicKrisp, the library at that location is the Khronos loader, together with an explicit driver description that names the selected driver. This route works with every CrossOver backend, while the additional `CX_LIBVULKAN` value is set only with WineD3D.
 
-## Compatibility and inspector
+Sikarugir loads the same selected components through its private graphics view and Vulkan driver description. Its Wine engine, its Template and the engine of a registered wrapper stay in place. Selected video codecs reach both runtimes through `GST_PLUGIN_PATH`.
 
-Play checks the files that the selected Wine process and Windows executable will load. An unused CPU variant in a multi-architecture installation does not affect the selection. A missing required file, absent PE machine or native CPU slice, a binary's declared macOS minimum above the running system, or a required Unix import absent from its actual Wine dependency can prevent loading. Weak imports, system-library imports and incomplete inspection do not establish a failure.
+## Compatibility and fallback
 
-When loading is impossible, Play uses the same engine supplied by the selected CrossOver or Template. If that engine is unavailable, it uses the runtime's automatic choice. The saved choice remains selected. The warning and inspector show the selected engine, the engine used and the reason. Software version numbers, vendor strings and tested-version lists do not decide translator compatibility.
+Before a launch, Play checks the files that the selected Wine process and Windows executable will load. Only the CPU variant that will actually run is checked, so an unused variant in a multi-architecture installation does not affect the result. Loading counts as impossible when one of these facts holds:
 
-The inspector shows selected and used components for Direct3D 8 through 12, the Vulkan driver and video codecs. CrossOver's automatic engine remains labeled automatic when its own final choice is unresolved. Camera, DLSS and graphics consumers use the final API bindings. WineVulkan scene capture uses its matching scene closure; a separate Vulkan driver override, including KosmicKrisp, leaves that scene closure unavailable. API selection alone does not provide NGX interception through Vulkan/KosmicKrisp.
+- a required file is missing;
+- the files have no PE machine type or native CPU slice for the game and the Wine process;
+- a binary declares a macOS minimum above the running system;
+- a Unix module needs a symbol that its actual Wine dependency does not export.
+
+Weak imports, imports from system libraries and inspection that cannot be completed do not count as failures. Release numbers, vendor strings and lists of tested versions play no part in the decision.
+
+When a translator cannot load, Play uses the same engine from the selected CrossOver or Template instead. If that runtime has no such engine, Play uses the runtime's automatic choice, as it also does when a saved choice is no longer installed. The saved choice stays selected for later launches, and a warning and the inspector show the selected engine, the engine actually used and the reason.
+
+## Inspector
+
+For each launch, the inspector shows the selected and the actually used components for Direct3D 8 through 12, the Vulkan driver and video codecs. When CrossOver makes its own automatic choice and has not resolved which engine that is, the row stays labeled as CrossOver's automatic choice. Camera support, DLSS and graphics effects use the final API bindings. CrossOver's [Vulkan scene support](CROSSOVER.md#vulkan-scene-support) works only while the Vulkan driver stays at CrossOver's automatic choice or a bottle's own setting, so selecting a specific Vulkan driver, including KosmicKrisp, makes it unavailable. Selecting an API does not by itself provide NGX interception through Vulkan or KosmicKrisp.
 
 ## Sources and notices
 
-[DXMT](https://github.com/3Shain/dxmt/releases) carries its release licence; v0.80 uses MIT and later source uses LGPL-2.1-or-later. [DXVK](https://github.com/doitsujin/dxvk), [D8VK](https://github.com/AlpyneDreams/d8vk), [D9VK](https://github.com/misyltoad/d9vk) and [Gcenx's macOS and async builds](https://github.com/Gcenx/DXVK-macOS) use the zlib licence. [vkd3d-proton](https://github.com/HansKristian-Work/vkd3d-proton) uses LGPL-2.1. [Sikarugir Template](https://github.com/Sikarugir-App/Template/releases) supplies its component notices. [GStreamer](https://gstreamer.freedesktop.org/) and codec dependencies retain their own licences.
+[DXMT](https://github.com/3Shain/dxmt/releases) carries the license of each release: v0.80 uses MIT, and later source uses LGPL-2.1-or-later. [DXVK](https://github.com/doitsujin/dxvk), [D8VK](https://github.com/AlpyneDreams/d8vk), [D9VK](https://github.com/misyltoad/d9vk) and [Gcenx's macOS and async builds](https://github.com/Gcenx/DXVK-macOS) use the zlib license, and [vkd3d-proton](https://github.com/HansKristian-Work/vkd3d-proton) uses LGPL-2.1. The [Sikarugir Template](https://github.com/Sikarugir-App/Template/releases) supplies the notices of its components. [GStreamer](https://gstreamer.freedesktop.org/) and codec dependencies keep their own licenses.

@@ -1,6 +1,6 @@
 # MacLauncher guide
 
-MacLauncher plays games on macOS through native Mac engines and compatibility runtimes. It runs browser games, macOS applications, Android and iOS packages, and Windows and Linux game data with native engines, and Windows executables with Sikarugir (Wine) or CrossOver. The library also manages runtime versions, graphics effects, store downloads, and tools for game files and saves.
+MacLauncher plays games on macOS through native Mac engines and compatibility runtimes. It runs browser games, macOS applications, Android and iOS packages, and Windows and Linux game data with native engines, and Windows executables with Sikarugir (Wine) or CrossOver. Besides playing games, MacLauncher manages runtime versions, graphics effects, store downloads, and tools for game files and saves.
 
 This page is an overview. The [reference index](#reference-index) at the end lists every documentation page.
 
@@ -8,11 +8,11 @@ This page is an overview. The [reference index](#reference-index) at the end lis
 
 ## Add and play
 
-Games enter the library by drag and drop, with **File → Open…** (Cmd-O) or with Finder's **Open With → MacLauncher**. Import accepts a game folder, a main executable or a supported package. The archives, scripts and assets beside the executable belong to the game. [Detection](library/DETECTION.md) assigns the game its [game type](game-types/README.md), and the inspector shows the detected engine and version.
+Games are added to the library by drag and drop, with **File → Open…** (Cmd-O) or with Finder's **Open With → MacLauncher**. Import accepts a game folder, a main executable or a supported package; when an executable is chosen, the archives, scripts and assets beside it are part of the game. [Detection](library/DETECTION.md) then assigns the game its [game type](game-types/README.md), and the inspector shows the detected engine and version.
 
 Selecting a game opens its inspector, and selecting it again returns to the library. **Play** starts the game with the selected runtime. If the required version is not installed, Play asks before downloading it and then continues.
 
-Preparation is automatic, and MacLauncher does not change the original files. Generated configuration, converted scripts, caches and saves go to private launcher storage, and large unchanged assets are linked or read directly. [Game preparation and storage](library/GAME_PREPARATION.md) describes the layout for each game type.
+Preparation is automatic. When the runtime supports a game's layout, Play uses the original game folder directly; for input that an engine cannot use in place, MacLauncher prepares only the adaptation that the engine needs and keeps it apart from the original game. The engine keeps its usual save and configuration locations unless a save-folder override is chosen for the game. [Game preparation and storage](library/GAME_PREPARATION.md) describes the layout for each game type.
 
 Mac apps, launcher scripts and executables without a recognized engine import as [macOS Game](game-types/MACOS.md) entries, and apps with an i386-only executable use the [32-bit Mac](game-types/MACOS.md#32-bit-mac) runtime. Windows executables without a recognized engine import as [Windows Game](game-types/WINDOWS.md) entries.
 
@@ -20,7 +20,7 @@ Mac apps, launcher scripts and executables without a recognized engine import as
 
 A game type is a game format that MacLauncher recognizes, such as Ren'Py, Unity or Android. A runtime is one way to play a game type: an engine, player or host. Each game type has a default runtime and often others. Ren'Py games, for example, can run in the Ren'Py SDK, through Ren'Py Patch or as the game's own Mac app. The [game types](game-types/README.md) page lists every game type with its runtimes, and each game-type page describes its formats, settings, tools and runtimes.
 
-Runtime selection uses the version chosen for the game, then the version that its detected format recommends, then the default. Runtime versions, the game's own version and archive or bytecode generations are recorded separately. Compatible Windows executables of other game types also offer [Sikarugir (Wine)](runtimes/SIKARUGIR.md) and [CrossOver](runtimes/CROSSOVER.md), while known engines keep their usual default. The [runtime system](runtimes/README.md) describes selection, versions and runtime managers.
+To pick a runtime version, MacLauncher uses the version chosen for the game, then the version that its detected format recommends, and then the default. Runtime versions, the game's own version and archive or bytecode generations are recorded separately. Games of other types that include a compatible Windows executable also offer [Sikarugir (Wine)](runtimes/SIKARUGIR.md) and [CrossOver](runtimes/CROSSOVER.md), while known engines keep their usual default. The [runtime system](runtimes/README.md) describes selection, versions and runtime managers.
 
 ## Runtimes and settings
 
@@ -28,9 +28,9 @@ Runtime selection uses the version chosen for the game, then the version that it
 
 **Runtimes** manages runtime and tool downloads, local registrations, versions and removal. Runtimes that need changes to work on macOS come from [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds), a companion repository that provides compiled builds of them with their version history and MacLauncher's patches; the others come from their publishers. Each source has its own version list and refresh control, and every installed version that the Mac can run is available in the game inspector. MacLauncher downloads only when asked, and installed versions work offline; [Downloads and offline use](runtimes/README.md#downloads-and-offline-use) gives the rules.
 
-The app itself includes the core graphics component and internal helpers for importing, extracting and integrating games. Catalogs record each package's CPU architecture and minimum macOS version. [Runtime distribution](runtimes/RUNTIME_DISTRIBUTION.md) describes where each runtime comes from.
+The app itself includes the core graphics component and internal helpers for importing, extracting and integrating games. For every package, the release catalogs that list its versions also record its CPU architecture and minimum macOS version. [Runtime distribution](runtimes/RUNTIME_DISTRIBUTION.md) describes where each runtime comes from.
 
-**Settings** holds the defaults for each game type. **Runtime Settings** in the inspector holds per-game overrides. The [settings reference](runtimes/SETTINGS_REFERENCE.md) lists every runtime, runtime setting and inspector action by game type.
+**Settings** holds the defaults for each game type, and **Runtime Settings** in the inspector holds the overrides for one game. The [settings reference](runtimes/SETTINGS_REFERENCE.md) lists every runtime, runtime setting and inspector action by game type.
 
 **Launch arguments** in the inspector stores extra startup arguments for a game and its saved `.command` launcher. Quotes keep spaces inside one argument, as in `--windowed --name "Example name"`. Shell commands, environment variables and wildcard patterns are not expanded. The arguments stay with the game when its runtime changes, and the adjacent `?` button explains the syntax.
 
@@ -59,9 +59,9 @@ Each game-type page describes the tools and save formats of its game type, and [
 Launcher data is stored in `~/Library/Application Support/maclauncher/` by default:
 
 - `runtimes/` holds the installed runtime and tool versions, shared by all games.
-- `games/<game-id>/` holds each game's library metadata, notes, private runtime files, exports and private saves.
+- `games/<game-id>/` holds each game's library metadata, notes, private runtime files, exports and any private saves.
 
-Ren'Py games can also use their configured `~/Library/RenPy/` save directory, and explicit save-directory overrides are available. Forgetting a game removes the launcher data that belongs to it; original files and external save locations are not touched.
+Other saves stay in the engine's usual locations, such as the `~/Library/RenPy/` save directory that a Ren'Py game configures, and explicit save-directory overrides are available. Forgetting a game removes the launcher data that belongs to it; original files and external save locations are not touched.
 
 The same backend runs without the launcher window:
 
@@ -94,6 +94,7 @@ pnpm launch --game /path/to/game --action <action-id>
 - [Settings reference](runtimes/SETTINGS_REFERENCE.md): every runtime, runtime setting and inspector action by game type.
 - [Web runtimes](runtimes/WEB_RUNTIMES.md): Electron and NW.js, including Greenworks.
 - [Sikarugir (Wine)](runtimes/SIKARUGIR.md) and [CrossOver](runtimes/CROSSOVER.md): the Windows runtimes.
+- [Graphics translators](runtimes/TRANSLATORS.md): the libraries, shared by CrossOver and Sikarugir, that carry a Windows game's Direct3D and Vulkan calls to Metal.
 - [Release catalogs](runtimes/RUNTIME_CATALOGS.md): where version lists come from, and how refresh and caching work.
 - [Runtime distribution](runtimes/RUNTIME_DISTRIBUTION.md): downloaded and included components, the MacLauncher Builds catalog format and app assembly.
 - [Native runtime and tool setup](runtimes/NATIVE_TOOL_SETUP.md): package sources, system components and decompilers.

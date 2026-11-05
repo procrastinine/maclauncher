@@ -19,9 +19,9 @@ Backend callers can choose a different root with `userDataDir`.
 
 ## Original files and private files
 
-Play uses the selected original game directory directly when the runtime supports its layout. For inputs that an engine cannot use in place, MacLauncher prepares only the platform, script or executable adaptation it needs. The engine keeps its usual save and configuration locations, or a save-folder override chosen for the game. Each game keeps its own recorded identity and settings.
+When the runtime supports a game's layout, Play uses the selected original game directory directly. For inputs that an engine cannot use in place, MacLauncher prepares only the platform, script or executable adaptation that the engine needs. In both cases, the engine keeps its usual save and configuration locations, unless a save-folder override has been chosen for the game, and each game keeps its own recorded identity and settings.
 
-The [NW.js Tools patch](../tools/CHEATS.md#nwjs-patching) used by RPG Maker MV and MZ games and the [Ren'Py cheat add-ons](../tools/CHEATS.md#renpy-cheat-add-ons) write their files into the game folder, and **Unpatch** or the add-on's remove button takes them out again. Edits saved in [Near Infinity](../game-types/INFINITY_ENGINE.md#near-infinity) change the game's resources. For a game inside an archive, these tools use its extracted project folder. Engine-generated caches, compiled scripts and saves follow the selected engine's normal behavior.
+A few tools write into the game folder. The [NW.js Tools patch](../tools/CHEATS.md#nwjs-patching) used by RPG Maker MV and MZ games and the [Ren'Py cheat add-ons](../tools/CHEATS.md#renpy-cheat-add-ons) add their files there, and **Unpatch** or the add-on's remove button takes them out again. Edits saved in [Near Infinity](../game-types/INFINITY_ENGINE.md#near-infinity) also change the game's resources. For a game inside an archive, these tools work on its extracted project folder instead. Engine-generated caches, compiled scripts and saves, on the other hand, follow the selected engine's normal behavior.
 
 ZIP payloads, archives appended to executables, ASAR files and similar containers are extracted only when the selected runtime cannot read the packaged content directly. The extracted content stays in the game's private launcher data. Explicit decompilation and Mac application exports create separate output, because their purpose is to produce extracted source or a distributable app.
 
@@ -41,31 +41,33 @@ The game-type and runtime pages describe what each one prepares:
 
 ## Original game paths
 
-Import, metadata, Play and tools use the original source paths. When a game has to be extracted, the extracted folder becomes its writable source folder, and no second writable copy is made from it. Executable or script conversions, generated engine configuration, exports and runtime-specific input adapters are kept apart from the original game.
+Import, metadata, Play and tools all use the game's original source paths. When a game has to be extracted, the extracted folder becomes its writable source folder, and no second writable copy is made from it. Executable or script conversions, generated engine configuration, exports and runtime-specific input adapters are kept apart from the original game.
 
-Installed runtimes and their shared dependencies are managed by MacLauncher and stored once. A runtime helper, or the graphics copy of a restricted native app, never copies or links the whole game tree.
+Installed runtimes and their shared dependencies are managed by MacLauncher and stored once. Neither a runtime helper nor the private graphics copy of a restricted native app copies or links the whole game tree.
 
 ### Earlier private game folders
 
-After an upgrade, the private folders that an earlier MacLauncher version kept for a game are processed at most once. This happens during the first startup after the upgrade, while the launcher window shows **Updating the library from an earlier MacLauncher version…** with the number of games processed so far, and the library appears when processing finishes. Files missing from the original game return to their original relative paths. Existing original files stay unchanged, and private versions that differ are kept beside them as `<filename>.MacLauncher-conflict-<id>`. Recovery creates no separate recovery folder and no new links in the original game folder.
+Earlier MacLauncher versions kept private folders for some games in launcher data. After an upgrade, the first startup processes these folders, at most once, and recovers from them the files that are missing from the original game, returning each to its original relative path. Existing original files stay unchanged, and a private version that differs is kept beside the original as `<filename>.MacLauncher-conflict-<id>`. Recovery creates no separate recovery folder and adds no new links in the original game folder. While it runs, the launcher window shows **Updating the library from an earlier MacLauncher version…** with the number of games processed so far, and the library appears when processing finishes.
 
 If the original location is unavailable or recovery cannot finish safely, the private files stay in place and the reason is recorded. Startup, import, Play and upkeep do not retry them automatically, and games without such a folder are never checked again.
 
-When such a game is removed, the removal confirmation names the folders kept in place and their reasons. **Show in Finder** opens the recorded folder, **Cancel** preserves the game, and **Remove Anyway** deletes its launcher data. The original game files go to the Trash only when the removal is [**Move to Trash**](#removing-games).
+When a game with such kept folders is removed, the removal confirmation names those folders and the reasons they were kept. **Show in Finder** opens the recorded folder, **Cancel** preserves the game, and **Remove Anyway** deletes its launcher data. The original game files go to the Trash only when the removal is [**Move to Trash**](#removing-games).
 
 ## Installer extraction
 
-MacLauncher imports Inno Setup offline installers with the [installer reader](../tools/INSTALLERS.md), built from [innoextract](https://github.com/dscharrer/innoextract). An installer includes its numbered data parts in the same folder. The backend lists the parts it needs, unpacks them once into `games/<gameId>/containers/inno/`, and then detects the extracted game with the ordinary engine registry. If parts are missing, the error names the exact files. Windows installer code never runs.
+MacLauncher imports Inno Setup offline installers with the [installer reader](../tools/INSTALLERS.md), built from [innoextract](https://github.com/dscharrer/innoextract). An installer's numbered data parts sit beside it in the same folder. The backend lists the parts it needs, unpacks them once into `games/<gameId>/containers/inno/`, and then detects the extracted game with the ordinary engine registry. If parts are missing, the error names the exact files. Windows installer code never runs.
 
-A compact progress row shows the extraction and can cancel it, and incomplete output is removed.
+While an extraction runs, a compact progress row shows it and can cancel it, and incomplete output is removed.
 
-A new extraction checks paths, case collisions, output sizes and file types, and accepts only regular files. The completed folder becomes the game's writable source folder, where saves, script edits, patches and added assets can stay. Engine preparation uses this folder directly and makes no second writable copy.
+Each new extraction checks paths, case collisions, output sizes and file types, and it accepts only regular files. Once complete, the folder becomes the game's writable source folder, where saves, script edits, patches and added assets can stay, and engine preparation uses it directly without making a second writable copy.
 
 ### Cache reuse
 
-The extraction record holds the installer's bytes and the reader's extraction format, version and executable checksums. An unchanged installer reuses the completed folder, including on a retry after detection found no matching engine. Installer filesystem metadata changes require checksum verification; extracted game contents are not rescanned or hashed on reuse. The extraction folder must still exist as a directory, with no symbolic link in its path.
+To decide whether an extraction can be reused, MacLauncher keeps an extraction record of the installer's bytes and of the reader's extraction format, version and executable checksums. An unchanged installer reuses the completed folder, including on a retry after detection found no matching engine. When the installer's filesystem metadata has changed, its checksums are verified before reuse; the extracted game contents, however, are not rescanned or hashed. Reuse also requires the extraction folder to still exist as a directory, with no symbolic link in its path.
 
-Extraction records from earlier MacLauncher versions, which hold only file status, are converted once while the installer still matches them. Only the original installer archives are checksummed, and the completed game stays in its folder. The earlier record is kept, and the extracted files it lists stay marked as not hashed. Later reuse reads the current format. A conversion that cannot finish safely is recorded for resolution; it replaces no game files and is not retried automatically. Separate library entries keep separate game data. Read-only inspection can use an existing extraction but never creates one. Existing game files are never overwritten by re-extraction.
+Extraction records from earlier MacLauncher versions hold only file status. Such a record is converted once, while the installer still matches it: only the original installer archives are checksummed, and the completed game stays in its folder. The earlier record is kept, and the extracted files it lists stay marked as not hashed; later reuse reads the current format. A conversion that cannot finish safely is recorded for resolution. It replaces no game files and is not retried automatically.
+
+Separate library entries keep separate game data. Read-only inspection can use an existing extraction but never creates one, and re-extraction never overwrites existing game files.
 
 ## Unavailable game files
 
@@ -86,7 +88,7 @@ When the files are back at the same path, such as after the drive is connected a
 
 ### Locating moved files
 
-Files that moved to another folder or drive are found again with **Locate…** in the inspector's unavailable notice. It opens a folder chooser for a game saved as a folder and a file chooser for a game saved as a single file or app, starting in the nearest existing folder above the saved location. MacLauncher runs the same detection as an import at the chosen location and accepts it only when detection finds the game's own type. The library entry keeps its game ID, so its saves, snapshots, settings, notes, favorites, runtime choices and effects stay with it. Paths recorded inside the old location, such as a save folder override, a chosen executable or a file imported from inside the game folder, move to the same place in the new location. The game's detected details, icon and save locations are then read again from the new location, and the notice disappears once the files are found there.
+When a game's files have moved to another folder or drive, **Locate…** in the inspector's unavailable notice gives the game their new location. It opens a folder chooser for a game saved as a folder and a file chooser for a game saved as a single file or app, starting in the nearest existing folder above the saved location. MacLauncher runs the same detection as an import at the chosen location and accepts it only when detection finds the game's own type. The library entry keeps its game ID, so its saves, snapshots, settings, notes, favorites, runtime choices and effects stay with it. Paths recorded inside the old location, such as a save folder override, a chosen executable or a file imported from inside the game folder, move to the same place in the new location. The game's detected details, icon and save locations are then read again from the new location, and the notice disappears once the files are found there.
 
 A location detected as another game type, a location without a recognized game, and a location that another library entry already uses are refused. The reason appears below the notice, and the entry stays unchanged. **Locate…** is also refused while the game runs or another action for it is in progress.
 

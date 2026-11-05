@@ -1,6 +1,6 @@
 # Android app downloads
 
-External has an Android tab that searches Google Play, F-Droid and IzzyOnDroid. Each selected source runs independently and shows its results as soon as it responds. Google Play also lists the account's purchase history under **Owned library**, separately from the search results. The purchase history requires a connected account. A saved sign-in is shown before it connects, and until an account is connected, **Owned library** is disabled and a note beside it asks for a Google account.
+The **External** window has an Android tab that searches Google Play, F-Droid and IzzyOnDroid. Each selected source runs independently and shows its results as soon as it responds. Google Play also lists the account's purchase history under **Owned library**, separately from the search results. That history requires a connected account, so until one is connected, **Owned library** is disabled and a note beside it asks for a Google account; a saved sign-in is shown before it connects.
 
 **Add to library** acquires an app that Google Play confirms is free for the selected account, without downloading its APKs. The **Owned** tag appears once Google Play confirms the entitlement. Paid apps need an existing license, because MacLauncher never submits payment details or completes paid purchases.
 
@@ -12,13 +12,13 @@ Search accepts an app name, an Android package name or a supported store URL. A 
 
 An app's details in either repository list its published APK versions, with their version codes, CPU architectures and Android SDK requirements, from the repository's version-2 index. Architecture-independent APKs are available for every supported CPU profile. The exact selected APK is downloaded; an incompatible selection is rejected and never replaced with another version.
 
-Search uses each repository's search service. Opening app details fetches the repository index when the local cache needs refreshing, and the index is checked against the size and SHA-256 hash in the repository's entry metadata. A download is checked against the APK's advertised SHA-256 hash, package name and exact version code, and keeps its original signature. These checks rely on HTTPS and the repository's hash metadata. They do not independently verify the repository's signing key or the APK publisher's certificate.
+Search uses each repository's search service. Opening app details fetches the repository index when the local cache needs refreshing, and the index is checked against the size and SHA-256 hash in the repository's entry metadata. A download is checked against the APK's advertised SHA-256 hash, package name and exact version code, and keeps its original signature. These checks rely on HTTPS and the repository's hash metadata, and do not independently verify the repository's signing key or the APK publisher's certificate.
 
 Repository downloads go to `external/downloads/fdroid/` or `external/downloads/izzy/` in the launcher profile. Custom destinations, background progress, cancellation, optional imports and exact-copy duplicate checks work as for the other External downloads. Each APK gets its own version folder containing `base.apk` and its download metadata.
 
 ## Accounts
 
-Browser sign-in is the default in both **External → Android** and **Settings → Android**, and both windows show the same shared account list. Existing microG and Mac.apk Google accounts can be selected without opening an Android sign-in window. Choosing one requests a scoped Google Play session through the account's original AccountManager and verified authenticator. A remembered selection stores a reference to the provider's account; it does not copy the provider's master token or private account database. When the Android account runtime, Java or the microG packages are missing, they are [downloaded like any runtime](../runtimes/README.md#downloads-and-offline-use).
+Google accounts belong to one of two Android account providers, microG or Mac.apk. **External → Android** and **Settings → Android** show the same shared list of these accounts, and browser sign-in is the default in both windows. An existing microG or Mac.apk account can be selected without opening an Android sign-in window, and choosing one requests a scoped Google Play session through the account's original AccountManager and verified authenticator. A remembered selection stores a reference to the provider's account; it does not copy the provider's master token or private account database. When the Android account runtime, Java or the microG packages are missing, they are [downloaded like any runtime](../runtimes/README.md#downloads-and-offline-use).
 
 ### Browser sign-in
 
@@ -34,7 +34,7 @@ Catalog requests and APK transfers use a native desktop client. Registering or r
 
 ## Versions and device profiles
 
-The current version is requested for a selected device profile: ARM64, ARMv7, x86-64 or x86. The Android SDK level is selected separately, from 21 to 36, and defaults to 34 for every architecture. Different profiles can receive different version codes or package splits. A profile's availability is checked when it is selected, and native ABI information comes from the split metadata when Google Play supplies it.
+Each request for the current version names a device profile: ARM64, ARMv7, x86-64 or x86. The Android SDK level is selected separately, from 21 to 36, and defaults to 34 for every architecture. Different profiles can receive different version codes or package splits. A profile's availability is checked when it is selected, and native ABI information comes from the split metadata when Google Play supplies it.
 
 A known earlier version code can be entered under **Known version code**, and that control stays available when the current version is unavailable for a profile. Google Play does not expose a complete version history through this interface, and delivery remains subject to the account, the region and device compatibility. A requested version code is kept and checked against the manifest of each delivered APK, and an unavailable edition is never silently replaced with the latest version.
 
@@ -71,7 +71,7 @@ The completed folder contains `base.apk`, the split APKs next to it and any `And
 - `addToLibrary` accepts a package name and the same profile options.
 - `download` accepts an exact `versionCode`, the architecture, `androidSdk`, language, destination, `includeExtras` and `autoImport`.
 
-Construction reads saved local metadata without connecting to Google Play. Network requests follow explicit account, search, refresh or download actions.
+Constructing the service reads saved local metadata without connecting to Google Play. Network requests follow explicit account, search, refresh or download actions.
 
 `createAndroidStoreDownloads(options)` combines the Google Play service with both repositories. Its search state records the request ID, the query, the results and each source's completion or error status. A new request cancels the previous search, and one source's failure does not discard another source's results. Repository rows use IDs qualified by their source for selection, while completed download metadata keeps the original Android package name.
 
@@ -79,6 +79,6 @@ Construction reads saved local metadata without connecting to Google Play. Netwo
 
 Repository metadata follows the [F-Droid API reference](https://f-droid.org/en/docs/All_our_APIs/) and the [IzzyOnDroid API reference](https://izzyondroid.org/about/resources/apis/).
 
-Protocol fields are documented by [Aurora GPlayAPI 3.6.4](https://gitlab.com/AuroraOSS/gplayapi/-/tree/18ec2bd74995d30e500b756359a4de3e37976f03) and the [gplaydl 4.2.1 package](https://pypi.org/project/gplaydl/4.2.1/). These are protocol references, not included dependencies. APK manifests use Android's [version code](https://developer.android.com/studio/publish/versioning) and [split package](https://developer.android.com/guide/app-bundle) names.
+Protocol fields are documented by [Aurora GPlayAPI 3.6.4](https://gitlab.com/AuroraOSS/gplayapi/-/tree/18ec2bd74995d30e500b756359a4de3e37976f03) and the [gplaydl 4.2.1 package](https://pypi.org/project/gplaydl/4.2.1/). Both serve only as protocol references, and neither is included. APK manifests use Android's [version code](https://developer.android.com/studio/publish/versioning) and [split package](https://developer.android.com/guide/app-bundle) names.
 
-The included account-control JAR is MacLauncher's own adaptation of the maclauncher-android account control, at a recorded commit, and keeps its MIT license. Its [MacLauncher Builds recipe](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/android-launcher/build.mjs) compiles it on GitHub against a pinned Android API, and ordinary account actions use the included build. microG's authenticated session format follows its [LoginActivity](https://github.com/microg/GmsCore/blob/v0.3.17.252432/play-services-core/src/main/java/org/microg/gms/auth/login/LoginActivity.java) and [AuthManager](https://github.com/microg/GmsCore/blob/v0.3.17.252432/play-services-core/src/main/java/org/microg/gms/auth/AuthManager.java) account APIs.
+The included account-control JAR is MacLauncher's own adaptation of the maclauncher-android account control, at a recorded commit, and keeps its MIT license. Its [MacLauncher Builds recipe](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/android-launcher/build.mjs) compiles it on GitHub against a fixed Android API version, and ordinary account actions use this included build. microG's authenticated session format follows its [LoginActivity](https://github.com/microg/GmsCore/blob/v0.3.17.252432/play-services-core/src/main/java/org/microg/gms/auth/login/LoginActivity.java) and [AuthManager](https://github.com/microg/GmsCore/blob/v0.3.17.252432/play-services-core/src/main/java/org/microg/gms/auth/AuthManager.java) account APIs.

@@ -1,89 +1,136 @@
 # Sikarugir (Wine)
 
-Sikarugir runs compatible Windows games with downloaded [Sikarugir Wine engines](https://github.com/Sikarugir-App/Engines) and their matching support libraries. It is the default runtime for [Windows games](../game-types/WINDOWS.md) and is also offered for [other game types](../game-types/WINDOWS.md#windows-executables-in-other-game-types) whose files include a compatible x86 or x64 Windows executable, such as Ren'Py, RPG Maker, Unity and Godot releases for Windows. In game runtime selectors it appears as **Sikarugir (Wine)**. Setup uses the publisher's engine archives directly, without Creator, a wrapper application, Homebrew or a compiler. [CrossOver](CROSSOVER.md) is a separate choice for locally installed CrossOver applications.
+[Sikarugir](https://github.com/Sikarugir-App/Sikarugir) is a free distribution of Wine for macOS. Its publisher releases [Wine engines](https://github.com/Sikarugir-App/Engines) together with Templates, packages of the support libraries that each engine needs. MacLauncher downloads these engines and runs compatible Windows games with them. Sikarugir is the default runtime for [Windows games](../game-types/WINDOWS.md), and it is also offered for [other game types](../game-types/WINDOWS.md#windows-executables-in-other-game-types) whose files include a compatible x86 or x64 Windows executable, such as Windows releases of Ren'Py, RPG Maker, Unity and Godot games. Game runtime selectors list it as **Sikarugir (Wine)**. For locally installed CrossOver applications, [CrossOver](CROSSOVER.md) is a separate choice.
+
+Running Windows games through Wine is a major MacLauncher feature, and Sikarugir is the runtime that MacLauncher can always download. Setup uses the publisher's engine archives directly, without Creator, a wrapper application, Homebrew or a compiler. On top of the engine, MacLauncher adds the following:
+
+- Play prepares a private Wine prefix for each game from its original files, so no wrapper application has to be built first. A Sikarugir wrapper that already exists can be used instead, and MacLauncher never deletes, recreates, moves or replaces it.
+- Every installed engine stays selectable, and each game can use a different one.
+- Each game can choose a default Direct3D engine, a translator for each Direct3D version, a Vulkan driver and video codecs from the Template's components and from [translator versions installed in Runtimes](TRANSLATORS.md), without changing the installed engine or Template. A version is installed once and shared by every game that selects it.
+- MacLauncher's [graphics effects](../graphics/SHARED_PROCESSING.md) run on Sikarugir games, and a game's own DLSS and XeSS support can feed MetalFX and the shared temporal upscalers.
+- Display, input, compatibility and diagnostics controls, a DirectDraw compatibility wrapper and per-program Windows versions are set per game.
 
 ## Requirements
 
-A Wine version installed during Play comes with its matching support libraries, and Play prepares a private Windows environment for the game. Installation reads the minimum macOS version from the engine and support libraries; current engines require macOS 14 or later. Their native Wine binaries are Intel code that needs Rosetta on Apple Silicon; Play checks for it and offers to install it, as described in [Rosetta](ROSETTA.md).
+A Wine version installed during Play comes with its matching support libraries, and Play then prepares a private Windows environment for the game. Installation reads the minimum macOS version from the engine and its support libraries; current engines require macOS 14 or later. Their native Wine binaries are Intel code, which needs Rosetta on Apple Silicon. Play checks for Rosetta and offers to install it, as [Rosetta](ROSETTA.md) describes.
 
-The selected Wine version and graphics backend supply the Windows APIs. Windows libraries that a game requires remain part of that game's own environment.
+The selected Wine version and graphics backend supply the Windows APIs. Windows libraries that a game itself requires remain part of that game's own environment.
 
 ## Versions
 
-**Runtimes → Sikarugir** lists downloadable and installed versions and selects the global preferred version, which the inspector's **Version** selector can override for one game. [Release catalogs](RUNTIME_CATALOGS.md#sikarugir) describes how Refresh reads the publisher's versions.
+**Runtimes → Sikarugir** lists the downloadable and installed versions and selects the global preferred version, and the inspector's **Version** selector can override it for one game. [Release catalogs](RUNTIME_CATALOGS.md#sikarugir) describes how Refresh reads the publisher's versions.
 
-Each version pairs a Wine engine with a Template, the publisher's package of support libraries. Engine and Template versions are recorded separately, with the exact downloaded files and their checksums. The publisher's rolling release tag is not the Wine version. Each installed engine stays selectable on its own. Installation finds the Wine bundle by its `bin/wine` and `bin/wineserver` files and the Template application by its `Contents/Frameworks` folder, so an archive that places them inside another folder installs in the same layout.
+Each version pairs a Wine engine with a Template. Engine and Template versions are recorded separately, together with the exact downloaded files and their checksums. The publisher's rolling release tag is therefore not the Wine version, and each installed engine stays selectable on its own. During installation, MacLauncher finds the Wine bundle by its `bin/wine` and `bin/wineserver` files and the Template application by its `Contents/Frameworks` folder, so an archive that places them inside another folder still installs in the same layout.
 
-Templates keep their renderer packages in `Contents/SharedSupport/renderer` from version 1.0.24 on and in `Contents/Frameworks/renderer` before that. Installation looks in the folder that matches the Template version first and then in the other one; if neither exists, it searches the Template's contents and records where the renderers are. MacLauncher installs the renderers in the same layout whichever folder they came from, and records each component's native-library requirements for the graphics capability checks.
+Templates keep their renderer packages in `Contents/SharedSupport/renderer` from version 1.0.24 on, and in `Contents/Frameworks/renderer` before that. Installation looks first in the folder that matches the Template version and then in the other one. If neither exists, it searches the Template's contents and records where the renderers are. Whichever folder they came from, MacLauncher installs the renderers in the same layout and records each component's native-library requirements for the graphics capability checks.
 
-Refresh lists every compatible engine that the publisher offers, each paired with the newest compatible Template. Automatic selection uses the newest listed engine, which also takes the place of a saved choice that is neither listed nor installed. An engine or Template counts as a separate version when its checksum differs or, if the publisher states no checksum, when its listed size or asset differs. A newer Template or a replaced archive therefore adds versions, and installed ones stay selectable. [Runtime release catalogs](RUNTIME_CATALOGS.md#sikarugir) describes how archives are recognized and checked. **Install** can replace an incomplete installation of the same version, and Play offers the same repair through its download prompt. The replacement is assembled in a separate folder before it takes the place of the installed runtime, and each game's private files and Windows environment are kept.
+Refresh lists every compatible engine that the publisher offers, each paired with the newest compatible Template. Automatic selection uses the newest listed engine, which also replaces a saved choice that is neither listed nor installed. An engine or Template counts as a separate version when its checksum differs, or, if the publisher states no checksum, when its listed size or asset differs. A newer Template or a replaced archive therefore adds versions, while installed ones stay selectable. [Runtime release catalogs](RUNTIME_CATALOGS.md#sikarugir) describes how archives are recognized and checked.
+
+**Install** can replace an incomplete installation of the same version, and Play offers the same repair through its download prompt. The replacement is assembled in a separate folder before it takes the place of the installed runtime, and each game's private files and Windows environment are kept.
 
 ## Private game files and prefixes
 
-Ordinary Play uses the original Windows executable, game assets and executable folder as its working directory. It makes no copy of the game or folder of links to it, and it does not read, update or remove the private game folders of earlier MacLauncher versions. Portable saves and configuration remain at their original paths.
+Ordinary Play uses the original Windows executable and game assets, with the executable's folder as the working directory. It makes no copy of the game and no folder of links to it, and it does not read, update or remove the private game folders of earlier MacLauncher versions. Portable saves and configuration remain at their original paths.
 
-Files in the private `game/` folders of earlier MacLauncher releases are recovered once into the original game folders, as [Earlier private game folders](../library/GAME_PREPARATION.md#earlier-private-game-folders) describes. Missing files are restored, and a version that differs from the original is kept beside it as a conflict copy. Earlier `temporal-camera` and `temporal-original` folders with proxy or asset-link records are kept for separate recovery. This recovery does not run during Play, import or upkeep, and it removes no Wine prefixes or bottles.
+Those earlier private `game/` folders are recovered once into the original game folders instead, as [Earlier private game folders](../library/GAME_PREPARATION.md#earlier-private-game-folders) describes. Missing files are restored, and a version that differs from the original is kept beside it as a conflict copy. Earlier `temporal-camera` and `temporal-original` folders with proxy or asset-link records are kept for a separate recovery. The recovery does not run during Play, import or upkeep, and it removes no Wine prefixes or bottles.
 
-The Windows environment is a Wine prefix. Each game has private prefixes under `prefixes/`; the original Windows 10, 11, 7 and XP selections retain their separate prefixes. Additional reported Windows versions use per-program registry settings in the Windows 10 prefix, independent of the selected engine version, installation path or package checksum. Runtime updates and reinstalls keep that prefix and its saves. Graphics loader views remain keyed to the runtime and renderer components separately. Wine accepts the original Unix executable path directly. A long path uses one short Windows drive mapping to the original game folder, preserving Windows path-length compatibility without copying game data. Existing mappings are kept; a conflicting older mapping uses another free drive letter. Windows profile directories, the home folder and temporary files are stored inside the prefix.
+A game's Windows environment is a Wine prefix. Each game has private prefixes under `prefixes/`, and the Windows 10, 11, 7 and XP selections each keep their own prefix. Other Windows versions are reported through per-program registry settings in the Windows 10 prefix, so they need no further prefix. A prefix does not depend on the selected engine version, installation path or package checksum, and runtime updates and reinstalls therefore keep it and its saves. Graphics loader views, in contrast, are keyed separately to the runtime and renderer components.
 
-After an upgrade, the earlier prefix that the game last used, as recorded, is adopted once at the game's stable Windows-version path. Without that record, the prefix with the newest registry or marker timestamp is adopted; when usage is unknown or tied, the prefixes stay where they are for manual resolution. A prefix already at the stable path takes precedence. Other earlier prefixes stay separate, with their locations recorded, and their files are not merged. A prefix whose internal Wine drive mappings use absolute paths that would break after the move is not adopted automatically.
+Wine accepts the original Unix path of the executable directly. When that path is long, MacLauncher maps one short Windows drive letter to the original game folder, which keeps Windows path lengths compatible without copying game data. Existing mappings are kept, and an older mapping that conflicts uses another free drive letter. Windows profile folders, the home folder and temporary files are stored inside the prefix.
 
-The shared installed engines stay unchanged. Private runtime views select the renderer libraries for each game: they copy the engine's small Wine loader files and share the installed libraries. Missing renderer DLLs are linked into the prefix after preparation. Renderer changes retain existing prefix files and game-supplied libraries.
+After an upgrade from an earlier MacLauncher version, the game's earlier prefix is adopted once at its stable Windows-version path. MacLauncher adopts the prefix that the game last used, according to its records. Without such a record, it adopts the prefix with the newest registry or marker timestamp; when usage is unknown or tied, the prefixes stay where they are for manual resolution. A prefix that is already at the stable path takes precedence. Other earlier prefixes stay separate, with their locations recorded, and their files are not merged. A prefix is also not adopted automatically when its internal Wine drive mappings use absolute paths that would break after the move.
 
-Stop first asks Windows programs in a private prefix to close, then ends remaining Wine processes. Removing a game from the library removes the Windows environments that MacLauncher created for it and leaves the original game files alone.
+The shared installed engines are never changed. Instead, private runtime views select the renderer libraries for each game: they copy the engine's small Wine loader files and share the installed libraries. After preparation, missing renderer DLLs are linked into the prefix, and renderer changes keep the existing prefix files and the libraries that the game supplies.
+
+Stop first asks the Windows programs in a private prefix to close and then ends any remaining Wine processes. Removing a game from the library removes the Windows environments that MacLauncher created for it and leaves the original game files alone.
 
 ### Saves
 
-Save tools use the original game folder as the primary location and list the selected prefix's Windows profile as an alternate. There is no universal Windows save editor or cheat integration. Recognized engines retain optional source and asset tools; engine-specific save codecs remain disabled while Sikarugir is selected.
+Save tools use the original game folder as the primary location and list the selected prefix's Windows profile as an alternate. There is no universal Windows save editor or cheat integration. Recognized engines keep their optional source and asset tools, but engine-specific save codecs are disabled while Sikarugir is selected.
 
 ## Existing wrappers
 
-Each game's Runtime Settings offers **Environment**: **Private (MacLauncher)**, Sikarugir wrappers discovered under `~/Applications/Sikarugir`, or **Choose…** for another wrapper. Listing and current values are read offline from the wrapper's Info.plist and registry files.
+A game can also run in a Sikarugir wrapper that already exists. Each game's Runtime Settings has an **Environment** choice for this: **Private (MacLauncher)**, the wrappers found under `~/Applications/Sikarugir`, or **Choose…** for another wrapper. The list and each wrapper's current values are read offline from the wrapper's Info.plist and registry files.
 
-A selection stores a reference and leaves the wrapper in place. MacLauncher composes the launch with that wrapper's own Wine engine, prefix and support files. The wrapper's launcher, custom shell commands and startup/shutdown scripts are not executed. Explicit setting or translator overrides may change the prefix. Inherited translator settings leave its DLL files unchanged. Its profile mappings, HOME and temporary-directory behavior stay as supplied. Logs stay in MacLauncher's data.
+Selecting a wrapper stores a reference and leaves the wrapper in place. MacLauncher builds the launch from the wrapper's own Wine engine, prefix and support files, but it does not run the wrapper's launcher, custom shell commands or startup and shutdown scripts. Explicit settings or translator overrides can change the prefix, whereas inherited translator settings leave its DLL files unchanged. The wrapper's profile mappings, HOME and temporary-folder behavior stay as supplied, and logs stay in MacLauncher's data.
 
-An incomplete or missing wrapper reports an error and is not recreated. Removing a game leaves the wrapper intact; removal is refused if its directory contains the external environment. **Open Windows files** opens the selected prefix, and its Windows profiles are alternate save locations.
+A missing or incomplete wrapper reports an error and is not recreated. Removing the game leaves the wrapper intact, and a removal whose directory contains the wrapper is refused. **Open Windows files** opens the selected prefix, whose Windows profiles are listed as alternate save locations.
 
-Stop defaults to the game's processes. **Close All Applications** requires confirmation before asking other Windows programs in the prefix to close and forcing remaining programs to quit. Ordinary exit leaves other programs running. A running wineserver is identified in the selector; MSync and High Resolution changes require it to stop.
+Stop ends only the game's processes by default. **Close All Applications** asks for confirmation before it asks the other Windows programs in the prefix to close and forces the remaining ones to quit. When the game exits normally, other programs keep running. If the prefix's wineserver is running, the selector shows this, and MSync and High Resolution changes then have to wait until it stops.
 
 ## Runtime settings
 
-Settings holds the defaults, and each game's Runtime Settings can override them. Settings and graphics choices that need Apple Silicon or a newer macOS than the Mac has are not listed.
+Settings holds the defaults, and each game's Runtime Settings can override them. Settings that need Apple Silicon or a newer macOS than the Mac has are not listed.
 
 | Setting | Behavior |
 | --- | --- |
-| Environment | Per-game private prefix or an existing Sikarugir wrapper reference. |
-| Default Direct3D engine | Automatic, engines supplied by the selected runtime or a managed translator version. Unset API choices retain this policy. |
-| Direct3D 8, 9, 10 / 10.1 and 11 | Installed choices for each API, with shared DLL/helper scopes linked and selected-versus-used reporting. |
-| Direct3D 12 | Wine vkd3d, D3DMetal or a managed Direct3D 12 translator. KosmicKrisp is recommended for vkd3d-proton. |
-| Vulkan driver | Automatic, a driver supplied by the runtime, or a specific managed MoltenVK or KosmicKrisp version. |
+| Environment | A private prefix for the game, or a reference to an existing Sikarugir wrapper. Set per game only. |
+| Default Direct3D engine | The renderer choice for every Direct3D API without a choice of its own: the Template's automatic choice, the engines that the selected runtime supplies, or a specific translator version installed in Runtimes. Each choice names its engine, version and source. |
+| Direct3D 8, 9, 10 / 10.1 and 11 | A choice for each API among the installed implementations. Choices that share DLLs or helpers are linked, and the inspector reports the selected and the used component. |
+| Direct3D 12 | Wine vkd3d, D3DMetal, or a vkd3d-proton or D3DMetal version installed in Runtimes. KosmicKrisp is recommended for vkd3d-proton. |
+| Vulkan driver | The Template's automatic choice, a driver that the runtime supplies, or a specific MoltenVK or KosmicKrisp version installed in Runtimes. |
 | Video codecs | The runtime defaults or a registered GStreamer codec folder. |
 | Game temporal integration | Exposes MetalFX Temporal through a compatible 64-bit game's DLSS integration. Listed for Unity and Windows games. See [Game temporal integration](#game-temporal-integration). |
 | DirectDraw compatibility | The optional CNC-DDraw wrapper for 32-bit games with a software DirectDraw renderer. Off by default and independent of the Direct3D settings. |
 | Synchronization | Automatic, MSync or Off. MSync requires support in the selected engine. |
 | Language locale | An optional locale, such as `ja_JP.UTF-8` or `en_US.UTF-8`. |
-| Windows version | Windows 10, 11, 7 or XP compatibility. |
+| Windows version | The Windows version that Wine reports. See [Windows versions](#windows-versions). |
 | Windows executable | An optional relative path inside the game folder. |
 | Wine DLL overrides | One `library=order` entry per line, such as `winhttp=n,b`. |
 | Environment variables | One `NAME=value` entry per line. MacLauncher sets the runtime and private Windows paths itself. |
 | Game arguments | One argument per line. |
 | Wine debug channels | Optional Wine channel filters, such as `-all` or `+seh`. |
 
-The optional **Enable BepInEx winhttp override**, listed for Unity and Windows games, loads a `winhttp.dll` that the game already supplies before Wine's built-in library. It does not install BepInEx, mods or DLLs, and explicit DLL overrides take precedence. The [BepInEx Wine guide](https://docs.bepinex.dev/articles/advanced/proton_wine.html) describes this setting.
+The optional **Enable BepInEx winhttp override**, which is listed for Unity and Windows games, loads a `winhttp.dll` that the game already supplies before Wine's built-in library. It installs no BepInEx, mods or DLLs, and explicit DLL overrides take precedence. The [BepInEx Wine guide](https://docs.bepinex.dev/articles/advanced/proton_wine.html) describes this setting. [Graphics translators](TRANSLATORS.md#selection) describes the translator controls.
+
+### Display, input, compatibility and diagnostics
+
+Runtime Settings keeps the basic launch choices above separate from four advanced groups. **Display** holds High Resolution (Retina), DPI, fullscreen capture, vertical sync and virtual desktops, and **Input** maps Option to Alt and Command to Ctrl and configures mouse capture. **Compatibility** holds Rosetta AVX advertisement together with options for particular engines: DXVK async, DXMT frame-rate presets and MetalFX spatial, D3DMetal frame limits and Metal 4, MoltenVK fast math, argument buffers and UE4 compatibility, and WineD3D configuration. Each engine's options appear only when that engine is selected. **Diagnostics**, finally, offers the Metal and DXVK HUDs, the Wine crash dialog and Wine debug channels.
+
+Explicit environment entries override these controls. Registry settings apply to the selected Windows environment on its next launch, and High Resolution and synchronization changes can require restarting the environment's Windows programs.
+
+| Control | Values and effect |
+| --- | --- |
+| High Resolution (Retina) | Runtime default, On or Off; On selects 192 DPI unless DPI is set explicitly. |
+| DPI | A positive REG_DWORD integer; empty keeps the current value. |
+| Option as Alt, Command as Ctrl | Map both the left and right modifier keys. |
+| Mouse capture | Configures cursor confinement and DirectInput mouse warping. |
+| Fullscreen display capture, Vertical sync | Runtime default, On or Off. |
+| Virtual desktop | Positive WIDTHxHEIGHT dimensions, such as 1920x1080; off turns the desktop off; empty uses the runtime default. |
+| DXVK async | Runtime default, On or Off; takes effect in DXVK builds that implement async. |
+| DXMT configuration | Runtime default or a 30, 60 or 120 FPS preset. |
+| MetalFX spatial | Runtime default, On or Off for DXMT. |
+| D3DMetal FPS limit | Runtime default, 30, 60, 120, 144 or 240 FPS. |
+| D3DMetal Metal 4 | Runtime default, On or Off; takes effect in builds that implement Metal 4. |
+| MoltenVK fast math, argument buffers, UE4 compatibility | Runtime default, On or Off; each changes the corresponding MoltenVK option. |
+| WineD3D options | Comma-separated configuration, such as csmt=0x1,renderer=gl. |
+| Metal Performance HUD | Runtime default, On or Off. |
+| DXVK HUD | Runtime default, Off, FPS, Performance or Full. |
+| Wine crash dialog | Runtime default, On or Off. |
+
+### Windows versions
+
+Windows 10, 11, 7 and XP each use their own prefix. The other versions, Windows 8.1, 8, Vista, XP 64-bit, 2000, ME, 98 and 95 and Windows Server 2008 R2, 2008 and 2003, change the per-program Windows version within the Windows 10 prefix instead. When an existing wrapper is selected, every Windows version applies inside that wrapper's prefix, and no private prefix is created.
+
+### Settings of an existing wrapper
+
+For a game in an existing wrapper, each setting defaults to **Wrapper setting**, followed by its current value as read offline. **Custom setting** turns on an override for that control. Overrides stored in the registry are written into the selected wrapper's prefix, and its original files and Windows environment remain in place.
 
 ## Translators
 
-[Translator management](TRANSLATORS.md) groups DirectX → Vulkan, DirectX → Metal, Vulkan drivers and video codecs separately. Runtime settings organize Direct3D 8 through 12. Versions, API scope and sources come from installed files. Shared DXGI/native closures use one coherent physical binding set in the private graphics view. Existing environments also offer their current Bottle setting or Wrapper setting. A runtime version is installed once; private graphics views and prefix DLLs link to that installation. Prepared loader trees are shared between games using the same inputs.
+[Graphics translators](TRANSLATORS.md) describes how the translator choices are installed, loaded and checked. Runtimes groups the translators as DirectX → Vulkan, DirectX → Metal, Vulkan drivers and video codecs, and Runtime Settings arranges the Direct3D choices from Direct3D 8 to 12. Their versions, API scope and sources come from installed files. Direct3D APIs that share DXGI or native modules use one coherent set of physical bindings in the private graphics view. For a game in an existing wrapper, each control also offers the wrapper's current setting. A runtime version is installed once, and private graphics views and prefix DLLs link to that installation. Prepared loader trees are shared between games that use the same inputs.
+
+DXMT, DXVK, DXVK3, D9VK and D3DMetal can be installed from Template component catalogs without installing another Wine engine. Registered folders stay at their original locations.
 
 ## Graphics
 
-Per-game ReShade effects use the shared [graphics pipeline](../graphics/SHARED_PROCESSING.md) with the selected Wine version, graphics backend and Windows environment. Effects switch while the game runs, and the shared Wine installation stays unchanged.
+Per-game ReShade effects use the shared [graphics pipeline](../graphics/SHARED_PROCESSING.md) with the selected Wine version, graphics backend and Windows environment. Effects can be switched while the game runs, and the shared Wine installation stays unchanged.
 
-With **Automatic** graphics, Direct3D 10 and 11 use DXMT. On a confirmed physical Apple M-series GPU with macOS 26 or later, Automatic enables KosmicKrisp, and Direct3D 8 and 9 use D9VK. Virtual or unrecognized GPUs, and older systems, use WineD3D for Direct3D 8 and 9 and MoltenVK for Vulkan.
+The Template's automatic choice depends on the Mac. Direct3D 10 and 11 use DXMT. On a confirmed physical Apple M-series GPU with macOS 26 or later, the automatic choice also enables KosmicKrisp, and Direct3D 8 and 9 then use D9VK. Virtual or unrecognized GPUs and older systems use WineD3D for Direct3D 8 and 9 and MoltenVK for Vulkan.
 
-The Vulkan driver is chosen separately from the Direct3D renderer and also applies to games that use Vulkan directly. Automatic prefers KosmicKrisp when its macOS, architecture and physical GPU checks pass, and uses MoltenVK otherwise. A selected translator that cannot load falls back to the same engine supplied by the runtime, or to its automatic choice. The warning and inspector name both versions and the reason.
+The Vulkan driver is chosen separately from the Direct3D renderer, and it also applies to games that use Vulkan directly. Its automatic choice prefers KosmicKrisp when the macOS, architecture and physical GPU checks pass, and uses MoltenVK otherwise. A selected translator that cannot load falls back to the same engine supplied by the runtime, or to the runtime's automatic choice, and the warning and inspector name both versions and the reason.
 
-Installation identifies the renderers supplied by the selected Template and records their component version labels and minimum macOS versions. Platform API requirements and the installed native dependencies determine each renderer's minimum independently of the Wine engine.
+During installation, MacLauncher identifies the renderers that the selected Template supplies and records their component version labels and minimum macOS versions. Each renderer's minimum follows from its platform API requirements and installed native dependencies, independently of the Wine engine.
 
 | Component | Supplied by | Requirements and role |
 | --- | --- | --- |
@@ -97,55 +144,32 @@ Installation identifies the renderers supplied by the selected Template and reco
 
 ### Game temporal integration
 
-**Game temporal integration** exposes MetalFX Temporal through a compatible 64-bit game's DLSS integration. It requires Apple Silicon and the selected package's NVAPI and NGX libraries. The DXMT path requires macOS 14 or later; the D3DMetal temporal path requires macOS 26 or later. Native dependencies can raise either minimum. The game's own DLSS setting activates the integration, and selecting a shared Temporal upscaling method also turns it on at launch.
+Temporal upscalers need the game's depth and motion data, which a Windows game passes to the upscaler it calls itself. **Game temporal integration** makes use of this: it exposes MetalFX Temporal through a compatible 64-bit game's DLSS integration. It requires Apple Silicon and the selected package's NVAPI and NGX libraries. The DXMT path requires macOS 14 or later and the D3DMetal path macOS 26 or later, and native dependencies can raise either minimum. The game's own DLSS setting activates the integration, and selecting a shared Temporal upscaling method also turns it on at launch.
 
-The option is off by default. It uses the selected renderer's existing MetalFX integration without modifying the game's DLLs. DXMT's vendor libraries are selected when this option or a shared temporal upscaler is enabled. A shared temporal selection can replace the exposed MetalFX operation with another available Metal implementation. The option does not enable DLSS frame generation or ray reconstruction, and the common ReShade effects remain available whether or not the game supports DLSS.
+The option is off by default. It uses the selected renderer's existing MetalFX integration without modifying the game's DLLs, and DXMT's vendor libraries are selected when this option or a shared temporal upscaler is enabled. A shared temporal selection can replace the exposed MetalFX operation with another available Metal implementation. The option does not enable DLSS frame generation or ray reconstruction, and the common ReShade effects stay available whether or not the game supports DLSS.
 
-Enabled temporal rows in the Advanced graphics settings prepare the same game integration and dependencies as the Simple temporal settings. Disabled rows add no temporal requirements.
+Enabled temporal rows in the Advanced graphics settings prepare the same game integration and dependencies as the Simple temporal settings, while disabled rows add no temporal requirements.
 
-D3DMetal also needs a Wine engine with the path conversion functions used to expose the NGX libraries to games, and Wine 10 lacks them. MacLauncher checks the selected engine before launch; DXMT remains available for DLSS with compatible Wine 10 packages. This requirement does not affect ordinary D3DMetal rendering.
+D3DMetal also needs a Wine engine with the path conversion functions that expose the NGX libraries to games, and Wine 10 lacks them. MacLauncher checks the selected engine before launch, and DXMT remains available for DLSS with compatible Wine 10 packages. This requirement does not affect ordinary D3DMetal rendering.
 
 ### FSR2/3 camera support
 
-FSR2/3 camera support also requires a compatible Streamline interposer and a camera adapter matching the selected DXMT native library and Windows thunk. The camera adapter is included with MacLauncher. Preparation adds the matched libraries and Streamline adapter only to the optional camera launch folder. The original interposer stays next to its proxy for normal plugin lookup, with its complete export interface. Camera constants are matched to the exact frame, viewport and queued depth and motion textures, and unsupported projections keep the game's original scaler. Turning on game temporal integration before launch also prepares camera support for live changes of the temporal method.
+MacLauncher's FSR 2 and FSR 3 upscalers need the game's camera data as well. A game that calls DLSS through NVIDIA Streamline already passes that data to Streamline, and MacLauncher's Streamline adapter can hand it on. This FSR2/3 camera support requires a compatible Streamline interposer and a camera adapter that matches the selected DXMT native library and Windows thunk. The camera adapter is included with MacLauncher. Preparation adds the matched libraries and the Streamline adapter only to the optional camera launch folder, where the original interposer stays next to its proxy for normal plugin lookup, with its complete export interface. Camera constants are matched to the exact frame, viewport and queued depth and motion textures, and projections that the adapter does not support keep the game's original scaler. Turning on game temporal integration before launch also prepares camera support for live changes of the temporal method.
 
-**Runtimes → Graphics → DirectX → Metal** manages DXMT versions independently of the Wine engine. The Direct3D engine choice also selects the DXMT version used by the camera adapter. If that version does not match the adapter, the inspector states that camera support is unavailable; the selected DXMT continues to render.
+**Runtimes → Graphics → DirectX → Metal** installs DXMT versions independently of the Wine engine. The Direct3D engine choice also selects the DXMT version that the camera adapter uses, and if that version does not match the adapter, the inspector states that camera support is unavailable while the selected DXMT continues to render.
 
-A camera adapter, or the automatic in-game XeSS compatibility adapter, that needs a DLL beside the app uses a separate launch folder containing copies of only the executable and selected DLLs; other assets reference the originals. The working directory remains the original executable folder. Files that the game creates, or replaces atomically, relative to the executable can stay in that adapter folder, which is kept. When an adapter folder is no longer used, original resources are never deleted, renamed or replaced, and earlier adapter folders stay intact. Ordinary Play bypasses these folders. If adapter preparation fails, the original executable runs with the selected backend and other available effects.
+The same DXMT conditions apply to an automatic in-game XeSS compatibility adapter. When a game includes Intel's XeSS Direct3D 11 library, MacLauncher's XeSS adapter takes its place in the launch folder so that the game's XeSS requests can run through MetalFX. [Inputs and adapters](../graphics/INPUTS_AND_ADAPTERS.md) describes the data that both routes supply.
+
+### Launch folders for adapters
+
+A camera adapter or the XeSS adapter needs a DLL beside the application, so it runs the game from a separate launch folder that contains copies of only the executable and the selected DLLs. Other assets are referenced from the originals, and the working directory remains the original executable folder. Files that the game creates, or replaces atomically, relative to the executable can stay in that launch folder, which is kept. When a launch folder is no longer used, original resources are never deleted, renamed or replaced, and earlier launch folders stay intact. Ordinary Play bypasses these folders. If an adapter cannot be prepared, the original executable runs with the selected backend and the other available effects.
 
 ## Licenses
 
-Wine is licensed under LGPL-2.1-or-later. The matching renderer and support-library notices stay with each installation, and the Template contains components under several different licenses. [Attributions](../ATTRIBUTIONS.md) and [upstream sources](UPSTREAMS.md#sikarugir) list their sources and download records.
+Wine is licensed under LGPL-2.1-or-later. The matching renderer and support-library notices stay with each installation, and a Template contains components under several different licenses. [Attributions](../ATTRIBUTIONS.md) and [upstream sources](UPSTREAMS.md#sikarugir) list their sources and download records.
 
 D3DMetal is Apple's proprietary Direct3D 11/12 component for compatible Apple Silicon systems and 64-bit Windows games. Its download keeps the [Game Porting Toolkit license](https://github.com/Sikarugir-App/Sikarugir/blob/main/D3DMetal/4.0/License.pdf), which limits use to developing, testing or evaluating games on Apple products and allows redistribution only for non-commercial purposes under its terms. That license is separate from the open-source Wine and graphics component licenses.
 
-Rosetta AVX advertisement is enabled by default and can be disabled in Runtime Settings. Language locale sets `LANG`, `LC_ALL` and `LC_MESSAGES`. Sikarugir launches under Rosetta also set `DOTNET_EnableWriteXorExecute=0`. CrossOver launches before version 25 receive the legacy graphics and ESync flags; later versions use the unified graphics selector and MSync.
+## Implementation
 
-Runtime Settings groups the basic launch choices separately from advanced Display, Input, Compatibility and Diagnostics controls. Display includes High Resolution (Retina), DPI, fullscreen capture, vertical sync and virtual desktops. Input controls map Option to Alt and Command to Ctrl and configure mouse capture. Registry settings apply to the selected Windows environment on the next launch; High Resolution and synchronization changes can require restarting its Windows programs.
-
-Compatibility options include Rosetta AVX advertisement and per-engine controls: DXVK async, DXMT frame-rate presets and MetalFX spatial, D3DMetal frame limits and Metal 4, MoltenVK fast math, argument buffers and UE4 compatibility, and WineD3D configuration. Diagnostics offers Metal and DXVK HUDs and the Wine crash dialog. Engine options appear with the corresponding engine selection. Explicit environment entries override these controls.
-
-Additional Windows versions include Windows 8.1, 8, Vista, XP 64-bit and Windows Server variants. Additional versions change the per-program Windows version within the Windows 10 prefix. Existing Windows environment selections retain their separate storage locations.
-
-For an existing wrapper, each setting defaults to **Wrapper setting** with its current value read offline. **Custom setting** enables an override for that control. Registry-backed overrides write into the selected wrapper prefix; its original files and Windows environment remain in place.
-
-| Control | Values and effect |
-| --- | --- |
-| High Resolution (Retina) | Runtime default, On or Off; On selects 192 DPI unless DPI is explicitly set. |
-| DPI | A positive REG_DWORD integer; empty retains the current value. |
-| Option as Alt, Command as Ctrl | Map both left and right modifier keys. |
-| Mouse capture | Configure cursor confinement and DirectInput mouse warping. |
-| Fullscreen display capture, Vertical sync | Runtime default, On or Off. |
-| Virtual desktop | Positive WIDTHxHEIGHT dimensions, such as 1920x1080; off disables the desktop; empty uses the runtime default. |
-| DXVK async | Runtime default, On or Off; takes effect in DXVK builds that implement async. |
-| DXMT configuration | Runtime default or a 30, 60 or 120 FPS preset. |
-| MetalFX spatial | Runtime default, On or Off for DXMT. |
-| D3DMetal FPS limit | Runtime default, 30, 60, 120, 144 or 240 FPS. |
-| D3DMetal Metal 4 | Runtime default, On or Off; takes effect in builds that implement Metal 4. |
-| MoltenVK fast math, argument buffers, UE4 compatibility | Runtime default, On or Off; each changes its corresponding MoltenVK option. |
-| WineD3D options | Comma-separated configuration, such as csmt=0x1,renderer=gl. |
-| Metal Performance HUD | Runtime default, On or Off. |
-| DXVK HUD | Runtime default, Off, FPS, Performance or Full. |
-| Wine crash dialog | Runtime default, On or Off. |
-
-[Translator runtimes](TRANSLATORS.md) lists the shared component catalogs and local registration. DXMT, DXVK, DXVK3, D9VK and D3DMetal can be installed from Template component catalogs without installing another Wine engine. Registered directories remain at their original locations.
+Rosetta AVX advertisement is on by default for private prefixes and can be turned off in Runtime Settings. When the Wine process runs under Rosetta, the launch also sets `DOTNET_EnableWriteXorExecute=0`. Language locale sets `LANG`, `LC_ALL` and `LC_MESSAGES`.

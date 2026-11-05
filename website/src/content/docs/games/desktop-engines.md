@@ -16,7 +16,7 @@ Each section below covers one game type, or a few closely related ones, and says
 
 Many games are web apps in a box. [RPG Maker](https://www.rpgmakerweb.com/) MV and MZ, [Construct](https://www.construct.net/) 2 and 3, [TyranoBuilder](https://tyranobuilder.com/) and TyranoScript, and [GameMaker](https://gamemaker.io/)'s HTML5 export all produce HTML and JavaScript, and a Windows release wraps that in a Windows copy of a browser engine. MacLauncher recognizes each of these as its own game type: RPG Maker MV, RPG Maker MZ, Construct, Tyrano and GameMaker HTML5. The Web game type covers any other HTML game.
 
-All of them run in the same hosts: <span id="runtime-electron"></span>**[Electron](https://www.electronjs.org/)**, which is included with the app, so there's nothing to download, or <span id="runtime-nwjs"></span>**[NW.js](https://nwjs.io/)**, whose versions are downloaded on demand. There's also <span id="runtime-nwjs-patched"></span>**NW.js (Patched)**, which uses the same NW.js versions and adds a patch layer with optional compatibility settings; GameMaker HTML5 doesn't offer it. RPG Maker MV and MZ games use NW.js (Patched) when an NW.js version is installed, and Electron otherwise. Most of these games work well in either host. RPG Maker MV and MZ games also get a structured save editor and cheats; see [Saves and cheats](/maclauncher/tools/saves-and-cheats/).
+All of them run in the same hosts. <span id="runtime-electron"></span>**[Electron](https://www.electronjs.org/)** is included with the app, so there's nothing to download, while <span id="runtime-nwjs"></span>**[NW.js](https://nwjs.io/)** versions are downloaded on demand, and most of these games work well in either host. A third host, <span id="runtime-nwjs-patched"></span>**NW.js (Patched)**, uses the same NW.js versions and adds a patch layer with optional compatibility settings; GameMaker HTML5 doesn't offer it. RPG Maker MV and MZ games use NW.js (Patched) when an NW.js version is installed, and Electron otherwise. These two game types also get a structured save editor and cheats; see [Saves and cheats](/maclauncher/tools/saves-and-cheats/).
 
 **Example games:** OMORI (RPG Maker MV).
 
@@ -114,4 +114,4 @@ Guide: [Flash](https://github.com/procrastinine/maclauncher/blob/master/docs/gam
 
 ## When a game ships its own Mac build
 
-When a game includes a working macOS build, most game types on this page can run it directly. That runtime is called **Game's macOS app**. You still get the [graphics layer](/maclauncher/graphics/), version management and tools.
+When a game includes a working macOS build, most game types on this page can run it directly with a runtime called **Game's macOS app**, and you still get the [graphics layer](/maclauncher/graphics/), version management and tools.

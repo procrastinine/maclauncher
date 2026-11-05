@@ -38,7 +38,7 @@ How well it works depends on the engine. Engines whose games are mostly data, su
 
 ### Sikarugir
 
-[Sikarugir](https://github.com/Sikarugir-App/Sikarugir) is a free distribution of [WINE](https://www.winehq.org/). MacLauncher downloads its engines on request, keeps several versions side by side, and sets up a private Windows environment for each game automatically. Sikarugir is the default runtime for Windows Game entries, and it's offered as an alternative for recognized engines too. Its requirements are on the [Windows games](/maclauncher/games/windows/#sikarugir) page.
+[Sikarugir](https://github.com/Sikarugir-App/Sikarugir) is a free distribution of [WINE](https://www.winehq.org/). MacLauncher downloads its engines on request, keeps several versions side by side, and sets up a private Windows environment for each game automatically. Sikarugir is the default runtime for Windows Game entries, and it's offered as an alternative for recognized engines too. Its requirements are on the [Windows games](/maclauncher/windows/crossover-and-sikarugir/#sikarugir) page.
 
 Try it when:
 
@@ -48,12 +48,12 @@ Try it when:
 
 ### CrossOver
 
-[CrossOver](https://www.codeweavers.com/crossover/) is CodeWeavers' commercial WINE. If it's installed, MacLauncher finds it and offers it as another runtime. You can register several copies of CrossOver, such as a preview build, and pick a different one for each game. CodeWeavers keeps CrossOver current with fixes for newer games, so if you own it, it's usually the better WINE to use. Sikarugir stays the default because it's free and always available. To use CrossOver, pick it in a game's inspector, or make it the default runtime for Windows Game in **Settings**.
+[CrossOver](https://www.codeweavers.com/crossover/) is CodeWeavers' commercial WINE. If it's installed, MacLauncher finds it and offers it as another runtime. You can register several copies of CrossOver, such as a preview build, and pick a different one for each game. CodeWeavers keeps CrossOver current with fixes for newer games, so if you own it, it's usually the better WINE to use. Sikarugir stays the default, though, because it's free and always available. To use CrossOver, pick it in a game's inspector, or make it the default runtime for Windows Game in **Settings**.
 
 A few game types have tools but no Mac player: BGI / Ethornell, CatSystem2 and Haxe native builds. These games play their Windows executable through a registered CrossOver application when there is one, and through Sikarugir otherwise.
 
 :::tip[Rule of thumb]
-Use the native runtime first. If the game won't start or misbehaves, switch to WINE: CrossOver if you have it, otherwise Sikarugir. Each runtime has its own settings in the inspector, so check those too, for example the graphics backend or locale for WINE.
+Use the native runtime first. If the game won't start or misbehaves, switch to WINE: CrossOver if you have it, otherwise Sikarugir. Each runtime also has its own settings in the inspector, so check those too, for example a WINE game's **Direct3D engine** or locale.
 :::
 
 ## Android games
@@ -75,7 +75,7 @@ If a game crashes or misbehaves in one mode, try the other.
 
 ### Mac.apk
 
-[Mac.apk](https://github.com/kksimp/Mac.apk) is an independent project that runs Android apps on macOS. MacLauncher downloads its releases and lets you choose its graphics backend for each game: [Metal](https://developer.apple.com/metal/), or [Vulkan](https://www.vulkan.org/) through [MoltenVK](https://github.com/KhronosGroup/MoltenVK). Each release states the macOS version it needs, which MacLauncher reads from the download. Network access is off by default and can be turned on per game, and Google sign-in is available through its own account panel. It's a good alternative when a lighter game doesn't get along with the default runtime.
+[Mac.apk](https://github.com/kksimp/Mac.apk) is an independent project that runs Android apps on macOS. MacLauncher downloads its releases and lets you choose its **Graphics backend** for each game: [Metal](https://developer.apple.com/metal/), or [Vulkan](https://www.vulkan.org/) through [MoltenVK](https://github.com/KhronosGroup/MoltenVK). Each release states the macOS version it needs, which MacLauncher reads from the download. Network access is off by default and can be turned on per game, and Google sign-in is available through its own account panel. It's a good alternative when a lighter game doesn't get along with the default runtime.
 
 ### AIM
 
@@ -102,7 +102,7 @@ The [Android guide](https://github.com/procrastinine/maclauncher/blob/master/doc
 | PlayStation 5 | [AnyPS5](https://github.com/boykopovar/AnyPS5) (default), [Prosper](https://github.com/mattias800/prosper) | AnyPS5 converts the game into macOS programs. Prosper runs the original PS5 programs; Runtimes offers MacLauncher Builds packages and accepts local builds. |
 | Ren'Py | Ren'Py SDK (default), Ren'Py Patch | The SDK runs the game from a private copy of its scripts. Ren'Py Patch copies the macOS runtime files from the matching SDK into the game. |
 
-Many game types can also run a working Mac build that ships with the game. That runtime is called **Game's macOS app**. Graphics effects still apply.
+Many game types can also run a working Mac build that ships with the game, through a runtime called **Game's macOS app**, and graphics effects still apply to it.
 
 ## Versions
 

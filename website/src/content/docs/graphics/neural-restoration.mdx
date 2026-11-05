@@ -27,7 +27,7 @@ import denoised from "../../../assets/graphics/neural-denoised.webp";
 import blurry from "../../../assets/graphics/neural-blurry.webp";
 import deblurred from "../../../assets/graphics/neural-deblurred.webp";
 
-Neural upscaling and restoration use trained models, running on a Mac's GPU, to enlarge or repair a game's image. Ordinary upscalers fill in new pixels by fixed rules. A neural model, by contrast, is trained on many images and learns what images tend to look like, such as how a line in an anime drawing continues, what grass looks like up close, or which fine patterns are noise rather than detail. Given a small or damaged image, the model redraws it from what it learned.
+Neural upscaling and restoration use trained models to enlarge or repair a game's image on your Mac. Ordinary upscalers fill in new pixels by fixed rules. A neural model, by contrast, is trained on many images and learns what images tend to look like, such as how a line in an anime drawing continues, what grass looks like up close, or which fine patterns are noise rather than detail. Given a small or damaged image, the model redraws it from what it learned.
 
 MacLauncher runs these models on your Mac's GPU through [MLX](https://github.com/ml-explore/mlx) and [Metal](https://developer.apple.com/metal/), inside the same graphics chain as every other effect. They need an Apple Silicon Mac with macOS 14 or later. Intel games running translated under [Rosetta](https://support.apple.com/en-us/102527) or [CrossOver](https://www.codeweavers.com/crossover/) can use them as well, because a small Apple Silicon helper runs the model on their behalf.
 
@@ -134,13 +134,13 @@ Not every model changes the size. [NAFNet](https://github.com/megvii-research/NA
 
 MacLauncher's other neural models are [RIFE](https://github.com/hzwer/Practical-RIFE) and MLX interpolation for [frame generation](/maclauncher/graphics/frame-generation/), and [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2), which estimates depth from a flat image for the [estimated depth fog](/maclauncher/graphics/color-and-light/#depth-without-a-depth-buffer) effect.
 
-Real-ESRGAN and NAFNet build on the existing [Real-ESRGAN MLX](https://github.com/xocialize/mlx-realesrgan-swift) and [NAFNet MLX](https://github.com/xocialize/mlx-nafnet-swift) ports; Real-CUGAN runs its original models on MLX.
+For Real-ESRGAN and NAFNet, MacLauncher builds on the existing [Real-ESRGAN MLX](https://github.com/xocialize/mlx-realesrgan-swift) and [NAFNet MLX](https://github.com/xocialize/mlx-nafnet-swift) ports, while Real-CUGAN runs its original models on MLX.
 
 ## Getting models
 
-MacLauncher doesn't include model files. **Runtimes → Graphics → Neural models** lists the supported downloads: **Install** downloads one, and **Import model…** adds a model you already have. Installed models work offline and are shared by every game.
+MacLauncher doesn't include model files. Instead, **Runtimes → Graphics → Neural models** lists the supported downloads: **Install** downloads one, and **Import model…** adds a model you already have. Installed models work offline and are shared by every game.
 
-Each neural row in the chain has a **Model** menu. **Automatic** chooses an installed model for that row's operation, starting with the default you set for the operation in **Neural models**. You can also pick a specific model for one row. If a row's model is missing, the row shows **Model needed** and the rest of the chain keeps running.
+Each neural row in the chain has a **Model** menu. Its **Automatic** choice picks an installed model for that row's operation, starting with the default you set for the operation in **Neural models**, or you can pick a specific model for one row instead. If a row's model is missing, the row shows **Model needed** and the rest of the chain keeps running.
 
 ## Keeping it fast
 

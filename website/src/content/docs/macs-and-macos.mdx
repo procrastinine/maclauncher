@@ -8,7 +8,7 @@ head:
 
 import MacFeatureTable from "../../components/MacFeatureTable.astro";
 
-This page explains which Macs MacLauncher runs on and what differs from one Mac to another. MacLauncher runs on any Mac with macOS 13 or later, whether it has an Apple Silicon or an Intel processor, and almost all of it works the same on every one of them. A few runtimes need Apple Silicon, and some graphics features need a newer macOS or a particular graphics chip. On a Mac without them, MacLauncher switches off only what can't run and explains why, while everything else keeps working.
+MacLauncher runs on any Mac with macOS 13 or later, whether it has an Apple Silicon or an Intel processor, and almost all of it works the same on every one of them. The differences from one Mac to another come from a few runtimes that need Apple Silicon and some graphics features that need a newer macOS or a particular graphics chip. On a Mac without them, MacLauncher switches off only what can't run and explains why, while everything else keeps working.
 
 ## Two kinds of processor
 
@@ -35,7 +35,7 @@ Some code has to match the game it works with, whatever the default. A library t
 Many runtimes have builds for both processors, or a universal build, and work the same on any Mac. Some depend on the processor:
 
 - [Android, iPhone and iPad, and Nintendo Switch games](/maclauncher/games/mobile-and-consoles/) run their original ARM code directly on the Mac's processor, so they need an Apple Silicon Mac.
-- The WINE runtimes, [Sikarugir and CrossOver](/maclauncher/games/windows/), run Windows games as Intel programs, which use Rosetta on Apple Silicon.
+- The WINE runtimes, [Sikarugir and CrossOver](/maclauncher/windows/crossover-and-sikarugir/), run Windows games as Intel programs, which use Rosetta on Apple Silicon.
 - The [32-bit Mac runtime](/maclauncher/games/more/#32-bit-mac-apps), the [HashLink](/maclauncher/games/more/#hashlink-and-haxe) virtual machine, PlayStation 5 games and Java 8 also run Intel code, through Rosetta on Apple Silicon.
 
 Each runtime version also has its own minimum macOS version. MacLauncher learns it, together with the processors a version supports, from the publisher's release information or from the downloaded files themselves, and a version that a Mac can't run stays in the list with the reason. Because versions come from each runtime's own publisher, a newer release can need a newer macOS than an older one.
@@ -49,10 +49,10 @@ The [graphics layer](/maclauncher/graphics/) runs on Apple Silicon and Intel Mac
 - [Metal 4](https://developer.apple.com/metal/) is the newest version of Apple's graphics interface, which some effects build on.
 - [MLX](https://github.com/ml-explore/mlx) runs neural models on Apple Silicon, for neural restoration and interpolation, and [FSR 4.1](/maclauncher/graphics/upscaling/#fsr-temporal) is AMD's machine-learning upscaler.
 - [libplacebo](https://libplacebo.org/) and [ISF](https://isf.video/) are shader formats that MacLauncher prepares and runs on Metal.
-- DXMT and D3DMetal translate the Direct3D graphics of Windows games to Metal, and KosmicKrisp is a Vulkan driver for Apple Silicon. All three serve [WINE games](/maclauncher/games/windows/#runtime-settings).
+- DXMT and D3DMetal translate the Direct3D graphics of Windows games to Metal, and KosmicKrisp is a Vulkan driver for Apple Silicon. All three serve [WINE games](/maclauncher/windows/graphics-translators/).
 
-This table lists each feature under the earliest macOS version that supports it, and every later macOS keeps it. Features under **Macs that report support** run where the Mac's graphics chip or macOS reports that it can run them:
+This table lists each feature under the earliest macOS version that supports it, and every later macOS keeps it. Features in the **Macs that report support** column run wherever the Mac's graphics chip or macOS reports that it can run them:
 
 <MacFeatureTable />
 
-A selected package can need a newer macOS than its feature's minimum, and effects such as temporal upscaling also need information from the game's renderer. When a feature can't run, MacLauncher switches off only the effects that use it, and the rest of an effect chain keeps working. [System requirements](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/SYSTEM_REQUIREMENTS.md) is the complete reference, including the processor and macOS version of each component that ships with the app.
+The package version you select can also need a newer macOS than its feature's minimum, and effects such as temporal upscaling need information from the game's renderer as well. When a feature can't run, MacLauncher switches off only the effects that use it, and the rest of an effect chain keeps working. [System requirements](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/SYSTEM_REQUIREMENTS.md) is the complete reference, including the processor and macOS version of each component that ships with the app.

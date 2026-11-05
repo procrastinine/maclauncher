@@ -18,7 +18,7 @@ Every game you play through MacLauncher passes through the same graphics layer o
 
 The same layer serves native Mac apps, [Godot](https://github.com/godotengine/godot) and [RPG Maker](https://www.rpgmakerweb.com/) games, visual novels, Android and iOS games, browser games, videos and Windows games running in [CrossOver](https://www.codeweavers.com/crossover/). Anything MacLauncher can launch can have effects applied to it, and on macOS 15.2 or later so can [the window of any other app, or a whole display](/maclauncher/graphics/window-graphics/).
 
-The graphics layer works on Intel and Apple Silicon Macs, though some effects need more: MLX models and Metal 4 features need Apple Silicon and a newer macOS, and the libplacebo and ISF shader providers follow the requirements of the selected graphics package. MetalFX support depends on your GPU, which MacLauncher checks directly. An effect your Mac can't run is switched off without affecting the others. [Macs and macOS versions](/maclauncher/macs-and-macos/#graphics-features-by-macos-version) lists which features need which macOS version, and the [requirements reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/SYSTEM_REQUIREMENTS.md#graphics) has the complete tables.
+The graphics layer works on Intel and Apple Silicon Macs, though some effects need more: MLX models and Metal 4 features need Apple Silicon and a newer macOS, and libplacebo and ISF shaders follow the requirements of the graphics package included with MacLauncher. MetalFX support depends on your GPU, which MacLauncher checks directly. An effect your Mac can't run is switched off without affecting the others. [Macs and macOS versions](/maclauncher/macs-and-macos/#graphics-features-by-macos-version) lists which features need which macOS version, and the [requirements reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/SYSTEM_REQUIREMENTS.md#graphics) has the complete tables.
 
 <Compare
   before={plain}
@@ -44,9 +44,9 @@ You choose the order, and the order changes the result. A CRT effect looks diffe
 
 ## Simple and Advanced
 
-The inspector's **Graphics** section shows the chain in two views. **Simple** has one dropdown for each group of methods: **Image filters**, **Resize** (Downsample and Upscale) and **Temporal** (temporal upscaling and frame generation). You pick a method in a group, and Simple chooses the working sizes for it.
+Each game's inspector has a **Graphics** section, which shows the chain in two views. **Simple** has one dropdown for each group of methods: **Image filters**, **Resize** (Downsample and Upscale) and **Temporal** (temporal upscaling and frame generation). You pick a method in a group, and Simple chooses the working sizes for it.
 
-**Advanced** shows every row in order. **Add effect…** adds an image filter, a downsample, an upscale, a temporal upscaler or a frame generator. Each row can be dragged to a new position, resized, adjusted and switched on or off.
+**Advanced** shows every row in order, and its **Add effect…** button adds an image filter, a downsample, an upscale, a temporal upscaler or a frame generator. Each row can be dragged to a new position, resized, adjusted and switched on or off.
 
 Both views edit the same chain, so switching between them loses nothing.
 
@@ -54,15 +54,15 @@ To try both views, open the [interactive demo](/maclauncher/demo/), select a gam
 
 ## The Graphics heading
 
-Clicking the **Graphics** heading opens and closes the section. While the section is closed, the heading summarizes the active effects. Its checkbox turns the whole chain off and on without changing any of it, so a chain can be set aside and restored later.
+Clicking the **Graphics** heading opens and closes the section. While the section is closed, the heading summarizes the active effects. The heading also has a checkbox, which turns the whole chain off and on without changing any of it, so a chain can be set aside and restored later.
 
-The **⋯** menu beside the heading applies a saved preset, saves the current chain with **Save as preset…**, opens **Manage presets…**, or empties the chain with **Clear effects**. Presets let you reuse a chain on other games. After you apply a preset or clear the chain, **Undo** brings back the previous chain until your next edit.
+Presets let you reuse a chain on other games. The **⋯** menu beside the heading applies a saved preset, saves the current chain with **Save as preset…** and opens **Manage presets…**, and it can also empty the chain with **Clear effects**. After you apply a preset or clear the chain, **Undo** brings back the previous chain until your next edit.
 
 ## Changes apply live
 
-Edits apply while the game runs, in a window or fullscreen, whenever the game's graphics adapter supports live changes; otherwise the inspector says they take effect at the next launch. Shaders compile and models load in the background while the game keeps drawing. A few settings depend on a renderer integration that is set up when the game starts, and their controls say so.
+Edits apply while the game runs, in a window or fullscreen, as long as the adapter that connects MacLauncher to the game's graphics supports live changes; otherwise the inspector says they take effect at the next launch. Shaders compile and models load in the background while the game keeps drawing. A few settings, however, depend on something set up inside the game's renderer when the game starts, and their controls say so.
 
-**Output → Compare** shows the untouched source, a split view, or the difference between the source and the processed image, which makes it easy to see what an effect changes. **Output → Performance overlay** draws frame rates, GPU time and latency over the game, which shows what an effect costs; [Performance and presentation](/maclauncher/graphics/composing-effects/#performance-and-presentation) describes it together with the frame-rate cap and display settings.
+**Output → Compare** shows the untouched source, a split view, or the difference between the source and the processed image, which makes it easy to see what an effect changes. To see what an effect costs, **Output → Performance overlay** draws frame rates, GPU time and latency over the game. [Performance and presentation](/maclauncher/graphics/composing-effects/#performance-and-presentation) describes the overlay together with the frame-rate cap and display settings.
 
 ## Two kinds of input
 
@@ -83,7 +83,7 @@ Some effects need more. Temporal upscalers such as MetalFX Temporal, [FSR](https
   <LinkCard title="Any window or display" description="The same chain on another app's window, in place or scaled to fill the screen, or on a whole display." href="/maclauncher/graphics/window-graphics/" />
 </CardGrid>
 
-The repository's [graphics guide](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md) describes every control in full, starting with [how the chain works](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#how-the-chain-works). The [algorithm reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/PROVIDERS.md) lists each algorithm with its exact inputs and requirements.
+MacLauncher's [graphics guide](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md) in the repository describes every control in full, starting with [how the chain works](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#how-the-chain-works), and the [algorithm reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/PROVIDERS.md) beside it lists each algorithm with its exact inputs and requirements.
 
 :::note[About the sample images]
 The before-and-after images in this section were made by running still images through MacLauncher's own **Export video…** pipeline, the same graphics chain games use, and saving a frame of the result. The example games and their copyright notices are listed on the [credits page](/maclauncher/about/credits/).

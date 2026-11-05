@@ -8,9 +8,9 @@ sidebar:
   order: 3
 ---
 
-To translate a game, mod it, rescue its music or read its script, you first need to see inside it, and MacLauncher's decompilers and extractors do that on your Mac. Most game types come with these tools in the inspector.
+To translate a game, mod it, rescue its music or read its script, you first need to see inside it. MacLauncher's decompilers and extractors let you do that on your Mac, and most game types come with them in the inspector.
 
-The tools belong to the game type, so they read the game's original data whichever runtime plays it. They all follow the same pattern. You press the action, and if it needs a tool that isn't installed yet, MacLauncher downloads it and then continues where it left off. Results go into a separate export folder, so the game's files stay as they are. The one exception is Near Infinity, an external editor for Infinity Engine games: edits you save in it can change the game's resources.
+The tools belong to the game type, so they read the game's original data whichever runtime plays it, and they all work the same way. When you press an action that needs a tool that isn't installed yet, MacLauncher downloads the tool and then continues where it left off. Results go into a separate export folder, so the game's files stay as they are. The one exception is Near Infinity, an external editor for Infinity Engine games: edits you save in it can change the game's resources.
 
 ## By game type
 
@@ -70,7 +70,7 @@ Each game type links to the tools section of its guide.
 | [HashLink](https://github.com/procrastinine/maclauncher/blob/master/docs/game-types/HASHLINK.md#bytecode-export) | Inspect bytecode and export its opcodes and pseudocode ([hlbc](https://github.com/Gui-Yom/hlbc)) |
 | [Video](https://github.com/procrastinine/maclauncher/blob/master/docs/game-types/VIDEO.md#preview-and-export) | Report a video's streams, chapters and tags |
 
-The [tool reference](https://github.com/procrastinine/maclauncher/blob/master/docs/tools/README.md) lists every action, output format and limit by game type, and [native binary inspection](https://github.com/procrastinine/maclauncher/blob/master/docs/tools/NATIVE_INSPECTION.md) describes the Rizin and Ghidra exports.
+MacLauncher's [tool reference](https://github.com/procrastinine/maclauncher/blob/master/docs/tools/README.md) lists every action, output format and limit by game type, and [native binary inspection](https://github.com/procrastinine/maclauncher/blob/master/docs/tools/NATIVE_INSPECTION.md) describes the Rizin and Ghidra exports.
 
 ## Installers and packed games
 
@@ -78,11 +78,11 @@ Many games don't arrive as a plain folder. MacLauncher opens the common wrappers
 
 ### Installers
 
-[GOG](https://www.gog.com/)'s offline Windows installers, like many others, are built with [Inno Setup](https://jrsoftware.org/isinfo.php): a `setup_….exe`, often with numbered `.bin` parts beside it. MacLauncher reads the installer as data with [innoextract](https://github.com/dscharrer/innoextract), without running it, then detects the game type inside like any other folder. A GOG Windows installer of a Ren'Py, GameMaker or RPG Maker game can therefore end up on a native runtime, with no Windows or [WINE](https://www.winehq.org/) at any step. [Stores and downloads](/maclauncher/tools/stores-and-downloads/) gets those installers, older versions included, from inside MacLauncher. Encrypted installers aren't supported.
+[GOG](https://www.gog.com/)'s offline Windows installers, like many others, are built with [Inno Setup](https://jrsoftware.org/isinfo.php): a `setup_….exe`, often with numbered `.bin` parts beside it. MacLauncher reads the installer as data with [innoextract](https://github.com/dscharrer/innoextract), without running it, then detects the game type inside like any other folder. A GOG Windows installer of a Ren'Py, GameMaker or RPG Maker game can therefore end up on a native runtime, with no Windows or [WINE](https://www.winehq.org/) at any step. Those installers, older versions included, can be downloaded from inside MacLauncher, as [Stores and downloads](/maclauncher/tools/stores-and-downloads/) describes. Encrypted installers, however, aren't supported.
 
 ### Packed games
 
-Some games ship entirely inside one `.exe`, and the game type's module reads it in place:
+Some games ship entirely inside one `.exe`, and MacLauncher reads it in place:
 
 - TyranoScript, [Construct](https://www.construct.net/) and LÖVE games with their data appended to the executable as a ZIP;
 - Godot games with their data embedded in the executable;
@@ -95,4 +95,4 @@ Guide: [Installer reader](https://github.com/procrastinine/maclauncher/blob/mast
 
 ## What you get back
 
-[Decompiled](https://en.wikipedia.org/wiki/Decompiler) output is a faithful reading of what the game shipped, which is different from the developer's original project. Script engines such as Ren'Py, RPG Maker and KiriKiri come back very readable. Compiled code (C#, Java) usually decompiles well. Machine code from native programs comes back as pseudocode, which is good for understanding a program and useless for rebuilding it.
+[Decompiled](https://en.wikipedia.org/wiki/Decompiler) output is a faithful reading of what the game shipped, which is different from the developer's original project. Games on script engines such as Ren'Py, RPG Maker and KiriKiri come back very readable, and compiled code (C#, Java) usually decompiles well. Machine code from native programs, however, comes back as pseudocode, which is good for understanding a program and useless for rebuilding it.

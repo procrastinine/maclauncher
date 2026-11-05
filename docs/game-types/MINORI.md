@@ -13,30 +13,32 @@ Import accepts a complete Windows game folder, its executable or the matching of
 
 ## Data formats
 
-The set of PAZ archives is validated before launch. ReMinori supports two PAZ profiles, which differ in where the archive keys come from. Profiles that use key tables from the executable also read the original Windows executable, as data only; it is never run. The executable's file version is shown separately from the archive format and the runtime version.
+ReMinori supports two PAZ profiles, which differ in where the archive keys come from, and the set of PAZ archives is validated before launch. Where a profile uses key tables from the executable, the original Windows executable is also read, but only as data, and it is never run. Its file version is shown separately from the archive format and the runtime version.
 
 | Profile | Key source |
 | --- | --- |
 | `paz-bf-slot0-rc4-v1` | Supported PAZ header and archive-key layout |
 | `paz-pe-keytables-rc4-v1` | Supported key tables in the original Windows PE |
 
-Each profile selects its own archive and VM implementation.
+Each profile also selects its own archive and VM implementation.
 
 ## Saves
 
-Saves use `userdata/` in the original game directory when it is writable, with ReMinori's `~/Documents/eden/userdata/` location as the fallback. Import records the supported save-folder setting so the managed interpreter uses the original executable's directory instead of its runtime installation directory. When another game in the library uses the same save location, import gives a game without an explicit save-folder setting a separate `~/Documents/eden/games/<gameId>/userdata/` override. Explicit save-folder settings stay unchanged. The game reads its original PAZ archives directly and uses the original game directory as its working directory. Interpreter caches, verification records and native logs remain in launcher data. Save editing and cheats are not available.
+ReMinori saves to `userdata/` in the original game directory when that directory is writable, and otherwise falls back to its own `~/Documents/eden/userdata/` location. For the installed ReMinori interpreter to use the original executable's directory rather than its runtime installation directory, import records the supported save-folder setting. If another game in the library already uses the same save location, import gives a game without an explicit save-folder setting its own `~/Documents/eden/games/<gameId>/userdata/` override. Explicit save-folder settings stay unchanged. Save editing and cheats are not available.
+
+The game reads its original PAZ archives directly and uses the original game directory as its working directory. Interpreter caches, verification records and native logs, on the other hand, remain in launcher data.
 
 ## Script tools
 
-The inspector's **Scripts** group has **Extract scripts**, **Reveal scripts** and **Remove scripts**, and its **Advanced** group has **Verify archives**. Extracted scripts are UTF-8 files in the game's launcher data.
+Scripts are handled by **Extract scripts**, **Reveal scripts** and **Remove scripts** in the inspector's **Scripts** group, while **Verify archives** is in its **Advanced** group. Extracted scripts are stored as UTF-8 files in the game's launcher data.
 
 ## Runtimes
 
 ### ReMinori
 
-ReMinori, the default runtime, supports title and menu interaction, story text and artwork, keyboard input, AppKit game controls, save comments and thumbnails, and saving and loading. Movies and audio play through a local [FFmpeg](https://ffmpeg.org/) bridge, which uses the codecs and containers enabled in the selected runtime package and makes no network requests.
+As the default runtime, ReMinori supports title and menu interaction, story text and artwork, keyboard input, AppKit game controls, save comments and thumbnails, and saving and loading. Movies and audio are played through a local [FFmpeg](https://ffmpeg.org/) bridge, which uses the codecs and containers enabled in the selected runtime package and makes no network requests.
 
-Native ReMinori packages are published by MacLauncher Builds and listed in **Runtimes → Minori**. Each package records its source revision, dependencies, build options and CPU architectures, and Runtimes lists its architectures and minimum macOS version.
+MacLauncher Builds publishes the native ReMinori packages, and they are listed in **Runtimes → Minori**. Each package records its source revision, dependencies, build options and CPU architectures, and Runtimes lists its architectures and minimum macOS version.
 
 ### CrossOver and Sikarugir (Wine)
 
