@@ -1047,6 +1047,8 @@ test('official codec catalog, local registration and Apple upstream links use or
   const nodes=value=>value==null?[]:Array.isArray(value)?value.flatMap(nodes):typeof value==='object'?[value,...nodes(value.props?.children)]:[];
   nodes(control.render()).find(node=>node.type==='button'&&node.props.children==='Register Game Porting Toolkit…').props.onClick();assert.equal(registrations,1);control.close();
   const fs=require('node:fs'),os=require('node:os'),root=fs.mkdtempSync(path.join(os.tmpdir(),'apple-cached-template-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const CrossOver=require('../src/modules/crossover/runtime/manager'),Sika=require('../src/modules/crossover/sikarugir/runtime/manager');
+  t.mock.method(CrossOver.core,'listInstalled',()=>[]);const originalSika=Sika.core;Sika.core={...originalSika,listInstalled:()=>[]};t.after(()=>{Sika.core=originalSika;});
   const Catalog=require('../src/modules/shared/runtime/runtime-catalog'),version='template-Template-1.0.27';
   Catalog.writeRuntimeCatalog({userDataDir:root,managerId:metal.id,source:'https://github.com/Sikarugir-App/Template/releases',entries:[{version,upstreamRevision:'published-template-release',catalogSourceId:'template',component:'d3dmetal',architecture:'universal',
     asset:{filename:'Template-1.0.27.tar.xz',url:'https://github.com/Sikarugir-App/Template/releases/download/v1.0/Template-1.0.27.tar.xz',integrity:'recorded-local'}}]});
