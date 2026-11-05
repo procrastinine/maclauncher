@@ -9,10 +9,10 @@ test('Steam Windows launch metadata preserves the unique publisher default and d
     2: { executable: 'bin\\Game.exe', type: 'default', arguments: '--publisher-mode', workingdir: 'bin', config: { oslist: 'windows', osarch: '64' }, futurePublisherField: 'preserved' }
   } } };
   const before = structuredClone(info), versions = normalizeVersions(480, info);
-  assert.equal(versions.defaultWindowsLaunch.id, '2'); assert.equal(versions.defaultWindowsLaunch.executable, 'bin\\Game.exe');
-  assert.equal(versions.defaultWindowsLaunch.arguments, '--publisher-mode'); assert.equal(versions.defaultWindowsLaunch.workingdir, 'bin');
-  assert.deepEqual(versions.defaultWindowsLaunch.config, { oslist: 'windows', osarch: '64' });
-  assert.equal(versions.defaultWindowsLaunch.futurePublisherField, 'preserved'); assert.deepEqual(info, before);
+  assert.deepEqual(versions.defaultWindowsLaunch, { executable: 'bin\\Game.exe' });
+  assert.deepEqual(versions.launchOptions[2], { id: '2', executable: 'bin\\Game.exe', description: '', platforms: ['windows'], architectures: ['64'],
+    architectureBits: ['64'], architectureCpu: [], architectureSource: 'launch' });
+  assert.deepEqual(info, before);
   const ambiguous = structuredClone(info); ambiguous.config.launch[3] = { ...ambiguous.config.launch[2], executable: 'alternate.exe' };
   const alternatives = normalizeVersions(480, ambiguous);
   assert.equal(alternatives.defaultWindowsLaunch, null); assert.equal(alternatives.launchOptions.length, 4);

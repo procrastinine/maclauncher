@@ -35,12 +35,13 @@ function matchesSteamArchitecture(depot, architecture = "all") {
 function steamArchitectureCatalog(info = {}, depots = []) {
   const common = info.common || {}, appPlatforms = platforms(common.oslist), extended = new Set(values(common.osextended));
   const evidence = Object.fromEntries(PLATFORMS.map(os => [os, new Set()]));
-  const launchOptions = Object.entries(info.config?.launch || {}).filter(([, option]) => option && typeof option === "object").map(([id, option]) => {
+  const launchEntries = Object.entries(info.config?.launch || {}).filter(([, option]) => option && typeof option === "object");
+  const launchOptions = launchEntries.map(([id, option]) => {
     let oses = platforms(option.config?.oslist || option.oslist);
     if (!oses.length) oses = /\.app(?:\/|$)/i.test(option.executable || "") ? ["macos"] : /\.exe$/i.test(option.executable || "") ? ["windows"] : appPlatforms.length === 1 ? appPlatforms : [];
     const config = architectureConfig({ ...option, ...option.config });
     for (const os of oses) for (const arch of config.architectures) evidence[os].add(arch);
-    return { ...option, id, executable: String(option.executable || ""), description: String(option.description || ""), platforms: oses, architectures: config.architectures,
+    return { id, executable: String(option.executable || ""), description: String(option.description || ""), platforms: oses, architectures: config.architectures,
       architectureBits: config.architectureBits, architectureCpu: config.architectureCpu, architectureSource: config.architectures.length ? "launch" : "unspecified" };
   });
   for (const depot of depots) for (const os of depot.platforms.length ? depot.platforms : appPlatforms) for (const arch of depot.architectures) evidence[os].add(arch);
@@ -64,10 +65,10 @@ function steamArchitectureCatalog(info = {}, depots = []) {
     if (os === "macos" && architectures[os].includes("arm64") && matching.some(depot => depot.architectureBits.includes("64") && !depot.architectureCpu.length))
       architectureNotes[os] += " Apple Silicon support is advertised, and its files can share a depot marked 64-bit.";
   }
-  const defaults = launchOptions.filter(option => option.executable && String(option.type || option.config?.type || "").toLowerCase() === "default" &&
+  const defaults = launchEntries.filter(([, option]) => option.executable && String(option.type || option.config?.type || "").toLowerCase() === "default" &&
     platforms(option.config?.oslist || option.oslist).includes("windows"));
   return { architectureSchema: 1, platformSchema: 1, architectures, architectureLabels, architectureNotes, launchOptions,
-    defaultWindowsLaunch: defaults.length === 1 ? defaults[0] : null };
+    defaultWindowsLaunch: defaults.length === 1 ? { executable: String(defaults[0][1].executable) } : null };
 }
 function steamLibraryArchitectures(info = {}) {
   const depots = Object.entries(info.depots || {}).filter(([id, depot]) => /^\d+$/.test(id) && depot && typeof depot === "object")

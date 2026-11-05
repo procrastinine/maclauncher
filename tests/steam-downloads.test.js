@@ -122,7 +122,8 @@ test("Steam manual download records publisher default Windows launch without ano
   const completed = await until(() => service.snapshot().downloads.find(row => row.id === job.id && (row.imported || row.status === 'error')));
   assert.equal(completed.status, 'completed', completed.error); assert.equal(requests, before);
   const receipt = JSON.parse(fs.readFileSync(path.join(completed.path, '.maclauncher-steam.json'), 'utf8'));
-  assert.deepEqual(receipt.defaultWindowsLaunch, versions.defaultWindowsLaunch); assert.equal(receipt.defaultWindowsLaunch.id, '1');
+  assert.deepEqual(versions.defaultWindowsLaunch, { executable: 'bin\\Game.exe' });
+  assert.deepEqual(receipt.defaultWindowsLaunch, versions.defaultWindowsLaunch);
   assert.equal(readDefaultWindowsExecutable(completed.path), path.join(completed.path, 'bin/Game.exe'));
   assert.deepEqual(imported[0].defaultWindowsLaunch, receipt.defaultWindowsLaunch);
   const installed = JSON.parse(fs.readFileSync(path.join(root, 'steam/installations.json'), 'utf8'));

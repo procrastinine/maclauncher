@@ -150,7 +150,8 @@ test("Steam client download records publisher default Windows launch from its ex
   const completed = session.snapshot().downloads.find(row => row.id === job.id);
   assert.equal(completed.status, 'completed', completed.error); assert.equal(metadataReads, before); assert.equal(depotRequests, 1);
   const receipt = JSON.parse(fs.readFileSync(path.join(completed.path, '.maclauncher-steam.json'), 'utf8'));
-  assert.deepEqual(receipt.defaultWindowsLaunch, versions.defaultWindowsLaunch); assert.equal(receipt.defaultWindowsLaunch.id, '1');
+  assert.deepEqual(versions.defaultWindowsLaunch, { executable: 'bin\\Game.exe' });
+  assert.deepEqual(receipt.defaultWindowsLaunch, versions.defaultWindowsLaunch);
   assert.equal(readDefaultWindowsExecutable(completed.path), path.join(completed.path, 'bin/Game.exe'));
   assert.deepEqual(imported[0].defaultWindowsLaunch, receipt.defaultWindowsLaunch);
   const index = JSON.parse(fs.readFileSync(path.join(f.userDataDir, 'steam/installations.json'), 'utf8'));

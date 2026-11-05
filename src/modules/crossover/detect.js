@@ -79,14 +79,13 @@ function isNativeImport(entry) {
 // The game's own folder: a folder game path, or the folder holding a single-file
 // game. A content root inside it, such as a data or resources folder, does not
 // narrow the search. A content root or recorded release folder that encloses it,
-// such as the NW.js release around an imported www folder, widens it. The
-// original folder import also retains a downloaded release's root receipt.
+// such as the NW.js release around an imported www folder, widens it.
 function searchRoot(entry) {
   const directory = file => {
     const info = typeof file === "string" && path.isAbsolute(file) ? stat(file) : null;
     return info?.isDirectory() ? file : info?.isFile() ? path.dirname(file) : null;
   };
-  const enclosing = [entry.contentRootDir, entry.releaseRootDir, entry.importPath]
+  const enclosing = [entry.contentRootDir, entry.releaseRootDir]
     .filter(folder => typeof folder === "string" && path.isAbsolute(folder) && stat(folder)?.isDirectory());
   let root = directory(entry.gamePath) || enclosing[0] || null;
   for (const folder of enclosing) if (root && inside(folder, root)) root = folder;
@@ -131,7 +130,9 @@ function findWindowsExecutable(entry, { detection, selectedPath } = {}) {
   // is not an installer or other support program, such as a setup package.
   for (const file of [selectedPath,
     stat(imported)?.isFile() ? imported : null,
-    readDefaultWindowsExecutable(root), entry.moduleData?.executablePath, entry.moduleData?.exePath,
+    readDefaultWindowsExecutable(root),
+    imported !== root && stat(imported)?.isDirectory() && inside(imported, root) ? readDefaultWindowsExecutable(imported) : null,
+    entry.moduleData?.executablePath, entry.moduleData?.exePath,
     entry.runtimeData?.crossover?.windowsExecutablePath, entry.windowsExecutablePath,
     stat(entry.gamePath)?.isFile() && executableRole(entry.gamePath) !== "support" ? entry.gamePath : null]) {
     const match = check(file);
