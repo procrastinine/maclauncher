@@ -337,7 +337,7 @@ function engines(plan) {
 }
 function settingsForPlan(settings, plan) {
   const result = { ...settings }, renderer = plan.components['d3d-renderer'].used, vulkan = plan.components['vulkan-driver'].used;
-  if (plan.apiMode) result.graphicsBackend = 'wined3d';
+  if (plan.apiMode || require('./translator-files').placesDirect3D(plan)) result.graphicsBackend = 'wined3d';
   else if (renderer) result.graphicsBackend = renderer.engine;
   else if (settings.translatorRenderer === Plan.AUTOMATIC || plan.components['d3d-renderer'].fallback) result.graphicsBackend = 'auto';
   if (vulkan) result.vulkanBackend = vulkan.engine;

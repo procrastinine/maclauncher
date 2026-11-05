@@ -83,3 +83,23 @@ test('API placements preserve inherited native DLLs when another role explicitly
   await Files.applyNativeLibraries(legacy, prefix); await Files.applyNativeLibraries({ native: [] }, prefix);
   assert.equal(fs.readFileSync(original9, 'utf8'), 'original d3d9'); assert.equal(fs.readFileSync(original11, 'utf8'), 'original d3d11');
 });
+
+test('A separately placed Direct3D 12 library also places the included CrossOver renderer instead of switching the whole game to wined3d', async t => {
+  const root = scratch(t), renderer = path.join(root, 'crossover-dxvk'), proton = path.join(root, 'vkd3d-proton');
+  const d3d11 = put(renderer, 'd3d11.dll', dll()), d3d9 = put(renderer, 'd3d9.dll', dll()); put(renderer, 'd3d12.dll', dll());
+  const d3d12 = put(proton, 'd3d12.dll', dll(false));
+  const included = { ...Description.describeTranslator(renderer, { engine: 'dxvk' }), id: 'included:d3d-renderer:dxvk', included: true };
+  const managed = { ...Description.describeTranslator(proton, { engine: 'vkd3d-proton', component: 'd3d12' }), id: 'translator-vkd3d-proton:3.1' };
+  const plan = { runtime: 'crossover', components: { 'd3d-renderer': row(included), d3d12: row(managed) } };
+  assert.equal(Files.placesDirect3D(plan), true);
+  const view = await Files.prepareTranslatorFiles(plan, { userDataDir: path.join(root, 'profile'), layout });
+  assert.equal(view.env.CX_GRAPHICS_BACKEND, 'wined3d');
+  assert.equal(fs.realpathSync(view.links['lib/wine/x86_64-windows/d3d11.dll']), d3d11);
+  assert.equal(fs.realpathSync(view.links['lib/wine/x86_64-windows/d3d9.dll']), d3d9);
+  assert.equal(Object.hasOwn(view.links, 'lib/wine/x86_64-windows/d3d12.dll'), false, 'the renderer\'s own Direct3D 12 library is not placed');
+  assert.ok(view.native.some(file => file.source === d3d12)); assert.ok(view.dllOverrides.includes('d3d12=n,b'));
+  // Without a placed library, CrossOver's own backend selector still routes the included renderer.
+  const alone = await Files.prepareTranslatorFiles({ runtime: 'crossover', components: { 'd3d-renderer': row(included) } }, { userDataDir: path.join(root, 'profile'), layout });
+  assert.equal(Files.placesDirect3D({ runtime: 'crossover', components: { 'd3d-renderer': row(included) } }), false);
+  assert.equal(alone.env.CX_GRAPHICS_BACKEND, 'dxvk'); assert.deepEqual(alone.links, {});
+});

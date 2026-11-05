@@ -30,6 +30,15 @@ function selectedDescriptions(plan) {
     row.used && (plan.runtime === 'sikarugir' || !row.inherited || row.fallback))
     .map(([, row]) => ({ ...row.used, inherited: row.inherited })), ...(plan?.additional || [])];
 }
+// CrossOver's graphics backend switch can route one included renderer on its
+// own. Libraries placed through the private Wine tree need the wined3d backend,
+// which bypasses that switch, so once any Direct3D library is placed, every
+// selected Direct3D library is placed, including an included renderer.
+const placedDirect3D = item => ['d3d-renderer', 'd3d12'].includes(item.component) &&
+  !(item.included && item.component === 'd3d-renderer') && item.engine !== 'vkd3d';
+function placesDirect3D(plan, selected = selectedDescriptions(plan)) {
+  return plan?.runtime === 'crossover' && (Boolean(plan.apiMode) || selected.some(placedDirect3D));
+}
 function filesIdentity(descriptions) {
   return descriptions.map(item => [item.id, item.files.map(file => [file.path, fs.existsSync(file.path) ? fileDigest(file.path).sha256 : null]),
     ...(item.videoPreparation ? [[item.videoPreparation.pluginDirectories, item.videoPreparation.excludedFiles,
@@ -67,11 +76,13 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logge
     return target;
   }
   try {
-  if (plan.apiMode && plan.runtime === 'crossover') env.CX_GRAPHICS_BACKEND = 'wined3d';
+  const placed = placesDirect3D(plan, selected);
+  if (placed) env.CX_GRAPHICS_BACKEND = 'wined3d';
+  // A separately selected Direct3D 12 library replaces the renderer's own.
+  const separateD3D12 = !plan.apiMode && plan.components?.d3d12?.used;
   for (const item of selected) {
     signal?.throwIfAborted();
-    if (!plan.apiMode && plan.runtime === 'crossover' && item.included && item.component === 'd3d-renderer') { env.CX_GRAPHICS_BACKEND = item.backend || item.engine; continue; }
-    if (plan.runtime === 'crossover' && ['d3d-renderer', 'd3d12'].includes(item.component) && (plan.apiMode || item.engine !== 'vkd3d')) env.CX_GRAPHICS_BACKEND = 'wined3d';
+    if (!placed && plan.runtime === 'crossover' && item.included && item.component === 'd3d-renderer') { env.CX_GRAPHICS_BACKEND = item.backend || item.engine; continue; }
     if (item.engine === 'vkd3d' && !plan.apiMode) continue; // Legacy Wine d3d12 stays in its normal builtin tree.
     if (item.component === 'vulkan-driver') {
       const json = item.icd ? { path: item.icd } : item.files.find(file => file.format === 'json' && (() => { try { return Boolean(JSON.parse(fs.readFileSync(file.path)).ICD); } catch { return false; } })());
@@ -98,6 +109,7 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logge
     for (const file of plan.apiMode ? item.files : plan.compatibility?.[item.id]?.files || item.files) {
       if (file.format === 'pe') {
         if (!plan.apiMode && item.component === 'd3d12' && !/^d3d12/i.test(path.basename(file.path))) continue;
+        if (separateD3D12 && item.component === 'd3d-renderer' && separateD3D12.id !== item.id && /^d3d12/i.test(path.basename(file.path))) continue;
         const architecture = cpuFolder(file.machine); if (!architecture) continue;
         const name = path.basename(file.path), module = name.replace(/\.dll$/i, '');
         if (file.form === 'native') { if (!(plan.apiMode ? file.inherited : item.inherited)) native.push({ source: file.path, name, machine: file.machine }); dllOverrides.push(`${module}=n,b`); }
@@ -170,4 +182,4 @@ async function applyNativeLibraries(view, prefixPath, { signal } = {}) {
   }
   Writable.atomicWrite(ledgerPath, JSON.stringify(next) + '\n', { root: prefixPath });
 }
-module.exports = { selectedDescriptions, filesIdentity, prepareTranslatorFiles, applyNativeLibraries, cpuFolder };
+module.exports = { placesDirect3D, selectedDescriptions, filesIdentity, prepareTranslatorFiles, applyNativeLibraries, cpuFolder };

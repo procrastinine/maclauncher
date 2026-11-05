@@ -8,7 +8,7 @@ const { fileDigest } = require('./verified-identity');
 function fallbackNotice(reasonCode) {
   if (reasonCode === 'missing-choice') return "This saved choice is unavailable. The runtime's current fallback will be used.";
   if (reasonCode === 'runtime-global-automatic') return 'CrossOver keeps its automatic renderer until every Direct3D row has a usable choice.';
-  if (reasonCode === 'shared-physical-binding') return 'This choice shares a library with another Direct3D selection. The existing renderer will be used.';
+  if (reasonCode === 'shared-physical-binding') return 'This choice needs a library that another Direct3D choice already provides, and a game can load only one copy.';
   if (reasonCode === 'recorded-fallback') return 'The recorded runtime used a different choice.';
   return 'This choice cannot load with the selected runtime. Its included copy or automatic choice will be used.';
 }
@@ -181,6 +181,8 @@ function resolveApiRoles(plan, { selections = {}, choices = [], included = [], c
     const affected = new Set(physical.conflicts.flatMap(item => item.roles));
     for (const role of Roles.DIRECT3D_ROLES) if (affected.has(role.id)) {
       const row = plan.components[role.id]; row.used = original[role.id].used;
+      // A row that still uses its own choice is not a fallback.
+      if (row.selected && identity(row.used) === identity(row.selected)) continue;
       row.fallback = true; row.reasonCode = 'shared-physical-binding'; row.reason = `Shared physical binding conflict: ${physical.conflicts.filter(item => item.roles.includes(role.id)).map(item => item.key).join(', ')}`;
     }
     physical = physicalPlacements(plan);

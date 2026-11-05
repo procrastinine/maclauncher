@@ -99,7 +99,7 @@ Installed managed choices remain available before Wine is installed. Included ch
 
 DXVK-macOS packages come in two layouts: Wine builtin libraries, as in Gcenx's `-builtin` packages, and plain native Windows DLLs. CrossOver's lists offer a DXVK-macOS installation only when its Direct3D libraries are Wine builtin DLLs, a form that is read from the files themselves, whereas Sikarugir's lists offer both layouts. A registered folder or archive is offered to both runtimes whatever its layout, and so is a package whose form cannot be read. A saved choice stays selected and goes through the same file-based loading checks as any other choice.
 
-Direct3D APIs can share DXGI, native Unix modules and Windows thunks, and each DLL or module location holds a file from only one source. When the selected choices would place different files at the same location, the affected APIs keep the components that the default Direct3D engine would use, and the inspector shows the selected choice with the shared-library notice. Companion files are identified from direct PE imports and matching Unix modules. When that information is incomplete, the whole package is treated as one group, and no ABI is guessed from engine names or versions.
+Direct3D APIs can share DXGI, native Unix modules and Windows thunks, and each DLL or module location holds a file from only one source. When the selected choices would place different files at the same location, the affected APIs keep the components that the default Direct3D engine would use. An API that loses its own choice this way shows the shared-library notice in the inspector; an API that keeps its choice shows none. For example, DXVK's Direct3D 8 library loads DXVK's own Direct3D 9 library, so it cannot be combined with a different Direct3D 9 choice. Companion files are identified from direct PE imports and matching Unix modules. When that information is incomplete, the whole package is treated as one group, and no ABI is guessed from engine names or versions.
 
 CrossOver selects its included renderer through one global backend, so while its automatic choice is unresolved, that choice applies to every API. A specific default Direct3D engine, or an explicit choice for every API, goes through the private loader instead. When only some APIs have their own choice and the others still depend on CrossOver's unresolved automatic choice, the game keeps CrossOver's automatic combination, and the inspector explains that the choices are linked. With a specific default Direct3D engine, the remaining APIs need no choices of their own. CrossOver's application files remain unchanged.
 
@@ -109,7 +109,7 @@ The DXMT version actually used for Direct3D 11 also supplies camera support. Bec
 
 ## Loading
 
-How a selected component is loaded depends on its source and form. CrossOver's own engines are chosen through CrossOver's graphics backend selector. A Direct3D engine from any other source is loaded in one of two ways:
+How a selected component is loaded depends on its source and form. CrossOver's own engines are chosen through CrossOver's graphics backend selector when every Direct3D API uses CrossOver's files. That selector applies to the whole game, so when any Direct3D API, such as Direct3D 12 with vkd3d-proton, uses a library from another source, the selected CrossOver engine's files are placed through the private loader as well, and each API keeps its choice. A Direct3D engine from any other source is loaded in one of two ways:
 
 - Replacement Wine builtin DLLs are placed in private Windows DLL directories, with their Unix modules beside the private Wine loader. D3DMetal's matching bridge and framework are selected together.
 - Upstream native Windows DLLs, on the other hand, are linked into the environment's `system32` or `syswow64` directory and enabled with native DLL overrides. An existing DLL is set aside before it is replaced and restored when that selection is removed. Native DLLs are not placed for a **Bottle setting** or **Wrapper setting**, so the environment keeps its own files.
@@ -139,7 +139,7 @@ For CrossOver and Sikarugir games alike, the inspector shows one row for each Di
 | --- | --- |
 | A saved choice is no longer installed; its row reads **Saved selection (unavailable)** | This saved choice is unavailable. The runtime's current fallback will be used. |
 | CrossOver's automatic renderer still applies to the API | CrossOver keeps its automatic renderer until every Direct3D row has a usable choice. |
-| Two choices would place different files at one library location | This choice shares a library with another Direct3D selection. The existing renderer will be used. |
+| Two choices would place different files at one library location | This choice needs a library that another Direct3D choice already provides, and a game can load only one copy. |
 | A file check shows that the choice cannot load | The failed check, such as a missing file |
 | Any other fallback, such as a component without that API's library | This choice cannot load with the selected runtime. Its included copy or automatic choice will be used. |
 | A record from an earlier MacLauncher version without a structured reason | The recorded runtime used a different choice. |
