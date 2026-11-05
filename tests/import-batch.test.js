@@ -63,3 +63,32 @@ test('per-item chooser cancellation preserves failures and resolving one keeps t
   state.dismiss(state.batches[0].id);assert.deepEqual(h.render().batches,[]);
   assert.deepEqual(added,['/bad1','/good','/bad2','/fixed','/bad2']);h.close();
 });
+
+test('a finished batch closes after 30 seconds while failed, running and hovered batches stay', async () => {
+  const {componentHarness}=require('./helpers/renderer-component'),{mock}=require('node:test');
+  mock.timers.enable({apis:['setTimeout']});
+  const notices=new Map();
+  try {
+    let finish;
+    const batches=componentHarness(()=>component.useImportBatches({openGameDialog:async()=>['/fixed'],addRecent:p=>p==='/running'
+      ?new Promise(resolve=>{finish=resolve}):p==='/bad'?Promise.reject(Error('Choose a game file.')):Promise.resolve()}),{});
+    await batches.render().addPaths(['/good']);await batches.render().addPaths(['/bad']);
+    const running=batches.render().addPaths(['/running']);
+    // React mounts one ImportBatchNotice per batch; each gets its own harness here.
+    const show=()=>{const state=batches.render();for(const batch of state.batches){
+      const notice=notices.get(batch.id)||{props:{jobs:[],onCancel(){}}};notices.set(batch.id,notice);
+      Object.assign(notice.props,{batch,resolve:state.resolve,dismiss:state.dismiss});
+      notice.harness||=componentHarness(component.ImportBatchNotice,notice.props);notice.tree=notice.harness.render();}
+      return state.batches.map(batch=>batch.id);};
+    assert.deepEqual(show(),[1,2,3]);
+    mock.timers.tick(29_999);assert.deepEqual(show(),[1,2,3]);
+    mock.timers.tick(1);assert.deepEqual(show(),[2,3]);
+    await batches.render().resolve(batches.render().batches[0],0,true);assert.deepEqual(show(),[2,3]);
+    notices.get(2).tree.props.onMouseEnter();show();mock.timers.tick(60_000);assert.deepEqual(show(),[2,3]);
+    notices.get(2).tree.props.onMouseLeave();show();mock.timers.tick(29_999);assert.deepEqual(show(),[2,3]);
+    mock.timers.tick(1);assert.deepEqual(show(),[3]);
+    finish();await running;assert.deepEqual(show(),[3]);
+    mock.timers.tick(30_000);assert.deepEqual(show(),[]);
+    batches.close();
+  } finally { for(const notice of notices.values())notice.harness?.close();mock.timers.reset(); }
+});
