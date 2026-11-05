@@ -423,7 +423,8 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     windowsExecutablePath: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture,
     sourceRoot: match.sourceRoot, gameRoot, bottlePath, applicationPath: selected.install.appPath,
     ...(existingEnvironment ? { environmentReference: existingEnvironment.reference } : {}),
-    translatorRows: Translators.inspectorRows(translatorPlan), cameraAdapterNotice: context.cameraAdapterNotice || null, graphicsInputs: context.graphicsInputs } };
+    translatorRows: Translators.inspectorRows(translatorPlan),
+    translatorPlanKey: Translators.planKey(context.runtimeSettings, context.wineEnvironment?.install || selected.install), cameraAdapterNotice: context.cameraAdapterNotice || null, graphicsInputs: context.graphicsInputs } };
   context.onEntryChange?.(entry);
   return { ...selected, directory, gameRoot, workingDirectory, bottlePath, executablePath, environment, args, translatorPlan, existingEnvironment };
 }

@@ -34,6 +34,17 @@ async function translatorOptions(entry, payload, context, dependencies = {}) {
     { value: 'vulkanBackend', label: plan.components['vulkan-driver'].used?.engine || 'auto' }
   ] };
 }
+// What the last Play recorded applies while the translator settings and the
+// Wine installation are unchanged.
+function recordedLaunch(entry, runtimeId, context, install) {
+  const record = entry.runtimeData?.[runtimeId];
+  return record?.translatorRows?.length && record.translatorPlanKey === Translators.planKey(context.runtimeSettings, install) ? record : null;
+}
+// The plan for the current settings from installed descriptions, without
+// Play's file checks.
+async function currentPlan(entry, runtimeId, context, install) {
+  return Translators.optionsPlan(await Translators.optionsInventory(install, runtimeId, context, { entry }), context);
+}
 async function runtimeStatus(entry, _payload, context) {
   const runtime = providerForEntry(entry, context)?.runtimeId;
   const selectedManager = runtimeManagers.find(candidate => candidate.id === providerForEntry(entry, context)?.managerId) || manager;
@@ -41,10 +52,14 @@ async function runtimeStatus(entry, _payload, context) {
   const selected = existing ? { ready: true, install: existing.install, version: existing.path, versionLabel: existing.install.engineVersion } :
     selectedManager.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
   const preparedContext = selected.install ? Translators.environmentContext(context, selected.install) : context;
-  const recorded = entry.runtimeData?.[runtime]?.translatorRows || [];
-  const plan = !recorded.length && selected.install ? Translators.optionsPlan(await Translators.optionsInventory(
-    preparedContext.wineEnvironment?.install || selected.install, runtime, preparedContext, { entry }), preparedContext) : null;
-  const rows = recorded.length ? Translators.presentInspectorRows(recorded) : plan ? Translators.inspectorRows(plan) : [];
+  const install = preparedContext.wineEnvironment?.install || selected.install;
+  // Rows recorded at the last Play describe unchanged settings; otherwise the
+  // rows describe what the current settings load. Without an installed
+  // runtime, the recorded rows remain.
+  const recorded = install ? recordedLaunch(entry, runtime, preparedContext, install)?.translatorRows
+    : entry.runtimeData?.[runtime]?.translatorRows?.length ? entry.runtimeData[runtime].translatorRows : null;
+  const plan = !recorded && install ? await currentPlan(entry, runtime, preparedContext, install) : null;
+  const rows = recorded ? Translators.presentInspectorRows(recorded) : plan ? Translators.inspectorRows(plan) : [];
   const details = rows.map(row => ({ label: row.label, value: row.used,
     detail: row.selected !== row.used && row.reason ? 'Selected ' + row.selected + '. ' + row.reason : '' }));
   const cameraNotice = entry.runtimeData?.[runtime]?.cameraAdapterNotice;
@@ -126,11 +141,14 @@ async function resolveGraphicsInputs(entry, context = {}, resolved, plan) {
   const prepared = Translators.environmentContext(context, selected.install);
   if (prepared.wineEnvironment) context.wineEnvironment = prepared.wineEnvironment;
   const install = prepared.wineEnvironment?.install || selected.install;
-  const translatorPlan = plan || context.translatorPlan;
-  if (!translatorPlan) return require('./graphics-inputs').inputs(install, entry.runtimeData?.[runtimeId]?.graphicsInputs,
-    { fallback: runtimeId === 'sikarugir' ? 'x86_64' : null });
-  const source = require("./temporal").resolvePlan(entry, context, { install, runtimeId, translatorPlan, settings: Translators.settingsForPlan(context.runtimeSettings || {}, translatorPlan), allowDownload: true })?.inputs;
-  return require("./graphics-inputs").inputs(install, source, { fallback: runtimeId === "sikarugir" ? "x86_64" : null });
+  const fallback = runtimeId === "sikarugir" ? "x86_64" : null;
+  let translatorPlan = plan || context.translatorPlan;
+  const recorded = !translatorPlan && recordedLaunch(entry, runtimeId, context, install);
+  if (recorded) return require("./graphics-inputs").inputs(install, recorded.graphicsInputs, { fallback });
+  translatorPlan ||= await currentPlan(entry, runtimeId, context, install);
+  const source = require("./temporal").resolvePlan(entry, context, { install, runtimeId, translatorPlan,
+    settings: Translators.settingsForPlan(context.runtimeSettings || {}, translatorPlan), allowDownload: true })?.inputs;
+  return require("./graphics-inputs").inputs(install, source, { fallback });
 }
 
 module.exports = { id: manifest.id, manifest, detectGame: Detection.detectGame,

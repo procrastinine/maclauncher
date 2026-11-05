@@ -383,20 +383,31 @@ function optionLists(install, runtime, context, dependencies = {}) {
   return { ...legacy, ...Plan.apiOptions(plan.components.d3d11 ? plan : Plan.projectRoles(plan), { ...input,
     selections: Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id, context.runtimeSettings?.[role.settingsKey]])) }) };
 }
+// The settings and Wine installation that decide a translator plan. Rows
+// recorded at Play describe the current settings while this key is unchanged.
+function planKey(settings = {}, install) {
+  return JSON.stringify([install?.executablePath || null, install?.versionLabel || install?.upstreamVersion || install?.engineVersion || null,
+    settings.environmentReference ?? null, settings[SETTINGS['d3d-renderer']] ?? '', ...Roles.ROLES.map(role => settings[role.settingsKey] ?? '')]);
+}
 function presentInspectorRows(rows) {
   return rows.map(row => {
     const reasonCode = row.reasonCode || (row.fallback ? 'recorded-fallback' : null);
     return { ...row, reasonCode, selected: reasonCode === 'missing-choice' ? Plan.UNAVAILABLE_CHOICE_LABEL : row.selected,
-      reason: row.fallback && reasonCode !== 'load-impossible' ? Plan.fallbackNotice(reasonCode) : row.reason };
+      reason: row.fallback && reasonCode !== 'load-impossible' ? Plan.fallbackNotice(reasonCode, { roles: row.conflictRoles }) : row.reason };
   });
 }
 function inspectorRows(plan) {
   const labels = { 'd3d-renderer': 'Direct3D', 'vulkan-driver': 'Vulkan', d3d12: 'Direct3D 12', video: 'Video codecs' };
   const entries = plan.components.d3d11 ? Roles.ROLES.map(role => [role.id, role.settingsKey]) : Object.entries(SETTINGS);
+  const automatic = plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice";
+  // Placed Direct3D libraries switch CrossOver to WineD3D, which then serves
+  // every Direct3D API that has no placed library of its own.
+  const builtin = plan.builtinRenderer && require('./translator-files').placesDirect3D(plan) ? Description.label(plan.builtinRenderer) : null;
   return presentInspectorRows(entries.map(([component, key]) => {
-    const row = plan.components[component];
-    return { id: key, component, label: labels[component] || Roles.ROLES.find(role => role.id === component)?.label, selected: row.selected ? Description.label(row.selected) : row.fallback ? Plan.UNAVAILABLE_CHOICE_LABEL : row.inherited ? 'Inherited' : plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice",
-      used: row.used ? Description.label(row.used) : plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice", reason: row.reason, reasonCode: row.reasonCode, fallback: row.fallback };
+    const row = plan.components[component], direct3D = Roles.DIRECT3D_ROLES.some(role => role.id === component);
+    return { id: key, component, label: labels[component] || Roles.ROLES.find(role => role.id === component)?.label, selected: row.selected ? Description.label(row.selected) : row.fallback ? Plan.UNAVAILABLE_CHOICE_LABEL : row.inherited ? 'Inherited' : automatic,
+      used: row.used ? Description.label(row.used) : direct3D && builtin || automatic, reason: row.reason, reasonCode: row.reasonCode, fallback: row.fallback,
+      ...(row.conflictRoles?.length ? { conflictRoles: row.conflictRoles } : {}) };
   }));
 }
-module.exports = { SETTINGS, includedTranslators, managedTranslators, inventory, optionsInventory, optionsPlan, resolve, engines, settingsForPlan, wineRoot, withSettings, optionLists, inspectorRows, presentInspectorRows, environmentContext };
+module.exports = { SETTINGS, includedTranslators, managedTranslators, inventory, optionsInventory, optionsPlan, resolve, engines, settingsForPlan, wineRoot, withSettings, optionLists, inspectorRows, presentInspectorRows, planKey, environmentContext };

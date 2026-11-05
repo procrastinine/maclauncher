@@ -5,10 +5,13 @@ const Roles = require('./translator-roles');
 const fs = require('node:fs'), path = require('node:path');
 const { fileDigest } = require('./verified-identity');
 
-function fallbackNotice(reasonCode) {
+// `roles` names the other APIs whose choices hold a shared library, when known.
+function fallbackNotice(reasonCode, { roles = [] } = {}) {
   if (reasonCode === 'missing-choice') return "This saved choice is unavailable. The runtime's current fallback will be used.";
   if (reasonCode === 'runtime-global-automatic') return 'CrossOver keeps its automatic renderer until every Direct3D row has a usable choice.';
-  if (reasonCode === 'shared-physical-binding') return 'This choice needs a library that another Direct3D choice already provides, and a game can load only one copy.';
+  if (reasonCode === 'shared-physical-binding') return roles.length
+    ? `This choice needs its own copy of a library that the ${roles.join(' and ')} choice provides, and a game can load only one copy.`
+    : 'This choice needs a library that another Direct3D choice already provides, and a game can load only one copy.';
   if (reasonCode === 'recorded-fallback') return 'The recorded runtime used a different choice.';
   return 'This choice cannot load with the selected runtime. Its included copy or automatic choice will be used.';
 }
@@ -153,6 +156,9 @@ function apiGroups(plan) {
 }
 function resolveApiRoles(plan, { selections = {}, choices = [], included = [], compatibility = {}, apiCompatibility = {}, automatic = {}, environment } = {}) {
   projectRoles(plan);
+  // While the private loader places Direct3D libraries, CrossOver's global
+  // backend is WineD3D, so an API without a placed library uses this renderer.
+  if (plan.runtime === 'crossover') plan.builtinRenderer = included.find(item => item.component === 'd3d-renderer' && item.engine === 'wined3d') || null;
   const original = Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id, { ...plan.components[role.id] }]));
   const requested = Roles.DIRECT3D_ROLES.some(role => role.id !== 'd3d12' && selections[role.id]);
   if (!requested) { plan.groups = apiGroups(plan); return plan; }
@@ -183,7 +189,9 @@ function resolveApiRoles(plan, { selections = {}, choices = [], included = [], c
       const row = plan.components[role.id]; row.used = original[role.id].used;
       // A row that still uses its own choice is not a fallback.
       if (row.selected && identity(row.used) === identity(row.selected)) continue;
-      row.fallback = true; row.reasonCode = 'shared-physical-binding'; row.reason = `Shared physical binding conflict: ${physical.conflicts.filter(item => item.roles.includes(role.id)).map(item => item.key).join(', ')}`;
+      const conflicts = physical.conflicts.filter(item => item.roles.includes(role.id));
+      row.fallback = true; row.reasonCode = 'shared-physical-binding'; row.reason = `Shared physical binding conflict: ${conflicts.map(item => item.key).join(', ')}`;
+      row.conflictRoles = Roles.DIRECT3D_ROLES.filter(other => other.id !== role.id && conflicts.some(item => item.roles.includes(other.id))).map(other => other.label);
     }
     physical = physicalPlacements(plan);
   }
@@ -219,10 +227,15 @@ function apiOptions(plan, { choices = [], included = [], environment = null, sel
     const rows = [], current = plan.components[role.id], saved = selections[role.id];
     if (environment) rows.push({ value: INHERIT, label: environment.label || 'Environment setting' });
     rows.push({ value: AUTOMATIC, label: plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice" });
+    // Another API is affected when the library it uses, or the one its own
+    // saved choice needs, would be a different copy of a file this item places.
+    // Choosing the item then changes that API too, so no saved conflict remains.
     const affectedBy = item => {
       const files = filesForRole(item, role), keys = new Set(files.map(placementKey));
-      return Roles.DIRECT3D_ROLES.filter(other => other.id === role.id ||
-        (plan.components[other.id]?.used && filesForRole(plan.components[other.id].used, other).some(file => keys.has(placementKey(file)) && files.some(own => placementKey(own) === placementKey(file) && physicalSource(own) !== physicalSource(file)))));
+      const clashes = (description, other) => description && filesForRole(description, other).some(file => keys.has(placementKey(file)) &&
+        files.some(own => placementKey(own) === placementKey(file) && physicalSource(own) !== physicalSource(file)));
+      return Roles.DIRECT3D_ROLES.filter(other => other.id === role.id || clashes(plan.components[other.id]?.used, other) ||
+        ![undefined, '', AUTOMATIC, INHERIT].includes(selections[other.id]) && clashes(plan.components[other.id]?.selected, other));
     };
     const scope = item => JSON.stringify(affectedBy(item).map(other => [other.id, serves(item, other)]));
     const candidates = uniqueComponents([...included, ...choices].filter(item => (!item.hiddenChoice || item.id === current.selected?.id) &&
@@ -238,7 +251,7 @@ function apiOptions(plan, { choices = [], included = [], environment = null, sel
           !(selections[other.id] && plan.components[other.id]?.selected && plan.components[other.id].reasonCode === 'runtime-global-automatic'));
       const heldBack = unresolvedGlobal || current.selected?.id === item.id && current.fallback && (!current.used || !sameComponent(item, current.used, role));
       const reason = heldBack ? unresolvedGlobal ? 'runtime-global-automatic' : current.reasonCode || 'fallback' : affected.length > 1 ? 'shared-physical-binding' : undefined;
-      const notice = heldBack ? fallbackNotice(reason) : undefined;
+      const notice = heldBack ? fallbackNotice(reason, { roles: current.conflictRoles }) : undefined;
       rows.push({ value, label: label(item), apis: item.apis, source: item.source, form: item.form, scopeKnown: Boolean(item.apis?.length), reason, heldBack: Boolean(heldBack), notice,
         groupId: affected.map(item => item.id).join('+'), affectedRoles: affected.map(item => item.id), runtimeSettingsPatch: patch });
     }

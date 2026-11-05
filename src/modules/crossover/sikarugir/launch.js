@@ -384,7 +384,8 @@ async function prepareLaunch(entry, context, dependencies = {}) {
     sourceRoot: match.sourceRoot, gameRoot, prefixPath, viewRoot, graphicsBackend: graphics.graphicsBackend,
     ...(existingEnvironment ? { environmentReference: existingEnvironment.reference } : {}),
     vulkanBackend: graphics.vulkanBackend, dlss: graphics.dlss?.enabled === true, componentVersions: graphics.componentVersions,
-    translatorRows: Translators.inspectorRows(translatorPlan), cameraAdapterNotice: context.cameraAdapterNotice || null, graphicsInputs: context.graphicsInputs } };
+    translatorRows: Translators.inspectorRows(translatorPlan),
+    translatorPlanKey: Translators.planKey(context.runtimeSettings, context.wineEnvironment?.install || selected.install), cameraAdapterNotice: context.cameraAdapterNotice || null, graphicsInputs: context.graphicsInputs } };
   context.onEntryChange?.(entry);
   return { ...selected, directory, gameRoot, workingDirectory, prefixPath, viewRoot, executablePath, windowsExecutablePath, graphics, environment, args, translatorPlan,
     existingEnvironment, winePath: graphics.executablePath || selected.install.executablePath, serverPath: graphics.serverPath || selected.install.serverPath };
