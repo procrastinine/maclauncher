@@ -234,6 +234,12 @@ function refreshRuntimeSnapshots(ids) {
   return backendService.request("state", "runtimeStates", loadSettings(), ids)
     .catch(error => logger.warn("[runtime] background inventory failed", error.message));
 }
+// A complete inventory read; returning to the app starts none while one runs.
+let runtimeInventoryReading = null;
+function readRuntimeInventory() {
+  runtimeInventoryReading ||= refreshRuntimeSnapshots().finally(() => { runtimeInventoryReading = null; });
+  return runtimeInventoryReading;
+}
 function refreshModuleSnapshots() {
   return backendService.request("state", "moduleStates", loadSettings())
     .catch(error => logger.warn("[modules] background state failed", error.message));
@@ -3072,7 +3078,7 @@ async function init() {
     // The window paints stored records immediately. Backend inventories and
     // metadata validation never delay opening Electron or handle selection.
     // After the startup inventory, one spare worker prepares the next game's lane.
-    void refreshRuntimeSnapshots().then(() => backendService.prepareSpareLane(loadSettings()));
+    void readRuntimeInventory().then(() => backendService.prepareSpareLane(loadSettings()));
     void refreshModuleSnapshots();
     void refreshLibraryMetadata(games, settings);
     void moduleAppActions.maintain({ userDataDir, logger });
@@ -5080,6 +5086,12 @@ app.on("browser-window-focus", (_event, win) => {
   if (!isChildGame && cachedState && launcherWindows.has(win)) gameAvailability.focus();
   // Running apps change while the launcher is in the background.
   if (!isChildGame && cachedState && launcherWindows.has(win)) refreshModuleAppActions();
+});
+// Runtimes changed outside the launcher, such as an updated or removed
+// CrossOver or a deleted translator folder, are read again on return. A
+// changed inventory starts a new display revision in every backend lane.
+app.on("did-become-active", () => {
+  if (!isChildGame && cachedState && !runtimeInventoryReading) void readRuntimeInventory();
 });
 app.on("will-quit", () => {gameAvailability.close();graphicsShortcuts.dispose();});
 

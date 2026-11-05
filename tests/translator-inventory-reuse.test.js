@@ -68,3 +68,23 @@ test('translator choices whose same-named libraries differ in size are distinct 
   assert.deepEqual(rows.map(row => row.value), ['automatic', 'older', 'newer']);
   assert.deepEqual(opened.sort(), ['copy', 'newer'], 'only the same-sized pair is read');
 });
+
+test('returning to the app reads runtime inventories again, one read at a time and never in a game child', async () => {
+  const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), { EventEmitter } = require('node:events');
+  const source = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8');
+  const reader = source.slice(source.indexOf('function refreshRuntimeSnapshots('), source.indexOf('\nfunction refreshModuleSnapshots('));
+  const start = source.indexOf('app.on("did-become-active"'), handler = source.slice(start, source.indexOf('\n});', start) + 4);
+  const requests = [], pending = [];
+  const context = { app: new EventEmitter(), isChildGame: false, cachedState: {}, loadSettings: () => ({}), logger: { warn() {} },
+    backendService: { request: (...args) => { requests.push(args); return new Promise(resolve => pending.push(resolve)); } } };
+  vm.createContext(context); vm.runInContext(reader, context); vm.runInContext(handler, context);
+  context.app.emit('did-become-active'); context.app.emit('did-become-active');
+  assert.deepEqual(requests, [['state', 'runtimeStates', {}, undefined]], 'one complete inventory read while one runs');
+  pending.shift()(); await new Promise(resolve => setImmediate(resolve));
+  context.app.emit('did-become-active');
+  assert.equal(requests.length, 2, 'a later return reads again');
+  pending.shift()(); await new Promise(resolve => setImmediate(resolve));
+  context.isChildGame = true; context.app.emit('did-become-active');
+  context.isChildGame = false; context.cachedState = null; context.app.emit('did-become-active');
+  assert.equal(requests.length, 2, 'game children and an unfinished startup read nothing');
+});
