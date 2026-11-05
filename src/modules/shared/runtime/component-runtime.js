@@ -51,6 +51,15 @@ function inspected(root, definition, options) {
     architectures: [...new Set(translator.files.flatMap(file => file.architectures || file.cpuSlices || file.slices?.map(slice => slice.architecture) || []))],
     versionLabel: translator.version, baseRoot: fs.existsSync(path.join(root, "wine")) ? path.join(root, "wine") : root };
 }
+function withCatalogFacts(translator, supplied = {}, sourceId = "upstream") {
+  const original = translator.source;
+  if (original === "custom" || original?.kind === "custom") return translator;
+  const source = original && typeof original === "object"
+    ? { ...supplied.source, ...original,
+      label: original.label && original.label !== sourceId ? original.label : supplied.source?.label || original.label }
+    : !original || original === sourceId ? supplied.source || original : original;
+  return { ...supplied, ...translator, version: translator.version || supplied.version || "", source };
+}
 function configure(manager, definition) {
   Custom.configure(manager, { prepare: prepareArchive, inspect(input, { data } = {}) {
     const root = componentRoot(data?.root || input, definition);
@@ -60,9 +69,15 @@ function configure(manager, definition) {
   const selection = manager.resolveSelection;
   manager.resolveSelection = function(...args) {
     const result = selection.apply(this, args);
-    if (!result?.install || result.install.translator) return result;
-    const root = componentRoot(result.install.installDir, definition);
-    return { ...result, install: { ...result.install, ...inspected(root, definition, { source: result.install.catalogEntry?.catalogSourceId || "upstream" }) } };
+    const install = result?.install;
+    if (!install || install.custom || install.source === "custom") return result;
+    const pin = install.catalogEntry || manager.core?.catalog?.find(row => row.version === install.version);
+    const supplied = definition.catalogDescription?.(pin) || {};
+    const translator = install.translator || install.installationMetadata?.translator;
+    if (translator) return { ...result, install: { ...install,
+      translator: withCatalogFacts(translator, supplied, pin?.catalogSourceId) } };
+    const root = componentRoot(install.installDir, definition);
+    return { ...result, install: { ...install, ...inspected(root, definition, supplied) } };
   };
   return manager;
 }
@@ -147,7 +162,7 @@ function withIncludedReferences(manager) {
   };
   return manager;
 }
-module.exports = { componentRoot, registrationSource, description, inspected, configure, componentLabel, hostLabel, includedReferences, withIncludedReferences };
+module.exports = { componentRoot, registrationSource, description, inspected, configure, withCatalogFacts, componentLabel, hostLabel, includedReferences, withIncludedReferences };
 
 // A downloaded local container is unpacked once into shared launcher storage.
 // Directory registrations stay at the supplied location and remain references.

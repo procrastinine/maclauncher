@@ -45,13 +45,11 @@ function translatorSource(pin) {
   return { kind: template ? "template" : "upstream", id: pin?.catalogSourceId || "upstream",
     label: template ? `Sikarugir ${template}` : repository || "Upstream" };
 }
-function versionLabel(pin, installed, label) {
-  pin ||= installed?.catalogEntry;
-  const template = templateName(pin), component = installed?.translator;
-  if (template) return component?.version ? `${Component.componentLabel(component)} · Sikarugir ${template}` : [template, pin?.component].filter(Boolean).join(" · ");
+function catalogVersion(pin) {
+  if (!pin || templateName(pin)) return "";
   const name = assetName(pin?.asset);
   const releaseTag = /\/releases\/tag\/([^/]+)/.exec(pin?.sourceUrl || "")?.[1];
-  let release = releaseTag || pin?.upstreamTag || name || pin?.versionLabel || installed?.versionLabel || "";
+  let release = releaseTag || pin?.upstreamTag || name || pin?.versionLabel || "";
   try { release = decodeURIComponent(release); } catch {}
   const match = /v?(\d+(?:\.\d+)+(?:-\d+-g[a-f0-9]+)?(?:[-.]?(?:alpha|beta|rc)\d*)?[a-z]?)/i.exec(name || release);
   const version = match?.[1] || release;
@@ -64,8 +62,21 @@ function versionLabel(pin, installed, label) {
   if (/\brepack\b/i.test(name)) qualifiers.push(`repack${date ? ` ${date[1]}-${date[2]}-${date[3]}` : ""}`);
   else if (date) qualifiers.push(`${date[1]}-${date[2]}-${date[3]}`);
   if (/\bnative\b/i.test(name)) qualifiers.push("native");
-  const readable = [version, ...qualifiers].filter(Boolean).join(" · ");
-  return installed ? `${component?.version ? Component.componentLabel(component) : `${label} ${readable}`} · ${translatorSource(pin).label}` : readable;
+  return [version, ...qualifiers].filter(Boolean).join(" · ");
+}
+function catalogDescription(pin, source = translatorSource(pin)) {
+  return pin ? { version: catalogVersion(pin), source } : {};
+}
+function versionLabel(pin, installed, label) {
+  pin ||= installed?.catalogEntry;
+  const component = installed?.translator || installed?.installationMetadata?.translator;
+  if (installed?.custom || installed?.source === "custom") return installed.versionLabel;
+  if (!pin && !component?.version) return installed?.versionLabel;
+  const template = templateName(pin);
+  if (template && !component?.version) return [template, pin?.component].filter(Boolean).join(" · ");
+  if (installed) return require("./translator-label").label(Component.withCatalogFacts(
+    component || { engine: label }, catalogDescription(pin), pin?.catalogSourceId));
+  return template || catalogVersion(pin);
 }
 function catalogSource([id, label, repository, filter, component, presentation = {}], projectLabel = component) {
   const upstream = Upstream.github({ repository, prerelease: true, allArchitectures: true, recognize: release =>
@@ -97,7 +108,7 @@ function createManager(engine, { dependencies = {} } = {}) {
     discoverCatalog: () => [], ...(catalogSources.length ? { catalogSources } : {}), sourceUrl: definition.sourceUrl || downloadSource?.url || catalogSources[0]?.url || "https://gstreamer.freedesktop.org/", sourceLabel: "Source", sourceName: definition.sourceName, sourceDescription: definition.sourceDescription, nativeLibrary: true, cacheDownloads: true, supportsDefault: false, customRuntime: !definition.referenceOnly,
     resolveExecutable(root) { return Component.inspected(Component.componentRoot(root, definition), definition).executablePath; },
     inspectRuntime({ runtimePath, runtimeRoot, runtimeSource, runtimeCatalogEntry }) {
-      return Component.inspected(Component.componentRoot(runtimeRoot || path.dirname(runtimePath), definition), definition, { engine: runtimeCatalogEntry?.translatorEngine || definition.engine, source: runtimeCatalogEntry ? installedSource(runtimeCatalogEntry) : runtimeSource || "upstream" });
+      return Component.inspected(Component.componentRoot(runtimeRoot || path.dirname(runtimePath), definition), definition, { ...catalogDescription(runtimeCatalogEntry), engine: runtimeCatalogEntry?.translatorEngine || definition.engine, source: runtimeCatalogEntry ? installedSource(runtimeCatalogEntry) : runtimeSource || "upstream" });
     },
     prepareInstall({ unpacked, pin }) {
       const selected = pin.component ? { ...definition, names: [pin.component] } : definition;
@@ -107,7 +118,7 @@ function createManager(engine, { dependencies = {} } = {}) {
         try { require("../copy-file").cloneOrCopySync(resources, path.join(root, "package-resources")); }
         catch (error) { console.warn("The optional package resources could not be retained:", error.message); }
       }
-      const translator = Component.description(root, definition, { engine: pin.translatorEngine || definition.engine, source: installedSource(pin) });
+      const translator = Component.description(root, definition, { ...catalogDescription(pin, installedSource(pin)), engine: pin.translatorEngine || definition.engine });
       const files = Object.fromEntries(translator.files.filter(file => file.format !== "json").map(file => [file.relative, require("./pinned-native-manager").hashFile(file.path)]));
       const stored = require("./translator-description").installationDescription(translator);
       const relative = path.relative(unpacked, root);
@@ -135,6 +146,7 @@ function createManager(engine, { dependencies = {} } = {}) {
     };
     manager.refreshCatalog = async options => manager.getState(options).catalog;
   }
-  return Component.withIncludedReferences(definition.referenceOnly ? manager : Component.configure(manager, definition));
+  return Component.withIncludedReferences(definition.referenceOnly ? manager : Component.configure(manager, {
+    ...definition, catalogDescription: pin => catalogDescription(pin, installedSource(pin)) }));
 }
-module.exports = { definitions, catalogSource, createManager, assetName, templateName, versionLabel };
+module.exports = { definitions, catalogSource, createManager, assetName, templateName, catalogVersion, catalogDescription, versionLabel };
