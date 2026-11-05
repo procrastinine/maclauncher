@@ -708,13 +708,13 @@ test("CrossOver launch retries unavailable optional temporal inputs but retains 
   const run = async (_command, args) => {const bottle = args[args.indexOf('--bottle') + 1];fs.mkdirSync(bottle, {recursive: true});
     fs.writeFileSync(path.join(bottle, 'cxbottle.conf'), '[Bottle]\n');fs.writeFileSync(path.join(bottle, 'system.reg'), 'registry');return {stdout: '', stderr: ''};};
   const launch = await Launch.prepareLaunch(entry, context, {run});
-  assert.equal(launch.environment.CX_GRAPHICS_BACKEND, 'dxvk');assert.equal(launch.environment.WINEDXVK, '1');
+  assert.equal(launch.environment.CX_GRAPHICS_BACKEND, 'dxvk');assert.equal(launch.environment.WINEDXVK, undefined);
   assert.equal(launch.environment.DXMT_ENABLE_NVEXT, '0');assert.equal(launch.environment.D3DM_ENABLE_METALFX, '0');
   assert.equal(entry.effects.video[0].method, 'fsr2');assert.match(warnings[0][0], /temporal integration is unavailable/);
   assert.deepEqual(context.graphicsInputs, {architecture: installed.architectures[0]});
   for (const warn of [() => {throw Error('warning sink failed');}, () => Promise.reject(Error('warning sink rejected'))]) {
     const recovered = await Launch.prepareLaunch(entry, {...context, logger: {warn}}, {run});
-    assert.equal(recovered.bottlePath, launch.bottlePath);assert.equal(recovered.environment.WINEDXVK, '1');assert.equal(entry.effects.video[0].method, 'fsr2');
+    assert.equal(recovered.bottlePath, launch.bottlePath);assert.equal(recovered.environment.WINEDXVK, undefined);assert.equal(entry.effects.video[0].method, 'fsr2');
   }
   await new Promise(setImmediate);
   await assert.rejects(Launch.prepareLaunch(entry, {...context, runtimeSettings: {...context.runtimeSettings, dllOverrides: ['invalid override']}}, {run}), /DLL overrides must use/);

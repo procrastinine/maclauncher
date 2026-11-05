@@ -41,7 +41,7 @@ export function normalizeRuntimeSettingValue(field, value, fallback) {
   const dynamic = typeof field?.optionsAction === "string" && field.optionsAction.trim().length > 0;
   if (type === "select" || dynamic) {
     const values = (Array.isArray(field.options) ? field.options : []).map(opt => opt?.value ?? opt?.id)
-      .filter(value => typeof value === "string" && value.length > 0);
+      .filter(value => typeof value === "string");
     // Local choices can be unavailable while loading or between launches. Keep
     // the exact saved identity; its provider validates availability when used.
     if (dynamic && isRuntimeSettingChoiceValue(value)) return value;

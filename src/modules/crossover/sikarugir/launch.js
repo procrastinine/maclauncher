@@ -1,3 +1,4 @@
+const WineSettings = require("../../shared/runtime/wine-settings");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
@@ -17,7 +18,7 @@ const PROTECTED_ENVIRONMENT = new Set(["HOME", "PATH", "TMPDIR", "WINEPREFIX", "
   "WINEDLLPATH", "WINEDLLOVERRIDES", "WINEMSYNC", "WINEESYNC", "DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH",
   "DYLD_FRAMEWORK_PATH", "DYLD_FALLBACK_FRAMEWORK_PATH", "DYLD_INSERT_LIBRARIES", "VK_DRIVER_FILES", "VK_ICD_FILENAMES",
   "NODE_OPTIONS", "ELECTRON_RUN_AS_NODE", "SikarugirAppWine11", "MACLAUNCHER_DXMT_BASE_LIBRARY"]);
-const WINDOWS_VERSIONS = new Set(["win11", "win10", "win7", "winxp"]);
+const WINDOWS_VERSIONS = new Set(Object.keys(WineSettings.WINDOWS_VERSIONS));
 
 // Wine may return while Windows children continue in other process groups.
 // Wait for the private wineserver on ordinary exit; Stop terminates that prefix
@@ -123,10 +124,7 @@ function buildEnvironment(settings, installation, directory, prefixPath, graphic
     if (!/^[A-Za-z0-9_.@-]+$/.test(locale)) throw new Error("Locale must use a locale identifier, such as ja_JP.UTF-8.");
     environment.LANG = locale; environment.LC_ALL = locale; environment.LC_MESSAGES = locale;
   }
-  if (installation.needsRosetta) {
-    environment.ROSETTA_ADVERTISE_AVX = settings.advertiseAvx === false || settings.advertiseAvx === "off" ? "0" : "1";
-    environment.DOTNET_EnableWriteXorExecute = "0";
-  }
+  Object.assign(environment, WineSettings.environment(settings, { needsRosetta: installation.needsRosetta, engines: { "d3d-renderer": settings.graphicsBackend, "vulkan-driver": settings.vulkanBackend } }), parseEnvironment(settings.environment));
   environment.WINEDEBUG = settings.wineDebug ? safeText(settings.wineDebug, "Wine debug channels") : "-all";
   const dll = dllOverrides(settings, graphics.dllOverrides);
   if (dll) environment.WINEDLLOVERRIDES = dll;
@@ -337,8 +335,10 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   // Apply launcher-owned optional effects only to the game, after stock Wine
   // finishes prefix initialization. User-supplied loader paths remain blocked.
   if (context.applyGameEnvironment) environment = await context.applyGameEnvironment(environment);
-  const args = [windowsExecutablePath, ...(Array.isArray(settings.arguments) ? settings.arguments : []).map(value => safeText(value, "Game arguments")),
-    ...(context.gameArguments || [])];
+  await WineSettings.applyRegistry({ ...settings, windowsVersion: "" }, { executable: path.basename(windowsExecutablePath) }, args =>
+    (dependencies.run || runSupervised)(selected.install.executablePath, selected.install.serverPath, args, { cwd: directory, env: environment, signal: context.signal, timeout: 30000 }));
+  const args = WineSettings.desktopArguments(settings, [windowsExecutablePath, ...(Array.isArray(settings.arguments) ? settings.arguments : []).map(value => safeText(value, "Game arguments")),
+    ...(context.gameArguments || [])]);
   if (cameraBridge && cameraView) {
     GameView.remember(entry, context, "sikarugir", cameraView, recovery);
     GameView.watch(entry, context, directory, "sikarugir", cameraView);

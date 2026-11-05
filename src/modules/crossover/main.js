@@ -1,5 +1,5 @@
 const fs = require("node:fs");
-const manifest = require("./temporal/catalog").withSettingsOptions(require("./manifest.json"));
+const manifest = require("../shared/runtime/wine-settings-ui").withSettings(require("./temporal/catalog").withSettingsOptions(require("./manifest.json")));
 const Detection = require("./detect");
 const manager = require("./runtime/manager");
 const Launch = require("./runtime/launch");

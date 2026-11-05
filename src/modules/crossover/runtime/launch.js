@@ -1,3 +1,4 @@
+const WineSettings = require("../../shared/runtime/wine-settings");
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
@@ -148,7 +149,7 @@ function buildEnvironment(settings, installation, directory, bottlePath, { baseE
     overrides.LANG = locale; overrides.LC_ALL = locale; overrides.LC_MESSAGES = locale;
   }
   if (settings.wineDebug) overrides.WINEDEBUG = safeText(settings.wineDebug, "Wine debug channels");
-  Object.assign(overrides, parseEnvironment(settings.environment));
+  Object.assign(overrides, WineSettings.environment(settings, { needsRosetta: installation.needsRosetta, engines: { "d3d-renderer": backend, "vulkan-driver": settings.vulkanBackend } }), parseEnvironment(settings.environment));
   const dll = dllOverrides(settings);
   if (dll) overrides.WINEDLLOVERRIDES = dll;
   Object.assign(environment, overrides, { CX_ROOT: installation.crossoverRoot,
@@ -320,6 +321,11 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   Writable.assertOwnDirectory(directory, path.dirname(bottlePath));
   await ensureBottle(selected.install, Environments.privateEnvironment(context.userDataDir, directory, path.relative(directory, bottlePath)), directory, settings, context, { run });
   detachProfileAliases(bottlePath);
+  await WineSettings.applyRegistry({ ...settings, windowsVersion: "" }, {}, args => {
+    const options = { cwd: directory, env: environment, signal: context.signal, timeout: 30000 };
+    const commandArgs = ["--bottle", bottlePath, "--no-update", "--", ...args];
+    return run ? run(selected.install.executablePath, commandArgs, options) : runSupervised(selected.install.executablePath, selected.install.serverPath, commandArgs, options);
+  });
   // The vendor wrapper restores these trusted game-only values after its
   // protected shell/Perl launch; bottle setup stays on the stock runtime.
   const originalEnvironment = {...environment}, originalOverrides = {...overrides};
@@ -366,6 +372,11 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   }
   const workingDirectory = path.dirname(executable);
   const args = ["--bottle", bottlePath, "--wait-children", "--workdir", workingDirectory];
+  if (!WineSettings.inherit(settings.windowsVersion)) {
+    if (!Object.hasOwn(WineSettings.WINDOWS_VERSIONS, settings.windowsVersion)) throw new Error("Unsupported Wine Windows version.");
+    args.push("--winver", settings.windowsVersion);
+  }
+  args.push(...WineSettings.desktopArguments(settings, [], { crossover: true }));
   if (Object.keys(overrides).length) args.push("--env", wineEnvironmentString(overrides));
   if (dll) args.push("--dll", dll);
   if (settings.wineDebug) args.push("--debugmsg", safeText(settings.wineDebug, "Wine debug channels"));
