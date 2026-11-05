@@ -51,8 +51,16 @@ function catalogVersion(pin) {
   const releaseTag = /\/releases\/tag\/([^/]+)/.exec(pin?.sourceUrl || "")?.[1];
   let release = releaseTag || pin?.upstreamTag || name || pin?.versionLabel || "";
   try { release = decodeURIComponent(release); } catch {}
-  const match = /v?(\d+(?:\.\d+)+(?:-\d+-g[a-f0-9]+)?(?:[-.]?(?:alpha|beta|rc)\d*)?[a-z]?)/i.exec(name || release);
-  const version = match?.[1] || release;
+  const versionPattern = /v?(\d+(?:\.\d+)+(?:-\d+-g[a-f0-9]+)?(?:[-.]?(?:alpha|beta|rc)\d*)?[a-z]?)/i;
+  const declared = [pin.releaseVersion, pin.upstreamTag, pin.version, releaseTag].map(value => {
+    const match = versionPattern.exec(String(value || "").trim());
+    return match?.index === 0 ? match[1] : null;
+  }).find(Boolean);
+  const assetVersion = versionPattern.exec(name || release)?.[1];
+  // Source-recognized releases precede package ABI prefixes. An asset may
+  // still qualify that same release with a build revision or prerelease.
+  const qualified = declared && assetVersion?.startsWith(declared) && /^[^\d.]/.test(assetVersion.slice(declared.length));
+  const version = qualified ? assetVersion : declared || assetVersion || release;
   const qualifiers = [];
   if (/\bmacos\b/i.test(name)) qualifiers.push("macOS build");
   if (/\basync\b/i.test(name)) qualifiers.push("async");
