@@ -260,7 +260,11 @@ test("ordinary Wine preparation configures its private prefix silently and prese
   dependencies.setVersion("WS12WineSikarugir10.0_8");
   const older = await Launch.prepareLaunch(entry, context, dependencies);
   assert.equal(older.prefixPath, launch.prefixPath, "engine updates keep the per-game Windows profile");
-  assert.notEqual(older.viewRoot, launch.viewRoot, "graphics loaders remain keyed to the selected runtime");
+  assert.equal(older.viewRoot, launch.viewRoot, "identical Wine files reuse the shared graphics view across labels");
+  fs.writeFileSync(install.executablePath, "updated synthetic Wine");
+  const updated = await Launch.prepareLaunch(entry, context, dependencies);
+  assert.notEqual(updated.viewRoot, older.viewRoot, "changed Wine files select a new shared graphics view");
+  assert.equal(updated.prefixPath, launch.prefixPath, "new graphics views retain the prefix and saves");
   assert.equal(fs.readFileSync(path.join(launch.prefixPath, "saved.dat"), "utf8"), "prefix save");
   assert.equal(fs.readFileSync(path.join(older.gameRoot, "Save01.dat"), "utf8"), "game save");
 });
