@@ -101,6 +101,7 @@ export type RuntimeSettingField = {
   optionsKey?: string;
   pickerAction?: string;
   pickerResultKey?: string;
+  pickerLabel?: string;
   fileStatusAction?: string;
   rows?: Array<{ label: string; value: string }>;
   gameOnly?: boolean;

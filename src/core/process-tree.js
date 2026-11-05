@@ -18,6 +18,15 @@ function list({ execFile: run = execFile } = {}) {
     (error, stdout) => resolve(error ? [] : parse(stdout))));
 }
 
+/** Parent links with executable names, for runtimes with a shared server. */
+function listCommands({ execFile: run = execFile } = {}) {
+  return new Promise(resolve => run("/bin/ps", ["-axo", "pid=,ppid=,comm="], { timeout: 2000, maxBuffer: 2 * 1024 * 1024 },
+    (error, stdout) => resolve(error ? [] : String(stdout).trim().split("\n").flatMap(line => {
+      const match = line.match(/^\s*(\d+)\s+(\d+)\s+(.+)$/);
+      return match && validPid(Number(match[1])) ? [[Number(match[1]), Number(match[2]), match[3]]] : [];
+    }))));
+}
+
 /** The given processes and their descendants in `rows`, at most `limit` PIDs. */
 function descendants(roots, rows, limit = 512) {
   const pids = new Set([].concat(roots).filter(validPid));
@@ -28,4 +37,4 @@ function descendants(roots, rows, limit = 512) {
   return pids;
 }
 
-module.exports = { parse, list, descendants };
+module.exports = { parse, list, listCommands, descendants };

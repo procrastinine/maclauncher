@@ -34,7 +34,7 @@ Windows-only auxiliary tools of some engines, such as alice-tools, WolfTL, UberW
 
 Both runtimes play from a private writable copy of the game folder. Windows games can write settings or saves next to any asset, so the whole folder is copied, using filesystem copy-on-write cloning where available. Other filesystems need space for a full copy. Later launches reuse unchanged assets and refresh private files that still match the previous original, so saves, mod edits and private deletions are kept.
 
-Each game's Windows environment is a CrossOver bottle or a Wine prefix kept in its launcher data. Stop ends the Wine processes in that environment, and forgetting the game removes its private files and environments. The [Sikarugir](../runtimes/SIKARUGIR.md#private-game-files-and-prefixes) and [CrossOver](../runtimes/CROSSOVER.md#bottles-and-private-game-files) pages describe each runtime's layout.
+Each game's Windows environment defaults to a private CrossOver bottle or Wine prefix in launcher data. Runtime Settings can select an existing bottle or Sikarugir wrapper by reference. Stop closes private programs gracefully before forcing; external environments keep other programs running unless a bottle-wide close is confirmed. Forgetting a game removes its private files and environments while preserving external references. The [Sikarugir](../runtimes/SIKARUGIR.md#private-game-files-and-prefixes) and [CrossOver](../runtimes/CROSSOVER.md#bottles-and-private-game-files) pages describe each runtime's layout.
 
 ## Saves
 

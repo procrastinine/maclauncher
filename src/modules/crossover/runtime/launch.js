@@ -116,7 +116,7 @@ function bottleTemplate(settings) {
   if (!["win11_64", "win10_64", "win7_64", "winxp_64"].includes(template)) throw new Error("Unsupported CrossOver Windows bottle type.");
   return template;
 }
-function buildEnvironment(settings, installation, directory, bottlePath, { baseEnvironment = process.env, host = {}, executableArchitecture, cameraBridge } = {}) {
+function buildEnvironment(settings, installation, directory, bottlePath, { baseEnvironment = process.env, host = {}, executableArchitecture, cameraBridge, existingEnvironment } = {}) {
   const environment = { ...baseEnvironment };
   for (const name of [...PROTECTED_ENVIRONMENT].filter(name => name.startsWith("WINE") || name.startsWith("CX_"))) delete environment[name];
   for (const name of MANAGED_ENVIRONMENT) delete environment[name];
@@ -155,6 +155,8 @@ function buildEnvironment(settings, installation, directory, bottlePath, { baseE
   Object.assign(environment, overrides, { CX_ROOT: installation.crossoverRoot,
     CX_BOTTLE: bottlePath,
     CX_BOTTLE_PATH: path.dirname(bottlePath), WINEPREFIX: bottlePath });
+  if (existingEnvironment) for (const key of ["CX_HOME", "CX_BOTTLE_PATH", "WINEPREFIX"]) delete environment[key];
+  if (existingEnvironment?.running) for (const key of ["WINEMSYNC", "WINEESYNC"]) { delete environment[key]; delete overrides[key]; }
   return { environment, overrides, dll };
 }
 
@@ -211,7 +213,12 @@ function detachProfileAliases(bottlePath) {
 }
 
 async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
-  let settings = DLSS.withTemporalSelection(context.runtimeSettings || {}, entry.effects);
+  const existingEnvironment = await require("../../shared/runtime/wine-processes").prepareEnvironment(
+    Environments.readEnvironment(context.runtimeSettings?.environmentReference), context, context.processOptions);
+  if (existingEnvironment && existingEnvironment.kind !== "crossover-bottle") throw new Error("Choose a CrossOver bottle for this runtime.");
+  let settings = DLSS.withTemporalSelection(existingEnvironment ? require("../../shared/runtime/wine-settings").explicitSettings(context.runtimeSettings || {}) : context.runtimeSettings || {}, entry.effects);
+  context.wineEnvironment = existingEnvironment;
+  if (existingEnvironment?.running) { settings = { ...settings, synchronization: existingEnvironment.settings.synchronization, retina: Environments.INHERIT }; }
   const selected = manager.resolveSelection(entry, context.settings, context.userDataDir, settings);
   if (!selected.ready) throw new Error(selected.reason);
   const Temporal = require("../temporal");
@@ -236,17 +243,17 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   // The game and Windows environment own saves; changing the CrossOver
   // installation does not create another bottle.
   // Validate all launch settings before creating a bottle.
-  const bottlePath = path.join(directory, "bottles", template);
+  const bottlePath = existingEnvironment?.prefixPath || path.join(directory, "bottles", template);
   let environment, overrides, dll;
   try {
     ({environment, overrides, dll} = buildEnvironment(settings, selected.install, directory, bottlePath,
-      {executableArchitecture: selectedExecutable.executableArchitecture, cameraBridge, host}));
+      {executableArchitecture: selectedExecutable.executableArchitecture, cameraBridge, host, existingEnvironment}));
   } catch (error) {
     if (context.signal?.aborted || isAbortError(error) || settings.dlss !== true) throw error;
     // Only accept a fallback if the ordinary vendor settings validate too.
     // A bad executable, renderer, environment or DLL rule remains an error.
     ({environment, overrides, dll} = buildEnvironment({...settings, dlss: false}, selected.install, directory, bottlePath,
-      {executableArchitecture: selectedExecutable.executableArchitecture, host}));
+      {executableArchitecture: selectedExecutable.executableArchitecture, host, existingEnvironment}));
     cameraBridge = null;
     context.graphicsBridgeFailure = {provider: "crossover-camera", reason: String(error.message || error)};
     warnGraphics(context.logger, "CrossOver temporal integration is unavailable. Using the selected vendor graphics backend.", context.graphicsBridgeFailure.reason);
@@ -313,17 +320,22 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
       // Disable only the optional temporal adaptation, retaining renderer,
       // synchronization, Steam, user environment and DLL override choices.
       ({environment, overrides, dll} = buildEnvironment({...settings, dlss: false}, selected.install, directory, bottlePath,
-        {executableArchitecture: selectedExecutable.executableArchitecture, host}));
+        {executableArchitecture: selectedExecutable.executableArchitecture, host, existingEnvironment}));
     }
   }
   context.graphicsInputs = require("../graphics-inputs").inputs(selected.install, cameraBridge?.inputs);
-  Writable.assertOwnDirectory(directory, path.dirname(bottlePath));
-  await ensureBottle(selected.install, Environments.privateEnvironment(context.userDataDir, directory, path.relative(directory, bottlePath)), directory, settings, context, { run });
-  detachProfileAliases(bottlePath);
-  await WineSettings.applyRegistry({ ...settings, windowsVersion: "" }, {}, args => {
+  if (!existingEnvironment) {
+    Writable.assertOwnDirectory(directory, path.dirname(bottlePath));
+    await ensureBottle(selected.install, Environments.privateEnvironment(context.userDataDir, directory, path.relative(directory, bottlePath)), directory, settings, context, { run });
+    detachProfileAliases(bottlePath);
+  }
+  await WineSettings.applyRegistry({ ...context.runtimeSettings, ...settings, windowsVersion: "" }, {
+    assertWritable: existingEnvironment ? () => Environments.assertWritableRegistry(existingEnvironment) : undefined }, args => {
     const options = { cwd: directory, env: environment, signal: context.signal, timeout: 30000 };
     const commandArgs = ["--bottle", bottlePath, "--no-update", "--", ...args];
-    return run ? run(selected.install.executablePath, commandArgs, options) : runSupervised(selected.install.executablePath, selected.install.serverPath, commandArgs, options);
+    return run ? run(selected.install.executablePath, commandArgs, options) : existingEnvironment
+      ? require("../../shared/runtime/wine-processes").runTool(selected.install.executablePath, commandArgs, options)
+      : runSupervised(selected.install.executablePath, selected.install.serverPath, commandArgs, options);
   });
   // The vendor wrapper restores these trusted game-only values after its
   // protected shell/Perl launch; bottle setup stays on the stock runtime.
@@ -376,6 +388,10 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     args.push("--winver", settings.windowsVersion);
   }
   args.push(...WineSettings.desktopArguments(settings, [], { crossover: true }));
+  if (existingEnvironment) args.push("--no-update");
+  if (existingEnvironment?.running) {
+    for (const key of ["WINEMSYNC", "WINEESYNC"]) { delete overrides[key]; delete environment[key]; }
+  }
   if (Object.keys(overrides).length) args.push("--env", wineEnvironmentString(overrides));
   if (dll) args.push("--dll", dll);
   if (settings.wineDebug) args.push("--debugmsg", safeText(settings.wineDebug, "Wine debug channels"));
@@ -388,9 +404,10 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   entry.runtimeData = { ...entry.runtimeData, crossover: { ...entry.runtimeData?.crossover,
     windowsExecutablePath: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture,
     sourceRoot: match.sourceRoot, gameRoot, bottlePath, applicationPath: selected.install.appPath,
+    ...(existingEnvironment ? { environmentReference: existingEnvironment.reference } : {}),
     graphicsInputs: context.graphicsInputs } };
   context.onEntryChange?.(entry);
-  return { ...selected, directory, gameRoot, workingDirectory, bottlePath, executablePath, environment, args };
+  return { ...selected, directory, gameRoot, workingDirectory, bottlePath, executablePath, environment, args, existingEnvironment };
 }
 
 module.exports = { runtimeDirectory, buildEnvironment, parseEnvironment, wineEnvironmentString, dllOverrides,

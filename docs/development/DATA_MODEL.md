@@ -536,3 +536,7 @@ When a document cannot be read at all, it is not replaced, and the change fails 
 - a runtime defaults change, a game record update or an installation index update fails with its reason;
 - a cheat edit fails, while a launch keeps the stored cheat file for the game to read;
 - playback positions are not saved for that session.
+
+### Existing Windows environments
+
+The per-game CrossOver and Sikarugir runtime settings store `environmentReference`: `private`, or a JSON-encoded record with `kind`, absolute `path`, and optional `name` and `bottleId`. Existing environment contents remain at that path. Runtime metadata retains the external reference alongside the resolved bottle or prefix path. Private initialization requires an ownership capability issued for launcher-owned game or compute data. Removal and profile adoption refuse directories containing a referenced external environment.

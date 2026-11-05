@@ -22,11 +22,21 @@ Ordinary Play passes the original Windows executable to CrossOver and uses its o
 
 Files in the private `game/` folders of earlier MacLauncher releases are recovered once into the original game folders, as [Earlier private game folders](../library/GAME_PREPARATION.md#earlier-private-game-folders) describes. Missing files are restored, and a version that differs from the original is kept beside it as a conflict copy. Earlier `temporal-camera` and `temporal-original` folders with proxy or asset-link records are kept for separate recovery. This recovery does not run during Play, import or upkeep, and it removes no Wine prefixes or bottles.
 
-The Windows environment is a private CrossOver bottle. Each game and Windows environment type has its own bottle, independent of the selected CrossOver installation. Moving, updating or changing the CrossOver application retains that bottle and its saves. Renderer and synchronization changes retain it too. Saves written to a bottle's Windows profile remain with the bottle. Profile aliases into macOS Documents or Desktop are replaced with private directories. CrossOver has no universal save editor or save-location format, and engine save tools are unavailable while it is selected.
+The default Windows environment is a private CrossOver bottle. Each game and Windows environment type has its own bottle, independent of the selected CrossOver installation. Moving, updating or changing the CrossOver application retains that bottle and its saves. Renderer and synchronization changes retain it too. Saves written to a bottle's Windows profile remain with the bottle. Profile aliases into macOS Documents or Desktop are replaced with private directories. CrossOver has no universal save editor or save-location format, and engine save tools are unavailable while it is selected.
 
-Stop ends the Wine processes in the selected bottle. Canceling initial preparation removes only the incomplete environment. Removing a game from the library removes the Windows environments that MacLauncher created for it and leaves the original game files alone. Application registrations are stored in `runtimes/crossover/registrations.json`.
+Stop first asks Windows programs in a private bottle to close, then ends remaining Wine processes. Canceling initial preparation removes only the incomplete private environment. Removing a game from the library removes the Windows environments that MacLauncher created for it and leaves the original game files alone. Application registrations are stored in `runtimes/crossover/registrations.json`.
 
 After an upgrade, the earlier bottle that the game last used, as recorded, is adopted once at the game's stable Windows environment path. Without that record, the bottle with the newest registry or marker timestamp is adopted; when usage is unknown or tied, the bottles stay where they are for manual resolution. A bottle already at the stable path takes precedence. Other earlier bottles stay separate, with their locations recorded, and their files are not merged. A bottle whose internal Wine drive mappings use absolute paths that would break after the move is not adopted automatically.
+
+## Existing bottles
+
+Each game's Runtime Settings offers **Environment**: **Private (MacLauncher)**, discovered CrossOver bottles, or **Choose…**. Discovery reads the configured bottle folder from the environment, CrossOver configuration or preferences, with the standard Bottles folder as the default. Published and stub bottles are excluded. Listing and current values are read offline.
+
+A selection stores a path reference. The bottle stays in place and is not copied, adopted, recreated or removed. A missing or incomplete external bottle reports an error and is left in place. Removing a game leaves its external environment intact; a removal whose directory contains an external environment is refused.
+
+CrossOver runs with the absolute bottle path, `--wait-children` and `--no-update`. Selected settings and translator files may change the bottle; profile mappings stay as supplied. Logs stay in MacLauncher's data. **Open Windows files** opens the selected bottle, and its Windows profiles are listed as alternate save locations.
+
+Stop defaults to the launched game's processes. **Close All Applications** requires confirmation before asking the bottle's other Windows programs to close and forcing remaining programs to quit. Ordinary exit leaves the bottle's other programs running. A running wineserver is shown in the selector; MSync and High Resolution changes require it to stop.
 
 ## Runtime settings
 
@@ -34,6 +44,7 @@ Settings holds the defaults, and each game's Runtime Settings can override them.
 
 | Setting | Behavior |
 | --- | --- |
+| Environment | Per-game private bottle or an existing bottle reference. |
 | Graphics | Automatic, D3DMetal, DXMT, DXVK or WineD3D. Automatic keeps CrossOver's own choice. Availability depends on the application, Mac and macOS version. |
 | Game temporal integration | Exposes MetalFX Temporal through a 64-bit game's DLSS integration. Listed for Unity and Windows games. See [Temporal upscaling](#temporal-upscaling). |
 | DXMT support | The DXMT library version for FSR2/3 camera support. Automatic uses the default from Runtimes. |

@@ -3,6 +3,8 @@ const path = require("node:path");
 const Detection = require("../detect");
 const Launch = require("./launch");
 const Writable = require("../../shared/writable-input");
+const Environments = require("../../shared/runtime/wine-environment");
+const Processes = require("../../shared/runtime/wine-processes");
 
 // Both Windows runtimes share the executable evidence that detection records.
 // The runtime picker reads that record and does not depend on whether Wine is
@@ -12,6 +14,7 @@ const decorateEntry = Detection.decorateEntry;
 function resolveSaveLocations(entry, context) {
   const directory = Launch.runtimeDirectory(entry, context), gameRoot = Detection.cachedWindowsExecutable(entry)?.sourceRoot || entry.gamePath;
   const directories = path.isAbsolute(gameRoot || "") ? [{ directory: gameRoot, role: "primary", source: "Original Windows game files", confidence: "exact" }] : [];
+  directories.push(...Environments.saveLocations(context.runtimeSettings));
   const prefixPath = entry.runtimeData?.sikarugir?.prefixPath;
   if (typeof prefixPath === "string" && path.isAbsolute(prefixPath) && Detection.inside(path.join(directory, "prefixes"), prefixPath)) {
     const users = path.join(prefixPath, "drive_c", "users");
@@ -45,17 +48,30 @@ function createProvider({ manager, launch = Launch, platform = process.platform,
   const runtimeManager = () => manager || require("./runtime/manager");
   return { runtimeId: "sikarugir", managerId: "sikarugir", supportsEntry, decorateEntry,
     resolveGraphicsInputs: (entry, context) => {
-      const selected = runtimeManager().resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
+      const reference = Environments.environmentReference(context.runtimeSettings?.environmentReference);
+      const existing = reference ? Environments.readEnvironment(reference) : null;
+      if (existing) context.wineEnvironment = existing;
+      const selected = existing ? {ready:true,install:existing.install} : runtimeManager().resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
       if (!selected?.ready) return null;
       const source = require("../temporal").resolvePlan(entry, context, { install: selected.install, runtimeId: "sikarugir", allowDownload: true })?.inputs;
       return require("../graphics-inputs").inputs(selected.install, source, { fallback: "x86_64" });
     },
-    getRuntimeRequirements: (entry, context) => require("../temporal").requirements(entry, { ...context, runtimeId: "sikarugir" }, { manager: runtimeManager() }),
+    getRuntimeRequirements: (entry, context) => {
+      const existing = Environments.readEnvironment(context.runtimeSettings?.environmentReference);
+      if (existing) context.wineEnvironment = existing;
+      const manager = existing ? { resolveSelection: () => ({ ready: true, install: existing.install, version: existing.path }) } : runtimeManager();
+      return require("../temporal").requirements(entry, { ...context, runtimeId: "sikarugir" }, { manager });
+    },
     runtimeDirectory: launch.runtimeDirectory, resolveSaveLocations,
     supports: { cheats: false, cheatsPatcher: false, saveEditing: false, saveLocation: true },
     canLaunchRuntime: (runtimeId, entry) => runtimeId === "sikarugir" && platform === "darwin" && supportsEntry(entry),
     ensureRuntime: async (entry, context) => {
       if (!supportsEntry(entry)) throw new Error("Sikarugir requires an x86 or x64 Windows game.");
+      const reference = Environments.environmentReference(context.runtimeSettings?.environmentReference);
+      if (reference) {
+        if (reference.kind !== "sikarugir-wrapper") throw new Error("Choose a Sikarugir wrapper for this runtime.");
+        Environments.readEnvironment(reference); return null;
+      }
       const selected = await runtimeManager().resolveForPlay(entry, context);
       if (selected.ready) return null;
       if (!selected.version && !selected.discoveryRequired) throw new Error(selected.reason || "No compatible Sikarugir version is available.");
@@ -69,7 +85,10 @@ function createProvider({ manager, launch = Launch, platform = process.platform,
       const plan = await launch.prepareLaunch(entry, context, { ...launchDependencies, manager: runtimeManager() });
       const log = createLog(plan.directory);
       try {
-        const child = await context.spawnDetachedChecked("/bin/sh", launch.supervisorArguments(plan.winePath, plan.serverPath, "play", plan.args, plan.environment),
+        Processes.installStopHandler(context, plan);
+        const args = plan.existingEnvironment ? Processes.externalArguments(plan.winePath, plan.args, plan.environment) :
+          launch.supervisorArguments(plan.winePath, plan.serverPath, "play", plan.args, plan.environment);
+        const child = await context.spawnDetachedChecked("/bin/sh", args,
         { cwd: plan.workingDirectory || path.dirname(plan.executablePath), env: plan.environment, stdio: ["ignore", "pipe", "pipe"], graphicsExecutable: plan.winePath }, false);
         log.attach(child);
         return child;

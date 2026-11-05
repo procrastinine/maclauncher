@@ -27,14 +27,17 @@ function wineSynchronizations(entry, context) {
   const options = manifest.runtime.entries.crossover.settings.fields.find(field => field.key === 'synchronization').options;
   return { synchronizations: options.filter(option => option.value !== 'esync' || Number.parseInt(selected.install?.upstreamVersion, 10) < 25) };
 }
-const crossoverActions = { ...graphicsBridgeActions, listWineSynchronizations: (entry, _payload, context) => wineSynchronizations(entry, context),
+const Environments = require("../shared/runtime/wine-environment");
+const crossoverActions = { ...graphicsBridgeActions, ...Environments.environmentActions("crossover", { resolveOptions: context => ({
+  crossoverRoot: manager.resolveSelection({}, context.settings, context.userDataDir, context.runtimeSettings)?.install?.crossoverRoot }) }),
+  listWineSynchronizations: (entry, _payload, context) => wineSynchronizations(entry, context),
   listGraphicsBackends: (entry, _payload, context) => graphicsBackendOptions(entry, context) };
 const crossoverSettingsActions = { ...graphicsBridgeSettingsActions, listWineSynchronizations: (_payload, context) => wineSynchronizations({}, context),
   listGraphicsBackends: (_payload, context) => graphicsBackendOptions({}, context) };
 const sikarugirManager = require("./sikarugir/runtime/manager");
 const sikarugirProvider = { ...require("./sikarugir/provider"),
   runtime: manifest.runtime.entries.sikarugir, supports: manifest.runtime.entries.sikarugir.supports,
-  actions: graphicsBridgeActions, settingsActions: graphicsBridgeSettingsActions };
+  actions: { ...graphicsBridgeActions, ...Environments.environmentActions("sikarugir") }, settingsActions: graphicsBridgeSettingsActions };
 // CrossOver cannot be downloaded, so it is offered only while an installed copy is available.
 function supportsEntry(entry, _moduleSettings, context = {}) {
   return Detection.supportsWindowsRuntimes(entry) && manager.isAvailable(context.userDataDir);
@@ -51,11 +54,14 @@ async function launchRuntime(runtimeId, entry, context) {
   if (runtimeId !== "crossover") return null;
   if (process.platform !== "darwin") throw new Error("CrossOver requires macOS.");
   const launch = await Launch.prepareLaunch(entry, context);
-  return context.spawnDetachedChecked("/bin/sh", ["-c", Launch.SUPERVISOR, "maclauncher-crossover",
-    launch.install.executablePath, launch.install.serverPath, ...launch.args],
+  const Processes = require("../shared/runtime/wine-processes");
+  Processes.installStopHandler(context, launch);
+  const args = launch.existingEnvironment ? Processes.externalArguments(launch.install.executablePath, launch.args, launch.environment) :
+    ["-c", Launch.SUPERVISOR, "maclauncher-crossover", launch.install.executablePath, launch.install.serverPath, ...launch.args];
+  return context.spawnDetachedChecked("/bin/sh", args,
   { cwd: launch.workingDirectory || launch.gameRoot, env: launch.environment, graphicsExecutable: launch.environment.WINELOADER || launch.install.loaderPath }, false);
 }
-const resolveSaveLocations = () => ({ primaryDirectory: null, directories: [] });
+const resolveSaveLocations = (_entry, context) => ({ primaryDirectory: null, directories: Environments.saveLocations(context?.runtimeSettings) });
 const crossoverProvider = { runtimeId: "crossover", runtime: manifest.runtime.entries.crossover, managerId: "crossover",
     actions: crossoverActions, settingsActions: crossoverSettingsActions,
     supports: manifest.supports, decorateEntry: Detection.decorateEntry,
@@ -69,7 +75,10 @@ const providerForEntry = (entry, context) => providerForRuntime(context?.runtime
 function resolveGraphicsInputs(entry, context = {}, resolved) {
   const runtimeId = providerForEntry(entry, context)?.runtimeId;
   const selectedManager = runtimeManagers.find(candidate => candidate.id === providerForEntry(entry, context)?.managerId);
-  const selected = resolved || selectedManager?.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
+  const existing = runtimeId === "sikarugir" ? Environments.readEnvironment(context.runtimeSettings?.environmentReference) : null;
+  if (existing) context.wineEnvironment = existing;
+  const selected = resolved || (existing ? { ready: true, install: existing.install, version: existing.path } :
+    selectedManager?.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings));
   if (!selected?.ready) return null;
   const source = require("./temporal").resolvePlan(entry, context, { install: selected.install, runtimeId, allowDownload: true })?.inputs;
   return require("./graphics-inputs").inputs(selected.install, source, { fallback: runtimeId === "sikarugir" ? "x86_64" : null });
@@ -93,12 +102,15 @@ module.exports = { id: manifest.id, manifest, detectGame: Detection.detectGame,
     ...crossoverActions,
     runtimeStatus: (entry, _payload, context) => {
       const selectedManager = runtimeManagers.find(candidate => candidate.id === providerForEntry(entry, context)?.managerId) || manager;
-      const selected = selectedManager.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
+      const existing = providerForEntry(entry, context)?.runtimeId === "sikarugir" ? Environments.readEnvironment(context.runtimeSettings?.environmentReference) : null;
+      const selected = existing ? { ready: true, install: existing.install, version: existing.path, versionLabel: existing.install.engineVersion } :
+        selectedManager.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
       return { ...selected, graphicsInputs: resolveGraphicsInputs(entry, context, selected), versionLabel: selected.versionLabel || selected.install?.versionLabel ||
         selected.install?.upstreamVersion || selected.install?.engineVersion || selected.version };
     },
     revealWindowsFiles: (entry, _payload, context) => {
-      const directory = providerForEntry(entry, context)?.runtimeDirectory?.(entry, context) || Launch.runtimeDirectory(entry, context);
+      const existing = Environments.readEnvironment(context.runtimeSettings?.environmentReference);
+      const directory = existing?.prefixPath || providerForEntry(entry, context)?.runtimeDirectory?.(entry, context) || Launch.runtimeDirectory(entry, context);
       if (!fs.existsSync(directory)) throw new Error("Play the game once to create its Windows files.");
       if (typeof context.ui?.shell?.openPath === "function") return context.ui.shell.openPath(directory);
       if (typeof context.ui?.openPath === "function") return context.ui.openPath(directory);

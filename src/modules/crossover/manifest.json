@@ -91,9 +91,28 @@
             "wineDebug": "",
             "dlss": false,
             "graphicsBridgeVersion": "auto",
-            "advertiseAvx": true
+            "advertiseAvx": true,
+            "environmentReference": "private"
           },
           "fields": [
+            {
+              "key": "environmentReference",
+              "type": "select",
+              "label": "Environment",
+              "gameOnly": true,
+              "optionsAction": "listEnvironments",
+              "optionsKey": "environments",
+              "pickerAction": "chooseEnvironment",
+              "pickerResultKey": "environmentReference",
+              "pickerLabel": "Choose…",
+              "options": [
+                {
+                  "value": "private",
+                  "label": "Private (MacLauncher)"
+                }
+              ],
+              "description": "An existing bottle or wrapper is used in place. Settings and translator files can be changed; its environment is never recreated."
+            },
             {
               "key": "graphicsBackend",
               "type": "select",
@@ -305,9 +324,28 @@
             "wineDebug": "",
             "dlss": false,
             "graphicsBridgeVersion": "auto",
-            "advertiseAvx": true
+            "advertiseAvx": true,
+            "environmentReference": "private"
           },
           "fields": [
+            {
+              "key": "environmentReference",
+              "type": "select",
+              "label": "Environment",
+              "gameOnly": true,
+              "optionsAction": "listEnvironments",
+              "optionsKey": "environments",
+              "pickerAction": "chooseEnvironment",
+              "pickerResultKey": "environmentReference",
+              "pickerLabel": "Choose…",
+              "options": [
+                {
+                  "value": "private",
+                  "label": "Private (MacLauncher)"
+                }
+              ],
+              "description": "An existing bottle or wrapper is used in place. Settings and translator files can be changed; its environment is never recreated."
+            },
             {
               "key": "graphicsBackend",
               "type": "select",

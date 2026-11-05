@@ -4,7 +4,7 @@ const Writable = require("../writable-input");
 const AppBundle = require("./app-bundle");
 const os = require("node:os");
 
-const INHERIT = "inherit";
+const { INHERIT } = require("./translator-plan");
 const privateEnvironments = new WeakSet();
 const inside = (root, file) => {
   const relative = path.relative(root, file);
@@ -88,7 +88,7 @@ function normalizeSettings(environment, metadata, registry, wrapper) {
     vulkanBackend: /kosmickrisp/i.test(environment.VK_DRIVER_FILES || "") ? "kosmickrisp" : "auto",
     synchronization: environment.WINEMSYNC === "1" ? "msync" : environment.WINEMSYNC === "0" ? "off" : "auto",
     wineDebug: environment.WINEDEBUG || "", windowsVersion: metadata.WindowsVersion || metadata.Template || value("", "Version"),
-    highResolution: value("Mac Driver", "RetinaMode"), dpi: user["Control Panel\\Desktop"]?.LogPixels,
+    highResolution: value("Mac Driver", "RetinaMode"), retina: value("Mac Driver", "RetinaMode"), dpi: user["Control Panel\\Desktop"]?.LogPixels,
     optionAsAlt: value("Mac Driver", "LeftOptionIsAlt"), commandAsControl: value("Mac Driver", "LeftCommandIsCtrl"),
     mouseCapture: value("DirectInput", "MouseWarpOverride"), fullscreenCapture: value("Mac Driver", "CaptureDisplaysForFullscreen"),
     verticalSync: value("Mac Driver", "AllowVerticalSync"), cncDdraw: wrapper ? Boolean(Number(metadata.CNC_DDRAW)) : undefined,
@@ -126,7 +126,7 @@ function readEnvironment(value, options = {}) {
     if (Object.hasOwn(metadata, "Updater")) throw new Error("Published and stub CrossOver bottles are excluded.");
   }
   const registry = registryValues(prefixPath);
-  const name = reference.name || metadata.Description || metadata.CFBundleDisplayName || path.basename(root, wrapper ? ".app" : undefined);
+  const name = metadata.Description || metadata.CFBundleDisplayName || reference.name || path.basename(root, wrapper ? ".app" : undefined);
   return { reference: { ...reference, path: root, name, ...(metadata.BottleID ? { bottleId: metadata.BottleID } : {}) },
     kind: reference.kind, path: root, prefixPath, name, metadata, environment, registry,
     settings: normalizeSettings(environment, metadata, registry, wrapper), ...(install ? { install } : {}) };
@@ -161,11 +161,56 @@ function discoverEnvironments(runtimeId, options = {}) {
   const result = [], seen = new Set();
   for (const candidate of candidates) try {
     const record = readEnvironment({ kind: runtimeId === "crossover" ? "crossover-bottle" : "sikarugir-wrapper", path: candidate });
-    if (seen.has(record.path) || options.userDataDir && inside(fs.realpathSync(options.userDataDir), record.path)) continue;
+    let ownedRoot = options.userDataDir;
+    if (ownedRoot) { try { ownedRoot = fs.realpathSync(ownedRoot); } catch { ownedRoot = path.resolve(ownedRoot); } }
+    if (seen.has(record.path) || ownedRoot && inside(ownedRoot, record.path)) continue;
     seen.add(record.path); result.push(record);
   } catch {}
   return result.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function environmentActions(runtimeId, { crossoverRoot, resolveOptions } = {}) {
+  const optionsFor = context => ({ userDataDir: context.userDataDir, crossoverRoot, ...resolveOptions?.(context),
+    ...(context.environmentOptions || {}) });
+  return {
+    async listEnvironments(_entry, payload, context) {
+      const settings = payload?.runtimeSettings || context.runtimeSettings;
+      const selectedValue = payload?.environmentReference || settings?.environmentReference;
+      const selected = environmentReference(selectedValue);
+      const rows = discoverEnvironments(runtimeId, { ...optionsFor({ ...context, runtimeSettings: settings }), wrapperPaths: selected?.kind === "sikarugir-wrapper" ? [selected.path] : [] });
+      if (selected && !rows.some(row => row.path === selected.path)) try { rows.push(readEnvironment(selected)); } catch {}
+      const states = await Promise.all(rows.map(row => require("./wine-processes").runningState(row.prefixPath, context.processOptions)));
+      return { environments: [{ value: "private", label: "Private (MacLauncher)" }, ...rows.map((row, index) => ({
+        value: row.path === selected?.path && typeof selectedValue === "string" ? selectedValue : JSON.stringify(row.reference),
+        label: `${runtimeId === "crossover" ? "CrossOver bottle" : "Sikarugir wrapper"}: ${row.name}${states[index].running ? " (running; MSync and High Resolution require a restart)" : ""}` }))] };
+    },
+    async chooseEnvironment(_entry, payload, context) {
+      const { getUiServices } = require("../ui-services");
+      const selection = payload?.filePaths ? { filePaths: payload.filePaths } : await getUiServices(context).dialog.showOpenDialog({
+        title: runtimeId === "crossover" ? "Choose CrossOver bottle" : "Choose Sikarugir wrapper",
+        properties: ["openDirectory", "treatPackageAsDirectory"],
+        ...(runtimeId === "sikarugir" ? { filters: [{ name: "Sikarugir wrapper", extensions: ["app"] }] } : {}) });
+      if (selection.canceled || !selection.filePaths?.[0]) return null;
+      const record = readEnvironment({ kind: runtimeId === "crossover" ? "crossover-bottle" : "sikarugir-wrapper", path: selection.filePaths[0] }, optionsFor(context));
+      return { environmentReference: JSON.stringify(record.reference) };
+    }
+  };
+}
+
+function saveLocations(settings) {
+  let record; try { record = readEnvironment(settings?.environmentReference); } catch { return []; }
+  if (!record) return [];
+  const directory = path.join(record.prefixPath, "drive_c", "users");
+  return fs.existsSync(directory) ? [{ directory, role: "alternate", source: `${record.kind === "crossover-bottle" ? "CrossOver bottle" : "Sikarugir wrapper"} Windows profiles`, confidence: "exact" }] : [];
+}
+
+function assertWritableRegistry(record) {
+  Writable.assertOwnDirectory(record.prefixPath, record.prefixPath, { create: false });
+  for (const name of Object.keys(record.registry)) {
+    let stat; try { stat = fs.lstatSync(path.join(record.prefixPath, name)); } catch (error) { if (error.code === "ENOENT") continue; throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("Registry settings cannot write through an aliased registry file.");
+  }
+}
+
 module.exports = { INHERIT, inside, privateEnvironment, assertPrivateEnvironment, environmentReference,
-  readIni, readRegistry, readEnvironment, discoverEnvironments };
+  readIni, readRegistry, readEnvironment, discoverEnvironments, environmentActions, saveLocations, assertWritableRegistry };

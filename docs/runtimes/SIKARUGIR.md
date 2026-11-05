@@ -30,11 +30,21 @@ After an upgrade, the earlier prefix that the game last used, as recorded, is ad
 
 The shared installed engines stay unchanged. Private runtime views select the renderer libraries for each game: they copy the engine's small Wine loader files and share the installed libraries. Missing renderer DLLs are linked into the prefix after preparation. Renderer changes retain existing prefix files and game-supplied libraries.
 
-Stop ends the Wine processes belonging to the selected prefix. Removing a game from the library removes the Windows environments that MacLauncher created for it and leaves the original game files alone.
+Stop first asks Windows programs in a private prefix to close, then ends remaining Wine processes. Removing a game from the library removes the Windows environments that MacLauncher created for it and leaves the original game files alone.
 
 ### Saves
 
 Save tools use the original game folder as the primary location and list the selected prefix's Windows profile as an alternate. There is no universal Windows save editor or cheat integration. Recognized engines retain optional source and asset tools; engine-specific save codecs remain disabled while Sikarugir is selected.
+
+## Existing wrappers
+
+Each game's Runtime Settings offers **Environment**: **Private (MacLauncher)**, Sikarugir wrappers discovered under `~/Applications/Sikarugir`, or **Choose…** for another wrapper. Listing and current values are read offline from the wrapper's Info.plist and registry files.
+
+A selection stores a reference and leaves the wrapper in place. MacLauncher composes the launch with that wrapper's own Wine engine, prefix and support files. The wrapper's launcher, custom shell commands and startup/shutdown scripts are not executed. Selected settings and translator files may change the prefix. Its profile mappings, HOME and temporary-directory behavior stay as supplied. Logs stay in MacLauncher's data.
+
+An incomplete or missing wrapper reports an error and is not recreated. Removing a game leaves the wrapper intact; removal is refused if its directory contains the external environment. **Open Windows files** opens the selected prefix, and its Windows profiles are alternate save locations.
+
+Stop defaults to the game's processes. **Close All Applications** requires confirmation before asking other Windows programs in the prefix to close and forcing remaining programs to quit. Ordinary exit leaves other programs running. A running wineserver is identified in the selector; MSync and High Resolution changes require it to stop.
 
 ## Runtime settings
 
@@ -42,6 +52,7 @@ Settings holds the defaults, and each game's Runtime Settings can override them.
 
 | Setting | Behavior |
 | --- | --- |
+| Environment | Per-game private prefix or an existing Sikarugir wrapper reference. |
 | Graphics | Automatic, DXMT, DXVK, D3DMetal or WineD3D. Availability depends on the selected engine, Mac and macOS version. |
 | Game temporal integration | Exposes MetalFX Temporal through a compatible 64-bit game's DLSS integration. Listed for Unity and Windows games. See [Game temporal integration](#game-temporal-integration). |
 | DXMT support | The DXMT library version for FSR2/3 camera support. Automatic uses the default from Runtimes. |

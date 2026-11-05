@@ -46,7 +46,7 @@ async function prepare(request,context={}){
   overrides.WINEDLLOVERRIDES=[built.overrides.WINEDLLOVERRIDES,"d3d12,dxgi=n,b",
     ...(request.helperLibraries||[]).map(row=>row.name+"=b")].filter(Boolean).join(";");
   const environment={...built.environment,...overrides};
-  const argumentsList=["--bottle",bottlePath,"--wait-children","--workdir",path.dirname(hostPath),"--env",Launch.wineEnvironmentString(overrides),"--"];
+  const argumentsList=["--bottle",bottlePath,...(request.prefixDirectory?["--no-update"]:[]),"--wait-children","--workdir",path.dirname(hostPath),"--env",Launch.wineEnvironmentString(overrides),"--"];
   signal?.throwIfAborted();await context.useRuntime?.({managerId:"crossover",sectionId:"default",version:install.version,sourcePath:install.appPath});
   return {schema:1,executable:install.executablePath,arguments:argumentsList,environment,hostPath,nativeRoot,originalLibrary,
     ...(originalLibraries?{originalLibraries}:{}),

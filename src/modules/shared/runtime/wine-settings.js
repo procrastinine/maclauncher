@@ -61,7 +61,9 @@ function registry(settings, { executable = '' } = {}) {
   return commands;
 }
 async function applyRegistry(settings, options, run) {
-  for (const args of registry(settings, options)) await run(args);
+  const commands = registry(settings, options);
+  if (commands.length) await options?.assertWritable?.();
+  for (const args of commands) await run(args);
 }
 function desktopArguments(settings, args, { crossover = false } = {}) {
   if (inherit(settings.virtualDesktop) || settings.virtualDesktop === 'off') return args;

@@ -337,6 +337,10 @@ export function RuntimeSettingsWindow({
                       </Select>
                       <button type="button" className="btn iconOnly" title={`Refresh ${field.label}`} aria-label={`Refresh ${field.label}`} disabled={disabled || loading}
                         onClick={() => setChoiceRevision(value => value + 1)}><RefreshIcon /></button>
+                      {field.pickerAction && <button type="button" className="btn" disabled={disabled || pickingField === field.key}
+                        onClick={() => void pickSettingFile(field.key, field.pickerAction!, field.pickerResultKey || "filePath")}>
+                        {field.pickerLabel || "Choose…"}
+                      </button>}
                     </div>
                   </div>;
                 }
