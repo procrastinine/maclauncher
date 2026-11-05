@@ -327,6 +327,42 @@ test("service shutdown blocks new lanes and waits for a pending first inspector 
   assert.equal(service.hasTemporaryProcesses(), false); assert.equal(service.hasPendingOperations(), false);
 });
 
+test("targeted runtime refresh updates source-owned references on first host addition and removal", async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-reference-refresh-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const copies = [], events = [], reads = { host: 0, component: 0, unrelated: 0 };
+  const host = { id: "fixture-host", getState() { reads.host++;return { installed: [...copies] }; } };
+  const component = { id: "fixture-component", referenceManagerIds: [host.id],
+    getState() {
+      reads.component++;
+      return { installed: [], references: copies.map(copy => ({ version: "reference:" + copy.version,
+        reference: { managerId: host.id, version: copy.version }, readOnly: true, ready: true })) };
+    }, refreshCatalog: () => assert.fail("A state refresh must stay offline") };
+  const unrelated = { id: "unrelated", getState() { reads.unrelated++;return { installed: [] }; } };
+  const registry = { listModuleIds: () => ["fixture"], listModules: () => [{ id: "fixture" }],
+    getModule: () => ({ runtimeManagers: [host, component, unrelated] }), getModuleInfo: () => ({ id: "fixture" }),
+    getModuleDir: () => root, listSharedRuntimeManagers: () => [], getRuntimeManagerUi: () => null };
+  const operations = createBackendOperations({ userDataDir: root, registry,
+    emit: (event, payload) => { if (event === "runtimeState") events.push(payload); } });
+  t.after(() => operations.beginShutdown());
+  await operations.runtimeStates({}, [component.id]);
+  assert.deepEqual(events.at(-1).state.references, []);
+  assert.deepEqual(reads, { host: 0, component: 1, unrelated: 0 });
+  const refreshHost = async () => { events.length = 0;await operations.runtimeStates({}, [host.id]); };
+  copies.push({ version: "1.0", ready: true });await refreshHost();
+  assert.deepEqual(events.map(row => row.id), [host.id, component.id]);
+  assert.equal(events[0].state.installed[0].version, "1.0");
+  assert.deepEqual(events[1].state.references[0].reference, { managerId: host.id, version: "1.0" });
+  copies.length = 0;await refreshHost();
+  assert.deepEqual(events.map(row => row.id), [host.id, component.id]);
+  assert.deepEqual(events[0].state.installed, []);assert.deepEqual(events[1].state.references, []);
+  assert.equal(reads.unrelated, 0, "An unrelated runtime is not inventoried for host changes");
+  events.length = 0;await operations.runtimeStates({});
+  assert.deepEqual(events.map(row => row.id), [host.id, component.id, unrelated.id]);
+  events.length = 0;await operations.runtimeStates({}, []);
+  assert.deepEqual(events.map(row => row.id), [host.id, component.id, unrelated.id]);
+});
+
 test("a failed runtime inventory is isolated and never hides other managers", async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-state-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

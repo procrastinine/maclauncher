@@ -219,7 +219,7 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     async runtimeStates(settings, ids) {
       const localPreparations = [];
       for (const manager of managers) {
-        if (ids?.length && !ids.includes(manager.id) || typeof manager.getState !== "function") continue;
+        if (ids?.length && !ids.includes(manager.id) && !manager.referenceManagerIds?.some(id => ids.includes(id)) || typeof manager.getState !== "function") continue;
         if (typeof manager.prepareLocalState === "function") {
           localPreparations.push(Promise.resolve().then(() => manager.prepareLocalState({...context(settings), settings: settings?.runtimes?.[manager.id]}))
             .catch(error => logger.warn(`[runtime:${manager.id}] local state could not be prepared`, error.message))
