@@ -117,7 +117,8 @@ test('ordinary managed codec installation persists compact placement facts and r
     assert.deepEqual(fs.readFileSync(path.join(stored.translatorRoot, file.relative)), fs.readFileSync(path.join(f.framework, file.relative)));
   }
   assert.equal(Object.hasOwn(persisted, 'unixImports'), false); assert.equal(Object.hasOwn(projected, 'unixImports'), false);
-  assert.equal(stored.installed.translator.files.find(file => file.relative === f.strongRelative).slices[0].imports.length, 1024, 'ordinary resolved install retains freshly inspected facts in memory');
+  assert.equal(Object.hasOwn(stored.installed.translator.files.find(file => file.relative === f.strongRelative).slices[0], 'imports'), false,
+    'the installed record carries the compact persisted facts; Play rereads imports from disk');
   assert.equal(fs.readFileSync(path.join(stored.translatorRoot, 'Resources/plugin-profiles/fixture.json'), 'utf8'), fs.readFileSync(path.join(f.framework, 'Resources/plugin-profiles/fixture.json'), 'utf8'));
   const { plan, context } = await resolvePersisted(f, stored), used = plan.components.video.used;
   const plugin = path.join(stored.translatorRoot, f.strongRelative), imported = used.files.find(file => file.path === plugin);

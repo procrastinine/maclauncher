@@ -194,7 +194,8 @@ async function optionsInventory(install, runtime, context, dependencies = {}) {
     for (const [key, prepare] of missing) {
       attempted.add(key);
       context.signal?.throwIfAborted();
-      try { await prepare(); } catch (error) { warn(context.logger, `[translators] ${error.message}`); }
+      // An optional library that is absent, such as a runtime's codec core, is not a warning.
+      try { await prepare(); } catch (error) { if (error.code !== 'ENOENT') warn(context.logger, `[translators] ${error.message}`); }
       await new Promise(resolve => setImmediate(resolve));
     }
   }

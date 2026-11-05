@@ -17,7 +17,7 @@ function dll(imported) {
   return f.bytes;
 }
 
-test('real API options reuse inspected source facts when an unused API makes the package globally incompatible', async t => {
+test('API options use installed descriptions without load checks, and Play rereads source facts when an unused API makes the package globally incompatible', async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'translator-option-facts-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const put = (relative, bytes) => {
@@ -47,18 +47,23 @@ test('real API options reuse inspected source facts when an unused API makes the
   const registry = require('../src/modules/registry'), runtimeManager = require('../src/modules/crossover/runtime/manager');
   t.mock.method(registry, 'listSharedRuntimeManagers', () => [manager]); t.mock.method(registry, 'listModuleIds', () => []);
   t.mock.method(runtimeManager, 'resolveSelection', () => ({ ready: true, install }));
-  const originalResolve = Translators.resolve; let plan;
-  t.mock.method(Translators, 'resolve', async (...args) => { plan = await originalResolve(...args); return plan; });
+  const originalResolve = Translators.resolve; let loadChecks = 0;
+  t.mock.method(Translators, 'resolve', async (...args) => { loadChecks++; return originalResolve(...args); });
   const context = { runtimeId: 'crossover', userDataDir: path.join(root, 'profile'), settings: {}, logger: { warn() {} },
     runtimeSettings: { translatorRenderer: 'included:d3d-renderer:dxmt', translatorD3D9: 'fixture-mixed:mixed' } };
   const result = await require('../src/modules/crossover/main').actions.listTranslatorOptions(entry, {}, context);
+  assert.equal(loadChecks, 0, 'settings lists come from installed descriptions; Play makes the load checks');
+  const plan = await originalResolve(install, 'crossover', context, { entry, executableArchitecture: 'x86_64' });
   assert.equal(plan.compatibility['fixture-mixed:mixed'].compatible, false);
   assert.equal(plan.compatibility['fixture-mixed:mixed'].files, undefined);
   assert.equal(plan.components.d3d9.used.id, 'fixture-mixed:mixed'); assert.equal(plan.components.d3d9.fallback, false);
   assert.equal(plan.components.d3d11.used.id, 'included:d3d-renderer:dxmt');
   assert.equal(plan.components.d3d9.used.files.find(file => path.basename(file.path) === 'common.dll').realPath, shared);
+  // The installed description records a library path that no longer exists, so
+  // the option cannot show that its shared library is the included copy and
+  // links the Direct3D 11 choice as well. Play reads the files themselves.
   const current = result.translatorD3D9Options.find(option => option.value === 'fixture-mixed:mixed');
-  assert.deepEqual(current.affectedRoles, ['d3d9']);
-  assert.deepEqual(current.runtimeSettingsPatch, { translatorD3D9: 'fixture-mixed:mixed' });
+  assert.deepEqual(current.affectedRoles, ['d3d9', 'd3d11']);
+  assert.equal(current.runtimeSettingsPatch.translatorD3D9, 'fixture-mixed:mixed');
   assert.ok(metadata.files.find(file => file.relative === 'selected/common.dll').realPath.includes('/discarded-unpack/'), 'inspection does not rewrite installed metadata');
 });

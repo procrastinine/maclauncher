@@ -1027,7 +1027,7 @@ test('included translator references use host records and shared release facts w
   assert.equal(dxmt.getState(options).references,undefined);assert.match(render([{...dxmt.getState(options),id:dxmt.id,label:dxmt.label,ui:dxmt.ui}],dxmt.id),/No runtime versions installed yet/);
 });
 
-test('Installed ordering compares component releases before host releases and preserves identities', t => {
+test('Installed ordering compares component releases before host releases and preserves identities', async t => {
   const fs=require('node:fs'),os=require('node:os'),Component=require('../src/modules/shared/runtime/component-runtime');
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'installed-sort-facts-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const put=(relative,bytes)=>{const file=path.join(root,relative);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,bytes);return file;};
@@ -1046,9 +1046,12 @@ test('Installed ordering compares component releases before host releases and pr
     host('Cross-B','crossover',{upstreamVersion:'26.10'},'3.1.1'),host('Cross-C','crossover',{upstreamVersion:'26.9'},'3.1.1'),
     host('Cross-D','crossover',{upstreamVersion:'26.7'},'1.10.3')],beforeHosts=structuredClone([templates,crosses]);
   const manifest=require('../src/modules/crossover/manifest.json');
-  const managers=[['sikarugir',templates],['crossover',crosses]].map(([runtime,hosts])=>({id:manifest.runtime.manager[runtime],core:{listInstalled:()=>hosts},getState:()=>({versionLabels:{}})}));
+  const managers=[['sikarugir',templates],['crossover',crosses]].map(([runtime,hosts])=>({id:manifest.runtime.manager[runtime],core:{listInstalled:()=>hosts},getState:()=>({installed:hosts,versionLabels:{}})}));
   t.mock.method(require('../src/modules/registry'),'getModule',id=>id==='crossover'?{manifest,runtimeManagers:managers}:null);
-  const references=Component.includedReferences('dxvk',{userDataDir:path.join(root,'data'),logger:{warn(){}}});
+  // Local preparation describes the included components that the listing then reads.
+  const local={userDataDir:path.join(root,'data'),logger:{warn(){}}};
+  await Component.withIncludedReferences({id:'fixture-dxvk',translatorEngine:'dxvk'}).prepareLocalState(local);
+  const references=Component.includedReferences('dxvk',local);
   const reference=host=>references.find(row=>row.reference.path===host.installDir);
   assert.equal(reference(templates[0]).sortVersion,'3.1.1');assert.equal(reference(templates[1]).sortVersion,'3.1.1');
   assert.equal(reference(templates[0]).sortHostVersion,'1.0.9');assert.equal(reference(templates[1]).sortHostVersion,'1.0.10');

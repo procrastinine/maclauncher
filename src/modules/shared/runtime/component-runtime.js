@@ -226,7 +226,8 @@ function withIncludedReferences(manager) {
     } });
     const results = await Promise.allSettled(pending.values());
     options.signal?.throwIfAborted();
-    for (const result of results) if (result.status === "rejected") require("../graphics-warning")(options.logger || console,
+    // An installation without one of the optional included components is not a warning.
+    for (const result of results) if (result.status === "rejected" && result.reason?.code !== "ENOENT") require("../graphics-warning")(options.logger || console,
       `[translators] ${result.reason?.message || result.reason}`);
   };
   const getState = manager.getState;
