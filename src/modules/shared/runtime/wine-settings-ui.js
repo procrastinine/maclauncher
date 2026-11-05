@@ -5,9 +5,9 @@ const engine = (key, value) => ({ visibleWhen: [{ key, equals: value }] });
 function fields() {
   return [
     tri('retina', 'High Resolution (Retina)', 'Basic'),
-    { key: 'dpi', label: 'DPI', type: 'string', section: 'Display', advanced: true, description: '48–768; empty uses the runtime default.' },
+    { key: 'dpi', label: 'DPI', type: 'string', section: 'Display', advanced: true, description: 'Positive DPI; empty uses the runtime default.' },
     tri('fullscreenCapture', 'Fullscreen display capture', 'Display'), tri('verticalSync', 'Vertical sync', 'Display'),
-    { key: 'virtualDesktop', label: 'Virtual desktop', type: 'select', section: 'Display', advanced: true, options: [option('', 'Runtime default'), option('off', 'Off'), ...['1280x720', '1920x1080', '2560x1440', '3840x2160'].map(v => option(v, v))] },
+    { key: 'virtualDesktop', label: 'Virtual desktop', type: 'string', section: 'Display', advanced: true, description: 'WIDTHxHEIGHT, such as 1920x1080; off disables the desktop; empty uses the runtime default.' },
     tri('optionAsAlt', 'Option as Alt', 'Input'), tri('commandAsCtrl', 'Command as Ctrl', 'Input'), tri('mouseCapture', 'Mouse capture', 'Input'),
     { key: 'advertiseAvx', label: 'Advertise AVX under Rosetta', type: 'boolean', section: 'Compatibility', advanced: true },
     { key: 'wineD3dConfig', label: 'WineD3D options', type: 'string', section: 'Compatibility', advanced: true, description: 'Comma-separated WineD3D options, such as csmt=0x1,renderer=gl.', ...engine('graphicsBackend', 'wined3d') },

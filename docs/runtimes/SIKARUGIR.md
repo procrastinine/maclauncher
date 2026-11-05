@@ -115,11 +115,11 @@ For an existing wrapper, each setting defaults to **Wrapper setting** with its c
 | Control | Values and effect |
 | --- | --- |
 | High Resolution (Retina) | Runtime default, On or Off; On selects 192 DPI unless DPI is explicitly set. |
-| DPI | An integer from 48 to 768; empty retains the current value. |
+| DPI | A positive REG_DWORD integer; empty retains the current value. |
 | Option as Alt, Command as Ctrl | Map both left and right modifier keys. |
 | Mouse capture | Configure cursor confinement and DirectInput mouse warping. |
 | Fullscreen display capture, Vertical sync | Runtime default, On or Off. |
-| Virtual desktop | Runtime default, Off, 1280×720, 1920×1080, 2560×1440 or 3840×2160. |
+| Virtual desktop | Positive WIDTHxHEIGHT dimensions, such as 1920x1080; off disables the desktop; empty uses the runtime default. |
 | DXVK async | Runtime default, On or Off; takes effect in DXVK builds that implement async. |
 | DXMT configuration | Runtime default or a 30, 60 or 120 FPS preset. |
 | MetalFX spatial | Runtime default, On or Off for DXMT. |

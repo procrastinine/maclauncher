@@ -39,7 +39,7 @@ function registry(settings, { executable = '' } = {}) {
   bool('retina', ['RetinaMode']);
   if (!inherit(settings.dpi) || !inherit(settings.retina)) {
     const dpi = inherit(settings.dpi) ? toggle(settings.retina) === '1' ? 192 : 96 : Number(settings.dpi);
-    if (!Number.isInteger(dpi) || dpi < 48 || dpi > 768) throw new Error('Wine DPI must be an integer from 48 to 768.');
+    if (!Number.isInteger(dpi) || dpi <= 0 || dpi > 0xffffffff) throw new Error('Wine DPI must be a positive REG_DWORD integer.');
     add('HKCU\\Control Panel\\Desktop', 'LogPixels', dpi, 'REG_DWORD');
     add('HKLM\\System\\CurrentControlSet\\Hardware Profiles\\Current\\Software\\Fonts', 'LogPixels', dpi, 'REG_DWORD');
   }
@@ -51,7 +51,7 @@ function registry(settings, { executable = '' } = {}) {
   if (!inherit(settings.mouseCapture)) add('HKCU\\Software\\Wine\\DirectInput', 'MouseWarpOverride', toggle(settings.mouseCapture) === '1' ? 'force' : 'disable');
   if (!inherit(settings.crashDialog)) add('HKLM\\Software\\Microsoft\\Windows NT\\CurrentVersion\\AeDebug', 'Debugger', toggle(settings.crashDialog) === '1' ? 'winedbg --auto %ld %ld' : 'false');
   if (!inherit(settings.virtualDesktop) && settings.virtualDesktop !== 'off') {
-    if (!/^\d{3,5}x\d{3,5}$/.test(settings.virtualDesktop)) throw new Error('Virtual desktop must use WIDTHxHEIGHT.');
+    if (!/^0*[1-9]\d*x0*[1-9]\d*$/.test(text(settings.virtualDesktop))) throw new Error('Virtual desktop must use WIDTHxHEIGHT.');
     add('HKCU\\Software\\Wine\\Explorer\\Desktops', 'MacLauncher', settings.virtualDesktop);
   }
   if (!inherit(settings.windowsVersion)) {
@@ -65,7 +65,7 @@ async function applyRegistry(settings, options, run) {
 }
 function desktopArguments(settings, args, { crossover = false } = {}) {
   if (inherit(settings.virtualDesktop) || settings.virtualDesktop === 'off') return args;
-  if (!/^\d{3,5}x\d{3,5}$/.test(settings.virtualDesktop)) throw new Error('Virtual desktop must use WIDTHxHEIGHT.');
+  if (!/^0*[1-9]\d*x0*[1-9]\d*$/.test(text(settings.virtualDesktop))) throw new Error('Virtual desktop must use WIDTHxHEIGHT.');
   return crossover ? ['--desktop', 'MacLauncher', ...args] : ['explorer.exe', `/desktop=MacLauncher,${settings.virtualDesktop}`, ...args];
 }
 function explicitSettings(settings) { return Object.fromEntries(Object.entries(settings).filter(([,value]) => value !== 'inherit')); }
