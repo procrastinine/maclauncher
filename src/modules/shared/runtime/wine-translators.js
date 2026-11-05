@@ -308,13 +308,20 @@ function optionLists(install, runtime, context, dependencies = {}) {
   return { ...legacy, ...Plan.apiOptions(plan.components.d3d11 ? plan : Plan.projectRoles(plan), { ...input,
     selections: Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id, context.runtimeSettings?.[role.settingsKey]])) }) };
 }
+function presentInspectorRows(rows) {
+  return rows.map(row => {
+    const reasonCode = row.reasonCode || (row.fallback ? 'recorded-fallback' : null);
+    return { ...row, reasonCode, selected: reasonCode === 'missing-choice' ? Plan.UNAVAILABLE_CHOICE_LABEL : row.selected,
+      reason: row.fallback && reasonCode !== 'load-impossible' ? Plan.fallbackNotice(reasonCode) : row.reason };
+  });
+}
 function inspectorRows(plan) {
   const labels = { 'd3d-renderer': 'Direct3D', 'vulkan-driver': 'Vulkan', d3d12: 'Direct3D 12', video: 'Video codecs' };
   const entries = plan.components.d3d11 ? Roles.ROLES.map(role => [role.id, role.settingsKey]) : Object.entries(SETTINGS);
-  return entries.map(([component, key]) => {
+  return presentInspectorRows(entries.map(([component, key]) => {
     const row = plan.components[component];
-    return { id: key, component, label: labels[component] || Roles.ROLES.find(role => role.id === component)?.label, selected: row.selected ? Description.label(row.selected) : row.fallback ? row.value : row.inherited ? 'Inherited' : plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice",
-      used: row.used ? Description.label(row.used) : plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice", reason: row.reason, fallback: row.fallback };
-  });
+    return { id: key, component, label: labels[component] || Roles.ROLES.find(role => role.id === component)?.label, selected: row.selected ? Description.label(row.selected) : row.fallback ? Plan.UNAVAILABLE_CHOICE_LABEL : row.inherited ? 'Inherited' : plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice",
+      used: row.used ? Description.label(row.used) : plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice", reason: row.reason, reasonCode: row.reasonCode, fallback: row.fallback };
+  }));
 }
-module.exports = { SETTINGS, includedTranslators, managedTranslators, inventory, resolve, engines, settingsForPlan, wineRoot, withSettings, optionLists, inspectorRows, environmentContext };
+module.exports = { SETTINGS, includedTranslators, managedTranslators, inventory, resolve, engines, settingsForPlan, wineRoot, withSettings, optionLists, inspectorRows, presentInspectorRows, environmentContext };

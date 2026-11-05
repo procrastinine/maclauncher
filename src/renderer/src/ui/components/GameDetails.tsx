@@ -315,7 +315,7 @@ export const GameDetails = memo(function GameDetails({
     runtimeStatusEntry && runtimeStatusEntry.runtimeId === g.runtimeId
       ? runtimeStatusEntry.status
       : null;
-  const translatorRows: { id?: string; label: string; selected: string; used: string; reason?: string | null }[] =
+  const translatorRows: { id?: string; label: string; selected: string; used: string; reason?: string | null; reasonCode?: string | null; fallback?: boolean }[] =
     Array.isArray(runtimeStatus?.translatorRows) ? runtimeStatus.translatorRows :
       Array.isArray(g.runtimeData?.[g.runtimeId]?.translatorRows) ? g.runtimeData[g.runtimeId].translatorRows : [];
   const translatorLabels = new Set(translatorRows.map(row => row.label));
@@ -743,7 +743,7 @@ export const GameDetails = memo(function GameDetails({
             <div className="detailRow" key={`translator:${row.id || index}`}>
               <div className="detailLabel">{row.label}</div>
               <div className="detailValue">{row.selected} → {row.used}
-                {row.selected !== row.used && row.reason && <div className="detailMeta">{row.reason}</div>}
+                {row.selected !== row.used && row.reason && (!row.fallback || row.reasonCode) && <div className="detailMeta">{row.reason}</div>}
               </div>
             </div>
           ))}

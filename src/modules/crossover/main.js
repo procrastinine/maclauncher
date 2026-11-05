@@ -49,7 +49,7 @@ async function runtimeStatus(entry, _payload, context) {
   const recorded = entry.runtimeData?.[runtime]?.translatorRows || [];
   const plan = !recorded.length && selected.install ? await Translators.resolve(preparedContext.wineEnvironment?.install || selected.install, runtime, preparedContext,
     { entry, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture }) : null;
-  const rows = recorded.length ? recorded : plan ? Translators.inspectorRows(plan) : [];
+  const rows = recorded.length ? Translators.presentInspectorRows(recorded) : plan ? Translators.inspectorRows(plan) : [];
   const details = rows.map(row => ({ label: row.label, value: row.used,
     detail: row.selected !== row.used && row.reason ? 'Selected ' + row.selected + '. ' + row.reason : '' }));
   const cameraNotice = entry.runtimeData?.[runtime]?.cameraAdapterNotice;

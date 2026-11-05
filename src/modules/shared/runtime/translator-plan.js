@@ -1,8 +1,17 @@
 const { COMPONENTS, label } = require('./translator-description');
 const AUTOMATIC = 'automatic', INHERIT = 'inherit';
+const UNAVAILABLE_CHOICE_LABEL = 'Saved selection (unavailable)';
 const Roles = require('./translator-roles');
 const fs = require('node:fs'), path = require('node:path');
 const { fileDigest } = require('./verified-identity');
+
+function fallbackNotice(reasonCode) {
+  if (reasonCode === 'missing-choice') return "This saved choice is unavailable. The runtime's current fallback will be used.";
+  if (reasonCode === 'runtime-global-automatic') return 'CrossOver keeps its automatic renderer until every Direct3D row has a usable choice.';
+  if (reasonCode === 'shared-physical-binding') return 'This choice shares a library with another Direct3D selection. The existing renderer will be used.';
+  if (reasonCode === 'recorded-fallback') return 'The recorded runtime used a different choice.';
+  return 'This choice cannot load with the selected runtime. Its included copy or automatic choice will be used.';
+}
 
 // Legacy settings are projected for display and consumers without writing or
 // changing their existing automatic/backend choice.
@@ -227,9 +236,7 @@ function apiOptions(plan, { choices = [], included = [], environment = null, sel
           !(selections[other.id] && plan.components[other.id]?.selected && plan.components[other.id].reasonCode === 'runtime-global-automatic'));
       const heldBack = unresolvedGlobal || current.selected?.id === item.id && current.fallback && (!current.used || !sameComponent(item, current.used, role));
       const reason = heldBack ? unresolvedGlobal ? 'runtime-global-automatic' : current.reasonCode || 'fallback' : affected.length > 1 ? 'shared-physical-binding' : undefined;
-      const notice = !heldBack ? undefined : reason === 'runtime-global-automatic' ? 'CrossOver keeps its automatic renderer until every Direct3D row has a usable choice.' :
-        reason === 'shared-physical-binding' ? 'This choice shares a library with another Direct3D selection. The existing renderer will be used.' :
-          'This choice cannot load with the selected runtime. Its included copy or automatic choice will be used.';
+      const notice = heldBack ? fallbackNotice(reason) : undefined;
       rows.push({ value, label: label(item), apis: item.apis, source: item.source, form: item.form, scopeKnown: Boolean(item.apis?.length), reason, heldBack: Boolean(heldBack), notice,
         groupId: affected.map(item => item.id).join('+'), affectedRoles: affected.map(item => item.id), runtimeSettingsPatch: patch });
     }
@@ -237,8 +244,8 @@ function apiOptions(plan, { choices = [], included = [], environment = null, sel
       const projected = rows.find(row => row.value === current.value && [AUTOMATIC, INHERIT].includes(row.value));
       if (projected) projected.value = '';
       else rows.push({ value: '', label: 'Default Direct3D engine' });
-    } else if (!rows.some(row => row.value === saved)) rows.push({ value: saved, label: 'Saved selection (unavailable)', reason: current.reasonCode || 'missing-choice', heldBack: Boolean(current.fallback),
-      notice: current.fallback ? "This saved choice is unavailable. The runtime's current fallback will be used." : undefined, runtimeSettingsPatch: { [role.settingsKey]: saved } });
+    } else if (!rows.some(row => row.value === saved)) rows.push({ value: saved, label: UNAVAILABLE_CHOICE_LABEL, reason: current.reasonCode || 'missing-choice', heldBack: Boolean(current.fallback),
+      notice: current.fallback ? fallbackNotice('missing-choice') : undefined, runtimeSettingsPatch: { [role.settingsKey]: saved } });
     result[role.optionsKey] = withOptionScopes(rows);
   }
   result.translatorGroups = plan.groups || apiGroups(plan);
@@ -265,22 +272,26 @@ function resolvePlan({ runtime = 'crossover', selections = {}, choices = [], inc
     const inherited = value === INHERIT && environment;
     const selected = inherited ? environment.selections?.[component] || null
       : findChoice([...included, ...choices].filter(item => item.component === component), value);
-    let used = selected, reason = null;
+    let used = selected, reason = null, reasonCode = null;
     if (!selected && value !== AUTOMATIC && value !== INHERIT) {
       reason = `The saved translator choice is unavailable: ${value}`;
+      reasonCode = 'missing-choice';
     }
     if (selected && compatibility[selected.id]?.compatible === false) {
       reason = compatibility[selected.id].reason;
+      reasonCode = 'load-impossible';
       used = included.find(item => item.component === component && item.engine === selected.engine && compatibility[item.id]?.compatible !== false) || null;
     }
-    components[component] = { value, selected, used, inherited: Boolean(inherited), fallback: Boolean(reason), reason };
+    components[component] = { value, selected, used, inherited: Boolean(inherited), fallback: Boolean(reason), reason, reasonCode };
   }
   const plan = { runtime, components };
   return { ...plan, warnings: fallbackWarnings(plan) };
 }
 function fallbackWarnings(plan) {
-  return [...new Set(Object.values(plan.components).filter(row => row.fallback).map(row =>
-    `${row.selected ? label(row.selected) : row.value} could not load: ${row.reason}. Using ${row.used ? label(row.used) : plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "the Template's automatic choice"}.`))];
+  return [...new Set(Object.values(plan.components).filter(row => row.fallback).map(row => {
+    const message = row.reasonCode === 'load-impossible' ? row.reason : fallbackNotice(row.reasonCode || 'recorded-fallback');
+    return `${row.selected ? label(row.selected) : UNAVAILABLE_CHOICE_LABEL}: ${String(message).replace(/[.!?]+\s*$/, '')}. Using ${row.used ? label(row.used) : plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "the Template's automatic choice"}.`;
+  }))];
 }
 function options({ component, runtime = 'crossover', included = [], choices = [], environment = null, selections = {} } = {}) {
   const result = [];
@@ -292,4 +303,4 @@ function options({ component, runtime = 'crossover', included = [], choices = []
     result.push({ value: item === selected ? selections[component] : item.id, label: label(item), apis: item.apis });
   return withOptionScopes(result);
 }
-module.exports = { AUTOMATIC, INHERIT, resolvePlan, options, fallbackWarnings, projectRoles, resolveApiRoles, apiOptions, filesForRole, ROLES: Roles.ROLES };
+module.exports = { AUTOMATIC, INHERIT, UNAVAILABLE_CHOICE_LABEL, fallbackNotice, resolvePlan, options, fallbackWarnings, projectRoles, resolveApiRoles, apiOptions, filesForRole, ROLES: Roles.ROLES };
