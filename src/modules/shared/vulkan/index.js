@@ -216,12 +216,17 @@ function legacyFallback(operation, context, dependencies) {
 function environment(selection, directory) {
   if (!selection) return {};
   const env = { KL_MVK_DYLIB: selection.library };
-  if (selection.backend === "kosmickrisp") {
-    Object.assign(env, driverEnvironment({ ...selection, apiVersion: '1.4.0' }, directory));
-  }
+  if (selection.backend === "kosmickrisp") Object.assign(env, driverEnvironment(selection, directory));
   return env;
 }
-function driverEnvironment({ driver, icd, backend, apiVersion = '1.0.0' }, directory) {
+// Every route that points the Vulkan loader at a driver writes its manifest
+// here. A driver's own ICD manifest is used as published. A driver without one,
+// such as a KosmicKrisp package, gets a generated manifest. The loader takes a
+// driver's Vulkan API version from that manifest, and a 1.0 declaration hides
+// KosmicKrisp's Vulkan 1.1+ features (for example shaderDrawParameters) from
+// DXVK, so KosmicKrisp is declared as Vulkan 1.4.
+function driverEnvironment({ driver, icd, backend }, directory) {
+  const apiVersion = backend === 'kosmickrisp' ? '1.4.0' : '1.0.0';
   const descriptor = icd ? JSON.parse(fs.readFileSync(icd, 'utf8')) : { file_format_version: '1.0.0', ICD: { api_version: apiVersion } };
   driver ||= icd && path.resolve(path.dirname(icd), descriptor.ICD.library_path);
   if (!path.isAbsolute(driver || '') || !fs.statSync(driver).isFile()) throw new Error('The selected Vulkan driver is missing.');
