@@ -1027,7 +1027,7 @@ test('included translator references use host records and shared release facts w
   assert.equal(dxmt.getState(options).references,undefined);assert.match(render([{...dxmt.getState(options),id:dxmt.id,label:dxmt.label,ui:dxmt.ui}],dxmt.id),/No runtime versions installed yet/);
 });
 
-test('official codec catalog, local registration and Apple upstream links use ordinary runtime presentation', () => {
+test('official codec catalog, local registration and Apple upstream links use ordinary runtime presentation', t => {
   const {createManager}=require('../src/modules/shared/runtime/translator-managers');
   const codecs=createManager('gstreamer'),local=codecs.getState({});
   const markup=render([{...local,id:codecs.id,label:codecs.label,ui:codecs.ui}],codecs.id,{onRuntimeRegister(){assert.fail('No registration during render');}});
@@ -1046,6 +1046,13 @@ test('official codec catalog, local registration and Apple upstream links use or
     onSelect(){assert.fail('Registration must not alter a version choice');},onInstall(){assert.fail('Registration is not an Install');},onRefresh(){assert.fail('Registration must not refresh');},onRegister(){registrations++;}});
   const nodes=value=>value==null?[]:Array.isArray(value)?value.flatMap(nodes):typeof value==='object'?[value,...nodes(value.props?.children)]:[];
   nodes(control.render()).find(node=>node.type==='button'&&node.props.children==='Register Game Porting Toolkit…').props.onClick();assert.equal(registrations,1);control.close();
+  const fs=require('node:fs'),os=require('node:os'),root=fs.mkdtempSync(path.join(os.tmpdir(),'apple-cached-template-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const Catalog=require('../src/modules/shared/runtime/runtime-catalog'),version='template-Template-1.0.27';
+  Catalog.writeRuntimeCatalog({userDataDir:root,managerId:metal.id,source:'https://github.com/Sikarugir-App/Template/releases',entries:[{version,upstreamRevision:'published-template-release',catalogSourceId:'template',component:'d3dmetal',architecture:'universal',
+    asset:{filename:'Template-1.0.27.tar.xz',url:'https://github.com/Sikarugir-App/Template/releases/download/v1.0/Template-1.0.27.tar.xz',integrity:'recorded-local'}}]});
+  const before=fs.readFileSync(Catalog.catalogPath(root,metal.id)),cached=metal.getState({userDataDir:root});
+  assert.deepEqual(cached.catalog.sources.find(source=>source.id==='template').versions,[version]);
+  assert.equal(cached.catalog.sources[0].id,'apple');assert.deepEqual(fs.readFileSync(Catalog.catalogPath(root,metal.id)),before);
 });
 
 test('persisted generic-tag source labels render actual asset packages without Refresh or positional ties', t => {

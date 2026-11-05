@@ -66,6 +66,7 @@ function catalogSource([id, label, repository, filter, component, presentation =
 }
 function createManager(engine, { dependencies = {} } = {}) {
   const definition = { ...definitions[engine], engine }, catalogSources = definition.sources.map(source => typeof source.discover === "function" ? source : catalogSource(source, definition.label));
+  const downloadSource = catalogSources.find(source => source.delivery !== "local-files");
   const installedSource = pin => {
     const source = translatorSource(pin), declared = catalogSources.find(item => item.id === pin?.catalogSourceId);
     return declared?.optionsRuntimeForms ? { ...(typeof source === "object" ? source : { kind: "upstream", id: pin.catalogSourceId, label: declared.label }),
@@ -75,7 +76,7 @@ function createManager(engine, { dependencies = {} } = {}) {
     formerIds: engine === "dxmt" ? ["crossover-graphics-bridge"] : [], label: definition.label,
     upstreamUrl: definition.upstreamUrl, upstreamLabel: definition.upstreamLabel,
     formatVersionLabel: (pin, installed) => versionLabel(pin, installed, catalogSources.find(source => source.id === pin?.catalogSourceId)?.componentLabel || definition.label),
-    discoverCatalog: () => [], ...(catalogSources.length ? { catalogSources } : {}), sourceUrl: definition.sourceUrl || catalogSources[0]?.url || "https://gstreamer.freedesktop.org/", sourceLabel: "Source", sourceName: definition.sourceName, sourceDescription: definition.sourceDescription, nativeLibrary: true, cacheDownloads: true, supportsDefault: false, customRuntime: !definition.referenceOnly,
+    discoverCatalog: () => [], ...(catalogSources.length ? { catalogSources } : {}), sourceUrl: definition.sourceUrl || downloadSource?.url || catalogSources[0]?.url || "https://gstreamer.freedesktop.org/", sourceLabel: "Source", sourceName: definition.sourceName, sourceDescription: definition.sourceDescription, nativeLibrary: true, cacheDownloads: true, supportsDefault: false, customRuntime: !definition.referenceOnly,
     resolveExecutable(root) { return Component.inspected(Component.componentRoot(root, definition), definition).executablePath; },
     inspectRuntime({ runtimePath, runtimeRoot, runtimeSource, runtimeCatalogEntry }) {
       return Component.inspected(Component.componentRoot(runtimeRoot || path.dirname(runtimePath), definition), definition, { engine: runtimeCatalogEntry?.translatorEngine || definition.engine, source: runtimeCatalogEntry ? installedSource(runtimeCatalogEntry) : runtimeSource || "upstream" });
