@@ -220,8 +220,9 @@ test("ordinary Wine preparation configures its private prefix silently and prese
   await dependencies.calls[0].options.onProcessSpawn(new EventEmitter(), { stopOnLauncherExit: true });
   assert.deepEqual(ownership, ["leased", "temporary", "bound"], "preparation helpers are registered for shutdown and retain the runtime lease");
   assert.equal(launch.directory, path.join(context.userDataDir, "games", entry.gameId, "runtimes", "sikarugir"));
-  assert.equal(dependencies.calls.length, 2);
-  assert.deepEqual(dependencies.calls.map(call => call.args), [["wineboot.exe", "--init"], ["winecfg.exe", "-v", "win10"]]);
+  assert.equal(dependencies.calls.length, 3);
+  assert.deepEqual(dependencies.calls.slice(0, 2).map(call => call.args), [["wineboot.exe", "--init"], ["winecfg.exe", "-v", "win10"]]);
+  assert.deepEqual(dependencies.calls[2].args, ["reg.exe", "add", "HKCU\\Software\\Wine\\AppDefaults\\Game.exe", "/v", "Version", "/t", "REG_SZ", "/d", "win10", "/f"]);
   assert.equal(dependencies.calls[0].command, install.executablePath); assert.equal(dependencies.calls[0].server, install.serverPath);
   assert.equal(dependencies.calls[0].options.env.WINEPREFIX, launch.prefixPath);
   assert.equal(dependencies.calls[0].options.env.WINEDLLOVERRIDES, undefined, "game renderer and mod overrides wait until preparation finishes");
@@ -236,7 +237,10 @@ test("ordinary Wine preparation configures its private prefix silently and prese
   fs.writeFileSync(path.join(launch.prefixPath, "saved.dat"), "prefix save");
   fs.writeFileSync(path.join(entry.gamePath, "asset.dat"), "two");
   await Launch.prepareLaunch(entry, context, dependencies);
-  assert.equal(dependencies.calls.length, 2, "completed prefix initialization is reused");
+  assert.equal(dependencies.calls.filter(call => call.args[0] !== "reg.exe").length, 2, "completed prefix initialization is reused");
+  const extra = await Launch.prepareLaunch(entry, {...context, runtimeSettings: {...context.runtimeSettings, windowsVersion: 'win81'}}, dependencies);
+  assert.equal(extra.prefixPath, launch.prefixPath, 'additional reported versions share the original Windows 10 prefix');
+  assert.equal(dependencies.calls.at(-1).args.at(-2), 'win81');
   assert.equal(fs.readFileSync(path.join(entry.gamePath, "settings.ini"), "utf8"), "private");
   assert.equal(fs.readFileSync(path.join(launch.gameRoot, "settings.ini"), "utf8"), "private");
   assert.equal(fs.readFileSync(path.join(launch.gameRoot, "asset.dat"), "utf8"), "two");

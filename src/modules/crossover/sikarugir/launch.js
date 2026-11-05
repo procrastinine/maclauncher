@@ -315,7 +315,9 @@ async function prepareLaunch(entry, context, dependencies = {}) {
     selected.install.sha256 || selected.install.digest || null])).digest("hex").slice(0, 20);
   const windowsVersion = settings.windowsVersion || "win10";
   if (!WINDOWS_VERSIONS.has(windowsVersion)) throw new Error("Unsupported Wine Windows version.");
-  const prefixPath = path.join(directory, "prefixes", windowsVersion);
+  const previousVersions = require('../manifest.json').runtime.entries.sikarugir.settings.fields.find(field => field.key === 'windowsVersion').options;
+  const environmentVersion = previousVersions.some(option => option.value === windowsVersion) ? windowsVersion : 'win10';
+  const prefixPath = path.join(directory, "prefixes", environmentVersion);
   // Version the loader layout independently of the persistent prefix/saves.
   const variant = crypto.createHash("sha256").update(JSON.stringify([2, settings.graphicsBackend || "auto", settings.vulkanBackend || "auto",
     settings.cncDdraw === true, match.executableArchitecture, ...(settings.dlss === true ? ["dlss"] : []),
@@ -323,7 +325,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const viewRoot = path.join(directory, "runtime-view", `${identity}-${variant}`);
   const graphics = await prepareGraphicsView({ install: selected.install, settings, prefixPath, viewRoot, host,
     cameraBridge, signal: context.signal, logger: context.logger, onProgress: context.onProgress, executableArchitecture: match.executableArchitecture });
-  await ensurePrefix(selected.install, Environments.privateEnvironment(context.userDataDir, directory, path.relative(directory, prefixPath)), directory, settings, graphics, context, { run: dependencies.run });
+  await ensurePrefix(selected.install, Environments.privateEnvironment(context.userDataDir, directory, path.relative(directory, prefixPath)), directory, { ...settings, windowsVersion: environmentVersion }, graphics, context, { run: dependencies.run });
   WindowsFiles.detachProfileAliases(prefixPath);
   await graphics.applyPrefix?.();
   context.signal?.throwIfAborted();
@@ -335,7 +337,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   // Apply launcher-owned optional effects only to the game, after stock Wine
   // finishes prefix initialization. User-supplied loader paths remain blocked.
   if (context.applyGameEnvironment) environment = await context.applyGameEnvironment(environment);
-  await WineSettings.applyRegistry({ ...settings, windowsVersion: "" }, { executable: path.basename(windowsExecutablePath) }, args =>
+  await WineSettings.applyRegistry(settings, { executable: path.basename(windowsExecutablePath) }, args =>
     (dependencies.run || runSupervised)(selected.install.executablePath, selected.install.serverPath, args, { cwd: directory, env: environment, signal: context.signal, timeout: 30000 }));
   const args = WineSettings.desktopArguments(settings, [windowsExecutablePath, ...(Array.isArray(settings.arguments) ? settings.arguments : []).map(value => safeText(value, "Game arguments")),
     ...(context.gameArguments || [])]);

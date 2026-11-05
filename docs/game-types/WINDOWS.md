@@ -65,3 +65,5 @@ Sikarugir runs the game with [Sikarugir Wine engines](https://github.com/Sikarug
 ### CrossOver
 
 CrossOver uses a licensed [CrossOver application](https://www.codeweavers.com/crossover) that is already installed on the Mac. MacLauncher never downloads or bundles CrossOver. [CrossOver](../runtimes/CROSSOVER.md) describes application registration, bottles, settings and graphics.
+
+Windows runtime controls are grouped into Basic settings and advanced Display, Input, Compatibility and Diagnostics settings. Both runtimes expose Retina and DPI, keyboard mapping, mouse and fullscreen capture, vertical sync, virtual desktops, Rosetta AVX advertisement, WineD3D options, engine-specific tuning and diagnostic HUDs. Existing bottles and wrappers offer their current setting as the default for each control. Per-launch CrossOver Windows versions and additional Sikarugir per-program Windows versions keep the current environment's storage.

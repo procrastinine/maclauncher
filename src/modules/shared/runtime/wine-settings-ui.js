@@ -40,6 +40,10 @@ function withSettings(manifest) {
       schema.defaults.windowsVersion = '';
       schema.fields.push({key: 'windowsVersion', label: 'Per-launch Windows version', section: 'Basic', type: 'select', options: [option('', 'Bottle version'), ...versions]});
     } else schema.fields.find(f => f.key === 'windowsVersion').options = versions;
+    if (id === 'crossover') {
+      const sync = schema.fields.find(field => field.key === 'synchronization');
+      sync.optionsAction = 'listWineSynchronizations'; sync.optionsKey = 'synchronizations';
+    }
     schema.inheritanceAction = "listWineSettingInheritance";
     for (const field of schema.fields) if (!["environmentReference", "version"].includes(field.key)) field.inheritFrom = "environmentReference";
     schema.fields.sort((a,b) => Number(Boolean(a.advanced)) - Number(Boolean(b.advanced)) || ['Basic','Display','Input','Compatibility','Diagnostics'].indexOf(a.section) - ['Basic','Display','Input','Compatibility','Diagnostics'].indexOf(b.section));

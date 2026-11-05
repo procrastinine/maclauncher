@@ -22,9 +22,14 @@ function graphicsBackendOptions(entry, context, { runtimeManager = manager, host
   const support = require("./runtime/backend-support");
   return { graphicsBackends: field.options.filter(option => !support.reason(selected?.install, option.value, host)) };
 }
-const crossoverActions = { ...graphicsBridgeActions,
+function wineSynchronizations(entry, context) {
+  const selected = manager.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
+  const options = manifest.runtime.entries.crossover.settings.fields.find(field => field.key === 'synchronization').options;
+  return { synchronizations: options.filter(option => option.value !== 'esync' || Number.parseInt(selected.install?.upstreamVersion, 10) < 25) };
+}
+const crossoverActions = { ...graphicsBridgeActions, listWineSynchronizations: (entry, _payload, context) => wineSynchronizations(entry, context),
   listGraphicsBackends: (entry, _payload, context) => graphicsBackendOptions(entry, context) };
-const crossoverSettingsActions = { ...graphicsBridgeSettingsActions,
+const crossoverSettingsActions = { ...graphicsBridgeSettingsActions, listWineSynchronizations: (_payload, context) => wineSynchronizations({}, context),
   listGraphicsBackends: (_payload, context) => graphicsBackendOptions({}, context) };
 const sikarugirManager = require("./sikarugir/runtime/manager");
 const sikarugirProvider = { ...require("./sikarugir/provider"),
