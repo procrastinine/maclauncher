@@ -4,9 +4,11 @@ import { isRuntimeSettingChoiceValue } from "../../../../core/runtime-setting-va
 export type SettingChoices = Record<string, any>;
 
 export function settingChoiceScope(choices: SettingChoices | undefined, field: RuntimeSettingField, option?: RuntimeSettingOption) {
-  const role = Array.isArray(choices?.translatorRoles) ? choices.translatorRoles.find((row: any) => row?.settingsKey === field.key) : null;
+  const roles = Array.isArray(choices?.translatorRoles) ? choices.translatorRoles : [];
+  const role = roles.find((row: any) => row?.settingsKey === field.key);
   const group = Array.isArray(choices?.translatorGroups) ? choices.translatorGroups.find((row: any) => row?.id === (option?.groupId || role?.groupId)) : null;
-  return [...new Set([group?.label, group?.reason, role?.reason].filter(value => typeof value === "string" && value))].join(" · ");
+  const affected = Array.isArray(option?.affectedRoles) ? roles.filter((row: any) => option.affectedRoles!.includes(row?.id)).map((row: any) => row.label).join(" / ") : "";
+  return [...new Set([group?.label || affected, option?.reason, group?.reason, role?.reason].filter(value => typeof value === "string" && value))].join(" · ");
 }
 
 export function settingChoiceRequest(
