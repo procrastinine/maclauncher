@@ -66,7 +66,7 @@ function includedTranslators(install, runtime, { engine: requestedEngine } = {})
       } catch (error) { warnings.push(error.message); }
     }
   }
-  const direct3DFiles = (!requestedEngine || requestedEngine === 'wined3d' || requestedEngine === 'vkd3d') && layout.primaryWindowsRoot && fs.existsSync(layout.primaryWindowsRoot) ? fs.readdirSync(layout.primaryWindowsRoot).filter(name => /^d3d\d.*\.dll$/i.test(name)).map(name => Description.inspectFile({ path: path.join(layout.primaryWindowsRoot, name), relative: `${layout.primaryWindows}/${name}` })) : [];
+  const direct3DFiles = (!requestedEngine || requestedEngine === 'wined3d' || requestedEngine === 'vkd3d') && layout.primaryWindowsRoot && fs.existsSync(layout.primaryWindowsRoot) ? fs.readdirSync(layout.primaryWindowsRoot).filter(name => /^(?:d3d\d.*|dxgi)\.dll$/i.test(name)).map(name => Description.inspectFile({ path: path.join(layout.primaryWindowsRoot, name), relative: `${layout.primaryWindows}/${name}` })) : [];
   const d3d12Files = direct3DFiles.filter(file => Roles.fileApis(file).includes('Direct3D 12'));
   if (!requestedEngine || requestedEngine === 'wined3d') result.push(Description.description({ id: 'included:d3d-renderer:wined3d', included: true, component: 'd3d-renderer', engine: 'wined3d', source,
     version: install.wineVersion || install.engineVersion || '', form: 'builtin', root: layout.root, files: direct3DFiles.filter(file => !d3d12Files.includes(file)) }));
@@ -97,7 +97,7 @@ function managedTranslators(context, runtime, managers = runtimeManagers(), arch
       if (description.source?.runtime === 'crossover' && runtime !== 'crossover') continue;
       const root = install.translatorRoot || install.payloadRoot || (install.installDir && path.join(install.installDir, install.installationMetadata?.translatorRelative || '')) || install.root;
       const value = { ...description, id: `${manager.id}:${install.version}`, root, entryPoint: install.executablePath || description.entryPoint,
-        managerId: manager.id, runtimeVersion: install.version, architecture: Architecture.recordArchitecture(install) || selection?.architecture,
+        managerId: manager.id, settingsEngine: manager.translatorEngine || manager.translator?.engine, runtimeVersion: install.version, architecture: Architecture.recordArchitecture(install) || selection?.architecture,
         variant: install.variant, sectionId: install.sectionId || selection?.sectionId || 'default', buildKey: install.buildKey,
         files: description.files.map(file => ({ ...file, path: path.resolve(root, file.path) })) };
       choices.push(value);
@@ -157,6 +157,7 @@ async function resolve(install, runtime, context, { executableArchitecture, host
   const roleRequested = Roles.DIRECT3D_ROLES.some(role => role.id !== 'd3d12' && context.runtimeSettings?.[role.settingsKey]);
   const actual = item => {
     const files = !roleRequested && compatibility[item.id]?.files || item.files.map(file => fs.existsSync(file.path) ? Description.inspectFile(file) : file);
+    compatibility[item.id].inspectedFiles = files;
     return { ...item, files, ...(['d3d-renderer', 'd3d12'].includes(item.component) && files.some(file => file.format === 'pe') ? { apis: Roles.apisForFiles(files) } : {}) };
   };
   input.included = input.included.map(actual); input.choices = input.choices.map(actual);
@@ -234,7 +235,8 @@ async function resolve(install, runtime, context, { executableArchitecture, host
 }
 function engines(plan) {
   const result = Object.fromEntries(Object.entries(plan.components).map(([component, row]) => [component, row.used?.engine || null]));
-  if (plan.apiMode) result['d3d-renderer'] = [...new Set(Roles.usedRenderers(plan).map(item => item.engine))];
+  const used = [...new Set(Roles.usedRenderers(plan).map(item => item.settingsEngine || item.engine))];
+  result['d3d-renderer'] = used.length === 1 ? used[0] : used.length ? used : null;
   return result;
 }
 function settingsForPlan(settings, plan) {
@@ -248,31 +250,30 @@ function settingsForPlan(settings, plan) {
 }
 function withSettings(manifest) {
   const result = structuredClone(manifest);
+  const controls = [{ label: 'Default Direct3D engine', settingsKey: SETTINGS['d3d-renderer'],
+    optionsKey: SETTINGS['d3d-renderer'] + 'Options' }, ...Roles.ROLES];
   for (const runtime of ['crossover', 'sikarugir']) {
     const schema = result.runtime.entries[runtime].settings;
     schema.visibilityAction = 'listTranslatorOptions';
     const index = schema.fields.findIndex(field => field.key === 'graphicsBackend');
     // Retain saved legacy values for existing games, without a second editable selector.
     for (const field of schema.fields) if (['graphicsBackend', 'vulkanBackend', 'graphicsBridgeVersion'].includes(field.key)) field.hidden = true;
-    const labels = { 'd3d-renderer': 'Default Direct3D engine', 'vulkan-driver': 'Vulkan driver', d3d12: 'Direct3D 12', video: 'Video codecs' };
-    for (const key of Object.values(SETTINGS)) schema.defaults[key] = '';
-    schema.fields.splice(Math.max(0, index), 0, ...Object.entries(SETTINGS).map(([component, key]) => ({ key, type: 'select', label: labels[component],
-      optionsAction: 'listTranslatorOptions', optionsKey: key + 'Options', options: [{ value: '', label: runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice" }],
-      inheritFrom: 'environmentReference', inheritanceInOptions: true, section: 'Basic',
-      description: 'Versions and sources are read from installed files. Changes apply on the next launch.' })));
-    const afterDefault = schema.fields.findIndex(field => field.key === 'translatorRenderer') + 1;
-    for (const role of Roles.DIRECT3D_ROLES.filter(role => role.id !== 'd3d12')) schema.defaults[role.settingsKey] = '';
-    schema.fields.splice(afterDefault, 0, ...Roles.DIRECT3D_ROLES.filter(role => role.id !== 'd3d12').map(role => ({
-      key: role.settingsKey, type: 'select', label: role.label, optionsAction: 'listTranslatorOptions', optionsKey: role.optionsKey,
-      options: [{ value: '', label: 'Existing selection' }], inheritFrom: 'environmentReference', inheritanceInOptions: true, section: 'Basic',
-      description: 'Shared libraries link affected API choices. Existing choices remain unchanged until edited.' })));
+    for (const role of controls) schema.defaults[role.settingsKey] = '';
+    schema.fields.splice(Math.max(0, index), 0, ...controls.map(role => {
+      const legacy = Object.values(SETTINGS).includes(role.settingsKey);
+      return { key: role.settingsKey, type: 'select', label: role.label, optionsAction: 'listTranslatorOptions', optionsKey: role.optionsKey,
+        options: [{ value: '', label: legacy ? runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice" : 'Existing selection' }],
+        inheritFrom: 'environmentReference', inheritanceInOptions: true, section: 'Basic',
+        description: legacy ? 'Versions and sources are read from installed files. Changes apply on the next launch.' :
+          'Shared libraries link affected API choices. Existing choices remain unchanged until edited.' };
+    }));
   }
   return result;
 }
 function optionLists(install, runtime, context, dependencies = {}) {
   const input = inventory(install, runtime, context, dependencies), plan = dependencies.plan || Plan.resolvePlan(input);
   if (plan.compatibility) for (const key of ['included', 'choices']) input[key] = input[key].map(item => {
-    const files = plan.compatibility[item.id]?.files || item.files;
+    const files = plan.compatibility[item.id]?.files || plan.compatibility[item.id]?.inspectedFiles || item.files;
     return { ...item, files, ...(['d3d-renderer', 'd3d12'].includes(item.component) && files.some(file => file.format === 'pe') ? { apis: Roles.apisForFiles(files) } : {}) };
   });
   const legacy = Object.fromEntries(Object.entries(SETTINGS).map(([component, key]) => {

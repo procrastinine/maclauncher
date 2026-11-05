@@ -137,3 +137,59 @@ test('per-API unknown scope stays accessible and real historical projects coexis
   assert.equal(options.translatorD3D9Options.some(option => option.value === historical.id), false);
   assert.ok(options.translatorD3D9Options.some(option => option.value === modern.id)); assert.equal(historical.engine, 'd8vk');
 });
+
+test('per-API CrossOver automatic guard permits complete concrete bindings while retaining partial automatic composition', t => {
+  const f = fixture(t), dxvk = component(f, 'complete-dxvk', 'dxvk', {
+    d3d8: [], d3d9: [], d3d10core: ['dxgi.dll'], d3d11: ['dxgi.dll'], dxgi: []
+  });
+  const vkd3d = component(f, 'complete-vkd3d', 'vkd3d-proton', { d3d12: [] }, [], { component: 'd3d12' });
+  const options = { choices: [dxvk, vkd3d], compatibility: compatibility([dxvk, vkd3d]) };
+  const complete = legacy(null, 'crossover');
+  Plan.resolveApiRoles(complete, { ...options, selections: Object.fromEntries(Roles.DIRECT3D_ROLES.map(role =>
+    [role.id, role.id === 'd3d12' ? vkd3d.id : dxvk.id])) });
+  assert.equal(complete.apiMode, true); assert.equal(complete.components['d3d-renderer'].used, null);
+  for (const role of Roles.DIRECT3D_ROLES) {
+    assert.equal(complete.components[role.id].used.id, role.id === 'd3d12' ? vkd3d.id : dxvk.id);
+    assert.equal(complete.components[role.id].fallback, false);
+  }
+  assert.deepEqual(names(complete.placements.map(placement => placement.file)), ['d3d10core.dll', 'd3d11.dll', 'd3d12.dll', 'd3d8.dll', 'd3d9.dll', 'dxgi.dll']);
+  const activeOptions = Plan.apiOptions(complete, options);
+  assert.equal(activeOptions.translatorD3D9Options.find(option => option.value === dxvk.id).reason, undefined);
+  const partial = legacy(null, 'crossover');
+  Plan.resolveApiRoles(partial, { ...options, selections: { d3d9: dxvk.id, d3d12: vkd3d.id } });
+  assert.equal(partial.apiMode, false); assert.deepEqual(partial.placements, []);
+  assert.equal(partial.components.d3d9.selected.id, dxvk.id); assert.equal(partial.components.d3d12.selected.id, vkd3d.id);
+  assert.ok(Roles.DIRECT3D_ROLES.every(role => partial.components[role.id].used === null));
+  assert.equal(partial.components.d3d9.fallback, true); assert.match(partial.components.d3d9.reason, /global backend|automatic composition/);
+});
+
+test('per-API linked groups follow shared physical placements instead of a common package identity', t => {
+  const f = fixture(t), dxvk = component(f, 'group-dxvk', 'dxvk', {
+    d3d8: [], d3d9: [], d3d10core: ['dxgi.dll'], d3d11: ['dxgi.dll'], dxgi: []
+  });
+  const vkd3d = component(f, 'group-vkd3d', 'vkd3d-proton', { d3d12: [] }, [], { component: 'd3d12' });
+  const selections = Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id, role.id === 'd3d12' ? vkd3d.id : dxvk.id]));
+  const plan = legacy(null, 'crossover');
+  Plan.resolveApiRoles(plan, { selections, choices: [dxvk, vkd3d], compatibility: compatibility([dxvk, vkd3d]) });
+  assert.equal(plan.apiMode, true);
+  assert.deepEqual(plan.groups.map(group => group.roles), [['d3d8'], ['d3d9'], ['d3d10', 'd3d11'], ['d3d12']]);
+  assert.deepEqual(plan.groups.map(group => group.id), ['d3d8', 'd3d9', 'd3d10+d3d11', 'd3d12']);
+  assert.match(plan.groups.find(group => group.id === 'd3d10+d3d11').reason, /physical/);
+  const coarse = legacy(dxvk); Plan.resolveApiRoles(coarse, {});
+  assert.deepEqual(coarse.groups[0].roles, ['d3d8', 'd3d9', 'd3d10', 'd3d11']);
+  const automatic = legacy(null, 'crossover'); Plan.resolveApiRoles(automatic, {});
+  assert.equal(automatic.groups[0].id, 'd3d8+d3d9+d3d10+d3d11+d3d12');
+  const d3d8 = dxvk.files.find(file => file.path.endsWith('d3d8.dll')), bytes = fs.readFileSync(d3d8.path);
+  const optional = bytes.readUInt32LE(60) + 24, directories = optional + 112, raw = 0x400, start = 0xc00;
+  bytes.writeUInt32LE(0x2000 + start, directories + 13 * 8); bytes.writeUInt32LE(64, directories + 13 * 8 + 4);
+  for (const [offset, value] of [[0, 1], [4, 0x2000 + start + 64], [8, 0x2000 + start + 128], [12, 0x2000 + start + 112], [16, 0x2000 + start + 96]]) bytes.writeUInt32LE(value, raw + start + offset);
+  bytes.write('dxgi.dll\0', raw + start + 64);
+  for (const offset of [96, 112]) bytes.writeBigUInt64LE(0x8000000000000001n, raw + start + offset);
+  fs.writeFileSync(d3d8.path, bytes);
+  const atomic = Description.describeTranslator(dxvk.root, { id: dxvk.id, engine: 'dxvk', logger: { warn() {} } });
+  assert.equal(atomic.files.find(file => file.path === d3d8.path).importsComplete, false);
+  const retained = legacy(null, 'crossover');
+  Plan.resolveApiRoles(retained, { selections, choices: [atomic, vkd3d], compatibility: compatibility([atomic, vkd3d]) });
+  assert.equal(retained.apiMode, true);
+  assert.deepEqual(retained.groups.map(group => group.roles), [['d3d8', 'd3d9', 'd3d10', 'd3d11'], ['d3d12']]);
+});

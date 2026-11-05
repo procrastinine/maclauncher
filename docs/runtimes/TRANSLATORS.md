@@ -45,8 +45,8 @@ Runtime Settings selects installed components by API and shows shared library sc
 | --- | --- |
 | Default Direct3D engine | The existing shared renderer policy, including runtime automatic and named installed versions. |
 | Direct3D 8, 9, 10 / 10.1 and 11 | Installed implementations with the corresponding DLLs. Modern DXVK can serve several APIs; historical D8VK and D9VK remain specific source/version choices. |
-| Vulkan driver | The runtime's automatic driver, its named drivers, and managed MoltenVK or KosmicKrisp versions. |
 | Direct3D 12 | Wine vkd3d, D3DMetal or a managed Direct3D 12 translator. KosmicKrisp is recommended for vkd3d-proton. |
+| Vulkan driver | The runtime's automatic driver, its named drivers, and managed MoltenVK or KosmicKrisp versions. |
 | Video codecs | The runtime defaults or a registered GStreamer plugin folder. Wine's own video modules remain with Wine. |
 
 An existing bottle or wrapper first offers its current setting, read from its configuration without starting Wine. Automatic follows that runtime's existing behavior. Named choices show their version and source from release labels, component version files, framework metadata or the runtime's changelog; a component without readable version metadata still names its engine and source. Replacement DLL version resources report Windows component versions and do not supply translator release versions. Installed CrossOver components are used for CrossOver launches only.
@@ -57,7 +57,7 @@ Unset API choices retain the existing shared renderer policy. No saved choices o
 
 Direct3D APIs can share DXGI, native Unix modules and Windows thunks. A physical DLL/module binding has one source; conflicting providers use the existing coherent composition with the selected intent and reason retained in the inspector. Direct PE imports and matching Unix module facts identify companions. Incomplete companion information retains the package as an atomic group instead of predicting an ABI from engine names or versions.
 
-CrossOver selects its included renderer through one global backend. Its unresolved automatic choice stays global. Independent overrides use a concrete shared default and the private loader; an override that cannot preserve the global automatic composition keeps that composition active and reports the coupling. Selecting each API individually is not required. CrossOver's application files remain unchanged.
+CrossOver selects its included renderer through one global backend. Its unresolved automatic choice stays global. A concrete shared default or a complete explicit API composition uses the private loader. A partial override that still depends on unresolved global Automatic keeps the existing composition active and reports the coupling. Selecting each API individually is not required when a concrete shared default supplies the remaining APIs. CrossOver's application files remain unchanged.
 
 The used Direct3D 11 DXMT version also supplies the camera adapter. The adapter keeps its own matching-library requirement. A mismatch leaves the selected renderer active and reports that camera support is unavailable. Engine settings apply to every engine actually used by the final API bindings.
 

@@ -55,10 +55,10 @@ Settings holds the defaults, and each game's Runtime Settings can override them.
 | Environment | Per-game private prefix or an existing Sikarugir wrapper reference. |
 | Default Direct3D engine | Automatic, engines supplied by the selected runtime or a managed translator version. Unset API choices retain this policy. |
 | Direct3D 8, 9, 10 / 10.1 and 11 | Installed choices for each API, with shared DLL/helper scopes linked and selected-versus-used reporting. |
-| Game temporal integration | Exposes MetalFX Temporal through a compatible 64-bit game's DLSS integration. Listed for Unity and Windows games. See [Game temporal integration](#game-temporal-integration). |
 | Direct3D 12 | Wine vkd3d, D3DMetal or a managed Direct3D 12 translator. KosmicKrisp is recommended for vkd3d-proton. |
-| Video codecs | The runtime defaults or a registered GStreamer codec folder. |
 | Vulkan driver | Automatic, a driver supplied by the runtime, or a specific managed MoltenVK or KosmicKrisp version. |
+| Video codecs | The runtime defaults or a registered GStreamer codec folder. |
+| Game temporal integration | Exposes MetalFX Temporal through a compatible 64-bit game's DLSS integration. Listed for Unity and Windows games. See [Game temporal integration](#game-temporal-integration). |
 | DirectDraw compatibility | The optional CNC-DDraw wrapper for 32-bit games with a software DirectDraw renderer. Off by default and independent of the Direct3D settings. |
 | Synchronization | Automatic, MSync or Off. MSync requires support in the selected engine. |
 | Language locale | An optional locale, such as `ja_JP.UTF-8` or `en_US.UTF-8`. |

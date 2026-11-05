@@ -186,3 +186,125 @@ test('real API11 imported PE machine failure retains the coherent CrossOver shar
   const view = await Files.prepareTranslatorFiles(plan, { userDataDir: context.userDataDir, layout: plan.layout });
   assert.equal(view.native.length, 0); assert.equal(view.env.CX_GRAPHICS_BACKEND, 'dxmt');
 });
+
+test('real Sikarugir API graphics view applies exact planned builtin and Unix sources without graphics metadata', async t => {
+  const f = fixture(t), Graphics = require('../src/modules/crossover/sikarugir/graphics');
+  const templateRoot = path.join(f.root, 'template'), component = path.join(templateRoot, 'Frameworks/renderer/dxmt');
+  fs.mkdirSync(path.dirname(component), { recursive: true }); fs.cpSync(path.join(f.root, 'wine/lib/dxmt'), component, { recursive: true });
+  f.put('wine/share/wine/nls/c_932.nls', 'fixture locale data');
+  const install = { ...f.install, templateRoot }, settings = { translatorRenderer: 'included:d3d-renderer:dxmt',
+    translatorD3D9: 'fixture-dxvk:native', dxvkHud: 'fps', dxmtConfig: 'fixture_config=1', dlss: false }, context = f.context(settings);
+  const plan = await Translators.resolve(install, 'sikarugir', context, { host: f.host, executableArchitecture: 'x86_64', managers: [f.manager] });
+  assert.equal(plan.apiMode, true); assert.equal(plan.components.d3d11.used.root, component);
+  assert.equal(fs.existsSync(path.join(templateRoot, 'graphics.json')), false);
+  const sourcePaths = new Set([...plan.placements.map(item => item.file.path), install.executablePath, install.serverPath,
+    path.join(plan.layout.unixRoot, 'ntdll.so'), path.join(plan.layout.unixRoot, 'wine')]);
+  const sourceBytes = new Map([...sourcePaths].map(file => [file, fs.readFileSync(file)]));
+  const translatorView = await Files.prepareTranslatorFiles(plan, { userDataDir: context.userDataDir, layout: plan.layout });
+  const viewRoot = path.join(context.userDataDir, 'graphics/sikarugir-views/fixture'), prefixPath = path.join(f.root, 'private-prefix');
+  const graphics = await Graphics.prepareGraphicsView({ install, settings: Translators.settingsForPlan(settings, plan),
+    translatorPlan: plan, translatorView, context, userDataDir: context.userDataDir, viewRoot, prefixPath,
+    host: f.host, executableArchitecture: 'x86_64' });
+  assert.equal(graphics.translatorPlan, plan);
+  assert.notEqual(graphics.executablePath, install.executablePath); assert.equal(fs.lstatSync(graphics.executablePath).isSymbolicLink(), false);
+  assert.deepEqual(fs.readFileSync(graphics.executablePath), fs.readFileSync(install.executablePath));
+  assert.equal(fs.realpathSync(graphics.serverPath), install.serverPath);
+  const privateUnix = path.join(graphics.dllRoot, plan.layout.unixName);
+  assert.equal(fs.lstatSync(path.join(privateUnix, 'ntdll.so')).isSymbolicLink(), false);
+  assert.deepEqual(fs.readFileSync(path.join(privateUnix, 'ntdll.so')), sourceBytes.get(path.join(plan.layout.unixRoot, 'ntdll.so')));
+  for (const { file } of plan.placements) {
+    if (file.format === 'pe' && file.form === 'builtin' || file.format === 'macho' && file.path.endsWith('.so')) {
+      const cpu = file.format === 'pe' ? Files.cpuFolder(file.machine) : plan.layout.unixName;
+      const target = path.join(graphics.dllRoot, cpu, path.basename(file.path));
+      assert.equal(fs.lstatSync(target).isSymbolicLink(), true); assert.equal(fs.realpathSync(target), fs.realpathSync(file.path));
+    }
+  }
+  assert.ok(graphics.dllOverrides.includes('d3d9=n,b')); assert.ok(graphics.env.DYLD_LIBRARY_PATH.split(path.delimiter).includes(privateUnix));
+  const original = WineSettings.environment; let calls = 0;
+  t.mock.method(WineSettings, 'environment', (settings, options) => { calls++; return original(settings, options); });
+  const built = SikaLaunch.buildEnvironment(Translators.settingsForPlan(settings, plan), install, path.join(f.root, 'state'), prefixPath, graphics,
+    { translatorPlan: plan, baseEnvironment: {} });
+  assert.equal(calls, 1); assert.equal(built.environment.DXVK_HUD, 'fps'); assert.equal(built.environment.DXMT_CONFIG, 'fixture_config=1');
+  assert.ok(built.environment.WINEDLLOVERRIDES.split(';').includes('d3d9=n,b'));
+  assert.equal(built.environment.DYLD_LIBRARY_PATH, graphics.env.DYLD_LIBRARY_PATH); assert.equal(built.environment.WINEDLLPATH, graphics.env.WINEDLLPATH);
+  for (const [file, bytes] of sourceBytes) assert.deepEqual(fs.readFileSync(file), bytes, 'installed source bytes stay unchanged');
+  assert.equal(fs.existsSync(path.join(templateRoot, 'graphics.json')), false); assert.equal(fs.existsSync(prefixPath), false);
+});
+
+test('translator schema follows canonical role order and explains CrossOver global Automatic before editing', async t => {
+  const Roles = require('../src/modules/shared/runtime/translator-roles'), original = require('../src/modules/crossover/manifest.json');
+  const before = JSON.stringify(original), manifest = Translators.withSettings(original);
+  const expected = ['translatorRenderer', ...Roles.ROLES.map(role => role.settingsKey)];
+  for (const runtime of ['crossover', 'sikarugir']) {
+    const schema = manifest.runtime.entries[runtime].settings, controls = schema.fields.filter(field => field.optionsAction === 'listTranslatorOptions');
+    assert.deepEqual(controls.map(field => field.key), expected);
+    assert.ok(expected.indexOf('translatorD3D12') < expected.indexOf('translatorVulkan'));
+    assert.equal(schema.visibilityAction, 'listTranslatorOptions');
+    for (const role of Roles.ROLES) {
+      const field = controls.find(field => field.key === role.settingsKey);
+      assert.equal(field.optionsKey, role.optionsKey); assert.equal(schema.defaults[role.settingsKey], '');
+      assert.equal(field.inheritanceInOptions, true); assert.equal(field.inheritFrom, 'environmentReference');
+    }
+    for (const key of ['graphicsBackend', 'vulkanBackend', 'graphicsBridgeVersion']) if (original.runtime.entries[runtime].settings.fields.some(field => field.key === key))
+      assert.equal(schema.fields.find(field => field.key === key).hidden, true);
+  }
+  assert.equal(JSON.stringify(original), before, 'schema composition preserves the original manifest');
+  const f = fixture(t), registry = require('../src/modules/registry'), runtimeManager = require('../src/modules/crossover/runtime/manager');
+  t.mock.method(registry, 'listSharedRuntimeManagers', () => [f.manager]); t.mock.method(registry, 'listModuleIds', () => []);
+  t.mock.method(runtimeManager, 'resolveSelection', () => ({ ready: true, install: f.install }));
+  const context = f.context({}), result = await require('../src/modules/crossover/main').actions.listTranslatorOptions(f.entry, {}, context);
+  const global = result.translatorGroups.find(group => group.roles.length === Roles.DIRECT3D_ROLES.length);
+  assert.ok(global); assert.match(global.reason, /global backend/i);
+  for (const role of Roles.DIRECT3D_ROLES) assert.equal(result.translatorRoles.find(item => item.id === role.id).used, null);
+  assert.deepEqual(context.runtimeSettings, {});
+});
+
+test('source-owned stock WineD3D API11 includes its DXGI binding while Wine vkd3d stays distinct', t => {
+  const f = fixture(t), windows = 'wine/lib/wine/x86_64-windows';
+  const d3d11 = f.put(windows + '/d3d11.dll', dll()), dxgi = f.put(windows + '/dxgi.dll', dll());
+  const d3d12 = f.put(windows + '/d3d12.dll', dll()); f.put(windows + '/opengl32.dll', dll());
+  const { included } = Translators.includedTranslators(f.install, 'crossover');
+  const wine = included.find(item => item.engine === 'wined3d'), vkd3d = included.find(item => item.engine === 'vkd3d');
+  assert.equal(wine.id, 'included:d3d-renderer:wined3d'); assert.equal(wine.root, f.install.crossoverRoot);
+  assert.equal(wine.source.runtime, 'crossover'); assert.equal(wine.source.id, f.install.version);
+  assert.deepEqual(new Set(wine.files.map(file => file.path)), new Set([d3d11, dxgi]));
+  assert.deepEqual(wine.apis, ['Direct3D 11']);
+  const helper = wine.files.find(file => file.path === dxgi);
+  assert.equal(helper.format, 'pe'); assert.equal(helper.machine, 0x8664); assert.equal(helper.form, 'builtin'); assert.deepEqual(helper.apis, []);
+  assert.equal(vkd3d.id, 'included:d3d12:vkd3d'); assert.equal(vkd3d.component, 'd3d12');
+  assert.deepEqual(vkd3d.apis, ['Direct3D 12']); assert.deepEqual(vkd3d.files.map(file => file.path), [d3d12]);
+  assert.equal(vkd3d.source.runtime, 'crossover');
+});
+
+test('engine settings use declared configuration namespaces without rewriting historical or legacy renderer identity', async t => {
+  const f = fixture(t), historicalRoot = path.join(f.root, 'historical');
+  f.put('historical/d3d9.dll', dll({ builtin: false }));
+  f.installs.push({ version: 'historical', architecture: 'x64', translatorRoot: historicalRoot, installDir: historicalRoot,
+    translator: Description.describeTranslator(historicalRoot, { engine: 'd9vk', source: 'fixture-history', version: 'historical' }) });
+  const context = f.context({ translatorRenderer: 'included:d3d-renderer:dxmt', translatorD3D9: 'fixture-dxvk:historical' });
+  const historical = await Translators.resolve(f.install, 'crossover', context, { host: f.host, executableArchitecture: 'x86_64', managers: [f.manager] });
+  assert.equal(historical.components.d3d9.used.engine, 'd9vk');
+  assert.equal(historical.components.d3d9.used.settingsEngine, 'dxvk');
+  const declared = Translators.engines(historical);
+  assert.deepEqual(new Set(declared['d3d-renderer']), new Set(['dxmt', 'dxvk']));
+  assert.equal(WineSettings.environment({ dxvkHud: 'fps' }, { engines: declared }).DXVK_HUD, 'fps');
+
+  const { RELATIVE_PATHS } = require('../src/modules/crossover/sikarugir/graphics/closure'), templateRoot = path.join(f.root, 'namespace-template');
+  const dxmtRoot = path.join(templateRoot, RELATIVE_PATHS.renderers, 'dxmt');
+  fs.mkdirSync(path.dirname(dxmtRoot), { recursive: true }); fs.cpSync(path.join(f.root, 'wine/lib/dxmt'), dxmtRoot, { recursive: true });
+  f.put(path.join('namespace-template', RELATIVE_PATHS.renderers, 'd9vk/wine/x86_64-windows/d3d9.dll'), dll());
+  const driver = f.put(path.join('namespace-template', RELATIVE_PATHS.frameworks, 'libvulkan_kosmickrisp.dylib'), image({ cpu: X64 }));
+  f.put(path.join('namespace-template', RELATIVE_PATHS.frameworks, 'libvulkan.1.dylib'), image({ cpu: X64 }));
+  const icd = path.join('namespace-template', RELATIVE_PATHS.vulkan, 'kosmickrisp_mesa_icd.json');
+  f.put(icd, JSON.stringify({ ICD: { library_path: path.relative(path.dirname(path.join(f.root, icd)), driver), api_version: '1.4.0' } }));
+  const install = { ...f.install, templateRoot }, legacyContext = f.context({ translatorVulkan: 'included:vulkan-driver:kosmickrisp' });
+  const legacy = await Translators.resolve(install, 'sikarugir', legacyContext, { host: f.host, executableArchitecture: 'x86_64', managers: [f.manager] });
+  assert.equal(Boolean(legacy.apiMode), false); assert.equal(legacy.components['d3d-renderer'].used.engine, 'dxmt');
+  assert.ok(legacy.additional.some(item => item.templateComponent === 'd9vk'));
+  const used = Translators.engines(legacy), environment = WineSettings.environment({ dxvkHud: 'fps', dxmtConfig: 'legacy=1' }, { engines: used });
+  assert.deepEqual(new Set(used['d3d-renderer']), new Set(['dxmt', 'dxvk']));
+  assert.equal(used['vulkan-driver'], 'kosmickrisp'); assert.equal(environment.DXVK_HUD, 'fps'); assert.equal(environment.DXMT_CONFIG, 'legacy=1');
+  const single = await Translators.resolve(install, 'sikarugir', f.context({}), { host: f.host, executableArchitecture: 'x86_64', managers: [f.manager] });
+  assert.equal(Translators.engines(single)['d3d-renderer'], 'dxmt', 'unchanged single-engine settings stay scalar');
+  assert.equal(historical.components.d3d9.used.engine, 'd9vk', 'configuration namespace never rewrites loaded engine identity');
+});

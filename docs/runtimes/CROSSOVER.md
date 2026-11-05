@@ -63,7 +63,7 @@ The graphics and synchronization choices follow the [CrossOver Mac user guide](h
 
 ## Translators
 
-[Translator management](TRANSLATORS.md) groups DirectX → Vulkan, DirectX → Metal, Vulkan drivers and video codecs separately. Runtime settings organize Direct3D 8 through 12. Versions, API scope and sources come from installed files. CrossOver's unresolved Automatic remains a global choice; independent overrides use a concrete shared default and the private loader. Existing environments also offer their current Bottle setting or Wrapper setting. A runtime version is installed once; private graphics views and prefix DLLs link to that installation. Prepared loader trees are shared between games using the same inputs.
+[Translator management](TRANSLATORS.md) groups DirectX → Vulkan, DirectX → Metal, Vulkan drivers and video codecs separately. Runtime settings organize Direct3D 8 through 12. Versions, API scope and sources come from installed files. CrossOver's unresolved Automatic remains a global choice; a concrete shared default or complete explicit API composition uses the private loader. Existing environments also offer their current Bottle setting or Wrapper setting. A runtime version is installed once; private graphics views and prefix DLLs link to that installation. Prepared loader trees are shared between games using the same inputs.
 
 ## Graphics
 

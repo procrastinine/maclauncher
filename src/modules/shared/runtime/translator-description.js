@@ -117,7 +117,7 @@ function inspectFile(file) {
   const result = { ...file };
   try {
     const native = readMachOLoadCommands(file.path, { imports: true });
-    return { ...result, format: 'macho', form: file.path.endsWith('.so') ? 'builtin' : 'dylib', apis: [], cpuSlices: native.architectures,
+    return { ...result, realPath: fs.realpathSync(file.path), format: 'macho', form: file.path.endsWith('.so') ? 'builtin' : 'dylib', apis: [], cpuSlices: native.architectures,
       slices: native.slices, macosFloor: native.slices.map(slice => slice.minimumMacOS).filter(Boolean).sort(compareVersions).at(-1) || null,
       unixImports: native.slices.flatMap(slice => slice.imports.map(item => ({ ...item, architecture: slice.architecture }))) };
   } catch (error) {
@@ -129,7 +129,7 @@ function inspectFile(file) {
     if (!pe.importsComplete) result.inspectionWarning = [result.inspectionWarning,
       `PE import inspection is incomplete: ${pe.importWarning || 'unknown import metadata'}`].filter(Boolean).join(' ');
     // Replacement DLL resources report Windows component versions, not translator releases.
-    return { ...result, format: 'pe', form: pe.form, machine: pe.machine, architecture: pe.architecture, macosFloor: null, unixImports: [],
+    return { ...result, realPath: original, format: 'pe', form: pe.form, machine: pe.machine, architecture: pe.architecture, macosFloor: null, unixImports: [],
       apis: fileApis({ ...file, format: 'pe' }), peImports: pe.peImports, importsComplete: pe.importsComplete, version: null };
   }
   return { ...result, format: file.path.endsWith('.json') ? 'json' : 'unknown', apis: [], macosFloor: null, unixImports: [] };
