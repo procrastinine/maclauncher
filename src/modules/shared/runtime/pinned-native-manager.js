@@ -81,7 +81,7 @@ function executableFloor(file, architecture) {
 // query or from a local cache. Every pinned manager offers the user's own
 // default version, as other multi-version runtimes do, unless a game needs its
 // exact engine version.
-function createSingleArchitectureManager({ installationArchitecture, shareDiscovery, id, label, discoverCatalog, upstream, projectBuilds, buildsRepository, upstreamUrl, upstreamLabel, resolveExecutable, inspectRuntime = Native.resolveLocalRuntime, verifyArtifact, prepareInstall, buildRuntime, buildSourcePath, sourceUrl, buildHelpUrl, buildRequirements, bundledRuntime, legacyInstalledRuntime, formerIds = [], bundledExecution = "copy", distributionRequired = false, importLocal = false, nativeLibrary = false, supportsDefault = true, maxEntries = 500, dependencies = {} }) {
+function createSingleArchitectureManager({ installationArchitecture, shareDiscovery, id, label, discoverCatalog, upstream, catalogSources, projectBuilds, buildsRepository, upstreamUrl, upstreamLabel, resolveExecutable, inspectRuntime = Native.resolveLocalRuntime, verifyArtifact, prepareInstall, buildRuntime, buildSourcePath, sourceUrl, buildHelpUrl, buildRequirements, bundledRuntime, legacyInstalledRuntime, formerIds = [], bundledExecution = "copy", distributionRequired = false, importLocal = false, nativeLibrary = false, supportsDefault = true, maxEntries = 500, dependencies = {} }) {
   if (typeof distributionRequired !== "boolean") throw new Error("Runtime distribution requirements must be explicit booleans.");
   if (typeof importLocal !== "boolean") throw new Error("Local runtime imports must be explicitly enabled.");
   if (typeof nativeLibrary !== "boolean") throw new Error("Native library runtimes must be explicitly enabled.");
@@ -144,8 +144,9 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     discoverCatalog.allArchitectures = upstreamDiscovery?.allArchitectures === true || !upstreamDiscovery;
   }
   let manager;
+  if (catalogSources) discoverCatalog = Object.assign(options => catalogSources.find(source => source.id === options.sourceId).discover(options), { allArchitectures: true });
   if (shareDiscovery && discoverCatalog) discoverCatalog = shareDiscovery(discoverCatalog, Boolean(buildsRepository));
-  const sourceIds = projectPackages ? projectBuilds.upstreamMacDownloads === true ? ["builds", "upstream"] : ["builds"]
+  const sourceIds = catalogSources ? catalogSources.map(source => source.id) : projectPackages ? projectBuilds.upstreamMacDownloads === true ? ["builds", "upstream"] : ["builds"]
     : buildsRepository ? ["builds"] : ["upstream"];
   const catalogLimit = Math.min(2000, maxEntries * sourceIds.length);
   const entries = new Map();
@@ -492,7 +493,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       }
       if (verification === "status" && cached?.key === cacheKey) return cached.install;
       const native = inspectRuntime({ arch: ["arm64", "x64"].includes(Architecture.recordArchitecture(pin)) ? Architecture.recordArchitecture(pin) : installationArchitecture,
-        hostArchitecture: dependencies.hostArch || require("./host-capabilities").getHostCapabilities().hardwareArch, runtimePath, runtimeVersion: normalized,
+        hostArchitecture: dependencies.hostArch || require("./host-capabilities").getHostCapabilities().hardwareArch, runtimePath, runtimeRoot: directory, runtimeVersion: normalized,
         upstreamRevision: pin.upstreamRevision, expectedSha256: record.source === 'download' ? undefined : record.binarySha256, allowLibrary: nativeLibrary });
       // resolveLocalRuntime already hashes the executable against this record.
       const installed = { ...record, ...native, ...(record.source === 'download' ? {binarySha256: native.sha256} : {}), version: normalized, runtimePath, installDir: directory,
@@ -754,7 +755,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       const target = ["arm64", "x64"].includes(Architecture.recordArchitecture(pin)) ? Architecture.recordArchitecture(pin) : installationArchitecture;
       const native = inspectRuntime({ arch: target,
         hostArchitecture: dependencies.hostArch || require("./host-capabilities").getHostCapabilities().hardwareArch,
-        runtimePath, runtimeVersion: normalized, upstreamRevision: pin.upstreamRevision, allowLibrary: nativeLibrary });
+        runtimePath, runtimeRoot: unpacked, runtimeVersion: normalized, upstreamRevision: pin.upstreamRevision, allowLibrary: nativeLibrary });
       const floor = executableFloor(native.executablePath, target);
       if (floor && !versionAtLeast(installedPin.minimumMacOS || "0", floor)) installedPin = { ...installedPin, minimumMacOS: floor };
       if (hostReason(installedPin)) throw new Error(rememberFloor(userDataDir, pin, installedPin));
@@ -886,6 +887,9 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     if (projectPackages || buildsRepository) state.catalog = require("./runtime-sources").projectSources(state.catalog, [...entries.values()],
       { projectId: id, repository: projectBuilds?.repository || buildsRepository, upstreamUrl: upstreamUrl || (projectBuilds ? sourceUrl : undefined), upstreamLabel,
         upstreamDownloads: projectBuilds?.upstreamMacDownloads === true });
+    if (catalogSources) state.catalog.sources = catalogSources.map(source => require("./runtime-sources").sourceCatalog(state.catalog, {
+      id: source.id, label: source.label, source: source.url,
+      versions: state.catalog.versions.filter(version => entrySource(entries.get(version) || {}) === source.id) }));
     return { ...state, sections: [{ id: "default", label: `${label} versions`, ...state }] };
   }
   manager = {
