@@ -40,12 +40,16 @@ test('included reader, runtime references and per-game choices share component v
     }
     hosts.set(runtime, install);
   }
+  // References list the hosts in each runtime's Runtimes state.
   const registry = require('../src/modules/registry'), managers = [...hosts].map(([runtime, install]) => ({
-    id: `label-${runtime}`, core: { listInstalled: () => [install] }
+    id: `label-${runtime}`, getState: () => ({ installed: [install] })
   }));
   t.mock.method(registry, 'getModule', id => id === 'crossover' ? { manifest: { runtime: { manager: {
     crossover: 'label-crossover', sikarugir: 'label-sikarugir' } } }, runtimeManagers: managers } : null);
-  const references = new Map(['dxvk', 'gstreamer'].map(engine => [engine, Component.includedReferences(engine, { userDataDir: path.join(root, 'profile'), logger: { warn() {} } })]));
+  const referenceOptions = { userDataDir: path.join(root, 'profile'), logger: { warn() {} } };
+  // Local state preparation inspects the included copies that status then reads.
+  for (const engine of ['dxvk', 'gstreamer']) await Component.withIncludedReferences({ translatorEngine: engine }).prepareLocalState(referenceOptions);
+  const references = new Map(['dxvk', 'gstreamer'].map(engine => [engine, Component.includedReferences(engine, referenceOptions)]));
   for (const [runtime, install] of hosts) {
     const included = Wine.includedTranslators(install, runtime), dxvk = included.included.find(item => item.engine === 'dxvk'), video = included.included.find(item => item.engine === 'gstreamer');
     const hostPhrase = runtime === 'crossover' ? 'CrossOver 26.3' : 'Sikarugir Template 1.0.24';
