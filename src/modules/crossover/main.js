@@ -24,14 +24,15 @@ async function translatorOptions(entry, payload, context, dependencies = {}) {
   const runtimeManager = dependencies.runtimeManager || (runtime === 'sikarugir' ? require('./sikarugir/runtime/manager') : manager);
   const selected = preparedContext.wineEnvironment?.install ? { ready: true, install: preparedContext.wineEnvironment.install } : runtimeManager.resolveSelection(entry, draft.settings, draft.userDataDir, draft.runtimeSettings);
   const install = selected.ready === false ? null : selected.install;
+  const consumerArchitecture = selected.architecture;
   let plan;
   if (install) plan = await Translators.resolve(install, runtime, preparedContext, { ...dependencies, entry, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
   else {
-    const Plan = require('../shared/runtime/translator-plan'), input = Translators.inventory(null, runtime, preparedContext, { ...dependencies, entry });
+    const Plan = require('../shared/runtime/translator-plan'), input = Translators.inventory(null, runtime, preparedContext, { ...dependencies, entry, consumerArchitecture });
     plan = Plan.resolveApiRoles(Plan.resolvePlan(input), { ...input,
       selections: Object.fromEntries(Plan.ROLES.map(role => [role.id, preparedContext.runtimeSettings?.[role.settingsKey]])) });
   }
-  return { ...Translators.optionLists(install, runtime, preparedContext, { ...dependencies, plan }),
+  return { ...Translators.optionLists(install, runtime, preparedContext, { ...dependencies, plan, consumerArchitecture }),
     ...(!install ? { notice: 'Included choices appear when the selected runtime is installed.' +
       (typeof runtimeManager.installRuntime === 'function' ? ' Play installs it after confirmation.' : '') } : {}), effectiveSettings: [
     { value: 'graphicsBackend', label: Translators.engines(plan)['d3d-renderer'] || 'auto' },

@@ -83,13 +83,13 @@ function runtimeManagers() {
   return [...registry.listSharedRuntimeManagers(), ...registry.listModuleIds().flatMap(id => registry.getModule(id)?.runtimeManagers || [])];
 }
 function managedTranslators(context, runtime, managers = runtimeManagers(), architecture) {
-  const choices = [], consumer = Architecture.normalizeArchitecture(architecture) || Architecture.selectedArchitecture();
+  const choices = [], consumer = Architecture.targetArchitecture(architecture);
   for (const manager of managers.filter(manager => manager.translatorEngine || manager.translator?.engine)) {
     const inspect = () => {
     const state = manager.getState({ userDataDir: context.userDataDir, settings: context.settings?.runtimes?.[manager.id] });
     for (const version of new Set((state.installed || []).map(item => item.version))) {
-      const selection = manager.resolveSelection?.(null, context.settings, context.userDataDir, { version, architecture: consumer, verification: 'status' });
-      let install = selection?.install || state.installed.find(item => item.version === version && Architecture.matchesArchitecture(item, consumer));
+      const selection = manager.resolveSelection?.(null, context.settings, context.userDataDir, { version, ...(consumer ? { architecture: consumer } : {}), verification: 'status' });
+      let install = selection?.install || (!manager.resolveSelection && state.installed.find(item => item.version === version && (!consumer || Architecture.matchesArchitecture(item, consumer))));
       if (!install) continue;
       let description = install.translator || install.installationMetadata?.translator;
       if (!description) {
@@ -109,14 +109,16 @@ function managedTranslators(context, runtime, managers = runtimeManagers(), arch
       if (value.engine === 'd3dmetal') choices.push({ ...value, id: value.id + ':d3d12', component: 'd3d12' });
     }
     };
-    Architecture.withArchitecture(consumer, inspect);
+    if (consumer) Architecture.withArchitecture(consumer, inspect);
+    else inspect();
   }
   return choices;
 }
 function inventory(install, runtime, context, dependencies = {}) {
   const result = install ? includedTranslators(install, runtime) : { included: [], warnings: [], layout: null };
   const managers = dependencies.managers || runtimeManagers();
-  const choices = dependencies.choices || managedTranslators(context, runtime, managers, result.layout?.architecture);
+  const consumerArchitecture = result.layout?.architecture || dependencies.consumerArchitecture;
+  const choices = dependencies.choices || managedTranslators(context, runtime, managers, consumerArchitecture);
   const current = context.wineEnvironment;
   const environment = current ? { label: runtime === 'crossover' ? 'Bottle setting' : 'Wrapper setting', selections: {} } : null;
   if (current) for (const [component, key] of [['d3d-renderer', 'graphicsBackend'], ['vulkan-driver', 'vulkanBackend']]) {
@@ -140,7 +142,7 @@ function inventory(install, runtime, context, dependencies = {}) {
     const explicit = version && version !== 'auto' || entry?.runtimeData?.[manager?.id]?.version || context.settings?.runtimes?.[manager?.id]?.defaultVersion;
     if (manager && explicit) {
       const selected = manager.resolveSelection(entry, context.settings, context.userDataDir, { version: version && version !== 'auto' ? version : undefined,
-        architecture: Architecture.normalizeArchitecture(result.layout?.architecture), verification: 'status' });
+        ...(Architecture.targetArchitecture(consumerArchitecture) ? { architecture: Architecture.targetArchitecture(consumerArchitecture) } : {}), verification: 'status' });
       const legacy = choices.find(item => item.managerId === manager.id && item.runtimeVersion === selected.version);
       selections['d3d-renderer'] = legacy?.id || `${manager.id}:${selected.version}`;
     }
