@@ -45,12 +45,22 @@ function rows(enabled, method = "fsr3") {
 
 test("CrossOver inspects automatic game API compatibility while shared processing is off", async t => {
   const settings = {dlss: false, graphicsBackend: "dxmt"}, stop = Error("inspection boundary");
-  t.mock.method(require("../src/modules/crossover/runtime/manager"), "resolveSelection", () => ({ready: true, install: {}}));
+  // Launch preparation reads the game's executable and the runtime's translator
+  // plan before it inspects the camera bridge: an empty CrossOver root and one
+  // Windows executable reach that inspection.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-dlss-automatic-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const crossoverRoot = path.join(root, "crossover"), game = path.join(root, "game", "Game.exe");
+  fs.mkdirSync(crossoverRoot);fs.mkdirSync(path.dirname(game));
+  const pe = require("./helpers/pe-fixture").peFixture({ is64: true });
+  pe.bytes.writeUInt16LE(0x22, pe.peOffset + 22);pe.bytes.writeUInt16LE(2, pe.optional + 68);
+  fs.writeFileSync(game, pe.bytes);
+  t.mock.method(require("../src/modules/crossover/runtime/manager"), "resolveSelection", () => ({ready: true, install: {crossoverRoot}}));
   let calls = 0;
   t.mock.method(require("../src/modules/crossover/temporal"), "resolvePlan", (_entry, _context, options) => {
     ++calls;assert.equal(options.automatic, true);assert.equal(options.settings.dlss, false);throw stop;
   });
-  await assert.rejects(CrossOver.prepareLaunch({graphics: {temporalMethod: "off"}}, {runtimeSettings: settings}), error => error === stop);
+  await assert.rejects(CrossOver.prepareLaunch({gamePath: game, graphics: {temporalMethod: "off"}}, {runtimeSettings: settings}), error => error === stop);
   assert.equal(calls, 1);assert.deepEqual(settings, {dlss: false, graphicsBackend: "dxmt"});
 });
 
