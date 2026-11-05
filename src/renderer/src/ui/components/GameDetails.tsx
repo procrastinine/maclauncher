@@ -320,8 +320,10 @@ export const GameDetails = memo(function GameDetails({
   // rather than recorded rows that may describe other settings.
   const translatorRows: { id?: string; label: string; selected: string; used: string; reason?: string | null; reasonCode?: string | null; fallback?: boolean }[] =
     Array.isArray(runtimeStatus?.translatorRows) ? runtimeStatus.translatorRows : [];
-  const translatorsPending = runtimeStatusEntry?.runtimeId !== g.runtimeId &&
-    Array.isArray(g.runtimeData?.[g.runtimeId]?.translatorRows) && g.runtimeData[g.runtimeId].translatorRows.length > 0;
+  const recordedTranslators = Array.isArray(g.runtimeData?.[g.runtimeId]?.translatorRows) && g.runtimeData[g.runtimeId].translatorRows.length > 0;
+  const translatorsPending = runtimeStatusEntry?.runtimeId !== g.runtimeId && recordedTranslators;
+  // A check that returned no status says so instead of leaving the section out.
+  const translatorsUnavailable = runtimeStatusEntry?.runtimeId === g.runtimeId && !runtimeStatus && recordedTranslators;
   const translatorLabels = new Set(translatorRows.map(row => row.label));
   const runtimeVersionChoices = runtimeInspectorVersions(runtimeSection, runtimeVersionOverride);
   const runtimeDefaultVersion = runtimeSection?.defaultVersion || "";
@@ -746,6 +748,10 @@ export const GameDetails = memo(function GameDetails({
           {translatorsPending && <div className="detailRow" aria-busy="true">
             <div className="detailLabel">Translators</div>
             <div className="detailValue dim">Checking…</div>
+          </div>}
+          {translatorsUnavailable && <div className="detailRow">
+            <div className="detailLabel">Translators</div>
+            <div className="detailValue dim">Unavailable</div>
           </div>}
           {translatorRows.map((row, index) => (
             <div className="detailRow" key={`translator:${row.id || index}`}>

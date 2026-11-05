@@ -106,7 +106,29 @@ test('before status arrives a recorded game shows a pending line, never recorded
     assert.ok(current.includes('New selection → New used')); assert.ok(current.includes('Actual new reason.'));
     assert.equal(current.includes('Required fixture symbol is absent.'), false);
     assert.equal(current.includes('Checking…'), false);
+    assert.equal(current.includes('Unavailable'), false);
     props.runtimeStatusEntry = { runtimeId: runtime, status: null };
-    assert.equal(renderRows(t, props).markup.includes('Checking…'), false, 'a failed status request ends the pending line');
+    const failed = renderRows(t, props).markup;
+    assert.equal(failed.includes('Checking…'), false, 'a failed status request ends the pending line');
+    assert.match(failed, /Translators<\/div><div class="detailValue dim">Unavailable</, 'and says the translators are unavailable');
+    assert.equal(renderRows(t, { ...propsFor(runtime), runtimeStatusEntry: { runtimeId: runtime, status: null } }).markup.includes('Unavailable'), false,
+      'a game without a recorded Play shows no translator line');
   }
+});
+
+test('a runtime with nothing to inspect settles its status entry, so no pending line stays', async () => {
+  const fs = require('node:fs'), path = require('node:path');
+  const { react, componentHarness } = require('./helpers/renderer-component');
+  const { createInspectionRequests, updatePathValue } = await import('../src/renderer/src/ui/launcher-state-model.mjs');
+  const source = fs.readFileSync(path.join(__dirname, '../src/renderer/src/ui/App.tsx'), 'utf8');
+  const start = source.indexOf('  useEffect(() => {', source.indexOf('  const runtimeInspectionKey')), end = source.indexOf('\n\n  const sorted', start);
+  const code = (await require('vite').transformWithOxc(source.slice(start, end), 'inspector-effect.ts')).code;
+  const inspect = new Function('context', 'useEffect', `const {api, inspectionGame, runtimeInspectionKey, inspectionRequests, inspectionActionsBusy, setRuntimeStatusByPath, updatePathValue} = context;${code}`);
+  let statusByPath = {};
+  const context = { api: { moduleAction: () => assert.fail('nothing is requested') }, inspectionGame: { gamePath: '/Game.exe', runtimeId: 'crossover' },
+    runtimeInspectionKey: '', inspectionActionsBusy: false, inspectionRequests: createInspectionRequests(), updatePathValue,
+    setRuntimeStatusByPath: update => { statusByPath = update(statusByPath); } };
+  const harness = componentHarness(() => { inspect(context, react.useEffect); return null; }, {});
+  try { harness.render(); await harness.settle(); } finally { harness.close(); }
+  assert.deepEqual(statusByPath['/Game.exe'], { runtimeId: 'crossover', status: null });
 });

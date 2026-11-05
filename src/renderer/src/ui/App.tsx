@@ -414,7 +414,8 @@ export default function App() {
     if (!api || !inspectionGame || inspectionActionsBusy) return;
     const gamePath = inspectionGame.gamePath;
     if (!runtimeInspectionKey) {
-      setRuntimeStatusByPath(previous => updatePathValue(previous, gamePath, null));
+      // Nothing is inspected for this runtime; its entry is current, with no status.
+      setRuntimeStatusByPath(previous => updatePathValue(previous, gamePath, { runtimeId: inspectionGame.runtimeId, status: null }));
       return;
     }
     const [action, inspectGraphics, recommend] = JSON.parse(runtimeInspectionKey) as [string | null, boolean, boolean];
