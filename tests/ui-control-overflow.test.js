@@ -45,7 +45,8 @@ test("package version labels keep upstream distinctions and explicit release nam
   const [, { resolveRuntimeVersionLabel, formatRuntimeVersionTag }] = await loaded;
   assert.equal(formatRuntimeVersionTag("v0.7.7beta-MCLv1"), "0.7.7 beta");
   assert.equal(formatRuntimeVersionTag("MCLv1-1003"), "Development build (Oct 3)");
-  assert.equal(formatRuntimeVersionTag("MCLv7"), "Development build");
+  assert.equal(formatRuntimeVersionTag("MCLv7"), "MCLv7");
+  assert.equal(formatRuntimeVersionTag("5f358ef1360b"), "5f358ef1360b");
   assert.equal(formatRuntimeVersionTag("MCLv1-1028-kag3-1"), "Development build (Oct 28)");
   assert.equal(formatRuntimeVersionTag("MCLv1-1025-17"), "Development build (Oct 25)");
   assert.equal(formatRuntimeVersionTag("MCLv1-1003", { versionLabels: { "MCLv1-1003": "MCLv1-1003" } }), "Development build (Oct 3)");

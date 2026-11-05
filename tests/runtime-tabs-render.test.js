@@ -597,6 +597,33 @@ test('the Build override defaults to the launcher CPU and lists only CPUs with t
   assert.doesNotMatch(stale, /aria-label="Build architecture"/);
   assert.doesNotMatch(stale, /<option[^>]*value="0\.9"/);
 });
+test('a refreshed catalog names each listed version in the Version menu beside a newer unpublished installation', () => {
+  // A refreshed Builds catalog lists an older published version for both CPUs,
+  // while a newer installed version that was never published stays a retained entry.
+  const requirement = architecture => ({ architecture, hostArchitectures: [architecture], minimumMacOS: '26.0',
+    requiresDownload: true, requiresBuild: false, available: false, installLabel: 'Install' });
+  const catalog = architecture => {
+    const listed = { status: 'success', versions: ['MCLv8'], installable: true, installableVersions: ['MCLv8'], versionLabels: { MCLv8: 'MCLv8' } };
+    const versionRequirements = { MCLv9: { ...requirement('x64'), available: true }, MCLv8: requirement(architecture) };
+    return { ...listed, architecture, versionRequirements, sources: [{ ...listed, id: 'builds', label: 'MacLauncher Builds',
+      source: 'https://procrastinine.github.io/maclauncher-builds/#refreshed', versionRequirements: { MCLv8: versionRequirements.MCLv8 } }] };
+  };
+  const section = { id: 'default', label: 'Refreshed versions', defaultVersion: 'MCLv8', defaultSource: 'manager',
+    launcherArchitecture: 'arm64', automaticArchitecture: 'arm64', defaultArchitecture: 'arm64',
+    installed: [{ version: 'MCLv9', architecture: 'x64', variant: 'architecture:arm64', ready: true, status: 'ready' }],
+    catalog: { ...catalog('arm64'), architectureCatalogs: { arm64: catalog('arm64'), x64: catalog('x64') } } };
+  const runtime = { id: 'refreshed', label: 'Refreshed', ui: {}, ...section, sections: [section] };
+  for (const build of ['', 'x64']) {
+    const markup = render([runtime], runtime.id, { runtimeUi: { refreshed: { remoteOpen: {}, installVersion: {}, installVariant: {},
+      installArchitecture: { default: build }, installedSort: {}, error: null } } });
+    const menu = /<select[^>]*aria-label="MacLauncher Builds version"[^>]*>(.*?)<\/select>/.exec(markup)?.[1] || '';
+    const options = [...menu.matchAll(/<option[^>]*value="([^"]+)"[^>]*>([^<]*)<\/option>/g)].map(match => match.slice(1));
+    assert.deepEqual(options.map(([value]) => value), ['MCLv8'], build || 'automatic build');
+    // The visible text names the version itself, not a generic or relative description.
+    for (const [value, text] of options) assert.ok(text.includes(value), `${value} reads "${text}"`);
+    assert.match(markup, /class="saveName">MCLv9</);
+  }
+});
 test('an Intel-only build installed on Apple Silicon is installed and can be the default', () => {
   const runtime = { ...manager('intel-only', {}, { versions: ['1.0'], installableVersions: ['1.0'], architecture: 'arm64',
     versionRequirements: { '1.0': { architecture: 'x64', installLabel: 'Install' } } },

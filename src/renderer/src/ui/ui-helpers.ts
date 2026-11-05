@@ -150,7 +150,9 @@ export function isPrereleaseVersion(version: string, runtimeSection: Record<stri
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 /** A version reads as the upstream version people know. Commit hashes,
  * MacLauncher package revisions, workflow timestamps and app-bundle suffixes
- * stay in the exact version value and its tooltip. */
+ * stay in the exact version value and its tooltip. A version with nothing
+ * else to read by, such as a package named only by its revision ("MCLv8"),
+ * reads as itself, so each listed version stays recognizable. */
 function readableVersion(raw: string) {
   // A package of an upstream with only commits is named MCLvN-MMDD after the
   // upstream commit date, sometimes followed by a build number or profile
@@ -158,7 +160,7 @@ function readableVersion(raw: string) {
   const build = raw.match(/^MCLv\d+(?:-(\d{2})(\d{2}))?(?:-[a-z0-9][\w.-]*)?$/i);
   if (build) {
     const month = MONTHS[Number(build[1]) - 1], day = Number(build[2]);
-    return month && day ? `Development build (${month} ${day})` : "Development build";
+    return month && day ? `Development build (${month} ${day})` : raw;
   }
   // A workflow build named by its time and commit reads as its date.
   const snapshot = raw.match(/^(\d{4}-\d{2}-\d{2})T\d{2}-\d{2}-\d{2}Z[_-][0-9a-f]{7,40}$/i);
@@ -167,7 +169,7 @@ function readableVersion(raw: string) {
     .replace(/(?:\s*·\s*|[-._+@])?(?<![0-9A-Za-z])(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{7,40}(?![0-9A-Za-z])/g, "")
     .replace(/\.app\b/g, "").replace(/\s*\(\s*\)/g, "").replace(/\s{2,}/g, " ").trim()
     .replace(/^v(?=\d)/i, "").replace(/(\d)(alpha|beta|rc)(?=\d|$)/i, "$1 $2");
-  return label || "Development build";
+  return label || raw;
 }
 
 // The MacLauncher package revision of a version, when it has one.
