@@ -45,8 +45,12 @@ function describeTranslator(root, { engine, source, version, component, id, apis
       for (const name of fs.readdirSync(file).sort()) visit(path.join(file, name));
     } else if (stat.isFile()) {
       const relative = path.relative(root, file) || path.basename(file);
-      if (/\.(?:dll|so|dylib|json)$/i.test(file) || /\.framework\//.test(file) && !path.extname(file))
-        files.push(inspectFile({ path: file, relative }));
+      if (/\.json$/i.test(file)) {
+        try { if (JSON.parse(fs.readFileSync(file, 'utf8')).ICD) files.push(inspectFile({ path: file, relative })); } catch {}
+      } else if (/\.(?:dll|so|dylib)$/i.test(file) || /\.framework\//.test(file) && !path.extname(file)) {
+        const facts = inspectFile({ path: file, relative });
+        if (path.extname(file) || facts.format === 'macho') files.push(facts);
+      }
     }
   }
   visit(root);
@@ -57,6 +61,12 @@ function describeTranslator(root, { engine, source, version, component, id, apis
   const versionFile = path.join(root, 'version');
   if (fs.existsSync(versionFile) && fs.statSync(versionFile).isFile()) version = fs.readFileSync(versionFile, 'utf8').trim() || version;
   version ||= pe?.version;
+  if (!apis.length) apis = [...new Set(files.flatMap(file => {
+    const match = path.basename(file.path).match(/^d3d(\d+)(?:core)?\.dll$/i);
+    if (match) return [`Direct3D ${match[1]}`];
+    if (file.format === 'json') { try { const api = JSON.parse(fs.readFileSync(file.path, 'utf8')).ICD?.api_version; return api ? [`Vulkan ${api}`] : []; } catch {} }
+    return [];
+  }))];
   const floors = files.flatMap(file => file.macosFloor ? [file.macosFloor] : []);
   return description({ id: id || `${engine}:${root}`, root, component, engine, source, version, apis, form, files,
     macosFloor: floors.sort(compareVersions).at(-1) || null,

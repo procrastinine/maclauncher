@@ -85,6 +85,7 @@ export type ModuleUi = {
 };
 
 export type RuntimeSettingField = {
+  hidden?: boolean; inheritanceInOptions?: boolean;
   key: string;
   type: "boolean" | "number" | "string" | "select" | "list" | "display";
   label: string;

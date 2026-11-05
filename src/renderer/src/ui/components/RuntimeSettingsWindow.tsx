@@ -185,7 +185,7 @@ export function RuntimeSettingsWindow({
   const visibilitySettings = { ...displaySettings };
   for (const row of choices[schema?.inheritanceAction || ""]?.effectiveSettings || []) if (visibilitySettings[row.value] === "inherit") visibilitySettings[row.value] = row.label;
   for (const row of choices[schema?.visibilityAction || ""]?.effectiveSettings || []) visibilitySettings[row.value] = row.label;
-  const visibleFields = (schema?.fields || []).filter(field => field.key !== "networkIsolation" &&
+  const visibleFields = (schema?.fields || []).filter(field => !field.hidden && field.key !== "networkIsolation" &&
     (isGameScope || !field.gameOnly) && isRuntimeSettingVisible(field, visibilitySettings) && (!fieldKeys || fieldKeys.includes(field.key)));
   const fileRequest = useMemo(() => settingChoiceRequest(api, context),
     [api?.moduleAction, api?.moduleSettingsAction, context.scope, context.moduleId, context.runtimeId, context.gamePath]);
@@ -430,7 +430,7 @@ export function RuntimeSettingsWindow({
               }).map((control, index) => ({ field: visibleFields[index], control }))}
               render={(field, control) => {
                 const rendered = renderField ? renderField(field, control, onFieldChange) : control;
-                if (!externalSettings || !field.inheritFrom) return rendered;
+                if (!externalSettings || !field.inheritFrom || field.inheritanceInOptions) return rendered;
                 const inherited = displaySettings[field.key] === "inherit";
                 const current = choices[schema.inheritanceAction || ""]?.inheritedValues?.find(row => row.value === field.key)?.label || "Current environment value unavailable";
                 return <React.Fragment key={field.key}>

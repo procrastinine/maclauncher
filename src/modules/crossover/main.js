@@ -1,5 +1,6 @@
 const fs = require("node:fs");
-const manifest = require("../shared/runtime/wine-settings-ui").withSettings(require("./temporal/catalog").withSettingsOptions(require("./manifest.json")));
+const Translators = require("../shared/runtime/wine-translators");
+const manifest = Translators.withSettings(require("../shared/runtime/wine-settings-ui").withSettings(require("./temporal/catalog").withSettingsOptions(require("./manifest.json"))));
 const Detection = require("./detect");
 const manager = require("./runtime/manager");
 const Launch = require("./runtime/launch");
@@ -14,11 +15,26 @@ function wineSettingInheritance(entry, payload, context) {
   return require('../shared/runtime/wine-setting-inheritance').choices(context.runtimeSettings || {}, manifest.runtime.entries[runtimeId].settings,
     { reference: payload?.environmentReference || context.runtimeSettings?.environmentReference });
 }
-const graphicsBridgeActions = { listWineSettingInheritance: wineSettingInheritance, listGraphicsBridgeVersions: (entry, _payload, context) => graphicsBridgeVersions(context.runtimeId || entry.runtimeId, context) };
-const graphicsBridgeSettingsActions = { listWineSettingInheritance: (payload, context) => wineSettingInheritance({}, payload, context), listGraphicsBridgeVersions: (payload, context) => graphicsBridgeVersions(payload?.runtimeId, context) };
+async function translatorOptions(entry, payload, context, dependencies = {}) {
+  const runtime = context.runtimeId || payload?.runtimeId || entry.runtimeId || 'crossover';
+  const draft = { ...context, runtimeSettings: { ...context.runtimeSettings, ...payload?.runtimeSettings } };
+  const runtimeManager = dependencies.runtimeManager || (runtime === 'sikarugir' ? require('./sikarugir/runtime/manager') : manager);
+  const selected = runtimeManager.resolveSelection(entry, draft.settings, draft.userDataDir, draft.runtimeSettings);
+  if (!selected.install) return {};
+  const preparedContext = Translators.environmentContext(draft, selected.install);
+  const install = preparedContext.wineEnvironment?.install || selected.install;
+  const plan = await Translators.resolve(install, runtime, preparedContext, { ...dependencies, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
+  return { ...Translators.optionLists(install, runtime, preparedContext, { ...dependencies, plan }), effectiveSettings: [
+    { value: 'graphicsBackend', label: plan.components['d3d-renderer'].used?.engine || 'auto' },
+    { value: 'vulkanBackend', label: plan.components['vulkan-driver'].used?.engine || 'auto' }
+  ] };
+}
+const graphicsBridgeActions = { listWineSettingInheritance: wineSettingInheritance, listTranslatorOptions: (entry, payload, context) => translatorOptions(entry, payload, context), listGraphicsBridgeVersions: (entry, _payload, context) => graphicsBridgeVersions(context.runtimeId || entry.runtimeId, context) };
+const graphicsBridgeSettingsActions = { listWineSettingInheritance: (payload, context) => wineSettingInheritance({}, payload, context), listTranslatorOptions: (payload, context) => translatorOptions({runtimeId:payload?.runtimeId}, payload, context), listGraphicsBridgeVersions: (payload, context) => graphicsBridgeVersions(payload?.runtimeId, context) };
+
 function graphicsBackendOptions(entry, context, { runtimeManager = manager, host } = {}) {
   const selected = runtimeManager.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
-  const field = manifest.runtime.entries.crossover.settings.fields.find(field => field.key === "graphicsBackend");
+  const field = require("./manifest.json").runtime.entries.crossover.settings.fields.find(field => field.key === "graphicsBackend");
   const support = require("./runtime/backend-support");
   return { graphicsBackends: field.options.filter(option => !support.reason(selected?.install, option.value, host)) };
 }
@@ -45,9 +61,12 @@ function supportsEntry(entry, _moduleSettings, context = {}) {
 function canLaunchRuntime(runtimeId, entry, moduleSettings, context) {
   return runtimeId === "crossover" && supportsEntry(entry, moduleSettings, context);
 }
-function ensureRuntime(entry, context) {
+async function ensureRuntime(entry, context) {
   const selected = manager.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
   if (!selected.ready) throw new Error(selected.reason);
+  const prepared = Translators.environmentContext(context, selected.install);
+  if (prepared.wineEnvironment) context.wineEnvironment = prepared.wineEnvironment;
+  await Translators.resolve(prepared.wineEnvironment?.install || selected.install, "crossover", context, { executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
   return null;
 }
 async function launchRuntime(runtimeId, entry, context) {
@@ -67,12 +86,12 @@ const crossoverProvider = { runtimeId: "crossover", runtime: manifest.runtime.en
     supports: manifest.supports, decorateEntry: Detection.decorateEntry,
     supportsEntry, canLaunchRuntime, ensureRuntime, launchRuntime, resolveSaveLocations,
     getRuntimeRequirements: (entry, context) => require("./temporal").requirements(entry, { ...context, runtimeId: "crossover" }),
-    resolveGraphicsInputs: (entry, context) => resolveGraphicsInputs(entry, { ...context, runtimeId: "crossover" }) };
+    resolveGraphicsInputs: (entry, context) => resolveGraphicsInputs(entry, context) };
 const runtimeProviders = [crossoverProvider, sikarugirProvider];
 const runtimeManagers = [manager, sikarugirManager, ...Object.values(require("./temporal/support-manager").managers)];
 const providerForRuntime = runtimeId => runtimeProviders.find(provider => provider.runtimeId === runtimeId);
 const providerForEntry = (entry, context) => providerForRuntime(context?.runtimeId || entry?.runtimeId || manifest.runtime.default);
-function resolveGraphicsInputs(entry, context = {}, resolved) {
+async function resolveGraphicsInputs(entry, context = {}, resolved) {
   const runtimeId = providerForEntry(entry, context)?.runtimeId;
   const selectedManager = runtimeManagers.find(candidate => candidate.id === providerForEntry(entry, context)?.managerId);
   const existing = runtimeId === "sikarugir" ? Environments.readEnvironment(context.runtimeSettings?.environmentReference) : null;
@@ -80,7 +99,11 @@ function resolveGraphicsInputs(entry, context = {}, resolved) {
   const selected = resolved || (existing ? { ready: true, install: existing.install, version: existing.path } :
     selectedManager?.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings));
   if (!selected?.ready) return null;
-  const source = require("./temporal").resolvePlan(entry, context, { install: selected.install, runtimeId, allowDownload: true })?.inputs;
+  const prepared = Translators.environmentContext(context, selected.install);
+  if (prepared.wineEnvironment) context.wineEnvironment = prepared.wineEnvironment;
+  const install = prepared.wineEnvironment?.install || selected.install;
+  const translatorPlan = await Translators.resolve(install, runtimeId, context, { executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
+  const source = require("./temporal").resolvePlan(entry, context, { install, runtimeId, translatorPlan, settings: Translators.settingsForPlan(context.runtimeSettings || {}, translatorPlan), allowDownload: true })?.inputs;
   return require("./graphics-inputs").inputs(selected.install, source, { fallback: runtimeId === "sikarugir" ? "x86_64" : null });
 }
 
@@ -100,12 +123,21 @@ module.exports = { id: manifest.id, manifest, detectGame: Detection.detectGame,
   settingsActions: crossoverSettingsActions,
   actions: {
     ...crossoverActions,
-    runtimeStatus: (entry, _payload, context) => {
+    runtimeStatus: async (entry, _payload, context) => {
       const selectedManager = runtimeManagers.find(candidate => candidate.id === providerForEntry(entry, context)?.managerId) || manager;
       const existing = providerForEntry(entry, context)?.runtimeId === "sikarugir" ? Environments.readEnvironment(context.runtimeSettings?.environmentReference) : null;
       const selected = existing ? { ready: true, install: existing.install, version: existing.path, versionLabel: existing.install.engineVersion } :
         selectedManager.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
-      return { ...selected, graphicsInputs: resolveGraphicsInputs(entry, context, selected), versionLabel: selected.versionLabel || selected.install?.versionLabel ||
+      const runtime = providerForEntry(entry, context)?.runtimeId;
+      const preparedContext = selected.install ? Translators.environmentContext(context, selected.install) : context;
+      const plan = selected.install ? await Translators.resolve(preparedContext.wineEnvironment?.install || selected.install, runtime, preparedContext,
+        { executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture }) : null;
+      const rows = plan ? Translators.inspectorRows(plan) : entry.runtimeData?.[runtime]?.translatorRows || [];
+      const details = rows.map(row => ({ label: row.label, value: row.used,
+        detail: row.fallback ? 'Selected ' + row.selected + '. ' + row.reason : '' }));
+      const cameraNotice = entry.runtimeData?.[runtime]?.cameraAdapterNotice;
+      if (cameraNotice) details.push({ label: 'Camera adapter', value: 'Unavailable', detail: cameraNotice });
+      return { ...selected, translatorRows: rows, details, graphicsInputs: await resolveGraphicsInputs(entry, context, selected), versionLabel: selected.versionLabel || selected.install?.versionLabel ||
         selected.install?.upstreamVersion || selected.install?.engineVersion || selected.version };
     },
     revealWindowsFiles: (entry, _payload, context) => {
@@ -117,6 +149,6 @@ module.exports = { id: manifest.id, manifest, detectGame: Detection.detectGame,
       return { directory };
     }
   },
-  __test: { supportsEntry, graphicsBackendOptions } };
+  __test: { supportsEntry, graphicsBackendOptions, translatorOptions } };
 
 module.exports = require("../shared/decompilation/native").withTools(module.exports);

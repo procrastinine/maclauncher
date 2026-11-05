@@ -725,6 +725,13 @@ export const GameDetails = memo(function GameDetails({
 
           </>}
 
+          {Array.isArray(runtimeStatus?.details) && runtimeStatus.details.map((row: {label: string; value: string; detail?: string}, index: number) => (
+            <div className="detailRow" key={index}>
+              <div className="detailLabel">{row.label}</div>
+              <div className="detailValue">{row.value}{row.detail && <div className="detailMeta">{row.detail}</div>}</div>
+            </div>
+          ))}
+
           {(libsDependencies.length > 0 || canPatchCheats) && <h3 className="detailSectionHeading">Patches</h3>}
           {libsDependencies.length > 0 && (
             <div className="detailRow">

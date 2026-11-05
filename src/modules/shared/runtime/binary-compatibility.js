@@ -1,7 +1,7 @@
 const fs = require('node:fs'), path = require('node:path');
 const { readMachOLoadCommands } = require('./macho-load-commands');
 const { inspectMachOExportInfo } = require('./macho-exports');
-const { inspectFile, compareVersions } = require('./translator-description');
+const { compareVersions } = require('./translator-description');
 const { wineLayout } = require('./wine-layout');
 const { binaryFiles } = require('./binary-files');
 
@@ -21,6 +21,15 @@ async function wineCompatibilityRecord(install) {
 function requiredMachine(executableArchitecture) {
   return { x86: 0x14c, i386: 0x14c, x64: 0x8664, x86_64: 0x8664, arm64: 0xaa64, aarch64: 0xaa64 }[executableArchitecture];
 }
+function wineDependency(record, library) {
+  const name = path.basename(library), target = record.modules[name];
+  if (!target) return null;
+  if ([name, `@rpath/${name}`, `@loader_path/${name}`].includes(library)) return name;
+  if (path.isAbsolute(library) && target.path) {
+    try { if (fs.realpathSync(library) === fs.realpathSync(target.path)) return name; } catch {}
+  }
+  return null;
+}
 function moduleExport(record, name, symbol, visited = new Set()) {
   if (visited.has(name)) return null;
   visited.add(name);
@@ -30,12 +39,14 @@ function moduleExport(record, name, symbol, visited = new Set()) {
   let unknown = module.complete !== true;
   for (const item of (module.reexports || []).filter(item => item.symbol === symbol)) {
     const dependency = module.image.dependencies[item.ordinal - 1];
-    const result = dependency && moduleExport(record, path.basename(dependency.path), item.imported, visited);
+    const target = dependency && wineDependency(record, dependency.path);
+    const result = target ? moduleExport(record, target, item.imported, visited) : null;
     if (result === true) return true;
     if (result == null) unknown = true;
   }
   for (const dependency of module.image.dependencies.filter(item => item.kind === 'reexport')) {
-    const result = moduleExport(record, path.basename(dependency.path), symbol, visited);
+    const target = wineDependency(record, dependency.path);
+    const result = target ? moduleExport(record, target, symbol, visited) : null;
     if (result === true) return true;
     if (result == null) unknown = true;
   }
@@ -44,7 +55,11 @@ function moduleExport(record, name, symbol, visited = new Set()) {
 function compatibility(description, record, { macOSVersion, executableArchitecture } = {}) {
   const warnings = [], machine = requiredMachine(executableArchitecture), expectedUnix = record.layout.architecture;
   const incompatible = reason => ({ compatible: false, reason, warnings });
-  const selected = binaryFiles(description.files || [], { machine, architecture: expectedUnix });
+  const requiredPaths = [];
+  if (description.icd) {
+    try { const icd = JSON.parse(fs.readFileSync(description.icd, 'utf8')); requiredPaths.push(path.resolve(path.dirname(description.icd), icd.ICD.library_path)); } catch {}
+  }
+  const selected = binaryFiles(description.files || [], { machine, architecture: expectedUnix, requiredPaths });
   if (selected.missing.length) return incompatible(selected.missing[0].reason);
   for (const file of selected.files) {
     if (!fs.existsSync(file.path)) return incompatible(`Required file is missing: ${file.path}`);
@@ -58,8 +73,8 @@ function compatibility(description, record, { macOSVersion, executableArchitectu
     if (!image.importsComplete) warnings.push(`Imports could not be fully inspected: ${file.path}`);
     for (const item of image.imports || []) {
       if (item.weak || !item.library || /^\/(?:usr\/lib|System\/Library)\//.test(item.library)) continue;
-      const name = path.basename(item.library);
-      if (!record.modules[name]) { warnings.push(`Dependency was not inspected: ${item.library}`); continue; }
+      const name = wineDependency(record, item.library);
+      if (!name) { warnings.push(`Dependency was not established as a Wine module: ${item.library}`); continue; }
       // Only the actual dependency and its reexports can satisfy a two-level import.
       const found = moduleExport(record, name, item.symbol);
       if (found === false) return incompatible(`${name} does not export required symbol ${item.symbol}`);

@@ -5,6 +5,7 @@ const Launch = require("./launch");
 const Writable = require("../../shared/writable-input");
 const Environments = require("../../shared/runtime/wine-environment");
 const Processes = require("../../shared/runtime/wine-processes");
+const Translators = require("../../shared/runtime/wine-translators");
 
 // Both Windows runtimes share the executable evidence that detection records.
 // The runtime picker reads that record and does not depend on whether Wine is
@@ -47,13 +48,17 @@ function createLog(directory) {
 function createProvider({ manager, launch = Launch, platform = process.platform, launchDependencies } = {}) {
   const runtimeManager = () => manager || require("./runtime/manager");
   return { runtimeId: "sikarugir", managerId: "sikarugir", supportsEntry, decorateEntry,
-    resolveGraphicsInputs: (entry, context) => {
+    resolveGraphicsInputs: async (entry, context) => {
       const reference = Environments.environmentReference(context.runtimeSettings?.environmentReference);
       const existing = reference ? Environments.readEnvironment(reference) : null;
       if (existing) context.wineEnvironment = existing;
       const selected = existing ? {ready:true,install:existing.install} : runtimeManager().resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
       if (!selected?.ready) return null;
-      const source = require("../temporal").resolvePlan(entry, context, { install: selected.install, runtimeId: "sikarugir", allowDownload: true })?.inputs;
+      const prepared = Translators.environmentContext(context, selected.install);
+      if (prepared.wineEnvironment) context.wineEnvironment = prepared.wineEnvironment;
+      const install = prepared.wineEnvironment?.install || selected.install;
+      const translatorPlan = await Translators.resolve(install, "sikarugir", context, { executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
+      const source = require("../temporal").resolvePlan(entry, context, { install, runtimeId: "sikarugir", translatorPlan, settings: Translators.settingsForPlan(context.runtimeSettings || {}, translatorPlan), allowDownload: true })?.inputs;
       return require("../graphics-inputs").inputs(selected.install, source, { fallback: "x86_64" });
     },
     getRuntimeRequirements: (entry, context) => {
@@ -73,7 +78,13 @@ function createProvider({ manager, launch = Launch, platform = process.platform,
         Environments.readEnvironment(reference); return null;
       }
       const selected = await runtimeManager().resolveForPlay(entry, context);
-      if (selected.ready) return null;
+      if (selected.ready) {
+        if (!selected.install) return null;
+        const prepared = Translators.environmentContext(context, selected.install);
+        if (prepared.wineEnvironment) context.wineEnvironment = prepared.wineEnvironment;
+        await Translators.resolve(prepared.wineEnvironment?.install || selected.install, "sikarugir", context, { executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
+        return null;
+      }
       if (!selected.version && !selected.discoveryRequired) throw new Error(selected.reason || "No compatible Sikarugir version is available.");
       return { managerId: "sikarugir", version: selected.version || null, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: selected.installOptions || {},
         ...(selected.detail ? { detail: selected.detail } : {}), ...(selected.versionLabel ? { versionLabel: selected.versionLabel } : {}) };

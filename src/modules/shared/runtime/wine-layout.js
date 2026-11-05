@@ -6,10 +6,12 @@ function wineLayout(install) {
   const root = install.crossoverRoot || install.engineRoot || install.wineRoot || path.dirname(path.dirname(install.executablePath));
   const dllRoot = path.join(root, 'lib/wine');
   let directories = []; try { directories = fs.readdirSync(dllRoot).sort(); } catch {}
-  const candidates = directories.filter(name => name.endsWith('-unix') && fs.existsSync(path.join(dllRoot, name, 'ntdll.so')));
+  const candidates = directories.filter(name => name.endsWith('-unix') && (fs.existsSync(path.join(dllRoot, name, 'ntdll.so')) || fs.existsSync(path.join(dllRoot, name, 'wine'))));
   const preferred = normalizeArchitecture(install.architecture || install.architectures?.[0]);
   const rows = candidates.map(name => {
-    let architectures = []; try { architectures = readMachOLoadCommands(path.join(dllRoot, name, 'ntdll.so')).architectures; } catch {}
+    let architectures = [];
+    const image = path.join(dllRoot, name, fs.existsSync(path.join(dllRoot, name, 'wine')) ? 'wine' : 'ntdll.so');
+    try { architectures = readMachOLoadCommands(image).architectures; } catch {}
     return { name, architectures };
   });
   const selected = rows.find(row => row.architectures.some(cpu => normalizeArchitecture(cpu) === preferred)) || rows[0];

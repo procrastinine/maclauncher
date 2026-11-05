@@ -3,7 +3,7 @@ const { inspectFile } = require('./translator-description');
 
 // Choose by actual machine/slices, independently of a publisher's folder names.
 // Both compatibility and materialization consume this exact file set.
-function binaryFiles(files, { machine, architecture } = {}) {
+function binaryFiles(files, { machine, architecture, requiredPaths = [] } = {}) {
   const groups = new Map(), selected = [], missing = [];
   for (const file of files) {
     const actual = fs.existsSync(file.path) ? inspectFile(file) : file;
@@ -18,6 +18,10 @@ function binaryFiles(files, { machine, architecture } = {}) {
     if (matches.length) selected.push(matches[0]);
     else missing.push({ file: rows[0], reason: format === 'pe' ? `No PE machine ${machine} for ${path.basename(rows[0].path)}` : `No ${architecture} CPU slice for ${path.basename(rows[0].path)}` });
   }
-  return { files: selected, missing };
+  // A package may contain modules only another consumer uses (for example an
+  // x64 NGX helper alongside both x32/x64 Direct3D libraries). Their absence
+  // from this consumer is not a required missing slice.
+  return { files: selected, missing: missing.filter(item => requiredPaths.includes(item.file.path) ||
+    !selected.some(file => file.format === item.file.format)) };
 }
 module.exports = { binaryFiles };

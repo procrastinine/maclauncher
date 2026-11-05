@@ -83,6 +83,7 @@ function inspect(readRange, size, { architecture, signal, imports: inspectImport
     if (!little && marker !== 0xfeedface && marker !== 0xfeedfacf) fail("File is not Mach-O.");
     const u32 = (data, offset) => little ? data.readUInt32LE(offset) : data.readUInt32BE(offset);
     const cpu = u32(initial, 4), subtype = u32(initial, 8), fileType = u32(initial, 12);
+    const flags = u32(initial, 24), twoLevel = Boolean(flags & 0x80) && !(flags & 0x100);
     if (slice.cpu != null && (slice.cpu !== cpu || slice.subtype !== subtype) || requested != null && requested !== cpu)
       fail("The Mach-O header does not match its selected architecture.", "MACHO_ARCH");
     if (wide !== !!(cpu & 0x01000000)) fail("CPU and Mach-O word size disagree.", "MACHO_ARCH");
@@ -158,7 +159,7 @@ function inspect(readRange, size, { architecture, signal, imports: inspectImport
         if (index >= strings.length || end < index) fail('Invalid undefined-symbol string.');
         const name = utf8.decode(strings.subarray(index, end)), desc = little ? records.readUInt16LE(offset + 6) : records.readUInt16BE(offset + 6);
         const ordinal = desc >>> 8, dependency = ordinal > 0 && ordinal < 0xfe ? dependencies[ordinal - 1] : null;
-        imports.push({ symbol: name.replace(/^_/, ''), ordinal, library: dependency?.path || null,
+        imports.push({ symbol: name.replace(/^_/, ''), ordinal, library: twoLevel ? dependency?.path || null : null,
           weak: Boolean(desc & 0x40) || dependency?.kind === 'weak' });
       }
     }
