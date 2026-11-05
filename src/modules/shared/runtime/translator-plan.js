@@ -157,6 +157,11 @@ function resolveApiRoles(plan, { selections = {}, choices = [], included = [], c
 }
 function apiOptions(plan, { choices = [], included = [], environment = null, selections = {} } = {}) {
   const result = {};
+  const displayDescription = description => {
+    if (!description) return description;
+    const { files, unixImports, videoPreparation, ...display } = description;
+    return display;
+  };
   for (const role of Roles.DIRECT3D_ROLES) {
     const rows = [];
     if (environment) rows.push({ value: INHERIT, label: environment.label || 'Environment setting' });
@@ -178,7 +183,7 @@ function apiOptions(plan, { choices = [], included = [], environment = null, sel
   }
   result.translatorGroups = plan.groups || apiGroups(plan);
   result.translatorRoles = Roles.ROLES.map(role => ({ ...role, groupId: result.translatorGroups.find(group => group.roles.includes(role.id))?.id || role.id,
-    ...plan.components[role.id] }));
+    ...plan.components[role.id], selected: displayDescription(plan.components[role.id]?.selected), used: displayDescription(plan.components[role.id]?.used) }));
   return result;
 }
 

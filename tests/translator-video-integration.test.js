@@ -9,6 +9,7 @@ const CrossLoader = require('../src/modules/crossover/runtime/graphics-loader');
 const SikaLaunch = require('../src/modules/crossover/sikarugir/launch');
 const SikaGraphics = require('../src/modules/crossover/sikarugir/graphics');
 const MachO = require('../src/modules/shared/runtime/macho-load-commands');
+const Binary = require('../src/modules/shared/runtime/binary-compatibility');
 const { image, X64, ARM64 } = require('./fixtures/macho-image');
 const { peFixture } = require('./helpers/pe-fixture');
 
@@ -108,10 +109,14 @@ async function environmentFor(f, plan, view, context) {
 
 test('selected framework codecs use host-core aliases through both real Wine environment builders and reuse one prepared payload', async t => {
   const composer = WineSettings.environment; let composerCalls = 0;
+  const complete = Binary.completeWineNativeLibraries; let nativeCalls = 0;
+  t.mock.method(Binary, 'completeWineNativeLibraries', (...args) => { nativeCalls++; return complete(...args); });
   t.mock.method(WineSettings, 'environment', (...args) => { composerCalls++; return composer(...args); });
   for (const runtime of ['crossover', 'sikarugir']) {
     const f = fixture(t, runtime), before = new Map([...f.sourceFiles].map(file => [file, fs.readFileSync(file)]));
+    const nativeBefore = nativeCalls;
     const { plan, context } = await f.resolve({ translatorVideo: 'fixture-gstreamer:prepared' });
+    assert.equal(nativeCalls - nativeBefore, 1); assert.ok(plan.record.libraries[f.core]);
     assert.equal(context.translatorPlan, plan); assert.equal(plan.components.video.used.id, 'fixture-gstreamer:prepared'); assert.equal(plan.components.video.fallback, false);
     const preparation = plan.components.video.used.videoPreparation;
     assert.ok(preparation.bindings.some(binding => binding.source === f.sdkCore && binding.target === f.core));
@@ -164,10 +169,13 @@ test('optional codec failures exclude only proven unusable plugins while weak an
 });
 
 test('default and inherited video selections preserve runtime plugin and scanner defaults without new video environment', async t => {
+  const complete = Binary.completeWineNativeLibraries; let nativeCalls = 0;
+  t.mock.method(Binary, 'completeWineNativeLibraries', (...args) => { nativeCalls++; return complete(...args); });
   for (const runtime of ['crossover', 'sikarugir']) for (const translatorVideo of [undefined, 'automatic', 'inherit']) {
     const f = fixture(t, runtime), settings = translatorVideo ? { translatorVideo } : {};
     const existing = translatorVideo === 'inherit' ? { kind: runtime === 'sikarugir' ? 'sikarugir-wrapper' : 'crossover-bottle', name: 'Scratch existing environment', settings: {}, environment: {} } : null;
     const { plan, context } = await f.resolve(settings, existing);
+    assert.equal(nativeCalls, 0); assert.equal(Object.hasOwn(plan.record, 'libraries'), false);
     assert.equal(plan.components.video.used, null);
     if (existing) assert.equal(plan.components.video.inherited, true);
     const view = await Files.prepareTranslatorFiles(plan, { userDataDir: context.userDataDir, layout: plan.layout, logger: context.logger });

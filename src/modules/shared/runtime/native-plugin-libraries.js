@@ -8,10 +8,15 @@ async function resolvePluginLibraries(description, record, options = {}) {
   const root = fs.realpathSync(description.root), files = description.files || [], warnings = [];
   const directories = description.pluginDirectories?.length ? description.pluginDirectories :
     [...new Set(files.filter(file => file.format === 'macho').map(file => path.relative(root, path.dirname(file.path)) || '.'))];
-  const pluginDirectories = directories.map(relative => path.resolve(root, relative));
+  const realDirectory = directory => {
+    try { return fs.realpathSync(directory); }
+    catch (error) { warnings.push(`Plugin directory ${directory} is unavailable: ${error.message}`); return null; }
+  };
+  const selectedDirectories = directories.map(relative => ({ relative, real: realDirectory(path.resolve(root, relative)) })).filter(item => item.real);
+  const pluginDirectories = selectedDirectories.map(item => item.real);
   const architecture = record.layout.architecture;
   const image = file => file.slices?.find(slice => slice.architecture === architecture) || (!architecture ? file.slices?.[0] : null);
-  const original = file => file.realPath || file.path;
+  const original = file => file.realPath || (fs.existsSync(file.path) ? fs.realpathSync(file.path) : file.path);
   const byPath = new Map(files.filter(file => file.format === 'macho').map(file => [original(file), file]));
   const host = Object.values(record.libraries || {});
   const hostFor = (dependency, supplied) => {
@@ -20,7 +25,14 @@ async function resolvePluginLibraries(description, record, options = {}) {
     const matches = host.filter(library => library.path === dependency || library.image.installName?.path === id);
     return matches.length === 1 ? matches[0] : null;
   };
-  const candidates = files.filter(file => file.format === 'macho' && pluginDirectories.includes(path.dirname(file.path)));
+  const fileDirectories = new Map([...new Set(files.filter(file => file.format === 'macho').map(file => path.dirname(file.path)))]
+    .map(directory => [directory, realDirectory(directory)]));
+  const candidates = files.filter(file => file.format === 'macho' && pluginDirectories.includes(fileDirectories.get(path.dirname(file.path))));
+  const preparedDirectories = [...new Set(selectedDirectories.flatMap(({ real: directory, relative }) => {
+    const logical = candidates.filter(file => fileDirectories.get(path.dirname(file.path)) === directory)
+      .map(file => path.relative(root, path.dirname(file.path)) || '.');
+    return logical.length ? logical : [relative];
+  }))];
   const bindings = new Map(), consumed = new Map(), excludedFiles = new Set();
   const rememberBinding = (file, library) => {
     if (file) bindings.set(file.path, { source: file.path, target: library.path });
@@ -111,7 +123,7 @@ async function resolvePluginLibraries(description, record, options = {}) {
       dependency.path.startsWith('@loader_path/') || dependency.path.startsWith('@rpath/'))
   }));
   return { description: { ...description, files: preparedFiles, videoPreparation: {
-    pluginDirectories: directories, bindings: bound, excludedFiles: [...excludedFiles], warnings: [...new Set(warnings)],
+    pluginDirectories: preparedDirectories, bindings: bound, excludedFiles: [...excludedFiles], warnings: [...new Set(warnings)],
     hostFiles: [...hostFiles.values()].map(library => ({ path: library.path, identity: library.identity }))
   } }, warnings };
 }

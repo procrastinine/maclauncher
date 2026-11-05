@@ -156,9 +156,7 @@ function environmentContext(context, install) {
 }
 async function resolve(install, runtime, context, { executableArchitecture, host = {}, ...dependencies } = {}) {
   const input = inventory(install, runtime, context, dependencies);
-  // CrossOver resolves its own LC_RPATH edges. Only an existing launcher-owned
-  // search context may override those edges, never a package's nearby names.
-  const record = await Binary.wineCompatibilityRecord(install, { nativeRoots: input.nativeRoots }), compatibility = {};
+  const record = await Binary.wineCompatibilityRecord(install), compatibility = {};
   for (const description of [...input.included, ...input.choices]) compatibility[description.id] = Binary.compatibility(description, record,
     { executableArchitecture, macOSVersion: host.macOSVersion || systemVersionSync() });
   const roleRequested = Roles.DIRECT3D_ROLES.some(role => role.id !== 'd3d12' && context.runtimeSettings?.[role.settingsKey]);
@@ -179,6 +177,9 @@ async function resolve(install, runtime, context, { executableArchitecture, host
   const plan = { ...Plan.resolvePlan({ ...input, compatibility }), layout: input.layout, compatibility, record };
   const videoRow = plan.components.video, selectedVideo = videoRow.selected || videoRow.used;
   if (selectedVideo && fs.existsSync(selectedVideo.root) && !(videoRow.inherited && !videoRow.fallback)) {
+    // Only an actual video preparation needs the extra host-native closure.
+    // Its roots come from the real launcher, never exploratory package names.
+    await Binary.completeWineNativeLibraries(record, install, { nativeRoots: input.nativeRoots });
     const video = await require('./native-plugin-libraries').resolvePluginLibraries(selectedVideo, record,
       { executableArchitecture, macOSVersion: host.macOSVersion || systemVersionSync() });
     compatibility[selectedVideo.id] = { ...compatibility[selectedVideo.id], compatible: true, reason: null,

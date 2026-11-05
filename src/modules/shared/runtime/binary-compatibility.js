@@ -22,30 +22,35 @@ async function wineCompatibilityRecord(install, options) {
     } catch (error) { warnings.push(`${name}: ${error.message}`); }
   }
   const record = { layout, modules, warnings };
-  if (options) {
-    record.executablePath = install.executablePath;
-    record.libraries = {};
-    const pending = modules['winegstreamer.so'] ? [{ file: modules['winegstreamer.so'].path, module: modules['winegstreamer.so'], runPaths: [] }] : [];
-    const visited = new Set();
-    while (pending.length) {
-      const item = pending.shift();
-      try {
-        const file = fs.realpathSync(item.file);
-        if (visited.has(file)) continue;
-        visited.add(file);
-        const module = item.module || await nativeLibrary(file, layout.architecture, warnings);
-        const runPaths = nativeRunPaths(file, module.image, install.executablePath, item.runPaths);
-        const dependencies = Object.create(null);
-        record.libraries[file] = { ...module, path: file, runPaths, dependencies };
-        for (const dependency of module.image.dependencies) {
-          const target = resolveNativeDependency(file, module.image, dependency.path,
-            { executablePath: install.executablePath, runPaths, libraryPaths: nativeRoots });
-          dependencies[dependency.path] = target;
-          if (target) pending.push({ file: target, runPaths });
-          else if (!systemLibrary(dependency.path)) warnings.push(`Could not resolve ${dependency.kind} dependency ${dependency.path} from ${file}`);
-        }
-      } catch (error) { warnings.push(`${item.file}: ${error.message}`); }
-    }
+  return options ? completeWineNativeLibraries(record, install, { nativeRoots }) : record;
+}
+// Demand-driven completion reuses the existing Wine module record and never
+// scans its Unix directory again. Ordinary compatibility keeps its old path.
+async function completeWineNativeLibraries(record, install, { nativeRoots = [] } = {}) {
+  const { layout, modules, warnings } = record;
+  record.executablePath = install.executablePath;
+  record.libraries = {};
+  const seed = modules['winegstreamer.so'];
+  const pending = seed ? [{ file: seed.path, module: seed.image.importsComplete === undefined ? null : seed, runPaths: [] }] : [];
+  const visited = new Set();
+  while (pending.length) {
+    const item = pending.shift();
+    try {
+      const file = fs.realpathSync(item.file);
+      if (visited.has(file)) continue;
+      visited.add(file);
+      const module = item.module || await nativeLibrary(file, layout.architecture, warnings);
+      const runPaths = nativeRunPaths(file, module.image, install.executablePath, item.runPaths);
+      const dependencies = Object.create(null);
+      record.libraries[file] = { ...module, path: file, runPaths, dependencies };
+      for (const dependency of module.image.dependencies) {
+        const target = resolveNativeDependency(file, module.image, dependency.path,
+          { executablePath: install.executablePath, runPaths, libraryPaths: nativeRoots });
+        dependencies[dependency.path] = target;
+        if (target) pending.push({ file: target, runPaths });
+        else if (!systemLibrary(dependency.path)) warnings.push(`Could not resolve ${dependency.kind} dependency ${dependency.path} from ${file}`);
+      }
+    } catch (error) { warnings.push(`${item.file}: ${error.message}`); }
   }
   return record;
 }
@@ -152,4 +157,4 @@ function compatibility(description, record, { macOSVersion, executableArchitectu
   }
   return { compatible: true, reason: null, warnings, files: selected.files };
 }
-module.exports = { wineCompatibilityRecord, compatibility, requiredMachine, moduleExport, resolveNativeDependency, nativeRunPaths, libraryExport };
+module.exports = { wineCompatibilityRecord, completeWineNativeLibraries, compatibility, requiredMachine, moduleExport, resolveNativeDependency, nativeRunPaths, libraryExport };
