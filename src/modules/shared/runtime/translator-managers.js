@@ -5,9 +5,9 @@ const { archiveFormat } = require("./release-files");
 const definitions = {
   gstreamer: { label: "GStreamer codecs", localOnly: true, sourceName: "GStreamer", sourceDescription: "GStreamer publishes multimedia libraries and plugins. Prepared codec folders are registered locally.", memberOrder: 30, names: ["gstreamer-1.0"], sources: [] },
   dxvk: { label: "DXVK", memberOrder: 2, apis: ["Direct3D 9", "Direct3D 10", "Direct3D 11"], names: ["dxvk", "dxvk3", "d9vk"],
-    sources: [["upstream", "DXVK", "doitsujin/dxvk"], ["macos", "DXVK-macOS", "Gcenx/DXVK-macOS", name => !/async/i.test(name)],
-      ["async", "DXVK-macOS async", "Gcenx/DXVK-macOS", name => /async/i.test(name)],
-      ...["dxvk", "dxvk3", "d9vk"].map(component => ["template-" + component, "Sikarugir Template · " + component, "Sikarugir-App/Template", null, component])] },
+    sources: [["upstream", "DXVK", "doitsujin/dxvk", null, null, { secondary: true }], ["macos", "DXVK-macOS", "Gcenx/DXVK-macOS", name => !/async/i.test(name), null, { description: "CrossOver's included copy or automatic choice is the ordinary route; Sikarugir uses its Template. DXVK-macOS releases published by Gcenx/DXVK-macOS are an optional macOS alternative." }],
+      ["async", "DXVK-macOS async", "Gcenx/DXVK-macOS", name => /async/i.test(name), null, { secondary: true, description: "DXVK-macOS async releases published by Gcenx/DXVK-macOS, with asynchronous shader compilation." }],
+      ...["dxvk", "dxvk3", "d9vk"].map(component => ["template-" + component, "Sikarugir Template · " + component, "Sikarugir-App/Template", null, component, { secondary: true, ...(component === "d9vk" ? { description: "D9VK copies taken from a Sikarugir Template release. This is the older Direct3D 8/9 variant." } : {}) }])] },
   "vkd3d-proton": { label: "vkd3d-proton", memberOrder: 3, apis: ["Direct3D 12"], names: ["vkd3d-proton"],
     sources: [["upstream", "vkd3d-proton", "HansKristian-Work/vkd3d-proton"]] },
   d3dmetal: { label: "D3DMetal", upstreamUrl: "https://developer.apple.com/games/game-porting-toolkit/", upstreamLabel: "Apple Game Porting Toolkit downloads", memberOrder: 1, apis: ["Direct3D 11", "Direct3D 12"], names: ["d3dmetal", "apple_gptk", "redist"],
@@ -33,13 +33,13 @@ function versionLabel(pin, installed, label) {
   if (template) return component ? `${label} ${component} · ${template}` : `${template} · ${label} component`;
   return component ? `${label} ${component}` : assetName(pin?.asset) || installed?.versionLabel || pin?.versionLabel;
 }
-function catalogSource([id, label, repository, filter, component], projectLabel = component) {
+function catalogSource([id, label, repository, filter, component, presentation = {}], projectLabel = component) {
   const upstream = Upstream.github({ repository, prerelease: true, allArchitectures: true, recognize: release =>
     (release.assets || []).filter(asset => archiveFormat(asset.name) && (!filter || filter(asset.name)) &&
       (!component || /^Template-/i.test(asset.name))).map(asset => ({
         version: (id + "-" + asset.name.replace(/\.(?:tar\.(?:gz|xz|bz2)|t[gx]z|zip|tar)$/i, "")).replace(/[^a-z0-9._-]/ig, "-"),
         architecture: "universal", label: versionLabel({ asset: { filename: asset.name } }, null, projectLabel || label), assets: [asset], details: { component, catalogSourceId: id } })) });
-  return { id, label, description: component ? `${projectLabel} copies taken from a Sikarugir Template release (${component}).` : `${label} releases published by ${repository}.`, url: `https://github.com/${repository}/releases`, discover: async options => upstreamPins(await upstream.discover(options)) };
+  return { id, label, description: component ? `${projectLabel} copies taken from a Sikarugir Template release (${component}).` : `${label} releases published by ${repository}.`, url: `https://github.com/${repository}/releases`, ...presentation, discover: async options => upstreamPins(await upstream.discover(options)) };
 }
 function createManager(engine, { dependencies = {} } = {}) {
   const definition = { ...definitions[engine], engine }, catalogSources = definition.sources.map(source => catalogSource(source, definition.label));

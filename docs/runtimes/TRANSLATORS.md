@@ -18,6 +18,8 @@ Translator versions use the shared runtime catalogs and local registration. Refr
 | D3DMetal | Sikarugir Template | Apple Game Porting Toolkit disk image or folder; installed runtime |
 | GStreamer codecs | Local registration | Prepared plugin folder with its matching dependency closure |
 
+DXVK-macOS is shown as an optional macOS alternative to the runtime's own included or automatic choice. Upstream, async and Template sources remain under Additional sources; D9VK is the older Direct3D 8/9 variant. Template package versions are distinct from installed component versions. The GStreamer panel registers prepared local codec folders, and D3DMetal links to Apple's official Game Porting Toolkit download page.
+
 Each catalog has its own Refresh control and publisher link. Release labels identify the source. Installed files supply PE machine and builtin/native form, Mach-O CPU slices, deployment targets and Unix imports. Release numbers and vendor labels do not determine compatibility.
 
 Directory and installed-application registrations reference the selected files. Archive registrations extract once into shared storage. Publisher archives are cached by asset identity across managers; installing another component from the same Template reuses that download. Template component installations retain their complete component tree, including notices, without installing another Wine engine. Removing a local registration preserves the original files.

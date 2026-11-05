@@ -1006,3 +1006,23 @@ test('persisted generic-tag source labels render actual asset packages without R
   for(const row of entries)assert.ok(markup.includes(`value="${row.version}"`));
   assert.doesNotMatch(markup,/\(2\)|earlier build|v1\.0 \(Sikarugir Template\)/);assert.deepEqual(fs.readFileSync(file),before);
 });
+
+test('secondary source disclosure preserves every DXVK source, version and install action', t => {
+  const fs=require('node:fs'),os=require('node:os'),root=fs.mkdtempSync(path.join(os.tmpdir(),'secondary-translator-sources-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const CrossOver=require('../src/modules/crossover/runtime/manager'),Sika=require('../src/modules/crossover/sikarugir/runtime/manager');
+  t.mock.method(CrossOver.core,'listInstalled',()=>[]);const original=Sika.core;Sika.core={...original,listInstalled:()=>[]};t.after(()=>{Sika.core=original;});
+  t.mock.method(globalThis,'fetch',()=>assert.fail('Disclosure must stay offline'));
+  const owner=require('../src/modules/shared/runtime/translator-managers').createManager('dxvk'),initial=owner.getState({});
+  const sourceIds=initial.catalog.sources.map(row=>row.id),entries=sourceIds.map(id=>({version:id+'-fixture',upstreamRevision:'published-asset',catalogSourceId:id,architecture:'universal',
+    asset:{filename:id.startsWith('template')?'Template-1.0.26.tar.xz':`dxvk-${id}-v2.7.tar.gz`,url:`https://github.com/example/runtime/releases/download/rolling/${id}.tar.gz`,integrity:'recorded-local'}}));
+  require('../src/modules/shared/runtime/runtime-catalog').writeRuntimeCatalog({userDataDir:root,managerId:owner.id,entries,source:initial.catalog.sourceUrl});
+  const state=owner.getState({userDataDir:root});assert.deepEqual(state.catalog.sources.map(row=>row.id),sourceIds);
+  const markup=render([{...state,id:owner.id,label:owner.label,ui:owner.ui}],owner.id);
+  const offset=markup.indexOf('<details class="runtimeAdditionalSources">');assert.ok(offset>0);
+  const primary=markup.slice(0,offset),additional=markup.slice(offset,markup.indexOf('</details>',offset));
+  assert.match(primary,/CrossOver&#x27;s included copy or automatic choice/);assert.match(primary,/data-runtime-source="macos"/);
+  assert.match(additional,/<summary>Additional sources<\/summary>/);assert.match(additional,/older Direct3D 8\/9 variant/);
+  for(const id of sourceIds){assert.ok(markup.includes(`data-runtime-source="${id}"`));if(id!=='macos'){assert.ok(!primary.includes(`data-runtime-source="${id}"`));assert.ok(additional.includes(`data-runtime-source="${id}"`));}}
+  for(const entry of entries)assert.ok(markup.includes(`value="${entry.version}"`));
+  assert.equal((markup.match(/>Install<\/button>/g)||[]).length,sourceIds.length);
+});

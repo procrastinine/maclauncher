@@ -74,18 +74,7 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
     return <a className="runtimeSourceLink" href={url} title={url}
       onClick={event => { if (onOpenSource) { event.preventDefault(); onOpenSource(url); } }}>{label}</a>;
   }
-  return <div className="runtimeSources">
-    {offersBuilds && <div className="runtimeRemoteField runtimeBuildField">
-      <label className="fieldLabel" htmlFor={`runtime-architecture-${managerId}-${section.id}`}>Build</label>
-      <select id={`runtime-architecture-${managerId}-${section.id}`} className="input inputSmall"
-        value={overrides.includes(architecture) ? architecture : ""}
-        aria-label="Build architecture" onChange={event => onSelect(section.id, "installArchitecture", event.target.value)}>
-        <option value="">Automatic ({architectureLabel(defaultArchitecture)})</option>
-        {overrides.map(value => <option key={value} value={value}>
-          {architectureLabel(value)}{defaultArchitecture === "arm64" && value === "x64" ? " (Rosetta)" : ""}</option>)}
-      </select>
-    </div>}
-    {sources.map(source => {
+  const renderSource = (source: Record<string, any>) => {
       const key = runtimeSourceUiKey(section.id, source.explicit ? source.id : undefined);
       const versions: string[] = Array.isArray(source.versions) ? source.versions : [];
       const requested = ui.installVersion[key] || ui.installVersion[section.id];
@@ -206,6 +195,22 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
         {!refreshing && error && <div className="dim runtimeAvailability">{runtimeRefreshFailure(source.status === "error" ? source : null)}</div>}
         {!refreshing && <ErrorText error={error} inline className="runtimeAvailability" />}
       </div>;
-    })}
+  };
+  return <div className="runtimeSources">
+    {offersBuilds && <div className="runtimeRemoteField runtimeBuildField">
+      <label className="fieldLabel" htmlFor={`runtime-architecture-${managerId}-${section.id}`}>Build</label>
+      <select id={`runtime-architecture-${managerId}-${section.id}`} className="input inputSmall"
+        value={overrides.includes(architecture) ? architecture : ""}
+        aria-label="Build architecture" onChange={event => onSelect(section.id, "installArchitecture", event.target.value)}>
+        <option value="">Automatic ({architectureLabel(defaultArchitecture)})</option>
+        {overrides.map(value => <option key={value} value={value}>
+          {architectureLabel(value)}{defaultArchitecture === "arm64" && value === "x64" ? " (Rosetta)" : ""}</option>)}
+      </select>
+    </div>}
+    {sources.filter(source => !source.secondary).map(renderSource)}
+    {sources.some(source => source.secondary) && <details className="runtimeAdditionalSources">
+      <summary>Additional sources</summary>
+      {sources.filter(source => source.secondary).map(renderSource)}
+    </details>}
   </div>;
 }

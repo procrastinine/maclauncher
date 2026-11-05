@@ -1,6 +1,6 @@
 // Each provider owns a complete catalog view. Installation identities remain
 // the manager's exact version keys; sources only organize download choices.
-function sourceCatalog(catalog, { id, label, source, description, versions = catalog.versions || [], state }) {
+function sourceCatalog(catalog, { id, label, source, description, secondary, versions = catalog.versions || [], state }) {
   const selected = new Set(versions);
   const pick = values => Object.fromEntries(Object.entries(values || {}).filter(([version]) => selected.has(version)));
   const installableVersions = (catalog.installableVersions || []).filter(version => selected.has(version));
@@ -12,7 +12,7 @@ function sourceCatalog(catalog, { id, label, source, description, versions = cat
   const reasons = [...new Set(versions.map(version => catalog.versionRequirements?.[version]?.installReason).filter(Boolean))];
   const installReason = installableVersions.length ? null : provider?.error || reasons.join(" · ") ||
     (provider ? provider.fetchedAt ? "No compatible download is available from this source." : "Refresh versions to list available downloads." : catalog.installReason);
-  return { ...shared, ...refresh, sources: undefined, sourceLinks: undefined, sourceStates: undefined, id, label, source, sourceUrl: source, ...(description ? { description } : {}),
+  return { ...shared, ...refresh, sources: undefined, sourceLinks: undefined, sourceStates: undefined, id, label, source, sourceUrl: source, ...(description ? { description } : {}), ...(secondary ? { secondary: true } : {}),
     versions, installableVersions, includedVersions: (catalog.includedVersions || []).filter(version => selected.has(version)),
     buildableVersions: (catalog.buildableVersions || []).filter(version => selected.has(version)),
     ...(catalog.versionDetails ? { versionDetails: catalog.versionDetails.filter(row => selected.has(row.version)) } : {}),

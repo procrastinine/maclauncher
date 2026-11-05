@@ -912,7 +912,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
         upstreamDownloads: projectBuilds?.upstreamMacDownloads === true });
     if (!projectPackages && !buildsRepository && upstreamUrl) state.catalog.sourceLinks = [{ label: upstreamLabel || "upstream code", url: upstreamUrl }];
     if (catalogSources) state.catalog.sources = catalogSources.map(source => require("./runtime-sources").sourceCatalog(state.catalog, {
-      id: source.id, label: source.label, source: source.url, description: source.description,
+      id: source.id, label: source.label, source: source.url, description: source.description, secondary: source.secondary,
       versions: state.catalog.versions.filter(version => entrySource(entries.get(version) || {}) === source.id) }));
     return { ...state, sections: [{ id: "default", label: `${label} versions`, ...state }] };
   }
