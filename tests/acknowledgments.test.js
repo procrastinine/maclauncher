@@ -102,7 +102,16 @@ test('every registered runtime manager has a linked upstream project in Credits'
     xsystem4: 'https://github.com/nunuhara/xsystem4'
   };
   const managers = [...registry.listSharedRuntimeManagers(), ...registry.listModules().flatMap(module => registry.getModule(module.id).runtimeManagers || [])];
-  for (const id of new Set(managers.map(manager => manager.id))) {
+  const { definitions } = require('../src/modules/shared/runtime/translator-managers');
+  for (const manager of new Map(managers.map(manager => [manager.id, manager])).values()) {
+    const { id } = manager;
+    if (definitions[manager.translatorEngine]) {
+      const catalog = manager.getState().catalog;
+      const sources = [...(catalog.sources || [catalog]).map(source => source.sourceUrl), ...(catalog.sourceLinks || []).map(source => source.url)];
+      assert.ok(sources.length, `${id}: retain its declared source projects`);
+      for (const url of sources) assert.ok(allProjects.has(normalized(url).replace(/\/releases$/, '')), `${id}: Credits must link its declared source ${url}`);
+      continue;
+    }
     assert.ok(upstream[id], `${id}: record its real upstream project when registering a manager`);
     assert.ok(allProjects.has(normalized(upstream[id])), `${id}: Credits must link its upstream`);
   }

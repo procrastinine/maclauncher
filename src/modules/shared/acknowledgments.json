@@ -486,6 +486,14 @@
     "label": "DXVK and D9VK macOS variants (zlib)",
     "url": "https://github.com/Sikarugir-App/dxvk"
   },
+  { "label": "DXVK", "url": "https://github.com/doitsujin/dxvk" },
+  { "label": "DXVK-macOS", "url": "https://github.com/Gcenx/DXVK-macOS" },
+  { "label": "D8VK", "url": "https://github.com/AlpyneDreams/d8vk" },
+  { "label": "D9VK", "url": "https://github.com/misyltoad/d9vk" },
+  { "label": "vkd3d-proton", "url": "https://github.com/HansKristian-Work/vkd3d-proton" },
+  { "label": "Wine vkd3d", "url": "https://gitlab.winehq.org/wine/vkd3d" },
+  { "label": "DXMT upstream", "url": "https://github.com/3Shain/dxmt" },
+  { "label": "Apple Game Porting Toolkit", "url": "https://developer.apple.com/games/game-porting-toolkit/" },
   {
     "label": "MoltenVK, Sikarugir build (Apache-2.0 and component notices)",
     "url": "https://github.com/Sikarugir-App/MoltenVK"
