@@ -384,7 +384,7 @@ test("selected shell and executable Python launchers preserve Ren'Py precedence"
   }
 });
 
-test("native file fallbacks preserve engine priority and never choose arbitrary folder scripts", async t => {
+test("native file fallbacks preserve engine priority and only unwrap single-entry script folders", async t => {
   const root = fixture(t), input = path.join(root, "launch.command");
   write(input, "#!/bin/sh\nexit 0\n");
   const native = require("../src/modules/generic-app/main");
@@ -392,7 +392,12 @@ test("native file fallbacks preserve engine priority and never choose arbitrary 
   for (const explain of [D.explainDetection, D.explainDetectionAsync]) {
     assert.equal((await explain(input, [native, engine])).selectedModuleId, "specific");
     assert.equal((await explain(input, [native])).selectedModuleId, "generic-app");
+    const wrapped = await explain(root, [native]);
+    assert.equal(wrapped.detected.gamePath, input);
+    assert.equal(wrapped.detected.importPath, input);
+    write(path.join(root, "notes.txt"));
     assert.equal((await explain(root, [native])).detected, null);
+    fs.unlinkSync(path.join(root, "notes.txt"));
   }
   const extensions = Registry.listSupportedInputExtensions();
   for (const extension of ["sh", "command", "bash", "zsh"]) assert.ok(extensions.includes(extension), extension);

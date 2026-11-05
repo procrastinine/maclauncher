@@ -1,6 +1,6 @@
 # Game detection
 
-When a game is imported, detection identifies its game type (the engine), its data format and its version, and the result decides which runtime is used. Detection runs offline in the backend and never executes the selected files; runtime and native-library requirements are checked later, before launch.
+When a game is imported, detection identifies its game type (the engine), its data format and its version, and the result decides which runtime is used. If an unrecognized plain folder contains one item after macOS metadata is ignored, detection repeats with that item, through successive single-item folders, and imports the recognized inner item directly. Recognized folders and macOS bundles retain their existing detection. Detection runs offline in the backend and never executes the selected files; runtime and native-library requirements are checked later, before launch.
 
 Each module checks the layout, formats and versions of its own engine. The pipeline in `src/modules/detection.js` handles everything shared: it normalizes the input, caches filesystem facts, runs the checks in stages, combines the matches, reports conflicts and explains its decisions. `src/modules/registry.js` supplies the modules it discovers and keeps the public synchronous API. The pipeline never branches on engine IDs and has no central table of engine extensions.
 

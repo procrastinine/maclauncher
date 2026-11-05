@@ -577,7 +577,7 @@ function exclusiveError(session, owners) {
   return new DetectionError(`Unsupported ${session.input.extension || "file"} input for ${owners.map(mod => mod.manifest?.label || mod.id).join(", ")}`, "DETECTION_UNSUPPORTED_EXTENSION");
 }
 
-function explainDetection(inputPath, modules, options = {}) {
+function explainDetectionAtPath(inputPath, modules, options = {}) {
   let session;
   const candidates = [];
   try {
@@ -627,7 +627,7 @@ function explainDetection(inputPath, modules, options = {}) {
   }
 }
 
-async function explainDetectionAsync(inputPath, modules, options = {}) {
+async function explainDetectionAsyncAtPath(inputPath, modules, options = {}) {
   let session;
   const candidates = [];
   try {
@@ -676,6 +676,45 @@ async function explainDetectionAsync(inputPath, modules, options = {}) {
     if (!session) return { format: "maclauncher-detection-v1", input: { requestedPath: inputPath }, detected: null, candidates, trace: [], versions: [], metrics: {}, error: { code: error.code || "DETECTION_ERROR", message: error.message } };
     return reportFor(session, candidates, null, error);
   }
+}
+
+function singleChildInput(report, visited) {
+  if (report.error?.code !== "DETECTION_UNSUPPORTED" || report.input.kind !== "directory" || visited.has(report.input.canonicalPath)) return null;
+  visited.add(report.input.canonicalPath);
+  const directory = report.input.requestedPath;
+  if (AppBundle.readInfoPlist(directory)?.CFBundlePackageType) return null;
+  let handle, child;
+  try {
+    handle = fs.opendirSync(directory);
+    for (let entry; (entry = handle.readSync());) {
+      if (entry.isFile() && (entry.name === ".DS_Store" || entry.name.startsWith("._") || entry.name === "Icon\r" || entry.name === ".localized")) continue;
+      if (child) return null;
+      child = entry.name;
+    }
+  } catch { return null; }
+  finally { handle?.closeSync(); }
+  return child ? path.join(directory, child) : null;
+}
+
+function finishInputDetection(report, input) {
+  if (report.input.requestedPath === input.requestedPath) return report;
+  const resolvedPath = report.input.requestedPath;
+  return { ...report, input: { ...input, resolvedPath },
+    detected: report.detected ? { ...report.detected, importPath: resolvedPath } : null };
+}
+
+function explainDetection(inputPath, modules, options = {}) {
+  let report = explainDetectionAtPath(inputPath, modules, options);
+  const input = report.input, visited = new Set();
+  for (let child; (child = singleChildInput(report, visited));) report = explainDetectionAtPath(child, modules, options);
+  return finishInputDetection(report, input);
+}
+
+async function explainDetectionAsync(inputPath, modules, options = {}) {
+  let report = await explainDetectionAsyncAtPath(inputPath, modules, options);
+  const input = report.input, visited = new Set();
+  for (let child; (child = singleChildInput(report, visited));) report = await explainDetectionAsyncAtPath(child, modules, options);
+  return finishInputDetection(report, input);
 }
 
 function resultOrThrow(report) {

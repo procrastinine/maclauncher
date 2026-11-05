@@ -614,7 +614,7 @@ function createLauncher({
       let entry = mergeDetectedEntry(existing, detected, { now: existing?.lastPlayedAt || 0 });
       entry.gameId = existing?.gameId || gameId;
       await gameLifecycle.claim(entry);
-      entry.importPath = existing?.importPath || input;
+      entry.importPath = existing?.importPath || detected.importPath || input;
       if (prepared.containerData) entry.containerData = prepared.containerData;
       entry.moduleId = resolveModuleId(entry);
       const mod = registry.getModule(entry.moduleId);

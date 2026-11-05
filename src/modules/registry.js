@@ -158,13 +158,13 @@ const finishDetected = (detected, inputPath) => RuntimeProviders.decorateRuntime
 
 function explainDetection(inputPath, options = {}) {
   const report = Detection.explainDetection(inputPath, MODULES, options);
-  if (report.detected) report.detected = finishDetected(report.detected, inputPath);
+  if (report.detected) report.detected = finishDetected(report.detected, report.input.resolvedPath || inputPath);
   return report;
 }
 
 async function explainDetectionAsync(inputPath, options = {}) {
   const report = await Detection.explainDetectionAsync(inputPath, MODULES, options);
-  if (report.detected) report.detected = finishDetected(report.detected, inputPath);
+  if (report.detected) report.detected = finishDetected(report.detected, report.input.resolvedPath || inputPath);
   return report;
 }
 
