@@ -31,7 +31,7 @@ The choice of translators is a major part of MacLauncher's support for Windows g
 | Manager | Download sources | Local sources |
 | --- | --- | --- |
 | MoltenVK | KhronosGroup/MoltenVK | Library, folder, archive or installed runtime |
-| KosmicKrisp | LWJGL's KosmicKrisp builds of Mesa; MacLauncher Builds' KosmicKrisp GLES 3.2 build | Driver and loader folder, archive or installed runtime |
+| KosmicKrisp | LWJGL's KosmicKrisp builds of Mesa; MacLauncher KosmicKrisp from MacLauncher Builds | Driver and loader folder, archive or installed runtime |
 | DXMT | 3Shain/dxmt builtin releases; Sikarugir Template | Folder, archive or installed runtime |
 | DXVK | doitsujin/dxvk; Gcenx/DXVK-macOS, with a separate async catalog; historical AlpyneDreams/d8vk and misyltoad/d9vk releases; Template dxvk, dxvk3 and d9vk | Folder, archive or installed runtime |
 | Wine vkd3d | Link to the Wine upstream source | Read-only copies included with registered runtimes |
@@ -39,9 +39,9 @@ The choice of translators is a major part of MacLauncher's support for Windows g
 | D3DMetal | Sikarugir Template | Apple Game Porting Toolkit disk image or folder; installed runtime |
 | GStreamer codecs | None | Prepared plugin folder together with the libraries its plugins depend on |
 
-Wine runs as an x86-64 process, also on Apple Silicon through Rosetta. Every macOS library that it loads must therefore contain x86-64 code, and only installations with Intel code are listed for Wine games. KosmicKrisp itself requires Apple Silicon, so a Wine game uses an x86-64 build of it: a Sikarugir Template's driver, an installed KosmicKrisp GLES 3.2 package that includes an Intel (x86-64) build, or a locally registered build with Intel code. LWJGL's KosmicKrisp builds are ARM64-only, so they never reach Wine.
+Wine runs as an x86-64 process, also on Apple Silicon through Rosetta. Every macOS library that it loads must therefore contain x86-64 code, and only installations with Intel code are listed for Wine games. KosmicKrisp itself requires Apple Silicon, so a Wine game uses an x86-64 build of it: a Sikarugir Template's driver, an installed MacLauncher KosmicKrisp package that includes an Intel (x86-64) build, or a locally registered build with Intel code. LWJGL's KosmicKrisp builds are ARM64-only, so they never reach Wine.
 
-KosmicKrisp GLES 3.2 is MacLauncher's adaptation of KosmicKrisp. In addition to upstream's features, it implements transform feedback and primitives-generated queries for DXVK's Direct3D stream output, non-solid polygon fill for DXVK, single-texel alignment of texel buffer views for vkd3d-proton, and variable multisample rate for Direct3D 11.1 and 12; [Native Vulkan libraries](../../src/modules/shared/vulkan/README.md) describes it.
+MacLauncher KosmicKrisp is an adapted build of KosmicKrisp. In addition to upstream's features, it implements transform feedback and primitives-generated queries for DXVK's Direct3D stream output and ANGLE's OpenGL ES 3.2, non-solid polygon fill for DXVK, single-texel alignment of texel buffer views for vkd3d-proton, and variable multisample rate for Direct3D 11.1 and 12; [Native Vulkan libraries](../../src/modules/shared/vulkan/README.md) describes it.
 
 Each catalog has its own Refresh control and publisher link, and each release label names its source, such as `(macOS async)`. The **Vulkan drivers** entry also holds **MoltenVK scene support**, a MacLauncher Builds package that CrossOver's [Vulkan scene support](CROSSOVER.md#vulkan-scene-support) uses.
 

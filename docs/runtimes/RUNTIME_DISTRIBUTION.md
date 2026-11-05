@@ -29,6 +29,7 @@ These projects are published as MacLauncher Builds downloads:
 | hashlink | HashLink ABI variants |
 | impacto | Impacto |
 | krkrsdl2 | Kirikiri SDL2 with its KAG3 scripts and font |
+| maclauncher-kosmickrisp | MacLauncher KosmicKrisp Vulkan driver |
 | mkxpz | MKXP-Z with MacLauncher filename fixes |
 | mpv | mpv player with decoded GPU video frames for MacLauncher's graphics presenter |
 | npengine | NP Engine |
@@ -43,7 +44,6 @@ These projects are published as MacLauncher Builds downloads:
 | sys3-decompiler | System 3 decompiler |
 | system3 | System 3 SDL2 |
 | vnds-love | VNDS-LOVE interpreter for LÖVE |
-| vulkan-kosmickrisp-gles32 | KosmicKrisp GLES 3.2 graphics provider |
 | xsys35-decompiler | System 3.5 decompiler |
 | xsystem35 | xsystem35 |
 | xsystem4 | xsystem4 |

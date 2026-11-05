@@ -92,11 +92,11 @@ CrossOver and Sikarugir's Template both include MoltenVK, and MacLauncher can in
 
 [KosmicKrisp](https://docs.mesa3d.org/drivers/kosmickrisp.html) is a newer Vulkan driver from the [Mesa](https://mesa3d.org/) project, built on Metal 4. Unlike MoltenVK, it's a conformant Vulkan implementation, which means it passes the Khronos Group's conformance tests, and Khronos now [recommends it](https://github.com/KhronosGroup/MoltenVK) for Apple Silicon Macs. Metal 4 also sets its requirements: an Apple Silicon Mac with macOS 26 or later.
 
-KosmicKrisp runs only on Apple Silicon, yet WINE needs an Intel build of it, because WINE itself is an Intel program. A WINE game can therefore use the KosmicKrisp in Sikarugir's Template, an installed [KosmicKrisp GLES 3.2](#kosmickrisp-gles-32) package that includes an Intel build, or an Intel build you register yourself. MacLauncher also downloads KosmicKrisp from LWJGL's builds, but those contain only Apple Silicon code, so they serve other runtimes, such as Android games, and never reach WINE.
+KosmicKrisp runs only on Apple Silicon, yet WINE needs an Intel build of it, because WINE itself is an Intel program. A WINE game can therefore use the KosmicKrisp in Sikarugir's Template, an installed [MacLauncher KosmicKrisp](#maclauncher-kosmickrisp) package that includes an Intel build, or an Intel build you register yourself. MacLauncher also downloads KosmicKrisp from LWJGL's builds, but those contain only Apple Silicon code, so they serve other runtimes, such as Android games, and never reach WINE.
 
-### KosmicKrisp GLES 3.2
+### MacLauncher KosmicKrisp
 
-MacLauncher publishes its own build of KosmicKrisp in MacLauncher Builds. It adds Vulkan features that upstream KosmicKrisp lacks, each one implemented on Metal rather than stubbed:
+MacLauncher KosmicKrisp is MacLauncher's own build of KosmicKrisp, published in MacLauncher Builds. It adds Vulkan features that upstream KosmicKrisp lacks, each one implemented on Metal rather than stubbed:
 
 - transform feedback and primitives-generated queries, which DXVK uses for Direct3D's stream output, and which ANGLE, the layer that provides OpenGL ES to Android games, needs to offer OpenGL ES 3.2 when it renders through Vulkan
 - wireframe and point fill modes, which DXVK requires

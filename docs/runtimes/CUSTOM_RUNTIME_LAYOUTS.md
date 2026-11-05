@@ -30,7 +30,7 @@ A custom runtime stays in its selected location, and removing its registration l
 | ILSpy | A DLL, an app host, or a directory containing `ilspycmd`, `ICSharpCode.Decompiler`, the runtime configuration, dependency metadata and referenced assemblies. The shared .NET host that MacLauncher installs stays available. |
 | Native runtimes and tools | A compatible native executable, application or runtime directory with its libraries and data. Windows tools keep their PE executable format. |
 | Python tools | A complete source package with the configured script or module entry point and its required files. The launcher supplies Python. |
-| Vulkan | A compatible dynamic library or runtime directory. KosmicKrisp also requires its Vulkan loader, and the GLES 3.2 build keeps its package metadata. |
+| Vulkan | A compatible dynamic library or runtime directory. KosmicKrisp also requires its Vulkan loader, and MacLauncher KosmicKrisp keeps its package metadata. |
 | Graphics models | A compatible Lossless Scaling DLL or a complete neural model bundle. Registration reads the existing model formats and keeps the original weights and resources. |
 | Shader collections | A complete compatible collection directory with its shader sources, includes and textures. |
 
