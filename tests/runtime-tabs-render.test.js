@@ -156,7 +156,7 @@ test('Graphics retains one Shaders tab and native runtime tabs for every shader 
     const collection = shaders.sections.find(section => section.shaderFamily === family);
     assert.ok(collection);
     const markup = render([graphics, shaders, vulkan], source.id, { runtimeSectionId: collection.id });
-    const topTabs = markup.match(/aria-label="Graphics sections">([\s\S]*?)<\/div>/)[1];
+    const topTabs = markup.match(/aria-label="Effects sections">([\s\S]*?)<\/div>/)[1];
     assert.deepEqual(sectionTabLabels(topTabs), ['Upscaling', 'Shaders', 'Presets', 'Vulkan']);
     assert.match(topTabs, /aria-selected="true"[\s\S]*?>Shaders<\/button>/);
     assert.doesNotMatch(markup, /shader-family-tab-/);assert.match(markup, /shader-library-search/);
@@ -385,9 +385,10 @@ test('the Runtimes sidebar heads category sections and a visible tab names its p
   const order = [...sidebar.matchAll(/<h2 class="launcherSidebarHeading"[^>]*>([^<]+)<\/h2>|class="launcherSidebarItem[^>]*>([^<]+)<\/button>/g)]
     .map(match => match[1] ? `# ${match[1]}` : match[2]);
   // Game engines are alphabetical regardless of numeric order; a heading that would repeat its only item is replaced by a rule.
-  assert.deepEqual(order, ['# Game engines', 'Alpha engine', 'Zeta engine', '# Consoles and mobile', 'Handheld', 'Graphics', 'Tools']);
+  // The graphics group's Effects entry sits under the Graphics heading.
+  assert.deepEqual(order, ['# Game engines', 'Alpha engine', 'Zeta engine', '# Consoles and mobile', 'Handheld', '# Graphics', 'Effects', 'Tools']);
   assert.match(sidebar, /role="group" aria-labelledby="([^"]+)"><h2 class="launcherSidebarHeading" id="\1">Game engines<\/h2>/);
-  assert.deepEqual([...sidebar.matchAll(/class="launcherSidebarSection unlabeled" role="group" aria-label="([^"]+)"/g)].map(match => match[1]), ['Graphics', 'Tools']);
+  assert.deepEqual([...sidebar.matchAll(/class="launcherSidebarSection unlabeled" role="group" aria-label="([^"]+)"/g)].map(match => match[1]), ['Tools']);
   assert.match(markup, /role="tab" aria-selected="true"[^>]*title="Backend reader"[^>]*>Reader<\/button>/);
   assert.doesNotMatch(markup, /class="runtimePanelTitle"/);
 });
