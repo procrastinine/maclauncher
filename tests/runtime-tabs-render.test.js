@@ -896,7 +896,7 @@ test('translator source links use one caption with explicit project and Template
   }
 });
 
-test('included translator references use host records and shared release facts without managed installs or mutation controls', t => {
+test('included translator references use host records and shared release facts without managed installs or mutation controls', async t => {
   const fs=require('node:fs'),os=require('node:os');
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'translator-references-'));
   const previousHome=process.env.HOME;process.env.HOME=path.join(root,'home');fs.mkdirSync(process.env.HOME);
@@ -907,14 +907,17 @@ test('included translator references use host records and shared release facts w
   const dll=()=>{const {bytes,peOffset}=require('./helpers/pe-fixture').peFixture({is64:true});bytes.writeUInt16LE(0x2002,peOffset+22);return bytes;};
   const owners=require('../src/modules/shared/runtime/translator-managers');
   const CrossOver=require('../src/modules/crossover/runtime/manager');
-  const registeredCrossOver=CrossOver.core.listInstalled;
-  t.mock.method(CrossOver.core,'listInstalled',directory=>registeredCrossOver(directory,{automaticPaths:[]}));
   const registry=require('../src/modules/registry'),sikarugir=registry.getModule('crossover').runtimeManagers.find(owner=>owner.id==='sikarugir');
   const originalCore=sikarugir.core;let templateHosts=[];
   // Only record enumeration is stubbed. The real reader inspects fixture hosts,
   // with no fabricated installation receipts, executable code or Wine process.
   sikarugir.core={...originalCore,listInstalled:()=>templateHosts};t.after(()=>{sikarugir.core=originalCore;});
+  // References list the hosts that each runtime's Runtimes state lists.
+  const sikarugirState=sikarugir.getState;
+  t.mock.method(sikarugir,'getState',function(options){return {...sikarugirState.call(this,options),installed:templateHosts};});
   const userDataDir=path.join(root,'data'),warnings=[],options={userDataDir,logger:{warn:message=>warnings.push(message)}};
+  // Applications installed on this Mac stay out of the fixture's CrossOver list.
+  CrossOver.__test.writeRegistry(userDataDir,{applications:[],ignoredPaths:CrossOver.__test.AUTOMATIC_PATHS});
   t.mock.method(console,'warn',message=>warnings.push(message));
   const dxmt=owners.createManager('dxmt'),dxvk=owners.createManager('dxvk'),metal=owners.createManager('d3dmetal');
   const molten=require('../src/modules/shared/vulkan/libraries').createManager('moltenvk');
@@ -956,13 +959,16 @@ test('included translator references use host records and shared release facts w
   // Bad optional component metadata cannot hide another component or host.
   fs.symlinkSync(path.join(root,'outside'),path.join(first.wine,'lib/dxvk/escape'));fs.mkdirSync(path.join(root,'outside'));
   write(path.join(root,'outside/d3d11.dll'),dll());
-  const Description=require('../src/modules/shared/runtime/translator-description'),described=[],inspected=[];
-  const describe=Description.describeTranslator,inspect=Description.inspectFile;
-  t.mock.method(Description,'describeTranslator',(root,options)=>{described.push(options.engine);return describe(root,options);});
+  const Description=require('../src/modules/shared/runtime/translator-description'),prepared=[],inspected=[];
+  const prepare=Description.prepareTranslator,inspect=Description.inspectFile;
+  t.mock.method(Description,'prepareTranslator',(root,options)=>{prepared.push(options.engine);return prepare(root,options);});
   t.mock.method(Description,'inspectFile',file=>{inspected.push(file.path);return inspect(file);});
   warnings.length=0;
+  // Status reads cached descriptions; local preparation in the backend lane inspects the files.
+  assert.equal(dxmt.getState(options).references,undefined,'status alone inspects no component');
+  await dxmt.prepareLocalState(options);
   const state=dxmt.getState(options),section=state.sections[0];
-  assert.deepEqual(described,['dxmt','dxmt','dxmt','dxmt'],'per-manager references inspect only the requested engine');
+  assert.deepEqual(prepared,['dxmt','dxmt','dxmt','dxmt'],'per-manager references inspect only the requested engine');
   assert.deepEqual(inspected,[],'unrelated builtin Wine D3D12 binaries are not inspected');
   assert.deepEqual(warnings,[],'unrelated malformed optional components are not inspected');
   const Wine=require('../src/modules/shared/runtime/wine-translators');
@@ -975,27 +981,31 @@ test('included translator references use host records and shared release facts w
   assert.ok(state.references.every(row=>row.included&&row.readOnly&&row.removable===false&&row.supportsDefault===false));
   assert.ok(state.references.every(row=>row.platformKey==='x86_64'&&row.architectures.includes('x86_64')));
   assert.ok(state.references.every(row=>row.apis.includes('Direct3D 11')));
-  assert.ok(state.references.some(row=>row.versionLabel==='DXMT (CrossOver 26.3) · Alpha.app'&&row.detail==='Component 0.80'));
-  assert.ok(state.references.some(row=>row.versionLabel==='DXMT (CrossOver 26.3) · Beta.app'&&row.detail==='Component 0.80'));
-  assert.ok(state.references.some(row=>row.versionLabel==='DXMT · Template 1.0.26 (Wine 10.0_8)'&&row.detail==='Component v0.81'));
-  assert.ok(state.references.some(row=>row.versionLabel==='DXMT · Template 1.0.27 (Wine 10.0_8)'));
-  assert.deepEqual(state.references.filter(row=>row.source.runtime==='sikarugir').map(row=>row.versionLabel),['DXMT · Template 1.0.27 (Wine 10.0_8)','DXMT · Template 1.0.26 (Wine 10.0_8)']);
+  assert.ok(state.references.some(row=>row.versionLabel==='DXMT 0.80 · CrossOver 26.3 · Alpha.app'&&row.detail==='Component 0.80'));
+  assert.ok(state.references.some(row=>row.versionLabel==='DXMT 0.80 · CrossOver 26.3 · Beta.app'&&row.detail==='Component 0.80'));
+  assert.ok(state.references.some(row=>row.versionLabel==='DXMT 0.81 · Sikarugir Template 1.0.26'&&row.detail==='Component v0.81'));
+  assert.ok(state.references.some(row=>row.versionLabel==='DXMT 0.81 · Sikarugir Template 1.0.27'));
+  assert.deepEqual(state.references.filter(row=>row.source.runtime==='sikarugir').map(row=>row.versionLabel),['DXMT 0.81 · Sikarugir Template 1.0.27','DXMT 0.81 · Sikarugir Template 1.0.26']);
+  for (const owner of [metal,molten,dxvk]) await owner.prepareLocalState(options);
   assert.equal(metal.getState(options).references.length,2,'D3D12 aliases do not duplicate the same source component');
-  assert.ok(metal.getState(options).references.every(row=>row.versionLabel.startsWith('D3DMetal (CrossOver 26.3)')&&row.detail==='Component 3.0'));
-  assert.ok(molten.getState(options).references.every(row=>row.versionLabel.startsWith('MoltenVK (CrossOver 26.3)')&&row.detail==='Component 1.2.10'&&row.platformKey==='x86_64'));
+  assert.ok(metal.getState(options).references.every(row=>row.versionLabel.startsWith('D3DMetal 3.0 · CrossOver 26.3')&&row.detail==='Component 3.0'));
+  assert.ok(molten.getState(options).references.every(row=>row.versionLabel.startsWith('MoltenVK 1.2.10 · CrossOver 26.3')&&row.detail==='Component 1.2.10'&&row.platformKey==='x86_64'));
   const dxvkState=dxvk.getState(options);
-  assert.ok(dxvkState.references.some(row=>row.versionLabel==='DXVK3 · Template 1.0.27 (Wine 10.0_8)'&&row.detail==='Component 3.1.1-gplasync'));
+  assert.ok(dxvkState.references.some(row=>row.versionLabel==='DXVK 3.1.1-gplasync · Sikarugir Template 1.0.27'&&row.detail==='Component 3.1.1-gplasync'));
   assert.ok(dxvkState.references.every(row=>!row.versionLabel.includes('DXVK DXVK')&&!row.versionLabel.includes('template-')));
   assert.equal(dxvkState.references.length,4,'usable siblings remain when an unsafe optional entry is skipped');assert.ok(warnings.some(row=>row.includes('dxvk')&&/outside.*root|escapes/.test(row)));
   const bounded=Wine.includedTranslators({crossoverRoot:first.wine},'crossover',{engine:'dxvk'}).included;
   assert.ok(bounded.some(row=>row.engine==='dxvk'));
   assert.ok(bounded.flatMap(row=>row.files).every(file=>!file.path.includes('escape')&&file.path.startsWith(path.join(first.wine,'lib/dxvk')+path.sep)),'unsafe entry never enters the retained description');
   const escaped=path.join(first.wine,'lib/dxvk/escaped.dll');fs.symlinkSync(path.join(root,'outside/d3d11.dll'),escaped);
+  await dxvk.prepareLocalState(options);
   assert.equal(dxvk.getState(options).references.length,3,'a directly consumed escaping DLL excludes that component');
   assert.ok(warnings.some(row=>row.includes('dxvk')&&/outside.*root|escapes/.test(row)));
   fs.unlinkSync(escaped);
-  assert.equal(owners.createManager('vkd3d-proton').getState(options).references,undefined,'builtin Wine choices are not mislabeled as vkd3d-proton');
-  const wine=registry.listSharedRuntimeManagers().find(manager=>manager.id==='translator-vkd3d'),wineState=wine.getState(options);
+  const proton=owners.createManager('vkd3d-proton');await proton.prepareLocalState(options);
+  assert.equal(proton.getState(options).references,undefined,'builtin Wine choices are not mislabeled as vkd3d-proton');
+  const wine=registry.listSharedRuntimeManagers().find(manager=>manager.id==='translator-vkd3d');await wine.prepareLocalState(options);
+  const wineState=wine.getState(options);
   assert.equal(wine.customRuntime,false);assert.equal(wine.registerCustomRuntime,undefined);assert.equal(wineState.supportsDefault,false);
   assert.equal(wineState.references.length,4);assert.deepEqual(wineState.installed,[]);assert.deepEqual(wineState.catalog.versions,[]);
   assert.ok(wineState.references.every(row=>row.readOnly&&row.included&&row.reference.managerId!=='translator-vkd3d-proton'));
@@ -1004,7 +1014,8 @@ test('included translator references use host records and shared release facts w
   assert.match(wineMarkup,/Included copies/);assert.match(wineMarkup,/Refresh included copies/);assert.match(wineMarkup,/href="https:\/\/gitlab\.winehq\.org\/wine\/vkd3d"/);
   assert.doesNotMatch(wineMarkup,/Imported files|Register custom|Load versions|No downloadable|saveRowActions|Set default|>Install<|>Repair</);
   assert.equal(fs.existsSync(path.join(userDataDir,'runtimes',wine.id)),false,'Wine source-owned references create no receipt or payload');
-  const codecs=owners.createManager('gstreamer'),codecState=codecs.getState(options);
+  const codecs=owners.createManager('gstreamer');await codecs.prepareLocalState(options);
+  const codecState=codecs.getState(options);
   assert.equal(codecState.references.length,4);assert.deepEqual(codecState.installed,[]);
   assert.ok(codecState.references.every(row=>row.readOnly&&row.included&&row.versionLabel.includes('GStreamer')&&!/GStreamer (?:1\.0|26\.3)/.test(row.versionLabel)));
   const codecMarkup=render([{...codecState,id:codecs.id,label:codecs.label,ui:codecs.ui}],codecs.id,{onRuntimeRegister(){assert.fail('No registration during render');}});
@@ -1025,7 +1036,7 @@ test('included translator references use host records and shared release facts w
   assert.equal(fs.existsSync(path.join(userDataDir,'runtimes',dxmt.id)),false,'no managed receipt or payload created');
   assert.deepEqual(snapshot.installed,[]);assert.deepEqual(snapshot.catalog,before.catalog);
   templateHosts=[];
-  CrossOver.__test.writeRegistry(userDataDir,{applications:[],ignoredPaths:[]});
+  CrossOver.__test.writeRegistry(userDataDir,{applications:[],ignoredPaths:CrossOver.__test.AUTOMATIC_PATHS});
   assert.equal(dxmt.getState(options).references,undefined);assert.match(render([{...dxmt.getState(options),id:dxmt.id,label:dxmt.label,ui:dxmt.ui}],dxmt.id),/No runtime versions installed yet/);
 });
 
@@ -1154,7 +1165,7 @@ test('official codec catalog, local registration and Apple upstream links use or
   nodes(control.render()).find(node=>node.type==='button'&&node.props.children==='Register Game Porting Toolkit…').props.onClick();assert.equal(registrations,1);control.close();
   const fs=require('node:fs'),os=require('node:os'),root=fs.mkdtempSync(path.join(os.tmpdir(),'apple-cached-template-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const CrossOver=require('../src/modules/crossover/runtime/manager'),Sika=require('../src/modules/crossover/sikarugir/runtime/manager');
-  t.mock.method(CrossOver.core,'listInstalled',()=>[]);const originalSika=Sika.core;Sika.core={...originalSika,listInstalled:()=>[]};t.after(()=>{Sika.core=originalSika;});
+  CrossOver.__test.writeRegistry(root,{applications:[],ignoredPaths:CrossOver.__test.AUTOMATIC_PATHS});const originalSika=Sika.core;Sika.core={...originalSika,listInstalled:()=>[]};t.after(()=>{Sika.core=originalSika;});
   const Catalog=require('../src/modules/shared/runtime/runtime-catalog'),version='template-Template-1.0.27';
   Catalog.writeRuntimeCatalog({userDataDir:root,managerId:metal.id,source:'https://github.com/Sikarugir-App/Template/releases',entries:[{version,upstreamRevision:'published-template-release',catalogSourceId:'template',component:'d3dmetal',architecture:'universal',
     asset:{filename:'Template-1.0.27.tar.xz',url:'https://github.com/Sikarugir-App/Template/releases/download/v1.0/Template-1.0.27.tar.xz',integrity:'recorded-local'}}]});
@@ -1166,7 +1177,7 @@ test('official codec catalog, local registration and Apple upstream links use or
 test('persisted generic-tag source labels render actual asset packages without Refresh or positional ties', t => {
   const fs=require('node:fs'),os=require('node:os'),root=fs.mkdtempSync(path.join(os.tmpdir(),'cached-template-presentation-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const CrossOver=require('../src/modules/crossover/runtime/manager'),Sika=require('../src/modules/crossover/sikarugir/runtime/manager');
-  t.mock.method(CrossOver.core,'listInstalled',()=>[]);const original=Sika.core;Sika.core={...original,listInstalled:()=>[]};t.after(()=>{Sika.core=original;});
+  CrossOver.__test.writeRegistry(root,{applications:[],ignoredPaths:CrossOver.__test.AUTOMATIC_PATHS});const original=Sika.core;Sika.core={...original,listInstalled:()=>[]};t.after(()=>{Sika.core=original;});
   t.mock.method(globalThis,'fetch',()=>assert.fail('Cached presentation must stay offline'));
   const manager=require('../src/modules/shared/runtime/translator-managers').createManager('dxmt'),source=manager.getState({}).catalog.sourceUrl;
   const versions=['1.0.1','1.0.10','1.0.2','1.0.27'],entries=versions.map(version=>({version:'template-Template-'+version,upstreamRevision:'published-template-release',catalogSourceId:'template',component:'dxmt',architecture:'universal',
@@ -1184,7 +1195,7 @@ test('persisted generic-tag source labels render actual asset packages without R
 test('grouped DXVK cards retain source identities and route variants, Install and Refresh through ordinary actions', t => {
   const fs=require('node:fs'),os=require('node:os'),root=fs.mkdtempSync(path.join(os.tmpdir(),'secondary-translator-sources-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const CrossOver=require('../src/modules/crossover/runtime/manager'),Sika=require('../src/modules/crossover/sikarugir/runtime/manager');
-  t.mock.method(CrossOver.core,'listInstalled',()=>[]);const original=Sika.core;Sika.core={...original,listInstalled:()=>[]};t.after(()=>{Sika.core=original;});
+  CrossOver.__test.writeRegistry(root,{applications:[],ignoredPaths:CrossOver.__test.AUTOMATIC_PATHS});const original=Sika.core;Sika.core={...original,listInstalled:()=>[]};t.after(()=>{Sika.core=original;});
   t.mock.method(globalThis,'fetch',()=>assert.fail('Disclosure must stay offline'));
   const owner=require('../src/modules/shared/runtime/translator-managers').createManager('dxvk'),initial=owner.getState({});
   const sourceIds=initial.catalog.sources.flatMap(row=>row.variants?.map(variant=>variant.id)||row.id),entries=sourceIds.map(id=>({version:id+'-fixture',upstreamRevision:'published-asset',catalogSourceId:id,architecture:'universal',
@@ -1324,7 +1335,7 @@ test('Gcenx inspected source metadata declares offered PE forms without changing
 test('cached vkd3d publisher releases order numeric cores before letter revisions and retain build identities', t => {
   const fs=require('node:fs'),os=require('node:os'),root=fs.mkdtempSync(path.join(os.tmpdir(),'vkd3d-release-order-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const CrossOver=require('../src/modules/crossover/runtime/manager'),Sika=require('../src/modules/crossover/sikarugir/runtime/manager');
-  t.mock.method(CrossOver.core,'listInstalled',()=>[]);const prior=Sika.core;Sika.core={...prior,listInstalled:()=>[]};t.after(()=>Sika.core=prior);
+  CrossOver.__test.writeRegistry(root,{applications:[],ignoredPaths:CrossOver.__test.AUTOMATIC_PATHS});const prior=Sika.core;Sika.core={...prior,listInstalled:()=>[]};t.after(()=>Sika.core=prior);
   t.mock.method(globalThis,'fetch',()=>assert.fail('Cached release ordering stays offline'));
   const owner=require('../src/modules/shared/runtime/translator-managers').createManager('vkd3d-proton');
   const released=[['3.0b','2025-12-10T09:49:00Z'],['3.0a','2025-11-18T16:58:49Z'],['3.0.1','2026-05-06T11:35:27Z'],['3.0','2025-11-17T15:54:20Z'],['3.1','2026-10-28T10:19:54Z']];
@@ -1344,7 +1355,7 @@ test('cached vkd3d publisher releases order numeric cores before letter revision
 test('cached GStreamer development series remain available while stable releases are preselected offline', t => {
   const fs=require('node:fs'),os=require('node:os'),root=fs.mkdtempSync(path.join(os.tmpdir(),'gstreamer-stable-choice-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const CrossOver=require('../src/modules/crossover/runtime/manager'),Sika=require('../src/modules/crossover/sikarugir/runtime/manager');
-  t.mock.method(CrossOver.core,'listInstalled',()=>[]);const prior=Sika.core;Sika.core={...prior,listInstalled:()=>[]};t.after(()=>Sika.core=prior);
+  CrossOver.__test.writeRegistry(root,{applications:[],ignoredPaths:CrossOver.__test.AUTOMATIC_PATHS});const prior=Sika.core;Sika.core={...prior,listInstalled:()=>[]};t.after(()=>Sika.core=prior);
   t.mock.method(globalThis,'fetch',()=>assert.fail('Stable catalog selection must not refresh'));
   const {createManager}=require('../src/modules/shared/runtime/translator-managers'),owner=createManager('gstreamer');
   const releases=['1.29.2','1.28.8','1.29.1','1.26.11'],entries=releases.map(release=>({version:release+'-universal',upstreamRevision:release+'-universal',catalogSourceId:'upstream',architecture:'universal',
