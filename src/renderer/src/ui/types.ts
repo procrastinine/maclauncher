@@ -115,6 +115,7 @@ export type RuntimeSettingField = {
 
 export type RuntimeSettingsSchema = {
   inheritanceAction?: string;
+  visibilityAction?: string;
   defaults?: Record<string, unknown>;
   fields: RuntimeSettingField[];
   provider?: { readAction: string; writeAction: string; gameOnly?: boolean };

@@ -184,6 +184,7 @@ export function RuntimeSettingsWindow({
   const canEdit = Boolean(api && schema && displaySettings);
   const visibilitySettings = { ...displaySettings };
   for (const row of choices[schema?.inheritanceAction || ""]?.effectiveSettings || []) if (visibilitySettings[row.value] === "inherit") visibilitySettings[row.value] = row.label;
+  for (const row of choices[schema?.visibilityAction || ""]?.effectiveSettings || []) visibilitySettings[row.value] = row.label;
   const visibleFields = (schema?.fields || []).filter(field => field.key !== "networkIsolation" &&
     (isGameScope || !field.gameOnly) && isRuntimeSettingVisible(field, visibilitySettings) && (!fieldKeys || fieldKeys.includes(field.key)));
   const fileRequest = useMemo(() => settingChoiceRequest(api, context),
@@ -213,7 +214,8 @@ export function RuntimeSettingsWindow({
   const inheritanceReference = schema?.fields.find(field => field.inheritFrom)?.inheritFrom;
   const inheritanceValue = inheritanceReference ? displaySettings?.[inheritanceReference] : undefined;
   const externalSettings = Boolean(inheritanceValue && inheritanceValue !== "private");
-  const choiceActions = JSON.stringify([...new Set((schema?.fields || []).filter(field => (isGameScope || !field.gameOnly) && isRuntimeSettingVisible(field, displaySettings || {})).map(field => field.optionsAction).concat(externalSettings ? schema?.inheritanceAction : undefined).filter(Boolean))]);
+  const visibilityRevision = schema?.visibilityAction ? JSON.stringify(schema.fields.filter(field => field.optionsAction === schema.visibilityAction).map(field => displaySettings?.[field.key])) : "";
+  const choiceActions = JSON.stringify([...new Set((schema?.fields || []).filter(field => (isGameScope || !field.gameOnly) && isRuntimeSettingVisible(field, displaySettings || {})).map(field => field.optionsAction).concat(schema?.visibilityAction, externalSettings ? schema?.inheritanceAction : undefined).filter(Boolean))]);
   useEffect(() => {
     const scope = JSON.stringify([context.moduleId, context.gamePath, context.runtimeId, isGameScope, choiceActions]);
     if (choiceScope.current !== scope) { setChoices({}); choiceScope.current = scope; }
@@ -222,11 +224,11 @@ export function RuntimeSettingsWindow({
     const request = settingChoiceRequest(api, context);
     if (!actions.length || !request) return;
     setChoiceLoading(Object.fromEntries(actions.map(action => [action, true])));
-    return loadSettingChoices(actions, action => request(action, { environmentReference: inheritanceValue }),
+    return loadSettingChoices(actions, action => request(action, { environmentReference: inheritanceValue, runtimeSettings: displaySettings }),
       (action, groups) => setChoices(previous => ({ ...previous, [action]: groups })),
       (_action, error) => setChoiceError(error instanceof Error ? error.message : String(error)),
       action => setChoiceLoading(previous => ({ ...previous, [action]: false })));
-  }, [api?.moduleAction, api?.moduleSettingsAction, context.moduleId, context.gamePath, context.runtimeId, isGameScope, choiceActions, choiceRevision, inheritanceValue]);
+  }, [api?.moduleAction, api?.moduleSettingsAction, context.moduleId, context.gamePath, context.runtimeId, isGameScope, choiceActions, choiceRevision, inheritanceValue, visibilityRevision]);
 
   saveCallback.current = async currentDraft => {
     if (!api || !schema) return;
