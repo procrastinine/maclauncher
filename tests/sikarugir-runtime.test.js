@@ -92,6 +92,33 @@ function omitLegacyRenderers(install) {
   write(recordFile, JSON.stringify(record));
 }
 
+test("Sikarugir retries reuse completed engine and Template downloads after extraction failures", async t => {
+  const root=temporary(t),pin=fixturePin(),start=Harness.network.requests.length;
+  let engineExtractions=0,templateExtractions=0;
+  const manager=fixtureManager({rows:[pin],dependencies:{extractArchive:async(archive,output)=>{
+    if(path.basename(archive).startsWith('Template-')){
+      if(++templateExtractions===1)throw Error('Fixture Template extraction unavailable');
+      fs.mkdirSync(path.join(output,'Template-1.0.21.app','Contents'),{recursive:true});
+    }else{
+      if(++engineExtractions===1)throw Error('Fixture engine extraction unavailable');
+      engine(output);
+    }
+  }}});
+  const downloads=url=>Harness.network.requests.slice(start).filter(request=>request===url).length;
+  await assert.rejects(manager.installRuntime({userDataDir:root,version:pin.version}),/Fixture engine extraction unavailable/);
+  assert.equal(downloads(pin.asset.url),1);assert.equal(downloads(pin.template.asset.url),0);
+  await assert.rejects(manager.installRuntime({userDataDir:root,version:pin.version}),/Fixture Template extraction unavailable/);
+  assert.equal(downloads(pin.asset.url),1,'engine retry uses the already completed shared archive');assert.equal(downloads(pin.template.asset.url),1);
+  const installed=await manager.installRuntime({userDataDir:root,version:pin.version});
+  assert.equal(downloads(pin.asset.url),1);assert.equal(downloads(pin.template.asset.url),1,'Template retry also reuses its completed archive');
+  assert.equal(manager.resolveSelection({}, {}, root, {version:pin.version}).ready,true);
+  assert.ok(fs.existsSync(installed.executablePath));assert.equal(engineExtractions,3);assert.equal(templateExtractions,2);
+  const artifacts=path.join(root,'runtimes','artifacts'),digests=fs.readdirSync(artifacts).filter(name=>!name.endsWith('.json')).map(name=>{
+    const digest=sha(fs.readFileSync(path.join(artifacts,name)));assert.equal(JSON.parse(fs.readFileSync(path.join(artifacts,name+'.json'))).sha256,digest);return digest;
+  });
+  assert.deepEqual(digests.sort(),[pin.asset.sha256,pin.template.asset.sha256].sort(),'only the exact verified publisher bytes are retained');
+});
+
 test("Sikarugir Install replaces an incomplete Template registration and keeps valid copies unchanged", async t => {
   const root = temporary(t), pin = fixturePin("11.0_1", undefined, undefined, "1.0.24");
   for (const method of ["installRuntime", "core"]) {

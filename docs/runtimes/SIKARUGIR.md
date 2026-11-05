@@ -26,7 +26,7 @@ Templates keep their renderer packages in `Contents/SharedSupport/renderer` from
 
 Refresh lists every compatible engine that the publisher offers, each paired with the newest compatible Template. Automatic selection uses the newest listed engine, which also replaces a saved choice that is neither listed nor installed. An engine or Template counts as a separate version when its checksum differs, or, if the publisher states no checksum, when its listed size or asset differs. A newer Template or a replaced archive therefore adds versions, while installed ones stay selectable. [Runtime release catalogs](RUNTIME_CATALOGS.md#sikarugir) describes how archives are recognized and checked.
 
-**Install** can replace an incomplete installation of the same version, and Play offers the same repair through its download prompt. The replacement is assembled in a separate folder before it takes the place of the installed runtime, and each game's private files and Windows environment are kept.
+**Install** can replace an incomplete installation of the same version, and Play offers the same repair through its download prompt. The replacement is assembled in a separate folder before it takes the place of the installed runtime, and each game's private files and Windows environment are kept. Completed engine and Template archives stay in the shared artifact cache, so a retry after an extraction failure reuses the verified download.
 
 ## Private game files and prefixes
 
