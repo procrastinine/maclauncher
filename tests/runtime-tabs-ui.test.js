@@ -213,6 +213,26 @@ test('declarative categories head runtime groups in order, alphabetize label-sor
   assert.deepEqual(runtimeGroupSections(groupRuntimeManagers([channels, extra])[0], sections).map(choice => choice.label), ['Engine 11', 'Engine · Upstream', 'Extra']);
 `));
 
+test('KosmicKrisp products keep distinct translator tabs and compact version labels', () => {
+  const adapted = require('../src/modules/shared/vulkan/managed');
+  const stock = require('../src/modules/shared/vulkan/libraries').managers.find(manager => manager.id === 'vulkan-kosmickrisp');
+  assert.equal(adapted.manager.label, 'KosmicKrisp GLES 3.2');
+  const version = '27.0.0-devel-MCLv11';
+  const provider = adapted.createProvider({ label: adapted.manager.label, resolveSelection: () => ({ ready: true, version,
+    install: { payloadRoot: '/runtime', executablePath: '/runtime/driver.dylib', manifest: {
+      minimumMacOS: '26.0', runtimeFiles: { loader: 'libvulkan.1.dylib' }, files: [] } } }) });
+  assert.equal(provider.resolve({ version }, {}).label, adapted.manager.label + ' ' + version);
+  const states = [stock, adapted.manager].map(manager => ({ id: manager.id, label: manager.label, ui: manager.ui,
+    sections: [{ id: 'default', label: 'Versions' }] }));
+  modelTest(`
+    const groups = groupRuntimeManagers(${JSON.stringify(states)});
+    const choices = runtimeGroupSections(groups.find(group => group.id === 'translators'), sections);
+    assert.deepEqual(choices.map(choice => [choice.managerId, choice.label]),
+      [['vulkan-kosmickrisp', 'KosmicKrisp'], ['vulkan-kosmickrisp-gles32', 'KosmicKrisp GLES 3.2']]);
+    assert.deepEqual(runtimeSectionTabs(choices).map(tab => tab.label), ['KosmicKrisp', 'KosmicKrisp GLES 3.2']);
+  `);
+});
+
 test('registry metadata exposes manageable production groups while exposing managed engine and tool routes', () => {
   const registry = require('../src/modules/registry');
   const groupUi = require('../src/modules/shared/runtime/group-ui.json');
