@@ -133,8 +133,8 @@ function buildEnvironment(settings, installation, directory, bottlePath, { baseE
     overrides.CX_GRAPHICS_BACKEND = backend;
     // CrossOver versions before its unified graphics selector use these flags.
     if (Number.parseInt(installation.upstreamVersion, 10) < 25) {
-    overrides.WINED3DMETAL = backend === "d3dmetal" ? "1" : "0";
-    overrides.WINEDXVK = backend === "dxvk" ? "1" : "0";
+      overrides.WINED3DMETAL = backend === "d3dmetal" ? "1" : "0";
+      overrides.WINEDXVK = backend === "dxvk" ? "1" : "0";
     }
   }
   const sync = settings.synchronization || "auto";
@@ -171,7 +171,6 @@ async function ensureBottle(installation, ownedEnvironment, directory, settings,
   }
   context.onProgress?.({ phase: "prepare", label: "Creating Windows environment…" });
   const { environment } = buildEnvironment({ ...settings, dlss: false }, installation, directory, bottlePath);
-  fs.mkdirSync(path.join(directory, "crossover-home"), { recursive: true });
   // A failed first preparation contains no game saves and cannot be reused.
   // Remove only this owned incomplete bottle, preserving completed environments.
   await fs.promises.rm(bottlePath, { recursive: true, force: true });

@@ -6,6 +6,18 @@ function choices(settings, schema, { reference = settings.environmentReference, 
   const label = record.kind === 'sikarugir-wrapper' ? 'Wrapper setting' : 'Bottle setting';
   const raw = record.environment || {}, registries = record.registry || {};
   const current = key => {
+    if (key === 'dlss') {
+      const values = [raw.D3DM_ENABLE_METALFX, raw.DXMT_ENABLE_NVEXT].filter(value => value !== undefined);
+      if (values.length) return values.some(value => value === '1') ? 'on' : 'off';
+    }
+    if (key === 'wineD3dConfig' && raw.WINE_D3D_CONFIG === undefined) {
+      const values = registries['user.reg']?.['Software\\Wine\\Direct3D'];
+      if (values) return Object.entries(values).map(([name,value]) => name + '=' + value).join(',');
+    }
+    if (key === 'dllOverrides' && raw.WINEDLLOVERRIDES === undefined) {
+      const values = registries['user.reg']?.['Software\\Wine\\DllOverrides'];
+      if (values) return Object.entries(values).map(([name,value]) => name + '=' + value).join(';');
+    }
     if (record.settings?.[key] !== undefined) return record.settings[key];
     const variable = Wine.ENGINE_SETTINGS[key]?.variable || ({ advertiseAvx: 'ROSETTA_ADVERTISE_AVX', metalHud: 'MTL_HUD_ENABLED', locale: 'LANG', dllOverrides: 'WINEDLLOVERRIDES', wineDebug: 'WINEDEBUG' })[key];
     if (variable) return raw[variable];

@@ -24,7 +24,7 @@ Ordinary Play uses the original Windows executable, game assets and executable f
 
 Files in the private `game/` folders of earlier MacLauncher releases are recovered once into the original game folders, as [Earlier private game folders](../library/GAME_PREPARATION.md#earlier-private-game-folders) describes. Missing files are restored, and a version that differs from the original is kept beside it as a conflict copy. Earlier `temporal-camera` and `temporal-original` folders with proxy or asset-link records are kept for separate recovery. This recovery does not run during Play, import or upkeep, and it removes no Wine prefixes or bottles.
 
-The Windows environment is a Wine prefix. Each game and Windows-version setting has one private prefix under `prefixes/`, independent of the selected engine version, installation path or package checksum. Runtime updates and reinstalls keep that prefix and its saves. Graphics loader views remain keyed to the runtime and renderer components separately. Wine accepts the original Unix executable path directly. A long path uses one short Windows drive mapping to the original game folder, preserving Windows path-length compatibility without copying game data. Existing mappings are kept; a conflicting older mapping uses another free drive letter. Windows profile directories, the home folder and temporary files are stored inside the prefix.
+The Windows environment is a Wine prefix. Each game has private prefixes under `prefixes/`; the original Windows 10, 11, 7 and XP selections retain their separate prefixes. Additional reported Windows versions use per-program registry settings in the Windows 10 prefix, independent of the selected engine version, installation path or package checksum. Runtime updates and reinstalls keep that prefix and its saves. Graphics loader views remain keyed to the runtime and renderer components separately. Wine accepts the original Unix executable path directly. A long path uses one short Windows drive mapping to the original game folder, preserving Windows path-length compatibility without copying game data. Existing mappings are kept; a conflicting older mapping uses another free drive letter. Windows profile directories, the home folder and temporary files are stored inside the prefix.
 
 After an upgrade, the earlier prefix that the game last used, as recorded, is adopted once at the game's stable Windows-version path. Without that record, the prefix with the newest registry or marker timestamp is adopted; when usage is unknown or tied, the prefixes stay where they are for manual resolution. A prefix already at the stable path takes precedence. Other earlier prefixes stay separate, with their locations recorded, and their files are not merged. A prefix whose internal Wine drive mappings use absolute paths that would break after the move is not adopted automatically.
 
@@ -108,6 +108,25 @@ Runtime Settings groups the basic launch choices separately from advanced Displa
 
 Compatibility options include Rosetta AVX advertisement and per-engine controls: DXVK async, DXMT frame-rate presets and MetalFX spatial, D3DMetal frame limits and Metal 4, MoltenVK fast math, argument buffers and UE4 compatibility, and WineD3D configuration. Diagnostics offers Metal and DXVK HUDs and the Wine crash dialog. Engine options appear with the corresponding engine selection. Explicit environment entries override these controls.
 
-Additional Windows versions include Windows 8.1, 8, Vista, XP 64-bit and Windows Server variants. CrossOver's per-launch Windows version changes the reported version within the current bottle. Existing Windows environment selections retain their separate storage locations.
+Additional Windows versions include Windows 8.1, 8, Vista, XP 64-bit and Windows Server variants. Additional versions change the per-program Windows version within the Windows 10 prefix. Existing Windows environment selections retain their separate storage locations.
 
 For an existing wrapper, each setting defaults to **Wrapper setting** with its current value read offline. **Custom setting** enables an override for that control. Registry-backed overrides write into the selected wrapper prefix; its original files and Windows environment remain in place.
+
+| Control | Values and effect |
+| --- | --- |
+| High Resolution (Retina) | Runtime default, On or Off; On selects 192 DPI unless DPI is explicitly set. |
+| DPI | An integer from 48 to 768; empty retains the current value. |
+| Option as Alt, Command as Ctrl | Map both left and right modifier keys. |
+| Mouse capture | Configure cursor confinement and DirectInput mouse warping. |
+| Fullscreen display capture, Vertical sync | Runtime default, On or Off. |
+| Virtual desktop | Runtime default, Off, 1280×720, 1920×1080, 2560×1440 or 3840×2160. |
+| DXVK async | Runtime default, On or Off; takes effect in DXVK builds that implement async. |
+| DXMT configuration | Runtime default or a 30, 60 or 120 FPS preset. |
+| MetalFX spatial | Runtime default, On or Off for DXMT. |
+| D3DMetal FPS limit | Runtime default, 30, 60, 120, 144 or 240 FPS. |
+| D3DMetal Metal 4 | Runtime default, On or Off; takes effect in builds that implement Metal 4. |
+| MoltenVK fast math, argument buffers, UE4 compatibility | Runtime default, On or Off; each changes its corresponding MoltenVK option. |
+| WineD3D options | Comma-separated configuration, such as csmt=0x1,renderer=gl. |
+| Metal Performance HUD | Runtime default, On or Off. |
+| DXVK HUD | Runtime default, Off, FPS, Performance or Full. |
+| Wine crash dialog | Runtime default, On or Off. |

@@ -88,3 +88,22 @@ Compatibility options include Rosetta AVX advertisement and per-engine controls:
 Additional Windows versions include Windows 8.1, 8, Vista, XP 64-bit and Windows Server variants. CrossOver's per-launch Windows version changes the reported version within the current bottle. Existing Windows environment selections retain their separate storage locations.
 
 For an existing environment, each setting defaults to **Bottle setting** with its current value read offline. **Custom setting** enables an override for that control. Registry-backed overrides write into the selected bottle; its original files and Windows environment remain in place.
+
+| Control | Values and effect |
+| --- | --- |
+| High Resolution (Retina) | Runtime default, On or Off; On selects 192 DPI unless DPI is explicitly set. |
+| DPI | An integer from 48 to 768; empty retains the current value. |
+| Option as Alt, Command as Ctrl | Map both left and right modifier keys. |
+| Mouse capture | Configure cursor confinement and DirectInput mouse warping. |
+| Fullscreen display capture, Vertical sync | Runtime default, On or Off. |
+| Virtual desktop | Runtime default, Off, 1280×720, 1920×1080, 2560×1440 or 3840×2160. |
+| DXVK async | Runtime default, On or Off; takes effect in DXVK builds that implement async. |
+| DXMT configuration | Runtime default or a 30, 60 or 120 FPS preset. |
+| MetalFX spatial | Runtime default, On or Off for DXMT. |
+| D3DMetal FPS limit | Runtime default, 30, 60, 120, 144 or 240 FPS. |
+| D3DMetal Metal 4 | Runtime default, On or Off; takes effect in builds that implement Metal 4. |
+| MoltenVK fast math, argument buffers, UE4 compatibility | Runtime default, On or Off; each changes its corresponding MoltenVK option. |
+| WineD3D options | Comma-separated configuration, such as csmt=0x1,renderer=gl. |
+| Metal Performance HUD | Runtime default, On or Off. |
+| DXVK HUD | Runtime default, Off, FPS, Performance or Full. |
+| Wine crash dialog | Runtime default, On or Off. |
