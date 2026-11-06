@@ -334,8 +334,9 @@ async function confirmRuntimeInstallation(plan, entry, {signal} = {}) {
   if (signal?.aborted) return false;
   if (plan?.kind === "licence") return require("./licence-sheet").show(plan, { parent: getLauncherDialogOwner(), signal });
   const versionLabel = [plan.label, plan.versionLabel || plan.version].filter(Boolean).join(" ");
-  // Optional companions of this download are listed with their version and size.
-  const companions = (Array.isArray(plan.companions) ? plan.companions : []).map(item =>
+  // Optional companions of this download are listed with their version and size,
+  // or with a companion's own complete text.
+  const companions = (Array.isArray(plan.companions) ? plan.companions : []).map(item => item.detail ||
     `Also downloads ${[item.label, item.versionLabel].filter(Boolean).join(" ")}${item.bytes > 0 ? ` (${Math.max(0.1, item.bytes / 1048576).toFixed(1)} MB)` : ""}. ${item.summary || ""}`.trim());
   // One optional companion can be a checkbox, checked by default, so it can be
   // declined without cancelling this download.

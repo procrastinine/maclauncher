@@ -115,15 +115,16 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
     // Valve download recorded them.
     const name = entry?.name || 'this game', size = bytes => bytes > 0 ? ` (${Math.max(0.1, bytes / 1048576).toFixed(1)} MB)` : '';
     const bytes = !local && pin?.asset?.bytes > 0 ? pin.asset.bytes : 0;
-    const valve = `Windows Steam client files from Valve${size(Components.lastDownload(context.userDataDir)?.bytes)}`;
-    const downloads = local ? valve : `the Steam client bridge${size(bytes)} and ${valve}`;
+    const valve = `the Windows Steam client files from Valve${size(Components.lastDownload(context.userDataDir)?.bytes)}`;
+    const version = local?.version || pin?.version || null;
+    const downloads = label => local ? valve : `${label}${size(bytes)} and ${valve}`;
     const starts = isRunning() === false && ClientStart.clientStartEnabled(entry, context.settings) ? ', then starts Steam' : '';
-    const kept = `That choice is kept for ${name} until the Steam client bridge is installed in Runtimes.`;
-    return [{ managerId: id, version: local?.version || pin?.version || null, requiresDownload: true, ...(!pin && !local ? { discoveryRequired: true } : {}), appId: String(game.appId),
+    const until = 'until the bridge is installed in Runtimes.';
+    return [{ managerId: id, version, requiresDownload: true, ...(!pin && !local ? { discoveryRequired: true } : {}), appId: String(game.appId),
       optional: true, silentFallback: true, companion: true, label: manager.label, ...(bytes ? { bytes } : {}), grants: ['steam-client-start'],
       message: 'Play with Steam?', confirmLabel: 'Play with Steam', cancelLabel: 'Play Without Steam', companionCheckbox: 'Also connect to Steam',
-      detail: `Play with Steam connects ${name} to the Steam client for Mac. It downloads ${downloads}${starts}.\n\nPlay Without Steam runs ${name} without the Steam client. ${kept}`,
-      summary: `Also connect to Steam connects ${name} to the Steam client for Mac. It also downloads ${valve}${starts}. Clearing it runs ${name} without the Steam client. ${kept}` }];
+      detail: `Connects ${name} to the Steam client for Mac. Downloads ${downloads('the Steam client bridge')}${starts}.\n\nWithout Steam, ${name} runs without the Steam client ${until}`,
+      companionDetail: `Connecting to Steam also downloads ${downloads(`the Steam client bridge${version ? ` ${version}` : ''}`)}${starts}. Without it, ${name} runs without Steam ${until}` }];
   }
   async function prepare(entry, context, { installation, prefixPath, architecture, environment } = {}) {
     const game = identifyGame(entry), native = discoverClient();

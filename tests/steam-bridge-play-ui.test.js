@@ -101,8 +101,8 @@ test('a Windows Steam game asks Play with Steam? once; Play Without Steam launch
   const [plan] = declined.dialogs;
   assert.deepEqual([plan.label, plan.version, plan.message, plan.confirmLabel, plan.cancelLabel],
     ['Steam client bridge', '1.0.0', 'Play with Steam?', 'Play with Steam', 'Play Without Steam']);
-  assert.equal(plan.detail, 'Play with Steam connects Fixture to the Steam client for Mac. It downloads the Steam client bridge (0.1 MB) and Windows Steam client files from Valve, then starts Steam.' +
-    '\n\nPlay Without Steam runs Fixture without the Steam client. That choice is kept for Fixture until the Steam client bridge is installed in Runtimes.');
+  assert.equal(plan.detail, 'Connects Fixture to the Steam client for Mac. Downloads the Steam client bridge (0.1 MB) and the Windows Steam client files from Valve, then starts Steam.' +
+    '\n\nWithout Steam, Fixture runs without the Steam client until the bridge is installed in Runtimes.');
   const shown = await dialogOptions(plan, { name: 'Fixture' });
   assert.equal(shown.message, 'Play with Steam?');
   assert.deepEqual(Array.from(shown.buttons), ['Play with Steam', 'Play Without Steam']);
@@ -136,13 +136,13 @@ test('with another Play download, the bridge is one line of that dialog', async 
   const host = { managerId: 'engine', version: '11.0', label: 'Wine engine' };
   const accepted = await play({ bridge, userDataDir, extra: [host] });
   assert.equal(accepted.dialogs.length, 1, 'one dialog');
-  const summary = 'Also connect to Steam connects Fixture to the Steam client for Mac. It also downloads Windows Steam client files from Valve, then starts Steam. ' +
-    'Clearing it runs Fixture without the Steam client. That choice is kept for Fixture until the Steam client bridge is installed in Runtimes.';
-  assert.deepEqual(accepted.dialogs[0].companions, [{ label: 'Steam client bridge', versionLabel: '1.0.0', bytes: item.record.asset.bytes, summary, checkboxLabel: 'Also connect to Steam' }]);
+  const detail = 'Connecting to Steam also downloads the Steam client bridge 1.0.0 (0.1 MB) and the Windows Steam client files from Valve, then starts Steam. ' +
+    'Without it, Fixture runs without Steam until the bridge is installed in Runtimes.';
+  assert.deepEqual(accepted.dialogs[0].companions, [{ label: 'Steam client bridge', versionLabel: '1.0.0', bytes: item.record.asset.bytes, detail, checkboxLabel: 'Also connect to Steam' }]);
   assert.deepEqual(accepted.installs.map(([manager]) => manager).sort(), ['engine', id]);
   assert.deepEqual(accepted.grants, ['steam-client-start']);
   const shown = await dialogOptions(accepted.dialogs[0], { name: 'Fixture' }, { response: 0, checkboxChecked: true });
-  assert.equal(shown.detail, 'Required to run Fixture.\n\nAlso downloads Steam client bridge 1.0.0 (0.1 MB). ' + summary);
+  assert.equal(shown.detail, 'Required to run Fixture.\n\n' + detail);
   assert.deepEqual([shown.checkboxLabel, shown.checkboxChecked, shown.result], ['Also connect to Steam', true, true]);
   const cleared = await dialogOptions(accepted.dialogs[0], { name: 'Fixture' }, { response: 0, checkboxChecked: false });
   assert.deepEqual({ ...cleared.result }, { approved: true, companionsDeclined: true });
@@ -187,7 +187,7 @@ test('Runtimes lists the bridge as one managed row with its Valve files, and rem
   // The next offer names the size of the last verified Valve download, offline.
   assert.deepEqual(Components.lastDownload(userDataDir), { filename: valve.resolved.filename, bytes: fs.statSync(valve.archiveFile).size });
   const [offer] = await bridge.requirements({ name: 'Fixture' }, { userDataDir });
-  assert.match(offer.detail, /the Steam client bridge \(0\.1 MB\) and Windows Steam client files from Valve \(0\.1 MB\), then starts Steam\./);
+  assert.match(offer.detail, /the Steam client bridge \(0\.1 MB\) and the Windows Steam client files from Valve \(0\.1 MB\), then starts Steam\./);
   const running = offlineBridge(path.join(root, 'running'), { isRunning: () => true }).bridge;
   assert.doesNotMatch((await running.requirements({ name: 'Fixture' }, { userDataDir }))[0].detail, /starts Steam/, 'a running Steam client is not started again');
   assert.doesNotMatch((await bridge.requirements({ name: 'Fixture', startSteamClient: 'never' }, { userDataDir }))[0].detail, /starts Steam/, "Don't start keeps Steam closed");

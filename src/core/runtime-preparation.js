@@ -186,6 +186,7 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
           ...(listed.length ? { companions: listed.map(item => ({ label: item.plan.label || item.manager.label || item.manager.id,
             ...(item.versionLabel || item.plan.version ? { versionLabel: item.versionLabel || item.plan.version } : {}),
             ...(item.plan.bytes ? { bytes: item.plan.bytes } : {}), ...(item.plan.summary ? { summary: item.plan.summary } : {}),
+            ...(item.plan.companionDetail ? { detail: item.plan.companionDetail } : {}),
             ...(item === optional ? { checkboxLabel: item.plan.companionCheckbox } : {}) })) } : {}) }) : false;
         if (consent !== true && consent?.approved !== true) {
           if (!plan.optional) return false;
