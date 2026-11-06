@@ -331,8 +331,10 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   await graphics.applyPrefix?.();
   context.signal?.throwIfAborted();
   const workingDirectory = path.dirname(match.windowsExecutablePath);
+  // The drive covers the imported game folder, so paths above the executable's folder resolve.
+  const driveRoot = require("../game-drive").gameDriveRoot(entry, originalRoot, match.windowsExecutablePath);
   const { windowsExecutablePath, windowsWorkingDirectory } = require("../../shared/runtime/wine-game-paths").prepareGamePaths(prefixPath,
-    { gameRoot, executablePath, workingRoot: originalRoot, workingDirectory });
+    { gameRoot: gameRoot === originalRoot ? driveRoot : gameRoot, executablePath, workingRoot: driveRoot, workingDirectory });
   let { environment } = buildEnvironment(settings, selected.install, directory, prefixPath, graphics, { ...dependencies, translatorPlan, existingEnvironment });
   // Apply launcher-owned optional effects only to the game, after stock Wine
   // finishes prefix initialization. User-supplied loader paths remain blocked.

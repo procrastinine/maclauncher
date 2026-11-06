@@ -463,6 +463,31 @@ test("long original game paths keep a short Wine path without a private game mir
   assert.deepEqual(fs.readFileSync(original), bytes);
 });
 
+test("the game drive maps the imported install folder so Unreal parent paths resolve", async t => {
+  const directory = fixture(t), install = path.join(directory, "Paradise Killer"), binaries = path.join(install, "ParadiseKiller", "Binaries", "Win64");
+  const executable = pe(path.join(binaries, "ParadiseKiller-Win64-Shipping.exe"), 0x8664);
+  fs.mkdirSync(path.join(install, "Engine")); fs.mkdirSync(path.join(install, "ParadiseKiller", "Content", "Paks"), { recursive: true });
+  const play = async (id, importPath) => {
+    const entry = Detection.decorateEntry({ gameId: id, moduleId: "crossover", gamePath: binaries, importPath });
+    assert.equal(entry.runtimeData.crossover.sourceRoot, binaries, "detection keeps the executable's folder as the game folder");
+    return Launch.prepareLaunch(entry, { userDataDir: path.join(directory, id), settings: {}, runtimeSettings: {} }, adapters(installation(path.join(directory, id))));
+  };
+  for (const [id, importPath] of [["imported-folder", install], ["imported-executable", executable]]) {
+    const launch = await play(id, importPath);
+    assert.equal(launch.windowsExecutablePath, "G:\\ParadiseKiller\\Binaries\\Win64\\ParadiseKiller-Win64-Shipping.exe", id);
+    assert.equal(launch.windowsWorkingDirectory, "G:\\ParadiseKiller\\Binaries\\Win64", id);
+    assert.equal(fs.realpathSync(path.join(launch.prefixPath, "dosdevices", "g:")), fs.realpathSync(install), id);
+    assert.equal(path.win32.resolve(path.win32.dirname(launch.windowsExecutablePath), "../../..", "ParadiseKiller/Content/Paks"), "G:\\ParadiseKiller\\Content\\Paks");
+  }
+  fs.rmdirSync(path.join(install, "Engine"));
+  const folder = await play("folder-without-engine", install);
+  assert.equal(folder.windowsExecutablePath, "G:\\ParadiseKiller\\Binaries\\Win64\\ParadiseKiller-Win64-Shipping.exe", "an imported folder is the drive for any engine");
+  assert.equal(fs.realpathSync(path.join(folder.prefixPath, "dosdevices", "g:")), fs.realpathSync(install));
+  const ordinary = await play("without-engine", executable);
+  assert.equal(ordinary.windowsExecutablePath, "G:\\ParadiseKiller-Win64-Shipping.exe", "without the Unreal layout the executable's folder stays the drive");
+  assert.equal(fs.realpathSync(path.join(ordinary.prefixPath, "dosdevices", "g:")), fs.realpathSync(binaries));
+});
+
 test("short original drive mappings preserve conflicting old entries and reject aliased parents", t => {
   const directory = fixture(t), prefix = path.join(directory, "prefixes", "selected"), gameRoot = path.join(directory, "game");
   const executable = pe(path.join(gameRoot, "Game.exe")), dosdevices = path.join(prefix, "dosdevices"), mapping = path.join(dosdevices, "g:");

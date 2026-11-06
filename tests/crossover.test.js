@@ -205,8 +205,9 @@ test("Windows publisher launch entries preserve saved relative executable roots 
   const launch = await Launch.prepareLaunch(entry, { userDataDir,
     settings: { runtimes: { crossover: { defaultVersion: installed.version } } }, runtimeSettings: settings }, { run });
   assert.equal(launch.executablePath, chosen); assert.equal(launch.workingDirectory, path.dirname(chosen));
-  assert.equal(launch.args[launch.args.indexOf("--") + 1], "G:\\bin\\Chosen.exe");
-  assert.equal(launch.windowsWorkingDirectory, "G:\\bin");
+  assert.equal(launch.args[launch.args.indexOf("--") + 1], "G:\\content\\bin\\Chosen.exe", "the drive is the imported download folder");
+  assert.equal(launch.windowsWorkingDirectory, "G:\\content\\bin");
+  assert.equal(fs.realpathSync(path.join(launch.bottlePath, "dosdevices", "g:")), root);
   assert.equal(entry.runtimeData.crossover.sourceRoot, content);
   assert.deepEqual(commands, [installed.bottleToolPath], "preparation uses only the injected synthetic bottle command");
   const sikarugir = require("../src/modules/crossover/sikarugir/launch").executableEvidence(entry, settings);
@@ -214,6 +215,33 @@ test("Windows publisher launch entries preserve saved relative executable roots 
   assert.equal(sikarugir.executableArchitecture, "x86_64", "the same-named outer executable has the different x86 machine");
   assert.deepEqual(settings, original); assert.deepEqual(entry.runtimeSettings.crossover, original);
   for (const [file, bytes] of sourceBytes) assert.deepEqual(fs.readFileSync(file), bytes);
+});
+
+test("CrossOver maps the Unreal install folder of an executable imported alone and rejects linked layout folders", async t => {
+  const directory = fs.realpathSync(fixture(t)), install = path.join(directory, "Paradise Killer"), binaries = path.join(install, "ParadiseKiller", "Binaries", "Win64");
+  const executable = pe(path.join(binaries, "ParadiseKiller-Win64-Shipping.exe"), { machine: 0x8664 });
+  fs.mkdirSync(path.join(install, "Engine")); fs.mkdirSync(path.join(install, "ParadiseKiller", "Content", "Paks"), { recursive: true });
+  const userDataDir = path.join(directory, "profile");
+  Manager.__test.writeRegistry(userDataDir, { applications: [], ignoredPaths: Manager.__test.AUTOMATIC_PATHS });
+  const installed = Manager.importRuntime({ userDataDir, runtimePath: app(path.join(directory, "CrossOver.app")) });
+  const run = async (_command, args) => {
+    const bottle = args[args.indexOf("--bottle") + 1];
+    fs.mkdirSync(bottle, { recursive: true }); fs.writeFileSync(path.join(bottle, "cxbottle.conf"), "[Bottle]\n"); fs.writeFileSync(path.join(bottle, "system.reg"), "registry");
+    return { stdout: "", stderr: "" };
+  };
+  const entry = Detection.decorateEntry({ gameId: "unreal-executable", moduleId: "crossover", gamePath: binaries, importPath: executable });
+  assert.equal(entry.runtimeData.crossover.sourceRoot, binaries);
+  const launch = await Launch.prepareLaunch(entry, { userDataDir, settings: { runtimes: { crossover: { defaultVersion: installed.version } } }, runtimeSettings: {} }, { run });
+  assert.equal(launch.args[launch.args.indexOf("--") + 1], "G:\\ParadiseKiller\\Binaries\\Win64\\ParadiseKiller-Win64-Shipping.exe");
+  assert.equal(launch.windowsWorkingDirectory, "G:\\ParadiseKiller\\Binaries\\Win64");
+  assert.equal(fs.realpathSync(path.join(launch.bottlePath, "dosdevices", "g:")), install);
+  const GameDrive = require("../src/modules/crossover/game-drive");
+  const outside = path.join(directory, "Outside"); fs.mkdirSync(outside);
+  fs.rmdirSync(path.join(install, "Engine")); fs.symlinkSync(outside, path.join(install, "Engine"), "dir");
+  assert.equal(GameDrive.gameDriveRoot({ importPath: executable }, binaries, executable), binaries, "a linked Engine folder outside the install is not layout evidence");
+  const root = path.join(directory, "Ordinary"), game = pe(path.join(root, "Game.exe"));
+  assert.equal(GameDrive.gameDriveRoot({ importPath: game }, root, game), root);
+  assert.equal(GameDrive.gameDriveRoot({ importPath: path.join(directory, "Missing") }, root, game), root);
 });
 
 test("CrossOver generic Windows fallback checks only top-level valid executables and never guesses among them", t => {

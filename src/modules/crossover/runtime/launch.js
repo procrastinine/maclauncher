@@ -402,8 +402,10 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     warnGraphics(context.logger, "CrossOver graphics loader could not be prepared. Using the vendor renderer without shared graphics processing.", context.graphicsBridgeFailure.reason);
   }
   const workingDirectory = path.dirname(executable);
+  // The drive covers the imported game folder, so paths above the executable's folder resolve.
+  const driveRoot = require("../game-drive").gameDriveRoot(entry, originalRoot, executable);
   const { windowsExecutablePath, windowsWorkingDirectory } = require("../../shared/runtime/wine-game-paths").prepareGamePaths(bottlePath,
-    { gameRoot, executablePath, workingRoot: originalRoot, workingDirectory });
+    { gameRoot: gameRoot === originalRoot ? driveRoot : gameRoot, executablePath, workingRoot: driveRoot, workingDirectory });
   const args = ["--bottle", bottlePath, "--wait-children", "--workdir", windowsWorkingDirectory];
   if (!WineSettings.inherit(settings.windowsVersion)) {
     if (!Object.hasOwn(WineSettings.WINDOWS_VERSIONS, settings.windowsVersion)) throw new Error("Unsupported Wine Windows version.");
