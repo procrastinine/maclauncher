@@ -66,7 +66,7 @@ class SwapchainDestination {
 public:
  SwapchainDestination()=default;~SwapchainDestination(){clear();}
  SwapchainDestination(const SwapchainDestination&)=delete;SwapchainDestination&operator=(const SwapchainDestination&)=delete;
- void retire(){std::lock_guard guard(mutex);clear();}
+ void retire(){if(!sceneDestinationEnabled())return;std::lock_guard guard(mutex);clear();}
  bool attach(IDXGISwapChain*chain,IUnknown*actualGetBufferResult)noexcept{try{
   if(!sceneDestinationEnabled())return false;
   if(!chain||!actualGetBufferResult)return false;
