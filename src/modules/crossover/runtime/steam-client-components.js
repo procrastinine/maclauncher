@@ -89,14 +89,24 @@ async function install({ userDataDir, signal, onProgress, resolved, archiveFile 
         try { const file = path.join(directory, item.path); return fs.lstatSync(file).isFile() && hashFile(file) === item.sha256; }
         catch { return false; }
       });
-      if (!valid) {
-        const damaged = directory + '.damaged-' + randomUUID();
-        const retained = fs.lstatSync(directory, { throwIfNoEntry: false });
-        if (retained) fs.renameSync(directory, damaged);
-        try { fs.renameSync(payload, directory); }
-        catch (error) { if (retained) fs.renameSync(damaged, directory); throw error; }
+      let damaged, replaced = false;
+      try {
+        if (!valid) {
+          if (fs.lstatSync(directory, { throwIfNoEntry: false })) {
+            const backup = directory + '.damaged-' + randomUUID();
+            fs.renameSync(directory, backup);
+            damaged = backup;
+          }
+          fs.renameSync(payload, directory);
+          replaced = true;
+        }
+        writeJsonAtomic(path.join(root, 'active.json'), { archiveSha1: expected[1], source: resolved.url, clients, files });
+      } catch (error) {
+        if (replaced) fs.rmSync(directory, { recursive: true, force: true });
+        if (damaged) fs.renameSync(damaged, directory);
+        throw error;
       }
-      writeJsonAtomic(path.join(root, 'active.json'), { archiveSha1: expected[1], source: resolved.url, clients, files });
+      if (damaged) fs.rmSync(damaged, { recursive: true, force: true });
       return current(userDataDir);
     } finally { fs.rmSync(stage, { recursive: true, force: true }); }
   }

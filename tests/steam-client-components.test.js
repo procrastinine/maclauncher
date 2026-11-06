@@ -25,16 +25,36 @@ test('consented Valve install discovers client DLL names in renamed assets and n
   assert.equal(fs.readFileSync(path.join(installed.root, installed.clients.i386), 'utf8'), 'archive inspection input: other-layout/SteamClient.dll');
   assert.equal(Components.current(fixture.userDataDir).root, installed.root);
 });
-test('a damaged content-addressed directory is retained aside and repaired from the verified archive', async t => {
+test('a damaged content-addressed directory rolls back on failure and leaves no backup after repair', async t => {
   const fixture = archive(t), options = { ...fixture, archiveFile: fixture.zip };
   const installed = await Components.install(options);
   const file = path.join(installed.root, installed.clients.x86_64);
   fs.writeFileSync(file, 'damaged bytes');
   assert.equal(Components.current(fixture.userDataDir), null);
+  const root = path.dirname(installed.root), active = path.join(root, 'active.json');
+  const previousRecord = fs.readFileSync(active);
+  const previousFiles = installed.files.map(item => [item.path, fs.readFileSync(path.join(installed.root, item.path))]);
+  const backups = () => fs.readdirSync(root).filter(name => name.startsWith(installed.archiveSha1 + '.damaged-'));
+  const rename = fs.renameSync;
+  for (const failure of ['replacement', 'active record']) {
+    let injected = false;
+    const mock = t.mock.method(fs, 'renameSync', (from, to) => {
+      if (!injected && (failure === 'replacement' ? path.basename(from) === 'payload' && to === installed.root : to === active)) {
+        injected = true;
+        throw new Error('Injected ' + failure + ' failure');
+      }
+      return rename(from, to);
+    });
+    try { await assert.rejects(Components.install(options), /Injected .* failure/); }
+    finally { mock.mock.restore(); }
+    assert.equal(injected, true);
+    for (const [name, bytes] of previousFiles) assert.deepEqual(fs.readFileSync(path.join(installed.root, name)), bytes);
+    assert.deepEqual(fs.readFileSync(active), previousRecord);
+    assert.deepEqual(backups(), [], 'rollback restores the prior directory');
+  }
   const repaired = await Components.install(options);
   assert.equal(repaired.root, installed.root);
   assert.match(fs.readFileSync(file, 'utf8'), /^archive inspection input:/);
-  const retained = fs.readdirSync(path.dirname(installed.root)).filter(name => name.startsWith(installed.archiveSha1 + '.damaged-'));
-  assert.equal(retained.length, 1);
-  assert.equal(fs.readFileSync(path.join(path.dirname(installed.root), retained[0], installed.clients.x86_64), 'utf8'), 'damaged bytes');
+  assert.equal(Components.current(fixture.userDataDir).root, installed.root);
+  assert.deepEqual(backups(), [], 'successful repair removes its temporary backup');
 });
