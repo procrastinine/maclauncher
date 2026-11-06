@@ -360,7 +360,7 @@ static VkResult negotiate_scene_kind(struct scene_context *owner,
     unsigned attempt;
     *supported=-1;
     if(atomic_load_explicit(&owner->commandKind,memory_order_acquire)!=UINT32_MAX)return VK_SUCCESS;
-    if(!owner->callbacks3.submitted||!owner->queryDevice||!owner->query)return status;
+    if(!owner->queryDevice||!owner->query)return status;
     if(pthread_mutex_trylock(&owner->admissionMutex))return VK_NOT_READY;
     if(atomic_load_explicit(&owner->commandKind,memory_order_acquire)!=UINT32_MAX){status=VK_SUCCESS;goto done;}
     for(attempt=0;attempt<2;++attempt){
@@ -498,7 +498,7 @@ static VkResult prepare_scene(RSWineVulkanSceneRequestV2 *packet,BOOL wow64,BOOL
     pthread_mutex_unlock(&provider_mutex);
     if(!owner)return VK_ERROR_FEATURE_NOT_PRESENT;
     if(owner->device.wineDevice!=request.base.device||owner->device.device!=device->host.device)goto done;
-    if(!owner->callbacks3.submitted||!owner->prepare||!owner->prepareDevice||owner->device.api()!=3){status=VK_ERROR_FEATURE_NOT_PRESENT;goto done;}
+    if(!owner->prepare||!owner->prepareDevice||owner->device.api()!=3){status=VK_ERROR_FEATURE_NOT_PRESENT;goto done;}
     if(!cancel){status=negotiate_scene_kind(owner,&request.base,feature,&result,&queried);if(status!=VK_SUCCESS)goto done;}
     if(!cancel){status=prepare_scene_destination(owner,request.metadata.destinationWindow);if(status!=VK_SUCCESS)goto done;}
     if(pthread_mutex_trylock(&owner->admissionMutex)){status=VK_NOT_READY;goto done;}
@@ -563,7 +563,7 @@ static VkResult query_scene(const RSWineVulkanSceneRequestV2 *packet,BOOL wow64)
     pthread_mutex_unlock(&provider_mutex);
     if(!owner)return VK_ERROR_FEATURE_NOT_PRESENT;
     if(owner->device.wineDevice!=request->device||owner->device.device!=device->host.device)goto done;
-    if(!owner->callbacks3.submitted||!owner->query||!owner->queryDevice||owner->device.api()!=3){status=VK_ERROR_FEATURE_NOT_PRESENT;goto done;}
+    if(!owner->query||!owner->queryDevice||owner->device.api()!=3){status=VK_ERROR_FEATURE_NOT_PRESENT;goto done;}
     status=negotiate_scene_kind(owner,request,request->reserved[0],&result,&supported);
     if(status!=VK_SUCCESS)goto done;
     copy_frame(&shape,request,owner->consumer.owner);
