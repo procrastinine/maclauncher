@@ -358,8 +358,11 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const { windowsExecutablePath, windowsWorkingDirectory } = require("../../shared/runtime/wine-game-paths").prepareGamePaths(prefixPath,
     { gameRoot: gameRoot === originalRoot ? driveRoot : gameRoot, executablePath, workingRoot: driveRoot, workingDirectory });
   Object.assign(environment, require('../runtime/shader-cache').prepare(directory, prefixPath));
-  const args = WineSettings.desktopArguments(settings, ["start.exe", "/d", windowsWorkingDirectory, "/exec", ...(steamBridge ? [steamBridge.helper] : []), windowsExecutablePath, ...(Array.isArray(settings.arguments) ? settings.arguments : []).map(value => safeText(value, "Game arguments")),
-    ...(context.gameArguments || [])]);
+  let applicationArguments = [...(Array.isArray(settings.arguments) ? settings.arguments : []).map(value => safeText(value, "Game arguments")), ...(context.gameArguments || [])];
+  if (context.resolveRuntimeArguments) applicationArguments = await context.resolveRuntimeArguments({ arguments: applicationArguments,
+    install: selected.install, executablePath: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture,
+    graphicsBackend: graphics.graphicsBackend });
+  const args = WineSettings.desktopArguments(settings, ["start.exe", "/d", windowsWorkingDirectory, "/exec", ...(steamBridge ? [steamBridge.helper] : []), windowsExecutablePath, ...applicationArguments]);
   if (cameraBridge && cameraView) {
     GameView.remember(entry, context, "sikarugir", cameraView, recovery);
     GameView.watch(entry, context, directory, "sikarugir", cameraView);

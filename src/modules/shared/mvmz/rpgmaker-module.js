@@ -321,6 +321,7 @@ function buildRpgmakerModule({ manifest, engineId, saveExtension, libs, smokeTes
     prepareInput,
     getContentReadRoots: Writable.contentReadRoots,
     resolveGameIcon,
+    resolveRuntimeArguments: require("../web/runtime/chromium-wine").resolveRuntimeArguments,
     getRuntimeRequirements: NwjsPatchedLauncher.getRuntimeRequirements,
     launchRuntime,
     cleanupGameData,

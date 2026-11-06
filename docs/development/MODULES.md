@@ -586,6 +586,8 @@ Runtime hooks continue to use `context.spawnDetachedChecked`, runtime settings, 
 
 A game can have its own launch arguments, stored in `entry.launchArguments`, a per-game setting shared by every runtime choice. During a game launch, `context.gameArguments` holds its parsed string array; tool and preparation-only contexts receive an empty array. The array is passed on as follows:
 
+An engine's optional `resolveRuntimeArguments(entry, context, launch)` hook adjusts application arguments after the runtime provider selects its installation and renderer. Providers call `context.resolveRuntimeArguments(launch)` with `arguments`, `install`, `executablePath`, `executableArchitecture` and `graphicsBackend`; the returned string array is validated before launch. The hook runs only for games. RPG Maker MV/MZ Windows NW.js releases select ANGLE Direct3D 9 on Sikarugir with DXVK when the selected Wine bridge lacks the Win32 Vulkan memory API and the bundled ANGLE library contains the Direct3D 9 backend. Explicit browser switches in game arguments, runtime arguments or the NW.js manifest take precedence.
+
 - Native adapters add these values at the end of the game's argument list, after the launcher's required options and any older runtime-specific application arguments. Interpreter and virtual machine options stay separate.
 - Helpers, downloads and configuration tools never receive game arguments.
 - Hosted web adapters pass the array separately from browser switches, and expose the application arguments through `nw.App.argv` and the game renderer's `process.argv`.

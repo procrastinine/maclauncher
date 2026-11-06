@@ -332,6 +332,9 @@ function createLauncher({
     context.gameArguments = options.gameEffects === true
       ? (options.gameArguments != null ? LaunchArguments.validate(options.gameArguments)
         : LaunchArguments.parse(entry.launchArguments || "")) : [];
+    context.resolveRuntimeArguments = async launch => LaunchArguments.validate(
+      options.gameEffects === true && typeof mod?.resolveRuntimeArguments === "function"
+        ? await mod.resolveRuntimeArguments(entry, context, launch) : launch.arguments);
     const graphicsDiagnostics = Object.fromEntries(["diagnostics", "capture", "gpuTiming", "trace"]
       .filter(key => typeof options.graphicsDiagnostics?.[key] === "boolean")
       .map(key => [key, options.graphicsDiagnostics[key]]));

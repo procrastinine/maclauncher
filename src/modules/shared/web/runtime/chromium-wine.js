@@ -1,0 +1,70 @@
+const fs = require("node:fs"), path = require("node:path");
+const Arguments = require("../../runtime/launch-arguments");
+const { readPeExports } = require("../../runtime/pe-exports");
+const { readMachOLoadCommands } = require("../../runtime/macho-load-commands");
+const { wineLayout } = require("../../runtime/wine-layout");
+
+const cache = new Map(), MAX_BYTES = 16 * 1024 * 1024;
+const names = ["vkCreateInstance", "vkGetMemoryWin32HandleKHR", "Direct3DCreate9", "Direct3DCreate9Ex"];
+function binary(file, format) {
+  try {
+    const stat = fs.lstatSync(file);
+    if (!stat.isFile() || stat.size > MAX_BYTES) return null;
+    const identity = [format, stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs].join(":");
+    const saved = cache.get(file);
+    if (saved?.identity === identity) return saved.facts;
+    const header = format === "pe" ? readPeExports(file) : readMachOLoadCommands(file);
+    if (!header) return null;
+    const bytes = fs.readFileSync(file), facts = {
+      builtin: header.form === "builtin", architecture: header.architecture,
+      exports: header.exports, architectures: header.architectures,
+      names: new Set(names.filter(name => bytes.includes(Buffer.from(name + "\0"))))
+    };
+    if (cache.size >= 32) cache.delete(cache.keys().next().value);
+    cache.set(file, { identity, facts });
+    return facts;
+  } catch { return null; }
+}
+function codeExport(image, name) {
+  const value = image?.exports?.get(name);
+  return value?.executable === true && value.forwarded === false;
+}
+
+// A necessary API can be absent without a runtime probe. Its presence does not
+// establish extension mapping, resource properties or Windows handle transport.
+function win32MemoryAPI(install, architecture) {
+  const layout = wineLayout(install);
+  const windows = architecture === "x86" ? "i386-windows" : architecture === "x86_64" ? "x86_64-windows" : null;
+  if (!windows || !layout.windows.includes(windows) || !layout.unixRoot) return "unknown";
+  const client = binary(path.join(layout.dllRoot, windows, "winevulkan.dll"), "pe");
+  const native = ["winevulkan.so", "win32u.so"].map(name => binary(path.join(layout.unixRoot, name), "macho"));
+  if (!client?.builtin || client.architecture !== architecture ||
+      !codeExport(client, "vkGetDeviceProcAddr") || !codeExport(client, "vkGetInstanceProcAddr") ||
+      native.some(image => !image?.architectures?.includes(layout.architecture) || !image.names.has("vkCreateInstance"))) return "unknown";
+  return [client, ...native].some(image => image.names.has("vkGetMemoryWin32HandleKHR")) ? "declared" : "absent";
+}
+
+function explicitBackend(args) {
+  return args.some(value => /^--(?:use-angle|use-gl|disable-gpu(?:-compositing)?|disable-webgl2?|disable-3d-apis|in-process-gpu|use-cmd-decoder)(?:=|$)/i.test(value));
+}
+function resolveRuntimeArguments(entry, context, launch) {
+  const args = launch.arguments;
+  if (context.runtimeId !== "sikarugir" || launch.graphicsBackend !== "dxvk" || explicitBackend(args)) return args;
+  try {
+    const directory = path.dirname(launch.executablePath), manifestPath = path.join(directory, "package.json");
+    if (fs.statSync(manifestPath).size > 1024 * 1024) return args;
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    if (typeof manifest.main !== "string" || !entry.indexHtml ||
+        fs.realpathSync(path.resolve(directory, manifest.main)) !== fs.realpathSync(entry.indexHtml)) return args;
+    if (manifest["chromium-args"] != null &&
+        (typeof manifest["chromium-args"] !== "string" || explicitBackend(Arguments.parse(manifest["chromium-args"])))) return args;
+    const angle = binary(path.join(directory, "libGLESv2.dll"), "pe");
+    if (angle?.builtin || angle?.architecture !== launch.executableArchitecture ||
+        !codeExport(angle, "glGetString") || !codeExport(angle, "glDrawArrays") ||
+        !["Direct3DCreate9", "Direct3DCreate9Ex"].some(name => angle.names.has(name))) return args;
+    if (win32MemoryAPI(launch.install, launch.executableArchitecture) !== "absent") return args;
+    return ["--use-angle=d3d9", ...args];
+  } catch { return args; }
+}
+
+module.exports = { resolveRuntimeArguments, win32MemoryAPI };

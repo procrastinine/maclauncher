@@ -746,3 +746,73 @@ test("changing Wine finishes the existing prefix update before short registry co
   assert.equal(fs.readFileSync(marker, "utf8"), completed, "an interrupted update cannot mark this engine prepared");
   assert.equal(fs.readFileSync(save, "utf8"), "existing save");
 });
+
+test("MV selects bundled ANGLE D3D9 only for a Wine bridge missing the Win32 memory API, preserving explicit choices", async t => {
+  const { peFixture } = require("./helpers/pe-fixture");
+  const { image, X64 } = require("./fixtures/macho-image");
+  const { composeRuntimeProviders } = require("../src/modules/shared/runtime/providers");
+  const { createLauncher } = require("../src/core/launcher");
+  const directory = fixture(t), entry = game(directory), install = installation(directory), dependencies = adapters(install);
+  function library(file, exports, { builtin = false, markers = [] } = {}) {
+    const f = peFixture();
+    f.bytes.writeUInt16LE(0x2002, f.peOffset + 22);
+    f.bytes.writeUInt32LE(0x60000020, f.section + 36);
+    if (builtin) f.bytes.write("Wine builtin DLL\0", 64);
+    const base = f.raw + 0x600, rva = offset => 0x2000 + offset;
+    f.bytes.writeUInt32LE(rva(0x600), f.directories); f.bytes.writeUInt32LE(0x400, f.directories + 4);
+    f.bytes.writeUInt32LE(exports.length, base + 20); f.bytes.writeUInt32LE(exports.length, base + 24);
+    f.bytes.writeUInt32LE(rva(0x640), base + 28); f.bytes.writeUInt32LE(rva(0x680), base + 32); f.bytes.writeUInt32LE(rva(0x6c0), base + 36);
+    let nameOffset = 0x700;
+    exports.forEach((name, index) => {
+      f.bytes.writeUInt32LE(rva(0xb00), f.raw + 0x640 + index * 4);
+      f.bytes.writeUInt32LE(rva(nameOffset), f.raw + 0x680 + index * 4);
+      f.bytes.writeUInt16LE(index, f.raw + 0x6c0 + index * 2);
+      f.bytes.write(name + "\0", f.raw + nameOffset); nameOffset += name.length + 1;
+    });
+    f.bytes.write(markers.join("\0") + "\0", f.raw + 0xc00);
+    fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, f.bytes);
+  }
+  const unix = path.join(install.wineRoot, "lib/wine/x86_64-unix");
+  fs.mkdirSync(unix, { recursive: true }); install.architecture = "x86_64";
+  const native = image({ cpu: X64 });
+  fs.writeFileSync(path.join(unix, "ntdll.so"), native);
+  for (const name of ["winevulkan.so", "win32u.so"]) fs.writeFileSync(path.join(unix, name), Buffer.concat([native, Buffer.from("vkCreateInstance\0")]));
+  library(path.join(install.wineRoot, "lib/wine/i386-windows/winevulkan.dll"), ["vkGetDeviceProcAddr", "vkGetInstanceProcAddr"], { builtin: true });
+  const anglePath = path.join(entry.gamePath, "libGLESv2.dll");
+  library(anglePath, ["glDrawArrays", "glGetString"], { markers: ["Direct3DCreate9"] });
+  const manifestPath = path.join(entry.gamePath, "package.json"), manifest = JSON.stringify({ main: "index.html" });
+  fs.writeFileSync(manifestPath, manifest); entry.indexHtml = path.join(entry.gamePath, "index.html"); fs.writeFileSync(entry.indexHtml, "original html");
+  Object.assign(entry, { moduleId: "mv", runtimeId: "sikarugir", launchArguments: "--seed 4" });
+  const mod = composeRuntimeProviders(require("../src/modules/mv/main"), [Provider]);
+  const registry = { listModules: () => [mod.manifest], getModule: () => mod, getModuleInfo: () => mod.manifest, listSharedRuntimeManagers: () => [] };
+  const launcher = createLauncher({ userDataDir: path.join(directory, "data"), registry });
+  const context = launcher.getGameLaunchContext(entry, {}, { runtimeId: "sikarugir", runtimeSettings: { arguments: ["--locale=en"] } });
+  const previousGraphics = dependencies.prepareGraphicsView;
+  dependencies.prepareGraphicsView = async options => ({ ...await previousGraphics(options), graphicsBackend: "dxvk" });
+  const prepared = await Launch.prepareLaunch(entry, context, dependencies);
+  assert.deepEqual(prepared.args.slice(-5), [prepared.windowsExecutablePath, "--use-angle=d3d9", "--locale=en", "--seed", "4"]);
+  assert.equal(dependencies.calls.some(call => call.args.includes("--use-angle=d3d9")), false, "prefix and registry helpers never receive browser switches");
+  assert.equal(fs.readFileSync(manifestPath, "utf8"), manifest);
+  assert.equal(fs.readFileSync(entry.indexHtml, "utf8"), "original html");
+  assert.equal(entry.launchArguments, "--seed 4");
+  assert.deepEqual(context.runtimeSettings.arguments, ["--locale=en"]);
+  const launch = { install, executablePath: path.join(entry.gamePath, "Game.exe"), executableArchitecture: "x86", graphicsBackend: "dxvk", arguments: ["--seed", "4"] };
+  for (const arguments_ of [["--use-angle=vulkan"], ["--use-angle", "d3d11"], ["--use-gl=desktop"], ["--disable-gpu"], ["--disable-webgl"]]) {
+    assert.deepEqual(await context.resolveRuntimeArguments({ ...launch, arguments: arguments_ }), arguments_);
+  }
+  fs.writeFileSync(manifestPath, JSON.stringify({ main: "index.html", "chromium-args": "--use-angle=d3d11" }));
+  assert.deepEqual(await context.resolveRuntimeArguments(launch), launch.arguments, "manifest browser settings take precedence too");
+  fs.writeFileSync(manifestPath, manifest);
+  const crossOver = launcher.getGameLaunchContext(entry, {}, { runtimeId: "crossover", runtimeSettings: {} });
+  assert.deepEqual(await crossOver.resolveRuntimeArguments(launch), launch.arguments);
+  const tool = launcher.getLaunchContext(entry, {}, { runtimeId: "sikarugir", runtimeSettings: {} });
+  assert.deepEqual(await tool.resolveRuntimeArguments(launch), launch.arguments);
+  assert.deepEqual(await context.resolveRuntimeArguments({ ...launch, graphicsBackend: "wined3d" }), launch.arguments);
+  fs.writeFileSync(path.join(unix, "win32u.so"), Buffer.concat([native, Buffer.from("vkCreateInstance\0vkGetMemoryWin32HandleKHR\0")]));
+  assert.deepEqual(await context.resolveRuntimeArguments(launch), launch.arguments, "declared APIs do not prove missing sharing and cannot trigger a fallback");
+  fs.unlinkSync(path.join(unix, "win32u.so"));
+  assert.deepEqual(await context.resolveRuntimeArguments(launch), launch.arguments, "missing native metadata remains unknown");
+  fs.writeFileSync(path.join(unix, "win32u.so"), Buffer.concat([native, Buffer.from("vkCreateInstance\0")]));
+  library(anglePath, ["glDrawArrays", "glGetString"]);
+  assert.deepEqual(await context.resolveRuntimeArguments(launch), launch.arguments, "a bundled ANGLE without the D3D9 backend cannot be selected");
+});
