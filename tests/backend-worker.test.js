@@ -9,6 +9,18 @@ const { createBackendOperations } = require("../src/core/backend-operations");
 const { untilTestEnds } = require("./helpers/fixture-process");
 const workerPath = path.join(__dirname, "fixtures", "backend-worker.cjs");
 
+test('ordinary backend module activation reaches the cancellable Electron host callback', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'launch-activation-ipc-'));
+  const request = { pid: 502, notification: 'WineAppWillActivateNotification', pidKey: 'ActivatingAppPID' };
+  let received;
+  const client = new BackendWorkerClient({ workerPath, workerData: { userDataDir: root }, callbacks: {
+    followProcessActivation: async (value, { signal }) => { received = value;assert.equal(signal.aborted, false);return { reason: 'yielded' }; }
+  } });
+  t.after(async () => { await client.close();fs.rmSync(root, { recursive: true, force: true }); });
+  assert.deepEqual(await client.request('launchActivation', request, root), { reason: 'yielded' });
+  assert.deepEqual(received, request);
+});
+
 test("actual backend tool roles cross worker IPC into the ordinary main log without adding stop ownership", async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-tool-role-relay-")), gamePath = path.join(root, "game");
   fs.mkdirSync(gamePath);

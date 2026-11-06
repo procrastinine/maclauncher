@@ -40,6 +40,25 @@ parentPort.on("message", async message => {
     };
     if (message.method === "delayedInspectorProcess") setTimeout(launch, message.args[1] || 100);
     else launch();
+  } else if (message.method === "launchActivation") {
+    try {
+      const { createBackendOperations } = require('../../src/core/backend-operations');
+      const info = { id: 'web', label: 'Fixture', runtime: { entries: { runner: {} } } };
+      const mod = { id: 'web', manifest: info, actions: { inspect: (_entry, _payload, context) =>
+        context.ui.followProcessActivation(message.args[0], { signal: new AbortController().signal }) } };
+      const registry = { listModuleIds: () => ['web'], listModules: () => [info], getModule: () => mod, getModuleInfo: () => info,
+        getModuleDir: () => __dirname, listSharedRuntimeManagers: () => [], getRuntimeManagerUi: () => null };
+      const operations = createBackendOperations({ userDataDir: workerData.userDataDir, registry, callHost: Object.assign(
+        () => { throw new Error('Activation must use the cancellable host callback.'); },
+        { withSignal: (_signal, method, ...args) => new Promise(resolve => {
+          const receive = response => { if (response.type !== 'callbackResult' || response.id !== 'activation') return;
+            parentPort.removeListener('message', receive);resolve(response.result); };
+          parentPort.on('message', receive);
+          parentPort.postMessage({ type: 'callback', id: 'activation', method, args, cancellable: true });
+        }) }) });
+      const result = await operations.moduleAction({ gameId: 'activation', moduleId: 'web', gamePath: message.args[1] }, 'inspect', {}, {});
+      parentPort.postMessage({ type: 'result', id: message.id, result });
+    } catch (error) { parentPort.postMessage({ type: 'result', id: message.id, error: require('../../src/core/backend-worker-client').errorRecord(error) }); }
   } else if (message.method === "runtimeToolRoles") {
     try {
       const { createBackendOperations } = require("../../src/core/backend-operations");

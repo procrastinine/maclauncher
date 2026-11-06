@@ -71,3 +71,4 @@ src/modules/shared/reshade/neural/native/Packages/
 
 # Prepared copy of the existing app package lock.
 /src/resources/runtime-packages.json
+/src/resources/launch-activation.node

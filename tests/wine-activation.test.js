@@ -16,46 +16,52 @@ function center() {
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
-test("Wine activation requests are answered only for processes started by the launch", async () => {
-  const notifications = center(), focused = [];
+test("ordinary Wine activation crosses the host seam and ends with the launch", async () => {
   const child = Object.assign(new EventEmitter(), { pid: 500, exitCode: null, signalCode: null });
-  // 500 is the supervisor; 501 the CrossOver wrapper; 502 the game. 600 is another Wine program.
-  const rows = [[500, 1], [501, 500], [502, 501], [600, 1], [601, 600]];
-  WineActivation.followWineActivation(child, { ui: { systemPreferences: notifications } }, { platform: "darwin", launcherPid: 42, now: () => 1700000000000,
-    list: async () => rows, focus: async (pid, options) => { focused.push({ pid, yieldFrom: options.yieldFrom, launchedAt: options.launchedAt, signal: options.signal }); return { activated: true }; } });
-  assert.deepEqual([...notifications.subscriptions.values()].map(row => row.name), ["WineAppWillActivateNotification"]);
-
-  notifications.post("WineAppWillActivateNotification", { ActivatingAppPID: 601, ActivatingAppPrefix: "/other/bottle" });
-  notifications.post("WineAppWillActivateNotification", { ActivatingAppPID: "not a pid" });
-  notifications.post("WineAppWillActivateNotification", { ActivatingAppPID: 500 });
-  await settle();
-  assert.deepEqual(focused, [], "foreign, malformed and supervisor PIDs are ignored");
-
-  notifications.post("WineAppWillActivateNotification", { ActivatingAppPID: 502, ActivatingAppPrefix: "/game/bottle", ActivatingAppConfigDir: "" });
-  notifications.post("WineAppWillActivateNotification", { ActivatingAppPID: 502 });
-  await settle();
-  assert.equal(focused.length, 1, "a repeated request while one is pending makes no second activation");
-  assert.equal(focused[0].pid, 502); assert.equal(focused[0].yieldFrom, 42); assert.equal(focused[0].launchedAt, 1700000000000);
-  assert.equal(focused[0].signal.aborted, false);
-
-  child.exitCode = 0; child.emit("exit", 0);
-  assert.equal(notifications.subscriptions.size, 0, "the subscription ends with the launched process");
-  assert.equal(focused[0].signal.aborted, true, "a pending activation is canceled when the game exits");
-  notifications.post("WineAppWillActivateNotification", { ActivatingAppPID: 502 });
-  await settle();
-  assert.equal(focused.length, 1);
+  let request, signal, release;
+  const stop = WineActivation.followWineActivation(child, { ui: { followProcessActivation: (value, options) => {
+    request = value;signal = options.signal;return new Promise(resolve => { release = resolve; });
+  } } }, { platform: 'darwin' });
+  assert.deepEqual(request, { pid: 500, notification: WineActivation.NOTIFICATION, pidKey: 'ActivatingAppPID' });
+  assert.equal(signal.aborted, false);
+  child.emit('exit', 0);assert.equal(signal.aborted, true);
+  stop();release({ reason: 'launch-ended' });await settle();
+  assert.equal(child.listenerCount('exit'), 0);
 });
 
-test("Wine activation needs macOS, a running launch and the host notification service", () => {
-  const notifications = center(), child = Object.assign(new EventEmitter(), { pid: 500, exitCode: null, signalCode: null });
-  const options = { list: async () => assert.fail("no process lookup"), focus: async () => assert.fail("no activation") };
-  WineActivation.followWineActivation(child, { ui: { systemPreferences: notifications } }, { ...options, platform: "linux" });
-  WineActivation.followWineActivation(child, { ui: {} }, { ...options, platform: "darwin" });
-  WineActivation.followWineActivation({ ...child, exitCode: 1 }, { ui: { systemPreferences: notifications } }, { ...options, platform: "darwin" });
-  assert.equal(notifications.subscriptions.size, 0);
-  const stop = WineActivation.followWineActivation(child, { ui: { systemPreferences: notifications } }, { ...options, platform: "darwin" });
-  assert.equal(notifications.subscriptions.size, 1); stop(); stop();
-  assert.equal(notifications.subscriptions.size, 0); assert.equal(child.listenerCount("exit"), 0);
+test("the host yields once to the first owned visible window and never steals focus later", async () => {
+  const Host = require('../src/main/launch-activation');
+  const notifications = center(), yielded = [], controller = new AbortController();
+  const windows = new Set();let front = 42;
+  const native = { inspect: pid => ({ active: front === 42, frontmostPid: front, frontWindowPid: front, windowId: windows.has(pid) ? 123 : 0 }),
+    yield: pid => { yielded.push(pid);front = pid;return { yielded: true, windowId: 123 }; } };
+  const done = Host.followProcessActivation({ pid: 500, notification: WineActivation.NOTIFICATION, pidKey: 'ActivatingAppPID' },
+    { signal: controller.signal }, { platform: 'darwin', systemPreferences: notifications, native: () => native,
+      list: async () => [[500, 1], [501, 500], [502, 501], [601, 600]] });
+  notifications.post(WineActivation.NOTIFICATION, { ActivatingAppPID: 601 });await settle();
+  notifications.post(WineActivation.NOTIFICATION, { ActivatingAppPID: 'invalid' });
+  notifications.post(WineActivation.NOTIFICATION, { ActivatingAppPID: 500 });await settle();
+  assert.deepEqual(yielded, []);
+  notifications.post(WineActivation.NOTIFICATION, { ActivatingAppPID: 502 });await settle();
+  assert.deepEqual(yielded, [], 'a process without a visible top-level window is not activated');
+  windows.add(502);
+  assert.deepEqual(await done, { reason: 'activated', target: 502, windowId: 123 });
+  assert.deepEqual(yielded, [502]);assert.equal(notifications.subscriptions.size, 0);
+  notifications.post(WineActivation.NOTIFICATION, { ActivatingAppPID: 502 });await settle();assert.deepEqual(yielded, [502]);
+});
+
+test("a user switch or game exit cancels the initial window handoff", async () => {
+  const Host = require('../src/main/launch-activation');
+  for (const exit of [false, true]) {
+    const notifications = center(), controller = new AbortController();let active = true;
+    const native = { inspect: () => ({ active, frontmostPid: active ? 42 : 77, windowId: 0 }), yield: () => assert.fail('no focus rescue') };
+    const done = Host.followProcessActivation({ pid: 500, notification: WineActivation.NOTIFICATION, pidKey: 'ActivatingAppPID' },
+      { signal: controller.signal }, { platform: 'darwin', systemPreferences: notifications, native: () => native, list: async () => [[502, 500]] });
+    if (exit) controller.abort();
+    else { active = false;notifications.post(WineActivation.NOTIFICATION, { ActivatingAppPID: 502 }); }
+    assert.equal((await done).reason, exit ? 'launch-ended' : 'foreground-changed');
+    assert.equal(notifications.subscriptions.size, 0);
+  }
 });
 
 // Runs the generated JXA activation script against a stub AppKit.

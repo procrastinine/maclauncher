@@ -52,6 +52,8 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     nativeImage: null
   };
   ui.openLiveVariableEditor = options => callHost("openLiveVariableEditor", options);
+  ui.followProcessActivation = (request, { signal } = {}) => callHost.withSignal
+    ? callHost.withSignal(signal, "followProcessActivation", request) : callHost("followProcessActivation", request);
   const downloads = new DownloadManager({ onChange: () => {
     if (shuttingDown) for (const task of downloads.list()) if (task.status === "downloading") downloads.cancel(task.id);
     emit("downloads", downloads.list());

@@ -248,12 +248,17 @@ function refreshModuleSnapshots() {
 }
 // Running sessions' own events, such as a list a session supplies to a picker.
 const sessionEvents = require("./module-app-actions").createSessionEvents();
+function followProcessActivation(request, options) {
+  return require('./launch-activation').followProcessActivation(request, options, { systemPreferences, logger,
+    native: () => require(path.join(app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), 'src/resources'), 'launch-activation.node')) });
+}
 const backendService = createBackendService({ userDataDir,
   appInfo: { appPath: app.getAppPath(), isPackaged: app.isPackaged, version: app.getVersion(),
     bootstrapPath: path.resolve(__dirname, "bootstrap.js"),
     execPath: process.execPath, resourcesPath: process.resourcesPath,
     paths: Object.fromEntries(["home", "appData", "desktop", "documents", "downloads", "temp"].map(name => [name, app.getPath(name)])) },
   callbacks: {
+    followProcessActivation,
     openLiveVariableEditor: options => createLiveVariableEditorWindow(options),
     confirmRuntimeInstall: (plan, entry, options) => confirmRuntimeInstallation(plan, entry, options),
     ...Object.fromEntries(["showOpenDialog", "showSaveDialog", "showMessageBox"].map(method => [`dialog.${method}`, (...args) => {
@@ -364,7 +369,7 @@ function logRuntimeToolSpawn(child, metadata, identity) {
   } catch { /* Logging cannot change tool launch or process ownership. */ }
 }
 const launcherService = createLauncher({
-  userDataDir, logger, app, ui: { shell, dialog, nativeImage, systemPreferences }, writeCheatsFile,
+  userDataDir, logger, app, ui: { shell, dialog, nativeImage, systemPreferences, followProcessActivation }, writeCheatsFile,
   getRuntimeManagerState: id => runtimeStateSnapshots[id] || { installed: [] },
   downloads: () => downloadManager,
   confirmRuntimeInstall: confirmRuntimeInstallation,

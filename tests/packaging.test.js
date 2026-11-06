@@ -68,6 +68,7 @@ test('beforePack applies explicit architecture selection and rejects local-only 
   const context = { electronPlatformName: 'darwin', arch: require('builder-util').Arch.arm64,
     packager: { config, info: {projectDir:f.root} } };
   let mapped;
+  t.mock.method(require('../scripts/build-launch-activation.cjs'), 'build', options => { assert.equal(options.repoRoot, f.root);assert.equal(options.arch, 'arm64'); });
   t.mock.method(require('../scripts/app-deduplication.cjs'),'unpackPatterns',input=>{mapped=input;return[];});
   await require('../scripts/before-pack.js')(context, { dependencies: f.dependencies, environment: { MACLAUNCHER_NATIVE_MAXIMUM_MACOS: '13.0' } });
   assert.equal(mapped.projectDir,f.root);

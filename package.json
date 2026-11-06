@@ -188,6 +188,7 @@
         "filter": [
           "7zip/**",
           "maclauncher.png",
+          "launch-activation.node",
           "native-runtimes/**",
           "python/**",
           "!**/.DS_Store",

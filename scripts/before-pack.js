@@ -9,6 +9,7 @@ module.exports = async function beforePack(context, { environment = process.env,
   const plan = Model.assertPublishable(Model.createPlan({ arch,
     maximumMacOS: environment.MACLAUNCHER_NATIVE_MAXIMUM_MACOS || '13.0', dependencies }));
   const projectDir=context.packager.info?.projectDir || require('node:path').resolve(__dirname,'..');
+  require('./build-launch-activation.cjs').build({ repoRoot: projectDir, arch });
   const lockFile=require('node:path').join(projectDir,'build/runtime-packages.json');
   const packageLock=require('node:fs').existsSync(lockFile) ? require('./runtime-packages.cjs').readLock({repoRoot:projectDir,arch,dependencies}) : undefined;
   const filtered = Content.applyBuildPolicy(context.packager.config);
