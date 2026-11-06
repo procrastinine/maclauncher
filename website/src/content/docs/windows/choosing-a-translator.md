@@ -45,13 +45,13 @@ Which DXVK fits depends on the Vulkan driver. The releases from the DXVK project
 
 DXMT is the usual first choice. It goes straight from Direct3D to Metal, it's Sikarugir's automatic choice, and several MacLauncher features need it: DLSS to MetalFX on macOS 14 or later, the FSR camera adapters and XeSS. D3DMetal is the alternative on Apple Silicon for 64-bit games, and it also turns DLSS into MetalFX, from macOS 26.
 
-DXVK on MacLauncher KosmicKrisp is worth a try when both Metal translators struggle with a game. Through it, a Direct3D 11 game sees at most feature level 12_0. WineD3D is the fallback that every Mac has, and it draws through OpenGL instead of Metal.
+DXVK on MacLauncher KosmicKrisp is worth a try when both Metal translators struggle with a game. WineD3D is the fallback that every Mac has, and it draws through OpenGL instead of Metal.
 
 ### Direct3D 12
 
 D3DMetal is the one Direct3D 12 route that doesn't pass through Vulkan, and it's the only route for DLSS to MetalFX in Direct3D 12 games. It needs Apple Silicon and a 64-bit game.
 
-vkd3d-proton is the open-source alternative. It refuses to start on a driver without transform feedback, robust null descriptors and single-texel buffer alignment, which rules out MoltenVK and LWJGL's KosmicKrisp, while MacLauncher KosmicKrisp provides all three. MacLauncher recommends KosmicKrisp for vkd3d-proton and warns when a game pairs it with another driver. On MacLauncher KosmicKrisp, vkd3d-proton reports at most feature level 12_0, so a game that insists on 12_1 or 12_2 won't run this way. WINE's own vkd3d is the third choice, and it comes with WINE itself.
+vkd3d-proton is the open-source alternative. It refuses to start on a driver without transform feedback, robust null descriptors and single-texel buffer alignment, which rules out MoltenVK and LWJGL's KosmicKrisp, while MacLauncher KosmicKrisp provides all three. MacLauncher recommends KosmicKrisp for vkd3d-proton and warns when a game pairs it with another driver. On MacLauncher KosmicKrisp, vkd3d-proton reports feature level 12_1. A game that insists on 12_2 won't run this way, because that level also needs ray tracing, which no KosmicKrisp build has. WINE's own vkd3d is the third choice, and it comes with WINE itself.
 
 ### Vulkan games
 

@@ -28,17 +28,9 @@ MacLauncher can install two KosmicKrisp builds, and a third comes with Sikarugir
 
 Each build needs a Khronos Vulkan loader beside the driver. LWJGL's builds use Homebrew's published Vulkan-Loader bottle, while each MacLauncher KosmicKrisp package contains a loader built from source together with the driver.
 
-MacLauncher KosmicKrisp is built from a pinned Mesa commit, to which MacLauncher Builds applies its KosmicKrisp patch set. The package described on this page has these identities:
+MacLauncher KosmicKrisp is built from Mesa's KosmicKrisp driver, to which MacLauncher Builds applies its KosmicKrisp patch set, together with a Khronos Vulkan loader built from source. Each package requires macOS 26.0 or later. The Runtimes window shows the installed version and the version that each catalog entry offers.
 
-| Item | Identity |
-| --- | --- |
-| Package version | `27.0.0-devel-MCLv12` |
-| Mesa source | Commit `4f071f891d63396c799b267172c19ba6b0301682` (Mesa 27.0.0-devel) |
-| Vulkan loader | Khronos Vulkan-Loader commit `f2389e27734347c1d9f40e03be53f69f969976b1` |
-| Minimum macOS | 26.0 |
-| Earlier package ID | `vulkan-kosmickrisp-gles32` |
-
-Installations, default versions and saved choices recorded under the earlier package ID are read as MacLauncher KosmicKrisp, so they keep working under the current name.
+The package was earlier published under the ID `vulkan-kosmickrisp-gles32`. Installations, default versions and saved choices recorded under that ID are read as MacLauncher KosmicKrisp, so they keep working under the current name.
 
 ## CPU builds and consumers
 
@@ -74,7 +66,7 @@ MoltenVK's library is loaded directly. KosmicKrisp, by contrast, is reached thro
 
 A MacLauncher KosmicKrisp package is installed only after its archive matches the SHA-256 recorded in the MacLauncher Builds catalog and the code signatures of its native files are verified. Besides the driver, `libvulkan_kosmickrisp.dylib`, and the loader, `libvulkan.1.dylib`, the package contains the compiler and compression libraries that the driver loads through relative paths, its license notices and records of its dependencies. Each version is installed once and shared by every game that selects it, and an installed version works offline.
 
-Neither KosmicKrisp build writes a Mesa disk shader cache. Compiled pipelines are kept across launches through the `VkPipelineCache` data that an application or translator stores itself. KosmicKrisp derives the pipeline cache UUID from its driver build, so cache data from a different build is not reused. In MacLauncher KosmicKrisp, shader cache keys also record the enabled device features that change shader compilation.
+Upstream KosmicKrisp keeps compiled pipelines across launches only through the `VkPipelineCache` data that an application or translator stores itself. MacLauncher KosmicKrisp also caches the Metal Shading Language that it generates from each shader and the Metal libraries compiled from that source, so a shader that was already translated and compiled is reused instead of being processed again. KosmicKrisp derives the pipeline cache UUID from its driver build, so cache data from a different build is not reused. In MacLauncher KosmicKrisp, shader cache keys also record the enabled device features that change shader compilation.
 
 ## Features of MacLauncher KosmicKrisp
 
@@ -89,7 +81,7 @@ MacLauncher KosmicKrisp adds Vulkan features that upstream KosmicKrisp does not 
 - Variable multisample rate, which allows rendering without attachments at differing sample counts, as Direct3D 11.1 and 12 need.
 - Depth bias control (`VK_EXT_depth_bias_control`), including exact and forced UNORM representations.
 - Conservative rasterization (`VK_EXT_conservative_rasterization`), with an overestimation of 1/256 pixel, rasterized degenerate triangles and a fully covered fragment input. Underestimation and post-depth coverage are not supported.
-- Fragment shader interlock (`VK_EXT_fragment_shader_interlock`) with sample interlock on Apple GPU family 7 and later. Pixel interlock and shading-rate interlock are not exposed.
+- Fragment shader interlock (`VK_EXT_fragment_shader_interlock`) with pixel interlock and sample interlock, which DXVK and vkd3d-proton use for rasterizer-ordered views.
 - Rasterization-order access (`VK_EXT_rasterization_order_attachment_access`) for color attachments on Apple GPU family 7 and later. Depth and stencil attachments have no such access.
 - Mesh and task shaders (`VK_EXT_mesh_shader`) with mesh shader queries, and multiview together with geometry and tessellation shaders.
 
@@ -129,13 +121,13 @@ MacLauncher KosmicKrisp adds Vulkan features that upstream KosmicKrisp does not 
 | Simultaneous memory allocations | 4,096 | 8,192 |
 | Indirect draw count | 65,535 | 2<sup>30</sup> |
 
-Neither build exposes ray tracing (acceleration structures, ray queries or ray tracing pipelines), fragment shading rate, pixel interlock or shading-rate interlock.
+Neither build exposes ray tracing: acceleration structures, ray queries or ray tracing pipelines.
 
 ## Compatibility with MoltenVK
 
-The table compares upstream KosmicKrisp at Mesa commit `4f071f89`, MacLauncher KosmicKrisp `27.0.0-devel-MCLv12` and MoltenVK 1.4.2.
+The table compares upstream KosmicKrisp at the Mesa source that MacLauncher KosmicKrisp is built from, MacLauncher KosmicKrisp and MoltenVK.
 
-| Capability | KosmicKrisp | MacLauncher KosmicKrisp | MoltenVK 1.4.2 |
+| Capability | KosmicKrisp | MacLauncher KosmicKrisp | MoltenVK |
 | --- | --- | --- | --- |
 | Vulkan version | 1.4, Khronos conformant | 1.4 | 1.4, with `VK_KHR_portability_subset` |
 | Metal | Metal 4 | Metal 4 | Metal, without Metal 4 interfaces |
@@ -155,13 +147,12 @@ The table compares upstream KosmicKrisp at Mesa commit `4f071f89`, MacLauncher K
 | 64-bit integer atomics on buffers and shared memory | No | Yes | No |
 | Sparse binding and residency | No | Where Metal supports placement sparse resources | No |
 | Conservative rasterization | No | Overestimation | No |
-| Fragment shader interlock | No | Sample interlock | Pixel and sample interlock where Metal supports raster order groups |
+| Fragment shader interlock | No | Pixel and sample interlock | Pixel and sample interlock where Metal supports raster order groups |
 | Mesh and task shaders | No | Yes | No |
 | Cooperative matrices | No | Yes | No |
 | Custom border colors | Through `MESA_KK_EXPERIMENTAL` | Yes | No |
 | Vertex input dynamic state | No | Yes | No |
 | Push constants | 256 bytes | 4,096 bytes | 4,096 bytes |
-| Fragment shading rate | No | No | No |
 | Ray tracing | No | No | No |
 
 The Khronos conformance shown for KosmicKrisp belongs to the submitted upstream driver. MacLauncher KosmicKrisp is based on that driver at a later Mesa commit and adds the features described above, so it is a different product and has no conformance submission of its own.
@@ -187,7 +178,7 @@ DXVK and vkd3d-proton each derive a game's highest Direct3D feature level from t
 | 12_1 | Rasterizer-ordered views and conservative rasterization tier 1 | Rasterizer-ordered views and conservative rasterization tier 1 |
 | 12_2 | Not offered | Shader model 6.5, ray tracing tier 1.1, variable shading rate tier 2, mesh shader tier 1, sampler feedback, tiled resources tier 3, conservative rasterization tier 3, resource binding tier 3 and further options |
 
-Tiled resources tier 2 rests on Vulkan sparse residency, so feature level 12_0 needs the sparse features that MacLauncher KosmicKrisp exposes where Metal supports placement sparse resources. Both translators report rasterizer-ordered views only when the driver offers pixel interlock. MacLauncher KosmicKrisp offers sample interlock alone, so neither translator reports feature level 12_1 or higher on it. Feature level 12_2 would also require ray tracing and variable rate shading, which no KosmicKrisp build provides.
+Tiled resources tier 2 rests on Vulkan sparse residency, so feature level 12_0 needs the sparse features that MacLauncher KosmicKrisp exposes where Metal supports placement sparse resources. Both translators report rasterizer-ordered views only when the driver offers pixel interlock. MacLauncher KosmicKrisp provides pixel interlock together with conservative rasterization, so vkd3d-proton reports feature level 12_1 on it. Feature level 12_2 also requires ray tracing, which no KosmicKrisp build provides.
 
 ### OpenGL ES on Android through ANGLE
 

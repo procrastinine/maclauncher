@@ -143,7 +143,7 @@ Two further options apply whichever engines run. **Metal Performance HUD** sets 
 
 vkd3d-proton, Wine vkd3d and KosmicKrisp have no options of their own in Runtime Settings. Their documented environment variables can be entered under **Environment variables**, and they take effect only when that component is loaded.
 
-MacLauncher sets no shader or pipeline cache location for DXVK, vkd3d-proton, DXMT, D3DMetal, WineD3D or MoltenVK, so each keeps the cache behavior of its own release. KosmicKrisp writes no Mesa disk shader cache; [KosmicKrisp](KOSMICKRISP.md#selection-and-loading) describes how its pipeline cache data is kept.
+MacLauncher sets no shader or pipeline cache location for DXVK, vkd3d-proton, DXMT, D3DMetal, WineD3D or MoltenVK, so each keeps the cache behavior of its own release. [KosmicKrisp](KOSMICKRISP.md#selection-and-loading) describes the shader and pipeline caching of each KosmicKrisp build.
 
 ## Compatibility and fallback
 
