@@ -6,14 +6,16 @@ CrossOver and Sikarugir share an optional Steam client bridge. While a Windows g
 
 The bridge applies to a game that includes `steam_api.dll` or `steam_api64.dll` and whose app ID is recorded in a local Steam library manifest or in a completed MacLauncher Steam download. The Steam client for Mac must also be installed. Play does not offer the bridge for any other game.
 
-When the bridge package or its Windows Steam client files are missing, Play asks before downloading them, in one of two ways:
+When the bridge package or its Windows Steam client files are missing, Play asks one question for the game, in one of two ways:
 
-- If Play also downloads another component for the same launch, such as a Wine engine, the bridge is one more line in that download's dialog, with its version, size and purpose.
-- Otherwise the bridge has its own dialog, which asks to download Steam client bridge with its version number and names what the download contains. **Download and Play** installs it, and **Play Without It** starts the game through the ordinary route.
+- When no other download is needed, the game gets its own **Play with Steam?** dialog. The dialog names what **Play with Steam** downloads: the Steam client bridge and the Windows Steam client files from Valve, and says that Steam starts when it is not running. **Play with Steam** downloads them and continues to the game, starting Steam for that Play without a second question unless the game's **Steam client on Play** preference is **Don't start**. **Play Without Steam** runs the game through the ordinary route.
+- If Play also downloads another component for the same launch, such as a Wine engine, that download's dialog lists the bridge with its version and size and adds an **Also connect to Steam** checkbox, selected by default. With the checkbox selected, approving the dialog has the same effect as **Play with Steam**. Clearing it declines only the bridge, and Play continues with the other download.
 
-After a consented download, preparation continues to the game without another action. A declined or failed download is remembered for that game, and later Plays start it without asking. The game becomes eligible again after an explicit Refresh in the CrossOver, Sikarugir or Steam client bridge section of **Runtimes**, or after the bridge is installed there.
+Sizes appear when they are known offline: the bridge's size from its last catalog refresh, and the Windows Steam client files' size from the last verified download of Valve's archive. Neither is read from the network before consent.
 
-The bridge also needs a running Steam client. When Steam is not running, Play uses the separate **Start Steam for this game?** consent and the per-game startup preference described in [Steam API support](STEAM_API.md#steam-client-on-play). With **Launch without Steam**, or with the **Don't start** setting, the game starts through the ordinary route without the bridge.
+**Play Without Steam**, a cleared checkbox or a failed bridge download is kept for that game, and later Plays start it without asking. A Refresh keeps the choice. Installing the bridge in **Runtimes → Steam client bridge** makes every Windows Steam game eligible again, and the dialog states this.
+
+After the bridge is installed, later Plays use it without a dialog while Steam is running. When Steam is not running, Play follows the per-game **Steam client on Play** preference described in [Steam API support](STEAM_API.md#steam-client-on-play). With **Ask**, Play shows the same **Play with Steam?** question with **Play with Steam** and **Play Without Steam**. **Play Without Steam**, or the **Don't start** preference, starts the game through the ordinary route without the bridge.
 
 ## Runtimes and inspector
 

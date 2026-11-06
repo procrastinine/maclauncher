@@ -1,6 +1,5 @@
 // Explicit Play preparation shared by the launcher and headless callers.
 // Engine compatibility and exact version selection remain module-owned.
-const { downloadApproved } = require("../modules/shared/runtime/tool-install");
 const { selectRuntimeVersion, managerDefaultVersion } = require("../modules/shared/runtime/version-choices");
 function listRuntimeManagers(registry) {
   const managers = new Map();
@@ -134,6 +133,11 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
     try { managers.find(manager => manager.id === plan.managerId)?.skipOptional?.(plan, { userDataDir: context.userDataDir }); }
     catch (error) { context.logger?.warn?.("[runtimes] The optional download choice could not be kept.", error.message); }
   }
+  // Approving a plan can also approve a step of this Play that the plan
+  // names, such as starting Steam; that step reads `context.grants`.
+  function grant(plan) {
+    for (const name of Array.isArray(plan.grants) ? plan.grants : []) if (typeof name === "string") (context.grants ||= new Set()).add(name);
+  }
   function useFallback(plan, error) {
     if (!plan.optional || (!plan.fallback && !plan.silentFallback) || context.signal?.aborted) return false;
     declined.add(consentKey(plan));
@@ -175,11 +179,15 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
       if (declined.has(key) || companions.some(item => item.plan === plan)) continue;
       if ((requiresDownload || !plan.version || plan.discoveryRequired) && !approved.has(key)) {
         const listed = host?.plan === plan ? companions : [];
-        if (!await downloadApproved(context, { ...plan, ...(versionLabel ? { versionLabel } : {}),
+        // The dialog shows one companion's checkbox; clearing it declines only that companion.
+        const optional = listed.find(item => typeof item.plan.companionCheckbox === "string" && item.plan.companionCheckbox);
+        const consent = typeof context.confirmRuntimeInstall === "function" ? await context.confirmRuntimeInstall({ ...plan, ...(versionLabel ? { versionLabel } : {}),
           label: plan.label || manager.label || manager.id, requiresDownload,
           ...(listed.length ? { companions: listed.map(item => ({ label: item.plan.label || item.manager.label || item.manager.id,
             ...(item.versionLabel || item.plan.version ? { versionLabel: item.versionLabel || item.plan.version } : {}),
-            ...(item.plan.bytes ? { bytes: item.plan.bytes } : {}), ...(item.plan.summary ? { summary: item.plan.summary } : {}) })) } : {}) })) {
+            ...(item.plan.bytes ? { bytes: item.plan.bytes } : {}), ...(item.plan.summary ? { summary: item.plan.summary } : {}),
+            ...(item === optional ? { checkboxLabel: item.plan.companionCheckbox } : {}) })) } : {}) }) : false;
+        if (consent !== true && consent?.approved !== true) {
           if (!plan.optional) return false;
           declined.add(key);
           skipped(plan);
@@ -187,7 +195,11 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
           continue;
         }
         approved.add(key);
-        for (const item of listed) approved.add(consentKey(item.plan));
+        grant(plan);
+        for (const item of listed) {
+          if (item === optional && consent?.companionsDeclined === true) { declined.add(consentKey(item.plan)); skipped(item.plan); }
+          else { approved.add(consentKey(item.plan)); grant(item.plan); }
+        }
       }
     }
     if (fallbackRequired) continue;

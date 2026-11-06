@@ -13,6 +13,13 @@ const MANIFEST = ORIGIN + '/steam_client_ubuntu12';
 const source = Upstream.service({ hosts: [new URL(ORIGIN).hostname] });
 const verified = new Map();
 const store = userDataDir => path.join(userDataDir, 'runtimes/steam-client-components');
+// The archive behind the last verified download. Play's consent shows its size
+// offline; the record stays when the files are removed.
+const downloadRecord = userDataDir => path.join(userDataDir, 'runtimes/steam-client-download.json');
+function lastDownload(userDataDir) {
+  const record = readJsonObject(downloadRecord(userDataDir));
+  return typeof record?.filename === 'string' && Number.isSafeInteger(record.bytes) && record.bytes > 0 ? { filename: record.filename, bytes: record.bytes } : null;
+}
 function resolveManifest(text) {
   const value = parseSteamVdf(text), pending = [value], matches = [];
   while (pending.length) for (const [key, row] of Object.entries(pending.shift())) {
@@ -130,9 +137,10 @@ async function install({ userDataDir, signal, onProgress, resolved, archiveFile 
         throw error;
       }
       if (damaged) fs.rmSync(damaged, { recursive: true, force: true });
+      try { writeJsonAtomic(downloadRecord(userDataDir), { filename: resolved.filename, bytes: fs.statSync(archive).size }); } catch {}
       return current(userDataDir);
     } finally { fs.rmSync(stage, { recursive: true, force: true }); }
   }
   throw new Error('Valve archives did not contain the Windows Steam client DLLs.');
 }
-module.exports = { current, status, install, remove, resolveManifest, MANIFEST };
+module.exports = { current, status, lastDownload, install, remove, resolveManifest, MANIFEST };

@@ -24,11 +24,11 @@ Steam starts through Launch Services as a separate application, hidden and witho
 
 The **Steam client on Play** setting in **Settings** has three values, and the inspector has a per-game override:
 
-- **Ask**, the default, offers **Start Steam** or **Launch without Steam** before startup when Steam is not running, because the Steam client connects to the Internet. Declining launches the game without starting Steam or waiting for it.
+- **Ask**, the default, shows **Play with Steam?** with **Play with Steam** and **Play Without Steam** before startup when Steam is not running, because the Steam client connects to the Internet. **Play Without Steam** starts the game without starting Steam or waiting for it. When the same Play already asked **Play with Steam?** for the [Steam client bridge](WINDOWS_STEAM.md#play) and received **Play with Steam**, Steam starts without this second question.
 - **Don't start** behaves like declining, without a prompt.
 - **Start automatically** gives consent to start Steam for later Plays.
 
-Earlier **On** settings become **Ask**. With every value, the game keeps its own Steam API. When Steam's process state cannot be checked, Play neither asks nor starts Steam, and the game's details show a notice. On the command line, Play asks on a terminal, and `--yes` gives consent; without a terminal and without `--yes`, the game launches without starting Steam.
+Earlier **On** settings become **Ask**. With every value, the game keeps its own Steam API. When Steam's process state cannot be checked, Play neither asks nor starts Steam, and the game's details show a notice. On the command line, Play asks **Play with Steam?** on a terminal, and `--yes` gives consent; without a terminal and without `--yes`, the game launches without starting Steam.
 
 ### Network isolation
 

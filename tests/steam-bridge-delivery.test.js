@@ -36,7 +36,7 @@ test('Play chooses and installs a newer catalog bridge with additional manifest 
   assert.deepEqual(downloads, ['97.3.0']);
 });
 
-test('declined optional bridge stays quiet until explicit refresh permits a new offer', async t => {
+test('declined optional bridge stays quiet until an installation permits a new offer', async t => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'steam-bridge-consent-'));
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
   const bridge = Bridge.create({ identifyGame: () => ({ appId: '123' }), discoverClient: () => '/discovered/client' });

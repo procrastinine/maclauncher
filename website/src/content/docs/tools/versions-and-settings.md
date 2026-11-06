@@ -63,7 +63,7 @@ Every game runs cut off from the Internet and your local network unless you allo
 
 ### Steam client on Play
 
-Games that use [Steam](https://store.steampowered.com/) can start the Mac Steam client when you press Play. With **Ask**, the default, MacLauncher offers **Start Steam** or **Launch without Steam** when Steam isn't running, because the Steam client goes online. **Start automatically** and **Don't start** skip the question. The setting is in **Settings → Launcher**, and each game can override it.
+Games that use [Steam](https://store.steampowered.com/) can start the Mac Steam client when you press Play. With **Ask**, the default, MacLauncher asks **Play with Steam?** with **Play with Steam** or **Play Without Steam** when Steam isn't running, because the Steam client goes online. **Start automatically** and **Don't start** skip the question. The setting is in **Settings → Launcher**, and each game can override it.
 
 ### Save location
 

@@ -337,12 +337,18 @@ async function confirmRuntimeInstallation(plan, entry, {signal} = {}) {
   // Optional companions of this download are listed with their version and size.
   const companions = (Array.isArray(plan.companions) ? plan.companions : []).map(item =>
     `Also downloads ${[item.label, item.versionLabel].filter(Boolean).join(" ")}${item.bytes > 0 ? ` (${Math.max(0.1, item.bytes / 1048576).toFixed(1)} MB)` : ""}. ${item.summary || ""}`.trim());
+  // One optional companion can be a checkbox, checked by default, so it can be
+  // declined without cancelling this download.
+  const optional = (Array.isArray(plan.companions) ? plan.companions : []).find(item => typeof item.checkboxLabel === "string" && item.checkboxLabel);
   const options = { type: "question", buttons: [plan.confirmLabel || "Download and Play", plan.cancelLabel || "Cancel"], defaultId: 0, cancelId: 1, ...(signal ? {signal} : {}),
     message: plan.message || `${plan.kind === "prerequisite" ? "Install" : "Download"} ${versionLabel}?`,
-    detail: [plan.detail || (entry ? `Required to run ${entry.name || path.basename(entry.gamePath)}.` : "Required by this runtime."), ...companions].join("\n\n") };
+    detail: [plan.detail || (entry ? `Required to run ${entry.name || path.basename(entry.gamePath)}.` : "Required by this runtime."), ...companions].join("\n\n"),
+    ...(optional ? { checkboxLabel: optional.checkboxLabel, checkboxChecked: true } : {}) };
   const owner = getLauncherDialogOwner();
   const choice = owner ? await dialog.showMessageBox(owner, options) : await dialog.showMessageBox(options);
-  return choice.response === 0 ? plan.licenseRequired ? { approved: true, licenseAccepted: true } : true : false;
+  if (choice.response !== 0) return false;
+  const approval = plan.licenseRequired ? { approved: true, licenseAccepted: true } : true;
+  return optional && !choice.checkboxChecked ? { ...(approval === true ? { approved: true } : approval), companionsDeclined: true } : approval;
 }
 function logRuntimeToolSpawn(child, metadata, identity) {
   try {

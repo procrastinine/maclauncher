@@ -60,13 +60,9 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
   function clearSkipped(userDataDir) {
     if (userDataDir) writeJsonAtomic(skippedPath(userDataDir), { apps: [] });
   }
-  const refresh = manager.refreshCatalog;
-  manager.refreshCatalog = async function (options = {}) {
-    clearSkipped(options.userDataDir);
-    return refresh.call(this, options);
-  };
-  // An installation, from Runtimes or Play, makes every Windows Steam game
-  // eligible again, including games whose earlier offer was declined.
+  // Only an installation, from Runtimes or Play, makes every Windows Steam game
+  // eligible again, including games for which Play Without Steam was chosen.
+  // A Refresh keeps those choices.
   const installRuntime = manager.installRuntime;
   manager.installRuntime = async function(options = {}) {
     const result = await installRuntime.call(this, options);
@@ -114,12 +110,20 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
     const pin = base.core.listDiscoveredCatalog({ userDataDir: context.userDataDir })
       .sort((a, b) => compareRuntimeVersions(a.version, b.version))[0];
     if (!pin && !local && base.getState({ userDataDir: context.userDataDir }).catalog?.status === 'success') return [];
-    const name = entry?.name || 'The game', bytes = !local && pin?.asset?.bytes > 0 ? pin.asset.bytes : 0;
-    const files = local ? 'Windows Steam client files from Valve' : `the bridge${bytes ? ` (${Math.max(0.1, bytes / 1048576).toFixed(1)} MB)` : ''} and Windows Steam client files from Valve`;
+    // One question per game: Play with Steam downloads what is missing and
+    // starts Steam for that Play. Sizes appear when the catalog or an earlier
+    // Valve download recorded them.
+    const name = entry?.name || 'this game', size = bytes => bytes > 0 ? ` (${Math.max(0.1, bytes / 1048576).toFixed(1)} MB)` : '';
+    const bytes = !local && pin?.asset?.bytes > 0 ? pin.asset.bytes : 0;
+    const valve = `Windows Steam client files from Valve${size(Components.lastDownload(context.userDataDir)?.bytes)}`;
+    const downloads = local ? valve : `the Steam client bridge${size(bytes)} and ${valve}`;
+    const starts = isRunning() === false && ClientStart.clientStartEnabled(entry, context.settings) ? ', then starts Steam' : '';
+    const kept = `That choice is kept for ${name} until the Steam client bridge is installed in Runtimes.`;
     return [{ managerId: id, version: local?.version || pin?.version || null, requiresDownload: true, ...(!pin && !local ? { discoveryRequired: true } : {}), appId: String(game.appId),
-      optional: true, silentFallback: true, companion: true, label: manager.label,
-      ...(bytes ? { bytes } : {}), summary: 'Connects Windows Steam games to the Steam client for Mac. Windows Steam client files are also downloaded from Valve.',
-      cancelLabel: 'Play Without It', detail: `Connects ${name} to the Steam client for Mac. The download is ${files}. ${name} also starts without it.` }];
+      optional: true, silentFallback: true, companion: true, label: manager.label, ...(bytes ? { bytes } : {}), grants: ['steam-client-start'],
+      message: 'Play with Steam?', confirmLabel: 'Play with Steam', cancelLabel: 'Play Without Steam', companionCheckbox: 'Also connect to Steam',
+      detail: `Play with Steam connects ${name} to the Steam client for Mac. It downloads ${downloads}${starts}.\n\nPlay Without Steam runs ${name} without the Steam client. ${kept}`,
+      summary: `Also connect to Steam connects ${name} to the Steam client for Mac. It also downloads ${valve}${starts}. Clearing it runs ${name} without the Steam client. ${kept}` }];
   }
   async function prepare(entry, context, { installation, prefixPath, architecture, environment } = {}) {
     const game = identifyGame(entry), native = discoverClient();
