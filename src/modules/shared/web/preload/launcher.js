@@ -101,7 +101,12 @@ contextBridge.exposeInMainWorld("MacLauncher", {
       } catch {}
       return null;
     },
-    addRecent: inputPath => ipcRenderer.invoke("launcher:addRecent", inputPath),
+    // A failure rejects with a plain record, which keeps its code across the context bridge.
+    addRecent: async inputPath => {
+      const result = await ipcRenderer.invoke("launcher:addRecent", inputPath);
+      if (result?.error) throw { ...result.error };
+      return result?.entry;
+    },
     cancelImport: inputPath => ipcRenderer.invoke("launcher:cancelImport", inputPath),
     forgetGame: gamePath => ipcRenderer.invoke("launcher:forgetGame", gamePath),
     findMissingGames: gamePaths => ipcRenderer.invoke("launcher:findMissingGames", gamePaths),

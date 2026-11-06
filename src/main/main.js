@@ -3401,7 +3401,15 @@ async function openGamesFromMenu() {
 }
 
 ipcMain.handle("launcher:openGameDialog", showGameOpenDialog);
-ipcMain.handle("launcher:addRecent", (_event, inputPath) => gameImports.import(inputPath));
+// The result is a record: Electron keeps only the message of a thrown error, and
+// the code decides which recovery actions an import failure offers.
+ipcMain.handle("launcher:addRecent", async (_event, inputPath) => {
+  try { return { entry: await gameImports.import(inputPath) }; }
+  catch (error) {
+    return { error: { message: String(error?.message || error), ...(typeof error?.code === "string" ? { code: error.code } : {}),
+      ...(error?.name === "AbortError" ? { name: "AbortError" } : {}) } };
+  }
+});
 ipcMain.handle("launcher:cancelImport", (_event, inputPath) => gameImports.cancel(inputPath));
 
 let quitCleanupPending = false, quitCleanupComplete = false;

@@ -33,7 +33,8 @@ module.exports = { id: manifest.id, manifest, detectGame, mergeEntry, runtimeMan
   resolveGraphicsInputs: () => ({ architecture: "arm64" }),
   ensureRuntime: (entry, context) => {
     const selected = manager.resolveSelection(entry, context.settings, context.userDataDir);
-    return selected.ready ? null : { managerId: manager.id, version: selected.version, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {} };
+    return selected.ready ? null : { managerId: manager.id, version: selected.version, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {},
+      ...manager.downloadConsent(entry, context.settings, context.userDataDir, selected.version) };
   },
   launchRuntime: async (runtimeId, entry, context) => {
     if (runtimeId !== "nxnative") return null;

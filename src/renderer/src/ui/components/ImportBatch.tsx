@@ -7,7 +7,7 @@ import { useNoticeTimeout } from "../use-notice-timeout";
 import "./import-batch.css";
 
 type Batch = ImportBatch & { id: number; resolving?: number };
-type ImportApi = { addRecent(path: string): Promise<unknown>; openGameDialog(): Promise<string[]> };
+type ImportApi = { addRecent(path: string): Promise<unknown>; openGameDialog(): Promise<string[]>; revealInFinder?(path: string): Promise<boolean> };
 const itemName = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() || path;
 
 export function useImportBatches(api: ImportApi | undefined) {
@@ -36,22 +36,62 @@ export function useImportBatches(api: ImportApi | undefined) {
       setBatches(previous => previous.map(row => row.id === batch.id ? { ...row, resolving: undefined } : row));
     }
   }
-  return { batches, addPaths, resolve, dismiss: (id: number) => setBatches(previous => previous.filter(batch => batch.id !== id)) };
+  // Removing a failure only takes it off the list; the file is not touched.
+  const remove = (batch: Batch, index: number) => setBatches(previous => previous.map(row => row.id === batch.id
+    ? { ...row, failures: row.failures.filter((_, i) => i !== index) } : row));
+  const reveal = (inputPath: string) => { void api?.revealInFinder?.(inputPath).catch(() => {}); };
+  return { batches, addPaths, resolve, remove, reveal, dismiss: (id: number) => setBatches(previous => previous.filter(batch => batch.id !== id)) };
 }
 
-type Props = ReturnType<typeof useImportBatches> & { jobs: ImportJob[]; onCancel(path: string): void };
-export function ImportBatches({ batches, jobs, onCancel, resolve, dismiss }: Props) {
+type Props = Omit<ReturnType<typeof useImportBatches>, "remove" | "reveal"> & Partial<Pick<ReturnType<typeof useImportBatches>, "remove" | "reveal">> &
+  { jobs: ImportJob[]; onCancel(path: string): void };
+// Running batches and fully added ones keep their own notices. Every failure of
+// the finished batches is listed in one banner with a single Dismiss.
+export function ImportBatches({ batches, jobs, onCancel, resolve, dismiss, remove = () => {}, reveal = () => {} }: Props) {
   const batchPaths = new Set(batches.map(batch => batch.currentPath));
+  const failed = batches.filter(batch => !batch.currentPath && batch.failures.length);
   return <div className="importBatches">
-    {batches.map(batch => <ImportBatchNotice key={batch.id} batch={batch} jobs={jobs} onCancel={onCancel} resolve={resolve} dismiss={dismiss} />)}
+    {batches.filter(batch => !failed.includes(batch)).map(batch =>
+      <ImportBatchNotice key={batch.id} batch={batch} jobs={jobs} onCancel={onCancel} resolve={resolve} dismiss={dismiss} />)}
+    {failed.length > 0 && <ImportFailures batches={failed} resolve={resolve} dismiss={dismiss} remove={remove} reveal={reveal} />}
     <ImportProgress jobs={jobs.filter(job => !batchPaths.has(job.inputPath))} onCancel={onCancel} />
   </div>;
 }
 
+// A damaged or incomplete game cannot be fixed by choosing another file or
+// trying again, so its row offers Show in Finder and Remove only.
+type FailureProps = Pick<Props, "resolve" | "dismiss"> & Pick<ReturnType<typeof useImportBatches>, "remove" | "reveal"> & { batches: Batch[] };
+function ImportFailures({ batches, resolve, dismiss, remove, reveal }: FailureProps) {
+  const busy = batches.some(batch => batch.resolving !== undefined);
+  const added = batches.reduce((sum, batch) => sum + batch.added, 0), total = batches.reduce((sum, batch) => sum + batch.total, 0);
+  return <section className="importBatch" aria-label="Import results">
+    <div className="importBatchHeading">
+      <strong role="status">Added {added} of {total}</strong>
+      <button className="btn small" disabled={busy} onClick={() => batches.forEach(batch => dismiss(batch.id))}>Dismiss</button>
+    </div>
+    <ul className="importBatchFailures">
+      {batches.flatMap(batch => batch.failures.map((failure, index) => <li key={`${batch.id}:${index}:${failure.inputPath}`}>
+        <div><strong>{itemName(failure.inputPath)}</strong><div className="dim">{formatUserError(failure.reason)}</div></div>
+        <div className="importBatchActions">
+          {failure.code === "DETECTION_INVALID_INPUT" ? <>
+            <button className="btn small" onClick={() => reveal(failure.inputPath)}>Show in Finder</button>
+          </> : <>
+            <button className="btn small" disabled={busy} onClick={() => void resolve(batch, index, true)}>
+              {batch.resolving === index ? "Adding…" : "Choose game file…"}</button>
+            <button className="btn small" disabled={busy} onClick={() => void resolve(batch, index, false)}>Retry</button>
+          </>}
+          <button className="btn small" disabled={busy} aria-label={`Remove ${itemName(failure.inputPath)} from this list`}
+            onClick={() => remove(batch, index)}>Remove</button>
+        </div>
+      </li>))}
+    </ul>
+  </section>;
+}
+
 // A finished batch with every item added closes on its own; running batches and
-// unresolved failures stay until handled.
-type NoticeProps = Pick<Props, "jobs" | "onCancel" | "resolve" | "dismiss"> & { batch: Batch };
-export function ImportBatchNotice({ batch, jobs, onCancel, resolve, dismiss }: NoticeProps) {
+// unresolved failures stay until handled. ImportFailures lists the failures.
+type NoticeProps = Pick<Props, "jobs" | "onCancel" | "dismiss"> & Partial<Pick<Props, "resolve">> & { batch: Batch };
+export function ImportBatchNotice({ batch, jobs, onCancel, dismiss }: NoticeProps) {
   const hold = useNoticeTimeout(!batch.currentPath && !batch.failures.length, () => dismiss(batch.id));
   return <section className="importBatch" aria-label="Import results" {...hold}>
     {batch.currentPath ? <>
@@ -66,16 +106,6 @@ export function ImportBatchNotice({ batch, jobs, onCancel, resolve, dismiss }: N
         <strong role="status">Added {batch.added} of {batch.total}</strong>
         <button className="btn small" disabled={batch.resolving !== undefined} onClick={() => dismiss(batch.id)}>Dismiss</button>
       </div>
-      {batch.failures.length > 0 && <ul className="importBatchFailures">
-        {batch.failures.map((failure, index) => <li key={`${index}:${failure.inputPath}`}>
-          <div><strong>{itemName(failure.inputPath)}</strong><div className="dim">{formatUserError(failure.reason)}</div></div>
-          <div className="importBatchActions">
-            <button className="btn small" disabled={batch.resolving !== undefined} onClick={() => void resolve(batch, index, true)}>
-              {batch.resolving === index ? "Adding…" : "Choose game file…"}</button>
-            <button className="btn small" disabled={batch.resolving !== undefined} onClick={() => void resolve(batch, index, false)}>Retry</button>
-          </div>
-        </li>)}
-      </ul>}
     </>}
   </section>;
 }

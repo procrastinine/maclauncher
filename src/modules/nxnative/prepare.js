@@ -80,7 +80,8 @@ async function pythonEnvironment(runtime, context) {
 async function resolveRuntime(entry, context, { runtimeManager = manager } = {}) {
   let selected = runtimeManager.resolveSelection(entry, context.settings, context.userDataDir);
   if (!selected.ready) {
-    await confirmToolInstall(context, { manager: runtimeManager, version: selected.version || "latest", requiresDownload: true, detail: "Required to inspect or prepare Nintendo Switch programs." });
+    await confirmToolInstall(context, { manager: runtimeManager, version: selected.version || "latest", requiresDownload: true,
+      ...(runtimeManager.downloadConsent?.(entry, context.settings, context.userDataDir, selected.version) || { detail: "Required to inspect or prepare Nintendo Switch programs." }) });
     await runtimeManager.installRuntime({ ...context, version: selected.version || "latest" });
     context.onRuntimeStateChange?.();
     selected = runtimeManager.resolveSelection(entry, context.settings, context.userDataDir);
@@ -278,7 +279,7 @@ async function ensureInputRuntime(entry, context, selection, input, packageVersi
     if (installed) { const next = await adopt(installed); if (next) return next; }
   }
   await confirmToolInstall(context, { manager: tools, version: "latest", requiresDownload: true,
-    detail: "Updated nxnative tools are required for this input format or game update selection." });
+    ...(owner.downloadConsent?.(entry, context.settings, context.userDataDir, null, { update: true }) || { detail: "Updated nxnative tools are required for this input format or game update selection." }) });
   await tools.refreshCatalog({ ...context, force: true });
   const catalog = state().catalog;
   const version = catalog.versions.find(value => !catalog.versionRequirements?.[value]?.installReason);

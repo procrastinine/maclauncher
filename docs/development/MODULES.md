@@ -325,7 +325,7 @@ File paths have their own controls:
 
 A runtime can also generate settings from local data:
 
-- `provider: {readAction, writeAction, gameOnly?}` adds the generated settings, shown with the same controls. The read action returns `{schema: {fields, defaults?}, values, message?}`; the write action receives `{values}` and returns the updated result. Game scopes use module actions and module scopes use settings actions, and `gameOnly: true` generates settings for individual games only. The module validates and stores the values itself, including in native preference stores, and generated choices never enter the static runtime-defaults file. Opening settings fetches no runtimes or game data.
+- `provider: {readAction, writeAction, gameOnly?}` adds the generated settings, shown with the same controls. The read action returns `{schema: {fields, defaults?}, values, message?}`; the write action receives `{values}` and returns the updated result. Generated settings follow the static fields, except static fields with `afterProvider: true`, which follow them. The message appears after the generated fields. The window has one **Reset**, which returns both the static fields and the generated ones to their defaults. Game scopes use module actions and module scopes use settings actions, and `gameOnly: true` generates settings for individual games only. The module validates and stores the values itself, including in native preference stores, and generated choices never enter the static runtime-defaults file. Opening settings fetches no runtimes or game data.
 
 Network access is not a runtime setting. It comes from the launcher default and one per-game override. Modules receive the effective value as `context.networkAllowed` and the derived `runtimeSettings.networkIsolation` flag, and runtime panels define no network controls of their own. A runtime that cannot run online declares `networkAccess: false` in its metadata.
 
@@ -372,6 +372,7 @@ The inspector builds a module's information rows, launch choices and action butt
 | `label` | Display label |
 | `format` | Optional `boolean`, `date`, `path` or `string` |
 | `empty` | Placeholder text when the value is missing |
+| `labelsKey` | Optional dotted path to a map from raw values to the labels shown, such as `moduleData.updateLabels`; a value missing from the map is shown as itself |
 | `hiddenWhen` | Conditions that hide the field |
 
 `ui.actions` entries describe the module's inspector actions:

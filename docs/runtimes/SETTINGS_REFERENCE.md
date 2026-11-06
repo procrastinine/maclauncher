@@ -625,11 +625,11 @@ Runtimes tabs: Switch / Switch 2 (nxnative) (managed); Switch / Switch 2 (nxnati
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
 | prod.keys | Path (with picker) |  | Keys for encrypted Switch game data. The file stays in its current location. Not shown in the settings of NUP and decrypted dump games. |
-| Game update | Latest available, Base game (v0) or a local update version | Latest available | *Per game*, for NUP and decrypted dump games with readable package versions. The package that Play prepares; a version that is no longer present prepares the newest local package. |
+| Game update | Latest available, Base game or a local Update N | Latest available | *Per game*, for NUP and decrypted dump games with readable package versions. The package that Play prepares; a version that is no longer present prepares the newest local package. |
 | Fixed keyboard mapping | Information |  | nxnative uses fixed physical key positions; keyboard remapping is not supported. Key names below follow the US keyboard layout. Rows: L + R prompt: Hold Q + E; Left stick: W A S D; D-pad: Arrow keys; A / B / X / Y: J / K / U / I; L / R: Q / E; ZL / ZR: Z / C; Right stick: No keyboard binding; L3 / R3: F / G; + / −: Return / Tab; Shake: Space; Touch: Left click / drag; Fullscreen: Control + Command + F. |
 | Fixed controller mapping | Information |  | Connected controllers with a macOS extended gamepad profile are detected automatically; controller remapping is not supported. Face buttons map by position, regardless of their printed labels. Rows: A / B / X / Y: Right / Bottom / Top / Left; Left / Right stick: Left / Right stick; D-pad: D-pad; L / R: Left / Right shoulder; ZL / ZR: Left / Right trigger; L3 / R3: Left / Right stick click; + / −: Menu / Options. |
 
-Inspector details: Title ID, Format, Build ID, Selected update.
+Inspector details: Title ID, Build ID, Selected update.
 
 | Action group | Actions |
 | --- | --- |

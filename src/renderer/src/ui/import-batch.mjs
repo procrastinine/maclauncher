@@ -8,7 +8,7 @@ export async function runImportBatch(paths, add, onProgress = () => {}) {
       await add(inputPath);
       result.added++;
     } catch (error) {
-      result.failures.push({ inputPath, reason: String(error?.message || error) });
+      result.failures.push({ inputPath, reason: String(error?.message || error), ...(typeof error?.code === "string" ? { code: error.code } : {}) });
     }
     result.completed++;
   }

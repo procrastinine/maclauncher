@@ -94,16 +94,22 @@ function currentFile(entry, context) {
 function packageSettings(entry) {
   const versions = entry.moduleData?.versions || [], choice = entry.runtimeSettings?.nxnative?.packageVersion;
   if (!versions.length || entry.moduleData?.keyRequirement !== "none") return { fields: [], values: {} };
-  return { fields: [{ key: "packageVersion", type: "select", label: "Game update", options: [{ value: "latest", label: "Latest available" }, ...versions.map(value => ({ value, label: value === "v0" ? "Base game (v0)" : value }))] }],
-    values: { packageVersion: versions.includes(choice) ? choice : "latest" } };
+  return { fields: [{ key: "packageVersion", type: "select", label: "Game update", options: [{ value: "latest", label: "Latest available" }, ...versions.map(value => ({ value, label: Inputs.updateLabel(value) || value }))] }],
+    defaults: { packageVersion: "latest" }, values: { packageVersion: versions.includes(choice) ? choice : "latest" } };
 }
 function withPackage(entry, result) {
   const packages = packageSettings(entry);
-  return { ...result, schema: { ...result.schema, fields: [...packages.fields, ...result.schema.fields] }, values: { ...packages.values, ...result.values } };
+  return { ...result, schema: { ...result.schema, fields: [...packages.fields, ...result.schema.fields], defaults: { ...packages.defaults, ...result.schema.defaults } },
+    values: { ...packages.values, ...result.values } };
+}
+// Before the first Play only the update choice exists; the game's own settings follow it.
+function unprepared(entry) {
+  return { schema: { fields: [] }, values: {},
+    message: packageSettings(entry).fields.length ? "More settings for this game appear after its first Play." : "Settings for this game appear after its first Play." };
 }
 async function read(entry, _payload, context, dependencies = {}) {
   const file = currentFile(entry, context), definition = schemaFor(file && readSchema(file));
-  if (!definition) return withPackage(entry, { schema: { fields: [] }, values: {}, message: "Game settings appear after preparation." });
+  if (!definition) return withPackage(entry, unprepared(entry));
   const saved = await (dependencies.preferences || preferences)({ domain: "org.nxnative." + definition.game, signal: context.signal });
   return withPackage(entry, { schema: definition.schema, values: valuesFor(definition, saved) });
 }
@@ -126,7 +132,7 @@ async function write(entry, payload, context, dependencies = {}) {
     entry.moduleData = { ...entry.moduleData, selectedUpdate: Inputs.selectedUpdate(entry.moduleData.versions, selected) };
     context.onEntryChange?.({ runtimeSettings: entry.runtimeSettings, moduleData: entry.moduleData });
   }
-  return withPackage(entry, definition ? { schema: definition.schema, values: valuesFor(definition, saved) } : { schema: { fields: [] }, values: {} });
+  return withPackage(entry, definition ? { schema: definition.schema, values: valuesFor(definition, saved) } : unprepared(entry));
 }
 async function ensure(entry, context, launch, runtime, dependencies = {}) {
   const file = path.join(launch.prepared, "launcher.json");

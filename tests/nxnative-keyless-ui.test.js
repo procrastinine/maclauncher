@@ -74,7 +74,7 @@ async function component(name) {
 }
 const info = () => Modules.getModuleInfo('nxnative');
 const keylessData = (inputPath, extra = {}) => ({ format: 'nup', sourceKind: 'Switch NUP', inputPath, titleId: '0100000000010000',
-  versions: ['v0', 'v65536'], selectedUpdate: 'v65536', generation: null, keyRequirement: 'none', keysRequired: false, inspectionOnly: false, ...extra });
+  versions: ['v0', 'v65536'], updateLabels: { v0: 'Base game', v65536: 'Update 1' }, selectedUpdate: 'v65536', generation: null, keyRequirement: 'none', keysRequired: false, inspectionOnly: false, ...extra });
 // A library row as the main process presents it.
 function libraryEntry(moduleData, extra = {}) {
   const entry = { gameId: 'keyless-example', gamePath: moduleData.inputPath, name: 'Keyless Example', moduleId: 'nxnative', runtimeId: 'nxnative',
@@ -115,6 +115,7 @@ test('Add, Open and drop accept NUP files and keyless dump folders', async t => 
   for (const [input, format, titleId, versions] of [[file, 'nup', '0100000000010000', ['v0']], [folder, 'dump', '0100000000020000', ['v0', 'v65536']],
     [path.join(root, 'Folder with NUP'), 'nup', '0100000000010000', ['v0']], [path.join(root, 'Unreadable.nup'), 'nup', null, []]]) {
     const detected = await Modules.detectGameAsync(input, { workerMode: 'inline' });
+    assert.deepEqual(Object.values(detected.moduleData.updateLabels), versions.map(version => version === 'v0' ? 'Base game' : 'Update 1'), input);
     assert.deepEqual([detected.moduleId, detected.runtimeId, detected.moduleData.format, detected.moduleData.titleId, detected.moduleData.versions,
       detected.moduleData.keyRequirement, detected.moduleData.keysRequired, detected.moduleData.generation],
     ['nxnative', 'nxnative', format, titleId, versions, 'none', false, null], input);
@@ -219,13 +220,15 @@ test('per-game settings hide prod.keys for keyless games and keep it for other S
   };
   const keyless = render(keylessData('/Games/Example.nup', { generation: 2 }));
   assert.doesNotMatch(keyless.html, /prod\.keys|Choose file…/);
-  assert.match(keyless.html, /Build the upstream host when needed/);
+  assert.match(keyless.html, /Loading game settings…[^]*Build the upstream host when needed[^]*Fixed keyboard mapping/,
+    'the game\'s own settings, with Game update first, come before the static options');
+  assert.equal((keyless.html.match(/>Reset</g) || []).length, 1, 'one Reset');
   assert.doesNotMatch(keyless.html, /Game update/, 'the update choice is a game setting from nxnative, not a static control');
   assert.match(keyless.html, /Keyless Example · Nintendo Switch 2/);
   assert.deepEqual(keyless.calls, []);
   for (const keyRequirement of ['unknown', 'encrypted', undefined]) {
     const html = render({ format: 'nsp', sourceKind: 'Switch NSP', inputPath: '/Games/Example.nsp', keyRequirement, keysRequired: keyRequirement === 'encrypted' }).html;
-    assert.match(html, /prod\.keys/, String(keyRequirement));
+    assert.match(html, /prod\.keys[^]*Loading game settings…[^]*Build the upstream host/, String(keyRequirement));
     assert.match(html, /Keyless Example · Nintendo Switch</);
   }
   assert.match(render(keylessData('/Games/Example.nup'), 'module').html, /prod\.keys/, 'the game type setting stays available');
@@ -236,8 +239,11 @@ test('Game update is offered for keyless input, follows the selection and surviv
   const entry = { gameId: 'keyless', moduleData: keylessData('/Games/Example dump', { format: 'dump', sourceKind: 'Switch decrypted dump' }), runtimeSettings: {} };
   const read = await Settings.read(entry, {}, context);
   assert.deepEqual(read.schema.fields.map(field => [field.key, field.label]), [['packageVersion', 'Game update']]);
-  assert.deepEqual(read.schema.fields[0].options.map(option => option.label), ['Latest available', 'Base game (v0)', 'v65536']);
+  assert.deepEqual(read.schema.fields[0].options.map(option => option.label), ['Latest available', 'Base game', 'Update 1']);
   assert.equal(read.values.packageVersion, 'latest');
+  assert.deepEqual([read.schema.defaults.packageVersion, read.message], ['latest', 'More settings for this game appear after its first Play.'],
+    'Reset returns to the newest package, and the note about later settings follows the update choice');
+  assert.deepEqual([2, 131072, 3].map(value => require('../src/modules/nxnative/inputs').updateLabel('v' + value)), ['Update (version 2)', 'Update 2', 'Update (version 3)']);
   let change;
   await Settings.write(entry, { values: { packageVersion: 'v0' } }, { ...context, onEntryChange: value => { change = value; } });
   assert.equal(entry.runtimeSettings.nxnative.packageVersion, 'v0');
@@ -257,7 +263,7 @@ test('Game update is offered for keyless input, follows the selection and surviv
     assert.equal((await Settings.read({ gameId: 'other', moduleData }, {}, context)).schema.fields.length, 0, JSON.stringify(moduleData));
 });
 
-test('the inspector shows the format, title ID and selected update and keeps the nxnative runtime name', async () => {
+test('the inspector shows one format row, the title ID and the selected update by name, without unknown version rows', async () => {
   const GameDetails = (await component('GameDetails')).type;
   const state = createLibraryFixture(), actions = new Proxy({}, { get: () => async () => {} });
   const g = libraryEntry(keylessData('/Games/Example.nup', { generation: 2 }));
@@ -265,11 +271,43 @@ test('the inspector shows the format, title ID and selected update and keeps the
   const html = renderToStaticMarkup(React.createElement(GameDetails, { g, state, moduleInfo: info(), actions,
     moduleActionResults: {}, moduleActionBusy: {}, moduleActionError: null }));
   assert.match(html, /class="cardSubtitle">Nintendo Switch 2</);
-  for (const [label, value] of [['Format', 'Switch NUP'], ['Title ID', '0100000000010000'], ['Selected update', 'v65536']])
+  for (const [label, value] of [['Format', 'Switch NUP'], ['Title ID', '0100000000010000'], ['Selected update', 'Update 1']])
     assert.match(html, new RegExp(`>${label}<[\\s\\S]{0,300}?>${value}<`), label);
+  assert.equal((html.match(/>Format</g) || []).length, 1, 'one Format row');
+  assert.doesNotMatch(html, />Version<[^]{0,200}?>Unknown<|>Confidence</, 'no unknown version rows');
+  // A record from before update names shows the package version itself.
+  const older = libraryEntry(keylessData('/Games/Example.nup', { updateLabels: undefined }));
+  assert.match(renderToStaticMarkup(React.createElement(GameDetails, { g: older, state, moduleInfo: info(), actions,
+    moduleActionResults: {}, moduleActionBusy: {}, moduleActionError: null })), />Selected update<[\s\S]{0,300}?>v65536</);
   assert.doesNotMatch(html, />Format<[^]{0,120}?>2</, 'the platform generation is not shown as a format');
   assert.doesNotMatch(html, /Choose prod\.keys/);
   assert.match(html, /<option value="nxnative" selected="">Switch \/ Switch 2 \(nxnative\)<\/option>/);
+});
+
+test('download consent names the Switch runtime plainly and gives the size its catalog lists', t => {
+  const { createManager } = require('../src/modules/nxnative/runtime/manager');
+  const { createManagedPythonTool } = require('../src/modules/shared/runtime/managed-python-tool');
+  const Upstream = require('../src/modules/shared/runtime/upstream');
+  const root = temp(t), MB = 1048576;
+  const source = createManagedPythonTool({ id: 'nxnative', label: 'nxnative', scriptName: 'main.py', requiredFiles: ['main.py'], sourceUrl: 'https://github.com/seedds/nxnative',
+    upstream: Upstream.index({ locations: ['https://example.invalid/versions.json'], parse: () => [] }) });
+  let toolsReady = false;
+  const tools = { resolveSelection: () => ({ version: 'tools-1', ready: toolsReady }), core: { listDiscoveredCatalog: () => [{ version: 'tools-1', asset: { bytes: 25 * MB } }] } };
+  const legacy = { ui: {}, customRuntime: { inspect() { throw Error('Not a custom runtime'); } }, resolveSelection: () => ({ version: null, ready: false }),
+    getState: () => ({ installed: [], catalog: { versions: [], versionRequirements: {} } }), core: { listDiscoveredCatalog: () => [{ version: 'MCLv9', asset: { bytes: 3 * MB } }] } };
+  const manager = createManager({ sourceManager: source, legacyManager: legacy, toolsManager: tools });
+  const game = { name: 'Keyless Example' }, snapshot = 'git-' + 'a'.repeat(40);
+  assert.deepEqual(manager.downloadConsent(game, {}, root, snapshot), { label: 'Switch runtime', message: 'Download the Switch runtime?',
+    detail: 'Required to run Keyless Example. The download is the Switch runtime tools (25.0 MB) from MacLauncher Builds and the matching nxnative source from GitHub.' });
+  toolsReady = true;
+  assert.equal(manager.downloadConsent(game, {}, root, snapshot).detail, 'Required to run Keyless Example. The download is the matching nxnative source from GitHub.');
+  assert.equal(manager.downloadConsent(game, {}, root, 'MCLv9').detail, 'Required to run Keyless Example. The download is the Switch runtime (3.0 MB) from MacLauncher Builds.');
+  assert.deepEqual(manager.downloadConsent(game, {}, root, null, { update: true }), { label: 'Switch runtime', message: 'Update the Switch runtime?',
+    detail: 'Keyless Example needs a newer Switch runtime for this game format or game update choice. The download is newer Switch runtime tools from MacLauncher Builds.' });
+  // Play's plan carries the same wording; no version or revision is named.
+  const plan = Nxnative.ensureRuntime({ name: 'Keyless Example', moduleId: 'nxnative', runtimeId: 'nxnative', runtimeData: {} }, { settings: {}, userDataDir: root });
+  assert.deepEqual([plan.label, plan.message], ['Switch runtime', 'Download the Switch runtime?']);
+  assert.match(plan.detail, /^Required to run Keyless Example\. The download is /);
 });
 
 test('Play prepares the chosen update and falls back to the newest local package when it is gone', async t => {

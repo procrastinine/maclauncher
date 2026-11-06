@@ -29,15 +29,15 @@
         "fields": [
           { "key": "keysPath", "type": "string", "label": "prod.keys", "description": "Keys for encrypted Switch game data. The file stays in its current location.", "pickerAction": "pickKeysFile", "pickerResultKey": "filePath", "fileStatusAction": "keysFileStatus", "gameHiddenWhen": [{ "key": "moduleData.keyRequirement", "equals": "none" }] },
           { "key": "packageVersion", "type": "string", "label": "Game update", "hidden": true, "gameOnly": true },
-          { "key": "buildUpstreamHost", "type": "boolean", "label": "Build the upstream host when needed", "description": "Needs Xcode. During preparation, supported native tools can build the selected snapshot's host when the packaged host does not match. Disabled by default; older native tools ignore this option." },
-          { "key": "keyboard", "type": "display", "label": "Fixed keyboard mapping", "description": "nxnative uses fixed physical key positions; keyboard remapping is not supported. Key names below follow the US keyboard layout.", "rows": [
+          { "key": "buildUpstreamHost", "type": "boolean", "afterProvider": true, "label": "Build the upstream host when needed", "description": "Needs Xcode. During preparation, supported native tools can build the selected snapshot's host when the packaged host does not match. Disabled by default; older native tools ignore this option." },
+          { "key": "keyboard", "type": "display", "afterProvider": true, "label": "Fixed keyboard mapping", "description": "nxnative uses fixed physical key positions; keyboard remapping is not supported. Key names below follow the US keyboard layout.", "rows": [
             { "label": "L + R prompt", "value": "Hold Q + E" }, { "label": "Left stick", "value": "W A S D" }, { "label": "D-pad", "value": "Arrow keys" },
             { "label": "A / B / X / Y", "value": "J / K / U / I" }, { "label": "L / R", "value": "Q / E" }, { "label": "ZL / ZR", "value": "Z / C" },
             { "label": "Right stick", "value": "No keyboard binding" },
             { "label": "L3 / R3", "value": "F / G" }, { "label": "+ / −", "value": "Return / Tab" }, { "label": "Shake", "value": "Space" },
             { "label": "Touch", "value": "Left click / drag" }, { "label": "Fullscreen", "value": "Control + Command + F" }
           ] },
-          { "key": "controller", "type": "display", "label": "Fixed controller mapping", "description": "Connected controllers with a macOS extended gamepad profile are detected automatically; controller remapping is not supported. Face buttons map by position, regardless of their printed labels.", "rows": [
+          { "key": "controller", "type": "display", "afterProvider": true, "label": "Fixed controller mapping", "description": "Connected controllers with a macOS extended gamepad profile are detected automatically; controller remapping is not supported. Face buttons map by position, regardless of their printed labels.", "rows": [
             { "label": "A / B / X / Y", "value": "Right / Bottom / Top / Left" },
             { "label": "Left / Right stick", "value": "Left / Right stick" }, { "label": "D-pad", "value": "D-pad" },
             { "label": "L / R", "value": "Left / Right shoulder" }, { "label": "ZL / ZR", "value": "Left / Right trigger" },
@@ -52,7 +52,8 @@
   "supports": { "saveLocation": true, "saveEditing": false, "cheats": false, "cheatsPatcher": false },
   "ui": {
     "entryLabels": [{ "when": [{ "key": "moduleData.generation", "equals": 2 }], "label": "Nintendo Switch 2", "shortLabel": "Nintendo Switch 2" }],
-    "infoFields": [{ "key": "moduleData.titleId", "label": "Title ID" }, { "key": "moduleData.sourceKind", "label": "Format" }, { "key": "moduleData.buildId", "label": "Build ID" }, { "key": "moduleData.selectedUpdate", "label": "Selected update" }],
+    "detection": { "showVersion": false },
+    "infoFields": [{ "key": "moduleData.titleId", "label": "Title ID" }, { "key": "moduleData.buildId", "label": "Build ID" }, { "key": "moduleData.selectedUpdate", "label": "Selected update", "labelsKey": "moduleData.updateLabels" }],
     "actions": [
       { "id": "inspectProgram", "label": "Inspect program", "kind": "secondary", "cancellable": true, "resultFields": [
         { "key": "format", "label": "Format" }, { "key": "titleId", "label": "Title ID" }, { "key": "outputRoot", "label": "Inspection", "format": "path" }

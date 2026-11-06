@@ -25,7 +25,8 @@ function nup(file) {
   } catch { return result; } // Recognition survives absent or newer metadata; the runtime validates the input.
 }
 function facts(format, sourceKind, inputPath, title, versions) {
-  return {format,sourceKind,inputPath,titleId:title ? title.toString(16).padStart(16,'0').toUpperCase() : null,versions:versions.map(v=>'v'+v),selectedUpdate:versions.length ? 'v'+versions.at(-1) : null,generation:null,keyRequirement:'none',keysRequired:false,inspectionOnly:false,canDecompile:false};
+  return {format,sourceKind,inputPath,titleId:title ? title.toString(16).padStart(16,'0').toUpperCase() : null,versions:versions.map(v=>'v'+v),
+    updateLabels:Object.fromEntries(versions.map(v=>['v'+v,updateLabel('v'+v)])),selectedUpdate:versions.length ? 'v'+versions.at(-1) : null,generation:null,keyRequirement:'none',keysRequired:false,inspectionOnly:false,canDecompile:false};
 }
 function dump(folder) {
   const root=fs.realpathSync(folder);
@@ -54,7 +55,14 @@ function dump(folder) {
   }
   return facts('dump','Switch decrypted dump',folder,id,[...(base&&rom(base)?[0]:[]),...rows.map(r=>r.v)]);
 }
+// A package version as people read it: the base game, or the update number that
+// Switch versions carry in their upper bits (v65536 is Update 1).
+function updateLabel(version) {
+  const value = Number(/^v(\d+)$/.exec(version || '')?.[1]);
+  if (!Number.isSafeInteger(value)) return null;
+  return value === 0 ? 'Base game' : value % 65536 === 0 ? `Update ${value / 65536}` : `Update (version ${value})`;
+}
 // The package Play prepares from a keyless input: the game's update choice while
 // that package is present, otherwise the newest local package.
 function selectedUpdate(versions, choice) { return Array.isArray(versions) ? versions.includes(choice) ? choice : versions.at(-1) || null : null; }
-module.exports={nup,dump,selectedUpdate,MAX_TABLE};
+module.exports={nup,dump,selectedUpdate,updateLabel,MAX_TABLE};

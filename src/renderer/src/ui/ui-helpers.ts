@@ -134,8 +134,8 @@ export function resolveRuntimeVersionLabel(
   runtimeSection: Record<string, any> | null | undefined
 ) {
   if (!version) return "";
-  const labels = runtimeSection?.versionLabels || runtimeSection?.catalog?.versionLabels;
-  const mapped = labels && typeof labels === "object" ? (labels as Record<string, string | null | undefined>)[version] : null;
+  // A section's own labels refine its catalog's; an empty section map does not hide them.
+  const mapped = runtimeSection?.versionLabels?.[version] || runtimeSection?.catalog?.versionLabels?.[version] || null;
   const label = readableVersion(mapped ? String(mapped) : String(version));
   // A catalog pre-release whose name does not already say so is marked.
   const prerelease = runtimeSection?.catalog?.versionRequirements?.[version]?.prerelease === true;
@@ -166,8 +166,10 @@ function readableVersion(raw: string) {
     const month = MONTHS[Number(build[2]) - 1], day = Number(build[3]);
     return month && day ? `${build[1]} (${month} ${day})` : raw;
   }
-  // A workflow build named by its time and commit reads as its date.
-  const snapshot = raw.match(/^(\d{4}-\d{2}-\d{2})T\d{2}-\d{2}-\d{2}Z[_-][0-9a-f]{7,40}$/i);
+  // A workflow build named by its time and commit reads as its date, and so does
+  // a source snapshot ("HEAD · 2026-10-27 · b7654d4940f9").
+  const snapshot = raw.match(/^(\d{4}-\d{2}-\d{2})T\d{2}-\d{2}-\d{2}Z[_-][0-9a-f]{7,40}$/i) ||
+    raw.match(/^(?:HEAD\s*·\s*)?(\d{4}-\d{2}-\d{2})\s*·\s*[0-9a-f]{7,40}$/i);
   if (snapshot) return snapshot[1];
   const label = raw.replace(/-MCLv[\w.-]+$/i, "")
     .replace(/(?:\s*·\s*|[-._+@])?(?<![0-9A-Za-z])(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{7,40}(?![0-9A-Za-z])/g, "")
