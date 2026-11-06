@@ -84,7 +84,7 @@ function configure(manager, definition) {
     return { ...data, root, source };
   };
   Custom.configure(manager, { async prepare(input, options) {
-    return prepareComponent(input, options, await prepareArchive(input, { ...options, names: definition.names, licence: definition.importLicence }));
+    return prepareComponent(input, options, await prepareArchive(input, { ...options, names: definition.names, licence: definition.importLicence, component: definition.label }));
   }, inspect(input, context = {}) {
     const { data, userDataDir, verification } = context;
     let root = data?.root || input;
@@ -284,7 +284,7 @@ async function prepareArchive(input, { userDataDir, names, signal, licence, ...c
 // kept. Declining cancels the import. Agreement
 // is recorded by the licence file's SHA-256, so only a different licence text
 // is shown again; an agreement that cannot be recorded is asked again later.
-async function confirmLicence(directory, owner, { userDataDir, confirmRuntimeInstall, logger, run } = {}) {
+async function confirmLicence(directory, owner, { userDataDir, confirmRuntimeInstall, logger, run, component } = {}) {
   const name = fs.readdirSync(directory).filter(item => /^licen[cs]e\b/i.test(item) && fs.statSync(path.join(directory, item)).isFile()).sort()[0];
   if (!name) return;
   const file = path.join(directory, name), bytes = fs.readFileSync(file), id = require("node:crypto").createHash("sha256").update(bytes).digest("hex");
@@ -298,8 +298,8 @@ async function confirmLicence(directory, owner, { userDataDir, confirmRuntimeIns
       ["-convert", "txt", "-stdout", file], { timeout: 30000, maxBuffer: 16 * 1024 * 1024 })).stdout; }
     catch { text = text.replace(/\\par[d]?\b/g, "\n").replace(/\\'[0-9a-f]{2}|\\[a-z]+-?\d* ?|[{}]/gi, ""); }
   }
-  const consent = typeof confirmRuntimeInstall === "function" ? await confirmRuntimeInstall({ kind: "licence", label: owner,
-    message: `Agree to the ${owner} licence?`, detail: text.trim(), licenseRequired: true, confirmLabel: "Agree and Import", cancelLabel: "Cancel" }) : false;
+  const consent = typeof confirmRuntimeInstall === "function" ? await confirmRuntimeInstall({ kind: "licence", label: owner, component,
+    message: `Agree to the ${owner} license?`, detail: text.trim(), licenseRequired: true, confirmLabel: "Agree and Import", cancelLabel: "Cancel" }) : false;
   if (consent !== true && consent?.approved !== true) throw require("./download-utils").createAbortError(`The ${owner} import was canceled.`);
   try { Json.writeJsonAtomic(store, { schemaVersion: 1, accepted: { ...accepted, [id]: new Date().toISOString() } }); }
   catch (error) { (logger || console).warn?.(`[translators] The licence agreement was not recorded: ${error.message}`); }

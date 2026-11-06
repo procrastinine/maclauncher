@@ -332,6 +332,7 @@ const backendService = createBackendService({ userDataDir,
 async function confirmRuntimeInstallation(plan, entry, {signal} = {}) {
   // `signal` closes the dialog as cancelled when its request is superseded.
   if (signal?.aborted) return false;
+  if (plan?.kind === "licence") return require("./licence-sheet").show(plan, { parent: getLauncherDialogOwner(), signal });
   const versionLabel = [plan.label, plan.versionLabel || plan.version].filter(Boolean).join(" ");
   // Optional companions of this download are listed with their version and size.
   const companions = (Array.isArray(plan.companions) ? plan.companions : []).map(item =>
