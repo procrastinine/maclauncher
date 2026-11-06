@@ -4700,6 +4700,10 @@ ipcMain.handle("launcher:runtimeAction", async (event, managerId, action, payloa
   return backendService.request(`runtime:${managerId}`, "runtimeAction", managerId, action, payload);
 });
 
+// Runtimes → Components; the backend lists, removes, adds and reveals them.
+ipcMain.handle("launcher:componentAction", (_event, action, payload) =>
+  backendService.request("components", "componentAction", String(action || ""), payload && typeof payload === "object" ? payload : {}));
+
 ipcMain.handle("launcher:moduleSettingsAction", async (_event, moduleId, action, payload) => {
   if (!Modules.getModule(moduleId)) throw new Error("Module not found.");
   if (hostAccountActions.handles(moduleId, action)) return hostAccountActions.run(moduleId, action, payload);

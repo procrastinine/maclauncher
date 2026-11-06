@@ -78,7 +78,7 @@ function executableFloor(file, architecture) {
 // query or from a local cache. Every pinned manager offers the user's own
 // default version, as other multi-version runtimes do, unless a game needs its
 // exact engine version.
-function createSingleArchitectureManager({ installationArchitecture, shareDiscovery, id, label, discoverCatalog, upstream, catalogSources, cacheDownloads = false, projectBuilds, buildsRepository, upstreamUrl, upstreamLabel, resolveExecutable, inspectRuntime = Native.resolveLocalRuntime, verifyArtifact, prepareInstall, buildRuntime, buildSourcePath, sourceUrl, sourceLabel, sourceName, sourceDescription, formatVersionLabel, versionContents, buildHelpUrl, buildRequirements, bundledRuntime, legacyInstalledRuntime, formerIds = [], bundledExecution = "copy", distributionRequired = false, importLocal = false, nativeLibrary = false, supportsDefault = true, customRuntime = true, maxEntries = 500, dependencies = {} }) {
+function createSingleArchitectureManager({ installationArchitecture, shareDiscovery, id, label, discoverCatalog, upstream, catalogSources, projectBuilds, buildsRepository, upstreamUrl, upstreamLabel, resolveExecutable, inspectRuntime = Native.resolveLocalRuntime, verifyArtifact, prepareInstall, buildRuntime, buildSourcePath, sourceUrl, sourceLabel, sourceName, sourceDescription, formatVersionLabel, versionContents, buildHelpUrl, buildRequirements, bundledRuntime, legacyInstalledRuntime, formerIds = [], bundledExecution = "copy", distributionRequired = false, importLocal = false, nativeLibrary = false, supportsDefault = true, customRuntime = true, maxEntries = 500, dependencies = {} }) {
   if (typeof distributionRequired !== "boolean") throw new Error("Runtime distribution requirements must be explicit booleans.");
   if (typeof importLocal !== "boolean") throw new Error("Local runtime imports must be explicitly enabled.");
   if (typeof nativeLibrary !== "boolean") throw new Error("Native library runtimes must be explicitly enabled.");
@@ -700,7 +700,10 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
         (pin.projectPackage?.unavailable && pin.installReason) || registrationFailure(userDataDir, version) ||
         `${label} ${version} is not installed for ${Architecture.architectureLabel(installationArchitecture)}.` };
   }
-  async function installVersion({ userDataDir, version, signal, onProgress, logger, sourceDir, replace = false } = {}) {
+  // `archiveFile` is a local copy of the release archive added in Runtimes →
+  // Components. It replaces the download and must match the catalog's SHA-256;
+  // nothing is fetched for it, including package dependencies.
+  async function installVersion({ userDataDir, version, signal, onProgress, logger, sourceDir, replace = false, archiveFile } = {}) {
     if (process.platform !== "darwin") throw new Error(`${label} installation requires macOS.`);
     loadCatalog(userDataDir);
     const normalized = normalizeVersion(version);
@@ -737,6 +740,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       return installed;
     }
     if (!pin.asset) throw new Error(pin.installReason || `${label} ${normalized} requires a local Mac build. A compatible runtime can be imported in Runtimes.`);
+    if (archiveFile && !/^[a-f0-9]{64}$/.test(pin.asset.sha256 || "")) throw new Error(`${label} ${normalized} has no recorded SHA-256, so a local copy cannot be verified.`);
     const destinationRoot = path.dirname(destination);
     fs.mkdirSync(destinationRoot, { recursive: true });
     const staging = fs.mkdtempSync(path.join(destinationRoot, ".install-"));
@@ -746,7 +750,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       onProgress?.({ downloaded: 0, total: pin.asset.bytes || null, detail: "Downloading…" });
       const download = destination => dependencies.downloadToFile ? dependencies.downloadToFile(pin.asset.url, destination, { signal, onProgress })
         : Upstream.download(Upstream.listedFile(pin.projectPackage ? {...pin.asset,bytes:undefined} : pin.asset), destination, { signal, onProgress });
-      const fetched = cacheDownloads ? await require("./artifact-cache").acquire({ userDataDir, asset: pin.asset, destination: archivePath, download, signal }) : await download(archivePath);
+      const fetched = archiveFile ? await require("../copy-file").cloneOrCopy(archiveFile, archivePath, { signal }).then(() => null) : await download(archivePath);
       const archiveBytes = fs.statSync(archivePath).size;
       const progressBytes = { downloaded: archiveBytes, total: archiveBytes };
       onProgress?.({ ...progressBytes, detail: "Checking download…" });
@@ -773,7 +777,8 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
         const declaration=JSON.parse(require('./bundled-native').readRegular(filename,require('./bundled-native').LIMITS.manifestBytes).bytes);
         packageDependencies=await require('./package-dependencies').prepare(declaration,{
           userDataDir,repository:buildsRepository || projectBuilds?.repository || 'procrastinine/maclauncher-builds',signal,logger,onProgress,
-          ...(dependencies.packageDependencies || {})});
+          ...(dependencies.packageDependencies || {}),
+          ...(archiveFile ? { fetchCatalog: async ({ projectId }) => { throw new Error(`${label} ${normalized} needs the shared library ${projectId}, which is not on this Mac. Installing ${label} in Runtimes downloads it after consent.`); } } : {})});
       }
       onProgress?.({ ...progressBytes, detail: "Checking installation…" });
       const preparation = projectPackages && pin.projectPackage ? projectPackages.prepare : prepareInstall;
@@ -976,7 +981,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       let selection = resolveSelection({}, settings, options.userDataDir, { version: requested });
       let version = selection.version;
       let pin = entries.get(version), refreshed = false;
-      if (!selection.ready && (selection.discoveryRequired || projectPackages && pin && !pin.projectPackage)) {
+      if (!options.archiveFile && !selection.ready && (selection.discoveryRequired || projectPackages && pin && !pin.projectPackage)) {
         // This is an explicit install, including consented Play preparation.
         // Resolve its binary before considering an upstream source recipe.
         refreshed = true;

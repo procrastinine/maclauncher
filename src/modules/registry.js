@@ -249,6 +249,34 @@ function listTranslatorEnvironments() {
   return translatorEnvironments.slice();
 }
 
+// A module directory or shared namespace declares the downloadable files it
+// keeps outside its runtime rows in an optional components.js, an array of
+// component declarations listed by core/component-service.js in Runtimes →
+// Components. Loaded only when that list is read.
+let components = null;
+function listComponents() {
+  if (!components) {
+    components = [];
+    const owners = [...MODULES.map(mod => ({ id: mod.id, dir: mod.__moduleDir })),
+      ...SHARED_SUBMODULES.map(sub => ({ id: `${SHARED_DIR_NAME}/${sub.id}`, dir: sub.dir }))];
+    for (const owner of owners) {
+      const file = path.join(owner.dir, "components.js");
+      if (!fs.existsSync(file)) continue;
+      try {
+        const declared = require(file);
+        for (const component of Array.isArray(declared) ? declared : []) {
+          if (component && typeof component.id === "string" && typeof component.list === "function" &&
+              !components.some(item => item.id === component.id)) components.push({ ...component, owner: owner.id });
+        }
+      } catch (error) {
+        // A failing declaration only leaves its owner's components unlisted.
+        console.warn(`[components] ${owner.id}: ${error.message}`);
+      }
+    }
+  }
+  return components.slice();
+}
+
 function listSupportedModules() {
   return moduleList.map(mod => mod.manifest?.label || mod.id);
 }
@@ -326,6 +354,7 @@ module.exports = {
   getModuleDir,
   getModuleInfo,
   getRuntimeManagerUi,
+  listComponents,
   listDerivedStores,
   listModuleIds,
   listModules,

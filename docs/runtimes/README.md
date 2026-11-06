@@ -200,6 +200,17 @@ Some catalogs also publish builds for another architecture that the Mac can run.
 
 An Intel Mac lists only Intel and Universal builds, and a runtime with no build it can run lists no version. Builds for both architectures can be installed at the same time; an installed version built for an architecture other than the automatic one carries an **Intel** or **Apple Silicon** label. A source that has been loaded but lists no build for the selected architecture shows a note and the small reload button, while **Load versions** appears only for a source that has not been loaded. [System requirements](SYSTEM_REQUIREMENTS.md) lists the architectures of each runtime.
 
+Every label that names the CPU of a build uses one vocabulary:
+
+| Code | Label |
+| --- | --- |
+| Mac code for Apple Silicon | **Apple Silicon** |
+| Mac code for Intel | **Intel**; **Intel (Rosetta)** where the label states that the build runs on an Apple Silicon Mac, as in the **Build** menu and the inspector |
+| Mac code for both | **Universal** |
+| Windows code | its Windows architecture: **x64**, **x86** or **ARM64** |
+
+The graphics translator entries, **DirectX → Vulkan**, **DirectX → Metal** and **Vulkan drivers**, name the CPU build of every installed version with a badge, taken from the CPU slices of its installed library, then from the build its release list declares, then from the CPU its installation was made for. A library with both slices reads **Universal**, and Windows libraries published once for every Mac read **Universal** as their list declares. When both builds of one version are installed, the version appears as two rows, one labeled **Intel** and one **Apple Silicon**. In these entries the **Build** menu sits under **Additional sources**, because Play chooses the build that a game's Wine needs. A version in a download menu names its build only when it differs from the chosen build, such as an Intel-only version listed as **1.2 · Intel** for Apple Silicon; a Universal build includes the chosen CPU and is not named, and a release list that declares no CPU, such as MoltenVK's release page, leaves a version unnamed until it is installed. A menu whose entries all share one CPU, such as a game's Vulkan driver choices, does not repeat it. [Graphics translator CPU builds](graphics-architecture.md#labels) lists which build each game runtime loads.
+
 For a selected version, a verified installed copy is used before another CPU build is downloaded. Among installed copies, the launcher's own CPU comes first, followed by any other CPU the Mac can run, including Intel through Rosetta on Apple Silicon. An explicit CPU choice is always followed. A missing component that the runtime cannot run without can require a repair, whereas a missing optional companion never causes the base runtime to be downloaded again.
 
 ### Default versions
@@ -212,7 +223,7 @@ Installing from **Runtimes** leaves a saved default unchanged, with these except
 
 Managers that declare `supportsDefault: false`, such as Unity Mono and the mpv plugins, offer no **Set default**. **Use automatic default** removes a saved default.
 
-An installed build is marked with a processor when its package is built for a processor other than the automatic one, for example **Intel** for an Intel build installed with the **Build** menu in the Apple Silicon app. Builds for the automatic processor and Universal builds carry no mark. The mark follows the Macs that the package declares it runs on, not the processor of the files inside it. A package for Apple Silicon that contains Intel Wine libraries is therefore not marked **Intel**, and such a build can be the default. When one version is installed with both **Build** choices, only the installation made with the other processor's choice is marked. When the default version is not installed, the **Installed** list says so, and MacLauncher asks before downloading it when a game needs it.
+An installed build is marked with a processor when its package is built for a processor other than the automatic one, for example **Intel** for an Intel build installed with the **Build** menu in the Apple Silicon app. Builds for the automatic processor and Universal builds carry no mark. The mark follows the Macs that the package declares it runs on, not the processor of the files inside it. A package for Apple Silicon that contains Intel Wine libraries is therefore not marked **Intel**, and such a build can be the default. When one version is installed with both **Build** choices, only the installation made with the other processor's choice is marked. The graphics translator entries name every build instead, as described under [Processor builds](#processor-builds). When the default version is not installed, the **Installed** list says so, and MacLauncher asks before downloading it when a game needs it.
 
 In the inspector, the **Version** menu names the version recommended by the game's data as **Recommended (vX)**, and **Install** beside the menu installs that exact version when it is missing. The menu lists installed versions and the game's saved choice, while downloadable versions stay in **Runtimes**. Installed builds that the Mac cannot run are left out of the menu unless one is the game's saved choice.
 
@@ -221,6 +232,32 @@ A damaged or incomplete installation stays in the menu as **Needs repair**. When
 The installation controls in **Runtimes** download the selected version. Installing the first version from **Runtimes** saves it as the default when no default is saved, but choosing a download version alone does not save a preference.
 
 Runtime status uses the same saved preferences as Play, including versions of dependencies that are selected separately, and changing a default refreshes the status of the runtimes that depend on it.
+
+### Downloaded files
+
+**Runtimes → Tools → Downloaded files**, the last subtab of the Tools entry, manages every downloaded file that has no row of its own elsewhere in **Runtimes**. Play and the inspector never open it; each file downloads by itself, after consent, when something needs it. It covers:
+
+- small runtime packages that other runtimes load, such as CrossOver graphics integration, the WineVulkan scene adapter, the FidelityFX API adapter and MoltenVK scene support
+- shared assets, such as the fallback fonts of KiriKiri and NScripter games and the MIDI soundfont and RPG Maker run-time packages that MKXP-Z uses
+- the GOG and Epic Games Store download helpers
+- the shared libraries that installed runtime packages declare
+- caches that MacLauncher fills, such as translator descriptions and neural model source archives
+
+The Steam client bridge and Valve's Steam client files are managed in the bridge's own **Runtimes** entry.
+
+The tab lists installed files only, largest first. A row names the file and its version, the CPU architecture in the vocabulary of [Processor builds](#processor-builds), the size on disk, the source (the host it was downloaded from, **Added manually**, or **Created by MacLauncher** for a cache) and the runtimes or games that use it, by their names in **Runtimes**. The tooltip of the name holds the file's content digest. With nothing installed, the tab reads **No downloaded files.** The list reads only local files; the reload button reads them again.
+
+**Delete** asks for confirmation in a native dialog. The dialog names the runtimes or games that use the file, notes that a running game keeps the files it already loaded until it quits, and states that MacLauncher asks before downloading it again the next time something needs it; for a cache, it states that MacLauncher fills it again when needed. A shared library that installed runtimes still load cannot be deleted, and its row gives that reason; it is removed with the last runtime that uses it. **Delete unused** deletes every file that no installed runtime or game uses, after one confirmation that lists them. Removal renames a file to a trash name in its own folder and then deletes it without following links; each such folder is a declared store of storage upkeep, so a stopped removal is finished by the next upkeep pass.
+
+**Add from file…** reads a chosen file before anything else, then adds it to the download whose recorded identity it matches, without network access:
+
+- A shared asset must have the recorded size and SHA-256.
+- A runtime package archive must match the SHA-256 of a release in that runtime's cached version list. A match installs that release, for the CPU its list names, through the ordinary installation. A package that declares a shared library that is not on this Mac is rejected with that library's name; installing the runtime from **Runtimes** downloads it after consent.
+- An RPG Maker run-time package installer must match the publisher installer's recorded SHA-256. When the installer reader that extracts it is not installed, MacLauncher asks before downloading the reader.
+
+A folder, an empty file or a file that matches no recorded download is rejected with a plain reason, which for an unknown file names its SHA-256, and nothing is installed. The file is checked the same way when the matching download is already installed. An added file reads **Added manually** as its source.
+
+**Show in Finder** reveals the file or its folder.
 
 ## Per-game runtime overrides
 
@@ -290,6 +327,20 @@ Catalogs declare `installable` and, optionally, `installableVersions`, `installL
 `runtime.managerUi[managerId].management` declares which download or automated build flows a manager supports. The Runtimes entries and the inspector's management links follow this metadata, while engine settings, per-game options, exact versions and backend actions remain available. A manager with several backends can also declare `sectionManagement`; ONScripter-Yuri, for example, exposes native `mac` and `web` sections. Internal helpers that have no UI are kept apart from game-runtime choices.
 
 `manifest.runtime.managerSectionOverrideKey` declares which manager section a module's per-game override selects in the inspector.
+
+### Component declarations
+
+**Runtimes → Tools → Downloaded files** lists declarations from `src/core/components.js` and from an optional `components.js` in each module folder or shared submodule folder, which `registry.listComponents()` discovers. Each file exports an array of declarations, and the first declaration of an id wins. A declaration has:
+
+- `id`, `label` and `description`
+- `list(context)`: the installed items, read from local files only
+- `remove(item, context)`, optional: deletes one item
+- `import`, optional: `{ matches(file, context), run(path, context) }`. **Add from file…** reads the chosen file once and passes `{ path, size, sha256 }` to each `matches`; the first declaration that recognizes its recorded identity runs `run`, which checks the file again while it installs it and throws a plain reason when it differs
+- `cache`, optional: `true` for data the launcher recreates
+
+An item is `{ id, version, identity, architecture, windows, path, source, users, status, removable, removeReason }`. `windows: true` marks Windows code, whose CPU is named as Windows names it. `source` is `{ url }`, `{ label }` or `"manual"`, `users` names the runtimes or games that load the item, and `removable: false` with `removeReason` keeps an item that is still required. The context holds `userDataDir`, `settings`, `logger`, `signal`, `runtimeAction(managerId, action, payload)`, `runtimeLabel(id)`, which names a runtime as **Runtimes** does, `confirmRuntimeInstall` and `downloads`. Sizes on disk, **Show in Finder** and the file chooser are provided by the launcher. A component whose `remove` places trash outside an existing store declares that folder in its owner's `derived-stores.js` with `match: TRASH`.
+
+`src/modules/shared/runtime/runtime-components.js` provides the common forms: `fromRuntimeManager(manager, { windows })` lists a manager's installed versions with their CPU builds, deletes one through the manager's uninstall action and installs a matching local archive through the manager's install action; `cacheComponent` describes one cache folder; `removeOwned` deletes one item inside its store. A pinned native manager's `installRuntime` accepts `archiveFile`, a local copy of the release archive that replaces the download and must match the release's recorded SHA-256. Every runtime manager that Runtimes does not show is declared as a component.
 
 ### Pre-launch checks
 

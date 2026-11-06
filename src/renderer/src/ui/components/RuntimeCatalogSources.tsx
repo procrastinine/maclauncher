@@ -1,10 +1,12 @@
 import React from "react";
 import type { DownloadTask, RuntimeRefreshOptions, RuntimeUiState } from "../types";
-import { architectureLabel, isRuntimeVersionInstalled, runtimeVersionTagger, withAvailability } from "../ui-helpers";
+import { isRuntimeVersionInstalled, runtimeVersionTagger, withAvailability } from "../ui-helpers";
+import { cpuLabel } from "../../../../core/cpu-labels.mjs";
 import { ErrorText } from "./ErrorText";
 import { RefreshIcon } from "../icons";
 import { Select } from "./Select";
-import { isRuntimeIncluded, runtimeInstallVersion, runtimeCatalogPresentation, runtimeCatalogSources, runtimeRefreshFailure, runtimeSourceUrl, runtimeSourceUiKey } from "./runtime-tabs-model";
+import { isRuntimeIncluded, runtimeInstallVersion, runtimeCatalogPresentation, runtimeCatalogSources, runtimeRefreshFailure, runtimeSourceUrl, runtimeSourceUiKey,
+  translatorVersionBuild } from "./runtime-tabs-model";
 
 type Props = {
   managerId: string;
@@ -19,6 +21,9 @@ type Props = {
   onOpenSource?: (url: string) => void;
   onRegister?: (runtimePath?: string) => void;
   pathForFile?: (file: File) => string | null;
+  /** Translator views name a version's CPU build when it differs from the chosen
+   * build, and keep the Build menu under Additional sources. */
+  cpuBuildLabels?: boolean;
 };
 
 function sourceDescription(source: Record<string, any>, url: string | null) {
@@ -34,7 +39,7 @@ function sourceDescription(source: Record<string, any>, url: string | null) {
   return `Runtime downloads from ${parsed.hostname}.`;
 }
 
-export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, downloads, onSelect, onInstall, onRefresh, onOpenSource, onRegister, pathForFile }: Props) {
+export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, downloads, onSelect, onInstall, onRefresh, onOpenSource, onRegister, pathForFile, cpuBuildLabels = false }: Props) {
   // The automatic CPU is the one Play uses: the launcher's own, or another CPU
   // this Mac runs when the launcher's CPU has no build.
   const defaultArchitecture = section.automaticArchitecture || section.launcherArchitecture || section.catalog?.architecture;
@@ -185,8 +190,11 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
                 const damaged = !ready&&!incomplete&&isRuntimeVersionInstalled(installed, value, selectedVariant, hasVariants);
                 const includedVersion = ready && installed.some((item: any) => item.version === value && isRuntimeIncluded(item) &&
                   (!hasVariants || item.variant === selectedVariant));
+                const build = cpuBuildLabels ? translatorVersionBuild(value, source, installed) : "";
+                // A Universal build includes the chosen CPU, so it is not named either.
+                const differs = build && build !== architecture && build !== "universal" ? cpuLabel(build) : "";
                 return <option key={value} value={value}>
-                  {withAvailability(versionTag(value), ready ? includedVersion ? "included" : "installed"
+                  {withAvailability(differs ? `${versionTag(value)} · ${differs}` : versionTag(value), ready ? includedVersion ? "included" : "installed"
                     : incomplete ? "downloadNeeded" : damaged ? "needsRepair" : null)}
                 </option>;
               }) : <option value="">No versions loaded</option>}
@@ -221,21 +229,26 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
         {!refreshing && <ErrorText error={error} inline className="runtimeAvailability" />}
       </div>;
   };
+  // Play chooses the build a game needs. The Build menu reads Automatic (the
+  // CPU Play uses) and each other CPU this Mac runs, Intel code on Apple
+  // Silicon as Intel (Rosetta); translator views keep it under Additional sources.
+  const buildField = offersBuilds && <div className="runtimeRemoteField runtimeBuildField">
+    <label className="fieldLabel" htmlFor={`runtime-architecture-${managerId}-${section.id}`}>Build</label>
+    <select id={`runtime-architecture-${managerId}-${section.id}`} className="input inputSmall"
+      value={overrides.includes(architecture) ? architecture : ""}
+      aria-label="Build architecture" onChange={event => onSelect(section.id, "installArchitecture", event.target.value)}>
+      <option value="">Automatic ({cpuLabel(defaultArchitecture, { hostArchitecture: defaultArchitecture })})</option>
+      {overrides.map(value => <option key={value} value={value}>{cpuLabel(value, { hostArchitecture: defaultArchitecture })}</option>)}
+    </select>
+  </div>;
+  const additional = sources.filter(source => source.secondary);
   return <div className="runtimeSources">
-    {offersBuilds && <div className="runtimeRemoteField runtimeBuildField">
-      <label className="fieldLabel" htmlFor={`runtime-architecture-${managerId}-${section.id}`}>Build</label>
-      <select id={`runtime-architecture-${managerId}-${section.id}`} className="input inputSmall"
-        value={overrides.includes(architecture) ? architecture : ""}
-        aria-label="Build architecture" onChange={event => onSelect(section.id, "installArchitecture", event.target.value)}>
-        <option value="">Automatic ({architectureLabel(defaultArchitecture)})</option>
-        {overrides.map(value => <option key={value} value={value}>
-          {architectureLabel(value)}{defaultArchitecture === "arm64" && value === "x64" ? " (Rosetta)" : ""}</option>)}
-      </select>
-    </div>}
+    {!cpuBuildLabels && buildField}
     {sources.filter(source => !source.secondary).map(renderSource)}
-    {sources.some(source => source.secondary) && <details className="runtimeAdditionalSources">
+    {(additional.length > 0 || cpuBuildLabels && buildField) && <details className="runtimeAdditionalSources">
       <summary>Additional sources</summary>
-      {sources.filter(source => source.secondary).map(renderSource)}
+      {cpuBuildLabels && buildField}
+      {additional.map(renderSource)}
     </details>}
   </div>;
 }

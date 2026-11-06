@@ -199,7 +199,9 @@ function contextForPayload(root,userDataDir,{verification='status'}={}){
  const installed=load(userDataDir,declaration.dependencies,{verification});
  return{installed,declaration,record:receipt.catalogEntry.projectPackage,resolveDependency:resolver(installed),dependencyLibraryPaths:loaderPaths(declaration,installed),dependencyReadRoots:readRoots(installed)};
 }
-function references(userDataDir){
+// `onReference(dependencies, runtimeId)`, when given, also names the runtime
+// folder that declares each group of dependencies.
+function references(userDataDir,onReference){
  const roots=[],runtimes=path.join(userDataDir,'runtimes');if(!fs.existsSync(runtimes))return roots;
  for(const project of fs.readdirSync(runtimes,{withFileTypes:true})){
   if(!project.isDirectory()||project.name.startsWith('.'))continue;
@@ -210,7 +212,8 @@ function references(userDataDir){
    for(const directory of candidates){
     const receipt=path.join(directory,'runtime.json');if(!fs.existsSync(receipt))continue;
     const record=read(receipt),wrapper=path.join(directory,'project-package.json');
-    roots.push(...C.packageDependencies(fs.existsSync(wrapper)?read(wrapper).dependencies:record.catalogEntry?.projectPackage?.dependencies,{managed:true}));
+    const declared=C.packageDependencies(fs.existsSync(wrapper)?read(wrapper).dependencies:record.catalogEntry?.projectPackage?.dependencies,{managed:true});
+    roots.push(...declared);if(declared.length)onReference?.(declared,project.name);
    }
   }
  }
@@ -238,4 +241,4 @@ async function collect(userDataDir,{acquireLock=acquireFileLock,removeTrash=requ
   }
  }finally{await release();}
 }
-module.exports={attach,packageFacts,resolverFromFacts,userDataForPayload,directory,prepare,load,resolver,materialize,loaderPaths,assertDeclaration,bind,relocateInstallation,readRoots,contextForPayload,collect};
+module.exports={attach,packageFacts,resolverFromFacts,userDataForPayload,directory,prepare,load,resolver,materialize,loaderPaths,assertDeclaration,bind,relocateInstallation,readRoots,contextForPayload,collect,references};

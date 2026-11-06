@@ -1,5 +1,6 @@
 import { resolveRuntimeSettingFallback, normalizeListValue, normalizeRuntimeSettingValue } from "../../../core/runtime-setting-values.mjs";
 import { sanitizeErrorMessage } from "../../../core/runtime-errors.mjs";
+import { cpuLabel } from "../../../core/cpu-labels.mjs";
 import { compareVersions } from "../../../modules/shared/runtime/version-order.mjs";
 export { resolveRuntimeSettingFallback, normalizeListValue, normalizeRuntimeSettingValue };
 
@@ -261,7 +262,7 @@ export function runtimeVersionOptions<T extends { value: string; label: string }
 
 /** Display name of a runtime build's CPU. */
 export function architectureLabel(architecture: string | null | undefined) {
-  return architecture === "x64" || architecture === "x86_64" ? "Intel" : architecture === "universal" ? "Universal" : "Apple Silicon";
+  return cpuLabel(architecture) || "Apple Silicon";
 }
 
 export function formatDownloadPercent(task: { downloaded: number; total: number | null }) {

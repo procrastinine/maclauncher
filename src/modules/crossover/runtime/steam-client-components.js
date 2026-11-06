@@ -45,6 +45,12 @@ function current(userDataDir) {
 }
 // Called only from the consented managed-install action. Discovery/status use current().
 async function install({ userDataDir, signal, onProgress, resolved, archiveFile } = {}) {
+  // A chosen archive is checked first, also when client files are current.
+  if (archiveFile) {
+    const named = /^bins_misc_ubuntu12\.zip\.([a-f0-9]{40})$/.exec(resolved?.filename || '');
+    if (!named || !fs.statSync(archiveFile).size || require('../../shared/runtime/pinned-native-manager').hashFile(archiveFile, 'sha1') !== named[1])
+      throw new Error('Valve component archive differs from its content address.');
+  }
   const existing = current(userDataDir); if (existing) return existing;
   if (!resolved) {
     const response = await source.request(MANIFEST, { signal, maxBytes: 2 * 1024 * 1024, maxRedirects: 0 });

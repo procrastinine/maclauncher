@@ -429,6 +429,15 @@ function withSettings(manifest) {
   }
   return result;
 }
+// A Vulkan driver loads as the slice of the Wine process's CPU: the one
+// wine-layout.js inspects, managedTranslators selects its build for and Play
+// checks before loading. The inspector names that build; settings menus share
+// it across every entry, so they do not repeat it.
+function nativeBuildSuffix(description, layout, host) {
+  if (description?.component !== 'vulkan-driver' || !description.files?.some(file => file.format === 'macho')) return '';
+  const build = Architecture.cpuBuildLabel(layout?.architecture, host ? { host } : {});
+  return build ? ` · ${build}` : '';
+}
 function optionLists(install, runtime, context, dependencies = {}) {
   const input = dependencies.inventory || inventory(install, runtime, context, dependencies), plan = dependencies.plan || Plan.resolvePlan(input);
   if (plan.compatibility) for (const key of ['included', 'choices']) input[key] = input[key].map(item => {
@@ -461,7 +470,7 @@ function presentInspectorRows(rows) {
       reason: row.fallback && reasonCode !== 'load-impossible' ? Plan.fallbackNotice(reasonCode, { roles: row.conflictRoles }) : row.reason };
   });
 }
-function inspectorRows(plan) {
+function inspectorRows(plan, { host } = {}) {
   const labels = { 'd3d-renderer': 'Direct3D', 'vulkan-driver': 'Vulkan', d3d12: 'Direct3D 12', video: 'Video codecs' };
   const entries = plan.components.d3d11 ? Roles.ROLES.map(role => [role.id, role.settingsKey]) : Object.entries(SETTINGS);
   const automatic = plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice";
@@ -471,7 +480,7 @@ function inspectorRows(plan) {
   return presentInspectorRows(entries.map(([component, key]) => {
     const row = plan.components[component], direct3D = Roles.DIRECT3D_ROLES.some(role => role.id === component);
     return { id: key, component, label: labels[component] || Roles.ROLES.find(role => role.id === component)?.label, selected: row.selected ? Description.label(row.selected) : row.fallback ? Plan.UNAVAILABLE_CHOICE_LABEL : row.inherited ? 'Inherited' : automatic,
-      used: row.used ? Description.label(row.used) : direct3D && builtin || automatic, reason: row.reason, reasonCode: row.reasonCode, fallback: row.fallback,
+      used: row.used ? Description.label(row.used) + nativeBuildSuffix(row.used, plan.layout, host) : direct3D && builtin || automatic, reason: row.reason, reasonCode: row.reasonCode, fallback: row.fallback,
       ...(row.conflictRoles?.length ? { conflictRoles: row.conflictRoles } : {}) };
   }));
 }

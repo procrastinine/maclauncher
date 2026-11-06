@@ -1,6 +1,7 @@
 const { AsyncLocalStorage } = require("node:async_hooks");
 const { architectureSupport, getHostCapabilities, defaultArchitecture } = require("./host-capabilities");
 const Requirements = require("./feature-requirements");
+const CpuLabels = require("../../../core/cpu-labels.mjs");
 const context = new AsyncLocalStorage();
 // A CPU this launcher installs builds for, or null.
 function normalizeArchitecture(value) {
@@ -21,7 +22,8 @@ function withArchitecture(architecture, action) {
   if (!["arm64", "x64"].includes(selected)) throw new Error("Choose an Apple Silicon or Intel build.");
   return context.run(selected, action);
 }
-function architectureLabel(architecture) { return normalizeArchitecture(architecture) === "x64" ? "Intel" : "Apple Silicon"; }
+// Labels come from core/cpu-labels.mjs, the one CPU vocabulary.
+function architectureLabel(architecture) { return CpuLabels.cpuLabel(normalizeArchitecture(architecture) === "x64" ? "x64" : "arm64"); }
 function recordArchitecture(record) {
   return normalizeArchitecture(record?.arch || record?.architecture || record?.projectPackage?.arch || record?.catalogEntry?.architecture);
 }
@@ -64,6 +66,11 @@ function assetArchitecture(name) {
 function requiresRosetta(architecture, host = getHostCapabilities()) {
   return normalizeArchitecture(architecture) === "x64" && host.platform === "darwin" && host.hardwareArch === "arm64";
 }
+// The build a consumer loads on this Mac, as the inspector states it: Intel
+// code on Apple Silicon reads Intel (Rosetta).
+function cpuBuildLabel(architecture, { host = getHostCapabilities() } = {}) {
+  return CpuLabels.cpuLabel(normalizeArchitecture(architecture), { hostArchitecture: host.platform === "darwin" ? host.hardwareArch : null });
+}
 // A Mach-O image without an Apple Silicon slice runs its Intel slice through Rosetta.
 function imageRequiresRosetta(architectures, host) {
   const slices = (architectures || []).map(Requirements.normalizeArchitecture);
@@ -86,4 +93,4 @@ async function ensureArchitecture(architecture, options = {}) {
 }
 module.exports = { normalizeArchitecture, defaultArchitecture, selectedArchitecture, withArchitecture, architectureLabel,
   recordArchitecture, matchesArchitecture, ensureArchitecture, requestedArchitecture, targetArchitecture, chooseArchitecture,
-  assetArchitecture, requiresRosetta, imageRequiresRosetta, tagInstall };
+  assetArchitecture, requiresRosetta, imageRequiresRosetta, tagInstall, cpuBuildLabel };

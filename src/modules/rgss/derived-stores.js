@@ -27,5 +27,16 @@ module.exports = [
     directories: context => [path.join(context.userDataDir, "modules", "rgss", "assets", "generations")],
     match: /^\.prepare-[A-Za-z0-9]{6}$/,
     minAgeMs: 24 * 60 * 60 * 1000
+  },
+  {
+    // An RTP pack deleted in Downloaded files is renamed to trash beside its
+    // version first; a removal that stopped is finished here. Nothing else matches.
+    id: "rgss-rtp-removals",
+    directories: context => {
+      const root = path.join(context.userDataDir, "modules", "rgss", "assets", "rtp-packs");
+      try { return fs.readdirSync(root, { withFileTypes: true }).filter(item => item.isDirectory() && !item.name.startsWith(".")).map(item => path.join(root, item.name)); }
+      catch { return []; }
+    },
+    match: require("../../core/storage-maintenance").TRASH
   }
 ];

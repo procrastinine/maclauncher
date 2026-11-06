@@ -14,7 +14,8 @@ import {
 import { DownloadIcon, RefreshIcon, TrashIcon } from "../icons";
 import { groupRuntimeManagers, resolveRuntimeTabSelection, runtimeGroupSections, runtimeSectionTabs,
   runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation,
-  runtimeRemovalPresentation, runtimeMinimumNotice, runtimeInstallVersion, isRuntimeIncluded, isRuntimeSetupPending } from "./runtime-tabs-model";
+  runtimeRemovalPresentation, runtimeMinimumNotice, runtimeInstallVersion, isRuntimeIncluded, isRuntimeSetupPending,
+  translatorInstallBuild, translatorInstallRequirement } from "./runtime-tabs-model";
 import type { RuntimeTabGroup, RuntimeTabSection, RuntimeSectionTab } from "./runtime-tabs-model";
 import { HelpTip } from "./HelpTip";
 import { RuntimeCatalogSources } from "./RuntimeCatalogSources";
@@ -30,6 +31,8 @@ import { installedRuntimeAvailability } from "../../../../core/runtime-install-a
 import { PluginLibrary } from "./PluginLibrary";
 import type { RuntimeSettingsApi } from "./RuntimeSettingsWindow";
 import { EffectsPresetManager } from "./EffectsPresetManager";
+import { ComponentsView } from "./ComponentsView";
+import { cpuLabel } from "../../../../core/cpu-labels.mjs";
 import { useGraphicsCatalog } from "../useGraphicsCatalog";
 import { ErrorText } from "./ErrorText";
 import { PopoverButton } from "./Popover";
@@ -161,6 +164,7 @@ export function RuntimesView({
   const shaderLibrary = activeRuntimeManager?.ui?.library === "shaders";
   const pluginLibrary = activeRuntimeManager?.ui?.library === "plugins";
   const presetLibrary = activeRuntimeManager?.ui?.library === "presets";
+  const componentLibrary = activeRuntimeManager?.ui?.library === "components";
   // The shader library and presets read the graphics catalog while shown.
   const graphicsCatalog = useGraphicsCatalog((shaderLibrary || presetLibrary) && !shaderFilters);
   const filters = shaderFilters || graphicsCatalog?.shaderLibrary || graphicsCatalog?.filters || [];
@@ -358,7 +362,7 @@ export function RuntimesView({
           {presetLibrary && activeRuntimeManager ? <div className="runtimeTabPanel" id={`runtime-panel-${activeRuntimeManager.id}`}>
             <EffectsPresetManager status={graphicsCatalog} navigationKey={navigationKey}
               selectedId={state?.utilityWindow?.managerId === activeRuntimeManager.id ? state.utilityWindow.sectionId : undefined} />
-          </div> : pluginLibrary && activeRuntimeManager ? <PluginLibrary key={activeRuntimeManager.id}
+          </div> : componentLibrary ? <ComponentsView navigationKey={navigationKey} /> : pluginLibrary && activeRuntimeManager ? <PluginLibrary key={activeRuntimeManager.id}
             manager={activeRuntimeManager} sections={activeRuntimeChoices.filter(choice => choice.managerId === activeRuntimeManager.id)}
             state={state} api={settingsApi} ui={activeRuntimeUi} downloads={downloadTasks}
             onInstall={onRuntimeInstall} onUninstall={onRuntimeUninstall} onOpenSource={onOpenSource} /> : activeRuntimeManager && activeRuntimeSection ? (
@@ -531,6 +535,7 @@ export function RuntimesView({
                     })()}
                     {!managementPresentation.local && !activeRuntimeSection.catalog?.packagesFrom && (
                       <RuntimeCatalogSources managerId={activeRuntimeManager.id} section={activeRuntimeSection}
+                        cpuBuildLabels={activeRuntimeManager.ui?.cpuBuildLabels === true}
                         ui={activeRuntimeUi} busy={runtimeBusy} variant={activeRuntimeResolvedInstallVariant}
                         downloads={activeRuntimeDownloads} onOpenSource={onOpenSource}
                         onRegister={activeRuntimeSection.customRuntime && onRuntimeRegister ? runtimePath => onRuntimeRegister(activeRuntimeManager.id, activeRuntimeSection.id, runtimePath) : undefined}
@@ -620,6 +625,9 @@ export function RuntimesView({
                         const preferredArchitecture = activeRuntimeSection.defaultArchitecture || automaticArchitecture;
                         const installArchitecture = (row: Record<string, any>) => buildArchitecture(row, activeRuntimeSection, activeRuntimeInstalledSorted);
                         const installBuild = installArchitecture(inst);
+                        // Translator views name every build, so two builds of one version read as two labeled rows.
+                        const translatorBuild = activeRuntimeManager.ui?.cpuBuildLabels === true
+                          ? translatorInstallBuild(inst, translatorInstallRequirement(inst, activeRuntimeSection)) : "";
                         const defaultFor = defaultSelections?.filter((row: Record<string, any>) => row.version === inst.version).map((row: Record<string, any>) => row.label) || [];
                         const isDefault = activeRuntimeSupportsDefault && !inst.reference && (
                           defaultSelections ? defaultFor.length > 0 : inst.version === activeRuntimeSection.defaultVersion &&
@@ -650,7 +658,8 @@ export function RuntimesView({
                             <div className="saveRowMain">
                               <div className="saveName">
                                 {activeRuntimeVersionTag(inst.version)}
-                                {installBuild && installBuild !== "universal" && automaticArchitecture &&
+                                {translatorBuild ? <span className="badge" data-cpu-build={translatorBuild} title="CPU build">{cpuLabel(translatorBuild)}</span>
+                                  : installBuild && installBuild !== "universal" && automaticArchitecture &&
                                   installBuild !== automaticArchitecture && <span className="badge">{architectureLabel(installBuild)}</span>}
                                 {isDefault && (
                                   <span className="badge badgeAccent" title={defaultFor.length ? `Automatic for ${defaultFor.join(", ")}` : undefined}>Default</span>

@@ -92,7 +92,7 @@ function omitLegacyRenderers(install) {
   write(recordFile, JSON.stringify(record));
 }
 
-test("Sikarugir retries reuse completed engine and Template downloads after extraction failures", async t => {
+test("Sikarugir retries download the engine and Template again and keep no archive", async t => {
   const root=temporary(t),pin=fixturePin(),start=Harness.network.requests.length;
   let engineExtractions=0,templateExtractions=0;
   const manager=fixtureManager({rows:[pin],dependencies:{extractArchive:async(archive,output)=>{
@@ -108,15 +108,17 @@ test("Sikarugir retries reuse completed engine and Template downloads after extr
   await assert.rejects(manager.installRuntime({userDataDir:root,version:pin.version}),/Fixture engine extraction unavailable/);
   assert.equal(downloads(pin.asset.url),1);assert.equal(downloads(pin.template.asset.url),0);
   await assert.rejects(manager.installRuntime({userDataDir:root,version:pin.version}),/Fixture Template extraction unavailable/);
-  assert.equal(downloads(pin.asset.url),1,'engine retry uses the already completed shared archive');assert.equal(downloads(pin.template.asset.url),1);
+  assert.equal(downloads(pin.asset.url),2);assert.equal(downloads(pin.template.asset.url),1);
   const installed=await manager.installRuntime({userDataDir:root,version:pin.version});
-  assert.equal(downloads(pin.asset.url),1);assert.equal(downloads(pin.template.asset.url),1,'Template retry also reuses its completed archive');
+  assert.equal(downloads(pin.asset.url),3);assert.equal(downloads(pin.template.asset.url),2);
   assert.equal(manager.resolveSelection({}, {}, root, {version:pin.version}).ready,true);
   assert.ok(fs.existsSync(installed.executablePath));assert.equal(engineExtractions,3);assert.equal(templateExtractions,2);
-  const artifacts=path.join(root,'runtimes','artifacts'),digests=fs.readdirSync(artifacts).filter(name=>!name.endsWith('.json')).map(name=>{
-    const digest=sha(fs.readFileSync(path.join(artifacts,name)));assert.equal(JSON.parse(fs.readFileSync(path.join(artifacts,name+'.json'))).sha256,digest);return digest;
-  });
-  assert.deepEqual(digests.sort(),[pin.asset.sha256,pin.template.asset.sha256].sort(),'only the exact verified publisher bytes are retained');
+  const archives=[];
+  const walk=directory=>{for(const entry of fs.readdirSync(directory,{withFileTypes:true})){const file=path.join(directory,entry.name);
+    if(entry.isDirectory())walk(file);else if(/\.tar\.(?:xz|gz)$|\.zip$/.test(entry.name))archives.push(path.relative(root,file));}};
+  walk(root);
+  assert.deepEqual(archives,[],'verified archives are removed after extraction, including after a failed attempt');
+  assert.equal(fs.existsSync(path.join(root,'runtimes','artifacts')),false);
 });
 
 test("Sikarugir Install replaces an incomplete Template registration and keeps valid copies unchanged", async t => {
@@ -150,12 +152,10 @@ test("Sikarugir failed and canceled renderer repairs preserve the previous regis
   const install = await manager.core.installVersion({ userDataDir: root, version: pin.version });
   omitLegacyRenderers(install);
   const recordFile = path.join(install.installDir, "runtime.json"), before = fs.readFileSync(recordFile);
-  // Verified archives are reused from the download cache; removing it makes each repair download again.
-  const clearDownloads = () => fs.rmSync(path.join(root, "runtimes", "artifacts"), { recursive: true, force: true });
-  failure = "checksum";clearDownloads();
+  failure = "checksum";
   await assert.rejects(manager.installRuntime({ userDataDir: root, version: pin.version }), /Template-1\.0\.24\.tar\.xz does not match the checksum its publisher lists/);
   assert.deepEqual(fs.readFileSync(recordFile), before);
-  failure = "cancel";clearDownloads();
+  failure = "cancel";
   const controller = new AbortController();
   await assert.rejects(manager.installRuntime({ userDataDir: root, version: pin.version, signal: controller.signal }), { name: "AbortError" });
   assert.deepEqual(fs.readFileSync(recordFile), before);
@@ -371,8 +371,6 @@ test("Sikarugir rejects support checksum mismatch and cancellation without publi
   await manager.refreshCatalog({ userDataDir: root, force: true });
   for (const architecture of ["arm64", "x64"]) {
     const catalogs = readCatalogs();
-    // The verified support archive from an earlier attempt is cached for every CPU; a new download is checked again.
-    fs.rmSync(path.join(root, "runtimes", "artifacts"), { recursive: true, force: true });
     served[row.template.asset.url] = Buffer.from("broken support!");
     await assert.rejects(manager.core.installVersion({ userDataDir: root, version: row.version, architecture }), /Template-1\.0\.21\.tar\.xz does not match the checksum its publisher lists/);
     served[row.template.asset.url] = Buffer.from("support archive");

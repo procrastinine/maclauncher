@@ -44,8 +44,11 @@ function createProvider(manager) {
     installed(context) {
       const state = manager.getState({ userDataDir: context.userDataDir,
         settings: context.settings?.runtimes?.[manager.id], runtimeSettings: context.settings?.runtimes, logger: context.logger });
-      return [...state.installed].sort((a, b) => Number(b.version === state.defaultVersion) - Number(a.version === state.defaultVersion)).flatMap(item => {
-        try { const row = selected(item.version, context, "status"); return row ? [row] : []; }
+      // Installed rows hold one entry per CPU build; a consumer loads one build of each version.
+      const versions = [...new Set([...state.installed].sort((a, b) => Number(b.version === state.defaultVersion) - Number(a.version === state.defaultVersion))
+        .map(item => item.version))];
+      return versions.flatMap(version => {
+        try { const row = selected(version, context, "status"); return row ? [row] : []; }
         catch { return []; }
       });
     },
