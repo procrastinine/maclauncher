@@ -29,8 +29,8 @@ __declspec(dllexport) int32_t WINAPI MacLauncherVkd3dResolveSceneImage1(
         return VK_ERROR_FEATURE_NOT_PRESENT;
     native_aspect = resource->desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL ?
             VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
-    if (aspect != native_aspect) return VK_ERROR_FEATURE_NOT_PRESENT;
-    *image = (RSWineVulkanSceneImageV1){(uint64_t)resource->res.vk_image,aspect,mip,layer,0};
+    if (aspect && aspect != native_aspect) return VK_ERROR_FEATURE_NOT_PRESENT;
+    *image = (RSWineVulkanSceneImageV1){(uint64_t)resource->res.vk_image,native_aspect,mip,layer,0};
     *width = mip >= 32 ? 1 : (uint32_t)(resource->desc.Width >> mip);
     *height = mip >= 32 ? 1 : resource->desc.Height >> mip;
     if (!*width) *width = 1;

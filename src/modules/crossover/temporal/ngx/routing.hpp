@@ -20,16 +20,19 @@ struct Image {
 };
 struct Evaluation {
  Feature feature=Feature::SuperResolution;
- uint64_t device=0,commands=0,generation=0,consumer=0,frameId=0;
+ uint64_t device=0,commands=0,generation=0,consumer=0,frameId=0,destinationWindow=0;
  double sourceTimeSeconds=0;
- uint32_t width=0,height=0,outputWidth=0,outputHeight=0;
- Image color,depth,motion,output,exposure;
+ uint32_t width=0,height=0,outputWidth=0,outputHeight=0,maxRenderWidth=0,maxRenderHeight=0;
+ Image color,depth,motion,output,exposure,realOutput;
+ bool uiComposited=false,cameraValid=false;
+ float nearPlane=0,farPlane=0,verticalFov=0;
  Image guides[RS_SCENE_AOV_COUNT];
+ RSWineVulkanSceneImageV1 expectedImages[RS_WINE_VULKAN_SCENE_IMAGE_COUNT]{};
  RSSceneAovs aovs{};
  RSSceneMatrices matrices{};
  RSWineVulkanSceneColorV1 colorDescription{};
  bool colorKnown=false,deviceDepth=false,currentToPreviousMotion=false;
- bool reversedDepth=false,infiniteDepth=false,jitteredMotion=false,outputMotion=false,reset=false;
+ bool reversedDepth=false,infiniteDepth=false,jitteredMotion=false,outputMotion=false,reset=false,autoExposure=false;
  float jitterX=0,jitterY=0,motionScaleX=0,motionScaleY=0,preExposure=1,frameTimeMs=0;
  // Method is assigned by the existing prepared graph, never by NGX feature ID.
  uint32_t method=0,profile=0;
@@ -51,16 +54,24 @@ inline Status map(const Evaluation&s,RSWineVulkanSceneRequestV2&out){
  r.size=sizeof(r);r.version=1;r.profile=RS_WINE_VULKAN_SCENE_PROFILE;r.flags=RS_WINE_VULKAN_ORIGINAL_OUTPUT_RETAINED;
  r.device=s.device;r.commandBuffer=s.commands;r.ownerId=s.generation;r.consumerId=s.consumer;r.frameId=s.frameId;r.sourceTimeSeconds=s.sourceTimeSeconds;
  auto&f=r.frame;f.method=s.method;f.profile=s.profile;
- f.renderWidth=f.maxRenderWidth=s.width;f.renderHeight=f.maxRenderHeight=s.height;f.outputWidth=s.outputWidth;f.outputHeight=s.outputHeight;
+ f.renderWidth=s.width;f.renderHeight=s.height;f.maxRenderWidth=s.maxRenderWidth?s.maxRenderWidth:s.width;f.maxRenderHeight=s.maxRenderHeight?s.maxRenderHeight:s.height;
+ if(f.renderWidth>f.maxRenderWidth||f.renderHeight>f.maxRenderHeight)return Status::Invalid;
+ f.outputWidth=s.outputWidth;f.outputHeight=s.outputHeight;
  f.colorX=s.color.x;f.colorY=s.color.y;f.depthX=s.depth.x;f.depthY=s.depth.y;f.motionX=s.motion.x;f.motionY=s.motion.y;f.outputX=s.output.x;f.outputY=s.output.y;
  f.jitterX=s.jitterX;f.jitterY=s.jitterY;f.motionScaleX=s.motionScaleX;f.motionScaleY=s.motionScaleY;
  f.preExposure=s.preExposure==0?1:s.preExposure;f.frameTimeMs=s.frameTimeMs;
- f.flags=(s.reset?RS_TEMPORAL_RESET:0)|(s.reversedDepth?RS_TEMPORAL_DEPTH_REVERSED:0)|(s.infiniteDepth?RS_TEMPORAL_DEPTH_INFINITE:0)|
-  (s.jitteredMotion?RS_TEMPORAL_JITTERED_MOTION:0)|(s.outputMotion?RS_TEMPORAL_OUTPUT_MOTION:0);
+ if(s.cameraValid){
+  if(!std::isfinite(s.nearPlane)||s.nearPlane<=0||!std::isfinite(s.farPlane)||
+     !std::isfinite(s.verticalFov)||s.verticalFov<=0||s.verticalFov>=3.141592653589793f||
+     (s.infiniteDepth?s.farPlane!=0:s.farPlane<=s.nearPlane))return Status::Invalid;
+  f.nearPlane=s.nearPlane;f.farPlane=s.farPlane;f.verticalFov=s.verticalFov;
+ }
+ f.flags=(s.reset?RS_TEMPORAL_RESET:0)|(s.cameraValid?RS_TEMPORAL_CAMERA_VALID:0)|(s.reversedDepth?RS_TEMPORAL_DEPTH_REVERSED:0)|(s.infiniteDepth?RS_TEMPORAL_DEPTH_INFINITE:0)|
+  (s.jitteredMotion?RS_TEMPORAL_JITTERED_MOTION:0)|(s.outputMotion?RS_TEMPORAL_OUTPUT_MOTION:0)|(s.autoExposure?RS_TEMPORAL_AUTO_EXPOSURE:0);
  const Image*images[]={&s.color,&s.depth,&s.motion,&s.output,&s.exposure};
  for(unsigned i=0;i<5;++i)if(images[i]->binding.image){r.images[i]=images[i]->binding;r.imageMask|=1u<<i;}
  r.colorKnown=s.colorKnown;r.color=s.colorDescription;
- m.size=sizeof(m);m.version=2;
+ m.size=sizeof(m);m.version=2;m.destinationWindow=s.destinationWindow;
  if(s.matrices.flags){
   const auto&v=s.matrices;
   if(v.size!=sizeof(v)||v.version!=1||v.frameId!=s.frameId||v.reserved||v.flags&~63u||

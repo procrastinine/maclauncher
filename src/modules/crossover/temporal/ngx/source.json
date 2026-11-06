@@ -19,10 +19,35 @@
   "headers": [
     "parameters.hpp",
     "routing.hpp",
-    "producer.hpp"
+    "producer.hpp",
+    "command-bridge.hpp",
+    "dll-observer.hpp",
+    "scene-source.hpp"
   ],
   "transport": "../vulkan/scene-metadata.h",
   "originalOutputRetained": true,
   "translatorOverlay": "vkd3d-overlay.mjs",
-  "translatorSource": "vkd3d-scene.inc"
+  "translatorSource": "vkd3d-scene.inc",
+  "upstreamInput": {
+    "origin": "https://github.com/metalsharp/VKD3D-Proton-MacOS.git",
+    "commit": "4e89065e359f9c6c2a78170b045835d6382113d9",
+    "sourceFile": "ngx/nvngx/nvngx.cpp",
+    "sourceSha256": "56204f41b585eed6285ca559c58b62023d2b422a6f34686d7f80c316681e7af2",
+    "originalProvenance": {
+      "project": "Mullion",
+      "paths": [
+        "src/nvngx/nvngx.hpp",
+        "src/nvngx/nvngx_parameter.hpp",
+        "src/nvngx"
+      ],
+      "license": "LGPL-2.1-or-later",
+      "notices": "Preserve original upstream notices and complete applicable license inputs; repository-wide MetalSharp AGPL license is distinct from the NGX file notices."
+    }
+  },
+  "ngxOverlay": "ngx-overlay.mjs",
+  "execution": {
+    "originalOnlyObservation": true,
+    "replacementAdmission": false,
+    "featureAvailabilityFromRecording": false
+  }
 }

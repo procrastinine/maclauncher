@@ -17,7 +17,7 @@ public:
   if(parameters.Get(key,&resource)!=1){void*opaque=nullptr;if(parameters.Get(key,&opaque)!=1)return false;resource=static_cast<Resource*>(opaque);}
   if(!resource)return false;
   Image resolved;if(!translator.image(resource,resolved))return false;
-  image=resolved;return true;
+  resolved.x=image.x;resolved.y=image.y;image=resolved;return true;
  }
  bool readMatrix(const char*key,float*out){
   void*source=nullptr;if(parameters.Get(key,&source)!=1||!source)return false;
@@ -25,11 +25,38 @@ public:
   std::memcpy(out,copied,sizeof(copied));return true;
  }
 };
+// Creation dimensions are retained separately from dynamic Evaluate subrects.
+// These bits are NGX input conventions, never a selected graphics provider.
+template<class Reader> bool readCreation(Reader&reader,Evaluation&out){
+ auto value=out;uint32_t flags=0;
+ if(!reader.get("Width",value.width)||!reader.get("Height",value.height)||
+    !reader.get("OutWidth",value.outputWidth)||!reader.get("OutHeight",value.outputHeight)||
+    !value.width||!value.height||!value.outputWidth||!value.outputHeight)return false;
+ reader.get("DLSS.Feature.Create.Flags",flags);
+ value.maxRenderWidth=value.width;value.maxRenderHeight=value.height;
+ value.outputMotion=(flags&(1u<<1))==0;value.jitteredMotion=(flags&(1u<<2))!=0;
+ value.reversedDepth=(flags&(1u<<3))!=0;value.autoExposure=(flags&(1u<<6))!=0;
+ out=value;return true;
+}
 // Reader adapts NGX's typed Get. readImage resolves actual translator resources
 // and subresources; D3D addresses must never be interpreted as Vulkan images.
 template<class Reader> bool readParameters(Reader&reader,Evaluation&out){
  auto value=out;
- if(value.feature==Feature::FrameGeneration)return false;
+ if(value.feature==Feature::FrameGeneration){
+  if(!reader.readImage("DLSSG.Backbuffer",value.color)||!reader.readImage("DLSSG.Depth",value.depth)||
+     !reader.readImage("DLSSG.MVecs",value.motion)||!reader.readImage("DLSSG.OutputInterpolated",value.output)||
+     !reader.readImage("DLSSG.OutputReal",value.realOutput))return false;
+  const bool hudless=reader.readImage("DLSSG.HUDLess",value.guides[RS_SCENE_AOV_HUDLESS_COLOR]);
+  const bool ui=reader.readImage("DLSSG.UI",value.guides[RS_SCENE_AOV_UI_COLOR_ALPHA]);
+  value.uiComposited=!(hudless&&ui);
+  if(!value.uiComposited)value.color=value.guides[RS_SCENE_AOV_HUDLESS_COLOR];
+  if(!reader.get("DLSSG.MvecScaleX",value.motionScaleX)||!reader.get("DLSSG.MvecScaleY",value.motionScaleY)||
+     !reader.get("DLSSG.JitterOffsetX",value.jitterX)||!reader.get("DLSSG.JitterOffsetY",value.jitterY))return false;
+  uint32_t reset=0;reader.get("DLSSG.Reset",reset);value.reset=reset!=0;
+  // Camera units, actual source timing and real/previous history must come
+  // from the cooperating scene contract. No QPC-based 60Hz substitute.
+  out=value;return true;
+ }
  if(!reader.readImage("Color",value.color)||!reader.readImage("Depth",value.depth)||
     !reader.readImage("MotionVectors",value.motion)||!reader.readImage("Output",value.output))return false;
  if(!reader.get("MV.Scale.X",value.motionScaleX)||!reader.get("MV.Scale.Y",value.motionScaleY)||

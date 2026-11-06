@@ -7,6 +7,8 @@ namespace maclauncher::ngx {
 class Producer {
  RSWineVulkanSceneContextCall1 control;
  RSWineVulkanSceneRecordCall2 sink;
+ using Recorder=int32_t(*)(void*,const RSWineVulkanSceneRequestV2*);
+ Recorder recorder=nullptr;void*recordStorage=nullptr;
  uint64_t observer,identity,device=0,generation=0,consumer=0,lastFrame=0;
  bool retired=false;
  RSWineVulkanSceneContextV1 request(uint32_t operation)const {
@@ -15,11 +17,12 @@ class Producer {
  }
 public:
  Producer(uint64_t observerId,uint64_t featureId,RSWineVulkanSceneContextCall1 context,RSWineVulkanSceneRecordCall2 record):control(context),sink(record),observer(observerId),identity(featureId){}
+ Producer(uint64_t observerId,uint64_t featureId,RSWineVulkanSceneContextCall1 context,Recorder record,void*storage):control(context),sink(nullptr),recorder(record),recordStorage(storage),observer(observerId),identity(featureId){}
  Producer(const Producer&)=delete;Producer&operator=(const Producer&)=delete;
  ~Producer(){retire();}
  void retire(){if(retired)return;retired=true;if(control&&generation){auto r=request(RS_WINE_SCENE_CONTEXT_DESTROY);control(&r);}}
  Status observe(Evaluation source,int32_t&result){
-  if(retired||!control||!sink||!observer||!identity)return Status::Unavailable;
+  if(retired||!control||(!sink&&!recorder)||!observer||!identity)return Status::Unavailable;
   if(device&&device!=source.device)return Status::Invalid;
   if(source.frameId<=lastFrame)return Status::Invalid;
   source.generation=source.consumer=1;RSWineVulkanSceneRequestV2 packet{};
@@ -36,7 +39,12 @@ public:
    }
    generation=r.generation;consumer=r.consumerId;
   }
-  source.generation=generation;source.consumer=consumer;status=record(source,sink,result);
+  source.generation=generation;source.consumer=consumer;
+  if(recorder){
+   status=map(source,packet);if(status!=Status::Recorded)return status;
+   result=recorder(recordStorage,&packet);
+   status=result==0?Status::Recorded:result==1||result==2?Status::Busy:result==-8?Status::Unavailable:Status::Failed;
+  }else status=record(source,sink,result);
   if(status==Status::Recorded)lastFrame=source.frameId;
   return status;
  }

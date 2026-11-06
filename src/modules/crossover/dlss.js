@@ -8,10 +8,13 @@ const DLLS = Object.freeze(["nvapi64", "nvngx"]);
 const ENVIRONMENT = Object.freeze(["DXMT_ENABLE_NVEXT", "D3DM_ENABLE_METALFX"]);
 
 function withTemporalSelection(settings, effects) {
-  const methods = require("../shared/effects/execution-requirements").analyze({effects}).methods.temporal;
+  const methods = require("../shared/effects/execution-requirements").analyze({effects}).methods;
+  const contracts = require("../shared/effects/operation-contracts.mjs");
+  const scene = methods.temporal.length > 0 || methods.neural.some(method => contracts.NEURAL[method]?.history === "scene") ||
+    methods.generation.some(method => contracts.GENERATION[method]?.scene === true);
   // Preserve saved runtime integration, including its ability to expose the
   // game's temporal inputs before a shared replacement is selected live.
-  return { ...settings, dlss: settings.dlss === true || methods.length > 0 };
+  return { ...settings, dlss: settings.dlss === true || scene };
 }
 
 function hasLibraries(directory) {

@@ -16,6 +16,8 @@ typedef struct RSWineSceneMetadataV2 {
  uint32_t pass,colorPass,matrixFlags;
  float view[16],projection[16];
  RSWineSceneAovImageV2 images[14];
+ // Actual final DXGI HWND association, resolved only by the matched Unix owner.
+ uint64_t destinationWindow;
 } RSWineSceneMetadataV2;
 typedef struct RSWineVulkanSceneRequestV2 {
  RSWineVulkanSceneRequestV1 base;
@@ -30,6 +32,6 @@ typedef int32_t (RS_SCENE_CALL2 *RSWineVulkanSceneRecordCall2)(const RSWineVulka
 #undef RS_SCENE_CALL2
 #if defined(__cplusplus)
 static_assert(sizeof(RSWineSceneAovImageV2)==48,"Wire AOV metadata layout");
-static_assert(sizeof(RSWineSceneMetadataV2)==1000,"Wire scene metadata layout");
-static_assert(sizeof(RSWineVulkanSceneRequestV2)==1744,"Wire scene request layout");
+static_assert(sizeof(RSWineSceneMetadataV2)==1008,"Wire scene metadata layout");
+static_assert(sizeof(RSWineVulkanSceneRequestV2)==1752,"Wire scene request layout");
 #endif
