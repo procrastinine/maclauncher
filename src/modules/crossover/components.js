@@ -9,11 +9,11 @@ const ARCHIVE = /^bins_misc_ubuntu12\.zip\.([a-f0-9]{40})$/;
 
 module.exports = [
   {
-    // Valve's genuine Windows client libraries, taken from the content-addressed
+    // Valve's Windows client libraries, taken from the content-addressed
     // archive that Valve's client update manifest names.
     id: "steam-client-components",
     label: "Steam client components",
-    description: "Valve's Windows steamclient.dll and steamclient64.dll. The Steam client bridge loads them so that Windows Steam games in CrossOver and Sikarugir talk to the Mac Steam client. They download with the bridge, after consent.",
+    description: "Valve's Windows steamclient.dll and steamclient64.dll. The Steam client bridge loads them so that Windows Steam games in CrossOver and Sikarugir talk to the Steam client for Mac. They download with the bridge, after consent.",
     list({ userDataDir }) {
       const active = readJson(path.join(store(userDataDir), "active.json"));
       return Components.storeEntries(store(userDataDir), { match: /^[a-f0-9]{40}$/ }).map(directory => {
@@ -41,7 +41,7 @@ module.exports = [
       } }
   },
   Components.fromRuntimeManager(require("./runtime/steam-bridge"), { users: ["Windows Steam games in CrossOver and Sikarugir"],
-    description: "The MacLauncher package that connects Windows Steam games in CrossOver and Sikarugir to the Mac Steam client. Play offers it, after consent, for a Windows Steam game." }),
+    description: "The MacLauncher package that connects Windows Steam games in CrossOver and Sikarugir to the Steam client for Mac. Play offers it, after consent, for a Windows Steam game." }),
   Components.fromRuntimeManager(require("./runtime/winemac"), { users: ["CrossOver"],
     description: "An optional package matched to one CrossOver release and build. It adds Vulkan external memory, semaphore and fence sharing to CrossOver's Mac driver, and Play offers it, after consent, when that release runs a Vulkan game." }),
   ...Object.values(require("./temporal/support-manager").apiManagers).map(manager => Components.fromRuntimeManager(manager, {
