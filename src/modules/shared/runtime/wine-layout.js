@@ -7,14 +7,14 @@ function wineLayout(install) {
   const dllRoot = path.join(root, 'lib/wine');
   let directories = []; try { directories = fs.readdirSync(dllRoot).sort(); } catch {}
   const candidates = directories.filter(name => name.endsWith('-unix') && (fs.existsSync(path.join(dllRoot, name, 'ntdll.so')) || fs.existsSync(path.join(dllRoot, name, 'wine'))));
-  const preferred = normalizeArchitecture(install.architecture || install.architectures?.[0]);
+  const preferred = normalizeArchitecture(install.architecture || require("./host-capabilities").getHostCapabilities().hardwareArch);
   const rows = candidates.map(name => {
     let architectures = [];
     const image = path.join(dllRoot, name, fs.existsSync(path.join(dllRoot, name, 'wine')) ? 'wine' : 'ntdll.so');
     try { architectures = readMachOLoadCommands(image).architectures; } catch {}
-    return { name, architectures };
+    return { name, image, architectures };
   });
-  const selected = rows.find(row => row.architectures.some(cpu => normalizeArchitecture(cpu) === preferred)) || rows[0];
+  const selected = rows.find(row => install.graphicsExecutablePath && path.resolve(row.image) === path.resolve(install.graphicsExecutablePath)) || rows.find(row => row.architectures.some(cpu => normalizeArchitecture(cpu) === preferred)) || rows[0];
   const unixName = selected?.name || null, architecture = selected?.architectures.find(cpu => normalizeArchitecture(cpu) === preferred) || selected?.architectures[0] || null;
   const windows = directories.filter(name => name.endsWith('-windows'));
   const primaryWindows = windows.find(name => name.slice(0, -8) === unixName?.slice(0, -5)) || windows.find(name => name !== 'i386-windows') || windows[0];

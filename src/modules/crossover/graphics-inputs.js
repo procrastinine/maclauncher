@@ -2,6 +2,10 @@
 // of the Windows executable and the launcher's own process.
 // The launcher CPU is the fallback ABI; an installed Wine loader supplies its own slices.
 function architecture(install, hostArchitecture = process.arch, fallback = null) {
+  if (install?.graphicsExecutablePath) {
+    const selected = require("../shared/runtime/wine-layout").wineLayout(install).architecture;
+    if (selected) return selected;
+  }
   const normalize = value => value === "x64" ? "x86_64" : value;
   const candidates = (install?.architectures || install?.installationMetadata?.architectures || [])
     .filter(value => typeof value === "string" && /^[a-z0-9_]{1,32}$/.test(value)).map(normalize);

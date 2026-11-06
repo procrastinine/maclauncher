@@ -34,3 +34,26 @@ test("CrossOver reports loader architecture even without a temporal camera bridg
   assert.deepEqual(await Module.resolveGraphicsInputs({}, {runtimeId: "crossover"}, selected),
     {architecture: "arm64", cameraProjection: true, sourceResolution: false, methods: ["fsr2"]});
 });
+test("FEX Wine selects arm64 native libraries while Rosetta Wine retains x64", t => {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+  const { wineLayout } = require('../src/modules/shared/runtime/wine-layout');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wine-fex-layout-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const loaders = {};
+  for (const [directory, cpu] of [['aarch64-unix', 0x0100000c], ['x86_64-unix', 0x01000007]]) {
+    const file = path.join(root, 'lib/wine', directory, 'wine');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const bytes = Buffer.alloc(32); bytes.writeUInt32LE(0xfeedfacf); bytes.writeUInt32LE(cpu, 4); bytes.writeUInt32LE(2, 12);
+    fs.writeFileSync(file, bytes); loaders[directory] = file;
+  }
+  for (const [directory, architecture] of [['aarch64-unix', 'arm64'], ['x86_64-unix', 'x86_64']]) {
+    // The registered child loader is authoritative even with stale front-loader metadata.
+    const install = { crossoverRoot: root, architectures: ['x86_64', 'arm64'], graphicsExecutablePath: loaders[directory] };
+    assert.equal(wineLayout(install).architecture, architecture);
+    assert.equal(Graphics.architecture(install, architecture === 'arm64' ? 'x64' : 'arm64'), architecture);
+  }
+  t.mock.method(require('../src/modules/shared/runtime/host-capabilities'), 'getHostCapabilities', () => ({ hardwareArch: 'arm64' }));
+  assert.equal(wineLayout({ crossoverRoot: root, architectures: ['x86_64', 'arm64'] }).architecture, 'arm64');
+  assert.equal(wineLayout({ crossoverRoot: root, architecture: 'x64' }).architecture, 'x86_64');
+  assert.equal(wineLayout({ crossoverRoot: root, architecture: 'arm64' }).architecture, 'arm64');
+});
