@@ -98,8 +98,11 @@ The launcher writes its main log to `userData/logs/main.log`. MKXP-Z writes a lo
 ## Checks
 
 - `pnpm typecheck` checks the renderer types without emitting files.
+- `npm run test:setup` prepares the declared source checkouts, publisher JARs, CP932 table, both processor builds of included packages and Android fixture tools. This explicit setup command can access the network; all downloaded inputs use their recorded commits or checksums. Linked app worktrees reuse existing source repositories through detached worktrees when the pinned commits are available locally.
 - `pnpm test` runs the Node backend and UI contract tests.
 - `pnpm check` runs type checking, the unit tests and the renderer build.
+
+The test runner checks these inputs offline before starting workers. Missing or changed inputs produce one error naming `npm run test:setup`; individual tests do not replace that setup step. Run setup after changes to the declared source or package pins.
 
 The normal source initialization above includes the Android source, at its recorded commit, that native and framework tests use. A checkout prepared only for app packaging can run `node scripts/ci-macos.cjs test-sources` before repository-wide tests or source audits. This initializes the packaging sources and the additional test sources declared in `build/source-dependencies.json`, at their existing Gitlink commits and without fetching nested upstream trees. The Android source in `src/external/maclauncher-android` has its own upstream adaptation tests and records its nested sources by exact commit, and those nested checkouts are initialized within it. These test sources are separate from the included Builds runtime packages. Integration tests for VNDS and engine packages read a `maclauncher-builds` checkout placed beside this repository.
 
