@@ -1345,7 +1345,8 @@ test('cached vkd3d publisher releases order numeric cores before letter revision
   const file=Catalog.catalogPath(root,owner.id),before=fs.readFileSync(file),state=owner.getState({userDataDir:root});
   assert.deepEqual(state.catalog.versions,['3.1','3.0.1','3.0b','3.0a','3.0'].map(v=>'upstream-vkd3d-proton-'+v+'.tar.zst'));
   const markup=render([{...state,id:owner.id,label:owner.label,ui:owner.ui}],owner.id);
-  assert.ok(markup.indexOf('>v3.0.1</option>')<markup.indexOf('>v3.0b</option>'));assert.match(markup,/value="upstream-vkd3d-proton-3\.1\.tar\.zst" selected/);
+  // Translator versions name their CPU build; these Windows packages serve every Mac.
+  assert.ok(markup.indexOf('>v3.0.1 · universal</option>')>0);assert.ok(markup.indexOf('>v3.0.1 · universal</option>')<markup.indexOf('>v3.0b · universal</option>'));assert.match(markup,/value="upstream-vkd3d-proton-3\.1\.tar\.zst" selected/);
   assert.deepEqual(fs.readFileSync(file),before);
   const {compareVersions}=require('../src/modules/shared/runtime/version-order.mjs');
   assert.ok(compareVersions('v1.10.3-47-gb144ae28','v1.10.3')>0);assert.ok(compareVersions('1.4.2-rc1','1.4.2')<0);

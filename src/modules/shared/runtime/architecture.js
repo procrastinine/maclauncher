@@ -64,6 +64,15 @@ function assetArchitecture(name) {
 function requiresRosetta(architecture, host = getHostCapabilities()) {
   return normalizeArchitecture(architecture) === "x64" && host.platform === "darwin" && host.hardwareArch === "arm64";
 }
+// The CPU build a consumer loads, as translator settings and the inspector name
+// it: x64, arm64 or universal. An x64 build on Apple Silicon runs under Rosetta;
+// a Wine consumer names its Wine process, whose CPU decides the slice it loads.
+function cpuBuildLabel(architecture, { consumer = null, host = getHostCapabilities() } = {}) {
+  const cpu = normalizeArchitecture(architecture);
+  if (!cpu) return "";
+  if (cpu === "x64" && requiresRosetta(cpu, host)) return consumer === "wine" ? "x64 (Wine under Rosetta)" : "x64 (under Rosetta)";
+  return cpu === "arm64" && consumer === "wine" ? "arm64 (ARM64 Wine)" : cpu;
+}
 // A Mach-O image without an Apple Silicon slice runs its Intel slice through Rosetta.
 function imageRequiresRosetta(architectures, host) {
   const slices = (architectures || []).map(Requirements.normalizeArchitecture);
@@ -86,4 +95,4 @@ async function ensureArchitecture(architecture, options = {}) {
 }
 module.exports = { normalizeArchitecture, defaultArchitecture, selectedArchitecture, withArchitecture, architectureLabel,
   recordArchitecture, matchesArchitecture, ensureArchitecture, requestedArchitecture, targetArchitecture, chooseArchitecture,
-  assetArchitecture, requiresRosetta, imageRequiresRosetta, tagInstall };
+  assetArchitecture, requiresRosetta, imageRequiresRosetta, tagInstall, cpuBuildLabel };

@@ -256,6 +256,14 @@ export function architectureLabel(architecture: string | null | undefined) {
   return architecture === "x64" || architecture === "x86_64" ? "Intel" : architecture === "universal" ? "Universal" : "Apple Silicon";
 }
 
+// The CPU name of one build, as translator and component rows show it.
+export function cpuBuildName(architecture: string | null | undefined) {
+  const value = String(architecture || "").trim();
+  if (/^(?:x64|x86_64|amd64)$/i.test(value)) return "x64";
+  if (/^(?:arm64|aarch64)$/i.test(value)) return "arm64";
+  return /^universal$/i.test(value) ? "universal" : value;
+}
+
 export function formatDownloadPercent(task: { downloaded: number; total: number | null }) {
   if (!task.total || task.total <= 0) return null;
   const pct = Math.floor((task.downloaded / task.total) * 100);

@@ -466,7 +466,9 @@ export type RuntimeManagerState = {
     componentId?: string;
     /** One introductory sentence shown above a library. */
     description?: string;
-    management?: "managed" | "built-in"; sectionManagement?: Record<string, "managed" | "built-in">; library?: "shaders" | "plugins" | "presets"; position?: "last";
+    management?: "managed" | "built-in"; sectionManagement?: Record<string, "managed" | "built-in">; library?: "shaders" | "plugins" | "presets";
+    /** Translator groups name the CPU build (x64, arm64 or universal) of every version. */
+    cpuBuildLabels?: boolean; position?: "last";
     settingsContext?: { moduleId: string; runtimeId: string }; configurationFieldKeys?: string[];
     pluginActions?: { install: string; setEnabled: string; update?: string } };
   sections?: Array<Record<string, any>>;

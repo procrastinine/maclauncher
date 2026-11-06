@@ -1,7 +1,7 @@
 import type { RuntimeManagerState, RuntimeRefreshOptions } from "../types";
 import { sanitizeErrorMessage } from "../../../../core/runtime-errors.mjs";
 import packageInfo from "../../../../../package.json";
-import { isPrereleaseVersion } from "../ui-helpers";
+import { cpuBuildName, isPrereleaseVersion } from "../ui-helpers";
 
 // Shared by initial UI state and the source/import controls. An explicit
 // choice stays selected; automatic choices prefer stable published releases.
@@ -258,4 +258,36 @@ export function runtimeCatalogPresentation(catalog: Record<string, any> | null |
     (installLabel === "Build" ? "Build the selected version locally." : "");
   return { installLabel, included, sourceUrl, sourceLabel, installHelpUrl,
     installReason: sanitizeErrorMessage([reason, runtimeMinimumNotice(minimum)].filter(Boolean).join(" ")) };
+}
+
+// Translator views (group ui.cpuBuildLabels) name the CPU build of every
+// version: x64, arm64 or universal. An installed version is named by the CPU
+// slices of its installed file, then by the build its list declares, then by
+// the CPU its installation was made for.
+const cpuBuild = (value: unknown) => {
+  const name = cpuBuildName(typeof value === "string" ? value : "");
+  return name === "x64" || name === "arm64" || name === "universal" ? name : "";
+};
+export function translatorInstallBuild(install: Record<string, any> | null | undefined, requirement?: Record<string, any> | null): string {
+  const slices = [...new Set((Array.isArray(install?.architectures) ? install!.architectures : []).map(cpuBuild)
+    .filter((cpu: string) => cpu === "x64" || cpu === "arm64"))];
+  if (slices.length) return slices.length > 1 ? "universal" : slices[0] as string;
+  return cpuBuild(requirement?.architecture) || cpuBuild(install?.architecture);
+}
+
+// The list for the CPU an installation was made for, falling back to the section's own list.
+export function translatorInstallRequirement(install: Record<string, any>, section: Record<string, any> | null | undefined) {
+  const slot = /^architecture:(.+)$/.exec(String(install?.variant || ""))?.[1];
+  const catalog = slot && section?.catalog?.architectureCatalogs?.[slot] || section?.catalog;
+  return install?.custom ? null : catalog?.versionRequirements?.[install?.version] || null;
+}
+
+// A listed version is named by its installed build for the selected Build
+// choice, otherwise by the build its list declares. A list that declares no
+// CPU, such as a release page whose package CPU is read at installation, leaves
+// the version unnamed until it is installed.
+export function translatorVersionBuild(version: string, catalog: Record<string, any> | null | undefined, installed: Array<Record<string, any>> = []) {
+  const requirement = catalog?.versionRequirements?.[version] || null;
+  const row = installed.find(item => item?.version === version && item.ready !== false);
+  return row ? translatorInstallBuild(row, requirement) : cpuBuild(requirement?.architecture);
 }

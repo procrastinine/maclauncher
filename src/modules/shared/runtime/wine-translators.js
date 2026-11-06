@@ -271,8 +271,8 @@ async function inventoryFacts(install, runtime, context, dependencies) {
   return { includedInventory, choices };
 }
 function optionsPlan(input, context) {
-  return Plan.resolveApiRoles(Plan.resolvePlan(input), { ...input,
-    selections: Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id, context.runtimeSettings?.[role.settingsKey]])) });
+  return { ...Plan.resolveApiRoles(Plan.resolvePlan(input), { ...input,
+    selections: Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id, context.runtimeSettings?.[role.settingsKey]])) }), layout: input.layout };
 }
 function environmentContext(context, install) {
   const value = context.runtimeSettings?.environmentReference;
@@ -422,22 +422,33 @@ function withSettings(manifest) {
   }
   return result;
 }
+// A Vulkan driver loads as the slice of the Wine process's CPU: the one
+// wine-layout.js inspects, managedTranslators selects its build for and Play
+// checks before loading. Settings and the inspector name that build.
+function nativeBuildSuffix(description, layout, host) {
+  if (description?.component !== 'vulkan-driver' || !description.files?.some(file => file.format === 'macho')) return '';
+  const build = Architecture.cpuBuildLabel(layout?.architecture, { consumer: 'wine', ...(host ? { host } : {}) });
+  return build ? ` · ${build}` : '';
+}
 function optionLists(install, runtime, context, dependencies = {}) {
   const input = dependencies.inventory || inventory(install, runtime, context, dependencies), plan = dependencies.plan || Plan.resolvePlan(input);
   if (plan.compatibility) for (const key of ['included', 'choices']) input[key] = input[key].map(item => {
     const files = plan.compatibility[item.id]?.files || plan.compatibility[item.id]?.inspectedFiles || item.files;
     return { ...item, files, ...(['d3d-renderer', 'd3d12'].includes(item.component) && files.some(file => file.format === 'pe') ? { apis: Roles.apisForFiles(files) } : {}) };
   });
+  const builds = new Map([...input.included, ...input.choices].map(item => [item.id, nativeBuildSuffix(item, input.layout, dependencies.host)]));
+  const withBuilds = rows => Array.isArray(rows) ? rows.map(row => builds.get(row?.value) ? { ...row, label: row.label + builds.get(row.value) } : row) : rows;
   const legacy = Object.fromEntries(Object.entries(SETTINGS).map(([component, key]) => {
-    const rows = Plan.options({ ...input, component, included: input.included.filter(item => !item.hiddenChoice) });
+    const rows = withBuilds(Plan.options({ ...input, component, included: input.included.filter(item => !item.hiddenChoice) }));
     if (!context.runtimeSettings?.[key]) {
       const current = rows.find(row => row.value === (plan.components[component].selected?.id || input.selections[component]));
       if (current) current.value = ''; // The unset control preserves its existing saved backend.
     }
     return [key + 'Options', rows];
   }));
-  return { ...legacy, ...Plan.apiOptions(plan.components.d3d11 ? plan : Plan.projectRoles(plan), { ...input,
-    selections: Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id, context.runtimeSettings?.[role.settingsKey]])) }) };
+  const api = Plan.apiOptions(plan.components.d3d11 ? plan : Plan.projectRoles(plan), { ...input,
+    selections: Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id, context.runtimeSettings?.[role.settingsKey]])) });
+  return { ...legacy, ...Object.fromEntries(Object.entries(api).map(([key, rows]) => [key, withBuilds(rows)])) };
 }
 // The settings and Wine installation that decide a translator plan. Rows
 // recorded at Play describe the current settings while these are unchanged.
@@ -454,7 +465,7 @@ function presentInspectorRows(rows) {
       reason: row.fallback && reasonCode !== 'load-impossible' ? Plan.fallbackNotice(reasonCode, { roles: row.conflictRoles }) : row.reason };
   });
 }
-function inspectorRows(plan) {
+function inspectorRows(plan, { host } = {}) {
   const labels = { 'd3d-renderer': 'Direct3D', 'vulkan-driver': 'Vulkan', d3d12: 'Direct3D 12', video: 'Video codecs' };
   const entries = plan.components.d3d11 ? Roles.ROLES.map(role => [role.id, role.settingsKey]) : Object.entries(SETTINGS);
   const automatic = plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice";
@@ -464,7 +475,7 @@ function inspectorRows(plan) {
   return presentInspectorRows(entries.map(([component, key]) => {
     const row = plan.components[component], direct3D = Roles.DIRECT3D_ROLES.some(role => role.id === component);
     return { id: key, component, label: labels[component] || Roles.ROLES.find(role => role.id === component)?.label, selected: row.selected ? Description.label(row.selected) : row.fallback ? Plan.UNAVAILABLE_CHOICE_LABEL : row.inherited ? 'Inherited' : automatic,
-      used: row.used ? Description.label(row.used) : direct3D && builtin || automatic, reason: row.reason, reasonCode: row.reasonCode, fallback: row.fallback,
+      used: row.used ? Description.label(row.used) + nativeBuildSuffix(row.used, plan.layout, host) : direct3D && builtin || automatic, reason: row.reason, reasonCode: row.reasonCode, fallback: row.fallback,
       ...(row.conflictRoles?.length ? { conflictRoles: row.conflictRoles } : {}) };
   }));
 }

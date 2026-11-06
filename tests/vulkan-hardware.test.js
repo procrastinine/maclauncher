@@ -125,8 +125,10 @@ test("KosmicKrisp choices use compact CPU labels and retain their order", t => {
     const kosmic = choices.filter(row => row.value.startsWith("kosmickrisp"));
     assert.ok(!kosmic.some(row => row.value === Managed.selectionId), "An uninstalled provider is not an inspector choice");
     assert.ok(kosmic.length > 0);
-    const cpu = architecture === "x64" ? "Intel" : "Apple Silicon";
-    assert.ok(kosmic.every(row => row.label.includes("(" + cpu + ")")));
+    // Each choice names the CPU build its consumer loads (x64 under Rosetta on Apple Silicon).
+    const cpu = architecture === "x64" ? " · x64 (under Rosetta)" : " · arm64";
+    assert.ok(kosmic.every(row => row.label.endsWith(cpu)), JSON.stringify(kosmic));
+    assert.ok(choices.filter(row => row.value !== "auto").every(row => row.label.endsWith(cpu)), "every installed driver names its build");
     assert.ok(kosmic.every(row => !row.label.includes("Intel build for Intel programs")));
     if (architecture === "arm64") {
       assert.equal(Vulkan.resolve(context, { ...selected, preferredBackend: undefined }).backend, "moltenvk");

@@ -1,10 +1,11 @@
 import React from "react";
 import type { DownloadTask, RuntimeRefreshOptions, RuntimeUiState } from "../types";
-import { architectureLabel, isRuntimeVersionInstalled, runtimeVersionTagger, withAvailability } from "../ui-helpers";
+import { architectureLabel, cpuBuildName, isRuntimeVersionInstalled, runtimeVersionTagger, withAvailability } from "../ui-helpers";
 import { ErrorText } from "./ErrorText";
 import { RefreshIcon } from "../icons";
 import { Select } from "./Select";
-import { isRuntimeIncluded, runtimeInstallVersion, runtimeCatalogPresentation, runtimeCatalogSources, runtimeRefreshFailure, runtimeSourceUrl, runtimeSourceUiKey } from "./runtime-tabs-model";
+import { isRuntimeIncluded, runtimeInstallVersion, runtimeCatalogPresentation, runtimeCatalogSources, runtimeRefreshFailure, runtimeSourceUrl, runtimeSourceUiKey,
+  translatorVersionBuild } from "./runtime-tabs-model";
 
 type Props = {
   managerId: string;
@@ -19,6 +20,8 @@ type Props = {
   onOpenSource?: (url: string) => void;
   onRegister?: (runtimePath?: string) => void;
   pathForFile?: (file: File) => string | null;
+  /** Translator views name each version's CPU build (x64, arm64 or universal). */
+  cpuBuildLabels?: boolean;
 };
 
 function sourceDescription(source: Record<string, any>, url: string | null) {
@@ -34,7 +37,8 @@ function sourceDescription(source: Record<string, any>, url: string | null) {
   return `Runtime downloads from ${parsed.hostname}.`;
 }
 
-export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, downloads, onSelect, onInstall, onRefresh, onOpenSource, onRegister, pathForFile }: Props) {
+export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, downloads, onSelect, onInstall, onRefresh, onOpenSource, onRegister, pathForFile, cpuBuildLabels = false }: Props) {
+  const buildName = (value: string) => cpuBuildLabels ? cpuBuildName(value) : architectureLabel(value);
   // The automatic CPU is the one Play uses: the launcher's own, or another CPU
   // this Mac runs when the launcher's CPU has no build.
   const defaultArchitecture = section.automaticArchitecture || section.launcherArchitecture || section.catalog?.architecture;
@@ -185,8 +189,9 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
                 const damaged = !ready&&!incomplete&&isRuntimeVersionInstalled(installed, value, selectedVariant, hasVariants);
                 const includedVersion = ready && installed.some((item: any) => item.version === value && isRuntimeIncluded(item) &&
                   (!hasVariants || item.variant === selectedVariant));
+                const build = cpuBuildLabels ? translatorVersionBuild(value, source, installed) : "";
                 return <option key={value} value={value}>
-                  {withAvailability(versionTag(value), ready ? includedVersion ? "included" : "installed"
+                  {withAvailability(build ? `${versionTag(value)} · ${build}` : versionTag(value), ready ? includedVersion ? "included" : "installed"
                     : incomplete ? "downloadNeeded" : damaged ? "needsRepair" : null)}
                 </option>;
               }) : <option value="">No versions loaded</option>}
@@ -227,9 +232,9 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
       <select id={`runtime-architecture-${managerId}-${section.id}`} className="input inputSmall"
         value={overrides.includes(architecture) ? architecture : ""}
         aria-label="Build architecture" onChange={event => onSelect(section.id, "installArchitecture", event.target.value)}>
-        <option value="">Automatic ({architectureLabel(defaultArchitecture)})</option>
+        <option value="">Automatic ({buildName(defaultArchitecture)})</option>
         {overrides.map(value => <option key={value} value={value}>
-          {architectureLabel(value)}{defaultArchitecture === "arm64" && value === "x64" ? " (Rosetta)" : ""}</option>)}
+          {buildName(value)}{defaultArchitecture === "arm64" && value === "x64" ? " (Rosetta)" : ""}</option>)}
       </select>
     </div>}
     {sources.filter(source => !source.secondary).map(renderSource)}

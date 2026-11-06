@@ -14,7 +14,8 @@ import {
 import { DownloadIcon, RefreshIcon, TrashIcon } from "../icons";
 import { groupRuntimeManagers, resolveRuntimeTabSelection, runtimeGroupSections, runtimeSectionTabs,
   runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation,
-  runtimeRemovalPresentation, runtimeMinimumNotice, runtimeInstallVersion, isRuntimeIncluded, isRuntimeSetupPending } from "./runtime-tabs-model";
+  runtimeRemovalPresentation, runtimeMinimumNotice, runtimeInstallVersion, isRuntimeIncluded, isRuntimeSetupPending,
+  translatorInstallBuild, translatorInstallRequirement } from "./runtime-tabs-model";
 import type { RuntimeTabGroup, RuntimeTabSection, RuntimeSectionTab } from "./runtime-tabs-model";
 import { HelpTip } from "./HelpTip";
 import { RuntimeCatalogSources } from "./RuntimeCatalogSources";
@@ -527,6 +528,7 @@ export function RuntimesView({
                     })()}
                     {!managementPresentation.local && !activeRuntimeSection.catalog?.packagesFrom && (
                       <RuntimeCatalogSources managerId={activeRuntimeManager.id} section={activeRuntimeSection}
+                        cpuBuildLabels={activeRuntimeManager.ui?.cpuBuildLabels === true}
                         ui={activeRuntimeUi} busy={runtimeBusy} variant={activeRuntimeResolvedInstallVariant}
                         downloads={activeRuntimeDownloads} onOpenSource={onOpenSource}
                         onRegister={activeRuntimeSection.customRuntime && onRuntimeRegister ? runtimePath => onRuntimeRegister(activeRuntimeManager.id, activeRuntimeSection.id, runtimePath) : undefined}
@@ -616,6 +618,9 @@ export function RuntimesView({
                         const preferredArchitecture = activeRuntimeSection.defaultArchitecture || automaticArchitecture;
                         const installArchitecture = (row: Record<string, any>) => buildArchitecture(row, activeRuntimeSection, activeRuntimeInstalledSorted);
                         const installBuild = installArchitecture(inst);
+                        // Translator views name every build, so two builds of one version read as two labeled rows.
+                        const translatorBuild = activeRuntimeManager.ui?.cpuBuildLabels === true
+                          ? translatorInstallBuild(inst, translatorInstallRequirement(inst, activeRuntimeSection)) : "";
                         const defaultFor = defaultSelections?.filter((row: Record<string, any>) => row.version === inst.version).map((row: Record<string, any>) => row.label) || [];
                         const isDefault = activeRuntimeSupportsDefault && !inst.reference && (
                           defaultSelections ? defaultFor.length > 0 : inst.version === activeRuntimeSection.defaultVersion &&
@@ -646,7 +651,8 @@ export function RuntimesView({
                             <div className="saveRowMain">
                               <div className="saveName">
                                 {activeRuntimeVersionTag(inst.version)}
-                                {installBuild && installBuild !== "universal" && automaticArchitecture &&
+                                {translatorBuild ? <span className="badge" data-cpu-build={translatorBuild} title="CPU build">{translatorBuild}</span>
+                                  : installBuild && installBuild !== "universal" && automaticArchitecture &&
                                   installBuild !== automaticArchitecture && <span className="badge">{architectureLabel(installBuild)}</span>}
                                 {isDefault && (
                                   <span className="badge badgeAccent" title={defaultFor.length ? `Automatic for ${defaultFor.join(", ")}` : undefined}>Default</span>
