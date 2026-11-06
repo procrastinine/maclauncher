@@ -67,6 +67,10 @@ MacLauncher's [graphics layer](/maclauncher/graphics/) works on WINE games, and 
 
 Each game's Runtime Settings gather WINE's display, input, compatibility and diagnostic options, from Retina mode and custom virtual desktop sizes to keyboard mapping and performance HUDs. A game in an existing bottle can keep the bottle's current values. [Runtime settings](/maclauncher/windows/settings/) lists them.
 
+### Steam for Windows games
+
+Windows games from Steam can talk to the Steam client for Mac through the optional [Steam client bridge](/maclauncher/windows/steam-client-bridge/), which Play offers for games that include Valve's Steam API once the Steam client for Mac is installed.
+
 ## What to expect
 
 WINE is very good, but it's a translation, so results vary from game to game. Games whose DRM or anti-cheat requires real Windows won't run. Installers that need to install further components can't be played as games either; point MacLauncher at the installed game folder or its main `.exe` instead.
