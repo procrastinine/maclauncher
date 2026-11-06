@@ -99,11 +99,13 @@ test("all three scene adapters retain discovery plans for a selected scene effec
 test("preferred Vulkan and explicit MacLauncher KosmicKrisp are downloadable from an empty profile", t => {
   const context = { userDataDir: profile(t), settings: {}, runtimeSettings: {} }, dependencies = { required: true, preferredBackend: "kosmickrisp" };
   assert.equal(Vulkan.requirements(context, dependencies)[0].managerId, "vulkan-kosmickrisp");
-  const choices = Vulkan.choices(context).vulkanRuntimes;
-  assert.ok(choices.some(row => row.value === "kosmickrisp:auto" && /download/.test(row.label)));
-  assert.ok(choices.some(row => row.value === "kosmickrisp:maclauncher" && /download/.test(row.label)));
-  context.runtimeSettings.vulkanRuntime = "kosmickrisp:maclauncher";
-  assert.equal(Vulkan.requirements(context)[0].discoveryRequired, true);
+  // Settings list installed drivers only; Play downloads what a choice needs.
+  assert.deepEqual(Vulkan.choices(context).vulkanRuntimes.map(row => row.value), ["auto"]);
+  for (const choice of ["kosmickrisp:auto", "kosmickrisp:maclauncher"]) {
+    context.runtimeSettings.vulkanRuntime = choice;
+    assert.ok(Vulkan.choices(context).vulkanRuntimes.some(row => row.value === choice && /not installed/.test(row.label)), choice);
+    assert.equal(Vulkan.requirements(context)[0].discoveryRequired, true, choice);
+  }
   context.runtimeSettings = { angleBackend: "vulkan" };
   assert.equal(Registry.getModule("android").getRuntimeRequirements({}, { ...context, runtimeId: "klepton" })[0].managerId, "vulkan-moltenvk");
 });
