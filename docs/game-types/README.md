@@ -35,7 +35,7 @@ The table lists game types by the name the app shows. In it, *Windows runtimes* 
 | [MAGES.](MAGES.md) | Impacto Windows HD | Windows runtimes |
 | [Minori](MINORI.md) | ReMinori | Windows runtimes |
 | [MUGEN / Ikemen GO](MUGEN.md) | Ikemen GO | Windows runtimes |
-| [Nintendo Switch](SWITCH.md) | Switch (nxnative) | Inspect only |
+| [Nintendo Switch](SWITCH.md) | Switch / Switch 2 (nxnative) | Inspect only |
 | [Nitroplus](NITROPLUS.md) | Nitroplus | Windows runtimes |
 | [NScripter](NSCRIPTER.md) | ONScripter-Yuri | ONScripter-EN, ONScripter-Yuri Web, External runtime, Windows runtimes |
 | [PlayStation 5](PS5.md) | PS5 (AnyPS5) | Inspect only, Prosper |

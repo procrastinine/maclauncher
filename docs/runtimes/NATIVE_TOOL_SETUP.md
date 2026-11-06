@@ -18,7 +18,7 @@ Intel-only runtimes on Apple silicon use Rosetta, Apple's system translator. If 
 
 ### Metal compiler
 
-Nintendo Switch preparation uses Apple's Metal compiler when the selected native-tools version requires it. The **Metal compiler** component of **Runtimes → Switch (nxnative)** selects either a compiler that MacLauncher downloads from Apple's public macOS MobileAsset catalog, or a toolchain already installed on the Mac. A downloaded compiler is kept in private launcher storage and changes no system developer settings. [Nintendo Switch](../game-types/SWITCH.md) describes the runtime.
+Nintendo Switch preparation uses Apple's Metal compiler when the selected native-tools version requires it. The **Metal compiler** component of **Runtimes → Switch / Switch 2 (nxnative)** selects either a compiler that MacLauncher downloads from Apple's public macOS MobileAsset catalog, or a toolchain already installed on the Mac. A downloaded compiler is kept in private launcher storage and changes no system developer settings. [Nintendo Switch](../game-types/SWITCH.md) describes the runtime.
 
 ### Python
 

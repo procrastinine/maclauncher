@@ -307,6 +307,8 @@ Conditions can disable, show or hide a field:
 
 - `disabledWhen` uses the same conditions as module actions, evaluated against the current runtime settings. It disables the control and keeps its saved value.
 - `visibleWhen` and `hiddenWhen` use those conditions in both global and per-game settings. A field with `visibleWhen` appears when any of its conditions match, and any matching `hiddenWhen` condition hides it. Hidden fields keep their values, defaults and overrides. Option providers load only for visible fields.
+- `gameHiddenWhen` uses the same conditions, evaluated against the library entry, and hides the field in that game's settings when any of them matches. The field stays in module settings and in other games, and its saved values stay unchanged. File status and option providers do not run for a field hidden this way.
+- `hidden: true` never lists the field. It still takes part in normalization, defaults and per-game overrides, so a module can keep a value that its own controls or settings provider edit, and saving the listed fields keeps it.
 - `requiresInstall: {managerId, sectionId}` disables a field until that runtime-manager section has a ready installation. A boolean control shows as off while the installation is missing and keeps its saved preference.
 
 A field can take its choices from local data:
@@ -351,6 +353,7 @@ The remaining fields describe the module's settings, detection, inspector, app-l
 - `ui.settingsOrder`: a number that orders the module's Settings sidebar entry. The sidebar lists Launcher first, then module sections by `ui.settingsOrder` (lower first, 0 by default) and alphabetically by label within the same value. macOS Game uses a negative value, so its section follows Launcher. No list of module IDs is hard-coded.
 - `detection`: input kinds, extension ownership, cheap markers and signatures, artifact probes and fallback policy; see [detection](../library/DETECTION.md).
 - `ui.infoFields`, `ui.entrySelectors`, `ui.actions` and `ui.actionGroups`: inspector fields, launch choices and actions; see [UI field and action schema](#ui-field-and-action-schema).
+- `ui.entryLabels`: game type labels for individual games. Each rule is `{ when, label, shortLabel? }`, where `when` lists conditions evaluated against the library entry. The first rule with a matching condition replaces the manifest `label` and `shortLabel` for that game in the library badge, the inspector, per-game settings and save tools; without a match, the manifest labels apply. The labels change only what the game shows, never its module ID, runtime IDs or stored settings.
 - `ui.appActions`: actions at app scope, which act without a selected game. Each is `{ id, label, menus, picker?, stopLabel?, shortcut?, sessionShortcuts? }`, and the [`appActions` export](#state-and-exported-objects) implements them.
   - `menus` lists `file`, `dock` or both. In each listed menu, the launcher shows the action as a native submenu of the module's current targets. With `picker: true`, the menu item opens a picker window for the action instead, titled with the action's label without the ellipsis.
   - `stopLabel` names the File and Dock submenu that stops the action's running sessions.
@@ -417,6 +420,7 @@ MacLauncher calls the hooks in a module's `main.js` to detect, import, prepare, 
 ### Detection, import and removal
 
 - `detectGame(context, helpers)` returns a detection object or `null`. `context` includes `inputPath`, `rootDir`, `isAppBundle` and `stat`, and the registry provides `helpers.findIndexHtml`.
+  - An error with code `DETECTION_CONFLICT` reports that the input holds more than one possible game. An error with code `DETECTION_INVALID_INPUT` reports that the input has the module's own format but is damaged or incomplete; its message names the problem in a short sentence. When no module matches, import shows that message after the item's name instead of the generic unrecognized-input text. Other errors count as no match.
   - When the game's own folder is only part of a release, a detection object can include `releaseRootDir`, the folder of the release around `gamePath`. Runtime providers search it for the game's executables. The registry fills it in for an NW.js app package whose parent `package.json` names a start page inside it, or for a `package.nw` folder, and filling it in never changes `gamePath` or `contentRootDir`.
 - `mergeEntry(existing, incoming, settings, context)` optionally merges per-game data before normalization. It applies to fresh and cached metadata alike, including the preservation of custom names. `context` includes `userDataDir`.
 - `onImport(entry, context)` runs when a game is first added to the library, for one-time setup such as staging bundled assets, with no background network access. `context` includes `userDataDir`, `settings` and `logger`.
