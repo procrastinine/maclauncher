@@ -81,7 +81,6 @@
             "executable": "",
             "bepInExWinhttp": false,
             "dllOverrides": [],
-            "environment": [],
             "arguments": [],
             "wineDebug": "",
             "dlss": false,
@@ -255,13 +254,6 @@
               "description": "One library=order entry per line, such as winhttp=n,b."
             },
             {
-              "key": "environment",
-              "type": "list",
-              "listSeparator": "newline",
-              "label": "Environment variables",
-              "description": "One NAME=value entry per line. CrossOver application and bottle paths are managed automatically."
-            },
-            {
               "key": "arguments",
               "type": "list",
               "listSeparator": "newline",
@@ -316,7 +308,6 @@
             "executable": "",
             "bepInExWinhttp": false,
             "dllOverrides": [],
-            "environment": [],
             "arguments": [],
             "wineDebug": "",
             "dlss": false,
@@ -509,13 +500,6 @@
               "listSeparator": "newline",
               "label": "Wine DLL overrides",
               "description": "One library=order entry per line, such as winhttp=n,b."
-            },
-            {
-              "key": "environment",
-              "type": "list",
-              "listSeparator": "newline",
-              "label": "Environment variables",
-              "description": "One NAME=value entry per line. Wine runtime and Windows environment paths are managed automatically."
             },
             {
               "key": "arguments",

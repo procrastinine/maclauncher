@@ -13,6 +13,14 @@ import {processRunning as alive,stopProcess as stop,stopProcesses,waitForExit,re
 const require=createRequire(import.meta.url),Host=require('../host'),Writable=require('../../shared/writable-input'),Storage=require('../storage'),Preparation=require('../prepare'),Packages=require('../service-packages');
 const execute=promisify(execFile);
 
+/** The game process environment: the launch values, then the chosen
+ * translators' environment values, then the ART runtime's own paths and
+ * options, which replace any of them. */
+export function gameEnvironment(supplier,values,{entry,context,renderer,vulkan,cacheRoot}){
+ const translator=require('../../shared/runtime/translator-environment-launch').forLaunch(entry,context,Host.translatorEnvironmentIds('art',renderer,vulkan)).values;
+ return applicationEnvironment(supplier,{...values,...translator,MACLAUNCHER_ANDROID_EGL_CACHE:cacheRoot});
+}
+
 /** ART replaces app execution only. Profile services, package identities,
  * account selection, clipboard authorization and process capabilities use the
  * ordinary launcher owners. The payload declares this entry only on delivery. */
@@ -140,7 +148,7 @@ export async function launch(entry,context,payload,dependencies={}){
    if(cancelled)throw Error("Android native launch was cancelled");
    // The shared host process owner uses this capability directly. It is not
    // imported into Android's guest descriptor table above.
-   const processEnvironment=applicationEnvironment(supplier,{...env,...childIsolation.environment,MACLAUNCHER_ANDROID_EGL_CACHE:appStorage.cacheRoot});
+   const processEnvironment=gameEnvironment(supplier,{...env,...childIsolation.environment},{entry,context,renderer,vulkan,cacheRoot:appStorage.cacheRoot});
    const query=require('../process-channel').prepareProcessQuerySpawn(require('../launch-arguments').processOptions(context,{cwd:appStorage.filesRoot,env:processEnvironment,executablePath:supplier.components.linuxRun,graphicsExecutable:supplier.components.linuxRun,networkIsolationApplied:true,stdio:descriptors},launch.serviceProcess),path.join(payload.root,'native/android-supervisor-send'));
    const child=await context.spawnDetachedChecked(childIsolation.command,[...childIsolation.prefix,supplier.components.linuxRun,...args],query.options);
    query.attach(child);

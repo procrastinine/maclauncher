@@ -107,6 +107,7 @@ test('saved KosmicKrisp manager IDs retain their installed choice through both W
     assert.ok(result.translatorVulkanOptions.some(row => row.value === saved));
     assert.equal(result.translatorVulkanOptions.some(row => row.value === canonical), false, 'the selected alias keeps one option for the installed copy');
     assert.equal(result.effectiveSettings.find(row => row.value === 'vulkanBackend').label, 'kosmickrisp');
+    assert.equal(result.translatorEnvironments[0], runtime); assert.ok(result.translatorEnvironments.includes('kosmickrisp'));
     const plan = await Translators.resolve(install, runtime, context, { host: f.host, executableArchitecture: 'x86_64', managers: [manager] });
     const selected = plan.components['vulkan-driver'];
     assert.equal(selected.value, saved); assert.equal(selected.selected.id, canonical); assert.equal(selected.used.id, canonical);
@@ -287,6 +288,8 @@ test('translator schema follows canonical role order and explains CrossOver glob
     assert.deepEqual(controls.map(field => field.key), expected);
     assert.ok(expected.indexOf('translatorD3D12') < expected.indexOf('translatorVulkan'));
     assert.equal(schema.visibilityAction, 'listTranslatorOptions');
+    assert.equal(schema.environmentAction, 'listTranslatorOptions');
+    assert.equal(schema.fields.some(field => field.key === 'environment'), false, 'translator environments replace the variable list');
     for (const role of Roles.ROLES) {
       const field = controls.find(field => field.key === role.settingsKey);
       assert.equal(field.optionsKey, role.optionsKey); assert.equal(schema.defaults[role.settingsKey], '');

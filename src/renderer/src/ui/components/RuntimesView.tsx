@@ -37,6 +37,7 @@ import { StatusBadge } from "./StatusBadge";
 import { RuntimeComponentGroup } from "./RuntimeComponentGroup";
 import { DownloadProgress } from "./DownloadProgress";
 import { isolatedItem } from "./ItemBoundary";
+import { RuntimeTranslatorEnvironments } from "./TranslatorEnvironmentEditor";
 
 const EMPTY_RUNTIME_UI: RuntimeUiState[string] = {
   remoteOpen: {},
@@ -494,6 +495,9 @@ export function RuntimesView({
                   </div>
 
                   <div className="runtimeSectionBody">
+                    {settingsApi?.setTranslatorEnvironment && <RuntimeTranslatorEnvironments managerId={activeRuntimeManager.id}
+                      declarations={state?.translatorEnvironments} store={state?.launcherSettings?.translatorEnvironment}
+                      onSave={settingsApi.setTranslatorEnvironment} />}
                     {itemGroups.length > 0 && <div className="detailRow detailControlRow"><label htmlFor="runtime-item-group" className="detailLabel">Operation</label>
                       <select id="runtime-item-group" className="input" value={selectedItemGroup}
                         onChange={event=>setItemGroup({section:groupKey,id:event.target.value})}>

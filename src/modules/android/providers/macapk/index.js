@@ -3,6 +3,11 @@ const path = require("node:path");
 const manager = require("./manager");
 const { environment } = require("../../../shared/runtime/macos-sandbox");
 
+// Translator environments of a Mac.apk launch: Mac.apk's own, ANGLE, and
+// MoltenVK when ANGLE renders through Vulkan.
+function translatorEnvironmentIds(runtimeSettings = {}) {
+  return ["macapk", "angle", ...(runtimeSettings.angleBackend === "vulkan" ? ["moltenvk"] : [])];
+}
 function ensureRuntime(entry, context) {
   const selection = manager.resolveSelection(entry, context.settings, context.userDataDir);
   return selection.ready ? null : { managerId: manager.id, version: selection.version, ...(selection.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {} };
@@ -44,7 +49,10 @@ async function prepareLaunch({ entry, context, storage, packageSet, policy }) {
     "-Duser.home=" + optionPath(storage.home), "-Djava.io.tmpdir=" + optionPath(storage.temporary),
     '-javaagent:"' + executablePolicy.replaceAll('"', '\\"') + '"',
     ...(argumentAgent ? ['-javaagent:"' + argumentAgent.replaceAll('"', '\\"') + '"=macapk'] : [])].join(" ");
-  const env = { ...ArgumentTransport.environment(context, environment()), HOME: storage.home, CFFIXED_USER_HOME: storage.home,
+  // Translator environment values apply first, so every value below stays the launcher's.
+  const base = require("../../../shared/runtime/translator-environment-launch").apply(environment(), entry, context,
+    translatorEnvironmentIds(context.runtimeSettings));
+  const env = { ...ArgumentTransport.environment(context, base), HOME: storage.home, CFFIXED_USER_HOME: storage.home,
     TMPDIR: storage.temporary + path.sep, JAVA_TOOL_OPTIONS: toolOptions,
     MACAPK_ANDROID_ROOT: storage.androidRoot, MACAPK_APP_CACHE_DIR: path.join(storage.cacheRoot, "applications"),
     MACAPK_AOT_CACHE: "0", MACAPK_CLIPBOARD_HOST: "0", MACAPK_LOCATION_HOST: "0", MACAPK_DISPLAY_DENSITY: "320",
@@ -84,4 +92,4 @@ async function prepareLaunch({ entry, context, storage, packageSet, policy }) {
     descriptor.expansionDirectory = path.join(storage.androidRoot, "sdcard/Android/obb", packageName);
   return descriptor;
 }
-module.exports = { manager, ensureRuntime, prepareLaunch, packageInput, resolveIcon: require("./identity").resolveIcon };
+module.exports = { manager, ensureRuntime, prepareLaunch, packageInput, translatorEnvironmentIds, resolveIcon: require("./identity").resolveIcon };

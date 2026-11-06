@@ -152,6 +152,10 @@ Runtime Settings shows the same sentence under a control's label while its selec
 
 When CrossOver makes its own automatic choice and has not resolved which engine that is, the row stays labeled as CrossOver's automatic choice. Once any Direct3D library is placed for a CrossOver game, CrossOver runs with WineD3D, and each Direct3D API without a placed library of its own shows CrossOver's WineD3D as the engine used. Camera support, DLSS and graphics effects use the components that each API actually uses after any fallback. CrossOver's [Vulkan scene support](CROSSOVER.md#vulkan-scene-support) works only while the Vulkan driver stays at CrossOver's automatic choice or a bottle's own setting, so selecting a specific Vulkan driver, including KosmicKrisp, makes it unavailable. Selecting an API does not by itself provide NGX interception through Vulkan or KosmicKrisp.
 
+## Environment variables
+
+Each translator has global environment variables in its Runtimes tab, and a game's Runtime Settings can change them for that game. A game receives the variables of the translators that it actually uses after any fallback. [Translator environment variables](TRANSLATOR_ENVIRONMENT.md) lists each translator's suggested and locked variables.
+
 ## Sources and notices
 
 [DXMT](https://github.com/3Shain/dxmt/releases) carries the license of each release: v0.80 uses MIT, and later source uses LGPL-2.1-or-later. [DXVK](https://github.com/doitsujin/dxvk), [D8VK](https://github.com/AlpyneDreams/d8vk), [D9VK](https://github.com/misyltoad/d9vk) and [Gcenx's macOS and async builds](https://github.com/Gcenx/DXVK-macOS) use the zlib license, and [vkd3d-proton](https://github.com/HansKristian-Work/vkd3d-proton) uses LGPL-2.1. The [Sikarugir Template](https://github.com/Sikarugir-App/Template/releases) supplies the notices of its components. [GStreamer](https://gstreamer.freedesktop.org/) and codec dependencies keep their own licenses.

@@ -4,5 +4,6 @@
 // Each key is removed together with its runner.
 module.exports = {
   ORIGINAL_GAME_MIRRORS_MIGRATION: "original-game-mirrors-v1",
-  CURRENT_SETTINGS_MIGRATION: "current-settings-v1"
+  CURRENT_SETTINGS_MIGRATION: "current-settings-v1",
+  TRANSLATOR_ENVIRONMENT_MIGRATION: "translator-environment-v1"
 };

@@ -238,6 +238,42 @@ test("Android launch keeps metadata libraries outside the guest class path and u
   assert.equal(spawned, false, "Cancellation during sandbox preparation must not start Java");
 });
 
+test("Android JVM games receive the merged values of their execution engine, ANGLE and Vulkan driver", async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "android-host-environment-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const fixture = managerFixture(true), payload = { root, profile: { angleVulkanVersion: 1 } };
+  fs.writeFileSync(path.join(root, "android-host.jar"), "host");
+  const entry = { gameId: "environment", gamePath: path.join(root, "original.apk"), name: "Environment",
+    translatorEnvironment: { angle: { ANGLE_FEATURE_OVERRIDES_ENABLED: "game" }, "android-jvm": { JAVA_TOOL_OPTIONS: null } } };
+  const prepared = { metadata: { packageName: "org.example.environment", versionName: "1", versionCode: 1,
+    launchers: [{ activity: "org.example.environment.Main" }] }, convertedJar: path.join(root, "converted.jar"),
+    filesRoot: root, cacheRoot: root, assetsRoot: root, nativeRoot: root, resourcesRoot: root, sourceApk: entry.gamePath };
+  let call;
+  const context = { ...fixture.context, userDataDir: root, runtimeSettings: { angleBackend: "vulkan" },
+    settings: { launcher: { translatorEnvironment: { android: { RUNTIME_WIDE: "1" }, "android-jvm": { JDK_JAVA_OPTIONS: "-Xmx4g", JAVA_TOOL_OPTIONS: "-Xss4m", HOME: "/elsewhere" },
+      angle: { ANGLE_FEATURE_OVERRIDES_ENABLED: "global", MTL_HUD_ENABLED: "1" }, moltenvk: { MVK_CONFIG_LOG_LEVEL: "3" },
+      kosmickrisp: { MESA_KK_DEBUG: "msl" }, "android-art": { ART_ONLY: "1" } } } },
+    getGameEffectsEnvironment: async () => ({}),
+    spawnDetachedChecked: async (...args) => { call = args; return { pid: 1 }; } };
+  await Host.launch(entry, context, payload, { ...fixture, prepare: async () => prepared, focusOwnedNativeGame: () => new Promise(() => {}),
+    resolveVulkan: () => ({ backend: "moltenvk", library: path.join(root, "libMoltenVK.dylib") }),
+    prepareSandbox: async () => ({ command: "/usr/bin/sandbox-exec", prefix: ["-f", "private-profile", "/owned/java"], executablePath: "/owned/java",
+      javaArguments: [], environment: { HOME: "private-home", KL_ANGLE_BACKEND: "vulkan", PATH: "/usr/bin:/bin" }, graphics: {} }) });
+  const environment = call[2].env;
+  assert.equal(environment.JDK_JAVA_OPTIONS, "-Xmx4g"); assert.equal(environment.JAVA_TOOL_OPTIONS, undefined, "the game removes a global value");
+  assert.equal(environment.ANGLE_FEATURE_OVERRIDES_ENABLED, "game"); assert.equal(environment.MTL_HUD_ENABLED, "1");
+  assert.equal(environment.MVK_CONFIG_LOG_LEVEL, "3"); assert.equal(environment.MESA_KK_DEBUG, undefined);
+  assert.equal(environment.ART_ONLY, undefined, "ART values apply only to the ART execution engine");
+  assert.equal(environment.RUNTIME_WIDE, "1", "MacLauncher Android's own values apply with either engine");
+  assert.equal(environment.HOME, "private-home"); assert.equal(environment.KL_ANGLE_BACKEND, "vulkan");
+  const main = require("../src/modules/android/main");
+  assert.deepEqual(main.actions.listTranslatorEnvironments(entry, { runtimeSettings: { execution: "art", angleBackend: "metal" } }, { runtimeId: "klepton" }).translatorEnvironments,
+    ["android", "android-art", "angle"]);
+  assert.deepEqual(main.actions.listTranslatorEnvironments(entry, { runtimeSettings: { angleBackend: "vulkan" } }, { runtimeId: "macapk" }).translatorEnvironments,
+    ["macapk", "angle", "moltenvk"]);
+  assert.deepEqual(main.actions.listTranslatorEnvironments(entry, {}, { runtimeId: "aim" }).translatorEnvironments, []);
+});
+
 test("Android prepares the selected JVM image before services or sandbox and preserves setup cancellation", async t => {
   const root=fs.mkdtempSync(path.join(os.tmpdir(),"android-host-image-"));
   t.after(()=>fs.rmSync(root,{recursive:true,force:true}));

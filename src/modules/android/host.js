@@ -289,6 +289,13 @@ function presentationEnvironment(payload, context, graphics = {}, dependencies =
   } : {};
 }
 
+// Translator environments of a MacLauncher Android game: the runtime's own,
+// which every game receives, its execution engine, ANGLE, and the Vulkan
+// driver when ANGLE renders through Vulkan.
+function translatorEnvironmentIds(execution, renderer, vulkan) {
+  return ["android", execution === "art" ? "android-art" : "android-jvm", "angle", ...(renderer === "vulkan" && vulkan?.backend ? [vulkan.backend] : [])];
+}
+
 function angleBackend(context, payload) {
   const selected = context.runtimeSettings?.angleBackend ?? "metal";
   if (!["metal", "vulkan"].includes(selected)) throw new Error("Select Metal or Vulkan for the Android OpenGL ES backend.");
@@ -449,7 +456,8 @@ async function launch(entry, context, payload, dependencies = {}) {
     let stdio=services ? services.stdio(["ignore", "ignore", "pipe", config.webLinksAllowed == null ? "ignore" : "pipe"]) :
         config.webLinksAllowed == null ? ["ignore", "ignore", "pipe"] : ["ignore", "ignore", "pipe", "pipe"];
     if(nativeComposition)stdio=nativeComposition.stdio(stdio);
-    const query=require("./process-channel").prepareProcessQuerySpawn({ cwd: prepared.filesRoot, env: ArgumentTransport.environment(context, isolated.environment),
+    const environment = require("../shared/runtime/translator-environment-launch").apply(isolated.environment, entry, context, translatorEnvironmentIds("jvm", renderer, vulkan));
+    const query=require("./process-channel").prepareProcessQuerySpawn({ cwd: prepared.filesRoot, env: ArgumentTransport.environment(context, environment),
       executablePath: isolated.executablePath || java.javaPath, graphicsExecutable: isolated.executablePath || java.javaPath, networkIsolationApplied: true,
       stdio },
       path.join(payload.root,"native/android-supervisor-send"));
@@ -489,4 +497,4 @@ async function launch(entry, context, payload, dependencies = {}) {
   }
 }
 
-module.exports = { ensureJava, viewport, launchConfig, hostEnvironment, captureStderr, presentationEnvironment, angleBackend, serviceLauncher, launch };
+module.exports = { ensureJava, viewport, launchConfig, hostEnvironment, captureStderr, presentationEnvironment, angleBackend, translatorEnvironmentIds, serviceLauncher, launch };

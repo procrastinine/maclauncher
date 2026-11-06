@@ -236,6 +236,7 @@ The launcher fills in missing fields when it loads the file.
 - `launcher.checkForUpdatesAtLaunch` turns on the [update check](../UPDATES.md) at each start. Only `true` turns it on, and it defaults to `false`.
 - `launcher.graphicsShortcuts` maps the four graphics shortcut actions `bypass`, `screenshot`, `windowPointer` and `windowGraphics` to accelerators such as `"Control+Option+Command+B"`. An action without an entry has no shortcut. Loading keeps only valid, distinct assignments of known actions, by the rules in [Graphics shortcuts](UI_GUIDE.md#graphics-shortcuts).
 - `launcher.graphicsScreenshotFolder` is the absolute path of the folder for processed screenshots. A `null` or relative value is removed, and when the field is absent, screenshots go to `~/Pictures/MacLauncher`.
+- `launcher.translatorEnvironment` holds the global [translator environment variables](../runtimes/TRANSLATOR_ENVIRONMENT.md): an object that maps a translator id to an object of variable names and literal string values. Loading keeps translator ids of lowercase letters, digits and hyphens, valid variable names and one-line values, and drops other entries. Saving a translator without values removes its entry.
 - `launcher.library` holds the library state described below.
 
 ### Library state
@@ -351,6 +352,7 @@ Runtime:
 - `runtimeId`: the selected runtime.
 - `runtimeData`: per-runtime overrides such as the version and, when supported, the variant; see [runtime data](#runtime-data).
 - `runtimeSettings`: the game's runtime settings overrides, when set.
+- `translatorEnvironment`: the game's own [translator environment variables](../runtimes/TRANSLATOR_ENVIRONMENT.md), when set. It maps a translator id to variable names, each with a literal string value or `null`, which removes the global value for this game. The field is independent of `runtimeId` and stays when the runtime changes. Records keep the object as stored; launches and the editor skip entries that are not valid translator ids, names or one-line values, and a save from the editor validates the translator's values.
 
 Saves:
 

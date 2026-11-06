@@ -200,6 +200,7 @@ Every module follows the same layout in `src/modules/<moduleId>/`:
 | `backcompat/index.js` | No | One-time conversion of older game records and private data layouts |
 | `libs/` | No | Library catalog and patcher |
 | `derived-stores.js` | No | Declarations of the derived data the module writes under userData, for [derived data upkeep](DATA_MODEL.md#derived-data-upkeep) |
+| `translator-environment.js` | No | Declarations of the [translator environments](#translator-environments) of the module's runtimes and translators |
 | `resources/` | No | Bundled assets the module needs |
 | `resources/icon.png` | For game-type modules | Default artwork recorded when a game has no original icon |
 
@@ -219,6 +220,21 @@ Modules declare the derived data they write under userData, so that [derived dat
 Upkeep refuses folders that resolve outside userData, and it leaves symbolic links and entries on another volume, such as mount points, in place. Before an entry is deleted, it is renamed to a hidden `.maclauncher-trash-<id>` name in its folder. Deletion never follows links or enters another volume, and directories that the app made read-only are made writable first. An error keeps the entry, is logged once per store and does not stop the other stores.
 
 Removing an installed runtime version from Runtimes can use the same deletion. It does so for a version folder under `runtimes/` when the runtime manager declares `trashFirst: true`, which means that its `uninstallRuntime` tolerates a version folder that is already gone; other managers remove their own files. With `trashFirst`, the folder first moves to `runtimes/.maclauncher-removing-<id>`, with a small `.json` record beside it, and takes the trash name only after the manager has removed the version. As a result, upkeep never takes a folder whose removal is still running. If the manager throws or returns `false`, the folder is restored and the manager is called again with the folder in place. Custom, external and imported registrations never move or delete files, because the manager does not own them.
+
+### Translator environments
+
+A runtime with a translator choice passes [translator environment variables](../runtimes/TRANSLATOR_ENVIRONMENT.md) to the translators that a game uses. A module directory or shared submodule declares them in a `translator-environment.js` file that exports an array of declarations. The registry lists all of them with `listTranslatorEnvironments()`, keeps the first declaration of each id and skips a malformed one. `src/modules/shared/runtime/translator-environment.mjs` defines the contract and is shared by main, the backend and the renderer. Each declaration has these fields:
+
+- `id`: the translator id, lowercase letters, digits and hyphens, such as `dxvk` or `android-art`. Stored values are keyed by this id.
+- `label` and optional `description`: the editor's title and the sentence that says which games the translator applies to.
+- `managerIds`: the runtime managers whose Runtimes tab shows the translator's global editor. A runtime's own translator has the id of its manager, such as `crossover` or `android`, and the tab lists it first.
+- `keys`: suggested variables, each `{ key, description, launcher? }`. `launcher` names the setting or condition from which the launcher also sets the variable; the editor then marks a value for it as replacing the launcher value.
+- `locked`: variables the launcher must set itself, each `{ key, reason }` or `{ prefix, reason }`. A locked name cannot be stored, and at launch it is skipped for every chosen translator. A suggested variable or default cannot be locked.
+- `defaults`: built-in values below the global values. Every declaration in MacLauncher has empty defaults.
+
+A runtime declares where a game's translators come from with `schema.environmentAction` in its runtime settings: the name of a module action that receives the edited runtime settings as `payload.runtimeSettings` and returns `{ translatorEnvironments: [ids] }`. The ids follow the order in which values are applied, the runtime's own translator first, and the editor groups its rows in the same order. Every launch of the runtime includes its own translator, so the editor stores a variable that no other translator in the table suggests there (`variableOwner`), and the variable reaches every game of the runtime. `lockingDeclarations` gives the translators whose locks apply to a stored variable. CrossOver and Sikarugir return these fields from `listTranslatorOptions`, the same action that fills their translator menus, and the ids name the engines the game uses after any fallback. MacLauncher Android, Mac.apk, AnyPS5 and Prosper use `listTranslatorEnvironments`.
+
+At launch, `src/modules/shared/runtime/translator-environment-launch.js` combines the values: `forLaunch(entry, context, ids)` returns `{ values, translators, sources }` from `context.settings.launcher.translatorEnvironment` and `entry.translatorEnvironment`, and `apply(environment, entry, context, ids, { required })` adds the values to a base environment. Each consumer applies the result before the variables it requires, so a locked name keeps the launcher's value even if a stored value bypasses the editor.
 
 ## Storage locations
 
@@ -326,6 +342,8 @@ File paths have their own controls:
 A runtime can also generate settings from local data:
 
 - `provider: {readAction, writeAction, gameOnly?}` adds the generated settings, shown with the same controls. The read action returns `{schema: {fields, defaults?}, values, message?}`; the write action receives `{values}` and returns the updated result. Generated settings follow the static fields, except static fields with `afterProvider: true`, which follow them. The message appears after the generated fields. The window has one **Reset**, which returns both the static fields and the generated ones to their defaults. Game scopes use module actions and module scopes use settings actions, and `gameOnly: true` generates settings for individual games only. The module validates and stores the values itself, including in native preference stores, and generated choices never enter the static runtime-defaults file. Opening settings fetches no runtimes or game data.
+
+`environmentAction` names the module action that lists the translators of a game's [translator environments](#translator-environments). With it, a game's Runtime Settings shows an **Environment variables** section.
 
 Network access is not a runtime setting. It comes from the launcher default and one per-game override. Modules receive the effective value as `context.networkAllowed` and the derived `runtimeSettings.networkIsolation` flag, and runtime panels define no network controls of their own. A runtime that cannot run online declares `networkAccess: false` in its metadata.
 

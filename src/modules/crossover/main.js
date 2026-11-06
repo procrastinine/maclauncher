@@ -32,7 +32,7 @@ async function translatorOptions(entry, payload, context, dependencies = {}) {
       (typeof runtimeManager.installRuntime === 'function' ? ' Play installs it after confirmation.' : '') } : {}), effectiveSettings: [
     { value: 'graphicsBackend', label: Translators.engines(plan)['d3d-renderer'] || 'auto' },
     { value: 'vulkanBackend', label: plan.components['vulkan-driver'].used?.engine || 'auto' }
-  ] };
+  ], translatorEnvironments: Translators.environmentIds(plan, runtime) };
 }
 // What the last Play recorded applies while the translator settings and the
 // Wine installation are unchanged.

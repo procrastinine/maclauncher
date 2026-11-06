@@ -7,14 +7,22 @@ const Writable = require("../shared/writable-input");
 const Architecture = require("../shared/runtime/architecture");
 const { spawnForegroundNativeGame } = require("../shared/runtime/native-focus");
 const { prepareGame, resolveSaveLocations, resolveSaveIdentity } = require("./prepare");
+const TranslatorEnvironment = require("../shared/runtime/translator-environment-launch");
 const vulkanOptions = Object.freeze({ architecture: "x64", preferredBackend: "kosmickrisp", required: true });
+// Translator environments of a launch: Prosper's own and its Vulkan driver's.
+const translatorIds = graphics => ["prosper", ...(graphics?.backend ? [graphics.backend] : [])];
 function supportsEntry(entry) {
   return (entry?.moduleId === "anyps5" || entry?.gameType === "ps5") && entry.moduleData?.inspectionOnly !== true &&
     ["elf", "self"].includes(entry.moduleData?.format);
 }
 function createProvider({ manager = require("./runtime/manager"), spawn = spawnForegroundNativeGame, vulkan = Vulkan } = {}) {
   return { runtimeId: "prosper", managerId: "prosper", runtime: manifest.runtime.entries.prosper, supportsEntry,
-    actions: { listVulkanRuntimes: (_entry, _payload, context) => vulkan.choices(context, vulkanOptions) },
+    actions: { listVulkanRuntimes: (_entry, _payload, context) => vulkan.choices(context, vulkanOptions),
+      listTranslatorEnvironments: (_entry, payload, context) => {
+        let graphics = null;
+        try { graphics = vulkan.resolve({ ...context, runtimeSettings: { ...context.runtimeSettings, ...payload?.runtimeSettings } }, vulkanOptions); } catch {}
+        return { translatorEnvironments: translatorIds(graphics) };
+      } },
     settingsActions: { listVulkanRuntimes: (_payload, context) => vulkan.choices(context, vulkanOptions) },
     supports: { saveLocation: true, saveEditing: false, cheats: false, cheatsPatcher: false }, resolveSaveLocations, resolveSaveIdentity,
     resolveGraphicsInputs: () => ({ architecture: "x86_64" }),
@@ -40,7 +48,8 @@ function createProvider({ manager = require("./runtime/manager"), spawn = spawnF
       context.recordRuntimeUse?.({ managerId: "prosper", version: selected.version, sectionId: "default", sourcePath: selected.install.installDir });
       const args = ["--dump", prepared.dump, "--guest-executable", prepared.executable, "--no-pick", ...(context.runtimeSettings?.showFps ? ["--fps"] : []), ...(context.gameArguments || [])];
       return spawn({ context, executablePath: executable, args, needsRosetta, options: { cwd: prepared.cwd, gameArguments: false,
-        env: { ...process.env, ...prepared.environment, ...vulkan.environment(graphics, prepared.root), PROSPER_VULKAN_LIB: graphics.library,
+        env: { ...process.env, ...TranslatorEnvironment.forLaunch(entry, context, translatorIds(graphics)).values, ...prepared.environment,
+          ...vulkan.environment(graphics, prepared.root), PROSPER_VULKAN_LIB: graphics.library,
           DYLD_LIBRARY_PATH: [libraries, process.env.DYLD_LIBRARY_PATH].filter(Boolean).join(":") } } });
     }
   };

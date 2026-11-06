@@ -95,6 +95,7 @@ pnpm launch --game /path/to/game --action <action-id>
 - [Web runtimes](runtimes/WEB_RUNTIMES.md): Electron and NW.js, including Greenworks.
 - [Sikarugir (Wine)](runtimes/SIKARUGIR.md) and [CrossOver](runtimes/CROSSOVER.md): the Windows runtimes.
 - [Graphics translators](runtimes/TRANSLATORS.md): the libraries, shared by CrossOver and Sikarugir, that carry a Windows game's Direct3D and Vulkan calls to Metal.
+- [Translator environment variables](runtimes/TRANSLATOR_ENVIRONMENT.md): global and per-game environment variables for every runtime with a translator choice.
 - [Release catalogs](runtimes/RUNTIME_CATALOGS.md): where version lists come from, and how refresh and caching work.
 - [Runtime distribution](runtimes/RUNTIME_DISTRIBUTION.md): downloaded and included components, the MacLauncher Builds catalog format and app assembly.
 - [Native runtime and tool setup](runtimes/NATIVE_TOOL_SETUP.md): package sources, system components and decompilers.

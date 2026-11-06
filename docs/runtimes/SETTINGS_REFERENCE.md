@@ -2,6 +2,8 @@
 
 This reference lists, for each game type, its playback backends, every runtime setting and every inspector action, while the runtime guides describe the behavior behind each setting and action. Runtime settings appear in two places: in **Settings** as module defaults and in a game's **Runtime Settings** as per-game overrides. Settings marked *per game* are the exception, because they exist only in the inspector. When a backend also has common settings, those marked *(Advanced)* follow the others inside a collapsed **Advanced** group.
 
+Backends with a translator choice, namely CrossOver, Sikarugir, MacLauncher Android, Mac.apk, AnyPS5 and Prosper, also have an **Environment variables** section in a game's Runtime Settings. Its global values are in **Runtimes**, as [translator environment variables](TRANSLATOR_ENVIRONMENT.md) describes.
+
 Some backends belong to another game type and are offered wherever they accept the game's input. These provider backends are marked *(provider)*, and their settings are listed under their own game type.
 
 | Game type | Default backend | Backends |
@@ -1177,7 +1179,6 @@ Runtimes tabs: CrossOver (managed); Sikarugir (managed); Graphics â†’ DirectX â†
 | Windows executable (optional) | Text |  | Relative path inside the game folder. Automatic selects the game's executable. |
 | Enable BepInEx winhttp override | On/Off | Off | Load an existing winhttp.dll before Wine's built-in library. No mods or DLLs are installed. |
 | Wine DLL overrides | List |  | One library=order entry per line, such as winhttp=n,b. |
-| Environment variables | List |  | One NAME=value entry per line. Wine runtime and Windows environment paths are managed automatically. |
 | Game arguments | List |  | One argument per line. |
 | Wine debug channels (optional) | Text |  | Wine channel filters, such as -all or +seh. |
 
@@ -1197,7 +1198,6 @@ Runtimes tabs: CrossOver (managed); Sikarugir (managed); Graphics â†’ DirectX â†
 | Windows executable (optional) | Text |  | Relative path inside the game folder. Automatic selects the game's executable. |
 | Enable BepInEx winhttp override | On/Off | Off | Load an existing winhttp.dll before Wine's built-in library. No mods or DLLs are installed. |
 | Wine DLL overrides | List |  | One library=order entry per line, such as winhttp=n,b. |
-| Environment variables | List |  | One NAME=value entry per line. CrossOver application and bottle paths are managed automatically. |
 | Game arguments | List |  | One argument per line. |
 | Wine debug channels (optional) | Text |  | Wine channel filters, such as -all or +seh. |
 

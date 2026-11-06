@@ -2135,6 +2135,30 @@ select.input:not([multiple]) {
   gap: 10px;
 }
 
+/* Translator environment editors: compact NAME = value rows with their state. */
+.runtimeEnvironment { border: 1px solid var(--border); border-radius: 8px; min-width: 0; }
+.runtimeEnvironment > summary { cursor: default; padding: 6px 10px; font-weight: 500; }
+.runtimeEnvironmentCount { color: var(--muted); font-weight: 400; }
+.runtimeEnvironmentBody { display: flex; flex-direction: column; gap: 8px; padding: 0 10px 10px; min-width: 0; }
+.translatorEnvironmentIntro { margin: 0; font-size: var(--font-xs); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.translatorEnvironmentTable { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.translatorEnvironmentRows { display: flex; flex-direction: column; gap: 2px; }
+.translatorEnvironmentGroup { margin-top: 6px; color: var(--muted); font-size: var(--font-xs); font-weight: 500; }
+.translatorEnvironmentGroup:first-child { margin-top: 0; }
+.translatorEnvironmentRow, .translatorEnvironmentAdd {
+  display: grid; grid-template-columns: minmax(7rem, 14rem) auto minmax(6rem, 1fr) auto auto; gap: 6px; align-items: center;
+}
+.translatorEnvironmentAdd { grid-template-columns: minmax(7rem, 14rem) auto minmax(6rem, 1fr) auto; margin-top: 4px; }
+.translatorEnvironmentName, .translatorEnvironmentRemovedValue { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-sm); }
+.translatorEnvironmentEquals { color: var(--muted); font-size: var(--font-sm); }
+.translatorEnvironmentRow .input, .translatorEnvironmentAdd .input { min-width: 0; font-size: var(--font-sm); }
+.translatorEnvironmentState { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+.translatorEnvironmentActions { display: flex; justify-content: flex-end; }
+.translatorEnvironmentRow.removed .translatorEnvironmentName, .translatorEnvironmentRemovedValue { color: var(--muted); text-decoration: line-through; }
+.translatorEnvironmentHint, .translatorEnvironmentEmpty { font-size: var(--font-xs); }
+.translatorEnvironmentFooter { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.translatorEnvironmentFooter > :first-child:not(button) { margin-right: auto; }
+
 .settingsStack {
   display: flex;
   flex-direction: column;

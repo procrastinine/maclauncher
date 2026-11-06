@@ -12,6 +12,7 @@ Each [game-type page](../game-types/README.md) describes the runtimes, settings 
 
 - [Web runtimes](WEB_RUNTIMES.md), [Sikarugir (Wine)](SIKARUGIR.md) and [CrossOver](CROSSOVER.md): runtimes shared by several game types.
 - [Graphics translators](TRANSLATORS.md): the libraries, shared by CrossOver and Sikarugir, that carry a Windows game's Direct3D or Vulkan calls to Metal.
+- [Translator environment variables](TRANSLATOR_ENVIRONMENT.md): global and per-game environment variables for every runtime with a translator choice.
 - [Native tool setup](NATIVE_TOOL_SETUP.md): package sources, system components and decompilers.
 - [Settings reference](SETTINGS_REFERENCE.md): every runtime setting and inspector action.
 - [System requirements](SYSTEM_REQUIREMENTS.md): macOS versions, CPU architectures and graphics requirements for each component.
@@ -183,6 +184,7 @@ The **Runtimes** window shows runtime managers, downloads and local application 
 - the available versions, with a refresh control
 - installed versions with uninstall actions
 - the default version and, where supported, the variant
+- for a manager that provides a translator, a collapsed **Environment variables** section with the global [environment variables](TRANSLATOR_ENVIRONMENT.md) of that translator
 
 Active downloads appear in the download menu, which supports several concurrent downloads and offers a cancel control for each.
 
@@ -241,6 +243,8 @@ Runtime settings are separate from runtime managers and installations, and they 
 3. Global defaults: `userData/runtimes/<runtimeId>/settings.json`.
 
 Game type defaults are edited in **Settings**, and per-game overrides with the **Runtime Settings** button next to the runtime selector in the inspector. Changes are saved as soon as a field changes.
+
+Environment variables of translators have their own two levels: global values in **Runtimes** and a game's own values in its **Runtime Settings**. [Translator environment variables](TRANSLATOR_ENVIRONMENT.md) describes them.
 
 ## Network access
 
