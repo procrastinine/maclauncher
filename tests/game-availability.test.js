@@ -233,6 +233,7 @@ test("library state hands an unavailable game's result to module hooks and reads
   const vm = require("node:vm");
   const context = { path, GameAvailability, StoredPlan: require("../src/modules/shared/effects/stored-plan"),
     NetworkAccess: require("../src/core/network-access"), SteamClientStart: { clientEligible: () => false, startPreference: value => value },
+    entryModuleLabels: require("../src/core/entry-labels").entryModuleLabels,
     isManagedSaveDirectory: require("../src/core/save-locations").isManagedSaveDirectory,
     isChildGame: false, gameRecordsCache: null, logger: { warn() {} }, GameStore: {}, GAME_SCHEMA_VERSION: 1, app: {},
     userDataDir: "/state", runtimeStateSnapshots: {}, resolveModuleId: () => info.id,

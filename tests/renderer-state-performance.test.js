@@ -123,6 +123,7 @@ test('library work shares availability, runs checks off main, retains previous r
     }) },
     NetworkAccess: require('../src/core/network-access'),
     SteamClientStart: { clientEligible: () => false, startPreference: value => value },
+    entryModuleLabels: require('../src/core/entry-labels').entryModuleLabels,
     isChildGame: false, GAME_SCHEMA_VERSION: 1,
     mergeRuntimeSettingsMap: (_, value) => value,
     getModuleCheats: () => null, resolveImportPath: entry => entry.gamePath,
@@ -215,6 +216,7 @@ test('serialized games use the selected backend capabilities, and library checks
   const mod = { getRuntimeProvider: id => id === 'local' ? provider : null };
   const context = { path, StoredPlan: require('../src/modules/shared/effects/stored-plan'),
     NetworkAccess: require('../src/core/network-access'), SteamClientStart: { clientEligible: () => false, startPreference: value => value },
+    entryModuleLabels: require('../src/core/entry-labels').entryModuleLabels,
     isManagedSaveDirectory: require('../src/core/save-locations').isManagedSaveDirectory,
     isChildGame: false, gameRecordsCache: null, logger: { warn() {} },
     GameStore: { readGameRecord: () => null, setGameNetworkAccess: () => assert.fail('A game without a stored record is not written') },
