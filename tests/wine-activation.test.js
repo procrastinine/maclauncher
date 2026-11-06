@@ -16,6 +16,26 @@ function center() {
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
+test('every initial activation precondition logs its outcome on the common line', async () => {
+  const Host = require('../src/main/launch-activation');
+  const aborted = new AbortController();aborted.abort();
+  for (const [options, expected] of [
+    [{ platform: 'linux' }, { reason: 'unavailable', detail: 'unsupported-platform' }],
+    [{ signal: aborted.signal }, { reason: 'unavailable', detail: 'launch-ended' }],
+    [{ native: () => { throw Error('helper missing'); } }, { reason: 'unavailable', detail: 'helper missing' }],
+    [{ native: () => ({ inspect: () => { throw Error('helper inspect failed'); } }) }, { reason: 'unavailable', detail: 'helper inspect failed' }],
+    [{ native: () => ({ inspect: () => ({ active: false }) }) }, { reason: 'launcher-inactive' }]
+  ]) {
+    const logs = [], { signal, ...dependencies } = options;
+    const result = await Host.followProcessActivation({ pid: 500 }, { signal }, {
+      platform: 'darwin', native: () => assert.fail('No helper load'), ...dependencies,
+      logger: { debug: (...args) => logs.push(args) }, systemPreferences: center()
+    });
+    assert.deepEqual(result, expected);
+    assert.deepEqual(logs, [['[runtime] initial window activation', { pid: 500, ...expected }]]);
+  }
+});
+
 test("ordinary Wine activation crosses the host seam and ends with the launch", async () => {
   const child = Object.assign(new EventEmitter(), { pid: 500, exitCode: null, signalCode: null });
   let request, signal, release;
@@ -31,12 +51,12 @@ test("ordinary Wine activation crosses the host seam and ends with the launch", 
 
 test("the host yields once to the first owned visible window and never steals focus later", async () => {
   const Host = require('../src/main/launch-activation');
-  const notifications = center(), yielded = [], controller = new AbortController();
+  const notifications = center(), yielded = [], logs = [], controller = new AbortController();
   const windows = new Set();let front = 42;
   const native = { inspect: pid => ({ active: front === 42, frontmostPid: front, frontWindowPid: front, windowId: windows.has(pid) ? 123 : 0 }),
     yield: pid => { yielded.push(pid);front = pid;return { yielded: true, windowId: 123 }; } };
   const done = Host.followProcessActivation({ pid: 500, notification: WineActivation.NOTIFICATION, pidKey: 'ActivatingAppPID' },
-    { signal: controller.signal }, { platform: 'darwin', systemPreferences: notifications, native: () => native,
+    { signal: controller.signal }, { platform: 'darwin', systemPreferences: notifications, native: () => native, logger: { debug: (...args) => logs.push(args) },
       list: async () => [[500, 1], [501, 500], [502, 501], [601, 600]] });
   notifications.post(WineActivation.NOTIFICATION, { ActivatingAppPID: 601 });await settle();
   notifications.post(WineActivation.NOTIFICATION, { ActivatingAppPID: 'invalid' });
@@ -47,6 +67,7 @@ test("the host yields once to the first owned visible window and never steals fo
   assert.deepEqual(yielded, [], 'a process without a visible top-level window is not activated');
   windows.add(502);
   assert.deepEqual(await done, { reason: 'activated', target: 502, windowId: 123 }, 'an earlier windowless Wine helper cannot block the actual game window');
+  assert.deepEqual(logs, [['[runtime] initial window activation', { pid: 500, reason: 'activated', target: 502, windowId: 123 }]]);
   assert.deepEqual(yielded, [502]);assert.equal(notifications.subscriptions.size, 0);
   notifications.post(WineActivation.NOTIFICATION, { ActivatingAppPID: 502 });await settle();assert.deepEqual(yielded, [502]);
 });

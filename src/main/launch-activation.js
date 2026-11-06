@@ -6,11 +6,14 @@ async function followProcessActivation({ pid, notification, pidKey }, { signal }
   systemPreferences, logger, platform = process.platform, list = ProcessTree.list,
   native = () => require(path.join(process.resourcesPath || path.resolve(__dirname, '../resources'), 'launch-activation.node'))
 } = {}) {
-  if (platform !== 'darwin' || signal?.aborted) return { reason: 'unavailable' };
+  const report = result => { logger?.debug?.('[runtime] initial window activation', { pid, ...result });return result; };
+  if (platform !== 'darwin' || signal?.aborted)
+    return report({ reason: 'unavailable', detail: signal?.aborted ? 'launch-ended' : 'unsupported-platform' });
   let helper;
-  try { helper = native(); }
-  catch (error) { logger?.warn?.('[runtime] launch activation: ' + error.message); return { reason: 'unavailable' }; }
-  if (!helper.inspect(0).active) return { reason: 'launcher-inactive' };
+  try {
+    helper = native();
+    if (!helper.inspect(0).active) return report({ reason: 'launcher-inactive' });
+  } catch (error) { return report({ reason: 'unavailable', detail: error.message }); }
   return new Promise(resolve => {
     let subscription, expiry, activating = null, finished = false;
     const pending = new Set(), timers = new Set();
@@ -20,8 +23,7 @@ async function followProcessActivation({ pid, notification, pidKey }, { signal }
       finished = true;for (const timer of timers) clearTimeout(timer);clearTimeout(expiry);
       signal?.removeEventListener('abort', abort);
       if (subscription != null) systemPreferences.unsubscribeNotification(subscription);
-      logger?.debug?.('[runtime] initial window activation', { pid, ...result });
-      resolve(result);
+      resolve(report(result));
     };
     const abort = () => stop({ reason: 'launch-ended' });
     const answer = async target => {

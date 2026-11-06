@@ -35,17 +35,23 @@ test("development branding preserves the original installation and caches a matc
   fs.writeFileSync(iconPath, "owned icon");
   const rasterIconPath = path.join(root, 'maclauncher.png');
   fs.writeFileSync(rasterIconPath, 'owned raster icon');
+  const activationHelperPath = path.join(root, 'launch-activation.node');
+  fs.writeFileSync(activationHelperPath, 'owned activation helper');
   fs.writeFileSync(entitlementsPath, "fixture entitlements");
   const { prepareDevelopmentApp } = await import(pathToFileURL(path.resolve(__dirname, "../scripts/dev-app.mjs")));
   let active = false;
-  const calls = [], options = { signingKeychain: null, inUse: () => active, electronBinary: binary, platform: "darwin", cacheRoot: path.join(root, "cache"), iconPath, rasterIconPath, entitlementsPath,
-    run: (command, args) => { calls.push({ command, args }); } };
+  const calls = [], options = { signingKeychain: null, inUse: () => active, electronBinary: binary, platform: "darwin", cacheRoot: path.join(root, "cache"), iconPath, rasterIconPath, activationHelperPath, entitlementsPath,
+    run: (command, args) => {
+      assert.equal(fs.readFileSync(path.join(args.at(-1), 'Contents/Resources/launch-activation.node'), 'utf8'), fs.readFileSync(activationHelperPath, 'utf8'), 'The packaged resource path is populated before signing');
+      calls.push({ command, args });
+    } };
   const prepared = await prepareDevelopmentApp(options), app = prepared.slice(0, prepared.lastIndexOf("/Contents/MacOS/"));
   assert.equal(path.basename(prepared), "MacLauncher");
   assert.equal(fs.readFileSync(binary, "utf8"), "fixture executable");
   assert.deepEqual(await parsePlistFile(path.join(contents, "Info.plist")), original);
   assert.equal(fs.readFileSync(path.join(app, "Contents", "MacOS", "MacLauncher"), "utf8"), "fixture executable");
   assert.equal(fs.readFileSync(path.join(app, 'Contents/Resources/maclauncher.png'), 'utf8'), 'owned raster icon');
+  assert.equal(fs.readFileSync(path.join(app, 'Contents/Resources/launch-activation.node'), 'utf8'), 'owned activation helper');
   const renamedHelper = path.join(app, "Contents", "Frameworks", "MacLauncher Helper (Renderer).app", "Contents");
   assert.equal((await parsePlistFile(path.join(renamedHelper, "Info.plist"))).CFBundleExecutable, "MacLauncher Helper (Renderer)");
   assert.equal(fs.readFileSync(path.join(renamedHelper, "MacOS", "MacLauncher Helper (Renderer)"), "utf8"), "fixture helper");
@@ -71,10 +77,11 @@ test("development branding preserves the original installation and caches a matc
   assert.equal(await prepareDevelopmentApp(options), binary);
   delete process.env.MACLAUNCHER_ELECTRON_PATH;
   assert.equal(path.basename(path.dirname(app)), 'stable');
-  fs.writeFileSync(iconPath,'changed icon');
+  fs.writeFileSync(activationHelperPath,'updated activation helper');
   active = true;
   assert.equal(await prepareDevelopmentApp(options), prepared, 'An active bundle defers regeneration');
   assert.equal(calls.length, 3);
+  assert.equal(fs.readFileSync(path.join(app, 'Contents/Resources/launch-activation.node'), 'utf8'), 'owned activation helper', 'An active bundle stays untouched');
   active = false;
 
   await assert.rejects(prepareDevelopmentApp({...options,run:()=>{throw Error('signing failed');}}),/signing failed/);
@@ -83,6 +90,7 @@ test("development branding preserves the original installation and caches a matc
   const oldReceipt = fs.readFileSync(path.join(options.cacheRoot, 'stable/ready.json'), 'utf8');
   assert.equal(await prepareDevelopmentApp(options), prepared, 'Changed inputs keep the stable executable path');
   assert.notEqual(fs.readFileSync(path.join(options.cacheRoot, 'stable/ready.json'), 'utf8'), oldReceipt);
+  assert.equal(fs.readFileSync(path.join(app, 'Contents/Resources/launch-activation.node'), 'utf8'), 'updated activation helper', 'Helper changes invalidate the cached development bundle');
   assert.equal(calls.length, 6);
   assert.equal(calls[4].args.at(-2), calls[1].args.at(-2), 'Regeneration keeps the designated requirement');
   const keychain = path.join(root, 'development.keychain-db');

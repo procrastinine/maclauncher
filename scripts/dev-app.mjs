@@ -34,6 +34,7 @@ export async function prepareDevelopmentApp({ electronBinary, platform = process
   cacheRoot = path.join(os.homedir(), "Library", "Caches", "maclauncher", "development"),
   iconPath = path.join(projectRoot, "build", "icon.icns"),
   rasterIconPath = path.join(projectRoot, "src", "resources", "maclauncher.png"),
+  activationHelperPath = path.join(projectRoot, "src", "resources", "launch-activation.node"),
   entitlementsPath = path.join(projectRoot, "build", "entitlements.mac.plist"),
   signingKeychain = path.join(projectRoot, ".local", "dev-signing", "development.keychain-db"),
   inUse = cache => { const processes=generationProcesses();return processes===null||generationReferenced(cache,liveGenerationPaths(cacheRoot),processes); },
@@ -47,7 +48,7 @@ export async function prepareDevelopmentApp({ electronBinary, platform = process
   const info = await parsePlistFile(infoPath);
   const documentTypes = applicationDocumentTypes(Modules.listSupportedInputExtensions());
   const digest = crypto.createHash("sha256").update("maclauncher-development-v5-stable-certificate");
-  for (const file of [infoPath, iconPath, rasterIconPath, entitlementsPath, path.join(source, "Contents", "_CodeSignature", "CodeResources")]) {
+  for (const file of [infoPath, iconPath, rasterIconPath, activationHelperPath, entitlementsPath, path.join(source, "Contents", "_CodeSignature", "CodeResources")]) {
     if (fs.existsSync(file)) digest.update(fs.readFileSync(file));
   }
   digest.update(JSON.stringify(documentTypes));
@@ -112,6 +113,7 @@ export async function prepareDevelopmentApp({ electronBinary, platform = process
     info.NSCameraUsageDescription = "Selected games can receive video from the camera chosen in game Settings.";
     fs.copyFileSync(iconPath, path.join(contents, "Resources", "icon.icns"));
     fs.copyFileSync(rasterIconPath, path.join(contents, "Resources", "maclauncher.png"));
+    fs.copyFileSync(activationHelperPath, path.join(contents, "Resources", "launch-activation.node"));
     await savePlistFile(path.join(contents, "Info.plist"), info);
     run("/usr/bin/codesign", ["--force", "--deep", "--sign", "-", "--entitlements", entitlementsPath, stagedApp], { stdio: "pipe", timeout: 120000 });
     const requirement='designated => identifier "com.maclauncher.launcher.development"'+(certificate ? ' and certificate leaf = H"'+certificate+'"' : '');
