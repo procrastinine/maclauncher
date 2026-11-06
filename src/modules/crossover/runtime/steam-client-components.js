@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { randomUUID } = require('node:crypto');
 const { hashFile } = require('../../shared/runtime/pinned-native-manager');
 const { promisify } = require('node:util');
 const execute = promisify(require('node:child_process').execFile);
@@ -79,8 +80,17 @@ async function install({ userDataDir, signal, onProgress, resolved, archiveFile 
       return { path: name, sha256: hashFile(path.join(payload, name)), size: fs.statSync(path.join(payload, name)).size };
     });
     const directory = path.join(root, expected[1]);
-    if (fs.existsSync(directory)) { if (current(userDataDir)?.archiveSha1 !== expected[1]) throw new Error('A retained Valve component directory needs repair.'); }
-    else fs.renameSync(payload, directory);
+    const valid = fs.lstatSync(directory, { throwIfNoEntry: false })?.isDirectory() && files.every(item => {
+      try { const file = path.join(directory, item.path); return fs.lstatSync(file).isFile() && hashFile(file) === item.sha256; }
+      catch { return false; }
+    });
+    if (!valid) {
+      const damaged = directory + '.damaged-' + randomUUID();
+      const retained = fs.lstatSync(directory, { throwIfNoEntry: false });
+      if (retained) fs.renameSync(directory, damaged);
+      try { fs.renameSync(payload, directory); }
+      catch (error) { if (retained) fs.renameSync(damaged, directory); throw error; }
+    }
     writeJsonAtomic(path.join(root, 'active.json'), { archiveSha1: expected[1], source: resolved.url, clients, files });
     return current(userDataDir);
   } finally { fs.rmSync(stage, { recursive: true, force: true }); }

@@ -23,3 +23,16 @@ test('consented Valve install discovers client DLL names in renamed assets and n
   assert.equal(fs.readFileSync(path.join(installed.root, installed.clients.i386), 'utf8'), 'archive inspection input: other-layout/SteamClient.dll');
   assert.equal(Components.current(fixture.userDataDir).root, installed.root);
 });
+test('a damaged content-addressed directory is retained aside and repaired from the verified archive', async t => {
+  const fixture = archive(t), options = { ...fixture, archiveFile: fixture.zip };
+  const installed = await Components.install(options);
+  const file = path.join(installed.root, installed.clients.x86_64);
+  fs.writeFileSync(file, 'damaged bytes');
+  assert.equal(Components.current(fixture.userDataDir), null);
+  const repaired = await Components.install(options);
+  assert.equal(repaired.root, installed.root);
+  assert.match(fs.readFileSync(file, 'utf8'), /^archive inspection input:/);
+  const retained = fs.readdirSync(path.dirname(installed.root)).filter(name => name.startsWith(installed.archiveSha1 + '.damaged-'));
+  assert.equal(retained.length, 1);
+  assert.equal(fs.readFileSync(path.join(path.dirname(installed.root), retained[0], installed.clients.x86_64), 'utf8'), 'damaged bytes');
+});
