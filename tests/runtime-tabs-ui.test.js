@@ -310,7 +310,9 @@ test('registry metadata exposes manageable production groups while exposing mana
     assert.equal(groups.some(group => group.label === 'ILSpy' || group.label === 'ONScripter-Yuri Web'), false);
     assert.equal(resolveRuntimeTabSelection(groups, 'onsyuri', 'mac', sections).section.sectionId, 'mac');
     assert.ok(states.every(manager => ['managed', 'built-in'].includes(manager.ui.management)));
-    assert.equal(groups.flatMap(group => group.managers).length, states.filter(manager => manager.ui.management === 'managed').length);
+    // Hidden managers, such as the CrossOver graphics integration, are acquired through their owner and have no tab.
+    assert.equal(groups.flatMap(group => group.managers).length, states.filter(manager => manager.ui.management === 'managed' && manager.ui.hidden !== true).length);
+    assert.equal(groups.some(group => group.managers.some(manager => manager.id === 'maclauncher-crossover-winemac')), false);
     for (const id of ['mkxpz', 'butterscotch', 'hashlink']) assert.ok(groups.some(group => group.managers.some(manager => manager.id === id)));
     for (const id of ['system3', 'xsystem35', 'xsystem4', 'fna', 'krkrsdl2', 'gemrb']) {
       assert.ok(states.some(manager => manager.id === id));

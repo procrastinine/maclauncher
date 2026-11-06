@@ -51,7 +51,7 @@ function create({ dependencies = {}, applications = userDataDir => require('./ma
     keepSkipped(userDataDir, [...skippedReleases(userDataDir), releaseKey({ upstreamVersion: plan.release.version, buildVersion: plan.release.build })]);
   }
   function clearSkipped(userDataDir) { if (userDataDir) keepSkipped(userDataDir, []); }
-  const manager = { ...base, ui: { hidden: true }, distributionRequired: false };
+  const manager = { ...base, ui: { hidden: true, management: 'managed' }, distributionRequired: false };
   // One package is kept for each registered CrossOver release: the newest
   // revision. Nothing is inspected while no package is installed.
   async function prune(userDataDir) {
