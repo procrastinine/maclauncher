@@ -164,6 +164,9 @@ async function prepareLoaderView(engine, viewRoot, install, signal) {
   const executablePath = path.join(bin, "wine"), serverPath = path.join(bin, "wineserver");
   await cloneLoaderFile(install.executablePath || path.join(engine, "bin", "wine"), executablePath, signal);
   await cloneLoaderFile(path.join(engine, "lib", "wine", "x86_64-unix", "ntdll.so"), path.join(unix, "ntdll.so"), signal);
+  const libraryOverride = path.join(wineRoot, "loader-libraries");
+  ownDirectory(libraryOverride);
+  await linkFile(path.join(unix, "ntdll.so"), path.join(libraryOverride, "ntdll.so"), signal);
   await linkFile(install.serverPath || path.join(engine, "bin", "wineserver"), serverPath, signal);
   // Newer engines re-exec a separate loader with the address-space layout
   // required by Windows. Reusing bin/wine here can retain its 4 GB PAGEZERO
@@ -179,7 +182,7 @@ async function prepareLoaderView(engine, viewRoot, install, signal) {
     }
   }
   await linkDirectory(path.join(engine, "share"), path.join(wineRoot, "share"), signal);
-  return { wineRoot, dllRoot, executablePath, serverPath };
+  return { wineRoot, dllRoot, executablePath, serverPath, libraryOverride };
 }
 async function clearUnusedRenderers(dllRoot, renderers, components, signal) {
   const selected = new Set(components.flatMap(name => CORE_DLLS[name].map(module => module + ".dll")));
@@ -319,7 +322,7 @@ async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoo
   // its initialized copy. Vendor dependencies must not replace system libraries
   // loaded by Apple frameworks in the same process.
   const env = { WINEDLLPATH: path.join(engine, "lib", "wine"),
-    ...(privateLoader ? { DYLD_LIBRARY_PATH: path.join(dllRoot, layout.unixName) } : {}),
+    ...(privateLoader ? { DYLD_LIBRARY_PATH: loader.libraryOverride } : {}),
     DYLD_FALLBACK_LIBRARY_PATH: libraryPaths.join(path.delimiter),
     DYLD_FALLBACK_FRAMEWORK_PATH: [frameworks, ...(external ? [external] : [])].join(path.delimiter),
     GST_REGISTRY_1_0: path.join(viewRoot, "gstreamer-registry.bin") };

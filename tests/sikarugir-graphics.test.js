@@ -328,7 +328,7 @@ test("selected renderers use a private loader anchor with shared immutable fallb
   const result = await Graphics.prepareGraphicsView(options), ntdll = path.join(result.dllRoot, "x86_64-unix", "ntdll.so");
   assert.equal(result.wineRoot, path.join(options.viewRoot, "wine"));
   assert.equal(result.env.WINEDLLPATH, path.join(fs.realpathSync(f.engineRoot), "lib", "wine"));
-  assert.equal(result.env.DYLD_LIBRARY_PATH.split(path.delimiter)[0], path.join(result.dllRoot, "x86_64-unix"));
+  assert.equal(result.env.DYLD_LIBRARY_PATH.split(path.delimiter)[0], result.libraryOverride);
   for (const [copy, source] of [[result.executablePath, original], [ntdll, sourceNtdll]]) {
     assert.ok(fs.lstatSync(copy).isFile()); assert.equal(hash(copy), hash(source)); assert.notEqual(fs.statSync(copy).ino, fs.statSync(source).ino);
   }
@@ -404,8 +404,10 @@ test("vendor dependencies use fallback paths while the HUD and private ntdll ove
     viewRoot: path.join(f.root, "game", "fallback-view"), host: {hardwareArch: "arm64", macOSVersion: "26.4"}, translatorView});
   const vendors = [frameworks, gstLib, path.join(f.engineRoot, "lib/wine/x86_64-unix"),
     path.join(frameworks, "renderer/dxmt/wine/x86_64-unix"), ...translatorView.libraryPaths];
-  assert.deepEqual(result.env.DYLD_LIBRARY_PATH.split(path.delimiter), [path.join(result.dllRoot, "x86_64-unix")],
+  assert.deepEqual(result.env.DYLD_LIBRARY_PATH.split(path.delimiter), [result.libraryOverride],
     "only the private ntdll anchor may override system library lookup");
+  assert.deepEqual(fs.readdirSync(result.libraryOverride), ["ntdll.so"]);
+  assert.equal(fs.realpathSync(path.join(result.libraryOverride, "ntdll.so")), fs.realpathSync(path.join(result.dllRoot, "x86_64-unix/ntdll.so")));
   const canonical = value => fs.existsSync(value) ? fs.realpathSync(value) : value;
   const fallback = result.env.DYLD_FALLBACK_LIBRARY_PATH.split(path.delimiter).map(canonical);
   for (const directory of vendors) assert.ok(fallback.includes(canonical(directory)), directory);

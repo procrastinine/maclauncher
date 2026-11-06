@@ -118,7 +118,8 @@ async function prepare(installation, directory, { signal, execute = executeFile,
       links[name] = source;helpers.push({ name, source, sha256: digest(fs.readFileSync(source)) });
     }
   }
-  const sourceHash = digest(JSON.stringify([5, sources, links, helpers, scene?.identity, translatorView?.identity, ...(winemac ? [winemac.sha256] : [])])), store = userDataDir || directory, root = path.join(store, userDataDir ? "graphics/crossover-loaders" : "graphics-loader");
+  const localLinks = separateLoader ? { "loader-libraries/ntdll.so": `../${unix}/ntdll.so` } : {};
+  const sourceHash = digest(JSON.stringify([6, sources, links, localLinks, helpers, scene?.identity, translatorView?.identity, ...(winemac ? [winemac.sha256] : [])])), store = userDataDir || directory, root = path.join(store, userDataDir ? "graphics/crossover-loaders" : "graphics-loader");
   let destination = path.join(root, sourceHash.slice(0, 24));
   Writable.assertOwnDirectory(store, root);
   while (fs.existsSync(destination)) {
@@ -135,6 +136,10 @@ async function prepare(installation, directory, { signal, execute = executeFile,
         const file = path.join(destination, name);
         Writable.assertOwnDirectory(destination, path.dirname(file), { create: false });
         return fs.lstatSync(file).isSymbolicLink() && fs.realpathSync(file) === fs.realpathSync(source);
+      }) && Object.entries(localLinks).every(([name, target]) => {
+        const file = path.join(destination, name);
+        return fs.lstatSync(file).isSymbolicLink() && fs.readlinkSync(file) === target &&
+          fs.realpathSync(file) === fs.realpathSync(path.join(destination, unix, "ntdll.so"));
       });
       if (record.schema === 2 && record.sourceHash === sourceHash && (!scene || record.sceneIdentity === scene.identity) && filesMatch && linksMatch) return path.join(destination, "bin/wineloader");
     } catch { /* An incomplete cache must not be executed. */ }
@@ -171,6 +176,11 @@ async function prepare(installation, directory, { signal, execute = executeFile,
       await fs.promises.mkdir(path.dirname(file), { recursive: true });
       await fs.promises.symlink(source, file);
     }
+    for (const [name, target] of Object.entries(localLinks)) {
+      const file = path.join(temporary, name);
+      await fs.promises.mkdir(path.dirname(file), { recursive: true });
+      await fs.promises.symlink(target, file);
+    }
     await fs.promises.rm(permissions);
     await fs.promises.writeFile(path.join(temporary, "loader.json"), JSON.stringify({ schema: 2, sourceHash, files,
       inputs: sources.map(item => ({ path: item.source, sha256: item.sha256 })),
@@ -189,7 +199,12 @@ function environment(loader, previous = {}, { cameraBridge, installation, sceneC
   const layout = wineLayout(installation || { wineRoot: path.resolve(path.dirname(loader), "..") }), unix = path.join(path.dirname(loader), "..", "lib", "wine", ...(layout.unixName ? [layout.unixName] : []));
   // Unix modules link @rpath/ntdll.so. They must reuse the already initialized
   // private copy instead of loading a second copy from the vendor directory.
-  if (fs.existsSync(path.join(unix, "ntdll.so"))) values.DYLD_LIBRARY_PATH = [unix, previous.DYLD_LIBRARY_PATH].filter(Boolean).join(path.delimiter);
+  const libraryOverride = path.resolve(path.dirname(loader), "../loader-libraries");
+  if (fs.existsSync(path.join(unix, "ntdll.so"))) {
+    if (fs.realpathSync(path.join(libraryOverride, "ntdll.so")) !== fs.realpathSync(path.join(unix, "ntdll.so")))
+      throw new Error("The private Wine library anchor changed. Prepare the graphics loader again.");
+    values.DYLD_LIBRARY_PATH = [libraryOverride, previous.DYLD_LIBRARY_PATH].filter(Boolean).join(path.delimiter);
+  }
   if (cameraBridge) {
     const wine = layout.unixName ? path.resolve(unix, "..") : unix, vendor = installation.crossoverRoot;
     const windows = layout.primaryWindows || require("../temporal").FILES.find(file => file.endsWith(".dll"))?.split("/")[0];

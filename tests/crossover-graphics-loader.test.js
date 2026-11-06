@@ -63,7 +63,7 @@ test("CrossOver graphics preparation signs only a private copy and reuses matchi
   assert.equal(fs.realpathSync(path.join(prepared, "lib/wine/x86_64-unix/crypt32.so")), fs.realpathSync(path.join(selected.crossoverRoot, "lib/wine/x86_64-unix/crypt32.so")));
   assert.equal(fs.realpathSync(path.join(prepared, "lib64")), fs.realpathSync(path.join(selected.crossoverRoot, "lib64")));
   assert.deepEqual(Loader.environment(loader, { DYLD_LIBRARY_PATH: "/existing/libraries" }), {
-    WINELOADER: loader, CX_WINELOADER: loader, DYLD_LIBRARY_PATH: path.join(prepared, "lib/wine/x86_64-unix") + ":/existing/libraries",
+    WINELOADER: loader, CX_WINELOADER: loader, DYLD_LIBRARY_PATH: path.join(prepared, "loader-libraries") + ":/existing/libraries",
   });
   assert.equal(calls.length, 6);
   assert.equal(await Loader.prepare(selected, directory, { execute: () => assert.fail("unchanged loader does not need signing") }), loader);
@@ -122,7 +122,7 @@ test("shared private loader preserves complete i386 and x86_64 Windows views wit
     assert.equal(fs.lstatSync(path.join(prepared, name)).isSymbolicLink(), false, `${name} retains its existing private copy`);
   assert.equal(fs.realpathSync(path.join(prepared, "lib/wine/x86_64-unix/crypt32.so")), path.join(unix, "crypt32.so"));
   const environment = Loader.environment(loader, {}, { installation: selected, translatorView });
-  assert.equal(environment.DYLD_LIBRARY_PATH, path.join(prepared, "lib/wine/x86_64-unix"));
+  assert.equal(environment.DYLD_LIBRARY_PATH, path.join(prepared, "loader-libraries"));
   for (const architecture of ["i386-windows", "x86_64-windows"]) assert.ok(environment.WINEDLLPATH.split(path.delimiter).includes(path.join(prepared, "lib/wine", architecture)));
   const regularBytes = directory => fs.readdirSync(directory).reduce((bytes, name) => {
     const file = path.join(directory, name), stat = fs.lstatSync(file);
@@ -226,12 +226,16 @@ test("CrossOver translator dependencies use fallback paths instead of global ove
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "crossover-loader-fallback-"));t.after(() => fs.rmSync(root, {recursive: true, force: true}));
   const selected = installation(root), loader = path.join(root, "private/bin/wineloader"), unix = path.join(root, "private/lib/wine/x86_64-unix");
   fs.mkdirSync(unix, {recursive: true});fs.writeFileSync(path.join(unix, "ntdll.so"), "private ntdll");
+  const libraryOverride = path.join(root, "private/loader-libraries");fs.mkdirSync(libraryOverride);
+  fs.symlinkSync(path.join(unix, "ntdll.so"), path.join(libraryOverride, "ntdll.so"));
+  fs.writeFileSync(path.join(unix, "libiconv.2.dylib"), "vendor library that cannot enter the override directory");
   const libraryPaths = [path.join(root, "vendor-libraries")], frameworkPaths = [path.join(root, "vendor-frameworks")];
   const previous = {DYLD_LIBRARY_PATH: "/explicit/existing", DYLD_FALLBACK_LIBRARY_PATH: "/existing/fallback",
     DYLD_FALLBACK_FRAMEWORK_PATH: "/existing/framework-fallback", MTL_HUD_ENABLED: "1", DYLD_INSERT_LIBRARIES: "/processor/libreshade-macos.dylib"};
   const result = {...previous, ...Loader.environment(loader, previous, {installation: selected,
     translatorView: {links: {}, env: {}, dllOverrides: [], libraryPaths, frameworkPaths}})};
-  assert.deepEqual(result.DYLD_LIBRARY_PATH.split(path.delimiter), [unix, previous.DYLD_LIBRARY_PATH]);
+  assert.deepEqual(result.DYLD_LIBRARY_PATH.split(path.delimiter), [libraryOverride, previous.DYLD_LIBRARY_PATH]);
+  assert.deepEqual(fs.readdirSync(libraryOverride), ["ntdll.so"]);
   assert.deepEqual(result.DYLD_FALLBACK_LIBRARY_PATH.split(path.delimiter), [...libraryPaths, previous.DYLD_FALLBACK_LIBRARY_PATH]);
   assert.equal(result.DYLD_FRAMEWORK_PATH, undefined);
   assert.deepEqual(result.DYLD_FALLBACK_FRAMEWORK_PATH.split(path.delimiter), [...frameworkPaths, previous.DYLD_FALLBACK_FRAMEWORK_PATH]);
