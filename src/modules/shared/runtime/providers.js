@@ -94,7 +94,7 @@ function composeRuntimeProviders(mod, providers) {
   if (typeof mod.normalizeRuntimeId === "function") {
     composed.normalizeRuntimeId = (runtimeId, ...args) => byId.has(runtimeId) ? runtimeId : mod.normalizeRuntimeId(runtimeId, ...args);
   }
-  for (const hook of ["ensureRuntime", "prepareLaunch", "prepareInput", "getRuntimeRequirements", "getSteamApiRequirement", "resolveGraphicsInputs"]) {
+  for (const hook of ["ensureRuntime", "prepareLaunch", "prepareInput", "getRuntimeRequirements", "getSteamApiRequirement", "resolveGraphicsInputs", "runtimeRecommendation"]) {
     composed[hook] = (entry, context, ...args) => {
       const provider = byId.get(context?.runtimeId || entry?.runtimeId);
       if (provider) {

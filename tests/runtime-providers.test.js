@@ -272,3 +272,59 @@ test("returning to an engine restores saves before preparation and keeps a newly
   await launcher.launchEntry(entry, { runtimeId: "runner", strict: true });
   assert.equal(entry.defaultSaveDir, newSave); assert.equal(entry.moduleData.runtimeProviderSaveLocations, null);
 });
+
+test("runtime recommendations follow the selected provider and preserve other runtime pins", async t => {
+  const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-version-scope-"));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const gamePath = path.join(root, "Game.exe");fs.writeFileSync(gamePath, "authored Windows fixture");
+  const native = "engine-native", portable = "portable-native";
+  const pin = {native: "4.6.3-stable", portable: "10.0_8-template-1.0.24"};
+  const engine = {id: "fixture", manifest: {id: "fixture", runtime: {default: native, supported: [native],
+    manager: {[native]: native}, entries: {[native]: {label: "Engine"}}}},
+    runtimeRecommendation: entry => ({version: entry.runtimeData[native].version}), launchRuntime() {}};
+  const provider = {runtimeId: portable, managerId: portable, runtime: {label: "Wine"}, supportsEntry: () => true, launchRuntime() {}};
+  const mod = composeRuntimeProviders(engine, [provider]);
+  const registry = {listModules: () => [mod.manifest], getModule: () => mod, getModuleInfo: () => mod.manifest};
+  const launcher = require("../src/core/launcher").createLauncher({userDataDir: root, registry});
+  const legacy = {gameId: "scope", gamePath, moduleId: "fixture", runtimeId: native,
+    runtimeData: {[native]: {version: pin.native}, [portable]: {version: pin.portable}}};
+  const before = structuredClone(legacy);
+  assert.equal((await launcher.runAction(legacy, "runtimeRecommendation", {})).version, pin.native);
+  assert.equal(await launcher.runAction({...legacy, runtimeId: portable}, "runtimeRecommendation", {}), null,
+    "an engine recommendation is never attributed to another provider's manager");
+  provider.runtimeRecommendation = () => ({version: pin.portable});
+  assert.deepEqual(await launcher.runAction({...legacy, runtimeId: portable}, "runtimeRecommendation", {}),
+    {managerId: portable, version: pin.portable});
+  assert.equal((await launcher.runAction(legacy, "runtimeRecommendation", {})).version, pin.native);
+  assert.deepEqual(legacy, before, "reading/switching retains both valid legacy scoped pins without rewriting either");
+});
+
+test("an unresolved runtime version fails before provider preparation while listed downloads keep consent", async t => {
+  const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
+  const {createPinnedNativeManager} = require("../src/modules/shared/runtime/pinned-native-manager");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-version-reject-"));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const id = "portable-version-scope", version = "10.0_8-template-1.0.24", foreign = "4.6.3-stable";
+  let discoveries = 0, preparations = 0, consents = 0, installs = 0;
+  const manager = createPinnedNativeManager({id, label: "Wine", discoverCatalog: async () => {
+    discoveries++;return [{version, upstreamRevision: "fixture-wine", asset: {url: "https://example.test/wine.zip", filename: "wine.zip", sha256: "a".repeat(64)}}];
+  }});
+  await manager.refreshCatalog({userDataDir: root, force: true});
+  assert.equal(manager.resolveSelection({runtimeId: id, runtimeData: {engine: {version: foreign}}}, {}, root, {verification: "status"}).version, version,
+    "a legacy engine-owned pin cannot become this provider’s automatic version");
+  const provider = {runtimeId: id, managerId: id, runtime: {label: "Wine"}, supportsEntry: () => true, launchRuntime() {assert.fail("No process");},
+    ensureRuntime: () => {preparations++;return {managerId: id, version, requiresDownload: true};}};
+  const mod = composeRuntimeProviders({id: "engine", runtimeManagers: [manager], manifest: {id: "engine", runtime: {supported: []}}}, [provider]);
+  const registry = {listModules: () => [mod.manifest], getModule: () => mod};
+  const context = {runtimeId: id, userDataDir: root, settings: {}, confirmRuntimeInstall: async () => {consents++;return true;}};
+  const entry = {runtimeId: id, runtimeData: {[id]: {version: foreign}, engine: {version: foreign}}}, before = structuredClone(entry);
+  await assert.rejects(prepareForLaunch({entry, mod, info: mod.manifest, registry, context,
+    install: () => assert.fail("Unresolved choice cannot install"), runAction: () => assert.fail("No prefix preparation")}),
+    error => error.code === "RUNTIME_VERSION_UNRESOLVED" && /Wine version setting.*4\.6\.3-stable/.test(error.message));
+  assert.deepEqual([preparations, consents, discoveries], [0, 0, 1]);
+  assert.deepEqual(entry, before, "ambiguous legacy input stays intact for correction, never migrated by guessing");
+  assert.equal(await prepareForLaunch({entry: {...entry, runtimeData: {...entry.runtimeData, [id]: {version}}},
+    mod, info: mod.manifest, registry, context, install: async () => {installs++;}, runAction: () => assert.fail("No prefix")}), true);
+  assert.deepEqual([preparations, consents, installs, discoveries], [1, 1, 1, 1]);
+});

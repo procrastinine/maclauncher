@@ -95,6 +95,16 @@ async function runtimePlans(entry, mod, info, context, managers) {
     const replacement = typeof selected?.version === "string" && selected.version && !Custom.isPath(selected.version) ||
       selected?.discoveryRequired === true && typeof manager.refreshCatalog === "function";
     if (selected && !selected.ready && !replacement) throw new Error(selected.reason);
+    const requested = selectRuntimeVersion({ manual: entry.runtimeData?.[context.runtimeId]?.version }).version;
+    if (requested && typeof manager.resolveSelection === "function") {
+      const selection = await manager.resolveSelection({ ...entry, runtimeId: context.runtimeId }, context.settings,
+        context.userDataDir, { version: requested, verification: "status" });
+      if (selection?.ready === false && selection.discoveryRequired && !selection.install) {
+        const label = info.runtime?.labels?.[context.runtimeId] || info.runtime?.entries?.[context.runtimeId]?.label || manager.label || context.runtimeId;
+        throw Object.assign(new Error(`The ${label} version setting ${JSON.stringify(requested)} cannot be resolved. ${selection.reason || "Choose a version listed in Runtimes."}`),
+          { code: "RUNTIME_VERSION_UNRESOLVED" });
+      }
+    }
   }
   const primary = typeof runtimeOwner?.ensureRuntime === "function"
     ? await runtimeOwner.ensureRuntime(entry, context)

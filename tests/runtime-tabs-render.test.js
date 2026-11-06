@@ -1394,3 +1394,32 @@ test('fresh runtime UI initialization and source controls use the same stable ch
   assert.equal(runtimeInstallVersion({catalog:{versions:['1.29.2-universal'],versionRequirements:{'1.29.2-universal':{prerelease:true}}}}),'1.29.2-universal','a development-only catalog remains usable');
   assert.equal(runtimeInstallVersion({catalog:{versions:[null,17,'', '1.28.8-universal'],recommendedVersion:{unknown:true}}}),'1.28.8-universal','malformed optional choices cannot suppress usable siblings');
 });
+
+test('per-game version menus use only the selected runtime recommendation and preserve scoped pins', () => {
+  const state = require('./library-layout-fixture').createLibraryFixture(), moduleInfo = state.modules[0];
+  const engine = moduleInfo.runtime.default, portable = 'sikarugir';
+  const engineVersion = '4.6.3-stable', wineVersion = '10.0_8-template-1.0.24';
+  moduleInfo.runtime.supported = [engine, portable];
+  moduleInfo.runtime.entries[portable] = {label: 'Sikarugir (Wine)', runtimeProvider: true};
+  moduleInfo.runtime.labels = {...moduleInfo.runtime.labels, [portable]: 'Sikarugir (Wine)'};
+  moduleInfo.runtime.manager = {...moduleInfo.runtime.manager, [engine]: 'engine-version-scope', [portable]: portable};
+  state.runtimeManagers['engine-version-scope'] = {...manager('engine-version-scope', {}, {}, [{version: engineVersion}]),
+    defaultVersion: engineVersion};
+  state.runtimeManagers[portable] = {...manager(portable, {}, {}, [{version: wineVersion}]), defaultVersion: wineVersion,
+    versionLabels: {[wineVersion]: 'Wine 10.0 (rev 8) · Template 1.0.24'}};
+  const original = {...state.recents[0], nativeAppPath: null, moduleRuntimeSupport: [engine, portable],
+    runtimeData: {[engine]: {version: engineVersion}, [portable]: {version: wineVersion}}};
+  const before = structuredClone(original);
+  const renderGame = (runtimeId, automatic = false) => renderToStaticMarkup(React.createElement(GameDetails, {
+    g: {...original, runtimeId, ...(automatic ? {runtimeData: {...original.runtimeData, [runtimeId]: {version: ''}}} : {})},
+    state, moduleInfo, actions: {}, cheatsStatus: null, libsStatus: null,
+    runtimeStatusEntry: {runtimeId, status: {runtimeRecommendation: runtimeId === engine ? {managerId: 'engine-version-scope', version: engineVersion} : null}},
+    cheatsPatchBusy: false, libsPatchBusy: false, moduleActionResults: {}, moduleActionBusy: {}, moduleActionError: null
+  }));
+  const automatic = renderGame(portable, true);
+  assert.match(automatic, /Default \(Wine 10\.0 \(rev 8\) · Template 1\.0\.24\)/);
+  assert.doesNotMatch(automatic, /Recommended \(v?4\.6\.3-stable\)/);
+  assert.match(renderGame(engine), new RegExp('value="' + engineVersion + '" selected=""'));
+  assert.match(renderGame(portable), new RegExp('value="' + wineVersion + '" selected=""'));
+  assert.deepEqual(original, before);
+});
