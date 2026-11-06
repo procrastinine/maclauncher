@@ -747,14 +747,14 @@ test("changing Wine finishes the existing prefix update before short registry co
   assert.equal(fs.readFileSync(save, "utf8"), "existing save");
 });
 
-test("MV selects compiled desktop GL only for a Wine bridge missing the Win32 memory API, preserving explicit choices", async t => {
+test("MV selects legacy ANGLE D3D9 with WineD3D for missing Win32 sharing, preserving explicit choices", async t => {
   const { peFixture } = require("./helpers/pe-fixture");
   const { image, X64 } = require("./fixtures/macho-image");
   const { composeRuntimeProviders } = require("../src/modules/shared/runtime/providers");
   const { createLauncher } = require("../src/core/launcher");
   const directory = fixture(t), entry = game(directory), install = installation(directory), dependencies = adapters(install);
-  function library(file, exports, { builtin = false, markers = [], isDll = true } = {}) {
-    const f = peFixture();
+  function library(file, exports, { builtin = false, markers = [], isDll = true, is64 = false } = {}) {
+    const f = peFixture({ is64 });
     f.bytes.writeUInt16LE(isDll ? 0x2002 : 2, f.peOffset + 22);
     f.bytes.writeUInt16LE(2, f.optional + 68);
     f.bytes.writeUInt32LE(0x60000020, f.section + 36);
@@ -779,25 +779,38 @@ test("MV selects compiled desktop GL only for a Wine bridge missing the Win32 me
   fs.writeFileSync(path.join(unix, "ntdll.so"), native);
   for (const name of ["winevulkan.so", "win32u.so"]) fs.writeFileSync(path.join(unix, name), Buffer.concat([native, Buffer.from("vkCreateInstance\0")]));
   library(path.join(install.wineRoot, "lib/wine/i386-windows/winevulkan.dll"), ["vkGetDeviceProcAddr", "vkGetInstanceProcAddr"], { builtin: true });
+  for (const is64 of [false, true]) library(path.join(install.wineRoot, "lib/wine", is64 ? "x86_64-windows" : "i386-windows", "d3d9.dll"), ["Direct3DCreate9"], { builtin: true, is64 });
   const browserPath = path.join(entry.gamePath, "Game.exe");
-  library(browserPath, [], { isDll: false, markers: ["use-gl", "desktop", "wglCreateContext", "wglMakeCurrent"] });
+  library(browserPath, [], { isDll: false, markers: ["disable-d3d11"] });
   library(path.join(entry.gamePath, "libEGL.dll"), ["eglInitialize"]);
+  library(path.join(entry.gamePath, "libGLESv2.dll"), ["glDrawArrays", "glGetString"], { markers: ["Direct3DCreate9"] });
   const manifestPath = path.join(entry.gamePath, "package.json"), manifest = JSON.stringify({ main: "index.html" });
   fs.writeFileSync(manifestPath, manifest); entry.indexHtml = path.join(entry.gamePath, "index.html"); fs.writeFileSync(entry.indexHtml, "original html");
   Object.assign(entry, { moduleId: "mv", runtimeId: "sikarugir", launchArguments: "--seed 4" });
   const mod = composeRuntimeProviders(require("../src/modules/mv/main"), [Provider]);
   const registry = { listModules: () => [mod.manifest], getModule: () => mod, getModuleInfo: () => mod.manifest, listSharedRuntimeManagers: () => [] };
   const launcher = createLauncher({ userDataDir: path.join(directory, "data"), registry });
-  const context = launcher.getGameLaunchContext(entry, {}, { runtimeId: "sikarugir", runtimeSettings: { arguments: ["--locale=en"] } });
+  const runtimeSettings = { arguments: ["--locale=en"], translatorRenderer: "fixture-dxvk" };
+  const context = launcher.getGameLaunchContext(entry, {}, { runtimeId: "sikarugir", runtimeSettings });
+  const dxvkRoot = path.join(directory, "dxvk");
+  for (const name of ["d3d9.dll", "d3d11.dll"]) library(path.join(dxvkRoot, name), ["Direct3DCreate9"]);
+  const dxvk = require("../src/modules/shared/runtime/translator-description").describeTranslator(dxvkRoot, { id: "fixture-dxvk", engine: "dxvk", component: "d3d-renderer" });
+  dependencies.resolveTranslators = (install, runtime, context, options) => require("../src/modules/shared/runtime/wine-translators").resolve(install, runtime, context, { ...options, choices: [dxvk], managers: [] });
   const previousGraphics = dependencies.prepareGraphicsView;
-  dependencies.prepareGraphicsView = async options => ({ ...await previousGraphics(options), graphicsBackend: "dxvk" });
+  dependencies.prepareGraphicsView = async options => ({ ...await previousGraphics(options), graphicsBackend: "wined3d", dllOverrides: [] });
   const prepared = await Launch.prepareLaunch(entry, context, dependencies);
-  assert.deepEqual(prepared.args.slice(-5), [prepared.windowsExecutablePath, "--use-gl=desktop", "--locale=en", "--seed", "4"]);
-  assert.equal(dependencies.calls.some(call => call.args.includes("--use-gl=desktop")), false, "prefix and registry helpers never receive browser switches");
+  assert.deepEqual(prepared.args.slice(-5), [prepared.windowsExecutablePath, "--disable-d3d11", "--locale=en", "--seed", "4"]);
+  assert.equal(context.translatorPlan.components.d3d9.used.engine, "wined3d");
+  assert.equal(context.translatorPlan.components.d3d9.fallback, false);
+  assert.equal(context.translatorPlan.components.d3d9.used.files.find(file => file.format === "pe").machine, 0x14c);
+  assert.equal(context.translatorPlan.components.d3d11.used.engine, "dxvk", "the existing per-API selector changes only D3D9");
+  assert.equal(dependencies.calls.some(call => call.args.includes("--disable-d3d11")), false, "prefix and registry helpers never receive browser switches");
   assert.equal(fs.readFileSync(manifestPath, "utf8"), manifest);
   assert.equal(fs.readFileSync(entry.indexHtml, "utf8"), "original html");
   assert.equal(entry.launchArguments, "--seed 4");
   assert.deepEqual(context.runtimeSettings.arguments, ["--locale=en"]);
+  assert.equal(runtimeSettings.translatorD3D9, undefined, "module defaults never modify saved runtime settings");
+  assert.equal(entry.runtimeData.sikarugir.translatorPlanInputs.settings.translatorD3D9, "", "applied rows remain keyed to the original requested settings");
   const launch = { install, executablePath: path.join(entry.gamePath, "Game.exe"), executableArchitecture: "x86", graphicsBackend: "dxvk", arguments: ["--seed", "4"] };
   for (const arguments_ of [["--use-angle=vulkan"], ["--use-angle", "d3d11"], ["--use-gl=desktop"], ["--disable-d3d11"], ["--disable-gpu"], ["--disable-webgl"]]) {
     assert.deepEqual(await context.resolveRuntimeArguments({ ...launch, arguments: arguments_ }), arguments_);
@@ -809,12 +822,21 @@ test("MV selects compiled desktop GL only for a Wine bridge missing the Win32 me
   assert.deepEqual(await crossOver.resolveRuntimeArguments(launch), launch.arguments);
   const tool = launcher.getLaunchContext(entry, {}, { runtimeId: "sikarugir", runtimeSettings: {} });
   assert.deepEqual(await tool.resolveRuntimeArguments(launch), launch.arguments);
-  assert.deepEqual(await context.resolveRuntimeArguments({ ...launch, graphicsBackend: "wined3d" }), launch.arguments);
+  const plan = context.translatorPlan;
+  context.translatorPlan = { components: { d3d9: { used: { engine: "dxvk" } } } };
+  assert.deepEqual(await context.resolveRuntimeArguments(launch), launch.arguments, "a failed or explicit different renderer selection cannot receive the D3D9 policy flag");
+  context.translatorPlan = plan;
+  const selection = { settings: runtimeSettings, install, executablePath: browserPath, executableArchitecture: "x86" };
+  for (const settings of [{ ...runtimeSettings, translatorD3D9: "chosen-dxvk" }, { ...runtimeSettings, arguments: ["--disable-webgl"] }, { ...runtimeSettings, environmentReference: { kind: "sikarugir-wrapper", path: directory } }]) {
+    assert.deepEqual(await context.resolveRuntimeSettings({ ...selection, settings }), settings);
+  }
+  assert.deepEqual(await crossOver.resolveRuntimeSettings(selection), runtimeSettings);
+  assert.deepEqual(await tool.resolveRuntimeSettings(selection), runtimeSettings);
   fs.writeFileSync(path.join(unix, "win32u.so"), Buffer.concat([native, Buffer.from("vkCreateInstance\0vkGetMemoryWin32HandleKHR\0")]));
   assert.deepEqual(await context.resolveRuntimeArguments(launch), launch.arguments, "declared APIs do not prove missing sharing and cannot trigger a fallback");
   fs.unlinkSync(path.join(unix, "win32u.so"));
   assert.deepEqual(await context.resolveRuntimeArguments(launch), launch.arguments, "missing native metadata remains unknown");
   fs.writeFileSync(path.join(unix, "win32u.so"), Buffer.concat([native, Buffer.from("vkCreateInstance\0")]));
-  library(browserPath, [], { isDll: false, markers: ["use-gl", "desktop"] });
-  assert.deepEqual(await context.resolveRuntimeArguments(launch), launch.arguments, "a browser without WGL backend declarations cannot be selected");
+  library(browserPath, [], { isDll: false });
+  assert.deepEqual(await context.resolveRuntimeArguments(launch), launch.arguments, "a browser without the legacy D3D9 selector cannot be selected");
 });

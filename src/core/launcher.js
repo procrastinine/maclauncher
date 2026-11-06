@@ -335,6 +335,12 @@ function createLauncher({
     context.resolveRuntimeArguments = async launch => LaunchArguments.validate(
       options.gameEffects === true && typeof mod?.resolveRuntimeArguments === "function"
         ? await mod.resolveRuntimeArguments(entry, context, launch) : launch.arguments);
+    context.resolveRuntimeSettings = async launch => {
+      const value = options.gameEffects === true && typeof mod?.resolveRuntimeSettings === "function"
+        ? await mod.resolveRuntimeSettings(entry, context, launch) : launch.settings;
+      if (!isRecord(value)) throw new Error("Runtime settings must be an object.");
+      return { ...value };
+    };
     const graphicsDiagnostics = Object.fromEntries(["diagnostics", "capture", "gpuTiming", "trace"]
       .filter(key => typeof options.graphicsDiagnostics?.[key] === "boolean")
       .map(key => [key, options.graphicsDiagnostics[key]]));

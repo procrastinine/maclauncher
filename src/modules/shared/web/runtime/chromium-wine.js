@@ -5,7 +5,7 @@ const { readMachOLoadCommands } = require("../../runtime/macho-load-commands");
 const { wineLayout } = require("../../runtime/wine-layout");
 
 const cache = new Map(), MAX_BYTES = 64 * 1024 * 1024;
-const names = ["vkCreateInstance", "vkGetMemoryWin32HandleKHR", "use-gl", "desktop", "wglCreateContext", "wglMakeCurrent"];
+const names = ["vkCreateInstance", "vkGetMemoryWin32HandleKHR", "disable-d3d11", "Direct3DCreate9", "Direct3DCreate9Ex"];
 function binary(file, format) {
   try {
     const stat = fs.lstatSync(file);
@@ -47,27 +47,49 @@ function win32MemoryAPI(install, architecture) {
 function explicitBackend(args) {
   return args.some(value => /^--(?:use-angle|use-gl|use-vulkan|disable-d3d11|use-warp|disable-gpu(?:-compositing)?|disable-webgl2?|disable-3d-apis|in-process-gpu|use-cmd-decoder)(?:=|$)/i.test(value));
 }
-function resolveRuntimeArguments(entry, context, launch) {
+function legacyD3D9(entry, context, launch) {
   const args = launch.arguments;
-  if (context.runtimeId !== "sikarugir" || launch.graphicsBackend !== "dxvk" || explicitBackend(args)) return args;
+  if (context.runtimeId !== "sikarugir" || context.wineEnvironment || explicitBackend(args)) return false;
   try {
     const directory = path.dirname(launch.executablePath), manifestPath = path.join(directory, "package.json");
-    if (fs.statSync(manifestPath).size > 1024 * 1024) return args;
+    if (fs.statSync(manifestPath).size > 1024 * 1024) return false;
     const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
     if (typeof manifest.main !== "string" || !entry.indexHtml ||
-        fs.realpathSync(path.resolve(directory, manifest.main)) !== fs.realpathSync(entry.indexHtml)) return args;
+        fs.realpathSync(path.resolve(directory, manifest.main)) !== fs.realpathSync(entry.indexHtml)) return false;
     if (manifest["chromium-args"] != null &&
-        (typeof manifest["chromium-args"] !== "string" || explicitBackend(Arguments.parse(manifest["chromium-args"])))) return args;
+        (typeof manifest["chromium-args"] !== "string" || explicitBackend(Arguments.parse(manifest["chromium-args"])))) return false;
     const egl = binary(path.join(directory, "libEGL.dll"), "pe");
     const browser = binary(launch.executablePath, "pe");
+    const angle = binary(path.join(directory, "libGLESv2.dll"), "pe");
     if (egl?.builtin || egl?.architecture !== launch.executableArchitecture || !codeExport(egl, "eglInitialize") ||
         browser?.architecture !== launch.executableArchitecture ||
-        !["use-gl", "desktop", "wglCreateContext", "wglMakeCurrent"].every(name => browser.names.has(name))) return args;
-    if (win32MemoryAPI(launch.install, launch.executableArchitecture) !== "absent") return args;
-    // Desktop GL uses Wine's WGL path directly. Choosing ANGLE D3D9 alone can
-    // still require DXVK's same unavailable Win32 shared-resource transport.
-    return ["--use-gl=desktop", ...args];
-  } catch { return args; }
+        !browser.names.has("disable-d3d11") || angle?.builtin || angle?.architecture !== launch.executableArchitecture ||
+        !codeExport(angle, "glGetString") || !codeExport(angle, "glDrawArrays") ||
+        !["Direct3DCreate9", "Direct3DCreate9Ex"].some(name => angle.names.has(name))) return false;
+    return win32MemoryAPI(launch.install, launch.executableArchitecture) === "absent";
+  } catch { return false; }
 }
 
-module.exports = { resolveRuntimeArguments, win32MemoryAPI };
+const WINE_D3D = "included:d3d-renderer:wined3d";
+function resolveRuntimeSettings(entry, context, launch) {
+  const settings = launch.settings;
+  // A saved per-API choice is explicit. The module supplies only the missing
+  // default; it never rewrites that choice or an external wrapper's settings.
+  if (settings.translatorD3D9 || settings.environmentReference) return settings;
+  const args = [...(Array.isArray(settings.arguments) ? settings.arguments : []), ...(context.gameArguments || [])];
+  if (!legacyD3D9(entry, context, { ...launch, arguments: args })) return settings;
+  const layout = wineLayout(launch.install), windows = launch.executableArchitecture === "x86" ? "i386-windows" : "x86_64-windows";
+  const d3d9 = binary(path.join(layout.dllRoot, windows, "d3d9.dll"), "pe");
+  if (!d3d9?.builtin || d3d9.architecture !== launch.executableArchitecture || !codeExport(d3d9, "Direct3DCreate9")) return settings;
+  return { ...settings, translatorD3D9: WINE_D3D };
+}
+function resolveRuntimeArguments(entry, context, launch) {
+  const args = launch.arguments;
+  const selected = require("../../runtime/translator-roles").usedForApi(context.translatorPlan, "d3d9");
+  if (selected?.engine !== "wined3d" || !legacyD3D9(entry, context, launch)) return args;
+  // This browser's legacy EGL selector requests ANGLE D3D9. WineD3D avoids
+  // DXVK shared handles; direct desktop GL has a separate WGL pbuffer failure.
+  return ["--disable-d3d11", ...args];
+}
+
+module.exports = { resolveRuntimeArguments, resolveRuntimeSettings, win32MemoryAPI };

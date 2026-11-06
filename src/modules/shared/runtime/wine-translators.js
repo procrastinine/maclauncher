@@ -76,11 +76,12 @@ function includedTranslators(install, runtime, { engine: requestedEngine, descri
       } catch (error) { warnings.push(error.message); }
     }
   }
-  const direct3DFiles = (!requestedEngine || requestedEngine === 'wined3d' || requestedEngine === 'vkd3d') && layout.primaryWindowsRoot && fs.existsSync(layout.primaryWindowsRoot) ? fs.readdirSync(layout.primaryWindowsRoot).filter(name => /^(?:d3d\d.*|dxgi)\.dll$/i.test(name)).map(name => {
-    const file = path.join(layout.primaryWindowsRoot, name), relative = `${layout.primaryWindows}/${name}`;
+  const direct3DWindows = [layout.primaryWindows, ...layout.windows.filter(name => name !== layout.primaryWindows)].filter(Boolean);
+  const direct3DFiles = (!requestedEngine || requestedEngine === 'wined3d' || requestedEngine === 'vkd3d') ? direct3DWindows.flatMap(windows => fs.readdirSync(path.join(layout.dllRoot, windows)).filter(name => /^(?:d3d\d.*|dxgi)\.dll$/i.test(name)).map(name => {
+    const file = path.join(layout.dllRoot, windows, name), relative = `${windows}/${name}`;
     const facts = describe ? describe(file, { engine: 'wined3d', component: 'd3d-renderer', source, form: 'builtin' })?.files[0] : Description.inspectFile({ path: file, relative });
     return facts && { ...facts, relative };
-  }).filter(Boolean) : [];
+  }).filter(Boolean)) : [];
   const d3d12Files = direct3DFiles.filter(file => Roles.fileApis(file).includes('Direct3D 12'));
   if (!requestedEngine || requestedEngine === 'wined3d') result.push(Description.description({ id: 'included:d3d-renderer:wined3d', included: true, component: 'd3d-renderer', engine: 'wined3d', source,
     version: install.wineVersion || install.engineVersion || '', form: 'builtin', root: layout.root, files: direct3DFiles.filter(file => !d3d12Files.includes(file)) }));

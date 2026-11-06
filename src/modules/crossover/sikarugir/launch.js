@@ -255,7 +255,8 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const existingEnvironment = await require("../../shared/runtime/wine-processes").prepareEnvironment(
     Environments.readEnvironment(context.runtimeSettings?.environmentReference), context, context.processOptions);
   if (existingEnvironment && existingEnvironment.kind !== "sikarugir-wrapper") throw new Error("Choose a Sikarugir wrapper for this runtime.");
-  let settings = existingEnvironment ? require("../../shared/runtime/wine-settings").explicitSettings(context.runtimeSettings || {}) : context.runtimeSettings || {};
+  const requestedSettings = context.runtimeSettings || {};
+  let settings = existingEnvironment ? require("../../shared/runtime/wine-settings").explicitSettings(requestedSettings) : requestedSettings;
   context.wineEnvironment = existingEnvironment;
   if (existingEnvironment?.running) { settings = { ...settings, synchronization: existingEnvironment.settings.synchronization, retina: Environments.INHERIT }; }
   const match = executableEvidence(entry, settings);
@@ -264,6 +265,11 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const selected = existingEnvironment ? { ready: true, version: existingEnvironment.path, install: existingEnvironment.install } :
     await manager.resolveSelection(entry, context.settings, context.userDataDir, settings);
   if (!selected.ready || !selected.install) throw new Error(selected.reason || "The selected Sikarugir version is not installed.");
+  if (context.resolveRuntimeSettings) {
+    settings = await context.resolveRuntimeSettings({ settings, install: selected.install,
+      executablePath: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture });
+    context.runtimeSettings = settings;
+  }
   const Temporal = require("../temporal");
   const capabilities = require("../../shared/runtime/host-capabilities").getHostCapabilities();
   const host = dependencies.host || capabilities;
@@ -373,7 +379,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
     vulkanBackend: graphics.vulkanBackend, dlss: graphics.dlss?.enabled === true, componentVersions: graphics.componentVersions,
     steamBridge: steamBridge ? { version: steamBridge.packageVersion } : null,
     translatorRows: Translators.inspectorRows(translatorPlan),
-    translatorPlanInputs: Translators.planInputs(context.runtimeSettings, context.wineEnvironment?.install || selected.install), cameraAdapterNotice: context.cameraAdapterNotice || null, graphicsInputs: context.graphicsInputs } };
+    translatorPlanInputs: Translators.planInputs(requestedSettings, context.wineEnvironment?.install || selected.install), cameraAdapterNotice: context.cameraAdapterNotice || null, graphicsInputs: context.graphicsInputs } };
   context.onEntryChange?.(entry);
   return { ...selected, directory, gameRoot, workingDirectory, prefixPath, viewRoot, executablePath, windowsExecutablePath, windowsWorkingDirectory, graphics, environment, args, translatorPlan,
     existingEnvironment, winePath: graphics.executablePath || selected.install.executablePath, serverPath: graphics.serverPath || selected.install.serverPath };
