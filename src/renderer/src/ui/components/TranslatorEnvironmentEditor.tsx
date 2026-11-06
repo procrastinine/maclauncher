@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from "react";
-import { editorRows, knownVariable, lockedRule, normalizeValues, readValues, type TranslatorEnvironmentDeclaration,
+import { editorRows, knownVariable, lockedRule, lockingDeclarations, managerDeclarations, normalizeValues, readValues, variableOwner,
+  type TranslatorEnvironmentDeclaration,
   type TranslatorEnvironmentRow as Row, type TranslatorEnvironmentStore, type TranslatorEnvironmentValues } from "../../../../modules/shared/runtime/translator-environment.mjs";
 import { CommitTextInput } from "./CommitInput";
 import { ErrorText } from "./ErrorText";
@@ -12,18 +13,19 @@ type Save = (id: string, values: TranslatorEnvironmentValues | null) => Promise<
 
 const SOURCE_LABELS: Record<string, string> = { default: "Default", global: "From Runtimes" };
 
-// The values stored at a scope for one translator, without names that a
-// translator in the table locks. A locked name is shown as set by MacLauncher
-// and is dropped by the next save.
-function ownValues(declarations: TranslatorEnvironmentDeclaration[], store: TranslatorEnvironmentStore | undefined, id: string) {
-  return Object.fromEntries(Object.entries(readValues(store?.[id])).filter(([name]) => !lockedRule(declarations, name))) as TranslatorEnvironmentValues;
+// The values stored at a scope for one translator, without names that its
+// locking translators lock. A locked name is shown as set by MacLauncher and
+// is dropped by the next save.
+function ownValues(locks: readonly TranslatorEnvironmentDeclaration[], store: TranslatorEnvironmentStore | undefined, id: string) {
+  return Object.fromEntries(Object.entries(readValues(store?.[id])).filter(([name]) => !lockedRule(locks, name))) as TranslatorEnvironmentValues;
 }
 
 // Every variable of one scope in one table. Rows are grouped by the
 // translator that stores them, in the order of `declarations`; the first is
-// the runtime's own translator. A new name joins the group that already lists
-// it, then the translator that suggests it, and otherwise the runtime's own group.
-// Values are stored exactly as typed and apply on the next launch.
+// the runtime's own translator. A new name goes to its owner (variableOwner):
+// the group that already lists it, then the translator that suggests it, and
+// otherwise the runtime's own group, which applies to every game the runtime
+// launches. Values are stored exactly as typed and apply on the next launch.
 export function TranslatorEnvironmentTable({ declarations, scope, globalStore, gameStore, disabled = false, onSave }: {
   declarations: TranslatorEnvironmentDeclaration[]; scope: Scope;
   globalStore?: TranslatorEnvironmentStore; gameStore?: TranslatorEnvironmentStore;
@@ -43,9 +45,9 @@ export function TranslatorEnvironmentTable({ declarations, scope, globalStore, g
   const typed = name.trim();
   const known = (variable: string, preferred?: TranslatorEnvironmentDeclaration) =>
     (preferred && knownVariable(preferred, variable)) || declarations.map(item => knownVariable(item, variable)).find(Boolean) || null;
-  const ownerOf = (variable: string) => groups.find(group => group.rows.some(row => row.name === variable))?.declaration
-    || declarations.find(item => knownVariable(item, variable)) || declarations[0];
-  const typedLocked = typed ? lockedRule(declarations, typed) : null;
+  const ownerOf = (variable: string) => variableOwner(declarations, variable, { scope, global: globalStore, game: gameStore });
+  const locks = (declaration: TranslatorEnvironmentDeclaration) => lockingDeclarations(declarations, declaration, { scope });
+  const typedLocked = typed ? lockedRule(locks(ownerOf(typed) || declarations[0]), typed) : null;
   const typedKnown = typed ? known(typed) : null;
   const typedOwner = typed && declarations.length > 1 ? ownerOf(typed) : null;
   const stored = declarations.filter(declaration => Object.keys(readValues(store?.[declaration.id])).length);
@@ -53,7 +55,7 @@ export function TranslatorEnvironmentTable({ declarations, scope, globalStore, g
   async function save(declaration: TranslatorEnvironmentDeclaration, next: TranslatorEnvironmentValues) {
     setError(null);
     try {
-      const values = normalizeValues(next, { declarations });
+      const values = normalizeValues(next, { declarations: locks(declaration) });
       await onSave(declaration.id, Object.keys(values).length ? values : null);
       return true;
     } catch (failure: any) {
@@ -61,7 +63,7 @@ export function TranslatorEnvironmentTable({ declarations, scope, globalStore, g
       return false;
     }
   }
-  const own = (declaration: TranslatorEnvironmentDeclaration) => ({ ...ownValues(declarations, store, declaration.id) });
+  const own = (declaration: TranslatorEnvironmentDeclaration) => ({ ...ownValues(locks(declaration), store, declaration.id) });
   function commitValue(declaration: TranslatorEnvironmentDeclaration, row: Row, text: string) {
     const next = own(declaration);
     if (row.inheritedValue !== undefined && text === row.inheritedValue) delete next[row.name];
@@ -108,7 +110,8 @@ export function TranslatorEnvironmentTable({ declarations, scope, globalStore, g
         {rows.map(row => {
           const removed = row.state === "removed";
           const info = known(row.name, declaration);
-          const launcher = !removed && !row.locked && info?.launcher;
+          const locked = lockedRule(locks(declaration), row.name);
+          const launcher = !removed && !locked && info?.launcher;
           return <div className={`translatorEnvironmentRow${removed ? " removed" : ""}`} role="listitem" key={`${declaration.id}:${row.name}`}>
             <span className="translatorEnvironmentName mono" title={info?.description || undefined}>{row.name}</span>
             <span className="translatorEnvironmentEquals" aria-hidden="true">=</span>
@@ -122,8 +125,8 @@ export function TranslatorEnvironmentTable({ declarations, scope, globalStore, g
               {row.state === "added" && scope === "game" && <StatusBadge>This game</StatusBadge>}
               {removed && <StatusBadge>Removed</StatusBadge>}
               {launcher && <StatusBadge tone="warning" title={`${launcher} This value replaces it.`}>Set by MacLauncher</StatusBadge>}
-              {row.locked && !removed && <StatusBadge tone="danger"
-                title={`${row.name} is set by MacLauncher, so this value is not used. ${row.locked.reason}`}>Set by MacLauncher</StatusBadge>}
+              {locked && !removed && <StatusBadge tone="danger"
+                title={`${row.name} is set by MacLauncher, so this value is not used. ${locked.reason}`}>Set by MacLauncher</StatusBadge>}
             </span>
             <span className="translatorEnvironmentActions">
               {(row.state === "changed" || removed)
@@ -170,7 +173,7 @@ const countValues = (declarations: TranslatorEnvironmentDeclaration[], store?: T
 export function RuntimeTranslatorEnvironments({ managerId, declarations, store, onSave }: {
   managerId: string; declarations?: TranslatorEnvironmentDeclaration[]; store?: TranslatorEnvironmentStore; onSave: Save;
 }) {
-  const own = (declarations || []).filter(item => item.managerIds.includes(managerId));
+  const own = managerDeclarations(declarations, managerId);
   if (!own.length) return null;
   const count = countValues(own, store);
   return <details className="runtimeEnvironment" aria-label="Environment variables">

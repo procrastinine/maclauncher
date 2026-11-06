@@ -289,10 +289,11 @@ function presentationEnvironment(payload, context, graphics = {}, dependencies =
   } : {};
 }
 
-// Translator environments of an Android game: its execution engine, ANGLE,
-// and the Vulkan driver when ANGLE renders through Vulkan.
+// Translator environments of a MacLauncher Android game: the runtime's own,
+// which every game receives, its execution engine, ANGLE, and the Vulkan
+// driver when ANGLE renders through Vulkan.
 function translatorEnvironmentIds(execution, renderer, vulkan) {
-  return [execution === "art" ? "android-art" : "android-jvm", "angle", ...(renderer === "vulkan" && vulkan?.backend ? [vulkan.backend] : [])];
+  return ["android", execution === "art" ? "android-art" : "android-jvm", "angle", ...(renderer === "vulkan" && vulkan?.backend ? [vulkan.backend] : [])];
 }
 
 function angleBackend(context, payload) {

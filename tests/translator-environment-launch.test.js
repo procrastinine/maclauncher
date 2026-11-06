@@ -13,7 +13,7 @@ test("the registry lists every module's translator environments once", () => {
   const ids = Registry.listTranslatorEnvironments().map(item => item.id);
   assert.equal(new Set(ids).size, ids.length);
   for (const id of ["crossover", "sikarugir", "dxvk", "vkd3d-proton", "dxmt", "d3dmetal", "gstreamer", "moltenvk", "kosmickrisp",
-    "android-jvm", "android-art", "macapk", "angle", "anyps5", "prosper"]) assert.ok(ids.includes(id), id);
+    "android", "android-jvm", "android-art", "macapk", "angle", "anyps5", "prosper"]) assert.ok(ids.includes(id), id);
   for (const declaration of Registry.listTranslatorEnvironments()) assert.ok(Object.isFrozen(declaration), declaration.id);
 });
 
@@ -101,6 +101,29 @@ test("ART games receive the translator values beneath the runtime's own paths an
   assert.equal(environment.JDK_JAVA_OPTIONS, undefined); assert.equal(environment.ART_VM_OPTIONS, undefined);
   assert.equal(environment.MACLAUNCHER_ANDROID_EGL_CACHE, "/private/cache");
   assert.notEqual(environment.CLASSPATH, "/stored/before/lock"); assert.equal(environment.HOME, "/");
+});
+
+test("a name that no Android translator suggests belongs to MacLauncher Android and reaches ART and JVM launches", async t => {
+  const Contract = require("../src/modules/shared/runtime/translator-environment.mjs");
+  const Host = require("../src/modules/android/host");
+  const tab = Contract.managerDeclarations(Registry.listTranslatorEnvironments(), "android");
+  assert.deepEqual(tab.map(item => item.id), ["android", "android-jvm", "android-art", "angle"], "the runtime's own translator comes first");
+  assert.equal(Contract.variableOwner(tab, "CUSTOM_FLAG").id, "android");
+  assert.equal(Contract.variableOwner(tab, "JDK_JAVA_OPTIONS").id, "android-jvm");
+  assert.equal(Contract.lockedRule(Contract.lockingDeclarations(tab, tab[1]), "JAVA_TOOL_OPTIONS"), null, "ART's lock does not refuse a JVM value");
+  assert.ok(Contract.lockedRule(Contract.lockingDeclarations(tab, tab[0]), "LD_PRELOAD"), "runtime-wide values follow the locks of both engines");
+  const context = { settings: { launcher: { translatorEnvironment: { ...Contract.withValues({}, "android", { CUSTOM_FLAG: "on" }),
+    "android-jvm": { JDK_JAVA_OPTIONS: "-Xmx4g" } } } } };
+  for (const execution of ["jvm", "art"])
+    assert.equal(Launch.forLaunch({}, context, Host.translatorEnvironmentIds(execution, "metal")).values.CUSTOM_FLAG, "on", execution);
+  let launch;
+  try { launch = await import("../src/modules/android/art/launch.mjs"); }
+  catch (error) { return t.skip("Requires the Android runtime source: " + error.message); }
+  const supplier = { bootClasspath: [], manifest: { frameworkResourcePreinitVersion: 1 } };
+  const environment = launch.gameEnvironment(supplier, { HOME: "/private/home", LANG: "en_US.UTF-8" },
+    { entry: { translatorEnvironment: { android: { GAME_FLAG: "game" } } }, context, renderer: "metal", vulkan: null, cacheRoot: "/private/cache" });
+  assert.equal(environment.CUSTOM_FLAG, "on"); assert.equal(environment.GAME_FLAG, "game");
+  assert.equal(environment.JDK_JAVA_OPTIONS, undefined, "JVM values stay with the JVM engine");
 });
 
 test("a game's values are stored literally in its record, survive detection and reach its launch context", async t => {

@@ -121,6 +121,27 @@ test('one table edits every translator of a game: rows change, remove and restor
   assert.deepEqual(saves, [['crossover', null]], 'Reset clears every translator that stores values for the game');
 });
 
+test('on the MacLauncher Android tab an unknown name goes to the runtime and each engine keeps its own locks', async t => {
+  const { managerDeclarations } = require('../src/modules/shared/runtime/translator-environment.mjs');
+  const saves = [];
+  const h = componentHarness(C.TranslatorEnvironmentTable, { declarations: managerDeclarations(declarations(), 'android'), scope: 'global',
+    globalStore: {}, onSave: async (id, values) => { saves.push([id, values]); } });
+  t.after(() => h.close());
+  const type = name => { labelled(h.render(), 'New variable name').props.onChange({ currentTarget: { value: name } }); return h.render(); };
+  const submit = async (name, value) => {
+    type(name); labelled(h.render(), 'New variable value').props.onChange({ currentTarget: { value } });
+    await nodes(h.render()).find(node => node.type === 'form').props.onSubmit({ preventDefault() {} });
+  };
+  assert.match(renderToStaticMarkup(type('CUSTOM_FLAG')), /Applies with MacLauncher Android\./);
+  await submit('CUSTOM_FLAG', 'on');
+  assert.deepEqual(saves.at(-1), ['android', { CUSTOM_FLAG: 'on' }]);
+  await submit('JAVA_TOOL_OPTIONS', '-Xss4m');
+  assert.deepEqual(saves.at(-1), ['android-jvm', { JAVA_TOOL_OPTIONS: '-Xss4m' }], 'a JVM option is not refused because ART locks it');
+  const tree = type('LD_PRELOAD');
+  assert.equal(nodes(tree).find(node => node.type === 'button' && node.props.type === 'submit').props.disabled, true);
+  assert.match(renderToStaticMarkup(tree), /LD_PRELOAD is set by MacLauncher\. The ART runtime sets the game&#x27;s library loading\./);
+});
+
 test('a game section loads the translators its settings choose and shows them in one table', async t => {
   const loads = [];
   const props = { declarations: declarations(), globalStore: { anyps5: { SHARED: 'global' } }, gameStore: { kosmickrisp: { MESA_KK_DEBUG: 'msl' } },

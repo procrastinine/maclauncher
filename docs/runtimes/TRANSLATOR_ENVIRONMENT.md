@@ -10,7 +10,7 @@ A game receives the variables of the translators that its runtime and settings c
 | --- | --- |
 | CrossOver | CrossOver, and each graphics translator that the game uses after any [fallback](TRANSLATORS.md#compatibility-and-fallback): D3DMetal, DXMT, DXVK, vkd3d-proton, MoltenVK, KosmicKrisp and GStreamer codecs. |
 | Sikarugir | Sikarugir, and each graphics translator that the game uses after any fallback, as for CrossOver. |
-| MacLauncher Android | Android JVM or Android ART, following the **Execution** setting, and ANGLE. When the **OpenGL ES backend** is Vulkan, the selected Vulkan driver, MoltenVK or KosmicKrisp, as well. |
+| MacLauncher Android | MacLauncher Android, Android JVM or Android ART following the **Execution** setting, and ANGLE. When the **OpenGL ES backend** is Vulkan, the selected Vulkan driver, MoltenVK or KosmicKrisp, as well. |
 | Mac.apk | Mac.apk and ANGLE. When the **Graphics backend** is Vulkan, MoltenVK as well. |
 | AnyPS5 | AnyPS5 and the selected Vulkan driver. |
 | Prosper | Prosper and the selected Vulkan driver. |
@@ -31,7 +31,7 @@ Each scope has one table of rows in the form `NAME = value`, followed by one row
 
 - The value field saves when it loses focus or on Return, and Escape returns it to the saved value.
 - The add row has a name field that suggests the variables of every translator in the table, a value field and an **Add** button. Return in either field adds the variable, and Escape clears both fields.
-- A new variable joins the translator whose heading already lists it, then the translator that suggests it, and otherwise the runtime's own translator. While a name is typed in a table with several translators, the hint under the add row names that translator, together with the variable's description when it is a suggested one.
+- A new variable joins the translator whose heading already lists it, then the translator that suggests it, and otherwise the runtime's own translator. The runtime's own translator applies to every game that the runtime launches, so on the **MacLauncher Android** tab a variable that no translator suggests reaches games with either execution engine. While a name is typed in a table with several translators, the hint under the add row names that translator, together with the variable's description when it is a suggested one.
 - The remove button (×) removes a variable. In a game, removing a value from Runtimes stores a removal for that game, which the row shows as **Removed** with the inherited value struck through.
 - **Restore** returns a changed or removed row to its inherited value.
 - One **Reset** per scope removes every value stored there: the global values in Runtimes, or the game's own values in Runtime Settings.
@@ -53,6 +53,8 @@ A name has the form of a shell variable: a letter or underscore followed by lett
 ## Locked variables
 
 MacLauncher sets some variables itself, such as the paths of a game's Windows environment, Android sandbox or save folders and the files that select a translator or Vulkan driver. These names are locked. A locked name cannot be added, and the editor explains why when it is typed. Locked names stay locked when another translator with the same names is also in use, so a value stored for one translator cannot replace a path that another translator's runtime sets.
+
+In a game, the locks of every translator in the table apply, because these translators run together. In Runtimes, the runtime's own translator follows the locks of every translator on the tab, since it runs with each of them, and any other translator follows its own locks. On the **MacLauncher Android** tab, `JAVA_TOOL_OPTIONS` can therefore be set for Android JVM although Android ART locks it, and `LD_PRELOAD` cannot be set for MacLauncher Android.
 
 ## Order of values
 
@@ -271,6 +273,21 @@ Applies to games whose Vulkan driver is a KosmicKrisp build. Its global values a
 | `VK_DRIVER_FILES`, `VK_ICD_FILENAMES` | Points the Vulkan loader at the selected driver. |
 | `KL_MVK_DYLIB` | Names the selected Vulkan library for Android. |
 | `CX_LIBVULKAN` | Names the selected Vulkan library for CrossOver. |
+
+### MacLauncher Android
+
+Applies to every Android game that runs with MacLauncher Android, with either execution engine. Its global values are on the **MacLauncher Android** tab of Runtimes.
+
+No variables are suggested. Any variable that is not locked can be added.
+
+| Locked | Reason |
+| --- | --- |
+| `HOME`, `CFFIXED_USER_HOME`, `TMPDIR`, `PATH` | The launcher sets this path inside the game's sandbox. |
+| `ANDROID_`…, `DOWNLOAD_CACHE`, `EXTERNAL_STORAGE`, `OEM_ROOT`, `ODM_ROOT`, `VENDOR_ROOT`, `PRODUCT_ROOT`, `PRODUCT_SERVICES_ROOT`, `SYSTEM_EXT_ROOT`, `APEX_ROOT` | The launcher sets the Android system and storage folders. |
+| `VK_DRIVER_FILES`, `VK_ICD_FILENAMES` | Points the Vulkan loader at the selected driver. |
+| `KL_`…, `KLJ_`… | The launcher sets the Android runtime's process and graphics options. |
+| `DYLD_`… | The launcher sets the runtime's library paths. |
+| `MACLAUNCHER_`… | Used by MacLauncher's own Android services. |
 
 ### Android JVM
 

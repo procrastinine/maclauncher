@@ -32,6 +32,12 @@ export function effectiveValues(declaration: TranslatorEnvironmentDeclaration,
   options?: { through?: TranslatorEnvironmentSource }): { values: Record<string, string>; sources: Record<string, TranslatorEnvironmentSource> };
 export function editorRows(declaration: TranslatorEnvironmentDeclaration,
   values?: { scope?: "global" | "game"; global?: unknown; game?: unknown }): TranslatorEnvironmentRow[];
+export function managerDeclarations(declarations: readonly TranslatorEnvironmentDeclaration[] | null | undefined,
+  managerId: string): TranslatorEnvironmentDeclaration[];
+export function variableOwner(declarations: readonly TranslatorEnvironmentDeclaration[] | null | undefined, name: string,
+  values?: { scope?: "global" | "game"; global?: unknown; game?: unknown }): TranslatorEnvironmentDeclaration | null;
+export function lockingDeclarations(declarations: readonly TranslatorEnvironmentDeclaration[] | null | undefined,
+  declaration: TranslatorEnvironmentDeclaration | null | undefined, options?: { scope?: "global" | "game" }): readonly TranslatorEnvironmentDeclaration[];
 export function launchValues(declarations: readonly TranslatorEnvironmentDeclaration[], ids: readonly string[],
   layers?: { global?: unknown; game?: unknown }): { values: Record<string, string>; translators: string[]; sources: Record<string, string> };
 export function applyEnvironment<T extends Record<string, string | undefined>>(environment: T, values: Record<string, string>,

@@ -147,6 +147,34 @@ export function editorRows(declaration, { scope = "global", global, game } = {})
   });
 }
 
+// The translators on a runtime manager's Runtimes tab. The runtime's own
+// translator, whose id is the manager id, comes first.
+export function managerDeclarations(declarations, managerId) {
+  const listed = (declarations || []).filter(item => item?.managerIds?.includes(managerId));
+  return [...listed.filter(item => item.id === managerId), ...listed.filter(item => item.id !== managerId)];
+}
+
+// The translator that stores a variable in a table of `declarations`, the
+// runtime's own translator first: the translator that already lists the name
+// at this scope, then the translator that suggests it, and otherwise the
+// runtime's own translator, which applies to every game the runtime launches.
+export function variableOwner(declarations, name, { scope = "global", global, game } = {}) {
+  const list = declarations || [];
+  return list.find(declaration => editorRows(declaration, { scope, global: readStore(global)[declaration.id], game: readStore(game)[declaration.id] })
+    .some(row => row.name === name)) || list.find(declaration => knownVariable(declaration, name)) || list[0] || null;
+}
+
+// The translators whose locks apply to a variable stored for `declaration`.
+// A game's translators all run together, and the runtime's own translator
+// runs with each of the others, so their locks apply too. At global scope a
+// translator's own variables only follow its own locks, because the other
+// translators on the tab, such as the JVM and ART execution engines, need not
+// run with it.
+export function lockingDeclarations(declarations, declaration, { scope = "global" } = {}) {
+  const list = declarations || [];
+  return scope === "game" || !declaration || declaration.id === list[0]?.id ? list : [declaration];
+}
+
 // The values a launch adds for the chosen translators, in the order the
 // consumer lists them. Every layer is applied across all chosen translators
 // before the next layer, so a game's value replaces a global or default value

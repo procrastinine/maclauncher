@@ -250,7 +250,7 @@ test("Android JVM games receive the merged values of their execution engine, ANG
     filesRoot: root, cacheRoot: root, assetsRoot: root, nativeRoot: root, resourcesRoot: root, sourceApk: entry.gamePath };
   let call;
   const context = { ...fixture.context, userDataDir: root, runtimeSettings: { angleBackend: "vulkan" },
-    settings: { launcher: { translatorEnvironment: { "android-jvm": { JDK_JAVA_OPTIONS: "-Xmx4g", JAVA_TOOL_OPTIONS: "-Xss4m", HOME: "/elsewhere" },
+    settings: { launcher: { translatorEnvironment: { android: { RUNTIME_WIDE: "1" }, "android-jvm": { JDK_JAVA_OPTIONS: "-Xmx4g", JAVA_TOOL_OPTIONS: "-Xss4m", HOME: "/elsewhere" },
       angle: { ANGLE_FEATURE_OVERRIDES_ENABLED: "global", MTL_HUD_ENABLED: "1" }, moltenvk: { MVK_CONFIG_LOG_LEVEL: "3" },
       kosmickrisp: { MESA_KK_DEBUG: "msl" }, "android-art": { ART_ONLY: "1" } } } },
     getGameEffectsEnvironment: async () => ({}),
@@ -264,10 +264,11 @@ test("Android JVM games receive the merged values of their execution engine, ANG
   assert.equal(environment.ANGLE_FEATURE_OVERRIDES_ENABLED, "game"); assert.equal(environment.MTL_HUD_ENABLED, "1");
   assert.equal(environment.MVK_CONFIG_LOG_LEVEL, "3"); assert.equal(environment.MESA_KK_DEBUG, undefined);
   assert.equal(environment.ART_ONLY, undefined, "ART values apply only to the ART execution engine");
+  assert.equal(environment.RUNTIME_WIDE, "1", "MacLauncher Android's own values apply with either engine");
   assert.equal(environment.HOME, "private-home"); assert.equal(environment.KL_ANGLE_BACKEND, "vulkan");
   const main = require("../src/modules/android/main");
   assert.deepEqual(main.actions.listTranslatorEnvironments(entry, { runtimeSettings: { execution: "art", angleBackend: "metal" } }, { runtimeId: "klepton" }).translatorEnvironments,
-    ["android-art", "angle"]);
+    ["android", "android-art", "angle"]);
   assert.deepEqual(main.actions.listTranslatorEnvironments(entry, { runtimeSettings: { angleBackend: "vulkan" } }, { runtimeId: "macapk" }).translatorEnvironments,
     ["macapk", "angle", "moltenvk"]);
   assert.deepEqual(main.actions.listTranslatorEnvironments(entry, {}, { runtimeId: "aim" }).translatorEnvironments, []);

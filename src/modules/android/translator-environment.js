@@ -1,7 +1,8 @@
 // Environment variables of the Android runtimes and ANGLE, the OpenGL ES
-// implementation that they draw with. Locked names are the storage, sandbox,
-// graphics and policy values of host.js, sandbox.js, art/layout.mjs and
-// providers/macapk/index.js.
+// implementation that they draw with. "android" is MacLauncher Android's own
+// translator and applies with both execution engines. Locked names are the
+// storage, sandbox, graphics and policy values of host.js, sandbox.js,
+// art/layout.mjs and providers/macapk/index.js.
 const folders = "The launcher sets the Android system and storage folders.";
 const sandbox = [
   ...["HOME", "CFFIXED_USER_HOME", "TMPDIR", "PATH"].map(key => ({ key, reason: "The launcher sets this path inside the game's sandbox." })),
@@ -16,6 +17,10 @@ const sandbox = [
 ];
 const art = "The ART runtime starts the game from its prepared framework with its own class paths and options.";
 module.exports = [
+  { id: "android", label: "MacLauncher Android", managerIds: ["android"],
+    description: "Applies to every Android game that runs with MacLauncher Android, with either execution engine.",
+    keys: [],
+    locked: sandbox },
   { id: "android-jvm", label: "Android JVM", managerIds: ["android"],
     description: "Applies to Android games whose execution engine is JVM.",
     keys: [
