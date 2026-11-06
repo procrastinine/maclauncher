@@ -261,7 +261,7 @@ test("native VN modules launch original game paths with upstream saves and expli
       runtimeSettings: { runtimePath, version, textHook: "copy", fullscreen: true },
       spawnDetachedChecked: (...input) => { calls.push(input); return "process"; } };
     assert.equal(mod.actions.runtimeStatus(entry, {}, ctx).ready, false);
-    await assert.rejects(() => mod.launchRuntime(runtimeId, entry, ctx), /not installed/);
+    await assert.rejects(() => mod.launchRuntime(runtimeId, entry, ctx), /installation is incomplete: its version record is missing/);
     const registered = await mod.actions.registerRuntime(entry, {}, ctx);
     assert.equal(registered.version, version); assert.match(registered.sha256, /^[a-f0-9]{64}$/);
     assert.equal(mod.actions.runtimeStatus(entry, {}, ctx).ready, true);
