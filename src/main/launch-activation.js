@@ -12,10 +12,12 @@ async function followProcessActivation({ pid, notification, pidKey }, { signal }
   catch (error) { logger?.warn?.('[runtime] launch activation: ' + error.message); return { reason: 'unavailable' }; }
   if (!helper.inspect(0).active) return { reason: 'launcher-inactive' };
   return new Promise(resolve => {
-    let subscription, timer, expiry, pending = false, finished = false;
+    let subscription, expiry, activating = null, finished = false;
+    const pending = new Set(), timers = new Set();
+    const later = action => { const timer = setTimeout(() => { timers.delete(timer);action(); }, 50);timers.add(timer); };
     const stop = result => {
       if (finished) return;
-      finished = true;clearTimeout(timer);clearTimeout(expiry);
+      finished = true;for (const timer of timers) clearTimeout(timer);clearTimeout(expiry);
       signal?.removeEventListener('abort', abort);
       if (subscription != null) systemPreferences.unsubscribeNotification(subscription);
       logger?.debug?.('[runtime] initial window activation', { pid, ...result });
@@ -24,33 +26,32 @@ async function followProcessActivation({ pid, notification, pidKey }, { signal }
     const abort = () => stop({ reason: 'launch-ended' });
     const answer = async target => {
       const owned = ProcessTree.descendants(pid, await list(), Infinity);
-      if (finished || !owned.has(target) || target === pid) { pending = false;return; }
-      const started = Date.now();
+      if (finished || !owned.has(target) || target === pid) { pending.delete(target);return; }
       let yieldedAt = null;
       const activate = () => {
-        if (finished) return;
+        if (finished || activating !== null && activating !== target) return;
         const state = helper.inspect(target);
         if (state.frontmostPid === target && state.frontWindowPid === target && state.windowId)
           return stop({ reason: yieldedAt === null ? 'already-frontmost' : 'activated', target, windowId: state.windowId });
         if (yieldedAt !== null) {
           if (Date.now() - yieldedAt >= 2000) return stop({ reason: 'activation-unconfirmed', target, windowId: state.windowId });
-          timer = setTimeout(activate, 50);return;
+          later(activate);return;
         }
         if (!state.active) return stop({ reason: 'foreground-changed' });
         if (state.windowId) {
           const result = helper.yield(target);
           if (!result.yielded) return stop({ reason: 'activation-refused', target, windowId: result.windowId });
-          yieldedAt = Date.now();timer = setTimeout(activate, 50);return;
+          activating = target;
+          yieldedAt = Date.now();later(activate);return;
         }
-        if (Date.now() - started < 10000) timer = setTimeout(activate, 50);
-        else pending = false;
+        later(activate);
       };
       activate();
     };
     subscription = systemPreferences.subscribeNotification(notification, (_event, info) => {
       const target = Number(info?.[pidKey]);
-      if (finished || pending || !Number.isSafeInteger(target) || target <= 0) return;
-      pending = true;
+      if (finished || pending.has(target) || !Number.isSafeInteger(target) || target <= 0) return;
+      pending.add(target);
       void answer(target).catch(error => stop({ reason: error.message }));
     });
     signal?.addEventListener('abort', abort, { once: true });

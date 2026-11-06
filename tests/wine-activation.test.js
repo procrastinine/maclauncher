@@ -42,10 +42,11 @@ test("the host yields once to the first owned visible window and never steals fo
   notifications.post(WineActivation.NOTIFICATION, { ActivatingAppPID: 'invalid' });
   notifications.post(WineActivation.NOTIFICATION, { ActivatingAppPID: 500 });await settle();
   assert.deepEqual(yielded, []);
+  notifications.post(WineActivation.NOTIFICATION, { ActivatingAppPID: 501 });await settle();
   notifications.post(WineActivation.NOTIFICATION, { ActivatingAppPID: 502 });await settle();
   assert.deepEqual(yielded, [], 'a process without a visible top-level window is not activated');
   windows.add(502);
-  assert.deepEqual(await done, { reason: 'activated', target: 502, windowId: 123 });
+  assert.deepEqual(await done, { reason: 'activated', target: 502, windowId: 123 }, 'an earlier windowless Wine helper cannot block the actual game window');
   assert.deepEqual(yielded, [502]);assert.equal(notifications.subscriptions.size, 0);
   notifications.post(WineActivation.NOTIFICATION, { ActivatingAppPID: 502 });await settle();assert.deepEqual(yielded, [502]);
 });
