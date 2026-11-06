@@ -222,6 +222,32 @@ The installation controls in **Runtimes** download the selected version. Install
 
 Runtime status uses the same saved preferences as Play, including versions of dependencies that are selected separately, and changing a default refreshes the status of the runtimes that depend on it.
 
+### Components
+
+**Runtimes → Tools → Components**, the last subtab of the Tools entry, manages every downloaded item that has no row of its own elsewhere in **Runtimes**. Play and the inspector never open it; each item downloads by itself, after consent, when something needs it. The tab lists:
+
+- small runtime packages that other runtimes load, such as CrossOver graphics integration, the WineVulkan scene adapter, the FidelityFX API adapter, MoltenVK scene support and the Steam client bridge
+- Valve's Steam client components that the Steam client bridge loads
+- shared assets, such as the fallback fonts of KiriKiri and NScripter games and the MIDI soundfont and RPG Maker run-time packages that MKXP-Z uses
+- the GOG and Epic Games Store download helpers
+- the shared libraries that installed runtime packages declare
+- caches that MacLauncher fills, such as the runtime download cache, translator descriptions and neural model source archives
+
+Each component lists its installed items. A row names the version or content identity, the CPU architecture (**x64**, **arm64**, **universal**, or a description such as **Windows x86 + x64** for Windows files), the size on disk, the source (the host it was downloaded from, **Added manually**, or **Created by MacLauncher** for a cache) and the runtimes or games that use it. A digest identity is shortened in the row and shown in full in its tooltip. A component with no installed item reads **Not installed.** The list reads only local files; the reload button reads them again.
+
+**Delete** asks for confirmation in a native dialog. The dialog names the runtimes or games that use the item, notes that a running game keeps the files it already loaded until it quits, and states that MacLauncher asks before downloading the item again the next time something needs it; for a cache, it states that MacLauncher fills it again when needed. A shared library that installed runtimes still load cannot be deleted, and its row gives that reason; it is removed with the last runtime that uses it. Deleting the current Steam client components also clears the record that selects them, so the bridge asks to download them again. Removal renames the item to a trash name in its own folder and then deletes it without following links, so a stopped removal is finished by ordinary storage upkeep.
+
+**Add** reads a chosen file or folder and checks it against the identity MacLauncher records for that component, without network access:
+
+- A shared asset must have the recorded size and SHA-256.
+- A runtime package archive must match the SHA-256 of a release in that runtime's cached version list. A match installs that release, for the CPU its list names, through the ordinary installation. A package that declares a shared library that is not on this Mac is rejected with that library's name; installing the runtime from **Runtimes** downloads it after consent.
+- An RPG Maker run-time package installer must match the publisher installer's recorded SHA-256. When the installer reader that extracts it is not installed, MacLauncher asks before downloading the reader.
+- Valve's client archive must keep its published name, `bins_misc_ubuntu12.zip.<SHA-1>`, and its contents must match that SHA-1. An archive is not added while another archive is current.
+
+A file that does not match is rejected with a reason that names both identities, such as the chosen file's SHA-256 and the recorded one, and nothing is installed. An added item reads **Added manually** as its source.
+
+**Show in Finder** reveals the item's folder or file.
+
 ## Per-game runtime overrides
 
 A game can override its runtime's version, variant and some manager-specific choices. These overrides are stored in `games/<gameId>/game.json` under `runtimeData[<runtimeId>]`:
@@ -288,6 +314,20 @@ Catalogs declare `installable` and, optionally, `installableVersions`, `installL
 `runtime.managerUi[managerId].management` declares which download or automated build flows a manager supports. The Runtimes entries and the inspector's management links follow this metadata, while engine settings, per-game options, exact versions and backend actions remain available. A manager with several backends can also declare `sectionManagement`; ONScripter-Yuri, for example, exposes native `mac` and `web` sections. Internal helpers that have no UI are kept apart from game-runtime choices.
 
 `manifest.runtime.managerSectionOverrideKey` declares which manager section a module's per-game override selects in the inspector.
+
+### Component declarations
+
+**Runtimes → Components** lists declarations from `src/core/components.js` and from an optional `components.js` in each module folder or shared submodule folder, which `registry.listComponents()` discovers. Each file exports an array of declarations, and the first declaration of an id wins. A declaration has:
+
+- `id`, `label` and `description`
+- `list(context)`: the installed items, read from local files only
+- `remove(item, context)`, optional: deletes one item
+- `import`, optional: `{ label, kinds, extensions, run(path, context) }`, where `kinds` holds `file`, `directory` or both and `run` checks the chosen path against the recorded identity and throws a plain reason when it differs
+- `cache`, optional: `true` for data the launcher recreates
+
+An item is `{ id, version, identity, architecture, path, source, users, status, removable, removeReason }`. `source` is `{ url }`, `{ label }` or `"manual"`, `users` names the runtimes or games that load the item, and `removable: false` with `removeReason` keeps an item that is still required. The context holds `userDataDir`, `settings`, `logger`, `signal`, `runtimeAction(managerId, action, payload)`, `confirmRuntimeInstall` and `downloads`. Sizes on disk, **Show in Finder** and the file chooser are provided by the launcher.
+
+`src/modules/shared/runtime/runtime-components.js` provides the common forms: `fromRuntimeManager(manager)` lists a manager's installed versions with their CPU builds, deletes one through the manager's uninstall action and installs a matching local archive through the manager's install action; `cacheComponent` describes one cache folder; `removeOwned` deletes one item inside its store. A pinned native manager's `installRuntime` accepts `archiveFile`, a local copy of the release archive that replaces the download and must match the release's recorded SHA-256. Every runtime manager that Runtimes does not show is declared as a component.
 
 ### Pre-launch checks
 

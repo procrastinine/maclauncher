@@ -466,7 +466,7 @@ export type RuntimeManagerState = {
     componentId?: string;
     /** One introductory sentence shown above a library. */
     description?: string;
-    management?: "managed" | "built-in"; sectionManagement?: Record<string, "managed" | "built-in">; library?: "shaders" | "plugins" | "presets";
+    management?: "managed" | "built-in"; sectionManagement?: Record<string, "managed" | "built-in">; library?: "shaders" | "plugins" | "presets" | "components";
     /** Translator groups name the CPU build (x64, arm64 or universal) of every version. */
     cpuBuildLabels?: boolean; position?: "last";
     settingsContext?: { moduleId: string; runtimeId: string }; configurationFieldKeys?: string[];
@@ -474,6 +474,18 @@ export type RuntimeManagerState = {
   sections?: Array<Record<string, any>>;
   [key: string]: any;
 };
+
+/** One downloadable item in Runtimes → Components (core/component-service.js). */
+export type ComponentItem = {
+  id: string; version: string; identity: string; architecture: string | null; path: string | null;
+  bytes: number; sizeComplete: boolean; source: { url?: string | null; label?: string | null; manual?: boolean } | null;
+  users: string[]; status: string | null; removable: boolean; removeReason: string | null;
+};
+export type ComponentEntry = {
+  id: string; label: string; description: string | null; owner: string; cache: boolean; error: string | null;
+  importable: boolean; importLabel: string | null; items: ComponentItem[];
+};
+export type ComponentList = { components: ComponentEntry[]; gameRunning: boolean };
 
 export type DownloadTask = {
   id: string;
@@ -790,6 +802,8 @@ declare global {
           action: string,
           payload?: Record<string, any>
         ): Promise<any>;
+        componentAction(action: "list", payload?: Record<string, never>): Promise<ComponentList>;
+        componentAction(action: "remove" | "import" | "reveal", payload: { componentId: string; itemId?: string }): Promise<boolean>;
         moduleAction(
           gamePath: string,
           action: string,

@@ -188,8 +188,10 @@ function createRtpStore({ catalog = CATALOG, download = (file, destination, opti
     return { helper, info };
   }
 
+  // `archiveFile` is the publisher's installer added by hand in Runtimes →
+  // Components; it must match the catalog's SHA-256 and nothing is fetched.
   async function installPack(options = {}) {
-    const { userDataDir, id, version, signal, onProgress, ...helperContext } = options;
+    const { userDataDir, id, version, signal, onProgress, archiveFile, ...helperContext } = options;
     const pack = packFor(id);
     if (version && version !== pack.installVersion) throw new Error("The selected RTP download version is invalid.");
     const key = JSON.stringify([path.resolve(userDataDir), id, pack.version]);
@@ -197,6 +199,11 @@ function createRtpStore({ catalog = CATALOG, download = (file, destination, opti
     const work = (async () => {
       const existing = await resolvePack({ userDataDir, id, signal });
       if (existing) return existing;
+      // A chosen installer is checked before anything else is prepared.
+      if (archiveFile) {
+        const chosen = (await Inno.hashFile(archiveFile, { signal })).sha256;
+        if (chosen !== pack.archive.sha256) throw new Error(`The file's SHA-256 is ${chosen}; ${pack.label} ${pack.version} (${pack.archive.file}) is ${pack.archive.sha256}.`);
+      }
       const helper = await resolveHelper({ ...helperContext, userDataDir, signal, onProgress });
       const root = directory(userDataDir, pack, true), stage = path.join(root, ".stage-" + crypto.randomUUID());
       fs.mkdirSync(stage, { mode: 0o700 });
@@ -205,8 +212,9 @@ function createRtpStore({ catalog = CATALOG, download = (file, destination, opti
       const timer = setTimeout(() => controller.abort(new Error("The RTP download timed out.")), 10 * 60 * 1000); timer.unref();
       let tooLarge = false, unpublished;
       try {
-        const file = await packDownload(pack, controller.signal), archive = path.join(stage, file.name);
-        await download(file, archive, { signal: controller.signal, onProgress: progress => {
+        const file = archiveFile ? { name: pack.archive.file, url: pack.sourceUrl } : await packDownload(pack, controller.signal), archive = path.join(stage, file.name);
+        if (archiveFile) await require("../shared/copy-file").cloneOrCopy(archiveFile, archive, { signal: controller.signal });
+        else await download(file, archive, { signal: controller.signal, onProgress: progress => {
           if (progress.downloaded > LIMITS.bytes || progress.total != null && progress.total > LIMITS.bytes) { tooLarge = true; controller.abort(); }
           onProgress?.({ ...progress, phase: "downloading", label: pack.label });
         } });
@@ -214,6 +222,7 @@ function createRtpStore({ catalog = CATALOG, download = (file, destination, opti
         // The catalog's checksum identifies the known installer; a replaced
         // installer is read from its own file list and its hash is recorded.
         const archiveSha256 = (await Inno.hashFile(archive, { signal: controller.signal })).sha256, known = archiveSha256 === pack.archive.sha256;
+        if (archiveFile && !known) throw new Error(`${pack.label} changed while it was copied.`);
         onProgress?.({ phase: "extracting", label: pack.label });
         const setup = await unpackArchive(archive, path.join(stage, "installer"), pack, controller.signal);
         const { info } = await inspect(setup, pack, controller.signal, helper, known), output = path.join(stage, "output");
@@ -238,7 +247,7 @@ function createRtpStore({ catalog = CATALOG, download = (file, destination, opti
         files = files.map(file => ({ ...file, identity: Inno.identity(path.join(destination, "files", file.relative)) }));
         fs.chmodSync(destination, 0o555);
         writeJsonAtomic(path.join(root, "current.json"), { schemaVersion: 1, id, version: pack.version, archiveSha256, integrity: known ? "catalog-sha256" : "recorded-local",
-          datasetSha256, dataProfile: pack.dataProfile, sourceUrl: file.url, termsUrl: pack.termsUrl, generation, files });
+          datasetSha256, dataProfile: pack.dataProfile, sourceUrl: file.url, ...(archiveFile ? { manual: true } : {}), termsUrl: pack.termsUrl, generation, files });
         unpublished = null;
         onProgress?.({ phase: "ready", label: pack.label });
         return { id, version: pack.version, installVersion: pack.installVersion, path: path.join(destination, "files"), datasetSha256, source: "official" };

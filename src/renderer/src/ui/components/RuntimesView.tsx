@@ -31,6 +31,7 @@ import { installedRuntimeAvailability } from "../../../../core/runtime-install-a
 import { PluginLibrary } from "./PluginLibrary";
 import type { RuntimeSettingsApi } from "./RuntimeSettingsWindow";
 import { EffectsPresetManager } from "./EffectsPresetManager";
+import { ComponentsView } from "./ComponentsView";
 import { useGraphicsCatalog } from "../useGraphicsCatalog";
 import { ErrorText } from "./ErrorText";
 import { PopoverButton } from "./Popover";
@@ -161,6 +162,7 @@ export function RuntimesView({
   const shaderLibrary = activeRuntimeManager?.ui?.library === "shaders";
   const pluginLibrary = activeRuntimeManager?.ui?.library === "plugins";
   const presetLibrary = activeRuntimeManager?.ui?.library === "presets";
+  const componentLibrary = activeRuntimeManager?.ui?.library === "components";
   // The shader library and presets read the graphics catalog while shown.
   const graphicsCatalog = useGraphicsCatalog((shaderLibrary || presetLibrary) && !shaderFilters);
   const filters = shaderFilters || graphicsCatalog?.shaderLibrary || graphicsCatalog?.filters || [];
@@ -358,7 +360,7 @@ export function RuntimesView({
           {presetLibrary && activeRuntimeManager ? <div className="runtimeTabPanel" id={`runtime-panel-${activeRuntimeManager.id}`}>
             <EffectsPresetManager status={graphicsCatalog} navigationKey={navigationKey}
               selectedId={state?.utilityWindow?.managerId === activeRuntimeManager.id ? state.utilityWindow.sectionId : undefined} />
-          </div> : pluginLibrary && activeRuntimeManager ? <PluginLibrary key={activeRuntimeManager.id}
+          </div> : componentLibrary ? <ComponentsView navigationKey={navigationKey} /> : pluginLibrary && activeRuntimeManager ? <PluginLibrary key={activeRuntimeManager.id}
             manager={activeRuntimeManager} sections={activeRuntimeChoices.filter(choice => choice.managerId === activeRuntimeManager.id)}
             state={state} api={settingsApi} ui={activeRuntimeUi} downloads={downloadTasks}
             onInstall={onRuntimeInstall} onUninstall={onRuntimeUninstall} onOpenSource={onOpenSource} /> : activeRuntimeManager && activeRuntimeSection ? (

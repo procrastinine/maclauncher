@@ -187,6 +187,7 @@ contextBridge.exposeInMainWorld("MacLauncher", {
       ipcRenderer.invoke("launcher:openRuntimeSettings", payload),
     runtimeAction: (managerId, action, payload) =>
       ipcRenderer.invoke("launcher:runtimeAction", managerId, action, payload),
+    componentAction: (action, payload) => ipcRenderer.invoke("launcher:componentAction", action, payload),
     moduleAction: (gamePath, action, payload, options) =>
       ipcRenderer.invoke("launcher:moduleAction", gamePath, action, payload, options),
     cancelModuleAction: requestId => ipcRenderer.invoke("launcher:cancelModuleAction", requestId),

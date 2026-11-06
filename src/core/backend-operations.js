@@ -56,6 +56,7 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     emit("downloads", downloads.list());
   } });
   const managers = listRuntimeManagers(registry);
+  let components = null;
   const processes = new Map();
   const launching = new Map();
   const moduleActions = new Map();
@@ -317,9 +318,12 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
       if (!binding || child.pid !== pid || binding.token !== stopToken) return false;
       return requestProcessStop(child);
     },
-    async runtimeAction(managerId, action, payload) {
+    // `internal` carries backend-only inputs, such as a local archive that a
+    // Components action chose; the launcher IPC never supplies it.
+    async runtimeAction(managerId, action, payload, internal = {}) {
       const manager = managers.find(item => item.id === managerId);
       if (!manager) throw new Error("Runtime manager not found.");
+      if (internal?.archiveFile) payload = { ...payload, archiveFile: internal.archiveFile };
       // Installs, removals, registrations and refreshed catalogs change what
       // translator choices list, whether or not the action succeeds.
       try {
@@ -346,6 +350,17 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
           onStateChange: () => operations.runtimeStates(launcher.loadSettings(), [managerId])
         });
       } finally { emit("runtimeInventoryChanged", { managerId }); }
+    },
+    // Runtimes → Components: list, remove, import and reveal; see component-service.js.
+    async componentAction(action, payload) {
+      if (!["list", "remove", "import", "reveal"].includes(action)) throw new Error("Unknown component action.");
+      if (shuttingDown) throw createAbortError("Launcher is closing.");
+      components ||= require("./component-service").createComponentService({ userDataDir, registry, logger, callHost, downloads,
+        confirmRuntimeInstall: plan => callHost("confirmRuntimeInstall", plan),
+        settings: () => launcher.loadSettings(), running: getRunning,
+        runtimeAction: (managerId, runtimeActionName, data, internal) => operations.runtimeAction(managerId, runtimeActionName, data, internal) });
+      try { return await components[action](payload && typeof payload === "object" ? payload : {}); }
+      finally { if (action === "remove" || action === "import") emit("runtimeInventoryChanged", {}); }
     },
     async moduleAction(entry, action, payload, settings, options = {}) {
       if (shuttingDown) throw createAbortError("Launcher is closing.");
