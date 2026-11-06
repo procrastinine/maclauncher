@@ -790,7 +790,7 @@ test("MV selects legacy ANGLE D3D9 with WineD3D for missing Win32 sharing, prese
   const mod = composeRuntimeProviders(require("../src/modules/mv/main"), [Provider]);
   const registry = { listModules: () => [mod.manifest], getModule: () => mod, getModuleInfo: () => mod.manifest, listSharedRuntimeManagers: () => [] };
   const launcher = createLauncher({ userDataDir: path.join(directory, "data"), registry });
-  const runtimeSettings = { arguments: ["--locale=en"], translatorRenderer: "fixture-dxvk" };
+  const runtimeSettings = { environmentReference: "private", arguments: ["--locale=en"], translatorRenderer: "fixture-dxvk" };
   const context = launcher.getGameLaunchContext(entry, {}, { runtimeId: "sikarugir", runtimeSettings });
   const dxvkRoot = path.join(directory, "dxvk");
   for (const name of ["d3d9.dll", "d3d11.dll"]) library(path.join(dxvkRoot, name), ["Direct3DCreate9"]);
@@ -827,7 +827,14 @@ test("MV selects legacy ANGLE D3D9 with WineD3D for missing Win32 sharing, prese
   assert.deepEqual(await context.resolveRuntimeArguments(launch), launch.arguments, "a failed or explicit different renderer selection cannot receive the D3D9 policy flag");
   context.translatorPlan = plan;
   const selection = { settings: runtimeSettings, install, executablePath: browserPath, executableArchitecture: "x86" };
-  for (const settings of [{ ...runtimeSettings, translatorD3D9: "chosen-dxvk" }, { ...runtimeSettings, arguments: ["--disable-webgl"] }, { ...runtimeSettings, environmentReference: { kind: "sikarugir-wrapper", path: directory } }]) {
+  for (const reference of [undefined, null, "", "private"]) {
+    const settings = { ...runtimeSettings, environmentReference: reference };
+    assert.equal((await context.resolveRuntimeSettings({ ...selection, settings })).translatorD3D9, "included:d3d-renderer:wined3d");
+    assert.equal(settings.translatorD3D9, undefined);
+  }
+  const external = { kind: "sikarugir-wrapper", path: directory };
+  for (const settings of [{ ...runtimeSettings, translatorD3D9: "chosen-dxvk" }, { ...runtimeSettings, arguments: ["--disable-webgl"] },
+    { ...runtimeSettings, environmentReference: external }, { ...runtimeSettings, environmentReference: JSON.stringify(external) }]) {
     assert.deepEqual(await context.resolveRuntimeSettings({ ...selection, settings }), settings);
   }
   assert.deepEqual(await crossOver.resolveRuntimeSettings(selection), runtimeSettings);

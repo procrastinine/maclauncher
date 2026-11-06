@@ -3,6 +3,7 @@ const Arguments = require("../../runtime/launch-arguments");
 const { readPeExports } = require("../../runtime/pe-exports");
 const { readMachOLoadCommands } = require("../../runtime/macho-load-commands");
 const { wineLayout } = require("../../runtime/wine-layout");
+const { environmentReference } = require("../../runtime/wine-environment");
 
 const cache = new Map(), MAX_BYTES = 64 * 1024 * 1024;
 const names = ["vkCreateInstance", "vkGetMemoryWin32HandleKHR", "disable-d3d11", "Direct3DCreate9", "Direct3DCreate9Ex"];
@@ -75,7 +76,7 @@ function resolveRuntimeSettings(entry, context, launch) {
   const settings = launch.settings;
   // A saved per-API choice is explicit. The module supplies only the missing
   // default; it never rewrites that choice or an external wrapper's settings.
-  if (settings.translatorD3D9 || settings.environmentReference) return settings;
+  if (settings.translatorD3D9 || environmentReference(settings.environmentReference) !== null) return settings;
   const args = [...(Array.isArray(settings.arguments) ? settings.arguments : []), ...(context.gameArguments || [])];
   if (!legacyD3D9(entry, context, { ...launch, arguments: args })) return settings;
   const layout = wineLayout(launch.install), windows = launch.executableArchitecture === "x86" ? "i386-windows" : "x86_64-windows";
