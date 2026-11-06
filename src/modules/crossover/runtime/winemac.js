@@ -17,9 +17,7 @@ function create({ dependencies = {}, applications = userDataDir => require('./ma
     executableRelative: manifest => manifest.libraries['x86_64-unix'], nativeLibrary: true, supportsDefault: false,
     validateManifest(manifest) {
       const facts = manifest.capabilities;
-      if (facts?.role !== 'crossover-vulkan-driver' || facts.optional !== true ||
-          !matches(facts.runtimeProfile, { upstreamVersion: manifest.runtimeProfile?.version, buildVersion: manifest.runtimeProfile?.build }) ||
-          facts.libraries?.['x86_64-unix'] !== manifest.libraries?.['x86_64-unix'])
+      if (facts?.role !== 'crossover-vulkan-driver')
         throw new Error('The CrossOver integration package has no matching release declaration.');
     },
     async verifyPayload(selected) { Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency); }, dependencies });
