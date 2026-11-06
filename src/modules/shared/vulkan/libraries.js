@@ -118,7 +118,7 @@ async function installLoader(unpacked, loader, signal) {
 function createManager(backend, dependencies = {}) {
   const definition = definitions[backend], loader = backend === "kosmickrisp" ? loaderSource(dependencies) : null;
   const manager = createPinnedNativeManager({ id: "vulkan-" + backend, label: definition.label, sourceUrl: definition.source, sourceLabel: "Source", sourceName: definition.sourceName, sourceDescription: definition.sourceDescription,
-    nativeLibrary: true, cacheDownloads: true,
+    nativeLibrary: true,
     ...(backend === "kosmickrisp" ? { formatVersionLabel: (pin, installed) => pin ? [installed?.translator?.version, `LWJGL package ${pin.upstreamTag || pin.version}`].filter(Boolean).join(" · ") : undefined } : {}),
     inspectRuntime(options) {
       const metadata = options.runtimeInstallationMetadata;

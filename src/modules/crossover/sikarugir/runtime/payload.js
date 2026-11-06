@@ -111,7 +111,7 @@ async function hashAsync(file, signal) {
   if (stamp(before) !== stamp(fs.statSync(file))) throw new Error("Sikarugir runtime files changed during installation.");
   return hash.digest("hex");
 }
-async function preparePayload({ unpacked, pin, userDataDir, signal, logger, onProgress }, dependencies = {}) {
+async function preparePayload({ unpacked, pin, signal, logger, onProgress }, dependencies = {}) {
   throwIfAborted(signal);
   const template = pin.template;
   if (!Catalog.validateEntry(pin))
@@ -128,11 +128,9 @@ async function preparePayload({ unpacked, pin, userDataDir, signal, logger, onPr
     logger?.info?.(`[sikarugir] acquiring support ${template.version}`);
     stageProgress("Downloading support libraries…", pin.asset.bytes || 0);
     // The publisher's size and digest verify the support archive when it lists them.
-    const download = destination => Catalog.templates.download(Upstream.listedFile(template.asset), destination, { signal,
+    archiveSha256 = (await Catalog.templates.download(Upstream.listedFile(template.asset), archive, { signal,
       onProgress: progress => onProgress?.({ ...progress, downloaded: (pin.asset.bytes || 0) + progress.downloaded,
-        total: pin.downloadBytes, detail: `${pin.versionLabel} · Downloading support libraries…` }) });
-    archiveSha256 = (userDataDir ? await require("../../../shared/runtime/artifact-cache").acquire({ userDataDir, asset: template.asset, destination: archive, download, signal })
-      : await download(archive)).sha256;
+        total: pin.downloadBytes, detail: `${pin.versionLabel} · Downloading support libraries…` }) })).sha256;
     throwIfAborted(signal);
     const templateUnpacked = path.join(scratch, "unpacked"); await fs.promises.mkdir(templateUnpacked);
     stageProgress("Extracting support libraries…");

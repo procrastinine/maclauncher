@@ -194,8 +194,8 @@ test("a Valve client archive is accepted only under the name that carries its SH
 });
 
 test("a cache component deletes its folder and reports its owner", async t => {
-  const root = temporary(t), cache = Service.declarations(registry).find(item => item.id === "runtime-download-cache");
-  const folder = path.join(root, "runtimes/artifacts"); fs.mkdirSync(folder, { recursive: true }); fs.writeFileSync(path.join(folder, "a"), "x");
+  const root = temporary(t), cache = Service.declarations(registry).find(item => item.id === "translator-descriptions");
+  const folder = path.join(root, "cache/translator-descriptions"); fs.mkdirSync(folder, { recursive: true }); fs.writeFileSync(path.join(folder, "a"), "x");
   const [item] = cache.list({ userDataDir: root });
   assert.equal(cache.cache, true); assert.deepEqual(item.source, { label: "Created by MacLauncher" });
   await cache.remove(item, { userDataDir: root });

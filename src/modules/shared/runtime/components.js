@@ -35,13 +35,6 @@ module.exports = [
     remove(item, context) { return Components.removeOwned(item.path, dependencies(context)); }
   },
   Components.cacheComponent({
-    id: "runtime-download-cache",
-    label: "Runtime download cache",
-    description: "Verified release archives that graphics translators and Vulkan drivers reuse, such as one Sikarugir Template release that supplies several translators. Another installation from the same archive needs no second download.",
-    location: ({ userDataDir }) => path.join(userDataDir, "runtimes", "artifacts"),
-    users: ["Graphics translator and Vulkan driver installations"]
-  }),
-  Components.cacheComponent({
     id: "translator-descriptions",
     label: "Translator descriptions",
     description: "Facts read from installed graphics translator files, such as versions and supported Direct3D APIs. Settings read them again from the files when they are missing.",

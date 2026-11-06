@@ -231,7 +231,7 @@ Runtime status uses the same saved preferences as Play, including versions of de
 - shared assets, such as the fallback fonts of KiriKiri and NScripter games and the MIDI soundfont and RPG Maker run-time packages that MKXP-Z uses
 - the GOG and Epic Games Store download helpers
 - the shared libraries that installed runtime packages declare
-- caches that MacLauncher fills, such as the runtime download cache, translator descriptions and neural model source archives
+- caches that MacLauncher fills, such as translator descriptions and neural model source archives
 
 Each component lists its installed items. A row names the version or content identity, the CPU architecture (**x64**, **arm64**, **universal**, or a description such as **Windows x86 + x64** for Windows files), the size on disk, the source (the host it was downloaded from, **Added manually**, or **Created by MacLauncher** for a cache) and the runtimes or games that use it. A digest identity is shortened in the row and shown in full in its tooltip. A component with no installed item reads **Not installed.** The list reads only local files; the reload button reads them again.
 
