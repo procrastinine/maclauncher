@@ -183,14 +183,14 @@ function inspectManifest(runtimePath, { managerId, allowLibrary = false, verific
   }
   return null;
 }
-async function register(manager, { runtimePath, sectionId = "default", userDataDir, settings } = {}) {
+async function register(manager, { runtimePath, sectionId = "default", userDataDir, settings, confirmRuntimeInstall, logger, signal } = {}) {
   if (!isPath(runtimePath)) throw new Error("Select a runtime executable, application or directory.");
   const state = manager.getState?.({ userDataDir, settings });
   const sections = state?.sections?.length ? state.sections : [{ ...state, id: "default" }];
   if (!sections.some(section => section.id === sectionId)) throw new Error("The selected runtime list is unavailable.");
   const row = { path: runtimePath, sectionId, registeredAt: new Date().toISOString() };
   if (manager.customRuntime?.prepare) {
-    const data = await manager.customRuntime.prepare(runtimePath, { sectionId, userDataDir });
+    const data = await manager.customRuntime.prepare(runtimePath, { sectionId, userDataDir, confirmRuntimeInstall, logger, signal });
     const serialized = JSON.stringify(data);
     if (!serialized || Buffer.byteLength(serialized) > 65536) throw new Error("The custom runtime metadata exceeds its size limit.");
     row.data = JSON.parse(serialized);

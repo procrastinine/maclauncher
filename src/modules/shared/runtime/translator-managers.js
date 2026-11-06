@@ -23,7 +23,7 @@ const definitions = {
     sources: [["upstream", "vkd3d-proton", "HansKristian-Work/vkd3d-proton", null, null, { description: "vkd3d-proton releases published by HansKristian-Work/vkd3d-proton. Direct3D 12 requires the Vulkan features used by the selected release; a Vulkan version alone does not establish KosmicKrisp driver support." }]] },
   vkd3d: { label: "Wine vkd3d", groupId: "directx-vulkan", memberOrder: 4, referenceOnly: true, localOnly: true, names: [], sources: [],
     sourceName: "Wine vkd3d", sourceUrl: "https://gitlab.winehq.org/wine/vkd3d", sourceDescription: "Wine vkd3d copies included with registered Wine runtimes remain in their source runtime." },
-  d3dmetal: { label: "D3DMetal", groupId: "directx-metal", memberOrder: 1, names: ["d3dmetal", "apple_gptk", "redist"],
+  d3dmetal: { label: "D3DMetal", groupId: "directx-metal", memberOrder: 1, names: ["d3dmetal", "apple_gptk", "redist"], importLicence: "Apple Game Porting Toolkit",
     sources: [{ id: "apple", label: "Apple Game Porting Toolkit", url: "https://developer.apple.com/games/game-porting-toolkit/", delivery: "local-files", registrationLabel: "Register Game Porting Toolkit…",
       description: "Apple distributes Game Porting Toolkit. Its download may require an Apple account and licence agreement. The downloaded disk image or an extracted folder can be registered here or dropped on this card. D3DMetal is taken from the evaluation environment inside the disk image.", discover: async () => [] },
       ["template", "Sikarugir Template", "Sikarugir-App/Template", null, "d3dmetal"]] },

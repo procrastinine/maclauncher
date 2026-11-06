@@ -84,7 +84,7 @@ function configure(manager, definition) {
     return { ...data, root, source };
   };
   Custom.configure(manager, { async prepare(input, options) {
-    return prepareComponent(input, options, await prepareArchive(input, { ...options, names: definition.names }));
+    return prepareComponent(input, options, await prepareArchive(input, { ...options, names: definition.names, licence: definition.importLicence }));
   }, inspect(input, context = {}) {
     const { data, userDataDir, verification } = context;
     let root = data?.root || input;
@@ -261,19 +261,46 @@ module.exports = { componentRoot, registrationSource, description, inspected, co
 
 // A downloaded local container is unpacked once into shared launcher storage.
 // Directory registrations stay at the supplied location and remain references.
-async function prepareArchive(input, { userDataDir, names, signal } = {}) {
+async function prepareArchive(input, { userDataDir, names, signal, licence, ...consent } = {}) {
   if (!require("./release-files").archiveFormat(input)) return {};
   const sha256 = require("./pinned-native-manager").hashFile(input);
   const base = path.join(userDataDir, "runtimes", "imports"), root = path.join(base, sha256);
-  if (!fs.existsSync(root)) {
+  if (fs.existsSync(root)) { if (licence) await confirmLicence(root, licence, { userDataDir, ...consent }); }
+  else {
     fs.mkdirSync(base, { recursive: true });const staging = fs.mkdtempSync(path.join(base, ".import-"));
     try {
       if (/\.dmg$/i.test(input)) await importDmg(input, staging, names, signal);
       else await require("./safe-archive").extractArchive(input, staging);
+      if (licence) await confirmLicence(staging, licence, { userDataDir, ...consent });
       fs.renameSync(staging, root);
     } finally { fs.rmSync(staging, { recursive: true, force: true }); }
   }
   return { root, source: "custom" };
+}
+// The licence an imported container carries at its top, such as Apple's
+// License.rtf in the Game Porting Toolkit, is shown as text through the runtime
+// consent before the import is kept. Declining cancels the import. Agreement
+// is recorded by the licence file's SHA-256, so only a different licence text
+// is shown again; an agreement that cannot be recorded is asked again later.
+async function confirmLicence(directory, owner, { userDataDir, confirmRuntimeInstall, logger, run } = {}) {
+  const name = fs.readdirSync(directory).filter(item => /^licen[cs]e\b/i.test(item) && fs.statSync(path.join(directory, item)).isFile()).sort()[0];
+  if (!name) return;
+  const file = path.join(directory, name), bytes = fs.readFileSync(file), id = require("node:crypto").createHash("sha256").update(bytes).digest("hex");
+  const Json = require("../../../core/json-files"), store = path.join(userDataDir, "runtimes", "accepted-licences.json");
+  let accepted = {};
+  try { accepted = Json.readJsonObject(store)?.accepted || {}; } catch {}
+  if (accepted[id]) return;
+  let text = bytes.toString("utf8");
+  if (/\.rtf$/i.test(name)) {
+    try { text = (await (run || require("node:util").promisify(require("node:child_process").execFile))("/usr/bin/textutil",
+      ["-convert", "txt", "-stdout", file], { timeout: 30000, maxBuffer: 16 * 1024 * 1024 })).stdout; }
+    catch { text = text.replace(/\\par[d]?\b/g, "\n").replace(/\\'[0-9a-f]{2}|\\[a-z]+-?\d* ?|[{}]/gi, ""); }
+  }
+  const consent = typeof confirmRuntimeInstall === "function" ? await confirmRuntimeInstall({ kind: "licence", label: owner,
+    message: `Agree to the ${owner} licence?`, detail: text.trim(), licenseRequired: true, confirmLabel: "Agree and Import", cancelLabel: "Cancel" }) : false;
+  if (consent !== true && consent?.approved !== true) throw require("./download-utils").createAbortError(`The ${owner} import was canceled.`);
+  try { Json.writeJsonAtomic(store, { schemaVersion: 1, accepted: { ...accepted, [id]: new Date().toISOString() } }); }
+  catch (error) { (logger || console).warn?.(`[translators] The licence agreement was not recorded: ${error.message}`); }
 }
 // A disk image volume that holds the component is copied whole, with the
 // publisher's notices. A distribution volume without the component, such as
