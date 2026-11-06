@@ -2,7 +2,7 @@ const fs = require("node:fs"), path = require("node:path");
 const { promisify } = require("node:util"), execute = promisify(require("node:child_process").execFile);
 const Catalog = require("./maclauncher-builds"), Bundled = require("./bundled-native");
 const { createPinnedNativeManager, compareRuntimeVersions } = require("./pinned-native-manager");
-const { selectRuntimeVersion, managerDefaultVersion } = require("./version-choices");
+const { selectRuntimeVersion, installedRuntimeVersion, managerDefaultVersion } = require("./version-choices");
 const Custom = require("./custom-runtime");
 const Architecture = require("./architecture");
 
@@ -172,11 +172,12 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
     const { all } = includedPackages(options);
     const explicit = selectRuntimeVersion({ manual: options.version, recommended: entry?.runtimeData?.[runtimeId]?.version }).version;
     const recommendation = options.recommendedVersion ?? options.recommended;
-    const configured = selectRuntimeVersion({ manual: explicit,
+    const layer = selectRuntimeVersion({ manual: explicit,
       recommended: explicit ? null : typeof recommendation === "function" ? recommendation() : recommendation,
       defaultVersion: core.normalizeSettings(settings?.runtimes?.[projectId]).defaultVersion,
       fallback: managerDefaultVersion({ listed: core.core.listDiscoveredCatalog({ userDataDir }).filter(pin => compatible(pin) && !pin.installReason && (!options.compatible || options.compatible(pin))).map(pin => pin.version).sort(compareRuntimeVersions),
-        installed: all.filter(item => item.present && item.ready).map(item => item.version).concat(core.getState({userDataDir}).installed.filter(row => row.ready !== false).map(row => row.version)).sort(compareRuntimeVersions) }) }).version;
+        installed: all.filter(item => item.present && item.ready).map(item => item.version).concat(core.getState({userDataDir}).installed.filter(row => row.ready !== false).map(row => row.version)).sort(compareRuntimeVersions) }) });
+    const configured = layer.version;
     const published = core.core.listDiscoveredCatalog({ userDataDir }).filter(pin => pin.projectPackage && pin.asset);
     const select = selectedVersion => {
       const version = selectedVersion.trim().replace(/^v(?=\d)/i, "");
@@ -196,6 +197,20 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
       }
       return bundled && !selected.ready ? { ...selected, version, install: null, reason: bundled.error } : selected;
     };
+    if (versionCompatibility && layer.source !== "manual") {
+      let installed = all.filter(item => item.present && item.ready).concat(core.getState({userDataDir}).installed)
+        .filter(row => (!Architecture.recordArchitecture(row) || Architecture.matchesArchitecture(row, options.architecture)) &&
+          compatible(row.catalogEntry || row.declaration || row) && (!options.compatible || options.compatible(row.catalogEntry || row.declaration || row)));
+      for (;;) {
+        const local = installedRuntimeVersion({...layer, installed, compatibility: typeof versionCompatibility === "function"
+          ? (candidate, requested, row) => versionCompatibility(candidate, requested, row, entry) : versionCompatibility});
+        if (!local) break;
+        // A ready row still passes the package's own manifest/profile checks.
+        const result = select(local);
+        if (result.ready) return result;
+        installed = installed.filter(row => row.version !== local);
+      }
+    }
     if (configured) return select(configured);
     return { version: null, ready: false, install: null,
       requiresDownload: true, discoveryRequired: !published.some(compatible),

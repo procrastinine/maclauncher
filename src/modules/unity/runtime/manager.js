@@ -12,7 +12,7 @@ const Custom = require("../../shared/runtime/custom-runtime");
 function createManager({ dependencies = {} } = {}) {
   // A game runs only on its exact player version, so there is no default.
   const core = createPinnedNativeManager({
-    // Serialized assets and the Mono player target the exact Unity player version.
+    // SerializedFile metadata records the full Unity player version; launch.validateSelection rejects a different version.
     versionCompatibility: "exact",
      id: "unity", label: "Unity Mono", supportsDefault: false,
     upstream: Catalog.source, sourceUrl: Catalog.SOURCE,

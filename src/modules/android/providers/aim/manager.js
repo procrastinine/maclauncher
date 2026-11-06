@@ -3,8 +3,8 @@ const { createProjectBuildManager } = require("../../../shared/runtime/project-b
 
 function createManager(dependencies = {}) {
   return createProjectBuildManager({
-    // ART, libcore, framework and Bionic must retain a coherent guest ABI snapshot.
-    versionCompatibility: "exact",
+    // APKs do not name an AIM package release; ART/libcore/framework/Bionic stay together inside each verified package.
+    versionCompatibility: () => true,
      projectId: "android-aim", runtimeId: "aim", label: "AIM", repository: "procrastinine/maclauncher-builds", upstreamUrl: "https://github.com/procrastinine/maclauncher-android",
     manifestRelative: "manifest.json", sourceRelative: manifest => manifest.files.some(file => file.path === "source.tar.gz") ? "files/source.tar.gz" : null,
     executableRelative: "bin/aimctl", filesPrefix: "files/",

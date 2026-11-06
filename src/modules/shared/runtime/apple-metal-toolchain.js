@@ -75,8 +75,10 @@ function diskImage(directory) {
 function createManager(dependencies = {}) {
   const run = dependencies.execute || execute, runSync = dependencies.executeSync || execFileSync;
   const base = createPinnedNativeManager({
-    // The consumer declares the managed compiler/SDK contract; an incompatible compiler cannot replace it.
-    versionCompatibility: "exact",
+    // Package build numbers are preferences. A consumer can require the actual
+    // compiler API string (requirement.version), recorded at installation.
+    versionCompatibility: (_candidate, _requested, install, entry) => !entry?.moduleData?.requiredMetalCompilerVersion ||
+      versionText(install.compilerVersion || install.installationMetadata?.compilerVersion) === versionText(entry.moduleData.requiredMetalCompilerVersion),
      id: ID, label: "Metal compiler", upstreamUrl: SOURCE, sourceUrl: SOURCE, supportsDefault: true,
     discoverCatalog: async ({ signal } = {}) => { throwIfAborted(signal); return (await (dependencies.readCatalog || (() => readLocalCatalog(runSync)))()).map(componentEntry); },
     resolveExecutable: directory => path.join(toolchain(directory), "usr/bin/metal"),
@@ -129,11 +131,12 @@ function createService({ manager = createManager(), run = execute, probeSystem =
     const managed = requirement.delivery === "managed" && requirement.managerId === ID && requirement.environment === ENVIRONMENT;
     const configured = [Custom.defaultVersion(context.settings, ID), manager.normalizeSettings(context.settings?.runtimes?.[ID]).defaultVersion]
       .some(value => typeof value === "string" && value.trim() && !["auto", "latest"].includes(value.trim().toLowerCase()));
-    if (!managed || !configured) {
+    const compilerEntry = {moduleData: {requiredMetalCompilerVersion: requirement.version || null}};
+    let selected = managed ? manager.resolveSelection(compilerEntry, context.settings, context.userDataDir) : null;
+    if (!managed || !configured || !selected?.ready) {
       const present = await probeSystem(requirement, run, context.signal); if (present) return present;
     }
     if (!managed) throw new Error("The selected native tools require the system Apple Metal compiler. A compatible native-tools version supports managed compiler installation.");
-    let selected = manager.resolveSelection(null, context.settings, context.userDataDir);
     if (!selected.ready && Custom.isPath(selected.version)) throw new Error(selected.reason || "The selected custom Metal toolchain is unavailable.");
     if (!selected.ready) {
       const version = selected.version;
@@ -144,7 +147,7 @@ function createService({ manager = createManager(), run = execute, probeSystem =
       throwIfAborted(context.signal);
       context.onProgress?.({ phase: "install", label: "Installing Metal compiler…", managerId: ID, version });
       const installed = await manager.installRuntime({ ...context, version }); throwIfAborted(context.signal);
-      selected = manager.resolveSelection(null, context.settings, context.userDataDir, { version: version || installed?.version });
+      selected = manager.resolveSelection(compilerEntry, context.settings, context.userDataDir, { version: version || installed?.version });
     }
     if (!selected.ready) throw new Error(selected.reason);
     const root = selected.install.toolchainRoot || toolchain(selected.install.installDir);

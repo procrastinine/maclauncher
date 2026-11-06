@@ -6,8 +6,8 @@ const Bundled = require("../../shared/runtime/bundled-native");
 
 function createManager(dependencies = {}) {
   const base = createProjectBuildManager({
-    // Relinker and guest libkernel native interfaces require a coherent package profile.
-    versionCompatibility: "exact",
+    // PS5 executables do not name a relinker release; each ready package keeps its own libkernel/relinker closure.
+    versionCompatibility: () => true,
      projectId: "anyps5", label: "AnyPS5",
     repository: "procrastinine/maclauncher-builds", upstreamUrl: "https://github.com/boykopovar/AnyPS5",
     manifestRelative: "runtime.json", sourceRelative: "source.json", executableRelative: "tools/relinker", supportsDefault: true,

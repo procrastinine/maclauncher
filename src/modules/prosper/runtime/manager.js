@@ -6,8 +6,8 @@ const Bundled = require("../../shared/runtime/bundled-native");
 
 function createManager(dependencies = {}) {
   const manager = createProjectBuildManager({
-    // Native engine modules and shader preparation use the selected package contract.
-    versionCompatibility: "exact",
+    // Game assets do not name a Prosper package build; native modules and shader tools stay with their verified package.
+    versionCompatibility: () => true,
      projectId: "prosper", label: "Prosper",
     repository: "procrastinine/maclauncher-builds", upstreamUrl: "https://github.com/mattias800/prosper",
     manifestRelative: "runtime.json", sourceRelative: "source.json", executableRelative: "bin/prosper-app", supportsDefault: true,

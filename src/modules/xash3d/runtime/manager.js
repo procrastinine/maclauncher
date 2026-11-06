@@ -19,8 +19,8 @@ function prepareInstall({ unpacked, pin }, { arch = Architecture.targetArchitect
 
 function createManager(dependencies = {}) {
   return createPinnedNativeManager({
-    // GoldSrc client/server game libraries must match the selected engine build ABI.
-    versionCompatibility: "exact",
+    // GoldSrc inputs do not record a launcher package version; existing game-library/API checks still apply.
+    versionCompatibility: () => true,
      id: "xash3d-fwgs", label: "Xash3D FWGS", sourceUrl: Catalog.SOURCE_URL,
     upstream: Catalog.source, resolveExecutable, prepareInstall, dependencies });
 }

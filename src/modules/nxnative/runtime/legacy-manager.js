@@ -6,8 +6,8 @@ const Bundled = require("../../shared/runtime/bundled-native");
 
 function createManager(dependencies = {}, { projectId = "nxnative" } = {}) {
   const base = createProjectBuildManager({
-    // Guest runtime, relinker and native library interfaces are packaged as one ABI profile.
-    versionCompatibility: "exact",
+    // Switch programs do not name a launcher build; the package keeps its relinker/guest libraries together.
+    versionCompatibility: () => true,
      projectId, label: "nxnative", repository: "procrastinine/maclauncher-builds",
     upstreamUrl: "https://github.com/seedds/nxnative", manifestRelative: "manifest.json", sourceRelative: "source.json",
     executableRelative: "bin/nxnative", supportsDefault: true,

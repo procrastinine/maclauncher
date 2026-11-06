@@ -8,8 +8,8 @@ const Architecture = require("./architecture");
 
 function createManager(dependencies = {}) {
   const manager = createProjectBuildManager({
-    // Managed decrypter packages declare the required tool ABI and native closure.
-    versionCompatibility: "exact",
+    // The caller uses toolABI1, checked by validateManifest; another package version with that contract is usable.
+    versionCompatibility: () => true,
      projectId: "rpgmaker-decrypter", label: "RPGMakerDecrypter",
     repository: "procrastinine/maclauncher-builds", manifestRelative: "manifest.json", sourceRelative: null,
     executableRelative: "files/bin/RPGMakerDecrypter-cli", supportsDefault: true,

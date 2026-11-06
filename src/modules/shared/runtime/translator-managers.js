@@ -110,6 +110,20 @@ function catalogSource([id, label, repository, filter, component, presentation =
     filterEntry: pin => !pin.asset?.filename || !filter || filter(pin.asset.filename),
     ...presentation, discover: async options => upstreamPins(await upstream.discover(options)) };
 }
+// Catalog keys include source/asset names; compatibility follows the actual
+// translator release, never the leading digits of a Template package version.
+function compatibleTranslatorVersion(requested, candidate, install = {}) {
+  if (!requested || !candidate) return false;
+  if (requested.catalogSourceId !== candidate.catalogSourceId || requested.component !== candidate.component ||
+      requested.translatorEngine !== candidate.translatorEngine) return false;
+  const major = version => /^v?(\d+)(?:\.|$)/.exec(String(version || ""))?.[1];
+  const requestedMajor = major(catalogVersion(requested));
+  // A Template preference identifies a folder/variant, not a component major.
+  if (requestedMajor == null) return Boolean(templateName(requested));
+  const actual = install.translator?.version || install.installationMetadata?.translator?.version || catalogVersion(candidate);
+  return major(actual) === requestedMajor;
+}
+
 function createManager(engine, { dependencies = {} } = {}) {
   const definition = { ...definitions[engine], engine }, catalogSources = definition.sources.map(source => typeof source.discover === "function" ? source : catalogSource(source, definition.label));
   const downloadSource = catalogSources.find(source => source.delivery !== "local-files");
@@ -119,7 +133,9 @@ function createManager(engine, { dependencies = {} } = {}) {
       optionsRuntimeForms: declared.optionsRuntimeForms } : source;
   };
   const manager = createPinnedNativeManager({
-    versionCompatibility: "exact", // Translator variants encode Wine layout, Direct3D coverage and host-driver feature requirements.
+    // Within a source/component variant, translator releases share their major API family.
+    versionCompatibility: (candidate, requested, install) => candidate === requested || compatibleTranslatorVersion(
+      manager.core.catalog.find(pin => pin.version === requested), install.catalogEntry || manager.core.catalog.find(pin => pin.version === candidate), install),
     id: engine === "dxmt" ? "sikarugir-graphics-bridge" : "translator-" + engine,
     formerIds: engine === "dxmt" ? ["crossover-graphics-bridge"] : [], label: definition.label,
     upstreamUrl: definition.upstreamUrl, upstreamLabel: definition.upstreamLabel,
@@ -178,4 +194,4 @@ function createManager(engine, { dependencies = {} } = {}) {
   return Component.withIncludedReferences(definition.referenceOnly ? manager : Component.configure(manager, {
     ...definition, catalogDescription: pin => catalogDescription(pin, installedSource(pin)) }));
 }
-module.exports = { definitions, catalogSource, createManager, assetName, templateName, catalogVersion, catalogDescription, versionLabel };
+module.exports = { definitions, catalogSource, createManager, compatibleTranslatorVersion, assetName, templateName, catalogVersion, catalogDescription, versionLabel };

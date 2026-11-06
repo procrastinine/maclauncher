@@ -3,8 +3,8 @@ const { createProjectBuildManager } = require("../shared/runtime/project-build-m
 
 function createManager(dependencies = {}) {
   return createProjectBuildManager({
-    // Framework, VM and native adaptation form one selected Android API/profile snapshot.
-    versionCompatibility: "exact",
+    // APKs do not name a launcher package version; the Java21/native-load-target profile is checked by validateManifest.
+    versionCompatibility: () => true,
      projectId: "android", runtimeId: "klepton", label: "MacLauncher Android", repository: "procrastinine/maclauncher-builds", upstreamUrl: "https://github.com/procrastinine/maclauncher-android",
     manifestRelative: "runtime.json", sourceRelative: manifest => manifest.files.some(file => file.path === "source.tar.gz") ? "source.tar.gz" : null,
     executableRelative: "native/libklepton-jvm.dylib", nativeLibrary: true,

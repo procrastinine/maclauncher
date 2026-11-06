@@ -7,8 +7,8 @@ const Architecture = require("../../shared/runtime/architecture");
 
 function createManager({ dependencies = {} } = {}) {
   const base = createPinnedNativeManager({
-    // Guest execution and translated helper interfaces require their matching runtime profile.
-    versionCompatibility: "exact",
+    // Guest programs do not name a mac32 release; each ready package retains its guest/helper interfaces together.
+    versionCompatibility: () => true,
      id: "mac32", label: "mac32", sourceUrl: Catalog.SOURCE_URL,
     upstream: Catalog.source,
     resolveExecutable: root => {

@@ -26,8 +26,8 @@ function verifyProjector(selected) {
 
 function createManager({ dependencies = {} } = {}) {
   const manager = createProjectBuildManager({
-    // The selected Adobe projector and its supported native host profile are a fixed package.
-    versionCompatibility: "exact",
+    // SWF data does not name the projector build; each ready projector retains its checked native host profile.
+    versionCompatibility: () => true,
     projectId: ID, runtimeId: "projector", label: "Adobe Flash Player", repository: "procrastinine/maclauncher-builds", upstreamUrl: "https://www.adobe.com/products/flashplayer/end-of-life.html", upstreamLabel: "Adobe Flash Player", manifestRelative: "manifest.json",
     sourceRelative: null, filesPrefix: "files/", executableRelative: EXECUTABLE_RELATIVE,
     supportsDefault: true, dependencies,

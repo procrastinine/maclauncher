@@ -68,8 +68,8 @@ async function verifyPolicy(contents, { signal, run = execute } = {}) {
 }
 function createManager({ dependencies = {} } = {}) {
   return createPinnedNativeManager({
-    // The Mac.apk launcher and its selected native environment use a matching package contract.
-    versionCompatibility: "exact",
+    // APKs do not link a Mac.apk release; the ready package supplies its complete native environment.
+    versionCompatibility: () => true,
      id: "macapk", label: "Mac.apk",
     sourceUrl: Catalog.SOURCE_URL, upstream: Catalog.source,
     resolveExecutable, dependencies,

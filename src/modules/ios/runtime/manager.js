@@ -57,8 +57,8 @@ function inspectPlayTools(unpacked) {
 function createManager({ dependencies = {} } = {}) {
   // Keep the persisted manager ID and version selections from earlier releases.
   const manager = createPinnedNativeManager({
-    // The injected iOS environment and PlayCover library must retain a matching native ABI.
-    versionCompatibility: "exact",
+    // An iOS app does not name a PlayCover release; its native environment is verified as a complete package.
+    versionCompatibility: () => true,
      id: "playcover", label: "PlayCover", nativeLibrary: true,
   sourceUrl: Catalog.SOURCE_URL, upstream: Catalog.source,
   dependencies: { extractArchive, ...dependencies }, resolveExecutable: root => path.join(root, "PlayTools.framework/PlayTools"),

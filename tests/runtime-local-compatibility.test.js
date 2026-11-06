@@ -49,6 +49,17 @@ const policies = [
   ['OpenGMK', 'gamemaker/runtime/opengmk'], ['MKXP-Z/RGSS', 'rgss/runtime/mkxpz-manager'],
   ['NW.js', 'shared/web/runtime/nwjs-manager'], ['LÖVE', 'love/runtime/love-runtime-manager'],
   ['Java', 'java/runtime/java-runtime-manager'],
+  ["Xash3D", "xash3d/runtime/manager"],
+  ["mac32", "mac32/runtime/manager"],
+  ["PlayCover", "ios/runtime/manager"],
+  ["RPGMakerDecrypter", "shared/runtime/decrypter-manager"],
+  ["AnyPS5", "anyps5/runtime/manager"],
+  ["Prosper", "prosper/runtime/manager"],
+  ["RLVM adapter", "siglus/runtime/rlvm-adapter-manager"],
+  ["Adobe projector", "flash/runtime/projector-manager"],
+  ["Android", "android/runtime-manager"],
+  ["AIM", "android/providers/aim/manager"],
+  ["Mac.apk", "android/providers/macapk/manager"],
   ["mpv", "video/runtime/manager"],
   ["GemRB", "gemrb/runtime/manager"],
   ["Ikemen", "ikemen/runtime/manager"],
@@ -110,12 +121,9 @@ test('Kirikiri and GameMaker retain module-owned feature/resource compatibility'
   assert.equal(installedRuntimeVersion({version:'2024.9.0.1', source:'recommended', installed:[{version:'2023.1.0.1'},{version:'2024.3.0.1'}], compatibility}), '2024.3.0.1');
 });
 
-test('graphics driver/translator packages retain exact consumer contracts', () => {
-  const translator = require('../src/modules/shared/runtime/translator-managers').createManager('dxvk');
-  const driver = require('../src/modules/shared/vulkan/libraries').managers[0];
-  for (const manager of [translator, driver]) {
-    assert.equal(manager.versionCompatibility, 'exact');
-    assert.equal(installedRuntimeVersion({version:'2.0',source:'default',installed:[{version:'1.0',ready:true}],compatibility:manager.versionCompatibility}), null);
+test('Vulkan driver ids accept another ready installed version without a package-version gate', () => {
+  for (const driver of require('../src/modules/shared/vulkan/libraries').managers) {
+    assert.equal(installedRuntimeVersion({version:'2.0',source:'default',installed:[{version:'1.0',ready:true}],compatibility:driver.versionCompatibility}), '1.0');
   }
 });
 
@@ -154,13 +162,13 @@ test('Java actual resolver reuses a local patch within its JVM line and preserve
   assert.equal(Java.__test.resolveInstalledRuntime({...options,runtimeData:{version:'21.0.3+9'}}), null);
 });
 
-for (const location of ['unity/runtime/manager','xash3d/runtime/manager','mac32/runtime/manager','ios/runtime/manager',
-  'shared/runtime/decrypter-manager','anyps5/runtime/manager','prosper/runtime/manager','siglus/runtime/rlvm-adapter-manager'])
-  test(`${location}: a different installed package cannot satisfy its declared native contract`, () => {
-    const manager = require('../src/modules/' + location);
-    assert.equal(manager.versionCompatibility, 'exact');
-    assert.equal(installedRuntimeVersion({version:'2.0',source:'default',installed:[{version:'1.0',ready:true}],compatibility:manager.versionCompatibility}), null);
-  });
+test('Unity keeps the full serialized player version exact', () => {
+  const manager = require('../src/modules/unity/runtime/manager');
+  assert.equal(manager.versionCompatibility, 'exact');
+  assert.throws(() => require('../src/modules/unity/launch').validateSelection({detectedVersion:'2021.3.4'},
+    {ready:true,version:'2021.3.3',profile:{templatePath:'/fixture/player'}}), /different version/);
+  assert.equal(installedRuntimeVersion({version:'2021.3.4',source:'recommended',installed:[{version:'2021.3.3',ready:true}],compatibility:manager.versionCompatibility}), null);
+});
 
 test('AliceSoft interpreter generations reuse local copies without crossing manager generations', () => {
   const managers = require('../src/modules/alicesoft/main').runtimeManagers.filter(manager => ['system3','xsystem35','xsystem4'].includes(manager.id));
@@ -168,12 +176,11 @@ test('AliceSoft interpreter generations reuse local copies without crossing mana
   for (const manager of managers) assert.equal(installedRuntimeVersion({version:'2.0',source:'default',installed:[{version:'1.0',ready:true}],compatibility:manager.versionCompatibility}), '1.0');
 });
 
-test('NX and Impacto retain exact guest/profile ABI packages', () => {
+test('NX and Impacto reuse installed package versions while retaining their own profile checks', () => {
   const nx = require('../src/modules/nxnative/runtime/legacy-manager').createManager();
   const impacto = require('../src/modules/mages/native/manager').createManager();
   for (const manager of [nx, impacto]) {
-    assert.equal(manager.versionCompatibility, 'exact');
-    assert.equal(installedRuntimeVersion({version:'2.0',source:'recommended',installed:[{version:'1.0',ready:true}],compatibility:manager.versionCompatibility}), null);
+    assert.equal(installedRuntimeVersion({version:'2.0',source:'recommended',installed:[{version:'1.0',ready:true}],compatibility:manager.versionCompatibility}), '1.0');
   }
 });
 
@@ -197,9 +204,9 @@ test('Greenworks explicit host remains tied to its exact bridge ABI', t => {
   assert.equal(config.version,requested);
 });
 
-test('managed Vulkan package declares its feature contract exact', () => {
+test('managed Vulkan accepts versions within the same driver project', () => {
   const Managed = require('../src/modules/shared/vulkan/managed');
-  assert.equal(Managed.manager.versionCompatibility,'exact');
+  assert.equal(installedRuntimeVersion({version:'27.1',source:'default',installed:[{version:'27.0',ready:true}],compatibility:Managed.manager.versionCompatibility}), '27.0');
 });
 
 for (const location of ['ai5/runtime/manager','nscripter/runtime/onscripter-en-manager','flash/runtime/ruffle-runtime-manager'])
@@ -208,13 +215,15 @@ for (const location of ['ai5/runtime/manager','nscripter/runtime/onscripter-en-m
     assert.equal(installedRuntimeVersion({version:'2.0',source:'recommended',installed:[{version:'1.0',ready:true}],compatibility:manager.versionCompatibility}), '1.0');
     assert.equal(installedRuntimeVersion({version:'2.0',source:'manual',installed:[{version:'1.0',ready:true}],compatibility:manager.versionCompatibility}), null);
   });
-for (const location of ['flash/runtime/projector-manager','android/runtime-manager','android/providers/aim/manager',
-  'android/providers/macapk/manager','shared/runtime/apple-metal-toolchain'])
-  test(`${location}: the selected native/framework/compiler profile stays exact`, () => {
-    const module = require('../src/modules/' + location), manager = module.versionCompatibility ? module : module.createManager();
-    assert.equal(manager.versionCompatibility,'exact');
-    assert.equal(installedRuntimeVersion({version:'2.0',source:'default',installed:[{version:'1.0',ready:true}],compatibility:manager.versionCompatibility}), null);
-  });
+test('Metal toolchain build numbers are preferences; a recorded compiler API need filters actual compiler metadata', () => {
+  const manager = require('../src/modules/shared/runtime/apple-metal-toolchain').createManager();
+  const installed = [{version:'18A',installationMetadata:{compilerVersion:'32023.1'}}, {version:'17A',installationMetadata:{compilerVersion:'31001.2'}}];
+  assert.equal(installedRuntimeVersion({version:'missing-build',source:'default',installed,compatibility:manager.versionCompatibility}), '18A');
+  const entry = {moduleData:{requiredMetalCompilerVersion:'Apple metal version 31001.2'}};
+  const compatibility = (candidate, requested, row) => manager.versionCompatibility(candidate, requested, row, entry);
+  assert.equal(installedRuntimeVersion({version:'missing-build',source:'default',installed,compatibility}), '17A');
+  assert.equal(installedRuntimeVersion({version:'18A',source:'manual',installed:installed.filter(row=>row.version==='17A'),compatibility}), null);
+});
 
 test('Browser Woditor selects the same ready local preference for Play and status', t => {
   const Manager = require('../src/modules/wolfrpg/runtime/manager'), root = temporary(t);
@@ -237,4 +246,80 @@ test('Ruffle actual Play selection uses a compatible installed interpreter befor
   assert.equal(await Flash.ensureRuntime({runtimeId:'ruffle'},context),null);
   const plan = await Flash.ensureRuntime({runtimeId:'ruffle',runtimeData:{ruffle:{version:'2026.2.1'}}},context);
   assert.ok(plan,'A manual absent runtime still requests preparation');
+});
+
+test('translator variants reuse a local release of the same major, not another variant or major', t => {
+  const {compatibleTranslatorVersion} = require('../src/modules/shared/runtime/translator-managers');
+  const root = temporary(t), id = 'translator-policy';
+  const pin = (version, variant, release) => ({version, catalogSourceId:variant, releaseVersion:release,upstreamRevision:version});
+  const requested = pin('async-dxvk-2.5','async','2.5');
+  const candidates = [pin('async-dxvk-2.3','async','2.3'),pin('async-dxvk-3.0','async','3.0'),pin('upstream-dxvk-2.5','upstream','2.5')];
+  const catalog = [requested,...candidates];
+  require('../src/modules/shared/runtime/runtime-catalog').writeRuntimeCatalog({userDataDir:root,managerId:id,entries:catalog});
+  const manager = createPinnedNativeManager({id,label:'Translator fixture',
+    versionCompatibility:(candidate, wanted, row) => candidate===wanted || compatibleTranslatorVersion(catalog.find(pin=>pin.version===wanted),row.catalogEntry),
+    discoverCatalog:()=>assert.fail('Local variants stay offline'),
+    inspectRuntime:({runtimePath})=>({executablePath:runtimePath,architectures:['arm64','x86_64'],ready:true})});
+  for(const pin of candidates){const runtimePath=path.join(root,pin.version);fs.writeFileSync(runtimePath,'native fixture');manager.core.registerLocal({userDataDir:root,version:pin.version,runtimePath});}
+  const selected=manager.resolveSelection({}, {}, root, {recommendedVersion:requested.version});
+  assert.equal(selected.version,'async-dxvk-2.3');assert.equal(selected.ready,true);
+  assert.equal(manager.resolveSelection({}, {}, root, {version:requested.version}).ready,false);
+  assert.equal(compatibleTranslatorVersion(requested,candidates[1]),false);
+  assert.equal(compatibleTranslatorVersion(requested,candidates[2]),false);
+});
+
+test('Vulkan local resolution stays inside its driver id and preserves a recorded capability predicate', t => {
+  const root=temporary(t), policy=require('../src/modules/shared/vulkan/libraries').managers[0].versionCompatibility;
+  const make=id=>createPinnedNativeManager({id,label:id,versionCompatibility:policy,discoverCatalog:()=>assert.fail('No discovery'),
+    inspectRuntime:({runtimePath})=>({executablePath:runtimePath,architectures:['arm64','x86_64'],ready:true})});
+  const first=make('driver-first'),other=make('driver-other');
+  const runtimePath=path.join(root,'driver');fs.writeFileSync(runtimePath,'driver fixture');
+  other.core.registerLocal({userDataDir:root,version:'9.0',runtimePath});
+  assert.equal(first.resolveSelection({}, {}, root, {recommendedVersion:'2.0'}).ready,false,'Another driver cannot satisfy the request');
+  first.core.registerLocal({userDataDir:root,version:'1.0',runtimePath});
+  assert.equal(first.resolveSelection({}, {}, root, {recommendedVersion:'2.0'}).version,'1.0');
+  assert.equal(first.resolveSelection({}, {}, root, {recommendedVersion:'2.0',compatible:pin=>pin.capabilities?.requiredExtension===true}).ready,false);
+});
+
+test('managed projects reuse a complete ready local package before consent, while manual and capability requests stay strict', async t => {
+  const {createProjectBuildManager}=require('../src/modules/shared/runtime/project-build-manager');
+  const crypto=require('node:crypto'), hash=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
+  const root=temporary(t), projectId='local-project', arch=process.arch==='x64'?'x64':'arm64';
+  const build=(version,capable=true)=>{
+    const directory=path.join(root,version);fs.mkdirSync(directory);
+    const binary=require('./fixtures/macho-image').image({cpu:arch==='x64'?0x01000007:0x0100000c});
+    fs.writeFileSync(path.join(directory,'native'),binary,{mode:0o755});
+    const manifest={schemaVersion:1,id:projectId,version,minimumMacOS:'13.0',files:[{path:'native',size:binary.length,mode:0o755,sha256:hash(binary),architectures:[arch==='x64'?'x86_64':'arm64']}]};
+    const bytes=Buffer.from(JSON.stringify(manifest));fs.writeFileSync(path.join(directory,'manifest.json'),bytes,{mode:0o644});
+    return {root:directory,record:{id:projectId,version,arch,minimumMacOS:'13.0',launcherArchitectures:[arch],manifestRelative:'manifest.json',manifestSha256:hash(bytes),capabilities:{needed:capable}}};
+  };
+  const old=build('1.0'), newest=build('2.0');
+  const manager=createProjectBuildManager({projectId,label:'Local project',repository:'ExampleOwner/builds',versionCompatibility:()=>true,
+    included:()=>old,retainedIncluded:()=>[newest],manifestRelative:'manifest.json',sourceRelative:null,executableRelative:'native',
+    dependencies:{systemVersionSync:()=> '26.0'}});
+  const settings={runtimes:{[projectId]:{defaultVersion:'3.0'}}};
+  assert.equal(manager.resolveSelection({},settings,root).version,'2.0');
+  assert.equal(manager.resolveSelection({runtimeData:{[projectId]:{version:'3.0'}}},settings,root).ready,false);
+  const capability=pin=>(pin.projectPackage||pin).capabilities?.needed===true;
+  assert.equal(manager.resolveSelection({},settings,root,{compatible:capability}).ready,true);
+  assert.equal(manager.resolveSelection({},settings,root,{compatible:()=>false}).ready,false);
+  await prepareForLaunch({entry:{runtimeId:projectId},mod:{},info:{runtime:{manager:{[projectId]:projectId}}},
+    context:{settings,userDataDir:root,runtimeId:projectId,confirmRuntimeInstall:()=>assert.fail('Ready managed package must not ask')},
+    registry:{listModuleIds:()=>['fixture'],getModule:()=>({runtimeManagers:[manager]})},install:()=>assert.fail('Must not install')});
+});
+
+test('Metal compiler API selection chooses another usable local build before consent', async t => {
+  const Metal=require('../src/modules/shared/runtime/apple-metal-toolchain'), real=Metal.createManager();
+  const installed=[{version:'18A',ready:true,toolchainRoot:'/fixture/metal',installationMetadata:{compilerVersion:'32023.1'}},
+    {version:'17A',ready:true,toolchainRoot:'/fixture/metal',installationMetadata:{compilerVersion:'31001.2'}}];
+  const manager={id:Metal.ID,normalizeSettings:()=>({defaultVersion:'missing-build'}),
+    resolveSelection(entry){const version=installedRuntimeVersion({version:'missing-build',source:'default',installed,
+      compatibility:(candidate,requested,row)=>real.versionCompatibility(candidate,requested,row,entry)});
+      return {version,ready:Boolean(version),install:installed.find(row=>row.version===version)};}};
+  let identityChecks=0;
+  const service=Metal.createService({manager,probeSystem:()=>assert.fail('An installed matching managed compiler exists'),
+    run:async (_file,args)=>{identityChecks++;return {stdout:args.includes('--version')?'Apple metal version 31001.2\n':''};}});
+  const selected=await service.ensure({settings:{runtimes:{[Metal.ID]:{defaultVersion:'missing-build'}}},confirmRuntimeInstall:()=>assert.fail('No compiler download')},
+    {required:true,delivery:'managed',managerId:Metal.ID,environment:Metal.ENVIRONMENT,version:'31001.2'});
+  assert.equal(selected.version,'17A');assert.ok(identityChecks>0);
 });

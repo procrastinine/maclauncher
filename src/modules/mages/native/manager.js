@@ -18,8 +18,8 @@ function createManager({ resourceRoot, dependencies = {} } = {}) {
   const bundledRuntime = createBundledNativeRuntime({ managerId: "impacto", resourceRoot,
     ...(dependencies.bundled ? { dependencies: dependencies.bundled } : {}) });
   const manager = createPinnedNativeManager({
-    // The Impacto game profile and engine feature requirements identify the package.
-    versionCompatibility: "exact",
+    // Game profile checksums, not the Impacto package version, select the Lua adapter profile via profileFor.
+    versionCompatibility: () => true,
      id: "impacto", label: "Impacto", maxEntries: 1000,
     projectBuilds: { projectId: "impacto", repository: "procrastinine/maclauncher-builds" },
     sourceUrl: SOURCE_URL, legacyInstalledRuntime: bundledRuntime, resolveExecutable: root => path.join(root, "Impacto.app", "Contents", "MacOS", "Impacto") });

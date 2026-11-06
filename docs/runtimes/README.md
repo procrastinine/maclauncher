@@ -122,7 +122,8 @@ A manual per-game version stays exact. Recommended versions and saved runtime de
 | HashLink | Compatible bytecode and native primitive profile |
 | GameMaker | Compatible WAD/resource layout or Classic interpreter; required runner capabilities remain checked |
 | FNA and KiriKiri | Verified runtime profile and required game APIs/resources |
-| Vulkan drivers and graphics translators | Selected package's native ABI, API coverage and feature requirements |
+| Vulkan drivers | Any ready installed version of the same driver; recorded capability requirements remain checked |
+| Graphics translators | Same variant and major component version; Template folder preferences keep their variant without guessing a component version from the Template release |
 
 A manual per-game version is never replaced with a different version. When it cannot be installed or is incompatible, Play instead reports the specific reason, such as a required engine ABI, CPU architecture or macOS version.
 

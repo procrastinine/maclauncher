@@ -12,7 +12,7 @@ const selectionId = "kosmickrisp:maclauncher";
 const prefix = projectId + ":";
 
 function createManager(dependencies = {}) {
-  const manager = createProjectBuildManager({ projectId, formerIds, versionCompatibility: "exact", // Managed driver capabilities and consumer ABI identify the required package.
+  const manager = createProjectBuildManager({ projectId, formerIds, versionCompatibility: () => true, // Vulkan versions of this managed driver project are interchangeable; consumers check required capabilities.
     label: "MacLauncher KosmicKrisp", repository, sourceLabel: "Source", upstreamUrl: "https://gitlab.freedesktop.org/mesa/mesa", nativeLibrary: true,
     manifestRelative: "manifest.json", sourceRelative: null, filesPrefix: "files/",
     executableRelative: manifest => manifest.executableRelative,

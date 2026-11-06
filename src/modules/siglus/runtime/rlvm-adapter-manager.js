@@ -16,8 +16,8 @@ function verifyInstall(install) {
 }
 function createManager(dependencies = {}) {
   const manager = createProjectBuildManager({
-    // The adapter must pair with its declared RLVM native ABI.
-    versionCompatibility: "exact",
+    // The consumer uses adapterABI1, checked by validateManifest; package build numbers do not change that contract.
+    versionCompatibility: () => true,
      projectId: "rlvm-adapter", label: "RLVM adapter", repository: "procrastinine/maclauncher-builds",
     manifestRelative: "manifest.json", sourceRelative: null, filesPrefix: "files/", executableRelative: "rlvm-adapter.dylib", nativeLibrary: true,
     validateManifest(manifest) {
