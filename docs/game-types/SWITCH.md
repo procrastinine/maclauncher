@@ -1,14 +1,18 @@
 # Nintendo Switch
 
-This game type covers Switch game containers and extracted Switch programs. Its runtime, [nxnative](https://github.com/seedds/nxnative), runs the game's ARM64 code in a native Apple Silicon host with Metal graphics. Extracted programs that cannot be played remain available for inspection.
+This game type covers Switch game containers, decrypted Switch and Switch 2 dumps, and extracted Switch programs. Its runtime, [nxnative](https://github.com/seedds/nxnative), runs the game's ARM64 code in a native Apple Silicon host with Metal graphics. Extracted programs that cannot be played remain available for inspection.
 
 ## Accepted inputs
 
 Import accepts NSP, NSZ, XCI and XCZ containers, as well as a folder holding an application's containers. MacLauncher identifies each container from its header and directory tables, reading only a limited part of the file, and detection neither extracts game data nor reads key contents.
 
-Other Switch formats are recognized for inspection only: extracted ExeFS/RomFS applications, standalone NSO and NRO modules, and HFS0 partitions. These use the **Inspect only** runtime, which does not launch anything. Playback preparation, by contrast, needs an application container.
+NUP containers and decrypted dumps also support Play without prod.keys. A dump contains base/exefs/main.npdm and base/romfs, exefs and romfs directly at its root, or complete updates/<decimal version>/exefs and romfs. Optional DLC lives under dlc/<title ID>/<number>/romfs. Updates contain full patched filesystems. A NUP holds the same decrypted content in one container. A folder containing one NUP is accepted; folders mixing NUP, dumps and encrypted packages require an explicit input selection.
+
+Other Switch formats are recognized for inspection only: extracted ExeFS/RomFS applications, standalone NSO and NRO modules, and HFS0 partitions. These use the **Inspect only** runtime, which does not launch anything. Standalone code and incomplete extracted applications remain inspection inputs.
 
 ## Keys
+
+NUP and decrypted dump preparation bypasses key files. No firmware installation is required for that route. Runtime packages contain neither keys, firmware nor game data.
 
 Encrypted input needs a `prod.keys` file, whose path is held by the **prod.keys** setting in the nxnative runtime settings:
 
@@ -65,6 +69,8 @@ To launch, Play builds a private Mac application named after the game. This appl
 During the first preparation, progress follows the upstream stages, with work counts and, when available, the estimated time remaining. Estimated totals are marked with `~`, while stages without a usable count or fraction show indeterminate progress. Stage summaries and diagnostic messages are in the progress detail. After a runtime update, preparation reuses the input's private workspace, and upstream stage fingerprints decide which extraction, code and shader data can be reused.
 
 #### Game options
+
+Decrypted inputs offer **Game update** before preparation. **Latest available** selects the newest local package; another available version can be selected per game. The inspector records the selected version. Changing it prepares that version while preserving saves.
 
 For each game, nxnative offers its own game, control and performance options. After preparation, these appear in the game's runtime settings as choices generated from upstream `launcher.json`. They are stored in the game's `org.nxnative.<title ID>` preferences domain, which upstream Mac applications also use, and only values that differ from nxnative's defaults are kept there. Reset removes them. Because saved values are checked against the current generated schema, retired options fall back to the new defaults.
 

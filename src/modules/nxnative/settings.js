@@ -90,25 +90,41 @@ function currentFile(entry, context) {
   catch (error) { if (error.code === "ENOENT") return null;throw error; }
   return path.join(prepared, "launcher.json");
 }
+function packageSettings(entry) {
+  const versions = entry.moduleData?.versions || [];
+  if (!versions.length || entry.moduleData?.keyRequirement !== "none") return { fields: [], values: {} };
+  return { fields: [{ key: "packageVersion", type: "select", label: "Game update", options: [{ value: "latest", label: "Latest available" }, ...versions.map(value => ({ value, label: value === "v0" ? "Base game (v0)" : value }))] }],
+    values: { packageVersion: entry.runtimeSettings?.nxnative?.packageVersion || "latest" } };
+}
+function withPackage(entry, result) {
+  const packages = packageSettings(entry);
+  return { ...result, schema: { ...result.schema, fields: [...packages.fields, ...result.schema.fields] }, values: { ...packages.values, ...result.values } };
+}
 async function read(entry, _payload, context, dependencies = {}) {
   const file = currentFile(entry, context), definition = schemaFor(file && readSchema(file));
-  if (!definition) return { schema: { fields: [] }, values: {}, message: "Game settings appear after preparation." };
+  if (!definition) return withPackage(entry, { schema: { fields: [] }, values: {}, message: "Game settings appear after preparation." });
   const saved = await (dependencies.preferences || preferences)({ domain: "org.nxnative." + definition.game, signal: context.signal });
-  return { schema: definition.schema, values: valuesFor(definition, saved) };
+  return withPackage(entry, { schema: definition.schema, values: valuesFor(definition, saved) });
 }
 async function write(entry, payload, context, dependencies = {}) {
   const file = currentFile(entry, context), definition = schemaFor(file && readSchema(file));
-  if (!definition) throw new Error("Switch game settings are unavailable before preparation.");
+  const packages = packageSettings(entry), selected = payload?.values?.packageVersion;
+  if (packages.fields.length && selected !== "latest" && !entry.moduleData.versions.includes(selected)) throw new Error("Choose an available game update.");
+  if (!definition && !packages.fields.length) throw new Error("Switch game settings are unavailable before preparation.");
   const changes = {};
-  for (const [key, row] of definition.rows) {
+  for (const [key, row] of definition?.rows || []) {
     const incoming = payload?.values?.[key];
     const value = row.kind === "toggle" ? incoming === true ? row.on : incoming === false ? row.off : null :
       row.kind === "range" ? typeof incoming === "number" ? String(incoming) : null : incoming;
     if (!validValue(row, value)) throw new Error("Invalid value for " + row.label + ".");
     changes["launcher." + key] = isDefault(row, value) ? null : value;
   }
-  const saved = await (dependencies.preferences || preferences)({ domain: "org.nxnative." + definition.game, changes, signal: context.signal });
-  return { schema: definition.schema, values: valuesFor(definition, saved) };
+  const saved = definition ? await (dependencies.preferences || preferences)({ domain: "org.nxnative." + definition.game, changes, signal: context.signal }) : {};
+  if (packages.fields.length) {
+    entry.runtimeSettings = { ...entry.runtimeSettings, nxnative: { ...entry.runtimeSettings?.nxnative, packageVersion: selected } };
+    context.onEntryChange?.({ runtimeSettings: entry.runtimeSettings });
+  }
+  return withPackage(entry, definition ? { schema: definition.schema, values: valuesFor(definition, saved) } : { schema: { fields: [] }, values: {} });
 }
 async function ensure(entry, context, launch, runtime, dependencies = {}) {
   const file = path.join(launch.prepared, "launcher.json");
@@ -117,7 +133,7 @@ async function ensure(entry, context, launch, runtime, dependencies = {}) {
   const profile = launch.env.NXNATIVE_PROFILE;
   if (!fs.existsSync(script) || typeof launch.env.DM_ROMFS !== "string" || !profile) return null;
   const control = path.join(path.dirname(launch.env.DM_ROMFS), "control.nacp");
-  if (!fs.existsSync(control)) return null;
+
   const game = path.basename(path.dirname(profile));
   if (!/^[0-9a-f]{16}$/i.test(game) || ![launch.prepared, runtime.root, runtime.source?.root].filter(Boolean)
     .some(root => inside(fs.realpathSync(root), fs.realpathSync(profile)))) throw new Error("Invalid prepared Switch profile.");

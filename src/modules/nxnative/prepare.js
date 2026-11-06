@@ -235,6 +235,15 @@ function validateLaunch(file, prepared, runtime, input, entry, context) {
     }
     environment[key] = value;
   }
+  const facts = launch.inputFacts;
+  if (facts && typeof facts === "object") {
+    const update = typeof facts.selectedUpdate === "string" && /^v\d+$/.test(facts.selectedUpdate) ? facts.selectedUpdate : input.selectedUpdate || null;
+    entry.moduleData = { ...entry.moduleData, titleId: /^[a-f0-9]{16}$/i.test(facts.titleId || "") ? facts.titleId.toUpperCase() : entry.moduleData?.titleId,
+      generation: facts.generation === 1 || facts.generation === 2 ? facts.generation : null, selectedUpdate: update,
+      keyRequirement: input.keyRequirement === "none" ? "none" : facts.keyRequirement === "encrypted" ? "encrypted" : "unknown",
+      keysRequired: input.keyRequirement === "none" ? false : Boolean(entry.moduleData?.keysRequired) };
+    context.onEntryChange?.({ moduleData: entry.moduleData });
+  }
   const save = saveDirectory(entry, context), temporary = path.join(gameDirectory(entry, context), "temp");
   assertOutsideSource(input.sourceRoot, save);fs.mkdirSync(save, { recursive: true });Writable.assertOwnDirectory(context.userDataDir, temporary);
   entry.defaultSaveDir = save;
@@ -243,11 +252,15 @@ function validateLaunch(file, prepared, runtime, input, entry, context) {
 }
 async function prepareGame(entry, context, selection, dependencies = {}) {
   const input = resolveInput(entry);
-  if (input.inspectionOnly) throw new Error("A Switch NSP, NSZ, XCI or XCZ application container is required for Play.");
+  if (input.inspectionOnly) throw new Error("A complete Switch game container or decrypted dump is required for Play.");
   const runtime = selection.runtime || await runtimeForSelection(selection, context), root = gameDirectory(entry, context);
   assertOutsideSource(input.sourceRoot, root);Writable.assertOwnDirectory(context.userDataDir, root);
+  entry.moduleData = { ...entry.moduleData, ...input, sourceRoot: undefined };
+  if (input.keyRequirement === "none") entry.moduleData.keysRequired = false;
+  const packageVersion = entry.runtimeSettings?.nxnative?.packageVersion || "latest";
+  if (packageVersion !== "latest" && (!/^v\d+$/.test(packageVersion) || !input.versions?.includes(packageVersion))) throw new Error("The selected game update is no longer available.");
   const inputKey = crypto.createHash("sha256").update(JSON.stringify([input.inputPath, await sourceIdentity(input.inputPath, context)])).digest("hex");
-  const identity = crypto.createHash("sha256").update(JSON.stringify([inputKey, selection.version, ...(runtime.source ? [runtime.source.revision] : []),
+  const identity = crypto.createHash("sha256").update(JSON.stringify([inputKey, packageVersion, selection.version, ...(runtime.source ? [runtime.source.revision] : []),
     selection.install.manifestSha256 || selection.install.declaration.manifestSha256])).digest("hex");
   let prepared = path.join(root, "prepared", inputKey);
   const workspacePath = path.join(root, "workspace.json");
@@ -272,16 +285,17 @@ async function prepareGame(entry, context, selection, dependencies = {}) {
   const compiler = compilerRequirement
     ? await (dependencies.ensureMetal || require("../shared/runtime/apple-metal-toolchain").ensure)(context, compilerRequirement) : null;
   const args = ["prepare", "--input", input.inputPath, "--output", prepared, "--progress", "json"];
+  if (packageVersion !== "latest") args.push("--package", packageVersion);
   const execute = async () => {
-    const keys = selectedKeys(entry, context);
+    const keys = input.keyRequirement === "none" ? null : selectedKeys(entry, context);
     return runCli(runtime, validKeys(keys) ? [...args, "--keys", keys] : args, path.join(root, "preparation"), context, dependencies, compiler?.environment || {});
   };
   context.onProgress?.({ phase: "prepare", label: "Preparing Switch game…" });
   let result;
   try { result = await execute(); }
   catch (error) {
-    if (error.code !== "NXNATIVE_KEYS_REQUIRED") throw error;
-    entry.moduleData = { ...entry.moduleData, keysRequired: true };context.onEntryChange?.({ moduleData: entry.moduleData });
+    if (error.code !== "NXNATIVE_KEYS_REQUIRED" || input.keyRequirement === "none") throw error;
+    entry.moduleData = { ...entry.moduleData, keysRequired: true, keyRequirement: "encrypted" };context.onEntryChange?.({ moduleData: entry.moduleData });
     const configured = selectedKeys(entry, context), adjacent = path.join(input.sourceRoot, "prod.keys");
     if (!validKeys(configured) && validKeys(adjacent)) rememberKeys(entry, context, adjacent);
     else if (!validKeys(configured)) await chooseKeys(entry, dependencies.keysPayload, context);

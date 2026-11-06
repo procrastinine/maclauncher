@@ -8,11 +8,11 @@
   "detection": {
     "priority": 20,
     "inputKinds": ["directory", "file"],
-    "fileExtensions": [".nsp", ".nsz", ".xci", ".xcz", ".hfs0", ".nso", ".nro", ""],
-    "fileSignatures": [{ "hex": "50465330" }, { "hex": "48465330" }, { "hex": "4e534f30" }, { "hex": "4e524f30", "offset": 16 }, { "hex": "48454144", "offset": 256 }],
-    "rootMarkers": ["ExeFS/main", "exefs/main"],
-    "rootExtensions": [".nsp", ".nsz", ".xci", ".xcz", ".hfs0"],
-    "directoryFileExtensions": [".nsp", ".nsz", ".xci", ".xcz", ".hfs0", ".nso", ".nro"]
+    "fileExtensions": [".nsp", ".nsz", ".xci", ".xcz", ".hfs0", ".nso", ".nro", ".nup", ""],
+    "fileSignatures": [{ "hex": "4e555001" }, { "hex": "50465330" }, { "hex": "48465330" }, { "hex": "4e534f30" }, { "hex": "4e524f30", "offset": 16 }, { "hex": "48454144", "offset": 256 }],
+    "rootMarkers": ["ExeFS/main", "exefs/main", "base/exefs/main.npdm", "exefs/main.npdm", "updates"],
+    "rootExtensions": [".nsp", ".nsz", ".xci", ".xcz", ".hfs0", ".nup"],
+    "directoryFileExtensions": [".nsp", ".nsz", ".xci", ".xcz", ".hfs0", ".nso", ".nro", ".nup"]
   },
   "runtime": {
     "default": "nxnative",
@@ -50,7 +50,7 @@
   "settingsDefaults": { "defaultRuntime": "nxnative" },
   "supports": { "saveLocation": true, "saveEditing": false, "cheats": false, "cheatsPatcher": false },
   "ui": {
-    "infoFields": [{ "key": "moduleData.titleId", "label": "Title ID" }, { "key": "moduleData.sourceKind", "label": "Format" }, { "key": "moduleData.buildId", "label": "Build ID" }],
+    "infoFields": [{ "key": "moduleData.titleId", "label": "Title ID" }, { "key": "moduleData.sourceKind", "label": "Format" }, { "key": "moduleData.buildId", "label": "Build ID" }, { "key": "moduleData.selectedUpdate", "label": "Selected update" }],
     "actions": [
       { "id": "inspectProgram", "label": "Inspect program", "kind": "secondary", "cancellable": true, "resultFields": [
         { "key": "format", "label": "Format" }, { "key": "titleId", "label": "Title ID" }, { "key": "outputRoot", "label": "Inspection", "format": "path" }
