@@ -438,10 +438,10 @@ function createBundledNativeRuntime({ managerId, resourceRoot, platform = proces
   }
   // Opt-in callers use these sealed resources in place. No registration or
   // writable runtime directory is created; game state belongs to userData.
-  function resolveRuntime({ version, upstreamRevision, verification = "full" } = {}) {
+  function resolveRuntime({ version, upstreamRevision, arch: selectedArch = arch, verification = "full" } = {}) {
     if (platform !== "darwin") return null;
     if (!["full", "status"].includes(verification)) throw new Error("Choose status or full bundled runtime verification.");
-    const bundle = resolve({ version, upstreamRevision, verification });
+    const bundle = resolve({ version, upstreamRevision, arch: selectedArch, verification });
     if (!bundle) return null;
     const manifest = bundle.manifest, payload = path.join(bundle.directory, "files");
     const hostVersion = (dependencies.systemVersionSync || systemVersionSync)();

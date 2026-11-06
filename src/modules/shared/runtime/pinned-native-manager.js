@@ -545,12 +545,13 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     let normalized, key;
     try {
       normalized = normalizeVersion(version);
-      const pin = entries.get(normalized), bundle = bundledRuntime.resolve({ version: normalized, upstreamRevision: pin.upstreamRevision, verification });
+      // Each CPU's manager uses that CPU's included resource only.
+      const pin = entries.get(normalized), bundle = bundledRuntime.resolve({ version: normalized, upstreamRevision: pin.upstreamRevision, arch: installationArchitecture, verification });
       if (!bundle) { includedFailures.delete(normalized); return null; }
       key = JSON.stringify([identity(path.join(bundle.directory, "manifest.json")),
         identity(path.join(bundle.directory, "files", bundle.manifest.executableRelative))]);
       if (verification === "status" && includedFailures.get(normalized)?.key === key) return null;
-      const included = bundledRuntime.resolveRuntime({ version: normalized, upstreamRevision: pin.upstreamRevision, verification });
+      const included = bundledRuntime.resolveRuntime({ version: normalized, upstreamRevision: pin.upstreamRevision, arch: installationArchitecture, verification });
       if (!included || included.version !== normalized || included.upstreamRevision !== pin.upstreamRevision ||
         included.source !== "bundled" || included.bundledExecution !== "direct" || included.readOnly !== true || included.removable !== false ||
         included.installDir !== bundle.directory || included.bundledManifestSha256 !== bundle.manifestSha256)
@@ -715,7 +716,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     if (replacing && (!pin.asset || !fs.lstatSync(destination).isDirectory() || fs.lstatSync(destination).isSymbolicLink()))
       throw new Error(`Remove the incomplete ${label} ${normalized} registration before replacing it.`);
     throwIfAborted(signal);
-    if (bundledExecution === "direct" && bundledRuntime.resolve({ version: normalized, upstreamRevision: pin.upstreamRevision, verification: "full" })) {
+    if (bundledExecution === "direct" && bundledRuntime.resolve({ version: normalized, upstreamRevision: pin.upstreamRevision, arch: installationArchitecture, verification: "full" })) {
       throw new Error(includedFailures.get(normalized)?.error || "The included runtime could not start. Reinstall MacLauncher or choose a compatible imported runtime.");
     }
     if (bundledRuntime) {
