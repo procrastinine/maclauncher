@@ -4,7 +4,7 @@ const {spawnSync}=require('./helpers/android-java');
 test('One built inotify owner delivers native and original JVM descriptor and creation events',t=>{
   const runtime=process.env.KLEPTON_NATIVE_RUNTIME;
   if(process.platform!=='darwin'||process.arch!=='arm64'||!runtime)return t.skip('Requires an Apple Silicon Android runtime with current file ownership');
-  const checkout=process.env.ANDROID_INOTIFY_SOURCE||path.resolve('src/external/libinotify-kqueue');
+  const checkout=process.env.ANDROID_INOTIFY_SOURCE||path.resolve('src/external/maclauncher-android/src/external/libinotify-kqueue');
   if(!fs.existsSync(path.join(checkout,'sys/inotify.h')))return t.skip('Initialize libinotify-kqueue headers');
   const jdk=process.env.JAVA_HOME||spawnSync('/usr/libexec/java_home',['-v','21'],{encoding:'utf8'}).stdout.trim();
   if(!jdk)return t.skip('Java 21 is required');

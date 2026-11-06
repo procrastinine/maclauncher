@@ -364,7 +364,7 @@ test('Android EGL keeps submitted images immutable across buffer reuse and idle 
     graphics=path.join(projected,'libklepton-graphics.dylib');fs.unlinkSync(graphics);
     try{fs.linkSync(path.resolve(process.env.KLEPTON_PIXEL_COPY_GRAPHICS),graphics);}catch{fs.copyFileSync(path.resolve(process.env.KLEPTON_PIXEL_COPY_GRAPHICS),graphics);}
   }
-  const binary=path.join(temporary,'egl-copy'),headers=path.resolve(root,'src/external/krkrsdl2/external/krkrz/external/angle/include');
+  const binary=path.join(temporary,'egl-copy'),headers=path.join(process.env.ANDROID_GLES_HEADERS||path.resolve(root,'src/external/maclauncher-android/src/external/android-gles-headers'),'include');
   run(path.join(home,'bin/javac'),['--release','21','-d',temporary,path.join(fixtures,'EglPixelCopyProbe.java')]);
   run('clang++',['-std=c++20','-fobjc-arc','-mmacosx-version-min=13.0','-I'+source,'-I'+headers,'-I'+path.join(home,'include'),'-I'+path.join(home,'include/darwin'),
     path.join(fixtures,'egl-pixel-copy.mm'),'-L'+path.join(home,'lib/server'),'-ljvm','-Wl,-rpath,'+path.join(home,'lib/server'),'-Wl,-rpath,'+native,
