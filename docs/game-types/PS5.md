@@ -47,6 +47,8 @@ A game can also carry PlayGo metadata, which describes which game chunks are ins
 
 Because ARM-only Vulkan libraries cannot load into AnyPS5's x86-64 game process, its **Vulkan** setting selects an installed Vulkan implementation with Intel support. The list shows the installed implementations, and Automatic prefers a compatible KosmicKrisp, which it offers to download when needed. **Settings → PlayStation 5 → PS5 (AnyPS5)** sets the default for all games, and each game's runtime settings can override it.
 
+With KosmicKrisp, AnyPS5 uses `KK_EMULATION=performance,-denorm_preserve,-denorm_flush` to disable software denormal controls because the emulator requests them when offered; a game-set environment value overrides this default.
+
 #### Controller bindings
 
 So that a keyboard and mouse can stand in for the PS5 controller, runtime settings include editable keyboard, mouse and wheel bindings for it. Each game inherits the module defaults and can override them or reset to them. Physical controllers keep working alongside the bindings, and changes to bindings and mouse routing apply on the next launch.

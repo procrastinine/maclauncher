@@ -29,6 +29,9 @@ test("launch values read the global store from launcher settings and the game's 
 
 test("AnyPS5 and Prosper launch with the merged values of their runtime and Vulkan driver", async t => {
   const root = directory(t, "translator-environment-ps5-");
+  const inheritedEmulation = process.env.KK_EMULATION;
+  delete process.env.KK_EMULATION;
+  t.after(() => { if (inheritedEmulation === undefined) delete process.env.KK_EMULATION; else process.env.KK_EMULATION = inheritedEmulation; });
   const executable = path.join(root, "game");
   fs.writeFileSync(executable, require("./fixtures/macho-image").image({ cpu: 0x01000007, fileType: 2, installName: null }));
   const Vulkan = require("../src/modules/shared/vulkan"), Bundled = require("../src/modules/shared/runtime/bundled-native");
@@ -62,6 +65,13 @@ test("AnyPS5 and Prosper launch with the merged values of their runtime and Vulk
   const context = { userDataDir: root, settings, runtimeSettings: {}, ensureRosetta: async () => {} };
 
   const ps5 = (await anyps5.launchRuntime("anyps5", entry, context)).options.env;
+  assert.equal(ps5.KK_EMULATION, "performance,-denorm_preserve,-denorm_flush");
+  entry.translatorEnvironment.kosmickrisp.KK_EMULATION = "conformance";
+  assert.equal((await anyps5.launchRuntime("anyps5", entry, context)).options.env.KK_EMULATION, "conformance", "the game's environment overrides the module default");
+  delete entry.translatorEnvironment.kosmickrisp.KK_EMULATION;
+  Vulkan.resolve.mock.mockImplementation(() => ({ library: executable, backend: "moltenvk" }));
+  assert.equal((await anyps5.launchRuntime("anyps5", entry, context)).options.env.KK_EMULATION, undefined, "the default applies only to KosmicKrisp");
+  Vulkan.resolve.mock.mockImplementation(() => ({ library: executable, backend: "kosmickrisp" }));
   assert.equal(ps5.APS5_PLAYGO_UNLISTED_CHUNKS, "absent", "a translator value replaces the launcher's PlayGo policy");
   assert.equal(ps5.SHARED, "anyps5"); assert.equal(ps5.MESA_VK_WSI_PRESENT_MODE, "immediate");
   assert.equal(ps5.MESA_KK_DEBUG, undefined, "the game removes the global KosmicKrisp value");
