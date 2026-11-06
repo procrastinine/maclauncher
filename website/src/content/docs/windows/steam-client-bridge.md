@@ -1,6 +1,6 @@
 ---
 title: Steam client bridge
-description: "How MacLauncher connects Windows Steam games in CrossOver and Sikarugir to the Steam client for Mac: when Play offers the Steam client bridge, what Play Without It does, how to check that a game used it, and how to remove it in Runtimes."
+description: "How MacLauncher connects Windows Steam games in CrossOver and Sikarugir to the Steam client for Mac: when Play offers the Steam client bridge, what Play Without Steam does, how to check that a game used it, and how to remove it in Runtimes."
 head:
   - tag: title
     content: "Run Windows Steam games with the Steam client for Mac in WINE | MacLauncher"
@@ -25,9 +25,11 @@ Every other game starts without it.
 ## Playing with the bridge
 
 1. Press **Play** on the game.
-2. If the bridge isn't installed yet, MacLauncher asks before downloading it. When the bridge is the only download, the dialog is **Download Steam client bridge**, with the version, the download size and a note that Windows Steam client files from Valve come with it. Choose **Download and Play**. When the same Play also needs another download, such as a graphics component, the bridge appears as one more line in that dialog instead.
-3. If Steam isn't running, MacLauncher asks **Start Steam for this game?**, because the Steam client goes online and signs in. Choose **Start Steam**. Your **Steam client on Play** setting in **Settings → Launcher**, or the game's own choice, can answer this question for you, as [Versions and settings](/maclauncher/tools/versions-and-settings/#steam-client-on-play) explains.
-4. The game starts. There's nothing else to press; after the download, MacLauncher goes straight on to the game.
+2. If the bridge isn't installed yet, MacLauncher asks one question, **Play with Steam?** The dialog names what **Play with Steam** downloads, the Steam client bridge and the Windows Steam client files from Valve, and says that Steam starts if it isn't running, because the Steam client goes online and signs in. Choose **Play with Steam**. When the same Play also needs another download, such as a WINE engine, that download's dialog lists the bridge instead and adds an **Also connect to Steam** checkbox, selected by default.
+3. MacLauncher downloads what's missing and starts Steam if it isn't running, without asking again, unless the game's **Steam client on Play** setting is **Don't start**.
+4. The game starts. There's nothing else to press.
+
+Once the bridge is installed, later Plays use it without a dialog while Steam is running. When Steam isn't running, your **Steam client on Play** setting in **Settings → Launcher**, or the game's own choice, decides what happens; with **Ask**, the default, MacLauncher shows the same **Play with Steam?** question, as [Versions and settings](/maclauncher/tools/versions-and-settings/#steam-client-on-play) explains.
 
 The Windows Steam client files come from Valve's current Steam client download, and MacLauncher checks them against the content address Valve publishes before keeping them, so later Plays don't download them again. The bridge doesn't need a particular version of the Steam client for Mac.
 
@@ -35,12 +37,9 @@ To check that a game used the bridge, look at its inspector after playing. A **S
 
 ## Playing without it
 
-**Play Without It** in the download dialog starts the game the ordinary way, without the bridge. So does **Launch without Steam** in the Steam question, and so does the **Don't start** setting, because the bridge can't work without a running Steam client.
+**Play Without Steam** in the **Play with Steam?** dialog starts the game the ordinary way, without the bridge, and so does clearing **Also connect to Steam** in another download's dialog. The **Don't start** setting does the same, because the bridge can't work without a running Steam client.
 
-MacLauncher remembers a declined or failed download for that game and doesn't ask again on later Plays. To be offered the bridge again, either:
-
-- press the refresh button in the **CrossOver**, **Sikarugir** or **Steam client bridge** section of **Runtimes**, or
-- install the bridge yourself in **Runtimes → Steam client bridge**, which makes every Windows Steam game eligible again.
+When you choose **Play Without Steam** in the download question, clear the checkbox, or the bridge download fails, MacLauncher remembers that for the game and doesn't ask again on later Plays. A refresh in **Runtimes** keeps that choice. To be offered the bridge again, install it yourself in **Runtimes → Steam client bridge**, which makes every Windows Steam game eligible again.
 
 ## The bridge in Runtimes
 
