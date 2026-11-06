@@ -39,6 +39,14 @@ test("only enabled temporal rows select Wine integration", () => {
   assert.equal(DLSS.withTemporalSelection({dlss: true}, rows(false)).dlss, true,
     "an explicit runtime integration selection remains enabled");
 });
+test("scene input selection preserves automatic vendor validation without overriding known Vulkan translators", () => {
+  const noOverride = {apiMode: true, components: {d3d11: {used: null}, d3d12: {used: null}}};
+  assert.equal(DLSS.withTemporalSelection({graphicsBackend: "auto"}, rows(true), noOverride).dlss, true);
+  assert.equal(DLSS.withTemporalSelection({graphicsBackend: "dxvk"}, rows(true), noOverride).dlss, false);
+  const vulkan = {apiMode: true, components: {d3d11: {used: {engine: "dxvk"}}, d3d12: {used: {engine: "vkd3d-proton"}}}};
+  assert.equal(DLSS.withTemporalSelection({graphicsBackend: "auto"}, rows(true), vulkan).dlss, false);
+  assert.equal(DLSS.withTemporalSelection({dlss: true}, null, vulkan).dlss, true);
+});
 function rows(enabled, method = "fsr3") {
   return {schema: 2, mode: "advanced", video: [{id: "scene", kind: "temporal", enabled, method, settings: {}}]};
 }

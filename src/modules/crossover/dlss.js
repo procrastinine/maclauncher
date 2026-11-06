@@ -13,10 +13,13 @@ function needsSceneInputs(effects) {
   return methods.temporal.length > 0 || methods.neural.some(method => contracts.NEURAL[method]?.history === "scene") ||
     methods.generation.some(method => contracts.GENERATION[method]?.scene === true);
 }
-function withTemporalSelection(settings, effects) {
+function withTemporalSelection(settings, effects, translatorPlan) {
+  const sources = translatorPlan ? [usedForApi(translatorPlan, "d3d11"), usedForApi(translatorPlan, "d3d12")].filter(Boolean) : [];
+  const classicSource = sources.some(source => source.engine === "dxmt" || source.engine === "d3dmetal") ||
+    !sources.length && ["auto", "dxmt", "d3dmetal"].includes(settings.graphicsBackend || "auto");
   // Preserve saved runtime integration, including its ability to expose the
   // game's temporal inputs before a shared replacement is selected live.
-  return { ...settings, dlss: settings.dlss === true || needsSceneInputs(effects) };
+  return { ...settings, dlss: settings.dlss === true || classicSource && needsSceneInputs(effects) };
 }
 
 function hasLibraries(directory) {

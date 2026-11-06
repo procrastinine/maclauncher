@@ -11,8 +11,8 @@ function exportsMatch(file, names, inspect) {
   let pe;try { pe = inspect(file); } catch { return false; }
   return pe && names.every(name => { const symbol = pe.exports?.get(name);return symbol?.executable && !symbol.forwarded; });
 }
-function resolve({ runtimeId, install, translatorPlan, executableArchitecture }, { inspect = readPeExports, layoutFor = wineLayout } = {}) {
-  if (!['crossover', 'sikarugir'].includes(runtimeId) || !install || executableArchitecture !== 'x86_64') return null;
+function resolve({ requested, runtimeId, install, translatorPlan, executableArchitecture }, { inspect = readPeExports, layoutFor = wineLayout } = {}) {
+  if (requested !== true || !['crossover', 'sikarugir'].includes(runtimeId) || !install || executableArchitecture !== 'x86_64') return null;
   const translator = usedForApi(translatorPlan, 'd3d12');
   if (translator?.engine !== 'vkd3d-proton') return null;
   const library = translator.files?.find(file => file.format === 'pe' && file.machine === 0x8664 && exportsMatch(file.path, TRANSLATOR, inspect));

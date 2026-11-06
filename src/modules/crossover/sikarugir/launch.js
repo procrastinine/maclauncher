@@ -251,7 +251,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const existingEnvironment = await require("../../shared/runtime/wine-processes").prepareEnvironment(
     Environments.readEnvironment(context.runtimeSettings?.environmentReference), context, context.processOptions);
   if (existingEnvironment && existingEnvironment.kind !== "sikarugir-wrapper") throw new Error("Choose a Sikarugir wrapper for this runtime.");
-  let settings = DLSS.withTemporalSelection(existingEnvironment ? require("../../shared/runtime/wine-settings").explicitSettings(context.runtimeSettings || {}) : context.runtimeSettings || {}, entry.effects);
+  let settings = existingEnvironment ? require("../../shared/runtime/wine-settings").explicitSettings(context.runtimeSettings || {}) : context.runtimeSettings || {};
   context.wineEnvironment = existingEnvironment;
   if (existingEnvironment?.running) { settings = { ...settings, synchronization: existingEnvironment.settings.synchronization, retina: Environments.INHERIT }; }
   const match = executableEvidence(entry, settings);
@@ -264,9 +264,9 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const capabilities = require("../../shared/runtime/host-capabilities").getHostCapabilities();
   const host = dependencies.host || capabilities;
   const translatorPlan = await (dependencies.resolveTranslators || Translators.resolve)(selected.install, "sikarugir", context, { entry, executableArchitecture: match.executableArchitecture, host });
-  settings = Translators.settingsForPlan(settings, translatorPlan);
+  settings = DLSS.withTemporalSelection(Translators.settingsForPlan(settings, translatorPlan), entry.effects, translatorPlan);
   const translatorEnvironment = TranslatorEnvironment.forLaunch(entry, context, Translators.environmentIds(translatorPlan, "sikarugir")).values;
-  const ngxScene = require("../temporal/ngx/connection").resolve({ runtimeId: "sikarugir", install: selected.install, translatorPlan, executableArchitecture: match.executableArchitecture });
+  const ngxScene = require("../temporal/ngx/connection").resolve({ requested: settings.dlss === true || DLSS.needsSceneInputs(entry.effects), runtimeId: "sikarugir", install: selected.install, translatorPlan, executableArchitecture: match.executableArchitecture });
   context.ngxSceneConnection = ngxScene;
   const translatorView = await TranslatorFiles.prepareTranslatorFiles(translatorPlan, { userDataDir: context.userDataDir, layout: translatorPlan.layout, signal: context.signal });
   let cameraBridge = Temporal.resolvePlan(entry, context, { install: selected.install, settings, translatorPlan, host,
@@ -328,7 +328,8 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   // Apply launcher-owned optional effects only to the game, after stock Wine
   // finishes prefix initialization. User-supplied loader paths remain blocked.
   if (context.applyGameEnvironment) environment = await context.applyGameEnvironment(environment);
-  Object.assign(environment, require("../temporal/ngx/connection").environment(ngxScene, { macDriverPath: require("../temporal/ngx/connection").windowModule(selected.install), sceneDestinationRequested: settings.dlss === true || DLSS.needsSceneInputs(entry.effects) }));
+  const ngxDestinationRequested = settings.dlss === true || DLSS.needsSceneInputs(entry.effects);
+  Object.assign(environment, require("../temporal/ngx/connection").environment(ngxScene, { macDriverPath: ngxDestinationRequested ? require("../temporal/ngx/connection").windowModule(selected.install) : "", sceneDestinationRequested: ngxDestinationRequested }));
   if (existingEnvironment?.running) {
     for (const key of ["WINEMSYNC", "WINEESYNC"]) {
       if (existingEnvironment.environment[key] != null) environment[key] = existingEnvironment.environment[key];

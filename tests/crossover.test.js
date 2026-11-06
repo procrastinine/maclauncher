@@ -677,8 +677,9 @@ test("CrossOver transports trusted game effects through its vendor environment a
   const disabled = await Launch.prepareLaunch(entry, { ...context, applyGameEnvironment: async env => env }, { run });
   assert.equal(disabled.environment.RESHADE_CONFIG, undefined);
   const expectedEnvironment = values => {
-    const {DXVK_SHADER_CACHE_PATH, ...rest} = values;
-    return Launch.wineEnvironmentString({...rest, DXVK_SHADER_CACHE_PATH});
+    const {DXVK_SHADER_CACHE_PATH, MACLAUNCHER_NGX_SCENE_ENABLE = "0", MACLAUNCHER_NGX_SCENE_DESTINATION_ENABLE = "0", MACLAUNCHER_NGX_WINEMAC_LIBRARY = "", ...rest} = values;
+    return Launch.wineEnvironmentString({...rest, DXVK_SHADER_CACHE_PATH,
+      MACLAUNCHER_NGX_SCENE_ENABLE, MACLAUNCHER_NGX_SCENE_DESTINATION_ENABLE, MACLAUNCHER_NGX_WINEMAC_LIBRARY});
   };
   const graphicsFlags = { DXMT_ENABLE_NVEXT: "0", D3DM_ENABLE_METALFX: "0",
     MESA_SHADER_CACHE_DIR: path.join(disabled.directory, "cache", "mesa"),
@@ -708,7 +709,7 @@ test("CrossOver transports trusted game effects through its vendor environment a
     applyGameEnvironment: async env => ({ ...env, ...temporalEffect }) }, { run });
   assert.equal(temporal.environment.DXMT_ENABLE_NVEXT, "1");
   assert.equal(temporal.environment.RESHADE_TEMPORAL_CONTROL_FILE, temporalEffect.RESHADE_TEMPORAL_CONTROL_FILE);
-  assert.equal(temporal.args[temporal.args.indexOf("--env") + 1], expectedEnvironment({ ...graphicsFlags, DXMT_ENABLE_NVEXT: "1", ...temporalEffect, ...loaderEnvironment }));
+  assert.equal(temporal.args[temporal.args.indexOf("--env") + 1], expectedEnvironment({ ...graphicsFlags, DXMT_ENABLE_NVEXT: "1", ...temporalEffect, ...loaderEnvironment, MACLAUNCHER_NGX_SCENE_DESTINATION_ENABLE: "1" }));
   assert.equal(temporal.bottlePath, disabled.bottlePath);
   assert.equal(preparation.length, 1, "temporal selection reuses the existing private bottle");
   assert.equal(loaderPreparations, 2);
@@ -871,7 +872,7 @@ test("CrossOver loader failure disables only optional camera adaptation before a
   await new Promise(setImmediate);
 });
 
-test("CrossOver launch retries unavailable optional temporal inputs but retains vendor validation", async t => {
+test("CrossOver keeps Vulkan temporal inputs separate and retains vendor validation", async t => {
   const directory = fixture(t), userDataDir = path.join(directory, 'data'), game = path.join(directory, 'game');
   pe(path.join(game, 'Game.exe'), {machine: 0x8664});
   const installed = Manager.importRuntime({userDataDir, runtimePath: app(path.join(directory, 'CrossOver.app'))});
@@ -885,7 +886,7 @@ test("CrossOver launch retries unavailable optional temporal inputs but retains 
   const launch = await Launch.prepareLaunch(entry, context, {run});
   assert.equal(launch.environment.CX_GRAPHICS_BACKEND, 'dxvk');assert.equal(launch.environment.WINEDXVK, undefined);
   assert.equal(launch.environment.DXMT_ENABLE_NVEXT, '0');assert.equal(launch.environment.D3DM_ENABLE_METALFX, '0');
-  assert.equal(entry.effects.video[0].method, 'fsr2');assert.match(warnings[0][0], /temporal integration is unavailable/);
+  assert.equal(entry.effects.video[0].method, 'fsr2');assert.deepEqual(warnings, [], 'a Vulkan route does not attempt the classic-only integration');
   assert.deepEqual(context.graphicsInputs, {architecture: installed.architectures[0]});
   for (const warn of [() => {throw Error('warning sink failed');}, () => Promise.reject(Error('warning sink rejected'))]) {
     const recovered = await Launch.prepareLaunch(entry, {...context, logger: {warn}}, {run});

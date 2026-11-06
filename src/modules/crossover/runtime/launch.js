@@ -222,7 +222,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   const existingEnvironment = await require("../../shared/runtime/wine-processes").prepareEnvironment(
     Environments.readEnvironment(context.runtimeSettings?.environmentReference), context, context.processOptions);
   if (existingEnvironment && existingEnvironment.kind !== "crossover-bottle") throw new Error("Choose a CrossOver bottle for this runtime.");
-  let settings = DLSS.withTemporalSelection(existingEnvironment ? require("../../shared/runtime/wine-settings").explicitSettings(context.runtimeSettings || {}) : context.runtimeSettings || {}, entry.effects);
+  let settings = existingEnvironment ? require("../../shared/runtime/wine-settings").explicitSettings(context.runtimeSettings || {}) : context.runtimeSettings || {};
   context.wineEnvironment = existingEnvironment;
   if (existingEnvironment?.running) { settings = { ...settings, synchronization: existingEnvironment.settings.synchronization, retina: Environments.INHERIT }; }
   const selected = manager.resolveSelection(entry, context.settings, context.userDataDir, settings);
@@ -234,12 +234,12 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   if (!selectedExecutable) throw new Error("Windows executable must be a PE executable inside the game folder.");
   const translatorPlan = await Translators.resolve(selected.install, 'crossover', context, { entry, executableArchitecture: selectedExecutable.executableArchitecture, host });
   timing('translators');
-  settings = Translators.settingsForPlan(settings, translatorPlan);
+  settings = DLSS.withTemporalSelection(Translators.settingsForPlan(settings, translatorPlan), entry.effects, translatorPlan);
   const translatorEnvironment = TranslatorEnvironment.forLaunch(entry, context, Translators.environmentIds(translatorPlan, "crossover")).values;
   const translatorView = TranslatorFiles.selectedDescriptions(translatorPlan).length ? await TranslatorFiles.prepareTranslatorFiles(translatorPlan,
     { userDataDir: context.userDataDir, layout: translatorPlan.layout, signal: context.signal }) : null;
   const Temporal = require("../temporal");
-  const ngxScene = require("../temporal/ngx/connection").resolve({ runtimeId: "crossover", install: selected.install, translatorPlan, executableArchitecture: selectedExecutable.executableArchitecture });
+  const ngxScene = require("../temporal/ngx/connection").resolve({ requested: settings.dlss === true || DLSS.needsSceneInputs(entry.effects), runtimeId: "crossover", install: selected.install, translatorPlan, executableArchitecture: selectedExecutable.executableArchitecture });
   context.ngxSceneConnection = ngxScene;
   const scenePlan = Temporal.resolveScenePlan(entry, context, { install: selected.install, settings, translatorPlan, verify: true, root: graphicsRoot });
   let sceneClosure = scenePlan?.packageReady ? scenePlan.sceneClosure : null;
