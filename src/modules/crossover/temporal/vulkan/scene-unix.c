@@ -41,6 +41,8 @@ struct scene_context {
     struct scene_admission admission;
     RSPrepareRecordedSceneOperation3 prepare;
     PFN_rsVulkanPrepareSceneOperation3 prepareDevice;
+    RSQueryRecordedSceneFeature3 query;
+    PFN_rsVulkanQuerySceneFeature3 queryDevice;
     RSRecordedSceneImageDemand1 demand;
     BOOL staging;
     void *library;
@@ -138,6 +140,8 @@ static VkResult create_context(const RSWineVulkanSceneContextV1 *request,struct 
             value->setDestination=(int(*)(void*,void*))dlsym(value->library,"rsSetRecordedSceneDestination3");
             value->prepare=(RSPrepareRecordedSceneOperation3)dlsym(value->library,"rsPrepareRecordedSceneOperation3");
             value->prepareDevice=(PFN_rsVulkanPrepareSceneOperation3)vk_funcs->p_vkGetDeviceProcAddr(value->device.device,"rsVulkanPrepareSceneOperation3");
+            value->query=(RSQueryRecordedSceneFeature3)dlsym(value->library,"rsQueryRecordedSceneFeature3");
+            value->queryDevice=(PFN_rsVulkanQuerySceneFeature3)vk_funcs->p_vkGetDeviceProcAddr(value->device.device,"rsVulkanQuerySceneFeature3");
             if(value->callbacks.size!=sizeof(value->callbacks3)||value->callbacks.version!=3||
                !value->callbacks.storage||!value->callbacks.retain||!value->callbacks.release||!value->callbacks.encode||
                !value->callbacks.completed||!value->callbacks3.submitted){release_context(value);return VK_ERROR_INITIALIZATION_FAILED;}
@@ -440,6 +444,48 @@ static VkResult prepare_scene(RSWineVulkanSceneRequestV2 *packet,BOOL wow64,BOOL
     release_context(owner);return status;
 }
 
+static VkResult query_scene(const RSWineVulkanSceneRequestV2 *packet,BOOL wow64)
+{
+    const RSWineVulkanSceneRequestV1 *request;
+    struct scene_context *owner;
+    struct vulkan_device *device;
+    RSTemporalFrame shape;
+    RSTemporalResult result={.size=sizeof(result),.version=1};
+    VkResult status=VK_ERROR_INITIALIZATION_FAILED;
+    unsigned i;
+    int supported;
+    if(!packet)return status;
+    request=&packet->base;
+    if(request->size!=sizeof(*request)||request->version!=1||request->profile!=RS_WINE_VULKAN_SCENE_PROFILE||
+       request->flags!=RS_WINE_VULKAN_ORIGINAL_OUTPUT_RETAINED||!request->device||request->commandBuffer||
+       !request->ownerId||request->consumerId!=NATIVE_CONSUMER_ID||request->reserved[1]||
+       (request->reserved[0]!=RS_RECORDED_RECONSTRUCTION&&request->reserved[0]!=RS_RECORDED_GENERATION)||
+       request->imageMask||request->colorKnown||(wow64&&request->device>>32)||
+       packet->metadata.size!=sizeof(packet->metadata)||packet->metadata.version!=2)
+        return status;
+    for(i=0;i<RS_WINE_VULKAN_SCENE_IMAGE_COUNT;++i)
+        if(request->images[i].image||request->images[i].aspect||request->images[i].mipLevel||request->images[i].arrayLayer||request->images[i].reserved)return status;
+    if(!vk_funcs)return VK_ERROR_FEATURE_NOT_PRESENT;
+    device=vulkan_device_from_handle((VkDevice)(UINT_PTR)request->device);
+    if(!device||!device->host.device)return status;
+    pthread_mutex_lock(&provider_mutex);
+    for(owner=contexts;owner;owner=owner->next)if(owner->generation==request->ownerId){atomic_fetch_add_explicit(&owner->references,1,memory_order_relaxed);break;}
+    pthread_mutex_unlock(&provider_mutex);
+    if(!owner)return VK_ERROR_FEATURE_NOT_PRESENT;
+    if(owner->device.wineDevice!=request->device||owner->device.device!=device->host.device)goto done;
+    if(!owner->callbacks3.submitted||!owner->query||!owner->queryDevice||owner->device.api()!=3){status=VK_ERROR_FEATURE_NOT_PRESENT;goto done;}
+    copy_frame(&shape,request,owner->consumer.owner);shape.commandBufferKind=1;
+    // The matched driver alone obtains/retains its actual MTLDevice. This is
+    // a scalar shape query: no texture resolution, queue, commands or lease.
+    supported=owner->queryDevice(device->host.device,owner->consumer.owner,request->reserved[0],&shape,owner->query,&result);
+    status=supported&&result.status==RS_TEMPORAL_OK&&!result.encoded?VK_SUCCESS:
+        result.status==RS_TEMPORAL_BUSY?VK_NOT_READY:
+        result.status==RS_TEMPORAL_UNAVAILABLE?VK_ERROR_FEATURE_NOT_PRESENT:
+        result.status==RS_TEMPORAL_INVALID?VK_ERROR_INITIALIZATION_FAILED:VK_ERROR_UNKNOWN;
+ done:
+    release_context(owner);return status;
+}
+
 static VkResult record_scene(const RSWineVulkanSceneRequestV1 *request, const RSWineSceneMetadataV2 *metadata, BOOL wow64)
 {
     struct vulkan_device *device;
@@ -558,6 +604,7 @@ NTSTATUS maclauncher_scene_record64(void *args)
 {
     struct maclauncher_scene_record_params *params = args;
     params->result = params->reserved==1 ? context_control((RSWineVulkanSceneContextV1 *)(UINT_PTR)params->request,FALSE) :
+        params->reserved==5 ? query_scene((const RSWineVulkanSceneRequestV2 *)(UINT_PTR)params->request,FALSE) :
         params->reserved==3||params->reserved==4 ? prepare_scene((RSWineVulkanSceneRequestV2 *)(UINT_PTR)params->request,FALSE,params->reserved==4) :
         params->reserved==2 ? record_scene(&((const RSWineVulkanSceneRequestV2 *)(UINT_PTR)params->request)->base, &((const RSWineVulkanSceneRequestV2 *)(UINT_PTR)params->request)->metadata, FALSE) : params->reserved ? VK_ERROR_INITIALIZATION_FAILED : record_scene((const RSWineVulkanSceneRequestV1 *)(UINT_PTR)params->request, NULL, FALSE);
     return STATUS_SUCCESS;
@@ -568,6 +615,7 @@ NTSTATUS maclauncher_scene_record32(void *args)
     struct maclauncher_scene_record_params *params = args;
     params->result = params->request >> 32 ? VK_ERROR_INITIALIZATION_FAILED : params->reserved==1 ?
         context_control((RSWineVulkanSceneContextV1 *)UlongToPtr((UINT32)params->request),TRUE) :
+        params->reserved==5 ? query_scene((const RSWineVulkanSceneRequestV2 *)UlongToPtr((UINT32)params->request),TRUE) :
         params->reserved==3||params->reserved==4 ? prepare_scene((RSWineVulkanSceneRequestV2 *)UlongToPtr((UINT32)params->request),TRUE,params->reserved==4) :
         params->reserved==2 ? record_scene(&((const RSWineVulkanSceneRequestV2 *)UlongToPtr((UINT32)params->request))->base, &((const RSWineVulkanSceneRequestV2 *)UlongToPtr((UINT32)params->request))->metadata, TRUE) : params->reserved ? VK_ERROR_INITIALIZATION_FAILED : record_scene((const RSWineVulkanSceneRequestV1 *)UlongToPtr((UINT32)params->request), NULL, TRUE);
     return STATUS_SUCCESS;

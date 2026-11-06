@@ -3,6 +3,7 @@
 #include "routing.hpp"
 namespace maclauncher::ngx {
 enum class AdmissionStatus {Prepared,Unavailable,Invalid,Busy,Failed};
+enum class QueryStatus {Supported,Unavailable,Invalid,Busy,Failed};
 // The translator feature owns a native context token. Recorded flights keep
 // their existing native references after this recording owner is retired.
 class Producer {
@@ -18,13 +19,10 @@ class Producer {
   RSWineVulkanSceneContextV1 r{};r.size=sizeof(r);r.version=1;r.profile=RS_WINE_VULKAN_SCENE_PROFILE;
   r.operation=operation;r.observerId=observer;r.contextId=identity;r.device=device;r.generation=generation;r.consumerId=consumer;return r;
  }
- Status context(Evaluation&source,int32_t&result){
-  if(device&&device!=source.device)return Status::Invalid;
-  if(source.frameId<=lastFrame)return Status::Invalid;
-  source.generation=source.consumer=1;RSWineVulkanSceneRequestV2 packet{};
-  auto status=map(source,packet);if(status!=Status::Recorded)return status;
-  device=source.device;
-  if(!generation||source.reset){
+ Status deviceContext(uint64_t actualDevice,bool reset,int32_t&result){
+  if(!actualDevice||(device&&device!=actualDevice))return Status::Invalid;
+  device=actualDevice;
+  if(!generation||reset){
    discardAdmission();
    uint32_t operation=generation?RS_WINE_SCENE_CONTEXT_RESET:RS_WINE_SCENE_CONTEXT_BEGIN;
    auto r=request(operation);result=control(&r);
@@ -36,7 +34,14 @@ class Producer {
    }
    generation=r.generation;consumer=r.consumerId;
   }
-  source.generation=generation;source.consumer=consumer;return Status::Recorded;
+  return Status::Recorded;
+ }
+ Status context(Evaluation&source,int32_t&result){
+  if(source.frameId<=lastFrame)return Status::Invalid;
+  source.generation=source.consumer=1;RSWineVulkanSceneRequestV2 packet{};
+  auto status=map(source,packet);if(status!=Status::Recorded)return status;
+  status=deviceContext(source.device,source.reset,result);
+  if(status==Status::Recorded){source.generation=generation;source.consumer=consumer;}return status;
  }
  void discardAdmission(){
   if(admission.base.consumerId&&cancelAdmission)cancelAdmission(&admission);
@@ -48,6 +53,28 @@ public:
  Producer(const Producer&)=delete;Producer&operator=(const Producer&)=delete;
  ~Producer(){retire();}
  void retire(){if(retired)return;discardAdmission();retired=true;if(control&&generation){auto r=request(RS_WINE_SCENE_CONTEXT_DESTROY);control(&r);}}
+ QueryStatus query(const Evaluation&shape,RSWineVulkanSceneQueryCall3 queryCall,int32_t&result){
+  if(retired||!control||!queryCall||!observer||!identity)return QueryStatus::Unavailable;
+  if(shape.feature!=Feature::RayReconstruction&&shape.feature!=Feature::FrameGeneration)return QueryStatus::Unavailable;
+  if(!shape.width||!shape.height||!shape.outputWidth||!shape.outputHeight||
+     (shape.maxRenderWidth&&shape.width>shape.maxRenderWidth)||
+     (shape.maxRenderHeight&&shape.height>shape.maxRenderHeight))return QueryStatus::Invalid;
+  auto status=deviceContext(shape.device,false,result);
+  if(status!=Status::Recorded)return status==Status::Busy?QueryStatus::Busy:status==Status::Invalid?QueryStatus::Invalid:status==Status::Failed?QueryStatus::Failed:QueryStatus::Unavailable;
+  RSWineVulkanSceneRequestV2 packet{};auto&p=packet.base;auto&f=p.frame;
+  p.size=sizeof(p);p.version=1;p.profile=RS_WINE_VULKAN_SCENE_PROFILE;
+  p.flags=RS_WINE_VULKAN_ORIGINAL_OUTPUT_RETAINED;p.device=device;p.ownerId=generation;p.consumerId=consumer;
+  f.method=shape.method;f.profile=shape.profile;f.renderWidth=shape.width;f.renderHeight=shape.height;
+  f.maxRenderWidth=shape.maxRenderWidth?shape.maxRenderWidth:shape.width;
+  f.maxRenderHeight=shape.maxRenderHeight?shape.maxRenderHeight:shape.height;
+  f.outputWidth=shape.outputWidth;f.outputHeight=shape.outputHeight;
+  f.flags=(shape.reversedDepth?RS_TEMPORAL_DEPTH_REVERSED:0)|(shape.infiniteDepth?RS_TEMPORAL_DEPTH_INFINITE:0)|
+      (shape.jitteredMotion?RS_TEMPORAL_JITTERED_MOTION:0)|(shape.outputMotion?RS_TEMPORAL_OUTPUT_MOTION:0)|
+      (shape.autoExposure?RS_TEMPORAL_AUTO_EXPOSURE:0);
+  packet.metadata.size=sizeof(packet.metadata);packet.metadata.version=2;
+  result=queryCall(&packet,shape.feature==Feature::RayReconstruction?2:3);
+  return !result?QueryStatus::Supported:result==1||result==2?QueryStatus::Busy:result==-8?QueryStatus::Unavailable:result==-3?QueryStatus::Invalid:QueryStatus::Failed;
+ }
  Status observe(Evaluation source,int32_t&result){
   if(retired||!control||(!sink&&!recorder)||!observer||!identity)return Status::Unavailable;
   discardAdmission();auto status=context(source,result);if(status!=Status::Recorded)return status;

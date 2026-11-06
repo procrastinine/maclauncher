@@ -6,14 +6,28 @@ export const reference = { origin:'https://github.com/metalsharp/VKD3D-Proton-Ma
 export function instrumentNgxCore(text) {
  if(text.includes('MacLauncherOriginalEvaluate'))throw Error('The NGX observer is already present.');
  const signature=/NVNGX_EXPORT NVNGX_RESULT NVSDK_NGX_D3D12_EvaluateFeature\(ID3D12GraphicsCommandList \*list, const unsigned int \*handle,\s*NVNGXParameter \*params, void \*callback\) \{/;
- if(!signature.test(text)||!text.includes('struct CommonFeature {'))throw Error('The declared NGX source interface differs.');
+ const createSignature=/NVNGX_EXPORT NVNGX_RESULT NVSDK_NGX_D3D12_CreateFeature\(ID3D12GraphicsCommandList \*list, unsigned int feature,\s*NVNGXParameter \*params, unsigned int \*\*out_handle\) \{/;
+ if(!signature.test(text)||!createSignature.test(text)||!text.includes('struct CommonFeature {'))throw Error('The declared NGX source interface differs.');
  // The original parameter store, original feature handles and original
  // capabilities remain authoritative; this observer creates no scaler.
  text=text.replace('namespace ngx {','#include "maclauncher-ngx/dll-observer.hpp"\n\nnamespace ngx {');
  text=text.replace('  NVNGX_FEATURE feature;','  NVNGX_FEATURE feature;\n  maclauncher::ngx::DllObserver sceneObserver;');
+ text=text.replace(createSignature,`NVNGX_EXPORT NVNGX_RESULT NVSDK_NGX_D3D12_CreateFeature(ID3D12GraphicsCommandList*,unsigned int,NVNGXParameter*,unsigned int**);
+static NVNGX_RESULT MacLauncherOriginalCreate(ID3D12GraphicsCommandList *list,unsigned int feature,NVNGXParameter *params,unsigned int **out_handle) {`);
  text=text.replace(signature,`NVNGX_EXPORT NVNGX_RESULT NVSDK_NGX_D3D12_EvaluateFeature(ID3D12GraphicsCommandList*,const unsigned int*,NVNGXParameter*,void*);
 static NVNGX_RESULT MacLauncherOriginalEvaluate(ID3D12GraphicsCommandList *list,const unsigned int *handle,NVNGXParameter *params,void *callback) {`);
- text+=`\nNVNGX_EXPORT NVNGX_RESULT NVSDK_NGX_D3D12_EvaluateFeature(ID3D12GraphicsCommandList *list,const unsigned int *handle,NVNGXParameter *params,void *callback) {
+ text+=`\nNVNGX_EXPORT NVNGX_RESULT NVSDK_NGX_D3D12_CreateFeature(ID3D12GraphicsCommandList *list,unsigned int feature,NVNGXParameter *params,unsigned int **out_handle) {
+  const auto result=MacLauncherOriginalCreate(list,feature,params,out_handle);
+  if(result!=NVNGX_RESULT_OK||!params||!out_handle||!*out_handle)return result;
+  try {
+    auto created=static_cast<CommonFeature*>((void*)*out_handle);
+    int32_t nativeResult=0;
+    if(created->feature==NVNGX_FEATURE_RAYRECONSTRUCTION)created->sceneObserver.onCreate(list,*static_cast<ParametersImpl*>(params),maclauncher::ngx::Feature::RayReconstruction,nativeResult);
+    else if(created->feature==NVNGX_FEATURE_FRAMEGENERATION)created->sceneObserver.onCreate(list,*static_cast<ParametersImpl*>(params),maclauncher::ngx::Feature::FrameGeneration,nativeResult);
+  } catch(...) { /* Optional shape discovery preserves genuine original creation. */ }
+  return result;
+}
+NVNGX_EXPORT NVNGX_RESULT NVSDK_NGX_D3D12_EvaluateFeature(ID3D12GraphicsCommandList *list,const unsigned int *handle,NVNGXParameter *params,void *callback) {
   return maclauncher::ngx::evaluateWithObservation([&]{return MacLauncherOriginalEvaluate(list,handle,params,callback);},[&]{
     maclauncher::ngx::ObservationResult observed;
     if(!handle||!params)return observed;

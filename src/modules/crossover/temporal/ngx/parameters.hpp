@@ -29,9 +29,14 @@ public:
 // These bits are NGX input conventions, never a selected graphics provider.
 template<class Reader> bool readCreation(Reader&reader,Evaluation&out){
  auto value=out;uint32_t flags=0;
- if(!reader.get("Width",value.width)||!reader.get("Height",value.height)||
-    !reader.get("OutWidth",value.outputWidth)||!reader.get("OutHeight",value.outputHeight)||
-    !value.width||!value.height||!value.outputWidth||!value.outputHeight)return false;
+ if(!reader.get("Width",value.width)||!reader.get("Height",value.height)||!value.width||!value.height)return false;
+ if(value.feature==Feature::FrameGeneration){
+  // This core's FG Create declares one backbuffer/output grid via Width and
+  // Height. OutWidth/OutHeight belong to reconstruction and may be stale in
+  // the shared parameter store. Actual output resources are admitted later.
+  value.outputWidth=value.width;value.outputHeight=value.height;
+ }else if(!reader.get("OutWidth",value.outputWidth)||!reader.get("OutHeight",value.outputHeight)||
+          !value.outputWidth||!value.outputHeight)return false;
  reader.get("DLSS.Feature.Create.Flags",flags);
  value.maxRenderWidth=value.width;value.maxRenderHeight=value.height;
  value.outputMotion=(flags&(1u<<1))==0;value.jitteredMotion=(flags&(1u<<2))!=0;

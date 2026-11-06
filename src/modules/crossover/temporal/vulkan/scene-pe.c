@@ -85,10 +85,11 @@ static int32_t prepared_scene_call(RSWineVulkanSceneRequestV2 *request,uint32_t 
     NTSTATUS status;
     if(!request||request->base.size!=sizeof(request->base)||request->base.version!=1||
        request->base.profile!=RS_WINE_VULKAN_SCENE_PROFILE||!request->base.device||
-       !request->base.commandBuffer||request->metadata.size!=sizeof(request->metadata)||request->metadata.version!=2)
+       (selector!=5&&!request->base.commandBuffer)||request->metadata.size!=sizeof(request->metadata)||request->metadata.version!=2)
         return VK_ERROR_INITIALIZATION_FAILED;
     if(!maclauncher_scene_initialize()||!matched_profile((VkDevice)(UINT_PTR)request->base.device))return VK_ERROR_FEATURE_NOT_PRESENT;
-    probe.device=(VkDevice)(UINT_PTR)request->base.device;probe.name="MacLauncherWineVulkanScenePreparationABI3";
+    probe.device=(VkDevice)(UINT_PTR)request->base.device;
+    probe.name=selector==5?"MacLauncherWineVulkanSceneQueryABI3":"MacLauncherWineVulkanScenePreparationABI3";
     if((uint32_t)UNIX_CALL(is_available_device_function,&probe)!=RS_WINE_VULKAN_SCENE_PROFILE)return VK_ERROR_FEATURE_NOT_PRESENT;
     params.request=(UINT_PTR)request;params.reserved=selector;params.result=VK_ERROR_FEATURE_NOT_PRESENT;
     status=UNIX_CALL(maclauncher_scene_record,&params);
@@ -114,4 +115,11 @@ int32_t WINAPI MacLauncherWineVulkanCancelScene3(const RSWineVulkanSceneRequestV
     RSWineVulkanSceneRequestV2 copy;
     if(!request)return VK_ERROR_INITIALIZATION_FAILED;
     copy=*request;return prepared_scene_call(&copy,4);
+}
+
+int32_t WINAPI MacLauncherWineVulkanQueryScene3(const RSWineVulkanSceneRequestV2 *request,uint32_t feature)
+{
+    RSWineVulkanSceneRequestV2 copy;
+    if(!request||request->base.reserved[0]||request->base.reserved[1])return VK_ERROR_INITIALIZATION_FAILED;
+    copy=*request;copy.base.reserved[0]=feature;return prepared_scene_call(&copy,5);
 }

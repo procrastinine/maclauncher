@@ -23,6 +23,7 @@ class CommandBridge {
  Context context=nullptr;Resolve resolve=nullptr;Record record=nullptr;
  RSWineVulkanScenePrepareCall3 prepareCall=nullptr;
  RSWineVulkanSceneCancelCall3 cancelCall=nullptr;
+ RSWineVulkanSceneQueryCall3 queryCall=nullptr;
  ID3D12GraphicsCommandList*commands=nullptr;bool recordingAttempted=false;
  struct Resource {Image image;ID3D12Resource*value;};std::vector<Resource>resources;
  std::unique_ptr<Producer>producer;
@@ -53,11 +54,20 @@ public:
   auto control=reinterpret_cast<RSWineVulkanSceneContextCall1>(GetProcAddress(wine,"MacLauncherWineVulkanSceneContext1"));
   prepareCall=reinterpret_cast<RSWineVulkanScenePrepareCall3>(GetProcAddress(wine,"MacLauncherWineVulkanPrepareScene3"));
   cancelCall=reinterpret_cast<RSWineVulkanSceneCancelCall3>(GetProcAddress(wine,"MacLauncherWineVulkanCancelScene3"));
+  queryCall=reinterpret_cast<RSWineVulkanSceneQueryCall3>(GetProcAddress(wine,"MacLauncherWineVulkanQueryScene3"));
   if(context&&resolve&&record&&api&&api()==1&&control)producer=std::make_unique<Producer>(observer,feature,control,submit,this);
  }
  ~CommandBridge(){producer.reset();clear();if(wine)FreeLibrary(wine);if(translator)FreeLibrary(translator);}
  bool connected()const{return bool(producer);}
  CommandBridge(const CommandBridge&)=delete;CommandBridge&operator=(const CommandBridge&)=delete;
+ template<class Parameters>QueryStatus queryFeature(ID3D12GraphicsCommandList*list,const Parameters&parameters,Feature feature,int32_t&result){
+  if(!producer||!queryCall||!list)return QueryStatus::Unavailable;
+  Evaluation shape;shape.feature=feature;uint64_t commands=0;
+  if(context(list,&shape.device,&commands)!=0)return QueryStatus::Invalid;
+  ParameterReader<Parameters,ID3D12Resource,CommandBridge>reader(parameters,*this);
+  if(!readCreation(reader,shape))return QueryStatus::Invalid;
+  return producer->query(shape,queryCall,result);
+ }
  bool image(ID3D12Resource*resource,Image&out){
   Image resolved;
   // NGX resources are the actual base 2D attachments; array/mip views require
