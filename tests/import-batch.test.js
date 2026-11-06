@@ -69,7 +69,8 @@ test('failures from several imports share one banner with one Dismiss, and a dam
   await h.render().addPaths(['/games/A','/games/B']);
   let state=h.render();assert.deepEqual(state.batches[0].failures.map(row=>row.code),['DETECTION_INVALID_INPUT','DETECTION_INVALID_INPUT']);
   state.reveal('/games/A');state.remove(state.batches[0],0);state=h.render();
-  assert.deepEqual(state.batches[0].failures.map(row=>row.inputPath),['/games/B']);assert.deepEqual(revealed,['/games/A']);h.close();
+  assert.deepEqual(state.batches[0].failures.map(row=>row.inputPath),['/games/B']);assert.deepEqual(revealed,['/games/A']);
+  state.remove(state.batches[0],0);assert.deepEqual(h.render().batches,[],'removing the last failure clears its batch');h.close();
 });
 
 test('per-item chooser cancellation preserves failures and resolving one keeps the other actionable', async () => {

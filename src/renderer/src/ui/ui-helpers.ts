@@ -168,14 +168,20 @@ function readableVersion(raw: string) {
   }
   // A workflow build named by its time and commit reads as its date, and so does
   // a source snapshot ("HEAD · 2026-10-27 · b7654d4940f9").
-  const snapshot = raw.match(/^(\d{4}-\d{2}-\d{2})T\d{2}-\d{2}-\d{2}Z[_-][0-9a-f]{7,40}$/i) ||
-    raw.match(/^(?:HEAD\s*·\s*)?(\d{4}-\d{2}-\d{2})\s*·\s*[0-9a-f]{7,40}$/i);
+  const snapshot = raw.match(/^(\d{4}-\d{2}-\d{2})T\d{2}-\d{2}-\d{2}Z[_-][0-9a-f]{7,40}$/i) || SOURCE_SNAPSHOT.exec(raw);
   if (snapshot) return snapshot[1];
   const label = raw.replace(/-MCLv[\w.-]+$/i, "")
     .replace(/(?:\s*·\s*|[-._+@])?(?<![0-9A-Za-z])(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{7,40}(?![0-9A-Za-z])/g, "")
     .replace(/\.app\b/g, "").replace(/\s*\(\s*\)/g, "").replace(/\s{2,}/g, " ").trim()
     .replace(/^v(?=\d)/i, "").replace(/(\d)(alpha|beta|rc)(?=\d|$)/i, "$1 $2");
   return label || raw;
+}
+
+const SOURCE_SNAPSHOT = /^(?:HEAD\s*·\s*)?(\d{4}-\d{2}-\d{2})\s*·\s*([0-9a-f]{7,40})$/i;
+// Source snapshots from one day are told apart by a short commit prefix.
+function snapshotIdentity(label: string) {
+  const snapshot = SOURCE_SNAPSHOT.exec(label);
+  return snapshot ? `${snapshot[1]} · ${snapshot[2].slice(0, 7)}` : label;
 }
 
 // The MacLauncher package revision of a version, when it has one.
@@ -226,7 +232,7 @@ export function runtimeVersionTagger(
   for (const { label, members } of groups.values()) {
     const packaged = members.filter(version => packageRevision(version) !== null);
     const other = members.filter(version => packageRevision(version) === null);
-    const complete = (version: string) => String(runtimeSection?.versionLabels?.[version] || runtimeSection?.catalog?.versionLabels?.[version] || version).trim();
+    const complete = (version: string) => snapshotIdentity(String(runtimeSection?.versionLabels?.[version] || runtimeSection?.catalog?.versionLabels?.[version] || version).trim());
     const sourceLabel = (version: string) => runtimeSection?.catalog?.sources?.find((source: any) => source.versions?.includes(version))?.label;
     const sourced = (version: string) => [complete(version), sourceLabel(version)].filter(Boolean).join(" · ");
     for (const version of other) {

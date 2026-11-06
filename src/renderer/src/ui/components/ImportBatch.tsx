@@ -36,9 +36,13 @@ export function useImportBatches(api: ImportApi | undefined) {
       setBatches(previous => previous.map(row => row.id === batch.id ? { ...row, resolving: undefined } : row));
     }
   }
-  // Removing a failure only takes it off the list; the file is not touched.
-  const remove = (batch: Batch, index: number) => setBatches(previous => previous.map(row => row.id === batch.id
-    ? { ...row, failures: row.failures.filter((_, i) => i !== index) } : row));
+  // Removing a failure only takes it off the list; the file is not touched. A
+  // batch whose last failure is removed has nothing left to report.
+  const remove = (batch: Batch, index: number) => setBatches(previous => previous.flatMap(row => {
+    if (row.id !== batch.id) return [row];
+    const failures = row.failures.filter((_, i) => i !== index);
+    return failures.length ? [{ ...row, failures }] : [];
+  }));
   const reveal = (inputPath: string) => { void api?.revealInFinder?.(inputPath).catch(() => {}); };
   return { batches, addPaths, resolve, remove, reveal, dismiss: (id: number) => setBatches(previous => previous.filter(batch => batch.id !== id)) };
 }

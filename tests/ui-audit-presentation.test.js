@@ -728,6 +728,11 @@ test('publisher revision labels distinguish real nightly and source choices with
   const tag=runtimeVersionTagger({versionLabels:labels,catalog:{versions}});
   assert.deepEqual(versions.map(tag),Object.values(labels));assert.ok(versions.map(tag).every(label=>!/[()]\d+[()]/.test(label)));
   const sha='0837e5326e710f49e2ab0a8d995da0708047442e';assert.equal(resolveRuntimeVersionLabel('git-'+sha,null),'Source revision '+sha);
+  // Source snapshots read as their commit date; snapshots from one day add a short commit prefix.
+  const snapshots=['git-'+'b7654d4940f9'+'0'.repeat(28),'git-'+'2e07a8803d6b'+'0'.repeat(28),'git-'+'c0ffee000000'+'0'.repeat(28)];
+  const snapshotTag=runtimeVersionTagger({versionLabels:{},catalog:{versions:snapshots,versionLabels:{[snapshots[0]]:'HEAD · 2026-10-27 · b7654d4940f9',
+    [snapshots[1]]:'2026-10-27 · 2e07a8803d6b',[snapshots[2]]:'2026-10-20 · c0ffee000000'}}});
+  assert.deepEqual(snapshots.map(snapshotTag),['2026-10-27 · b7654d4','2026-10-27 · 2e07a88','2026-10-20']);
   const molten=runtimeVersionTagger({catalog:{versions:['1.4.2','1.4.2-rc1','1.0.37-Metal-3.0','1.0.37']}});
   assert.deepEqual(['1.4.2','1.4.2-rc1','1.0.37-Metal-3.0','1.0.37'].map(molten),['v1.4.2','v1.4.2-rc1','v1.0.37-Metal-3.0','v1.0.37']);
 });
