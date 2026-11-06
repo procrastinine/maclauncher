@@ -57,9 +57,15 @@ function offlineBridge(root, options = {}) {
       fs.writeFileSync(path.join(destination, 'runtime-package.json'), JSON.stringify(item.wrapper));
       fs.cpSync(item.payload, path.join(destination, 'files'), { recursive: true });
     } } });
-  // Play and Runtimes pass the same options; the Valve archive is supplied locally here.
-  const install = (userDataDir, version) => bridge.installRuntime({ userDataDir, version, resolved: valve.resolved, archiveFile: valve.archiveFile });
-  return { bridge, install, requests, item };
+  // Play and Runtimes pass the same options. The Valve archive is supplied
+  // locally here, and `received` records what the bridge passed for it.
+  const received = [];
+  const install = async (userDataDir, version, extra = {}) => {
+    const original = Components.install;
+    Components.install = options => { received.push(options); return original({ ...options, resolved: valve.resolved, archiveFile: valve.archiveFile }); };
+    try { return await bridge.installRuntime({ userDataDir, version, ...extra }); } finally { Components.install = original; }
+  };
+  return { bridge, install, received, requests, item };
 }
 const play = ({ bridge, userDataDir, extra = [], answers = [], installBridge }) => {
   const dialogs = [], installs = [], launches = [];
@@ -130,7 +136,7 @@ test('with another Play download, the bridge is one line of that dialog', async 
 });
 
 test('Runtimes lists the bridge as one managed row with its Valve files, and removing its last version removes them', async t => {
-  const root = scratch(t), userDataDir = path.join(root, 'data'), { bridge, install } = offlineBridge(root);
+  const root = scratch(t), userDataDir = path.join(root, 'data'), { bridge, install, received, item } = offlineBridge(root);
   assert.deepEqual({ ...bridge.ui }, { groupId: 'steam-bridge', tabLabel: 'Steam client bridge', sectionLabel: 'Steam client bridge',
     management: 'managed', order: 202, category: 'compatibility' });
   const empty = bridge.getState({ userDataDir }).sections[0];
@@ -140,7 +146,11 @@ test('Runtimes lists the bridge as one managed row with its Valve files, and rem
     [['steam-client-components', 'Windows Steam client files', 'Not installed', false, undefined]]);
   await bridge.refreshCatalog({ userDataDir, force: true });
   bridge.skipOptional({ appId: '480' }, { userDataDir });
-  await install(userDataDir, '1.0.0');
+  // A Components import passes the bridge package's own archive; the Valve install never receives it.
+  const packageArchive = path.join(root, item.record.asset.filename);
+  fs.writeFileSync(packageArchive, item.archive);
+  await install(userDataDir, '1.0.0', { archiveFile: packageArchive });
+  assert.deepEqual(Object.keys(received.at(-1)).sort(), ['onProgress', 'signal', 'userDataDir']);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(userDataDir, 'runtimes/steam-bridge-skipped.json'))).apps, [],
     'an installation makes a declined game eligible again');
   const ready = bridge.getState({ userDataDir }).sections[0], active = Components.status(userDataDir);

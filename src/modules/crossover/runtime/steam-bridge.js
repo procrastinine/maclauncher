@@ -75,7 +75,9 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
   const installRuntime = manager.installRuntime;
   manager.installRuntime = async function(options = {}) {
     const result = await installRuntime.call(this, options);
-    await Components.install(options);
+    // The Valve files take only the install context. A local archive in
+    // `options` is the bridge package's own archive.
+    await Components.install({ userDataDir: options.userDataDir, signal: options.signal, onProgress: options.onProgress });
     clearSkipped(options.userDataDir);
     return result;
   };
