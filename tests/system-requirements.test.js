@@ -63,7 +63,7 @@ test("documented processor behavior agrees with shared execution and launch gate
   const {documentFile} = await generator, text = fs.readFileSync(documentFile, "utf8");
   assert.match(text, /Apple Silicon Macs execute ARM64 code directly and Intel code through/);
   assert.match(text, /Intel Macs execute Intel code/);
-  assert.match(text, /Each app selects its own processor build by default/);
+  assert.match(text, /By default, each app selects the processor build that matches its own/);
   // Use the actual included iOS helper declarations, without loading a game,
   // reading installed resources or starting any native helper.
   const mod = {distributionSupplementals: require("../src/modules/shared/runtime/included-package-metadata").declarations(require("../src/modules/ios/distribution-supplementals.json"))};
