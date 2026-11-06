@@ -35,6 +35,11 @@ template<class Reader> bool readParameters(Reader&reader,Evaluation&out){
  if(!reader.get("MV.Scale.X",value.motionScaleX)||!reader.get("MV.Scale.Y",value.motionScaleY)||
     !reader.get("Jitter.Offset.X",value.jitterX)||!reader.get("Jitter.Offset.Y",value.jitterY))return false;
  uint32_t reset=0;reader.get("Reset",reset);value.reset=reset!=0;
+ uint32_t width=0,height=0;
+ const bool hasWidth=reader.get("DLSS.Render.Subrect.Dimensions.Width",width);
+ const bool hasHeight=reader.get("DLSS.Render.Subrect.Dimensions.Height",height);
+ if(hasWidth!=hasHeight||(hasWidth&&(!width||!height)))return false;
+ if(hasWidth){value.width=width;value.height=height;}
  reader.get("DLSS.Pre.Exposure",value.preExposure);reader.readImage("ExposureTexture",value.exposure);
  if(value.feature==Feature::RayReconstruction){
   uint32_t hardwareDepth=1;reader.get("DLSS.Use.HW.Depth",hardwareDepth);value.deviceDepth=value.deviceDepth&&hardwareDepth!=0;

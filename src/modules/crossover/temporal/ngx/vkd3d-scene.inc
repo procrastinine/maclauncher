@@ -49,12 +49,14 @@ __declspec(dllexport) int32_t WINAPI MacLauncherVkd3dRecordScene2(
     VkMemoryBarrier2 barrier;
     VkDependencyInfo dependency;
     HMODULE module;
+    char enabled[2];
     int32_t status;
     unsigned i;
     if (!iface || !source || !resources || source->base.size != sizeof(source->base) ||
         source->base.version != 1 || source->base.flags != RS_WINE_VULKAN_ORIGINAL_OUTPUT_RETAINED ||
         source->base.imageMask & ~((1u << RS_WINE_VULKAN_SCENE_IMAGE_COUNT)-1))
         return VK_ERROR_INITIALIZATION_FAILED;
+    if(GetEnvironmentVariableA("MACLAUNCHER_NGX_SCENE_ENABLE",enabled,sizeof(enabled))!=1 || enabled[0]!='1')return VK_ERROR_FEATURE_NOT_PRESENT;
     list = unsafe_impl_from_ID3D12CommandList((ID3D12CommandList *)iface);
     if (!list || !list->is_recording) return VK_ERROR_INITIALIZATION_FAILED;
     request = *source;

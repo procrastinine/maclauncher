@@ -239,6 +239,8 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   const translatorView = TranslatorFiles.selectedDescriptions(translatorPlan).length ? await TranslatorFiles.prepareTranslatorFiles(translatorPlan,
     { userDataDir: context.userDataDir, layout: translatorPlan.layout, signal: context.signal }) : null;
   const Temporal = require("../temporal");
+  const ngxScene = require("../temporal/ngx/connection").resolve({ runtimeId: "crossover", install: selected.install, translatorPlan, executableArchitecture: selectedExecutable.executableArchitecture });
+  context.ngxSceneConnection = ngxScene;
   const scenePlan = Temporal.resolveScenePlan(entry, context, { install: selected.install, settings, translatorPlan, verify: true, root: graphicsRoot });
   let sceneClosure = scenePlan?.packageReady ? scenePlan.sceneClosure : null;
   // A Vulkan scene source does not request a different Direct3D renderer.
@@ -425,6 +427,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   if (existingEnvironment?.running) {
     for (const key of ["WINEMSYNC", "WINEESYNC"]) { delete overrides[key]; delete environment[key]; }
   }
+  Object.assign(overrides, require("../temporal/ngx/connection").environment(ngxScene));
   if (Object.keys(overrides).length) args.push("--env", wineEnvironmentString(overrides));
   if (dll) args.push("--dll", dll);
   if (settings.wineDebug) args.push("--debugmsg", safeText(settings.wineDebug, "Wine debug channels"));

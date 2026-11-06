@@ -266,6 +266,8 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const translatorPlan = await (dependencies.resolveTranslators || Translators.resolve)(selected.install, "sikarugir", context, { entry, executableArchitecture: match.executableArchitecture, host });
   settings = Translators.settingsForPlan(settings, translatorPlan);
   const translatorEnvironment = TranslatorEnvironment.forLaunch(entry, context, Translators.environmentIds(translatorPlan, "sikarugir")).values;
+  const ngxScene = require("../temporal/ngx/connection").resolve({ runtimeId: "sikarugir", install: selected.install, translatorPlan, executableArchitecture: match.executableArchitecture });
+  context.ngxSceneConnection = ngxScene;
   const translatorView = await TranslatorFiles.prepareTranslatorFiles(translatorPlan, { userDataDir: context.userDataDir, layout: translatorPlan.layout, signal: context.signal });
   let cameraBridge = Temporal.resolvePlan(entry, context, { install: selected.install, settings, translatorPlan, host,
     runtimeId: "sikarugir", verify: true, root: dependencies.graphicsRoot, automatic: settings.dlss !== true });
@@ -326,6 +328,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   // Apply launcher-owned optional effects only to the game, after stock Wine
   // finishes prefix initialization. User-supplied loader paths remain blocked.
   if (context.applyGameEnvironment) environment = await context.applyGameEnvironment(environment);
+  Object.assign(environment, require("../temporal/ngx/connection").environment(ngxScene));
   if (existingEnvironment?.running) {
     for (const key of ["WINEMSYNC", "WINEESYNC"]) {
       if (existingEnvironment.environment[key] != null) environment[key] = existingEnvironment.environment[key];
