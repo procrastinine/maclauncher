@@ -676,8 +676,14 @@ test("CrossOver transports trusted game effects through its vendor environment a
   const context = { userDataDir, settings: {}, runtimeSettings: { version: installed.version } };
   const disabled = await Launch.prepareLaunch(entry, { ...context, applyGameEnvironment: async env => env }, { run });
   assert.equal(disabled.environment.RESHADE_CONFIG, undefined);
-  const graphicsFlags = { DXMT_ENABLE_NVEXT: "0", D3DM_ENABLE_METALFX: "0" };
-  assert.equal(disabled.args[disabled.args.indexOf("--env") + 1], Launch.wineEnvironmentString(graphicsFlags));
+  const expectedEnvironment = values => {
+    const {DXVK_SHADER_CACHE_PATH, ...rest} = values;
+    return Launch.wineEnvironmentString({...rest, DXVK_SHADER_CACHE_PATH});
+  };
+  const graphicsFlags = { DXMT_ENABLE_NVEXT: "0", D3DM_ENABLE_METALFX: "0",
+    MESA_SHADER_CACHE_DIR: path.join(disabled.directory, "cache", "mesa"),
+    DXVK_SHADER_CACHE_PATH: disabled.environment.DXVK_SHADER_CACHE_PATH };
+  assert.equal(disabled.args[disabled.args.indexOf("--env") + 1], expectedEnvironment(graphicsFlags));
   const effect = { DYLD_INSERT_LIBRARIES: "/owned/effects/quoted ' library.dylib", RESHADE_CONFIG: "/owned/game/ReShade.ini" };
   const loader = path.join(directory, "private graphics loader");let loaderPreparations = 0;
   t.mock.method(require("../src/modules/crossover/runtime/graphics-loader"), "prepare", async (installation, owned) => {
@@ -692,7 +698,7 @@ test("CrossOver transports trusted game effects through its vendor environment a
   assert.equal(preparation[0].RESHADE_CONFIG, undefined);
   assert.equal(enabled.environment.RESHADE_CONFIG, effect.RESHADE_CONFIG);
   assert.equal(enabled.environment.DYLD_INSERT_LIBRARIES, effect.DYLD_INSERT_LIBRARIES);
-  assert.equal(enabled.args[enabled.args.indexOf("--env") + 1], Launch.wineEnvironmentString({ ...graphicsFlags, ...effect, ...loaderEnvironment }));
+  assert.equal(enabled.args[enabled.args.indexOf("--env") + 1], expectedEnvironment({ ...graphicsFlags, ...effect, ...loaderEnvironment }));
   assert.equal(enabled.environment.WINELOADER, loader);assert.equal(enabled.environment.CX_WINELOADER, loader);
   assert.equal(enabled.bottlePath, disabled.bottlePath, "enabling effects retains the Windows environment and saves");
   const temporalEffect = { ...effect, RESHADE_TEMPORAL_CONTROL_FILE: "/owned/game/temporal-controls.bin", RESHADE_TEMPORAL_METHOD: "metalfx" };
@@ -702,7 +708,7 @@ test("CrossOver transports trusted game effects through its vendor environment a
     applyGameEnvironment: async env => ({ ...env, ...temporalEffect }) }, { run });
   assert.equal(temporal.environment.DXMT_ENABLE_NVEXT, "1");
   assert.equal(temporal.environment.RESHADE_TEMPORAL_CONTROL_FILE, temporalEffect.RESHADE_TEMPORAL_CONTROL_FILE);
-  assert.equal(temporal.args[temporal.args.indexOf("--env") + 1], Launch.wineEnvironmentString({ ...graphicsFlags, DXMT_ENABLE_NVEXT: "1", ...temporalEffect, ...loaderEnvironment }));
+  assert.equal(temporal.args[temporal.args.indexOf("--env") + 1], expectedEnvironment({ ...graphicsFlags, DXMT_ENABLE_NVEXT: "1", ...temporalEffect, ...loaderEnvironment }));
   assert.equal(temporal.bottlePath, disabled.bottlePath);
   assert.equal(preparation.length, 1, "temporal selection reuses the existing private bottle");
   assert.equal(loaderPreparations, 2);

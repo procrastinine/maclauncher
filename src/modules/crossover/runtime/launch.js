@@ -159,6 +159,7 @@ function buildEnvironment(settings, installation, directory, bottlePath, { baseE
   Object.assign(overrides, WineSettings.environment(settings, { needsRosetta: installation.needsRosetta, engines: translatorPlan ? Translators.engines(translatorPlan) : {} }), parseEnvironment(settings.environment));
   const dll = dllOverrides(settings);
   if (dll) overrides.WINEDLLOVERRIDES = dll;
+  Object.assign(overrides, require("./shader-cache").environment(directory));
   Object.assign(environment, overrides, { CX_ROOT: installation.crossoverRoot,
     CX_BOTTLE: bottlePath,
     CX_BOTTLE_PATH: path.dirname(bottlePath), WINEPREFIX: bottlePath });
@@ -409,6 +410,8 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   const driveRoot = require("../game-drive").gameDriveRoot(entry, originalRoot, executable);
   const { windowsExecutablePath, windowsWorkingDirectory } = require("../../shared/runtime/wine-game-paths").prepareGamePaths(bottlePath,
     { gameRoot: gameRoot === originalRoot ? driveRoot : gameRoot, executablePath, workingRoot: driveRoot, workingDirectory });
+  const shaderCache = require('./shader-cache').prepare(directory, bottlePath);
+  Object.assign(environment, shaderCache); Object.assign(overrides, shaderCache);
   const args = ["--bottle", bottlePath, "--wait-children", "--workdir", windowsWorkingDirectory];
   if (!WineSettings.inherit(settings.windowsVersion)) {
     if (!Object.hasOwn(WineSettings.WINDOWS_VERSIONS, settings.windowsVersion)) throw new Error("Unsupported Wine Windows version.");
