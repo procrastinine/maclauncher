@@ -719,7 +719,9 @@ test("native preparation evidence is cloned, persisted and immutable without rep
 
 test("invalid preparation evidence cannot publish a native runtime", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t), archive = Buffer.from("verified archive"), digest = crypto.createHash("sha256").update(archive).digest("hex");
-  for (const evidence of [{ file: () => "not serializable" }, { size: Infinity }, { text: "x".repeat(65537) }]) {
+  // Evidence size is not limited; a cycle cannot be recorded.
+  const cyclic = { files: [] }; cyclic.files.push(cyclic);
+  for (const evidence of [{ file: () => "not serializable" }, { size: Infinity }, cyclic]) {
     const runtime = await listed({ discoverCatalog: async () => [{ version: "1.2.0", upstreamRevision: "abc123", asset: { url: "https://example.com/native.tar.gz", filename: "native.tar.gz", sha256: digest } }],
       prepareInstall: async () => evidence, resolveExecutable: destination => path.join(destination, "runner"),
       dependencies: { downloadToFile: async (_url, destination) => fs.writeFileSync(destination, archive),
