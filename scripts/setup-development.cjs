@@ -13,11 +13,13 @@ async function prepareDevelopmentInputs({ repoRoot = ROOT, arch = process.arch, 
   prepareDeclaredPublishers = require('./published-inputs.cjs').prepareDeclaredPublishers,
   prepareCp932 = require('../src/modules/catsystem2/runtime/stage-cp932.cjs').prepare,
   buildActivation = require('./build-launch-activation.cjs').build,
+  buildRosettaLibraryLoader = require('../src/modules/shared/runtime/native/rosetta-library-load-build.mjs').buildRosettaLibraryLoader,
   fetchPackages = require('./runtime-packages.cjs').fetchPackages } = {}) {
   await installElectron();
   const cp932 = await prepareCp932({ repoRoot });
   if (platform !== 'darwin') return { electron: true, nativePackages: 0, platform, cp932 };
   buildActivation({ repoRoot, arch });
+  buildRosettaLibraryLoader({ output: path.join(repoRoot, 'src/resources/rosetta-library-load-x64') });
   const lock = readLock({ repoRoot, arch });
   const python = await preparePython({ repoRoot, arch });
   const sevenZip = await prepareSevenZip({ repoRoot });

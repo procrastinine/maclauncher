@@ -175,5 +175,5 @@ function createRosettaService({ platform = process.platform, arch, fileSystem = 
     clearCache: () => { cached = null; checkedAt = 0; } };
 }
 
-module.exports = { createRosettaService, createAppleInstaller, parsePackageInfo, parseSystemVersion, prerequisitePlan,
+module.exports = { createRosettaService, createAppleInstaller, parsePackageInfo, parseSystemVersion, prerequisitePlan, systemEnvironment,
   PACKAGE_ID, RUNTIME_PATH, INSTALL_LOCATION, LICENSE_URL, SUPPORT_URL, ...createRosettaService() };

@@ -109,6 +109,9 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
       return { manifestSha256: record.manifestSha256,
         sourceIdentity: Catalog.sourceIdentity(record, {manifest: selected.manifest, wrapper, sourceRelative: sourcePath}) };
     },
+    prepareInstalled: nativeLibrary ? ({ installed, pin, ...context }) =>
+      require('./rosetta-library-prepare').prepareInstalledLibraries(inspect(path.join(installed.installDir, 'payload'), pin.projectPackage,
+        { userDataDir: context.userDataDir, verification: 'status', metadataOnly: true }), installed, context, dependencies.rosettaLoad) : undefined,
     dependencies: { ...dependencies, extractArchive: async (archive, unpacked, signal) => {
       const extracted = path.join(unpacked, ".package"); fs.mkdirSync(extracted);
       const options = { signal, timeout: 120000, maxBuffer: 8 * 1024 * 1024 };

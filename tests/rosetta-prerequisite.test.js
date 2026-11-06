@@ -231,3 +231,49 @@ test("network errors do not trigger an unrelated administrator prompt", async ()
 test("package evidence never assigns another package's version to Rosetta", () => {
   assert.deepEqual(Rosetta.parsePackageInfo("package-id: unrelated\nversion: 99\n"), { packageId: null, version: null, installedAt: null });
 });
+
+test('installed Intel library preparation uses final declared images and records real loading only', async t => {
+  const { prepareInstalledLibraries } = require('../src/modules/shared/runtime/rosetta-library-prepare');
+  const { image, X64 } = require('./fixtures/macho-image');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rosetta-installed-load-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const facts = [], write = (name, options, architectures = ['x86_64']) => {
+    const file = path.join(root, name);fs.writeFileSync(file, image({ cpu: X64, ...options }));
+    facts.push({ path: name, architectures });return fs.realpathSync(file);
+  };
+  const library = write('declared-library-without-suffix', { fileType: 6 });
+  write('executable-with-dylib-suffix.dylib', { fileType: 2 });
+  write('silicon.dylib', { cpu: 0x0100000c }, ['arm64']);
+  const depRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rosetta-dependency-'));
+  t.after(() => fs.rmSync(depRoot, { recursive: true, force: true }));
+  const dependency = path.join(depRoot, 'actual-native-image');fs.writeFileSync(dependency, image({cpu:X64,fileType:6}));
+  const depRecord = {id:'shared-library',asset:{sha256:'b'.repeat(64)}};
+  const selected = { root, declaration: { files: facts }, resolveDependency: Object.assign(() => {}, {packages:[{root:depRoot,record:depRecord,declaration:{files:[{path:'actual-native-image',architectures:['x86_64']}]}}]}) }, installed = { archiveSha256: 'a'.repeat(64), architecture: 'x64' };
+  const calls = [], controller = new AbortController(), logs = [];
+  const options = { platform: 'darwin', hardwareArch: 'arm64', rosettaPresent: () => true, helperPath: '/packaged/rosetta-library-load-x64',
+    run: async (command, args, config) => { calls.push({command,args,config});return {stdout: JSON.stringify({requested:args.length,loaded:args.length,failed_index:-1,load_ms:42})}; } };
+  const context = { signal: controller.signal, logger: {warn: text => logs.push(text)} };
+  const result = await prepareInstalledLibraries(selected, installed, context, options);
+  assert.equal(result.rosettaLoad.status, 'loaded');assert.equal(result.rosettaLoad.loadMs, 42);
+  assert.deepEqual(calls[0].args, [fs.realpathSync(dependency), library]);assert.equal(calls[0].config.signal, controller.signal);
+  assert.equal(calls[0].config.timeout, 120000);assert.equal(calls[0].config.killSignal, 'SIGKILL');
+  assert.equal(Object.keys(calls[0].config.env).some(key => key.startsWith('DYLD_')), false);
+  await prepareInstalledLibraries(selected, {...installed,installationMetadata:result}, context, options);
+  assert.equal(calls.length, 1, 'unchanged successful preparation does not invoke the helper');
+  fs.appendFileSync(library, Buffer.from([0]));
+  const changed = await prepareInstalledLibraries(selected, {...installed,installationMetadata:result}, context, options);
+  assert.notEqual(changed.rosettaLoad.identity, result.rosettaLoad.identity);assert.equal(calls.length, 2);
+  depRecord.asset.sha256 = 'c'.repeat(64);
+  const dependencyChanged = await prepareInstalledLibraries(selected, {...installed,installationMetadata:changed}, context, options);
+  assert.notEqual(dependencyChanged.rosettaLoad.identity, changed.rosettaLoad.identity);assert.equal(calls.length, 3);
+  const fail = await prepareInstalledLibraries(selected, installed, context, {...options,run: async () => {throw Error('load failed');}});
+  assert.equal(fail.rosettaLoad.status, 'not-loaded');assert.match(fail.rosettaLoad.reason, /load failed/);
+  controller.abort();
+  const cancelled = await prepareInstalledLibraries(selected, installed, context, {...options,run: async () => {throw controller.signal.reason;}});
+  assert.equal(cancelled.rosettaLoad.status, 'not-loaded');assert.match(cancelled.rosettaLoad.reason, /cancelled/);
+  const noProbe = {...options,run: async () => assert.fail('no helper or Rosetta probe')};
+  assert.equal((await prepareInstalledLibraries(selected, installed, {}, {...noProbe,rosettaPresent: () => false})).rosettaLoad.status, 'not-loaded');
+  assert.equal(await prepareInstalledLibraries(selected, {...installed,architecture:'arm64'}, {}, noProbe), undefined);
+  assert.equal(await prepareInstalledLibraries(selected, installed, {}, {...noProbe,hardwareArch:'x64'}), undefined);
+  assert.equal(fs.existsSync(library), true, 'failed optional loads leave the installed payload intact');
+});

@@ -30,6 +30,7 @@ function fixture(overrides = {}) {
     prepareDeclaredPublishers: step('publishers', { files: 1 }),
     prepareCp932: step('cp932', { generated: false }),
     buildActivation: options => { calls.push({ name: 'activation', options }); },
+    buildRosettaLibraryLoader: options => { calls.push({ name: 'rosetta-loader', options }); },
     fetchPackages: step('packages', { packages: lock.packages.length }),
     ...overrides
   };
@@ -39,7 +40,7 @@ function fixture(overrides = {}) {
 test('developer installation uses the app lock and the existing publisher and sealed-package preparation paths', async () => {
   const f = fixture();
   const result = await Setup.prepareDevelopmentInputs(f.options);
-  assert.deepEqual(f.calls.map(row => row.name), ['electron', 'cp932', 'activation', 'lock', 'python', '7zip', 'publishers', 'packages']);
+  assert.deepEqual(f.calls.map(row => row.name), ['electron', 'cp932', 'activation', 'rosetta-loader', 'lock', 'python', '7zip', 'publishers', 'packages']);
   assert.deepEqual(f.calls.find(row=>row.name==='lock').options, { repoRoot: '/source', arch: 'arm64' });
   assert.deepEqual(f.calls.find(row=>row.name==='cp932').options, { repoRoot: '/source' });
   assert.deepEqual(f.calls.find(row=>row.name==='python').options, { repoRoot: '/source', arch: 'arm64' });

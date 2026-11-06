@@ -189,6 +189,7 @@
           "7zip/**",
           "maclauncher.png",
           "launch-activation.node",
+          "rosetta-library-load-x64",
           "native-runtimes/**",
           "python/**",
           "!**/.DS_Store",
