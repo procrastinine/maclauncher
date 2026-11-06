@@ -11,7 +11,7 @@ const { build } = require('vite');
 const Modules = require('../src/modules/registry');
 const { userImportError } = require('../src/core/import-error');
 const { entryModuleLabels } = require('../src/core/entry-labels');
-const { normalizeRuntimeSettings, resolveRuntimeSettingsSchema, resolveModuleRuntimeSettings } = require('../src/core/runtime-settings');
+const { normalizeRuntimeSettings, resolveRuntimeSettingsSchema, resolveModuleRuntimeSettings, resolveRuntimeSettingsForEntry } = require('../src/core/runtime-settings');
 const { createLibraryFixture } = require('./library-layout-fixture');
 const Nxnative = require('../src/modules/nxnative/main');
 const Settings = require('../src/modules/nxnative/settings');
@@ -99,7 +99,8 @@ function fakeRuntime(root, outcome) {
       inputFacts: outcome.inputFacts }));
     fs.writeFileSync(options.logPath, JSON.stringify({ ev: 'prepared', launchFile: path.join(out, 'launch.json') }) + '\n');
   };
-  return { calls, runCommand, selection: { runtime: { root, host, cli: host, config: { runtimeFiles: {} } }, version: 'fixture', install: { manifestSha256: 'fixture' } } };
+  return { calls, runCommand, selection: { runtime: { root, host, cli: host, config: { runtimeFiles: {}, capabilities: { keylessInputs: ['nup', 'dump'], packageSelection: true } } },
+    version: 'fixture', install: { manifestSha256: 'fixture' } } };
 }
 
 test('Add, Open and drop accept NUP files and keyless dump folders', async t => {
@@ -279,4 +280,19 @@ test('Play prepares the chosen update and falls back to the newest local package
   const missing = await run('v9');
   assert.equal(missing.args.includes('--package'), false);
   assert.deepEqual([missing.data.selectedUpdate, missing.data.generation], ['v65536', 2]);
+});
+
+test('existing Switch games keep their module, runtime and saved settings IDs', () => {
+  // A record saved before keyless input support: an encrypted container with a registered key file.
+  const record = { gameId: 'existing', gamePath: '/Games/Example.nsp', moduleId: 'nxnative', runtimeId: 'nxnative',
+    moduleData: { format: 'nsp', sourceKind: 'Switch NSP', inputPath: '/Games/Example.nsp', titleId: null, inspectionOnly: false, keysRequired: true },
+    runtimeSettings: { nxnative: { keysPath: '/Keys/prod.keys', buildUpstreamHost: true } } };
+  assert.deepEqual(Object.keys(Nxnative.manifest.runtime.entries), ['nxnative', 'inspection']);
+  assert.equal(Nxnative.normalizeRuntimeId(record.runtimeId), 'nxnative');
+  assert.deepEqual(Nxnative.filterRuntimeSupport(record), ['nxnative']);
+  assert.equal(Nxnative.canLaunchRuntime('nxnative', record), true);
+  assert.equal(info().runtime.manager.nxnative, 'nxnative');
+  const settings = resolveRuntimeSettingsForEntry(record, {}, info(), 'nxnative');
+  assert.deepEqual([settings.keysPath, settings.buildUpstreamHost, settings.packageVersion], ['/Keys/prod.keys', true, 'latest']);
+  assert.deepEqual(entryModuleLabels(info(), record), { label: 'Nintendo Switch', shortLabel: 'Nintendo Switch' });
 });
