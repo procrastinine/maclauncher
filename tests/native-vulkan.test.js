@@ -475,3 +475,11 @@ test("stock KosmicKrisp discovers upstream metadata, installs verified closures 
     fs.appendFileSync(path.join(installed.installDir, "libvulkan.1.dylib"), "tampered");
     assert.equal(Vulkan.installed(context, options).length, 1, "a changed loader cannot enter a graphics path");
   });
+
+test('KosmicKrisp rename conversion preserves explicit choices and falls back on malformed saved values', () => {
+ const { normalizeSelection } = require('../src/modules/shared/vulkan/managed'), warnings = [], logger = {warn: text => warnings.push(text)};
+ assert.equal(normalizeSelection('kosmickrisp:maclauncher-gles32',logger),'kosmickrisp:maclauncher');
+ assert.equal(normalizeSelection('kosmickrisp-gles32:27.0.0-devel-MCLv8',logger),'maclauncher-kosmickrisp:27.0.0-devel-MCLv8');
+ assert.equal(normalizeSelection('auto',logger),'auto');
+ assert.equal(normalizeSelection(null,logger),'auto');assert.equal(warnings.length,1);
+});

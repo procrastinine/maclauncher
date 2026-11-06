@@ -5,22 +5,14 @@ const { createProjectBuildManager } = require("../runtime/project-build-manager"
 const repository = "procrastinine/maclauncher-builds";
 
 const projectId = "maclauncher-kosmickrisp";
-const formerProjectId = "vulkan-kosmickrisp-gles32";
+const Rename = require("./backcompat/rename");
+const { formerProjectId, normalizeSelection } = Rename;
 const selectionId = "kosmickrisp:maclauncher";
 const prefix = projectId + ":";
 
-function normalizeSelection(value, logger = console) {
-  if (value === "kosmickrisp:maclauncher-gles32") return selectionId;
-  if (typeof value === "string") {
-    if (!value.startsWith("kosmickrisp-gles32:")) return value;
-    try { return prefix + manager.core.normalizeVersion(value.slice("kosmickrisp-gles32:".length)); } catch {}
-  }
-  logger?.warn?.("[runtimes] The saved MacLauncher KosmicKrisp choice could not be read; using Automatic.");
-  return "auto";
-}
 
 function createManager(dependencies = {}) {
-  const formerIds = [formerProjectId];
+  const { formerIds } = Rename;
   const manager = createProjectBuildManager({ projectId, formerIds, label: "MacLauncher KosmicKrisp", repository, sourceLabel: "Source", upstreamUrl: "https://gitlab.freedesktop.org/mesa/mesa", nativeLibrary: true,
     manifestRelative: "manifest.json", sourceRelative: null, filesPrefix: "files/",
     executableRelative: manifest => manifest.executableRelative,
@@ -34,39 +26,7 @@ function createManager(dependencies = {}) {
       Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
       await Bundled.verifySignatures(selected.root,selected.declaration,{signal});
     }, dependencies });
-  function previousSettings(runtimes, logger = dependencies.logger || console) {
-    const previous = runtimes?.[formerProjectId];
-    if (previous === undefined) return undefined;
-    if (previous && typeof previous === "object" && !Array.isArray(previous) &&
-        (previous.defaultVersion == null || typeof previous.defaultVersion === "string")) try {
-      const normalized = manager.normalizeSettings(previous);
-      if (normalized.defaultVersion) manager.core.normalizeVersion(normalized.defaultVersion);
-      return normalized;
-    } catch {}
-    logger?.warn?.("[runtimes] The saved MacLauncher KosmicKrisp settings could not be read; using the manager default.");
-    return undefined;
-  }
-  const withPreviousSettings = settings => settings?.runtimes?.[projectId] !== undefined ? settings :
-    { ...settings, runtimes: { ...settings?.runtimes, [projectId]: previousSettings(settings?.runtimes) } };
-  const withPreviousEntry = entry => entry?.runtimeData?.[projectId] !== undefined || entry?.runtimeData?.[formerProjectId] === undefined ? entry :
-    { ...entry, runtimeData: { ...entry.runtimeData, [projectId]: entry.runtimeData[formerProjectId] } };
-  function resolveSelection(entry, settings, data, options = {}) {
-    entry = withPreviousEntry(entry);
-    const effective = withPreviousSettings(settings);
-    const result = manager.resolveSelection(entry, effective, data, options);
-    if (effective.runtimes?.[projectId]?.defaultVersion && !settings?.runtimes?.[projectId] &&
-        !options.version && !result.ready && result.discoveryRequired) {
-      (dependencies.logger || console).warn?.("[runtimes] The saved MacLauncher KosmicKrisp version is unavailable; using the manager default.");
-      return manager.resolveSelection(entry, settings, data, options);
-    }
-    return result;
-  }
-  return { ...manager, formerIds, translatorEngine: "kosmickrisp", distributionRequired: false,
-    chooseArchitecture: (entry, settings, data, options) => manager.chooseArchitecture(withPreviousEntry(entry), withPreviousSettings(settings), data, options),
-    resolveSelection,
-    getState: (options = {}) => manager.getState({ ...options,
-      settings: options.settings ?? options.runtimeSettings?.[projectId] ?? previousSettings(options.runtimeSettings, options.logger) }),
-    installRuntime: (options = {}) => manager.installRuntime({ ...options, settings: withPreviousSettings(options.settings) }),
+  return { ...Rename.adapt(manager, dependencies), translatorEngine: "kosmickrisp", distributionRequired: false,
     ui: { groupId: "vulkan-drivers", sectionLabel: manager.label, memberOrder: 22, management: "managed", hostFeature: "METAL4" } };
 }
 
