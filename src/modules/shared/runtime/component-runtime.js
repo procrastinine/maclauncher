@@ -265,13 +265,13 @@ async function prepareArchive(input, { userDataDir, names, signal, licence, ...c
   if (!require("./release-files").archiveFormat(input)) return {};
   const sha256 = require("./pinned-native-manager").hashFile(input);
   const base = path.join(userDataDir, "runtimes", "imports"), root = path.join(base, sha256);
-  if (fs.existsSync(root)) { if (licence) await confirmLicence(root, licence, { userDataDir, ...consent }); }
+  const confirm = async directory => { if (licence) await confirmLicence(directory, licence, { userDataDir, ...consent }); };
+  if (fs.existsSync(root)) await confirm(root);
   else {
     fs.mkdirSync(base, { recursive: true });const staging = fs.mkdtempSync(path.join(base, ".import-"));
     try {
-      if (/\.dmg$/i.test(input)) await importDmg(input, staging, names, signal);
-      else await require("./safe-archive").extractArchive(input, staging);
-      if (licence) await confirmLicence(staging, licence, { userDataDir, ...consent });
+      if (/\.dmg$/i.test(input)) await importDmg(input, staging, names, signal, confirm);
+      else { await require("./safe-archive").extractArchive(input, staging); await confirm(staging); }
       fs.renameSync(staging, root);
     } finally { fs.rmSync(staging, { recursive: true, force: true }); }
   }
@@ -279,7 +279,9 @@ async function prepareArchive(input, { userDataDir, names, signal, licence, ...c
 }
 // The licence an imported container carries at its top, such as Apple's
 // License.rtf in the Game Porting Toolkit, is shown as text through the runtime
-// consent before the import is kept. Declining cancels the import. Agreement
+// consent. A disk image volume is shown while attached, before anything is
+// copied; an archive is shown once extracted to staging, before the import is
+// kept. Declining cancels the import. Agreement
 // is recorded by the licence file's SHA-256, so only a different licence text
 // is shown again; an agreement that cannot be recorded is asked again later.
 async function confirmLicence(directory, owner, { userDataDir, confirmRuntimeInstall, logger, run } = {}) {
@@ -305,16 +307,17 @@ async function confirmLicence(directory, owner, { userDataDir, confirmRuntimeIns
 // A disk image volume that holds the component is copied whole, with the
 // publisher's notices. A distribution volume without the component, such as
 // Apple's Game Porting Toolkit, is searched for a disk image at its top level
-// that holds the component, and only that image's volume is copied.
-async function importDmg(image, destination, names, signal, nested = false) {
+// that holds the component, and only that image's volume is copied. `ready`
+// receives the volume that is about to be copied.
+async function importDmg(image, destination, names, signal, ready = async () => {}, nested = false) {
   const Dmg = require("./dmg");
   return Dmg.withMountedDmg(image, signal, {}, async volume => {
-    if (!names?.length || holdsComponent(volume, names)) { await Dmg.copyVolume(volume, destination, signal); return true; }
+    if (!names?.length || holdsComponent(volume, names)) { await ready(volume); await Dmg.copyVolume(volume, destination, signal); return true; }
     if (nested) return false;
     for (const item of fs.readdirSync(volume, { withFileTypes: true }))
       if (item.isFile() && !item.name.startsWith(".") && /\.dmg$/i.test(item.name) &&
-        await importDmg(path.join(volume, item.name), destination, names, signal, true)) return true;
-    await Dmg.copyVolume(volume, destination, signal);
+        await importDmg(path.join(volume, item.name), destination, names, signal, ready, true)) return true;
+    await ready(volume); await Dmg.copyVolume(volume, destination, signal);
     return true;
   });
 }

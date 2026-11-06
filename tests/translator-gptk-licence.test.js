@@ -31,12 +31,16 @@ function setup(t) {
   };
   t.mock.method(Dmg, "withMountedDmg", async (file, _signal, _options, use) => use(volumes.get(file)));
   const manager = createManager("d3dmetal");
+  const imports = () => { try { return fs.readdirSync(path.join(userDataDir, "runtimes/imports")); } catch { return []; } };
+  // Each consent also records the files imported so far.
   const register = (runtimePath, consent) => {
     const plans = [];
     return { plans, result: Custom.register(manager, { userDataDir, runtimePath, sectionId: "default", logger: { warn() {} },
-      confirmRuntimeInstall: async plan => { plans.push(plan); return consent; } }) };
+      confirmRuntimeInstall: async plan => {
+        plans.push({ ...plan, copied: imports().flatMap(name => fs.readdirSync(path.join(userDataDir, "runtimes/imports", name))) });
+        return consent;
+      } }) };
   };
-  const imports = () => { try { return fs.readdirSync(path.join(userDataDir, "runtimes/imports")); } catch { return []; } };
   const accepted = () => { try { return Object.keys(JSON.parse(fs.readFileSync(path.join(userDataDir, "runtimes/accepted-licences.json"), "utf8")).accepted); } catch { return []; } };
   return { disk, manager, register, imports, accepted, userDataDir };
 }
@@ -50,6 +54,7 @@ test("declining Apple's licence cancels the import and keeps nothing", async t =
   assert.equal(plans[0].licenseRequired, true);
   assert.match(plans[0].detail, /Apple licence one/);
   assert.doesNotMatch(plans[0].detail, /\\rtf1/, "the licence is shown as text");
+  assert.deepEqual(plans[0].copied, [], "the licence is shown before anything is copied from the disk image");
   assert.deepEqual(f.imports(), [], "neither the import nor its staging folder remains");
   assert.deepEqual(f.accepted(), []);
   assert.deepEqual(Custom.forManager(f.manager).records(f.userDataDir), []);
