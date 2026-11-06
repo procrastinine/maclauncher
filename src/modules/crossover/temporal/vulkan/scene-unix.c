@@ -34,6 +34,8 @@ struct scene_context {
     RSRecordedSceneConsumerV1 consumer;
     RSVulkanSceneCallbacksV1 callbacks;
     RSVulkanSceneCallbacksV3 callbacks3;
+    atomic_uint commandKind;
+    uint32_t candidateKind;
     int (*setDestination)(void*,void*);
     uint64_t destinationWindow;
     pthread_mutex_t destinationMutex;
@@ -82,6 +84,42 @@ static struct scene_context *find_context(uint64_t observer,uint64_t identity)
         if (value->observer==observer && value->identity==identity) return value;
     return NULL;
 }
+/* A factory kind is only a candidate until the actual producer query admits
+ * it. An API3 callback/table version does not identify a native command kind. */
+static VkResult create_scene_consumer3(struct scene_context *value,uint32_t kind)
+{
+    typedef int (*Create3)(uint64_t,uint32_t,RSRecordedSceneConsumerV3*);
+    typedef int (*Boundary3)(const RSVulkanSceneCallbacksV3*,RSVulkanSceneCallbacksV3*);
+    Create3 create=(Create3)dlsym(value->library,"rsCreateRecordedSceneConsumer3");
+    Boundary3 boundary=(Boundary3)dlsym(value->library,"rsCreateVulkanSceneBoundary3");
+    RSRecordedSceneConsumerV3 consumer={0};
+    RSVulkanSceneCallbacksV3 output={0};
+    RSVulkanSceneCallbacksV1 *callbacks=&consumer.callbacks.base;
+    if(!create||!boundary)return VK_ERROR_FEATURE_NOT_PRESENT;
+    consumer.size=sizeof(consumer);consumer.version=3;
+    if(!create(value->generation,kind,&consumer))return VK_NOT_READY;
+    if(consumer.size!=sizeof(consumer)||consumer.version!=3||!consumer.owner||
+       callbacks->size!=sizeof(RSVulkanSceneCallbacksV3)||callbacks->version!=3||
+       !callbacks->storage||!callbacks->retain||!callbacks->release||!callbacks->encode||
+       !callbacks->completed||!consumer.callbacks.submitted){
+        if(callbacks->release)callbacks->release(callbacks->storage);
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    if(!boundary(&consumer.callbacks,&output)){
+        callbacks->release(callbacks->storage);return VK_NOT_READY;
+    }
+    callbacks->release(callbacks->storage);
+    if(output.base.size!=sizeof(output)||output.base.version!=3||!output.base.storage||
+       !output.base.retain||!output.base.release||!output.base.encode||!output.base.completed||!output.submitted){
+        if(output.base.release)output.base.release(output.base.storage);
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    if(value->callbacks.release)value->callbacks.release(value->callbacks.storage);
+    value->consumer.size=sizeof(value->consumer);value->consumer.version=3;
+    value->consumer.owner=consumer.owner;value->callbacks3=output;value->callbacks=output.base;
+    value->candidateKind=kind;
+    return VK_SUCCESS;
+}
 static VkResult create_context(const RSWineVulkanSceneContextV1 *request,struct scene_context **output)
 {
     typedef int (*CreateBoundary)(const RSVulkanSceneCallbacksV1*,RSVulkanSceneCallbacksV1*);
@@ -101,6 +139,7 @@ static VkResult create_context(const RSWineVulkanSceneContextV1 *request,struct 
         !dladdr((void*)api,&info) || !info.dli_fname) return VK_ERROR_FEATURE_NOT_PRESENT;
     if (!(value=calloc(1,sizeof(*value)))) return VK_ERROR_OUT_OF_HOST_MEMORY;
     atomic_init(&value->references,1);
+    atomic_init(&value->commandKind,UINT32_MAX);
     if(pthread_mutex_init(&value->destinationMutex,NULL)){free(value);return VK_ERROR_OUT_OF_HOST_MEMORY;}
     if(pthread_mutex_init(&value->admissionMutex,NULL)){pthread_mutex_destroy(&value->destinationMutex);free(value);return VK_ERROR_OUT_OF_HOST_MEMORY;}
     value->library=dlopen(info.dli_fname,RTLD_NOW|RTLD_LOCAL|RTLD_NODELETE);
@@ -121,22 +160,9 @@ static VkResult create_context(const RSWineVulkanSceneContextV1 *request,struct 
         create3=(Create3)dlsym(value->library,"rsCreateRecordedSceneConsumer3");
         boundary3=(Boundary3)dlsym(value->library,"rsCreateVulkanSceneBoundary3");
         if(create3&&boundary3){
-            RSRecordedSceneConsumerV3 consumer3={0};
-            RSVulkanSceneCallbacksV1 *callbacks=&consumer3.callbacks.base;
-            consumer3.size=sizeof(consumer3);consumer3.version=3;
-            if(!create3(value->generation,1,&consumer3)){release_context(value);return VK_NOT_READY;}
-            if(consumer3.size!=sizeof(consumer3)||consumer3.version!=3||!consumer3.owner||
-               callbacks->size!=sizeof(RSVulkanSceneCallbacksV3)||callbacks->version!=3||
-               !callbacks->storage||!callbacks->retain||!callbacks->release||!callbacks->encode||!callbacks->completed||!consumer3.callbacks.submitted){
-                if(callbacks->release)callbacks->release(callbacks->storage);
-                release_context(value);return VK_ERROR_INITIALIZATION_FAILED;
-            }
-            if(!boundary3(&consumer3.callbacks,&value->callbacks3)){
-                callbacks->release(callbacks->storage);release_context(value);return VK_NOT_READY;
-            }
-            callbacks->release(callbacks->storage);
-            value->consumer.size=sizeof(value->consumer);value->consumer.version=3;
-            value->consumer.owner=consumer3.owner;value->callbacks=value->callbacks3.base;
+            status=create_scene_consumer3(value,1);
+            if(status==VK_NOT_READY)status=create_scene_consumer3(value,0);
+            if(status!=VK_SUCCESS){release_context(value);return status;}
             value->setDestination=(int(*)(void*,void*))dlsym(value->library,"rsSetRecordedSceneDestination3");
             value->prepare=(RSPrepareRecordedSceneOperation3)dlsym(value->library,"rsPrepareRecordedSceneOperation3");
             value->prepareDevice=(PFN_rsVulkanPrepareSceneOperation3)vk_funcs->p_vkGetDeviceProcAddr(value->device.device,"rsVulkanPrepareSceneOperation3");
@@ -172,6 +198,7 @@ static VkResult create_context(const RSWineVulkanSceneContextV1 *request,struct 
     staging=(PFN_rsVulkanSceneStagingAPI)vk_funcs->p_vkGetDeviceProcAddr(value->device.device,"rsVulkanSceneStagingAPI");
     if (!staging || staging()!=1)
         staging=(PFN_rsVulkanSceneStagingAPI)vk_funcs->p_vkGetDeviceProcAddr(value->device.device,"rsMoltenVKSceneStagingAPI");
+    atomic_store_explicit(&value->commandKind,version==1?0:1,memory_order_release);
     value->staging=version==1 && staging && staging()==1;
     value->observer=request->observerId;value->identity=request->contextId;*output=value;
     return VK_SUCCESS;
@@ -299,6 +326,67 @@ static void copy_frame(RSTemporalFrame *frame, const RSWineVulkanSceneRequestV1 
     frame->reserved = s->profile;
 }
 
+/* Call-local forwarding only: the authoritative common query still runs and
+ * its result is unchanged. The matched producer must validate its actual kind
+ * before invoking this callback (as the native4 query does). No factory/table
+ * success, provider availability or method name establishes the command kind. */
+struct scene_kind_query {
+    RSQueryRecordedSceneFeature3 common;
+    void *owner;
+    uint32_t kind,feature,calls;
+    BOOL forwarded;
+};
+static _Thread_local struct scene_kind_query *active_kind_query;
+static int forward_scene_kind_query(void *owner,uint32_t feature,void *device,
+    const RSTemporalFrame *shape,RSTemporalResult *result)
+{
+    struct scene_kind_query *query=active_kind_query;
+    if(!query||query->calls++||!device||owner!=query->owner||feature!=query->feature||
+       !shape||shape->owner!=owner||shape->commandBufferKind!=query->kind){
+        if(result){result->status=RS_TEMPORAL_INVALID;result->encoded=0;}
+        return 0;
+    }
+    query->forwarded=TRUE;
+    return query->common(owner,feature,device,shape,result);
+}
+static VkResult negotiate_scene_kind(struct scene_context *owner,
+    const RSWineVulkanSceneRequestV1 *request,uint32_t feature,
+    RSTemporalResult *result,int *supported)
+{
+    RSTemporalFrame shape;
+    struct scene_kind_query query,*previous;
+    VkResult status=VK_ERROR_FEATURE_NOT_PRESENT;
+    uint32_t candidate;
+    unsigned attempt;
+    *supported=-1;
+    if(atomic_load_explicit(&owner->commandKind,memory_order_acquire)!=UINT32_MAX)return VK_SUCCESS;
+    if(!owner->callbacks3.submitted||!owner->queryDevice||!owner->query)return status;
+    if(pthread_mutex_trylock(&owner->admissionMutex))return VK_NOT_READY;
+    if(atomic_load_explicit(&owner->commandKind,memory_order_acquire)!=UINT32_MAX){status=VK_SUCCESS;goto done;}
+    for(attempt=0;attempt<2;++attempt){
+        candidate=owner->candidateKind;
+        copy_frame(&shape,request,owner->consumer.owner);shape.commandBufferKind=candidate;
+        query=(struct scene_kind_query){owner->query,owner->consumer.owner,candidate,feature,0,FALSE};
+        previous=active_kind_query;active_kind_query=&query;
+        *result=(RSTemporalResult){.size=sizeof(*result),.version=1,.status=RS_TEMPORAL_UNAVAILABLE};
+        *supported=owner->queryDevice(owner->device.device,owner->consumer.owner,feature,
+            &shape,forward_scene_kind_query,result);
+        active_kind_query=previous;
+        if(result->size!=sizeof(*result)||result->version!=1||result->encoded||
+           (result->status==RS_TEMPORAL_OK&&!*supported)){status=VK_ERROR_UNKNOWN;goto done;}
+        if(query.calls==1&&query.forwarded){
+            atomic_store_explicit(&owner->commandKind,candidate,memory_order_release);
+            status=result->status==RS_TEMPORAL_FAILED?VK_ERROR_UNKNOWN:VK_SUCCESS;goto done;
+        }
+        if(query.calls||result->encoded||result->status==RS_TEMPORAL_FAILED){status=VK_ERROR_UNKNOWN;goto done;}
+        if(result->status==RS_TEMPORAL_BUSY){status=VK_NOT_READY;goto done;}
+        if(attempt==0){status=create_scene_consumer3(owner,candidate^1u);if(status!=VK_SUCCESS)goto done;}
+    }
+    status=result->status==RS_TEMPORAL_INVALID?VK_ERROR_INITIALIZATION_FAILED:VK_ERROR_FEATURE_NOT_PRESENT;
+ done:
+    pthread_mutex_unlock(&owner->admissionMutex);return status;
+}
+
 // All pointers here remain native. The matched macdrv helper owns synchronous
 // UI dispatch and holds the actual window during this metadata-only callback.
 struct scene_destination_call { struct scene_context *owner; int result; BOOL clearOnly; };
@@ -349,7 +437,7 @@ static VkResult prepare_scene_destination(struct scene_context *owner,uint64_t h
 
 static void scene_operation(const RSWineVulkanSceneRequestV1 *request,
     const RSWineSceneMetadataV2 *metadata, void *owner,
-    const RSVulkanSceneCallbacksV3 *callbacks, RSVulkanSceneOperationV3 *operation,
+    uint32_t commandKind,const RSVulkanSceneCallbacksV3 *callbacks, RSVulkanSceneOperationV3 *operation,
     struct RSImageColorDescription *color, RSSceneAovs *aovs, RSSceneMatrices *matrices)
 {
     unsigned i;
@@ -357,7 +445,7 @@ static void scene_operation(const RSWineVulkanSceneRequestV1 *request,
     operation->base.size=sizeof(*operation);operation->base.version=3;
     operation->base.flags=request->flags;operation->base.imageMask=request->imageMask;
     copy_frame(&operation->base.frame,request,owner);
-    operation->base.frame.commandBufferKind=1;
+    operation->base.frame.commandBufferKind=commandKind;
     for(i=0;i<RS_WINE_VULKAN_SCENE_IMAGE_COUNT;++i){
         operation->base.images[i].image=(VkImage)request->images[i].image;
         operation->base.images[i].aspect=request->images[i].aspect;
@@ -387,7 +475,7 @@ static VkResult prepare_scene(RSWineVulkanSceneRequestV2 *packet,BOOL wow64,BOOL
     VkResult status=VK_ERROR_INITIALIZATION_FAILED;
     uint32_t feature;
     uint64_t identity;
-    int ready;
+    int ready,queried;
     if(!packet)return status;
     request=*packet;feature=request.base.reserved[0];
     if(request.base.size!=sizeof(request.base)||request.base.version!=1||
@@ -411,6 +499,7 @@ static VkResult prepare_scene(RSWineVulkanSceneRequestV2 *packet,BOOL wow64,BOOL
     if(!owner)return VK_ERROR_FEATURE_NOT_PRESENT;
     if(owner->device.wineDevice!=request.base.device||owner->device.device!=device->host.device)goto done;
     if(!owner->callbacks3.submitted||!owner->prepare||!owner->prepareDevice||owner->device.api()!=3){status=VK_ERROR_FEATURE_NOT_PRESENT;goto done;}
+    if(!cancel){status=negotiate_scene_kind(owner,&request.base,feature,&result,&queried);if(status!=VK_SUCCESS)goto done;}
     if(!cancel){status=prepare_scene_destination(owner,request.metadata.destinationWindow);if(status!=VK_SUCCESS)goto done;}
     if(pthread_mutex_trylock(&owner->admissionMutex)){status=VK_NOT_READY;goto done;}
     if(cancel){
@@ -420,7 +509,8 @@ static VkResult prepare_scene(RSWineVulkanSceneRequestV2 *packet,BOOL wow64,BOOL
     }
     scene_admission_clear(&owner->admission);
     request.base.reserved[0]=0;request.base.flags=0;
-    scene_operation(&request.base,&request.metadata,owner->consumer.owner,&owner->callbacks3,&operation,&color,&aovs,&matrices);
+    scene_operation(&request.base,&request.metadata,owner->consumer.owner,
+        atomic_load_explicit(&owner->commandKind,memory_order_acquire),&owner->callbacks3,&operation,&color,&aovs,&matrices);
     admitted.size=sizeof(admitted);admitted.version=3;
     ready=owner->prepareDevice(device->host.device,&operation.base,owner->consumer.owner,feature,
         NULL,NULL,owner->prepare,&admitted,&result);
@@ -474,10 +564,13 @@ static VkResult query_scene(const RSWineVulkanSceneRequestV2 *packet,BOOL wow64)
     if(!owner)return VK_ERROR_FEATURE_NOT_PRESENT;
     if(owner->device.wineDevice!=request->device||owner->device.device!=device->host.device)goto done;
     if(!owner->callbacks3.submitted||!owner->query||!owner->queryDevice||owner->device.api()!=3){status=VK_ERROR_FEATURE_NOT_PRESENT;goto done;}
-    copy_frame(&shape,request,owner->consumer.owner);shape.commandBufferKind=1;
+    status=negotiate_scene_kind(owner,request,request->reserved[0],&result,&supported);
+    if(status!=VK_SUCCESS)goto done;
+    copy_frame(&shape,request,owner->consumer.owner);
+    shape.commandBufferKind=atomic_load_explicit(&owner->commandKind,memory_order_acquire);
     // The matched driver alone obtains/retains its actual MTLDevice. This is
     // a scalar shape query: no texture resolution, queue, commands or lease.
-    supported=owner->queryDevice(device->host.device,owner->consumer.owner,request->reserved[0],&shape,owner->query,&result);
+    if(supported<0)supported=owner->queryDevice(device->host.device,owner->consumer.owner,request->reserved[0],&shape,owner->query,&result);
     status=supported&&result.status==RS_TEMPORAL_OK&&!result.encoded?VK_SUCCESS:
         result.status==RS_TEMPORAL_BUSY?VK_NOT_READY:
         result.status==RS_TEMPORAL_UNAVAILABLE?VK_ERROR_FEATURE_NOT_PRESENT:
@@ -502,6 +595,8 @@ static VkResult record_scene(const RSWineVulkanSceneRequestV1 *request, const RS
     RSSceneAovs aovs = {0};
     RSSceneMatrices matrices = {0};
     VkResult result;
+    RSTemporalResult kindResult={.size=sizeof(kindResult),.version=1};
+    int queried;
     unsigned int i;
 
     if (!request || request->size != sizeof(*request) || request->version != 1 ||
@@ -546,6 +641,8 @@ static VkResult record_scene(const RSWineVulkanSceneRequestV1 *request, const RS
     }else if(owned){
         if(request->consumerId!=NATIVE_CONSUMER_ID){result=VK_ERROR_INITIALIZATION_FAILED;goto done;}
         if(!(owned_demand=owned->demand())){result=VK_ERROR_FEATURE_NOT_PRESENT;goto done;}
+        result=negotiate_scene_kind(owned,request,RS_RECORDED_RECONSTRUCTION,&kindResult,&queried);
+        if(result!=VK_SUCCESS)goto done;
         if(owned->callbacks3.submitted)extended=&owned->callbacks3;
     }
     consumer.size = sizeof(consumer); consumer.version = 1;
@@ -578,7 +675,8 @@ static VkResult record_scene(const RSWineVulkanSceneRequestV1 *request, const RS
     operation->imageMask = owned && !admission.identity ? request->imageMask & owned_demand : request->imageMask;
     if(owned)operation->imageMask |= (1u<<RS_VULKAN_SCENE_COLOR)|(1u<<RS_VULKAN_SCENE_OUTPUT);
     copy_frame(&operation->frame, request, consumer.owner);
-    operation->frame.commandBufferKind=consumer.callbacks.version>=2?1:0;
+    operation->frame.commandBufferKind=owned?atomic_load_explicit(&owned->commandKind,memory_order_acquire):
+        (consumer.callbacks.version==1?0:1);
     for (i = 0; i < RS_WINE_VULKAN_SCENE_IMAGE_COUNT; ++i)
     {
         operation->images[i].image = (VkImage)request->images[i].image;
