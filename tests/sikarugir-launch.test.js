@@ -271,6 +271,50 @@ test("ordinary Wine preparation configures its private prefix silently and prese
   assert.equal(fs.readFileSync(path.join(older.gameRoot, "Save01.dat"), "utf8"), "game save");
 });
 
+test("a shared Wine environment maps the game drive in its private Steam copy on both launches", async t => {
+  const directory = fs.realpathSync(fixture(t)), entry = game(directory), install = installation(directory);
+  const userDataDir = path.join(directory, "data"), original = path.join(directory, "shared-wrapper", "prefix");
+  fs.mkdirSync(path.join(original, "dosdevices"), { recursive: true });
+  fs.mkdirSync(path.join(original, "drive_c"));
+  fs.writeFileSync(path.join(original, "saved.dat"), "shared save");
+  const external = { kind: "sikarugir-wrapper", path: path.dirname(original), prefixPath: original,
+    install, running: false, settings: {}, environment: {} };
+  t.mock.method(require("../src/modules/shared/runtime/wine-environment"), "readEnvironment", () => external);
+  t.mock.method(require("../src/modules/shared/runtime/wine-processes"), "prepareEnvironment", async value => value);
+  const dependencies = adapters(install), context = { userDataDir, settings: {}, runtimeSettings: {} };
+  let copies = 0, selections = 0, target;
+  // Select and copy a prefix without loading Steam or returning any Steam API response.
+  t.mock.method(require("../src/modules/crossover/runtime/steam-bridge"), "prepare", async (_entry, _context, options) => {
+    selections++;
+    assert.equal(options.prefixPath, original);
+    assert.equal(fs.lstatSync(path.join(original, "dosdevices", "g:"), { throwIfNoEntry: false }), undefined,
+      "game-drive preparation must never write to the shared environment");
+    target = path.join(options.directory, "steam-environments", "selected");
+    if (!fs.existsSync(target)) {
+      fs.cpSync(original, target, { recursive: true, verbatimSymlinks: true });
+      copies++;
+    }
+    return { prefixPath: target, environment: { ...options.environment, WINEPREFIX: target },
+      privateClone: true, helper: "C:\\Program Files (x86)\\Steam\\steam.exe" };
+  });
+  for (let launch = 1; launch <= 2; launch++) {
+    const prepared = await Launch.prepareLaunch(entry, context, dependencies);
+    assert.equal(prepared.prefixPath, target);
+    assert.equal(prepared.environment.WINEPREFIX, target);
+    assert.equal(prepared.existingEnvironment, null);
+    const mapping = path.join(target, "dosdevices", "g:");
+    assert.equal(path.isAbsolute(fs.readlinkSync(mapping)), false, "exercise a relative Wine drive link");
+    assert.equal(fs.realpathSync(mapping), fs.realpathSync(entry.gamePath), `launch ${launch} resolves the actual private drive`);
+    assert.equal(fs.realpathSync(path.join(mapping, "Game.exe")), fs.realpathSync(entry.importPath));
+    assert.equal(prepared.windowsExecutablePath, "G:\\Game.exe");
+    assert.equal(prepared.windowsWorkingDirectory, "G:\\");
+    assert.equal(fs.readFileSync(path.join(original, "saved.dat"), "utf8"), "shared save");
+  }
+  assert.equal(selections, 2);
+  assert.equal(copies, 1, "the second launch uses the existing private copy");
+  assert.equal(fs.existsSync(path.join(original, "dosdevices", "g:")), false);
+});
+
 test("trusted optional game effects follow prefix setup and preserve disabled launch environments", async t => {
   const directory = fixture(t), entry = game(directory), install = installation(directory), dependencies = adapters(install);
   const context = { userDataDir: path.join(directory, "data"), settings: {}, runtimeSettings: {} };

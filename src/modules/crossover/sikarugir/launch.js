@@ -330,11 +330,6 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   await TranslatorFiles.applyNativeLibraries(translatorView, prefixPath, { signal: context.signal });
   await graphics.applyPrefix?.();
   context.signal?.throwIfAborted();
-  const workingDirectory = path.dirname(match.windowsExecutablePath);
-  // The drive covers the imported game folder, so paths above the executable's folder resolve.
-  const driveRoot = require("../game-drive").gameDriveRoot(entry, originalRoot, match.windowsExecutablePath);
-  const { windowsExecutablePath, windowsWorkingDirectory } = require("../../shared/runtime/wine-game-paths").prepareGamePaths(prefixPath,
-    { gameRoot: gameRoot === originalRoot ? driveRoot : gameRoot, executablePath, workingRoot: driveRoot, workingDirectory });
   let { environment } = buildEnvironment(settings, selected.install, directory, prefixPath, graphics, { ...dependencies, translatorPlan, existingEnvironment });
   // Apply launcher-owned optional effects only to the game, after stock Wine
   // finishes prefix initialization. User-supplied loader paths remain blocked.
@@ -355,6 +350,11 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const steamBridge = await require('../runtime/steam-bridge').prepare(entry, context, { installation: selected.install, prefixPath, directory,
     architecture: match.executableArchitecture, environment, externalEnvironment: existingEnvironment });
   if (steamBridge) { environment = steamBridge.environment; prefixPath = steamBridge.prefixPath; }
+  const workingDirectory = path.dirname(match.windowsExecutablePath);
+  // Allocate relative drive links only after choosing the prefix that will run the game.
+  const driveRoot = require("../game-drive").gameDriveRoot(entry, originalRoot, match.windowsExecutablePath);
+  const { windowsExecutablePath, windowsWorkingDirectory } = require("../../shared/runtime/wine-game-paths").prepareGamePaths(prefixPath,
+    { gameRoot: gameRoot === originalRoot ? driveRoot : gameRoot, executablePath, workingRoot: driveRoot, workingDirectory });
   const args = WineSettings.desktopArguments(settings, ["start.exe", "/d", windowsWorkingDirectory, "/exec", ...(steamBridge ? [steamBridge.helper] : []), windowsExecutablePath, ...(Array.isArray(settings.arguments) ? settings.arguments : []).map(value => safeText(value, "Game arguments")),
     ...(context.gameArguments || [])]);
   if (cameraBridge && cameraView) {
