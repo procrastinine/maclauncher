@@ -48,4 +48,4 @@ By default, the app is signed ad hoc. Developer ID signing and notarization use 
 
 MacLauncher requires macOS 13 or later on a Mac with Apple Silicon or an Intel processor. The package lock records the highest minimum macOS version among the included native packages, and packaging checks it; the value sets no upper limit on supported macOS versions. Downloaded runtimes check their own CPU and macOS requirements, and Intel programs that MacLauncher starts still go through the Rosetta check on Apple Silicon.
 
-The optional KosmicKrisp OpenGL ES 3.2 package, like the KosmicKrisp Vulkan driver itself, requires macOS 26 or later and is unavailable on older systems ([System requirements](../runtimes/SYSTEM_REQUIREMENTS.md)). A runtime that requires 26.0 also accepts 26.1, 26.2 and later releases.
+The optional MacLauncher KosmicKrisp package, like the KosmicKrisp Vulkan driver itself, requires macOS 26 or later and is unavailable on older systems ([System requirements](../runtimes/SYSTEM_REQUIREMENTS.md)). A runtime that requires 26.0 also accepts 26.1, 26.2 and later releases.

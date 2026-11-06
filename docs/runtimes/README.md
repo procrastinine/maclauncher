@@ -12,6 +12,7 @@ Each [game-type page](../game-types/README.md) describes the runtimes, settings 
 
 - [Web runtimes](WEB_RUNTIMES.md), [Sikarugir (Wine)](SIKARUGIR.md) and [CrossOver](CROSSOVER.md): runtimes shared by several game types.
 - [Graphics translators](TRANSLATORS.md): the libraries, shared by CrossOver and Sikarugir, that carry a Windows game's Direct3D or Vulkan calls to Metal.
+- [KosmicKrisp](KOSMICKRISP.md): the Vulkan driver on Metal 4, MacLauncher's adapted build of it, the CPU build that each consumer loads, and a comparison with MoltenVK.
 - [Native tool setup](NATIVE_TOOL_SETUP.md): package sources, system components and decompilers.
 - [Settings reference](SETTINGS_REFERENCE.md): every runtime setting and inspector action.
 - [System requirements](SYSTEM_REQUIREMENTS.md): macOS versions, CPU architectures and graphics requirements for each component.
