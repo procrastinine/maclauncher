@@ -340,16 +340,19 @@ async function prepareLaunch(entry, context, dependencies = {}) {
       else delete environment[key];
     }
   }
-  await WineSettings.applyRegistry({ ...context.runtimeSettings, ...settings }, { executable: path.basename(executablePath),
-    assertWritable: existingEnvironment ? () => Environments.assertWritableRegistry(existingEnvironment) : undefined }, args => {
-    const options = { cwd: directory, env: { ...environment, WINEDEBUG: "-all" }, signal: context.signal, timeout: 30000 };
-    return dependencies.run ? dependencies.run(selected.install.executablePath, selected.install.serverPath, args, options) : existingEnvironment
-      ? require("../../shared/runtime/wine-processes").runTool(selected.install.executablePath, args, options)
-      : runSupervised(selected.install.executablePath, selected.install.serverPath, args, options);
-  });
   const steamBridge = await require('../runtime/steam-bridge').prepare(entry, context, { installation: selected.install, prefixPath, directory,
     architecture: match.executableArchitecture, environment, externalEnvironment: existingEnvironment });
   if (steamBridge) { environment = steamBridge.environment; prefixPath = steamBridge.prefixPath; }
+  const registryEnvironment = steamBridge?.privateClone ? null : existingEnvironment;
+  await WineSettings.applyRegistry({ ...context.runtimeSettings, ...settings }, { executable: path.basename(executablePath),
+    assertWritable: registryEnvironment ? () => Environments.assertWritableRegistry(registryEnvironment) : steamBridge?.privateClone
+      ? () => Environments.assertPrivateEnvironment(Environments.privateEnvironment(context.userDataDir, directory, path.relative(directory, prefixPath)), directory)
+      : undefined }, args => {
+    const options = { cwd: directory, env: { ...environment, WINEDEBUG: "-all" }, signal: context.signal, timeout: 30000 };
+    return dependencies.run ? dependencies.run(selected.install.executablePath, selected.install.serverPath, args, options) : registryEnvironment
+      ? require("../../shared/runtime/wine-processes").runTool(selected.install.executablePath, args, options)
+      : runSupervised(selected.install.executablePath, selected.install.serverPath, args, options);
+  });
   const workingDirectory = path.dirname(match.windowsExecutablePath);
   // Allocate relative drive links only after choosing the prefix that will run the game.
   const driveRoot = require("../game-drive").gameDriveRoot(entry, originalRoot, match.windowsExecutablePath);

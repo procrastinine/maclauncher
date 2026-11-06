@@ -271,7 +271,7 @@ test("ordinary Wine preparation configures its private prefix silently and prese
   assert.equal(fs.readFileSync(path.join(older.gameRoot, "Save01.dat"), "utf8"), "game save");
 });
 
-test("a shared Wine environment maps the game drive in its private Steam copy on both launches", async t => {
+test("a shared Wine environment maps drives and applies changed settings in its private Steam copy on both launches", async t => {
   const directory = fs.realpathSync(fixture(t)), entry = game(directory), install = installation(directory);
   const userDataDir = path.join(directory, "data"), original = path.join(directory, "shared-wrapper", "prefix");
   fs.mkdirSync(path.join(original, "dosdevices"), { recursive: true });
@@ -281,8 +281,18 @@ test("a shared Wine environment maps the game drive in its private Steam copy on
     install, running: false, settings: {}, environment: {} };
   t.mock.method(require("../src/modules/shared/runtime/wine-environment"), "readEnvironment", () => external);
   t.mock.method(require("../src/modules/shared/runtime/wine-processes"), "prepareEnvironment", async value => value);
-  const dependencies = adapters(install), context = { userDataDir, settings: {}, runtimeSettings: {} };
+  const dependencies = adapters(install), context = { userDataDir, settings: {}, runtimeSettings: { windowsVersion: "win10" } };
   let copies = 0, selections = 0, target;
+  const versions = [];
+  t.mock.method(require("../src/modules/shared/runtime/wine-environment"), "assertWritableRegistry", () => assert.fail("The shared registry must stay unchanged"));
+  dependencies.run = async (_wine, _server, args, options) => {
+    assert.equal(args[0], "reg.exe");
+    assert.equal(options.env.WINEPREFIX, target, "settings reach the selected private prefix");
+    const version = args[args.indexOf("/d") + 1];
+    versions.push(version);
+    fs.writeFileSync(path.join(options.env.WINEPREFIX, "program-version.txt"), version);
+    return { stdout: "", stderr: "" };
+  };
   // Select and copy a prefix without loading Steam or returning any Steam API response.
   t.mock.method(require("../src/modules/crossover/runtime/steam-bridge"), "prepare", async (_entry, _context, options) => {
     selections++;
@@ -298,6 +308,7 @@ test("a shared Wine environment maps the game drive in its private Steam copy on
       privateClone: true, helper: "C:\\Program Files (x86)\\Steam\\steam.exe" };
   });
   for (let launch = 1; launch <= 2; launch++) {
+    context.runtimeSettings.windowsVersion = launch === 1 ? "win10" : "win81";
     const prepared = await Launch.prepareLaunch(entry, context, dependencies);
     assert.equal(prepared.prefixPath, target);
     assert.equal(prepared.environment.WINEPREFIX, target);
@@ -309,9 +320,12 @@ test("a shared Wine environment maps the game drive in its private Steam copy on
     assert.equal(prepared.windowsExecutablePath, "G:\\Game.exe");
     assert.equal(prepared.windowsWorkingDirectory, "G:\\");
     assert.equal(fs.readFileSync(path.join(original, "saved.dat"), "utf8"), "shared save");
+    assert.equal(fs.readFileSync(path.join(target, "program-version.txt"), "utf8"), context.runtimeSettings.windowsVersion);
   }
   assert.equal(selections, 2);
   assert.equal(copies, 1, "the second launch uses the existing private copy");
+  assert.deepEqual(versions, ["win10", "win81"]);
+  assert.equal(fs.existsSync(path.join(original, "program-version.txt")), false);
   assert.equal(fs.existsSync(path.join(original, "dosdevices", "g:")), false);
 });
 
