@@ -428,3 +428,60 @@ test('optional project builds remain offline and unavailable until an explicit c
   assert.equal(manager.resolveSelection({}, {}, userDataDir).ready, false);
   assert.equal(fetches, 2, 'Reading a download-only catalog stays offline');
 });
+
+test('both managed package layouts load Intel libraries only after final installation and keep optional failures usable', {skip:process.platform !== 'darwin' && 'Managed Mach-O installation requires macOS.'}, async t => {
+  const { packageFor } = require('./helpers/managed-tool-fixture.cjs');
+  const { image, X64 } = require('./fixtures/macho-image');
+  const Architecture = require('../src/modules/shared/runtime/architecture');
+  for (const layout of ['payload', 'project-payload']) await t.test(layout, async t => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'project-final-load-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const id = 'final-load-' + layout, library = image({ cpu: X64, fileType: 6 });
+    const fixture = packageFor(root, { id, version: '1.0', architecture: 'x64', filesPrefix: 'files/',
+      manifest: { managerId:id,platform:'darwin',executableRelative:'lib/declared-image',dependencies:[] },
+      entries: [{ path:'lib/declared-image',bytes:library,mode:0o755,architectures:['x86_64'] }] });
+    fixture.record.launcherArchitectures = ['arm64', 'x64'];
+    const update = packageFor(path.join(root, 'update'), { id, version:'2.0', architecture:'x64', filesPrefix:'files/',
+      manifest:{managerId:id,platform:'darwin',executableRelative:'lib/declared-image',dependencies:[]},
+      entries:[{path:'lib/declared-image',bytes:library,mode:0o755,architectures:['x86_64']}] });
+    update.record.launcherArchitectures = ['arm64', 'x64'];
+    const userDataDir = path.join(root, 'profile'), calls = [];let fail = false;
+    const rosettaLoad = { platform:'darwin',hardwareArch:'arm64',rosettaPresent:()=>true,helperPath:'/packaged/rosetta-library-load-x64',
+      run: async (_command, args, options) => {
+        assert.ok(args.every(file => file.startsWith(path.join(userDataDir, 'runtimes') + path.sep)));
+        assert.ok(args.every(file => !file.includes('.install-') && file.includes(path.sep + layout + path.sep)));
+        assert.ok(args.every(file => fs.existsSync(file)));assert.equal(options.timeout, 120000);
+        const leases = require('../src/core/runtime-coordinator').coordinatorFor(userDataDir).snapshot();
+        assert.ok(leases.active.some(lease=>lease.kind==='mutation'&&lease.identities.some(identity=>identity.managerId===id)), 'the existing install mutation stays held during loading');
+        calls.push(args);
+        if (fail) throw Object.assign(Error('fixture dlopen failed'), {stdout:JSON.stringify({loaded:0,failed_index:0,error:'fixture library unavailable'})});
+        return {stdout:JSON.stringify({requested:args.length,loaded:args.length,failed_index:-1,load_ms:12})};
+      } };
+    const acquisition = { systemVersionSync:()=>'27.0',fetchUrlBuffer:async()=>({status:200,body:Buffer.from(JSON.stringify(fixture.catalog))}),
+      downloadToFile:async(url, output)=>fs.copyFileSync(url===fixture.record.asset.url?fixture.archive:update.archive,output),rosettaLoad };
+    const manager = layout === 'payload' ? createProjectBuildManager({ projectId:id,label:'Fixture',repository:'procrastinine/maclauncher-builds',
+      nativeLibrary:true,manifestRelative:'manifest.json',sourceRelative:null,filesPrefix:'files/',executableRelative:m=>m.executableRelative,
+      verifyPayload: selected=>Bundled.verifyPayload(selected.root,selected.declaration),dependencies:acquisition }) :
+      require('../src/modules/shared/runtime/pinned-native-manager').createPinnedNativeManager({ id,label:'Fixture',nativeLibrary:true,
+        projectBuilds:{projectId:id,repository:'procrastinine/maclauncher-builds'},
+        dependencies:{...acquisition,projectBuilds:{...acquisition,verifySignatures:async()=>{}}} });
+    await Architecture.withArchitecture('x64',()=>manager.refreshCatalog({userDataDir,force:true}));
+    const install = options => Architecture.withArchitecture('x64',()=>runRuntimeManagerAction({manager,action:'install',userDataDir,
+      payload:{version:'1.0',architecture:'x64',...options},readSettings:()=>({})}));
+    const first = await install();
+    assert.equal(calls.length, 1);assert.equal(first.installationMetadata.rosettaLoad.status, 'loaded');
+    const recordPath = path.join(first.installDir, 'runtime.json');
+    assert.equal(JSON.parse(fs.readFileSync(recordPath)).installationMetadata.rosettaLoad.identity, first.installationMetadata.rosettaLoad.identity);
+    await install();manager.getState({userDataDir});manager.resolveSelection({}, {}, userDataDir, {version:'1.0',architecture:'x64'});
+    assert.equal(calls.length, 1, 'existing installation/status/selection never invokes loading');
+    fail = true;fixture.catalog.packages.push(update.record);
+    await Architecture.withArchitecture('x64',()=>manager.refreshCatalog({userDataDir,force:true}));
+    const replaced = await install({version:'2.0'});
+    assert.equal(calls.length, 2);assert.equal(replaced.installationMetadata.rosettaLoad.status, 'not-loaded');
+    assert.equal(replaced.installationMetadata.rosettaLoad.reason, 'fixture library unavailable');
+    assert.equal(fs.existsSync(replaced.executablePath), true);assert.equal(fs.existsSync(recordPath), true);
+    assert.equal(manager.resolveSelection({}, {}, userDataDir, {version:'2.0',architecture:'x64'}).ready, true);
+    assert.notEqual(replaced.installationMetadata.rosettaLoad.identity, first.installationMetadata.rosettaLoad.identity);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(replaced.installDir,'runtime.json'))).installationMetadata.rosettaLoad.status,'not-loaded');
+  });
+});

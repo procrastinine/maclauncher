@@ -78,7 +78,7 @@ function executableFloor(file, architecture) {
 // query or from a local cache. Every pinned manager offers the user's own
 // default version, as other multi-version runtimes do, unless a game needs its
 // exact engine version.
-function createSingleArchitectureManager({ installationArchitecture, shareDiscovery, id, label, discoverCatalog, upstream, catalogSources, projectBuilds, buildsRepository, upstreamUrl, upstreamLabel, resolveExecutable, inspectRuntime = Native.resolveLocalRuntime, verifyArtifact, prepareInstall, buildRuntime, buildSourcePath, sourceUrl, sourceLabel, sourceName, sourceDescription, formatVersionLabel, versionContents, buildHelpUrl, buildRequirements, bundledRuntime, legacyInstalledRuntime, formerIds = [], bundledExecution = "copy", distributionRequired = false, importLocal = false, nativeLibrary = false, supportsDefault = true, customRuntime = true, maxEntries = 500, dependencies = {} }) {
+function createSingleArchitectureManager({ installationArchitecture, shareDiscovery, id, label, discoverCatalog, upstream, catalogSources, projectBuilds, buildsRepository, upstreamUrl, upstreamLabel, resolveExecutable, inspectRuntime = Native.resolveLocalRuntime, verifyArtifact, prepareInstall, prepareInstalled, buildRuntime, buildSourcePath, sourceUrl, sourceLabel, sourceName, sourceDescription, formatVersionLabel, versionContents, buildHelpUrl, buildRequirements, bundledRuntime, legacyInstalledRuntime, formerIds = [], bundledExecution = "copy", distributionRequired = false, importLocal = false, nativeLibrary = false, supportsDefault = true, customRuntime = true, maxEntries = 500, dependencies = {} }) {
   if (typeof distributionRequired !== "boolean") throw new Error("Runtime distribution requirements must be explicit booleans.");
   if (typeof importLocal !== "boolean") throw new Error("Local runtime imports must be explicitly enabled.");
   if (typeof nativeLibrary !== "boolean") throw new Error("Native library runtimes must be explicitly enabled.");
@@ -823,6 +823,16 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
         clearDisplayCache(userDataDir);
         const installed = resolveInstalled({ userDataDir, version: normalized });
         if (!installed) throw new Error(registrationFailure(userDataDir, normalized) || "Installed runtime failed its version and executable integrity check.");
+        const finalPreparation = projectPackages && pin.projectPackage ? projectPackages.prepareInstalled : prepareInstalled;
+        if (finalPreparation) try {
+          const evidence = await finalPreparation({ installed, pin, architecture: target, userDataDir, signal, logger, onProgress });
+          if (evidence) {
+            const record = JSON.parse(fs.readFileSync(path.join(destination, 'runtime.json'), 'utf8'));
+            record.installationMetadata = installationEvidence({ ...record.installationMetadata, ...evidence });
+            publishRecord(destination, record);
+            installed.installationMetadata = record.installationMetadata;
+          }
+        } catch (error) { require('../graphics-warning')(logger, '[runtime] Optional installed-library preparation: ' + error.message); }
         return installed;
       } catch (error) {
         if (replacing) {

@@ -109,7 +109,11 @@ function createProjectNativePackage({ projectId, repository, validateManifest, l
       environmentRelative: Object.fromEntries(Object.entries(selected.manifest.environmentRelative || {}).map(([key, value]) => [key, relative(value)])),
       runtimeFiles: Object.fromEntries(Object.entries(selected.manifest.runtimeFiles || {}).map(([key, value]) => [key, relative(value)])) };
   }
-  return { discover, extract: extractArchive, prepare, inspectInstalled, inspect };
+  const prepareInstalled = nativeLibrary ? ({ installed, pin, ...context }) =>
+    require('./rosetta-library-prepare').prepareInstalledLibraries(installed.manifest ? installed :
+      inspectInstalled(installed.installDir, pin, { verification: 'status', userDataDir: context.userDataDir }), installed,
+    context, dependencies.rosettaLoad) : undefined;
+  return { discover, extract: extractArchive, prepare, prepareInstalled, inspectInstalled, inspect };
 }
 
 module.exports = { createProjectNativePackage, extractArchive };
