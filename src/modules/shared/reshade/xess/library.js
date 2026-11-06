@@ -57,7 +57,14 @@ async function install(context={}){
     },{userDataDir:context.userDataDir});
   },{onProgress:context.onProgress});
 }
-async function remove(context={}){const record=read(context.userDataDir)||readComponents(context.userDataDir);if(!record)return;return withRuntimeMutation({managerId:Source.managerId,version:record.version},()=>fs.promises.rm(directory(context.userDataDir),{recursive:true,force:true}),{userDataDir:context.userDataDir});}
+async function remove(context={}) {
+ assertVersion(context);
+ const target=directory(context.userDataDir);
+ // Corrupt receipts and incomplete DLLs still belong to this owned SDK folder.
+ // External imports keep their original file; only their local record is removed.
+ Writable.assertOwnDirectory(context.userDataDir,target,{create:false});
+ return withRuntimeMutation({managerId:Source.managerId,version:Source.version},()=>fs.promises.rm(target,{recursive:true,force:true}),{userDataDir:context.userDataDir});
+}
 function componentsReceipt(userDataDir,files,external){
   const root=directory(userDataDir);Writable.assertOwnDirectory(userDataDir,root);
   try{const licenses=path.join(root,"licenses");fs.mkdirSync(licenses,{recursive:true});fs.copyFileSync(path.join(__dirname,Source.licenseFile),path.join(licenses,"xess.txt"));}catch(error){console.warn("Optional XeSS license copy skipped:",error.message);}
