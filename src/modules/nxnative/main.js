@@ -25,9 +25,10 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     if (runtimeId !== "nxnative") return null;
     const selected = manager.resolveSelection(entry, context.settings, context.userDataDir);
     if (!selected.ready) throw new Error(selected.reason);
-    const runtime = await Prepare.runtimeForSelection(selected, context);
+    let runtime = await Prepare.runtimeForSelection(selected, context);
     Prepare.recordSelectionUse(entry, context, selected, runtime);
     const launch = await Prepare.prepareGame(entry, context, { ...selected, runtime });
+    runtime = launch.runtime || runtime;
     const gameSettings = await GameSettings.launchEnvironment(entry, context, launch, runtime);
     const application = await Application.prepareApplication(entry, context, launch, { runtime });
     entry.iconPath = application.iconPath;entry.iconSource = application.iconSource;

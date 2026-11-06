@@ -22,8 +22,8 @@ function sourceRequirement(install) {
 }
 function createManager(dependencies = {}) {
   const base = createPackageManager(dependencies, { projectId: ID });
-  function resolveSelection(_entry, settings, userDataDir, options = {}) {
-    const selected = base.resolveSelection(null, settings, userDataDir, options);
+  function resolveSelection(entry, settings, userDataDir, options = {}) {
+    const selected = base.resolveSelection(entry, settings, userDataDir, options);
     if (!selected.ready) return selected;
     try { return { ...selected, sourceRequirement: sourceRequirement(selected.install) }; }
     catch (error) { return { ...selected, install: null, ready: false, reason: error.message }; }

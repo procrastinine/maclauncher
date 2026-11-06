@@ -27,8 +27,8 @@ function createManager(dependencies = {}) {
     { managerId: "nxnative", version, sectionId: "default", sourcePath: sourceInstall.root || sourceInstall.installDir },
     { managerId: NativeTools.ID, version: native.version, sectionId: "default", sourcePath: native.install.installDir || native.install.root }
   ] : [];
-  function fromSource(version, sourceInstall, settings, userDataDir) {
-    const native = tools.resolveSelection(null, settings, userDataDir);
+  function fromSource(version, sourceInstall, settings, userDataDir, entry) {
+    const native = tools.resolveSelection(entry, settings, userDataDir);
     return { version, sourceInstall, toolsVersion: native.version, toolsManagerId: NativeTools.ID,
       install: native.install, ready: Boolean(sourceInstall && native.ready && native.sourceRequirement),
       runtimeUses: runtimeUses(version, sourceInstall, native),
@@ -36,7 +36,7 @@ function createManager(dependencies = {}) {
   }
   function resolveSelection(entry, settings, userDataDir, options = {}) {
     const version = configured(entry, settings, userDataDir, options);
-    if (version) return gitVersion(version) ? fromSource(version, source.resolve({ userDataDir, version }), settings, userDataDir)
+    if (version) return gitVersion(version) ? fromSource(version, source.resolve({ userDataDir, version }), settings, userDataDir, entry)
       : legacy.resolveSelection(entry, settings, userDataDir, { ...options, version });
     return { version: null, ready: false, install: null, sourceInstall: null, discoveryRequired: true,
       reason: "No nxnative versions are available to download." };
