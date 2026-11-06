@@ -518,17 +518,17 @@ test("CrossOver graphics choices use the selected application's renderer require
 
 test("CrossOver environment settings are launch-scoped, quoted as data and keep bottle paths owned", () => {
   const installation = { crossoverRoot: "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver" };
-  const settings = { graphicsBackend: "dxmt", synchronization: "msync", locale: "ja_JP.UTF-8", bepInExWinhttp: true,
-    environment: ["DXMT_CONFIG=d3d11.preferredMaxFrameRate=60", "CUSTOM_TITLE=it's a game; $(echo nope)"] };
-  const launch = Launch.buildEnvironment(settings, installation, "/data/game", "/data/game/bottle", { baseEnvironment: { WINEPREFIX: "/original", WINEDLLOVERRIDES: "bad=n", PATH: "/usr/bin" } });
+  const settings = { graphicsBackend: "dxmt", synchronization: "msync", locale: "ja_JP.UTF-8", bepInExWinhttp: true };
+  const launch = Launch.buildEnvironment(settings, installation, "/data/game", "/data/game/bottle", { baseEnvironment: { WINEPREFIX: "/original", WINEDLLOVERRIDES: "bad=n", PATH: "/usr/bin" },
+    translatorEnvironment: { DXMT_CONFIG: "d3d11.preferredMaxFrameRate=60", CUSTOM_TITLE: "it's a game; $(echo nope)", LC_ALL: "fr_FR.UTF-8" } });
   assert.equal(launch.environment.WINEPREFIX, "/data/game/bottle");
   assert.equal(launch.overrides.CX_GRAPHICS_BACKEND, "dxmt");
   assert.equal(launch.overrides.WINEMSYNC, "1");
-  assert.equal(launch.overrides.LC_ALL, "ja_JP.UTF-8");
   assert.equal(launch.dll, "winhttp=n,b");
+  assert.equal(launch.overrides.LC_ALL, "fr_FR.UTF-8", "a translator environment value replaces the locale setting");
+  assert.equal(launch.overrides.LANG, "ja_JP.UTF-8");
+  assert.equal(launch.overrides.DXMT_CONFIG, "d3d11.preferredMaxFrameRate=60");
   assert.match(Launch.wineEnvironmentString(launch.overrides), /'CUSTOM_TITLE=it'"'"'s a game; \$\(echo nope\)'/);
-  assert.throws(() => Launch.parseEnvironment(["WINEPREFIX=/elsewhere"]), /cannot replace/);
-  assert.throws(() => Launch.parseEnvironment(["MISSING_EQUALS"]), /NAME=value/);
   assert.equal(Launch.dllOverrides({}), "");
   assert.equal(Launch.dllOverrides({ dllOverrides: ["winhttp=b"], bepInExWinhttp: true }), "winhttp=b");
   assert.equal(Launch.dllOverrides({ dllOverrides: ["winhttp,wininet=b"], bepInExWinhttp: true }), "winhttp,wininet=b");
@@ -566,7 +566,7 @@ test("CrossOver rejects invalid launch options before creating game data or a bo
   let calls = 0;
   for (const runtimeSettings of [
     { bottleTemplate: "../win10_64" }, { graphicsBackend: "unknown" }, { synchronization: "unknown" },
-    { environment: ["WINEPREFIX=/outside"] }, { dllOverrides: ["winhttp=n;unexpected"] },
+    { dllOverrides: ["winhttp=n;unexpected"] },
     { arguments: ["bad\nargument"] }, { locale: "bad locale" }, { wineDebug: "bad\0debug" }
   ]) {
     await assert.rejects(Launch.prepareLaunch(entry, { userDataDir,
@@ -721,6 +721,34 @@ test("CrossOver transports trusted game effects through its vendor environment a
   assert.equal(camera.bottlePath, disabled.bottlePath);assert.equal(preparation.length, 1);
   assert.equal(camera.workingDirectory, path.dirname(path.join(game, "Game.exe")));
   assert.equal(camera.args[camera.args.indexOf("--workdir") + 1], camera.windowsWorkingDirectory, "camera adaptation keeps the mapped original cwd");
+});
+
+test("CrossOver launches with the global, earlier and game values of its chosen translator environments", async t => {
+  const directory = fixture(t), userDataDir = path.join(directory, "data"), game = path.join(directory, "game");
+  pe(path.join(game, "Game.exe"), { machine: 0x8664 });
+  const installed = Manager.importRuntime({ userDataDir, runtimePath: app(path.join(directory, "CrossOver.app")) });
+  const entry = { ...Detection.decorateEntry({ gameId: "translator-environment", gamePath: game, moduleId: "rgss" }), runtimeId: "crossover",
+    translatorEnvironment: { crossover: { FROM_EARLIER: null, GAME_ONLY: "it's $(literal) ~/x", LC_ALL: "fr_FR.UTF-8" } } };
+  const context = { userDataDir, runtimeSettings: { version: installed.version, graphicsBackend: "wined3d", locale: "ja_JP.UTF-8",
+    environment: ["FROM_EARLIER=earlier", "EARLIER_KEPT=1", "SHARED=earlier"] },
+  settings: { launcher: { translatorEnvironment: { crossover: { SHARED: "global", GLOBAL_ONLY: "1", WINEPREFIX: "/stored/before/lock" },
+    dxvk: { DXVK_HUD: "fps" } } } } };
+  const ready = await Launch.prepareLaunch(entry, context, { run: async (_command, args, options) => {
+    assert.equal(options.env.GLOBAL_ONLY, "1", "bottle creation sees the same values");
+    const bottle = args[args.indexOf("--bottle") + 1]; fs.mkdirSync(bottle, { recursive: true });
+    fs.writeFileSync(path.join(bottle, "cxbottle.conf"), "[Bottle]\n"); fs.writeFileSync(path.join(bottle, "system.reg"), "registry");
+    return { stdout: "", stderr: "" };
+  } });
+  const environment = ready.environment, passed = ready.args[ready.args.indexOf("--env") + 1];
+  assert.equal(environment.SHARED, "earlier", "the earlier per-game setting follows the global value");
+  assert.equal(environment.GLOBAL_ONLY, "1"); assert.equal(environment.EARLIER_KEPT, "1");
+  assert.equal(environment.FROM_EARLIER, undefined, "the game removes an inherited value");
+  assert.equal(environment.GAME_ONLY, "it's $(literal) ~/x");
+  assert.equal(environment.LC_ALL, "fr_FR.UTF-8", "a game value replaces the launcher's locale"); assert.equal(environment.LANG, "ja_JP.UTF-8");
+  assert.equal(environment.WINEPREFIX, ready.bottlePath, "locked names keep the launcher's value");
+  assert.equal(environment.DXVK_HUD, undefined, "DXVK values apply only to games that render with DXVK");
+  assert.match(passed, /'GAME_ONLY=it'"'"'s \$\(literal\) ~\/x'/);
+  assert.doesNotMatch(passed, /stored\/before\/lock/);
 });
 
 test("CrossOver loader failure preserves ordinary vendor launch, Steam and final game environment", async t => {

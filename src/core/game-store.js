@@ -104,6 +104,23 @@ function setGameLaunchArguments(userDataDir, gameId, launchArguments) {
   return next;
 }
 
+// One translator's environment values for a game, checked against the
+// translator's declaration. Values are literal text; null removes a variable
+// inherited from the global values, and empty values remove the translator.
+function setGameTranslatorEnvironment(userDataDir, gameId, translatorId, values, { declarations = [] } = {}) {
+  const Contract = require("../modules/shared/runtime/translator-environment.mjs");
+  const declaration = declarations.find(item => item.id === translatorId);
+  if (!declaration) throw new Error("Unknown translator.");
+  const normalized = Contract.normalizeValues(values, { declarations: [declaration] });
+  const record = readGameRecord(userDataDir, gameId);
+  if (!record) throw new Error("Game not found in library.");
+  const { translatorEnvironment: previous, ...rest } = record;
+  const store = Contract.withValues(previous, translatorId, normalized);
+  const next = { ...rest, ...(Object.keys(store).length ? { translatorEnvironment: store } : {}), updatedAt: Date.now() };
+  writeGameRecord(userDataDir, next);
+  return next;
+}
+
 function setGameNetworkAccess(userDataDir, gameId, networkAccess) {
   if (typeof networkAccess !== "boolean")
     throw new Error("Network access must be enabled or disabled.");
@@ -134,6 +151,7 @@ module.exports = {
   writeGameRecord,
   setGameNotes,
   setGameLaunchArguments,
+  setGameTranslatorEnvironment,
   setGameNetworkAccess,
   setGameSteamClientStart,
   deleteGameData

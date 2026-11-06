@@ -2135,6 +2135,28 @@ select.input:not([multiple]) {
   gap: 10px;
 }
 
+/* Translator environment editors: compact NAME = value rows with their state. */
+.translatorEnvironmentList { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.runtimeSectionCard > .translatorEnvironmentList { padding: 10px 12px 12px; }
+.translatorEnvironmentIntro { margin: 0; font-size: var(--font-xs); }
+.translatorEnvironment { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.translatorEnvironment + .translatorEnvironment { border-top: 1px solid var(--border); padding-top: 10px; }
+.translatorEnvironmentHeader { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; }
+.translatorEnvironmentTitle { display: flex; align-items: center; gap: 4px; min-width: 0; font-weight: 500; }
+.translatorEnvironmentDetail { font-size: var(--font-xs); font-weight: 400; }
+.translatorEnvironmentRows { display: flex; flex-direction: column; gap: 2px; }
+.translatorEnvironmentRow, .translatorEnvironmentAdd {
+  display: grid; grid-template-columns: minmax(7rem, 14rem) auto minmax(6rem, 1fr) auto auto; gap: 6px; align-items: center;
+}
+.translatorEnvironmentAdd { grid-template-columns: minmax(7rem, 14rem) auto minmax(6rem, 1fr) auto; margin-top: 2px; }
+.translatorEnvironmentName, .translatorEnvironmentRemovedValue { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-sm); }
+.translatorEnvironmentEquals { color: var(--muted); font-size: var(--font-sm); }
+.translatorEnvironmentRow .input, .translatorEnvironmentAdd .input { min-width: 0; font-size: var(--font-sm); }
+.translatorEnvironmentState { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+.translatorEnvironmentActions { display: flex; justify-content: flex-end; }
+.translatorEnvironmentRow.removed .translatorEnvironmentName, .translatorEnvironmentRemovedValue { color: var(--muted); text-decoration: line-through; }
+.translatorEnvironmentHint, .translatorEnvironmentEmpty { font-size: var(--font-xs); }
+
 .settingsStack {
   display: flex;
   flex-direction: column;

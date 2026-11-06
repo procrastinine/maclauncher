@@ -58,6 +58,7 @@
         "hostFeature": "APPLE_SILICON",
         "graphicsHost": "explicit",
         "settings": {
+          "environmentAction": "listTranslatorEnvironments",
           "defaults": {
             "execution": "jvm",
             "width": 1280,
@@ -304,6 +305,7 @@
         "hostFeature": "APPLE_SILICON",
         "graphicsHost": "window",
         "settings": {
+          "environmentAction": "listTranslatorEnvironments",
           "defaults": {
             "networkIsolation": true,
             "width": 1280,

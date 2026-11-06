@@ -312,8 +312,12 @@ test("owned DXMT transport survives both shared graphics environment merges and 
   const transport = Temporal.environment({ dxmt: {} }, "/private/game/wine/lib/wine"), effects = { DYLD_INSERT_LIBRARIES: "/graphics/libreshade.dylib", RESHADE_TEMPORAL_METHOD: "fsr2" };
   assert.equal(ReShade.mergeEnvironment(ReShade.mergeEnvironment(transport, effects), effects).MACLAUNCHER_DXMT_BASE_LIBRARY,
     "/private/game/wine/lib/wine/x86_64-unix/maclauncher-dxmt-original.so");
-  for (const module of ["../src/modules/crossover/runtime/launch", "../src/modules/crossover/sikarugir/launch"])
-    assert.throws(() => require(module).parseEnvironment(["MACLAUNCHER_DXMT_BASE_LIBRARY=/unrelated.so"]), /Environment/);
+  const Contract = require("../src/modules/shared/runtime/translator-environment.mjs");
+  for (const runtime of ["crossover", "sikarugir"]) {
+    const declaration = require("../src/modules/registry").listTranslatorEnvironments().find(item => item.id === runtime);
+    assert.throws(() => Contract.normalizeValues({ MACLAUNCHER_DXMT_BASE_LIBRARY: "/unrelated.so" }, { declarations: [declaration] }), /set by MacLauncher/);
+    assert.deepEqual(Contract.launchValues([declaration], [runtime], { game: { [runtime]: { MACLAUNCHER_DXMT_BASE_LIBRARY: "/unrelated.so" } } }).values, {});
+  }
 });
 for (const layout of ["Frameworks", "SharedSupport"]) test(`DXMT camera support keeps only the Template's dxmt folder from its archive (${layout}/renderer)`, async t => {
   const f = fixture(t), Support = require("../src/modules/crossover/temporal/support-manager"), archive = templateArchive(f.root, "9.7.3", { layout });

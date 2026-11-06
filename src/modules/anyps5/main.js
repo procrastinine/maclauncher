@@ -9,7 +9,11 @@ const Tools=require("./tools");
 const Input=require("./input");
 const Bundled=require("../shared/runtime/bundled-native");
 const Architecture=require("../shared/runtime/architecture");
+const TranslatorEnvironment=require("../shared/runtime/translator-environment-launch");
 const vulkanOptions=Object.freeze({architecture:"x64",preferredBackend:"kosmickrisp"});
+// Translator environments of a launch: AnyPS5's own and its Vulkan driver's.
+const translatorIds=vulkan=>["anyps5",...(vulkan?.backend?[vulkan.backend]:[])];
+function selectedVulkan(context){try{return Vulkan.resolve(context,vulkanOptions);}catch{return null;}}
 
 module.exports={id:manifest.id,manifest,detectGame,resolveSaveLocations,runtimeManagers:[manager],normalizeRuntimeId:value=>value==="inspection"?value:"anyps5",
   filterRuntimeSupport:entry=>entry.moduleData?.inspectionOnly?["inspection"]:["anyps5"],
@@ -36,7 +40,8 @@ module.exports={id:manifest.id,manifest,detectGame,resolveSaveLocations,runtimeM
     const input=Input.prepare(entry,context,selected.install);
     const vulkan=Vulkan.resolve(context,vulkanOptions);
     if(!vulkan) throw new Error("A compatible Intel Vulkan runtime is required. Install one in Runtimes.");
-    const environment={APS5_PLAYGO_UNLISTED_CHUNKS:"installed",...process.env,...Vulkan.environment(vulkan,launch.directory),...input,ANYPS5_VULKAN_LIBRARY:vulkan.library};
+    const environment={APS5_PLAYGO_UNLISTED_CHUNKS:"installed",...process.env,...TranslatorEnvironment.forLaunch(entry,context,translatorIds(vulkan)).values,
+      ...Vulkan.environment(vulkan,launch.directory),...input,ANYPS5_VULKAN_LIBRARY:vulkan.library};
     delete environment.ANYPS5_MOUSE_ROUTING;
     Object.assign(environment,inputRouting);
     context.onEntryChange?.({defaultSaveDir:entry.defaultSaveDir,moduleData:entry.moduleData});
@@ -47,5 +52,6 @@ module.exports={id:manifest.id,manifest,detectGame,resolveSaveLocations,runtimeM
   settingsActions:{listVulkanRuntimes:(_payload,context)=>Vulkan.choices(context,vulkanOptions)},
   actions:{runtimeStatus:(entry,_payload,context)=>manager.resolveSelection(entry,context.settings,context.userDataDir),
     listVulkanRuntimes:(_entry,_payload,context)=>Vulkan.choices(context,vulkanOptions),
+    listTranslatorEnvironments:(_entry,payload,context)=>({translatorEnvironments:translatorIds(selectedVulkan({...context,runtimeSettings:{...context.runtimeSettings,...payload?.runtimeSettings}}))}),
     inspectProgram:Tools.inspectExecutable,inspectPackage:Tools.inspectPackage,decompile:Tools.decompile,revealExport:Tools.revealExport}
 };

@@ -71,6 +71,7 @@
         "graphicsArchitecture": "x86_64",
         "requirements": "macOS 26 · Rosetta on Apple Silicon · Vulkan with Intel support",
         "settings": {
+          "environmentAction": "listTranslatorEnvironments",
           "defaults": {
             "vulkanRuntime": "auto",
             "mouseInput": "auto"

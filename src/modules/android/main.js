@@ -50,6 +50,16 @@ module.exports = {
       return { ...metadata, architectureLabel: metadata.architectures.join(", ") || "Java",
         activity: metadata.launchers[0]?.activity || "No enabled launcher activity" };
     },
+    // The translator environments that apply with the edited runtime settings.
+    listTranslatorEnvironments: (entry, payload, context = {}) => {
+      const draft = { ...withRuntime(entry, context), runtimeSettings: { ...context.runtimeSettings, ...payload?.runtimeSettings } };
+      if (draft.runtimeId === "macapk") return { translatorEnvironments: require("./providers/macapk").translatorEnvironmentIds(draft.runtimeSettings) };
+      if (draft.runtimeId !== "klepton") return { translatorEnvironments: [] };
+      const renderer = draft.runtimeSettings.angleBackend ?? "metal";
+      let vulkan = null;
+      if (renderer === "vulkan") try { vulkan = require("../shared/vulkan").resolve(draft, require("./graphics-selection").VULKAN_OPTIONS); } catch {}
+      return { translatorEnvironments: require("./host").translatorEnvironmentIds(draft.runtimeSettings.execution, renderer, vulkan) };
+    },
     decompileApk: Decompile.decompileApk,
     decodeApk: ApkResources.decodeApk,
     revealDecompiled: Decompile.revealDecompiled,

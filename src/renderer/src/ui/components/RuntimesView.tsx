@@ -37,6 +37,7 @@ import { StatusBadge } from "./StatusBadge";
 import { RuntimeComponentGroup } from "./RuntimeComponentGroup";
 import { DownloadProgress } from "./DownloadProgress";
 import { isolatedItem } from "./ItemBoundary";
+import { RuntimeTranslatorEnvironments } from "./TranslatorEnvironmentEditor";
 
 const EMPTY_RUNTIME_UI: RuntimeUiState[string] = {
   remoteOpen: {},
@@ -728,6 +729,9 @@ export function RuntimesView({
                   </button>
                   <HelpTip label={activeRuntimeSection.registrationPresentation ? "About existing packages" : "About custom runtimes"}>{activeRuntimeSection.registrationPresentation?.description || "Register a compatible executable, application or runtime directory in this list. Files remain in their original location."}</HelpTip>
                 </div>}
+                {settingsApi?.setTranslatorEnvironment && <RuntimeTranslatorEnvironments managerId={activeRuntimeManager.id}
+                  declarations={state?.translatorEnvironments} store={state?.launcherSettings?.translatorEnvironment}
+                  onSave={settingsApi.setTranslatorEnvironment} />}
               </div>
             </div>
           ) : (

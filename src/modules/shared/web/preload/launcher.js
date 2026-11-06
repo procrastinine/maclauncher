@@ -111,6 +111,8 @@ contextBridge.exposeInMainWorld("MacLauncher", {
     setGameFavorite: (gamePath, favorite) => ipcRenderer.invoke("launcher:setGameFavorite", gamePath, favorite),
     setGameNotes: (gamePath, notes) => ipcRenderer.invoke("launcher:setGameNotes", gamePath, notes),
     setGameLaunchArguments: (gamePath, value) => ipcRenderer.invoke("launcher:setGameLaunchArguments", gamePath, value),
+    setGameTranslatorEnvironment: (gamePath, translatorId, values) => ipcRenderer.invoke("launcher:setGameTranslatorEnvironment", gamePath, translatorId, values),
+    setTranslatorEnvironment: (translatorId, values) => ipcRenderer.invoke("launcher:setTranslatorEnvironment", translatorId, values),
     setGameNetworkAccess: (gamePath, value) => ipcRenderer.invoke("launcher:setGameNetworkAccess", gamePath, value),
     setGameSteamClientStart: (gamePath, value) => ipcRenderer.invoke("launcher:setGameSteamClientStart", gamePath, value),
     listEffectsPresets: () => ipcRenderer.invoke("launcher:listEffectsPresets"),

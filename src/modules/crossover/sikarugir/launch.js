@@ -15,11 +15,8 @@ const Detection = require("../detect");
 const DLSS = require("../dlss");
 const Translators = require("../../shared/runtime/wine-translators");
 const TranslatorFiles = require("../../shared/runtime/translator-files");
+const TranslatorEnvironment = require("../../shared/runtime/translator-environment-launch");
 
-const PROTECTED_ENVIRONMENT = new Set(["HOME", "PATH", "TMPDIR", "WINEPREFIX", "WINEARCH", "WINELOADER", "WINESERVER",
-  "WINEDLLPATH", "WINEDLLOVERRIDES", "WINEMSYNC", "WINEESYNC", "DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH",
-  "DYLD_FRAMEWORK_PATH", "DYLD_FALLBACK_FRAMEWORK_PATH", "DYLD_INSERT_LIBRARIES", "VK_DRIVER_FILES", "VK_ICD_FILENAMES",
-  "NODE_OPTIONS", "ELECTRON_RUN_AS_NODE", "SikarugirAppWine11", "MACLAUNCHER_DXMT_BASE_LIBRARY"]);
 const WINDOWS_VERSIONS = new Set(Object.keys(WineSettings.WINDOWS_VERSIONS));
 
 // Wine may return while Windows children continue in other process groups.
@@ -79,17 +76,6 @@ function safeText(value, label) {
   if (/[\0\r\n]/.test(text)) throw new Error(`${label} must not contain newlines or NUL bytes.`);
   return text;
 }
-function parseEnvironment(values) {
-  const environment = {};
-  for (const line of Array.isArray(values) ? values : []) {
-    const match = String(line).match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
-    if (!match || PROTECTED_ENVIRONMENT.has(match[1]) || /^(?:CX_|GST_)/.test(match[1])) {
-      throw new Error("Environment entries must use NAME=value. Wine paths, graphics libraries and synchronization are managed automatically.");
-    }
-    environment[match[1]] = safeText(match[2], "Environment values");
-  }
-  return environment;
-}
 function dllOverrides(settings, graphicsOverrides = []) {
   const values = [...(Array.isArray(graphicsOverrides) ? graphicsOverrides : []),
     ...(Array.isArray(settings.dllOverrides) ? settings.dllOverrides : [])]
@@ -102,7 +88,10 @@ function dllOverrides(settings, graphicsOverrides = []) {
   }
   return values.join(";");
 }
-function buildEnvironment(settings, installation, directory, prefixPath, graphics = {}, { baseEnvironment = process.env, translatorPlan, existingEnvironment } = {}) {
+// `translatorEnvironment` holds the values of the chosen translators'
+// environments (shared/runtime/translator-environment-launch.js). They replace
+// the values that Runtime Settings set; locked names never reach them.
+function buildEnvironment(settings, installation, directory, prefixPath, graphics = {}, { baseEnvironment = process.env, translatorPlan, existingEnvironment, translatorEnvironment = {} } = {}) {
   const environment = { ...baseEnvironment };
   for (const key of Object.keys(environment)) {
     if (/^(?:WINE|CX_|DYLD_|GST_|SikarugirAppWine)/.test(key) || [...DLSS.ENVIRONMENT, "MACLAUNCHER_DXMT_BASE_LIBRARY", "NODE_OPTIONS", "ELECTRON_RUN_AS_NODE", "ELECTRON_RENDERER_URL", "VITE_DEV_SERVER_URL", "VK_DRIVER_FILES", "VK_ICD_FILENAMES"].includes(key)) delete environment[key];
@@ -113,7 +102,7 @@ function buildEnvironment(settings, installation, directory, prefixPath, graphic
   if (!existingEnvironment && ["msync", "esync"].includes(synchronization) && capabilities[synchronization] !== true) {
     throw new Error(`The selected Sikarugir version does not support ${synchronization === "msync" ? "MSync" : "ESync"}. Select Automatic or Off in Runtime Settings.`);
   }
-  Object.assign(environment, existingEnvironment?.environment || {}, graphics.env || {}, WineSettings.environment(settings, { needsRosetta: installation.needsRosetta, engines: translatorPlan ? Translators.engines(translatorPlan) : {} }), parseEnvironment(settings.environment));
+  Object.assign(environment, existingEnvironment?.environment || {}, graphics.env || {}, WineSettings.environment(settings, { needsRosetta: installation.needsRosetta, engines: translatorPlan ? Translators.engines(translatorPlan) : {} }));
   // The producer's Wine 11 loader requires this initialization marker before
   // loading Windows libraries, including wineboot in a fresh prefix.
   if (/^11(?:[._]|$)/.test(installation.engineVersion || "")) environment.SikarugirAppWine11 = "1";
@@ -127,6 +116,7 @@ function buildEnvironment(settings, installation, directory, prefixPath, graphic
     environment.LANG = locale; environment.LC_ALL = locale; environment.LC_MESSAGES = locale;
   }
   environment.WINEDEBUG = settings.wineDebug ? safeText(settings.wineDebug, "Wine debug channels") : existingEnvironment?.environment.WINEDEBUG || "-all";
+  Object.assign(environment, translatorEnvironment);
   const dll = dllOverrides(settings, graphics.dllOverrides);
   if (dll) environment.WINEDLLOVERRIDES = dll;
   else delete environment.WINEDLLOVERRIDES;
@@ -213,7 +203,7 @@ async function ensurePrefix(installation, ownedEnvironment, directory, settings,
   // Renderer-prioritized loaders can replace libraries used by wineboot itself.
   const runtime = prefixRuntime(installation, directory);
   const wine = runtime.executablePath, server = runtime.serverPath;
-  const { environment } = buildEnvironment({ ...settings, wineDebug: "-all", environment: [], dllOverrides: [], bepInExWinhttp: false },
+  const { environment } = buildEnvironment({ ...settings, wineDebug: "-all", dllOverrides: [], bepInExWinhttp: false },
     installation, directory, prefixPath, runtime);
   const options = { cwd: directory, env: environment, signal: context.signal, timeout: 180000, maxBuffer: 1024 * 1024,
     onProcessSpawn: async (child, options) => {
@@ -274,6 +264,10 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const host = dependencies.host || capabilities;
   const translatorPlan = await (dependencies.resolveTranslators || Translators.resolve)(selected.install, "sikarugir", context, { entry, executableArchitecture: match.executableArchitecture, host });
   settings = Translators.settingsForPlan(settings, translatorPlan);
+  // Saved NAME=value lines of the earlier Environment variables setting apply
+  // between the global and the game's own Sikarugir values.
+  const translatorEnvironment = TranslatorEnvironment.forLaunch(entry, context, Translators.environmentIds(translatorPlan, "sikarugir"),
+    { earlier: { sikarugir: TranslatorEnvironment.valuesFromLines(settings.environment) } }).values;
   const translatorView = await TranslatorFiles.prepareTranslatorFiles(translatorPlan, { userDataDir: context.userDataDir, layout: translatorPlan.layout, signal: context.signal });
   let cameraBridge = Temporal.resolvePlan(entry, context, { install: selected.install, settings, translatorPlan, host,
     runtimeId: "sikarugir", verify: true, root: dependencies.graphicsRoot, automatic: settings.dlss !== true });
@@ -330,7 +324,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   await TranslatorFiles.applyNativeLibraries(translatorView, prefixPath, { signal: context.signal });
   await graphics.applyPrefix?.();
   context.signal?.throwIfAborted();
-  let { environment } = buildEnvironment(settings, selected.install, directory, prefixPath, graphics, { ...dependencies, translatorPlan, existingEnvironment });
+  let { environment } = buildEnvironment(settings, selected.install, directory, prefixPath, graphics, { ...dependencies, translatorPlan, existingEnvironment, translatorEnvironment });
   // Apply launcher-owned optional effects only to the game, after stock Wine
   // finishes prefix initialization. User-supplied loader paths remain blocked.
   if (context.applyGameEnvironment) environment = await context.applyGameEnvironment(environment);
@@ -372,5 +366,5 @@ async function prepareLaunch(entry, context, dependencies = {}) {
     existingEnvironment: steamBridge?.privateClone ? null : existingEnvironment, winePath: graphics.executablePath || selected.install.executablePath, serverPath: graphics.serverPath || selected.install.serverPath };
 }
 
-module.exports = { SUPERVISOR, supervisorArguments, PROTECTED_ENVIRONMENT, runtimeDirectory, safeText, parseEnvironment, dllOverrides,
+module.exports = { SUPERVISOR, supervisorArguments, runtimeDirectory, safeText, dllOverrides,
   buildEnvironment, runSupervised, prefixRuntime, ensurePrefix, executableEvidence, prepareLaunch };

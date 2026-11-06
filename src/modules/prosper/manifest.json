@@ -15,6 +15,7 @@
       "graphicsHost": "window", "graphicsArchitecture": "x86_64",
       "requirements": "macOS 26 · Rosetta on Apple Silicon · Vulkan 1.4",
       "settings": {
+        "environmentAction": "listTranslatorEnvironments",
         "defaults": {"vulkanRuntime": "auto", "showFps": false, "configPath": ""},
         "fields": [
           {"key": "vulkanRuntime", "type": "select", "label": "Vulkan", "optionsAction": "listVulkanRuntimes", "optionsKey": "vulkanRuntimes", "options": [{"value": "auto", "label": "Automatic"}]},

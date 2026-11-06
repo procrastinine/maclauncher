@@ -38,7 +38,7 @@ const GameAvailability = require("./game-availability");
 
 const isRecord = value => Boolean(value && typeof value === "object" && !Array.isArray(value));
 // Actions that change only the library record and never read the game's files.
-const RECORD_ACTIONS = new Set(["setGameNotes", "setGameLaunchArguments", "setGameNetworkAccess", "setGameSteamClientStart"]);
+const RECORD_ACTIONS = new Set(["setGameNotes", "setGameLaunchArguments", "setGameTranslatorEnvironment", "setGameNetworkAccess", "setGameSteamClientStart"]);
 const defaultUserDataDir = () => path.join(os.homedir(), "Library", "Application Support", "maclauncher");
 
 function resolveModuleId(entry) {
@@ -919,6 +919,14 @@ function createLauncher({
       const updated = GameStore.setGameLaunchArguments(userDataDir, entry.gameId, payload.launchArguments);
       Object.assign(entry, { launchArguments: updated.launchArguments, updatedAt: updated.updatedAt });
       return { launchArguments: updated.launchArguments, updatedAt: updated.updatedAt };
+    }
+    if (actionId === "setGameTranslatorEnvironment") {
+      const updated = GameStore.setGameTranslatorEnvironment(userDataDir, entry.gameId, payload.translatorId, payload.values,
+        { declarations: (typeof registry.listTranslatorEnvironments === "function" ? registry : Modules).listTranslatorEnvironments() });
+      if (updated.translatorEnvironment) entry.translatorEnvironment = updated.translatorEnvironment;
+      else delete entry.translatorEnvironment;
+      entry.updatedAt = updated.updatedAt;
+      return { translatorEnvironment: updated.translatorEnvironment || {}, updatedAt: updated.updatedAt };
     }
     if (actionId === "setGameNetworkAccess") {
       const updated = GameStore.setGameNetworkAccess(userDataDir, entry.gameId, payload.networkAccess);

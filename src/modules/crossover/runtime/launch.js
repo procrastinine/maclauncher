@@ -12,6 +12,7 @@ const manager = require("./manager");
 const DLSS = require("../dlss");
 const Translators = require("../../shared/runtime/wine-translators");
 const TranslatorFiles = require("../../shared/runtime/translator-files");
+const TranslatorEnvironment = require("../../shared/runtime/translator-environment-launch");
 const { wineLayout } = require("../../shared/runtime/wine-layout");
 const { findWindowsExecutable, readWindowsExecutable, inside } = require("../detect");
 
@@ -89,15 +90,6 @@ const safeText = (value, label) => {
   if (/[\0\r\n]/.test(text)) throw new Error(`${label} must not contain newlines or NUL bytes.`);
   return text;
 };
-function parseEnvironment(values) {
-  const environment = {};
-  for (const line of Array.isArray(values) ? values : []) {
-    const match = String(line).match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
-    if (!match || PROTECTED_ENVIRONMENT.has(match[1])) throw new Error("Environment entries must use NAME=value and cannot replace CrossOver's application or bottle paths.");
-    environment[match[1]] = safeText(match[2], "Environment values");
-  }
-  return environment;
-}
 function wineEnvironmentString(environment) {
   // CrossOver parses --env with Perl shellwords; no shell executes this text.
   return Object.entries(environment).map(([key, value]) => "'" + `${key}=${value}`.replace(/'/g, "'\"'\"'") + "'").join(" ");
@@ -119,7 +111,10 @@ function bottleTemplate(settings) {
   if (!["win11_64", "win10_64", "win7_64", "winxp_64"].includes(template)) throw new Error("Unsupported CrossOver Windows bottle type.");
   return template;
 }
-function buildEnvironment(settings, installation, directory, bottlePath, { baseEnvironment = process.env, host = {}, executableArchitecture, cameraBridge, translatorPlan, existingEnvironment } = {}) {
+// `translatorEnvironment` holds the values of the chosen translators'
+// environments (shared/runtime/translator-environment-launch.js). They replace
+// the values that Runtime Settings set; locked names never reach them.
+function buildEnvironment(settings, installation, directory, bottlePath, { baseEnvironment = process.env, host = {}, executableArchitecture, cameraBridge, translatorPlan, existingEnvironment, translatorEnvironment = {} } = {}) {
   const environment = { ...baseEnvironment };
   for (const name of [...PROTECTED_ENVIRONMENT].filter(name => name.startsWith("WINE") || name.startsWith("CX_"))) delete environment[name];
   for (const name of MANAGED_ENVIRONMENT) delete environment[name];
@@ -156,7 +151,7 @@ function buildEnvironment(settings, installation, directory, bottlePath, { baseE
     overrides.LANG = locale; overrides.LC_ALL = locale; overrides.LC_MESSAGES = locale;
   }
   if (settings.wineDebug) overrides.WINEDEBUG = safeText(settings.wineDebug, "Wine debug channels");
-  Object.assign(overrides, WineSettings.environment(settings, { needsRosetta: installation.needsRosetta, engines: translatorPlan ? Translators.engines(translatorPlan) : {} }), parseEnvironment(settings.environment));
+  Object.assign(overrides, WineSettings.environment(settings, { needsRosetta: installation.needsRosetta, engines: translatorPlan ? Translators.engines(translatorPlan) : {} }), translatorEnvironment);
   const dll = dllOverrides(settings);
   if (dll) overrides.WINEDLLOVERRIDES = dll;
   Object.assign(environment, overrides, { CX_ROOT: installation.crossoverRoot,
@@ -167,7 +162,7 @@ function buildEnvironment(settings, installation, directory, bottlePath, { baseE
   return { environment, overrides, dll };
 }
 
-async function ensureBottle(installation, ownedEnvironment, directory, settings, context, { run } = {}) {
+async function ensureBottle(installation, ownedEnvironment, directory, settings, context, { run, translatorEnvironment } = {}) {
   const bottlePath = Environments.assertPrivateEnvironment(ownedEnvironment, directory);
   const template = bottleTemplate(settings);
   Writable.assertOwnDirectory(directory, bottlePath, { create: false });
@@ -179,7 +174,7 @@ async function ensureBottle(installation, ownedEnvironment, directory, settings,
     throw new Error("The selected CrossOver application does not include this Windows bottle type. Select another type in Runtime Settings.");
   }
   context.onProgress?.({ phase: "prepare", label: "Creating Windows environment…" });
-  const { environment } = buildEnvironment({ ...settings, dlss: false }, installation, directory, bottlePath);
+  const { environment } = buildEnvironment({ ...settings, dlss: false }, installation, directory, bottlePath, { translatorEnvironment });
   // A failed first preparation contains no game saves and cannot be reused.
   // Remove only this owned incomplete bottle, preserving completed environments.
   await fs.promises.rm(bottlePath, { recursive: true, force: true });
@@ -235,6 +230,10 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   if (!selectedExecutable) throw new Error("Windows executable must be a PE executable inside the game folder.");
   const translatorPlan = await Translators.resolve(selected.install, 'crossover', context, { entry, executableArchitecture: selectedExecutable.executableArchitecture, host });
   settings = Translators.settingsForPlan(settings, translatorPlan);
+  // Saved NAME=value lines of the earlier Environment variables setting apply
+  // between the global and the game's own CrossOver values.
+  const translatorEnvironment = TranslatorEnvironment.forLaunch(entry, context, Translators.environmentIds(translatorPlan, "crossover"),
+    { earlier: { crossover: TranslatorEnvironment.valuesFromLines(settings.environment) } }).values;
   const translatorView = TranslatorFiles.selectedDescriptions(translatorPlan).length ? await TranslatorFiles.prepareTranslatorFiles(translatorPlan,
     { userDataDir: context.userDataDir, layout: translatorPlan.layout, signal: context.signal }) : null;
   const Temporal = require("../temporal");
@@ -258,13 +257,13 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   let environment, overrides, dll;
   try {
     ({environment, overrides, dll} = buildEnvironment(settings, selected.install, directory, bottlePath,
-      {executableArchitecture: selectedExecutable.executableArchitecture, cameraBridge, translatorPlan, existingEnvironment, host}));
+      {executableArchitecture: selectedExecutable.executableArchitecture, cameraBridge, translatorPlan, existingEnvironment, host, translatorEnvironment}));
   } catch (error) {
     if (context.signal?.aborted || isAbortError(error) || settings.dlss !== true) throw error;
     // Only accept a fallback if the ordinary vendor settings validate too.
     // A bad executable, renderer, environment or DLL rule remains an error.
     ({environment, overrides, dll} = buildEnvironment({...settings, dlss: false}, selected.install, directory, bottlePath,
-      {executableArchitecture: selectedExecutable.executableArchitecture, translatorPlan, existingEnvironment, host}));
+      {executableArchitecture: selectedExecutable.executableArchitecture, translatorPlan, existingEnvironment, host, translatorEnvironment}));
     cameraBridge = null;
     context.graphicsBridgeFailure = {provider: "crossover-camera", reason: String(error.message || error)};
     warnGraphics(context.logger, "CrossOver temporal integration is unavailable. Using the selected vendor graphics backend.", context.graphicsBridgeFailure.reason);
@@ -334,13 +333,13 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
       // Disable only the optional temporal adaptation, retaining renderer,
       // synchronization, Steam, user environment and DLL override choices.
       ({environment, overrides, dll} = buildEnvironment({...settings, dlss: false}, selected.install, directory, bottlePath,
-        {executableArchitecture: selectedExecutable.executableArchitecture, host, existingEnvironment}));
+        {executableArchitecture: selectedExecutable.executableArchitecture, host, existingEnvironment, translatorEnvironment}));
     }
   }
   context.graphicsInputs = require("../graphics-inputs").inputs(selected.install, cameraBridge?.inputs);
   if (!existingEnvironment) {
     Writable.assertOwnDirectory(directory, path.dirname(bottlePath));
-    await ensureBottle(selected.install, Environments.privateEnvironment(context.userDataDir, directory, path.relative(directory, bottlePath)), directory, settings, context, { run });
+    await ensureBottle(selected.install, Environments.privateEnvironment(context.userDataDir, directory, path.relative(directory, bottlePath)), directory, settings, context, { run, translatorEnvironment });
     detachProfileAliases(bottlePath);
   }
   await WineSettings.applyRegistry({ ...context.runtimeSettings, ...settings, windowsVersion: "" }, {
@@ -438,5 +437,5 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   return { ...selected, directory, gameRoot, workingDirectory, bottlePath, executablePath, windowsExecutablePath, windowsWorkingDirectory, environment, args, translatorPlan, existingEnvironment: steamBridge?.privateClone ? null : existingEnvironment };
 }
 
-module.exports = { runtimeDirectory, buildEnvironment, parseEnvironment, wineEnvironmentString, dllOverrides,
+module.exports = { runtimeDirectory, buildEnvironment, wineEnvironmentString, dllOverrides,
   ensureBottle, detachProfileAliases, prepareLaunch, runSupervised, SUPERVISOR };

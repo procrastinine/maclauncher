@@ -26,8 +26,10 @@ import { Toggle } from "./FieldRow";
 import { createQueuedWriter, type QueuedWriter } from "./queued-write-model";
 import { inventoryChoiceLabel, loadSettingChoices, readSettingChoices, storeSettingChoices, settingChoiceRequest, settingChoiceScope, type SettingChoices } from "./runtime-setting-choices";
 import { RuntimeFileSetting } from "./RuntimeFileSetting";
+import { GameTranslatorEnvironment } from "./TranslatorEnvironmentEditor";
 
-export type RuntimeSettingsApi = Pick<LauncherApi, "setModuleRuntimeSettings" | "setGameRuntimeSettings"> & Partial<Pick<LauncherApi, "moduleAction" | "moduleSettingsAction">>;
+export type RuntimeSettingsApi = Pick<LauncherApi, "setModuleRuntimeSettings" | "setGameRuntimeSettings"> &
+  Partial<Pick<LauncherApi, "moduleAction" | "moduleSettingsAction" | "setTranslatorEnvironment" | "setGameTranslatorEnvironment">>;
 
 type RuntimeSettingsWindowProps = {
   api: RuntimeSettingsApi | undefined;
@@ -491,6 +493,16 @@ export function RuntimeSettingsWindow({
               </div>}
             </div>
           )}
+          {api?.setGameTranslatorEnvironment && state && schema?.environmentAction && isGameScope && context.gamePath && (() => {
+            const action = schema.environmentAction, gamePath = context.gamePath, save = api.setGameTranslatorEnvironment;
+            // Wine runtimes return the environments with their translator choices.
+            const shared = (JSON.parse(choiceActions) as string[]).includes(action);
+            return <GameTranslatorEnvironment key={choiceContext} declarations={state.translatorEnvironments}
+              globalStore={state.launcherSettings?.translatorEnvironment} gameStore={gameEntry?.translatorEnvironment}
+              result={shared ? choices[action] : undefined} loadKey={choiceInputsKey}
+              load={shared ? undefined : () => settingChoiceRequest(api, context)?.(action, choiceInputs) ?? Promise.resolve(null)}
+              onSave={(id, values) => save(gamePath, id, values)} />;
+          })()}
           {schema?.provider && (!schema.provider.gameOnly || isGameScope) && <RuntimeSettingsProvider
             key={JSON.stringify([context.moduleId, context.runtimeId, context.gamePath])}
             api={api} state={state} context={context} provider={schema.provider}

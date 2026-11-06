@@ -151,25 +151,29 @@ test("a rejected private log path prevents Wine from spawning and never truncate
 
 test("Wine settings keep managed paths owned, preserve comma values and validate actual synchronization support", () => {
   const install = { executablePath: "/runtime/bin/wine", serverPath: "/runtime/bin/wineserver", capabilities: { msync: true, esync: false } };
-  const settings = { synchronization: "msync", locale: "ja_JP.UTF-8", bepInExWinhttp: true,
-    environment: ["DXMT_CONFIG=d3d11.option=a,b", "CUSTOM_TITLE=it's literal; $(echo nope)"] };
+  const settings = { synchronization: "msync", locale: "ja_JP.UTF-8", bepInExWinhttp: true };
   const { environment, dll } = Launch.buildEnvironment(settings, install, "/private/game", "/private/game/prefix", {
     env: { WINEDLLPATH: "/private/view", VK_DRIVER_FILES: "/private/driver.json" }, dllOverrides: ["d3d11,dxgi=b"]
   }, { baseEnvironment: { HOME: "/personal", PATH: "/unrelated", WINEPREFIX: "/other-game", CX_BOTTLE: "other", WINED3DMETAL: "1",
-    DYLD_INSERT_LIBRARIES: "/other.dylib", VK_DRIVER_FILES: "/other.json", GST_PLUGIN_PATH: "/other/plugins", NODE_OPTIONS: "--inspect" } });
+    DYLD_INSERT_LIBRARIES: "/other.dylib", VK_DRIVER_FILES: "/other.json", GST_PLUGIN_PATH: "/other/plugins", NODE_OPTIONS: "--inspect" },
+  translatorEnvironment: { DXMT_CONFIG: "d3d11.option=a,b", CUSTOM_TITLE: "it's literal; $(echo nope)", WINEDEBUG: "+seh" } });
   assert.equal(environment.WINEPREFIX, "/private/game/prefix"); assert.equal(environment.HOME, "/private/game/home");
   assert.equal(environment.WINELOADER, install.executablePath); assert.equal(environment.WINESERVER, install.serverPath);
   assert.equal(environment.WINEMSYNC, "1"); assert.equal(environment.WINEESYNC, "0"); assert.equal(environment.LC_ALL, "ja_JP.UTF-8");
   assert.equal(environment.DXMT_CONFIG, "d3d11.option=a,b"); assert.equal(environment.CUSTOM_TITLE, "it's literal; $(echo nope)");
+  assert.equal(environment.WINEDEBUG, "+seh", "a translator environment value replaces the launcher's debug channels");
   assert.equal(environment.VK_DRIVER_FILES, "/private/driver.json"); assert.equal(environment.GST_PLUGIN_PATH, undefined);
   assert.equal(environment.CX_BOTTLE, undefined); assert.equal(environment.WINED3DMETAL, undefined);
   assert.equal(environment.DYLD_INSERT_LIBRARIES, undefined); assert.equal(environment.NODE_OPTIONS, undefined);
   assert.equal(dll, "d3d11,dxgi=b;winhttp=n,b");
   assert.throws(() => Launch.buildEnvironment({ synchronization: "esync" }, install, "/private", "/private/prefix"), /does not support ESync/);
-  for (const key of ["HOME", "WINEPREFIX", "WINEMSYNC", "DYLD_LIBRARY_PATH", "VK_DRIVER_FILES", "GST_PLUGIN_PATH", "CX_BOTTLE"]) {
-    assert.throws(() => Launch.parseEnvironment([`${key}=/elsewhere`]), /managed automatically/);
+  const Contract = require("../src/modules/shared/runtime/translator-environment.mjs");
+  const sikarugir = require("../src/modules/registry").listTranslatorEnvironments().find(item => item.id === "sikarugir");
+  for (const key of ["HOME", "WINEPREFIX", "WINEMSYNC", "WINEDLLOVERRIDES", "DYLD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES", "VK_DRIVER_FILES",
+    "GST_PLUGIN_PATH", "CX_BOTTLE", "NODE_OPTIONS", "SikarugirAppWine11", "MACLAUNCHER_DXMT_BASE_LIBRARY"]) {
+    assert.throws(() => Contract.normalizeValues({ [key]: "/elsewhere" }, { declarations: [sikarugir] }), /set by MacLauncher/, key);
+    assert.deepEqual(Contract.launchValues([sikarugir], ["sikarugir"], { global: { sikarugir: { [key]: "/elsewhere" } } }).values, {}, key);
   }
-  assert.throws(() => Launch.parseEnvironment(["MISSING_EQUALS"]), /NAME=value/);
   assert.throws(() => Launch.dllOverrides({ dllOverrides: ["winhttp=n;anything"] }), /library=order/);
   assert.equal(Launch.dllOverrides({ dllOverrides: ["winhttp=b"], bepInExWinhttp: true }), "winhttp=b");
 });
@@ -184,7 +188,6 @@ test("Wine 11 receives the producer's initialization marker for both fresh setup
   assert.equal(playback.environment.SikarugirAppWine11, "1");
   const wine10 = Launch.buildEnvironment({}, { ...install, engineVersion: "10.0_8" }, "/private/game", "/private/game/prefix", {}, inherited);
   assert.equal(wine10.environment.SikarugirAppWine11, undefined);
-  assert.throws(() => Launch.parseEnvironment(["SikarugirAppWine11=0"]), /managed automatically/);
 });
 
 test("ordinary Wine uses original files without staging or reconciling earlier views", async t => {
@@ -339,7 +342,6 @@ test("trusted optional game effects follow prefix setup and preserve disabled la
     assert.equal(call.options.env.DYLD_INSERT_LIBRARIES, undefined);
     assert.equal(call.options.env.RESHADE_CONFIG, undefined);
   }
-  assert.throws(() => Launch.parseEnvironment(["DYLD_INSERT_LIBRARIES=/untrusted.dylib"]), /managed automatically/);
 });
 
 test("a successful explicit Wine camera adapter keeps the original working directory", async t => {
@@ -477,6 +479,24 @@ test("fresh prefix setup uses the stock engine and common support before applyin
   assert.equal(result.environment.DXMT_CONFIG, "game-only");
   assert.equal(result.environment.VK_DRIVER_FILES, "/selected/renderer/icd.json");
   assert.equal(result.environment.WINEDLLOVERRIDES, "d3d11,dxgi=b;custom=n,b;winhttp=n,b");
+});
+
+test("Sikarugir launches with the global, earlier and game values of its chosen translator environments", async t => {
+  const directory = fixture(t), dependencies = adapters(installation(directory));
+  const entry = { ...game(directory), translatorEnvironment: { dxmt: { DXMT_CONFIG: null, DXMT_LOG_LEVEL: "debug" }, sikarugir: { GAME_ONLY: "$PATH literal" } } };
+  const result = await Launch.prepareLaunch(entry, { userDataDir: path.join(directory, "data"),
+    runtimeSettings: { graphicsBackend: "dxmt", locale: "ja_JP.UTF-8", environment: ["DXMT_CONFIG=earlier", "EARLIER=1", "SHARED=earlier"] },
+    settings: { launcher: { translatorEnvironment: { sikarugir: { SHARED: "global", LANG: "fr_FR.UTF-8", WINEDEBUG: "+loaddll", PATH: "/stored/before/lock" },
+      dxmt: { DXMT_CONFIG: "global" }, moltenvk: { MVK_CONFIG_LOG_LEVEL: "4" } } } } }, dependencies);
+  const environment = result.environment;
+  assert.equal(environment.SHARED, "earlier"); assert.equal(environment.EARLIER, "1"); assert.equal(environment.GAME_ONLY, "$PATH literal");
+  assert.equal(environment.DXMT_LOG_LEVEL, "debug"); assert.equal(environment.DXMT_CONFIG, undefined, "the game removes the global and earlier values");
+  assert.equal(environment.LANG, "fr_FR.UTF-8", "a global value replaces the launcher's locale"); assert.equal(environment.LC_ALL, "ja_JP.UTF-8");
+  assert.equal(environment.WINEDEBUG, "+loaddll", "a global value replaces the launcher's debug channels");
+  assert.equal(environment.MVK_CONFIG_LOG_LEVEL, undefined, "MoltenVK values apply only to games that use MoltenVK");
+  assert.notEqual(environment.PATH, "/stored/before/lock");
+  for (const call of dependencies.calls) for (const name of ["SHARED", "EARLIER", "DXMT_LOG_LEVEL"])
+    assert.equal(call.options.env[name], undefined, `${name} is used only during gameplay`);
 });
 
 test("selected Windows executables cannot escape the source root or select ARM Windows", async t => {

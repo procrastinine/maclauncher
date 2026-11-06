@@ -391,6 +391,11 @@ function engines(plan) {
   result['d3d-renderer'] = used.length === 1 ? used[0] : used.length ? used : null;
   return result;
 }
+// Translator environments of a launch: the Wine runtime's own, then each
+// translator engine the plan uses.
+function environmentIds(plan, runtime) {
+  return [...new Set([runtime, ...Object.values(plan ? engines(plan) : {}).flatMap(engine => [].concat(engine || []))])];
+}
 function settingsForPlan(settings, plan) {
   const result = { ...settings }, renderer = plan.components['d3d-renderer'].used, vulkan = plan.components['vulkan-driver'].used;
   if (plan.apiMode || require('./translator-files').placesDirect3D(plan)) result.graphicsBackend = 'wined3d';
@@ -409,9 +414,12 @@ function withSettings(manifest) {
   for (const runtime of ['crossover', 'sikarugir']) {
     const schema = result.runtime.entries[runtime].settings;
     schema.visibilityAction = 'listTranslatorOptions';
+    schema.environmentAction = 'listTranslatorOptions';
     const index = schema.fields.findIndex(field => field.key === 'graphicsBackend');
-    // Retain saved legacy values for existing games, without a second editable selector.
-    for (const field of schema.fields) if (['graphicsBackend', 'vulkanBackend', 'graphicsBridgeVersion'].includes(field.key)) field.hidden = true;
+    // Retain saved legacy values for existing games, without a second editable
+    // selector. Saved environment lines apply as the runtime's earlier layer of
+    // its translator environment.
+    for (const field of schema.fields) if (['graphicsBackend', 'vulkanBackend', 'graphicsBridgeVersion', 'environment'].includes(field.key)) field.hidden = true;
     for (const role of controls) schema.defaults[role.settingsKey] = '';
     schema.fields.splice(Math.max(0, index), 0, ...controls.map(role => {
       return { key: role.settingsKey, type: 'select', label: role.label, optionsAction: 'listTranslatorOptions', optionsKey: role.optionsKey,
@@ -468,4 +476,4 @@ function inspectorRows(plan) {
       ...(row.conflictRoles?.length ? { conflictRoles: row.conflictRoles } : {}) };
   }));
 }
-module.exports = { SETTINGS, includedTranslators, includedSummary, describedIncluded, managedTranslators, inventory, optionsInventory, optionsPlan, resolve, engines, settingsForPlan, wineRoot, withSettings, optionLists, inspectorRows, presentInspectorRows, planInputs, samePlanInputs, environmentContext };
+module.exports = { SETTINGS, includedTranslators, includedSummary, describedIncluded, managedTranslators, inventory, optionsInventory, optionsPlan, resolve, engines, environmentIds, settingsForPlan, wineRoot, withSettings, optionLists, inspectorRows, presentInspectorRows, planInputs, samePlanInputs, environmentContext };

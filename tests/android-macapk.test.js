@@ -75,6 +75,29 @@ test("Mac.apk restores an unlisted installed version without pinning recorded by
   assert.equal(Harness.network.requests.length, before, "Receipt reuse stays offline");
 });
 
+test("Mac.apk launches with the merged values of Mac.apk, ANGLE and MoltenVK beneath its own options", async t => {
+  const root = directory(t), input = path.join(root, "base.apk"); fs.writeFileSync(input, "package fixture");
+  const install = { executablePath: path.join(root, "runtime/Mac.apk.app/Contents/Resources/macapk-runtime"), installDir: path.join(root, "runtime") };
+  t.mock.method(Manager, "resolveSelection", () => ({ version: "7.8.9", ready: true, install }));
+  t.mock.method(require("../src/modules/android/providers/macapk/executable-identity"), "prepareExecutable", async () => install.executablePath);
+  const storage = Object.fromEntries(["androidRoot", "home", "temporary", "cacheRoot", "runtimeRoot"].map(key => [key, path.join(root, key)]));
+  const icon = path.join(root, "game-icon.png"); fs.writeFileSync(icon, "icon fixture");
+  t.mock.method(require("../src/modules/shared/dock-icon"), "prepare", async source => source);
+  const entry = { gamePath: input, name: "Environment", iconPath: icon, translatorEnvironment: { angle: { ANGLE_FEATURE_OVERRIDES_DISABLED: "game" }, macapk: { GLOBAL: null } } };
+  const settings = { launcher: { translatorEnvironment: { macapk: { GLOBAL: "1", SHARED: "macapk", MACAPK_OFFLINE: "0", JAVA_TOOL_OPTIONS: "-Dstored=before-lock" },
+    angle: { SHARED: "angle", ANGLE_FEATURE_OVERRIDES_DISABLED: "global" }, moltenvk: { MVK_CONFIG_LOG_LEVEL: "2" }, "android-jvm": { JDK_JAVA_OPTIONS: "-Xmx4g" } } } };
+  const launch = async angleBackend => (await Provider.prepareLaunch({ entry, context: { userDataDir: root, settings, runtimeSettings: { angleBackend } }, storage,
+    packageSet: { base: { file: input } }, policy: { clipboard: "explicit", location: null, networkAllowed: false } })).env;
+  const vulkan = await launch("vulkan");
+  assert.equal(vulkan.SHARED, "angle"); assert.equal(vulkan.GLOBAL, undefined, "the game removes a global value");
+  assert.equal(vulkan.ANGLE_FEATURE_OVERRIDES_DISABLED, "game"); assert.equal(vulkan.MVK_CONFIG_LOG_LEVEL, "2");
+  assert.equal(vulkan.JDK_JAVA_OPTIONS, undefined, "Android JVM values do not apply to Mac.apk");
+  assert.equal(vulkan.MACAPK_OFFLINE, "1"); assert.match(vulkan.JAVA_TOOL_OPTIONS, /-javaagent:/);
+  assert.equal(vulkan.MACAPK_ANGLE_BACKEND, "vulkan");
+  const metal = await launch("metal");
+  assert.equal(metal.MVK_CONFIG_LOG_LEVEL, undefined, "MoltenVK values apply only with the Vulkan backend");
+});
+
 test("Play requests the selected managed download and launches with private policy and data", async t => {
   const root = directory(t), input = path.join(root, "base.apk"); fs.writeFileSync(input, "package fixture");
   let ready = false;

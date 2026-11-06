@@ -1,5 +1,9 @@
+import type { TranslatorEnvironmentDeclaration, TranslatorEnvironmentStore, TranslatorEnvironmentValues }
+  from "../../../modules/shared/runtime/translator-environment.mjs";
+
 export type ModuleId = string;
 export type RuntimeId = string;
+export type { TranslatorEnvironmentDeclaration, TranslatorEnvironmentStore, TranslatorEnvironmentValues };
 
 export type ModuleUiCondition = {
   key: string;
@@ -127,6 +131,8 @@ export type RuntimeSettingField = {
 export type RuntimeSettingsSchema = {
   inheritanceAction?: string;
   visibilityAction?: string;
+  /** Game-scope action whose result names the translator environments that apply (translatorEnvironments) and earlier values (earlierEnvironment). */
+  environmentAction?: string;
   defaults?: Record<string, unknown>;
   fields: RuntimeSettingField[];
   provider?: { readAction: string; writeAction: string; gameOnly?: boolean };
@@ -225,6 +231,8 @@ export type LauncherSettings = {
   /** Graphics shortcut assignments by action, in canonical accelerator form. */
   graphicsShortcuts?: Record<string, string>;
   graphicsScreenshotFolder?: string;
+  /** Global environment values by translator id. */
+  translatorEnvironment?: TranslatorEnvironmentStore;
   library?: {
     version: number;
     order: string[];
@@ -432,6 +440,8 @@ export type RecentGame = {
   runtimeData: Record<string, any>;
   runtimeSettings: Record<string, any>;
   launchArguments?: string;
+  /** The game's own environment values by translator id. */
+  translatorEnvironment?: TranslatorEnvironmentStore;
   moduleData: Record<string, any>;
   cheats: CheatsConfig | null;
   iconPath: string | null;
@@ -542,6 +552,8 @@ export type LauncherState = {
   runtimeInventoryRevision?: number;
   runtimeDefaults: Record<string, Record<string, any>>;
   launcherSettings: LauncherSettings;
+  /** Every translator environment that modules declare. */
+  translatorEnvironments?: TranslatorEnvironmentDeclaration[];
   running: Record<string, number>;
   preparing?: Record<string, GamePreparation>;
   importing?: ImportProgress[];
@@ -718,6 +730,7 @@ declare global {
         setGameNetworkAccess(gamePath: string, enabled: boolean): Promise<boolean>;
         setGameSteamClientStart(gamePath: string, value: "ask" | "automatic" | "never" | null): Promise<boolean>;
         setGameLaunchArguments(gamePath: string, value: string): Promise<boolean>;
+        setGameTranslatorEnvironment(gamePath: string, translatorId: string, values: TranslatorEnvironmentValues | null): Promise<boolean>;
         setLibrarySort(sort: import("../../../core/library-view.mjs").LibrarySort): Promise<boolean>;
         moveGame(gamePath: string, delta: number): Promise<boolean>;
         reorderGame(gamePath: string, toIndex: number): Promise<boolean>;
@@ -760,6 +773,7 @@ declare global {
         ): Promise<boolean>;
         setModuleSettings(moduleId: ModuleId, patch: Record<string, any>): Promise<boolean>;
         setLauncherSettings(patch: Record<string, any>): Promise<boolean>;
+        setTranslatorEnvironment(translatorId: string, values: TranslatorEnvironmentValues | null): Promise<boolean>;
         /** Graphics shortcut actions that have a handler, with their assignments and registration problems. */
         getGraphicsShortcuts?(): Promise<Array<{action: string; label: string; accelerator: string | null; reason?: string}>>;
         chooseScreenshotFolder?(): Promise<string | null>;

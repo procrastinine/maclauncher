@@ -81,7 +81,6 @@ Settings holds the defaults, and each game's Runtime Settings can override them.
 | Windows version | The Windows version that Wine reports. See [Windows versions](#windows-versions). |
 | Windows executable | An optional relative path inside the game folder. |
 | Wine DLL overrides | One `library=order` entry per line, such as `winhttp=n,b`. |
-| Environment variables | One `NAME=value` entry per line. MacLauncher sets the runtime and private Windows paths itself. |
 | Game arguments | One argument per line. |
 | Wine debug channels | Optional Wine channel filters, such as `-all` or `+seh`. |
 
@@ -91,7 +90,7 @@ The optional **Enable BepInEx winhttp override**, which is listed for Unity and 
 
 Runtime Settings keeps the basic launch choices above separate from four advanced groups. **Display** holds High Resolution (Retina), DPI, fullscreen capture, vertical sync and virtual desktops, and **Input** maps Option to Alt and Command to Ctrl and configures mouse capture. **Compatibility** holds Rosetta AVX advertisement together with options for particular engines: DXVK async, DXMT frame-rate presets and MetalFX spatial, D3DMetal frame limits and Metal 4, MoltenVK fast math, argument buffers and UE4 compatibility, and WineD3D configuration. Each engine's options appear only when that engine is selected. **Diagnostics**, finally, offers the Metal and DXVK HUDs, the Wine crash dialog and Wine debug channels.
 
-Explicit environment entries override these controls. Registry settings apply to the selected Windows environment on its next launch, and High Resolution and synchronization changes can require restarting the environment's Windows programs.
+Environment variables for Sikarugir and its translators are set in the **Environment variables** section, as [translator environment variables](TRANSLATOR_ENVIRONMENT.md) describes. A variable there replaces the value that one of these controls sets, such as `WINEDEBUG` or `MTL_HUD_ENABLED`. Registry settings apply to the selected Windows environment on its next launch, and High Resolution and synchronization changes can require restarting the environment's Windows programs.
 
 | Control | Values and effect |
 | --- | --- |

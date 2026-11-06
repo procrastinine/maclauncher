@@ -198,6 +198,7 @@ const gameLaunchNotices = new Map();
 let graphicsImportsClosing = false;
 const runtimeStateSnapshots = {};
 const { sanitizeRuntimeErrors } = require("../core/runtime-errors.mjs");
+const TranslatorEnvironment = require("../modules/shared/runtime/translator-environment.mjs");
 let runtimeInventoryRevision = 0;
 const moduleStateSnapshots = {};
 let snapshotSaveTimer;
@@ -504,6 +505,12 @@ function normalizeLauncherSettings(settings) {
   settings.launcher = { ...DEFAULT_LAUNCHER_SETTINGS, ...current, networkAccess: current.networkAccess === true,
     checkForUpdatesAtLaunch: current.checkForUpdatesAtLaunch === true, startSteamClient: SteamClientStart.startPreference(current.startSteamClient),
     appearance: ["system", "light", "dark"].includes(current.appearance) ? current.appearance : "system", library };
+  // Global translator environment values are read leniently: malformed entries are left out.
+  if (current.translatorEnvironment !== undefined) {
+    const store = TranslatorEnvironment.readStore(current.translatorEnvironment);
+    if (Object.keys(store).length) settings.launcher.translatorEnvironment = store;
+    else delete settings.launcher.translatorEnvironment;
+  }
   // Graphics shortcuts keep only assignments that pass the native-shortcut rules.
   if (current.graphicsShortcuts !== undefined) settings.launcher.graphicsShortcuts = require("../modules/shared/graphics-shortcuts.mjs").normalize(current.graphicsShortcuts);
   if (current.graphicsScreenshotFolder !== undefined && !(typeof current.graphicsScreenshotFolder === "string" && path.isAbsolute(current.graphicsScreenshotFolder)))
@@ -688,6 +695,12 @@ function saveSettings(next) {
   return settingsSnapshots.save(next);
 }
 
+// A game's own translator environment values, by translator.
+function translatorEnvironmentField(entry) {
+  const store = TranslatorEnvironment.readStore(entry.translatorEnvironment);
+  return Object.keys(store).length ? { translatorEnvironment: store } : {};
+}
+
 function serializeGameEntry(entry) {
   if (!entry || typeof entry !== "object") throw new Error("Missing game entry.");
   const gameId = entry.gameId;
@@ -703,6 +716,7 @@ function serializeGameEntry(entry) {
     name: entry.name || null,
     notes: typeof entry.notes === "string" ? entry.notes : "",
     launchArguments: typeof entry.launchArguments === "string" ? entry.launchArguments : "",
+    ...translatorEnvironmentField(entry),
     networkAccess: typeof entry.networkAccess === "boolean" ? entry.networkAccess :
       NetworkAccess.preferenceForEntry(entry, loadSettings(), entry.runtimeId),
     ...(entry.startSteamClient !== undefined ? {startSteamClient: SteamClientStart.startPreference(entry.startSteamClient)} : {}),
@@ -1168,6 +1182,7 @@ function normalizeGameEntry(entry, settings, precomputed = null) {
     name: entry.name || path.basename(entry.gamePath || ""),
     notes: typeof entry.notes === "string" ? entry.notes : "",
     launchArguments: typeof entry.launchArguments === "string" ? entry.launchArguments : "",
+    ...translatorEnvironmentField(entry),
     networkAccess: entry.networkAccess,
     steamClientEligible: SteamClientStart.clientEligible(entry),
     ...(entry.startSteamClient !== undefined ? {startSteamClient: SteamClientStart.startPreference(entry.startSteamClient)} : {}),
@@ -2752,6 +2767,7 @@ function buildState(settings, games) {
     runtimeInventoryRevision,
     runtimeDefaults: buildRuntimeDefaultsState(),
     launcherSettings: settings.launcher || {},
+    translatorEnvironments: Modules.listTranslatorEnvironments(),
     debug: isDebug,
     logPath: logger.path
   };
@@ -3588,6 +3604,22 @@ ipcMain.handle("launcher:setGameLaunchArguments", async (_event, gamePath, launc
   await launcherService.runAction(entry, "setGameLaunchArguments", { launchArguments });
   const index = gameRecordsCache?.findIndex(game => game.gameId === entry.gameId) ?? -1;
   if (index >= 0) gameRecordsCache[index] = { ...gameRecordsCache[index], launchArguments: entry.launchArguments, updatedAt: entry.updatedAt };
+  cachedState = buildState(settings, games);
+  broadcastState();
+  return true;
+});
+
+ipcMain.handle("launcher:setGameTranslatorEnvironment", async (_event, gamePath, translatorId, values) => {
+  const settings = loadSettings();
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath);
+  if (!entry) throw new Error("Game not found in library.");
+  await launcherService.runAction(entry, "setGameTranslatorEnvironment", { translatorId, values });
+  const index = gameRecordsCache?.findIndex(game => game.gameId === entry.gameId) ?? -1;
+  if (index >= 0) {
+    const { translatorEnvironment: _previous, ...rest } = gameRecordsCache[index];
+    gameRecordsCache[index] = { ...rest, ...translatorEnvironmentField(entry), updatedAt: entry.updatedAt };
+  }
   cachedState = buildState(settings, games);
   broadcastState();
   return true;
@@ -4502,6 +4534,21 @@ ipcMain.handle("launcher:setLauncherSettings", async (_event, patch) => {
   nativeTheme.themeSource = settings.launcher.appearance;
   saveSettings(settings);
   graphicsShortcuts.refresh();
+  cachedState = buildState(settings, loadGamesHydrated({ persist: false }));
+  broadcastState();
+  return true;
+});
+
+// One translator's global environment values; null restores its defaults.
+ipcMain.handle("launcher:setTranslatorEnvironment", async (_event, translatorId, values) => {
+  const declaration = Modules.listTranslatorEnvironments().find(item => item.id === translatorId);
+  if (!declaration) throw new Error("Unknown translator.");
+  const normalized = TranslatorEnvironment.normalizeValues(values, { declarations: [declaration] });
+  const settings = loadSettings();
+  const current = settings.launcher && typeof settings.launcher === "object" ? settings.launcher : {};
+  settings.launcher = { ...current, translatorEnvironment: TranslatorEnvironment.withValues(current.translatorEnvironment, translatorId, normalized) };
+  normalizeLauncherSettings(settings);
+  saveSettings(settings);
   cachedState = buildState(settings, loadGamesHydrated({ persist: false }));
   broadcastState();
   return true;

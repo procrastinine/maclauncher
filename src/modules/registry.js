@@ -220,6 +220,35 @@ function listDerivedStores() {
   return derivedStores.slice();
 }
 
+// A module directory or shared namespace declares the environment variables of
+// the translators it runs in an optional translator-environment.js, an array of
+// declarations in the shape of shared/runtime/translator-environment.mjs. The
+// first declaration of an id applies.
+let translatorEnvironments = null;
+function listTranslatorEnvironments() {
+  if (!translatorEnvironments) {
+    const { normalizeDeclaration } = require("./shared/runtime/translator-environment.mjs");
+    const found = new Map();
+    const owners = [...MODULES.map(mod => mod.__moduleDir), ...SHARED_SUBMODULES.map(sub => sub.dir)];
+    for (const dir of owners) {
+      const file = path.join(dir, "translator-environment.js");
+      if (!fs.existsSync(file)) continue;
+      let declared = [];
+      try { declared = require(file); } catch { continue; }
+      for (const input of Array.isArray(declared) ? declared : []) {
+        try {
+          const declaration = normalizeDeclaration(input);
+          if (!found.has(declaration.id)) found.set(declaration.id, declaration);
+        } catch {
+          // A malformed declaration only leaves its translator without an environment editor.
+        }
+      }
+    }
+    translatorEnvironments = [...found.values()];
+  }
+  return translatorEnvironments.slice();
+}
+
 function listSupportedModules() {
   return moduleList.map(mod => mod.manifest?.label || mod.id);
 }
@@ -306,5 +335,6 @@ module.exports = {
   listGraphicsComputeHosts,
   listSupportedInputExtensions,
   listSupportedModules,
+  listTranslatorEnvironments,
   UNKNOWN_MODULE
 };
