@@ -417,6 +417,7 @@ test("full immutable commits and explicit network arguments are required", () =>
 test("checked-in inventory validates retained source records and explicit recipes", async () => {
   const inventory = require("../scripts/upstream-overlays.json");
   Check.validateInventory(inventory);
+  assert.equal(inventory.projects.some(project => Object.hasOwn(project, "licensePaths")), false, "source inventory carries only consumed source metadata");
   const links = await Check.indexLinks(Check.ROOT);
   for (const project of inventory.projects) {
     const revision = project.revision || links.get(project.path);

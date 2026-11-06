@@ -5,63 +5,42 @@
       "id": "evbunpack",
       "repository": "https://github.com/mos9527/evbunpack",
       "path": "src/external/evbunpack",
-      "licensePaths": [
-        "LICENSE"
-      ],
       "usage": "tool-reference"
     },
     {
       "id": "rpgmakermlinux-cicpoffs",
       "repository": "https://github.com/bakustarver/rpgmakermlinux-cicpoffs",
       "path": "src/external/rpgmakermlinux-cicpoffs",
-      "licensePaths": [
-        "LICENSE"
-      ],
       "usage": "source-overlay"
     },
     {
       "id": "universal-renpy-walkthrough",
       "repository": "https://github.com/BCassO/universal-renpy-walkthrough",
       "path": "src/modules/renpy/resources/universal-renpy-walkthrough",
-      "licensePaths": [
-        "LICENSE"
-      ],
       "usage": "source-overlay"
     },
     {
       "id": "rpatool",
       "repository": "https://codeberg.org/shiz/rpatool",
       "path": "src/modules/renpy/resources/unren/third_party/rpatool",
-      "licensePaths": [
-        "LICENSE"
-      ],
       "usage": "runtime-shim"
     },
     {
       "id": "unren-gideon-mod",
       "repository": "https://github.com/VepsrP/UnRen-Gideon-mod-",
       "path": "src/modules/renpy/resources/unren/third_party/UnRen-Gideon-mod-",
-      "licensePaths": [
-        "LICENSE"
-      ],
       "usage": "runtime-shim"
     },
     {
       "id": "unrpyc",
       "repository": "https://github.com/CensoredUsername/unrpyc",
       "path": "src/modules/renpy/resources/unren/third_party/unrpyc",
-      "licensePaths": [
-        "LICENSE"
-      ],
       "usage": "runtime-shim"
     },
     {
       "id": "maclauncher-android",
       "repository": "https://github.com/procrastinine/maclauncher-android.git",
       "path": "src/external/maclauncher-android",
-      "licensePaths": [
-        "LICENSE"
-      ],
       "usage": "Android framework, JVM/native implementations and ART producers."
     }
   ],
