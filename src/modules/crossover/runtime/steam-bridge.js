@@ -49,7 +49,7 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
   const base = createProjectBuildManager({ projectId: id, label: 'Steam client bridge', repository: 'procrastinine/maclauncher-builds',
     manifestRelative: 'manifest.json', executableRelative: 'steam.exe', dataOnly: true, supportsDefault: false,
     validateManifest(manifest) {
-      if (manifest.managerId !== id || manifest.steamBridge?.abi !== 1 || manifest.steamBridge.role !== 'native-steam-client-bridge')
+      if (manifest.managerId !== id || !manifest.steamBridge?.native || !manifest.steamBridge?.windows)
         throw new Error('The Steam bridge package has no compatible loader declaration.');
     }, async verifyPayload(selected) { Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency); }, dependencies });
   const manager = { ...base, ui: { hidden: true }, distributionRequired: false };
