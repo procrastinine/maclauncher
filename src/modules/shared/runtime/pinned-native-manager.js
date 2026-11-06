@@ -78,7 +78,7 @@ function executableFloor(file, architecture) {
 // query or from a local cache. Every pinned manager offers the user's own
 // default version, as other multi-version runtimes do, unless a game needs its
 // exact engine version.
-function createSingleArchitectureManager({ installationArchitecture, shareDiscovery, id, label, discoverCatalog, upstream, catalogSources, cacheDownloads = false, projectBuilds, buildsRepository, upstreamUrl, upstreamLabel, resolveExecutable, inspectRuntime = Native.resolveLocalRuntime, verifyArtifact, prepareInstall, buildRuntime, buildSourcePath, sourceUrl, sourceLabel, sourceName, sourceDescription, formatVersionLabel, versionContents, buildHelpUrl, buildRequirements, bundledRuntime, legacyInstalledRuntime, formerIds = [], bundledExecution = "copy", distributionRequired = false, importLocal = false, nativeLibrary = false, supportsDefault = true, customRuntime = true, maxEntries = 500, dependencies = {} }) {
+function createSingleArchitectureManager({ installationArchitecture, shareDiscovery, id, label, discoverCatalog, upstream, catalogSources, projectBuilds, buildsRepository, upstreamUrl, upstreamLabel, resolveExecutable, inspectRuntime = Native.resolveLocalRuntime, verifyArtifact, prepareInstall, buildRuntime, buildSourcePath, sourceUrl, sourceLabel, sourceName, sourceDescription, formatVersionLabel, versionContents, buildHelpUrl, buildRequirements, bundledRuntime, legacyInstalledRuntime, formerIds = [], bundledExecution = "copy", distributionRequired = false, importLocal = false, nativeLibrary = false, supportsDefault = true, customRuntime = true, maxEntries = 500, dependencies = {} }) {
   if (typeof distributionRequired !== "boolean") throw new Error("Runtime distribution requirements must be explicit booleans.");
   if (typeof importLocal !== "boolean") throw new Error("Local runtime imports must be explicitly enabled.");
   if (typeof nativeLibrary !== "boolean") throw new Error("Native library runtimes must be explicitly enabled.");
@@ -746,7 +746,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       onProgress?.({ downloaded: 0, total: pin.asset.bytes || null, detail: "Downloading…" });
       const download = destination => dependencies.downloadToFile ? dependencies.downloadToFile(pin.asset.url, destination, { signal, onProgress })
         : Upstream.download(Upstream.listedFile(pin.projectPackage ? {...pin.asset,bytes:undefined} : pin.asset), destination, { signal, onProgress });
-      const fetched = cacheDownloads ? await require("./artifact-cache").acquire({ userDataDir, asset: pin.asset, destination: archivePath, download, signal }) : await download(archivePath);
+      const fetched = await download(archivePath);
       const archiveBytes = fs.statSync(archivePath).size;
       const progressBytes = { downloaded: archiveBytes, total: archiveBytes };
       onProgress?.({ ...progressBytes, detail: "Checking download…" });

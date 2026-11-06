@@ -124,7 +124,7 @@ function createManager(engine, { dependencies = {} } = {}) {
     formatVersionLabel: (pin, installed, options) => versionLabel(pin, installed, catalogSources.find(source => source.id === pin?.catalogSourceId)?.componentLabel || definition.label, options?.includedReferences),
     versionContents: (pin, options) => templateName(pin) && !templateComponentLabel(pin, options?.includedReferences)
       ? `The ${catalogSources.find(source => source.id === pin.catalogSourceId)?.componentLabel || definition.label} version in this Template release is known after download.` : null,
-    discoverCatalog: () => [], ...(catalogSources.length ? { catalogSources } : {}), sourceUrl: definition.sourceUrl || downloadSource?.url || catalogSources[0]?.url || "https://gstreamer.freedesktop.org/", sourceLabel: "Source", sourceName: definition.sourceName, sourceDescription: definition.sourceDescription, nativeLibrary: true, cacheDownloads: true, supportsDefault: false, customRuntime: !definition.referenceOnly,
+    discoverCatalog: () => [], ...(catalogSources.length ? { catalogSources } : {}), sourceUrl: definition.sourceUrl || downloadSource?.url || catalogSources[0]?.url || "https://gstreamer.freedesktop.org/", sourceLabel: "Source", sourceName: definition.sourceName, sourceDescription: definition.sourceDescription, nativeLibrary: true, supportsDefault: false, customRuntime: !definition.referenceOnly,
     resolveExecutable(root, _pin, { installationMetadata } = {}) {
       const stored = installationMetadata?.translator;
       const selected = stored ? path.join(root, installationMetadata.translatorRelative || '') : Component.componentRoot(root, definition);
