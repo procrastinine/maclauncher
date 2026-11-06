@@ -54,4 +54,7 @@ function dump(folder) {
   }
   return facts('dump','Switch decrypted dump',folder,id,[...(base&&rom(base)?[0]:[]),...rows.map(r=>r.v)]);
 }
-module.exports={nup,dump,MAX_TABLE};
+// The package Play prepares from a keyless input: the game's update choice while
+// that package is present, otherwise the newest local package.
+function selectedUpdate(versions, choice) { return Array.isArray(versions) ? versions.includes(choice) ? choice : versions.at(-1) || null : null; }
+module.exports={nup,dump,selectedUpdate,MAX_TABLE};

@@ -117,6 +117,7 @@ export type RuntimeSettingField = {
   gameOnly?: boolean;
   visibleWhen?: ModuleUiCondition[];
   hiddenWhen?: ModuleUiCondition[];
+  gameHiddenWhen?: ModuleUiCondition[];
   disabledWhen?: ModuleUiCondition[];
   requiresInstall?: { managerId: string; sectionId: string };
   checkedValue?: boolean;

@@ -83,7 +83,9 @@ function inspectBinary(file, detection) {
   } catch { return null; }
 }
 function extracted(directory, detection) {
-  const dump = Inputs.dump(directory);
+  let dump;
+  // A folder laid out as a dump that cannot be used reports its problem on import.
+  try { dump = Inputs.dump(directory); } catch (error) { throw error.code ? error : Object.assign(error, { code: "DETECTION_INVALID_INPUT" }); }
   if (dump) return dump;
   const names = entries(directory, detection), exefs = names.find(item => item.isDirectory() && item.name.toLowerCase() === "exefs"),
     romfs = names.find(item => item.isDirectory() && item.name.toLowerCase() === "romfs");
@@ -97,13 +99,13 @@ function detectGame(context) {
   let sourceRoot = context.rootDir, program;
   if (context.stat?.isDirectory()) {
     program = extracted(sourceRoot, context.detection);
-    if (program && entries(sourceRoot, context.detection).some(item => item.isFile() && CONTAINERS.test(item.name))) throw new Error("Choose a dump or one container without other game inputs beside it.");
+    if (program && entries(sourceRoot, context.detection).some(item => item.isFile() && CONTAINERS.test(item.name))) throw Object.assign(new Error("Choose a dump or one container without other game inputs beside it."), { code: "DETECTION_CONFLICT" });
     if (!program) {
       const candidates = entries(sourceRoot, context.detection).filter(item => item.isFile() && CONTAINERS.test(item.name));
       if (!candidates.length || candidates.length > 32) return null;
       const containers = candidates.map(item => inspectBinary(path.join(sourceRoot, item.name), context.detection));
       if (containers.some(item => !item || item.inspectionOnly)) return null;
-      if (containers.length > 1 && containers.some(item => item.format === "nup")) throw new Error("Choose one NUP file per game.");
+      if (containers.length > 1 && containers.some(item => item.format === "nup")) throw Object.assign(new Error("Choose one NUP file per game."), { code: "DETECTION_CONFLICT" });
       program = containers.length === 1 ? containers[0] : { format: "collection", sourceKind: "Switch packages", inputPath: sourceRoot, inspectionOnly: false, canDecompile: true, fileCount: containers.length };
     }
   } else if (context.stat?.isFile()) {

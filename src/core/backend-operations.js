@@ -18,6 +18,7 @@ const { createAbortError } = require("../modules/shared/runtime/download-utils")
 const { COMPLETION_DIAGNOSTIC_WAIT_MS } = require("./game-process-events");
 const { snapshotRuntimeState } = require("./runtime-state-snapshot.mjs");
 const { withRunnableBuilds } = require("../modules/shared/runtime/host-settings");
+const { entryModuleLabels } = require("./entry-labels");
 
 function listRuntimeManagers(registry) {
   const managers = new Map();
@@ -460,8 +461,9 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
       // empty copy of the game folder in its place.
       if (GameAvailability.affectsPath(availability, saveDir)) throw GameAvailability.unavailableError(availability, "This game's saves are unavailable.");
       fs.mkdirSync(saveDir, { recursive: true });
+      const labels = entryModuleLabels(info, entry);
       return { saveDir, directoryChoices: entry.saveLocations || [], moduleId,
-        moduleLabel: info.label, moduleShortLabel: info.shortLabel, name: entry.name,
+        moduleLabel: labels.label, moduleShortLabel: labels.shortLabel, name: entry.name,
         canEditJson: info.supports?.saveEditing === true, structuredActions: registry.getModule(moduleId)?.save?.structured || null };
     },
     async selectSaveLocation(entry, directory, settings) {

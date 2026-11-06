@@ -398,6 +398,9 @@ function recordProbe(session, task, result, error = null) {
   if (error) {
     session.trace.push({ stage: task.stage, moduleId: task.mod.id, inputPath: task.context.inputPath, outcome: "error", message: String(error.message || error), ...(error.code ? { code: error.code } : {}) });
     if (error.code === "DETECTION_LIMIT" || error.code === "DETECTION_CONFLICT") throw error;
+    // A module that recognizes its own input format but finds the input
+    // damaged or incomplete names the problem when no module matches.
+    if (error.code === "DETECTION_INVALID_INPUT") session.invalidInput ||= error;
     return null;
   }
   const candidate = candidateFor(task.mod, task.context, task.stage, task.gate, result);
@@ -568,12 +571,18 @@ function reportFor(session, candidates, selected = null, error = null) {
     metrics: session.metrics, limits: session.limits, ...(error ? { error: { code: error.code || "DETECTION_ERROR", message: error.message } } : {}) };
 }
 
+function invalidInputError(error) {
+  return new DetectionError(String(error.message || error), "DETECTION_INVALID_INPUT");
+}
+
 function notFoundError(session, modules) {
+  if (session.invalidInput) return invalidInputError(session.invalidInput);
   if (session.context.isAppBundle) return new DetectionError(`Unsupported app bundle. Supported modules: ${modules.map(mod => mod.manifest?.label || mod.id).join(", ")}.`, "DETECTION_UNSUPPORTED");
   return new DetectionError("No supported game found. Could not find index.html in root or www/ or a recognized engine artifact.", "DETECTION_UNSUPPORTED");
 }
 
 function exclusiveError(session, owners) {
+  if (session.invalidInput) return invalidInputError(session.invalidInput);
   return new DetectionError(`Unsupported ${session.input.extension || "file"} input for ${owners.map(mod => mod.manifest?.label || mod.id).join(", ")}`, "DETECTION_UNSUPPORTED_EXTENSION");
 }
 

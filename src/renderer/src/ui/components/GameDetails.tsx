@@ -181,7 +181,9 @@ function detectionDisplay(game: RecentGame, moduleInfo: ModuleManifest | null, s
   const evidenceSource = Array.isArray(selectedCandidate?.evidence)
     ? selectedCandidate.evidence.find((item: any) => ["web-marker", "root-marker", "validated-selected-artifact"].includes(item.type))?.path
     : null;
-  const format = detectionText(data.rgssVersion) || detectionText(data.generation) || detectionText(data.executionKind)
+  // A named engine generation describes the format; a numbered platform
+  // generation, such as Switch 2, is not a format name.
+  const format = detectionText(data.rgssVersion) || (typeof data.generation === "string" ? detectionText(data.generation) : null) || detectionText(data.executionKind)
     || detectionText(data.sourceKind) || detectionText(data.packagedType) || detectionText(game.gameType);
   const rows = [
     ...(selectedModule && selectedModule.id !== game.moduleId ? [{ label: "Engine", value: selectedModule.label || selectedId }] : []),

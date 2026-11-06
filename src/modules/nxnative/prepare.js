@@ -292,8 +292,11 @@ async function ensureInputRuntime(entry, context, selection, input, packageVersi
 async function prepareGame(entry, context, selection, dependencies = {}) {
   const input = resolveInput(entry);
   if (input.inspectionOnly) throw new Error("A complete Switch game container or decrypted dump is required for Play.");
-  const packageVersion = entry.runtimeSettings?.nxnative?.packageVersion || "latest";
-  if (packageVersion !== "latest" && (!/^v\d+$/.test(packageVersion) || input.versions?.length && !input.versions.includes(packageVersion))) throw new Error("The selected game update is no longer available.");
+  // An update choice whose package is gone prepares the newest local package.
+  // Without readable package versions, nxnative checks the choice itself.
+  const choice = entry.runtimeSettings?.nxnative?.packageVersion;
+  const packageVersion = /^v\d+$/.test(choice || "") && (!input.versions?.length || input.versions.includes(choice)) ? choice : "latest";
+  if (packageVersion !== "latest") input.selectedUpdate = packageVersion;
   selection = await ensureInputRuntime(entry, context, selection, input, packageVersion, dependencies);
   const runtime = selection.runtime, root = gameDirectory(entry, context);
   assertOutsideSource(input.sourceRoot, root);Writable.assertOwnDirectory(context.userDataDir, root);

@@ -274,7 +274,9 @@ test('registry metadata exposes manageable production groups while exposing mana
     assert.deepEqual(groups.filter(group => common.includes(group.label)).map(group => group.label), common);
     const section = id => groups.find(group => group.managers.some(manager => manager.id === id));
     assert.deepEqual(groups.filter(group => group.category === 'platforms').map(group => group.label),
-      ['PS5 (AnyPS5)', 'Prosper', 'Switch (nxnative)', 'MacLauncher Android', 'Mac.apk', 'AIM', 'PlayCover']);
+      ['PS5 (AnyPS5)', 'Prosper', 'Switch / Switch 2 (nxnative)', 'MacLauncher Android', 'Mac.apk', 'AIM', 'PlayCover']);
+    // One family group holds the nxnative runtime and its native tools for Switch and Switch 2 games.
+    assert.deepEqual(['nxnative', 'nxnative-tools'].map(id => section(id).label), ['Switch / Switch 2 (nxnative)', 'Switch / Switch 2 (nxnative)']);
     assert.deepEqual(groups.filter(group => group.category === 'compatibility').map(group => group.label), ['CrossOver', 'Sikarugir', 'DOSBox', '32-bit Mac']);
     // Engine-specific tools sit with their engine; Tools keeps cross-engine tools only.
     for (const [engine, ids] of [['AliceSoft', ['alice-tools']], ['MAGES.', ['sc3tools']], ['Siglus', ['siglus-ssu']], ['RealLive (RLVM)', ['rldev']],

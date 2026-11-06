@@ -115,6 +115,8 @@ export function RuntimeSettingsWindow({
     if (!isGameScope) return null;
     return (state?.recents || []).find(g => g.gamePath === context.gamePath) || null;
   }, [state, isGameScope, context.gamePath]);
+  // Game facts can hide a field for one game, such as a key file for a game without encrypted data.
+  const shownForGame = (field: RuntimeSettingField) => !isGameScope || !matchesAnyCondition(gameEntry, field.gameHiddenWhen);
   const launchRecord = gameEntry?.runtimeData?.[context.runtimeId];
   const launchRows: any[] = Array.isArray(launchRecord?.translatorRows) ? launchRecord.translatorRows : [];
   const launchSettings: Record<string, unknown> | undefined = launchRecord?.translatorPlanInputs?.settings;
@@ -197,7 +199,7 @@ export function RuntimeSettingsWindow({
   for (const row of choices[schema?.inheritanceAction || ""]?.effectiveSettings || []) if (visibilitySettings[row.value] === "inherit") visibilitySettings[row.value] = row.label;
   for (const row of choices[schema?.visibilityAction || ""]?.effectiveSettings || []) visibilitySettings[row.value] = row.label;
   const visibleFields = (schema?.fields || []).filter(field => !field.hidden && field.key !== "networkIsolation" &&
-    (isGameScope || !field.gameOnly) && isRuntimeSettingVisible(field, visibilitySettings) && (!fieldKeys || fieldKeys.includes(field.key)));
+    (isGameScope || !field.gameOnly) && shownForGame(field) && isRuntimeSettingVisible(field, visibilitySettings) && (!fieldKeys || fieldKeys.includes(field.key)));
   const fileRequest = useMemo(() => settingChoiceRequest(api, context),
     [api?.moduleAction, api?.moduleSettingsAction, context.scope, context.moduleId, context.runtimeId, context.gamePath]);
 
@@ -224,7 +226,7 @@ export function RuntimeSettingsWindow({
 
   const externalSettings = Boolean(inheritanceValue && inheritanceValue !== "private");
   const visibilityRevision = schema?.visibilityAction ? JSON.stringify(schema.fields.filter(field => field.optionsAction === schema.visibilityAction).map(field => displaySettings?.[field.key])) : "";
-  const choiceActions = JSON.stringify([...new Set((schema?.fields || []).filter(field => (isGameScope || !field.gameOnly) && isRuntimeSettingVisible(field, displaySettings || {})).map(field => field.optionsAction).concat(schema?.visibilityAction, externalSettings ? schema?.inheritanceAction : undefined).filter(Boolean))]);
+  const choiceActions = JSON.stringify([...new Set((schema?.fields || []).filter(field => (isGameScope || !field.gameOnly) && shownForGame(field) && isRuntimeSettingVisible(field, displaySettings || {})).map(field => field.optionsAction).concat(schema?.visibilityAction, externalSettings ? schema?.inheritanceAction : undefined).filter(Boolean))]);
   useEffect(() => {
     if (choiceScope.current !== choiceContext) { setChoices({}); choiceScope.current = choiceContext; }
     setChoiceError(null); setChoiceLoading({});
@@ -299,7 +301,7 @@ export function RuntimeSettingsWindow({
   }
 
   const subtitleBase = isGameScope
-    ? `${gameEntry?.name || "Game"} · ${moduleLabel}`
+    ? `${gameEntry?.name || "Game"} · ${gameEntry?.moduleLabel || moduleLabel}`
     : moduleLabel;
   const subtitle = modified ? `${subtitleBase} · Modified` : subtitleBase;
   const resetLabel = controlled?.resetLabel || (context.scope === "game"

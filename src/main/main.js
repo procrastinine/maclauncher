@@ -19,6 +19,7 @@ const { createAvailabilityMonitor } = require("./game-availability-monitor");
 const { createLauncher, resolveModuleId, resolveHostedRuntimeInfo,
   resolveNativeLaunchPath, resolveModuleSettings, resolveRuntimeSupportForEntry, mergeSettingsChanges } = require("../core/launcher");
 const { withoutClearedDefaults } = require("../core/settings-merge");
+const { entryModuleLabels } = require("../core/entry-labels");
 const { createElectronHostLaunch } = require("../core/electron-binary");
 const { launchHostedProcess } = require("../core/hosted-process");
 const { stopProcessTree } = require("../core/process-stop");
@@ -1090,6 +1091,7 @@ function normalizeGameEntry(entry, settings, precomputed = null) {
   const moduleId = resolveModuleId(entry);
   const mod = Modules.getModule(moduleId);
   const moduleInfo = Modules.getModuleInfo(moduleId);
+  const labels = entryModuleLabels(moduleInfo, entry);
   const moduleData =
     entry.moduleData && typeof entry.moduleData === "object" ? { ...entry.moduleData } : {};
   const runtimeData =
@@ -1197,8 +1199,8 @@ function normalizeGameEntry(entry, settings, precomputed = null) {
     // apps or displays it serves.
     ...(entry.ephemeral === true ? { ephemeral: true, ...sessionTargetsView(entry) } : {}),
     moduleFamily: moduleInfo.family,
-    moduleLabel: moduleInfo.label,
-    moduleShortLabel: moduleInfo.shortLabel,
+    moduleLabel: labels.label,
+    moduleShortLabel: labels.shortLabel,
     moduleRuntimeSupport: checks.runtimeSupport,
     moduleSupports: {
       launch: checks.launch,

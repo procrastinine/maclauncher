@@ -4,6 +4,7 @@ const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const Prepare = require("./prepare");
 const { inside } = require("./detect");
+const Inputs = require("./inputs");
 const Writable = require("../shared/writable-input");
 const { runToolCommand } = require("../shared/runtime/tool-command");
 
@@ -91,10 +92,10 @@ function currentFile(entry, context) {
   return path.join(prepared, "launcher.json");
 }
 function packageSettings(entry) {
-  const versions = entry.moduleData?.versions || [];
+  const versions = entry.moduleData?.versions || [], choice = entry.runtimeSettings?.nxnative?.packageVersion;
   if (!versions.length || entry.moduleData?.keyRequirement !== "none") return { fields: [], values: {} };
   return { fields: [{ key: "packageVersion", type: "select", label: "Game update", options: [{ value: "latest", label: "Latest available" }, ...versions.map(value => ({ value, label: value === "v0" ? "Base game (v0)" : value }))] }],
-    values: { packageVersion: entry.runtimeSettings?.nxnative?.packageVersion || "latest" } };
+    values: { packageVersion: versions.includes(choice) ? choice : "latest" } };
 }
 function withPackage(entry, result) {
   const packages = packageSettings(entry);
@@ -122,7 +123,8 @@ async function write(entry, payload, context, dependencies = {}) {
   const saved = definition ? await (dependencies.preferences || preferences)({ domain: "org.nxnative." + definition.game, changes, signal: context.signal }) : {};
   if (packages.fields.length) {
     entry.runtimeSettings = { ...entry.runtimeSettings, nxnative: { ...entry.runtimeSettings?.nxnative, packageVersion: selected } };
-    context.onEntryChange?.({ runtimeSettings: entry.runtimeSettings });
+    entry.moduleData = { ...entry.moduleData, selectedUpdate: Inputs.selectedUpdate(entry.moduleData.versions, selected) };
+    context.onEntryChange?.({ runtimeSettings: entry.runtimeSettings, moduleData: entry.moduleData });
   }
   return withPackage(entry, definition ? { schema: definition.schema, values: valuesFor(definition, saved) } : { schema: { fields: [] }, values: {} });
 }
