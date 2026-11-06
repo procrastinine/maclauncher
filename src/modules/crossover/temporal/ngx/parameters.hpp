@@ -42,6 +42,16 @@ template<class Reader> bool readCreation(Reader&reader,Evaluation&out){
 // and subresources; D3D addresses must never be interpreted as Vulkan images.
 template<class Reader> bool readParameters(Reader&reader,Evaluation&out){
  auto value=out;
+ // A supplied subregion is a pair. Keep the cooperating scene's explicit
+ // origin when absent; a half-specified pair cannot describe an attachment.
+ auto origin=[&](Image&image,const char*xKey,const char*yKey){
+  uint32_t x=0,y=0;const bool hasX=reader.get(xKey,x),hasY=reader.get(yKey,y);
+  if(hasX!=hasY)return false;if(hasX){image.x=x;image.y=y;}return true;
+ };
+ float duration=0;
+ if(reader.get("FrameTimeDeltaInMsec",duration)){
+  if(!std::isfinite(duration)||duration<=0)return false;value.frameTimeMs=duration;
+ }
  if(value.feature==Feature::FrameGeneration){
   if(!reader.readImage("DLSSG.Backbuffer",value.color)||!reader.readImage("DLSSG.Depth",value.depth)||
      !reader.readImage("DLSSG.MVecs",value.motion)||!reader.readImage("DLSSG.OutputInterpolated",value.output)||
@@ -61,6 +71,10 @@ template<class Reader> bool readParameters(Reader&reader,Evaluation&out){
     !reader.readImage("MotionVectors",value.motion)||!reader.readImage("Output",value.output))return false;
  if(!reader.get("MV.Scale.X",value.motionScaleX)||!reader.get("MV.Scale.Y",value.motionScaleY)||
     !reader.get("Jitter.Offset.X",value.jitterX)||!reader.get("Jitter.Offset.Y",value.jitterY))return false;
+ if(!origin(value.color,"DLSS.Input.Color.Subrect.Base.X","DLSS.Input.Color.Subrect.Base.Y")||
+    !origin(value.depth,"DLSS.Input.Depth.Subrect.Base.X","DLSS.Input.Depth.Subrect.Base.Y")||
+    !origin(value.motion,"DLSS.Input.MV.Subrect.Base.X","DLSS.Input.MV.Subrect.Base.Y")||
+    !origin(value.output,"DLSS.Output.Subrect.Base.X","DLSS.Output.Subrect.Base.Y"))return false;
  uint32_t reset=0;reader.get("Reset",reset);value.reset=reset!=0;
  uint32_t width=0,height=0;
  const bool hasWidth=reader.get("DLSS.Render.Subrect.Dimensions.Width",width);
@@ -77,9 +91,18 @@ template<class Reader> bool readParameters(Reader&reader,Evaluation&out){
      !resolve(RS_SCENE_AOV_DIFFUSE_ALBEDO,"DLSS.Input.DiffuseAlbedo","GBuffer.Albedo")||
      !resolve(RS_SCENE_AOV_SPECULAR_ALBEDO,"DLSS.Input.SpecularAlbedo","GBuffer.Specular")||
      !resolve(RS_SCENE_AOV_SPECULAR_HIT_DISTANCE,"DLSSD.SpecularHitDistance"))return false;
+  auto guideOrigin=[&](unsigned slot,const char*xKey,const char*yKey){
+   auto&image=value.guides[slot];if(!origin(image,xKey,yKey))return false;
+   value.aovs.images[slot].x=image.x;value.aovs.images[slot].y=image.y;return true;
+  };
+  if(!guideOrigin(RS_SCENE_AOV_NORMAL,"DLSS.Input.Normals.Subrect.Base.X","DLSS.Input.Normals.Subrect.Base.Y")||
+     !guideOrigin(RS_SCENE_AOV_DIFFUSE_ALBEDO,"DLSS.Input.DiffuseAlbedo.Subrect.Base.X","DLSS.Input.DiffuseAlbedo.Subrect.Base.Y")||
+     !guideOrigin(RS_SCENE_AOV_SPECULAR_ALBEDO,"DLSS.Input.SpecularAlbedo.Subrect.Base.X","DLSS.Input.SpecularAlbedo.Subrect.Base.Y")||
+     !guideOrigin(RS_SCENE_AOV_SPECULAR_HIT_DISTANCE,"DLSSD.SpecularHitDistance.Subrect.Base.X","DLSSD.SpecularHitDistance.Subrect.Base.Y"))return false;
   uint32_t mode=0;reader.get("DLSS.Roughness.Mode",mode);
   if(mode==1){value.guides[RS_SCENE_AOV_ROUGHNESS]=value.guides[RS_SCENE_AOV_NORMAL];value.aovs.images[RS_SCENE_AOV_ROUGHNESS]=value.aovs.images[RS_SCENE_AOV_NORMAL];value.aovs.images[RS_SCENE_AOV_ROUGHNESS].encoding=RS_SCENE_AOV_SCALAR;value.aovs.images[RS_SCENE_AOV_ROUGHNESS].space=RS_SCENE_AOV_SPACE_NONE;value.aovs.images[RS_SCENE_AOV_ROUGHNESS].channel=3;}
   else if(mode!=0||!resolve(RS_SCENE_AOV_ROUGHNESS,"GBuffer.Roughness"))return false;
+  if(mode==0&&!guideOrigin(RS_SCENE_AOV_ROUGHNESS,"DLSS.Input.Roughness.Subrect.Base.X","DLSS.Input.Roughness.Subrect.Base.Y"))return false;
   if(!reader.readMatrix("WorldToViewMatrix",value.matrices.view)||!reader.readMatrix("ViewToClipMatrix",value.matrices.projection))return false;
  }
  out=value;return true;
