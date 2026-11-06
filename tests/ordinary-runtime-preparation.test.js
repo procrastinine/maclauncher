@@ -22,9 +22,10 @@ function context(runtimeId, runtimeSettings = {}) {
 
 function additionalRequirementsFixture(requirements) {
   const events = [], primary = { managerId: "host", version: "1.2.3", installOptions: { sectionId: "stable" } };
+  // Runtime managers report an empty installed list on a fresh profile.
   const managers = ["host", "bridge"].map(id => ({ id, label: id,
     installRuntime: () => assert.fail("The preparation install adapter owns installations"),
-    getState: () => ({ catalog: {} }) }));
+    getState: () => ({ catalog: {}, installed: [] }) }));
   const mod = { id: "fixture", runtimeManagers: managers,
     ensureRuntime: async () => primary,
     getRuntimeRequirements: async (_entry, ctx, plan) => {
@@ -73,7 +74,7 @@ test("included native bridge plans require no redundant download prompt", async 
 
 test("shared dependency consent and progress retain the module's asset label", async () => {
   const reports = [], consents = [], installs = [];
-  const manager = { id: "host", label: "Game runtime", installRuntime() {}, getState: () => ({ catalog: {} }) };
+  const manager = { id: "host", label: "Game runtime", installRuntime() {}, getState: () => ({ catalog: {}, installed: [] }) };
   const mod = { id: "fixture", runtimeManagers: [manager], ensureRuntime: async () => null,
     getRuntimeRequirements: async () => [{ managerId: "host", version: "assets-1.0", label: "Game assets",
       progressLabel: "Downloading game assets…", requiresDownload: true, installOptions: { assetId: "shared" } }] };

@@ -1,7 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {androidSource}=require('./helpers/android-sources.cjs');
 const {spawnSync}=require('node:child_process');
 test('Original Android wide printf retains guest arguments and borrowed stream ownership',async t=>{
- const root=path.resolve(__dirname,'..'),source=path.join(root,'src/modules/android/native'),klepton=process.env.KLEPTON_SOURCE||path.join(root,'src/external/klepton'),bionicSource=process.env.BIONIC_SOURCE||path.join(root,'src/external/aosp-bionic'),compilerRtSource=process.env.COMPILER_RT_SOURCE||path.join(root,'src/external/aosp-compiler-rt'),runtime=process.env.KLEPTON_NATIVE_RUNTIME;
+ const root=path.resolve(__dirname,'..'),source=path.join(root,'src/modules/android/native'),klepton=process.env.KLEPTON_SOURCE||androidSource('klepton'),bionicSource=process.env.BIONIC_SOURCE||androidSource('aosp-bionic'),compilerRtSource=process.env.COMPILER_RT_SOURCE||androidSource('aosp-compiler-rt'),runtime=process.env.KLEPTON_NATIVE_RUNTIME;
  if(process.platform!=='darwin'||process.arch!=='arm64'||!runtime||!fs.existsSync(bionicSource)||!fs.existsSync(compilerRtSource)||!fs.existsSync(klepton))return t.skip('Requires Apple Silicon runtime and original Bionic, compiler-rt and Klepton sources');
  const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'android-wide-stdio-'));t.after(()=>fs.rmSync(tmp,{recursive:true,force:true}));
  const shim=path.join(tmp,'shim.c'),libcSource=path.join(tmp,'libc.c'),table=path.join(tmp,'table.h');

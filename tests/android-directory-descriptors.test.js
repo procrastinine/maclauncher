@@ -1,8 +1,9 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {androidSource}=require('./helpers/android-sources.cjs');
 const {spawnSync}=require('node:child_process');
 test('Raw directory cursors follow the physical file description across dup, fork and explicit metadata transfer',async t=>{
  if(process.platform!=='darwin'||process.arch!=='arm64')return t.skip('Requires Darwin ARM64 descriptor supplier');
- const checkout=process.env.EPOLL_SHIM_SOURCE||path.resolve(__dirname,'../src/external/epoll-shim');
+ const checkout=process.env.EPOLL_SHIM_SOURCE||androidSource('epoll-shim');
  if(!fs.existsSync(path.join(checkout,'CMakeLists.txt')))return t.skip('Requires pinned descriptor supplier');
  if(!process.env.ANDROID_DESCRIPTOR_BUILD&&spawnSync(process.env.NINJA||'ninja',['--version'],{stdio:'ignore'}).status!==0)return t.skip('Requires Ninja to build the pinned descriptor supplier');
  const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'android-directory-description-'));t.after(()=>fs.rmSync(tmp,{recursive:true,force:true}));

@@ -10,7 +10,15 @@
 #include <sys/mman.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <signal.h>
 #include "poll-bridge.h"
+/* Error, signal and identity conversion are outside this socket and poll check. */
+sigset_t klj_signal_mask_to_host(uint64_t mask) { return (sigset_t)mask; }
+int klj_signal_to_guest(int signal) { return signal; }
+int kl_errno_to_linux(int value) { return value; }
+uid_t klj_process_uid_from_host(uid_t uid) { return uid; }
+/* Sockets and pipes never acquire an ashmem access lease. */
+void klj_ashmem_capability_release(int64_t handle) { (void)handle; assert(!"Unexpected ashmem lease in I/O ABI fixture"); }
 static unsigned kl_default_mcast_if(void) { return 0; }
 #include "socket-addresses.c"
 static void *half_close(void *argument) {

@@ -1,4 +1,5 @@
 const test=require('node:test');
+const {androidSource}=require('./helpers/android-sources.cjs');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const os=require('node:os');
@@ -7,8 +8,8 @@ const {execFileSync}=require('node:child_process');
 
 test('complete ActivityThread JNI allocator unit reaches Darwin pressure relief without retiring live resources',async t=>{
   const home=process.env.JAVA_HOME,runtime=process.env.KLEPTON_NATIVE_RUNTIME;
-  const frameworkSource=process.env.AOSP_FRAMEWORK_SOURCE||path.resolve('src/external/aosp-framework');
-  const bionicSource=process.env.AOSP_BIONIC_SOURCE||path.resolve('src/external/aosp-bionic');
+  const frameworkSource=process.env.AOSP_FRAMEWORK_SOURCE||androidSource('aosp-framework');
+  const bionicSource=process.env.AOSP_BIONIC_SOURCE||androidSource('aosp-bionic');
   if(process.platform!=='darwin'||!home||!runtime||!fs.existsSync(frameworkSource)||!fs.existsSync(bionicSource))return t.skip('Requires JDK, full runtime and pinned framework/Bionic sources');
   const output=fs.mkdtempSync(path.join(os.tmpdir(),'android-activity-thread-'));
   t.after(()=>fs.rmSync(output,{recursive:true,force:true}));
@@ -21,6 +22,8 @@ test('complete ActivityThread JNI allocator unit reaches Darwin pressure relief 
   execFileSync('clang++',[...flags,'-dynamiclib',unit,'-o',library],{stdio:'pipe'});
   const cp=[output,...['android-host.jar','android-framework.jar'].map(file=>path.resolve(runtime,file))].join(path.delimiter);
   execFileSync(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',output,path.resolve('tests/fixtures/android-framework-services/ActivityThreadPurgeProbe.java'),path.resolve('tests/fixtures/android-window-session/RuntimeFixture.java')],{stdio:'pipe'});
-  const result=execFileSync(path.join(home,'bin/java'),['-Xverify:all','-cp',cp,'maclauncher.android.fixture.ActivityThreadPurgeProbe',path.resolve(runtime),output,library],{encoding:'utf8',timeout:20000,env:{...process.env,TMPDIR:output}});
+  // Production launches supply the framework JVM options and a process ID namespace.
+  const {frameworkJvmOptions}=require('../src/modules/android/jvm-options'),{processNamespace}=require('./helpers/android-java');
+  const result=execFileSync(path.join(home,'bin/java'),[...frameworkJvmOptions,'-Xverify:all','-cp',cp,'maclauncher.android.fixture.ActivityThreadPurgeProbe',path.resolve(runtime),output,library],{encoding:'utf8',timeout:20000,env:{...process.env,TMPDIR:output,...processNamespace(output)}});
   assert.match(result,/PASS original ActivityThread allocator natives preserve live native resources/);
 });

@@ -1,7 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),{spawnSync}=require('node:child_process');
+const {androidSource}=require('./helpers/android-sources.cjs');
 // An uninitialized Gitlink leaves an empty folder, so presence means the original files read below.
-const checkout=path.resolve('src/external/aim-custom'),aimFiles=['sys/arena.rs','sys/mod.rs','loader.rs'];
-const aimSkip=aimFiles.every(name=>fs.existsSync(path.join(checkout,'crates/aim-linux-abi/src',name)))?false:'Optional upstream integration; run node scripts/init-submodules.cjs --all.';
+const checkout=path.resolve(process.env.ANDROID_AIM_SOURCE||androidSource('aim-custom')),aimFiles=['sys/arena.rs','sys/mod.rs','loader.rs'];
+const aimSkip=aimFiles.every(name=>fs.existsSync(path.join(checkout,'crates/aim-linux-abi/src',name)))?false:'Optional upstream integration; initialize aim-custom in src/external/maclauncher-android or set ANDROID_AIM_SOURCE.';
 test('source preparation retains optional stack fixtures without requiring them in source distributions',{skip:aimSkip},async t=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-stack-source-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  // ANDROID_ART_SOURCE names the pinned AOSP ART checkout; this reads the owned module.

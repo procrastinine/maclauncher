@@ -1,4 +1,5 @@
 const test = require('node:test');
+const {androidSource}=require('./helpers/android-sources.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -7,11 +8,18 @@ const { spawnSync } = require('node:child_process');
 
 test('Linux I/O ABI retains original socket owners and caller buffer bounds', async t => {
   const root = path.resolve(__dirname, '..'), source = path.join(root, 'src/modules/android/native');
-  const klepton = process.env.KLEPTON_SOURCE || path.join(root, 'src/external/klepton');
+  const klepton = process.env.KLEPTON_SOURCE || androidSource('klepton');
   if (process.platform !== 'darwin' || !fs.existsSync(path.join(klepton, 'runtime/libc/kl_shim.c')))
     return t.skip('Requires macOS and the pinned Klepton source');
+  // poll-bridge.c delegates to the pollable descriptor bridge built from the pinned epoll-shim.
+  const descriptors = process.env.EPOLL_SHIM_SOURCE || androidSource('epoll-shim');
+  if (process.arch !== 'arm64' || !fs.existsSync(path.join(descriptors, 'CMakeLists.txt')) ||
+      spawnSync(process.env.NINJA || 'ninja', ['--version'], { stdio: 'ignore' }).status !== 0)
+    return t.skip('Requires Apple Silicon, the pinned epoll-shim source and Ninja');
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'android-io-abi-'));
   t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
+  const { buildPollableDescriptors } = await import(require('node:url').pathToFileURL(path.join(source, 'pollable-fds/build.mjs')));
+  const pollable = buildPollableDescriptors({ checkout: descriptors, output: path.join(temporary, 'pollable') });
   const shim = path.join(temporary, 'shim.c'), slink = path.join(temporary, 'slink.c'), libc = path.join(temporary, 'libc.c');
   fs.copyFileSync(path.join(klepton, 'runtime/libc/kl_shim.c'), shim);
   fs.copyFileSync(path.join(klepton, 'runtime/libc/kl_libc_slink.c'), slink);
@@ -27,8 +35,8 @@ test('Linux I/O ABI retains original socket owners and caller buffer bounds', as
   fs.writeFileSync(path.join(temporary, 'socket-addresses.c'), functions);
   const binary = path.join(temporary, 'probe');
   for (const [command, args] of [
-    ['clang', ['-std=gnu11', '-O2', '-Wall', '-Wextra', '-Werror', '-I'+source, '-I'+temporary,
-      path.join(__dirname, 'fixtures/android-native/io-abi.c'), path.join(source, 'poll-bridge.c'), '-o', binary]],
+    ['clang', ['-std=gnu11', '-O2', '-Wall', '-Wextra', '-Werror', '-I'+source, '-I'+temporary, '-I'+pollable.include,
+      path.join(__dirname, 'fixtures/android-native/io-abi.c'), path.join(source, 'poll-bridge.c'), pollable.object, pollable.archive, '-o', binary]],
     [binary, []]
   ]) {
     const result = spawnSync(command, args, { encoding: 'utf8', timeout: 10000 });

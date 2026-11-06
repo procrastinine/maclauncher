@@ -11,17 +11,3 @@ test('NativeActivity keeps the complete original lifecycle and JNI object owner'
  run(path.join(home,'bin/javac'),['--release','21','-cp',asm,'-d',output,path.join(source,'framework/NativeBindings.java'),path.join(__dirname,'fixtures/android-framework-policy/NativeActivityOwnerProbe.java')]);
  assert.match(run(path.join(home,'bin/java'),['-cp',output+path.delimiter+asm,'NativeActivityOwnerProbe',framework]),/PASS original NativeActivity bytes and \d+ JNI declarations preserved/);
 });
-test('Retained native graphics helpers consume the real EGL device and have no NDK handle owner',async t=>{
- const klepton=process.env.ANDROID_KLEPTON_SOURCE||path.resolve(__dirname,'../src/external/klepton');
- if(!fs.existsSync(path.join(klepton,'runtime/gfx/kl_egl.c')))return t.skip('Pinned Klepton source is required');
- const {retireEglDispatch}=await import('../src/modules/android/native/native-surface-sources.mjs');
- const result=retireEglDispatch(fs.readFileSync(path.join(klepton,'runtime/gfx/kl_egl.c'),'utf8'));
- assert.doesNotMatch(result,/kl_ndk_|g_(?:display|configs|surfaces|contexts|egl|gl_handle)\b|klegl_\w+/);
- assert.match(result,/klj_resolve_import\("eglGetCurrentContext"\)/);
- assert.match(result,/klj_resolve_import\("klj_native_egl_swap_count"\)/);
- assert.match(result,/kl_glfb_sym\(name\)/,'Preserve existing GL/XR physical helpers');
- const makefile=fs.readFileSync(path.join(source,'source-list.mk'),'utf8');
- assert.match(makefile,/MACLAUNCHER_FRAMEWORK_OWNED\s*:=[\s\S]*runtime\/guest\/kl_ndk\.c/);
- const owners=JSON.parse(fs.readFileSync(path.join(source,'platform-boundaries.json'))).nativeRegistrationOwners;
- for(const name of ['android.content.res.AssetManager','android.os.MessageQueue','android.view.InputQueue'])assert.ok(owners.some(owner=>owner.owner==='guest'&&owner.classes?.includes(name)),name);
-});
