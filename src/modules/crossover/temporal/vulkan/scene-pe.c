@@ -77,3 +77,41 @@ int32_t WINAPI MacLauncherWineVulkanRecordScene2(const RSWineVulkanSceneRequestV
     status=UNIX_CALL(maclauncher_scene_record,&params);
     return status ? VK_ERROR_INITIALIZATION_FAILED : params.result;
 }
+
+static int32_t prepared_scene_call(RSWineVulkanSceneRequestV2 *request,uint32_t selector)
+{
+    struct maclauncher_scene_record_params params={0};
+    struct is_available_device_function_params probe;
+    NTSTATUS status;
+    if(!request||request->base.size!=sizeof(request->base)||request->base.version!=1||
+       request->base.profile!=RS_WINE_VULKAN_SCENE_PROFILE||!request->base.device||
+       !request->base.commandBuffer||request->metadata.size!=sizeof(request->metadata)||request->metadata.version!=2)
+        return VK_ERROR_INITIALIZATION_FAILED;
+    if(!maclauncher_scene_initialize()||!matched_profile((VkDevice)(UINT_PTR)request->base.device))return VK_ERROR_FEATURE_NOT_PRESENT;
+    probe.device=(VkDevice)(UINT_PTR)request->base.device;probe.name="MacLauncherWineVulkanScenePreparationABI3";
+    if((uint32_t)UNIX_CALL(is_available_device_function,&probe)!=RS_WINE_VULKAN_SCENE_PROFILE)return VK_ERROR_FEATURE_NOT_PRESENT;
+    params.request=(UINT_PTR)request;params.reserved=selector;params.result=VK_ERROR_FEATURE_NOT_PRESENT;
+    status=UNIX_CALL(maclauncher_scene_record,&params);
+    return status?VK_ERROR_INITIALIZATION_FAILED:params.result;
+}
+
+int32_t WINAPI MacLauncherWineVulkanPrepareScene3(RSWineVulkanSceneRequestV2 *request,uint32_t feature)
+{
+    RSWineVulkanSceneRequestV2 copy;
+    int32_t result;
+    if(!request||request->base.reserved[0]||request->base.reserved[1])return VK_ERROR_INITIALIZATION_FAILED;
+    copy=*request;copy.base.reserved[0]=feature;
+    result=prepared_scene_call(&copy,3);
+    if(result==VK_SUCCESS){
+        if(copy.base.reserved[0]||copy.base.reserved[1]||copy.base.flags||!copy.base.consumerId)return VK_ERROR_INITIALIZATION_FAILED;
+        *request=copy;
+    }
+    return result;
+}
+
+int32_t WINAPI MacLauncherWineVulkanCancelScene3(const RSWineVulkanSceneRequestV2 *request)
+{
+    RSWineVulkanSceneRequestV2 copy;
+    if(!request)return VK_ERROR_INITIALIZATION_FAILED;
+    copy=*request;return prepared_scene_call(&copy,4);
+}

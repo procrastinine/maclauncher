@@ -8,6 +8,11 @@
 #include <windows.h>
 #include <d3d12.h>
 namespace maclauncher::ngx {
+struct PreparedRecording {
+ AdmissionStatus admission=AdmissionStatus::Unavailable;
+ Status recording=Status::Unavailable;
+ int32_t nativeResult=0;
+};
 // PE-only connection to the actual command-list implementation, located by its
 // own COM method address. No backend name or filename selects the translator.
 class CommandBridge {
@@ -16,6 +21,8 @@ class CommandBridge {
  using Record=int32_t(WINAPI*)(ID3D12GraphicsCommandList*,const RSWineVulkanSceneRequestV2*,ID3D12Resource*const*);
  HMODULE translator=nullptr,wine=nullptr;
  Context context=nullptr;Resolve resolve=nullptr;Record record=nullptr;
+ RSWineVulkanScenePrepareCall3 prepareCall=nullptr;
+ RSWineVulkanSceneCancelCall3 cancelCall=nullptr;
  ID3D12GraphicsCommandList*commands=nullptr;bool recordingAttempted=false;
  struct Resource {Image image;ID3D12Resource*value;};std::vector<Resource>resources;
  std::unique_ptr<Producer>producer;
@@ -44,6 +51,8 @@ public:
   record=reinterpret_cast<Record>(GetProcAddress(translator,"MacLauncherVkd3dRecordScene2"));
   auto api=reinterpret_cast<RSWineVulkanSceneAPICall1>(GetProcAddress(wine,"MacLauncherWineVulkanSceneAPI1"));
   auto control=reinterpret_cast<RSWineVulkanSceneContextCall1>(GetProcAddress(wine,"MacLauncherWineVulkanSceneContext1"));
+  prepareCall=reinterpret_cast<RSWineVulkanScenePrepareCall3>(GetProcAddress(wine,"MacLauncherWineVulkanPrepareScene3"));
+  cancelCall=reinterpret_cast<RSWineVulkanSceneCancelCall3>(GetProcAddress(wine,"MacLauncherWineVulkanCancelScene3"));
   if(context&&resolve&&record&&api&&api()==1&&control)producer=std::make_unique<Producer>(observer,feature,control,submit,this);
  }
  ~CommandBridge(){producer.reset();clear();if(wine)FreeLibrary(wine);if(translator)FreeLibrary(translator);}
@@ -60,21 +69,37 @@ public:
   }
   resources.push_back({resolved,resource});resource->AddRef();out=resolved;return true;
  }
- template<class Parameters>Status observe(ID3D12GraphicsCommandList*list,const Parameters&parameters,Evaluation source,int32_t&result){
+ template<class Parameters>Status readInputs(ID3D12GraphicsCommandList*list,const Parameters&parameters,Evaluation&source){
   if(!producer||!list)return Status::Unavailable;
   clear();commands=list;recordingAttempted=false;
-  if(context(list,&source.device,&source.commands)!=0)return Status::Invalid;
+  if(context(list,&source.device,&source.commands)!=0){commands=nullptr;return Status::Invalid;}
   ParameterReader<Parameters,ID3D12Resource,CommandBridge>reader(parameters,*this);
-  if(!readParameters(reader,source)){clear();return Status::Unavailable;}
+  if(!readParameters(reader,source)){clear();commands=nullptr;return Status::Unavailable;}
   const Image*primary[]={&source.color,&source.depth,&source.motion,&source.output,&source.exposure};
   for(unsigned slot=0;slot<RS_WINE_VULKAN_SCENE_IMAGE_COUNT;++slot){
    const auto&expected=source.expectedImages[slot];if(!expected.image)continue;
    const Image*actual=slot<5?primary[slot]:slot>=RS_WINE_SCENE_AOV_FIRST?&source.guides[slot-RS_WINE_SCENE_AOV_FIRST]:nullptr;
    if(!actual||!same(expected,actual->binding)){clear();commands=nullptr;return Status::Unavailable;}
   }
+  return Status::Recorded;
+ }
+ template<class Parameters>Status observe(ID3D12GraphicsCommandList*list,const Parameters&parameters,Evaluation source,int32_t&result){
+  auto inputs=readInputs(list,parameters,source);if(inputs!=Status::Recorded)return inputs;
   auto status=producer->observe(source,result);clear();commands=nullptr;
   if(status==Status::Failed&&!recordingAttempted&&result!=-4)return Status::Unavailable;
   return status;
+ }
+ // This connects actual typed resources to command-free admission and the
+ // normal translator recording boundary. Neither field is SDK output success;
+ // its wrapper still needs the actual requested-output fulfillment contract.
+ template<class Parameters>PreparedRecording prepareRecord(ID3D12GraphicsCommandList*list,const Parameters&parameters,Evaluation source){
+  PreparedRecording result;
+  if(!prepareCall||!cancelCall)return result;
+  auto inputs=readInputs(list,parameters,source);
+  if(inputs!=Status::Recorded){result.admission=inputs==Status::Invalid?AdmissionStatus::Invalid:AdmissionStatus::Unavailable;return result;}
+  result.admission=producer->prepare(source,prepareCall,cancelCall,result.nativeResult);
+  if(result.admission==AdmissionStatus::Prepared)result.recording=producer->recordPrepared(result.nativeResult);
+  clear();commands=nullptr;return result;
  }
 };
 }

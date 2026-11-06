@@ -14,6 +14,8 @@ AOVs retain their frame, view, epoch, revision, region, channel, encoding, space
 
 Recorded operations retain the original SDK output. Recording success describes command recording and does not establish replacement output. The adapter does not advertise frame generation through the temporal scene call. Generation requires the shared real/synthetic event and completion path, with display owned by the existing presenter and one generation owner.
 
+The optional preparation calls negotiate separate Unix selectors before transporting a reconstruction request. Preparation returns an opaque native operation identity on the same request; it records no commands. The typed client separates prepared admission from recording and cancels unused admissions when preparation is replaced or the feature retires. A prepared request is accepted only by its matching native owner and exact resource/frame metadata. These calls do not change NGX feature availability or Evaluate results.
+
 The native encoding contract remains `RSVulkanSceneEncodingV2`, including its actual queue and per-flight retain/release callbacks. Provider choice and preparation belong to the shared graph. The transport selects no algorithm and creates no command queue or presentation scheduler.
 
 For CrossOver and Sikarugir, launch preparation reads the actual used Direct3D 12 translator and selected Wine layout. Observation is enabled only when the translator carries the typed resource/command exports and the selected Wine module carries the scene transport exports. The native context handshake performs final admission. Missing exports preserve the ordinary renderer route; executable names, driver labels and downloadable version numbers do not establish this capability.

@@ -29,6 +29,11 @@ typedef struct RSWineVulkanSceneRequestV2 {
 #define RS_SCENE_CALL2
 #endif
 typedef int32_t (RS_SCENE_CALL2 *RSWineVulkanSceneRecordCall2)(const RSWineVulkanSceneRequestV2*);
+// Preparation mutates only the existing request: an owned native admission
+// returns its opaque consumerId and flags0. It does not encode or fulfill an
+// SDK output. Feature2 is reconstruction; unsupported features retain input.
+typedef int32_t (RS_SCENE_CALL2 *RSWineVulkanScenePrepareCall3)(RSWineVulkanSceneRequestV2*,uint32_t);
+typedef int32_t (RS_SCENE_CALL2 *RSWineVulkanSceneCancelCall3)(const RSWineVulkanSceneRequestV2*);
 #undef RS_SCENE_CALL2
 #if defined(__cplusplus)
 static_assert(sizeof(RSWineSceneAovImageV2)==48,"Wire AOV metadata layout");
