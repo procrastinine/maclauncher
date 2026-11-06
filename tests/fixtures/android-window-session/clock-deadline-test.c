@@ -75,8 +75,20 @@ static void cpu_clocks(void){
  assert(klj_clock_read(cpu_clock(tid,1,2),&after)==0&&ns(after)>ns(before));
  assert(klj_clock_resolution(cpu_clock(tid,1,2),NULL)==0);
  assert(klj_clock_read(cpu_clock(tid,0,2),&t)==-1&&errno==EINVAL);
+ thread_t retained=pthread_mach_thread_np(thread);assert(retained);
+ assert(mach_port_mod_refs(mach_task_self(),retained,MACH_PORT_RIGHT_SEND,1)==KERN_SUCCESS);
  atomic_store(&worker_stop,1);assert(!pthread_join(thread,NULL));
+ /* Darwin wakes pthread_join before the exiting thread enters its final kernel
+  * termination call. Guest identity retirement follows the retained Mach port. */
+ uint64_t deadline=clock_gettime_nsec_np(CLOCK_UPTIME_RAW)+2000000000ull;
+ mach_port_type_t type=0;
+ while(!(type&MACH_PORT_TYPE_DEAD_NAME)&&clock_gettime_nsec_np(CLOCK_UPTIME_RAW)<deadline){
+  assert(mach_port_type(mach_task_self(),retained,&type)==KERN_SUCCESS);
+  if(!(type&MACH_PORT_TYPE_DEAD_NAME)){struct timespec pause={0,1000000};nanosleep(&pause,NULL);}
+ }
+ assert(type&MACH_PORT_TYPE_DEAD_NAME);
  assert(klj_clock_read(cpu_clock(tid,1,2),&t)==-1&&errno==EINVAL);
+ assert(mach_port_deallocate(mach_task_self(),retained)==KERN_SUCCESS);
  int ready[2],stop[2];assert(!pipe(ready)&&!pipe(stop));pid_t child=fork();assert(child>=0);
  if(!child){
   close(ready[0]);close(stop[1]);int id=klj_process_id();assert(id>0);busy();

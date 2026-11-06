@@ -907,7 +907,8 @@ test("CrossOver Stop terminates an independently grouped Windows process before 
   fs.writeFileSync(fakeWine, `#!${process.execPath}\nconst fs=require('fs'),{spawn}=require('child_process');fs.writeFileSync(process.env.GAME_ARGUMENTS,JSON.stringify(process.argv.slice(2)));spawn(process.execPath,['-e',${JSON.stringify(gameCode)}],{detached:true,stdio:'ignore'});${untilTestEnds}`, { mode: 0o755 });
   // The real server is a lightweight native CLI. Cold Node startups here can
   // consume the ordinary Stop grace before the fixture has requested shutdown.
-  fs.writeFileSync(fakeServer, '#!/bin/sh\nprintf "%s\\n" "$1" >> "$SERVER_CALLS"\nif [ "$1" = "-k" ]; then\n  read -r game_pid < "$GAME_PID"\n  kill -TERM "$game_pid" 2>/dev/null || :\n  printf stopped > "$STOPPED"\nfi\n', { mode: 0o755 });
+  // Its -w also waits for Windows shutdown; sending SIGTERM alone is not that acknowledgement.
+  fs.writeFileSync(fakeServer, '#!/bin/sh\nprintf "%s\\n" "$1" >> "$SERVER_CALLS"\nif [ "$1" = "-k" ]; then\n  read -r game_pid < "$GAME_PID"\n  kill -TERM "$game_pid" 2>/dev/null || :\n  printf stopped > "$STOPPED"\nelif [ "$1" = "-w" ]; then\n  attempts=0\n  while [ ! -f "$GAME_TERMINATED" ] && [ "$attempts" -lt 200 ]; do\n    sleep 0.01\n    attempts=$((attempts + 1))\n  done\n  test -f "$GAME_TERMINATED"\nfi\n', { mode: 0o755 });
   const child = spawn("/bin/sh", ["-c", Launch.SUPERVISOR, "test-crossover", fakeWine, fakeServer, ...gameArguments],
     { detached: true, stdio: "ignore", env: { ...process.env, GAME_PID: pidFile, GAME_TERMINATED: terminatedFile, STOPPED: stoppedFile, GAME_ARGUMENTS: argumentsFile, SERVER_CALLS: serverCalls } });
   t.after(() => { try { process.kill(-child.pid, "SIGKILL"); } catch {} });
