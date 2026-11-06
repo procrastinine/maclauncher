@@ -16,6 +16,8 @@ A Wine version installed during Play comes with its matching support libraries, 
 
 The selected Wine version and graphics backend supply the Windows APIs. Windows libraries that a game itself requires remain part of that game's own environment.
 
+[Windows Steam games](WINDOWS_STEAM.md) describes the optional connection to the real Mac Steam client shared with CrossOver.
+
 ## Versions
 
 **Runtimes → Sikarugir** lists the downloadable and installed versions and selects the global preferred version, and the inspector's **Version** selector can override it for one game. [Release catalogs](RUNTIME_CATALOGS.md#sikarugir) describes how Refresh reads the publisher's versions.

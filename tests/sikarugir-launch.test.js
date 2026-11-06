@@ -410,7 +410,7 @@ test("fresh prefix setup uses the stock engine and common support before applyin
     }
     assert.equal(environment.WINEMSYNC, "1", "prefix setup preserves the selected supported synchronization mode");
     assert.equal(environment.LC_ALL, "ja_JP.UTF-8");
-    assert.equal(environment.WINEDEBUG, "err+all");
+    assert.equal(environment.WINEDEBUG, "-all", "verbose game tracing cannot overflow prefix preparation");
     return originalRun(...args);
   };
   dependencies.prepareGraphicsView = async options => ({
@@ -427,6 +427,7 @@ test("fresh prefix setup uses the stock engine and common support before applyin
   } }, dependencies);
   assert.deepEqual(order, ["wineboot.exe", "winecfg.exe", "renderer"]);
   assert.equal(result.winePath, rendererWine);
+  assert.equal(result.environment.WINEDEBUG, "err+all", "the selected tracing remains active for the game");
   assert.equal(result.serverPath, rendererServer);
   assert.equal(result.environment.WINELOADER, rendererWine);
   assert.equal(result.environment.DXMT_CONFIG, "game-only");

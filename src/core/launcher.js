@@ -500,6 +500,7 @@ function createLauncher({
       if (required) context.steamClientConnection = true;
       await ensureSteamClient(required);
     };
+    context.useSteamClient = usesSteamClient;
     context.prepareSteamApi = async (request, { baseEnvironment = process.env } = {}) => {
       const prepared = await steamApiService({
         ...request,

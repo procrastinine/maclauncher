@@ -213,7 +213,7 @@ async function ensurePrefix(installation, ownedEnvironment, directory, settings,
   // Renderer-prioritized loaders can replace libraries used by wineboot itself.
   const runtime = prefixRuntime(installation, directory);
   const wine = runtime.executablePath, server = runtime.serverPath;
-  const { environment } = buildEnvironment({ ...settings, environment: [], dllOverrides: [], bepInExWinhttp: false },
+  const { environment } = buildEnvironment({ ...settings, wineDebug: "-all", environment: [], dllOverrides: [], bepInExWinhttp: false },
     installation, directory, prefixPath, runtime);
   const options = { cwd: directory, env: environment, signal: context.signal, timeout: 180000, maxBuffer: 1024 * 1024,
     onProcessSpawn: async (child, options) => {
@@ -311,7 +311,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   if (!WINDOWS_VERSIONS.has(windowsVersion)) throw new Error("Unsupported Wine Windows version.");
   const previousVersions = require('../manifest.json').runtime.entries.sikarugir.settings.fields.find(field => field.key === 'windowsVersion').options;
   const environmentVersion = previousVersions.some(option => option.value === windowsVersion) ? windowsVersion : 'win10';
-  const prefixPath = existingEnvironment?.prefixPath || path.join(directory, "prefixes", environmentVersion);
+  let prefixPath = existingEnvironment?.prefixPath || path.join(directory, "prefixes", environmentVersion);
   // Version the loader layout independently of the persistent prefix/saves.
   const variant = crypto.createHash("sha256").update(JSON.stringify([2, settings.graphicsBackend || "auto", settings.vulkanBackend || "auto",
     settings.cncDdraw === true, match.executableArchitecture, ...(settings.dlss === true ? ["dlss"] : []),
@@ -347,12 +347,15 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   }
   await WineSettings.applyRegistry({ ...context.runtimeSettings, ...settings }, { executable: path.basename(executablePath),
     assertWritable: existingEnvironment ? () => Environments.assertWritableRegistry(existingEnvironment) : undefined }, args => {
-    const options = { cwd: directory, env: environment, signal: context.signal, timeout: 30000 };
+    const options = { cwd: directory, env: { ...environment, WINEDEBUG: "-all" }, signal: context.signal, timeout: 30000 };
     return dependencies.run ? dependencies.run(selected.install.executablePath, selected.install.serverPath, args, options) : existingEnvironment
       ? require("../../shared/runtime/wine-processes").runTool(selected.install.executablePath, args, options)
       : runSupervised(selected.install.executablePath, selected.install.serverPath, args, options);
   });
-  const args = WineSettings.desktopArguments(settings, ["start.exe", "/d", windowsWorkingDirectory, "/exec", windowsExecutablePath, ...(Array.isArray(settings.arguments) ? settings.arguments : []).map(value => safeText(value, "Game arguments")),
+  const steamBridge = await require('../runtime/steam-bridge').prepare(entry, context, { installation: selected.install, prefixPath, directory,
+    architecture: match.executableArchitecture, environment, externalEnvironment: existingEnvironment });
+  if (steamBridge) { environment = steamBridge.environment; prefixPath = steamBridge.prefixPath; }
+  const args = WineSettings.desktopArguments(settings, ["start.exe", "/d", windowsWorkingDirectory, "/exec", ...(steamBridge ? [steamBridge.helper] : []), windowsExecutablePath, ...(Array.isArray(settings.arguments) ? settings.arguments : []).map(value => safeText(value, "Game arguments")),
     ...(context.gameArguments || [])]);
   if (cameraBridge && cameraView) {
     GameView.remember(entry, context, "sikarugir", cameraView, recovery);
@@ -366,7 +369,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
     translatorPlanInputs: Translators.planInputs(context.runtimeSettings, context.wineEnvironment?.install || selected.install), cameraAdapterNotice: context.cameraAdapterNotice || null, graphicsInputs: context.graphicsInputs } };
   context.onEntryChange?.(entry);
   return { ...selected, directory, gameRoot, workingDirectory, prefixPath, viewRoot, executablePath, windowsExecutablePath, windowsWorkingDirectory, graphics, environment, args, translatorPlan,
-    existingEnvironment, winePath: graphics.executablePath || selected.install.executablePath, serverPath: graphics.serverPath || selected.install.serverPath };
+    existingEnvironment: steamBridge?.privateClone ? null : existingEnvironment, winePath: graphics.executablePath || selected.install.executablePath, serverPath: graphics.serverPath || selected.install.serverPath };
 }
 
 module.exports = { SUPERVISOR, supervisorArguments, PROTECTED_ENVIRONMENT, runtimeDirectory, safeText, parseEnvironment, dllOverrides,

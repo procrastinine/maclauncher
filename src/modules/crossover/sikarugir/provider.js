@@ -61,11 +61,12 @@ function createProvider({ manager, launch = Launch, platform = process.platform,
       const source = require("../temporal").resolvePlan(entry, context, { install, runtimeId: "sikarugir", translatorPlan, settings: Translators.settingsForPlan(context.runtimeSettings || {}, translatorPlan), allowDownload: true })?.inputs;
       return require("../graphics-inputs").inputs(install, source, { fallback: "x86_64" });
     },
-    getRuntimeRequirements: (entry, context) => {
+    getRuntimeRequirements: async (entry, context) => {
       const existing = Environments.readEnvironment(context.runtimeSettings?.environmentReference);
       if (existing) context.wineEnvironment = existing;
       const manager = existing ? { resolveSelection: () => ({ ready: true, install: existing.install, version: existing.path }) } : runtimeManager();
-      return require("../temporal").requirements(entry, { ...context, runtimeId: "sikarugir" }, { manager });
+      return [...await require("../temporal").requirements(entry, { ...context, runtimeId: "sikarugir" }, { manager }),
+        ...await require("../runtime/steam-bridge").requirements(entry, { ...context, runtimeId: "sikarugir" })];
     },
     runtimeDirectory: launch.runtimeDirectory, resolveSaveLocations,
     supports: { cheats: false, cheatsPatcher: false, saveEditing: false, saveLocation: true },

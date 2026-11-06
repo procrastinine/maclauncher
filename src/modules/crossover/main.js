@@ -138,11 +138,12 @@ const crossoverProvider = { runtimeId: "crossover", runtime: manifest.runtime.en
     supportsEntry, canLaunchRuntime, ensureRuntime, launchRuntime, resolveSaveLocations,
     getRuntimeRequirements: async (entry, context) => [
       ...await require("./temporal").requirements(entry, { ...context, runtimeId: "crossover" }),
-      ...await require('./runtime/winemac').requirements(entry, { ...context, runtimeId: 'crossover' })
+      ...await require('./runtime/winemac').requirements(entry, { ...context, runtimeId: 'crossover' }),
+      ...await require('./runtime/steam-bridge').requirements(entry, { ...context, runtimeId: 'crossover' })
     ],
     resolveGraphicsInputs: (entry, context) => resolveGraphicsInputs(entry, context) };
 const runtimeProviders = [crossoverProvider, sikarugirProvider];
-const runtimeManagers = [manager, sikarugirManager, require('./runtime/winemac'), ...Object.values(require("./temporal/support-manager").managers)];
+const runtimeManagers = [manager, sikarugirManager, require('./runtime/winemac'), require('./runtime/steam-bridge'), ...Object.values(require("./temporal/support-manager").managers)];
 const providerForRuntime = runtimeId => runtimeProviders.find(provider => provider.runtimeId === runtimeId);
 const providerForEntry = (entry, context) => providerForRuntime(context?.runtimeId || entry?.runtimeId || manifest.runtime.default);
 async function resolveGraphicsInputs(entry, context = {}, resolved, plan) {
@@ -173,7 +174,8 @@ module.exports = { id: manifest.id, manifest, detectGame: Detection.detectGame,
   resolveGraphicsInputs, warmBackendLane,
   getRuntimeRequirements: async (entry, context) => [
     ...await require("./temporal").requirements(entry, context),
-    ...await require('./runtime/winemac').requirements(entry, context)
+    ...await require('./runtime/winemac').requirements(entry, context),
+    ...await require('./runtime/steam-bridge').requirements(entry, context)
   ],
   normalizeRuntimeId: runtimeId => providerForRuntime(runtimeId) ? runtimeId : manifest.runtime.default,
   filterRuntimeSupport: (entry, supported, settings, context) => supported.filter(runtimeId =>
