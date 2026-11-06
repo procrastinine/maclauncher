@@ -65,14 +65,11 @@ function status(userDataDir) {
 }
 // Removing the bridge's last version also removes these files; Play can
 // download them again after consent.
-function remove(userDataDir) {
+async function remove(userDataDir) {
   const root = store(userDataDir);
   if (!fs.lstatSync(root, { throwIfNoEntry: false })) return false;
   Writable.assertOwnDirectory(userDataDir, root, { create: false });
-  const trash = path.join(path.dirname(root), '.steam-client-components-' + randomUUID());
-  fs.renameSync(root, trash);
-  fs.rmSync(trash, { recursive: true, force: true });
-  return true;
+  return require('../../shared/runtime/runtime-components').removeOwned(root, userDataDir);
 }
 // Called only from the consented managed-install action. Discovery/status use current().
 async function install({ userDataDir, signal, onProgress, resolved } = {}) {

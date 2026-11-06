@@ -185,7 +185,7 @@ test('Runtimes lists the bridge as one managed row with its Valve files, and rem
   assert.equal(await bridge.uninstallRuntime({ userDataDir, version: '1.0.0' }), true);
   assert.equal(fs.existsSync(path.join(userDataDir, 'runtimes/steam-client-components')), false);
   assert.equal(bridge.getState({ userDataDir }).sections[0].components[0].status, 'Not installed');
-  assert.equal(Components.remove(userDataDir), false, 'nothing else is removed');
+  assert.equal(await Components.remove(userDataDir), false, 'nothing else is removed');
   // The next offer names the size of the last verified Valve download, offline.
   assert.deepEqual(Components.lastDownload(userDataDir), { filename: valve.resolved.filename, bytes: fs.statSync(valve.zip).size });
   const [offer] = await bridge.requirements({ name: 'Fixture' }, { userDataDir });

@@ -85,7 +85,68 @@ test('the offline download record totals every archive before the client DLLs ar
   const totalBytes = fs.statSync(unrelated).size + fs.statSync(fixture.zip).size;
   assert.deepEqual(Components.lastDownload(fixture.userDataDir), { filename: fixture.resolved.filename, bytes: totalBytes });
   assert.deepEqual(JSON.parse(fs.readFileSync(recordPath)), { filename: fixture.resolved.filename, totalBytes });
-  Components.remove(fixture.userDataDir);
+  await Components.remove(fixture.userDataDir);
   assert.equal(Components.lastDownload(fixture.userDataDir).bytes, totalBytes, 'the complete total remains available offline after removal');
   assert.deepEqual(requests, [first.url, fixture.resolved.url]);
+});
+
+test('interrupted Steam component removal leaves canonical trash for ordinary upkeep', async t => {
+  const Storage = require('../src/core/storage-maintenance');
+  const Shared = require('../src/modules/shared/runtime/runtime-components');
+  const Bridge = require('../src/modules/crossover/runtime/steam-bridge');
+  const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'steam-removal-')));
+  t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+  const userDataDir = path.join(scratch, 'profile'), runtimes = path.join(userDataDir, 'runtimes');
+  const root = path.join(runtimes, 'steam-client-components'), content = path.join(root, '1'.repeat(40));
+  fs.mkdirSync(content, { recursive: true });
+  fs.writeFileSync(path.join(content, 'steamclient.dll'), 'downloaded component bytes');
+  fs.writeFileSync(path.join(root, 'active.json'), JSON.stringify({ archiveSha1: '1'.repeat(40), clients: { i386: 'steamclient.dll' } }));
+  const protectedFiles = [path.join(runtimes, 'steam-client-download.json'), path.join(runtimes, 'unrelated', 'keep.dat'),
+    path.join(userDataDir, 'games', 'saved.dat'), path.join(scratch, 'outside', 'keep.dat')];
+  for (const [index, file] of protectedFiles.entries()) {
+    fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, 'preserved ' + index);
+  }
+  const protectedBytes = protectedFiles.map(file => fs.readFileSync(file));
+  let announce, resume, trash, settled = false;
+  const renamed = new Promise(resolve => { announce = resolve; });
+  const gate = new Promise(resolve => { resume = resolve; });
+  const interruption = new Error('Interrupted component deletion');
+  const removal = t.mock.method(Storage, 'removeTrash', async target => {
+    trash = target; announce(); await gate; throw interruption;
+  });
+  const manager = Bridge.create({ dependencies: { systemVersionSync: () => '26.0' } });
+  const pending = manager.uninstallRuntime({ userDataDir, version: '1.0.0' });
+  pending.then(() => { settled = true; }, () => { settled = true; });
+  const rejected = assert.rejects(pending, error => error === interruption);
+  await renamed;
+  assert.equal(settled, false, 'bridge uninstall waits for component deletion');
+  assert.equal(path.dirname(trash), runtimes);
+  assert.match(path.basename(trash), Storage.TRASH);
+  assert.equal(fs.existsSync(root), false, 'the store and active selection are removed together');
+  assert.equal(Components.current(userDataDir), null);
+  assert.equal(Components.status(userDataDir), null);
+  resume(); await rejected; removal.mock.restore();
+  assert.deepEqual(fs.readdirSync(runtimes).filter(name => name.startsWith('.')), [path.basename(trash)],
+    'the interruption leaves only recognized trash');
+  const stores = Storage.listStores({}).filter(store => store.id === 'runtime-removals');
+  assert.equal(stores.length, 1, 'use the actual core runtime-removals store');
+  const result = await Storage.maintainStorage({ userDataDir, stores });
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.interrupted, false);
+  assert.ok(result.bytes > 0);
+  assert.equal(fs.existsSync(trash), false);
+  assert.deepEqual(fs.readdirSync(runtimes).sort(), ['steam-client-download.json', 'unrelated']);
+  assert.equal(await Components.remove(userDataDir), false);
+  assert.equal(await manager.uninstallRuntime({ userDataDir, version: '1.0.0' }), true, 'manager success result is unchanged');
+
+  // Both a linked store and a linked parent must stay outside removal.
+  fs.symlinkSync(path.join(scratch, 'outside'), root, 'dir');
+  await assert.rejects(Components.remove(userDataDir), /aliases|link/i);
+  fs.unlinkSync(root);
+  const aliasProfile = path.join(scratch, 'alias-profile'); fs.mkdirSync(aliasProfile);
+  fs.mkdirSync(path.join(scratch, 'outside', 'steam-client-components'));
+  fs.symlinkSync(path.join(scratch, 'outside'), path.join(aliasProfile, 'runtimes'), 'dir');
+  await assert.rejects(Components.remove(aliasProfile), /aliases|link/i);
+  await assert.rejects(Shared.removeOwned(path.join(scratch, 'outside'), userDataDir), /outside its store/);
+  for (const [index, file] of protectedFiles.entries()) assert.deepEqual(fs.readFileSync(file), protectedBytes[index]);
 });

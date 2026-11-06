@@ -77,7 +77,7 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
   const uninstallRuntime = manager.uninstallRuntime;
   manager.uninstallRuntime = async function(options = {}) {
     const result = await uninstallRuntime.call(this, options);
-    if (options.userDataDir && !base.core.listInstalled(options.userDataDir).length) Components.remove(options.userDataDir);
+    if (options.userDataDir && !base.core.listInstalled(options.userDataDir).length) await Components.remove(options.userDataDir);
     return result;
   };
   // The Valve files are listed in the bridge's Runtimes section with the
