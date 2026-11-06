@@ -8,12 +8,7 @@ The two implementations are loaded differently. MoltenVK's dynamic library is lo
 
 The components come from different sources. MoltenVK downloads come from the KhronosGroup releases. KosmicKrisp comes from the versioned LWJGL native distribution, where each version is identified by its release tag and source commit, while the MacLauncher KosmicKrisp packages record their Mesa source separately. The Vulkan loader is Homebrew's published Vulkan-Loader binary bottle and keeps its original license. Every versioned file is protected by its publisher's checksum or by a SHA-256 identity recorded at installation, and installation keeps only the native libraries and their notices.
 
-**MacLauncher KosmicKrisp** is an adapted build of KosmicKrisp. It adds Vulkan features that upstream KosmicKrisp lacks, each implemented on Metal rather than stubbed, so that ANGLE on Android and the Direct3D translators in Wine can run on KosmicKrisp:
-
-- Transform feedback and primitives-generated queries. ANGLE's Vulkan renderer needs them to provide OpenGL ES 3.2, with its tessellation, geometry and compute shaders, and DXVK uses them for Direct3D stream output. Geometry shaders themselves come from upstream KosmicKrisp. Transform feedback uses Mesa Poly together with KosmicKrisp's own shader compiler and GPU command encoders.
-- Non-solid polygon fill (`fillModeNonSolid`), which provides the wireframe and point fill modes that DXVK requires.
-- Single-texel alignment for uniform and storage texel buffer views, which vkd3d-proton requires.
-- Variable multisample rate, which allows rendering without attachments at differing sample counts, as Direct3D 11.1 and 12 need.
+**MacLauncher KosmicKrisp** is an adapted build of KosmicKrisp. It adds Vulkan features that upstream KosmicKrisp lacks, each implemented on Metal, so that ANGLE on Android and the Direct3D translators in Wine can run on KosmicKrisp. [KosmicKrisp](../../../../docs/runtimes/KOSMICKRISP.md) lists these features and compares the build with upstream KosmicKrisp and MoltenVK.
 
 The package is built for Apple Silicon and for Intel (x86-64). On Android, the Apple Silicon build serves ANGLE's Vulkan renderer; ANGLE still renders through Metal by default, and when its Vulkan renderer is selected, that renderer runs on the chosen Vulkan component. Wine uses the build matching its native loader: Intel Wine under Rosetta uses x64, while ARM64 Wine with FEX uses arm64. CrossOver and Sikarugir select it through their **Vulkan driver** control and use it beneath DXVK, vkd3d-proton and Wine's own Vulkan support. Unmodified KosmicKrisp versions keep their publisher identity and feature set.
 
@@ -23,4 +18,4 @@ The Vulkan packages that MacLauncher Builds publishes are built by its [recipes]
 
 Android maps `VK_KHR_android_surface` to the selected driver's `VK_EXT_metal_surface`. The driver owns the Vulkan queues, images, swapchains and synchronization, and its Metal carrier layer registers with the common graphics presenter. Each completed frame therefore follows the same Android overlay and graphics pipeline as EGL and Canvas frames. When the native window is resized, the carrier's source extent is updated independently of the display extent. Presentation borrows GPU resources until their commands complete, and it makes no CPU copy of the image for each frame.
 
-[Graphics translator CPU builds](../../../../docs/runtimes/graphics-architecture.md) lists each consumer and its native driver architecture.
+[CPU builds and consumers](../../../../docs/runtimes/KOSMICKRISP.md#cpu-builds-and-consumers) lists each consumer and the driver architecture that it loads.

@@ -13,6 +13,8 @@ None of these outputs changes which runtime can play a game.
 
 Some tools apply to many game types and have their own pages: [native binary inspection](NATIVE_INSPECTION.md), the [installer reader](INSTALLERS.md), [save snapshots](SAVE_SNAPSHOTS.md) and [cheats](CHEATS.md).
 
+Patches, plugins and add-ons that write into a game's folder are described with their game types: [Ren'Py Patch](../game-types/RENPY.md#renpy-patch), the [Ren'Py console](../game-types/RENPY.md#renpy-console) and [cheat add-ons](CHEATS.md#renpy-cheat-add-ons), the RPG Maker MV [library patches and MV and MZ plugins](../game-types/RPGMAKER_MV_MZ.md#plugins-and-extraction), and the [NW.js Tools patch](CHEATS.md#nwjs-patching). Each can be removed from the same place. Runtime-level changes leave the game's files unchanged: [NW.js (Patched)](../runtimes/WEB_RUNTIMES.md#nwjs-patched), mac32 [game compatibility patches](../game-types/MACOS.md#settings) and the Windows upscaling adapters ([CrossOver](../runtimes/CROSSOVER.md#temporal-upscaling), [Sikarugir](../runtimes/SIKARUGIR.md#game-temporal-integration)).
+
 ## Tools by game type
 
 Actions separated by a semicolon are in different action groups of the inspector.

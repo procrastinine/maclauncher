@@ -31,6 +31,10 @@ Find the games already installed from [Steam](https://store.steampowered.com/), 
 
 Find where a game keeps its saves, take snapshots before you experiment, restore them, and edit [RPG Maker](https://www.rpgmakerweb.com/) MV and MZ saves field by field. Cheats are built in for RPG Maker and [Ren'Py](https://www.renpy.org/) games.
 
+### [Patching games](/maclauncher/tools/patching-games/)
+
+Patch a [Ren'Py](https://www.renpy.org/) game with the macOS runtime of its SDK, give an RPG Maker MV game newer graphics libraries, or add the in-game Tools overlay to an RPG Maker game on NW.js. Every patch asks first and can be undone.
+
 ### [Decompilers and extractors](/maclauncher/tools/decompilers-and-extractors/)
 
 Unpack archives, decrypt assets, and decompile scripts and code for most game types, from Ren'Py and RPG Maker to [Unity](https://unity.com/), [GameMaker](https://gamemaker.io/), Java, Flash and Android. The tools download on demand.

@@ -70,7 +70,7 @@ Of the two Vulkan drivers, KosmicKrisp requires Apple Silicon and Metal 4, while
 
 ## Windows compatibility runtimes
 
-CrossOver and Sikarugir run Windows programs in Intel Wine processes, which use Rosetta on Apple Silicon. The Wine engine and each renderer keep separate requirements. In Sikarugir, each Wine engine is paired with a Template, a package of the support libraries that the engine needs. Because MacLauncher reads the requirements of the installed renderer's libraries, a newer Template or graphics dependency can raise that renderer's minimum without disabling a compatible Wine engine or another renderer.
+CrossOver and Sikarugir run Windows programs in Wine processes. Sikarugir and CrossOver's Intel Wine are x86-64 processes, which use Rosetta on Apple Silicon, and a CrossOver installation with an ARM64 Wine loader runs as an arm64 process; [KosmicKrisp](KOSMICKRISP.md#cpu-builds-and-consumers) lists the graphics libraries that each one loads. The Wine engine and each renderer keep separate requirements. In Sikarugir, each Wine engine is paired with a Template, a package of the support libraries that the engine needs. Because MacLauncher reads the requirements of the installed renderer's libraries, a newer Template or graphics dependency can raise that renderer's minimum without disabling a compatible Wine engine or another renderer.
 
 DXMT starts at macOS 14 with a compatible Metal GPU. D3DMetal requires Apple Silicon, and its effective macOS minimum is read from the installed D3DMetal libraries and everything they depend on. KosmicKrisp requires Apple Silicon and macOS 26. Renderer selection and bottle settings are described in [Sikarugir](SIKARUGIR.md) and [CrossOver](CROSSOVER.md).
 

@@ -80,7 +80,7 @@ WINE's vkd3d is WINE's own Direct3D 12 library. It translates Direct3D 12 into V
 
 Every Vulkan route above, and every game that uses Vulkan directly, ends in a Vulkan driver, which carries out the Vulkan work on Metal. Two drivers exist for the Mac.
 
-WINE runs as an Intel program, also on Apple Silicon, where Rosetta translates it, so any driver that WINE loads must contain Intel code. MacLauncher lists only such builds for WINE games.
+A driver has to match the processor that WINE itself is built for. Sikarugir and the usual CrossOver releases run WINE as an Intel program, which Rosetta translates on Apple Silicon, so their drivers must contain Intel code. A CrossOver build whose WINE is an ARM64 program, one that leaves the game's Intel code to the FEX emulator, needs Apple Silicon builds instead. MacLauncher reads which kind of WINE it has from WINE's own files and lists only drivers that fit.
 
 ### MoltenVK
 
@@ -90,18 +90,21 @@ CrossOver and Sikarugir's Template both include MoltenVK, and MacLauncher can in
 
 ### KosmicKrisp
 
-[KosmicKrisp](https://docs.mesa3d.org/drivers/kosmickrisp.html) is a newer Vulkan driver from the [Mesa](https://mesa3d.org/) project, built on Metal 4. Unlike MoltenVK, it's a conformant Vulkan implementation, which means it passes the Khronos Group's conformance tests, and Khronos now [recommends it](https://github.com/KhronosGroup/MoltenVK) for Apple Silicon Macs. Metal 4 also sets its requirements: an Apple Silicon Mac with macOS 26 or later.
+[KosmicKrisp](https://docs.mesa3d.org/drivers/kosmickrisp.html) is a newer Vulkan driver from the [Mesa](https://mesa3d.org/) project, developed by LunarG and built on Metal 4. Unlike MoltenVK, it's a [conformant Vulkan 1.4 implementation](https://www.khronos.org/news/permalink/kosmickrisp-achieves-vulkan-1.4-conformance-on-apple-silicon), which means it passes the Khronos Group's conformance tests, and Khronos now [recommends it](https://github.com/KhronosGroup/MoltenVK) for Apple Silicon Macs. Metal 4 also sets its requirements: an Apple Silicon Mac with macOS 26 or later. [KosmicKrisp](/maclauncher/windows/kosmickrisp/) has the whole story.
 
-KosmicKrisp runs only on Apple Silicon, yet WINE needs an Intel build of it, because WINE itself is an Intel program. A WINE game can therefore use the KosmicKrisp in Sikarugir's Template, an installed [MacLauncher KosmicKrisp](#maclauncher-kosmickrisp) package that includes an Intel build, or an Intel build you register yourself. MacLauncher also downloads KosmicKrisp from LWJGL's builds, but those contain only Apple Silicon code, so they serve other runtimes, such as Android games, and never reach WINE.
+KosmicKrisp runs only on Apple Silicon, yet Intel WINE needs an Intel build of it, which Rosetta then translates. Such a game can use the KosmicKrisp in Sikarugir's Template, an installed [MacLauncher KosmicKrisp](#maclauncher-kosmickrisp) package that includes an Intel build, or an Intel build you register yourself. MacLauncher also downloads KosmicKrisp from LWJGL's builds, but those contain only Apple Silicon code, so they serve Android games and ARM64 WINE and never reach Intel WINE.
 
 ### MacLauncher KosmicKrisp
 
-MacLauncher KosmicKrisp is MacLauncher's own build of KosmicKrisp, published in MacLauncher Builds. It adds Vulkan features that upstream KosmicKrisp lacks, each one implemented on Metal rather than stubbed:
+MacLauncher KosmicKrisp is MacLauncher's own build of KosmicKrisp, published in MacLauncher Builds. It adds Vulkan features that upstream KosmicKrisp lacks, each one implemented on Metal, and several of them are what the translators above ask for:
 
-- transform feedback and primitives-generated queries, which DXVK uses for Direct3D's stream output, and which ANGLE, the layer that provides OpenGL ES to Android games, needs to offer OpenGL ES 3.2 when it renders through Vulkan
 - wireframe and point fill modes, which DXVK requires
-- texel buffer views aligned to a single texel, which vkd3d-proton requires
-- rendering without attachments at differing sample counts, which Direct3D 11.1 and 12 need
+- transform feedback and texel buffer views aligned to a single texel, which vkd3d-proton requires
+- transform feedback with primitives-generated queries, which ANGLE, the layer that provides OpenGL ES to Android games, needs before it offers the geometry and tessellation shaders of OpenGL ES 3.2 through Vulkan
+- sparse resources, on GPUs where Metal supports them, which Direct3D's tiled resources and feature level 12_0 rest on
+- pixel interlock, which vkd3d-proton turns into the rasterizer-ordered views of Direct3D 12 feature level 12_1
+
+The build adds plenty more, from mesh shaders to 64-bit floating point; [KosmicKrisp](/maclauncher/windows/kosmickrisp/#maclauncher-kosmickrisp) goes through it.
 
 Like KosmicKrisp itself, the build needs an Apple Silicon Mac with macOS 26 or later. It also comes as an Intel build, so CrossOver and Sikarugir games can choose it as their **Vulkan driver** and run DXVK, vkd3d-proton or a Vulkan game on it. CrossOver includes only MoltenVK, so this build also brings KosmicKrisp to CrossOver games.
 
@@ -109,10 +112,10 @@ Like KosmicKrisp itself, the build needs an Apple Silicon Mac with macOS 26 or l
 
 | | MoltenVK | KosmicKrisp |
 | --- | --- | --- |
-| Vulkan support | A subset of Vulkan 1.4, layered on Metal | Conformant Vulkan on Metal 4 |
+| Vulkan support | A subset of Vulkan 1.4, layered on Metal | Conformant Vulkan 1.4 on Metal 4 |
 | Macs | Intel and Apple Silicon | Apple Silicon with macOS 26 or later |
 | Status | Deprecated by Khronos, maintained by its community | Recommended by Khronos for Apple Silicon |
-| For WINE games | Included with CrossOver and Sikarugir, and installable from Khronos's releases | An Intel build: Sikarugir's own copy or one installed in Runtimes |
+| For WINE games | Included with CrossOver and Sikarugir, and installable from Khronos's releases | A build for WINE's processor: Sikarugir's own copy or one installed in Runtimes |
 
 On a Mac that can run it, KosmicKrisp is the more compatible driver. That's why Sikarugir's automatic choice prefers it on a real Apple Silicon Mac, and why MacLauncher recommends it for vkd3d-proton. MoltenVK covers the rest: Intel Macs, macOS versions before 26 and virtual machines. It's also the driver that CrossOver includes, and CrossOver's [Vulkan scene route](/maclauncher/windows/effects-and-upscaling/#fidelityfx-in-vulkan-games-on-crossover) needs it.
 
@@ -140,7 +143,7 @@ Each game's **Runtime Settings** have a translator control for each graphics API
 
 Every entry names the translator, its version and where it comes from, read from the installed files. Each list starts with the automatic choice, or with the environment's own setting in an existing bottle or wrapper, followed by the versions that come with your WINE runtime and the ones installed in Runtimes. A change applies the next time you press **Play**.
 
-If a game renders wrongly, trying another default Direct3D engine is a good first step. For Direct3D 12 games, D3DMetal and vkd3d-proton are the alternatives to WINE's own vkd3d. [Translator versions](/maclauncher/windows/translator-versions/) explains how to add more versions to these lists.
+If a game renders wrongly, trying another default Direct3D engine is a good first step. For Direct3D 12 games, D3DMetal and vkd3d-proton are the alternatives to WINE's own vkd3d. [Choosing a translator](/maclauncher/windows/choosing-a-translator/) goes through the choices by kind of game, and [Translator versions](/maclauncher/windows/translator-versions/) explains how to add more versions to these lists.
 
 ## When a translator can't load
 

@@ -39,9 +39,9 @@ The choice of translators is a major part of MacLauncher's support for Windows g
 | D3DMetal | Sikarugir Template | Apple Game Porting Toolkit disk image or folder; installed runtime |
 | GStreamer codecs | Official GStreamer macOS runtime packages | Prepared plugin folder together with the libraries its plugins depend on |
 
-Wine runs as an x86-64 process, also on Apple Silicon through Rosetta. Every macOS library that it loads must therefore contain x86-64 code, and only installations with Intel code are listed for Wine games. KosmicKrisp itself requires Apple Silicon, so a Wine game uses an x86-64 build of it: a Sikarugir Template's driver, an installed MacLauncher KosmicKrisp package that includes an Intel (x86-64) build, or a locally registered build with Intel code. LWJGL's KosmicKrisp builds are ARM64-only, so they never reach Wine.
+Every macOS library that Wine loads must contain code for the CPU architecture of Wine's native loader. Sikarugir and CrossOver's Intel Wine run as x86-64 processes, also on Apple Silicon through Rosetta, while a CrossOver installation with an ARM64 Wine loader runs as an arm64 process and leaves Windows x86-64 code to FEX. The architecture is read from the selected installation's native Wine loader, and only installations with code for it are listed for a Wine game. KosmicKrisp itself requires Apple Silicon, so Intel Wine uses an x86-64 build of it: a Sikarugir Template's driver, an installed MacLauncher KosmicKrisp package that includes an Intel (x86-64) build, or a locally registered build with Intel code. LWJGL's KosmicKrisp builds contain only arm64 code, so they can serve ARM64 Wine but never Intel Wine. [KosmicKrisp](KOSMICKRISP.md#cpu-builds-and-consumers) lists the build that each consumer loads.
 
-MacLauncher KosmicKrisp is an adapted build of KosmicKrisp. In addition to upstream's features, it implements transform feedback and primitives-generated queries for DXVK's Direct3D stream output and ANGLE's OpenGL ES 3.2, non-solid polygon fill for DXVK, single-texel alignment of texel buffer views for vkd3d-proton, and variable multisample rate for Direct3D 11.1 and 12; [Native Vulkan libraries](../../src/modules/shared/vulkan/README.md) describes it.
+MacLauncher KosmicKrisp is an adapted build of KosmicKrisp. Among the features it adds to upstream's are the non-solid polygon fill that DXVK requires, the transform feedback and single-texel alignment of texel buffer views that vkd3d-proton requires, and the transform feedback and primitives-generated queries that ANGLE's Vulkan renderer needs for OpenGL ES 3.2 shaders. [KosmicKrisp](KOSMICKRISP.md) lists its features, compares it with upstream KosmicKrisp and MoltenVK, and shows which Direct3D feature levels depend on them.
 
 Each source card has its own Refresh control and publisher link. A grouped source exposes its existing catalogs through a Variant control; Refresh updates those catalogs together. Download cards list their versions newest first by the publisher's release: the release tag for upstream sources such as DXVK and vkd3d-proton, and the Template version for Sikarugir Template components. The **Vulkan drivers** entry also holds **MoltenVK scene support**, a MacLauncher Builds package that CrossOver's [Vulkan scene support](CROSSOVER.md#vulkan-scene-support) uses.
 
@@ -81,6 +81,15 @@ Real copies are made only where a link cannot work. A Wine loader that must carr
 
 A shared graphics view that has gone stale is rebuilt as a new shared generation. Earlier generations stay in place until ordinary storage upkeep can remove them.
 
+## CPU build labels
+
+Labels use the CPU vocabulary in [Processor builds](README.md#processor-builds). [KosmicKrisp](KOSMICKRISP.md#cpu-builds-and-consumers) lists the build that each consumer loads.
+
+- In **Runtimes**, the **DirectX → Vulkan**, **DirectX → Metal** and **Vulkan drivers** entries mark every installed version with its build, from the CPU slices of its installed library, and both builds of one version appear as two rows.
+- For CrossOver and Sikarugir games, the inspector's **Vulkan** row ends with the build that the Wine process loads, taken from the same inspected Wine layout that Play prepares translator files for: **Intel (Rosetta)** for Intel Wine on Apple Silicon, including CrossOver's Intel Wine, **Intel** on an Intel Mac and **Apple Silicon** for ARM64 Wine, including the CrossOver 27 FEX preview. Direct3D rows name Windows libraries and carry no Mac CPU.
+- The Vulkan driver choices of a game share the build of their consumer, Intel for AnyPS5 and Prosper and Apple Silicon for Android, so the menu does not repeat it. The choice list checks each library for that CPU, the same check that selects the library at launch.
+- Each installed version of a driver package is one choice for a consumer, even when both of its CPU builds are installed.
+
 ## Selection
 
 Runtime Settings selects installed components for each graphics API and shows which choices share libraries. Settings holds the default of each control for all games, and a game's Runtime Settings can override it. Versions and sources are read from installed files, and a change applies on the next launch. A saved choice names one installed version, so installing a newer version adds a choice without changing the games that use an older one.
@@ -118,9 +127,32 @@ How a selected component is loaded depends on its source and form. CrossOver's o
 - Replacement Wine builtin DLLs are placed in private Windows DLL directories, with their Unix modules beside the private Wine loader. D3DMetal's matching bridge and framework are selected together.
 - Upstream native Windows DLLs, on the other hand, are linked into the environment's `system32` or `syswow64` directory and enabled with native DLL overrides. An existing DLL is set aside before it is replaced and restored when that selection is removed. Native DLLs are not placed for a **Bottle setting** or **Wrapper setting**, so the environment keeps its own files.
 
-For a Vulkan driver override in CrossOver, the selected Vulkan library is placed at the private `libMoltenVK.dylib` location. With KosmicKrisp, the library at that location is the Khronos loader, together with an explicit driver description that names the selected driver. A driver that ships its own description keeps it as published; a KosmicKrisp package without one receives a generated description that declares Vulkan 1.4, the same on every launch route, because the loader withholds Vulkan 1.1 and later features from a driver declared as Vulkan 1.0. This route works with every CrossOver backend, while the additional `CX_LIBVULKAN` value is set only with WineD3D.
+For a Vulkan driver override in CrossOver, the selected Vulkan library is placed at the private `libMoltenVK.dylib` location. With KosmicKrisp, the library at that location is the Khronos loader, together with an explicit driver description that names the selected driver. A driver that ships its own description keeps its other fields, while `library_path` is set to the absolute path of the selected driver and `is_portability_driver` to false. A KosmicKrisp package without a description of its own receives a generated description that declares Vulkan 1.4, the same on every launch route, because the loader withholds Vulkan 1.1 and later features from a driver declared as Vulkan 1.0. This route works with every CrossOver backend, while the additional `CX_LIBVULKAN` value is set only with WineD3D.
 
 Sikarugir loads the same selected components through its private graphics view and Vulkan driver description. Its Wine engine, its Template and the engine of a registered wrapper stay in place. Selected video codecs reach both runtimes through `GST_PLUGIN_PATH`.
+
+## Translator options
+
+The **Compatibility** and **Diagnostics** groups of Runtime Settings for CrossOver and Sikarugir include options for particular engines. Each option belongs to one engine. At launch, it sets its environment variable only when the game actually uses that engine, for one of its Direct3D APIs or as its Vulkan driver, so a fallback to another engine leaves the option unused. When per-API choices use several Direct3D engines, the options of each engine apply. **Runtime default** leaves the variable unset, and the engine keeps its own default. An entry with the same name under **Environment variables** takes precedence over the option.
+
+| Option | Engine | Variable | Values |
+| --- | --- | --- | --- |
+| DXVK async | DXVK | `DXVK_ASYNC` | `1` for On, `0` for Off. Only DXVK builds that implement async read it. |
+| DXVK HUD | DXVK | `DXVK_HUD` | `0` for Off, `fps` for FPS, `fps,frametimes,devinfo` for Performance, `full` for Full. |
+| DXMT configuration | DXMT | `DXMT_CONFIG` | `d3d11.preferredMaxFrameRate=30`, `60` or `120`. |
+| MetalFX spatial | DXMT | `DXMT_METALFX_SPATIAL_SWAPCHAIN` | `1` for On, `0` for Off. |
+| D3DMetal FPS limit | D3DMetal | `D3DM_MAX_FPS` | `30`, `60`, `120`, `144` or `240`. |
+| D3DMetal Metal 4 | D3DMetal | `D3DM_MTL4` | `1` for On, `0` for Off. Only D3DMetal builds that implement Metal 4 read it. |
+| WineD3D options | WineD3D | `WINE_D3D_CONFIG` | The comma-separated text as entered, such as `csmt=0x1,renderer=gl`. |
+| MoltenVK fast math | MoltenVK | `MVK_CONFIG_FAST_MATH_ENABLED` | `1` for On, `0` for Off. |
+| MoltenVK argument buffers | MoltenVK | `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS` | `1` for On, `0` for Off. |
+| MoltenVK UE4 compatibility | MoltenVK | `MVK_CONFIG_UE4_HACK_ENABLED` | `1` for On, `0` for Off. |
+
+Two further options apply whichever engines run. **Metal Performance HUD** sets `MTL_HUD_ENABLED`. **Advertise AVX under Rosetta** sets `ROSETTA_ADVERTISE_AVX`; when the Wine process runs under Rosetta in an environment that MacLauncher creates, it is `1` unless the option is turned off. Rosetta launches also set `DOTNET_EnableWriteXorExecute=0`.
+
+vkd3d-proton, Wine vkd3d and KosmicKrisp have no options of their own in Runtime Settings. Their documented environment variables can be entered under **Environment variables**, and they take effect only when that component is loaded.
+
+CrossOver and Sikarugir keep each game's shader caches in its MacLauncher runtime directory, apart from the bottle and the Wine home. DXVK writes its cache to `cache/dxvk` there: `DXVK_SHADER_CACHE_PATH` holds that folder's Wine DOS path, mapped to a drive in the same way as the game's own folder. Mesa drivers use `cache/mesa` through `MESA_SHADER_CACHE_DIR` and keep Mesa's default size limit. MacLauncher sets no cache location for vkd3d-proton, DXMT, D3DMetal, WineD3D or MoltenVK, which keep the cache behavior of their own releases. [KosmicKrisp](KOSMICKRISP.md#selection-and-loading) describes the shader and pipeline caching of each KosmicKrisp build.
 
 ## Compatibility and fallback
 
@@ -137,7 +169,7 @@ When a translator cannot load, Play uses the same engine from the selected Cross
 
 ## Inspector
 
-For CrossOver and Sikarugir games alike, the inspector shows one row for each Direct3D version from 8 to 12, the Vulkan driver and video codecs, in the form **selected → used**. The Vulkan driver used ends with the CPU build that the Wine process loads, such as **Intel (Rosetta)** or **Apple Silicon**, as described in [Graphics translator CPU builds](graphics-architecture.md#labels). Play records its rows together with the translator settings and the Wine installation they were resolved for. While those are unchanged, the inspector shows the recorded rows, including the results of Play's file checks. Before the first launch, after a translator setting changes, or after a different Wine installation is selected, the rows come from the current settings and the installed descriptions. When the selected runtime is not installed, the recorded rows remain. Until the game's current rows arrive, a game with recorded rows shows a single pending **Translators** line instead of rows that may describe other settings. If the runtime returns no status, the line reads **Unavailable**. A plain reason appears under a row only when the two sides differ:
+For CrossOver and Sikarugir games alike, the inspector shows one row for each Direct3D version from 8 to 12, the Vulkan driver and video codecs, in the form **selected → used**. The Vulkan driver used ends with the CPU build that the Wine process loads, such as **Intel (Rosetta)** or **Apple Silicon**, as described in [CPU build labels](#cpu-build-labels). Play records its rows together with the translator settings and the Wine installation they were resolved for. While those are unchanged, the inspector shows the recorded rows, including the results of Play's file checks. Before the first launch, after a translator setting changes, or after a different Wine installation is selected, the rows come from the current settings and the installed descriptions. When the selected runtime is not installed, the recorded rows remain. Until the game's current rows arrive, a game with recorded rows shows a single pending **Translators** line instead of rows that may describe other settings. If the runtime returns no status, the line reads **Unavailable**. A plain reason appears under a row only when the two sides differ:
 
 | Situation | Reason shown |
 | --- | --- |

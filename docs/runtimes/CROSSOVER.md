@@ -64,7 +64,7 @@ Settings holds the defaults, and each game's Runtime Settings can override them.
 | Default Direct3D engine | The global renderer choice for every Direct3D API without a choice of its own: CrossOver's automatic choice, an engine included with the selected CrossOver, or a specific translator version installed in Runtimes. Each choice names its engine, version and source. |
 | Direct3D 8, 9, 10 / 10.1 and 11 | A choice for each API among the installed implementations, with their actual versions and sources. Choices that share DLLs or helpers are linked, and an unset choice keeps the default Direct3D engine. |
 | Direct3D 12 | Wine vkd3d, D3DMetal, or a vkd3d-proton or D3DMetal version installed in Runtimes. KosmicKrisp is recommended for vkd3d-proton. |
-| Vulkan driver | CrossOver's automatic choice, CrossOver's own MoltenVK, or a specific MoltenVK or KosmicKrisp version installed in Runtimes. Only versions with Intel code are listed, as [Versions and sources](TRANSLATORS.md#versions-and-sources) explains. |
+| Vulkan driver | CrossOver's automatic choice, CrossOver's own MoltenVK, or a specific MoltenVK or KosmicKrisp version installed in Runtimes. Only versions with code for the CPU architecture of the selected Wine are listed, as [Versions and sources](TRANSLATORS.md#versions-and-sources) explains. |
 | Video codecs | The runtime defaults or a registered GStreamer codec folder. |
 | Game temporal integration | Exposes MetalFX Temporal through a 64-bit game's DLSS integration. Listed for Unity and Windows games. See [Temporal upscaling](#temporal-upscaling). |
 | Synchronization | Automatic, MSync, ESync or Off. ESync is listed only when the selected CrossOver is older than version 25. |

@@ -35,6 +35,8 @@ A few game types have tools in MacLauncher but no runtime that can play them on 
 - [Windows games and WINE](/maclauncher/windows/): how a Windows game runs on a Mac, and what MacLauncher adds.
 - [CrossOver and Sikarugir](/maclauncher/windows/crossover-and-sikarugir/): the two runtimes, and where each game's Windows files live.
 - [Graphics translators](/maclauncher/windows/graphics-translators/): DXMT, D3DMetal, DXVK, MoltenVK, KosmicKrisp and the rest, and how to choose one.
+- [Choosing a translator](/maclauncher/windows/choosing-a-translator/): which translator and Vulkan driver suit each kind of game.
+- [KosmicKrisp](/maclauncher/windows/kosmickrisp/): the Vulkan driver on Metal 4, MacLauncher's own build of it, and how it compares with MoltenVK.
 - [Translator versions](/maclauncher/windows/translator-versions/): any translator version for any game, and how that compares with patching CrossOver.
 - [Effects and upscaling](/maclauncher/windows/effects-and-upscaling/): the graphics layer and temporal upscaling in WINE games.
 - [Runtime settings](/maclauncher/windows/settings/) and [existing bottles and wrappers](/maclauncher/windows/existing-bottles/).

@@ -47,4 +47,6 @@ Epic, GOG and itch.io have their own sign-ins in their tabs. Google Play account
 
 Some games refuse to start unless Steam is running. MacLauncher includes [offline Steam API support](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/STEAM_API.md) for the runtimes that need it, so those games can run locally, with the genuine [Steamworks](https://partner.steamgames.com/doc/sdk) libraries used where a game requires them.
 
+Windows games in CrossOver or Sikarugir can instead connect to the Steam client for Mac through the [Steam client bridge](/maclauncher/windows/steam-client-bridge/).
+
 Guides: [External game libraries](https://github.com/procrastinine/maclauncher/blob/master/docs/library/EXTERNAL.md), [Android app downloads](https://github.com/procrastinine/maclauncher/blob/master/docs/library/GOOGLE_PLAY.md)

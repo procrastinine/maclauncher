@@ -19,7 +19,7 @@ A Windows game expects three things a Mac doesn't have: Windows itself, an x86 p
 
 WINE replaces Windows. It's a compatibility layer, not an emulator: the game's own code runs on your Mac's processor, and WINE answers its requests to Windows, such as opening a window or reading a file, with the macOS equivalent. [How games run on a Mac](/maclauncher/background/how-games-run/#compatibility-layers-translate-the-conversation) explains the idea in more detail.
 
-On Apple Silicon, Apple's [Rosetta 2](https://support.apple.com/en-us/102527) takes care of the processor. WINE on the Mac runs as an Intel program, and Rosetta translates its x86 code, and the game's, into ARM code. If Rosetta isn't installed yet, MacLauncher asks and installs it through the normal macOS prompt.
+On Apple Silicon, Apple's [Rosetta 2](https://support.apple.com/en-us/102527) takes care of the processor. WINE on the Mac usually runs as an Intel program, and Rosetta translates its x86 code, and the game's, into ARM code. A CrossOver build whose WINE is an ARM64 program leaves the game's Intel code to the FEX emulator instead. If Rosetta isn't installed yet, MacLauncher asks and installs it through the normal macOS prompt.
 
 Graphics need one more piece, because macOS draws with [Metal](https://developer.apple.com/metal/) and has no Direct3D. A **graphics translator** turns the game's Direct3D calls into Metal, either directly or through [Vulkan](https://www.vulkan.org/) and a Vulkan driver that runs on Metal. A game can behave differently with different translators, so MacLauncher lets you choose one for each game; [Graphics translators](/maclauncher/windows/graphics-translators/) explains the options.
 
@@ -66,6 +66,10 @@ MacLauncher's [graphics layer](/maclauncher/graphics/) works on WINE games, and 
 ### Settings in one place
 
 Each game's Runtime Settings gather WINE's display, input, compatibility and diagnostic options, from Retina mode and custom virtual desktop sizes to keyboard mapping and performance HUDs. A game in an existing bottle can keep the bottle's current values. [Runtime settings](/maclauncher/windows/settings/) lists them.
+
+### Steam for Windows games
+
+Windows games from Steam can talk to the Steam client for Mac through the optional [Steam client bridge](/maclauncher/windows/steam-client-bridge/), which Play offers for games that include Valve's Steam API once the Steam client for Mac is installed.
 
 ## What to expect
 

@@ -60,6 +60,8 @@ The Switch runs on an ARM64 processor, like Apple Silicon, so its game code can 
 
 Import an `.nsp`, `.nsz`, `.xci` or `.xcz` file, or a folder of them. The first launch extracts the game, patches its code and compiles its shaders, showing progress as it goes. That can take a while, but later launches start straight away. Encrypted games need your own `prod.keys` file, which you can select in the game's Runtime Settings. If shader compilation needs Apple's Metal compiler, MacLauncher can download it, so Xcode isn't needed.
 
+Decrypted dumps, Switch 2 games among them, and `.nup` files play without `prod.keys` or firmware. Import the dump's folder or the `.nup` file. When a dump contains several updates, **Game update** in Runtime Settings chooses which one runs: **Latest available**, the default, or a particular version such as **Base game (v0)**. Changing it prepares that version and keeps your saves, and the inspector shows the selected update. If the installed nxnative tools can't handle these inputs or the chosen update, Play asks before downloading newer tools and then carries on with the game.
+
 nxnative has fixed keyboard controls (WASD for the left stick, J/K/U/I for A/B/X/Y, and so on), which Settings shows for reference, and supported controllers work natively. After the first preparation, the game's own options from nxnative appear in Runtime Settings.
 
 **Example games:** Mario Kart 8 Deluxe, The Legend of Zelda: Breath of the Wild, Super Mario Odyssey, from [nxnative's list of tested games](https://github.com/seedds/nxnative).
@@ -68,4 +70,4 @@ Guide: [Nintendo Switch](https://github.com/procrastinine/maclauncher/blob/maste
 
 ## Bringing your own games
 
-MacLauncher doesn't provide games, keys or firmware. For Android, the built-in store downloads cover apps you own or that are free. For iOS, PS5 and Switch, you need your own decrypted copies and keys.
+MacLauncher doesn't provide games, keys or firmware. For Android, the built-in store downloads cover apps you own or that are free. For iOS, PS5 and Switch, you need your own decrypted copies, and encrypted Switch containers also need your own keys.
