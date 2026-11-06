@@ -66,7 +66,7 @@ MoltenVK's library is loaded directly. KosmicKrisp, by contrast, is reached thro
 
 A MacLauncher KosmicKrisp package is installed only after its archive matches the SHA-256 recorded in the MacLauncher Builds catalog and the code signatures of its native files are verified. Besides the driver, `libvulkan_kosmickrisp.dylib`, and the loader, `libvulkan.1.dylib`, the package contains the compiler and compression libraries that the driver loads through relative paths, its license notices and records of its dependencies. Each version is installed once and shared by every game that selects it, and an installed version works offline.
 
-Upstream KosmicKrisp keeps compiled pipelines across launches only through the `VkPipelineCache` data that an application or translator stores itself. MacLauncher KosmicKrisp also caches the Metal Shading Language that it generates from each shader and the Metal libraries compiled from that source, so a shader that was already translated and compiled is reused instead of being processed again. KosmicKrisp derives the pipeline cache UUID from its driver build, so cache data from a different build is not reused. In MacLauncher KosmicKrisp, shader cache keys also record the enabled device features that change shader compilation.
+Upstream KosmicKrisp keeps compiled pipelines across launches only through the `VkPipelineCache` data that an application or translator stores itself. MacLauncher KosmicKrisp also caches the Metal Shading Language that it generates from each shader and the Metal libraries compiled from that source, so a shader that was already translated and compiled is reused instead of being processed again. For Wine games, CrossOver and Sikarugir point Mesa's shader cache to `cache/mesa` in the game's MacLauncher runtime directory through `MESA_SHADER_CACHE_DIR`, apart from the bottle and the Wine home. KosmicKrisp derives the pipeline cache UUID from its driver build, so cache data from a different build is not reused. In MacLauncher KosmicKrisp, shader cache keys also record the enabled device features that change shader compilation.
 
 ## Features of MacLauncher KosmicKrisp
 
@@ -81,7 +81,7 @@ MacLauncher KosmicKrisp adds Vulkan features that upstream KosmicKrisp does not 
 - Variable multisample rate, which allows rendering without attachments at differing sample counts, as Direct3D 11.1 and 12 need.
 - Depth bias control (`VK_EXT_depth_bias_control`), including exact and forced UNORM representations.
 - Conservative rasterization (`VK_EXT_conservative_rasterization`), with an overestimation of 1/256 pixel, rasterized degenerate triangles and a fully covered fragment input. Underestimation and post-depth coverage are not supported.
-- Fragment shader interlock (`VK_EXT_fragment_shader_interlock`) with pixel interlock and sample interlock, which DXVK and vkd3d-proton use for rasterizer-ordered views.
+- Fragment shader interlock (`VK_EXT_fragment_shader_interlock`) with pixel interlock and sample interlock, which DXVK and vkd3d-proton use for rasterizer-ordered views. Single-sampled pixel interlock and sample interlock use Metal's raster order groups directly. In multisampled pipelines, pixel interlock runs the shader's ordered section inside a pixel-scope envelope, which orders the fragments of one pixel across all samples that a primitive covers.
 - Rasterization-order access (`VK_EXT_rasterization_order_attachment_access`) for color attachments on Apple GPU family 7 and later. Depth and stencil attachments have no such access.
 - Mesh and task shaders (`VK_EXT_mesh_shader`) with mesh shader queries, and multiview together with geometry and tessellation shaders.
 
@@ -178,7 +178,7 @@ DXVK and vkd3d-proton each derive a game's highest Direct3D feature level from t
 | 12_1 | Rasterizer-ordered views and conservative rasterization tier 1 | Rasterizer-ordered views and conservative rasterization tier 1 |
 | 12_2 | Not offered | Shader model 6.5, ray tracing tier 1.1, variable shading rate tier 2, mesh shader tier 1, sampler feedback, tiled resources tier 3, conservative rasterization tier 3, resource binding tier 3 and further options |
 
-Tiled resources tier 2 rests on Vulkan sparse residency, so feature level 12_0 needs the sparse features that MacLauncher KosmicKrisp exposes where Metal supports placement sparse resources. Both translators report rasterizer-ordered views only when the driver offers pixel interlock. MacLauncher KosmicKrisp provides pixel interlock together with conservative rasterization, so vkd3d-proton reports feature level 12_1 on it. Feature level 12_2 also requires ray tracing, which no KosmicKrisp build provides.
+Tiled resources tier 2 rests on Vulkan sparse residency, so feature level 12_0 needs the sparse features that MacLauncher KosmicKrisp exposes where Metal supports placement sparse resources. Both translators report rasterizer-ordered views only when the driver offers pixel interlock. MacLauncher KosmicKrisp provides pixel interlock together with conservative rasterization, so vkd3d-proton reports feature level 12_1 on it. Feature level 12_2 also requires ray tracing tier 1.1 and variable shading rate tier 2. No KosmicKrisp build provides ray tracing, so neither translator reports feature level 12_2.
 
 ### OpenGL ES on Android through ANGLE
 
