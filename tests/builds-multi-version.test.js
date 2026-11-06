@@ -59,8 +59,8 @@ test("revisions of one upstream version install side by side, keep a user defaul
     "Installing a newer revision leaves the earlier one installed");
   assert.equal(runtimeSettings.defaultVersion, first.version, "The committed first-install default is retained");
   assert.equal(select(null).version, first.version, "A later install does not silently change the default");
-  assert.equal(manager.resolveSelection(null, { runtimes: { [projectId]: { defaultVersion: null } } }, userDataDir).version, tenth.version,
-    "Without a saved default the manager default is the newest published revision, never a forced choice");
+  assert.equal(manager.resolveSelection(null, { runtimes: { [projectId]: { defaultVersion: null } } }, userDataDir).version, second.version,
+    "Without a saved default the manager default is the newest ready installed revision, never a forced choice");
   assert.equal(manager.resolveSelection(null, { runtimes: { [projectId]: runtimeSettings } }, userDataDir,
     { recommended: () => second.version }).version, second.version, "A game recommendation precedes the global default");
   assert.equal(manager.resolveSelection({ runtimeData: { [runtimeId]: { version: first.version } } },
@@ -147,8 +147,9 @@ test("every named catalog record is listed; records this launcher cannot use sho
     dependencies: { systemVersionSync: () => "26.0", projectBuilds: { fetchUrlBuffer: async () => catalogResponse([...rows.map(sourced),
       { ...hostedRecord("0.41.0-MCLv6"), source: { repository: "ExampleOwner/runtime-source", revision: "3".repeat(40) },
         capabilities: { decodedFrameAPI: 1, nativeAbi: { sdlEventLoop: "dynamic" } } }, hostedRecord("0.41.0-MCLv7")]) } } });
-  for (const [manager, expected, installable] of [[project, reasons, ["0.41.0-MCLv3", "0.41.0-MCLv8", "0.41.0-MCLv2", "0.41.0-MCLv1"]],
-    [native, reasons, ["0.41.0-MCLv3", "0.41.0-MCLv8", "0.41.0-MCLv2", "0.41.0-MCLv1", "0.41.0-MCLv6", "0.41.0-MCLv7"]]]) {
+  // Download lists are ordered newest first, whatever order the publisher's catalog uses.
+  for (const [manager, expected, installable] of [[project, reasons, ["0.41.0-MCLv8", "0.41.0-MCLv3", "0.41.0-MCLv2", "0.41.0-MCLv1"]],
+    [native, reasons, ["0.41.0-MCLv8", "0.41.0-MCLv7", "0.41.0-MCLv6", "0.41.0-MCLv3", "0.41.0-MCLv2", "0.41.0-MCLv1"]]]) {
     await manager.refreshCatalog({ userDataDir, force: true });
     const { catalog } = manager.getState({ userDataDir }), builds = catalog.sources.find(source => source.id === "builds");
     assert.deepEqual(catalog.installableVersions, installable, "Only usable records are installable");
