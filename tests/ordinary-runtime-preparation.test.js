@@ -536,13 +536,27 @@ test("saved Android MacLauncher KosmicKrisp selection joins ordinary consent, in
   const events = [], uses = [];
   let ready = false, approved = false;
   t.mock.method(Android, "ensureRuntime", () => null);
-  t.mock.method(manager, "resolveSelection", () => ({version:"selected-gles32",ready,
-    install:ready ? {installDir:"/installed/graphics"} : null}));
-  t.mock.method(manager, "getState", () => ({catalog:{}}));
+  const freshRoot = fs.mkdtempSync(path.join(os.tmpdir(), "android-kosmic-fresh-"));
+  t.after(() => fs.rmSync(freshRoot, {recursive:true,force:true}));
+  const freshState = manager.getState({userDataDir:freshRoot,settings:{}});
+  assert.deepEqual(freshState.installed, [], "A fresh production manager reports no installed packages");
+  const version = "selected-gles32", architecture = "arm64", installDir = path.join(freshRoot, "graphics");
+  fs.mkdirSync(installDir);
+  const files = ["libvulkan_kosmickrisp.dylib", "libvulkan.1.dylib"];
+  const {image,ARM64} = require("./fixtures/macho-image");
+  for (const file of files) fs.writeFileSync(path.join(installDir,file), image({cpu:ARM64}));
+  const install = {installDir,payloadRoot:installDir,executablePath:path.join(installDir,files[0]),
+    manifest:{minimumMacOS:"13.0",runtimeFiles:{loader:files[1]},files:files.map(file=>({path:file,architectures:["arm64"]}))}};
+  t.mock.method(manager, "resolveSelection", () => ({version,ready,install:ready ? install : null}));
+  t.mock.method(manager.core, "listCatalog", () => [{version,arch:architecture}]);
+  const catalog = {...freshState.catalog,versions:[version],installableVersions:[version]};
+  catalog.architectureCatalogs = {...freshState.catalog.architectureCatalogs,
+    [architecture]:{...freshState.catalog.architectureCatalogs?.[architecture],versions:[version],installableVersions:[version]}};
+  t.mock.method(manager, "getState", () => ({...freshState,installed:ready ? [{version}] : [],catalog}));
   t.mock.method(manager, "installRuntime", async options => {
     events.push(["install",options.version]); ready = true;
   });
-  const ctx = {...context("klepton"),runtimeSettings:{vulkanRuntime:"kosmickrisp:maclauncher"},
+  const ctx = {...context("klepton"),userDataDir:freshRoot,runtimeSettings:{vulkanRuntime:"kosmickrisp:maclauncher"},
     confirmRuntimeInstall: async plan => {events.push(["consent",plan.managerId,plan.version]);return approved;},
     recordRuntimeUse: row => uses.push(row)};
   const prepare = () => prepareForLaunch({entry:{},mod:Android,info:Android.manifest,context:ctx,
@@ -558,7 +572,7 @@ test("saved Android MacLauncher KosmicKrisp selection joins ordinary consent, in
   assert.equal(await prepare(),true);
   assert.deepEqual(events,[]);
   assert.equal(uses[0].managerId,manager.id);
-  assert.equal(uses[0].sourcePath,"/installed/graphics");
+  assert.equal(uses[0].sourcePath,installDir);
 });
 
 test("Play preparation with a ready installed runtime stays offline despite a newer cached release", {skip: process.platform !== "darwin"}, async t => {
