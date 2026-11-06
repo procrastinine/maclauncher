@@ -114,7 +114,12 @@ async function runGameCli(argv = process.argv.slice(2)) {
             return plan.licenseRequired ? { approved: true, licenseAccepted: true } : true;
           }
           const versionLabel = [plan.label, plan.versionLabel || plan.version].filter(Boolean).join(" ");
-          if (!process.stdin.isTTY) throw new Error(`${versionLabel} is required. Run with --yes${plan.licenseRequired ? " --accept-runtime-licenses" : ""} to install it or install it in Runtimes.`);
+          if (!process.stdin.isTTY) {
+            // Managers apply saved choices before offering an optional plan.
+            // With no terminal or explicit approval, use its decline default.
+            if (plan.optional) return false;
+            throw new Error(`${versionLabel} is required. Run with --yes${plan.licenseRequired ? " --accept-runtime-licenses" : ""} to install it or install it in Runtimes.`);
+          }
           const input = createInterface({ input: process.stdin, output: process.stderr });
           try {
             const prompt = plan.licenseRequired ? `Agree to ${plan.licenseUrl} and install ${plan.label}? [y/N] ` : `${plan.message || `Download ${versionLabel}?`} [y/N] `;

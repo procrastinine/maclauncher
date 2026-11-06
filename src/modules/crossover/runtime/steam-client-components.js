@@ -13,12 +13,12 @@ const MANIFEST = ORIGIN + '/steam_client_ubuntu12';
 const source = Upstream.service({ hosts: [new URL(ORIGIN).hostname] });
 const verified = new Map();
 const store = userDataDir => path.join(userDataDir, 'runtimes/steam-client-components');
-// The archive behind the last verified download. Play's consent shows its size
+// The total behind the last verified download. Play's consent shows its size
 // offline; the record stays when the files are removed.
 const downloadRecord = userDataDir => path.join(userDataDir, 'runtimes/steam-client-download.json');
 function lastDownload(userDataDir) {
   const record = readJsonObject(downloadRecord(userDataDir));
-  return typeof record?.filename === 'string' && Number.isSafeInteger(record.bytes) && record.bytes > 0 ? { filename: record.filename, bytes: record.bytes } : null;
+  return typeof record?.filename === 'string' && Number.isSafeInteger(record.totalBytes) && record.totalBytes > 0 ? { filename: record.filename, bytes: record.totalBytes } : null;
 }
 function resolveManifest(text) {
   const value = parseSteamVdf(text), pending = [value], matches = [];
@@ -82,6 +82,7 @@ async function install({ userDataDir, signal, onProgress, resolved, archiveFile 
     if (response.status !== 200) throw new Error('Valve client component metadata is unavailable.');
     resolved = resolveManifest(response.body.toString('utf8'));
   }
+  let totalBytes = 0;
   for (const candidate of Array.isArray(resolved) ? resolved : [resolved]) {
     const expected = /^[A-Za-z0-9][A-Za-z0-9._-]*\.zip\.([a-f0-9]{40})$/.exec(candidate.filename || '');
     resolved = candidate;
@@ -93,6 +94,7 @@ async function install({ userDataDir, signal, onProgress, resolved, archiveFile 
       if (archiveFile) fs.copyFileSync(archiveFile, archive);
       else await Upstream.download({ url: resolved.url, name: resolved.filename, ...(resolved.bytes ? { bytes: resolved.bytes } : {}), digest: { algorithm: 'sha1', value: expected[1] } }, archive, { signal, onProgress });
       if (hashFile(archive, 'sha1') !== expected[1]) throw new Error('Valve component archive differs from its content address.');
+      totalBytes += fs.statSync(archive).size;
       const listing = await execute('/usr/bin/unzip', ['-Z1', archive], { signal, timeout: 120000 });
       const members = listing.stdout.trim().split('\n');
       const selected = ['steamclient64.dll', 'steamclient.dll'].map(name => members.filter(member => path.posix.basename(member).toLowerCase() === name));
@@ -137,7 +139,7 @@ async function install({ userDataDir, signal, onProgress, resolved, archiveFile 
         throw error;
       }
       if (damaged) fs.rmSync(damaged, { recursive: true, force: true });
-      try { writeJsonAtomic(downloadRecord(userDataDir), { filename: resolved.filename, bytes: fs.statSync(archive).size }); } catch {}
+      try { writeJsonAtomic(downloadRecord(userDataDir), { filename: resolved.filename, totalBytes }); } catch {}
       return current(userDataDir);
     } finally { fs.rmSync(stage, { recursive: true, force: true }); }
   }
