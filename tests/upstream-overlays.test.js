@@ -53,7 +53,7 @@ test("Gitlink-only source records retain exact offline and candidate checks", as
   const current = fixture(t);delete current.inventory.projects[0].revision;
   const offline = await Check.checkInventory(current);
   assert.equal(offline.passed,true);assert.equal(offline.checked[0].revision,current.revision);
-  const candidate = await Check.checkCandidate({...current,projectId:"fixture",workDir:path.join(current.root,".local/gitlink-only")});
+  const candidate = await Check.checkCandidate({...current,projectId:"fixture",workDir:path.join(current.root,"candidate-work/gitlink-only")});
   assert.equal(candidate.passed,true);assert.equal(candidate.reviewedRevision,current.revision);
   assert.equal(current.inventory.projects[0].revision,undefined);
   fs.appendFileSync(path.join(current.source,"engine.c"),"changed input\n");
@@ -100,7 +100,7 @@ test("candidate nested sources use parent Gitlinks and metadata without inventor
   git(current.root, "update-index", "--cacheinfo", `160000,${revision},src/external/fixture`);
   const report = await Check.checkInventory(current);
   assert.equal(report.passed, true);
-  const workDir = path.join(current.root, ".local/unknown-nested");
+  const workDir = path.join(current.root, "candidate-work/unknown-nested");
   const candidate = await Check.checkCandidate({ ...current, revision, projectId: "fixture", workDir });
   assert.equal(candidate.passed, true);assert.equal(candidate.upstreamCheckoutUnchanged, true);
   assert.equal(fs.readFileSync(path.join(workDir,"fixture-overlay/source/vendor/child/dependency.c"),"utf8"),"nested dependency\n");
@@ -117,7 +117,7 @@ test("stale nested submodule declarations warn without inventing a pinned depend
   const report = await Check.checkInventory(current);
   assert.equal(report.passed, true);
   assert.ok(report.warnings.some(issue => issue.code === "unused-submodule-declaration" && issue.path === "src/external/fixture/vendor/stale"));
-  const candidate = await Check.checkCandidate({ ...current, revision, projectId: "fixture", workDir: path.join(current.root, ".local/stale-nested") });
+  const candidate = await Check.checkCandidate({ ...current, revision, projectId: "fixture", workDir: path.join(current.root, "candidate-work/stale-nested") });
   assert.equal(candidate.passed, true);assert.equal(candidate.upstreamCheckoutUnchanged, true);
   assert.ok(candidate.warnings.some(issue => issue.code === "unused-submodule-declaration" && issue.path === "src/external/fixture/vendor/stale"));
 });
@@ -131,9 +131,9 @@ test("candidate scopes leave unrelated nested sources alone and require metadata
   git(current.root, "update-index", "--cacheinfo", `160000,${revision},src/external/fixture`);
   current.inventory.recipes[0].includePaths = ["engine.c"];
   assert.equal((await Check.checkInventory(current)).passed, true);
-  assert.equal((await Check.checkCandidate({ ...current, revision, projectId: "fixture", workDir: path.join(current.root, ".local/unconsumed-nested") })).passed, true);
+  assert.equal((await Check.checkCandidate({ ...current, revision, projectId: "fixture", workDir: path.join(current.root, "candidate-work/unconsumed-nested") })).passed, true);
   current.inventory.recipes[0].includePaths.push("vendor/undeclared");
-  await assert.rejects(Check.checkCandidate({ ...current, revision, projectId: "fixture", workDir: path.join(current.root, ".local/missing-actual-metadata") }), /lacks .gitmodules metadata/);
+  await assert.rejects(Check.checkCandidate({ ...current, revision, projectId: "fixture", workDir: path.join(current.root, "candidate-work/missing-actual-metadata") }), /lacks .gitmodules metadata/);
 });
 
 test("candidate file scopes cross pinned nested Git trees without copying unrelated dependency files", async t => {
@@ -148,7 +148,7 @@ test("candidate file scopes cross pinned nested Git trees without copying unrela
   git(current.source, "commit", "-qm", "Parent with scoped dependency");
   const revision = git(current.source, "rev-parse", "HEAD"); current.inventory.projects[0].revision = revision;
   current.inventory.recipes[0].sourceScopes = { fixture: ["engine.c", "vendor/child/selected.c"] };
-  const workDir = path.join(current.root, ".local/scoped-candidate"), before = git(child, "status", "--porcelain");
+  const workDir = path.join(current.root, "candidate-work/scoped-candidate"), before = git(child, "status", "--porcelain");
   const report = await Check.checkCandidate({ ...current, revision, projectId: "fixture", workDir });
   assert.equal(report.passed, true); assert.equal(report.sourceCheckoutsChecked, 2); assert.equal(report.upstreamCheckoutUnchanged, true);
   const staged = path.join(workDir, 'fixture-overlay/source/vendor/child');
@@ -156,7 +156,7 @@ test("candidate file scopes cross pinned nested Git trees without copying unrela
   assert.equal(fs.readFileSync(path.join(staged, 'selected.c'), 'utf8'), 'selected dependency\n');
   assert.equal(git(child, "status", "--porcelain"), before);
   current.inventory.projects.push({ id: "fixture-child", path: "src/external/fixture/vendor/child", repository: "https://example.invalid/child", revision: 'a'.repeat(40) });
-  await assert.rejects(Check.checkCandidate({ ...current, revision, projectId: "fixture", workDir: path.join(current.root, '.local/changed-nested-pin') }), /nested source pin changed/);
+  await assert.rejects(Check.checkCandidate({ ...current, revision, projectId: "fixture", workDir: path.join(current.root, 'candidate-work/changed-nested-pin') }), /nested source pin changed/);
 });
 
 test("offline source guards read exact nested Gitlink blobs and reject hash or origin drift", async t => {
@@ -350,7 +350,7 @@ test("candidate check applies only to an owned copy and records original/adapted
 test("candidate source changes are conflicts; original hash guards are never relaxed", async t => {
   const current = fixture(t);
   write(current.source, "engine.c", "upstream changed this source\n"); git(current.source, "add", "engine.c"); git(current.source, "commit", "-qm", "Candidate source");
-  const revision = git(current.source, "rev-parse", "HEAD"), workDir = path.join(current.root, ".local/conflict");
+  const revision = git(current.source, "rev-parse", "HEAD"), workDir = path.join(current.root, "candidate-work/conflict");
   const report = await Check.checkCandidate({ ...current, revision, projectId: "fixture", workDir });
   assert.equal(report.passed, false);
   assert.match(report.results[0].error, /Original source checksum differs/);
@@ -363,7 +363,7 @@ test("candidate source changes are conflicts; original hash guards are never rel
 test("candidate check allows owned code edits and keeps upstream source immutable", async t => {
   const current = fixture(t);
   fs.appendFileSync(path.join(current.root, current.applyFile), "// changed after review\n");
-  const report = await Check.checkCandidate({ ...current, projectId: "fixture", workDir: path.join(current.root, ".local/changed-owned") });
+  const report = await Check.checkCandidate({ ...current, projectId: "fixture", workDir: path.join(current.root, "candidate-work/changed-owned") });
   assert.equal(report.passed,true);assert.equal(report.upstreamCheckoutUnchanged,true);
   assert.equal(fs.existsSync(path.join(current.source, "helper.c")), false);
 });
@@ -371,7 +371,7 @@ test("candidate check allows owned code edits and keeps upstream source immutabl
 test("candidate check rejects an incorrect adapted hash even when the apply routine succeeds", async t => {
   const current = fixture(t);
   current.inventory.recipes[0].reviewedAdaptedFiles["engine.c"] = "f".repeat(64);
-  const report = await Check.checkCandidate({ ...current, projectId: "fixture", workDir: path.join(current.root, ".local/adapted-conflict") });
+  const report = await Check.checkCandidate({ ...current, projectId: "fixture", workDir: path.join(current.root, "candidate-work/adapted-conflict") });
   assert.equal(report.passed, false);
   assert.match(report.results[0].error, /Adapted source checksum differs/);
   assert.equal(report.upstreamCheckoutUnchanged, true);
@@ -380,7 +380,7 @@ test("candidate check rejects an incorrect adapted hash even when the apply rout
 test("candidate check protects a new upstream file from an owned helper name collision", async t => {
   const current = fixture(t);
   write(current.source, "helper.c", "new upstream helper\n"); git(current.source, "add", "helper.c"); git(current.source, "commit", "-qm", "Upstream added a helper");
-  const revision = git(current.source, "rev-parse", "HEAD"), workDir = path.join(current.root, ".local/helper-conflict");
+  const revision = git(current.source, "rev-parse", "HEAD"), workDir = path.join(current.root, "candidate-work/helper-conflict");
   const report = await Check.checkCandidate({ ...current, revision, projectId: "fixture", workDir });
   assert.equal(report.passed, false);
   assert.match(report.results[0].error, /Original source checksum differs: helper.c/);
@@ -394,14 +394,14 @@ test("candidate storage rejects vendor paths, aliases and nonempty destinations"
   assert.throws(() => Check.ensureOwnedWork(current.root, current.inventory, path.join(alias, "build")), /separate/);
   assert.throws(() => Check.ensureOwnedWork(current.root, current.inventory, path.join(current.root, ".git/candidate")), /Git metadata/);
   assert.throws(() => Check.ensureOwnedWork(current.root, current.inventory, current.root), /separate|empty/);
-  assert.throws(() => Check.ensureOwnedWork(current.root, current.inventory, ".local/candidate"), /absolute/);
+  assert.throws(() => Check.ensureOwnedWork(current.root, current.inventory, "candidate-work/candidate"), /absolute/);
 });
 
 test("Git source symlinks cannot escape bounded owned staging", async t => {
   const current = fixture(t);
   fs.symlinkSync("/outside-owned-storage", path.join(current.source, "escape")); git(current.source, "add", "escape"); git(current.source, "commit", "-qm", "Escaping source alias");
   const revision = git(current.source, "rev-parse", "HEAD");
-  await assert.rejects(Check.materializeGitTree({ source: current.source, revision, destination: path.join(current.root, ".local/stage"),
+  await assert.rejects(Check.materializeGitTree({ source: current.source, revision, destination: path.join(current.root, "candidate-work/stage"),
     root: current.root, project: current.inventory.projects[0], projects: current.inventory.projects }), /symlink escapes/);
   assert.equal(fs.readlinkSync(path.join(current.source, "escape")), "/outside-owned-storage");
 });
