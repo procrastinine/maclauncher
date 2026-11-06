@@ -31,6 +31,7 @@ function fixture(t, value, {runtimeValue} = {}) {
   const defaults = RuntimeSettings.createRuntimeSettingsStore({userDataDir});
   const context = vm.createContext({userDataDir, Modules: registry, logger, readJsonDocument, CURRENT_SETTINGS_MIGRATION: MIGRATION,
     TRANSLATOR_ENVIRONMENT_MIGRATION: require("../src/core/data-migration-ids").TRANSLATOR_ENVIRONMENT_MIGRATION,
+    KOSMICKRISP_RENAME_MIGRATION: require("../src/core/data-migration-ids").KOSMICKRISP_RENAME_MIGRATION,
     require: request => require(path.join(__dirname, "../src/main", request)),
     settingsPath: () => settingsFile, structuredClone, LibraryState, SteamClientStart, withoutClearedDefaults,
     ...RuntimeSettings, readRuntimeDefaults: (runtimeId, moduleInfo) => defaults.readDefaults(runtimeId, moduleInfo),

@@ -30,7 +30,7 @@ Each build needs a Khronos Vulkan loader beside the driver. LWJGL's builds use H
 
 MacLauncher KosmicKrisp is built from Mesa's KosmicKrisp driver, to which MacLauncher Builds applies its KosmicKrisp patch set, together with a Khronos Vulkan loader built from source. Each package requires macOS 26.0 or later. The Runtimes window shows the installed version and the version that each catalog entry offers.
 
-The package was earlier published under the ID `vulkan-kosmickrisp-gles32`. Installations, default versions and saved choices recorded under that ID are read as MacLauncher KosmicKrisp, so they keep working under the current name.
+The package was earlier published under the ID `vulkan-kosmickrisp-gles32`. Installations under that ID stay in place and are listed as MacLauncher KosmicKrisp. On the first start of a profile that still records the earlier ID, MacLauncher converts its default version, each game's version and CPU build, and every saved Vulkan driver choice to the current ID once. A saved choice whose version cannot be read becomes **Automatic**.
 
 ## CPU builds and consumers
 

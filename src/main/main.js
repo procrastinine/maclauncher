@@ -29,7 +29,7 @@ const { readJsonObject, readJsonDocument, onUnreadablePreserved, writeJsonAtomic
 const { coordinatorFor } = require("../core/runtime-coordinator");
 const { createSettingsSnapshots } = require("../core/settings-snapshots");
 const { applySaveIdentity } = require("../core/save-identity");
-const { ORIGINAL_GAME_MIRRORS_MIGRATION, CURRENT_SETTINGS_MIGRATION, TRANSLATOR_ENVIRONMENT_MIGRATION } = require("../core/data-migration-ids");
+const { ORIGINAL_GAME_MIRRORS_MIGRATION, CURRENT_SETTINGS_MIGRATION, TRANSLATOR_ENVIRONMENT_MIGRATION, KOSMICKRISP_RENAME_MIGRATION } = require("../core/data-migration-ids");
 const { createUtilityWindowController } = require("./utility-windows");
 const { runRuntimeManagerAction } = require("../core/runtime-manager-service");
 const { createBackendService } = require("../core/backend-worker-client");
@@ -455,8 +455,14 @@ function readSettingsDocument() {
   // Wine environment variable lists move into the translator environment
   // before normalization drops their retired field.
   const environment = document?.dataMigrations?.[TRANSLATOR_ENVIRONMENT_MIGRATION];
-  if (environment?.complete === true || environment?.settings === true) return document;
-  return require("../core/backcompat/translator-environment").migrateSettings(document, { userDataDir, registry: Modules, logger,
+  if (environment?.complete !== true && environment?.settings !== true)
+    document = require("../core/backcompat/translator-environment").migrateSettings(document, { userDataDir, registry: Modules, logger,
+      commitSettings: (before, next) => settingsCoordinator.applySettings(before, next) });
+  // MacLauncher KosmicKrisp settings and choices saved under its former ID
+  // move to the current ID.
+  const rename = document?.dataMigrations?.[KOSMICKRISP_RENAME_MIGRATION];
+  if (rename?.complete === true || rename?.settings === true) return document;
+  return require("../core/backcompat/kosmickrisp-rename").migrateSettings(document, { userDataDir, logger,
     commitSettings: (before, next) => settingsCoordinator.applySettings(before, next) });
 }
 
@@ -3092,6 +3098,21 @@ async function init() {
         [TRANSLATOR_ENVIRONMENT_MIGRATION]: { ...settings.dataMigrations?.[TRANSLATOR_ENVIRONMENT_MIGRATION], complete: true } };
       saveSettings(settings);
     } catch (error) { logger.warn("[migration] Game environment variables remain pending:", error.message); }
+  }
+  if (!isChildGame && settings?.dataMigrations?.[KOSMICKRISP_RENAME_MIGRATION]?.complete !== true) {
+    // A game's MacLauncher KosmicKrisp data and choices saved under the former ID move to the current ID once.
+    const Migration = require("../core/backcompat/kosmickrisp-rename");
+    try {
+      for (const entry of games) {
+        const next = Migration.migrateGameEntry(entry, { logger });
+        if (!next) continue;
+        const baseline = structuredClone(entry);
+        Object.assign(entry, saveGameRecord(next, { baseline: serializeGameEntry(baseline) }));
+      }
+      settings.dataMigrations = { ...settings.dataMigrations,
+        [KOSMICKRISP_RENAME_MIGRATION]: { ...settings.dataMigrations?.[KOSMICKRISP_RENAME_MIGRATION], complete: true } };
+      saveSettings(settings);
+    } catch (error) { logger.warn("[migration] MacLauncher KosmicKrisp game choices remain pending:", error.message); }
   }
   if (!isChildGame) {
     if (settings?.dataMigrations?.[ORIGINAL_GAME_MIRRORS_MIGRATION]?.complete !== true) await require("../core/backcompat/data-migrations").runDataMigrations({

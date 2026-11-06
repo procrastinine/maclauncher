@@ -160,14 +160,15 @@ test("saved MacLauncher KosmicKrisp choices request exact consented installation
   assert.deepEqual(versions,[undefined,"older","older"]);
 });
 
-test("KosmicKrisp per-game former manager version and CPU remain readable without changing the record", t => {
-  const Managed = require("../src/modules/shared/vulkan/managed");
+test("KosmicKrisp per-game version and CPU saved under the former manager ID remain selected after the migration", t => {
+  const Managed = require("../src/modules/shared/vulkan/managed"), Rename = require("../src/core/backcompat/kosmickrisp-rename");
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "kosmickrisp-game-choice-"));
   t.after(() => fs.rmSync(userDataDir, {recursive: true, force: true}));
   const manager = Managed.createManager({systemVersionSync: () => "27.0", hostCapabilities: {platform: "darwin", hardwareArch: "arm64", macOSVersion: "27.0"},
     fetchUrlBuffer: () => assert.fail("per-game version and CPU reads remain offline")});
-  const entry = {runtimeData: {[Managed.formerProjectId]: {version: "27.0.0-devel-MCLv8", architecture: "x64", note: "retained"}}};
-  const before = JSON.stringify(entry);
+  const saved = {runtimeData: {[Rename.FORMER_ID]: {version: "27.0.0-devel-MCLv8", architecture: "x64", note: "retained"}}};
+  const before = JSON.stringify(saved), entry = Rename.migrateGameEntry(saved);
+  assert.deepEqual(entry.runtimeData, {[manager.id]: saved.runtimeData[Rename.FORMER_ID]});
   assert.equal(manager.chooseArchitecture(entry, {}, userDataDir), "x64");
   const selection = manager.resolveSelection(entry, {}, userDataDir, {verification: "status"});
   assert.equal(selection.version, "27.0.0-devel-MCLv8"); assert.equal(selection.architecture, "x64");
@@ -175,11 +176,13 @@ test("KosmicKrisp per-game former manager version and CPU remain readable withou
   const current = {runtimeData: {...entry.runtimeData, [manager.id]: {version: "27.0.0-devel-MCLv12", architecture: "arm64"}}};
   const preferred = manager.resolveSelection(current, {}, userDataDir, {verification: "status"});
   assert.equal(preferred.version, "27.0.0-devel-MCLv12"); assert.equal(preferred.architecture, "arm64");
-  assert.equal(JSON.stringify(entry), before);
+  const both = Rename.migrateGameEntry({runtimeData: {...saved.runtimeData, [manager.id]: current.runtimeData[manager.id]}});
+  assert.deepEqual(both.runtimeData, {[manager.id]: current.runtimeData[manager.id]}, "a value saved under the current ID stays");
+  assert.equal(JSON.stringify(saved), before, "the migration returns a new record");
 });
 
 test("MacLauncher KosmicKrisp retains earlier selections, installations and catalog downloads", {skip: process.platform !== "darwin" || process.arch !== "arm64"}, async t => {
-  const Managed = require("../src/modules/shared/vulkan/managed"), Bundled = require("../src/modules/shared/runtime/bundled-native");
+  const Managed = require("../src/modules/shared/vulkan/managed"), Rename = require("../src/core/backcompat/kosmickrisp-rename"), Bundled = require("../src/modules/shared/runtime/bundled-native");
   const { createProjectBuildManager } = require("../src/modules/shared/runtime/project-build-manager");
   const { nativeTool, packageFor } = require("./helpers/managed-tool-fixture.cjs");
   const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "kosmickrisp-rename-"));
@@ -221,28 +224,33 @@ test("MacLauncher KosmicKrisp retains earlier selections, installations and cata
   const options = {managers: [], adaptedManager: manager, adapted: provider, architecture: "arm64",
     hostCapabilities: {platform: "darwin", hardwareArch: "arm64", macOSVersion: "27.0"}};
   offline = true;
-  await t.test("saved manager defaults and both old Vulkan choices retain the same installed version", () => {
+  await t.test("migrated manager defaults and both old Vulkan choices select the same installed version", () => {
     const before = JSON.stringify(settings), count = requests.length;
-    assert.equal(manager.resolveSelection(null, settings, userDataDir).version, older);
-    assert.equal(manager.resolveSelection(null, settings, userDataDir).ready, true);
-    assert.equal(manager.getState({userDataDir, runtimeSettings: settings.runtimes}).defaultVersion, older);
-    const game = {runtimeData: {[legacyId]: {version: older, architecture: "arm64"}}}, gameBefore = JSON.stringify(game);
+    const migrated = Rename.migrateSettings(settings, {userDataDir});
+    assert.deepEqual(migrated.runtimes, {[manager.id]: {defaultVersion: older, defaultArchitecture: "arm64"}});
+    assert.equal(manager.resolveSelection(null, migrated, userDataDir).version, older);
+    assert.equal(manager.resolveSelection(null, migrated, userDataDir).ready, true);
+    assert.equal(manager.getState({userDataDir, settings: migrated.runtimes[manager.id], runtimeSettings: migrated.runtimes}).defaultVersion, older);
+    const game = Rename.migrateGameEntry({runtimeData: {[legacyId]: {version: older, architecture: "arm64"}}});
     const gameSelection = manager.resolveSelection(game, {}, userDataDir, {verification: "status"});
     assert.equal(gameSelection.version, older); assert.equal(gameSelection.architecture, "arm64"); assert.equal(gameSelection.ready, true);
-    assert.equal(gameSelection.install.installDir, installed[0].installDir); assert.equal(JSON.stringify(game), gameBefore);
-    for (const request of ["kosmickrisp:maclauncher-gles32", "kosmickrisp-gles32:" + older]) {
-      context.runtimeSettings.vulkanRuntime = request;
-      assert.equal(Vulkan.resolve(context, options).version, older);
-      assert.deepEqual(Vulkan.requirements(context, options), []);
-      const choices = Vulkan.choices(context, options).vulkanRuntimes;
-      assert.ok(choices.some(row => row.value === request && !row.label.includes("not installed")), "the saved alias remains selected");
+    assert.equal(gameSelection.install.installDir, installed[0].installDir);
+    const current = {...context, settings: migrated, runtimeSettings: {}};
+    for (const [request, choice] of [["kosmickrisp:maclauncher-gles32", Managed.selectionId], ["kosmickrisp-gles32:" + older, Managed.projectId + ":" + older]]) {
+      current.runtimeSettings.vulkanRuntime = Rename.convertChoice(request);
+      assert.equal(current.runtimeSettings.vulkanRuntime, choice);
+      assert.equal(Vulkan.resolve(current, options).version, older);
+      assert.deepEqual(Vulkan.requirements(current, options), []);
+      const choices = Vulkan.choices(current, options).vulkanRuntimes;
+      assert.ok(choices.some(row => row.value === choice && !row.label.includes("not installed")), "the migrated choice remains selected");
     }
-    const explicit = {runtimes: {...settings.runtimes, [manager.id]: {defaultVersion: newer}}};
+    const explicit = Rename.migrateSettings({runtimes: {...settings.runtimes, [manager.id]: {defaultVersion: newer}}}, {userDataDir});
+    assert.deepEqual(explicit.runtimes, {[manager.id]: {defaultVersion: newer}}, "settings saved under the current ID stay");
     assert.equal(manager.resolveSelection(null, explicit, userDataDir).version, newer);
     assert.equal(manager.getState({userDataDir, settings: explicit.runtimes[manager.id], runtimeSettings: explicit.runtimes}).defaultVersion, newer);
-    const cleared = {runtimes: {...settings.runtimes, [manager.id]: {defaultVersion: null}}};
+    const cleared = Rename.migrateSettings({runtimes: {...settings.runtimes, [manager.id]: {defaultVersion: null}}}, {userDataDir});
     assert.equal(manager.resolveSelection(null, cleared, userDataDir).version, newer, "an explicit new default reset supersedes the former saved default");
-    assert.equal(JSON.stringify(settings), before, "reading old settings never rewrites them");
+    assert.equal(JSON.stringify(settings), before, "the migration returns new settings");
     assert.equal(requests.length, count);
   });
   await t.test("old runtime directories and receipts remain recognized in place without mutation", () => {
@@ -267,21 +275,18 @@ test("MacLauncher KosmicKrisp retains earlier selections, installations and cata
     assert.equal(fs.existsSync(path.join(userDataDir, "runtimes", manager.id)), false);
     assert.equal(requests.length, count);
   });
-  await t.test("unreadable former settings and unavailable former choices warn and use normal fallback", () => {
+  await t.test("unreadable former settings and choices are dropped with a warning and use the normal default", () => {
     const warnings = [], logger = {warn: (...args) => warnings.push(args.join(" "))};
-    const badSettings = {runtimes: {[legacyId]: {defaultVersion: {version: older}}}};
-    const tolerant = Managed.createManager({...dependencies, logger});
-    assert.equal(tolerant.resolveSelection(null, badSettings, userDataDir).version, newer);
-    assert.ok(warnings.length > 0);
-    const previous = JSON.stringify(context), count = requests.length;
-    for (const request of ["kosmickrisp-gles32:unknown-version", "kosmickrisp-gles32:../invalid"]) {
-      const oldContext = {...context, logger, runtimeSettings: {vulkanRuntime: request}};
-      const number = warnings.length;
-      assert.equal(Vulkan.resolve(oldContext, options).version, older);
-      assert.deepEqual(Vulkan.requirements(oldContext, options), []);
-      assert.ok(warnings.length > number);
-    }
-    assert.equal(JSON.stringify(context), previous);
+    const badSettings = Rename.migrateSettings({runtimes: {[legacyId]: {defaultVersion: {version: older}}}}, {userDataDir, logger});
+    assert.deepEqual(badSettings.runtimes, {});
+    assert.equal(manager.resolveSelection(null, badSettings, userDataDir).version, newer);
+    assert.equal(warnings.length, 1);
+    const count = requests.length, good = Rename.migrateSettings(settings, {userDataDir});
+    const request = Rename.convertChoice("kosmickrisp-gles32:../invalid", logger);
+    assert.equal(request, "auto"); assert.equal(warnings.length, 2);
+    const migratedContext = {...context, settings: good, logger, runtimeSettings: {vulkanRuntime: request}};
+    assert.equal(Vulkan.resolve(migratedContext, options).version, older);
+    assert.deepEqual(Vulkan.requirements(migratedContext, options), []);
     assert.equal(requests.length, count);
   });
   await t.test("Runtimes discovers both catalogs and installs the old MCLv8 arm64 publication", async () => {
@@ -475,11 +480,3 @@ test("stock KosmicKrisp discovers upstream metadata, installs verified closures 
     fs.appendFileSync(path.join(installed.installDir, "libvulkan.1.dylib"), "tampered");
     assert.equal(Vulkan.installed(context, options).length, 1, "a changed loader cannot enter a graphics path");
   });
-
-test('KosmicKrisp rename conversion preserves explicit choices and falls back on malformed saved values', () => {
- const { normalizeSelection } = require('../src/modules/shared/vulkan/managed'), warnings = [], logger = {warn: text => warnings.push(text)};
- assert.equal(normalizeSelection('kosmickrisp:maclauncher-gles32',logger),'kosmickrisp:maclauncher');
- assert.equal(normalizeSelection('kosmickrisp-gles32:27.0.0-devel-MCLv8',logger),'maclauncher-kosmickrisp:27.0.0-devel-MCLv8');
- assert.equal(normalizeSelection('auto',logger),'auto');
- assert.equal(normalizeSelection(null,logger),'auto');assert.equal(warnings.length,1);
-});

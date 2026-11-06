@@ -5,14 +5,13 @@ const { createProjectBuildManager } = require("../runtime/project-build-manager"
 const repository = "procrastinine/maclauncher-builds";
 
 const projectId = "maclauncher-kosmickrisp";
-const Rename = require("./backcompat/rename");
-const { formerProjectId, normalizeSelection } = Rename;
+// Installations and catalog releases published under the earlier ID stay
+// readable in place; core/backcompat/kosmickrisp-rename.js moves saved data.
+const formerIds = ["vulkan-kosmickrisp-gles32"];
 const selectionId = "kosmickrisp:maclauncher";
 const prefix = projectId + ":";
 
-
 function createManager(dependencies = {}) {
-  const { formerIds } = Rename;
   const manager = createProjectBuildManager({ projectId, formerIds, label: "MacLauncher KosmicKrisp", repository, sourceLabel: "Source", upstreamUrl: "https://gitlab.freedesktop.org/mesa/mesa", nativeLibrary: true,
     manifestRelative: "manifest.json", sourceRelative: null, filesPrefix: "files/",
     executableRelative: manifest => manifest.executableRelative,
@@ -26,7 +25,7 @@ function createManager(dependencies = {}) {
       Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
       await Bundled.verifySignatures(selected.root,selected.declaration,{signal});
     }, dependencies });
-  return { ...Rename.adapt(manager, dependencies), translatorEngine: "kosmickrisp", distributionRequired: false,
+  return { ...manager, formerIds, translatorEngine: "kosmickrisp", distributionRequired: false,
     ui: { groupId: "vulkan-drivers", sectionLabel: manager.label, memberOrder: 22, management: "managed", hostFeature: "METAL4" } };
 }
 
@@ -117,5 +116,5 @@ function createSceneProvider(selectedManager) {
 const provider = createProvider(manager), sceneManager = createSceneManager(), sceneProvider = createSceneProvider(sceneManager);
 const providers = Object.freeze([{ manager, provider, projectId, selectionId, prefix },
   { manager: sceneManager, provider: sceneProvider, projectId: sceneProjectId, selectionId: sceneSelectionId, prefix: "moltenvk-scene:" }]);
-module.exports = { manager, provider, createManager, createProvider, selectionId, projectId, formerProjectId, normalizeSelection,
+module.exports = { manager, provider, createManager, createProvider, selectionId, projectId,
   sceneManager, sceneProvider, sceneProjectId, sceneSelectionId, sceneDescriptor, createSceneManager, createSceneProvider, providers };

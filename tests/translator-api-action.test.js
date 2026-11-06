@@ -81,12 +81,12 @@ test('real translator options action resolves draft API roles and advertises ato
 
 test('saved KosmicKrisp manager IDs retain their installed choice through both Wine actions and resolvers', async t => {
   const f = fixture(t), Managed = require('../src/modules/shared/vulkan/managed'), Plan = require('../src/modules/shared/runtime/translator-plan');
-  const version = '27.0.0-devel-MCLv8', saved = `${Managed.formerProjectId}:${version}`, canonical = `${Managed.projectId}:${version}`;
-  const relative = `profile/runtimes/${Managed.formerProjectId}/x64/${version}/payload/files`;
+  const version = '27.0.0-devel-MCLv8', saved = `${Managed.manager.formerIds[0]}:${version}`, canonical = `${Managed.projectId}:${version}`;
+  const relative = `profile/runtimes/${Managed.manager.formerIds[0]}/x64/${version}/payload/files`;
   const driver = f.put(`${relative}/libvulkan_kosmickrisp.dylib`, image({ cpu: X64 }));
   f.put(`${relative}/libvulkan.1.dylib`, image({ cpu: X64 }));
   const root = path.dirname(driver), installed = { version, architecture: 'x64', translatorRoot: root, installDir: root,
-    executablePath: driver, translator: Description.describeTranslator(root, { engine: 'kosmickrisp', source: Managed.formerProjectId, version }) };
+    executablePath: driver, translator: Description.describeTranslator(root, { engine: 'kosmickrisp', source: Managed.manager.formerIds[0], version }) };
   const manager = Managed.createManager();
   t.mock.method(manager, 'getState', () => ({ installed: [installed] }));
   t.mock.method(manager, 'resolveSelection', (_entry, _settings, _data, options) => {

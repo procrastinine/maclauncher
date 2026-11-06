@@ -21,10 +21,13 @@ function offerLabel(label, dependencies) {
 }
 function consumerContext(context, dependencies, projectId) {
   if (!dependencies.architecture) return context;
-  const settingsId = projectId === managed.projectId && context.settings?.runtimes?.[projectId] === undefined &&
-    context.settings?.runtimes?.[managed.formerProjectId] !== undefined ? managed.formerProjectId : projectId;
   return { ...context, settings: { ...context.settings, runtimes: { ...context.settings?.runtimes,
-    [settingsId]: { ...context.settings?.runtimes?.[settingsId], defaultArchitecture: dependencies.architecture } } } };
+    [projectId]: { ...context.settings?.runtimes?.[projectId], defaultArchitecture: dependencies.architecture } } } };
+}
+// The saved Vulkan choice of a consumer; a value that is not a choice is Automatic.
+function savedChoice(context) {
+  const saved = context.runtimeSettings?.vulkanRuntime;
+  return typeof saved === "string" && saved ? saved : "auto";
 }
 function managedSelection(provider, context, dependencies, version, available) {
   const manager = dependencies.adaptedManager || provider.manager;
@@ -97,26 +100,23 @@ function installed(context, dependencies = {}) {
 function choices(context, dependencies = {}) {
   const available = installed(context, dependencies);
   const rows = available.map(item => ({ value: item.id, label: item.label }));
-  const saved = context.runtimeSettings?.vulkanRuntime || "auto";
-  const request = managed.normalizeSelection(saved, context.logger || console);
-  if (request !== saved && rows.some(row => row.value === request)) rows.find(row => row.value === request).value = saved;
+  const request = savedChoice(context);
   if (request !== "auto" && !rows.some(row => row.value === request)) {
     const owner = managed.providers.find(item => item.selectionId === request || request.startsWith(item.prefix));
     const backend = owner ? owner.selectionId.split(":")[0] : request.split(":")[0];
     const unversioned = owner?.selectionId === request || request === backend + ":auto";
     const selected = unversioned && available.find(item => owner ? item.projectId === owner.projectId : item.backend === backend && !item.projectId);
-    if (selected) rows.find(row => row.value === selected.id).value = saved;
+    if (selected) rows.find(row => row.value === selected.id).value = request;
     else {
       const version = unversioned ? "" : owner ? request.slice(owner.prefix.length) : request.slice(backend.length + 1);
       const label = (owner?.manager.label || definitions[backend]?.label || backend) + (version ? " " + version : "");
-      if (!rows.some(row => row.value === saved)) rows.push({ value: saved, label: label + " (not installed)" });
+      if (!rows.some(row => row.value === request)) rows.push({ value: request, label: label + " (not installed)" });
     }
   }
   return { vulkanRuntimes: [{ value: "auto", label: "Automatic" }, ...rows] };
 }
 function resolve(context, dependencies = {}) {
-  const saved = context.runtimeSettings?.vulkanRuntime || "auto";
-  const request = managed.normalizeSelection(saved, context.logger || console);
+  const request = savedChoice(context);
   const reason = unavailableReason(request.split(":")[0], dependencies);
   if (reason) throw new Error(reason);
   const available = installed(context, dependencies);
@@ -125,14 +125,12 @@ function resolve(context, dependencies = {}) {
     ? available.find(item => item.backend === request.slice(0, -5) && !item.projectId) : managedRequest
     ? available.find(item => item.projectId === managedRequest.projectId) : available.find(item => item.id === request);
   if (!selected && request === "auto") return null;
-  if (!selected && request !== saved) return legacyFallback(resolve, context, dependencies);
   if (!selected) throw new Error("The selected Vulkan library is unavailable for this Mac. Select an installed version in game Settings.");
   const owner = managed.providers.find(item => item.projectId === selected.projectId);
   return owner ? (dependencies.adapted || owner.provider).resolve(selected, consumerContext(context, dependencies, owner.projectId)) : selected;
 }
 function requirements(context, dependencies = {}) {
-  const saved = context.runtimeSettings?.vulkanRuntime || "auto";
-  const request = managed.normalizeSelection(saved, context.logger || console);
+  const request = savedChoice(context);
   const reason = unavailableReason(request.split(":")[0], dependencies);
   if (reason) throw new Error(reason);
   const managedRequest = managed.providers.find(item => item.selectionId === request || request.startsWith(item.prefix));
@@ -193,8 +191,6 @@ function requirements(context, dependencies = {}) {
   const installOptions = dependencies.architecture ? { architecture: dependencies.architecture } : {};
   const available = dependencies.architecture ? installed(context, dependencies) : null;
   const selection = managedSelection(managedRequest, context, dependencies, version, available);
-  if (request !== saved && !selection.ready && selection.discoveryRequired && version)
-    return legacyFallback(requirements, context, dependencies);
   if (!selection.version && selection.discoveryRequired) return [{ managerId: manager.id, version: null,
     discoveryRequired: true, requiresDownload: true, installOptions }];
   if (!selection.version) throw new Error(selection.reason || "A compatible " + manager.label + " package is unavailable.");
@@ -210,10 +206,6 @@ function requirements(context, dependencies = {}) {
     return [];
   }
   return [{ managerId: manager.id, version: selection.version, requiresDownload: true, installOptions }];
-}
-function legacyFallback(operation, context, dependencies) {
-  (context.logger || console).warn?.("[runtimes] The saved MacLauncher KosmicKrisp choice is unavailable; using Automatic.");
-  return operation({ ...context, runtimeSettings: { ...context.runtimeSettings, vulkanRuntime: "auto" } }, dependencies);
 }
 function environment(selection, directory) {
   if (!selection) return {};

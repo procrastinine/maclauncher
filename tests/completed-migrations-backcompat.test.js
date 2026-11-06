@@ -5,7 +5,7 @@ const { createLauncher } = require("../src/core/launcher");
 const { coordinatorFor } = require("../src/core/runtime-coordinator");
 const { readJsonDocument } = require("../src/core/json-files");
 const { createGameRemoval } = require("../src/core/game-removal");
-const { ORIGINAL_GAME_MIRRORS_MIGRATION, CURRENT_SETTINGS_MIGRATION, TRANSLATOR_ENVIRONMENT_MIGRATION } = require("../src/core/data-migration-ids");
+const { ORIGINAL_GAME_MIRRORS_MIGRATION, CURRENT_SETTINGS_MIGRATION, TRANSLATOR_ENVIRONMENT_MIGRATION, KOSMICKRISP_RENAME_MIGRATION } = require("../src/core/data-migration-ids");
 
 // This file runs in its own process, so require.cache holds only the startup
 // graph: every module, the Node launcher and settings coordinator, the backend
@@ -17,7 +17,7 @@ test("a completed profile loads no backcompat module at startup", async t => {
   const settingsFile = path.join(userDataDir, "settings.json"), logger = { warn() {} };
   const completed = { launcher: { appearance: "dark" }, dataMigrations: {
     [ORIGINAL_GAME_MIRRORS_MIGRATION]: { complete: true, remainingIds: [], pendingIds: [] }, [CURRENT_SETTINGS_MIGRATION]: { complete: true },
-    [TRANSLATOR_ENVIRONMENT_MIGRATION]: { complete: true } } };
+    [TRANSLATOR_ENVIRONMENT_MIGRATION]: { complete: true }, [KOSMICKRISP_RENAME_MIGRATION]: { complete: true } } };
   fs.writeFileSync(settingsFile, JSON.stringify(completed));
   const main = fs.readFileSync(path.join(__dirname, "../src/main/main.js"), "utf8");
   function section(start, end) {
@@ -27,7 +27,7 @@ test("a completed profile loads no backcompat module at startup", async t => {
   }
   const coordinator = coordinatorFor(userDataDir).client();
   const context = vm.createContext({ userDataDir, Modules, logger, readJsonDocument, settingsPath: () => settingsFile,
-    settingsCoordinator: coordinator, ORIGINAL_GAME_MIRRORS_MIGRATION, CURRENT_SETTINGS_MIGRATION, TRANSLATOR_ENVIRONMENT_MIGRATION, games: [], showStartupMigration() {},
+    settingsCoordinator: coordinator, ORIGINAL_GAME_MIRRORS_MIGRATION, CURRENT_SETTINGS_MIGRATION, TRANSLATOR_ENVIRONMENT_MIGRATION, KOSMICKRISP_RENAME_MIGRATION, games: [], showStartupMigration() {},
     require: request => require(path.join(__dirname, "../src/main", request)) });
   vm.runInContext(section("function readSettingsDocument(", "\n}") + "\n}", context);
   context.settings = context.readSettingsDocument();
