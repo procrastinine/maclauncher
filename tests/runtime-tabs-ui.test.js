@@ -275,7 +275,10 @@ test('registry metadata exposes manageable production groups while exposing mana
     const section = id => groups.find(group => group.managers.some(manager => manager.id === id));
     assert.deepEqual(groups.filter(group => group.category === 'platforms').map(group => group.label),
       ['PS5 (AnyPS5)', 'Prosper', 'Switch (nxnative)', 'MacLauncher Android', 'Mac.apk', 'AIM', 'PlayCover']);
-    assert.deepEqual(groups.filter(group => group.category === 'compatibility').map(group => group.label), ['CrossOver', 'Sikarugir', 'DOSBox', '32-bit Mac']);
+    assert.deepEqual(groups.filter(group => group.category === 'compatibility').map(group => group.label), ['CrossOver', 'Sikarugir', 'Steam client bridge', 'DOSBox', '32-bit Mac']);
+    // CrossOver and Sikarugir share the Steam client bridge as one managed row.
+    assert.deepEqual(runtimeGroupSections(section('maclauncher-steam-bridge'), sections).map(choice => [choice.label, choice.managerId]),
+      [['Steam client bridge', 'maclauncher-steam-bridge']]);
     // Engine-specific tools sit with their engine; Tools keeps cross-engine tools only.
     for (const [engine, ids] of [['AliceSoft', ['alice-tools']], ['MAGES.', ['sc3tools']], ['Siglus', ['siglus-ssu']], ['RealLive (RLVM)', ['rldev']],
       ['LÖVE', ['ljd', 'unluac']], ['WOLF RPG', ['wolftl', 'uberwolf']], ['HashLink', ['hlbc']], ['GemRB', ['near-infinity']],

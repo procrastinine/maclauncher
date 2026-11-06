@@ -14,6 +14,7 @@ Only the game's own Steam API connects to the Steam client. Play can start the M
 
 - The game is a native Mac app whose installation ships the macOS Steam API (`libsteam_api.dylib` or a `steam_api.bundle`). Native apps always run their original library.
 - The game uses an engine runtime, and the shared Steam API preparation selects the game's own library.
+- The game is a Windows game in CrossOver or Sikarugir that uses the [Steam client bridge](WINDOWS_STEAM.md). For this case, a completed MacLauncher Steam download also identifies the game.
 
 When the preparation selects the included helper instead, Steam is not started, whatever the engine or runtime. A DRM-free copy outside a Steam library never starts Steam, even when it bundles Steamworks. Detection, status, library scans, runtime selection and other actions never start Steam.
 
@@ -35,7 +36,7 @@ With network access off, the game's own Steam API can still reach a running Stea
 
 ### Windows games
 
-The native Mac Steam client does not provide a Windows Steam client inside Wine. Windows games that ship only `steam_api.dll` or `steam_api64.dll` run in private CrossOver or Sikarugir environments, which a Steam client outside them cannot serve, so Play does not start Steam for them. A Windows game that requires Steam needs a compatible Windows Steam installation and a launch path that its publisher supports; installing Mac Steam is not enough.
+Windows games that ship `steam_api.dll` or `steam_api64.dll` run in CrossOver or Sikarugir environments, which the Steam client for Mac does not serve on its own. The optional [Steam client bridge](WINDOWS_STEAM.md) connects them to it, and Play asks to start Steam only when it prepares the bridge for a game. Without the bridge, Play does not start Steam for a Windows game, and a Windows game that requires Steam needs a compatible Windows Steam installation and a launch path that its publisher supports.
 
 ## Offline Steam API helper
 

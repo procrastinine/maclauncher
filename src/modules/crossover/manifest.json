@@ -593,6 +593,14 @@
     {
       "label": "Sikarugir Wine engines",
       "url": "https://github.com/Sikarugir-App/Engines"
+    },
+    {
+      "label": "Proton lsteamclient (Steam client bridge)",
+      "url": "https://github.com/ValveSoftware/Proton"
+    },
+    {
+      "label": "NotProton (Steam client bridge)",
+      "url": "https://github.com/NotProtonNot/NotProton"
     }
   ]
 }

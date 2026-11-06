@@ -365,6 +365,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
     sourceRoot: match.sourceRoot, gameRoot, prefixPath, viewRoot, graphicsBackend: graphics.graphicsBackend,
     ...(existingEnvironment ? { environmentReference: existingEnvironment.reference } : {}),
     vulkanBackend: graphics.vulkanBackend, dlss: graphics.dlss?.enabled === true, componentVersions: graphics.componentVersions,
+    steamBridge: steamBridge ? { version: steamBridge.packageVersion } : null,
     translatorRows: Translators.inspectorRows(translatorPlan),
     translatorPlanInputs: Translators.planInputs(context.runtimeSettings, context.wineEnvironment?.install || selected.install), cameraAdapterNotice: context.cameraAdapterNotice || null, graphicsInputs: context.graphicsInputs } };
   context.onEntryChange?.(entry);

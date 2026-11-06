@@ -432,6 +432,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     windowsExecutablePath: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture,
     sourceRoot: match.sourceRoot, gameRoot, bottlePath, applicationPath: selected.install.appPath,
     ...(existingEnvironment ? { environmentReference: existingEnvironment.reference } : {}),
+    steamBridge: steamBridge ? { version: steamBridge.packageVersion } : null,
     translatorRows: Translators.inspectorRows(translatorPlan),
     translatorPlanInputs: Translators.planInputs(context.runtimeSettings, context.wineEnvironment?.install || selected.install), cameraAdapterNotice: context.cameraAdapterNotice || null, graphicsInputs: context.graphicsInputs } };
   context.onEntryChange?.(entry);

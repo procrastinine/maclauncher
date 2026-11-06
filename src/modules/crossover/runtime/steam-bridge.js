@@ -52,7 +52,11 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
       if (manifest.managerId !== id || manifest.steamBridge?.abi !== 1 || manifest.steamBridge.role !== 'native-steam-client-bridge')
         throw new Error('The Steam bridge package has no compatible loader declaration.');
     }, async verifyPayload(selected) { Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency); }, dependencies });
-  const manager = { ...base, ui: { hidden: true }, distributionRequired: false };
+  // CrossOver and Sikarugir share one managed row under Compatibility. Play
+  // uses only managed versions, so the row offers no custom registration.
+  const manager = { ...base, ui: { groupId: 'steam-bridge', tabLabel: 'Steam client bridge', sectionLabel: 'Steam client bridge',
+    management: 'managed', order: 202, category: 'compatibility' }, distributionRequired: false, customRuntime: false };
+  delete manager.registerCustomRuntime;
   const skippedPath = directory => path.join(directory, 'runtimes/steam-bridge-skipped.json');
   const skipped = directory => readJsonObject(skippedPath(directory))?.apps || [];
   function skipOptional(plan, { userDataDir } = {}) {
@@ -66,12 +70,39 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
     clearSkipped(options.userDataDir);
     return refresh.call(this, options);
   };
+  // An installation, from Runtimes or Play, makes every Windows Steam game
+  // eligible again, including games whose earlier offer was declined.
   const installRuntime = manager.installRuntime;
   manager.installRuntime = async function(options = {}) {
     const result = await installRuntime.call(this, options);
     await Components.install(options);
+    clearSkipped(options.userDataDir);
     return result;
   };
+  const uninstallRuntime = manager.uninstallRuntime;
+  manager.uninstallRuntime = async function(options = {}) {
+    const result = await uninstallRuntime.call(this, options);
+    if (options.userDataDir && !base.core.listInstalled(options.userDataDir).length) Components.remove(options.userDataDir);
+    return result;
+  };
+  // The Valve files are listed in the bridge's Runtimes section with the
+  // generic section components; status reads no file contents.
+  const getState = manager.getState;
+  manager.getState = function(options = {}) {
+    const state = getState.call(this, options), files = Components.status(options.userDataDir);
+    const extra = { description: 'Connects Windows Steam games in CrossOver and Sikarugir to the Steam client for Mac. Play offers it for a Windows Steam game while the Steam client for Mac is installed.',
+      components: [{ id: 'steam-client-components', label: 'Windows Steam client files', ...(files ? { version: files.archiveSha1.slice(0, 12) } : {}),
+        status: files ? 'Installed' : 'Not installed', available: Boolean(files),
+        description: "steamclient.dll and steamclient64.dll from Valve's current Steam client download, checked against its content address. They are installed with the bridge and removed with its last version." }] };
+    return { ...state, ...extra, sections: (state.sections || []).map(section => ({ ...section, ...extra, customRuntime: false })) };
+  };
+  // One inspector line for a game whose last Play used the bridge, while that
+  // version remains installed.
+  function inspectorDetail(record, userDataDir) {
+    const version = record?.steamBridge?.version;
+    if (typeof version !== 'string' || !version || !userDataDir || !base.core.listInstalled(userDataDir).some(row => row.version === version)) return null;
+    return { label: 'Steam', value: `Steam client bridge ${version}` };
+  }
   function installed(userDataDir) {
     for (const row of [...base.core.listInstalled(userDataDir)].sort((a, b) => compareRuntimeVersions(a.version, b.version))) {
       const selected = base.resolveSelection(null, {}, userDataDir, { version: row.version, verification: 'status' });
@@ -86,10 +117,12 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
     const pin = base.core.listDiscoveredCatalog({ userDataDir: context.userDataDir })
       .sort((a, b) => compareRuntimeVersions(a.version, b.version))[0];
     if (!pin && !local && base.getState({ userDataDir: context.userDataDir }).catalog?.status === 'success') return [];
+    const name = entry?.name || 'The game', bytes = !local && pin?.asset?.bytes > 0 ? pin.asset.bytes : 0;
+    const files = local ? 'Windows Steam client files from Valve' : `the bridge${bytes ? ` (${Math.max(0.1, bytes / 1048576).toFixed(1)} MB)` : ''} and Windows Steam client files from Valve`;
     return [{ managerId: id, version: local?.version || pin?.version || null, requiresDownload: true, ...(!pin && !local ? { discoveryRequired: true } : {}), appId: String(game.appId),
       optional: true, silentFallback: true, companion: true, label: manager.label,
-      ...(pin?.asset?.bytes ? { bytes: pin.asset.bytes } : {}), summary: 'Connects Windows Steam games to the real Mac Steam client.',
-      cancelLabel: 'Play Without It', detail: 'Downloads the Steam bridge and current genuine Windows client components from Valve for this private Windows environment. The game keeps its original Steam API. Steam startup has separate Internet consent.' }];
+      ...(bytes ? { bytes } : {}), summary: 'Connects Windows Steam games to the Steam client for Mac. Windows Steam client files are also downloaded from Valve.',
+      cancelLabel: 'Play Without It', detail: `Connects ${name} to the Steam client for Mac. The download is ${files}. ${name} also starts without it.` }];
   }
   async function prepare(entry, context, { installation, prefixPath, directory, architecture, environment, externalEnvironment } = {}) {
     const game = identifyGame(entry), native = discoverClient();
@@ -173,6 +206,6 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
         helper: 'C:\\Program Files (x86)\\Steam\\steam.exe', appId: String(game.appId), packageVersion: current.version };
     } catch (error) { if (context.signal?.aborted) throw error; return null; }
   }
-  return Object.assign(manager, { requirements, prepare, skipOptional, clearSkipped });
+  return Object.assign(manager, { requirements, prepare, skipOptional, clearSkipped, inspectorDetail });
 }
 module.exports = Object.assign(create(), { create, identify, clientRoot });

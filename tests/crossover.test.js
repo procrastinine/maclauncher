@@ -946,3 +946,38 @@ test("CrossOver cancelled preparation waits until independently grouped Wine chi
   }
   assert.fail("Wine child survived cancelled preparation");
 });
+
+test("CrossOver records which Steam client bridge a Play used, and the inspector shows the bridge's line for it", async t => {
+  const directory = fixture(t), userDataDir = path.join(directory, "data"), game = path.join(directory, "game");
+  pe(path.join(game, "Game.exe"));
+  const installed = Manager.importRuntime({ userDataDir, runtimePath: app(path.join(directory, "CrossOver.app")) });
+  const entry = { ...Detection.decorateEntry({ gameId: "steamgame", gamePath: game, moduleId: "rgss" }), runtimeId: "crossover" };
+  const run = async (_command, args) => {
+    const bottle = args[args.indexOf("--bottle") + 1];
+    fs.mkdirSync(bottle, { recursive: true });
+    fs.writeFileSync(path.join(bottle, "cxbottle.conf"), "[Bottle]\n");
+    fs.writeFileSync(path.join(bottle, "system.reg"), "registry");
+    return { stdout: "", stderr: "" };
+  };
+  const context = { userDataDir, settings: { runtimes: { crossover: { defaultVersion: installed.version } } }, runtimeSettings: {} };
+  const Bridge = require("../src/modules/crossover/runtime/steam-bridge");
+  let used = true;
+  const inspected = [];
+  t.mock.method(Bridge, "prepare", async (_entry, _context, options) => used ? { environment: { ...options.environment, SteamAppId: "480" }, extra: { SteamAppId: "480" },
+    prefixPath: options.prefixPath, privateClone: false, helper: "C:\\Program Files (x86)\\Steam\\steam.exe", appId: "480", packageVersion: "1.0.0" } : null);
+  // The bridge decides its line from the recorded Play and its installed versions.
+  t.mock.method(Bridge, "inspectorDetail", (record, profile) => {
+    inspected.push([record?.steamBridge ?? null, profile]);
+    return record?.steamBridge ? { label: "Steam", value: "Steam client bridge " + record.steamBridge.version } : null;
+  });
+  const steamRows = async () => (await Module.actions.runtimeStatus(entry, {}, { ...context, runtimeId: "crossover" })).details.filter(row => row.label === "Steam");
+  const launch = await Launch.prepareLaunch(entry, context, { run });
+  assert.deepEqual(launch.args.slice(launch.args.indexOf("--"), launch.args.indexOf("--") + 2), ["--", "C:\\Program Files (x86)\\Steam\\steam.exe"]);
+  assert.deepEqual(entry.runtimeData.crossover.steamBridge, { version: "1.0.0" });
+  assert.deepEqual(await steamRows(), [{ label: "Steam", value: "Steam client bridge 1.0.0" }]);
+  used = false;
+  await Launch.prepareLaunch(entry, context, { run });
+  assert.equal(entry.runtimeData.crossover.steamBridge, null);
+  assert.deepEqual(await steamRows(), [], "a Play without the bridge leaves no line");
+  assert.deepEqual(inspected, [[{ version: "1.0.0" }, userDataDir], [null, userDataDir]]);
+});

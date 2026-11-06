@@ -16,7 +16,7 @@ A Wine version installed during Play comes with its matching support libraries, 
 
 The selected Wine version and graphics backend supply the Windows APIs. Windows libraries that a game itself requires remain part of that game's own environment.
 
-[Windows Steam games](WINDOWS_STEAM.md) describes the optional connection to the real Mac Steam client shared with CrossOver.
+[Windows Steam games](WINDOWS_STEAM.md) describes the optional Steam client bridge to the Steam client for Mac, which Sikarugir shares with CrossOver.
 
 ## Versions
 

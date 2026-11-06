@@ -74,6 +74,8 @@ async function runtimeStatus(entry, _payload, context) {
     detail: row.selected !== row.used && row.reason ? 'Selected ' + row.selected + '. ' + row.reason : '' }));
   const cameraNotice = entry.runtimeData?.[runtime]?.cameraAdapterNotice;
   if (cameraNotice) details.push({ label: 'Camera adapter', value: 'Unavailable', detail: cameraNotice });
+  const steamBridge = require('./runtime/steam-bridge').inspectorDetail(entry.runtimeData?.[runtime], context.userDataDir);
+  if (steamBridge) details.push(steamBridge);
   const { install: _install, ...displaySelection } = selected;
   return { ...displaySelection, translatorRows: rows, details, graphicsInputs: await resolveGraphicsInputs(entry, preparedContext, selected, plan),
     versionLabel: selected.versionLabel || selected.install?.versionLabel || selected.install?.upstreamVersion || selected.install?.engineVersion || selected.version };

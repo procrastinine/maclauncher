@@ -36,6 +36,29 @@ function current(userDataDir) {
     return { ...record, root: directory };
   } catch { return null; }
 }
+// Runtimes status reads the active record and file sizes without hashing.
+function status(userDataDir) {
+  try {
+    const record = readJsonObject(path.join(store(userDataDir), 'active.json'));
+    if (!record || !/^[a-f0-9]{40}$/.test(record.archiveSha1 || '') || !Array.isArray(record.files) || !record.files.length) return null;
+    const directory = path.join(store(userDataDir), record.archiveSha1);
+    for (const item of record.files) {
+      if (!/^[A-Za-z0-9._-]+$/.test(item?.path || '') || fs.lstatSync(path.join(directory, item.path), { throwIfNoEntry: false })?.size !== item.size) return null;
+    }
+    return { archiveSha1: record.archiveSha1, source: record.source, bytes: record.files.reduce((sum, item) => sum + item.size, 0) };
+  } catch { return null; }
+}
+// Removing the bridge's last version also removes these files; Play can
+// download them again after consent.
+function remove(userDataDir) {
+  const root = store(userDataDir);
+  if (!fs.lstatSync(root, { throwIfNoEntry: false })) return false;
+  Writable.assertOwnDirectory(userDataDir, root, { create: false });
+  const trash = path.join(path.dirname(root), '.steam-client-components-' + crypto.randomUUID());
+  fs.renameSync(root, trash);
+  fs.rmSync(trash, { recursive: true, force: true });
+  return true;
+}
 // Called only from the consented managed-install action. Discovery/status use current().
 async function install({ userDataDir, signal, onProgress, resolved, archiveFile } = {}) {
   const existing = current(userDataDir); if (existing) return existing;
@@ -68,4 +91,4 @@ async function install({ userDataDir, signal, onProgress, resolved, archiveFile 
     return current(userDataDir);
   } finally { fs.rmSync(stage, { recursive: true, force: true }); }
 }
-module.exports = { current, install, resolveManifest, MANIFEST };
+module.exports = { current, status, install, remove, resolveManifest, MANIFEST };

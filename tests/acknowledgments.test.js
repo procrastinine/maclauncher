@@ -48,6 +48,7 @@ test('every registered runtime manager has a linked upstream project in Credits'
     'vulkan-moltenvk-scene': 'https://github.com/KhronosGroup/MoltenVK',
     'winevulkan-scene': 'https://www.codeweavers.com/crossover/source',
     'maclauncher-crossover-winemac': 'https://www.codeweavers.com/crossover/source',
+    'maclauncher-steam-bridge': 'https://github.com/ValveSoftware/Proton',
     'fidelityfx-api': 'https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK',
     'vulkan-kosmickrisp': 'https://gitlab.freedesktop.org/mesa/mesa',
     'maclauncher-kosmickrisp': 'https://gitlab.freedesktop.org/mesa/mesa',

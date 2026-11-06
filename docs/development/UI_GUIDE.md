@@ -324,7 +324,7 @@ Sidebar entries are grouped under headings, in this order:
 
 - **Game engines**, listed alphabetically.
 - **Consoles and mobile**: PS5 (AnyPS5), Prosper, Switch (nxnative), MacLauncher Android, Mac.apk, AIM and PlayCover.
-- **Compatibility**: CrossOver, Sikarugir, DOSBox and 32-bit Mac.
+- **Compatibility**: CrossOver, Sikarugir, Steam client bridge, DOSBox and 32-bit Mac.
 - **Graphics**: the Effects, DirectX → Vulkan, DirectX → Metal, Vulkan drivers and Video codecs entries.
 - **Tools**, a single entry set apart by a divider line, without a heading that would repeat its name.
 

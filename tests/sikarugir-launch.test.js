@@ -665,3 +665,17 @@ test("failed preparation process registration terminates the private Windows chi
   assert.equal(fs.readFileSync(stopped, "utf8"), "yes");
   assert.throws(() => process.kill(gamePid, 0), { code: "ESRCH" });
 });
+
+test("Sikarugir records which Steam client bridge a Play used", async t => {
+  const directory = fixture(t), entry = game(directory), install = installation(directory), dependencies = adapters(install);
+  const context = { userDataDir: path.join(directory, "data"), settings: {}, runtimeSettings: {} };
+  let used = true;
+  t.mock.method(require("../src/modules/crossover/runtime/steam-bridge"), "prepare", async (_entry, _context, options) => used ? { prefixPath: options.prefixPath,
+    environment: options.environment, privateClone: false, helper: "C:\\Program Files (x86)\\Steam\\steam.exe", appId: "480", packageVersion: "1.0.0" } : null);
+  const launch = await Launch.prepareLaunch(entry, context, dependencies);
+  assert.ok(launch.args.includes("C:\\Program Files (x86)\\Steam\\steam.exe"));
+  assert.deepEqual(entry.runtimeData.sikarugir.steamBridge, { version: "1.0.0" });
+  used = false;
+  await Launch.prepareLaunch(entry, context, dependencies);
+  assert.equal(entry.runtimeData.sikarugir.steamBridge, null);
+});
