@@ -41,13 +41,13 @@ function clientRoot(home = os.homedir()) {
   return null;
 }
 function create({ dependencies = {}, identifyGame = identify, discoverClient = clientRoot, isRunning = ClientStart.clientRunning } = {}) {
-  const base = createProjectBuildManager({ projectId: id, label: 'Steam client bridge', repository: 'procrastinine/maclauncher-builds',
+  const base = createProjectBuildManager({ projectId: id, label: 'Steam client bridge', repository: 'procrastinine/maclauncher-builds', upstreamUrl: 'https://github.com/ValveSoftware/Proton', upstreamLabel: 'Proton lsteamclient',
     manifestRelative: 'manifest.json', executableRelative: 'steam.exe', dataOnly: true, supportsDefault: false,
     validateManifest(manifest) {
       if (manifest.managerId !== id || !manifest.steamBridge?.native || !manifest.steamBridge?.windows || !manifest.steamBridge?.clientEnvironment)
         throw new Error('The Steam bridge package has no compatible loader declaration.');
     }, async verifyPayload(selected) { Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency); }, dependencies });
-  const manager = { ...base, ui: { hidden: true }, distributionRequired: false };
+  const manager = { ...base, ui: { hidden: true, management: 'managed' }, distributionRequired: false };
   const skippedPath = directory => path.join(directory, 'runtimes/steam-bridge-skipped.json');
   const skipped = directory => readJsonObject(skippedPath(directory))?.apps || [];
   function skipOptional(plan, { userDataDir } = {}) {

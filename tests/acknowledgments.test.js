@@ -22,6 +22,7 @@ test('every registered runtime manager has a linked upstream project in Credits'
     'browser-woditor': 'https://frostyhowl.com/browser-woditor/',
     butterscotch: 'https://github.com/ButterscotchRunner/Butterscotch',
     crossover: 'https://www.codeweavers.com/crossover',
+    'maclauncher-steam-bridge': 'https://github.com/ValveSoftware/Proton',
     easyrpg: 'https://github.com/EasyRPG/Player',
     ffdec: 'https://github.com/jindrapetrik/jpexs-decompiler',
     fna: 'https://github.com/FNA-XNA/FNA',

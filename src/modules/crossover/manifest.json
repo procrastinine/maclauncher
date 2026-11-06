@@ -593,6 +593,18 @@
     {
       "label": "Sikarugir Wine engines",
       "url": "https://github.com/Sikarugir-App/Engines"
+    },
+    {
+      "label": "Proton lsteamclient and steam_helper",
+      "url": "https://github.com/ValveSoftware/Proton"
+    },
+    {
+      "label": "NotProton Mac Steam bridge",
+      "url": "https://github.com/NotProtonNot/NotProton"
+    },
+    {
+      "label": "OpenVR headers",
+      "url": "https://github.com/ValveSoftware/openvr"
     }
   ]
 }
