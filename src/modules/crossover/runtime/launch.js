@@ -216,6 +216,9 @@ function detachProfileAliases(bottlePath) {
 }
 
 async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
+  const started = performance.now();
+  const timing = phase => context.logger?.debug?.('[runtime] CrossOver preparation', { phase, elapsedMs: Math.round(performance.now() - started) });
+  timing('start');
   const existingEnvironment = await require("../../shared/runtime/wine-processes").prepareEnvironment(
     Environments.readEnvironment(context.runtimeSettings?.environmentReference), context, context.processOptions);
   if (existingEnvironment && existingEnvironment.kind !== "crossover-bottle") throw new Error("Choose a CrossOver bottle for this runtime.");
@@ -230,6 +233,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   const selectedExecutable = inside(match.sourceRoot, executable) ? readWindowsExecutable(executable) : null;
   if (!selectedExecutable) throw new Error("Windows executable must be a PE executable inside the game folder.");
   const translatorPlan = await Translators.resolve(selected.install, 'crossover', context, { entry, executableArchitecture: selectedExecutable.executableArchitecture, host });
+  timing('translators');
   settings = Translators.settingsForPlan(settings, translatorPlan);
   const translatorEnvironment = TranslatorEnvironment.forLaunch(entry, context, Translators.environmentIds(translatorPlan, "crossover")).values;
   const translatorView = TranslatorFiles.selectedDescriptions(translatorPlan).length ? await TranslatorFiles.prepareTranslatorFiles(translatorPlan,
@@ -341,6 +345,8 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     detachProfileAliases(bottlePath);
   }
   await WineSettings.applyRegistry({ ...context.runtimeSettings, ...settings, windowsVersion: "" }, {
+    readCurrentRegistry: !existingEnvironment ? async () =>
+      (await require('../../shared/runtime/wine-processes').runningState(bottlePath)).running ? null : Environments.registryValues(bottlePath) : undefined,
     assertWritable: existingEnvironment ? () => Environments.assertWritableRegistry(existingEnvironment) : undefined }, args => {
     const options = { cwd: directory, env: environment, signal: context.signal, timeout: 30000 };
     const commandArgs = ["--bottle", bottlePath, "--no-update", "--", ...args];
@@ -348,6 +354,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
       ? require("../../shared/runtime/wine-processes").runTool(selected.install.executablePath, commandArgs, options)
       : runSupervised(selected.install.executablePath, selected.install.serverPath, commandArgs, options);
   });
+  timing('bottle-settings');
   // The vendor wrapper restores these trusted game-only values after its
   // protected shell/Perl launch; bottle setup stays on the stock runtime.
   const originalEnvironment = {...environment}, originalOverrides = {...overrides};
@@ -435,6 +442,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     translatorRows: Translators.inspectorRows(translatorPlan),
     translatorPlanInputs: Translators.planInputs(context.runtimeSettings, context.wineEnvironment?.install || selected.install), cameraAdapterNotice: context.cameraAdapterNotice || null, graphicsInputs: context.graphicsInputs } };
   context.onEntryChange?.(entry);
+  timing('ready');
   return { ...selected, directory, gameRoot, workingDirectory, bottlePath, executablePath, windowsExecutablePath, windowsWorkingDirectory, environment, args, translatorPlan, existingEnvironment };
 }
 

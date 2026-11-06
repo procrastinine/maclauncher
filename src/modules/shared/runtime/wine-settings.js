@@ -61,7 +61,16 @@ function registry(settings, { executable = '' } = {}) {
   return commands;
 }
 async function applyRegistry(settings, options, run) {
-  const commands = registry(settings, options);
+  let commands = registry(settings, options);
+  // A stopped private prefix has a flushed registry. Replaying an unchanged
+  // value would boot Wine, stop its server, then boot it again for the game.
+  const current = commands.length && await options?.readCurrentRegistry?.();
+  if (current) commands = commands.filter(args => {
+    const file = args[2].startsWith('HKCU\\') ? 'user.reg' : 'system.reg';
+    const key = args[2].replace(/^HK(?:CU|LM)\\/, ''), name = args[args.indexOf('/v') + 1];
+    const type = args[args.indexOf('/t') + 1], value = args[args.indexOf('/d') + 1];
+    return current[file]?.[key]?.[name] !== (type === 'REG_DWORD' ? Number(value) : value);
+  });
   if (commands.length) await options?.assertWritable?.();
   for (const args of commands) await run(args);
 }

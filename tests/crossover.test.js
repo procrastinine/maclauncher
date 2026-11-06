@@ -1043,3 +1043,33 @@ test('Steam preparation keeps CrossOver registry settings and game drives in the
   const retina = registry.filter(args => args.includes('RetinaMode'));
   assert.deepEqual(retina.map(args => args[args.indexOf('/d') + 1]), ['Y', 'N']);
 });
+
+test('repeated Play skips unchanged settings only in a stopped private Wine registry', async t => {
+  const directory = fixture(t), userDataDir = path.join(directory, 'data'), game = path.join(directory, 'game');
+  pe(path.join(game, 'Game.exe'));
+  const installed = Manager.importRuntime({ userDataDir, runtimePath: app(path.join(directory, 'CrossOver.app')) });
+  const entry = Detection.decorateEntry({ gameId: 'unchanged-registry', gamePath: game });
+  const calls = [], Processes = require('../src/modules/shared/runtime/wine-processes');let running = false;
+  t.mock.method(Processes, 'runningState', async () => ({ running }));
+  const run = async (_command, args) => {
+    calls.push(args);
+    const bottle = args[args.indexOf('--bottle') + 1];
+    fs.mkdirSync(bottle, { recursive: true });fs.writeFileSync(path.join(bottle, 'cxbottle.conf'), '[Bottle]\n');
+    fs.writeFileSync(path.join(bottle, 'system.reg'), '[Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\AeDebug]\n"Debugger"="false"\n');
+    return { stdout: '', stderr: '' };
+  };
+  const launch = crashDialog => Launch.prepareLaunch(entry, { userDataDir, settings: {}, runtimeSettings: { version: installed.version, crashDialog } }, { run });
+  await launch('off');await launch('off');
+  assert.equal(calls.length, 1, 'only initial bottle setup runs; the matching setting needs no reg.exe/server restart');
+  await launch('on');
+  assert.equal(calls.length, 2);assert.ok(calls[1].includes('reg.exe'));assert.ok(calls[1].includes('winedbg --auto %ld %ld'));
+  running = true;await launch('off');
+  assert.equal(calls.length, 3, 'a live prefix never uses potentially stale on-disk registry values');
+  assert.ok(calls[2].includes('reg.exe'));assert.ok(calls[2].includes('false'));
+  const Wine = require('../src/modules/shared/runtime/wine-settings');
+  const current = require('../src/modules/shared/runtime/wine-environment').readRegistry('[Control Panel\\\\Desktop]\n"LogPixels"=dword:00000090\n');
+  const writes = [];
+  await Wine.applyRegistry({ dpi: 144 }, { readCurrentRegistry: async () => ({ 'user.reg': current }) }, args => writes.push(args));
+  assert.equal(writes.length, 1, 'matching DWORD is skipped but missing machine-wide value is still written');
+  assert.equal(writes[0][2], 'HKLM\\System\\CurrentControlSet\\Hardware Profiles\\Current\\Software\\Fonts');
+});

@@ -223,4 +223,4 @@ function wrapperForPrefix(prefixPath, reference) {
 }
 
 module.exports = { INHERIT, inside, privateEnvironment, assertPrivateEnvironment, environmentReference,
-  readIni, readRegistry, readEnvironment, discoverEnvironments, environmentActions, saveLocations, assertWritableRegistry, wrapperForPrefix };
+  readIni, readRegistry, registryValues, readEnvironment, discoverEnvironments, environmentActions, saveLocations, assertWritableRegistry, wrapperForPrefix };
