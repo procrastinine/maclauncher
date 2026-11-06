@@ -32,6 +32,7 @@ import { PluginLibrary } from "./PluginLibrary";
 import type { RuntimeSettingsApi } from "./RuntimeSettingsWindow";
 import { EffectsPresetManager } from "./EffectsPresetManager";
 import { ComponentsView } from "./ComponentsView";
+import { cpuLabel } from "../../../../core/cpu-labels.mjs";
 import { useGraphicsCatalog } from "../useGraphicsCatalog";
 import { ErrorText } from "./ErrorText";
 import { PopoverButton } from "./Popover";
@@ -653,7 +654,7 @@ export function RuntimesView({
                             <div className="saveRowMain">
                               <div className="saveName">
                                 {activeRuntimeVersionTag(inst.version)}
-                                {translatorBuild ? <span className="badge" data-cpu-build={translatorBuild} title="CPU build">{translatorBuild}</span>
+                                {translatorBuild ? <span className="badge" data-cpu-build={translatorBuild} title="CPU build">{cpuLabel(translatorBuild)}</span>
                                   : installBuild && installBuild !== "universal" && automaticArchitecture &&
                                   installBuild !== automaticArchitecture && <span className="badge">{architectureLabel(installBuild)}</span>}
                                 {isDefault && (

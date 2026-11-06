@@ -13,16 +13,11 @@ function unavailableReason(backend, dependencies) {
   const support = Requirements.requirementSupport(Requirements.METAL4, dependencies.hostCapabilities || Host.getHostCapabilities());
   return support.supported === false ? support.reason : null;
 }
-function choiceLabel(backend, label, dependencies) {
-  return backend === "kosmickrisp"
-    ? label + " (" + Architecture.architectureLabel(dependencies.architecture || Architecture.selectedArchitecture()) + ")" : label;
-}
-// A settings choice names the CPU build its consumer loads: the consumer's own
-// CPU (dependencies.architecture), the slice installed() checked for it.
-function buildChoiceLabel(label, dependencies) {
-  const build = Architecture.cpuBuildLabel(dependencies.architecture || Architecture.selectedArchitecture(),
-    { host: dependencies.hostCapabilities || Host.getHostCapabilities() });
-  return build ? label + " · " + build : label;
+// The Intel KosmicKrisp offer names its build. Settings entries share their
+// consumer's CPU (dependencies.architecture, the slice installed() checked),
+// so they do not repeat it.
+function offerLabel(label, dependencies) {
+  return label + " (" + Architecture.architectureLabel(dependencies.architecture || Architecture.selectedArchitecture()) + ")";
 }
 function consumerContext(context, dependencies, projectId) {
   if (!dependencies.architecture) return context;
@@ -101,7 +96,7 @@ function installed(context, dependencies = {}) {
 }
 function choices(context, dependencies = {}) {
   const available = installed(context, dependencies);
-  const rows = available.map(item => ({ value: item.id, label: buildChoiceLabel(item.label, dependencies) }));
+  const rows = available.map(item => ({ value: item.id, label: item.label }));
   const saved = context.runtimeSettings?.vulkanRuntime || "auto";
   const request = managed.normalizeSelection(saved, context.logger || console);
   if (request !== saved && rows.some(row => row.value === request)) rows.find(row => row.value === request).value = saved;
@@ -114,7 +109,6 @@ function choices(context, dependencies = {}) {
     else {
       const version = unversioned ? "" : owner ? request.slice(owner.prefix.length) : request.slice(backend.length + 1);
       const label = (owner?.manager.label || definitions[backend]?.label || backend) + (version ? " " + version : "");
-      // A saved choice that is not installed loads no build, so it names none.
       if (!rows.some(row => row.value === saved)) rows.push({ value: saved, label: label + " (not installed)" });
     }
   }
@@ -164,7 +158,7 @@ function requirements(context, dependencies = {}) {
           preferred = requirements({ ...context, runtimeSettings: { ...context.runtimeSettings, vulkanRuntime: managed.selectionId } }, dependencies)[0];
         } catch (error) { context.logger?.warn?.("[runtimes] The Intel KosmicKrisp package is unavailable; using MoltenVK.", error.message); }
         if (preferred) return [{ ...preferred, optional: true, cancelLabel: "Use MoltenVK",
-          label: choiceLabel("kosmickrisp", "KosmicKrisp", dependencies),
+          label: offerLabel("KosmicKrisp", dependencies),
           detail: "Intel programs on Apple Silicon. Skipping uses MoltenVK.", fallback: fallback()[0] }];
       }
       return fallback();

@@ -18,9 +18,9 @@ Upstream LWJGL KosmicKrisp packages contain arm64 libraries. MacLauncher KosmicK
 
 ## Labels
 
-Runtimes, game settings and the inspector name the CPU build a consumer loads.
+Labels use the CPU vocabulary in [Processor builds](README.md#processor-builds).
 
-- In **Runtimes**, the **DirectX → Vulkan**, **DirectX → Metal** and **Vulkan drivers** entries mark every installed version **x64**, **arm64** or **universal**, from the CPU slices of its installed library, and both builds of one version appear as two rows. [Processor builds](README.md#processor-builds) describes the version and **Build** menus.
-- For CrossOver and Sikarugir games, the inspector's **Vulkan** row and the Vulkan driver choices in Runtime Settings end with the build that the Wine process loads, taken from the same inspected Wine layout that Play prepares translator files for: **x64 (Wine under Rosetta)** for Intel Wine on Apple Silicon, **x64** for Intel Wine on an Intel Mac and **arm64 (ARM64 Wine)** for ARM64 Wine, including the CrossOver 27 FEX preview. Direct3D rows name Windows libraries and carry no Mac CPU.
-- The Vulkan choices of AnyPS5 and Prosper end with **x64 (under Rosetta)** on Apple Silicon and **x64** on an Intel Mac, and Android's end with **arm64**. These are the builds whose libraries the choice list checked for that CPU, the same check that selects the library at launch. A saved choice that is not installed names no build.
+- In **Runtimes**, the **DirectX → Vulkan**, **DirectX → Metal** and **Vulkan drivers** entries mark every installed version with its build, from the CPU slices of its installed library, and both builds of one version appear as two rows.
+- For CrossOver and Sikarugir games, the inspector's **Vulkan** row ends with the build that the Wine process loads, taken from the same inspected Wine layout that Play prepares translator files for: **Intel (Rosetta)** for Intel Wine on Apple Silicon, including CrossOver's Intel Wine, **Intel** on an Intel Mac and **Apple Silicon** for ARM64 Wine, including the CrossOver 27 FEX preview. Direct3D rows name Windows libraries and carry no Mac CPU.
+- The Vulkan driver choices of a game share the build of their consumer, Intel for AnyPS5 and Prosper and Apple Silicon for Android, so the menu does not repeat it. The choice list checks each library for that CPU, the same check that selects the library at launch.
 - Each installed version of a driver package is one choice for a consumer, even when both of its CPU builds are installed.

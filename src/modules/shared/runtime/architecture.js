@@ -1,6 +1,7 @@
 const { AsyncLocalStorage } = require("node:async_hooks");
 const { architectureSupport, getHostCapabilities, defaultArchitecture } = require("./host-capabilities");
 const Requirements = require("./feature-requirements");
+const CpuLabels = require("../../../core/cpu-labels.mjs");
 const context = new AsyncLocalStorage();
 // A CPU this launcher installs builds for, or null.
 function normalizeArchitecture(value) {
@@ -21,7 +22,8 @@ function withArchitecture(architecture, action) {
   if (!["arm64", "x64"].includes(selected)) throw new Error("Choose an Apple Silicon or Intel build.");
   return context.run(selected, action);
 }
-function architectureLabel(architecture) { return normalizeArchitecture(architecture) === "x64" ? "Intel" : "Apple Silicon"; }
+// Labels come from core/cpu-labels.mjs, the one CPU vocabulary.
+function architectureLabel(architecture) { return CpuLabels.cpuLabel(normalizeArchitecture(architecture) === "x64" ? "x64" : "arm64"); }
 function recordArchitecture(record) {
   return normalizeArchitecture(record?.arch || record?.architecture || record?.projectPackage?.arch || record?.catalogEntry?.architecture);
 }
@@ -64,14 +66,10 @@ function assetArchitecture(name) {
 function requiresRosetta(architecture, host = getHostCapabilities()) {
   return normalizeArchitecture(architecture) === "x64" && host.platform === "darwin" && host.hardwareArch === "arm64";
 }
-// The CPU build a consumer loads, as translator settings and the inspector name
-// it: x64, arm64 or universal. An x64 build on Apple Silicon runs under Rosetta;
-// a Wine consumer names its Wine process, whose CPU decides the slice it loads.
-function cpuBuildLabel(architecture, { consumer = null, host = getHostCapabilities() } = {}) {
-  const cpu = normalizeArchitecture(architecture);
-  if (!cpu) return "";
-  if (cpu === "x64" && requiresRosetta(cpu, host)) return consumer === "wine" ? "x64 (Wine under Rosetta)" : "x64 (under Rosetta)";
-  return cpu === "arm64" && consumer === "wine" ? "arm64 (ARM64 Wine)" : cpu;
+// The build a consumer loads on this Mac, as the inspector states it: Intel
+// code on Apple Silicon reads Intel (Rosetta).
+function cpuBuildLabel(architecture, { host = getHostCapabilities() } = {}) {
+  return CpuLabels.cpuLabel(normalizeArchitecture(architecture), { hostArchitecture: host.platform === "darwin" ? host.hardwareArch : null });
 }
 // A Mach-O image without an Apple Silicon slice runs its Intel slice through Rosetta.
 function imageRequiresRosetta(architectures, host) {

@@ -271,8 +271,8 @@ async function inventoryFacts(install, runtime, context, dependencies) {
   return { includedInventory, choices };
 }
 function optionsPlan(input, context) {
-  return { ...Plan.resolveApiRoles(Plan.resolvePlan(input), { ...input,
-    selections: Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id, context.runtimeSettings?.[role.settingsKey]])) }), layout: input.layout };
+  return Plan.resolveApiRoles(Plan.resolvePlan(input), { ...input,
+    selections: Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id, context.runtimeSettings?.[role.settingsKey]])) });
 }
 function environmentContext(context, install) {
   const value = context.runtimeSettings?.environmentReference;
@@ -424,10 +424,11 @@ function withSettings(manifest) {
 }
 // A Vulkan driver loads as the slice of the Wine process's CPU: the one
 // wine-layout.js inspects, managedTranslators selects its build for and Play
-// checks before loading. Settings and the inspector name that build.
+// checks before loading. The inspector names that build; settings menus share
+// it across every entry, so they do not repeat it.
 function nativeBuildSuffix(description, layout, host) {
   if (description?.component !== 'vulkan-driver' || !description.files?.some(file => file.format === 'macho')) return '';
-  const build = Architecture.cpuBuildLabel(layout?.architecture, { consumer: 'wine', ...(host ? { host } : {}) });
+  const build = Architecture.cpuBuildLabel(layout?.architecture, host ? { host } : {});
   return build ? ` · ${build}` : '';
 }
 function optionLists(install, runtime, context, dependencies = {}) {
@@ -436,19 +437,16 @@ function optionLists(install, runtime, context, dependencies = {}) {
     const files = plan.compatibility[item.id]?.files || plan.compatibility[item.id]?.inspectedFiles || item.files;
     return { ...item, files, ...(['d3d-renderer', 'd3d12'].includes(item.component) && files.some(file => file.format === 'pe') ? { apis: Roles.apisForFiles(files) } : {}) };
   });
-  const builds = new Map([...input.included, ...input.choices].map(item => [item.id, nativeBuildSuffix(item, input.layout, dependencies.host)]));
-  const withBuilds = rows => Array.isArray(rows) ? rows.map(row => builds.get(row?.value) ? { ...row, label: row.label + builds.get(row.value) } : row) : rows;
   const legacy = Object.fromEntries(Object.entries(SETTINGS).map(([component, key]) => {
-    const rows = withBuilds(Plan.options({ ...input, component, included: input.included.filter(item => !item.hiddenChoice) }));
+    const rows = Plan.options({ ...input, component, included: input.included.filter(item => !item.hiddenChoice) });
     if (!context.runtimeSettings?.[key]) {
       const current = rows.find(row => row.value === (plan.components[component].selected?.id || input.selections[component]));
       if (current) current.value = ''; // The unset control preserves its existing saved backend.
     }
     return [key + 'Options', rows];
   }));
-  const api = Plan.apiOptions(plan.components.d3d11 ? plan : Plan.projectRoles(plan), { ...input,
-    selections: Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id, context.runtimeSettings?.[role.settingsKey]])) });
-  return { ...legacy, ...Object.fromEntries(Object.entries(api).map(([key, rows]) => [key, withBuilds(rows)])) };
+  return { ...legacy, ...Plan.apiOptions(plan.components.d3d11 ? plan : Plan.projectRoles(plan), { ...input,
+    selections: Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id, context.runtimeSettings?.[role.settingsKey]])) }) };
 }
 // The settings and Wine installation that decide a translator plan. Rows
 // recorded at Play describe the current settings while these are unchanged.

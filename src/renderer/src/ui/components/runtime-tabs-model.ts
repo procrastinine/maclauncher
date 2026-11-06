@@ -1,7 +1,8 @@
 import type { RuntimeManagerState, RuntimeRefreshOptions } from "../types";
 import { sanitizeErrorMessage } from "../../../../core/runtime-errors.mjs";
 import packageInfo from "../../../../../package.json";
-import { cpuBuildName, isPrereleaseVersion } from "../ui-helpers";
+import { isPrereleaseVersion } from "../ui-helpers";
+import { cpuId } from "../../../../core/cpu-labels.mjs";
 
 // Shared by initial UI state and the source/import controls. An explicit
 // choice stays selected; automatic choices prefer stable published releases.
@@ -265,7 +266,7 @@ export function runtimeCatalogPresentation(catalog: Record<string, any> | null |
 // slices of its installed file, then by the build its list declares, then by
 // the CPU its installation was made for.
 const cpuBuild = (value: unknown) => {
-  const name = cpuBuildName(typeof value === "string" ? value : "");
+  const name = cpuId(value);
   return name === "x64" || name === "arm64" || name === "universal" ? name : "";
 };
 export function translatorInstallBuild(install: Record<string, any> | null | undefined, requirement?: Record<string, any> | null): string {
