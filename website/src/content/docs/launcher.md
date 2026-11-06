@@ -81,7 +81,7 @@ This section holds the runtime, its version and settings, launch arguments, netw
 
 ### Patches
 
-Some game types support reversible patches to the game's files. For example, RPG Maker MV games can swap in an updated graphics library, and games with in-game cheat tools can have those tools injected. Each patch shows its status (Not patched, Patched or Partial) with **Patch** and **Unpatch** buttons, and asks before changing anything.
+Some game types support reversible patches to the game's files. For example, RPG Maker MV games can swap in an updated graphics library, and games with in-game cheat tools can have those tools injected. Each patch shows its status (Not patched, Patched or Partial) with **Patch** and **Unpatch** buttons, and asks before changing anything. [Patching games](/maclauncher/tools/patching-games/) walks through each one.
 
 ### Tools
 
