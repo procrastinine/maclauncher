@@ -5,13 +5,14 @@ import { FolderIcon, RefreshIcon, TrashIcon } from "../icons";
 import { ErrorText } from "./ErrorText";
 import { HelpTip } from "./HelpTip";
 import { StatusBadge } from "./StatusBadge";
-import { componentCpuLabel, componentDeleteRequest, componentIdentityText, componentImportLabel, componentItemName,
-  componentSizeText, componentSourceText } from "./components-model";
+import { componentCpuLabel, componentDeleteRequest, componentDeleteUnusedRequest, componentItemName, componentRows,
+  componentSizeText, componentSourceText, unusedComponentRows } from "./components-model";
 
 export type ComponentsApi = { componentAction: NonNullable<Window["MacLauncher"]>["launcher"]["componentAction"] };
 
-// Runtimes → Components: downloads without a Runtimes row of their own. The list
-// reads local files only; Delete, Add and Show in Finder act on one item.
+// Runtimes → Tools → Downloaded files: downloads without a Runtimes row of
+// their own, installed items only and largest first. The list reads local files
+// only; Add from file, Delete unused, Delete and Show in Finder act on it.
 export function ComponentsView({ api: suppliedApi, navigationKey, initial }: {
   api?: ComponentsApi; navigationKey?: number; initial?: ComponentList;
 }) {
@@ -24,7 +25,7 @@ export function ComponentsView({ api: suppliedApi, navigationKey, initial }: {
   const request = useRef(0);
   async function load() {
     const token = ++request.current;
-    if (!api?.componentAction) { setLoading(false); setError("Components are unavailable."); return; }
+    if (!api?.componentAction) { setLoading(false); setError("Downloaded files are unavailable."); return; }
     setLoading(true);
     try {
       const next = await api.componentAction("list");
@@ -35,22 +36,31 @@ export function ComponentsView({ api: suppliedApi, navigationKey, initial }: {
   useEffect(() => { if (!initial) void load(); return () => { request.current++; }; }, [api, navigationKey, initial]);
 
   // The list is read again after every action; a failed action keeps its reason shown.
-  async function act(key: string, run: () => Promise<boolean>, done?: string) {
+  async function act(key: string, run: () => Promise<string>) {
     setBusy(key); setError(null); setMessage("");
     let failed: unknown = null;
-    try { if (await run() && done) setMessage(done); }
+    try { const done = await run(); if (done) setMessage(done); }
     catch (failure) { failed = failure; }
     setBusy(""); await load();
     if (failed) setError(failed);
   }
   async function remove(component: ComponentEntry, item: ComponentItem) {
     if (!api || !await confirmAction(componentDeleteRequest(component, item, list?.gameRunning))) return;
-    await act(`${component.id}:${item.id}`, () => api.componentAction("remove", { componentId: component.id, itemId: item.id }),
-      `Deleted ${componentItemName(component, item)}.`);
+    await act(`${component.id}:${item.id}`, async () => await api.componentAction("remove", { componentId: component.id, itemId: item.id })
+      ? `Deleted ${componentItemName(component, item)}.` : "");
   }
-  async function add(component: ComponentEntry) {
+  async function removeUnused() {
+    const unused = unusedComponentRows(componentRows(list));
+    if (!api || !unused.length || !await confirmAction(componentDeleteUnusedRequest(unused, list?.gameRunning))) return;
+    await act("unused", async () => {
+      let deleted = 0;
+      for (const { component, item } of unused) if (await api.componentAction("remove", { componentId: component.id, itemId: item.id })) deleted++;
+      return deleted === 1 ? "Deleted 1 unused download." : `Deleted ${deleted} unused downloads.`;
+    });
+  }
+  async function add() {
     if (!api) return;
-    await act(`${component.id}:import`, () => api.componentAction("import", { componentId: component.id }), `Added ${component.label}.`);
+    await act("import", async () => { const added = await api.componentAction("import"); return added ? `Added ${added.label}.` : ""; });
   }
   async function reveal(component: ComponentEntry, item: ComponentItem) {
     if (!api) return;
@@ -58,71 +68,65 @@ export function ComponentsView({ api: suppliedApi, navigationKey, initial }: {
     catch (failure) { setError(failure); }
   }
 
-  const components = list?.components || [];
+  const rows = componentRows(list), unused = unusedComponentRows(rows);
+  const failed = (list?.components || []).filter(component => component.error);
   return <div className="runtimeTabPanel componentsView" id="runtime-panel-components">
     <div className="runtimePanel">
       <div className="runtimeSectionCard">
         <div className="runtimeSectionHeader">
           <div>
-            <div className="runtimeSectionTitle">Components
-              <HelpTip label="About components">Files that runtimes and games download when needed and that have no list of their own.
-                A deleted item downloads again, after consent, the next time something needs it. Add reads a local copy and checks it
-                against the identity MacLauncher records for that item, without network access.</HelpTip>
+            <div className="runtimeSectionTitle">Downloaded files
+              <HelpTip label="About downloaded files">Files that runtimes and games download when needed and that have no list of their own.
+                A deleted file downloads again, after consent, the next time something needs it. Add from file reads a local copy and
+                adds it when it matches a download that MacLauncher records, without network access.</HelpTip>
             </div>
           </div>
           <div className="runtimePanelHeaderActions">
+            <button type="button" className="btn small" disabled={Boolean(busy)} onClick={() => void add()}>
+              {busy === "import" ? "Adding…" : "Add from file…"}</button>
+            <button type="button" className="btn small" disabled={Boolean(busy) || unused.length === 0} onClick={() => void removeUnused()}
+              title={unused.length ? undefined : "Every downloaded file is in use."}>{busy === "unused" ? "Deleting…" : "Delete unused"}</button>
             <button type="button" className={`btn iconOnly runtimeRefresh${loading ? " refreshing" : ""}`} disabled={loading || Boolean(busy)}
-              aria-busy={loading} title="Reload components" aria-label="Reload components" onClick={() => void load()}><RefreshIcon /></button>
+              aria-busy={loading} title="Reload downloaded files" aria-label="Reload downloaded files" onClick={() => void load()}><RefreshIcon /></button>
           </div>
         </div>
-        {(error || message) && <div className="runtimeSectionBody">
+        {(error || message || failed.length > 0) && <div className="runtimeSectionBody">
           <ErrorText error={error} inline className="runtimeError" onDismiss={() => setError(null)} />
           {message && !error && <div className="dim runtimeActionStatus" role="status">{message}</div>}
+          {failed.map(component => <ErrorText key={component.id} error={`${component.label}: ${component.error}`} inline />)}
         </div>}
-        {loading && !list && <div className="runtimeSectionBody"><span className="dim" role="status">Reading installed components…</span></div>}
+        {loading && !list && <div className="runtimeSectionBody"><span className="dim" role="status">Reading downloaded files…</span></div>}
       </div>
-      {components.map(component => <section key={component.id} className="saveSection runtimeSection componentGroup"
-        aria-label={component.label} data-component-id={component.id}>
-        <div className="saveSectionTitle runtimeInstalledHeader">
-          <span>{component.label}{component.description && <HelpTip label={`About ${component.label}`}>{component.description}</HelpTip>}</span>
-          {component.importable && <span className="runtimeInstalledHeaderRight">
-            <button type="button" className="btn small" disabled={Boolean(busy)} onClick={() => void add(component)}>
-              {busy === `${component.id}:import` ? "Adding…" : componentImportLabel(component)}
-            </button>
-          </span>}
-        </div>
-        {component.error && <ErrorText error={component.error} inline />}
-        {component.items.length === 0 ? <div className="empty">Not installed.</div> : <div className="saveList">
-          {component.items.map(item => {
-            const cpu = componentCpuLabel(item), size = componentSizeText(item), source = componentSourceText(item);
-            const identity = componentIdentityText(item.identity);
+      {list && <section className="saveSection runtimeSection componentGroup" aria-label="Downloaded files">
+        {rows.length === 0 ? <div className="empty">No downloaded files.</div> : <div className="saveList">
+          {rows.map(({ component, item }) => {
+            const name = componentItemName(component, item), cpu = componentCpuLabel(item);
+            const size = componentSizeText(item), source = componentSourceText(item);
             const removing = busy === `${component.id}:${item.id}`;
-            return <div className="saveRow" key={item.id} data-component-item={item.id}>
+            return <div className="saveRow" key={`${component.id}:${item.id}`} data-component-id={component.id} data-component-item={item.id}>
               <div className="saveRowMain">
                 <div className="saveName">
-                  {item.version || component.label}
+                  <span title={item.identity || undefined}>{name}</span>
+                  {component.description && <HelpTip label={`About ${component.label}`}>{component.description}</HelpTip>}
                   {cpu && <span className="badge" title="CPU architecture">{cpu}</span>}
                   {item.status && <StatusBadge tone="warning">{item.status}</StatusBadge>}
                 </div>
-                <div className="dim componentMeta">
-                  {[size, source].filter(Boolean).join(" · ")}
-                  {identity && <>{(size || source) && " · "}<span className="mono" title={item.identity}>{identity}</span></>}
-                </div>
+                <div className="dim componentMeta">{[size, source].filter(Boolean).join(" · ")}</div>
                 <div className="dim">{item.users.length ? `Used by ${item.users.join(", ")}` : "Not used by an installed runtime"}</div>
                 {!item.removable && item.removeReason && <div className="dim">{item.removeReason}</div>}
               </div>
               <div className="saveRowActions">
                 {item.path && <button type="button" className="btn iconOnly" disabled={Boolean(busy)} title="Show in Finder"
-                  aria-label={`Show ${componentItemName(component, item)} in Finder`} onClick={() => void reveal(component, item)}><FolderIcon /></button>}
+                  aria-label={`Show ${name} in Finder`} onClick={() => void reveal(component, item)}><FolderIcon /></button>}
                 <button type="button" className="btn iconOnly danger" disabled={Boolean(busy) || !item.removable}
-                  title={item.removable ? "Delete" : item.removeReason || "This item cannot be deleted here."}
-                  aria-label={removing ? `Deleting ${componentItemName(component, item)}` : `Delete ${componentItemName(component, item)}`}
+                  title={item.removable ? "Delete" : item.removeReason || "This file cannot be deleted here."}
+                  aria-label={removing ? `Deleting ${name}` : `Delete ${name}`}
                   onClick={() => void remove(component, item)}><TrashIcon /></button>
               </div>
             </div>;
           })}
         </div>}
-      </section>)}
+      </section>}
     </div>
   </div>;
 }

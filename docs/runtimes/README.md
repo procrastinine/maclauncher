@@ -222,31 +222,31 @@ The installation controls in **Runtimes** download the selected version. Install
 
 Runtime status uses the same saved preferences as Play, including versions of dependencies that are selected separately, and changing a default refreshes the status of the runtimes that depend on it.
 
-### Components
+### Downloaded files
 
-**Runtimes → Tools → Components**, the last subtab of the Tools entry, manages every downloaded item that has no row of its own elsewhere in **Runtimes**. Play and the inspector never open it; each item downloads by itself, after consent, when something needs it. The tab lists:
+**Runtimes → Tools → Downloaded files**, the last subtab of the Tools entry, manages every downloaded file that has no row of its own elsewhere in **Runtimes**. Play and the inspector never open it; each file downloads by itself, after consent, when something needs it. It covers:
 
-- small runtime packages that other runtimes load, such as CrossOver graphics integration, the WineVulkan scene adapter, the FidelityFX API adapter, MoltenVK scene support and the Steam client bridge
-- Valve's Steam client components that the Steam client bridge loads
+- small runtime packages that other runtimes load, such as CrossOver graphics integration, the WineVulkan scene adapter, the FidelityFX API adapter and MoltenVK scene support
 - shared assets, such as the fallback fonts of KiriKiri and NScripter games and the MIDI soundfont and RPG Maker run-time packages that MKXP-Z uses
 - the GOG and Epic Games Store download helpers
 - the shared libraries that installed runtime packages declare
 - caches that MacLauncher fills, such as translator descriptions and neural model source archives
 
-Each component lists its installed items. A row names the version or content identity, the CPU architecture (**x64**, **arm64**, **universal**, or a description such as **Windows x86 + x64** for Windows files), the size on disk, the source (the host it was downloaded from, **Added manually**, or **Created by MacLauncher** for a cache) and the runtimes or games that use it. A digest identity is shortened in the row and shown in full in its tooltip. A component with no installed item reads **Not installed.** The list reads only local files; the reload button reads them again.
+The Steam client bridge and Valve's Steam client files are managed in the bridge's own **Runtimes** entry.
 
-**Delete** asks for confirmation in a native dialog. The dialog names the runtimes or games that use the item, notes that a running game keeps the files it already loaded until it quits, and states that MacLauncher asks before downloading the item again the next time something needs it; for a cache, it states that MacLauncher fills it again when needed. A shared library that installed runtimes still load cannot be deleted, and its row gives that reason; it is removed with the last runtime that uses it. Deleting the current Steam client components also clears the record that selects them, so the bridge asks to download them again. Removal renames the item to a trash name in its own folder and then deletes it without following links, so a stopped removal is finished by ordinary storage upkeep.
+The tab lists installed files only, largest first. A row names the file and its version, the CPU architecture in the vocabulary of [Processor builds](#processor-builds), the size on disk, the source (the host it was downloaded from, **Added manually**, or **Created by MacLauncher** for a cache) and the runtimes or games that use it, by their names in **Runtimes**. The tooltip of the name holds the file's content digest. With nothing installed, the tab reads **No downloaded files.** The list reads only local files; the reload button reads them again.
 
-**Add** reads a chosen file or folder and checks it against the identity MacLauncher records for that component, without network access:
+**Delete** asks for confirmation in a native dialog. The dialog names the runtimes or games that use the file, notes that a running game keeps the files it already loaded until it quits, and states that MacLauncher asks before downloading it again the next time something needs it; for a cache, it states that MacLauncher fills it again when needed. A shared library that installed runtimes still load cannot be deleted, and its row gives that reason; it is removed with the last runtime that uses it. **Delete unused** deletes every file that no installed runtime or game uses, after one confirmation that lists them. Removal renames a file to a trash name in its own folder and then deletes it without following links; each such folder is a declared store of storage upkeep, so a stopped removal is finished by the next upkeep pass.
+
+**Add from file…** reads a chosen file before anything else, then adds it to the download whose recorded identity it matches, without network access:
 
 - A shared asset must have the recorded size and SHA-256.
 - A runtime package archive must match the SHA-256 of a release in that runtime's cached version list. A match installs that release, for the CPU its list names, through the ordinary installation. A package that declares a shared library that is not on this Mac is rejected with that library's name; installing the runtime from **Runtimes** downloads it after consent.
 - An RPG Maker run-time package installer must match the publisher installer's recorded SHA-256. When the installer reader that extracts it is not installed, MacLauncher asks before downloading the reader.
-- Valve's client archive must keep its published name, `bins_misc_ubuntu12.zip.<SHA-1>`, and its contents must match that SHA-1. An archive is not added while another archive is current.
 
-A file that does not match is rejected with a reason that names both identities, such as the chosen file's SHA-256 and the recorded one, and nothing is installed. An added item reads **Added manually** as its source.
+A folder, an empty file or a file that matches no recorded download is rejected with a plain reason, which for an unknown file names its SHA-256, and nothing is installed. The file is checked the same way when the matching download is already installed. An added file reads **Added manually** as its source.
 
-**Show in Finder** reveals the item's folder or file.
+**Show in Finder** reveals the file or its folder.
 
 ## Per-game runtime overrides
 
@@ -317,17 +317,17 @@ Catalogs declare `installable` and, optionally, `installableVersions`, `installL
 
 ### Component declarations
 
-**Runtimes → Components** lists declarations from `src/core/components.js` and from an optional `components.js` in each module folder or shared submodule folder, which `registry.listComponents()` discovers. Each file exports an array of declarations, and the first declaration of an id wins. A declaration has:
+**Runtimes → Tools → Downloaded files** lists declarations from `src/core/components.js` and from an optional `components.js` in each module folder or shared submodule folder, which `registry.listComponents()` discovers. Each file exports an array of declarations, and the first declaration of an id wins. A declaration has:
 
 - `id`, `label` and `description`
 - `list(context)`: the installed items, read from local files only
 - `remove(item, context)`, optional: deletes one item
-- `import`, optional: `{ label, kinds, extensions, run(path, context) }`, where `kinds` holds `file`, `directory` or both and `run` checks the chosen path against the recorded identity and throws a plain reason when it differs
+- `import`, optional: `{ matches(file, context), run(path, context) }`. **Add from file…** reads the chosen file once and passes `{ path, size, sha256 }` to each `matches`; the first declaration that recognizes its recorded identity runs `run`, which checks the file again while it installs it and throws a plain reason when it differs
 - `cache`, optional: `true` for data the launcher recreates
 
-An item is `{ id, version, identity, architecture, path, source, users, status, removable, removeReason }`. `source` is `{ url }`, `{ label }` or `"manual"`, `users` names the runtimes or games that load the item, and `removable: false` with `removeReason` keeps an item that is still required. The context holds `userDataDir`, `settings`, `logger`, `signal`, `runtimeAction(managerId, action, payload)`, `confirmRuntimeInstall` and `downloads`. Sizes on disk, **Show in Finder** and the file chooser are provided by the launcher.
+An item is `{ id, version, identity, architecture, windows, path, source, users, status, removable, removeReason }`. `windows: true` marks Windows code, whose CPU is named as Windows names it. `source` is `{ url }`, `{ label }` or `"manual"`, `users` names the runtimes or games that load the item, and `removable: false` with `removeReason` keeps an item that is still required. The context holds `userDataDir`, `settings`, `logger`, `signal`, `runtimeAction(managerId, action, payload)`, `runtimeLabel(id)`, which names a runtime as **Runtimes** does, `confirmRuntimeInstall` and `downloads`. Sizes on disk, **Show in Finder** and the file chooser are provided by the launcher. A component whose `remove` places trash outside an existing store declares that folder in its owner's `derived-stores.js` with `match: TRASH`.
 
-`src/modules/shared/runtime/runtime-components.js` provides the common forms: `fromRuntimeManager(manager)` lists a manager's installed versions with their CPU builds, deletes one through the manager's uninstall action and installs a matching local archive through the manager's install action; `cacheComponent` describes one cache folder; `removeOwned` deletes one item inside its store. A pinned native manager's `installRuntime` accepts `archiveFile`, a local copy of the release archive that replaces the download and must match the release's recorded SHA-256. Every runtime manager that Runtimes does not show is declared as a component.
+`src/modules/shared/runtime/runtime-components.js` provides the common forms: `fromRuntimeManager(manager, { windows })` lists a manager's installed versions with their CPU builds, deletes one through the manager's uninstall action and installs a matching local archive through the manager's install action; `cacheComponent` describes one cache folder; `removeOwned` deletes one item inside its store. A pinned native manager's `installRuntime` accepts `archiveFile`, a local copy of the release archive that replaces the download and must match the release's recorded SHA-256. Every runtime manager that Runtimes does not show is declared as a component.
 
 ### Pre-launch checks
 

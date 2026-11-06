@@ -52,8 +52,8 @@ async function ensure(asset, context) {
   pending.set(target, work);
   try { return await work; } finally { pending.delete(target); }
 }
-// The Runtimes → Components row of one shared asset. A file added by hand
-// must have the asset's size and SHA-256; it is copied into the same store.
+// The Downloaded files row of one shared asset. A file added by hand must
+// have the asset's size and SHA-256; it is copied into the same store.
 function component(asset, { description, users = [] } = {}) {
   const root = userDataDir => path.join(userDataDir, "assets", asset.id);
   return { id: `asset:${asset.id}`, label: asset.label, description,
@@ -63,7 +63,8 @@ function component(asset, { description, users = [] } = {}) {
         source: fs.existsSync(path.join(path.dirname(file), ".manual")) ? "manual" : { url: asset.url }, users }] : [];
     },
     remove(item, { userDataDir }) { return require("./runtime-components").removeOwned(path.dirname(item.path), root(userDataDir)); },
-    import: { label: `Add ${asset.label}`, kinds: ["file"], extensions: [path.extname(asset.filename).slice(1)].filter(Boolean),
+    import: {
+      matches: ({ size, sha256 }) => size === asset.bytes && sha256 === asset.sha256,
       async run(input, { userDataDir, signal }) {
         const stat = fs.statSync(input);
         if (!stat.isFile()) throw Error(`Choose the ${asset.filename} file.`);

@@ -2,7 +2,7 @@ const fs = require("node:fs"), path = require("node:path");
 const Components = require("./runtime-components");
 
 // Shared runtime downloads and caches without a Runtimes row; see
-// core/component-service.js.
+// core/component-service.js. "Used by" names runtimes by their Runtimes label.
 const dependencies = ({ userDataDir }) => path.join(userDataDir, "runtimes", ".dependencies");
 const readJson = file => { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; } };
 
@@ -25,7 +25,7 @@ module.exports = [
         Components.storeEntries(release, { match: /^[a-f0-9]{64}$/ }).map(directory => {
           const record = readJson(path.join(directory, "runtime.json")) || {}, sha256 = path.basename(directory);
           const key = JSON.stringify([path.basename(project), path.basename(release), sha256]);
-          const named = [...new Set(users.get(key) || [])];
+          const named = [...new Set((users.get(key) || []).map(runtimeId => context.runtimeLabel?.(runtimeId) || runtimeId))];
           return { id: key, label: path.basename(project), version: `${path.basename(project)} ${path.basename(release)}`,
             identity: `SHA-256 ${sha256}`, architecture: record.catalogEntry?.projectPackage?.arch || null, path: directory,
             source: { url: record.repository ? `https://github.com/${record.repository}/releases` : "https://github.com/procrastinine/maclauncher-builds/releases" },

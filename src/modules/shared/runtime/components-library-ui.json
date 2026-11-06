@@ -1,9 +1,9 @@
 {
   "id": "components",
-  "label": "Components",
+  "label": "Downloaded files",
   "ui": {
-    "groupId": "tools", "tabLabel": "Tools", "sectionLabel": "Components",
+    "groupId": "tools", "tabLabel": "Tools", "sectionLabel": "Downloaded files",
     "library": "components", "order": 200, "memberOrder": 100000, "management": "managed"
   },
-  "sections": [{ "id": "default", "label": "Components" }]
+  "sections": [{ "id": "default", "label": "Downloaded files" }]
 }

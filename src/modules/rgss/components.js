@@ -20,7 +20,7 @@ module.exports = [
         path: directory, source: current.manual ? "manual" : { url: current.sourceUrl || pack.sourceUrl }, users: [`MKXP-Z (games that declare ${pack.id})`] }];
     },
     remove(item, { userDataDir }) { return Components.removeOwned(item.path, packs(userDataDir)); },
-    import: { label: `Add ${pack.label} installer`, kinds: ["file"], extensions: [path.extname(pack.archive.file).slice(1)].filter(Boolean),
+    import: { matches: ({ sha256 }) => sha256 === pack.archive.sha256,
       run: (file, context) => Rtp.installPack({ ...context, id: pack.id, archiveFile: file }) }
   }))
 ];

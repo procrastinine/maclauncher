@@ -32,8 +32,8 @@ test("every declaration follows the contract and lists an empty profile offline"
     assert.equal(typeof component.description, "string", `${component.id} describes what it is`);
     assert.equal(typeof component.list, "function");
     if (component.import) {
+      assert.equal(typeof component.import.matches, "function", component.id);
       assert.equal(typeof component.import.run, "function", component.id);
-      assert.ok((component.import.kinds || ["file"]).every(kind => ["file", "directory"].includes(kind)), component.id);
     }
     assert.deepEqual(await component.list({ userDataDir: root, settings: {}, logger: console }) || [], [], `${component.id} on an empty profile`);
   }
@@ -64,7 +64,7 @@ test("the service presents items, reveals them and refuses deletion of items sti
   const component = {
     id: "fixture-store", label: "Fixture store", description: "Fixture files.",
     list: () => [
-      { id: "one", version: "1.0", identity: "SHA-256 " + "a".repeat(64), architecture: "x86_64", path: path.join(store, "one"),
+      { id: "one", version: "1.0", identity: "SHA-256 " + "a".repeat(64), architecture: "x86_64", windows: true, path: path.join(store, "one"),
         source: { url: "https://example.test/one.zip" }, users: ["Fixture runtime"] },
       { id: "two", version: "2.0", architecture: "arm64", path: path.join(store, "missing"), source: "manual",
         users: ["Fixture runtime"], removable: false, removeReason: "Installed runtimes load it." }],
@@ -75,7 +75,8 @@ test("the service presents items, reveals them and refuses deletion of items sti
   const { components, gameRunning } = await service.list();
   assert.equal(gameRunning, true);
   const [first, second] = components.find(row => row.id === "fixture-store").items;
-  assert.equal(first.architecture, "x64"); assert.ok(first.bytes >= 9000); assert.equal(first.sizeComplete, true);
+  assert.equal(first.architecture, "x64"); assert.equal(first.windows, true); assert.equal(second.windows, false);
+  assert.ok(first.bytes >= 9000); assert.equal(first.sizeComplete, true);
   assert.deepEqual(first.source, { url: "https://example.test/one.zip", label: null }); assert.equal(first.removable, true);
   assert.deepEqual(second.source, { manual: true, label: "Added manually" });
   assert.equal(second.removable, false); assert.equal(second.removeReason, "Installed runtimes load it.");
@@ -87,7 +88,6 @@ test("the service presents items, reveals them and refuses deletion of items sti
   await service.reveal({ componentId: "fixture-store", itemId: "one" });
   assert.deepEqual(host, [["shell.showItemInFolder", path.join(store, "one")]]);
   await assert.rejects(service.reveal({ componentId: "fixture-store", itemId: "two" }), /no files on this Mac/);
-  await assert.rejects(service.import({ componentId: "fixture-store" }), /cannot be added manually/);
 });
 
 test("owned removal refuses links and anything outside the component store", async t => {
@@ -101,29 +101,52 @@ test("owned removal refuses links and anything outside the component store", asy
   assert.equal(fs.existsSync(path.join(store, "kept")), false);
 });
 
-test("a shared asset added by hand must match its size and SHA-256", async t => {
+test("Add from file reads the chosen file first and adds a shared asset only when its size and SHA-256 match", async t => {
   offline(t);
   const root = temporary(t), bytes = Buffer.from("fixture soundfont bytes");
   const asset = { id: "fixture-font", label: "Fixture font", filename: "fixture.ttf", bytes: bytes.length, sha256: sha256(bytes), url: "https://example.test/fixture.ttf" };
   const component = File.component(asset, { users: ["Fixture engine"], description: "Fixture." });
-  const chosen = { file: null };
+  const chosen = { file: null }, prompts = [];
   const service = Service.createComponentService({ userDataDir: root, registry: fakeRegistry([component]),
-    callHost: async name => name === "chooseImportPath" ? chosen.file : true });
-  chosen.file = path.join(root, "short.ttf"); fs.writeFileSync(chosen.file, "short");
-  await assert.rejects(service.import({ componentId: component.id }), /has 5 bytes; Fixture font has 23/);
-  chosen.file = path.join(root, "wrong.ttf"); fs.writeFileSync(chosen.file, Buffer.from("fixture soundfont BYTES"));
-  await assert.rejects(service.import({ componentId: component.id }), /SHA-256 is [a-f0-9]{64}; Fixture font is/);
-  assert.deepEqual(await component.list({ userDataDir: root }), []);
+    callHost: async (name, value) => { if (name === "chooseImportPath") { prompts.push(value); return chosen.file; } return true; } });
   chosen.file = null;
-  assert.equal(await service.import({ componentId: component.id }), false, "a canceled chooser adds nothing");
+  assert.equal(await service.import(), false, "a canceled chooser adds nothing");
+  assert.deepEqual(prompts[0], { label: "Add from file", kinds: ["file"], extensions: [], buttonLabel: "Add" });
+  chosen.file = path.join(root, "empty.ttf"); fs.writeFileSync(chosen.file, "");
+  await assert.rejects(service.import(), /The chosen file is empty/);
+  chosen.file = root;
+  await assert.rejects(service.import(), /Choose a file/);
+  chosen.file = path.join(root, "wrong.ttf"); fs.writeFileSync(chosen.file, Buffer.from("fixture soundfont BYTES"));
+  await assert.rejects(service.import(), new RegExp(`matches no download that MacLauncher records. Its SHA-256 is ${sha256(Buffer.from("fixture soundfont BYTES"))}`));
+  assert.deepEqual(await component.list({ userDataDir: root }), []);
   chosen.file = path.join(root, "right.ttf"); fs.writeFileSync(chosen.file, bytes);
-  assert.equal(await service.import({ componentId: component.id }), true);
+  assert.deepEqual(await service.import(), { componentId: component.id, label: "Fixture font" });
   const [item] = (await service.list()).components.find(row => row.id === component.id).items;
   assert.deepEqual(item.source, { manual: true, label: "Added manually" });
   assert.equal(File.resolve(asset, root), item.path);
   assert.deepEqual(item.users, ["Fixture engine"]);
+  // Installed already: a different file is still read and rejected, never reported as added.
+  chosen.file = path.join(root, "wrong.ttf");
+  await assert.rejects(service.import(), /matches no download/);
+  const short = path.join(root, "short.ttf"); fs.writeFileSync(short, "short");
+  await assert.rejects(component.import.run(short, { userDataDir: root }), /has 5 bytes; Fixture font has 23/, "run checks the file again");
   await service.remove({ componentId: component.id, itemId: item.id });
   assert.equal(File.resolve(asset, root), null, "a deleted asset is fetched again by ensure(), after consent");
+});
+
+test("a chosen Valve archive is checked before the current client files are reported", async t => {
+  const Valve = require("../src/modules/crossover/runtime/steam-client-components");
+  const root = temporary(t), store = path.join(root, "runtimes/steam-client-components"), sha1 = "c".repeat(40), directory = path.join(store, sha1);
+  fs.mkdirSync(directory, { recursive: true });
+  const files = ["steamclient64.dll", "steamclient.dll"].map(name => { fs.writeFileSync(path.join(directory, name), name); return { path: name, sha256: sha256(Buffer.from(name)), size: name.length }; });
+  fs.writeFileSync(path.join(store, "active.json"), JSON.stringify({ archiveSha1: sha1, source: "https://example.test", clients: { x86_64: "steamclient64.dll", i386: "steamclient.dll" }, files }));
+  assert.equal(Valve.current(root)?.archiveSha1, sha1);
+  const wrong = path.join(root, "bins_misc_ubuntu12.zip." + sha1); fs.writeFileSync(wrong, "not this archive");
+  await assert.rejects(Valve.install({ userDataDir: root, archiveFile: wrong, resolved: { filename: path.basename(wrong), url: "https://example.test/" + path.basename(wrong) } }),
+    /differs from its content address/);
+  const empty = path.join(root, "empty"); fs.writeFileSync(empty, "");
+  await assert.rejects(Valve.install({ userDataDir: root, archiveFile: empty, resolved: { filename: path.basename(wrong) } }), /differs from its content address/);
+  assert.equal((await Valve.install({ userDataDir: root })).archiveSha1, sha1, "without a chosen file the current files are used");
 });
 
 test("a runtime archive added by hand installs the release whose SHA-256 it matches", async t => {
@@ -135,15 +158,17 @@ test("a runtime archive added by hand installs the release whose SHA-256 it matc
       { version: "1.0", architecture: "arm64", installDir: path.join(root, "one"), catalogEntry: { architecture: "arm64" }, source: "manual" },
       { version: "0.9", installDir: path.join(root, "included"), included: true }] }] }),
     core: { listCatalog: ({ architecture }) => architecture === "x64" ? [{ version: "3.0", asset: { sha256: sha256("release archive") } }] : [] } };
-  const component = Components.fromRuntimeManager(manager, { users: ["Fixture games"], description: "Fixture." });
+  const component = Components.fromRuntimeManager(manager, { users: ["Fixture games"], description: "Fixture.", windows: true });
   const context = { userDataDir: root, runtimeAction: async (...args) => { actions.push(args); return true; } };
   const items = component.list(context);
-  assert.deepEqual(items.map(item => [item.version, item.architecture, item.identity, item.source]), [
-    ["2.0", "universal", "SHA-256 " + "b".repeat(64), { url: "https://example.test/two.tar.gz" }], ["1.0", "arm64", null, "manual"]]);
+  assert.deepEqual(items.map(item => [item.version, item.architecture, item.windows, item.identity, item.source]), [
+    ["2.0", "universal", true, "SHA-256 " + "b".repeat(64), { url: "https://example.test/two.tar.gz" }], ["1.0", "arm64", true, null, "manual"]]);
   await component.remove(items[0], context);
   assert.deepEqual(actions.pop(), ["fixture-runtime", "uninstall", { sectionId: "default", version: "2.0", architecture: "x64", variant: undefined,
     platformKey: undefined, installDir: path.join(root, "two") }]);
   const other = path.join(root, "other.tar.gz"); fs.writeFileSync(other, "another archive");
+  assert.equal(component.import.matches({ sha256: sha256("another archive") }, context), false);
+  assert.equal(component.import.matches({ sha256: sha256("release archive") }, context), true);
   await assert.rejects(component.import.run(other, context), /does not match any Fixture runtime release recorded on this Mac/);
   assert.equal(actions.length, 0);
   assert.deepEqual(await component.import.run(archive, context), { version: "3.0", architecture: "x64" });
@@ -176,21 +201,17 @@ test("a pinned release installs from a local archive only when the archive match
   assert.equal(installed.version, "1.0"); assert.equal(installed.ready, true); assert.equal(installed.archiveSha256, hashFile(archive));
 });
 
-test("a Valve client archive is accepted only under the name that carries its SHA-1", async t => {
-  offline(t);
-  const root = temporary(t), [valve] = require("../src/modules/crossover/components");
-  assert.equal(valve.id, "steam-client-components");
-  const file = path.join(root, "steamclient.zip"); fs.writeFileSync(file, "archive");
-  await assert.rejects(valve.import.run(file, { userDataDir: root }), /bins_misc_ubuntu12\.zip\.<SHA-1>/);
-  assert.deepEqual(valve.list({ userDataDir: root }), []);
-  const store = path.join(root, "runtimes/steam-client-components"), current = "c".repeat(40), earlier = "d".repeat(40);
-  fs.mkdirSync(path.join(store, current), { recursive: true }); fs.mkdirSync(path.join(store, earlier));
-  fs.writeFileSync(path.join(store, "active.json"), JSON.stringify({ archiveSha1: current, source: "https://example.test/archive" }));
-  const rows = valve.list({ userDataDir: root });
-  assert.deepEqual(rows.map(row => [row.version, row.users.length > 0]), [["Current", true], ["Earlier archive", false]]);
-  await valve.remove(rows[0], { userDataDir: root });
-  assert.equal(fs.existsSync(path.join(store, "active.json")), false, "the bridge asks for an archive again");
-  assert.equal(fs.existsSync(path.join(store, current)), false);
+test("interrupted deletions in every component store are finished by storage upkeep", async t => {
+  const Storage = require("../src/core/storage-maintenance");
+  const root = temporary(t), trash = () => ".maclauncher-trash-" + crypto.randomUUID();
+  const folders = [path.join(root, "assets", "fixture-font"), path.join(root, "cache"),
+    path.join(root, "modules", "rgss", "assets", "rtp-packs", "RPGVXAce"), path.join(root, "external", "tools"),
+    path.join(root, "runtimes", "graphics-neural-models")];
+  const left = folders.map(folder => { const file = path.join(folder, trash()); fs.mkdirSync(file, { recursive: true }); fs.writeFileSync(path.join(file, "data"), "x"); return file; });
+  const kept = path.join(root, "cache", "translator-descriptions"); fs.mkdirSync(kept, { recursive: true });
+  await Storage.maintainStorage({ userDataDir: root, stores: Storage.listStores(registry), logger: { info() {}, warn() {} } });
+  assert.deepEqual(left.filter(file => fs.existsSync(file)).map(file => path.relative(root, path.dirname(file))), []);
+  assert.ok(fs.existsSync(kept), "only trash entries are removed");
 });
 
 test("a cache component deletes its folder and reports its owner", async t => {
@@ -212,7 +233,11 @@ test("a shared runtime library stays while an installed runtime declares it and 
   const service = Service.createComponentService({ userDataDir: root, registry, logger: { warn() {} } });
   const listed = async () => (await service.list()).components.find(row => row.id === "shared-package-dependencies").items;
   const [item] = await listed();
-  assert.deepEqual([item.version, item.identity, item.users, item.removable], ["vulkan-loader 1.4.0", "SHA-256 " + "e".repeat(64), ["maclauncher-kosmickrisp"], false]);
+  const label = [...registry.listSharedRuntimeManagers(), ...registry.listModuleIds().flatMap(id => registry.getModule(id)?.runtimeManagers || [])]
+    .find(manager => manager.id === "maclauncher-kosmickrisp")?.label;
+  assert.ok(label && label !== "maclauncher-kosmickrisp");
+  assert.deepEqual([item.version, item.identity, item.users, item.removable], ["vulkan-loader 1.4.0", "SHA-256 " + "e".repeat(64), [label], false],
+    "Used by names the runtime as Runtimes does");
   assert.match(item.removeReason, /Installed runtimes load this library/);
   await assert.rejects(service.remove({ componentId: "shared-package-dependencies", itemId: item.id }), /Installed runtimes load this library/);
   assert.ok(fs.existsSync(store));

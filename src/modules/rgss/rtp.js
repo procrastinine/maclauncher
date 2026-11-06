@@ -188,8 +188,8 @@ function createRtpStore({ catalog = CATALOG, download = (file, destination, opti
     return { helper, info };
   }
 
-  // `archiveFile` is the publisher's installer added by hand in Runtimes →
-  // Components; it must match the catalog's SHA-256 and nothing is fetched.
+  // `archiveFile` is the publisher's installer added by hand in Downloaded
+  // files; it must match the catalog's SHA-256 and nothing is fetched.
   async function installPack(options = {}) {
     const { userDataDir, id, version, signal, onProgress, archiveFile, ...helperContext } = options;
     const pack = packFor(id);
@@ -197,13 +197,13 @@ function createRtpStore({ catalog = CATALOG, download = (file, destination, opti
     const key = JSON.stringify([path.resolve(userDataDir), id, pack.version]);
     if (pending.has(key)) return pending.get(key);
     const work = (async () => {
-      const existing = await resolvePack({ userDataDir, id, signal });
-      if (existing) return existing;
-      // A chosen installer is checked before anything else is prepared.
+      // A chosen installer is checked first, also when the pack is installed.
       if (archiveFile) {
         const chosen = (await Inno.hashFile(archiveFile, { signal })).sha256;
         if (chosen !== pack.archive.sha256) throw new Error(`The file's SHA-256 is ${chosen}; ${pack.label} ${pack.version} (${pack.archive.file}) is ${pack.archive.sha256}.`);
       }
+      const existing = await resolvePack({ userDataDir, id, signal });
+      if (existing) return existing;
       const helper = await resolveHelper({ ...helperContext, userDataDir, signal, onProgress });
       const root = directory(userDataDir, pack, true), stage = path.join(root, ".stage-" + crypto.randomUUID());
       fs.mkdirSync(stage, { mode: 0o700 });

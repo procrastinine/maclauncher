@@ -1,10 +1,24 @@
-import type { ComponentEntry, ComponentItem, ConfirmActionRequest } from "../types";
-import { cpuBuildName, formatBytes } from "../ui-helpers";
+import type { ComponentEntry, ComponentItem, ComponentList, ConfirmActionRequest } from "../types";
+import { formatBytes } from "../ui-helpers";
+import { cpuLabel } from "../../../../core/cpu-labels.mjs";
 
-// Presentation of Runtimes → Components rows (core/component-service.js lists them).
+// Presentation of Runtimes → Tools → Downloaded files (core/component-service.js lists them).
+
+export type ComponentRow = { component: ComponentEntry; item: ComponentItem };
 
 export function componentItemName(component: Pick<ComponentEntry, "label">, item: Pick<ComponentItem, "version">) {
   return item.version ? `${component.label} ${item.version}` : component.label;
+}
+
+// Installed items only, largest first.
+export function componentRows(list: ComponentList | null | undefined): ComponentRow[] {
+  return (list?.components || []).flatMap(component => component.items.map(item => ({ component, item })))
+    .sort((a, b) => b.item.bytes - a.item.bytes || componentItemName(a.component, a.item).localeCompare(componentItemName(b.component, b.item)));
+}
+
+// Items that no installed runtime or game uses and that can be deleted.
+export function unusedComponentRows(rows: ComponentRow[]) {
+  return rows.filter(row => row.item.removable && row.item.users.length === 0);
 }
 
 export function componentSizeText(item: Pick<ComponentItem, "bytes" | "sizeComplete" | "path">) {
@@ -22,14 +36,8 @@ export function componentSourceText(item: Pick<ComponentItem, "source">) {
   return source.label || "";
 }
 
-// A digest is shortened in the row; the full value is the row's tooltip.
-export function componentIdentityText(identity: string) {
-  const match = /^(SHA-(?:1|256)) ([a-f0-9]{40,64})$/.exec(identity || "");
-  return match ? `${match[1]} ${match[2].slice(0, 12)}…` : identity || "";
-}
-
-export function componentCpuLabel(item: Pick<ComponentItem, "architecture">) {
-  return item.architecture ? cpuBuildName(item.architecture) : "";
+export function componentCpuLabel(item: Pick<ComponentItem, "architecture" | "windows">) {
+  return cpuLabel(item.architecture, { windows: item.windows === true });
 }
 
 // Deletion names what still uses the item. A cache is filled again by its owner;
@@ -45,6 +53,11 @@ export function componentDeleteRequest(component: Pick<ComponentEntry, "label" |
   return { message: `Delete ${name}?`, detail: parts.join(" "), confirmLabel: "Delete", destructive: true };
 }
 
-export function componentImportLabel(component: Pick<ComponentEntry, "importLabel" | "label">) {
-  return `${component.importLabel || `Add ${component.label}`}…`;
+export function componentDeleteUnusedRequest(rows: ComponentRow[], gameRunning = false): ConfirmActionRequest {
+  const names = rows.map(row => componentItemName(row.component, row.item));
+  const parts = [`${names.join(", ")}.`];
+  if (gameRunning) parts.push("A running game keeps the files it already loaded until it quits.");
+  parts.push("MacLauncher asks before downloading one again the next time something needs it.");
+  return { message: rows.length === 1 ? "Delete 1 unused download?" : `Delete ${rows.length} unused downloads?`, detail: parts.join(" "),
+    confirmLabel: "Delete", destructive: true };
 }

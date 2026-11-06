@@ -334,7 +334,7 @@ Opening a specific runtime from elsewhere reveals its sidebar group and selects 
 
 #### Entries and subtabs
 
-An engine's entry keeps its backends and its engine-specific tools together as subtabs, with the common runtimes first. For example, Unity holds Unity Mono, Cpp2IL and AssetRipper; GameMaker holds Official, Butterscotch, Classic (OpenGMK), GM8Decompiler, UMT and Graphics helper; and WOLF RPG holds Browser Woditor, WolfTL and UberWolf. **Tools** holds the tools shared by several engines: Installer reader, ILSpy, RPGMakerDecrypter, JADX, Apktool, msg-tool and Rizin / Ghidra, followed by **Components** as its last subtab. [Where tools appear in Runtimes](../tools/README.md#where-tools-appear-in-runtimes) lists the entry for every tool. MKXP-Z, Flash Player and the native and web NScripter players have their own sections.
+An engine's entry keeps its backends and its engine-specific tools together as subtabs, with the common runtimes first. For example, Unity holds Unity Mono, Cpp2IL and AssetRipper; GameMaker holds Official, Butterscotch, Classic (OpenGMK), GM8Decompiler, UMT and Graphics helper; and WOLF RPG holds Browser Woditor, WolfTL and UberWolf. **Tools** holds the tools shared by several engines: Installer reader, ILSpy, RPGMakerDecrypter, JADX, Apktool, msg-tool and Rizin / Ghidra, followed by **Downloaded files** as its last subtab. [Where tools appear in Runtimes](../tools/README.md#where-tools-appear-in-runtimes) lists the entry for every tool. MKXP-Z, Flash Player and the native and web NScripter players have their own sections.
 
 Under the Graphics heading, the managed translator components are grouped by what they produce. **DirectX → Vulkan** holds DXVK, Wine vkd3d and vkd3d-proton, **DirectX → Metal** holds D3DMetal and DXMT, **Vulkan drivers** holds MoltenVK, KosmicKrisp and MacLauncher KosmicKrisp, and **Video codecs** holds GStreamer codecs. Each component keeps its own version controls and installation identity. Every installed row in these three entries carries its CPU build as a badge, **x64**, **arm64** or **universal**, and each version in their download menus ends with the same name, such as **27.0.0 · arm64**; their **Build** menu reads **Automatic (arm64)** and **x64 (Rosetta)**. Two installed builds of one version are two rows with different badges. Other entries keep the processor mark described in [Processor builds](../runtimes/README.md#processor-builds). In the Windows runtime settings, named engines and versions are selected separately for each Direct3D version from 8 to 12, the Vulkan driver and video codecs, and the inspector reports the effective choices and any fallback. [Graphics translators](../runtimes/TRANSLATORS.md) specifies how these components are loaded and their compatibility behavior.
 
@@ -372,19 +372,17 @@ Besides downloads, a runtime can come from an application already on the Mac or 
 
 For custom files, **Register custom…** follows the Installed list and opens a native file and folder picker for the current list of compatible runtimes. Custom executables, applications and complete runtime folders then join its installed choices, and download sources use the same registration control. **Remove registration** leaves the selected files in place. [Custom runtime layouts](../runtimes/CUSTOM_RUNTIME_LAYOUTS.md) describes the files each runtime needs.
 
-#### Components
+#### Downloaded files
 
-**Components**, the last subtab of **Tools**, lists every downloaded item without a row of its own elsewhere in Runtimes, such as small runtime packages, shared assets, store download helpers, shared libraries and caches. Nothing in the library, the inspector or Play links to it. A header with a **?** explains the tab, and an icon-only reload button reads the list again.
+**Downloaded files**, the last subtab of **Tools**, lists every installed downloaded file without a row of its own elsewhere in Runtimes, such as small runtime packages, shared assets, store download helpers, shared libraries and caches, largest first. Nothing in the library, the inspector or Play links to it. The header holds the title with a **?** that explains the tab, **Add from file…**, **Delete unused** and an icon-only reload button. **Add from file…** opens the native file chooser, reads **Adding…** while it runs and adds the file to the download it matches. **Delete unused** is disabled while every file is in use. Each file is a row:
 
-Each component is a section with its name, a **?** with its description and, when it accepts a local copy, an **Add …** button such as **Add Valve client archive…**, which opens the native file chooser and reads **Adding…** while it runs. Each installed item is a row:
+- its name and version, whose tooltip holds the content digest, a **?** with its description and a CPU badge in the vocabulary of [Processor builds](../runtimes/README.md#processor-builds)
+- the size on disk and the source (**Downloaded from <host>**, **Added manually** or **Created by MacLauncher**)
+- **Used by …** with runtime names as **Runtimes** shows them, or **Not used by an installed runtime**
+- for a file that installed runtimes still require, the reason it stays
+- an icon-only **Show in Finder** button and an icon-only **Delete** button; Delete is disabled, with the reason as its tooltip, for a file that is still required
 
-- the version or content identity, with a CPU badge (**x64**, **arm64**, **universal** or a Windows description)
-- the size on disk, the source (**Downloaded from <host>**, **Added manually** or **Created by MacLauncher**) and a shortened digest whose tooltip holds the full value
-- **Used by …**, or **Not used by an installed runtime**
-- for an item that installed runtimes still require, the reason it stays
-- an icon-only **Show in Finder** button and an icon-only **Delete** button; Delete is disabled, with the reason as its tooltip, for an item that is still required
-
-A component without installed items reads **Not installed.** Delete asks in a native dialog that names the item's users, notes a running game and states that MacLauncher asks before downloading the item again; for a cache, it states that MacLauncher fills it again. After Delete or Add, the list is read again and a status line confirms the result, such as **Deleted MoltenVK scene support 1.4.2.** A rejected file or failed removal appears as an inline error with its reason. All controls are native buttons in reading order, reachable with Tab.
+With nothing installed, the tab reads **No downloaded files.** Delete asks in a native dialog that names the file's users, notes a running game and states that MacLauncher asks before downloading it again; for a cache, it states that MacLauncher fills it again. **Delete unused** asks once and lists every file it deletes. After an action, the list is read again and a status line confirms the result, such as **Deleted MoltenVK scene support 1.4.2.** A rejected file or failed removal appears as an inline error with its reason. All controls are native buttons in reading order, reachable with Tab.
 
 #### Effects
 

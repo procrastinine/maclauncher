@@ -475,15 +475,15 @@ export type RuntimeManagerState = {
   [key: string]: any;
 };
 
-/** One downloadable item in Runtimes → Components (core/component-service.js). */
+/** One downloaded item in Runtimes → Tools → Downloaded files (core/component-service.js). */
 export type ComponentItem = {
-  id: string; version: string; identity: string; architecture: string | null; path: string | null;
+  id: string; version: string; identity: string; architecture: string | null; windows?: boolean; path: string | null;
   bytes: number; sizeComplete: boolean; source: { url?: string | null; label?: string | null; manual?: boolean } | null;
   users: string[]; status: string | null; removable: boolean; removeReason: string | null;
 };
 export type ComponentEntry = {
   id: string; label: string; description: string | null; owner: string; cache: boolean; error: string | null;
-  importable: boolean; importLabel: string | null; items: ComponentItem[];
+  items: ComponentItem[];
 };
 export type ComponentList = { components: ComponentEntry[]; gameRunning: boolean };
 
@@ -803,7 +803,8 @@ declare global {
           payload?: Record<string, any>
         ): Promise<any>;
         componentAction(action: "list", payload?: Record<string, never>): Promise<ComponentList>;
-        componentAction(action: "remove" | "import" | "reveal", payload: { componentId: string; itemId?: string }): Promise<boolean>;
+        componentAction(action: "import", payload?: Record<string, never>): Promise<{ componentId: string; label: string } | false>;
+        componentAction(action: "remove" | "reveal", payload: { componentId: string; itemId: string }): Promise<boolean>;
         moduleAction(
           gamePath: string,
           action: string,

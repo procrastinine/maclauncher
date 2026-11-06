@@ -1,8 +1,9 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
 const Architecture = require("./architecture");
 
-// Helpers for components.js declarations, the downloadable files listed in
-// Runtimes → Components (see core/component-service.js for the contract).
+// Helpers for components.js declarations, the downloaded files listed in
+// Runtimes → Tools → Downloaded files (see core/component-service.js for the
+// contract).
 
 async function sha256File(file, { signal } = {}) {
   const hash = crypto.createHash("sha256");
@@ -50,8 +51,16 @@ function installedBuild(row) {
  * Installed versions are listed with their CPU build; Delete removes one through
  * the manager, and a local copy of a release archive installs offline when its
  * SHA-256 matches a version in the manager's cached catalog. */
-function fromRuntimeManager(manager, { id = manager.id, label = manager.label, description, users = [], extensions = ["gz", "zip", "xz", "tar", "tgz", "txz"] } = {}) {
+function fromRuntimeManager(manager, { id = manager.id, label = manager.label, description, users = [], windows = false } = {}) {
   if (!manager?.id) throw new Error("A runtime component needs its manager.");
+  // A release in the manager's cached version list whose archive has this SHA-256.
+  const release = (sha256, context) => {
+    for (const architecture of ["arm64", "x64"]) {
+      const pin = (manager.core?.listCatalog?.({ userDataDir: context.userDataDir, architecture }) || []).find(row => row?.asset?.sha256 === sha256);
+      if (pin) return { pin, architecture };
+    }
+    return null;
+  };
   return {
     id, label, description, managerId: manager.id,
     list(context) {
@@ -64,7 +73,7 @@ function fromRuntimeManager(manager, { id = manager.id, label = manager.label, d
         const url = row.assetUrl || row.catalogEntry?.asset?.url || null;
         return { id: JSON.stringify([section.id || "default", row.version, row.architecture || null, row.installDir]),
           version: String(versionLabel || ""), identity: /^[a-f0-9]{64}$/.test(row.archiveSha256 || "") ? `SHA-256 ${row.archiveSha256}` : null,
-          architecture: installedBuild(row), path: row.installDir,
+          architecture: installedBuild(row), windows, path: row.installDir,
           source: row.source === "manual" || row.source === "custom" ? "manual" : url ? { url } : null,
           users: named, ...(row.ready === false ? { status: row.error || "Needs repair" } : {}),
           runtime: { sectionId: section.id || "default", version: row.version, architecture: row.architecture, variant: row.variant,
@@ -72,17 +81,13 @@ function fromRuntimeManager(manager, { id = manager.id, label = manager.label, d
       }));
     },
     remove(item, context) { return context.runtimeAction(manager.id, "uninstall", item.runtime); },
-    import: { label: `Add ${label} archive`, kinds: ["file"], extensions,
+    import: {
+      matches: ({ sha256 }, context) => Boolean(release(sha256, context)),
       async run(file, context) {
-        const sha256 = await sha256File(file, context);
-        for (const architecture of ["arm64", "x64"]) {
-          const pins = manager.core?.listCatalog?.({ userDataDir: context.userDataDir, architecture }) || [];
-          const pin = pins.find(row => row?.asset?.sha256 === sha256);
-          if (!pin) continue;
-          await context.runtimeAction(manager.id, "install", { sectionId: "default", version: pin.version, architecture }, { archiveFile: file });
-          return { version: pin.version, architecture };
-        }
-        throw new Error(`The file does not match any ${label} release recorded on this Mac (SHA-256 ${sha256}).`);
+        const sha256 = await sha256File(file, context), found = release(sha256, context);
+        if (!found) throw new Error(`The file does not match any ${label} release recorded on this Mac (SHA-256 ${sha256}).`);
+        await context.runtimeAction(manager.id, "install", { sectionId: "default", version: found.pin.version, architecture: found.architecture }, { archiveFile: file });
+        return { version: found.pin.version, architecture: found.architecture };
       } } };
 }
 

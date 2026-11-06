@@ -1,24 +1,27 @@
 const fs = require("node:fs"), path = require("node:path");
 const Architecture = require("../modules/shared/runtime/architecture");
 
-// Runtimes → Components lists every downloadable file that has no row of its
-// own in Runtimes: small helpers, shared assets, packages of runtimes without
-// a list and caches the launcher fills. Core services declare theirs in
-// core/components.js; a module or shared namespace declares its own in an
-// optional components.js beside it (registry.listComponents()). A declaration:
+// Runtimes → Tools → Downloaded files lists every downloaded file that has no
+// row of its own in Runtimes: small helpers, shared assets, packages of
+// runtimes without a list and caches the launcher fills. Core services declare
+// theirs in core/components.js; a module or shared namespace declares its own
+// in an optional components.js beside it (registry.listComponents()). A
+// declaration:
 //   id, label, description  stable identity and plain-language name
 //   list(context)            installed items, from local files only
 //   remove(item, context)    optional; deletes one item. The owner downloads it
 //                            again, after consent, when something needs it
-//   import                   optional { label, kinds, extensions, run(path, context) };
-//                            run checks the chosen file or folder against the
-//                            component's declared identity without network
-//                            access and throws a plain reason when it differs
+//   import                   optional { matches(file, context), run(path, context) };
+//                            matches({ path, size, sha256 }) recognizes the
+//                            component's recorded identity; run checks the file
+//                            again while it installs it, without network access,
+//                            and throws a plain reason when it differs
 //   cache                    optional; true for data the launcher recreates
-// An item: { id, version, identity, architecture, path, source, users, status,
-// removable, removeReason }. `source` is { url } or { label }, or "manual" for
-// an item added by hand; `users` names the runtimes or games that load it.
-// Sizes, Reveal in Finder and the listing itself are generic.
+// An item: { id, version, identity, architecture, windows, path, source, users,
+// status, removable, removeReason }. `source` is { url } or { label }, or
+// "manual" for an item added by hand; `users` names the runtimes or games that
+// load it; `windows` marks Windows code, whose CPU is named as Windows names it.
+// Sizes, Show in Finder, Add from file and the listing itself are generic.
 const ENTRY_LIMIT = 200000;
 const text = (value, limit = 512) => typeof value === "string" ? value.replace(/[\x00-\x1f\x7f]+/g, " ").trim().slice(0, limit) : "";
 
@@ -55,18 +58,29 @@ function presentItem(item, component) {
     : item?.source && typeof item.source === "object" ? { url: /^https:\/\//.test(item.source.url || "") ? item.source.url : null, label: text(item.source.label) || null } : null;
   const architecture = typeof item?.architecture === "string" ? Architecture.normalizeArchitecture(item.architecture) || text(item.architecture, 64) : null;
   return { id: text(String(item?.id ?? ""), 1024), version: text(item?.version), identity: text(item?.identity), architecture,
-    path: location, bytes: size.bytes, sizeComplete: size.complete, source,
+    windows: item?.windows === true, path: location, bytes: size.bytes, sizeComplete: size.complete, source,
     users: (Array.isArray(item?.users) ? item.users : []).map(value => text(value)).filter(Boolean),
     status: text(item?.status) || null,
     removable: typeof component.remove === "function" && item?.removable !== false,
     removeReason: item?.removable === false ? text(item.removeReason) || null : null };
 }
 
+// Runtime names for "Used by", from the registry's runtime managers.
+function runtimeLabels(registry) {
+  const managers = [...(registry.listSharedRuntimeManagers?.() || []),
+    ...(registry.listModuleIds?.() || []).flatMap(id => registry.getModule?.(id)?.runtimeManagers || [])];
+  const labels = new Map();
+  for (const manager of managers) if (manager?.id && !labels.has(manager.id)) labels.set(manager.id, text(manager.label) || manager.id);
+  return id => labels.get(id) || id;
+}
+
 // `confirmRuntimeInstall` and `downloads` let an import that needs a helper
 // tool, such as an installer reader, ask before downloading it as Play does.
 function createComponentService({ userDataDir, registry, settings = () => ({}), logger = console, callHost, runtimeAction, running = () => ({}),
   confirmRuntimeInstall, downloads }) {
+  let runtimeLabel = null;
   const context = signal => ({ userDataDir, settings: settings(), logger, signal, runtimeAction,
+    runtimeLabel: id => (runtimeLabel ||= runtimeLabels(registry))(id),
     ...(confirmRuntimeInstall ? { confirmRuntimeInstall } : {}), ...(downloads ? { downloads } : {}) });
   async function listOne(component, signal) {
     let items = [], error = null;
@@ -91,7 +105,6 @@ function createComponentService({ userDataDir, registry, settings = () => ({}), 
         const { items, error } = await listOne(component, signal);
         result.push({ id: component.id, label: text(component.label) || component.id, description: text(component.description, 2048) || null,
           owner: component.owner || "core", cache: component.cache === true, error,
-          importable: typeof component.import?.run === "function", importLabel: text(component.import?.label) || null,
           items: items.map(item => presentItem(item, component)) });
         await new Promise(resolve => setImmediate(resolve));
       }
@@ -103,16 +116,25 @@ function createComponentService({ userDataDir, registry, settings = () => ({}), 
       await component.remove(item, context(signal));
       return true;
     },
-    async import({ componentId } = {}, { signal } = {}) {
-      const { component } = await find(componentId, undefined, signal);
-      if (typeof component.import?.run !== "function") throw new Error("This component cannot be added manually.");
-      const kinds = (Array.isArray(component.import.kinds) ? component.import.kinds : ["file"]).filter(kind => ["file", "directory"].includes(kind));
-      const inputPath = await callHost("chooseImportPath", { label: text(component.import.label) || `Add ${text(component.label)}`,
-        kinds: kinds.length ? kinds : ["file"], extensions: Array.isArray(component.import.extensions) ? component.import.extensions : [], buttonLabel: "Add" });
+    // One Add from file: the chosen file is read first, every time, and added
+    // to the component whose recorded identity it matches.
+    async import(_payload = {}, { signal } = {}) {
+      const inputPath = await callHost("chooseImportPath", { label: "Add from file", kinds: ["file"], extensions: [], buttonLabel: "Add" });
       if (!inputPath) return false;
       signal?.throwIfAborted();
-      await component.import.run(inputPath, context(signal));
-      return true;
+      let stat;
+      try { stat = fs.statSync(inputPath); } catch { throw new Error("The chosen file is not available."); }
+      if (!stat.isFile()) throw new Error("Choose a file.");
+      if (!stat.size) throw new Error("The chosen file is empty.");
+      const file = { path: inputPath, size: stat.size, sha256: await require("../modules/shared/runtime/runtime-components").sha256File(inputPath, { signal }) };
+      for (const component of declarations(registry)) {
+        if (typeof component.import?.matches !== "function" || typeof component.import.run !== "function") continue;
+        signal?.throwIfAborted();
+        if (!await component.import.matches(file, context(signal))) continue;
+        await component.import.run(inputPath, context(signal));
+        return { componentId: component.id, label: text(component.label) || component.id };
+      }
+      throw new Error(`This file matches no download that MacLauncher records. Its SHA-256 is ${file.sha256}.`);
     },
     async reveal({ componentId, itemId } = {}, { signal } = {}) {
       const { item } = await find(componentId, String(itemId ?? ""), signal);
