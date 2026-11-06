@@ -108,7 +108,13 @@ function bindStop(child, plan, context, { run = execute, list = ProcessTree.list
 function installStopHandler(context, plan, dependencies) {
   const spawned = context.onProcessSpawn;
   context.onProcessSpawn = child => {
-    if (Number.isSafeInteger(child.pid) && child.pid > 0) bindStop(child, plan, context, dependencies);
+    if (Number.isSafeInteger(child.pid) && child.pid > 0) {
+      bindStop(child, plan, context, dependencies);
+      const started = performance.now(), info = require('../graphics-warning').info;
+      info(context.logger, '[runtime] Wine supervisor', { phase: 'spawn', pid: child.pid, runtimeId: context.runtimeId });
+      child.once('exit', (code, signal) => info(context.logger, '[runtime] Wine supervisor', {
+        phase: 'exit', pid: child.pid, runtimeId: context.runtimeId, code, signal, elapsedMs: Math.round(performance.now() - started) }));
+    }
     return spawned?.(child);
   };
 }

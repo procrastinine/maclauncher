@@ -1074,3 +1074,24 @@ test('repeated Play skips unchanged settings only in a stopped private Wine regi
   assert.equal(writes.length, 1, 'matching DWORD is skipped but missing machine-wide value is still written');
   assert.equal(writes[0][2], 'HKLM\\System\\CurrentControlSet\\Hardware Profiles\\Current\\Software\\Fonts');
 });
+
+test('Wine supervisor timing follows the actual root lifetime without delaying spawn or changing Stop', async () => {
+  const { EventEmitter } = require('node:events'), Processes = require('../src/modules/shared/runtime/wine-processes');
+  const messages = [], bound = [], child = Object.assign(new EventEmitter(), { pid: 500, exitCode: null, signalCode: null });
+  const context = { runtimeId: 'crossover', logger: { info: (...args) => messages.push(args) },
+    onProcessSpawn: async process => { bound.push(process);return 'existing-binding'; } };
+  Processes.installStopHandler(context, {}, { run: async () => assert.fail('no Wine or server command from timing') });
+  assert.equal(await context.onProcessSpawn(child), 'existing-binding');
+  assert.deepEqual(bound, [child]);assert.equal(messages.length, 1);
+  assert.deepEqual(messages[0], ['[runtime] Wine supervisor', { phase:'spawn',pid:500,runtimeId:'crossover' }]);
+  assert.ok(require('../src/core/process-lifecycle').processStopBinding(child), 'the existing Stop binding survives');
+  child.exitCode = 0;child.emit('exit', 0, null);child.emit('exit', 0, null);
+  assert.equal(messages.length, 2, 'exit is recorded only once, on the actual root event');
+  assert.deepEqual({...messages[1][1],elapsedMs:0}, {phase:'exit',pid:500,runtimeId:'crossover',code:0,signal:null,elapsedMs:0});
+  assert.ok(messages[1][1].elapsedMs >= 0);
+  const silent = { logger:{info:()=>{throw Error('closed log sink');}},onProcessSpawn:()=> 'unchanged' };
+  Processes.installStopHandler(silent, {});
+  const other = Object.assign(new EventEmitter(), {pid:501});
+  assert.equal(silent.onProcessSpawn(other), 'unchanged');
+  assert.doesNotThrow(()=>other.emit('exit',0,null));
+});
