@@ -124,6 +124,9 @@ test("detectGame does not false-positive on non-runnable single-jar directories"
       { name: "META-INF/MANIFEST.MF", data: ["Manifest-Version: 1.0", ""].join("\n") },
       { name: "DemoMain.class", data: createClassHeader(11) }
     ]);
+    // A folder holding only the JAR is detected through that item, as a direct JAR import.
+    assert.equal(Modules.detectGame(gameDir).gamePath, jarPath);
+    fs.writeFileSync(path.join(gameDir, "readme.txt"), "notes");
     assert.throws(() => Modules.detectGame(gameDir));
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
