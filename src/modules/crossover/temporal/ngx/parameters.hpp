@@ -2,6 +2,29 @@
 // Copyright (c) MacLauncher contributors. MIT license.
 #include "routing.hpp"
 namespace maclauncher::ngx {
+// Instantiated against the actual NGX parameter interface and the translator's
+// D3D resource type. This introduces no guessed NGX vtable or COM interface.
+// Translator::image must resolve on the actual recording command list and
+// retain its ordinary resource/barrier ownership before the scene is recorded.
+template<class Parameters,class Resource,class Translator> class ParameterReader {
+ const Parameters&parameters;Translator&translator;
+public:
+ ParameterReader(const Parameters&p,Translator&t):parameters(p),translator(t){}
+ bool get(const char*key,float&value){float next;if(parameters.Get(key,&next)!=1)return false;value=next;return true;}
+ bool get(const char*key,uint32_t&value){unsigned next;if(parameters.Get(key,&next)!=1)return false;value=next;return true;}
+ bool readImage(const char*key,Image&image){
+  Resource*resource=nullptr;
+  if(parameters.Get(key,&resource)!=1){void*opaque=nullptr;if(parameters.Get(key,&opaque)!=1)return false;resource=static_cast<Resource*>(opaque);}
+  if(!resource)return false;
+  Image resolved;if(!translator.image(resource,resolved))return false;
+  image=resolved;return true;
+ }
+ bool readMatrix(const char*key,float*out){
+  void*source=nullptr;if(parameters.Get(key,&source)!=1||!source)return false;
+  float copied[16];std::memcpy(copied,source,sizeof(copied));if(!finiteMatrix(copied))return false;
+  std::memcpy(out,copied,sizeof(copied));return true;
+ }
+};
 // Reader adapts NGX's typed Get. readImage resolves actual translator resources
 // and subresources; D3D addresses must never be interpreted as Vulkan images.
 template<class Reader> bool readParameters(Reader&reader,Evaluation&out){
