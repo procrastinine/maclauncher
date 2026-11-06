@@ -221,7 +221,7 @@ test("hosted packages retain source identities, offline selection and listed inc
   await manager.refreshCatalog({ userDataDir, force: true });
   assert.equal(manager.getState({ userDataDir }).installed.find(row => row.version === first.version).source, "bundled",
     "A listed version included in the app needs no install");
-  assert.equal(manager.resolveSelection(null, {}, userDataDir).version, second.version, "The newest compatible published runtime supplies the manager default");
+  assert.equal(manager.resolveSelection(null, {}, userDataDir).version, first.version, "The ready included runtime supplies the manager default before a newer download");
   assert.equal(manager.resolveSelection(null, { runtimes: { [id]: { defaultVersion: first.version } } }, userDataDir).version, first.version,
     "An explicit included choice survives Refresh");
   assert.equal(manager.core.listCatalog({ userDataDir }).find(pin => pin.version === second.version).asset.url, second.asset.url, "Hosted binary replaces the same-version upstream source download");

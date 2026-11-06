@@ -134,8 +134,8 @@ test("detected WAD and sequence recommendations preserve compatible fallbacks an
   assert.equal(Official.manager.resolveSelection(legacy, {}, root).version, "1.4.2800", "Compatible installed runners remain a WAD-derived choice");
   Fixture.legacyReceipt(root, "1.4.9999"); Fixture.legacyReceipt(root, "1.4.10000");
   assert.equal(Official.manager.resolveSelection(legacy, {}, root).version, "1.4.9999", "A compatible cached recommendation retains its priority without a built-in version list");
-  assert.equal(Official.manager.resolveSelection({}, {}, root).version, "2024.12.0.1", "Without game evidence the default follows the newest catalog version");
-  assert.equal(Official.manager.resolveSelection({}, {runtimes:{"gamemaker-official":{defaultVersion:null}}}, root).version, "2024.12.0.1", "Clearing a saved default retains the manager default");
+  assert.equal(Official.manager.resolveSelection({}, {}, root).version, "1.4.10000", "Without game evidence the default is the newest ready installed runner");
+  assert.equal(Official.manager.resolveSelection({}, {runtimes:{"gamemaker-official":{defaultVersion:null}}}, root).version, "1.4.10000", "Clearing a saved default retains the manager default");
   const facts = Compatibility.capabilityForVersion("2.2.5.378");
   assert.deepEqual(facts.testedWadVersions, [16]); assert.equal(facts.observation.workaround, "software-opengl");
   assert.match(facts.observation.binarySha256, /^[a-f0-9]{64}$/); assert.equal('result' in facts.observation, false);

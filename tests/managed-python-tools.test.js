@@ -82,7 +82,7 @@ test("Python tools restore consented discovery, installed fallback and fill-on-f
   assert.deepEqual(f.manager.updateSettingsAfterInstall({ defaultVersion: "1.0.0" }, installed), { defaultVersion: "1.0.0" });
   assert.deepEqual(f.manager.updateSettingsAfterInstall({ defaultVersion: null }, installed), { defaultVersion: "2.0.0" });
   f.listing.versions = ["3.0.0"]; await f.manager.refreshCatalog({ ...f.context, force: true });
-  assert.equal(f.manager.getState({userDataDir:f.context.userDataDir}).defaultVersion, "3.0.0");
+  assert.equal(f.manager.getState({userDataDir:f.context.userDataDir}).defaultVersion, "2.0.0", "The ready installed tool stays the manager default after a newer listing");
   assert.equal(f.manager.getState({userDataDir:f.context.userDataDir,settings:{defaultVersion:null}}).defaultSource, "manager");
   const reused = await f.manager.ensureTool({ ...f.context, settings:{runtimes:{[f.manager.id]:{defaultVersion:"2.0.0"}}}, confirmRuntimeInstall: () => assert.fail("Saved installed default remains offline") }, {}, {});
   assert.equal(reused.version, "2.0.0");

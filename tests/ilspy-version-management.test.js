@@ -176,7 +176,7 @@ test("retired installed tools retain exact identities after refresh and cache re
   assert.equal(Catalog.cachedCatalog(userDataDir).retainedEntries[0].version, selected.version);
   assert.equal(Catalog.pinFor(selected.version, userDataDir).sha512, selected.sha512);
   assert.equal(Manager.getState({ userDataDir }).installed[0].version, selected.version);
-  assert.equal(Tool.selectedVersion({ userDataDir, settings: {} }), "12.0.0.9001", "The manager default follows the listed release");
+  assert.equal(Tool.selectedVersion({ userDataDir, settings: {} }), selected.version, "The installed retired tool remains the manager default");
   assert.equal(Tool.selectedVersion({ userDataDir, settings: { runtimes: { ilspy: { defaultVersion: selected.version } } } }), selected.version);
   fs.rmSync(path.join(userDataDir, "runtimes", "ilspy", "catalog.json"));
   assert.equal(Catalog.pinFor(selected.version, userDataDir).sha512, selected.sha512);
