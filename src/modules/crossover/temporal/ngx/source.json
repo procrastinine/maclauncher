@@ -25,6 +25,16 @@
     "scene-source.hpp"
   ],
   "transport": "../vulkan/scene-metadata.h",
+  "nativeInterfaceContract": {
+    "origin": "https://github.com/NVIDIA-RTX/Streamline.git",
+    "commit": "b998246a3d499c08765c5681b229c9e6b4513348",
+    "files": [
+      "docs/ProgrammingGuide.md",
+      "source/core/sl.interposer/d3d12/d3d12CommandList.cpp"
+    ],
+    "interface": "ADEC44E2-61F0-45C3-AD9F-1B37379284FF",
+    "ownership": "Successful QueryInterface returns one owned native interface reference. No implementation code is incorporated."
+  },
   "originalOutputRetained": true,
   "translatorOverlay": "vkd3d-overlay.mjs",
   "translatorSource": "vkd3d-scene.inc",
