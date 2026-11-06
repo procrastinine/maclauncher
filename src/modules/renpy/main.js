@@ -5,7 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 const Custom = require("../shared/runtime/custom-runtime");
 const Architecture = require("../shared/runtime/architecture");
-const { selectRuntimeVersion } = require("../shared/runtime/version-choices");
+const { selectRuntimeVersion, installedRuntimeVersion } = require("../shared/runtime/version-choices");
 const { getUiServices } = require("../shared/ui-services");
 const manifest = require("./manifest.json");
 const GameData = require("../shared/game-data");
@@ -122,11 +122,13 @@ function recommendedSdkVersion(entry) {
 
 const resolveEntrySdkVersion = Custom.createSelector(SdkRuntimeManager, function managedSdkVersion(entry, settings, userDataDir) {
   const major = resolveMajor(entry), cfg = SdkRuntimeManager.normalizeSettings(settings?.runtimes?.sdk);
-  return selectRuntimeVersion({ manual: normalizeSdkVersion(entry?.runtimeData?.sdk?.version ?? ""),
+  const selection = selectRuntimeVersion({ manual: normalizeSdkVersion(entry?.runtimeData?.sdk?.version ?? ""),
     recommended: recommendedSdkVersion(entry),
     defaultVersion: normalizeSdkVersion(cfg[major === 7 ? "v7" : "v8"]?.defaultVersion),
     // Installed SDKs live in the launcher data directory; without it only saved choices apply.
-    fallback: userDataDir ? SdkRuntimeManager.getState({ settings: settings?.runtimes?.sdk, userDataDir }).sections?.find(section => section.id === (major === 7 ? "v7" : "v8"))?.defaultVersion : null }).version;
+    fallback: userDataDir ? SdkRuntimeManager.getState({ settings: settings?.runtimes?.sdk, userDataDir }).sections?.find(section => section.id === (major === 7 ? "v7" : "v8"))?.defaultVersion : null });
+  return installedRuntimeVersion({ ...selection, compatibility: SdkRuntimeManager.versionCompatibility,
+    installed: userDataDir ? SdkRuntimeManager.core.listInstalled(userDataDir, major) : [] }) || selection.version;
 }, { context: ([entry, settings, userDataDir]) => ({ entry: userDataDir ? entry : null, settings: userDataDir ? settings : null, userDataDir,
   options: { recommended: () => userDataDir ? recommendedSdkVersion(entry) : null } }), required: true,
   result: selection => selection.version });

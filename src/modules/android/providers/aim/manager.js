@@ -2,7 +2,10 @@ const Bundled = require("../../../shared/runtime/bundled-native");
 const { createProjectBuildManager } = require("../../../shared/runtime/project-build-manager");
 
 function createManager(dependencies = {}) {
-  return createProjectBuildManager({ projectId: "android-aim", runtimeId: "aim", label: "AIM", repository: "procrastinine/maclauncher-builds", upstreamUrl: "https://github.com/procrastinine/maclauncher-android",
+  return createProjectBuildManager({
+    // ART, libcore, framework and Bionic must retain a coherent guest ABI snapshot.
+    versionCompatibility: "exact",
+     projectId: "android-aim", runtimeId: "aim", label: "AIM", repository: "procrastinine/maclauncher-builds", upstreamUrl: "https://github.com/procrastinine/maclauncher-android",
     manifestRelative: "manifest.json", sourceRelative: manifest => manifest.files.some(file => file.path === "source.tar.gz") ? "files/source.tar.gz" : null,
     executableRelative: "bin/aimctl", filesPrefix: "files/",
     validateManifest: (manifest, record) => {

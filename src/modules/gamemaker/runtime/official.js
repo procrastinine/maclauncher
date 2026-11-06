@@ -9,7 +9,7 @@ const { runDownloadTask } = require("../../shared/runtime/download-manager");
 const Catalog = require("./official-catalog");
 const Compatibility = require("./official-compatibility");
 const Custom = require("../../shared/runtime/custom-runtime");
-const { selectRuntimeVersion, managerDefaultVersion, savedDefaultVersion } = require("../../shared/runtime/version-choices");
+const { selectRuntimeVersion, installedRuntimeVersion, managerDefaultVersion, savedDefaultVersion } = require("../../shared/runtime/version-choices");
 
 const ID = "gamemaker-official";
 const VERSION = Catalog.VERSION;
@@ -241,9 +241,10 @@ function resolveSelection(entry, settings, userDataDir) {
   const layer = selectRuntimeVersion({ manual: requested, recommended,
     defaultVersion: savedDefaultVersion(preferred && VERSION.test(preferred) ? preferred : null, { listed: cached.map(item => item.version), installed: registered }),
     fallback: managerDefaultVersion({ listed: catalogChoice ? [catalogChoice.version] : [], installed: installedChoice ? [installedChoice.version] : [] }) });
-  let version = layer.version;
+  let version = installedRuntimeVersion({ ...layer, installed: listInstalled(userDataDir).filter(row => row.launchReady),
+    compatibility: (candidate, requested, row) => manager.versionCompatibility(candidate, requested, row, entry) }) || layer.version;
   let selectionSource = { manual: "explicit-selection", recommended: install ? "installed" : "catalog", default: "global-default" }[layer.source] || null;
-  if (layer.source !== "recommended") install = null;
+  if (layer.source !== "recommended" || install?.version !== version) install = null;
   if (!version) {
     const conflict = inspection.minimumEngineVersion && inspection.maximumOfficialRuntimeExclusive &&
       require("../version").compareVersions(inspection.minimumEngineVersion, inspection.maximumOfficialRuntimeExclusive) >= 0;
@@ -324,7 +325,10 @@ function getState({ settings, userDataDir } = {}) {
   return { ...state, sections: [{ id: "default", label: "Official", ...state }] };
 }
 const manager = {
-  id: ID, label: "GameMaker", normalizeSettings, getState, resolveSelection,
+  id: ID, label: "GameMaker",
+  // WAD/resource-format bounds, not the runner release number, determine compatibility.
+  versionCompatibility: (version, _requested, _install, entry) => Compatibility.compatibility(entry?.moduleData || {}, version).compatible,
+  normalizeSettings, getState, resolveSelection,
   delivery: { catalog: "remote", included: "none", sourceBuild: false },
   // The YoYo Games runtime feeds, one per channel.
   upstream: Catalog.SOURCES,

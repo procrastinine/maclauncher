@@ -68,7 +68,10 @@ async function prepareInstall({ unpacked, pin, signal, logger }, dependencies = 
     ...(host?{decodedFrameAPI:host.decodedFrameAPI,libraryVersion:host.libraryVersion}:{}) };
 }
 function createManager(dependencies = {}) {
-  const manager = createPinnedNativeManager({ id: "mpv", label: "mpv", supportsDefault: true, projectBuilds:{projectId:"mpv",repository:"procrastinine/maclauncher-builds",upstreamMacDownloads:true},
+  const manager = createPinnedNativeManager({
+    // Media formats and the verified mpv command interface do not require a patch release.
+    versionCompatibility: () => true,
+     id: "mpv", label: "mpv", supportsDefault: true, projectBuilds:{projectId:"mpv",repository:"procrastinine/maclauncher-builds",upstreamMacDownloads:true},
     sourceUrl: Catalog.SOURCE_URL, upstream: Catalog.source,
     resolveExecutable: root => path.join(root, "mpv.app/Contents/MacOS/mpv"),
     prepareInstall: options => prepareInstall(options, dependencies), importLocal:true, dependencies });

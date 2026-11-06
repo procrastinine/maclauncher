@@ -15,7 +15,10 @@ function verifyInstall(install) {
   return file;
 }
 function createManager(dependencies = {}) {
-  const manager = createProjectBuildManager({ projectId: "rlvm-adapter", label: "RLVM adapter", repository: "procrastinine/maclauncher-builds",
+  const manager = createProjectBuildManager({
+    // The adapter must pair with its declared RLVM native ABI.
+    versionCompatibility: "exact",
+     projectId: "rlvm-adapter", label: "RLVM adapter", repository: "procrastinine/maclauncher-builds",
     manifestRelative: "manifest.json", sourceRelative: null, filesPrefix: "files/", executableRelative: "rlvm-adapter.dylib", nativeLibrary: true,
     validateManifest(manifest) {
       if (Bundled.isManagedDeclaration(manifest)) return;

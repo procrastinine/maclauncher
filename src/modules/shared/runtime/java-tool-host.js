@@ -1,3 +1,4 @@
+const { installedRuntimeVersion } = require("./version-choices");
 const Java = require("../../java/runtime/java-runtime-manager");
 const Rosetta = require("./rosetta");
 const { confirmToolInstall } = require("./tool-install");
@@ -15,7 +16,9 @@ async function ensure(context, minimumJava = 17, dependencies = {}) {
     variant: config.lines[line]?.defaultVariant, hostArch: process.arch });
   let host;
   for (const line of lines) {
-    const version = config.lines[line]?.defaultVersion;
+    const preferred = config.lines[line]?.defaultVersion;
+    const version = installedRuntimeVersion({ version: preferred, source: "default", compatibility: manager.versionCompatibility,
+      installed: core.listInstalled(context.userDataDir, line).filter(row => resolve(line, row.version)) }) || preferred;
     host = resolve(line, version) || (!version ? resolve(line, null) : null);
     if (host) break;
   }

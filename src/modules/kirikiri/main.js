@@ -23,7 +23,9 @@ function resourcePin(runtimeManager, userDataDir, version) {
 
 function createManager(dependencies = {}) {
 const runtimeManager = createPinnedNativeManager({
-  id: "krkrsdl2", label: "KiriKiri SDL2",
+  id: "krkrsdl2",
+    versionCompatibility: () => true, // KAG scripts share the interpreter; required native feature checks remain game-specific.
+     label: "KiriKiri SDL2",
   projectBuilds: { projectId: "krkrsdl2", repository: "procrastinine/maclauncher-builds", upstreamMacDownloads: true },
   sourceUrl: "https://github.com/krkrsdl2/krkrsdl2",
   legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "krkrsdl2" }),
@@ -57,8 +59,9 @@ function selection(entry, context) {
   const explicit = typeof configured === "string" && configured.trim() && configured !== "auto";
   const effective = explicit
     ? { ...entry, runtimeData: { ...entry.runtimeData, krkrsdl2: { ...entry.runtimeData?.krkrsdl2, version: configured.trim() } } } : entry;
-  const selected = manager.resolveSelection(effective, context.settings, context.userDataDir);
   const required = entry.moduleData?.requiredNativeFeatures || [];
+  const selected = manager.resolveSelection(effective, context.settings, context.userDataDir,
+    { compatible: pin => required.every(feature => pin?.nativeFeatures?.includes(feature)) });
   const pins = manager.core.listCatalog({ userDataDir: context.userDataDir });
   const supports = version => required.every(feature => pins.find(pin => pin.version === version)?.nativeFeatures?.includes(feature));
   if (!required.length || supports(selected.version)) return selected;

@@ -1,5 +1,5 @@
 const Core = require("./core");
-const { selectRuntimeVersion, managerDefaultVersion } = require("../../shared/runtime/version-choices");
+const { selectRuntimeVersion, installedRuntimeVersion, usableDefaultVersion, managerDefaultVersion } = require("../../shared/runtime/version-choices");
 const fs = require("node:fs");
 const path = require("node:path");
 const Custom = require("../../shared/runtime/custom-runtime");
@@ -186,6 +186,15 @@ function updateSettingsAfterUninstall() {}
 
 module.exports = {
   id: "browser-woditor",
+  versionCompatibility: () => true, // Game data uses the interpreter package API rather than a runtime patch version.
+  resolveSelection(entry, settings, userDataDir) {
+    const state = module.exports.getState({settings: settings?.runtimes?.["browser-woditor"], userDataDir});
+    const selection = selectRuntimeVersion({manual: Custom.selectionPath(module.exports, entry, settings) || entry?.runtimeData?.["browser-woditor"]?.version,
+      defaultVersion: usableDefaultVersion(state)});
+    const version = installedRuntimeVersion({...selection, installed: state.installed, compatibility: module.exports.versionCompatibility}) || selection.version;
+    const install = version && Core.resolveInstalled({userDataDir, version});
+    return {version, install, ready: Boolean(install), ...(!version ? {discoveryRequired: true} : {})};
+  },
   label: "Browser Woditor",
   normalizeSettings,
   applySettingsUpdate: (action, payload, settings) => action === "setDefault"

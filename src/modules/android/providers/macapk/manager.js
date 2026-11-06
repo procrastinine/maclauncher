@@ -67,7 +67,10 @@ async function verifyPolicy(contents, { signal, run = execute } = {}) {
   } finally { fs.rmSync(privateHome, { recursive: true, force: true }); }
 }
 function createManager({ dependencies = {} } = {}) {
-  return createPinnedNativeManager({ id: "macapk", label: "Mac.apk",
+  return createPinnedNativeManager({
+    // The Mac.apk launcher and its selected native environment use a matching package contract.
+    versionCompatibility: "exact",
+     id: "macapk", label: "Mac.apk",
     sourceUrl: Catalog.SOURCE_URL, upstream: Catalog.source,
     resolveExecutable, dependencies,
     prepareInstall: async ({ unpacked, signal }) => {

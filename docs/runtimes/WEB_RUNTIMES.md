@@ -34,7 +34,7 @@ The `nwjs` runtime launches an installed NW.js version with a small wrapper. NW.
 
 ### Versions
 
-Play chooses the NW.js version in the [usual order](README.md#versions); the manager default is the newest compatible stable SDK in the catalog, or the newest ready installed SDK when none is listed. NW.js and NW.js (Patched) share these choices and use the same version for preparation, runtime status and launch. A game that uses Greenworks only considers hosts with a matching [bridge ABI](#greenworks).
+Play chooses the NW.js version in the [usual order](README.md#versions); the manager default prefers a ready compatible installed SDK, then a compatible stable catalog version. A missing recommended version or saved default uses the newest compatible local host before requesting a download; manual per-game versions stay exact. NW.js and NW.js (Patched) share these choices and use the same version for preparation, runtime status and launch. A game that uses Greenworks only considers hosts with a matching [bridge ABI](#greenworks).
 
 Installing an NW.js version from **Runtimes** that is newer than the current default makes it the default, because newer NW.js versions run older games.
 

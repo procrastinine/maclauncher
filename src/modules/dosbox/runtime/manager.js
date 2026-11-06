@@ -17,7 +17,9 @@ function prepareInstall({ unpacked }, { arch = require("../../shared/runtime/arc
 }
 
 function createManager(dependencies = {}) {
-  return createPinnedNativeManager({ id: "dosbox-staging", label: "DOSBox Staging", sourceUrl: Catalog.SOURCE_URL,
+  return createPinnedNativeManager({ id: "dosbox-staging",
+    versionCompatibility: () => true, // DOS executables target the emulated DOS machine, not a DOSBox release ABI.
+     label: "DOSBox Staging", sourceUrl: Catalog.SOURCE_URL,
     supportsDefault: true, upstream: Catalog.source, resolveExecutable: executablePath, prepareInstall, dependencies });
 }
 

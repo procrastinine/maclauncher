@@ -20,6 +20,7 @@ const managers = Object.fromEntries([
   { id: "xsystem35", label: "AliceSoft System 3.5–3.9", owner: "kichikuou", repo: "xsystem35-sdl2" },
   { id: "xsystem4", label: "AliceSoft System 4", owner: "nunuhara", repo: "xsystem4" }
 ].map(({ id, label, owner, repo }) => [id, createPinnedNativeManager({
+  versionCompatibility: () => true, // Each System generation has a separate interpreter manager.
   id, label, projectBuilds: { projectId: id, repository: "procrastinine/maclauncher-builds" },
   sourceUrl: `https://github.com/${owner}/${repo}/releases`,
   legacyInstalledRuntime: createBundledNativeRuntime({ managerId: id })

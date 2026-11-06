@@ -6,7 +6,9 @@ function supportsGameArguments(pin) {
   return (pin?.capabilities?.gameArguments || pin?.gameArguments || pin?.projectPackage?.capabilities?.gameArguments) === "repeat-game-arg-v1";
 }
 function createManager(dependencies = {}) {
-  const runtime = createPinnedNativeManager({ id: "butterscotch", label: "Butterscotch",
+  const runtime = createPinnedNativeManager({ id: "butterscotch",
+    versionCompatibility: () => true, // The runner interprets supported VM data; argument capabilities remain separately required.
+     label: "Butterscotch",
     projectBuilds: { projectId: "butterscotch", repository: "procrastinine/maclauncher-builds", upstreamMacDownloads: true },
     distributionRequired: false, importLocal: true,
     upstream: Downloads.source,

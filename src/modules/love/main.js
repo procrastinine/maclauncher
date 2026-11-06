@@ -5,7 +5,7 @@ const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
 const LoveRuntimeManager = require("./runtime/love-runtime-manager");
 const RuntimeRegistration = require("../shared/runtime/custom-runtime");
-const { selectRuntimeVersion, savedDefaultVersion, usableDefaultVersion } = require("../shared/runtime/version-choices");
+const { selectRuntimeVersion, installedRuntimeVersion, savedDefaultVersion, usableDefaultVersion } = require("../shared/runtime/version-choices");
 const LuaSteam = require("./runtime/luasteam-runtime");
 const LuaSteamConsumer = require("./runtime/luasteam-consumer");
 const GameData = require("../shared/game-data");
@@ -249,7 +249,8 @@ function resolveManagedRuntimeSelection(entry, { settings, userDataDir } = {}) {
   const layer = selectRuntimeVersion({ manual: trimString(original.version),
     recommended: nightlyMatch?.version || (channel === CHANNEL_NIGHTLY ? null : resolveRecommendedRelease(entry)),
     defaultVersion: saved, fallback: fallbackSection && usableDefaultVersion(fallbackSection) });
-  const version = layer.version;
+  const version = installedRuntimeVersion({ ...layer, compatibility: LoveRuntimeManager.versionCompatibility,
+    installed: channelSections.flatMap(section => section.installed || []) }) || layer.version;
   const install = version ? LoveCore.resolveInstalled({ userDataDir, channel, version }) : null;
   const source = layer.source === "manual" ? install ? "explicit-version" : "explicit-missing"
     : layer.source === "recommended" ? install ? "detected-version" : "missing" : "default";

@@ -118,7 +118,9 @@ function createManager(engine, { dependencies = {} } = {}) {
     return declared?.optionsRuntimeForms ? { ...(typeof source === "object" ? source : { kind: "upstream", id: pin.catalogSourceId, label: declared.label }),
       optionsRuntimeForms: declared.optionsRuntimeForms } : source;
   };
-  const manager = createPinnedNativeManager({ id: engine === "dxmt" ? "sikarugir-graphics-bridge" : "translator-" + engine,
+  const manager = createPinnedNativeManager({
+    versionCompatibility: "exact", // Translator variants encode Wine layout, Direct3D coverage and host-driver feature requirements.
+    id: engine === "dxmt" ? "sikarugir-graphics-bridge" : "translator-" + engine,
     formerIds: engine === "dxmt" ? ["crossover-graphics-bridge"] : [], label: definition.label,
     upstreamUrl: definition.upstreamUrl, upstreamLabel: definition.upstreamLabel,
     formatVersionLabel: (pin, installed, options) => versionLabel(pin, installed, catalogSources.find(source => source.id === pin?.catalogSourceId)?.componentLabel || definition.label, options?.includedReferences),

@@ -382,6 +382,11 @@ function applySettingsUpdate(action, payload, settings) {
 }
 
 module.exports = {
+  // LÖVE 0.x changes APIs between minor lines; 11 and 12 are separate API families.
+  versionCompatibility: (candidate, requested) => {
+    const family = value => /^0\./.test(value) ? String(value).split(".").slice(0, 2).join(".") : /^\d+/.exec(value)?.[0];
+    return family(candidate) != null && family(candidate) === family(requested);
+  },
   id: "love",
   label: "LÖVE",
   normalizeSettings,

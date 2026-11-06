@@ -48,7 +48,7 @@ function inspectPackage(root, record, { projectId, manifestRelative, sourceRelat
 /** Project catalogs are queried only by Refresh. Included packages remain in
  * place; downloaded packages use the ordinary immutable version installation.
  * Runtimes offers Set default unless a module declares otherwise. */
-function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds = [], label, repository, upstreamUrl, upstreamLabel, sourceLabel, included, retainedIncluded, manifestRelative, sourceRelative,
+function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds = [], label, versionCompatibility, repository, upstreamUrl, upstreamLabel, sourceLabel, included, retainedIncluded, manifestRelative, sourceRelative,
   executableRelative, filesPrefix = "", validateManifest, verifyPayload, inspectRuntime, dataOnly = false, nativeLibrary = false, supportsDefault = true, launcherContract = 2, dependencies = {} }) {
   if (typeof dataOnly !== "boolean" || dataOnly && inspectRuntime) throw new Error("Data packages use sealed regular-file inspection.");
   const format = { projectId, manifestRelative, sourceRelative, executableRelative, filesPrefix, dataOnly, validateManifest };
@@ -81,7 +81,7 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
     ...Catalog.unavailablePins(catalog.projectId, catalog.unavailable || [])];
   };
   const discover = async (id, { signal }) => publishedPins(await Catalog.fetchProjectCatalog({ ...recordOptions, projectId: id, signal }, dependencies));
-  const core = createPinnedNativeManager({ id: projectId, runtimeId, formerIds, label,
+  const core = createPinnedNativeManager({ id: projectId, runtimeId, formerIds, label, versionCompatibility,
     sourceUrl, sourceLabel, buildsRepository: repository, upstreamUrl, upstreamLabel, nativeLibrary, supportsDefault,
     ...(formerIds.length ? { catalogSources: [projectId, ...formerIds].map((id, index) => ({
       id: index ? id : "builds", label: index ? "MacLauncher Builds · earlier releases" : "MacLauncher Builds",

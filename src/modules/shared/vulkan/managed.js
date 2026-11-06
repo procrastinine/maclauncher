@@ -12,7 +12,8 @@ const selectionId = "kosmickrisp:maclauncher";
 const prefix = projectId + ":";
 
 function createManager(dependencies = {}) {
-  const manager = createProjectBuildManager({ projectId, formerIds, label: "MacLauncher KosmicKrisp", repository, sourceLabel: "Source", upstreamUrl: "https://gitlab.freedesktop.org/mesa/mesa", nativeLibrary: true,
+  const manager = createProjectBuildManager({ projectId, formerIds, versionCompatibility: "exact", // Managed driver capabilities and consumer ABI identify the required package.
+    label: "MacLauncher KosmicKrisp", repository, sourceLabel: "Source", upstreamUrl: "https://gitlab.freedesktop.org/mesa/mesa", nativeLibrary: true,
     manifestRelative: "manifest.json", sourceRelative: null, filesPrefix: "files/",
     executableRelative: manifest => manifest.executableRelative,
     validateManifest(manifest, record) {

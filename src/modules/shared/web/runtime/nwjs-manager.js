@@ -2,7 +2,7 @@ const Core = require("./nwjs-runtime-manager");
 const fs = require("node:fs");
 const path = require("node:path");
 const Custom = require("../../runtime/custom-runtime");
-const { selectRuntimeVersion, managerDefaultVersion, savedDefaultVersion } = require("../../runtime/version-choices");
+const { selectRuntimeVersion, installedRuntimeVersion, managerDefaultVersion, savedDefaultVersion } = require("../../runtime/version-choices");
 const AppBundle = require("../../runtime/app-bundle");
 const managedInstalled = Core.listInstalled;
 const Greenworks = require("./greenworks-runtime");
@@ -83,9 +83,14 @@ function runtimeSelection({ runtimeData, managerSettings, userDataDir, sourceRoo
     (!compatibleVersions || compatibleVersions.includes(value))).sort((a,b) => compareSemver(b,a));
   const ready = userDataDir ? Core.resolveBestInstalled({ userDataDir, variant: DEFAULT_VARIANT, platform, arch, versions: compatibleVersions }) : null;
   const fallback = managerDefaultVersion({ listed, installed: ready ? [ready.version] : [] });
-  const { version, source } = selectRuntimeVersion({ manual, recommended: needsGreenworks ? fallback : null,
+  const selection = selectRuntimeVersion({ manual, recommended: needsGreenworks ? fallback : null,
     defaultVersion: managerSettings?.customDefaults?.default || savedDefaultVersion(managerSettings?.defaultVersion,
       { listed: catalog.versions, installed: userDataDir ? Core.listInstalled(userDataDir).map(row => row.version) : [] }), fallback });
+  const version = installedRuntimeVersion({ ...selection,
+    compatibility: needsGreenworks ? "exact" : module.exports.versionCompatibility,
+    installed: userDataDir ? Core.listInstalled(userDataDir).filter(row => Core.resolveBestInstalled({ userDataDir,
+      version: row.version, variant: DEFAULT_VARIANT, platform, arch, versions: compatibleVersions })) : [] }) || selection.version;
+  const source = selection.source;
   const install = version && userDataDir ? Core.resolveBestInstalled({ userDataDir, version, variant: DEFAULT_VARIANT, platform, arch, versions: compatibleVersions }) : null;
   return { version, source, variant: DEFAULT_VARIANT, architecture: arch, install };
 }
@@ -408,6 +413,7 @@ function cleanupGameData({ entry, gameId, userDataDir } = {}) {
 }
 
 module.exports = {
+  versionCompatibility: () => true, // Web content has no NW patch ABI; Greenworks overrides this with its exact native contract.
   id: "nwjs",
   label: "NW.js",
   // Newer NW.js runs older games; Greenworks SDKs stay tied to their NW.js ABI.

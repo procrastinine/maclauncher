@@ -10,7 +10,9 @@ const { inspectClassic } = require("../inspect");
 
 const bundledRuntime = createBundledNativeRuntime({ managerId: "opengmk" });
 // The publisher's releases hold Windows binaries only; Mac builds come from MacLauncher Builds.
-const manager = createPinnedNativeManager({ id: "opengmk", label: "OpenGMK",
+const manager = createPinnedNativeManager({ id: "opengmk",
+    versionCompatibility: () => true, // The interpreter supports standard GM8.0/8.1 data with unchanged extension checks.
+     label: "OpenGMK",
   projectBuilds: { projectId: "opengmk", repository: "procrastinine/maclauncher-builds" },
   distributionRequired: false, legacyInstalledRuntime: bundledRuntime,
   sourceUrl: "https://github.com/OpenGMK/OpenGMK/releases" });

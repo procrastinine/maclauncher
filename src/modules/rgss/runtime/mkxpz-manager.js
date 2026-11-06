@@ -9,7 +9,7 @@ const { readRuntimeCatalog, writeRuntimeCatalog } = require("../../shared/runtim
 const UPSTREAM_SOURCE = "https://github.com/mkxp-z/mkxp-z/actions";
 const Custom = require("../../shared/runtime/custom-runtime");
 const Architecture = require("../../shared/runtime/architecture");
-const { selectRuntimeVersion, managerDefaultVersion, usableDefaultVersion } = require("../../shared/runtime/version-choices");
+const { selectRuntimeVersion, installedRuntimeVersion, managerDefaultVersion, usableDefaultVersion } = require("../../shared/runtime/version-choices");
 const fs = require("node:fs"), path = require("node:path");
 let loadedUpstreamDir = null;
 
@@ -73,7 +73,9 @@ function resolveSelection(entry, settings, userDataDir) {
   const state = getState({ userDataDir, settings: settings?.runtimes?.mkxpz });
   const chosen = selectRuntimeVersion({ manual: Custom.selectionPath(module.exports, entry, settings) || entry?.runtimeData?.mkxpz?.version,
     defaultVersion: usableDefaultVersion(state) });
-  const version = chosen.version;
+  const architecture = buildArchitecture(entry, settings, userDataDir);
+  const version = installedRuntimeVersion({ ...chosen, compatibility: module.exports.versionCompatibility,
+    installed: state.installed.filter(row => !row.architecture || Architecture.matchesArchitecture(row, architecture)) }) || chosen.version;
   if (!version) return { version: null, ready: false, install: null, discoveryRequired: true,
     reason: "No MKXP-Z versions are available to download.", installOptions: { sectionId: "default" } };
   let install = null, reason;
@@ -296,6 +298,7 @@ module.exports = {
   normalizeSettings,
   selectedVersion,
   buildArchitecture,
+  versionCompatibility: () => true, // One MKXP-Z interpreter supports RGSS 1, 2 and 3; package/CPU verification remains mandatory.
   resolveSelection,
   applySettingsUpdate,
   refreshCatalog,

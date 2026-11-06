@@ -8,7 +8,9 @@ const { managerDefaultVersion } = require("../../shared/runtime/version-choices"
 
 function createManager({ dependencies = {} } = {}) {
   const manager = createPinnedNativeManager({
-    id: "fna", label: "FNA native host", sourceUrl: "https://github.com/FNA-XNA/FNA/tags",
+    id: "fna",
+    versionCompatibility: () => true, // FNA hosts are checked against the game assembly and original-path runtime profile.
+     label: "FNA native host", sourceUrl: "https://github.com/FNA-XNA/FNA/tags",
     projectBuilds: { projectId: "fna", repository: "procrastinine/maclauncher-builds", launcherContract: 2 },
     resolveExecutable: root => path.join(root, "dotnet"),
     dependencies: dependencies.manager || {},
@@ -101,6 +103,8 @@ function createManager({ dependencies = {} } = {}) {
   manager.resolveSelection = (entry, settings, userDataDir, options = {}) => {
     const selected = resolve(entry, settings, userDataDir, options);
     if (selected.ready && selected.profile?.capabilities?.originalGamePaths === true) return selected;
+    // A missing capability does not authorize replacing a manual per-game pin.
+    if (selected.selectionSource === "manual") return selected;
     const pin = manager.core.listCatalog({userDataDir, architecture: selected.architecture}).find(pin => pin.version === selected.version);
     if (!selected.runtimeRequirement && (!pin || hasCapability(pin)) && !selected.ready) return selected;
     // A runtime requirement changes the effective selection, not the saved

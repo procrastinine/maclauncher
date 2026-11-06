@@ -19,7 +19,10 @@ const source = Upstream.github({ repository: "ikemen-engine/Ikemen-GO", allArchi
     return rows.length ? rows : { version, installReason: "No Mac package is available for this release. A compatible local runtime can be imported." };
   } });
 
-module.exports = createPinnedNativeManager({ id: "ikemen", label: "Ikemen GO",
+module.exports = createPinnedNativeManager({
+    // MUGEN assets use the supported interpreter API rather than a release-specific binary format.
+    versionCompatibility: () => true,
+     id: "ikemen", label: "Ikemen GO",
   sourceUrl: "https://github.com/ikemen-engine/Ikemen-GO/releases", upstream: source,
   resolveExecutable });
 module.exports.resolveExecutable = resolveExecutable;

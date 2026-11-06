@@ -11,7 +11,7 @@ const { sanitizeErrorMessage } = require("../../../core/runtime-errors.mjs");
 const Architecture = require("./architecture");
 const { systemVersionSync, versionAtLeast } = require("./bundled-native");
 const Custom = require("./custom-runtime");
-const { selectRuntimeVersion, managerDefaultVersion } = require("./version-choices");
+const { selectRuntimeVersion, installedRuntimeVersion, managerDefaultVersion } = require("./version-choices");
 
 // Catalog sorts compare often enough that each comparison reuses one module lookup.
 let versionOrder;
@@ -78,7 +78,7 @@ function executableFloor(file, architecture) {
 // query or from a local cache. Every pinned manager offers the user's own
 // default version, as other multi-version runtimes do, unless a game needs its
 // exact engine version.
-function createSingleArchitectureManager({ installationArchitecture, shareDiscovery, id, label, discoverCatalog, upstream, catalogSources, projectBuilds, buildsRepository, upstreamUrl, upstreamLabel, resolveExecutable, inspectRuntime = Native.resolveLocalRuntime, verifyArtifact, prepareInstall, prepareInstalled, buildRuntime, buildSourcePath, sourceUrl, sourceLabel, sourceName, sourceDescription, formatVersionLabel, versionContents, buildHelpUrl, buildRequirements, bundledRuntime, legacyInstalledRuntime, formerIds = [], bundledExecution = "copy", distributionRequired = false, importLocal = false, nativeLibrary = false, supportsDefault = true, customRuntime = true, maxEntries = 500, dependencies = {} }) {
+function createSingleArchitectureManager({ installationArchitecture, shareDiscovery, id, label, versionCompatibility, discoverCatalog, upstream, catalogSources, projectBuilds, buildsRepository, upstreamUrl, upstreamLabel, resolveExecutable, inspectRuntime = Native.resolveLocalRuntime, verifyArtifact, prepareInstall, prepareInstalled, buildRuntime, buildSourcePath, sourceUrl, sourceLabel, sourceName, sourceDescription, formatVersionLabel, versionContents, buildHelpUrl, buildRequirements, bundledRuntime, legacyInstalledRuntime, formerIds = [], bundledExecution = "copy", distributionRequired = false, importLocal = false, nativeLibrary = false, supportsDefault = true, customRuntime = true, maxEntries = 500, dependencies = {} }) {
   if (typeof distributionRequired !== "boolean") throw new Error("Runtime distribution requirements must be explicit booleans.");
   if (typeof importLocal !== "boolean") throw new Error("Local runtime imports must be explicitly enabled.");
   if (typeof nativeLibrary !== "boolean") throw new Error("Native library runtimes must be explicitly enabled.");
@@ -686,7 +686,12 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       entries.has(savedKey) && resolveInstalled({ userDataDir, version: savedKey, verification: "status" })) ? savedVersion : null;
     const layer = selectRuntimeVersion({ manual, recommended: gameRecommendation, defaultVersion: saved,
       fallback: manual || gameRecommendation || saved ? null : managerDefault(userDataDir, { verification, compatible }) });
-    const version = layer.version ? canonicalVersion(layer.version) : null, pin = version && entries.get(version);
+    const localVersion = versionCompatibility && installedRuntimeVersion({ ...layer,
+      version: layer.version ? canonicalVersion(layer.version) : null,
+      installed: listRuntimeRows(userDataDir).filter(row => !compatible || compatible(row.catalogEntry || entries.get(row.version))),
+      compatibility: typeof versionCompatibility === "function"
+        ? (candidate, requested, row) => versionCompatibility(candidate, requested, row, entry) : versionCompatibility });
+    const version = localVersion || (layer.version ? canonicalVersion(layer.version) : null), pin = version && entries.get(version);
     const registered = version && pin && resolveInstalled({ userDataDir, version, verification });
     const install = registered && (!compatible || compatible(registered.catalogEntry || pin)) ? registered : null;
     if (!version) return { version: null, install: null, ready: false, requiresDownload: true,
@@ -976,7 +981,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
   }
   manager = {
     upstream: upstream || null,
-    id, label, bundledExecution, distributionRequired, normalizeSettings, resolveSelection, getState, offersBuild,
+    id, label, versionCompatibility, bundledExecution, distributionRequired, normalizeSettings, resolveSelection, getState, offersBuild,
     distributionVersions: [],
     delivery: Object.freeze({ included: bundledRuntime ? bundledExecution : "none", catalog: "remote", sourceBuild: typeof buildRuntime === "function" }),
     refreshCatalog,

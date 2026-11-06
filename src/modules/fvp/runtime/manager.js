@@ -5,6 +5,8 @@ const { throwIfAborted } = require("../../shared/runtime/download-utils");
 
 function createManager({ dependencies = {} } = {}) {
   const base = createPinnedNativeManager({
+    // The verified interpreter payload reads the game format independently of its own release.
+    versionCompatibility: () => true,
     id: "rfvp", label: "RFVP", sourceUrl: Catalog.SOURCE_URL,
     upstream: Catalog.source, resolveExecutable: Payload.appPath,
     prepareInstall: options => Payload.preparePayload(options, dependencies), dependencies

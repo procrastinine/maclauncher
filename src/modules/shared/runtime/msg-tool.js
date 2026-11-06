@@ -26,7 +26,10 @@ const source = Upstream.github({ repository: "lifegpc/msg-tool", allArchitecture
 
 // The publisher may move the executable into a folder of its archive.
 const executable = root => locatePackaged(root, "msg_tool") || path.join(root, "msg_tool");
-const base = createPinnedNativeManager({ id: "msg-tool", label: "msg-tool", supportsDefault: true,
+const base = createPinnedNativeManager({
+    // The extraction command operates on game archives without a release-specific caller ABI.
+    versionCompatibility: () => true,
+     id: "msg-tool", label: "msg-tool", supportsDefault: true,
   sourceUrl: "https://github.com/lifegpc/msg-tool/releases", upstream: source, resolveExecutable: executable,
   prepareInstall: async ({ unpacked, pin, signal }) => {
     if (fs.existsSync(executable(unpacked))) fs.chmodSync(executable(unpacked), 0o755);

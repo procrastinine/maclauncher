@@ -17,7 +17,10 @@ function profileFor(profileSha256) {
 function createManager({ resourceRoot, dependencies = {} } = {}) {
   const bundledRuntime = createBundledNativeRuntime({ managerId: "impacto", resourceRoot,
     ...(dependencies.bundled ? { dependencies: dependencies.bundled } : {}) });
-  const manager = createPinnedNativeManager({ id: "impacto", label: "Impacto", maxEntries: 1000,
+  const manager = createPinnedNativeManager({
+    // The Impacto game profile and engine feature requirements identify the package.
+    versionCompatibility: "exact",
+     id: "impacto", label: "Impacto", maxEntries: 1000,
     projectBuilds: { projectId: "impacto", repository: "procrastinine/maclauncher-builds" },
     sourceUrl: SOURCE_URL, legacyInstalledRuntime: bundledRuntime, resolveExecutable: root => path.join(root, "Impacto.app", "Contents", "MacOS", "Impacto") });
   manager.distributionRequired = false;

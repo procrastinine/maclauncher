@@ -733,6 +733,7 @@ function updateSettingsAfterUninstall(settings, payload, { userDataDir } = {}) {
 }
 
 module.exports = {
+  versionCompatibility: "major", // Class-file/JVM line and required CPU variant stay fixed; patch releases are interchangeable.
   id: "java",
   label: "Temurin",
   // Each Java line is its own section; a newer patch runs that line's games.

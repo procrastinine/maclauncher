@@ -117,7 +117,9 @@ async function installLoader(unpacked, loader, signal) {
 }
 function createManager(backend, dependencies = {}) {
   const definition = definitions[backend], loader = backend === "kosmickrisp" ? loaderSource(dependencies) : null;
-  const manager = createPinnedNativeManager({ id: "vulkan-" + backend, label: definition.label, sourceUrl: definition.source, sourceLabel: "Source", sourceName: definition.sourceName, sourceDescription: definition.sourceDescription,
+  const manager = createPinnedNativeManager({
+    versionCompatibility: "exact", // The selected driver must retain its consumer ABI and required Vulkan/Metal feature profile.
+     id: "vulkan-" + backend, label: definition.label, sourceUrl: definition.source, sourceLabel: "Source", sourceName: definition.sourceName, sourceDescription: definition.sourceDescription,
     nativeLibrary: true,
     ...(backend === "kosmickrisp" ? { formatVersionLabel: (pin, installed) => pin ? [installed?.translator?.version, `LWJGL package ${pin.upstreamTag || pin.version}`].filter(Boolean).join(" · ") : undefined } : {}),
     inspectRuntime(options) {

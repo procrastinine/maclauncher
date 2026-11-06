@@ -49,6 +49,28 @@ function managerDefaultVersion({ listed = [], installed = [] } = {}) {
     fallback: listed.find(value => selectRuntimeVersion({ manual: value }).version) }).version;
 }
 
+/** Resolve a Play preference against ready local copies before requesting an
+ * install. Manual game choices stay exact. Managers declare the compatibility
+ * class; predicates receive candidate/version/installation and can retain ABI
+ * or format constraints. No catalog, network or settings changes occur here. */
+function installedRuntimeVersion({ version, source, installed = [], compatibility } = {}) {
+  const ready = installed.filter(row => row && row.ready !== false && !row.error &&
+    !["damaged", "unsupported-host", "incomplete"].includes(row.status) && typeof row.version === "string" && !row.version.startsWith("/"));
+  const accepts = row => {
+    if (typeof compatibility === "function") return compatibility(row.version, version, row);
+    if (compatibility === "major") {
+      const major = value => /^v?(\d+)(?:\.|$)/.exec(String(value || ""))?.[1];
+      return major(version) != null && major(row.version) === major(version);
+    }
+    return compatibility === "exact" && row.version === version;
+  };
+  const exact = ready.find(row => row.version === version && accepts(row));
+  if (exact) return exact.version;
+  if (source === "manual" || typeof version === "string" && version.startsWith("/")) return null;
+  return ready.filter(accepts).sort((a, b) => b.version.localeCompare(a.version, undefined,
+    { numeric: true, sensitivity: "base" }))[0]?.version || null;
+}
+
 /** The saved default while it can still be used: a custom runtime path, a
  * listed or installed version, or any version while nothing is listed yet
  * (offline). A saved version that upstream removed and that is not installed
@@ -69,4 +91,4 @@ function usableDefaultVersion(state) {
     managerDefaultVersion({ listed: listed.filter(version => !requirements[version]?.installReason), installed });
 }
 
-module.exports = { versionChoices, runtimeVersionChoices, selectRuntimeVersion, managerDefaultVersion, savedDefaultVersion, usableDefaultVersion };
+module.exports = { versionChoices, runtimeVersionChoices, selectRuntimeVersion, installedRuntimeVersion, managerDefaultVersion, savedDefaultVersion, usableDefaultVersion };

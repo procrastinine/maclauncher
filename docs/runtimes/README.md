@@ -109,7 +109,22 @@ Each downloadable runtime lists its published versions in a catalog, and Play pi
 2. The version recommended by the game's own data. Recommendations come from detected formats, ABIs and engine versions, such as GameMaker WAD and sequence layouts, Ren'Py SDK versions, Java bytecode lines, KiriKiri native APIs and Butterscotch launch arguments, and from known compatibility mappings for particular games.
 3. The runtime default. A saved default takes precedence over the manager default, which prefers a ready compatible installed version. When no usable installed version is available, the manager selects a compatible stable version from the catalog. Clearing a saved default restores the manager default.
 
-An explicitly chosen version is never replaced with a different version. When it cannot be installed or is incompatible, Play instead reports the specific reason, such as a required engine ABI, CPU architecture or macOS version.
+A manual per-game version stays exact. Recommended versions and saved runtime defaults are preferences: Play first uses that exact version when ready locally, otherwise the newest ready installed version in the same compatibility class. A compatible installed copy needs no download consent or catalog refresh. If no compatible local copy exists, Play requests the preferred version with consent.
+
+| Runtime | Local compatibility class |
+| --- | --- |
+| Ren'Py SDK | Same major version, such as Ren'Py 8.2.x for an 8.3.4 game |
+| Godot and Unity | Exact engine release |
+| LÖVE | Same major API family; 0.x releases also keep the minor line |
+| NW.js | Compatible web host; Greenworks keeps its exact host/bridge ABI |
+| Java | Same JVM major line and required CPU variant |
+| MKXP-Z, EasyRPG, DOSBox and ScummVM | Ready interpreter with the game's existing format and edition checks |
+| HashLink | Compatible bytecode and native primitive profile |
+| GameMaker | Compatible WAD/resource layout or Classic interpreter; required runner capabilities remain checked |
+| FNA and KiriKiri | Verified runtime profile and required game APIs/resources |
+| Vulkan drivers and graphics translators | Selected package's native ABI, API coverage and feature requirements |
+
+A manual per-game version is never replaced with a different version. When it cannot be installed or is incompatible, Play instead reports the specific reason, such as a required engine ABI, CPU architecture or macOS version.
 
 The inspector lists the versions and runtime libraries installed on the Mac; versions that a catalog only offers for download do not appear there. When both Intel and Apple Silicon copies of a version are installed, its entries carry **(Intel)** and **(Apple Silicon)**, and selecting one saves that CPU for the game. A version with a single installed copy keeps its plain label. A saved choice that is no longer installed stays in the list once, marked **(not installed)**, and Play asks for the usual download consent if it is needed. Damaged copies also stay visible, marked **Needs repair**.
 

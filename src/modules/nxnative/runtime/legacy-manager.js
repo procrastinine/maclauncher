@@ -5,7 +5,10 @@ const { createProjectBuildManager } = require("../../shared/runtime/project-buil
 const Bundled = require("../../shared/runtime/bundled-native");
 
 function createManager(dependencies = {}, { projectId = "nxnative" } = {}) {
-  const base = createProjectBuildManager({ projectId, label: "nxnative", repository: "procrastinine/maclauncher-builds",
+  const base = createProjectBuildManager({
+    // Guest runtime, relinker and native library interfaces are packaged as one ABI profile.
+    versionCompatibility: "exact",
+     projectId, label: "nxnative", repository: "procrastinine/maclauncher-builds",
     upstreamUrl: "https://github.com/seedds/nxnative", manifestRelative: "manifest.json", sourceRelative: "source.json",
     executableRelative: "bin/nxnative", supportsDefault: true,
     validateManifest(manifest, record) {

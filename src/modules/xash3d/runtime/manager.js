@@ -18,7 +18,10 @@ function prepareInstall({ unpacked, pin }, { arch = Architecture.targetArchitect
 }
 
 function createManager(dependencies = {}) {
-  return createPinnedNativeManager({ id: "xash3d-fwgs", label: "Xash3D FWGS", sourceUrl: Catalog.SOURCE_URL,
+  return createPinnedNativeManager({
+    // GoldSrc client/server game libraries must match the selected engine build ABI.
+    versionCompatibility: "exact",
+     id: "xash3d-fwgs", label: "Xash3D FWGS", sourceUrl: Catalog.SOURCE_URL,
     upstream: Catalog.source, resolveExecutable, prepareInstall, dependencies });
 }
 

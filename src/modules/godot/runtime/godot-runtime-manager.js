@@ -406,6 +406,7 @@ function updateSettingsAfterUninstall(settings, payload, { userDataDir } = {}) {
 
 module.exports = Custom.configure({
   id: "godot",
+  versionCompatibility: "exact", // Serialized resources and scripts target a specific Godot release.
   label: "Godot",
   normalizeSettings,
   applySettingsUpdate: (action, payload, settings) => {

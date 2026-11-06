@@ -7,7 +7,10 @@ const { throwIfAborted } = require("./download-utils");
 const Architecture = require("./architecture");
 
 function createManager(dependencies = {}) {
-  const manager = createProjectBuildManager({ projectId: "rpgmaker-decrypter", label: "RPGMakerDecrypter",
+  const manager = createProjectBuildManager({
+    // Managed decrypter packages declare the required tool ABI and native closure.
+    versionCompatibility: "exact",
+     projectId: "rpgmaker-decrypter", label: "RPGMakerDecrypter",
     repository: "procrastinine/maclauncher-builds", manifestRelative: "manifest.json", sourceRelative: null,
     executableRelative: "files/bin/RPGMakerDecrypter-cli", supportsDefault: true,
     validateManifest(manifest, record) {

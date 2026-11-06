@@ -220,6 +220,7 @@ function updateSettingsAfterUninstall(settings) { return settings; }
 
 module.exports = Custom.configure({
   id: "sdk",
+  versionCompatibility: "major", // SDK games share the Python/API contract within Ren'Py 7 or 8.
   label: "Ren'Py",
   // Newer SDKs of a major line run that line's older games.
   installSetsDefault: true,

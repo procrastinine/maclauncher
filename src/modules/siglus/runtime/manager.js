@@ -5,7 +5,10 @@ const Catalog = require("./catalog");
 const Profile = require("./profile");
 
 function createManager({ dependencies = {} } = {}) {
-  const core = createPinnedNativeManager({ id: "siglus", label: "siglus_rs", projectBuilds: { projectId: "siglus", repository: "procrastinine/maclauncher-builds" },
+  const core = createPinnedNativeManager({
+    // Scene bytecode is interpreted by the validated Siglus runtime profile.
+    versionCompatibility: () => true,
+     id: "siglus", label: "siglus_rs", projectBuilds: { projectId: "siglus", repository: "procrastinine/maclauncher-builds" },
     sourceUrl: Catalog.RELEASES,
     legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "siglus", ...(dependencies.bundle || {}) }),
     resolveExecutable: root => path.join(root, "bin", "siglus-host"), dependencies });

@@ -5,7 +5,6 @@ const Manager = require("./runtime/manager");
 const Preparation = require("./prepare");
 const Inspection = require("./inspection-tools");
 const AssetTools = require("./tools");
-const { selectRuntimeVersion, usableDefaultVersion } = require("../shared/runtime/version-choices");
 module.exports = {
   id: manifest.id, manifest, detectGame, runtimeManagers: [Manager, Inspection.WolfTL, Inspection.UberWolf],
   normalizeRuntimeId: () => "browser-woditor",
@@ -25,11 +24,7 @@ module.exports = {
     extractAdvancedAssets: Inspection.extractAdvancedAssets,
     revealProject: Inspection.revealProject,
     runtimeStatus(entry, _payload, context) {
-      const configured = context.settings?.runtimes?.["browser-woditor"];
-      const { version } = selectRuntimeVersion({ manual: entry.runtimeData?.["browser-woditor"]?.version,
-        // A saved version the publisher removed that is not installed gives way to the newest usable version.
-        defaultVersion: configured?.customDefaults?.default || usableDefaultVersion(Manager.getState({ settings: configured, userDataDir: context.userDataDir })) });
-      const install = version ? Manager.core.resolveInstalled({ userDataDir: context.userDataDir, version }) : null;
+      const {version, install} = Manager.resolveSelection(entry, context.settings, context.userDataDir);
       return { ready: Boolean(install), version: install?.version || version || null };
     }
   }

@@ -11,7 +11,9 @@ const Custom = require("../../shared/runtime/custom-runtime");
 const intelBundle = createBundledNativeRuntime({ managerId: "hashlink", arch: "x64" });
 const bundledRuntime = { ...intelBundle, resolve: options => intelBundle.resolve({ ...options, arch: "x64" }) };
 
-function createManager(dependencies = {}) { const base = createPinnedNativeManager({ id: "hashlink", label: "HashLink", upstream: Catalog.source, legacyInstalledRuntime: bundledRuntime,
+function createManager(dependencies = {}) { const base = createPinnedNativeManager({ id: "hashlink",
+    versionCompatibility: () => true, // The caller retains bytecode and native primitive/profile compatibility checks.
+     label: "HashLink", upstream: Catalog.source, legacyInstalledRuntime: bundledRuntime,
   projectBuilds: { projectId: "hashlink", repository: "procrastinine/maclauncher-builds", upstreamMacDownloads: true },
   distributionRequired: false, importLocal: true,
   sourceUrl: "https://github.com/HaxeFoundation/hashlink/releases",

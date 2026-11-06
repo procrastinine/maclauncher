@@ -8,7 +8,9 @@ const Signing = require('./signing');
 
 function createManager({ dependencies = {} } = {}) {
   const verify = Signing.createVerifier();
-  const base = createPinnedNativeManager({ id:'scummvm',label:'ScummVM',sourceUrl:Catalog.SOURCE_URL,upstream:Catalog.source,resolveExecutable:root=>path.join(root,'ScummVM.app'),
+  const base = createPinnedNativeManager({ id:'scummvm',
+    versionCompatibility: () => true, // ScummVM identifies the game edition before launching its interpreter.
+    label:'ScummVM',sourceUrl:Catalog.SOURCE_URL,upstream:Catalog.source,resolveExecutable:root=>path.join(root,'ScummVM.app'),
     prepareInstall:options=>Signing.prepareInstall(options),
     inspectRuntime(options) {
       const native = Native.resolveLocalRuntime(options), app = Signing.appRoot(native.executablePath);

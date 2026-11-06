@@ -6,7 +6,10 @@ const { locatePackaged } = require("../../shared/runtime/release-files");
 const Architecture = require("../../shared/runtime/architecture");
 
 function createManager({ dependencies = {} } = {}) {
-  const base = createPinnedNativeManager({ id: "mac32", label: "mac32", sourceUrl: Catalog.SOURCE_URL,
+  const base = createPinnedNativeManager({
+    // Guest execution and translated helper interfaces require their matching runtime profile.
+    versionCompatibility: "exact",
+     id: "mac32", label: "mac32", sourceUrl: Catalog.SOURCE_URL,
     upstream: Catalog.source,
     resolveExecutable: root => {
       const executable = locatePackaged(root, [Payload.HOST, "Contents/MacOS/mac32"]);

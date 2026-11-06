@@ -3,7 +3,6 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const GameData = require("../shared/game-data");
 const { throwIfAborted } = require("../shared/runtime/download-utils");
-const { selectRuntimeVersion, usableDefaultVersion } = require("../shared/runtime/version-choices");
 const { openArchive, writeModernArchive } = require("./archive");
 const { inspectRoot } = require("./detect");
 const Core = require("./runtime/core");
@@ -161,10 +160,7 @@ function seedSaves(entry, context) {
   atomicWrite(receipt, JSON.stringify({ schemaVersion: 1 }) + "\n", { root: owned });
 }
 function prepareLaunch(entry, context) {
-  const configured = context.settings?.runtimes?.["browser-woditor"];
-  const { version } = selectRuntimeVersion({ manual: entry.runtimeData?.["browser-woditor"]?.version,
-    defaultVersion: configured?.customDefaults?.default || usableDefaultVersion(require("./runtime/manager").getState({ settings: configured, userDataDir: context.userDataDir })) });
-  const install = Core.resolveInstalled({ userDataDir: context.userDataDir, version });
+  const {install} = require("./runtime/manager").resolveSelection(entry, context.settings, context.userDataDir);
   if (!install) throw new Error("Browser Woditor is not installed.");
   const stage = buildStage(entry, context, install);
   seedSaves(entry, context);

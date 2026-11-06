@@ -2,7 +2,10 @@ const Bundled = require("../shared/runtime/bundled-native");
 const { createProjectBuildManager } = require("../shared/runtime/project-build-manager");
 
 function createManager(dependencies = {}) {
-  return createProjectBuildManager({ projectId: "android", runtimeId: "klepton", label: "MacLauncher Android", repository: "procrastinine/maclauncher-builds", upstreamUrl: "https://github.com/procrastinine/maclauncher-android",
+  return createProjectBuildManager({
+    // Framework, VM and native adaptation form one selected Android API/profile snapshot.
+    versionCompatibility: "exact",
+     projectId: "android", runtimeId: "klepton", label: "MacLauncher Android", repository: "procrastinine/maclauncher-builds", upstreamUrl: "https://github.com/procrastinine/maclauncher-android",
     manifestRelative: "runtime.json", sourceRelative: manifest => manifest.files.some(file => file.path === "source.tar.gz") ? "source.tar.gz" : null,
     executableRelative: "native/libklepton-jvm.dylib", nativeLibrary: true,
     validateManifest: (manifest, record) => {

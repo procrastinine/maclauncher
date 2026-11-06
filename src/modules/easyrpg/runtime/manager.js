@@ -10,7 +10,9 @@ function resolveExecutable(root) {
 }
 
 function createManager(dependencies = {}) {
-  return createPinnedNativeManager({ id: "easyrpg", label: "EasyRPG Player", sourceUrl: Catalog.SOURCE_URL,
+  return createPinnedNativeManager({ id: "easyrpg",
+    versionCompatibility: () => true, // EasyRPG interprets RPG Maker 2000/2003 data independently of the Player release.
+     label: "EasyRPG Player", sourceUrl: Catalog.SOURCE_URL,
     upstream: Catalog.source, resolveExecutable, dependencies });
 }
 

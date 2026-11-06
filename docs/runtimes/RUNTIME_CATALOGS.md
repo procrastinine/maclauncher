@@ -33,7 +33,7 @@ Adoptium's releases are grouped into feature-release lines, and each long-term s
 
 Java 8 has no Apple silicon asset in the catalog, so it can use an Intel runtime through Rosetta. The manager keeps the architecture choice and reports availability for each exact version.
 
-Version labels use Adoptium's exact `openjdk_version`, including a fourth patch component. Upstream `17.0.20.1+1`, for example, stays `17.0.20.1+1` and does not become `17.0.20+101`, even though Adoptium also publishes that encoded SemVer value. Catalog lookup keeps the aliases that the same release metadata provides, so a SemVer key stored earlier still selects its package, while new installations use the canonical OpenJDK version. Existing installation directories and explicit selections keep their original keys. A missing exact installed version stays missing and does not select another release.
+Version labels use Adoptium's exact `openjdk_version`, including a fourth patch component. Upstream `17.0.20.1+1`, for example, stays `17.0.20.1+1` and does not become `17.0.20+101`, even though Adoptium also publishes that encoded SemVer value. Catalog lookup keeps the aliases that the same release metadata provides, so a SemVer key stored earlier still selects its package, while new installations use the canonical OpenJDK version. Existing installation directories and explicit selections keep their original keys. A missing manual per-game version stays missing. A recommended or default Java patch can use a ready installed release of the same JVM major line and required CPU variant.
 
 ### NW.js
 

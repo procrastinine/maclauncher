@@ -5,7 +5,10 @@ const Custom = require("../../shared/runtime/custom-runtime");
 const Bundled = require("../../shared/runtime/bundled-native");
 
 function createManager(dependencies = {}) {
-  const manager = createProjectBuildManager({ projectId: "prosper", label: "Prosper",
+  const manager = createProjectBuildManager({
+    // Native engine modules and shader preparation use the selected package contract.
+    versionCompatibility: "exact",
+     projectId: "prosper", label: "Prosper",
     repository: "procrastinine/maclauncher-builds", upstreamUrl: "https://github.com/mattias800/prosper",
     manifestRelative: "runtime.json", sourceRelative: "source.json", executableRelative: "bin/prosper-app", supportsDefault: true,
     validateManifest(manifest, record) {

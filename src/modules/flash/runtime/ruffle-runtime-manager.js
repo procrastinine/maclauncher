@@ -186,6 +186,7 @@ function updateSettingsAfterUninstall() {}
 
 module.exports = Custom.configure({
   id: "ruffle",
+  versionCompatibility: () => true, // SWF/ActionScript content targets the interpreter rather than a runtime release.
   label: "Ruffle",
   normalizeSettings,
   applySettingsUpdate: (action, payload, settings) => action === "setDefault" ? normalizeSettings({ defaultVersion: payload?.version }) : settings,

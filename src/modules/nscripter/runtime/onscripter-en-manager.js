@@ -4,6 +4,8 @@ const { createBundledNativeRuntime } = require("../../shared/runtime/bundled-nat
 
 function createManager({ dependencies = {} } = {}) {
   const manager = createPinnedNativeManager({
+    // Scripts use the selected NScripter interpreter dialect, not its release version.
+    versionCompatibility: () => true,
     id: "onscripter-en", label: "ONScripter-EN", projectBuilds: { projectId: "onscripter-en", repository: "procrastinine/maclauncher-builds" },
     sourceUrl: "https://github.com/Galladite27/ONScripter-EN/releases",
     legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "onscripter-en", ...(dependencies.bundle || {}) }),

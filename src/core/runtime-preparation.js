@@ -1,6 +1,6 @@
 // Explicit Play preparation shared by the launcher and headless callers.
 // Engine compatibility and exact version selection remain module-owned.
-const { selectRuntimeVersion, managerDefaultVersion } = require("../modules/shared/runtime/version-choices");
+const { selectRuntimeVersion, installedRuntimeVersion, managerDefaultVersion } = require("../modules/shared/runtime/version-choices");
 function listRuntimeManagers(registry) {
   const managers = new Map();
   for (const id of registry.listModuleIds?.() || registry.listModules().map(mod => mod.id)) {
@@ -54,14 +54,16 @@ async function managerPlan(entry, info, context, managers, { managerId, runtimeI
   if (!section) throw new Error("The detected game does not identify a compatible runtime line.");
   const override = entry.runtimeData?.[runtimeId] || {};
   const variant = override.variant || section.defaultVariant;
-  const version = selectRuntimeVersion({ manual: override.version,
+  const selection = selectRuntimeVersion({ manual: override.version,
     defaultVersion: section.defaultVersion,
     fallback: managerDefaultVersion({
       listed: (section.catalog?.installableVersions || section.catalog?.versions || []).filter(version =>
         !section.catalog?.versionRequirements?.[version]?.installReason && section.availabilityByVersion?.[version]?.unavailable !== true),
       installed: (section.installed || []).filter(install => install.ready !== false && install.status !== "damaged" &&
         (!variant || install.variant === variant)).map(install => install.version)
-    }) }).version;
+    }) });
+  const version = installedRuntimeVersion({ ...selection, compatibility: manager.versionCompatibility,
+    installed: (section.installed || []).filter(install => !variant || install.variant === variant) }) || selection.version;
   // Only the manager's own default, with no game choice or saved default,
   // is an automatic choice; see runtime-install-origins.js.
   const automatic = !selectRuntimeVersion({ manual: override.version, defaultVersion: section.defaultVersion }).version;

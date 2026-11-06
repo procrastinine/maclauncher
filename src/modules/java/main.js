@@ -13,7 +13,7 @@ const {
 const { extractJarIconToPath } = require("./jar-icon");
 const JavaRuntimeManager = require("./runtime/java-runtime-manager");
 const Custom = require("../shared/runtime/custom-runtime");
-const { selectRuntimeVersion, usableDefaultVersion } = require("../shared/runtime/version-choices");
+const { selectRuntimeVersion, installedRuntimeVersion, usableDefaultVersion } = require("../shared/runtime/version-choices");
 const Rosetta = require("../shared/runtime/rosetta");
 const GraphicsInputs = require("../shared/runtime/native-graphics-inputs");
 const { confirmToolInstall } = require("../shared/runtime/tool-install");
@@ -279,8 +279,8 @@ function resolveLineConfig(cfg, line, userDataDir) {
 
 function resolveInstalledRuntime({ userDataDir, line, runtimeData, lineConfig, entry }) {
   // Game data recommends a Java line, not a patch; the line's default supplies it.
-  const overrideVersion = selectRuntimeVersion({ manual: normalizeVersionOrNull(runtimeData.version),
-    defaultVersion: lineConfig.defaultVersion }).version;
+  const selection = selectRuntimeVersion({ manual: normalizeVersionOrNull(runtimeData.version),
+    defaultVersion: lineConfig.defaultVersion });
   let preferredVariant =
     normalizeVariantOrNull(runtimeData.variant) ||
     normalizeVariantOrNull(lineConfig.defaultVariant) ||
@@ -293,7 +293,9 @@ function resolveInstalledRuntime({ userDataDir, line, runtimeData, lineConfig, e
   return JavaCore.resolveBestInstalled({
     userDataDir,
     line,
-    version: overrideVersion,
+    version: installedRuntimeVersion({ ...selection, compatibility: JavaRuntimeManager.versionCompatibility,
+      installed: JavaCore.listInstalled(userDataDir, line).filter(row => JavaCore.resolveBestInstalled({userDataDir, line, version: row.version,
+        variant: preferredVariant, strictVariant: Boolean(requiredVariant), hostArch: process.arch})) }) || selection.version,
     variant: preferredVariant,
     ...(requiredVariant ? { strictVariant: true } : {}),
     // Keep the launcher CPU as the JVM preference; hardware checks admit runnable alternatives.

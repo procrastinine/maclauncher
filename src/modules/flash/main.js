@@ -5,7 +5,7 @@ const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
 const RuffleRuntimeManager = require("./runtime/ruffle-runtime-manager");
 const Custom = require("../shared/runtime/custom-runtime");
-const { selectRuntimeVersion, usableDefaultVersion } = require("../shared/runtime/version-choices");
+const { selectRuntimeVersion, installedRuntimeVersion, usableDefaultVersion } = require("../shared/runtime/version-choices");
 const ProjectorRuntimeManager = require("./runtime/projector-manager");
 const FFDec = require("./runtime/ffdec-manager");
 const Tools = require("./tools");
@@ -106,7 +106,9 @@ const resolveRuffleSelection = Custom.createSelector(RuffleRuntimeManager, funct
   // A saved default that is neither listed nor installed gives way to the newest usable version.
   const defaultVersion = usableDefaultVersion(state.sections?.[0] || state);
   const latestInstalled = RuffleCore.listInstalled(userDataDir)[0]?.version || null;
-  const requestedVersion = selectRuntimeVersion({ manual: overrideVersion, defaultVersion }).version;
+  const selection = selectRuntimeVersion({ manual: overrideVersion, defaultVersion });
+  const requestedVersion = installedRuntimeVersion({ ...selection, compatibility: RuffleRuntimeManager.versionCompatibility,
+    installed: RuffleCore.listInstalled(userDataDir) }) || selection.version;
 
   const install = requestedVersion ? RuffleCore.resolveInstalled({ userDataDir, version: requestedVersion }) : null;
 

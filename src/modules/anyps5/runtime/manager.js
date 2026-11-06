@@ -5,7 +5,10 @@ const { createProjectBuildManager } = require("../../shared/runtime/project-buil
 const Bundled = require("../../shared/runtime/bundled-native");
 
 function createManager(dependencies = {}) {
-  const base = createProjectBuildManager({ projectId: "anyps5", label: "AnyPS5",
+  const base = createProjectBuildManager({
+    // Relinker and guest libkernel native interfaces require a coherent package profile.
+    versionCompatibility: "exact",
+     projectId: "anyps5", label: "AnyPS5",
     repository: "procrastinine/maclauncher-builds", upstreamUrl: "https://github.com/boykopovar/AnyPS5",
     manifestRelative: "runtime.json", sourceRelative: "source.json", executableRelative: "tools/relinker", supportsDefault: true,
     validateManifest(manifest, record) {
