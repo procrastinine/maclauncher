@@ -93,6 +93,7 @@ function createSteamConsoleRelay({ executable, logPath, execute = dispatchClient
       const stat = fs.statSync(logPath, { throwIfNoEntry: false }), cursor = { offset: stat?.size || 0, inode: stat?.ino };
       // +commands are processed without opening the desktop console. -console
       // opens its UI even with -silent and can steal focus from this window.
+      options.beforeDispatch?.();
       await execute(executable, ["-silent", `+${begin}`, `+${command}`, ...args.map(String), `+${end}`]);
       const deadline = now() + (options.timeoutMs || 20000);
       let raw = "", text = "", started = false, ended = false, lastOutput = now();
@@ -242,6 +243,30 @@ async function copyDepot(source, destination, signal) {
   await copy(root, destination);
 }
 
+// Only known depot paths absent before download_depot can become cleanup
+// candidates. Keep the directory identities until the destination receipt is
+// published, and never traverse a symlink on the content/app/depot path.
+function stagingIdentity(source) {
+  const app = path.dirname(source), content = path.dirname(app), steamapps = path.dirname(content);
+  if (path.basename(steamapps) !== "steamapps" || path.basename(content) !== "content" ||
+      !/^app_[1-9]\d*$/.test(path.basename(app)) || !/^depot_[1-9]\d*$/.test(path.basename(source))) return null;
+  try {
+    const directories = [steamapps, content, app, source].map(file => ({ file, stat: fs.lstatSync(file, {bigint: true}) }));
+    if (directories.some(({stat}) => !stat.isDirectory())) return null;
+    return directories.map(({file, stat}) => ({file, dev: stat.dev, ino: stat.ino}));
+  } catch { return null; }
+}
+async function removeCreatedStaging(directories) {
+  const source = directories.at(-1).file, app = directories.at(-2).file;
+  for (const {file, dev, ino} of directories) {
+    const stat = fs.lstatSync(file, {throwIfNoEntry: false, bigint: true});
+    if (!stat?.isDirectory() || stat.dev !== dev || stat.ino !== ino) return;
+  }
+  await fs.promises.rm(source, {recursive: true});
+  // rmdir removes only an empty app folder; sibling depots/files stay intact.
+  try { await fs.promises.rmdir(app); } catch (error) { if (!["ENOENT", "ENOTEMPTY", "EEXIST"].includes(error.code)) throw error; }
+}
+
 function createSteamClientSession(options = {}) {
   if (!path.isAbsolute(options.userDataDir || "")) throw publicError("A MacLauncher profile directory is required.");
   const homeDir = options.homeDir || os.homedir(), steamRoot = path.join(homeDir, "Library/Application Support/Steam");
@@ -357,6 +382,7 @@ function createSteamClientSession(options = {}) {
     jobs.set(record.id, job); state.downloads.unshift(record); emit();
     const task = downloadTail.then(async () => {
       let stage, terminalStatus;
+      const createdStaging = [];
       try {
         signal.throwIfAborted(); record.status = "preparing"; emit();
         const versions = await getVersions(appId, { signal }), branchInfo = versions.branches.find(item => item.id === branch);
@@ -392,6 +418,13 @@ function createSteamClientSession(options = {}) {
           const contentAppId = choice.depot.depotFromAppId || appId;
           const allowed = [steamRoot, ...clientRoots(homeDir), path.dirname(options.executable || findClient({ home: homeDir }) || steamRoot)]
             .map(root => path.normalize(path.join(root, `steamapps/content/app_${contentAppId}/depot_${choice.depot.id}`)));
+          let preexisting;
+          // Snapshot at dispatch, after an earlier cancelled transfer releases
+          // the console lease, rather than while this command is still queued.
+          const beforeDispatch = () => { preexisting = new Set(allowed.filter(file => {
+            try { fs.lstatSync(file); return true; }
+            catch (error) { return error.code !== "ENOENT"; }
+          })); };
           let source;
           const complete = text => {
             if (/Depot download failed|Failed to download|Access denied|Manifest not available/i.test(text)) return true;
@@ -402,11 +435,13 @@ function createSteamClientSession(options = {}) {
             return false;
           };
           await queryConsole("download_depot", [String(contentAppId), String(choice.depot.id), manifest(choice.manifestId)],
-            { signal, complete, timeoutMs: options.downloadTimeoutMs || 2 * 60 * 60 * 1000, keepLeaseOnAbort: true });
+            { signal, complete, beforeDispatch, timeoutMs: options.downloadTimeoutMs || 2 * 60 * 60 * 1000, keepLeaseOnAbort: true });
           signal.throwIfAborted(); assertGeneration(currentGeneration);
           if (!source) throw publicError("Steam could not download the selected depot or manifest. Check ownership and access in Steam.");
           record.detail = `Copying ${choice.depot.name}`; emit();
+          const cleanup = preexisting && !preexisting.has(source) && stagingIdentity(source);
           await (options.copyDepot || copyDepot)(source, stage, signal);
+          if (cleanup) createdStaging.push(cleanup);
         }
         signal.throwIfAborted(); assertGeneration(currentGeneration);
         const metadata = { schema: 1, appId, name: record.name, platform, branch, buildId: identity.buildId, versionName: identity.versionName, version: identity.versionName, importPath: finalPath, path: finalPath, createdAt: record.createdAt, complete: true,
@@ -416,6 +451,10 @@ function createSteamClientSession(options = {}) {
         // A damaged index is kept beside it; one that cannot be read is not replaced.
         const installations = readJsonDocument(path.join(root, "installations.json"), { array: true }) || [];
         writeJsonAtomic(path.join(root, "installations.json"), [...(Array.isArray(installations) ? installations : []).filter(item => (typeof item === "string" ? item : item.path) !== finalPath), metadata]);
+        for (const directories of createdStaging) {
+          try { await removeCreatedStaging(directories); }
+          catch (error) { options.logger?.warn?.("[steam] The completed download's staging copy could not be removed.", error.message); }
+        }
         record.status = "completed"; record.downloaded = record.total; record.detail = "Download complete"; record.completedAt = new Date().toISOString(); emit();
         if (record.autoImport && options.onDownloaded) {
           try { await options.onDownloaded(clone(record)); record.imported = true; }

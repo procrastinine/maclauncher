@@ -290,3 +290,83 @@ test("anonymous metadata timeout and cancellation never fall back to the desktop
   controller.abort(); await assert.rejects(pending, { name: "AbortError" });
   metadata.dispose(); assert.equal(clients[1].loggedOff, true);
 });
+
+for (const scenario of ['created', 'preexisting', 'sibling', 'failed-copy', 'failed-receipt', 'outside', 'symlink-app']) {
+  test(`client depot staging cleanup: ${scenario}`, async t => {
+    const f = fixture(t), source = path.join(f.homeDir, 'Library/Application Support/Steam/steamapps/content/app_480/depot_481');
+    const app = path.dirname(source), outside = path.join(f.homeDir, 'owner-files');
+    if (scenario === 'preexisting') {
+      fs.mkdirSync(source, {recursive:true});fs.writeFileSync(path.join(source,'game.exe'),'owner depot');
+    }
+    if (scenario === 'sibling') {
+      fs.mkdirSync(app, {recursive:true});fs.writeFileSync(path.join(app,'keep.txt'),'owner file');
+      fs.mkdirSync(path.join(app,'depot_482'));fs.writeFileSync(path.join(app,'depot_482','keep'),'owner depot');
+    }
+    if (scenario === 'symlink-app') {
+      fs.mkdirSync(outside,{recursive:true});fs.mkdirSync(path.dirname(app),{recursive:true});fs.symlinkSync(outside,app);
+    }
+    if (scenario === 'failed-receipt') {
+      const rename = fs.renameSync;
+      t.mock.method(fs, 'renameSync', (from,to) => {
+        if (path.basename(to) === '.maclauncher-steam.json') throw Object.assign(new Error('receipt write failed'),{code:'EIO'});
+        return rename(from,to);
+      });
+    }
+    const session = createSteamClientSession({...f,isRunning:()=>true,pollInterval:2,quietMs:3,loadLibrary:async()=>[],
+      ...(scenario==='failed-copy'?{copyDepot:async(_source,target)=>{
+        fs.writeFileSync(path.join(target,'partial'),'partial copy');throw Object.assign(new Error('copy failed'),{code:'EIO'});
+      }}:{}),
+      execute:async(_executable,args)=>{
+        markers(f.logPath,args);
+        if(args.includes('+licenses_print'))return append(f.logPath,'License packageID 1:\n');
+        const directory=scenario==='outside'?outside:source;
+        fs.mkdirSync(directory,{recursive:true});
+        if(scenario!=='preexisting')fs.writeFileSync(path.join(directory,'game.exe'),'downloaded depot');
+        append(f.logPath,`Depot download complete : "${directory}"\n${scenario==='outside'?'Depot download failed\n':''}`);
+      }});
+    t.after(()=>session.dispose());await session.connect();
+    const job=session.download({appId:480,platform:'windows',autoImport:false});
+    const result=await waitFor(()=>session.snapshot().downloads.find(row=>row.id===job.id&&['completed','error'].includes(row.status)));
+    if(['failed-copy','failed-receipt','outside'].includes(scenario)) {
+      assert.equal(result.status,'error');
+      assert.equal(fs.readFileSync(path.join(scenario==='outside'?outside:source,'game.exe'),'utf8'),'downloaded depot');
+      assert.equal(fs.existsSync(path.join(f.userDataDir,'steam/installations.json')),false);
+      assert.deepEqual(fs.readdirSync(path.join(f.userDataDir,'external/downloads/steam/480/windows')),[]);
+    } else {
+      assert.equal(result.status,'completed',result.error);
+      const receipt=JSON.parse(fs.readFileSync(path.join(result.path,'.maclauncher-steam.json'),'utf8'));
+      assert.equal(receipt.complete,true);assert.equal(receipt.depots[0].depotId,481);
+      assert.equal(fs.readFileSync(path.join(result.path,'game.exe'),'utf8'),scenario==='preexisting'?'owner depot':'downloaded depot');
+      assert.equal(JSON.parse(fs.readFileSync(path.join(f.userDataDir,'steam/installations.json'),'utf8')).length,1);
+      if(['preexisting','symlink-app'].includes(scenario))assert.equal(fs.existsSync(source),true);
+      else assert.equal(fs.existsSync(source),false,'Only the newly acquired depot is removed after publication');
+      if(scenario==='created')assert.equal(fs.existsSync(app),false,'The empty app directory is removed');
+      if(scenario==='sibling') {
+        assert.equal(fs.readFileSync(path.join(app,'keep.txt'),'utf8'),'owner file');
+        assert.equal(fs.readFileSync(path.join(app,'depot_482','keep'),'utf8'),'owner depot');
+      }
+      if(scenario==='symlink-app')assert.equal(fs.readFileSync(path.join(outside,'depot_481/game.exe'),'utf8'),'downloaded depot');
+    }
+  });
+}
+
+test('client staging existence is recorded at dispatch after a cancelled download releases its lease', async t => {
+  const f=fixture(t),source=path.join(f.homeDir,'Library/Application Support/Steam/steamapps/content/app_480/depot_481');let dispatched=0;
+  const session=createSteamClientSession({...f,isRunning:()=>true,pollInterval:2,quietMs:3,loadLibrary:async()=>[],
+    execute:async(_executable,args)=>{
+      markers(f.logPath,args);if(args.includes('+licenses_print'))return append(f.logPath,'License packageID 1:\n');
+      dispatched++;if(dispatched===2)append(f.logPath,`Depot download complete : "${source}"\n`);
+    }});
+  t.after(()=>session.dispose());await session.connect();
+  const cancelled=session.download({appId:480,platform:'windows',autoImport:false});
+  await waitFor(()=>dispatched===1);session.cancel(cancelled.id);
+  await waitFor(()=>session.snapshot().downloads.find(row=>row.id===cancelled.id)?.status==='cancelled');
+  const next=session.download({appId:480,platform:'windows',autoImport:false,depots:[{depotId:481,manifestId:'101'}]});
+  await waitFor(()=>session.snapshot().downloads.find(row=>row.id===next.id)?.status==='downloading');
+  assert.equal(dispatched,1);
+  fs.mkdirSync(source,{recursive:true});fs.writeFileSync(path.join(source,'game.exe'),'previous transfer');
+  append(f.logPath,`Depot download complete : "${source}"\n`);
+  const result=await waitFor(()=>session.snapshot().downloads.find(row=>row.id===next.id&&['completed','error'].includes(row.status)));
+  assert.equal(result.status,'completed',result.error);assert.equal(dispatched,2);
+  assert.equal(fs.readFileSync(path.join(source,'game.exe'),'utf8'),'previous transfer','It existed before the second download command was actually dispatched');
+});
