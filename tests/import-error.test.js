@@ -34,6 +34,10 @@ test("conflicts, access failures and unknown errors offer a next step without di
     assert.doesNotMatch(error.message, /\/Users|internal/);
   }
   assert.match(userImportError({ code: "DETECTION_UNSUPPORTED_EXTENSION" }, "C:\\Games\\sample.xyz").message, /“sample.xyz”.*XYZ file/);
+  // A damaged input shows the module's short reason; the detail stays with the cause for the log.
+  const damaged = userImportError({ code: "DETECTION_INVALID_INPUT", message: "Switch dump is missing RomFS.", detail: "Invalid NPDM ACI0." }, "/games/Example");
+  assert.equal(damaged.message, "“Example” could not be added. Switch dump is missing RomFS.");
+  assert.equal(damaged.cause.detail, "Invalid NPDM ACI0.");
 });
 
 test("unsupported folders and Mac applications use their input kind", t => {

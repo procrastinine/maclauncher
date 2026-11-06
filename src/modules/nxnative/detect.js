@@ -84,8 +84,12 @@ function inspectBinary(file, detection) {
 }
 function extracted(directory, detection) {
   let dump;
-  // A folder laid out as a dump that cannot be used reports its problem on import.
-  try { dump = Inputs.dump(directory); } catch (error) { throw error.code ? error : Object.assign(error, { code: "DETECTION_INVALID_INPUT" }); }
+  // A folder laid out as a dump that cannot be used reports its problem on import
+  // in a plain sentence. The parser's own message goes to the log as the detail.
+  try { dump = Inputs.dump(directory); } catch (error) {
+    if (error.code) throw error;
+    throw Object.assign(new Error(error.reason || "Not a readable Switch game dump."), { code: "DETECTION_INVALID_INPUT", detail: String(error.message) });
+  }
   if (dump) return dump;
   const names = entries(directory, detection), exefs = names.find(item => item.isDirectory() && item.name.toLowerCase() === "exefs"),
     romfs = names.find(item => item.isDirectory() && item.name.toLowerCase() === "romfs");

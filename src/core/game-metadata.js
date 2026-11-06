@@ -215,6 +215,9 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
     try {
       return await refreshEntry(entry, settings, { ...options, importing: true, findExisting: detected => games.find(game => game.gamePath === detected.gamePath) });
     } catch (error) {
+      if (typeof error?.detail === "string") {
+        try { logger.warn?.("[import] could not add", inputPath, error.detail)?.catch?.(() => {}); } catch {}
+      }
       // A failed or cancelled import of a new game leaves no launcher folder.
       // A completed container unpack stays for the next import to reuse, and a
       // folder that holds a record is never removed.

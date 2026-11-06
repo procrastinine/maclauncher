@@ -90,7 +90,7 @@ Two equally strong matches for independent games or engines produce `DETECTION_C
 
 ### Damaged or incomplete inputs
 
-A module can recognize its own input format and still find the input unusable, such as a Switch dump folder without RomFS. It then reports `DETECTION_INVALID_INPUT` with a short message, which the trace records. Detection continues with the other modules, and a match from any of them is used. Without a match, the result is `DETECTION_INVALID_INPUT` with the first such message instead of `DETECTION_UNSUPPORTED`, and import shows the message after the item's name: “Example” could not be added. Switch dump is missing RomFS.
+A module can recognize its own input format and still find the input unusable, such as a Switch dump folder without RomFS. It then reports `DETECTION_INVALID_INPUT` with a short plain message, which the trace records, and optionally a technical detail that is written to the log rather than shown. Detection continues with the other modules, and a match from any of them is used. Without a match, the result is `DETECTION_INVALID_INPUT` with the first such message instead of `DETECTION_UNSUPPORTED`, and import shows the message after the item's name: “Example” could not be added. Switch dump is missing RomFS.
 
 ## Installers
 

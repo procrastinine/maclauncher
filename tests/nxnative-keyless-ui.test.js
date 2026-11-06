@@ -10,6 +10,7 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { build } = require('vite');
 const Modules = require('../src/modules/registry');
 const { userImportError } = require('../src/core/import-error');
+const { createGameMetadataService } = require('../src/core/game-metadata');
 const { entryModuleLabels } = require('../src/core/entry-labels');
 const { normalizeRuntimeSettings, resolveRuntimeSettingsSchema, resolveModuleRuntimeSettings, resolveRuntimeSettingsForEntry } = require('../src/core/runtime-settings');
 const { createLibraryFixture } = require('./library-layout-fixture');
@@ -120,20 +121,26 @@ test('Add, Open and drop accept NUP files and keyless dump folders', async t => 
   }
 });
 
-test('an incomplete dump names its problem on import, and mixed inputs report more than one game', async t => {
+test('an incomplete dump names its problem on import in a plain sentence, and mixed inputs report more than one game', async t => {
   const root = temp(t);
   const noRomfs = dump(path.join(root, 'Dump without RomFS'), TITLE, { romfs: false });
   const update = dump(path.join(root, 'Dump with partial update'), TITLE, { updates: [65536] });
   fs.rmSync(path.join(update, 'updates/65536/romfs'), { recursive: true });
-  for (const [input, message] of [[noRomfs, '“Dump without RomFS” could not be added. Switch dump is missing RomFS.'],
-    [update, '“Dump with partial update” could not be added. Update needs matching ExeFS and full RomFS.']]) {
-    await assert.rejects(Modules.detectGameAsync(input, { workerMode: 'inline' }), error => {
+  // The banner shows the module's short reason or the general sentence; the parser's text is only the log detail.
+  for (const [input, message, detail] of [[noRomfs, '“Dump without RomFS” could not be added. Switch dump is missing RomFS.', 'Switch dump is missing RomFS.'],
+    [update, '“Dump with partial update” could not be added. Not a readable Switch game dump.', 'Update needs matching ExeFS and full RomFS.']]) {
+    for (const options of [{ workerMode: 'inline' }, {}]) await assert.rejects(Modules.detectGameAsync(input, options), error => {
       assert.equal(error.code, 'DETECTION_INVALID_INPUT');
+      assert.equal(error.detail, detail, 'the detail crosses the detection worker');
       assert.equal(userImportError(error, input).message, message);
       return true;
     });
     assert.equal(Modules.explainDetection(input).error.code, 'DETECTION_INVALID_INPUT', 'synchronous detection reports the same problem');
   }
+  const warnings = [], userDataDir = path.join(root, 'data');
+  const service = createGameMetadataService({ userDataDir, registry: Modules, logger: { warn: (...args) => warnings.push(args.join(' ')), debug() {} } });
+  await assert.rejects(service.importEntry(update, {}), { code: 'DETECTION_INVALID_INPUT', message: 'Not a readable Switch game dump.' });
+  assert.deepEqual(warnings, [`[import] could not add ${update} Update needs matching ExeFS and full RomFS.`]);
   const mixed = dump(path.join(root, 'Dump with NUP'), TITLE); nup(path.join(mixed, 'Other.nup'), TITLE);
   const pair = path.join(root, 'Two NUPs'); fs.mkdirSync(pair); nup(path.join(pair, 'A.nup'), TITLE); nup(path.join(pair, 'B.nup'), TITLE + 0x10000n);
   for (const input of [mixed, pair]) await assert.rejects(Modules.detectGameAsync(input, { workerMode: 'inline' }), error => {

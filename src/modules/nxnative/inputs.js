@@ -44,7 +44,7 @@ function dump(folder) {
   }
   rows.sort((a,b)=>a.v-b.v);
   if(!base&&!rows.some(r=>code(r.p)&&rom(r.p)))return null;
-  if(base&&!rom(base)&&!rows.some(r=>rom(r.p)))throw Error('Switch dump is missing RomFS.');
+  if(base&&!rom(base)&&!rows.some(r=>rom(r.p)))throw Object.assign(Error('Switch dump is missing RomFS.'),{reason:'Switch dump is missing RomFS.'});
   const chosen=base||rows.filter(r=>code(r.p)&&rom(r.p)).at(-1).p,id=program(path.join(chosen,'exefs/main.npdm'));
   if(!id||id & 0xfffn)throw Error('Invalid base program ID.');
   for(const r of rows)if(!code(r.p)||!rom(r.p)||program(path.join(r.p,'exefs/main.npdm'))!==id)throw Error('Update needs matching ExeFS and full RomFS.');
