@@ -93,6 +93,21 @@ function githubScenarios(repository, releases, { bump = nextVersion, version = t
       deleted: version(releases.at(-1).tag_name) } : null
   };
 }
+// A manager that reads several publishers. Each publisher's scenarios run with
+// the other publishers' current answers. `listed` turns a version derived from
+// a tag into the versions the manager lists for that release; the first is the
+// one each scenario checks, and a deleted release removes all of them.
+function publisherScenarios(publishers) {
+  const current = Object.assign({}, ...publishers.map(publisher => publisher.current)), scenarios = {};
+  for (const publisher of publishers) for (const [name, scenario] of Object.entries(publisher.scenarios)) {
+    if (!scenario) continue;
+    const listed = value => [value].flat().flatMap(item => [publisher.listed(item)].flat());
+    scenarios[`${publisher.name} ${name}`] = { ...scenario, routes: { ...current, ...scenario.routes },
+      ...(scenario.version === undefined ? {} : { version: listed(scenario.version)[0] }),
+      ...(scenario.deleted === undefined ? {} : { deleted: listed(scenario.deleted) }) };
+  }
+  return { current, scenarios };
+}
 function tagVersion(tag) { return /\d+(?:\.\d+)+/.exec(tag)?.[0] || tag; }
 function nextVersion(version) {
   const parts = version.split(".");
@@ -232,4 +247,4 @@ async function checkLayout(t, layout, label = "layout") {
 }
 
 module.exports = { network, githubRoutes, githubRelease, githubAsset, githubScenarios, withUnknownFields, mapRoutes, catalogs, listed,
-  checkManager, checkLayout, nextVersion, renameAsset, extraAssets };
+  checkManager, checkLayout, nextVersion, renameAsset, extraAssets, publisherScenarios };
