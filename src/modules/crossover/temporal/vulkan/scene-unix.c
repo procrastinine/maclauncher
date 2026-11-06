@@ -376,7 +376,10 @@ static VkResult negotiate_scene_kind(struct scene_context *owner,
            (result->status==RS_TEMPORAL_OK&&!*supported)){status=VK_ERROR_UNKNOWN;goto done;}
         if(query.calls==1&&query.forwarded){
             atomic_store_explicit(&owner->commandKind,candidate,memory_order_release);
-            status=result->status==RS_TEMPORAL_FAILED?VK_ERROR_UNKNOWN:VK_SUCCESS;goto done;
+            /* Provider-query failure is not a failure of the producer's kind
+             * or of an already successful original SDK operation. Query and
+             * preparation callers still consume its unchanged result. */
+            status=VK_SUCCESS;goto done;
         }
         if(query.calls||result->encoded||result->status==RS_TEMPORAL_FAILED){status=VK_ERROR_UNKNOWN;goto done;}
         if(result->status==RS_TEMPORAL_BUSY){status=VK_NOT_READY;goto done;}
@@ -500,6 +503,12 @@ static VkResult prepare_scene(RSWineVulkanSceneRequestV2 *packet,BOOL wow64,BOOL
     if(owner->device.wineDevice!=request.base.device||owner->device.device!=device->host.device)goto done;
     if(!owner->prepare||!owner->prepareDevice||owner->device.api()!=3){status=VK_ERROR_FEATURE_NOT_PRESENT;goto done;}
     if(!cancel){status=negotiate_scene_kind(owner,&request.base,feature,&result,&queried);if(status!=VK_SUCCESS)goto done;}
+    if(!cancel&&queried>=0&&(!queried||result.status!=RS_TEMPORAL_OK)){
+        status=result.status==RS_TEMPORAL_BUSY?VK_NOT_READY:
+            result.status==RS_TEMPORAL_UNAVAILABLE?VK_ERROR_FEATURE_NOT_PRESENT:
+            result.status==RS_TEMPORAL_INVALID?VK_ERROR_INITIALIZATION_FAILED:VK_ERROR_UNKNOWN;
+        goto done;
+    }
     if(!cancel){status=prepare_scene_destination(owner,request.metadata.destinationWindow);if(status!=VK_SUCCESS)goto done;}
     if(pthread_mutex_trylock(&owner->admissionMutex)){status=VK_NOT_READY;goto done;}
     if(cancel){
