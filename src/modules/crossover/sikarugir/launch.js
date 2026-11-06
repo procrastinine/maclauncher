@@ -264,10 +264,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const host = dependencies.host || capabilities;
   const translatorPlan = await (dependencies.resolveTranslators || Translators.resolve)(selected.install, "sikarugir", context, { entry, executableArchitecture: match.executableArchitecture, host });
   settings = Translators.settingsForPlan(settings, translatorPlan);
-  // Saved NAME=value lines of the earlier Environment variables setting apply
-  // between the global and the game's own Sikarugir values.
-  const translatorEnvironment = TranslatorEnvironment.forLaunch(entry, context, Translators.environmentIds(translatorPlan, "sikarugir"),
-    { earlier: { sikarugir: TranslatorEnvironment.valuesFromLines(settings.environment) } }).values;
+  const translatorEnvironment = TranslatorEnvironment.forLaunch(entry, context, Translators.environmentIds(translatorPlan, "sikarugir")).values;
   const translatorView = await TranslatorFiles.prepareTranslatorFiles(translatorPlan, { userDataDir: context.userDataDir, layout: translatorPlan.layout, signal: context.signal });
   let cameraBridge = Temporal.resolvePlan(entry, context, { install: selected.install, settings, translatorPlan, host,
     runtimeId: "sikarugir", verify: true, root: dependencies.graphicsRoot, automatic: settings.dlss !== true });

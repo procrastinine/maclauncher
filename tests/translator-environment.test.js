@@ -79,21 +79,13 @@ test("values are stored literally and validated by name, line and lock", () => {
   assert.throws(() => Contract.withValues({}, "../x", {}), /Unknown translator/);
 });
 
-test("earlier NAME=value list settings become literal values", () => {
-  assert.deepEqual(Contract.valuesFromLines(["DXMT_CONFIG=d3d11.preferredMaxFrameRate=60", "CUSTOM=it's a game; $(echo nope)", "BROKEN", "EMPTY="]),
-    { DXMT_CONFIG: "d3d11.preferredMaxFrameRate=60", CUSTOM: "it's a game; $(echo nope)", EMPTY: "" });
-  assert.deepEqual(Contract.valuesFromLines("A=1\nB=2"), { A: "1", B: "2" });
-  assert.deepEqual(Contract.valuesFromLines(null), {});
-});
-
-test("launch values layer defaults, global, earlier and game values across the chosen translators", () => {
+test("launch values layer defaults, global and game values across the chosen translators", () => {
   const dxvk = declaration();
   const runtime = Contract.normalizeDeclaration({ id: "crossover", label: "CrossOver", managerIds: ["crossover"],
     keys: [{ key: "WINEDEBUG", description: "Channels." }], locked: [{ key: "CX_ROOT", reason: "Application path." }] });
   const declarations = [runtime, dxvk];
   const result = Contract.launchValues(declarations, ["crossover", "dxvk", "dxvk", "missing"], {
     global: { crossover: { WINEDEBUG: "-all", SHARED: "runtime", CX_ROOT: "/stored/before/lock" }, dxvk: { DXVK_HUD: "fps", SHARED: "dxvk", DXVK_LOG_LEVEL: null } },
-    earlier: { crossover: { DXVK_HUD: "earlier", OLD: "1" } },
     game: { dxvk: { DXVK_HUD: "full", DXVK_CONFIG: "dxvk.enableAsync = True" }, crossover: { OLD: null }, moltenvk: { MVK_CONFIG_LOG_LEVEL: "4" } }
   });
   assert.deepEqual(result.translators, ["crossover", "dxvk"]);
@@ -124,13 +116,13 @@ test("editor rows show inherited, changed, added and removed values with their s
   assert.deepEqual(global.map(row => [row.name, row.state, row.value, row.inheritedSource]), [
     ["DXVK_LOG_LEVEL", "changed", "info", "default"], ["DXVK_HUD", "added", "fps", undefined]]);
   assert.equal(global[1].known.launcher, "Set by DXVK HUD in Runtime Settings.");
-  const game = Contract.editorRows(dxvk, { scope: "game", global: { DXVK_HUD: "fps", DXVK_CONFIG: "a" }, earlier: { OLD: "1" },
+  const game = Contract.editorRows(dxvk, { scope: "game", global: { DXVK_HUD: "fps", DXVK_CONFIG: "a", OLD: "1" },
     game: { DXVK_HUD: "full", DXVK_CONFIG: null, EXTRA: "x" } });
   assert.deepEqual(game.map(row => [row.name, row.state, row.value, row.inheritedValue, row.inheritedSource]), [
     ["DXVK_LOG_LEVEL", "inherited", "none", "none", "default"],
     ["DXVK_HUD", "changed", "full", "fps", "global"],
     ["DXVK_CONFIG", "removed", null, "a", "global"],
-    ["OLD", "inherited", "1", "1", "earlier"],
+    ["OLD", "inherited", "1", "1", "global"],
     ["EXTRA", "added", "x", undefined, undefined]]);
   const locked = Contract.editorRows(dxvk, { scope: "global", global: { WINEPREFIX: "/stored" } });
   assert.equal(locked.find(row => row.name === "WINEPREFIX").locked.reason, "Bottle path.");

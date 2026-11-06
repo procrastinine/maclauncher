@@ -131,7 +131,7 @@ export type RuntimeSettingField = {
 export type RuntimeSettingsSchema = {
   inheritanceAction?: string;
   visibilityAction?: string;
-  /** Game-scope action whose result names the translator environments that apply (translatorEnvironments) and earlier values (earlierEnvironment). */
+  /** Game-scope action whose result names the translator environments that apply (translatorEnvironments). */
   environmentAction?: string;
   defaults?: Record<string, unknown>;
   fields: RuntimeSettingField[];

@@ -184,7 +184,7 @@ The **Runtimes** window shows runtime managers, downloads and local application 
 - the available versions, with a refresh control
 - installed versions with uninstall actions
 - the default version and, where supported, the variant
-- for a manager that provides a translator, an **Environment variables** card with the global [environment variables](TRANSLATOR_ENVIRONMENT.md) of that translator
+- for a manager that provides a translator, a collapsed **Environment variables** section with the global [environment variables](TRANSLATOR_ENVIRONMENT.md) of that translator
 
 Active downloads appear in the download menu, which supports several concurrent downloads and offers a cancel control for each.
 

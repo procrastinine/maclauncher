@@ -230,10 +230,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   if (!selectedExecutable) throw new Error("Windows executable must be a PE executable inside the game folder.");
   const translatorPlan = await Translators.resolve(selected.install, 'crossover', context, { entry, executableArchitecture: selectedExecutable.executableArchitecture, host });
   settings = Translators.settingsForPlan(settings, translatorPlan);
-  // Saved NAME=value lines of the earlier Environment variables setting apply
-  // between the global and the game's own CrossOver values.
-  const translatorEnvironment = TranslatorEnvironment.forLaunch(entry, context, Translators.environmentIds(translatorPlan, "crossover"),
-    { earlier: { crossover: TranslatorEnvironment.valuesFromLines(settings.environment) } }).values;
+  const translatorEnvironment = TranslatorEnvironment.forLaunch(entry, context, Translators.environmentIds(translatorPlan, "crossover")).values;
   const translatorView = TranslatorFiles.selectedDescriptions(translatorPlan).length ? await TranslatorFiles.prepareTranslatorFiles(translatorPlan,
     { userDataDir: context.userDataDir, layout: translatorPlan.layout, signal: context.signal }) : null;
   const Temporal = require("../temporal");

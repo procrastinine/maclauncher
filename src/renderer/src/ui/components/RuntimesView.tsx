@@ -495,6 +495,9 @@ export function RuntimesView({
                   </div>
 
                   <div className="runtimeSectionBody">
+                    {settingsApi?.setTranslatorEnvironment && <RuntimeTranslatorEnvironments managerId={activeRuntimeManager.id}
+                      declarations={state?.translatorEnvironments} store={state?.launcherSettings?.translatorEnvironment}
+                      onSave={settingsApi.setTranslatorEnvironment} />}
                     {itemGroups.length > 0 && <div className="detailRow detailControlRow"><label htmlFor="runtime-item-group" className="detailLabel">Operation</label>
                       <select id="runtime-item-group" className="input" value={selectedItemGroup}
                         onChange={event=>setItemGroup({section:groupKey,id:event.target.value})}>
@@ -729,9 +732,6 @@ export function RuntimesView({
                   </button>
                   <HelpTip label={activeRuntimeSection.registrationPresentation ? "About existing packages" : "About custom runtimes"}>{activeRuntimeSection.registrationPresentation?.description || "Register a compatible executable, application or runtime directory in this list. Files remain in their original location."}</HelpTip>
                 </div>}
-                {settingsApi?.setTranslatorEnvironment && <RuntimeTranslatorEnvironments managerId={activeRuntimeManager.id}
-                  declarations={state?.translatorEnvironments} store={state?.launcherSettings?.translatorEnvironment}
-                  onSave={settingsApi.setTranslatorEnvironment} />}
               </div>
             </div>
           ) : (

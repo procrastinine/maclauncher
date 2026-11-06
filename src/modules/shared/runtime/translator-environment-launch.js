@@ -10,13 +10,11 @@ function declarations(options = {}) {
   return require("../../registry").listTranslatorEnvironments();
 }
 
-// The values a launch adds for the chosen translators. `earlier` holds values
-// per translator from a runtime's earlier per-game environment setting.
+// The values a launch adds for the chosen translators.
 function forLaunch(entry, context, ids, options = {}) {
   return Contract.launchValues(declarations(options), ids, {
     global: context?.settings?.launcher?.translatorEnvironment,
-    game: entry?.translatorEnvironment,
-    earlier: options.earlier
+    game: entry?.translatorEnvironment
   });
 }
 
@@ -26,4 +24,4 @@ function apply(environment, entry, context, ids, options = {}) {
   return Contract.applyEnvironment(environment, forLaunch(entry, context, ids, options).values, { required: options.required });
 }
 
-module.exports = { declarations, forLaunch, apply, valuesFromLines: Contract.valuesFromLines };
+module.exports = { declarations, forLaunch, apply };

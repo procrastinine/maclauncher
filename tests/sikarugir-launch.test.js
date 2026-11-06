@@ -385,7 +385,8 @@ test("camera preparation rolls back before ordinary Play, while cancellation and
   const Temporal = require("../src/modules/crossover/temporal"), Streamline = require("../src/modules/crossover/temporal/streamline"), crypto = require("node:crypto");
   const originals = ["sl.interposer.dll", "plugins/sl.interposer.dll"];
   for (const relative of originals) { const file = path.join(entry.gamePath, relative);fs.mkdirSync(path.dirname(file), {recursive: true});fs.writeFileSync(file, "original " + relative); }
-  entry.graphics = {temporalMethod: "fsr2"};const saved = structuredClone(entry.graphics), settings = {graphicsBackend: "dxmt", synchronization: "msync", windowsVersion: "win7", environment: ["CUSTOM=retained"], dllOverrides: ["winhttp=b"]};
+  entry.graphics = {temporalMethod: "fsr2"};const saved = structuredClone(entry.graphics), settings = {graphicsBackend: "dxmt", synchronization: "msync", windowsVersion: "win7", dllOverrides: ["winhttp=b"]};
+  entry.translatorEnvironment = {sikarugir: {CUSTOM: "retained"}};
   const plan = {inputs: {cameraProjection: true, source: "streamline", methods: ["fsr2"]}, libraries: originals.map(relativePath => ({relativePath, sourcePath: path.join(entry.gamePath, relativePath)}))};
   t.mock.method(Temporal, "resolvePlan", () => plan);
   let failure = new Error("Private camera DLL copy failed"), cancel;
@@ -467,8 +468,9 @@ test("fresh prefix setup uses the stock engine and common support before applyin
       order.push("renderer");
     }
   });
+  entry.translatorEnvironment = { dxmt: { DXMT_CONFIG: "game-only" } };
   const result = await Launch.prepareLaunch(entry, { userDataDir: path.join(directory, "data"), settings: {}, runtimeSettings: {
-    graphicsBackend: "dxmt", synchronization: "msync", locale: "ja_JP.UTF-8", wineDebug: "err+all", environment: ["DXMT_CONFIG=game-only"],
+    graphicsBackend: "dxmt", synchronization: "msync", locale: "ja_JP.UTF-8", wineDebug: "err+all",
     dllOverrides: ["custom=n,b"], bepInExWinhttp: true
   } }, dependencies);
   assert.deepEqual(order, ["wineboot.exe", "winecfg.exe", "renderer"]);
@@ -481,21 +483,21 @@ test("fresh prefix setup uses the stock engine and common support before applyin
   assert.equal(result.environment.WINEDLLOVERRIDES, "d3d11,dxgi=b;custom=n,b;winhttp=n,b");
 });
 
-test("Sikarugir launches with the global, earlier and game values of its chosen translator environments", async t => {
+test("Sikarugir launches with the global and game values of its chosen translator environments", async t => {
   const directory = fixture(t), dependencies = adapters(installation(directory));
-  const entry = { ...game(directory), translatorEnvironment: { dxmt: { DXMT_CONFIG: null, DXMT_LOG_LEVEL: "debug" }, sikarugir: { GAME_ONLY: "$PATH literal" } } };
+  const entry = { ...game(directory), translatorEnvironment: { dxmt: { DXMT_CONFIG: null, DXMT_LOG_LEVEL: "debug" }, sikarugir: { GAME_ONLY: "$PATH literal", SHARED: "game" } } };
   const result = await Launch.prepareLaunch(entry, { userDataDir: path.join(directory, "data"),
-    runtimeSettings: { graphicsBackend: "dxmt", locale: "ja_JP.UTF-8", environment: ["DXMT_CONFIG=earlier", "EARLIER=1", "SHARED=earlier"] },
+    runtimeSettings: { graphicsBackend: "dxmt", locale: "ja_JP.UTF-8" },
     settings: { launcher: { translatorEnvironment: { sikarugir: { SHARED: "global", LANG: "fr_FR.UTF-8", WINEDEBUG: "+loaddll", PATH: "/stored/before/lock" },
       dxmt: { DXMT_CONFIG: "global" }, moltenvk: { MVK_CONFIG_LOG_LEVEL: "4" } } } } }, dependencies);
   const environment = result.environment;
-  assert.equal(environment.SHARED, "earlier"); assert.equal(environment.EARLIER, "1"); assert.equal(environment.GAME_ONLY, "$PATH literal");
-  assert.equal(environment.DXMT_LOG_LEVEL, "debug"); assert.equal(environment.DXMT_CONFIG, undefined, "the game removes the global and earlier values");
+  assert.equal(environment.SHARED, "game"); assert.equal(environment.GAME_ONLY, "$PATH literal");
+  assert.equal(environment.DXMT_LOG_LEVEL, "debug"); assert.equal(environment.DXMT_CONFIG, undefined, "the game removes the global value");
   assert.equal(environment.LANG, "fr_FR.UTF-8", "a global value replaces the launcher's locale"); assert.equal(environment.LC_ALL, "ja_JP.UTF-8");
   assert.equal(environment.WINEDEBUG, "+loaddll", "a global value replaces the launcher's debug channels");
   assert.equal(environment.MVK_CONFIG_LOG_LEVEL, undefined, "MoltenVK values apply only to games that use MoltenVK");
   assert.notEqual(environment.PATH, "/stored/before/lock");
-  for (const call of dependencies.calls) for (const name of ["SHARED", "EARLIER", "DXMT_LOG_LEVEL"])
+  for (const call of dependencies.calls) for (const name of ["SHARED", "GAME_ONLY", "DXMT_LOG_LEVEL"])
     assert.equal(call.options.env[name], undefined, `${name} is used only during gameplay`);
 });
 

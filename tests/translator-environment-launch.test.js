@@ -143,3 +143,53 @@ test("a game's values are stored literally in its record, survive detection and 
   assert.equal("translatorEnvironment" in stored, false, "clearing the last translator removes the field");
   assert.equal("translatorEnvironment" in entry, false);
 });
+
+test("Wine environment variable lists move once into the translator environment, show in the editor and yield to an edited global value", t => {
+  const root = directory(t, "translator-environment-migration-");
+  const Migration = require("../src/core/backcompat/translator-environment");
+  const Contract = require("../src/modules/shared/runtime/translator-environment.mjs");
+  const declarations = Registry.listTranslatorEnvironments(), logger = { warn() {} };
+  fs.mkdirSync(path.join(root, "runtimes", "sikarugir"), { recursive: true });
+  fs.writeFileSync(path.join(root, "runtimes", "sikarugir", "settings.json"), JSON.stringify({ environment: ["RUNTIME=1", "SHARED=runtime"] }));
+  const raw = { launcher: { appearance: "dark", translatorEnvironment: { crossover: { KEPT: "current" } } }, modules: {
+    unity: { runtimeSettings: { crossover: { environment: ["WINEDEBUG=-all", " LITERAL=$HOME `x` ", "WINEPREFIX=/locked", "BROKEN"], locale: "ja_JP.UTF-8" } } },
+    windows: { runtimeSettings: { crossover: { environment: ["WINEDEBUG=+seh", "OTHER=1", "KEPT=old"] }, sikarugir: { environment: ["SHARED=module"] } } } } };
+  const before = structuredClone(raw), commits = [];
+  const migrated = Migration.migrateSettings(raw, { userDataDir: root, registry: Registry, logger,
+    commitSettings: (previous, next) => { commits.push(previous); return next; } });
+  assert.deepEqual(raw, before, "the read document is not changed in place");
+  assert.equal(commits.length, 1);
+  assert.deepEqual(migrated.launcher.translatorEnvironment, {
+    crossover: { KEPT: "current", WINEDEBUG: "-all", LITERAL: "$HOME `x`", OTHER: "1" }, sikarugir: { RUNTIME: "1", SHARED: "runtime" } });
+  assert.equal(migrated.launcher.appearance, "dark");
+  assert.deepEqual(migrated.modules.unity.runtimeSettings.crossover, { locale: "ja_JP.UTF-8" }, "the retired list leaves the game type settings");
+  assert.deepEqual(migrated.modules.windows.runtimeSettings, { crossover: {}, sikarugir: {} });
+  assert.deepEqual(migrated.dataMigrations[Migration.MIGRATION], { settings: true, retained: [
+    { runtimeId: "crossover", moduleId: "windows", name: "WINEDEBUG", value: "+seh" },
+    { runtimeId: "sikarugir", moduleId: "windows", name: "SHARED", value: "module" }] });
+  assert.equal(Migration.migrateSettings(migrated, { userDataDir: root, commitSettings: () => assert.fail("migrated once") }), migrated);
+  const plain = { launcher: {}, modules: { unity: { runtimeSettings: { crossover: { locale: "" } } } } };
+  assert.equal(Migration.migrateSettings(plain, { userDataDir: directory(t, "translator-environment-plain-"),
+    commitSettings: () => assert.fail("a document without lists is not rewritten") }), plain);
+
+  const entry = { gameId: "game", runtimeSettings: { crossover: { environment: ["DXVK_HUD=full", "GAME=old", "CX_ROOT=/locked"], locale: "" },
+    sikarugir: { environment: [] }, mkxpz: { environment: ["UNRELATED=1"] } }, translatorEnvironment: { crossover: { GAME: "current" } } };
+  const game = Migration.migrateGameEntry(entry, declarations);
+  assert.deepEqual(game.runtimeSettings, { crossover: { locale: "" }, sikarugir: {}, mkxpz: { environment: ["UNRELATED=1"] } });
+  assert.deepEqual(game.translatorEnvironment, { crossover: { DXVK_HUD: "full", GAME: "current" } });
+  assert.equal(Migration.migrateGameEntry(game, declarations), null, "a migrated record has nothing left to move");
+  assert.equal(Migration.migrateGameEntry({ gameId: "empty", runtimeSettings: { crossover: { environment: [] } } }, declarations).translatorEnvironment, undefined);
+
+  // The moved line is an ordinary global row of the CrossOver editor, and the
+  // value saved from that editor is the one the next launch receives.
+  const crossover = declarations.find(item => item.id === "crossover");
+  const row = Contract.editorRows(crossover, { scope: "global", global: migrated.launcher.translatorEnvironment.crossover }).find(item => item.name === "WINEDEBUG");
+  assert.deepEqual([row.state, row.value, row.known.launcher], ["added", "-all", "Set by Wine debug channels in Runtime Settings."]);
+  const gameRow = Contract.editorRows(crossover, { scope: "game", global: migrated.launcher.translatorEnvironment.crossover,
+    game: game.translatorEnvironment.crossover }).find(item => item.name === "WINEDEBUG");
+  assert.deepEqual([gameRow.state, gameRow.inheritedSource], ["inherited", "global"], "the game shows the moved value as coming from Runtimes");
+  const edited = Contract.withValues(migrated.launcher.translatorEnvironment, "crossover",
+    Contract.normalizeValues({ ...migrated.launcher.translatorEnvironment.crossover, WINEDEBUG: "+loaddll" }, { declarations: [crossover] }));
+  const launch = Launch.forLaunch(game, { settings: { launcher: { translatorEnvironment: edited } } }, ["crossover", "dxvk"]).values;
+  assert.equal(launch.WINEDEBUG, "+loaddll"); assert.equal(launch.DXVK_HUD, "full"); assert.equal(launch.GAME, "current"); assert.equal(launch.LITERAL, "$HOME `x`");
+});

@@ -28,7 +28,7 @@ const { readJsonObject, readJsonDocument, onUnreadablePreserved, writeJsonAtomic
 const { coordinatorFor } = require("../core/runtime-coordinator");
 const { createSettingsSnapshots } = require("../core/settings-snapshots");
 const { applySaveIdentity } = require("../core/save-identity");
-const { ORIGINAL_GAME_MIRRORS_MIGRATION, CURRENT_SETTINGS_MIGRATION } = require("../core/data-migration-ids");
+const { ORIGINAL_GAME_MIRRORS_MIGRATION, CURRENT_SETTINGS_MIGRATION, TRANSLATOR_ENVIRONMENT_MIGRATION } = require("../core/data-migration-ids");
 const { createUtilityWindowController } = require("./utility-windows");
 const { runRuntimeManagerAction } = require("../core/runtime-manager-service");
 const { createBackendService } = require("../core/backend-worker-client");
@@ -447,9 +447,15 @@ function settingsPath() {
 // An unreadable settings document is kept byte for byte beside it before any
 // save, and one notice names the copy. Its readable top-level settings remain.
 function readSettingsDocument() {
-  const document = readJsonDocument(settingsPath());
-  if (document?.dataMigrations?.[CURRENT_SETTINGS_MIGRATION]?.complete === true) return document;
-  return require("../core/backcompat/settings-conversions").migrateLegacySettings(document, { userDataDir, registry: Modules, logger,
+  let document = readJsonDocument(settingsPath());
+  if (document?.dataMigrations?.[CURRENT_SETTINGS_MIGRATION]?.complete !== true)
+    document = require("../core/backcompat/settings-conversions").migrateLegacySettings(document, { userDataDir, registry: Modules, logger,
+      commitSettings: (before, next) => settingsCoordinator.applySettings(before, next) });
+  // Wine environment variable lists move into the translator environment
+  // before normalization drops their retired field.
+  const environment = document?.dataMigrations?.[TRANSLATOR_ENVIRONMENT_MIGRATION];
+  if (environment?.complete === true || environment?.settings === true) return document;
+  return require("../core/backcompat/translator-environment").migrateSettings(document, { userDataDir, registry: Modules, logger,
     commitSettings: (before, next) => settingsCoordinator.applySettings(before, next) });
 }
 
@@ -695,12 +701,6 @@ function saveSettings(next) {
   return settingsSnapshots.save(next);
 }
 
-// A game's own translator environment values, by translator.
-function translatorEnvironmentField(entry) {
-  const store = TranslatorEnvironment.readStore(entry.translatorEnvironment);
-  return Object.keys(store).length ? { translatorEnvironment: store } : {};
-}
-
 function serializeGameEntry(entry) {
   if (!entry || typeof entry !== "object") throw new Error("Missing game entry.");
   const gameId = entry.gameId;
@@ -716,7 +716,8 @@ function serializeGameEntry(entry) {
     name: entry.name || null,
     notes: typeof entry.notes === "string" ? entry.notes : "",
     launchArguments: typeof entry.launchArguments === "string" ? entry.launchArguments : "",
-    ...translatorEnvironmentField(entry),
+    ...(entry.translatorEnvironment && typeof entry.translatorEnvironment === "object" && !Array.isArray(entry.translatorEnvironment)
+      ? { translatorEnvironment: entry.translatorEnvironment } : {}),
     networkAccess: typeof entry.networkAccess === "boolean" ? entry.networkAccess :
       NetworkAccess.preferenceForEntry(entry, loadSettings(), entry.runtimeId),
     ...(entry.startSteamClient !== undefined ? {startSteamClient: SteamClientStart.startPreference(entry.startSteamClient)} : {}),
@@ -1182,7 +1183,8 @@ function normalizeGameEntry(entry, settings, precomputed = null) {
     name: entry.name || path.basename(entry.gamePath || ""),
     notes: typeof entry.notes === "string" ? entry.notes : "",
     launchArguments: typeof entry.launchArguments === "string" ? entry.launchArguments : "",
-    ...translatorEnvironmentField(entry),
+    ...(entry.translatorEnvironment && typeof entry.translatorEnvironment === "object" && !Array.isArray(entry.translatorEnvironment)
+      ? { translatorEnvironment: entry.translatorEnvironment } : {}),
     networkAccess: entry.networkAccess,
     steamClientEligible: SteamClientStart.clientEligible(entry),
     ...(entry.startSteamClient !== undefined ? {startSteamClient: SteamClientStart.startPreference(entry.startSteamClient)} : {}),
@@ -3074,6 +3076,21 @@ async function init() {
 
   const settings = loadSettingsHydrated({ persist: !isChildGame });
   const games = loadGamesHydrated({ persist: !isChildGame });
+  if (!isChildGame && settings?.dataMigrations?.[TRANSLATOR_ENVIRONMENT_MIGRATION]?.complete !== true) {
+    // A game's own Wine environment variable lines become its translator values once.
+    const Migration = require("../core/backcompat/translator-environment"), declarations = Modules.listTranslatorEnvironments();
+    try {
+      for (const entry of games) {
+        const next = Migration.migrateGameEntry(entry, declarations);
+        if (!next) continue;
+        const baseline = structuredClone(entry);
+        Object.assign(entry, saveGameRecord(next, { baseline: serializeGameEntry(baseline) }));
+      }
+      settings.dataMigrations = { ...settings.dataMigrations,
+        [TRANSLATOR_ENVIRONMENT_MIGRATION]: { ...settings.dataMigrations?.[TRANSLATOR_ENVIRONMENT_MIGRATION], complete: true } };
+      saveSettings(settings);
+    } catch (error) { logger.warn("[migration] Game environment variables remain pending:", error.message); }
+  }
   if (!isChildGame) {
     if (settings?.dataMigrations?.[ORIGINAL_GAME_MIRRORS_MIGRATION]?.complete !== true) await require("../core/backcompat/data-migrations").runDataMigrations({
       settings, games, registry: Modules, userDataDir, logger,
@@ -3618,7 +3635,7 @@ ipcMain.handle("launcher:setGameTranslatorEnvironment", async (_event, gamePath,
   const index = gameRecordsCache?.findIndex(game => game.gameId === entry.gameId) ?? -1;
   if (index >= 0) {
     const { translatorEnvironment: _previous, ...rest } = gameRecordsCache[index];
-    gameRecordsCache[index] = { ...rest, ...translatorEnvironmentField(entry), updatedAt: entry.updatedAt };
+    gameRecordsCache[index] = { ...rest, ...(entry.translatorEnvironment ? { translatorEnvironment: entry.translatorEnvironment } : {}), updatedAt: entry.updatedAt };
   }
   cachedState = buildState(settings, games);
   broadcastState();

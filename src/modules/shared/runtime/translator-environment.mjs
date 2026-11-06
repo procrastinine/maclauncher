@@ -9,7 +9,7 @@
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const ID = /^[a-z0-9][a-z0-9-]*$/;
 export const LIMITS = Object.freeze({ entries: 256, name: 256, value: 32768 });
-export const SOURCES = Object.freeze(["default", "global", "earlier", "game"]);
+export const SOURCES = Object.freeze(["default", "global", "game"]);
 const isRecord = value => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 const text = (value, limit = 4096) => typeof value === "string" && value.length <= limit ? value : "";
@@ -108,11 +108,9 @@ export function withValues(store, id, values) {
   return next;
 }
 
-// The layers of one translator, lowest first. "earlier" holds values carried
-// from a runtime's earlier per-game environment setting.
-function layers(declaration, { global, earlier, game } = {}) {
-  return [["default", declaration.defaults || {}], ["global", readValues(global)],
-    ["earlier", readValues(earlier)], ["game", readValues(game)]];
+// The layers of one translator, lowest first.
+function layers(declaration, { global, game } = {}) {
+  return [["default", declaration.defaults || {}], ["global", readValues(global)], ["game", readValues(game)]];
 }
 function applyLayer(target, values, skip, source, sources) {
   for (const [name, value] of Object.entries(values)) {
@@ -135,8 +133,8 @@ export function effectiveValues(declaration, values = {}, { through = "game" } =
 
 // Rows for an editor at one scope. Inherited rows come from the layers below
 // the scope, and `own` holds the values stored at the scope itself.
-export function editorRows(declaration, { scope = "global", global, earlier, game } = {}) {
-  const below = scope === "game" ? effectiveValues(declaration, { global, earlier }, { through: "earlier" })
+export function editorRows(declaration, { scope = "global", global, game } = {}) {
+  const below = scope === "game" ? effectiveValues(declaration, { global }, { through: "global" })
     : effectiveValues(declaration, {}, { through: "default" });
   const ownValues = readValues(scope === "game" ? game : global);
   const names = [...Object.keys(below.values), ...Object.keys(ownValues).filter(name => !own(below.values, name))];
@@ -154,15 +152,14 @@ export function editorRows(declaration, { scope = "global", global, earlier, gam
 // before the next layer, so a game's value replaces a global or default value
 // whichever translator declares it. Variables locked by any chosen
 // translator are never taken from these values.
-export function launchValues(declarations, ids, { global, game, earlier } = {}) {
+export function launchValues(declarations, ids, { global, game } = {}) {
   const byId = new Map((declarations || []).map(item => [item.id, item]));
   const chosen = [...new Set(ids || [])].map(id => byId.get(id)).filter(Boolean);
   const skip = name => Boolean(lockedRule(chosen, name));
-  const globalStore = readStore(global), gameStore = readStore(game), earlierStore = isRecord(earlier) ? earlier : {};
+  const globalStore = readStore(global), gameStore = readStore(game);
   const values = {}, sources = {};
   for (const source of SOURCES) for (const declaration of chosen) {
-    const layer = source === "default" ? declaration.defaults : source === "global" ? globalStore[declaration.id]
-      : source === "earlier" ? readValues(earlierStore[declaration.id]) : gameStore[declaration.id];
+    const layer = source === "default" ? declaration.defaults : source === "global" ? globalStore[declaration.id] : gameStore[declaration.id];
     applyLayer(values, layer || {}, skip, declaration.id, sources);
   }
   return { values, translators: chosen.map(item => item.id), sources };
@@ -174,16 +171,5 @@ export function applyEnvironment(environment, values, { required = [] } = {}) {
   const keep = new Set(required);
   const result = { ...environment };
   for (const [name, value] of Object.entries(values || {})) if (!keep.has(name)) result[name] = value;
-  return result;
-}
-
-// Lines of an earlier NAME=value list setting. List settings store trimmed
-// lines, so each line is trimmed the same way; the value after "=" is literal.
-export function valuesFromLines(lines) {
-  const result = {};
-  for (const line of Array.isArray(lines) ? lines : typeof lines === "string" ? lines.split(/\r?\n/) : []) {
-    const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(String(line).trim());
-    if (match && isVariableValue(match[2])) result[match[1]] = match[2];
-  }
   return result;
 }

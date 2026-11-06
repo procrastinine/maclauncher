@@ -29,7 +29,7 @@ test("Windows metadata registers a managed Wine choice without changing the game
   assert.equal(wine.vulkanBackend, "auto");
   assert.equal(wine.cncDdraw, false);
   assert.equal(wine.windowsVersion, "win10");
-  assert.deepEqual(wine.environment, []);
+  assert.equal("environment" in wine, false, "translator environments replace the Wine variable list");
   const synchronization = manifest.runtime.entries.sikarugir.settings.fields.find(field => field.key === "synchronization");
   assert.deepEqual(synchronization.options.map(option => option.value), ["auto", "msync", "off"]);
   const crossover = buildRuntimeSettingsDefaults(resolveRuntimeSettingsSchema(manifest, "crossover"));
@@ -63,11 +63,10 @@ test("managed Wine defaults survive storage and combine with per-engine and per-
   const defaults = store.writeDefaults("sikarugir", manifest, {
     graphicsBackend: "dxvk", vulkanBackend: "moltenvk", locale: "ja_JP.UTF-8", windowsVersion: "win7",
     synchronization: "msync", cncDdraw: true, executable: "bin/Game.exe", bepInExWinhttp: true,
-    dllOverrides: "winhttp=n,b\nd3d11=n,b", environment: "GAME_FLAGS=a,b\nLANGUAGE=ja",
+    dllOverrides: "winhttp=n,b\nd3d11=n,b",
     arguments: "--title=a,b\nwindowed", wineDebug: "-all,+seh", graphicsBridgeVersion: "1.0.21"
   });
   assert.deepEqual(defaults.dllOverrides, ["winhttp=n,b", "d3d11=n,b"]);
-  assert.deepEqual(defaults.environment, ["GAME_FLAGS=a,b", "LANGUAGE=ja"]);
   assert.deepEqual(defaults.arguments, ["--title=a,b", "windowed"]);
   const restored = createRuntimeSettingsStore({ userDataDir });
   assert.deepEqual(restored.readDefaults("sikarugir", manifest), defaults);

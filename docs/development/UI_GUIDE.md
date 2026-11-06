@@ -309,7 +309,7 @@ The runtime settings window holds one game's own settings for its runtime. The g
 - Long field labels wrap. Menus use the available width and move adjacent actions to the next line when space runs out. A long selected label ends in an ellipsis, and the menu's tooltip shows the full label and its exact saved ID.
 - A dependent setting appears only when its controlling option applies, and hiding it keeps its saved value. Field descriptions and the runtime's preparation and data details open from question-mark buttons beside them, while platform requirements stay visible.
 - Local account, device and runtime choices load independently. Refresh keeps the saved selection and the existing choices while each provider updates, and a game launch uses the saved selection without the window being open.
-- A runtime with a translator choice adds an **Environment variables** section with one editor for each translator that the current settings choose. The list follows unsaved and saved choices alike, and each editor shows the global values from Runtimes with the game's own changes, additions and removals. [Translator environment variables](../runtimes/TRANSLATOR_ENVIRONMENT.md#editor) describes the rows, badges and keys.
+- A runtime with a translator choice adds an **Environment variables** section with one table for the translators that the current settings choose, grouped by translator. The list follows unsaved and saved choices alike, and the table shows the global values from Runtimes with the game's own changes, additions and removals. [Translator environment variables](../runtimes/TRANSLATOR_ENVIRONMENT.md#editor) describes the rows, badges and keys.
 
 ### Runtimes window
 
@@ -369,7 +369,7 @@ The download manager menu (the down arrow) shows active downloads with progress 
 
 #### Environment variables
 
-The tab of a runtime manager that provides a translator ends with an **Environment variables** card, which holds one editor for each such translator. Each editor lists rows of `NAME = value` with remove buttons, followed by a row with a name field, a value field and **Add**. The name field suggests the translator's documented variables, and **Reset** removes all global values of that translator. Values save on Enter or when focus leaves the field, and Escape discards an edit or clears the add row. [Translator environment variables](../runtimes/TRANSLATOR_ENVIRONMENT.md) describes the badges, locked names and the order in which values apply.
+The panel of a runtime manager that provides a translator opens with a collapsed **Environment variables** section, whose title counts the stored values. It holds one table for all of the manager's translators: rows of `NAME = value` with remove buttons, grouped under a small heading per translator when there are several, then one row with a name field, a value field and **Add**, and one **Reset**. The name field suggests the translators' documented variables. Values save on Enter or when focus leaves the field, and Escape discards an edit or clears the add row. [Translator environment variables](../runtimes/TRANSLATOR_ENVIRONMENT.md) describes the badges, locked names and the order in which values apply.
 
 #### Local applications and custom runtimes
 

@@ -417,9 +417,8 @@ function withSettings(manifest) {
     schema.environmentAction = 'listTranslatorOptions';
     const index = schema.fields.findIndex(field => field.key === 'graphicsBackend');
     // Retain saved legacy values for existing games, without a second editable
-    // selector. Saved environment lines apply as the runtime's earlier layer of
-    // its translator environment.
-    for (const field of schema.fields) if (['graphicsBackend', 'vulkanBackend', 'graphicsBridgeVersion', 'environment'].includes(field.key)) field.hidden = true;
+    // selector.
+    for (const field of schema.fields) if (['graphicsBackend', 'vulkanBackend', 'graphicsBridgeVersion'].includes(field.key)) field.hidden = true;
     for (const role of controls) schema.defaults[role.settingsKey] = '';
     schema.fields.splice(Math.max(0, index), 0, ...controls.map(role => {
       return { key: role.settingsKey, type: 'select', label: role.label, optionsAction: 'listTranslatorOptions', optionsKey: role.optionsKey,

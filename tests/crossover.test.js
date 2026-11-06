@@ -723,15 +723,14 @@ test("CrossOver transports trusted game effects through its vendor environment a
   assert.equal(camera.args[camera.args.indexOf("--workdir") + 1], camera.windowsWorkingDirectory, "camera adaptation keeps the mapped original cwd");
 });
 
-test("CrossOver launches with the global, earlier and game values of its chosen translator environments", async t => {
+test("CrossOver launches with the global and game values of its chosen translator environments", async t => {
   const directory = fixture(t), userDataDir = path.join(directory, "data"), game = path.join(directory, "game");
   pe(path.join(game, "Game.exe"), { machine: 0x8664 });
   const installed = Manager.importRuntime({ userDataDir, runtimePath: app(path.join(directory, "CrossOver.app")) });
   const entry = { ...Detection.decorateEntry({ gameId: "translator-environment", gamePath: game, moduleId: "rgss" }), runtimeId: "crossover",
-    translatorEnvironment: { crossover: { FROM_EARLIER: null, GAME_ONLY: "it's $(literal) ~/x", LC_ALL: "fr_FR.UTF-8" } } };
-  const context = { userDataDir, runtimeSettings: { version: installed.version, graphicsBackend: "wined3d", locale: "ja_JP.UTF-8",
-    environment: ["FROM_EARLIER=earlier", "EARLIER_KEPT=1", "SHARED=earlier"] },
-  settings: { launcher: { translatorEnvironment: { crossover: { SHARED: "global", GLOBAL_ONLY: "1", WINEPREFIX: "/stored/before/lock" },
+    translatorEnvironment: { crossover: { REMOVED: null, SHARED: "game", GAME_ONLY: "it's $(literal) ~/x", LC_ALL: "fr_FR.UTF-8" } } };
+  const context = { userDataDir, runtimeSettings: { version: installed.version, graphicsBackend: "wined3d", locale: "ja_JP.UTF-8" },
+  settings: { launcher: { translatorEnvironment: { crossover: { SHARED: "global", GLOBAL_ONLY: "1", REMOVED: "global", WINEPREFIX: "/stored/before/lock" },
     dxvk: { DXVK_HUD: "fps" } } } } };
   const ready = await Launch.prepareLaunch(entry, context, { run: async (_command, args, options) => {
     assert.equal(options.env.GLOBAL_ONLY, "1", "bottle creation sees the same values");
@@ -740,9 +739,9 @@ test("CrossOver launches with the global, earlier and game values of its chosen 
     return { stdout: "", stderr: "" };
   } });
   const environment = ready.environment, passed = ready.args[ready.args.indexOf("--env") + 1];
-  assert.equal(environment.SHARED, "earlier", "the earlier per-game setting follows the global value");
-  assert.equal(environment.GLOBAL_ONLY, "1"); assert.equal(environment.EARLIER_KEPT, "1");
-  assert.equal(environment.FROM_EARLIER, undefined, "the game removes an inherited value");
+  assert.equal(environment.SHARED, "game", "the game's value replaces the global value");
+  assert.equal(environment.GLOBAL_ONLY, "1");
+  assert.equal(environment.REMOVED, undefined, "the game removes an inherited value");
   assert.equal(environment.GAME_ONLY, "it's $(literal) ~/x");
   assert.equal(environment.LC_ALL, "fr_FR.UTF-8", "a game value replaces the launcher's locale"); assert.equal(environment.LANG, "ja_JP.UTF-8");
   assert.equal(environment.WINEPREFIX, ready.bottlePath, "locked names keep the launcher's value");
@@ -764,7 +763,7 @@ test("CrossOver loader failure preserves ordinary vendor launch, Steam and final
     fs.writeFileSync(path.join(bottle, 'cxbottle.conf'), '[Bottle]\n');fs.writeFileSync(path.join(bottle, 'system.reg'), 'registry');
     return {stdout: '', stderr: ''};
   }});
-  settings.environment = ['DYLD_INSERT_LIBRARIES=/Steam/shim.dylib:/Required/camera.dylib', 'STEAM_DYLD_INSERT_LIBRARIES=/Steam/shim.dylib', 'CUSTOM=kept'];
+  entry.translatorEnvironment = {crossover: {DYLD_INSERT_LIBRARIES: '/Steam/shim.dylib:/Required/camera.dylib', STEAM_DYLD_INSERT_LIBRARIES: '/Steam/shim.dylib', CUSTOM: 'kept'}};
   const requested = structuredClone(settings), graphics = {DYLD_INSERT_LIBRARIES: '/Shared/libreshade-macos.dylib',
     RESHADE_EFFECT_PLAN: '/Shared/plan.json', RESHADE_LIVE_EFFECTS: '/Shared/effects'};
   const warnings = [], calls = [];

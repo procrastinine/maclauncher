@@ -19,34 +19,34 @@ AIM has no translator choice and no translator environment. WineD3D and Wine vkd
 
 ## Global values
 
-On a runtime manager's tab in **Runtimes**, an **Environment variables** card lists the global variables of each translator that the manager provides. Variables apply to every game that uses that translator. KosmicKrisp has the same global values on the **KosmicKrisp** and **MacLauncher KosmicKrisp** tabs.
+On a runtime manager's tab in **Runtimes**, the collapsed **Environment variables** section at the top of the panel holds the global values of the translators that the manager provides. Its title shows the number of values. These values apply to every game that uses the translator. KosmicKrisp has the same global values on the **KosmicKrisp** and **MacLauncher KosmicKrisp** tabs, and ANGLE's values appear on the **MacLauncher Android** and **Mac.apk** tabs.
 
 ## Values for one game
 
-In a game's **Runtime Settings**, the **Environment variables** section lists the translators that the current settings choose, one editor each. The list follows the settings as they are edited, such as a different Direct3D engine, Vulkan driver or execution engine. Each editor shows the inherited global values together with the game's own values. A game's values are stored with the game and are independent of the game type defaults in **Settings**.
+In a game's **Runtime Settings**, the **Environment variables** section shows the values of the translators that the current settings choose. The list of translators follows the settings as they are edited, such as a different Direct3D engine, Vulkan driver or execution engine. Values from Runtimes appear together with the game's own changes, additions and removals. A game's values are stored with the game and are independent of the game type defaults in **Settings**.
 
 ## Editor
 
-Each translator's editor is a list of rows in the form `NAME = value`, followed by a row that adds a variable.
+Each scope has one table of rows in the form `NAME = value`, followed by one row that adds a variable. When the scope covers several translators, the rows appear under a small heading for each translator that has values, the runtime's own translator first.
 
 - The value field saves when it loses focus or on Return, and Escape returns it to the saved value.
-- The add row has a name field with the translator's suggested variables, a value field and an **Add** button. Return in either field adds the variable, and Escape clears both fields.
-- The remove button (×) removes a variable. In a game, removing an inherited global value stores a removal for that game, which the row shows as **Removed** with the inherited value struck through.
+- The add row has a name field that suggests the variables of every translator in the table, a value field and an **Add** button. Return in either field adds the variable, and Escape clears both fields.
+- A new variable joins the translator whose heading already lists it, then the translator that suggests it, and otherwise the runtime's own translator. While a name is typed in a table with several translators, the hint under the add row names that translator, together with the variable's description when it is a suggested one.
+- The remove button (×) removes a variable. In a game, removing a value from Runtimes stores a removal for that game, which the row shows as **Removed** with the inherited value struck through.
 - **Restore** returns a changed or removed row to its inherited value.
-- **Reset** removes all values of that translator at the current scope: the global values in Runtimes, or the game's own values in Runtime Settings.
-- Typing the name of a suggested variable shows its description, and the variable's name shows the same description as a tooltip.
+- One **Reset** per scope removes every value stored there: the global values in Runtimes, or the game's own values in Runtime Settings.
+- A suggested variable's name shows its description as a tooltip.
 
 Each row has a badge for its source:
 
 | Badge | Meaning |
 | --- | --- |
-| Global | Inherited from the global values in Runtimes. |
-| Earlier setting | Inherited from the **Environment variables** list of an earlier MacLauncher version. |
+| From Runtimes | In a game, a value inherited from the global values in Runtimes. |
+| Default | A translator's built-in value. |
 | Changed | The game replaces an inherited value. |
 | This game | A variable that only this game sets. |
 | Removed | The game removes an inherited value. |
-| Replaces launcher value | MacLauncher also sets this variable, and the value in the row replaces it. The tooltip names the setting or condition behind the launcher's value. |
-| Not applied | The variable is locked and is not passed to the game. Such a value can come from an older record and is dropped by the next save. |
+| Set by MacLauncher | MacLauncher also sets this variable. In a warning color, the value in the row replaces MacLauncher's value, and the tooltip names the setting or condition behind it. In an error color, the variable is locked, the value is not used, and the next save drops it. |
 
 A name has the form of a shell variable: a letter or underscore followed by letters, digits or underscores, at most 256 characters. A value can hold any text except line breaks and NUL characters, at most 32,768 characters, and an empty value is passed as an empty variable. One translator holds at most 256 variables at each scope. An invalid name or value is reported under the editor and is not saved.
 
@@ -60,16 +60,11 @@ At launch, MacLauncher combines the values of the chosen translators in this ord
 
 1. the translators' built-in defaults;
 2. the global values from Runtimes;
-3. the **Environment variables** list of an earlier MacLauncher version, for CrossOver and Sikarugir;
-4. the game's own values from Runtime Settings.
+3. the game's own values from Runtime Settings.
 
-Within each step, the runtime's own translator comes first, followed by the graphics translators and the Vulkan driver, so a variable that two translators set takes the later translator's value. A removal in a game takes away the inherited value, and the variable then keeps whatever value the launcher would give it without this setting. The combined values are applied before the variables that the launcher requires, so locked names always keep the launcher's value. Variables that the launcher sets from Runtime Settings, which the editor marks **Replaces launcher value**, take the combined value instead.
+Within each step, the runtime's own translator comes first, followed by the graphics translators and the Vulkan driver, so a variable that two translators set takes the later translator's value. A removal in a game takes away the inherited value, and the variable then keeps whatever value the launcher would give it without this setting. The combined values are applied before the variables that the launcher requires, so locked names always keep the launcher's value. Variables that the launcher sets from Runtime Settings, which the editor marks **Set by MacLauncher** in a warning color, take the combined value instead.
 
 Every translator's built-in defaults are empty, so the global values start empty.
-
-## Earlier environment variable lists
-
-CrossOver and Sikarugir previously had an **Environment variables** list setting with one `NAME=value` entry per line. That list is no longer shown. Its saved entries still apply, after the global values and before the game's own values, and appear in each game's CrossOver or Sikarugir editor with the **Earlier setting** badge. An entry with a locked or invalid name is skipped. Changing, removing or restoring such a row stores the result as the game's own value.
 
 ## Storage
 

@@ -8,7 +8,7 @@ export type TranslatorEnvironmentDeclaration = {
 /** A null value removes a variable inherited from a lower layer. */
 export type TranslatorEnvironmentValues = Record<string, string | null>;
 export type TranslatorEnvironmentStore = Record<string, TranslatorEnvironmentValues>;
-export type TranslatorEnvironmentSource = "default" | "global" | "earlier" | "game";
+export type TranslatorEnvironmentSource = "default" | "global" | "game";
 export type TranslatorEnvironmentRow = {
   name: string; value: string | null; state: "inherited" | "changed" | "added" | "removed";
   inheritedValue?: string; inheritedSource?: TranslatorEnvironmentSource;
@@ -28,12 +28,11 @@ export function readValues(values: unknown): TranslatorEnvironmentValues;
 export function readStore(store: unknown): TranslatorEnvironmentStore;
 export function withValues(store: unknown, id: string, values: unknown): TranslatorEnvironmentStore;
 export function effectiveValues(declaration: TranslatorEnvironmentDeclaration,
-  values?: { global?: unknown; earlier?: unknown; game?: unknown },
+  values?: { global?: unknown; game?: unknown },
   options?: { through?: TranslatorEnvironmentSource }): { values: Record<string, string>; sources: Record<string, TranslatorEnvironmentSource> };
 export function editorRows(declaration: TranslatorEnvironmentDeclaration,
-  values?: { scope?: "global" | "game"; global?: unknown; earlier?: unknown; game?: unknown }): TranslatorEnvironmentRow[];
+  values?: { scope?: "global" | "game"; global?: unknown; game?: unknown }): TranslatorEnvironmentRow[];
 export function launchValues(declarations: readonly TranslatorEnvironmentDeclaration[], ids: readonly string[],
-  layers?: { global?: unknown; game?: unknown; earlier?: Record<string, unknown> }): { values: Record<string, string>; translators: string[]; sources: Record<string, string> };
+  layers?: { global?: unknown; game?: unknown }): { values: Record<string, string>; translators: string[]; sources: Record<string, string> };
 export function applyEnvironment<T extends Record<string, string | undefined>>(environment: T, values: Record<string, string>,
   options?: { required?: readonly string[] }): T & Record<string, string>;
-export function valuesFromLines(lines: unknown): Record<string, string>;
