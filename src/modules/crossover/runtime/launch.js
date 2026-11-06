@@ -254,7 +254,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   // The game and Windows environment own saves; changing the CrossOver
   // installation does not create another bottle.
   // Validate all launch settings before creating a bottle.
-  let bottlePath = existingEnvironment?.prefixPath || path.join(directory, "bottles", template);
+  const bottlePath = existingEnvironment?.prefixPath || path.join(directory, "bottles", template);
   let environment, overrides, dll;
   try {
     ({environment, overrides, dll} = buildEnvironment(settings, selected.install, directory, bottlePath,
@@ -401,9 +401,9 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     context.graphicsBridgeFailure = {provider: "crossover-loader", reason: String(loaderFailure.message || loaderFailure)};
     warnGraphics(context.logger, "CrossOver graphics loader could not be prepared. Using the vendor renderer without shared graphics processing.", context.graphicsBridgeFailure.reason);
   }
-  const steamBridge = await require('./steam-bridge').prepare(entry, context, { installation: selected.install, prefixPath: bottlePath, directory,
-    architecture: selectedExecutable.executableArchitecture, environment, externalEnvironment: existingEnvironment });
-  if (steamBridge) { environment = steamBridge.environment; Object.assign(overrides, steamBridge.extra); dll = environment.WINEDLLOVERRIDES; bottlePath = steamBridge.prefixPath; }
+  const steamBridge = await require('./steam-bridge').prepare(entry, context, { installation: selected.install, prefixPath: bottlePath,
+    architecture: selectedExecutable.executableArchitecture, environment });
+  if (steamBridge) { environment = steamBridge.environment; Object.assign(overrides, steamBridge.extra); dll = environment.WINEDLLOVERRIDES; }
   const workingDirectory = path.dirname(executable);
   // The drive covers the imported game folder, so paths above the executable's folder resolve.
   const driveRoot = require("../game-drive").gameDriveRoot(entry, originalRoot, executable);
@@ -436,7 +436,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     translatorRows: Translators.inspectorRows(translatorPlan),
     translatorPlanInputs: Translators.planInputs(context.runtimeSettings, context.wineEnvironment?.install || selected.install), cameraAdapterNotice: context.cameraAdapterNotice || null, graphicsInputs: context.graphicsInputs } };
   context.onEntryChange?.(entry);
-  return { ...selected, directory, gameRoot, workingDirectory, bottlePath, executablePath, windowsExecutablePath, windowsWorkingDirectory, environment, args, translatorPlan, existingEnvironment: steamBridge?.privateClone ? null : existingEnvironment };
+  return { ...selected, directory, gameRoot, workingDirectory, bottlePath, executablePath, windowsExecutablePath, windowsWorkingDirectory, environment, args, translatorPlan, existingEnvironment };
 }
 
 module.exports = { runtimeDirectory, buildEnvironment, parseEnvironment, wineEnvironmentString, dllOverrides,

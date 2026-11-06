@@ -311,7 +311,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   if (!WINDOWS_VERSIONS.has(windowsVersion)) throw new Error("Unsupported Wine Windows version.");
   const previousVersions = require('../manifest.json').runtime.entries.sikarugir.settings.fields.find(field => field.key === 'windowsVersion').options;
   const environmentVersion = previousVersions.some(option => option.value === windowsVersion) ? windowsVersion : 'win10';
-  let prefixPath = existingEnvironment?.prefixPath || path.join(directory, "prefixes", environmentVersion);
+  const prefixPath = existingEnvironment?.prefixPath || path.join(directory, "prefixes", environmentVersion);
   // Version the loader layout independently of the persistent prefix/saves.
   const variant = crypto.createHash("sha256").update(JSON.stringify([2, settings.graphicsBackend || "auto", settings.vulkanBackend || "auto",
     settings.cncDdraw === true, match.executableArchitecture, ...(settings.dlss === true ? ["dlss"] : []),
@@ -340,16 +340,17 @@ async function prepareLaunch(entry, context, dependencies = {}) {
       else delete environment[key];
     }
   }
+  const steamBridge = await require('../runtime/steam-bridge').prepare(entry, context, { installation: selected.install, prefixPath,
+    architecture: match.executableArchitecture, environment });
+  if (steamBridge) environment = steamBridge.environment;
+  const registryEnvironment = existingEnvironment;
   await WineSettings.applyRegistry({ ...context.runtimeSettings, ...settings }, { executable: path.basename(executablePath),
-    assertWritable: existingEnvironment ? () => Environments.assertWritableRegistry(existingEnvironment) : undefined }, args => {
+    assertWritable: registryEnvironment ? () => Environments.assertWritableRegistry(registryEnvironment) : undefined }, args => {
     const options = { cwd: directory, env: { ...environment, WINEDEBUG: "-all" }, signal: context.signal, timeout: 30000 };
-    return dependencies.run ? dependencies.run(selected.install.executablePath, selected.install.serverPath, args, options) : existingEnvironment
+    return dependencies.run ? dependencies.run(selected.install.executablePath, selected.install.serverPath, args, options) : registryEnvironment
       ? require("../../shared/runtime/wine-processes").runTool(selected.install.executablePath, args, options)
       : runSupervised(selected.install.executablePath, selected.install.serverPath, args, options);
   });
-  const steamBridge = await require('../runtime/steam-bridge').prepare(entry, context, { installation: selected.install, prefixPath, directory,
-    architecture: match.executableArchitecture, environment, externalEnvironment: existingEnvironment });
-  if (steamBridge) { environment = steamBridge.environment; prefixPath = steamBridge.prefixPath; }
   const workingDirectory = path.dirname(match.windowsExecutablePath);
   // Allocate relative drive links only after choosing the prefix that will run the game.
   const driveRoot = require("../game-drive").gameDriveRoot(entry, originalRoot, match.windowsExecutablePath);
@@ -370,7 +371,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
     translatorPlanInputs: Translators.planInputs(context.runtimeSettings, context.wineEnvironment?.install || selected.install), cameraAdapterNotice: context.cameraAdapterNotice || null, graphicsInputs: context.graphicsInputs } };
   context.onEntryChange?.(entry);
   return { ...selected, directory, gameRoot, workingDirectory, prefixPath, viewRoot, executablePath, windowsExecutablePath, windowsWorkingDirectory, graphics, environment, args, translatorPlan,
-    existingEnvironment: steamBridge?.privateClone ? null : existingEnvironment, winePath: graphics.executablePath || selected.install.executablePath, serverPath: graphics.serverPath || selected.install.serverPath };
+    existingEnvironment, winePath: graphics.executablePath || selected.install.executablePath, serverPath: graphics.serverPath || selected.install.serverPath };
 }
 
 module.exports = { SUPERVISOR, supervisorArguments, PROTECTED_ENVIRONMENT, runtimeDirectory, safeText, parseEnvironment, dllOverrides,

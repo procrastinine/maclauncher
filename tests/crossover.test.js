@@ -981,3 +981,31 @@ test("CrossOver records which Steam client bridge a Play used, and the inspector
   assert.deepEqual(await steamRows(), [], "a Play without the bridge leaves no line");
   assert.deepEqual(inspected, [[{ version: "1.0.0" }, userDataDir], [null, userDataDir]]);
 });
+
+test('Steam preparation keeps CrossOver registry settings and game drives in the selected bottle on two launches', async t => {
+  const directory = fs.realpathSync(fixture(t)), userDataDir = path.join(directory, 'data'), game = path.join(directory, 'game');
+  pe(path.join(game, 'Game.exe'));
+  const installed = Manager.importRuntime({ userDataDir, runtimePath: app(path.join(directory, 'CrossOver.app')) });
+  const entry = Detection.decorateEntry({ gameId: 'steam-selected-bottle', gamePath: game });
+  const prefixPath = path.join(directory, 'selected-bottle'); fs.mkdirSync(path.join(prefixPath, 'drive_c'), { recursive: true });
+  fs.mkdirSync(path.join(prefixPath, 'dosdevices')); fs.writeFileSync(path.join(prefixPath, 'save.dat'), 'save');
+  const external = { kind: 'crossover-bottle', prefixPath, path: prefixPath, settings: {}, environment: {}, registry: {}, running: false };
+  t.mock.method(require('../src/modules/shared/runtime/wine-environment'), 'readEnvironment', () => external);
+  t.mock.method(require('../src/modules/shared/runtime/wine-processes'), 'prepareEnvironment', async value => value);
+  const registry = [];
+  const run = async (_command, args) => { assert.equal(args[args.indexOf('--bottle') + 1], prefixPath); registry.push(args); return { stdout: '', stderr: '' }; };
+  t.mock.method(require('../src/modules/crossover/runtime/steam-bridge'), 'prepare', async (_entry, _context, options) => {
+    assert.equal(options.prefixPath, prefixPath);
+    return { prefixPath, environment: { ...options.environment, WINEPREFIX: prefixPath }, extra: {}, helper: 'managed-helper.exe' };
+  });
+  for (const retina of [true, false]) {
+    const prepared = await Launch.prepareLaunch(entry, { userDataDir, settings: {}, runtimeSettings: { version: installed.version, retina } }, { run });
+    assert.equal(prepared.bottlePath, prefixPath); assert.equal(prepared.existingEnvironment, external);
+    assert.equal(fs.realpathSync(path.join(prefixPath, 'dosdevices/g:')), game);
+    assert.equal(fs.readFileSync(path.join(prefixPath, 'save.dat'), 'utf8'), 'save');
+    assert.deepEqual(fs.readdirSync(path.join(prefixPath, 'drive_c')), []);
+    assert.equal(fs.existsSync(path.join(prepared.directory, 'steam-environments')), false);
+  }
+  const retina = registry.filter(args => args.includes('RetinaMode'));
+  assert.deepEqual(retina.map(args => args[args.indexOf('/d') + 1]), ['Y', 'N']);
+});
