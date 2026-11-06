@@ -44,10 +44,11 @@ function partition(file, header, size, detection) {
 function inspectBinary(file, detection) {
   try {
     const observed = stat(file, detection);
-    if (!observed?.isFile() || observed.size < 0x40) return null;
+    if (!observed?.isFile() || observed.size < 4) return null;
     const header = readBytes(file, 0, Math.min(observed.size, 0x400), detection);
     const result = { inputPath: file, bytes: observed.size, generation: null, keyRequirement: "unknown" };
     if (header.subarray(0, 4).equals(Buffer.from([78, 85, 80, 1]))) return { ...result, ...Inputs.nup(file) };
+    if (observed.size < 0x40) return null;
     if (header.toString("ascii", 0, 4) === "NSO0") {
       if (header.length < 0x100 || !header.readUInt32LE(0x18)) return null;
       const flags = header.readUInt32LE(0xc);
