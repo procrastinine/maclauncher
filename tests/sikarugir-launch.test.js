@@ -62,7 +62,7 @@ function adapters(install) {
     },
     run: async (command, server, args, options) => {
       calls.push({ command, server, args, options });
-      if (args[0] === "wineboot.exe") {
+      if (args[0] === "wineboot.exe" && args[1] === "--init") {
         const prefix = options.env.WINEPREFIX;
         fs.mkdirSync(path.join(prefix, "drive_c", "users", "player"), { recursive: true });
         fs.writeFileSync(path.join(prefix, "system.reg"), "registry");
@@ -704,4 +704,44 @@ test("Sikarugir records which Steam client bridge a Play used", async t => {
   used = false;
   await Launch.prepareLaunch(entry, context, dependencies);
   assert.equal(entry.runtimeData.sikarugir.steamBridge, null);
+});
+
+test("changing Wine finishes the existing prefix update before short registry commands", async t => {
+  const directory = fixture(t), entry = game(directory), install = installation(directory), dependencies = adapters(install);
+  const context = {userDataDir: path.join(directory, "data"), settings: {}, runtimeSettings: {windowsVersion: "win10"}};
+  dependencies.setVersion("10.0_8-template-1.0.24");
+  const first = await Launch.prepareLaunch(entry, context, dependencies);
+  const save = path.join(first.prefixPath, "save.dat");fs.writeFileSync(save, "existing save");
+  const marker = path.join(first.prefixPath, "maclauncher-prefix.json");
+  const before = fs.readFileSync(marker, "utf8");
+  let needsUpdate = true;
+  const commands = [], priorRun = dependencies.run;
+  dependencies.run = async (command, server, args, options) => {
+    commands.push(args);
+    if (args[0] === "wineboot.exe" && args[1] === "--update") {
+      assert.ok(options.timeout >= 45000, "the engine update uses the prefix-preparation budget");
+      assert.equal(options.env.WINEDLLOVERRIDES, undefined, "stock Wine updates before game overrides");
+      assert.equal(options.env.WINEDLLPATH, undefined, "the game loader view cannot update the prefix");
+      needsUpdate = false;return {stdout: "", stderr: ""};
+    }
+    if (args[0] === "reg.exe" && needsUpdate) throw Object.assign(new Error("Wine preparation timed out."), {code: "ETIMEDOUT"});
+    return priorRun(command, server, args, options);
+  };
+  dependencies.setVersion("11.0_1-template-1.0.24");
+  const updated = await Launch.prepareLaunch(entry, context, dependencies);
+  assert.equal(updated.prefixPath, first.prefixPath);
+  assert.deepEqual(commands[0], ["wineboot.exe", "--update"]);
+  assert.equal(commands.filter(args => args[0] === "wineboot.exe").length, 1);
+  assert.ok(commands.findIndex(args => args[0] === "reg.exe") > 0);
+  assert.notEqual(fs.readFileSync(marker, "utf8"), before);
+  assert.equal(fs.readFileSync(save, "utf8"), "existing save");
+  commands.length = 0;
+  await Launch.prepareLaunch(entry, context, dependencies);
+  assert.equal(commands.some(args => args[0] === "wineboot.exe"), false, "unchanged warm Play does not update again");
+  const completed = fs.readFileSync(marker, "utf8");
+  dependencies.setVersion("11.0_2-template-1.0.24");
+  dependencies.run = async (_command, _server, args) => {assert.deepEqual(args, ["wineboot.exe", "--update"]);throw Object.assign(new Error("cancelled update"), {name: "AbortError"});};
+  await assert.rejects(Launch.prepareLaunch(entry, context, dependencies), {name: "AbortError"});
+  assert.equal(fs.readFileSync(marker, "utf8"), completed, "an interrupted update cannot mark this engine prepared");
+  assert.equal(fs.readFileSync(save, "utf8"), "existing save");
 });

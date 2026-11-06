@@ -191,7 +191,8 @@ function prefixRuntime(installation, directory) {
   }
   return { executablePath: installation.executablePath, serverPath: installation.serverPath, env };
 }
-async function ensurePrefix(installation, ownedEnvironment, directory, settings, graphics, context, { run = runSupervised } = {}) {
+async function ensurePrefix(installation, ownedEnvironment, directory, settings, graphics, context, { run = runSupervised,
+  runtimeIdentity = JSON.stringify([installation.version, installation.archiveSha256, installation.binarySha256]) } = {}) {
   const prefixPath = Environments.assertPrivateEnvironment(ownedEnvironment, directory);
   Writable.assertOwnDirectory(directory, prefixPath, { create: false });
   const windowsVersion = settings.windowsVersion || "win10";
@@ -199,7 +200,8 @@ async function ensurePrefix(installation, ownedEnvironment, directory, settings,
   const markerPath = path.join(prefixPath, "maclauncher-prefix.json");
   let marker; try { if (regularFile(markerPath)) marker = JSON.parse(fs.readFileSync(markerPath, "utf8")); } catch {}
   const completed = regularFile(path.join(prefixPath, "system.reg")) && regularFile(path.join(prefixPath, "user.reg"));
-  if (completed && marker?.windowsVersion === windowsVersion && marker?.schemaVersion === 1) return;
+  const runtimeChanged = marker?.runtimeIdentity !== runtimeIdentity;
+  if (completed && !runtimeChanged && marker?.windowsVersion === windowsVersion && marker?.schemaVersion === 1) return;
   // Initialize the engine's Windows system files before selecting game DLLs.
   // Renderer-prioritized loaders can replace libraries used by wineboot itself.
   const runtime = prefixRuntime(installation, directory);
@@ -211,12 +213,14 @@ async function ensurePrefix(installation, ownedEnvironment, directory, settings,
       await context.onToolProcessSpawn?.(child, options);
       await context.onProcessSpawn?.(child);
     } };
-  context.onProgress?.({ phase: "prepare", label: "Creating Windows environment…" });
+  context.onProgress?.({ phase: "prepare", label: completed ? "Updating Windows environment…" : "Creating Windows environment…" });
   if (!completed) await fs.promises.rm(prefixPath, { recursive: true, force: true });
-  let stage = completed ? "winecfg" : "wineboot";
+  let stage = completed && !runtimeChanged ? "winecfg" : "wineboot";
   try {
     context.signal?.throwIfAborted();
-    if (!completed) await run(wine, server, ["wineboot.exe", "--init"], options);
+    // A new engine upgrades existing Windows files before any short registry
+    // command can trigger that upgrade implicitly. Existing prefixes stay intact.
+    if (!completed || runtimeChanged) await run(wine, server, ["wineboot.exe", completed ? "--update" : "--init"], options);
     if (!regularFile(path.join(prefixPath, "system.reg")) || !regularFile(path.join(prefixPath, "user.reg"))) {
       throw new Error("Wine did not finish creating the game's Windows environment.");
     }
@@ -224,7 +228,7 @@ async function ensurePrefix(installation, ownedEnvironment, directory, settings,
     stage = "winecfg";
     await run(wine, server, ["winecfg.exe", "-v", windowsVersion], options);
     context.signal?.throwIfAborted();
-    Writable.atomicWrite(markerPath, JSON.stringify({ schemaVersion: 1, windowsVersion }) + "\n", { root: directory });
+    Writable.atomicWrite(markerPath, JSON.stringify({ schemaVersion: 1, windowsVersion, runtimeIdentity }) + "\n", { root: directory });
   } catch (error) {
     try { context.logger?.warn?.(`[sikarugir] Windows environment preparation failed ${JSON.stringify({ stage, ...preparationFailureDetails(error) })}`); } catch {}
     if (!completed) await fs.promises.rm(prefixPath, { recursive: true, force: true });
@@ -318,7 +322,8 @@ async function prepareLaunch(entry, context, dependencies = {}) {
     environment: existingEnvironment, cameraBridge, translatorPlan, translatorView, signal: context.signal, logger: context.logger, onProgress: context.onProgress, executableArchitecture: match.executableArchitecture });
   Writable.atomicWrite(path.join(viewRoot, "prepared.json"), JSON.stringify({ inputs: [...nativeInputs, { path: path.join(translatorView.root, "prepared.json"), sha256: require("../../shared/runtime/verified-identity").fileDigest(path.join(translatorView.root, "prepared.json")).sha256 }] }) + "\n", { root: viewRoot });
   if (!existingEnvironment) {
-    await ensurePrefix(selected.install, Environments.privateEnvironment(context.userDataDir, directory, path.relative(directory, prefixPath)), directory, { ...settings, windowsVersion: environmentVersion }, graphics, context, { run: dependencies.run });
+    await ensurePrefix(selected.install, Environments.privateEnvironment(context.userDataDir, directory, path.relative(directory, prefixPath)), directory, { ...settings, windowsVersion: environmentVersion }, graphics, context,
+      { run: dependencies.run, runtimeIdentity: JSON.stringify([selected.version, identity]) });
     WindowsFiles.detachProfileAliases(prefixPath);
   }
   await TranslatorFiles.applyNativeLibraries(translatorView, prefixPath, { signal: context.signal });
