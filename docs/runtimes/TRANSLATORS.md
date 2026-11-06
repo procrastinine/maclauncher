@@ -122,6 +122,29 @@ For a Vulkan driver override in CrossOver, the selected Vulkan library is placed
 
 Sikarugir loads the same selected components through its private graphics view and Vulkan driver description. Its Wine engine, its Template and the engine of a registered wrapper stay in place. Selected video codecs reach both runtimes through `GST_PLUGIN_PATH`.
 
+## Translator options
+
+The **Compatibility** and **Diagnostics** groups of Runtime Settings for CrossOver and Sikarugir include options for particular engines. Each option belongs to one engine. At launch, it sets its environment variable only when the game actually uses that engine, for one of its Direct3D APIs or as its Vulkan driver, so a fallback to another engine leaves the option unused. When per-API choices use several Direct3D engines, the options of each engine apply. **Runtime default** leaves the variable unset, and the engine keeps its own default. An entry with the same name under **Environment variables** takes precedence over the option.
+
+| Option | Engine | Variable | Values |
+| --- | --- | --- | --- |
+| DXVK async | DXVK | `DXVK_ASYNC` | `1` for On, `0` for Off. Only DXVK builds that implement async read it. |
+| DXVK HUD | DXVK | `DXVK_HUD` | `0` for Off, `fps` for FPS, `fps,frametimes,devinfo` for Performance, `full` for Full. |
+| DXMT configuration | DXMT | `DXMT_CONFIG` | `d3d11.preferredMaxFrameRate=30`, `60` or `120`. |
+| MetalFX spatial | DXMT | `DXMT_METALFX_SPATIAL_SWAPCHAIN` | `1` for On, `0` for Off. |
+| D3DMetal FPS limit | D3DMetal | `D3DM_MAX_FPS` | `30`, `60`, `120`, `144` or `240`. |
+| D3DMetal Metal 4 | D3DMetal | `D3DM_MTL4` | `1` for On, `0` for Off. Only D3DMetal builds that implement Metal 4 read it. |
+| WineD3D options | WineD3D | `WINE_D3D_CONFIG` | The comma-separated text as entered, such as `csmt=0x1,renderer=gl`. |
+| MoltenVK fast math | MoltenVK | `MVK_CONFIG_FAST_MATH_ENABLED` | `1` for On, `0` for Off. |
+| MoltenVK argument buffers | MoltenVK | `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS` | `1` for On, `0` for Off. |
+| MoltenVK UE4 compatibility | MoltenVK | `MVK_CONFIG_UE4_HACK_ENABLED` | `1` for On, `0` for Off. |
+
+Two further options apply whichever engines run. **Metal Performance HUD** sets `MTL_HUD_ENABLED`. **Advertise AVX under Rosetta** sets `ROSETTA_ADVERTISE_AVX`; when the Wine process runs under Rosetta in an environment that MacLauncher creates, it is `1` unless the option is turned off. Rosetta launches also set `DOTNET_EnableWriteXorExecute=0`.
+
+vkd3d-proton, Wine vkd3d and KosmicKrisp have no options of their own in Runtime Settings. Their documented environment variables can be entered under **Environment variables**, and they take effect only when that component is loaded.
+
+MacLauncher sets no shader or pipeline cache location for DXVK, vkd3d-proton, DXMT, D3DMetal, WineD3D or MoltenVK, so each keeps the cache behavior of its own release. KosmicKrisp writes no Mesa disk shader cache; [KosmicKrisp](KOSMICKRISP.md#selection-and-loading) describes how its pipeline cache data is kept.
+
 ## Compatibility and fallback
 
 Before a launch, Play checks the files that the selected Wine process and Windows executable will load. Only the CPU variant that will actually run is checked, so an unused variant in a multi-architecture installation does not affect the result. Loading counts as impossible when one of these facts holds:

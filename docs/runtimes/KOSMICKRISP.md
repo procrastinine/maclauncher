@@ -4,7 +4,7 @@ macOS has no Vulkan driver of its own. Vulkan games, the Vulkan-based Direct3D t
 
 ## What KosmicKrisp is
 
-[KosmicKrisp](https://docs.mesa3d.org/drivers/kosmickrisp.html) is a Vulkan driver in the [Mesa](https://mesa3d.org/) project, developed by LunarG for Apple Silicon Macs. Khronos has [announced](https://www.khronos.org/news/permalink/kosmickrisp-achieves-vulkan-1.4-conformance-on-apple-silicon) that it passed the Vulkan 1.4 conformance tests and is a conformant Vulkan 1.4 implementation on Apple Silicon; an earlier version was conformant to Vulkan 1.3. Because the driver is built on Metal 4, it requires macOS 26 or later.
+[KosmicKrisp](https://docs.mesa3d.org/drivers/kosmickrisp.html) is a Vulkan driver in the [Mesa](https://mesa3d.org/) project, developed by LunarG for Apple Silicon Macs. Khronos has [announced](https://www.khronos.org/news/permalink/kosmickrisp-achieves-vulkan-1.4-conformance-on-apple-silicon) that it passed the Vulkan 1.4 conformance tests and is a conformant Vulkan 1.4 implementation on Apple Silicon; an earlier version was conformant to Vulkan 1.3. The Vulkan 1.4 entry in the Khronos list of conformant products is submission 997, which covers the A18 Pro and the M1, M2, M3, M4 and M5 families, each with its Pro and Max variants, on macOS 27. LunarG's Vulkan SDK for macOS includes KosmicKrisp as a Vulkan 1.4 driver and keeps MoltenVK for Intel Macs and earlier macOS versions. Because the driver is built on Metal 4, it requires macOS 26 or later, and it runs only on Apple Silicon. Mesa's documentation states that it has no iOS support.
 
 Metal 4 shapes how the driver works. Vulkan command buffers are recorded into Metal 4 command buffers and submitted through Metal 4 command queues. A single Metal 4 compute encoder carries compute dispatches together with buffer and texture copies, render passes use Metal 4 render encoders, and resources are bound through argument tables and residency sets. Shaders pass through Mesa's NIR into the Metal Shading Language, version 4.0 on macOS 26 and 4.1 on macOS 27 and later, and Metal 4's compiler interface compiles them.
 
@@ -89,7 +89,7 @@ MacLauncher KosmicKrisp adds Vulkan features that upstream KosmicKrisp does not 
 - Variable multisample rate, which allows rendering without attachments at differing sample counts, as Direct3D 11.1 and 12 need.
 - Depth bias control (`VK_EXT_depth_bias_control`), including exact and forced UNORM representations.
 - Conservative rasterization (`VK_EXT_conservative_rasterization`), with an overestimation of 1/256 pixel, rasterized degenerate triangles and a fully covered fragment input. Underestimation and post-depth coverage are not supported.
-- Fragment shader interlock (`VK_EXT_fragment_shader_interlock`) with sample interlock on Apple GPU family 7 and later. Pixel interlock is not exposed, because Metal's raster order groups keep different samples of one pixel apart under per-sample shading and therefore do not give the per-pixel guarantee that pixel interlock defines.
+- Fragment shader interlock (`VK_EXT_fragment_shader_interlock`) with sample interlock on Apple GPU family 7 and later. Pixel interlock and shading-rate interlock are not exposed.
 - Rasterization-order access (`VK_EXT_rasterization_order_attachment_access`) for color attachments on Apple GPU family 7 and later. Depth and stencil attachments have no such access.
 - Mesh and task shaders (`VK_EXT_mesh_shader`) with mesh shader queries, and multiview together with geometry and tessellation shaders.
 
@@ -164,7 +164,7 @@ The table compares upstream KosmicKrisp at Mesa commit `4f071f89`, MacLauncher K
 | Fragment shading rate | No | No | No |
 | Ray tracing | No | No | No |
 
-The Khronos conformance shown for KosmicKrisp belongs to upstream KosmicKrisp. MacLauncher KosmicKrisp is a modified build and has no conformance submission of its own.
+The Khronos conformance shown for KosmicKrisp belongs to the submitted upstream driver. MacLauncher KosmicKrisp is based on that driver at a later Mesa commit and adds the features described above, so it is a different product and has no conformance submission of its own.
 
 ## Where the differences matter
 

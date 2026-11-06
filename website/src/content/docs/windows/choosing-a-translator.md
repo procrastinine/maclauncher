@@ -21,6 +21,8 @@ A few translators only exist on some Macs, so your Mac narrows the list before t
 
 If you're not sure which graphics API a game uses, its system requirements usually name the DirectX version.
 
+Both WINE distributions, CrossOver and Sikarugir, can use the translators installed in Runtimes, except that CrossOver accepts DXVK-macOS packages only in their WINE builtin form. They differ in the translator versions they include, which [CrossOver and Sikarugir](/maclauncher/windows/crossover-and-sikarugir/#which-one-to-use) compares.
+
 ## By kind of game
 
 | Game draws with | Start with | Alternatives |
@@ -73,5 +75,9 @@ AnyPS5 and Prosper run as Intel programs and need an Intel driver build. Their a
 4. Check the inspector. It shows each translator as **selected → used**, with the reason whenever MacLauncher had to fall back.
 
 To make a choice the default for every game, set it in **Settings** instead, and games without their own choice follow it. New versions come from **Runtimes → Graphics**, as [Translator versions](/maclauncher/windows/translator-versions/) describes, and installing one never changes a game that already uses another.
+
+## Options for each translator
+
+Some translators have options of their own, such as frame-rate caps for DXMT and D3DMetal, DXVK's on-screen HUD and MoltenVK's compatibility switches. They're in the same Runtime Settings, under **Compatibility** and **Diagnostics**, and each takes effect only when the game actually uses its translator. [Runtime settings](/maclauncher/windows/settings/#compatibility) describes each one.
 
 Further reading: [KosmicKrisp](/maclauncher/windows/kosmickrisp/) for the Vulkan drivers in depth, and the [graphics translator reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/TRANSLATORS.md).

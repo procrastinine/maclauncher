@@ -12,7 +12,9 @@ Not every game reaches Metal directly. Some draw with [Vulkan](https://www.vulka
 
 ## What KosmicKrisp is
 
-[KosmicKrisp](https://docs.mesa3d.org/drivers/kosmickrisp.html) is a Vulkan driver from the [Mesa](https://mesa3d.org/) project, the open-source graphics stack that also supplies Linux's GPU drivers. LunarG develops it for Apple Silicon Macs, and it's written for Metal 4, the version of Metal that arrived with macOS 26. KosmicKrisp records Vulkan's work into Metal 4 command buffers, lets a single Metal 4 compute encoder handle compute work and copies alike, and binds resources through Metal 4's argument tables. The flip side is the requirement: it needs an Apple Silicon Mac with macOS 26 or later.
+[KosmicKrisp](https://docs.mesa3d.org/drivers/kosmickrisp.html) is a Vulkan driver from the [Mesa](https://mesa3d.org/) project, the open-source graphics stack that also supplies Linux's GPU drivers. LunarG develops it for Apple Silicon Macs, and it's written for Metal 4, the version of Metal that arrived with macOS 26. KosmicKrisp records Vulkan's work into Metal 4 command buffers, lets a single Metal 4 compute encoder handle compute work and copies alike, and binds resources through Metal 4's argument tables. Because of Metal 4, it needs an Apple Silicon Mac with macOS 26 or later, and it doesn't run on iOS.
+
+Khronos lists KosmicKrisp as a conformant Vulkan 1.4 product for the M1 to M5 chip families and the A18 Pro, tested on macOS 27. LunarG's Vulkan SDK for macOS includes it as a Vulkan 1.4 driver, and keeps MoltenVK for Intel Macs and older versions of macOS.
 
 ## Why it matters
 
@@ -28,7 +30,7 @@ Conformance means KosmicKrisp does everything Vulkan 1.4 requires, but the trans
 
 MacLauncher therefore publishes **MacLauncher KosmicKrisp**, its own build of KosmicKrisp from [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds). It takes the same Mesa source and adds the missing Vulkan features, each one implemented on Metal. Besides what the translators require, it brings sparse resources, which Direct3D's tiled resources need, along with conservative rasterization, mesh and task shaders, 64-bit floating point computed in software, pipeline statistics, and a much larger push constant space. The build comes for Apple Silicon and Intel processes alike, and both need an Apple Silicon Mac with macOS 26.
 
-The Khronos conformance belongs to upstream KosmicKrisp; MacLauncher's build is a modified driver with no conformance submission of its own. Some Direct3D levels also stay out of reach. Feature level 12_1, the highest that DXVK offers for Direct3D 11 and the next step up for Direct3D 12, needs rasterizer-ordered views, which DXVK and vkd3d-proton build on a Vulkan feature called pixel interlock. Metal's closest equivalent keeps the samples of one pixel apart and so can't give the per-pixel guarantee. The build offers only the per-sample variant, and through DXVK or vkd3d-proton a game sees at most feature level 12_0. Feature level 12_2 would also need ray tracing and variable rate shading, which no KosmicKrisp build has.
+The Khronos conformance belongs to the upstream driver that was submitted for testing. MacLauncher's build is based on that driver but adds to it, so it has no conformance submission of its own. Some Direct3D levels also stay out of reach. Feature level 12_1, the highest that DXVK offers for Direct3D 11 and the next step up for Direct3D 12, needs rasterizer-ordered views, which DXVK and vkd3d-proton build on a Vulkan feature called pixel interlock. The build offers only the per-sample variant, sample interlock, so through DXVK or vkd3d-proton a game sees at most feature level 12_0. Feature level 12_2 would also need ray tracing and variable rate shading, which no KosmicKrisp build has.
 
 ## At a glance
 

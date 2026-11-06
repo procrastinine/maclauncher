@@ -42,6 +42,6 @@ Removing a game from your library removes the Windows environments MacLauncher c
 
 ## Rosetta
 
-WINE on the Mac runs Intel code, so on Apple Silicon it needs [Rosetta 2](https://support.apple.com/en-us/102527). If Rosetta isn't installed yet, MacLauncher asks and installs it through the normal macOS prompt.
+Sikarugir and the usual CrossOver releases run WINE as an Intel program, so on Apple Silicon they need [Rosetta 2](https://support.apple.com/en-us/102527). A CrossOver build whose WINE is an ARM64 program runs it natively and leaves the game's Intel code to the FEX emulator. If Rosetta isn't installed yet, MacLauncher asks and installs it through the normal macOS prompt.
 
 Further reading: the [CrossOver](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/CROSSOVER.md) and [Sikarugir](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/SIKARUGIR.md) reference pages, and CodeWeavers' [CrossOver Mac user guide](https://www.codeweavers.com/support/docs/crossover-mac/index).

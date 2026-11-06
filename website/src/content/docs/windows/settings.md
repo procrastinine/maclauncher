@@ -47,6 +47,8 @@ The other compatibility options belong to a particular translator, so each one a
 - MoltenVK: fast math, argument buffers and an Unreal Engine 4 compatibility option.
 - WineD3D: its own configuration string, such as `renderer=gl`.
 
+If MacLauncher has to fall back to another translator for a launch, the options of the translator that didn't load are left out. **Runtime default** keeps the translator's own behavior. vkd3d-proton and KosmicKrisp have no options of their own here. The [graphics translators reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/TRANSLATORS.md#translator-options) lists the environment variable behind each option.
+
 Sikarugir also has **DirectDraw compatibility**, an optional [cnc-ddraw](https://github.com/FunkyFr3sh/cnc-ddraw) wrapper for old 32-bit games that draw with DirectDraw.
 
 **Enable BepInEx winhttp override** lets [BepInEx](https://github.com/BepInEx/BepInEx) mods that the game already contains load under WINE. MacLauncher doesn't download any mods or DLLs for it.
