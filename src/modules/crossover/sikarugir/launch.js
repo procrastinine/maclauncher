@@ -132,6 +132,7 @@ function buildEnvironment(settings, installation, directory, prefixPath, graphic
   else delete environment.WINEDLLOVERRIDES;
   const wine = graphics.executablePath || installation.executablePath;
   const server = graphics.serverPath || installation.serverPath;
+  Object.assign(environment, require("../runtime/shader-cache").environment(directory));
   Object.assign(environment, { HOME: path.join(directory, "home"), TMPDIR: path.join(directory, "tmp"), WINEPREFIX: prefixPath,
     WINEARCH: "win64", WINELOADER: wine, WINESERVER: server,
     PATH: [path.dirname(wine), "/usr/bin", "/bin", "/usr/sbin", "/sbin"].join(path.delimiter) });
@@ -355,6 +356,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const driveRoot = require("../game-drive").gameDriveRoot(entry, originalRoot, match.windowsExecutablePath);
   const { windowsExecutablePath, windowsWorkingDirectory } = require("../../shared/runtime/wine-game-paths").prepareGamePaths(prefixPath,
     { gameRoot: gameRoot === originalRoot ? driveRoot : gameRoot, executablePath, workingRoot: driveRoot, workingDirectory });
+  Object.assign(environment, require('../runtime/shader-cache').prepare(directory, prefixPath));
   const args = WineSettings.desktopArguments(settings, ["start.exe", "/d", windowsWorkingDirectory, "/exec", ...(steamBridge ? [steamBridge.helper] : []), windowsExecutablePath, ...(Array.isArray(settings.arguments) ? settings.arguments : []).map(value => safeText(value, "Game arguments")),
     ...(context.gameArguments || [])]);
   if (cameraBridge && cameraView) {

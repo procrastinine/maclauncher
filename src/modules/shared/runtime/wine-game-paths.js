@@ -48,4 +48,7 @@ function prepareGamePaths(prefixPath, { gameRoot, executablePath, workingRoot = 
   return { windowsExecutablePath: executableDrive + executableRelative, windowsWorkingDirectory: workingDrive + cwdRelative };
 }
 
-module.exports = { prepareGamePaths };
+function windowsDirectoryPath(prefixPath, root, directory) {
+  return mapRoot(prefixPath, fs.realpathSync(root)) + relativeWindowsPath(root, directory);
+}
+module.exports = { prepareGamePaths, windowsDirectoryPath };

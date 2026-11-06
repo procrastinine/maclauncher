@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const crypto = require('node:crypto');
+const { hashFile } = require('../../shared/runtime/pinned-native-manager');
 const { promisify } = require('node:util');
 const execute = promisify(require('node:child_process').execFile);
 const Upstream = require('../../shared/runtime/upstream');
@@ -10,7 +10,7 @@ const { readJsonObject, writeJsonAtomic } = require('../../../core/json-files');
 const ORIGIN = 'https://client-update.akamai.steamstatic.com';
 const MANIFEST = ORIGIN + '/steam_client_ubuntu12';
 const source = Upstream.service({ hosts: [new URL(ORIGIN).hostname] });
-const digest = (file, algorithm = 'sha256') => { const h = crypto.createHash(algorithm), fd = fs.openSync(file, 'r'), b = Buffer.alloc(1024 * 1024); try { let n; while ((n = fs.readSync(fd, b, 0, b.length, null))) h.update(b.subarray(0, n)); } finally { fs.closeSync(fd); } return h.digest('hex'); };
+const verified = new Map();
 const store = userDataDir => path.join(userDataDir, 'runtimes/steam-client-components');
 function resolveManifest(text) {
   const value = parseSteamVdf(text), pending = [value], matches = [];
@@ -30,7 +30,14 @@ function current(userDataDir) {
   const directory = path.join(root, record.archiveSha1);
   try {
     for (const item of record.files) {
-      if (!/^[A-Za-z0-9._-]+$/.test(item.path) || fs.lstatSync(path.join(directory, item.path)).isSymbolicLink() || digest(path.join(directory, item.path)) !== item.sha256) return null;
+      if (!/^[A-Za-z0-9._-]+$/.test(item.path)) return null;
+      const file = path.join(directory, item.path), stat = fs.lstatSync(file);
+      if (!stat.isFile() || stat.isSymbolicLink()) return null;
+      const stamp = JSON.stringify([stat.size, stat.mtimeMs, stat.ctimeMs, stat.ino, item.sha256]);
+      if (verified.get(file) !== stamp) {
+        if (hashFile(file) !== item.sha256) { verified.delete(file); return null; }
+        verified.set(file, stamp);
+      }
     }
     for (const name of Object.values(record.clients)) if (!record.files.some(item => item.path === name)) return null;
     return { ...record, root: directory };
@@ -52,14 +59,14 @@ async function install({ userDataDir, signal, onProgress, resolved, archiveFile 
     const archive = path.join(stage, 'client.zip');
     if (archiveFile) fs.copyFileSync(archiveFile, archive);
     else await Upstream.download({ url: resolved.url, name: resolved.filename, ...(resolved.bytes ? { bytes: resolved.bytes } : {}), digest: { algorithm: 'sha1', value: expected[1] } }, archive, { signal, onProgress });
-    if (digest(archive, 'sha1') !== expected[1]) throw new Error('Valve component archive differs from its content address.');
+    if (hashFile(archive, 'sha1') !== expected[1]) throw new Error('Valve component archive differs from its content address.');
     const extracted = path.join(stage, 'extracted'); fs.mkdirSync(extracted);
     await execute('/usr/bin/unzip', ['-q', archive, 'steamclient64.dll', 'legacycompat/steamclient.dll', '-d', extracted], { signal, timeout: 120000 });
     const clients = { x86_64: 'steamclient64.dll', i386: 'steamclient.dll' }, payload = path.join(stage, 'payload'); fs.mkdirSync(payload);
     const files = Object.entries(clients).map(([arch, name]) => {
       fs.renameSync(path.join(extracted, arch === 'i386' ? 'legacycompat/steamclient.dll' : name), path.join(payload, name));
       fs.chmodSync(path.join(payload, name), 0o644);
-      return { path: name, sha256: digest(path.join(payload, name)), size: fs.statSync(path.join(payload, name)).size };
+      return { path: name, sha256: hashFile(path.join(payload, name)), size: fs.statSync(path.join(payload, name)).size };
     });
     const directory = path.join(root, expected[1]);
     if (fs.existsSync(directory)) { if (current(userDataDir)?.archiveSha1 !== expected[1]) throw new Error('A retained Valve component directory needs repair.'); }

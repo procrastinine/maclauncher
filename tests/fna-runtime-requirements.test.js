@@ -165,3 +165,13 @@ test("catalog feature claims do not override an installed FNA profile missing th
   assert.equal(selected.ready, false);assert.equal(selected.version, null);assert.equal(selected.discoveryRequired, true);
   assert.deepEqual(events, []);
 });
+
+test('FNA verifies expanded runtime profiles above 128 files', t => {
+  const f = fixture(t), root = path.join(f.root, 'runtime'), profile = runtimeFiles(root, {originalGamePaths: true});
+  for (let i=0; i<130; i++) { const name = 'extra-' + i + '.dll'; fs.writeFileSync(path.join(root,name),'assembly'); profile.files[name]=digest('assembly'); }
+  fs.writeFileSync(path.join(root,'fna-runtime.json'),JSON.stringify(profile));
+  assert.equal(Object.keys(Profile.verifyRuntime({executablePath:path.join(root,'dotnet')}).files).length,140);
+  assert.equal(Object.keys(Profile.verifyRuntime({source:'download',executablePath:path.join(root,'dotnet')}).files).length,140);
+  fs.writeFileSync(path.join(root,'extra-129.dll'),'modified');
+  assert.throws(()=>Profile.verifyRuntime({executablePath:path.join(root,'dotnet')}),/integrity/);
+});

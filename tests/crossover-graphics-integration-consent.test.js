@@ -96,3 +96,19 @@ test('the Play download dialog lists each companion with version, size and what 
   assert.deepEqual(Array.from(shown[1].buttons), ['Download and Play', 'Play Without It']);
   assert.equal(shown[1].detail, 'Adds Vulkan sharing. Fixture also starts without it.');
 });
+
+test('winemac matches the exact CrossOver ABI release without duplicate package declarations', t => {
+  const Module = require('node:module'), original = Module._load;
+  let validate;
+  t.mock.method(Module, '_load', function(id, ...args) {
+    if (id === '../../shared/runtime/project-build-manager') return { createProjectBuildManager(options) { validate = options.validateManifest; return { core: {} }; } };
+    return original.call(this, id, ...args);
+  });
+  delete require.cache[require.resolve('../src/modules/crossover/runtime/winemac')];
+  const manager = require('../src/modules/crossover/runtime/winemac');
+  assert.doesNotThrow(() => validate({ capabilities: { role: 'crossover-vulkan-driver' } }));
+  const profile = { product: 'CrossOver', version: '26.3', build: '39832' };
+  assert.equal(manager.matches(profile, { upstreamVersion: '26.3', buildVersion: '39832' }), true);
+  assert.equal(manager.matches(profile, { upstreamVersion: '26.4', buildVersion: '39832' }), false);
+  assert.equal(manager.matches(profile, { upstreamVersion: '26.3', buildVersion: '39833' }), false);
+});

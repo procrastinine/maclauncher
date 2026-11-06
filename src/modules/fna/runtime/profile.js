@@ -18,7 +18,6 @@ function verifyRuntime(install) {
   const record = JSON.parse(Bundled.readRegular(profilePath ? path.join(install.installDir,Bundled.relativeFile(profilePath)) : path.join(root, "fna-runtime.json"),1024*1024).bytes);
   const project = install.source === "download" && install.catalogEntry?.projectPackage;
   if (install.source === "download") {
-    if (Object.keys(record.files || {}).length > 128) throw new Error("FNA runtime profile exceeds its file limit.");
     for (const relative of Object.keys(record.files || {})) Bundled.relativeFile(relative);
     const host=install.runtimeFiles?.managedHost;
     return {root,...record,...(host?{hostPath:path.join(install.installDir,Bundled.relativeFile(host))}:{}),
@@ -27,7 +26,7 @@ function verifyRuntime(install) {
   if (typeof record.profile !== "string" || !record.profile ||
       !/^\d+\.\d+\.\d+$/.test(record.dotnetVersion || "") || !/^\d+(?:\.\d+){1,3}$/.test(record.frameworkVersion || "") ||
       !["arm64", "x64"].includes(record.architecture) ||
-      !record.files || Array.isArray(record.files) || Object.keys(record.files).length > 128) throw new Error("FNA runtime profile metadata is invalid.");
+      !record.files || Array.isArray(record.files)) throw new Error("FNA runtime profile metadata is invalid.");
   let sealedManifest, sealedPayload;
   if (install.source === "custom" && install.manifest) {
     sealedManifest = Bundled.validateRuntimeManifest(install.manifest, { managerId: "fna", arch: record.architecture });
