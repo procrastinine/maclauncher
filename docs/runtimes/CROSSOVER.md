@@ -115,6 +115,8 @@ For a game in an existing bottle, each setting defaults to **Bottle setting**, f
 
 [Graphics translators](TRANSLATORS.md) describes how the translator choices are installed, loaded and checked. Runtimes groups the translators as DirectX → Vulkan, DirectX → Metal, Vulkan drivers and video codecs, and Runtime Settings arranges the Direct3D choices from Direct3D 8 to 12. Their versions, API scope and sources come from installed files. CrossOver's automatic choice remains global while it is unresolved, whereas a specific default Direct3D engine or an explicit choice for every API uses the private loader. For a game in an existing bottle, each control also offers the bottle's current setting. A runtime version is installed once, and private graphics views and Windows DLLs link to that installation. Prepared loader trees are shared between games that use the same inputs.
 
+Translator dependency directories use fallback library and framework lookup, so macOS system libraries retain precedence. The private Wine loader keeps its own `ntdll.so` anchor.
+
 Translator catalogs and local registrations share their runtime storage with Sikarugir. Components installed inside CrossOver are referenced in place and are used for CrossOver launches only.
 
 Video components add only their plugin directories. Their private preparation reuses CrossOver's established native core dependencies and preserves its scanner and system-plugin defaults. Component dependency directories do not enter global library search paths; optional unusable plugins are reported separately from usable siblings.

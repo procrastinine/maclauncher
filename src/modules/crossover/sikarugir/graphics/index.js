@@ -272,7 +272,8 @@ async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoo
     if (!image.slices.some(slice => slice.architecture === layout.architecture && slice.platform === 1)) fail("The GPU helper requires an Intel macOS library.");
     helperNames.add(item.name); helpers.push({ name: item.name, windows, unix });
   }
-  const loader = selection.components.length || helpers.length || translatorView && Object.keys(translatorView.links).length ? await prepareLoaderView(engine, viewRoot, install, signal) : {
+  const privateLoader = Boolean(selection.components.length || helpers.length || translatorView && Object.keys(translatorView.links).length);
+  const loader = privateLoader ? await prepareLoaderView(engine, viewRoot, install, signal) : {
     wineRoot: engine, dllRoot: path.join(viewRoot, "dlls"), executablePath: install.executablePath || path.join(engine, "bin", "wine"),
     serverPath: install.serverPath || path.join(engine, "bin", "wineserver") };
   const dllRoot = loader.dllRoot, dllOverrides = [], selectedUnix = [];
@@ -314,8 +315,13 @@ async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoo
   const external = selection.components.includes("d3dmetal") ? path.join(renderers, "d3dmetal", "external") : null;
   const libraryPaths = [path.join(dllRoot, layout.unixName), ...selectedUnix, ...(external ? [external] : []), path.join(engine, "lib", "wine", layout.unixName), frameworks,
     ...(fs.existsSync(gstLib) ? [gstLib] : [])];
-  const env = { WINEDLLPATH: path.join(engine, "lib", "wine"), DYLD_LIBRARY_PATH: libraryPaths.join(path.delimiter), DYLD_FALLBACK_LIBRARY_PATH: libraryPaths.join(path.delimiter),
-    DYLD_FRAMEWORK_PATH: [frameworks, ...(external ? [external] : [])].join(path.delimiter),
+  // Only ntdll's private anchor overrides lookup: Unix Wine modules must reuse
+  // its initialized copy. Vendor dependencies must not replace system libraries
+  // loaded by Apple frameworks in the same process.
+  const env = { WINEDLLPATH: path.join(engine, "lib", "wine"),
+    ...(privateLoader ? { DYLD_LIBRARY_PATH: path.join(dllRoot, layout.unixName) } : {}),
+    DYLD_FALLBACK_LIBRARY_PATH: libraryPaths.join(path.delimiter),
+    DYLD_FALLBACK_FRAMEWORK_PATH: [frameworks, ...(external ? [external] : [])].join(path.delimiter),
     GST_REGISTRY_1_0: path.join(viewRoot, "gstreamer-registry.bin") };
   Object.assign(env, DLSS.environment(dlss));
   if (selection.components.includes("dxmt") && dlss.dxmt) Object.assign(env, require("../../temporal").environment(cameraBridge, dllRoot));
@@ -347,8 +353,8 @@ async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoo
   }
   if (translatorView) {
     Object.assign(env, translatorView.env);
-    env.DYLD_LIBRARY_PATH = [path.join(dllRoot, layout.unixName), ...translatorView.libraryPaths, env.DYLD_LIBRARY_PATH].filter(Boolean).join(path.delimiter);
-    env.DYLD_FRAMEWORK_PATH = [...translatorView.frameworkPaths, env.DYLD_FRAMEWORK_PATH].filter(Boolean).join(path.delimiter);
+    env.DYLD_FALLBACK_LIBRARY_PATH = [...translatorView.libraryPaths, env.DYLD_FALLBACK_LIBRARY_PATH].filter(Boolean).join(path.delimiter);
+    env.DYLD_FALLBACK_FRAMEWORK_PATH = [...translatorView.frameworkPaths, env.DYLD_FALLBACK_FRAMEWORK_PATH].filter(Boolean).join(path.delimiter);
     if (Object.keys(translatorView.links).some(name => name.endsWith(".dll"))) env.WINEDLLPATH = [...layout.windows.map(name => path.join(dllRoot, name)), dllRoot, layout.dllRoot].join(path.delimiter);
   }
   signal?.throwIfAborted();

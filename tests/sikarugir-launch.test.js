@@ -453,9 +453,10 @@ test("fresh prefix setup uses the stock engine and common support before applyin
     const environment = args[3].env;
     assert.equal(environment.WINELOADER, install.executablePath);
     assert.equal(environment.WINESERVER, install.serverPath);
-    assert.equal(environment.DYLD_LIBRARY_PATH, [path.join(install.wineRoot, "lib", "wine", "x86_64-unix"), frameworks, gstLib].join(path.delimiter));
-    assert.equal(environment.DYLD_FALLBACK_LIBRARY_PATH, environment.DYLD_LIBRARY_PATH);
-    assert.equal(environment.DYLD_FRAMEWORK_PATH, frameworks);
+    assert.equal(environment.DYLD_LIBRARY_PATH, undefined);
+    assert.equal(environment.DYLD_FALLBACK_LIBRARY_PATH, [path.join(install.wineRoot, "lib", "wine", "x86_64-unix"), frameworks, gstLib].join(path.delimiter));
+    assert.equal(environment.DYLD_FRAMEWORK_PATH, undefined);
+    assert.equal(environment.DYLD_FALLBACK_FRAMEWORK_PATH, frameworks);
     for (const name of ["WINEDLLPATH", "WINEDLLOVERRIDES", "VK_DRIVER_FILES", "VK_ICD_FILENAMES", "DXMT_CONFIG"]) {
       assert.equal(environment[name], undefined, `${name} is used only during gameplay`);
     }

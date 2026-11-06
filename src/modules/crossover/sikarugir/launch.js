@@ -181,8 +181,8 @@ function prefixRuntime(installation, directory) {
   const gstLib = path.join(gstreamer, "lib");
   const libraries = [path.join(engine, "lib", "wine", "x86_64-unix"), frameworks,
     ...(fs.existsSync(gstLib) ? [gstLib] : [])].join(path.delimiter);
-  const env = { DYLD_LIBRARY_PATH: libraries, DYLD_FALLBACK_LIBRARY_PATH: libraries,
-    DYLD_FRAMEWORK_PATH: frameworks, GST_REGISTRY_1_0: path.join(directory, "gstreamer-prefix-registry.bin") };
+  const env = { DYLD_FALLBACK_LIBRARY_PATH: libraries,
+    DYLD_FALLBACK_FRAMEWORK_PATH: frameworks, GST_REGISTRY_1_0: path.join(directory, "gstreamer-prefix-registry.bin") };
   if (fs.existsSync(gstLib)) {
     env.GST_PLUGIN_SYSTEM_PATH_1_0 = path.join(gstLib, "gstreamer-1.0");
     env.GST_PLUGIN_PATH_1_0 = "";

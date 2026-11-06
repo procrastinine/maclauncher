@@ -221,3 +221,19 @@ test("image filters, scaling and image-pair generation never acquire or activate
   const temporal = {...entry, effects: {...entry.effects, video: [{id: "scene", kind: "temporal", method: "metalfx", enabled: true, settings: {}}]}};
   assert.deepEqual(Temporal.sceneDemand(temporal).sort(), ["depth", "motion"]);
 });
+
+test("CrossOver translator dependencies use fallback paths instead of global overrides", t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "crossover-loader-fallback-"));t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const selected = installation(root), loader = path.join(root, "private/bin/wineloader"), unix = path.join(root, "private/lib/wine/x86_64-unix");
+  fs.mkdirSync(unix, {recursive: true});fs.writeFileSync(path.join(unix, "ntdll.so"), "private ntdll");
+  const libraryPaths = [path.join(root, "vendor-libraries")], frameworkPaths = [path.join(root, "vendor-frameworks")];
+  const previous = {DYLD_LIBRARY_PATH: "/explicit/existing", DYLD_FALLBACK_LIBRARY_PATH: "/existing/fallback",
+    DYLD_FALLBACK_FRAMEWORK_PATH: "/existing/framework-fallback", MTL_HUD_ENABLED: "1", DYLD_INSERT_LIBRARIES: "/processor/libreshade-macos.dylib"};
+  const result = {...previous, ...Loader.environment(loader, previous, {installation: selected,
+    translatorView: {links: {}, env: {}, dllOverrides: [], libraryPaths, frameworkPaths}})};
+  assert.deepEqual(result.DYLD_LIBRARY_PATH.split(path.delimiter), [unix, previous.DYLD_LIBRARY_PATH]);
+  assert.deepEqual(result.DYLD_FALLBACK_LIBRARY_PATH.split(path.delimiter), [...libraryPaths, previous.DYLD_FALLBACK_LIBRARY_PATH]);
+  assert.equal(result.DYLD_FRAMEWORK_PATH, undefined);
+  assert.deepEqual(result.DYLD_FALLBACK_FRAMEWORK_PATH.split(path.delimiter), [...frameworkPaths, previous.DYLD_FALLBACK_FRAMEWORK_PATH]);
+  assert.equal(result.MTL_HUD_ENABLED, "1");assert.equal(result.DYLD_INSERT_LIBRARIES, previous.DYLD_INSERT_LIBRARIES);
+});

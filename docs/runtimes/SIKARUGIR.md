@@ -14,6 +14,8 @@ Running Windows games through Wine is a major MacLauncher feature, and Sikarugir
 
 A Wine version installed during Play comes with its matching support libraries, and Play then prepares a private Windows environment for the game. Installation reads the minimum macOS version from the engine and its support libraries; current engines require macOS 14 or later. Their native Wine binaries are Intel code, which needs Rosetta on Apple Silicon. Play checks for Rosetta and offers to install it, as [Rosetta](ROSETTA.md) describes.
 
+Vendor support and translator dependency directories use fallback library and framework lookup, so macOS system libraries retain precedence. The private Wine loader keeps its own `ntdll.so` anchor.
+
 The selected Wine version and graphics backend supply the Windows APIs. Windows libraries that a game itself requires remain part of that game's own environment.
 
 [Windows Steam games](WINDOWS_STEAM.md) describes the optional Steam client bridge to the Steam client for Mac, which Sikarugir shares with CrossOver.

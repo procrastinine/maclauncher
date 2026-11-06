@@ -211,8 +211,10 @@ function environment(loader, previous = {}, { cameraBridge, installation, sceneC
   if (translatorView) {
     const wine = path.resolve(unix, '..');
     Object.assign(values, translatorView.env);
-    values.DYLD_LIBRARY_PATH = [unix, ...translatorView.libraryPaths, previous.DYLD_LIBRARY_PATH].filter(Boolean).join(path.delimiter);
-    if (translatorView.frameworkPaths.length) values.DYLD_FRAMEWORK_PATH = [...translatorView.frameworkPaths, previous.DYLD_FRAMEWORK_PATH].filter(Boolean).join(path.delimiter);
+    // Translator dependencies are fallbacks; overriding system libraries also
+    // affects Apple frameworks such as the Metal HUD in the Wine process.
+    if (translatorView.libraryPaths.length) values.DYLD_FALLBACK_LIBRARY_PATH = [...translatorView.libraryPaths, previous.DYLD_FALLBACK_LIBRARY_PATH].filter(Boolean).join(path.delimiter);
+    if (translatorView.frameworkPaths.length) values.DYLD_FALLBACK_FRAMEWORK_PATH = [...translatorView.frameworkPaths, previous.DYLD_FALLBACK_FRAMEWORK_PATH].filter(Boolean).join(path.delimiter);
     if (Object.keys(translatorView.links).some(name => name.endsWith('.dll'))) values.WINEDLLPATH =
       [...layout.windows.map(name => path.join(wine, name)), wine, values.WINEDLLPATH || previous.WINEDLLPATH, layout.dllRoot].filter(Boolean).join(path.delimiter);
     if (translatorView.dllOverrides.length) values.WINEDLLOVERRIDES = [values.WINEDLLOVERRIDES || previous.WINEDLLOVERRIDES, ...translatorView.dllOverrides].filter(Boolean).join(';');

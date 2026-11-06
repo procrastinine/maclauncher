@@ -87,7 +87,7 @@ test("graphics staging finds renderers in the Template's SharedSupport folder an
   assert.equal(fs.readFileSync(path.join(f.support, "Frameworks", "renderer", "dxmt", "LICENSE"), "utf8"), "dxmt license");
   const result = await Graphics.prepareGraphicsView({ install: f.install, settings: { graphicsBackend: "d3dmetal" }, viewRoot: path.join(f.root, "game", "view"),
     host: { hardwareArch: "arm64", macOSVersion: "26.5" }, executableArchitecture: "x86_64" });
-  assert.ok(result.env.DYLD_FRAMEWORK_PATH.includes(path.join(f.support, "Frameworks", "renderer", "d3dmetal", "external")));
+  assert.ok(result.env.DYLD_FALLBACK_FRAMEWORK_PATH.includes(path.join(fs.realpathSync(f.support), "Frameworks", "renderer", "d3dmetal", "external")));
   const legacy = await installed(t);
   assert.equal(legacy.metadata.relativePaths.templateRenderers, "Frameworks/renderer");
   assert.deepEqual(legacy.metadata.graphicsCapabilities, f.metadata.graphicsCapabilities);
@@ -224,7 +224,7 @@ test("Automatic on Tahoe selects KosmicKrisp under D9VK while retaining DXMT and
   assert.equal(fs.realpathSync(path.join(result.dllRoot, "i386-windows", "d3d9.dll")), fs.realpathSync(path.join(f.support, "Frameworks", "renderer", "d9vk", "wine", "i386-windows", "d3d9.dll")));
   assert.equal(result.env.GST_REGISTRY_1_0, path.join(viewRoot, "gstreamer-registry.bin"));
   assert.equal(result.env.VK_DRIVER_FILES, result.env.VK_ICD_FILENAMES);
-  assert.ok(result.env.DYLD_LIBRARY_PATH.includes(path.join(f.engineRoot, "lib", "wine", "x86_64-unix")));
+  assert.ok(result.env.DYLD_FALLBACK_LIBRARY_PATH.includes(path.join(fs.realpathSync(f.engineRoot), "lib", "wine", "x86_64-unix")));
   await Graphics.prepareGraphicsView(options);
   assert.equal(hash(path.join(f.support, "Frameworks", "renderer", "dxmt", "wine", "i386-windows", "d3d11.dll")), before);
 });
@@ -296,7 +296,7 @@ test("D3DMetal stages its native bridge without modifying shared framework files
   const f = await installed(t), viewRoot = path.join(f.root, "game", "view");
   const result = await Graphics.prepareGraphicsView({ install: f.install, settings: { graphicsBackend: "d3dmetal" }, viewRoot, host: { hardwareArch: "arm64", macOSVersion: "26.5" }, executableArchitecture: "x86_64" });
   assert.deepEqual(result.components, ["d3dmetal"]);
-  assert.ok(result.env.DYLD_FRAMEWORK_PATH.includes(path.join(f.support, "Frameworks", "renderer", "d3dmetal", "external")));
+  assert.ok(result.env.DYLD_FALLBACK_FRAMEWORK_PATH.includes(path.join(fs.realpathSync(f.support), "Frameworks", "renderer", "d3dmetal", "external")));
   assert.ok(fs.lstatSync(path.join(result.dllRoot, "x86_64-unix", "d3d11.so")).isSymbolicLink());
   assert.equal(fs.existsSync(path.join(result.dllRoot, "i386-windows", "d3d12.dll")), false);
 });
@@ -393,4 +393,29 @@ test("GPU compute helper pairs use a private Wine anchor even for direct Vulkan 
   await assert.rejects(Graphics.prepareGraphicsView({ install: f.install, settings: { graphicsBackend: "wined3d" },
     viewRoot: path.join(f.root, "compute", "reserved"), host: { hardwareArch: "arm64", macOSVersion: "26.4" },
     helperLibraries: [{ name: "ntdll", windows, unix }] }), /helper name/);
+});
+
+test("vendor dependencies use fallback paths while the HUD and private ntdll override remain available", async t => {
+  const f = await installed(t), frameworks = path.join(f.support, "Frameworks"), gstLib = path.join(frameworks, "GStreamer.framework", "Versions", "1.0", "lib");
+  fs.mkdirSync(gstLib, {recursive: true});
+  const translatorView = {identity: "fallback-scope", links: {}, env: {}, dllOverrides: [],
+    libraryPaths: [path.join(f.root, "translator-dependencies")], frameworkPaths: [path.join(f.root, "translator-frameworks")]};
+  const result = await Graphics.prepareGraphicsView({install: f.install, settings: {graphicsBackend: "dxmt"},
+    viewRoot: path.join(f.root, "game", "fallback-view"), host: {hardwareArch: "arm64", macOSVersion: "26.4"}, translatorView});
+  const vendors = [frameworks, gstLib, path.join(f.engineRoot, "lib/wine/x86_64-unix"),
+    path.join(frameworks, "renderer/dxmt/wine/x86_64-unix"), ...translatorView.libraryPaths];
+  assert.deepEqual(result.env.DYLD_LIBRARY_PATH.split(path.delimiter), [path.join(result.dllRoot, "x86_64-unix")],
+    "only the private ntdll anchor may override system library lookup");
+  const canonical = value => fs.existsSync(value) ? fs.realpathSync(value) : value;
+  const fallback = result.env.DYLD_FALLBACK_LIBRARY_PATH.split(path.delimiter).map(canonical);
+  for (const directory of vendors) assert.ok(fallback.includes(canonical(directory)), directory);
+  assert.equal(result.env.DYLD_FRAMEWORK_PATH, undefined);
+  assert.ok(result.env.DYLD_FALLBACK_FRAMEWORK_PATH.split(path.delimiter).map(canonical).includes(canonical(frameworks)));
+  assert.ok(result.env.DYLD_FALLBACK_FRAMEWORK_PATH.split(path.delimiter).includes(translatorView.frameworkPaths[0]));
+  const launch = require("../src/modules/crossover/sikarugir/launch").buildEnvironment({metalHud: true}, f.install,
+    path.join(f.root, "game"), path.join(f.root, "prefix"), result, {baseEnvironment: {}});
+  assert.equal(launch.environment.MTL_HUD_ENABLED, "1");
+  const stock = require("../src/modules/crossover/sikarugir/launch").prefixRuntime(f.install, path.join(f.root, "game"));
+  assert.equal(stock.env.DYLD_LIBRARY_PATH, undefined);
+  assert.ok(stock.env.DYLD_FALLBACK_LIBRARY_PATH.split(path.delimiter).map(canonical).includes(canonical(frameworks)));
 });
