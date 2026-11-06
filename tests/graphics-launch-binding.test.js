@@ -29,12 +29,14 @@ test("main graphics inspection carries current process identities without a full
   const pendingEdits = [];
   const context = {userDataDir: f.userDataDir, app: {}, runningGameSessions: sessions, loadSettings: () => ({}), runtimeInventoryRevision: 0, ReShade, cachedState: null,
     graphicsShortcuts: require("../src/main/graphics-shortcuts").create({globalShortcut: {}, readAssignments: () => ({})}), removeEphemeralEntry: () => false,
-    backendService:{invalidateGraphicsPreparation:async()=>false},
+    // Graphics inputs come from the game's backend lane; the fixture's runAction stands for that lane.
+    backendService: {invalidateGraphicsPreparation: async () => false,
+      request: (_lane, method, value, action, payload, settings) => method === "moduleAction" && action === "graphicsInputs" ? context.launcherService.runAction(value, action, payload, settings) : assert.fail(method)},
     downloadManager: {}, confirmRuntimeInstallation: () => assert.fail("No download in lifecycle fixture"),
     settingsCoordinator: coordinator.client(), listRuntimeManagers: () => [{id: "graphics-models"}],
     logger: {warn: () => assert.fail("model lease cleanup failed")}, broadcastActivity: () => {},
     Modules: {getModuleInfo: () => ({runtime: {entries: {native: {graphicsHost: "window"}}}})}, resolveModuleId: () => "test",
-    launcherService: {runAction: async () => ({runtimeId: "native", graphicsInputs: null})},
+    launcherService: {runAction: async () => ({runtimeId: "native", graphicsInputs: null}), graphicsCallbacks: () => ({})},
     require: id => require(path.resolve(__dirname, "../src/main", id))};
   vm.runInNewContext(source.slice(start, end), context);
   assert.equal(context.gameGraphicsLive(entry), false);
@@ -51,8 +53,16 @@ test("main graphics inspection carries current process identities without a full
   context.launcherService.runAction = async value => {
     inspected = value.runtimeId;return {runtimeId: "future-runtime", graphicsInputs: {architecture: "x86_64", depth: true}};
   };
+  // A binding without recorded inputs is inspected on the game's lane with its actual runtime.
+  const {graphicsInputs: _recorded, ...unrecorded} = JSON.parse(fs.readFileSync(f.file, "utf8"));
+  fs.writeFileSync(f.file, JSON.stringify(unrecorded));
+  await context.gameEffectsOptions({...entry, runtimeId: "future-runtime"});
+  assert.equal(inspected, "actual-running");
+  // Recorded launch inputs are used as recorded, without a lane request.
+  fs.writeFileSync(f.file, JSON.stringify({...unrecorded, graphicsInputs: boundInputs}));
+  inspected = undefined;
   const actual = await context.gameEffectsOptions({...entry, runtimeId: "future-runtime"});
-  assert.equal(inspected, "actual-running");assert.equal(actual.graphicsHost, "explicit");
+  assert.equal(inspected, undefined);assert.equal(actual.graphicsHost, "explicit");
   assert.equal(actual.graphicsArchitecture, "arm64");assert.deepEqual(actual.graphicsInputs, boundInputs);
   assert.equal(entry.runtimeId, undefined, "inspection does not overwrite the saved future selection");
   await options.useModel("live-selected");
@@ -77,10 +87,11 @@ function mainFixture(t, {running = true} = {}) {
   const context = {userDataDir: f.userDataDir, app: {}, runningGameSessions: sessions, loadSettings: () => ({}), runtimeInventoryRevision: 0, cachedState: null,
     graphicsShortcuts: require("../src/main/graphics-shortcuts").create({globalShortcut: {}, readAssignments: () => ({})}),
     downloadManager: {}, confirmRuntimeInstallation: () => assert.fail("No download in lifecycle fixture"),
-    backendService:{invalidateGraphicsPreparation:async()=>false},
+    backendService: {invalidateGraphicsPreparation: async () => false,
+      request: (_lane, method, value, action, payload, settings) => method === "moduleAction" && action === "graphicsInputs" ? context.launcherService.runAction(value, action, payload, settings) : assert.fail(method)},
     settingsCoordinator: coordinator.client(), listRuntimeManagers: () => [{id: "graphics-models"}],
     Modules: {getModuleInfo: () => ({runtime: {entries: {native: {graphicsHost: "window"}}}})}, resolveModuleId: () => "test",
-    launcherService: {runAction: async () => ({runtimeId: "native", graphicsInputs: null})},
+    launcherService: {runAction: async () => ({runtimeId: "native", graphicsInputs: null}), graphicsCallbacks: () => ({})},
     require: id => require(path.resolve(__dirname, "../src/main", id)),
     ReShade, StoredPlan: require("../src/modules/shared/effects/stored-plan"),
     EffectsPlan: require("../src/modules/shared/effects/plan"), EffectsRuntime: require("../src/modules/shared/effects/runtime"),
