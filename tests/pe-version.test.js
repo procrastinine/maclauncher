@@ -74,7 +74,7 @@ test("translator labels use component metadata instead of replacement DLL Window
     const description = describeTranslator(path.join(root, "lib", engine), { engine, source });
     assert.equal(description.version, "");
     assert.equal(description.files[0].version, null);
-    assert.equal(label(description), `${engine.toUpperCase()} (CrossOver 26.3)`);
+    assert.equal(label(description), `${engine.toUpperCase()} · CrossOver 26.3`);
   }
   write("changelog.html", "<p>Update to DXMT v0.72</p><p>Update to DXVK 1.10.3.</p><p>Update to MoltenVK 1.2.10.</p>");
   write("lib64/libMoltenVK.dylib", image({ cpu: X64 }));
@@ -82,10 +82,10 @@ test("translator labels use component metadata instead of replacement DLL Window
   write("lib64/apple_gptk/D3DMetal.framework/Versions/A/Resources/version.plist",
     "<plist><dict><key>CFBundleShortVersionString</key><string>3.0</string></dict></plist>");
   const { included } = includedTranslators({ crossoverRoot: root, upstreamVersion: "26.3" }, "crossover");
-  assert.equal(label(included.find(row => row.engine === "dxmt")), "DXMT 0.72 (CrossOver 26.3)");
-  assert.equal(label(included.find(row => row.engine === "dxvk")), "DXVK 1.10.3 (CrossOver 26.3)");
-  assert.equal(label(included.find(row => row.engine === "d3dmetal")), "D3DMetal 3.0 (CrossOver 26.3)");
-  assert.equal(label(included.find(row => row.engine === "moltenvk")), "MoltenVK 1.2.10 (CrossOver 26.3)");
+  assert.equal(label(included.find(row => row.engine === "dxmt")), "DXMT 0.72 · CrossOver 26.3");
+  assert.equal(label(included.find(row => row.engine === "dxvk")), "DXVK 1.10.3 · CrossOver 26.3");
+  assert.equal(label(included.find(row => row.engine === "d3dmetal")), "D3DMetal 3.0 · CrossOver 26.3");
+  assert.equal(label(included.find(row => row.engine === "moltenvk")), "MoltenVK 1.2.10 · CrossOver 26.3");
   assert.equal(describeTranslator(path.join(root, "lib/dxmt"), { engine: "dxmt", source, version: "release-label" }).version, "release-label");
   write("lib/dxmt/version", "0.80");
   assert.equal(describeTranslator(path.join(root, "lib/dxmt"), { engine: "dxmt", source }).version, "0.80");
