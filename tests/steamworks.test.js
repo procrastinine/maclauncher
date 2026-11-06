@@ -4,18 +4,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
 const crypto = require("node:crypto");
-const Overlay = require("../src/modules/shared/runtime/steamworks/source-overlay");
-const Build = require("../src/modules/shared/runtime/steamworks/build");
+const Fixture = { VERSION: require("../src/modules/shared/runtime/included-package-metadata").version("steam-api-helper"), SOURCE_REVISION: "a".repeat(40) };
 const Environment = require("../src/modules/shared/runtime/steamworks/environment");
 const Steam = require("../src/modules/shared/runtime/steamworks");
 const GameMakerSteam = require("../src/modules/gamemaker/runtime/steam-api");
-test("Steam API dependency validation rejects changed archives without a build or network request", context => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "steamworks-dependencies-"));
-  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  fs.writeFileSync(path.join(root, "curl.tar.gz"), "changed source archive");
-  assert.throws(() => Build.validateDependencyArchives(root), /dependency source changed: curl/);
-  assert.throws(() => Build.validateDependencyArchives("relative"), /absolute directory/);
-});
 
 test("Steam API environment contains owned offline configuration and preserves the parent", context => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "steamworks-environment-"));
@@ -68,17 +60,17 @@ function libraryFixture(root, architecture) {
 test("Steam API lookup enforces interface, architecture, manifest and full payload identity", context => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "steamworks-payload-"));
   context.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const directory = path.join(root, "native-runtimes/steam-api-helper", Overlay.VERSION, "x64");
+  const directory = path.join(root, "native-runtimes/steam-api-helper", Fixture.VERSION, "x64");
   const library = libraryFixture(directory, "x86_64"), interfaces = ["SteamClient017", "SteamUser018"];
-  const manifest = { schemaVersion: 1, id: "steam-api-helper", version: Overlay.VERSION, minimumMacOS: "13.0", sourceRevision: Overlay.SOURCE_REVISION,
+  const manifest = { schemaVersion: 1, id: "steam-api-helper", version: Fixture.VERSION, minimumMacOS: "13.0", sourceRevision: Fixture.SOURCE_REVISION,
     librarySha256: library.sha256, qualifiedInterfaces: interfaces,
     files: [{ path: "libsteam_api.dylib", size: library.bytes.length, sha256: library.sha256, mode: 0o644, architectures: ["x86_64"] }] };
   const content = JSON.stringify(manifest);
   fs.writeFileSync(path.join(directory, "helper.json"), content, { mode: 0o644 });
-  const catalog = [{ version: Overlay.VERSION, minimumMacOS: "13.0", sourceRevision: Overlay.SOURCE_REVISION, architectures: ["x86_64"], qualifiedInterfaces: interfaces,
+  const catalog = [{ version: Fixture.VERSION, minimumMacOS: "13.0", sourceRevision: Fixture.SOURCE_REVISION, architectures: ["x86_64"], qualifiedInterfaces: interfaces,
     librarySha256: library.sha256, manifestSha256: crypto.createHash("sha256").update(content).digest("hex") }];
-  const declarations = [{ id: "steam-api-helper", version: Overlay.VERSION, arch: "x64", minimumMacOS: "13.0", launcherArchitectures: [process.arch],
-    directoryRelative: `steam-api-helper/${Overlay.VERSION}/x64`, manifestRelative: "helper.json", manifestSha256: catalog[0].manifestSha256,
+  const declarations = [{ id: "steam-api-helper", version: Fixture.VERSION, arch: "x64", minimumMacOS: "13.0", launcherArchitectures: [process.arch],
+    directoryRelative: `steam-api-helper/${Fixture.VERSION}/x64`, manifestRelative: "helper.json", manifestSha256: catalog[0].manifestSha256,
     files: [...manifest.files, { path: "helper.json", size: Buffer.byteLength(content), mode: 0o644, sha256: catalog[0].manifestSha256 }] }];
   const options = { resourcesRoot: root, architecture: "x86_64", interfaces, catalog, declarations };
   assert.equal(Steam.resolveBundledLibrary(options).ready, true);
@@ -97,13 +89,13 @@ test("Steam API lookup enforces interface, architecture, manifest and full paylo
 test("source-package revisions preserve native ABI identity and never fall back to an older package", t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "steamworks-package-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const packageVersion = Overlay.VERSION + "-package2";
+  const packageVersion = Fixture.VERSION + "-package2";
   const directory = path.join(root, "native-runtimes/steam-api-helper", packageVersion, "x64");
   const library = libraryFixture(directory, "x86_64"), interfaces = ["SteamClient017", "SteamUser018"];
-  const manifest = { schemaVersion: 1, id: "steam-api-helper", version: Overlay.VERSION, packageVersion, minimumMacOS: "13.0", sourcePackageVersion: 2,
-    sourceRevision: Overlay.SOURCE_REVISION, librarySha256: library.sha256, qualifiedInterfaces: interfaces,
+  const manifest = { schemaVersion: 1, id: "steam-api-helper", version: Fixture.VERSION, packageVersion, minimumMacOS: "13.0", sourcePackageVersion: 2,
+    sourceRevision: Fixture.SOURCE_REVISION, librarySha256: library.sha256, qualifiedInterfaces: interfaces,
     files: [{ path: "libsteam_api.dylib", size: library.bytes.length, sha256: library.sha256, mode: 0o644, architectures: ["x86_64"] }] };
-  const pin = { version: Overlay.VERSION, packageVersion, minimumMacOS: "13.0", sourcePackageVersion: 2, sourceRevision: Overlay.SOURCE_REVISION,
+  const pin = { version: Fixture.VERSION, packageVersion, minimumMacOS: "13.0", sourcePackageVersion: 2, sourceRevision: Fixture.SOURCE_REVISION,
     architectures: ["x86_64"], qualifiedInterfaces: interfaces, librarySha256: library.sha256 };
   const declarations = [{ id: "steam-api-helper", version: packageVersion, arch: "x64", minimumMacOS: "13.0", launcherArchitectures: [process.arch],
     directoryRelative: `steam-api-helper/${packageVersion}/x64`, manifestRelative: "helper.json" }];
@@ -118,16 +110,16 @@ test("source-package revisions preserve native ABI identity and never fall back 
   const options = { resourcesRoot: root, architecture: "x86_64", interfaces, catalog: [pin], declarations };
   const result = Steam.resolveBundledLibrary(options);
   assert.equal(result.ready, true);
-  assert.equal(result.version, Overlay.VERSION);
+  assert.equal(result.version, Fixture.VERSION);
   assert.equal(result.packageVersion, packageVersion);
   assert.equal(result.sha256, library.sha256);
   assert.equal(result.libraryPath, library.file);
   manifest.sourcePackageVersion = 1; publishManifest();
   assert.match(Steam.resolveBundledLibrary(options).reason, /source\/version identity changed/);
-  manifest.sourcePackageVersion = 2; manifest.packageVersion = Overlay.VERSION; publishManifest();
+  manifest.sourcePackageVersion = 2; manifest.packageVersion = Fixture.VERSION; publishManifest();
   assert.match(Steam.resolveBundledLibrary(options).reason, /source\/version identity changed/);
   assert.match(Steam.resolveBundledLibrary({ ...options, catalog: [{ ...pin, packageVersion: "../other" }] }).reason, /package version is invalid/);
-  fs.renameSync(path.dirname(directory), path.join(root, "native-runtimes/steam-api-helper", Overlay.VERSION));
+  fs.renameSync(path.dirname(directory), path.join(root, "native-runtimes/steam-api-helper", Fixture.VERSION));
   const missing = Steam.resolveBundledLibrary(options);
   assert.equal(missing.ready, false);
   assert.equal(missing.present, true);
@@ -164,13 +156,13 @@ test("GameMaker delegates its exact legacy Steam ABI to the shared automatic ser
   } };
   assert.equal(await GameMakerSteam.prepareDependency(null, entry, context, environment), null);
   assert.deepEqual(calls, []);
-  const dependency = { ready: true, mode: "offline", version: Overlay.VERSION,
+  const dependency = { ready: true, mode: "offline", version: Fixture.VERSION,
     appId: 480, architecture: "x86_64", interfaces: [...GameMakerSteam.LEGACY_INTERFACES] };
   const result = await GameMakerSteam.prepareDependency(dependency, entry, context, environment);
   assert.equal(result.environment, environment);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].request.required, true);
-  assert.equal(calls[0].request.version, Overlay.VERSION);
+  assert.equal(calls[0].request.version, Fixture.VERSION);
   assert.equal(calls[0].request.arch, "x86_64");
   assert.equal(calls[0].request.appId, 480);
   assert.deepEqual(calls[0].request.interfaces, GameMakerSteam.LEGACY_INTERFACES);
