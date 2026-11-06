@@ -4,8 +4,8 @@ const { readPeExports } = require("../../runtime/pe-exports");
 const { readMachOLoadCommands } = require("../../runtime/macho-load-commands");
 const { wineLayout } = require("../../runtime/wine-layout");
 
-const cache = new Map(), MAX_BYTES = 16 * 1024 * 1024;
-const names = ["vkCreateInstance", "vkGetMemoryWin32HandleKHR", "Direct3DCreate9", "Direct3DCreate9Ex"];
+const cache = new Map(), MAX_BYTES = 64 * 1024 * 1024;
+const names = ["vkCreateInstance", "vkGetMemoryWin32HandleKHR", "use-gl", "desktop", "wglCreateContext", "wglMakeCurrent"];
 function binary(file, format) {
   try {
     const stat = fs.lstatSync(file);
@@ -45,7 +45,7 @@ function win32MemoryAPI(install, architecture) {
 }
 
 function explicitBackend(args) {
-  return args.some(value => /^--(?:use-angle|use-gl|disable-gpu(?:-compositing)?|disable-webgl2?|disable-3d-apis|in-process-gpu|use-cmd-decoder)(?:=|$)/i.test(value));
+  return args.some(value => /^--(?:use-angle|use-gl|use-vulkan|disable-d3d11|use-warp|disable-gpu(?:-compositing)?|disable-webgl2?|disable-3d-apis|in-process-gpu|use-cmd-decoder)(?:=|$)/i.test(value));
 }
 function resolveRuntimeArguments(entry, context, launch) {
   const args = launch.arguments;
@@ -58,12 +58,15 @@ function resolveRuntimeArguments(entry, context, launch) {
         fs.realpathSync(path.resolve(directory, manifest.main)) !== fs.realpathSync(entry.indexHtml)) return args;
     if (manifest["chromium-args"] != null &&
         (typeof manifest["chromium-args"] !== "string" || explicitBackend(Arguments.parse(manifest["chromium-args"])))) return args;
-    const angle = binary(path.join(directory, "libGLESv2.dll"), "pe");
-    if (angle?.builtin || angle?.architecture !== launch.executableArchitecture ||
-        !codeExport(angle, "glGetString") || !codeExport(angle, "glDrawArrays") ||
-        !["Direct3DCreate9", "Direct3DCreate9Ex"].some(name => angle.names.has(name))) return args;
+    const egl = binary(path.join(directory, "libEGL.dll"), "pe");
+    const browser = binary(launch.executablePath, "pe");
+    if (egl?.builtin || egl?.architecture !== launch.executableArchitecture || !codeExport(egl, "eglInitialize") ||
+        browser?.architecture !== launch.executableArchitecture ||
+        !["use-gl", "desktop", "wglCreateContext", "wglMakeCurrent"].every(name => browser.names.has(name))) return args;
     if (win32MemoryAPI(launch.install, launch.executableArchitecture) !== "absent") return args;
-    return ["--use-angle=d3d9", ...args];
+    // Desktop GL uses Wine's WGL path directly. Choosing ANGLE D3D9 alone can
+    // still require DXVK's same unavailable Win32 shared-resource transport.
+    return ["--use-gl=desktop", ...args];
   } catch { return args; }
 }
 

@@ -747,15 +747,16 @@ test("changing Wine finishes the existing prefix update before short registry co
   assert.equal(fs.readFileSync(save, "utf8"), "existing save");
 });
 
-test("MV selects bundled ANGLE D3D9 only for a Wine bridge missing the Win32 memory API, preserving explicit choices", async t => {
+test("MV selects compiled desktop GL only for a Wine bridge missing the Win32 memory API, preserving explicit choices", async t => {
   const { peFixture } = require("./helpers/pe-fixture");
   const { image, X64 } = require("./fixtures/macho-image");
   const { composeRuntimeProviders } = require("../src/modules/shared/runtime/providers");
   const { createLauncher } = require("../src/core/launcher");
   const directory = fixture(t), entry = game(directory), install = installation(directory), dependencies = adapters(install);
-  function library(file, exports, { builtin = false, markers = [] } = {}) {
+  function library(file, exports, { builtin = false, markers = [], isDll = true } = {}) {
     const f = peFixture();
-    f.bytes.writeUInt16LE(0x2002, f.peOffset + 22);
+    f.bytes.writeUInt16LE(isDll ? 0x2002 : 2, f.peOffset + 22);
+    f.bytes.writeUInt16LE(2, f.optional + 68);
     f.bytes.writeUInt32LE(0x60000020, f.section + 36);
     if (builtin) f.bytes.write("Wine builtin DLL\0", 64);
     const base = f.raw + 0x600, rva = offset => 0x2000 + offset;
@@ -778,8 +779,9 @@ test("MV selects bundled ANGLE D3D9 only for a Wine bridge missing the Win32 mem
   fs.writeFileSync(path.join(unix, "ntdll.so"), native);
   for (const name of ["winevulkan.so", "win32u.so"]) fs.writeFileSync(path.join(unix, name), Buffer.concat([native, Buffer.from("vkCreateInstance\0")]));
   library(path.join(install.wineRoot, "lib/wine/i386-windows/winevulkan.dll"), ["vkGetDeviceProcAddr", "vkGetInstanceProcAddr"], { builtin: true });
-  const anglePath = path.join(entry.gamePath, "libGLESv2.dll");
-  library(anglePath, ["glDrawArrays", "glGetString"], { markers: ["Direct3DCreate9"] });
+  const browserPath = path.join(entry.gamePath, "Game.exe");
+  library(browserPath, [], { isDll: false, markers: ["use-gl", "desktop", "wglCreateContext", "wglMakeCurrent"] });
+  library(path.join(entry.gamePath, "libEGL.dll"), ["eglInitialize"]);
   const manifestPath = path.join(entry.gamePath, "package.json"), manifest = JSON.stringify({ main: "index.html" });
   fs.writeFileSync(manifestPath, manifest); entry.indexHtml = path.join(entry.gamePath, "index.html"); fs.writeFileSync(entry.indexHtml, "original html");
   Object.assign(entry, { moduleId: "mv", runtimeId: "sikarugir", launchArguments: "--seed 4" });
@@ -790,14 +792,14 @@ test("MV selects bundled ANGLE D3D9 only for a Wine bridge missing the Win32 mem
   const previousGraphics = dependencies.prepareGraphicsView;
   dependencies.prepareGraphicsView = async options => ({ ...await previousGraphics(options), graphicsBackend: "dxvk" });
   const prepared = await Launch.prepareLaunch(entry, context, dependencies);
-  assert.deepEqual(prepared.args.slice(-5), [prepared.windowsExecutablePath, "--use-angle=d3d9", "--locale=en", "--seed", "4"]);
-  assert.equal(dependencies.calls.some(call => call.args.includes("--use-angle=d3d9")), false, "prefix and registry helpers never receive browser switches");
+  assert.deepEqual(prepared.args.slice(-5), [prepared.windowsExecutablePath, "--use-gl=desktop", "--locale=en", "--seed", "4"]);
+  assert.equal(dependencies.calls.some(call => call.args.includes("--use-gl=desktop")), false, "prefix and registry helpers never receive browser switches");
   assert.equal(fs.readFileSync(manifestPath, "utf8"), manifest);
   assert.equal(fs.readFileSync(entry.indexHtml, "utf8"), "original html");
   assert.equal(entry.launchArguments, "--seed 4");
   assert.deepEqual(context.runtimeSettings.arguments, ["--locale=en"]);
   const launch = { install, executablePath: path.join(entry.gamePath, "Game.exe"), executableArchitecture: "x86", graphicsBackend: "dxvk", arguments: ["--seed", "4"] };
-  for (const arguments_ of [["--use-angle=vulkan"], ["--use-angle", "d3d11"], ["--use-gl=desktop"], ["--disable-gpu"], ["--disable-webgl"]]) {
+  for (const arguments_ of [["--use-angle=vulkan"], ["--use-angle", "d3d11"], ["--use-gl=desktop"], ["--disable-d3d11"], ["--disable-gpu"], ["--disable-webgl"]]) {
     assert.deepEqual(await context.resolveRuntimeArguments({ ...launch, arguments: arguments_ }), arguments_);
   }
   fs.writeFileSync(manifestPath, JSON.stringify({ main: "index.html", "chromium-args": "--use-angle=d3d11" }));
@@ -813,6 +815,6 @@ test("MV selects bundled ANGLE D3D9 only for a Wine bridge missing the Win32 mem
   fs.unlinkSync(path.join(unix, "win32u.so"));
   assert.deepEqual(await context.resolveRuntimeArguments(launch), launch.arguments, "missing native metadata remains unknown");
   fs.writeFileSync(path.join(unix, "win32u.so"), Buffer.concat([native, Buffer.from("vkCreateInstance\0")]));
-  library(anglePath, ["glDrawArrays", "glGetString"]);
-  assert.deepEqual(await context.resolveRuntimeArguments(launch), launch.arguments, "a bundled ANGLE without the D3D9 backend cannot be selected");
+  library(browserPath, [], { isDll: false, markers: ["use-gl", "desktop"] });
+  assert.deepEqual(await context.resolveRuntimeArguments(launch), launch.arguments, "a browser without WGL backend declarations cannot be selected");
 });
