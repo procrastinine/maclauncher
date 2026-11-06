@@ -31,7 +31,7 @@ function dll({ builtin = true, metalImport = false, metalExport = false, is64 = 
   return fixture.bytes;
 }
 function fixture(t) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'translator-api-action-'));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'translator-api-action-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const put = (relative, bytes) => { const file = path.join(root, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes); return file; };
   const vendor = path.join(root, 'wine');

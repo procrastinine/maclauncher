@@ -17,7 +17,7 @@ function pe({ is64 = false, builtin = false, game = false } = {}) {
 }
 
 test('real per-API wrapper preparation writes only explicit native API8 and preserves inherited D9VK and CNC prefix bytes', async t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'translator-api-inherited-'));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'translator-api-inherited-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const put = (relative, bytes) => {
     const file = path.join(root, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes); return file;

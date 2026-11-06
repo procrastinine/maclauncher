@@ -15,7 +15,7 @@ function renderer(t, root, engine) {
   return Description.describeTranslator(directory, { engine, id: engine, source: 'fixture' });
 }
 function fixture(t) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'translator-api-consumers-'));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'translator-api-consumers-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const dxmt = renderer(t, root, 'dxmt'), d3dmetal = renderer(t, root, 'd3dmetal');
   const plan = { runtime: 'crossover', apiMode: true, components: {
@@ -61,7 +61,7 @@ test('graphics API binding retains actual placements and canonical null without 
 
 test('per-API camera consumes used D3D11 DXMT and keeps its existing pair requirement independent', t => {
   const Temporal = require('../src/modules/crossover/temporal'), StreamlinePE = require('../src/modules/crossover/temporal/streamline/pe-exports');
-  const crypto = require('node:crypto'), root = fs.mkdtempSync(path.join(os.tmpdir(), 'api-camera-'));
+  const crypto = require('node:crypto'), root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'api-camera-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const put = (relative, bytes) => { const file = path.join(root, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes); return file; };
   const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');

@@ -18,7 +18,7 @@ function dll(imported) {
 }
 
 test('API options use installed descriptions without load checks, and Play rereads source facts when an unused API makes the package globally incompatible', async t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'translator-option-facts-'));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'translator-option-facts-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const put = (relative, bytes) => {
     const file = path.join(root, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes); return file;

@@ -6,7 +6,7 @@ const Vulkan = require('../src/modules/shared/vulkan');
 const { image, X64 } = require('./fixtures/macho-image');
 
 test('a KosmicKrisp package without an ICD manifest gets the same Vulkan API version on the Play placement and native routes', async t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vulkan-icd-manifest-'));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'vulkan-icd-manifest-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   // The package layout ships the driver and its loader, and no ICD JSON.
   const payload = path.join(root, 'payload', 'files'); fs.mkdirSync(payload, { recursive: true });

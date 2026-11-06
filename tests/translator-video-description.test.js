@@ -4,7 +4,7 @@ const Description = require('../src/modules/shared/runtime/translator-descriptio
 const { image, X64 } = require('./fixtures/macho-image');
 
 function fixture(t) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'translator-video-description-'));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'translator-video-description-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const put = (relative, options = {}) => {
     const file = path.join(root, relative); fs.mkdirSync(path.dirname(file), { recursive: true });

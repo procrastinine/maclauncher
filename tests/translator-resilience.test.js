@@ -8,7 +8,7 @@ const Loader = require('../src/modules/crossover/runtime/graphics-loader');
 const { peFixture } = require('./helpers/pe-fixture');
 const { image, X64 } = require('./fixtures/macho-image');
 function scratch(t) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'translator-resilience-'));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'translator-resilience-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   return root;
 }

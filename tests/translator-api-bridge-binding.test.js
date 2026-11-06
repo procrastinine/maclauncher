@@ -24,7 +24,7 @@ function component(root, name, apis) {
 function legacy(base) { return Plan.resolvePlan({ runtime: 'sikarugir', included: [base], selections: { 'd3d-renderer': base.id } }); }
 
 test('per-API bridge destinations conflict across sources while one physical bridge retains both logical Unix aliases', async t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'translator-api-bridge-'));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'translator-api-bridge-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const a = component(root, 'a', [11]), b = component(root, 'b', [11, 12]);
   const compatibility = Object.fromEntries([a, b].map(({ description }) => [description.id, Binary.compatibility(description,

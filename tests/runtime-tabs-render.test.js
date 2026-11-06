@@ -898,7 +898,7 @@ test('translator source links use one caption with explicit project and Template
 
 test('included translator references use host records and shared release facts without managed installs or mutation controls', async t => {
   const fs=require('node:fs'),os=require('node:os');
-  const root=fs.mkdtempSync(path.join(os.tmpdir(),'translator-references-'));
+  const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'translator-references-')));
   const previousHome=process.env.HOME;process.env.HOME=path.join(root,'home');fs.mkdirSync(process.env.HOME);
   t.after(()=>{process.env.HOME=previousHome;fs.rmSync(root,{recursive:true,force:true});});
   t.mock.method(globalThis,'fetch',()=>assert.fail('Reference status must stay offline'));

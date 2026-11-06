@@ -6,7 +6,7 @@ const { peFixture } = require('./helpers/pe-fixture');
 const { image, X64 } = require('./fixtures/macho-image');
 
 test('API bindings preserve inspected aliases to the same real PE and Unix source while linking different sources', t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'translator-api-alias-'));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'translator-api-alias-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const put = (relative, bytes) => {
     const file = path.join(root, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes); return file;

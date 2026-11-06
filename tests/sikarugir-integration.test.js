@@ -10,7 +10,7 @@ const { peFixture, versionResource } = require("./helpers/pe-fixture");
 const { image, X64 } = require("./fixtures/macho-image");
 
 function fixture(t) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-sikarugir-integration-"));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-sikarugir-integration-")));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   return { root, userDataDir: path.join(root, "data") };
 }

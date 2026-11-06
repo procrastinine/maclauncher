@@ -6,7 +6,7 @@ const { peFixture } = require('./helpers/pe-fixture');
 const { image, X64 } = require('./fixtures/macho-image');
 const layout = { architecture: 'x86_64', unixName: 'x86_64-unix' };
 function scratch(t) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'translator-api-placement-'));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'translator-api-placement-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root;
 }
 function put(root, relative, bytes) {
