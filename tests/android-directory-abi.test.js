@@ -1,7 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {androidSource}=require('./helpers/android-sources.cjs');
 const {spawnSync}=require('node:child_process');
 test('Guest directories retain per-stream results and share real/OBB seek ownership',async t=>{
- const root=path.resolve(__dirname,'..'),source=path.join(root,'src/modules/android/native'),klepton=process.env.KLEPTON_SOURCE||path.join(root,'src/external/klepton'),java=process.env.JAVA_HOME;
+ const root=path.resolve(__dirname,'..'),source=path.join(root,'src/modules/android/native'),klepton=process.env.KLEPTON_SOURCE||androidSource('klepton'),java=process.env.JAVA_HOME;
  if(process.platform!=='darwin'||!java||!fs.existsSync(path.join(klepton,'runtime/guest/kl_obbmap.c')))return t.skip('Requires macOS, Java headers and pinned Klepton');
  const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'android-directory-'));t.after(()=>fs.rmSync(tmp,{recursive:true,force:true}));
  const {prepareObbSource,prepareDirectoryCallers}=await import(require('node:url').pathToFileURL(path.join(source,'obb-source.mjs')));

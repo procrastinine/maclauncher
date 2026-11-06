@@ -1,4 +1,5 @@
 const test=require('node:test');
+const {androidSource}=require('./helpers/android-sources.cjs');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const os=require('node:os');
@@ -67,8 +68,8 @@ test('original Binder references retain identity and callbacks across provider R
 
 test('AOSP Binder RPC exchanges callbacks and owned file descriptors between processes',async t=>{
   if(process.platform!=='darwin'||process.arch!=='arm64')return t.skip('Apple Silicon native transport');
-  const nativeSource=process.env.AOSP_NATIVE_SOURCE||path.resolve('src/external/aosp-native');
-  const systemCore=process.env.AOSP_SYSTEM_CORE_SOURCE||path.resolve('src/external/aosp-system-core');
+  const nativeSource=process.env.AOSP_NATIVE_SOURCE||androidSource('aosp-native');
+  const systemCore=process.env.AOSP_SYSTEM_CORE_SOURCE||androidSource('aosp-system-core');
   if(!fs.existsSync(path.join(nativeSource,'.git'))||!fs.existsSync(path.join(systemCore,'.git')))return t.skip('Pinned AOSP native and system/core checkouts are required');
   const python=process.env.PYTHON,ninja=process.env.NINJA;
   if(!python||!ninja||!process.env.ANDROID_BLUEPRINT_PARSER)return t.skip('Requires the configured Python, Ninja and original Blueprint parser');

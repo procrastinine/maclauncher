@@ -1,7 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {androidSource}=require('./helpers/android-sources.cjs');
 const{spawnSync}=require('node:child_process');
 test('Complete original Bionic mutex attribute family feeds the shared native mutex owner',async t=>{
- const root=path.resolve(__dirname,'..'),source=path.join(root,'src/modules/android/native'),klepton=process.env.KLEPTON_SOURCE||path.join(root,'src/external/klepton'),bionicSource=process.env.BIONIC_SOURCE||path.join(root,'src/external/aosp-bionic'),runtime=process.env.KLEPTON_NATIVE_RUNTIME;
+ const root=path.resolve(__dirname,'..'),source=path.join(root,'src/modules/android/native'),klepton=process.env.KLEPTON_SOURCE||androidSource('klepton'),bionicSource=process.env.BIONIC_SOURCE||androidSource('aosp-bionic'),runtime=process.env.KLEPTON_NATIVE_RUNTIME;
  if(process.platform!=='darwin'||!runtime||!fs.existsSync(klepton)||!fs.existsSync(bionicSource))return t.skip('Requires macOS runtime and pinned Bionic/Klepton');
  const build=fs.mkdtempSync(path.join(os.tmpdir(),'android-mutexattr-'));t.after(()=>fs.rmSync(build,{recursive:true,force:true}));
  const pthreadSource=path.join(build,'pthread-source.c'),shimSource=path.join(build,'shim.c');fs.copyFileSync(path.join(klepton,'runtime/libc/kl_pthread.c'),pthreadSource);fs.copyFileSync(path.join(klepton,'runtime/libc/kl_shim.c'),shimSource);

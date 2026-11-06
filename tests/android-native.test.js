@@ -1,4 +1,5 @@
 const test = require('node:test');
+const {androidSource}=require('./helpers/android-sources.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -25,7 +26,7 @@ test('Complete Bionic pthread attributes retain actual host thread ownership',t=
   assert.match(run(binary,[path.resolve(runtime,'native/libklepton-jvm.dylib'),fs.realpathSync(ids)]),/PASS complete Bionic pthread attributes, scheduling ABI, supplied stacks, inheritance and live detach state/);
 });
 test('Android property iteration and raw file calls share native owners',async t=>{
-  const runtime=process.env.KLEPTON_NATIVE_RUNTIME,klepton=process.env.KLEPTON_SOURCE||path.join(root,'src/external/klepton');
+  const runtime=process.env.KLEPTON_NATIVE_RUNTIME,klepton=process.env.KLEPTON_SOURCE||androidSource('klepton');
   const bionicSource=process.env.BIONIC_SOURCE,include=process.env.ANDROID_NDK_HEADERS,importsDirectory=process.env.ANDROID_IMPORT_DECLARATIONS,python=process.env.PYTHON;
   if(process.platform!=='darwin'||!runtime||!bionicSource||!include||!importsDirectory||!python||!fs.existsSync(path.join(klepton,'runtime/libc/kl_libc.c')))return t.skip('Requires macOS, pinned Bionic/NDK declarations, Klepton and an installed Android native runtime');
   const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-libc-capabilities-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
@@ -50,7 +51,7 @@ test('Android property iteration and raw file calls share native owners',async t
   assert.match(run(binary,[path.resolve(runtime,'native/libklepton-jvm.dylib'),fs.realpathSync(ids)]),/PASS shared properties, fortified file ownership and Linux syscall delegates/);
 });
 test('Android inline Linux syscalls preserve native machine state',t=>{
-  const runtime=process.env.KLEPTON_NATIVE_RUNTIME,klepton=process.env.KLEPTON_SOURCE||path.join(root,'src/external/klepton');
+  const runtime=process.env.KLEPTON_NATIVE_RUNTIME,klepton=process.env.KLEPTON_SOURCE||androidSource('klepton');
   if(process.platform!=='darwin'||process.arch!=='arm64'||!runtime||!fs.existsSync(path.join(klepton,'runtime/kl_x18.h')))return t.skip('Requires Apple Silicon, Klepton headers and an installed Android native runtime');
   const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-inline-syscall-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
   const binary=path.join(temporary,'probe');
@@ -255,7 +256,7 @@ test('Android memory relocation and resolver preserve native ownership', t => {
 });
 
 test('Android x18 scan reuses its survey without changing decoder or emitted bytes', async t => {
-  const klepton=process.env.KLEPTON_SOURCE||path.join(root,'src/external/klepton');
+  const klepton=process.env.KLEPTON_SOURCE||androidSource('klepton');
   if(process.platform!=='darwin'||process.arch!=='arm64'||!fs.existsSync(path.join(klepton,'runtime/kl_x18.c')))
     return t.skip('Requires Apple Silicon and the pinned Klepton source');
   const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-x18-survey-'));
@@ -268,7 +269,7 @@ test('Android x18 scan reuses its survey without changing decoder or emitted byt
 });
 
 test('Android ELF instruction context preserves unsectioned functions and typed data',async t=>{
-  const klepton=process.env.KLEPTON_SOURCE||path.join(root,'src/external/klepton');
+  const klepton=process.env.KLEPTON_SOURCE||androidSource('klepton');
   const runtime=process.env.KLEPTON_NATIVE_RUNTIME;
   if(process.platform!=='darwin'||process.arch!=='arm64'||!runtime||!fs.existsSync(path.join(klepton,'runtime/kl_image.c')))return t.skip('Requires Apple Silicon, the pinned Klepton source and Android native runtime');
   const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-image-code-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
@@ -293,7 +294,7 @@ test('Android ELF instruction context preserves unsectioned functions and typed 
 });
 
 test('Android x18 ADR veneer preserves the original address and live registers', async t => {
-  const klepton=process.env.KLEPTON_SOURCE||path.join(root,'src/external/klepton');
+  const klepton=process.env.KLEPTON_SOURCE||androidSource('klepton');
   if(process.platform!=='darwin'||process.arch!=='arm64'||!fs.existsSync(path.join(klepton,'runtime/kl_x18.c')))
     return t.skip('Requires Apple Silicon and the pinned Klepton source');
   const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-x18-adr-'));
@@ -308,7 +309,7 @@ test('Android x18 ADR veneer preserves the original address and live registers',
 });
 
 test('Android x18 literal loads preserve live memory and register width across distant pools', async t => {
-  const klepton=process.env.KLEPTON_SOURCE||path.join(root,'src/external/klepton');
+  const klepton=process.env.KLEPTON_SOURCE||androidSource('klepton');
   if(process.platform!=='darwin'||process.arch!=='arm64'||!fs.existsSync(path.join(klepton,'runtime/kl_x18.c')))
     return t.skip('Requires Apple Silicon and the pinned Klepton source');
   const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-x18-literal-'));
@@ -321,7 +322,7 @@ test('Android x18 literal loads preserve live memory and register width across d
 });
 
 test('Android x18 stack writeback preserves native frame and register semantics', async t => {
-  const klepton=process.env.KLEPTON_SOURCE||path.join(root,'src/external/klepton');
+  const klepton=process.env.KLEPTON_SOURCE||androidSource('klepton');
   if(process.platform!=='darwin'||process.arch!=='arm64'||!fs.existsSync(path.join(klepton,'runtime/kl_x18.c')))
     return t.skip('Requires Apple Silicon and the pinned Klepton source');
   const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-x18-stack-'));
@@ -364,7 +365,7 @@ test('Android EGL keeps submitted images immutable across buffer reuse and idle 
     graphics=path.join(projected,'libklepton-graphics.dylib');fs.unlinkSync(graphics);
     try{fs.linkSync(path.resolve(process.env.KLEPTON_PIXEL_COPY_GRAPHICS),graphics);}catch{fs.copyFileSync(path.resolve(process.env.KLEPTON_PIXEL_COPY_GRAPHICS),graphics);}
   }
-  const binary=path.join(temporary,'egl-copy'),headers=path.join(process.env.ANDROID_GLES_HEADERS||path.resolve(root,'src/external/maclauncher-android/src/external/android-gles-headers'),'include');
+  const binary=path.join(temporary,'egl-copy'),headers=path.join(process.env.ANDROID_GLES_HEADERS||androidSource('android-gles-headers'),'include');
   run(path.join(home,'bin/javac'),['--release','21','-d',temporary,path.join(fixtures,'EglPixelCopyProbe.java')]);
   run('clang++',['-std=c++20','-fobjc-arc','-mmacosx-version-min=13.0','-I'+source,'-I'+headers,'-I'+path.join(home,'include'),'-I'+path.join(home,'include/darwin'),
     path.join(fixtures,'egl-pixel-copy.mm'),'-L'+path.join(home,'lib/server'),'-ljvm','-Wl,-rpath,'+path.join(home,'lib/server'),'-Wl,-rpath,'+native,
@@ -535,7 +536,7 @@ test('Android native heap statistics reflect real allocations without retaining 
 });
 
 test('Android GLES header inputs reject revision, byte and containment mismatches',async t=>{
- const headers=process.env.ANDROID_GLES_HEADERS||path.join(root,'src/external/maclauncher-android/src/external/android-gles-headers');
+ const headers=process.env.ANDROID_GLES_HEADERS||androidSource('android-gles-headers');
  if(!fs.existsSync(path.join(headers,'include/GLES3/gl3.h')))return t.skip('Pinned GLES build headers are not initialized');
  const {verifyGlesHeaders}=await import(require('node:url').pathToFileURL(path.join(source,'gles-headers.mjs')).href);
  const manifest=verifyGlesHeaders(headers);for(const file of ['include/GLES/gl.h','include/GLES2/gl2ext.h','include/GLES3/gl32.h','include/EGL/egl.h','include/KHR/khrplatform.h'])assert.ok(manifest.files.some(entry=>entry.path===file),file);

@@ -1,7 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');
+const {androidSource}=require('./helpers/android-sources.cjs');
 const {spawnSync}=require('./helpers/android-java');
 test('Android planar video buffers preserve orientation, shared conversion and original EGL image lifetime',t=>{
- const angle=process.env.ANDROID_ANGLE_ROOT,headers=path.join(process.env.ANDROID_GLES_HEADERS||path.resolve('src/external/maclauncher-android/src/external/android-gles-headers'),'include');
+ const angle=process.env.ANDROID_ANGLE_ROOT,headers=path.join(process.env.ANDROID_GLES_HEADERS||androidSource('android-gles-headers'),'include');
  if(process.platform!=='darwin'||process.env.KLEPTON_GRAPHICS_RUN!=='1'||!angle)return t.skip('Requires macOS Metal and an explicit ANGLE provider');
  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'android-video-image-'));t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));const binary=path.join(directory,'probe'),source=path.resolve('src/modules/android/native');
  const args=['-std=c++20','-O2','-fobjc-arc','-I'+headers,'-I'+source,path.resolve('tests/fixtures/android-native/video-image.mm'),path.join(source,'video-image.mm'),path.join(source,'video-pixels.mm'),'-o',binary];

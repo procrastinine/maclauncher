@@ -1,8 +1,9 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {androidSource}=require('./helpers/android-sources.cjs');
 const {spawnSync}=require('node:child_process');
 
 test('shared hardware veneers preserve dynamic SP arithmetic and SIMD post-index',async t=>{
- const klepton=process.env.KLEPTON_SOURCE||path.resolve('src/external/klepton');
+ const klepton=process.env.KLEPTON_SOURCE||androidSource('klepton');
  if(process.platform!=='darwin'||process.arch!=='arm64'||!fs.existsSync(path.join(klepton,'runtime/kl_x18.c')))return t.skip('Requires Apple Silicon and original Klepton source');
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-native-stack-simd-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const {prepareX18Source,prepareX18Core}=await import('../src/modules/android/native/x18-source.mjs');
