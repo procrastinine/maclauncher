@@ -5,9 +5,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include <math.h>
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 #import <MetalFX/MetalFX.h>
+#import <objc/runtime.h>
 #define WINEMETAL_API
 #include "winemetal_thunks.h"
 #include "scene-aovs.h"
@@ -24,12 +26,77 @@ typedef uint32_t (*MLSceneDemand)(uint32_t);
 static MLSceneSetter setScene;
 static MLSceneClear clearScene;
 static MLSceneDemand sceneDemand;
+typedef int (*MLDestinationSetter)(void*,void*,void*,void*,void*,uint64_t);
+static MLDestinationSetter setDestination;
+static MLSceneClear clearDestination;
+static MLSceneClear releaseOwner;
+static int destinationEnabled;
 static pthread_once_t resolveCamera = PTHREAD_ONCE_INIT;
 
 static void resolve_camera(void) {
   setCamera = (MLCameraSetter)dlsym(RTLD_DEFAULT, "rsSetTemporalCamera");
+  const char*enabled=getenv("MACLAUNCHER_NGX_SCENE_DESTINATION_ENABLE");destinationEnabled=enabled&&!strcmp(enabled,"1");
+  if(destinationEnabled){
+    setDestination=(MLDestinationSetter)dlsym(RTLD_DEFAULT,"rsSetTemporalSceneDestinationForTextures");
+    clearDestination=(MLSceneClear)dlsym(RTLD_DEFAULT,"rsClearTemporalSceneDestinationTextures");
+    releaseOwner=(MLSceneClear)dlsym(RTLD_DEFAULT,"rsReleaseTemporalOwner");
+  }
   uint32_t (*api)(void)=(void*)dlsym(RTLD_DEFAULT,"rsSceneAovAPI");
   if(api&&api()==RS_SCENE_AOV_ABI_VERSION){setScene=(void*)dlsym(RTLD_DEFAULT,"rsSetTemporalAovsForTexturesObserved");clearScene=(void*)dlsym(RTLD_DEFAULT,"rsClearTemporalAovsTextures");sceneDemand=(void*)dlsym(RTLD_DEFAULT,"rsGetSceneAovDemand");}
+}
+
+@interface MLDestinationOwner:NSObject {@public void*key;}
+@end
+@implementation MLDestinationOwner
+-(void)dealloc{if(clearDestination&&key)clearDestination(key);if(releaseOwner&&key)releaseOwner(key);[super dealloc];}
+@end
+static char destinationAssociation;
+static int known_scene_color(const MLStreamlineNativeResourcesV2*value){
+  const MLStreamlineNativeResources*base=&value->base;
+  if(base->version!=2||base->size!=sizeof(*value))return 0;
+  const struct RSImageColorDescription*c=&value->sceneColor;
+  return value->sceneColorKnown==1&&!value->reserved&&value->scenePass<=RS_SCENE_AOV_TEMPORAL_INPUT&&value->sceneColorPass<=RS_SCENE_AOV_TEMPORAL_INPUT&&c->size==sizeof(*c)&&c->version==1&&
+    c->primaries<=RS_COLOR_BT2020&&c->transfer==RS_COLOR_LINEAR&&c->range<=RS_COLOR_LIMITED&&c->alpha<=RS_COLOR_OPAQUE&&
+    !c->reserved&&!(c->flags&~RS_COLOR_SCENE_REFERRED)&&isfinite(c->referenceWhite)&&c->referenceWhite>0&&
+    isfinite(c->peakLuminance)&&c->peakLuminance>=c->referenceWhite&&isfinite(c->blackLuminance)&&
+    c->blackLuminance>=0&&c->blackLuminance<c->peakLuminance&&isfinite(c->hlgSystemGamma)&&c->hlgSystemGamma>0;
+}
+struct MLDestinationCall {
+  struct unixcall_mtlcommandbuffer_temporal_scale *recording;
+  uint64_t frame;int result;
+};
+static void bind_destination(void*storage,void*actualWindow){
+  struct MLDestinationCall*call=storage;
+  const struct unixcall_mtlcommandbuffer_temporal_scale*p=call->recording;
+  call->result=setDestination((void*)p->scaler,actualWindow,(void*)p->color,(void*)p->depth,(void*)p->motion,call->frame);
+}
+static void publish_destination(struct unixcall_mtlcommandbuffer_temporal_scale*recording,const struct WMTFXTemporalScalerProps*props){
+  if(!destinationEnabled)return;
+  typedef int(*WithWindow)(uint64_t,void(*)(void*,void*),void*);
+  const MLStreamlineNativeResourcesV2*value=&props->streamline;
+  const MLStreamlineNativeResources*base=&value->base;
+  void*library;WithWindow withWindow;const char*path;
+  struct MLDestinationCall call={recording,base->frameId,RS_TEMPORAL_UNAVAILABLE};
+  if(clearDestination)clearDestination((void*)recording->scaler);
+  // Old producers stop at the original prefix. Read no tail until the exact
+  // new layout has been declared by this actual typed recording.
+  if(!setDestination||!clearDestination||!releaseOwner||!known_scene_color(value)||
+     !base->frameId||base->frameId!=props->camera.frameId||base->viewId!=props->camera.viewportId||
+     !base->epoch||!value->destinationWindow||!isfinite(props->camera.frameTimeMs)||props->camera.frameTimeMs<=0||
+     !recording->scaler||!recording->color||!recording->depth||!recording->motion)return;
+  id<MTLCommandBuffer>commands=(id<MTLCommandBuffer>)recording->cmdbuf;
+  if(!commands.retainedReferences||commands.status>=MTLCommandBufferStatusCommitted)return;
+  path=getenv("MACLAUNCHER_NGX_WINEMAC_LIBRARY");if(!path||path[0]!='/')return;
+  library=dlopen(path,RTLD_NOW|RTLD_LOCAL|RTLD_NOLOAD);if(!library)return;
+  withWindow=(WithWindow)dlsym(library,"MacLauncherWineMacWithWindow1");
+  if(withWindow&&withWindow(value->destinationWindow,bind_destination,&call)&&call.result==RS_TEMPORAL_OK){
+    id scaler=(id)recording->scaler;
+    if(!objc_getAssociatedObject(scaler,&destinationAssociation)){
+      MLDestinationOwner*owner=[MLDestinationOwner new];owner->key=(void*)recording->scaler;
+      objc_setAssociatedObject(scaler,&destinationAssociation,owner,OBJC_ASSOCIATION_RETAIN_NONATOMIC);[owner release];
+    }
+  }
+  dlclose(library);
 }
 
 @interface MLStreamlineCopies:NSObject {
@@ -56,34 +123,42 @@ static id<MTLTexture> snapshot_image(id<MTLCommandBuffer>commands,const MLStream
   [blit copyFromTexture:input sourceSlice:0 sourceLevel:0 sourceOrigin:(MTLOrigin){source->x,source->y,0} sourceSize:(MTLSize){source->width,source->height,1} toTexture:*storage destinationSlice:0 destinationLevel:0 destinationOrigin:(MTLOrigin){0,0,0}];[blit endEncoding];
   return view;
 }
-static void publish_scene(struct unixcall_mtlcommandbuffer_temporal_scale *params,const struct WMTFXTemporalScalerProps *props){
+static int publish_scene(struct unixcall_mtlcommandbuffer_temporal_scale *params,const struct WMTFXTemporalScalerProps *props){
+  if(!destinationEnabled)return 0;
   if(clearScene)clearScene((void*)params->scaler);
-  const MLStreamlineNativeResources *source=&props->streamline;
+  const MLStreamlineNativeResources *source=&props->streamline.base;
   const uint32_t pair=(1u<<RS_SCENE_AOV_HUDLESS_COLOR)|(1u<<RS_SCENE_AOV_UI_COLOR_ALPHA);
-  if(!setScene||!clearScene||!sceneDemand||(sceneDemand(1)&pair)!=pair||source->size!=sizeof(*source)||source->version!=1||!source->frameId||!source->epoch||
-      source->frameId!=props->camera.frameId||source->viewId!=props->camera.viewportId||!source->hudless.texture||!source->ui.texture)return;
+  if(!setScene||!clearScene||!known_scene_color(&props->streamline)||!source->frameId||!source->epoch||
+      source->frameId!=props->camera.frameId||source->viewId!=props->camera.viewportId||
+      !isfinite(props->camera.frameTimeMs)||props->camera.frameTimeMs<=0)return 0;
   id<MTLCommandBuffer>commands=(id<MTLCommandBuffer>)params->cmdbuf;
-  if(!commands.retainedReferences||commands.status>=MTLCommandBufferStatusCommitted)return;
+  if(!commands.retainedReferences||commands.status>=MTLCommandBufferStatusCommitted)return 0;
+  const float exposure=props->pre_exposure==0?1:props->pre_exposure;
+  if(!isfinite(exposure)||exposure<=0)return 0;
+  int bound=0;
   @autoreleasepool{
     MLStreamlineCopies *copies=[MLStreamlineCopies new];
-    copies->hudless=snapshot_image(commands,&source->hudless,&copies->hudlessStorage);
-    copies->ui=snapshot_image(commands,&source->ui,&copies->uiStorage);
+    if(sceneDemand&&(sceneDemand(1)&pair)==pair&&source->hudless.texture&&source->ui.texture){
+      copies->hudless=snapshot_image(commands,&source->hudless,&copies->hudlessStorage);
+      copies->ui=snapshot_image(commands,&source->ui,&copies->uiStorage);
+    }
     // The command handler retains copies even for an abandoned/unsubmitted
     // command until that command is destroyed. Core retirement is independent.
     [commands addCompletedHandler:^(id<MTLCommandBuffer>finished){(void)finished;[copies self];}];
-    if(copies->hudless&&copies->ui){
       RSSceneAovs packet={0};packet.size=sizeof(packet);packet.version=1;packet.frameId=source->frameId;packet.viewId=source->viewId+1;packet.epoch=source->epoch;packet.imageRevision=source->imageRevision;
-      // No scene-radiance AOV is published. Its linear color descriptor is
-      // unused; encoded HUD and UI each retain their actual independent tags.
-      packet.color=(struct RSImageColorDescription){sizeof(packet.color),1,RS_COLOR_BT709,RS_COLOR_LINEAR,RS_COLOR_FULL,RS_COLOR_OPAQUE,203,203,0,1.2f,0,0};
-      packet.preExposure=1;packet.pass=packet.colorPass=RS_SCENE_AOV_AFTER_TRANSPARENT;packet.hudlessColor=source->hudlessColor;packet.uiColor=source->uiColor;
+      packet.color=props->streamline.sceneColor;packet.preExposure=exposure;
+      packet.pass=props->streamline.scenePass;packet.colorPass=props->streamline.sceneColorPass;
+      packet.hudlessColor=source->hudlessColor;packet.uiColor=source->uiColor;
+    if(copies->hudless&&copies->ui){
       packet.images[RS_SCENE_AOV_HUDLESS_COLOR]=(RSSceneAovImage){(void*)copies->hudless,0,0,(uint32_t)copies->hudless.width,(uint32_t)copies->hudless.height,RS_SCENE_AOV_COLOR,RS_SCENE_AOV_SPACE_NONE,0,RS_SCENE_AOV_TOP_LEFT,1,0,RS_SCENE_AOV_AFTER_TRANSPARENT,0};
       packet.images[RS_SCENE_AOV_UI_COLOR_ALPHA]=(RSSceneAovImage){(void*)copies->ui,0,0,(uint32_t)copies->ui.width,(uint32_t)copies->ui.height,RS_SCENE_AOV_COLOR,RS_SCENE_AOV_SPACE_NONE,0,RS_SCENE_AOV_TOP_LEFT,1,0,RS_SCENE_AOV_AFTER_TRANSPARENT,0};
-      RSSceneAovRetirement observer={sizeof(observer),1,[copies retain],retire_scene};
-      if(setScene((void*)params->scaler,(void*)params->color,(void*)params->depth,(void*)params->motion,&packet,&observer)!=RS_TEMPORAL_OK)[copies release];
     }
+    RSSceneAovRetirement observer={sizeof(observer),1,[copies retain],retire_scene};
+    bound=setScene((void*)params->scaler,(void*)params->color,(void*)params->depth,(void*)params->motion,&packet,&observer)==RS_TEMPORAL_OK;
+    if(!bound)[copies release];
     [copies release];
   }
+  return bound;
 }
 static int create_temporal(void *data) {
   struct unixcall_mtldevice_newfxtemporalscaler *params=data;
@@ -110,9 +185,10 @@ static int create_temporal(void *data) {
 static int temporal(void *data) {
   struct unixcall_mtlcommandbuffer_temporal_scale *params = data;
   const struct WMTFXTemporalScalerProps *props = params->props.ptr;
-  if(@available(macOS 14.4,*))((id<MTLFXTemporalScaler>)params->scaler).reactiveMaskTexture=(id<MTLTexture>)props->reactive_texture;
   pthread_once(&resolveCamera, resolve_camera);
-  publish_scene(params,props);
+  publish_destination(params,props);
+  if(@available(macOS 14.4,*))((id<MTLFXTemporalScaler>)params->scaler).reactiveMaskTexture=(id<MTLTexture>)props->reactive_texture;
+  if(!publish_scene(params,props)&&clearDestination)clearDestination((void*)params->scaler);
   if (setCamera) setCamera((void *)params->scaler, (void *)params->cmdbuf,
       props->camera.size == sizeof(RSTemporalCamera) ? &props->camera : NULL);
   return originalTemporal(data);

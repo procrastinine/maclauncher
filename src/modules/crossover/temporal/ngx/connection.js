@@ -25,7 +25,11 @@ function resolve({ runtimeId, install, translatorPlan, executableArchitecture },
     nativeWine: path.join(layout.unixRoot, 'winevulkan.so'), nativeMacDriver: path.join(layout.unixRoot, 'winemac.so'), transport: 2,
     originalOutputRetained: true, activationReady: false };
 }
-function environment(connection, { macDriverPath = connection?.nativeMacDriver } = {}) {
-  return { MACLAUNCHER_NGX_SCENE_ENABLE: connection ? '1' : '0', MACLAUNCHER_NGX_WINEMAC_LIBRARY: connection && path.isAbsolute(macDriverPath || '') ? macDriverPath : '' };
+function environment(connection, { macDriverPath = connection?.nativeMacDriver, sceneDestinationRequested = Boolean(connection) } = {}) {
+  return { MACLAUNCHER_NGX_SCENE_ENABLE: connection ? '1' : '0', MACLAUNCHER_NGX_SCENE_DESTINATION_ENABLE: sceneDestinationRequested ? '1' : '0', MACLAUNCHER_NGX_WINEMAC_LIBRARY: path.isAbsolute(macDriverPath || '') ? macDriverPath : '' };
 }
-module.exports = { TRANSLATOR, WINE, resolve, environment };
+function windowModule(install, { layoutFor = wineLayout } = {}) {
+  try { const layout = layoutFor(install);return layout?.unixRoot ? path.join(layout.unixRoot, 'winemac.so') : ''; }
+  catch { return ''; }
+}
+module.exports = { TRANSLATOR, WINE, resolve, environment, windowModule };

@@ -427,7 +427,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   if (existingEnvironment?.running) {
     for (const key of ["WINEMSYNC", "WINEESYNC"]) { delete overrides[key]; delete environment[key]; }
   }
-  Object.assign(overrides, require("../temporal/ngx/connection").environment(ngxScene, { macDriverPath: winemac?.path || ngxScene?.nativeMacDriver }));
+  Object.assign(overrides, require("../temporal/ngx/connection").environment(ngxScene, { macDriverPath: winemac?.path || ngxScene?.nativeMacDriver, sceneDestinationRequested: settings.dlss === true || DLSS.needsSceneInputs(entry.effects) }));
   if (Object.keys(overrides).length) args.push("--env", wineEnvironmentString(overrides));
   if (dll) args.push("--dll", dll);
   if (settings.wineDebug) args.push("--debugmsg", safeText(settings.wineDebug, "Wine debug channels"));

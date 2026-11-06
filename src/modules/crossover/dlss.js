@@ -7,14 +7,16 @@ const { usedForApi } = require("../shared/runtime/translator-roles");
 const DLLS = Object.freeze(["nvapi64", "nvngx"]);
 const ENVIRONMENT = Object.freeze(["DXMT_ENABLE_NVEXT", "D3DM_ENABLE_METALFX"]);
 
-function withTemporalSelection(settings, effects) {
+function needsSceneInputs(effects) {
   const methods = require("../shared/effects/execution-requirements").analyze({effects}).methods;
   const contracts = require("../shared/effects/operation-contracts.mjs");
-  const scene = methods.temporal.length > 0 || methods.neural.some(method => contracts.NEURAL[method]?.history === "scene") ||
+  return methods.temporal.length > 0 || methods.neural.some(method => contracts.NEURAL[method]?.history === "scene") ||
     methods.generation.some(method => contracts.GENERATION[method]?.scene === true);
+}
+function withTemporalSelection(settings, effects) {
   // Preserve saved runtime integration, including its ability to expose the
   // game's temporal inputs before a shared replacement is selected live.
-  return { ...settings, dlss: settings.dlss === true || scene };
+  return { ...settings, dlss: settings.dlss === true || needsSceneInputs(effects) };
 }
 
 function hasLibraries(directory) {
@@ -70,4 +72,4 @@ async function hasD3DMetalPathBridge(engineRoot) {
   } catch { return false; }
 }
 
-module.exports = { DLLS, ENVIRONMENT, withTemporalSelection, hasLibraries, hasPlanLibraries, checkSelection, environment, hasD3DMetalPathBridge };
+module.exports = { DLLS, ENVIRONMENT, needsSceneInputs, withTemporalSelection, hasLibraries, hasPlanLibraries, checkSelection, environment, hasD3DMetalPathBridge };

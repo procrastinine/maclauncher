@@ -3,10 +3,24 @@
 #include "camera-transport.hpp"
 #include "image-color.h"
 #include "streamline-snapshot.hpp"
+#include "scene-aovs.h"
 
 // This is an owned, additive D3D11 side channel. Its resources are COM objects
 // only in the PE half; the DXMT recording boundary resolves native textures.
 inline constexpr GUID MLTemporalStreamlineGuid={0x7ace5da4,0xe89b,0x46ed,{0x92,0x94,0x51,0x40,0x6b,0x3a,0x01,0x21}};
+// One-shot existing scene metadata, supplied explicitly for the exact source
+// frame/view. Only numeric color evidence is consumed, never texture pointers.
+inline constexpr GUID MLTemporalSceneColorGuid={0x33bd24cb,0xb106,0x4c24,{0x9c,0xee,0x86,0x1d,0xab,0x52,0xa9,0x41}};
+inline bool MLConsumeSceneColor(ID3D11DeviceContext*context,const RSTemporalCamera&camera,RSSceneAovs&out){
+ RSSceneAovs metadata{};UINT bytes=sizeof(metadata);
+ const bool found=SUCCEEDED(context->GetPrivateData(MLTemporalSceneColorGuid,&bytes,&metadata));
+ context->SetPrivateData(MLTemporalSceneColorGuid,0,nullptr);
+ if(!found||bytes!=sizeof(metadata)||metadata.size!=sizeof(metadata)||metadata.version!=1||
+    metadata.frameId!=camera.frameId||!metadata.frameId||!metadata.viewId||metadata.viewId!=camera.viewportId+1||metadata.reserved||metadata.reserved2||
+    metadata.color.size!=sizeof(metadata.color)||metadata.color.version!=1)return false;
+ for(const auto&image:metadata.images)if(image.texture)return false;
+ out=metadata;return true;
+}
 enum MLStreamlineSlot {ML_SL_COLOR,ML_SL_DEPTH,ML_SL_MOTION,ML_SL_EXPOSURE,ML_SL_OUTPUT,ML_SL_HUDLESS,ML_SL_UI,ML_SL_COMPOSED,ML_SL_COUNT};
 struct MLStreamlineImage {ID3D11Resource *resource=nullptr;uint32_t x=0,y=0,width=0,height=0,format=0,reserved=0;};
 struct MLStreamlineResources {

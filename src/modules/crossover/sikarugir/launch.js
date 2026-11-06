@@ -328,7 +328,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   // Apply launcher-owned optional effects only to the game, after stock Wine
   // finishes prefix initialization. User-supplied loader paths remain blocked.
   if (context.applyGameEnvironment) environment = await context.applyGameEnvironment(environment);
-  Object.assign(environment, require("../temporal/ngx/connection").environment(ngxScene));
+  Object.assign(environment, require("../temporal/ngx/connection").environment(ngxScene, { macDriverPath: require("../temporal/ngx/connection").windowModule(selected.install), sceneDestinationRequested: settings.dlss === true || DLSS.needsSceneInputs(entry.effects) }));
   if (existingEnvironment?.running) {
     for (const key of ["WINEMSYNC", "WINEESYNC"]) {
       if (existingEnvironment.environment[key] != null) environment[key] = existingEnvironment.environment[key];
