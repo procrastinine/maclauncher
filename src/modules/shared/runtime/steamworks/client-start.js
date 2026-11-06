@@ -90,6 +90,12 @@ function clientStartPreference(entry, settings) {
   return startPreference(entry?.startSteamClient ?? settings?.launcher?.startSteamClient);
 }
 function clientStartEnabled(entry, settings) { return clientStartPreference(entry, settings) !== "never"; }
+// A Play whose consent already included starting Steam, such as Play with
+// Steam for the Steam client bridge, does not ask again. Don't start still wins.
+function playStartPreference(preference, grants) {
+  const value = startPreference(preference);
+  return value === "ask" && grants?.has?.("steam-client-start") ? "automatic" : value;
+}
 
 // pgrep exits 0 with a match and 1 without one. Any other result, including a
 // failed spawn, leaves the client's state unknown (null).
@@ -181,8 +187,8 @@ async function ensureClient({ signal, report, logger, mode = "ask", confirmRunti
   }
   if (!pending && startPreference(mode) !== "automatic") {
     const consent = await confirmRuntimeInstall?.({ kind: "client-start", managerId: "steam-client", label: "Steam",
-      requiresDownload: false, message: "Start Steam for this game?", confirmLabel: "Start Steam", cancelLabel: "Launch without Steam",
-      detail: "This game uses the Steam client, which connects to the Internet and signs in. The game can also launch without it." });
+      requiresDownload: false, message: "Play with Steam?", confirmLabel: "Play with Steam", cancelLabel: "Play Without Steam",
+      detail: "This game uses the Steam client. Play with Steam starts it, and it connects to the Internet and signs in. Play Without Steam runs the game without it." });
     signal?.throwIfAborted();
     if (consent !== true && consent?.approved !== true) return { started: false };
     if (!pending && isRunning() !== false) return { started: false };
@@ -204,5 +210,5 @@ async function ensureClient({ signal, report, logger, mode = "ask", confirmRunti
   return abortable(pending, signal);
 }
 
-module.exports = { ensureClient, steamInstallation, nativeAppNeedsClient, preparedApiNeedsClient, clientEligible, clientStartEnabled, clientStartPreference, startPreference, findSteamApiPlatforms,
+module.exports = { ensureClient, steamInstallation, nativeAppNeedsClient, preparedApiNeedsClient, clientEligible, clientStartEnabled, clientStartPreference, playStartPreference, startPreference, findSteamApiPlatforms,
   startClient, clientRunning, SIGNED_IN };

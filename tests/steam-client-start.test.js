@@ -72,10 +72,15 @@ test("Steam startup defaults to consent, refusal continues without startup, and 
     assert.deepEqual(await ClientStart.ensureClient({ ...base, mode, confirmRuntimeInstall: async plan => { prompts.push(plan); return false; } }), { started: false });
   }
   assert.equal(starts, 0); assert.equal(prompts.length, 3);
-  assert.equal(prompts[0].cancelLabel, "Launch without Steam");
+  assert.deepEqual([prompts[0].message, prompts[0].confirmLabel, prompts[0].cancelLabel], ["Play with Steam?", "Play with Steam", "Play Without Steam"]);
   assert.equal(prompts[0].requiresDownload, false);
   assert.equal((await ClientStart.ensureClient({ ...base, confirmRuntimeInstall: async () => ({ approved: true }) })).started, true);
   assert.equal((await ClientStart.ensureClient({ ...base, mode: "automatic" })).started, true);
+  // An earlier consent in the same Play, such as Play with Steam, includes the start; Don't start still wins.
+  const granted = new Set(["steam-client-start"]);
+  assert.deepEqual([undefined, "ask", "automatic", "never", false].map(value => ClientStart.playStartPreference(value, granted)),
+    ["automatic", "automatic", "automatic", "never", "never"]);
+  assert.deepEqual(["ask", "never"].map(value => ClientStart.playStartPreference(value)), ["ask", "never"]);
   assert.deepEqual(await ClientStart.ensureClient({ ...base, mode: "never", confirmRuntimeInstall: () => assert.fail("No prompt when disabled") }), { started: false });
   assert.deepEqual(await ClientStart.ensureClient({ ...base, isRunning: () => true, confirmRuntimeInstall: () => assert.fail("No prompt for running Steam") }), { started: false });
   assert.equal(starts, 2);
@@ -192,8 +197,8 @@ test("Steam client on Play: Ask prompts through the consent flow, a decline stil
   await launcher.getLaunchContext(resolved, settings("automatic"), { runtimeId: "native" }).prepareNativeSteam(f.steamEntry.gamePath);
   assert.deepEqual(events, []);
   for (const [name, global, game, consent, expected] of [
-    ["default Ask, Start Steam", undefined, undefined, true, ["prompt", "start", "spawn"]],
-    ["default Ask, Launch without Steam", undefined, undefined, false, ["prompt", "spawn"]],
+    ["default Ask, Play with Steam", undefined, undefined, true, ["prompt", "start", "spawn"]],
+    ["default Ask, Play Without Steam", undefined, undefined, false, ["prompt", "spawn"]],
     ["Start automatically", "automatic", undefined, false, ["start", "spawn"]],
     ["Don't start", "never", undefined, true, ["spawn"]],
     ["game Ask over launcher Don't start", "never", "ask", true, ["prompt", "start", "spawn"]],
@@ -209,8 +214,8 @@ test("Steam client on Play: Ask prompts through the consent flow, a decline stil
   }
   const { plan, entry } = prompts[0];
   assert.equal(entry.gamePath, f.steamEntry.gamePath);
-  assert.deepEqual([plan.kind, plan.requiresDownload, plan.confirmLabel, plan.cancelLabel], ["client-start", false, "Start Steam", "Launch without Steam"]);
-  assert.match(plan.detail, /uses the Steam client, which connects to the Internet/);
+  assert.deepEqual([plan.kind, plan.requiresDownload, plan.confirmLabel, plan.cancelLabel], ["client-start", false, "Play with Steam", "Play Without Steam"]);
+  assert.match(plan.detail, /uses the Steam client\. Play with Steam starts it, and it connects to the Internet and signs in\./);
 });
 
 test("an unknown Steam client state neither prompts nor starts Steam", async t => {

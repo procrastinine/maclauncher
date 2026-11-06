@@ -165,7 +165,7 @@ Each adapter launch has its own folder, which is kept, so earlier private files 
 
 ## Requirements
 
-Wine's macOS window driver needs a graphical login session, so games are played from the MacLauncher application; an SSH shell alone cannot supply that session. [Windows Steam games](WINDOWS_STEAM.md) describes the optional connection to the real Mac Steam client shared with Sikarugir. This runtime uses CrossOver's own commands and modifies neither Steam nor CrossOver.
+Wine's macOS window driver needs a graphical login session, so games are played from the MacLauncher application; an SSH shell alone cannot supply that session. [Windows Steam games](WINDOWS_STEAM.md) describes the optional Steam client bridge to the Steam client for Mac, which CrossOver shares with Sikarugir. This runtime uses CrossOver's own commands and modifies neither Steam nor CrossOver.
 
 ## Implementation
 

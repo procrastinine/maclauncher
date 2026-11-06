@@ -107,7 +107,7 @@ async function runGameCli(argv = process.argv.slice(2)) {
             if (options.yes) return true;
             if (!process.stdin.isTTY) return false;
             const input = createInterface({ input: process.stdin, output: process.stderr });
-            try { return /^y(?:es)?$/i.test((await input.question("Start Steam? Steam may connect to the Internet. [y/N] ")).trim()); }
+            try { return /^y(?:es)?$/i.test((await input.question("Play with Steam? Steam starts and may connect to the Internet. [y/N] ")).trim()); }
             finally { input.close(); }
           }
           if (options.yes && (!plan.licenseRequired || options["accept-runtime-licenses"])) {
@@ -117,7 +117,7 @@ async function runGameCli(argv = process.argv.slice(2)) {
           if (!process.stdin.isTTY) throw new Error(`${versionLabel} is required. Run with --yes${plan.licenseRequired ? " --accept-runtime-licenses" : ""} to install it or install it in Runtimes.`);
           const input = createInterface({ input: process.stdin, output: process.stderr });
           try {
-            const prompt = plan.licenseRequired ? `Agree to ${plan.licenseUrl} and install ${plan.label}? [y/N] ` : `Download ${versionLabel}? [y/N] `;
+            const prompt = plan.licenseRequired ? `Agree to ${plan.licenseUrl} and install ${plan.label}? [y/N] ` : `${plan.message || `Download ${versionLabel}?`} [y/N] `;
             const approved = /^y(?:es)?$/i.test((await input.question(prompt)).trim());
             return approved && plan.licenseRequired ? { approved: true, licenseAccepted: true } : approved;
           }

@@ -486,11 +486,13 @@ function createLauncher({
     };
     // The game's own Steam API can request client startup during Play.
     // The default asks before Steam starts; declining still launches the game.
+    // A consent earlier in this Play can already include the start.
     const ensureSteamClient = async required => {
       if (!required || !options.launchNotices || !SteamClientStart.clientStartEnabled(entry, settings)) return;
       const report = label => reportPreparation({ gamePath: entry.gamePath, phase: "launch", label });
       const started = await steamClientStart({ signal: context.signal, logger, report,
-        mode: SteamClientStart.clientStartPreference(entry, settings), confirmRuntimeInstall: context.confirmRuntimeInstall });
+        mode: SteamClientStart.playStartPreference(SteamClientStart.clientStartPreference(entry, settings), context.grants),
+        confirmRuntimeInstall: context.confirmRuntimeInstall });
       if (started?.notice) options.launchNotices.push(started.notice);
       if (started?.started) report("Starting game…");
     };

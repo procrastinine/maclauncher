@@ -48,7 +48,7 @@ Beyond the Basic group, the controls of both runtimes are arranged in advanced D
 
 ## Inspector tools
 
-The inspector details show the Windows CPU, the executable and, with CrossOver, the CrossOver application. They also show the components that the game uses for Direct3D 8 through 12, the Vulkan driver and video codecs, together with the selected choice and the reason whenever a [fallback](../runtimes/TRANSLATORS.md#compatibility-and-fallback) replaced it. When the DXMT version does not match the camera adapter, a **Camera adapter** row reports it as unavailable.
+The inspector details show the Windows CPU, the executable and, with CrossOver, the CrossOver application. They also show the components that the game uses for Direct3D 8 through 12, the Vulkan driver and video codecs, together with the selected choice and the reason whenever a [fallback](../runtimes/TRANSLATORS.md#compatibility-and-fallback) replaced it. When the DXMT version does not match the camera adapter, a **Camera adapter** row reports it as unavailable. After a Play that used the [Steam client bridge](../runtimes/WINDOWS_STEAM.md), a **Steam** row names the bridge version while that version stays installed.
 
 - **Open Windows files** opens the game's Windows environment: its private bottle or prefix once the game has been played, or the selected existing bottle or wrapper prefix.
 - **Inspect binary** runs the shared [native inspection](../tools/NATIVE_INSPECTION.md) on the original executable, independently of the selected runtime.
