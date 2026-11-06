@@ -27,8 +27,8 @@ function createManager(dependencies = {}) {
     { managerId: "nxnative", version, sectionId: "default", sourcePath: sourceInstall.root || sourceInstall.installDir },
     { managerId: NativeTools.ID, version: native.version, sectionId: "default", sourcePath: native.install.installDir || native.install.root }
   ] : [];
-  function fromSource(version, sourceInstall, settings, userDataDir) {
-    const native = tools.resolveSelection(null, settings, userDataDir);
+  function fromSource(version, sourceInstall, settings, userDataDir, entry) {
+    const native = tools.resolveSelection(entry, settings, userDataDir);
     return { version, sourceInstall, toolsVersion: native.version, toolsManagerId: NativeTools.ID,
       install: native.install, ready: Boolean(sourceInstall && native.ready && native.sourceRequirement),
       runtimeUses: runtimeUses(version, sourceInstall, native),
@@ -36,14 +36,32 @@ function createManager(dependencies = {}) {
   }
   function resolveSelection(entry, settings, userDataDir, options = {}) {
     const version = configured(entry, settings, userDataDir, options);
-    if (version) return gitVersion(version) ? fromSource(version, source.resolve({ userDataDir, version }), settings, userDataDir)
+    if (version) return gitVersion(version) ? fromSource(version, source.resolve({ userDataDir, version }), settings, userDataDir, entry)
       : legacy.resolveSelection(entry, settings, userDataDir, { ...options, version });
     return { version: null, ready: false, install: null, sourceInstall: null, discoveryRequired: true,
       reason: "No nxnative versions are available to download." };
   }
 
+  // Download consent names the runtime plainly and gives the size its catalog
+  // lists. The upstream source snapshot has no listed size.
+  function downloadConsent(entry, settings, userDataDir, version, { update = false } = {}) {
+    const listedBytes = (owner, wanted) => {
+      try { return owner.core.listDiscoveredCatalog({ userDataDir }).find(pin => pin.version === wanted)?.asset?.bytes || 0; } catch { return 0; }
+    };
+    const size = bytes => bytes > 0 ? ` (${Math.max(0.1, bytes / 1048576).toFixed(1)} MB)` : "";
+    const native = tools.resolveSelection(entry, settings, userDataDir), name = entry?.name || "this game";
+    let parts;
+    if (version && !gitVersion(version)) parts = `the Switch runtime${size(listedBytes(legacy, version))} from MacLauncher Builds`;
+    else if (update) parts = "newer Switch runtime tools from MacLauncher Builds";
+    else if (!native.ready) parts = `the Switch runtime tools${size(listedBytes(tools, native.version))} from MacLauncher Builds and the matching nxnative source from GitHub`;
+    else parts = "the matching nxnative source from GitHub";
+    return update
+      ? { label: "Switch runtime", message: "Update the Switch runtime?", detail: `${name} needs a newer Switch runtime for this game format or game update choice. The download is ${parts}.` }
+      : { label: "Switch runtime", message: "Download the Switch runtime?", detail: `Required to run ${name}. The download is ${parts}.` };
+  }
+
   const manager = { ...source, id: "nxnative", label: "nxnative", sourceManager: source, legacyManager: legacy, toolsManager: tools,
-    ui: { ...legacy.ui, tabLabel: "nxnative", sectionLabel: "nxnative", management: "managed" }, resolveSelection,
+    ui: { ...legacy.ui, tabLabel: "nxnative", sectionLabel: "nxnative", management: "managed" }, resolveSelection, downloadConsent,
     getState(options = {}) {
       const state = source.getState(options), old = legacy.getState(options);
       const native = tools.resolveSelection(null, { runtimes: options.runtimeSettings || { nxnative: options.settings } }, options.userDataDir);

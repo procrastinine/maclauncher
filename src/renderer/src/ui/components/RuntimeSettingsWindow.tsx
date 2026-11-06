@@ -65,6 +65,9 @@ export function RuntimeSettingsWindow({
   const [pickingField, setPickingField] = useState<string | null>(null);
   const pickerScope = useRef("");
   pickerScope.current = JSON.stringify([context.scope, context.moduleId, context.runtimeId, context.gamePath]);
+  // A per-game settings provider shares this window's single Reset.
+  const providerReset = useRef<(() => Promise<void>) | null>(null);
+  const [providerEditable, setProviderEditable] = useState(false);
   const isGameScope = context.scope === "game";
   const draftRef = useRef<Record<string, any> | null>(null);
   const saveCallback = useRef<(value: Record<string, any>) => Promise<void>>(async () => {});
@@ -115,6 +118,8 @@ export function RuntimeSettingsWindow({
     if (!isGameScope) return null;
     return (state?.recents || []).find(g => g.gamePath === context.gamePath) || null;
   }, [state, isGameScope, context.gamePath]);
+  // Game facts can hide a field for one game, such as a key file for a game without encrypted data.
+  const shownForGame = (field: RuntimeSettingField) => !isGameScope || !matchesAnyCondition(gameEntry, field.gameHiddenWhen);
   const launchRecord = gameEntry?.runtimeData?.[context.runtimeId];
   const launchRows: any[] = Array.isArray(launchRecord?.translatorRows) ? launchRecord.translatorRows : [];
   const launchSettings: Record<string, unknown> | undefined = launchRecord?.translatorPlanInputs?.settings;
@@ -197,7 +202,7 @@ export function RuntimeSettingsWindow({
   for (const row of choices[schema?.inheritanceAction || ""]?.effectiveSettings || []) if (visibilitySettings[row.value] === "inherit") visibilitySettings[row.value] = row.label;
   for (const row of choices[schema?.visibilityAction || ""]?.effectiveSettings || []) visibilitySettings[row.value] = row.label;
   const visibleFields = (schema?.fields || []).filter(field => !field.hidden && field.key !== "networkIsolation" &&
-    (isGameScope || !field.gameOnly) && isRuntimeSettingVisible(field, visibilitySettings) && (!fieldKeys || fieldKeys.includes(field.key)));
+    (isGameScope || !field.gameOnly) && shownForGame(field) && isRuntimeSettingVisible(field, visibilitySettings) && (!fieldKeys || fieldKeys.includes(field.key)));
   const fileRequest = useMemo(() => settingChoiceRequest(api, context),
     [api?.moduleAction, api?.moduleSettingsAction, context.scope, context.moduleId, context.runtimeId, context.gamePath]);
 
@@ -224,7 +229,7 @@ export function RuntimeSettingsWindow({
 
   const externalSettings = Boolean(inheritanceValue && inheritanceValue !== "private");
   const visibilityRevision = schema?.visibilityAction ? JSON.stringify(schema.fields.filter(field => field.optionsAction === schema.visibilityAction).map(field => displaySettings?.[field.key])) : "";
-  const choiceActions = JSON.stringify([...new Set((schema?.fields || []).filter(field => (isGameScope || !field.gameOnly) && isRuntimeSettingVisible(field, displaySettings || {})).map(field => field.optionsAction).concat(schema?.visibilityAction, externalSettings ? schema?.inheritanceAction : undefined).filter(Boolean))]);
+  const choiceActions = JSON.stringify([...new Set((schema?.fields || []).filter(field => (isGameScope || !field.gameOnly) && shownForGame(field) && isRuntimeSettingVisible(field, displaySettings || {})).map(field => field.optionsAction).concat(schema?.visibilityAction, externalSettings ? schema?.inheritanceAction : undefined).filter(Boolean))]);
   useEffect(() => {
     if (choiceScope.current !== choiceContext) { setChoices({}); choiceScope.current = choiceContext; }
     setChoiceError(null); setChoiceLoading({});
@@ -271,6 +276,12 @@ export function RuntimeSettingsWindow({
     }
   }
 
+  async function onResetAll() {
+    setSaveError(null);
+    try { await providerReset.current?.(); }
+    catch (error: any) { setSaveError(String(error?.message || error)); return false; }
+    return onReset();
+  }
   function onReset() {
     if (!schema) return;
     const defaults = baseDefaults || buildRuntimeSettingsDefaults(schema);
@@ -299,12 +310,18 @@ export function RuntimeSettingsWindow({
   }
 
   const subtitleBase = isGameScope
-    ? `${gameEntry?.name || "Game"} · ${moduleLabel}`
+    ? `${gameEntry?.name || "Game"} · ${gameEntry?.moduleLabel || moduleLabel}`
     : moduleLabel;
   const subtitle = modified ? `${subtitleBase} · Modified` : subtitleBase;
   const resetLabel = controlled?.resetLabel || (context.scope === "game"
       ? "Reset to game type defaults"
       : "Reset to global defaults");
+  // The game's own settings come first. Fields marked afterProvider follow them.
+  const providerBlock = schema?.provider && (!schema.provider.gameOnly || isGameScope) ? <RuntimeSettingsProvider
+    key={JSON.stringify([context.moduleId, context.runtimeId, context.gamePath])}
+    api={api} state={state} context={context} provider={schema.provider} resetRef={providerReset} onEditable={setProviderEditable}
+    revision={JSON.stringify([gameEntry?.runtimeData, gameEntry?.moduleData])} /> : null;
+  const showsStatic = Boolean(api && state && schema && displaySettings);
 
   return (
     <section className={inline ? "runtimeSettingsInline" : "runtimeSettingsRoot"} aria-label={`${runtimeLabel} settings`}>
@@ -329,7 +346,7 @@ export function RuntimeSettingsWindow({
           {api && state && !schema && <div className="dim">{runtimeLabel} has no settings.</div>}
           {api && state && schema && displaySettings && (
             <div className="settingsStack">
-              <SettingFieldRows rows={visibleFields.map(field => {
+              <SettingFieldRows between={providerBlock} rows={visibleFields.map(field => {
                 if (field.type === "display") return <RuntimeSettingsDisplay key={field.key} field={field} />;
                 const requirement = field.requiresInstall;
                 const missingInstall = Boolean(requirement && !state.runtimeManagers?.[requirement.managerId]?.sections?.find(section => section.id === requirement.sectionId)?.installed?.some((install: Record<string, any>) => install.ready === true));
@@ -478,10 +495,10 @@ export function RuntimeSettingsWindow({
                   {!inherited && rendered}
                 </React.Fragment>;
               }} />
-              {showReset && visibleFields.some(field => field.type !== "display") && <div className="runtimeSettingsActions">
+              {showReset && (visibleFields.some(field => field.type !== "display") || providerEditable) && <div className="runtimeSettingsActions">
                 <button
                   className="btn"
-                  onClick={onReset}
+                  onClick={() => void onResetAll()}
                   disabled={!schema || !canEdit}
                   title={resetLabel}
                   aria-label={resetLabel}
@@ -491,10 +508,7 @@ export function RuntimeSettingsWindow({
               </div>}
             </div>
           )}
-          {schema?.provider && (!schema.provider.gameOnly || isGameScope) && <RuntimeSettingsProvider
-            key={JSON.stringify([context.moduleId, context.runtimeId, context.gamePath])}
-            api={api} state={state} context={context} provider={schema.provider}
-            revision={JSON.stringify([gameEntry?.runtimeData, gameEntry?.moduleData])} />}
+          {!showsStatic && providerBlock}
         </div>
       </div>
     </section>
@@ -506,7 +520,14 @@ type SettingFieldRow = { field: RuntimeSettingField; control: React.ReactNode };
 
 // Fields marked advanced follow the others in one collapsed group. When every
 // shown field is advanced, nothing is left to separate them from, so they stay flat.
-function SettingFieldRows({ rows, render }: { rows: SettingFieldRow[]; render: (field: RuntimeSettingField, control: React.ReactNode) => React.ReactNode }) {
+// `between`, such as a module's per-game settings, sits between the fields that
+// precede it and those marked afterProvider.
+function SettingFieldRows({ rows, render, between }: { rows: SettingFieldRow[]; render: (field: RuntimeSettingField, control: React.ReactNode) => React.ReactNode; between?: React.ReactNode }) {
+  if (between !== undefined) return <>
+    <SettingFieldRows rows={rows.filter(row => !row.field.afterProvider)} render={render} />
+    {between}
+    <SettingFieldRows rows={rows.filter(row => row.field.afterProvider)} render={render} />
+  </>;
   const basic = rows.filter(row => !row.field.advanced), advanced = rows.filter(row => row.field.advanced);
   const list = (items: SettingFieldRow[]) => items.map(({ field, control }, index) => <React.Fragment key={field.key}>
     {field.section && field.section !== items[index - 1]?.field.section &&
@@ -532,9 +553,10 @@ function providerSettings(value: unknown): ProviderSettings {
   return { schema: { fields: result.schema.fields, defaults: result.schema.defaults }, values: result.values,
     message: typeof result.message === "string" ? result.message.slice(0, 512) : undefined };
 }
-function RuntimeSettingsProvider({ api, state, context, provider, revision }: {
+function RuntimeSettingsProvider({ api, state, context, provider, revision, resetRef, onEditable }: {
   api: RuntimeSettingsApi | undefined; state: LauncherState | null; context: RuntimeSettingsContext;
   provider: NonNullable<RuntimeSettingsSchema["provider"]>; revision: string;
+  resetRef: React.MutableRefObject<(() => Promise<void>) | null>; onEditable: (editable: boolean) => void;
 }) {
   const [loaded, setLoaded] = useState<ProviderSettings | null>(null), [error, setError] = useState<string | null>(null);
   const scope = useRef(0);
@@ -552,11 +574,19 @@ function RuntimeSettingsProvider({ api, state, context, provider, revision }: {
     const result = providerSettings(await request(provider.writeAction, { values }));
     if (generation === scope.current) setLoaded(result);
   }
+  // The window's Reset returns these settings to the provider's defaults too.
+  const editable = Boolean(loaded?.schema.fields.some(field => field.type !== "display"));
+  useEffect(() => {
+    resetRef.current = editable && loaded ? () => save(buildRuntimeSettingsDefaults(loaded.schema)) : null;
+    onEditable(editable);
+    return () => { resetRef.current = null; onEditable(false); };
+  }, [loaded, editable]);
+  // A message about settings that are not available yet follows the ones that are.
   return <>
     <ErrorText error={error} />
     {!loaded && !error && <div className="empty">Loading game settings…</div>}
-    {loaded?.message && <div className="empty">{loaded.message}</div>}
     {loaded && loaded.schema.fields.length > 0 && <RuntimeSettingsWindow api={api} state={state} context={context}
-      error={null} inline showDescription={false} controlled={{ ...loaded, save, resetLabel: "Reset to tested defaults" }} />}
+      error={null} inline showDescription={false} showReset={false} controlled={{ ...loaded, save }} />}
+    {loaded?.message && <div className="empty">{loaded.message}</div>}
   </>;
 }

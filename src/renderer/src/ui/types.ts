@@ -18,6 +18,8 @@ export type ModuleUiField = {
   helpKey?: string;
   format?: "boolean" | "date" | "path" | "string";
   empty?: string;
+  /** A map in the entry from raw values to the labels shown for them. */
+  labelsKey?: string;
   hiddenWhen?: ModuleUiCondition[];
 };
 
@@ -117,6 +119,9 @@ export type RuntimeSettingField = {
   gameOnly?: boolean;
   visibleWhen?: ModuleUiCondition[];
   hiddenWhen?: ModuleUiCondition[];
+  gameHiddenWhen?: ModuleUiCondition[];
+  /** Shown after the module's per-game settings provider instead of before it. */
+  afterProvider?: boolean;
   disabledWhen?: ModuleUiCondition[];
   requiresInstall?: { managerId: string; sectionId: string };
   checkedValue?: boolean;

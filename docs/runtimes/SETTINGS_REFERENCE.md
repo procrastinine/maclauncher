@@ -32,7 +32,7 @@ Some backends belong to another game type and are offered wherever they accept t
 | [MAGES.](#mages) | Impacto Windows HD | Impacto Windows HD, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [Minori](#minori) | ReMinori | ReMinori, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [MUGEN / Ikemen GO](#mugen--ikemen-go) | Ikemen GO | Ikemen GO, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
-| [Nintendo Switch](#nintendo-switch) | Switch (nxnative) | Switch (nxnative), Inspect only |
+| [Nintendo Switch](#nintendo-switch) | Switch / Switch 2 (nxnative) | Switch / Switch 2 (nxnative), Inspect only |
 | [Nitroplus](#nitroplus) | Nitroplus | Nitroplus, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [NScripter](#nscripter) | ONScripter-Yuri | ONScripter-Yuri, ONScripter-EN, ONScripter-Yuri Web, External runtime, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [PlayStation 5](#playstation-5) | PS5 (AnyPS5) | PS5 (AnyPS5), Inspect only, Prosper *(provider)* |
@@ -616,19 +616,20 @@ Inspector details: Source format, Motif, Declared content requirement, Version s
 
 Module `nxnative`.
 
-Backends: Switch (nxnative) (default), Inspect only.
+Backends: Switch / Switch 2 (nxnative) (default), Inspect only.
 
-Runtimes tabs: Switch (nxnative) (managed); Switch (nxnative) → Native tools (managed).
+Runtimes tabs: Switch / Switch 2 (nxnative) (managed); Switch / Switch 2 (nxnative) → Native tools (managed).
 
-### Switch (nxnative) settings
+### Switch / Switch 2 (nxnative) settings
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| prod.keys | Path (with picker) |  | Keys for encrypted Switch game data. The file stays in its current location. |
+| prod.keys | Path (with picker) |  | Keys for encrypted Switch game data. The file stays in its current location. Not shown in the settings of NUP and decrypted dump games. |
+| Game update | Latest available, Base game or a local Update N | Latest available | *Per game*, for NUP and decrypted dump games with readable package versions. The package that Play prepares; a version that is no longer present prepares the newest local package. |
 | Fixed keyboard mapping | Information |  | nxnative uses fixed physical key positions; keyboard remapping is not supported. Key names below follow the US keyboard layout. Rows: L + R prompt: Hold Q + E; Left stick: W A S D; D-pad: Arrow keys; A / B / X / Y: J / K / U / I; L / R: Q / E; ZL / ZR: Z / C; Right stick: No keyboard binding; L3 / R3: F / G; + / −: Return / Tab; Shake: Space; Touch: Left click / drag; Fullscreen: Control + Command + F. |
 | Fixed controller mapping | Information |  | Connected controllers with a macOS extended gamepad profile are detected automatically; controller remapping is not supported. Face buttons map by position, regardless of their printed labels. Rows: A / B / X / Y: Right / Bottom / Top / Left; Left / Right stick: Left / Right stick; D-pad: D-pad; L / R: Left / Right shoulder; ZL / ZR: Left / Right trigger; L3 / R3: Left / Right stick click; + / −: Menu / Options. |
 
-Inspector details: Title ID, Format, Build ID.
+Inspector details: Title ID, Build ID, Selected update.
 
 | Action group | Actions |
 | --- | --- |

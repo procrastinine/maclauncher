@@ -30,7 +30,9 @@ export function presentModuleFields(source: unknown, fields: ModuleUiField[]) {
     if (typeof raw === "object" && !Array.isArray(raw) && field.format !== "boolean") return [];
     // Older manifests also return paths without a format declaration.
     const format = field.format || (typeof raw === "string" && raw.startsWith("/") ? "path" : undefined);
-    const value = formatFieldValue(raw, format, field.empty);
+    const labels = field.labelsKey ? getByPath(source, field.labelsKey) : null;
+    const mapped = labels && typeof labels === "object" && (typeof raw === "string" || typeof raw === "number") ? (labels as Record<string, unknown>)[String(raw)] : null;
+    const value = typeof mapped === "string" && mapped.trim() ? mapped : formatFieldValue(raw, format, field.empty);
     if (!hasDisplayValue(value)) return [];
     const key = `${field.label}\0${value}`;
     if (seen.has(key)) return [];

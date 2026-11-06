@@ -80,7 +80,8 @@ async function pythonEnvironment(runtime, context) {
 async function resolveRuntime(entry, context, { runtimeManager = manager } = {}) {
   let selected = runtimeManager.resolveSelection(entry, context.settings, context.userDataDir);
   if (!selected.ready) {
-    await confirmToolInstall(context, { manager: runtimeManager, version: selected.version || "latest", requiresDownload: true, detail: "Required to inspect or prepare Nintendo Switch programs." });
+    await confirmToolInstall(context, { manager: runtimeManager, version: selected.version || "latest", requiresDownload: true,
+      ...(runtimeManager.downloadConsent?.(entry, context.settings, context.userDataDir, selected.version) || { detail: "Required to inspect or prepare Nintendo Switch programs." }) });
     await runtimeManager.installRuntime({ ...context, version: selected.version || "latest" });
     context.onRuntimeStateChange?.();
     selected = runtimeManager.resolveSelection(entry, context.settings, context.userDataDir);
@@ -235,19 +236,75 @@ function validateLaunch(file, prepared, runtime, input, entry, context) {
     }
     environment[key] = value;
   }
+  const facts = launch.inputFacts;
+  if (facts && typeof facts === "object") {
+    const update = typeof facts.selectedUpdate === "string" && /^v\d+$/.test(facts.selectedUpdate) ? facts.selectedUpdate : input.selectedUpdate || null;
+    entry.moduleData = { ...entry.moduleData, titleId: /^[a-f0-9]{16}$/i.test(facts.titleId || "") ? facts.titleId.toUpperCase() : entry.moduleData?.titleId,
+      generation: facts.generation === 1 || facts.generation === 2 ? facts.generation : null, selectedUpdate: update,
+      keyRequirement: input.keyRequirement === "none" ? "none" : facts.keyRequirement === "encrypted" ? "encrypted" : "unknown",
+      keysRequired: input.keyRequirement === "none" ? false : Boolean(entry.moduleData?.keysRequired) };
+    context.onEntryChange?.({ moduleData: entry.moduleData });
+  }
   const save = saveDirectory(entry, context), temporary = path.join(gameDirectory(entry, context), "temp");
   assertOutsideSource(input.sourceRoot, save);fs.mkdirSync(save, { recursive: true });Writable.assertOwnDirectory(context.userDataDir, temporary);
   entry.defaultSaveDir = save;
   return { command: packagedHost && !runtime.managed ? runtime.host : launch.command, args: launch.args, cwd: launch.cwd,
     env: { ...environment, DM_SAVE: save, DM_TEMP: temporary, DM_WINDOW: "1", DM_AUDIO: "1" }, prepared };
 }
+function supportsInput(runtime, input, packageVersion) {
+  const capabilities = runtime.config.capabilities;
+  return (!["nup", "dump"].includes(input.format) || capabilities?.keylessInputs?.includes(input.format) === true) &&
+    (packageVersion === "latest" || capabilities?.packageSelection === true);
+}
+async function ensureInputRuntime(entry, context, selection, input, packageVersion, dependencies) {
+  const resolve = dependencies.runtimeForSelection || runtimeForSelection;
+  let runtime = selection.runtime || await resolve(selection, context);
+  if (supportsInput(runtime, input, packageVersion)) return { ...selection, runtime };
+  const owner = dependencies.runtimeManager || manager;
+  const tools = selection.sourceInstall ? owner.toolsManager : owner;
+  const adopt = async installed => {
+    const next = selection.sourceInstall ? { ...selection, install: installed, toolsVersion: installed.version } : { ...selection, install: installed, version: installed.version };
+    const candidate = await resolve(next, context);
+    if (!supportsInput(candidate, input, packageVersion)) return null;
+    const id = tools.id;
+    entry.runtimeData = { ...entry.runtimeData, [id]: { ...entry.runtimeData?.[id], version: installed.version } };
+    context.onEntryChange?.({ runtimeData: entry.runtimeData });
+    recordSelectionUse(entry, context, next, candidate);
+    return { ...next, runtime: candidate };
+  };
+  const state = () => tools.getState({ userDataDir: context.userDataDir, settings: context.settings?.runtimes?.[tools.id], runtimeSettings: context.settings?.runtimes });
+  for (const row of state().installed || []) {
+    if (row.ready === false) continue;
+    const installed = tools.resolveSelection(entry, context.settings, context.userDataDir, { version: row.version }).install;
+    if (installed) { const next = await adopt(installed); if (next) return next; }
+  }
+  await confirmToolInstall(context, { manager: tools, version: "latest", requiresDownload: true,
+    ...(owner.downloadConsent?.(entry, context.settings, context.userDataDir, null, { update: true }) || { detail: "Updated nxnative tools are required for this input format or game update selection." }) });
+  await tools.refreshCatalog({ ...context, force: true });
+  const catalog = state().catalog;
+  const version = catalog.versions.find(value => !catalog.versionRequirements?.[value]?.installReason);
+  if (!version) throw new Error("No nxnative tools supporting this game input are available to install.");
+  const installed = await tools.installRuntime({ ...context, version });
+  context.onRuntimeStateChange?.();
+  const next = await adopt(installed);
+  if (!next) throw new Error("The available nxnative tools do not support this input format or game update selection.");
+  return next;
+}
 async function prepareGame(entry, context, selection, dependencies = {}) {
   const input = resolveInput(entry);
-  if (input.inspectionOnly) throw new Error("A Switch NSP, NSZ, XCI or XCZ application container is required for Play.");
-  const runtime = selection.runtime || await runtimeForSelection(selection, context), root = gameDirectory(entry, context);
+  if (input.inspectionOnly) throw new Error("A complete Switch game container or decrypted dump is required for Play.");
+  // An update choice whose package is gone prepares the newest local package.
+  // Without readable package versions, nxnative checks the choice itself.
+  const choice = entry.runtimeSettings?.nxnative?.packageVersion;
+  const packageVersion = /^v\d+$/.test(choice || "") && (!input.versions?.length || input.versions.includes(choice)) ? choice : "latest";
+  if (packageVersion !== "latest") input.selectedUpdate = packageVersion;
+  selection = await ensureInputRuntime(entry, context, selection, input, packageVersion, dependencies);
+  const runtime = selection.runtime, root = gameDirectory(entry, context);
   assertOutsideSource(input.sourceRoot, root);Writable.assertOwnDirectory(context.userDataDir, root);
+  entry.moduleData = { ...entry.moduleData, ...input, sourceRoot: undefined };
+  if (input.keyRequirement === "none") entry.moduleData.keysRequired = false;
   const inputKey = crypto.createHash("sha256").update(JSON.stringify([input.inputPath, await sourceIdentity(input.inputPath, context)])).digest("hex");
-  const identity = crypto.createHash("sha256").update(JSON.stringify([inputKey, selection.version, ...(runtime.source ? [runtime.source.revision] : []),
+  const identity = crypto.createHash("sha256").update(JSON.stringify([inputKey, packageVersion, selection.version, ...(runtime.source ? [runtime.source.revision] : []),
     selection.install.manifestSha256 || selection.install.declaration.manifestSha256])).digest("hex");
   let prepared = path.join(root, "prepared", inputKey);
   const workspacePath = path.join(root, "workspace.json");
@@ -265,23 +322,24 @@ async function prepareGame(entry, context, selection, dependencies = {}) {
   const receiptPath = path.join(prepared, "prepared.json");
   try {
     const receipt = readJson(receiptPath);
-    if (receipt.identity === identity) return { ...validateLaunch(path.join(prepared, "launch.json"), prepared, runtime, input, entry, context), cached: true };
+    if (receipt.identity === identity) return { ...validateLaunch(path.join(prepared, "launch.json"), prepared, runtime, input, entry, context), runtime, cached: true };
   } catch (error) { if (error.code !== "ENOENT") context.logger?.debug?.("[nxnative] preparing current input: " + error.message); }
   Writable.assertOwnDirectory(root, prepared);
   const compilerRequirement = runtime.config.requirements?.metalCompiler;
   const compiler = compilerRequirement
     ? await (dependencies.ensureMetal || require("../shared/runtime/apple-metal-toolchain").ensure)(context, compilerRequirement) : null;
   const args = ["prepare", "--input", input.inputPath, "--output", prepared, "--progress", "json"];
+  if (packageVersion !== "latest") args.push("--package", packageVersion);
   const execute = async () => {
-    const keys = selectedKeys(entry, context);
+    const keys = input.keyRequirement === "none" ? null : selectedKeys(entry, context);
     return runCli(runtime, validKeys(keys) ? [...args, "--keys", keys] : args, path.join(root, "preparation"), context, dependencies, compiler?.environment || {});
   };
   context.onProgress?.({ phase: "prepare", label: "Preparing Switch game…" });
   let result;
   try { result = await execute(); }
   catch (error) {
-    if (error.code !== "NXNATIVE_KEYS_REQUIRED") throw error;
-    entry.moduleData = { ...entry.moduleData, keysRequired: true };context.onEntryChange?.({ moduleData: entry.moduleData });
+    if (error.code !== "NXNATIVE_KEYS_REQUIRED" || input.keyRequirement === "none") throw error;
+    entry.moduleData = { ...entry.moduleData, keysRequired: true, keyRequirement: "encrypted" };context.onEntryChange?.({ moduleData: entry.moduleData });
     const configured = selectedKeys(entry, context), adjacent = path.join(input.sourceRoot, "prod.keys");
     if (!validKeys(configured) && validKeys(adjacent)) rememberKeys(entry, context, adjacent);
     else if (!validKeys(configured)) await chooseKeys(entry, dependencies.keysPayload, context);
@@ -294,6 +352,6 @@ async function prepareGame(entry, context, selection, dependencies = {}) {
   Writable.atomicWrite(receiptPath, JSON.stringify({ schemaVersion: 1, identity, runtimeVersion: selection.version,
     ...(runtime.source ? { sourceRevision: runtime.source.revision, sourceCommittedAt: runtime.source.committedAt,
       nativeToolsVersion: selection.toolsVersion || runtime.config.version } : {}) }) + "\n", { root });
-  return { ...launch, cached: false };
+  return { ...launch, runtime, cached: false };
 }
-module.exports = { gameDirectory, saveDirectory, resolveInput, runtimePaths, runtimeForSelection, recordSelectionUse, pythonEnvironment, resolveRuntime, runCli, keysFileStatus, pickKeysFile, chooseKeys, sourceIdentity, validateLaunch, prepareGame, readJson };
+module.exports = { supportsInput, ensureInputRuntime, gameDirectory, saveDirectory, resolveInput, runtimePaths, runtimeForSelection, recordSelectionUse, pythonEnvironment, resolveRuntime, runCli, keysFileStatus, pickKeysFile, chooseKeys, sourceIdentity, validateLaunch, prepareGame, readJson };

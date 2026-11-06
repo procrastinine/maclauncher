@@ -6,9 +6,23 @@ const Prepare = require("./prepare");
 const Tools = require("./tools");
 const Application = require("./application");
 const GameSettings = require("./settings");
+const Inputs = require("./inputs");
 const { spawnForegroundNativeGame } = require("../shared/runtime/native-focus");
 
-module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [manager, manager.toolsManager],
+// Detection reads only the input files. Title, generation and update facts that
+// preparation reports stay with the game while detection finds no other title,
+// and a keyless input with local packages shows the one its update choice selects.
+function mergeEntry(existing, entry) {
+  const before = existing?.moduleData, data = entry?.moduleData;
+  if (!data) return entry;
+  const same = Boolean(before) && (!data.titleId || data.titleId === before.titleId);
+  const prepared = key => data[key] ?? (same ? before[key] : null) ?? null;
+  return { ...entry, moduleData: { ...data, titleId: prepared("titleId"), generation: prepared("generation"),
+    selectedUpdate: data.keyRequirement === "none" && data.versions?.length
+      ? Inputs.selectedUpdate(data.versions, entry.runtimeSettings?.nxnative?.packageVersion) : prepared("selectedUpdate") } };
+}
+
+module.exports = { id: manifest.id, manifest, detectGame, mergeEntry, runtimeManagers: [manager, manager.toolsManager],
   normalizeRuntimeId: value => value === "inspection" ? value : "nxnative",
   filterRuntimeSupport: entry => entry.moduleData?.inspectionOnly ? ["inspection"] : ["nxnative"],
   canLaunchRuntime: (runtimeId, entry) => runtimeId === "nxnative" && entry.moduleData?.inspectionOnly === false,
@@ -19,15 +33,17 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
   resolveGraphicsInputs: () => ({ architecture: "arm64" }),
   ensureRuntime: (entry, context) => {
     const selected = manager.resolveSelection(entry, context.settings, context.userDataDir);
-    return selected.ready ? null : { managerId: manager.id, version: selected.version, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {} };
+    return selected.ready ? null : { managerId: manager.id, version: selected.version, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {},
+      ...manager.downloadConsent(entry, context.settings, context.userDataDir, selected.version) };
   },
   launchRuntime: async (runtimeId, entry, context) => {
     if (runtimeId !== "nxnative") return null;
     const selected = manager.resolveSelection(entry, context.settings, context.userDataDir);
     if (!selected.ready) throw new Error(selected.reason);
-    const runtime = await Prepare.runtimeForSelection(selected, context);
+    let runtime = await Prepare.runtimeForSelection(selected, context);
     Prepare.recordSelectionUse(entry, context, selected, runtime);
     const launch = await Prepare.prepareGame(entry, context, { ...selected, runtime });
+    runtime = launch.runtime || runtime;
     const gameSettings = await GameSettings.launchEnvironment(entry, context, launch, runtime);
     const application = await Application.prepareApplication(entry, context, launch, { runtime });
     entry.iconPath = application.iconPath;entry.iconSource = application.iconSource;

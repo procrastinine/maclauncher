@@ -1,8 +1,10 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
+const Inputs = require("./inputs");
+
 const MAX_TABLE_BYTES = 2 * 1024 * 1024;
-const CONTAINERS = /\.(?:nsp|nsz|xci|xcz|hfs0)$/i;
+const CONTAINERS = /\.(?:nsp|nsz|xci|xcz|hfs0|nup)$/i;
 function inside(root, file) {
   const relative = path.relative(root, file);
   return relative === "" || relative !== ".." && !relative.startsWith(".." + path.sep) && !path.isAbsolute(relative);
@@ -42,9 +44,11 @@ function partition(file, header, size, detection) {
 function inspectBinary(file, detection) {
   try {
     const observed = stat(file, detection);
-    if (!observed?.isFile() || observed.size < 0x40) return null;
+    if (!observed?.isFile() || observed.size < 4) return null;
     const header = readBytes(file, 0, Math.min(observed.size, 0x400), detection);
-    const result = { inputPath: file, bytes: observed.size };
+    const result = { inputPath: file, bytes: observed.size, generation: null, keyRequirement: "unknown" };
+    if (header.subarray(0, 4).equals(Buffer.from([78, 85, 80, 1]))) return { ...result, ...Inputs.nup(file) };
+    if (observed.size < 0x40) return null;
     if (header.toString("ascii", 0, 4) === "NSO0") {
       if (header.length < 0x100 || !header.readUInt32LE(0x18)) return null;
       const flags = header.readUInt32LE(0xc);
@@ -79,6 +83,14 @@ function inspectBinary(file, detection) {
   } catch { return null; }
 }
 function extracted(directory, detection) {
+  let dump;
+  // A folder laid out as a dump that cannot be used reports its problem on import
+  // in a plain sentence. The parser's own message goes to the log as the detail.
+  try { dump = Inputs.dump(directory); } catch (error) {
+    if (error.code) throw error;
+    throw Object.assign(new Error(error.reason || "Not a readable Switch game dump."), { code: "DETECTION_INVALID_INPUT", detail: String(error.message) });
+  }
+  if (dump) return dump;
   const names = entries(directory, detection), exefs = names.find(item => item.isDirectory() && item.name.toLowerCase() === "exefs"),
     romfs = names.find(item => item.isDirectory() && item.name.toLowerCase() === "romfs");
   if (!exefs || !romfs) return null;
@@ -91,11 +103,13 @@ function detectGame(context) {
   let sourceRoot = context.rootDir, program;
   if (context.stat?.isDirectory()) {
     program = extracted(sourceRoot, context.detection);
+    if (program && entries(sourceRoot, context.detection).some(item => item.isFile() && CONTAINERS.test(item.name))) throw Object.assign(new Error("Choose a dump or one container without other game inputs beside it."), { code: "DETECTION_CONFLICT" });
     if (!program) {
       const candidates = entries(sourceRoot, context.detection).filter(item => item.isFile() && CONTAINERS.test(item.name));
       if (!candidates.length || candidates.length > 32) return null;
       const containers = candidates.map(item => inspectBinary(path.join(sourceRoot, item.name), context.detection));
       if (containers.some(item => !item || item.inspectionOnly)) return null;
+      if (containers.length > 1 && containers.some(item => item.format === "nup")) throw Object.assign(new Error("Choose one NUP file per game."), { code: "DETECTION_CONFLICT" });
       program = containers.length === 1 ? containers[0] : { format: "collection", sourceKind: "Switch packages", inputPath: sourceRoot, inspectionOnly: false, canDecompile: true, fileCount: containers.length };
     }
   } else if (context.stat?.isFile()) {
@@ -106,6 +120,7 @@ function detectGame(context) {
     }
   }
   if (!program) return null;
+  program = { generation: null, keyRequirement: "unknown", selectedUpdate: null, ...program };
   try {
     const root = fs.realpathSync(sourceRoot);
     if (!inside(root, fs.realpathSync(program.inputPath)) || program.executablePath && !inside(root, fs.realpathSync(program.executablePath))) return null;

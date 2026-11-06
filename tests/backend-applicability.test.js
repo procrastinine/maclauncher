@@ -80,7 +80,7 @@ test('Settings shows a saved incompatible default and compatible alternatives', 
     onSetLauncherSettings() {}, onSetModuleSettings() {}
   }));
   assert.match(html, /<option value="mac32" selected="">32-bit Mac \(saved; choose a compatible runtime\)<\/option>/);
-  assert.match(html, /<option value="nxnative">Switch \(nxnative\)<\/option>/);
+  assert.match(html, /<option value="nxnative">Switch \/ Switch 2 \(nxnative\)<\/option>/);
   assert.doesNotMatch(html, /settings-runtime-tab-nxnative-(?:mac32|prosper|sikarugir|crossover)/);
 });
 

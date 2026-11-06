@@ -398,6 +398,9 @@ function recordProbe(session, task, result, error = null) {
   if (error) {
     session.trace.push({ stage: task.stage, moduleId: task.mod.id, inputPath: task.context.inputPath, outcome: "error", message: String(error.message || error), ...(error.code ? { code: error.code } : {}) });
     if (error.code === "DETECTION_LIMIT" || error.code === "DETECTION_CONFLICT") throw error;
+    // A module that recognizes its own input format but finds the input
+    // damaged or incomplete names the problem when no module matches.
+    if (error.code === "DETECTION_INVALID_INPUT") session.invalidInput ||= error;
     return null;
   }
   const candidate = candidateFor(task.mod, task.context, task.stage, task.gate, result);
@@ -438,7 +441,8 @@ function runWorker(session, task) {
     worker.once("message", message => {
       settled = true;
       clearTimeout(timer);
-      if (message.error) reject(Object.assign(new Error(message.error), message.errorCode ? { code: message.errorCode } : {})); else resolve(message.result);
+      if (message.error) reject(Object.assign(new Error(message.error), message.errorCode ? { code: message.errorCode } : {},
+        message.errorDetail ? { detail: message.errorDetail } : {})); else resolve(message.result);
     });
     worker.once("error", error => { settled = true; clearTimeout(timer); reject(error); });
     worker.once("exit", code => { clearTimeout(timer); if (!settled) reject(new Error(`Detection worker exited without a result (${code}).`)); });
@@ -565,15 +569,26 @@ function chooseChildApp(candidates) {
 function reportFor(session, candidates, selected = null, error = null) {
   return { format: "maclauncher-detection-v1", input: session.input, detected: selected?.detected || null, selectedModuleId: selected?.moduleId || null,
     candidates, versions: candidates.map(candidate => ({ moduleId: candidate.moduleId, ...candidate.version })), trace: session.trace,
-    metrics: session.metrics, limits: session.limits, ...(error ? { error: { code: error.code || "DETECTION_ERROR", message: error.message } } : {}) };
+    metrics: session.metrics, limits: session.limits, ...(error ? { error: { code: error.code || "DETECTION_ERROR", message: error.message,
+      ...(typeof error.detail === "string" ? { detail: error.detail } : {}) } } : {}) };
+}
+
+// The message is the module's plain reason for the import message; its detail,
+// when present, is for the log.
+function invalidInputError(error) {
+  const result = new DetectionError(String(error.message || error), "DETECTION_INVALID_INPUT");
+  if (typeof error.detail === "string") result.detail = error.detail;
+  return result;
 }
 
 function notFoundError(session, modules) {
+  if (session.invalidInput) return invalidInputError(session.invalidInput);
   if (session.context.isAppBundle) return new DetectionError(`Unsupported app bundle. Supported modules: ${modules.map(mod => mod.manifest?.label || mod.id).join(", ")}.`, "DETECTION_UNSUPPORTED");
   return new DetectionError("No supported game found. Could not find index.html in root or www/ or a recognized engine artifact.", "DETECTION_UNSUPPORTED");
 }
 
 function exclusiveError(session, owners) {
+  if (session.invalidInput) return invalidInputError(session.invalidInput);
   return new DetectionError(`Unsupported ${session.input.extension || "file"} input for ${owners.map(mod => mod.manifest?.label || mod.id).join(", ")}`, "DETECTION_UNSUPPORTED_EXTENSION");
 }
 
@@ -718,7 +733,7 @@ async function explainDetectionAsync(inputPath, modules, options = {}) {
 }
 
 function resultOrThrow(report) {
-  if (report.error) throw new DetectionError(report.error.message, report.error.code, report);
+  if (report.error) throw Object.assign(new DetectionError(report.error.message, report.error.code, report), report.error.detail ? { detail: report.error.detail } : {});
   return report.detected;
 }
 

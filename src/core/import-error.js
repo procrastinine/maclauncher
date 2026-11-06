@@ -15,6 +15,9 @@ function userImportError(error, input) {
   let message;
   if (code === "DETECTION_CONFLICT") {
     message = `${item} contains more than one possible game. Add the game file or a more specific folder.`;
+  } else if (code === "DETECTION_INVALID_INPUT") {
+    // The module recognized the input format and names what is damaged or missing.
+    message = `${item} could not be added. ${error.message}`;
   } else if (code === "DETECTION_UNSUPPORTED" || code === "DETECTION_UNSUPPORTED_EXTENSION") {
     message = `${item} is a ${kind} MacLauncher does not recognize as a game. Add the game's application, main game file or complete folder.`;
   } else if (code === "DETECTION_NOT_FOUND" || code === "ENOENT") {

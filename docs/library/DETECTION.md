@@ -88,6 +88,10 @@ A validated file that was selected directly ranks above a sibling layout that on
 
 Two equally strong matches for independent games or engines produce `DETECTION_CONFLICT` with the evidence for every candidate. Neither the order of the labels nor the order of the file names chooses one silently. A `DETECTION_CONFLICT` reported by a module keeps its message and trace, and detection does not fall through to another detector. Fallback matches of equal priority go through the same conflict checks.
 
+### Damaged or incomplete inputs
+
+A module can recognize its own input format and still find the input unusable, such as a Switch dump folder without RomFS. It then reports `DETECTION_INVALID_INPUT` with a short plain message, which the trace records, and optionally a technical detail that is written to the log rather than shown. Detection continues with the other modules, and a match from any of them is used. Without a match, the result is `DETECTION_INVALID_INPUT` with the first such message instead of `DETECTION_UNSUPPORTED`, and import shows the message after the item's name: “Example” could not be added. Switch dump is missing RomFS.
+
 ## Installers
 
 Before engine detection, an import checks whether the input is an installer, using the shared input-container providers in `src/modules/shared/installers/`. An Inno Setup installer is identified by following its loader pointer or its exact PE resource, validating the loader CRC and reading the versioned setup header; a matching text string alone is not enough. Ordinary executables start no installer helper process.
