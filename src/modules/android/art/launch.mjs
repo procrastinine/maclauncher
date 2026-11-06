@@ -19,7 +19,8 @@ const execute=promisify(execFile);
 export async function launch(entry,context,payload,dependencies={}){
  const timing=require('../launch-timing').createLaunchTiming(context.logger);
  let renderer=Host.angleBackend(context,payload);
- let vulkan=await timing.measure('vulkan',()=>(dependencies.resolveVulkan||require('../../shared/vulkan').resolve)(context));
+ // ART is an arm64 host, so its Vulkan driver is always the arm64 build.
+ let vulkan=await timing.measure('vulkan',()=>(dependencies.resolveVulkan||require('../../shared/vulkan').resolve)(context,require('../graphics-selection').VULKAN_OPTIONS));
  const supplier=require('./runtime').resolve(payload),java=await timing.measure('java',()=>Host.ensureJava(context,dependencies));
  const platformPayload=await timing.measure('platform-runtime',()=>require('../launch-policy').resolvePlatformRuntime({context,payload},dependencies));
  const apkPayload={...payload,profile:{...payload.profile,arm32Version:supplier.manifest.android.architectures.includes('armeabi-v7a')?1:0}};
