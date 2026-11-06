@@ -53,47 +53,52 @@ async function install({ userDataDir, signal, onProgress, resolved, archiveFile 
     resolved = resolveManifest(response.body.toString('utf8'));
   }
   for (const candidate of Array.isArray(resolved) ? resolved : [resolved]) {
-  const expected = /^[A-Za-z0-9][A-Za-z0-9._-]*\.zip\.([a-f0-9]{40})$/.exec(candidate.filename || '');
-  resolved = candidate;
-  if (!expected || resolved.url !== ORIGIN + '/' + resolved.filename) throw new Error('Valve components require an official content-addressed archive.');
-  const root = store(userDataDir); Writable.assertOwnDirectory(userDataDir, root);
-  const stage = fs.mkdtempSync(path.join(root, '.install-'));
-  try {
-    const archive = path.join(stage, 'client.zip');
-    if (archiveFile) fs.copyFileSync(archiveFile, archive);
-    else await Upstream.download({ url: resolved.url, name: resolved.filename, ...(resolved.bytes ? { bytes: resolved.bytes } : {}), digest: { algorithm: 'sha1', value: expected[1] } }, archive, { signal, onProgress });
-    if (hashFile(archive, 'sha1') !== expected[1]) throw new Error('Valve component archive differs from its content address.');
-    const listing = await execute('/usr/bin/unzip', ['-Z1', archive], { signal, timeout: 120000 });
-    const members = listing.stdout.trim().split('\n');
-    const selected = ['steamclient64.dll', 'steamclient.dll'].map(name => members.filter(member => path.posix.basename(member).toLowerCase() === name));
-    if (selected.some(matches => !matches.length)) continue;
-    if (selected.some(matches => matches.length !== 1)) throw new Error('Valve client archive has ambiguous client filenames.');
-    const paths = selected.map(matches => matches[0]);
-    if (paths.some(member => member.startsWith('/') || member.includes('\\') || member.split('/').some(part => part === '..' || part === '.')))
-      throw new Error('Valve client archive contains an unsafe client path.');
-    const extracted = path.join(stage, 'extracted'); fs.mkdirSync(extracted);
-    await execute('/usr/bin/unzip', ['-q', archive, ...paths, '-d', extracted], { signal, timeout: 120000 });
-    const clients = { x86_64: 'steamclient64.dll', i386: 'steamclient.dll' }, payload = path.join(stage, 'payload'); fs.mkdirSync(payload);
-    const files = Object.entries(clients).map(([arch, name]) => {
-      fs.renameSync(path.join(extracted, paths[arch === 'i386' ? 1 : 0]), path.join(payload, name));
-      fs.chmodSync(path.join(payload, name), 0o644);
-      return { path: name, sha256: hashFile(path.join(payload, name)), size: fs.statSync(path.join(payload, name)).size };
-    });
-    const directory = path.join(root, expected[1]);
-    const valid = fs.lstatSync(directory, { throwIfNoEntry: false })?.isDirectory() && files.every(item => {
-      try { const file = path.join(directory, item.path); return fs.lstatSync(file).isFile() && hashFile(file) === item.sha256; }
-      catch { return false; }
-    });
-    if (!valid) {
-      const damaged = directory + '.damaged-' + randomUUID();
-      const retained = fs.lstatSync(directory, { throwIfNoEntry: false });
-      if (retained) fs.renameSync(directory, damaged);
-      try { fs.renameSync(payload, directory); }
-      catch (error) { if (retained) fs.renameSync(damaged, directory); throw error; }
-    }
-    writeJsonAtomic(path.join(root, 'active.json'), { archiveSha1: expected[1], source: resolved.url, clients, files });
-    return current(userDataDir);
-  } finally { fs.rmSync(stage, { recursive: true, force: true }); }
+    const expected = /^[A-Za-z0-9][A-Za-z0-9._-]*\.zip\.([a-f0-9]{40})$/.exec(candidate.filename || '');
+    resolved = candidate;
+    if (!expected || resolved.url !== ORIGIN + '/' + resolved.filename) throw new Error('Valve components require an official content-addressed archive.');
+    const root = store(userDataDir); Writable.assertOwnDirectory(userDataDir, root);
+    const stage = fs.mkdtempSync(path.join(root, '.install-'));
+    try {
+      const archive = path.join(stage, 'client.zip');
+      if (archiveFile) fs.copyFileSync(archiveFile, archive);
+      else await Upstream.download({ url: resolved.url, name: resolved.filename, ...(resolved.bytes ? { bytes: resolved.bytes } : {}), digest: { algorithm: 'sha1', value: expected[1] } }, archive, { signal, onProgress });
+      if (hashFile(archive, 'sha1') !== expected[1]) throw new Error('Valve component archive differs from its content address.');
+      const listing = await execute('/usr/bin/unzip', ['-Z1', archive], { signal, timeout: 120000 });
+      const members = listing.stdout.trim().split('\n');
+      const selected = ['steamclient64.dll', 'steamclient.dll'].map(name => members.filter(member => path.posix.basename(member).toLowerCase() === name));
+      if (selected.some(matches => !matches.length)) continue;
+      const paths = selected.flat();
+      if (paths.some(member => member.startsWith('/') || member.includes('\\') || member.split('/').some(part => part === '..' || part === '.')))
+        throw new Error('Valve client archive contains an unsafe client path.');
+      const extracted = path.join(stage, 'extracted'); fs.mkdirSync(extracted);
+      await execute('/usr/bin/unzip', ['-q', archive, ...paths, '-d', extracted], { signal, timeout: 120000 });
+      const clients = { x86_64: 'steamclient64.dll', i386: 'steamclient.dll' }, payload = path.join(stage, 'payload'); fs.mkdirSync(payload);
+      const files = Object.entries(clients).map(([arch, name]) => {
+        const candidates = selected[arch === 'i386' ? 1 : 0].map(member => {
+          const file = path.join(extracted, member), stat = fs.lstatSync(file);
+          if (!stat.isFile()) throw new Error('Valve client archive contains a non-regular client file.');
+          return { file, sha256: hashFile(file), size: stat.size };
+        });
+        if (new Set(candidates.map(item => item.sha256)).size !== 1) throw new Error('Valve client archive has different files with the same client name.');
+        fs.renameSync(candidates[0].file, path.join(payload, name));
+        fs.chmodSync(path.join(payload, name), 0o644);
+        return { path: name, sha256: candidates[0].sha256, size: candidates[0].size };
+      });
+      const directory = path.join(root, expected[1]);
+      const valid = fs.lstatSync(directory, { throwIfNoEntry: false })?.isDirectory() && files.every(item => {
+        try { const file = path.join(directory, item.path); return fs.lstatSync(file).isFile() && hashFile(file) === item.sha256; }
+        catch { return false; }
+      });
+      if (!valid) {
+        const damaged = directory + '.damaged-' + randomUUID();
+        const retained = fs.lstatSync(directory, { throwIfNoEntry: false });
+        if (retained) fs.renameSync(directory, damaged);
+        try { fs.renameSync(payload, directory); }
+        catch (error) { if (retained) fs.renameSync(damaged, directory); throw error; }
+      }
+      writeJsonAtomic(path.join(root, 'active.json'), { archiveSha1: expected[1], source: resolved.url, clients, files });
+      return current(userDataDir);
+    } finally { fs.rmSync(stage, { recursive: true, force: true }); }
   }
   throw new Error('Valve archives did not contain the Windows Steam client DLLs.');
 }

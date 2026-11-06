@@ -10,8 +10,10 @@ function archive(t) {
     fs.mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
     fs.writeFileSync(path.join(root, name), 'archive inspection input: ' + name);
   }
+  fs.mkdirSync(path.join(root, 'duplicate'));
+  fs.copyFileSync(path.join(root, 'other-layout/SteamClient.dll'), path.join(root, 'duplicate/steamclient.dll'));
   const zip = path.join(root, 'input.zip');
-  execFileSync('/usr/bin/zip', ['-qr', zip, 'new-layout', 'other-layout'], { cwd: root });
+  execFileSync('/usr/bin/zip', ['-qr', zip, 'new-layout', 'other-layout', 'duplicate'], { cwd: root });
   const sha1 = crypto.createHash('sha1').update(fs.readFileSync(zip)).digest('hex');
   const [resolved] = Components.resolveManifest('"client" { "any_asset" { "file" "changed-name.zip.' + sha1 + '" } }');
   return { root, zip, resolved, userDataDir: path.join(root, 'data') };
