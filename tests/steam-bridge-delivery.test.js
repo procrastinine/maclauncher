@@ -50,7 +50,7 @@ test('declined optional bridge stays quiet until explicit refresh permits a new 
 
 test('current Valve metadata selects content addresses without a fixed client version', () => {
   for (const digest of ['1'.repeat(40), 'a'.repeat(40)]) {
-    const archive = Components.resolveManifest('"client" { "bins_misc" { "file" "bins_misc_ubuntu12.zip.' + digest + '" "size" "128" } }');
+    const [archive] = Components.resolveManifest('"client" { "bins_misc" { "file" "bins_misc_ubuntu12.zip.' + digest + '" "size" "128" } }');
     assert.equal(archive.sha1, digest);
     assert.equal(archive.url, 'https://client-update.akamai.steamstatic.com/' + archive.filename);
   }
