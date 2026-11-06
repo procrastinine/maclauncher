@@ -151,9 +151,10 @@ test('AIM Stop signals only its retained controller and preserves original shutd
   assert.equal(child.listenerCount('exit'),0);assert.equal(child.listenerCount('error'),0);t.mock.restoreAll();
 });
 
-const keeper=path.resolve(__dirname,'../src/modules/android/providers/aim/resources/maclauncher-aim');
+// The controller ships as bin/maclauncher-aim in the managed android-aim runtime.
+const keeper=process.env.ANDROID_AIM_CONTROLLER;
 test('AIM owned Stop reaches the actual sandboxed controller and its resident child without granting sibling signals',
-  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!fs.existsSync(keeper),timeout:20000},async t=>{
+  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!keeper||!fs.existsSync(keeper),timeout:20000},async t=>{
   const AIM=require('../src/modules/android/providers/aim'),Policy=require('../src/modules/android/policy');
   const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'aim-owned-sandbox-stop-')));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const ctl=path.join(root,'supplier/bin/aimctl');fs.mkdirSync(path.dirname(ctl),{recursive:true});

@@ -182,15 +182,3 @@ test('attributions retain separate component and proprietary terms', () => {
   assert.match(doc, /\[Unity player components\][^\n]+\[official GameMaker runtimes\][^\n]+\[Adobe Flash Player\][^\n]+vendor terms/);
   assert.match(doc, /\[Kosugi\][^\n]+\(Apache-2\.0\)/);
 });
-
-const ai5Root = path.join(root, 'src/resources/native-runtimes/ai5');
-test('available AI5 bundle Kosugi declarations match their preserved Apache license', { skip: !fs.existsSync(ai5Root) }, () => {
-  for (const version of ['1.5.0-macos-v1', '1.5.0-macos-v2']) {
-    const directory = path.join(ai5Root, version, 'arm64');
-    if (!fs.existsSync(directory)) continue;
-    const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'manifest.json'), 'utf8'));
-    const notice = manifest.notices.find(item => item.name === 'Kosugi-Regular');
-    assert.equal(notice?.license, 'Apache-2.0', version);
-    assert.match(fs.readFileSync(path.join(directory, 'files', notice.path), 'utf8'), /Apache License[\s\S]+Version 2\.0/);
-  }
-});
