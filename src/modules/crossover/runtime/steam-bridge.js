@@ -58,9 +58,12 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
   function skipOptional(plan, { userDataDir } = {}) {
     if (userDataDir && plan?.appId) writeJsonAtomic(skippedPath(userDataDir), { apps: [...new Set([...skipped(userDataDir), String(plan.appId)])] });
   }
+  function clearSkipped(userDataDir) {
+    if (userDataDir) writeJsonAtomic(skippedPath(userDataDir), { apps: [] });
+  }
   const refresh = manager.refreshCatalog;
   manager.refreshCatalog = async function (options = {}) {
-    if (options.userDataDir) writeJsonAtomic(skippedPath(options.userDataDir), { apps: [] });
+    clearSkipped(options.userDataDir);
     return refresh.call(this, options);
   };
   const installRuntime = manager.installRuntime;
@@ -170,6 +173,6 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
         helper: 'C:\\Program Files (x86)\\Steam\\steam.exe', appId: String(game.appId), packageVersion: current.version };
     } catch (error) { if (context.signal?.aborted) throw error; return null; }
   }
-  return Object.assign(manager, { requirements, prepare, skipOptional });
+  return Object.assign(manager, { requirements, prepare, skipOptional, clearSkipped });
 }
 module.exports = Object.assign(create(), { create, identify, clientRoot });

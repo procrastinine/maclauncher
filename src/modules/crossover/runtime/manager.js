@@ -174,6 +174,7 @@ const manager = { id: "crossover", label: "CrossOver", ui: { groupId: "crossover
   refreshCatalog: async ({ userDataDir } = {}) => {
     // An explicit Refresh offers a declined graphics integration again.
     require('./winemac').clearSkipped(userDataDir);
+    require('./steam-bridge').clearSkipped(userDataDir);
     await require('./winemac').prune(userDataDir);
     return getState({ userDataDir }).catalog;
   },

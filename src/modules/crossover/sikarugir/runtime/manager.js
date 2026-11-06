@@ -62,6 +62,10 @@ function createManager({ discoverCatalog = Catalog.discover, dependencies = {} }
   }
   const manager = {
     ...base,
+    async refreshCatalog(options = {}) {
+      require('../../runtime/steam-bridge').clearSkipped(options.userDataDir);
+      return base.refreshCatalog(options);
+    },
     upstream: [Catalog.engines, Catalog.templates],
     ui: { groupId: "sikarugir", tabLabel: "Sikarugir", sectionLabel: "Sikarugir", memberOrder: 0, management: "managed", order: 201 },
     resolveSelection(entry, settings, userDataDir, options = {}) {
