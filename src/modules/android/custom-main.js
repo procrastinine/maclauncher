@@ -9,6 +9,7 @@ const Writable = require("../shared/writable-input");
 const Storage = require("./storage");
 const Metadata = require("./package-metadata");
 const manager = require("./runtime-manager");
+const { VULKAN_OPTIONS } = require("./graphics-selection");
 const LaunchPolicy = require("./launch-policy");
 
 function gameDirectory(entry, context) {
@@ -20,7 +21,7 @@ function listAngleBackends(entry, context) {
     ...(Runtime.resolveSelected(entry, context)?.profile?.angleVulkanVersion === 1 ? [{ value: "vulkan", label: "Vulkan" }] : [])] };
 }
 function listVulkanRuntimes(_payload, context) {
-  return require("../shared/vulkan").choices(context);
+  return require("../shared/vulkan").choices(context, VULKAN_OPTIONS);
 }
 
 module.exports = {
@@ -43,7 +44,7 @@ module.exports = {
   getRuntimeRequirements(entry, context) {
     if (context.runtimeId && context.runtimeId !== "klepton") return [];
     return [
-      ...require("../shared/vulkan").requirements(context, { required: context.runtimeSettings?.angleBackend === "vulkan" })
+      ...require("../shared/vulkan").requirements(context, { ...VULKAN_OPTIONS, required: context.runtimeSettings?.angleBackend === "vulkan" })
     ];
   },
   async launchRuntime(runtimeId, entry, context) {

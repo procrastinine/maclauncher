@@ -4,6 +4,8 @@ const Vulkan = require("../shared/vulkan");
 const { managers } = require("../shared/vulkan/libraries");
 const { confirmToolInstall } = require("../shared/runtime/tool-install");
 
+const VULKAN_OPTIONS = Object.freeze({ architecture: "arm64" });
+
 // The pinned ANGLE Metal provider's mtl_common.h declares GLES 3.0. This is a
 // provider-selection ceiling, never a replacement for actual EGL capability
 // queries or an application API check. ANGLE's Vulkan backend still runs GLES.
@@ -21,19 +23,19 @@ function explicitBackend(entry, context) {
 }
 
 async function moltenVk(context, dependencies) {
-  const available = (dependencies.installedVulkan || Vulkan.installed)(context);
+  const available = (dependencies.installedVulkan || Vulkan.installed)(context, VULKAN_OPTIONS);
   const installed = available.find(provider => provider.backend === "moltenvk");
   const resolve = dependencies.resolveVulkan || Vulkan.resolve;
   const selectedContext = id => ({ ...context, runtimeSettings: { ...context.runtimeSettings, vulkanRuntime: id } });
-  if (installed) return resolve(selectedContext(installed.id));
+  if (installed) return resolve(selectedContext(installed.id), VULKAN_OPTIONS);
   const manager = dependencies.moltenVkManager || managers.find(provider => provider.backend === "moltenvk");
-  const selection = manager.resolveSelection({}, context.settings, context.userDataDir, { verification: "status" });
+  const selection = manager.resolveSelection({}, context.settings, context.userDataDir, { verification: "status", ...VULKAN_OPTIONS });
   await (dependencies.confirmGraphicsInstall || confirmToolInstall)(context, { manager, version: selection.version,
-    requiresDownload: true, label: selection.version ? "MoltenVK " + selection.version : "MoltenVK",
+    requiresDownload: true, installOptions: VULKAN_OPTIONS, label: selection.version ? "MoltenVK " + selection.version : "MoltenVK",
     detail: "Required for this game's OpenGL ES version." });
-  const resultInstall = await manager.installRuntime({ ...context, version: selection.version });
+  const resultInstall = await manager.installRuntime({ ...context, version: selection.version, ...VULKAN_OPTIONS });
   context.onRuntimeStateChange?.();
-  const result = await resolve(selectedContext("moltenvk:" + (resultInstall?.version || selection.version || "auto")));
+  const result = await resolve(selectedContext("moltenvk:" + (resultInstall?.version || selection.version || "auto")), VULKAN_OPTIONS);
   if (!result || result.backend !== "moltenvk") throw new Error("MoltenVK is unavailable after installation.");
   return result;
 }
@@ -57,4 +59,4 @@ async function resolveGraphics(entry, context, payload, metadata, { renderer, vu
   return { renderer: "vulkan", vulkan };
 }
 
-module.exports = { METAL_GLES_CEILING, explicitBackend, resolveGraphics };
+module.exports = { VULKAN_OPTIONS, METAL_GLES_CEILING, explicitBackend, resolveGraphics };

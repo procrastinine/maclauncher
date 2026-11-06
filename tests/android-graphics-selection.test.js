@@ -65,3 +65,15 @@ test("Android required GLES downloads only its existing compatible supplier afte
   await select({}, { requiredGlEsVersion: 0x30000 }, { renderer: "metal", vulkan: null }, dependencies);
   assert.deepEqual(calls, [], "Ordinary Metal applications do not acquire Vulkan");
 });
+test("Android Vulkan fallback pins arm64 for selection, consent, installation and resolution", async () => {
+  const seen = [];
+  const manager = { id: 'vulkan-moltenvk', backend: 'moltenvk',
+    resolveSelection: (_entry, _settings, _directory, options) => { seen.push(options.architecture); return { version: '1.4.2' }; },
+    installRuntime: async options => { seen.push(options.architecture); return { version: '1.4.2' }; } };
+  await select({ runtimeSettings: { execution: 'art' } }, required, { renderer: 'metal', vulkan: null }, {
+    installedVulkan: (_context, options) => { seen.push(options.architecture); return []; }, moltenVkManager: manager,
+    confirmGraphicsInstall: async (_context, request) => seen.push(request.installOptions.architecture),
+    resolveVulkan: (_context, options) => { seen.push(options.architecture); return molten; }
+  });
+  assert.deepEqual(seen, Array(5).fill('arm64'));
+});

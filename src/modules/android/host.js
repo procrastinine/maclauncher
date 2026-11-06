@@ -300,7 +300,7 @@ function angleBackend(context, payload) {
 function serviceLauncher(context, payload, java, presentation, dependencies = {}, privateOutput = false) {
   const blockNetwork = require("./launch-policy").networkBlocked(context);
   const renderer = angleBackend(context, payload);
-  const vulkan = (dependencies.resolveVulkan || require("../shared/vulkan").resolve)(context);
+  const vulkan = (dependencies.resolveVulkan || require("../shared/vulkan").resolve)(context, require("./graphics-selection").VULKAN_OPTIONS);
   const hostClasspath = [path.join(payload.root, "android-host.jar"), path.join(payload.root, "android-framework.jar")];
   return async (service, fields, stdio, sandboxOptions) => {
         const serviceConfig = { ...launchConfig({ name: service.record.packageName }, service.prepared, payload,
@@ -382,7 +382,7 @@ async function launch(entry, context, payload, dependencies = {}) {
     graphics = { ...graphics }; delete graphics.RESHADE_RESOLUTION_MULTIPLIER;
   }
   const presentation = presentationEnvironment(payload, context, graphics, dependencies);
-  let vulkan = await timing.measure("vulkan", () => (dependencies.resolveVulkan || require("../shared/vulkan").resolve)(context));
+  let vulkan = await timing.measure("vulkan", () => (dependencies.resolveVulkan || require("../shared/vulkan").resolve)(context, require("./graphics-selection").VULKAN_OPTIONS));
   ({ renderer, vulkan } = await timing.measure("gles-provider", () => require("./graphics-selection").resolveGraphics(
     entry, context, payload, prepared.metadata, { renderer, vulkan }, dependencies)));
   if (payload.profile?.canvasPresentationVersion === 1 && !graphics.DYLD_INSERT_LIBRARIES) {
