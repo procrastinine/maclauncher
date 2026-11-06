@@ -115,7 +115,8 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
     // Valve download recorded them.
     const name = entry?.name || 'this game', size = bytes => bytes > 0 ? ` (${Math.max(0.1, bytes / 1048576).toFixed(1)} MB)` : '';
     const bytes = !local && pin?.asset?.bytes > 0 ? pin.asset.bytes : 0;
-    const valve = `the Windows Steam client files from Valve${size(Components.lastDownload(context.userDataDir)?.bytes)}`;
+    const previous = Components.lastDownload(context.userDataDir);
+    const valve = `the Windows Steam client files from Valve${previous ? ` (about ${Math.max(0.1, previous.bytes / 1048576).toFixed(1)} MB)` : ''}`;
     const version = local?.version || pin?.version || null;
     const downloads = label => local ? valve : `${label}${size(bytes)} and ${valve}`;
     const starts = isRunning() === false && ClientStart.clientStartEnabled(entry, context.settings) ? ', then starts Steam' : '';

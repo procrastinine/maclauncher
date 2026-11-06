@@ -187,7 +187,7 @@ test('Runtimes lists the bridge as one managed row with its Valve files, and rem
   // The next offer names the size of the last verified Valve download, offline.
   assert.deepEqual(Components.lastDownload(userDataDir), { filename: valve.resolved.filename, bytes: fs.statSync(valve.archiveFile).size });
   const [offer] = await bridge.requirements({ name: 'Fixture' }, { userDataDir });
-  assert.match(offer.detail, /the Steam client bridge \(0\.1 MB\) and the Windows Steam client files from Valve \(0\.1 MB\), then starts Steam\./);
+  assert.match(offer.detail, /the Steam client bridge \(0\.1 MB\) and the Windows Steam client files from Valve \(about 0\.1 MB\), then starts Steam\./);
   const running = offlineBridge(path.join(root, 'running'), { isRunning: () => true }).bridge;
   assert.doesNotMatch((await running.requirements({ name: 'Fixture' }, { userDataDir }))[0].detail, /starts Steam/, 'a running Steam client is not started again');
   assert.doesNotMatch((await bridge.requirements({ name: 'Fixture', startSteamClient: 'never' }, { userDataDir }))[0].detail, /starts Steam/, "Don't start keeps Steam closed");
@@ -206,4 +206,22 @@ test('the inspector line names the bridge only after a Play that used an install
   await install(userDataDir, '1.0.0');
   assert.deepEqual(bridge.inspectorDetail({ steamBridge: { version: '1.0.0' } }, userDataDir), { label: 'Steam', value: 'Steam client bridge 1.0.0' });
   assert.equal(bridge.inspectorDetail({ steamBridge: { version: '0.9.0' } }, userDataDir), null);
+});
+
+test('Play sizes use only an earlier complete Valve total without a metadata request', async t => {
+  const root = scratch(t), userDataDir = path.join(root, 'data'), { bridge, requests } = offlineBridge(root);
+  await bridge.refreshCatalog({ userDataDir, force: true });
+  const record = path.join(userDataDir, 'runtimes/steam-client-download.json');
+  fs.mkdirSync(path.dirname(record), { recursive: true });
+  for (const [value, expected] of [[null, false], [{ filename: 'old.zip', bytes: 1048576 }, false],
+    [{ filename: 'last.zip', totalBytes: 7340032 }, true]]) {
+    if (value) fs.writeFileSync(record, JSON.stringify(value));
+    const [plan] = await bridge.requirements({ name: 'Fixture' }, { userDataDir });
+    for (const text of [plan.detail, plan.companionDetail]) {
+      assert.equal(text.includes('the Windows Steam client files from Valve (about 7.0 MB)'), expected);
+      assert.doesNotMatch(text, /unknown|previous download/i);
+      if (!expected) assert.doesNotMatch(text, /files from Valve \(/);
+    }
+    assert.equal(requests.length, 1, 'only the explicit Refresh used the local metadata transport');
+  }
 });

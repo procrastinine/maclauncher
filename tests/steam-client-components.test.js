@@ -58,3 +58,28 @@ test('a damaged content-addressed directory rolls back on failure and leaves no 
   assert.equal(Components.current(fixture.userDataDir).root, installed.root);
   assert.deepEqual(backups(), [], 'successful repair removes its temporary backup');
 });
+
+test('the offline download record totals every archive before the client DLLs are found', async t => {
+  const fixture = archive(t), Upstream = require('../src/modules/shared/runtime/upstream');
+  const unrelated = path.join(fixture.root, 'unrelated.zip');
+  fs.writeFileSync(path.join(fixture.root, 'unrelated.txt'), 'not the client files');
+  execFileSync('/usr/bin/zip', ['-q', unrelated, 'unrelated.txt'], { cwd: fixture.root });
+  const filename = 'first.zip.' + crypto.createHash('sha1').update(fs.readFileSync(unrelated)).digest('hex');
+  const first = { filename, url: 'https://client-update.akamai.steamstatic.com/' + filename };
+  const requests = [];
+  t.mock.method(Upstream, 'download', async (asset, destination) => {
+    requests.push(asset.url);
+    fs.copyFileSync(asset.url === first.url ? unrelated : fixture.zip, destination);
+  });
+  const recordPath = path.join(fixture.userDataDir, 'runtimes/steam-client-download.json');
+  fs.mkdirSync(path.dirname(recordPath), { recursive: true });
+  fs.writeFileSync(recordPath, JSON.stringify({ filename, bytes: 123 }));
+  assert.equal(Components.lastDownload(fixture.userDataDir), null, 'an old final-archive-only size is not a complete total');
+  await Components.install({ userDataDir: fixture.userDataDir, resolved: [first, fixture.resolved] });
+  const totalBytes = fs.statSync(unrelated).size + fs.statSync(fixture.zip).size;
+  assert.deepEqual(Components.lastDownload(fixture.userDataDir), { filename: fixture.resolved.filename, bytes: totalBytes });
+  assert.deepEqual(JSON.parse(fs.readFileSync(recordPath)), { filename: fixture.resolved.filename, totalBytes });
+  Components.remove(fixture.userDataDir);
+  assert.equal(Components.lastDownload(fixture.userDataDir).bytes, totalBytes, 'the complete total remains available offline after removal');
+  assert.deepEqual(requests, [first.url, fixture.resolved.url]);
+});
