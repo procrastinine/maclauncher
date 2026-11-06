@@ -1,0 +1,15 @@
+# NGX scene metadata transport
+
+The NGX producer adapter carries game scene inputs into the shared recorded-scene boundary. Resource resolution belongs to the Direct3D translator: a resource is represented by its actual Vulkan image, aspect, mip and array layer, with explicit storage extent and viewport region. A Direct3D pointer is never used as a native image.
+
+`crossover/temporal/ngx/parameters.hpp` reads typed NGX parameters through a translator reader. Its `readImage` callback resolves resources on the recording command list, while `readMatrix` copies the supplied transforms. Encoding, normal space, depth interpretation and color descriptions come from the producer's actual declarations. `routing.hpp` maps those inputs into the existing temporal, AOV and matrix contracts. Linear depth is declined unless the producer has converted it to device depth using the supplied projection and conventions.
+
+The additive `MacLauncherWineVulkanRecordScene2` export carries fixed-width metadata beside the original scene request. The original export and context calls keep their layouts. Before using the additive Unix selector, the PE export probes the matched Unix module. Only the Unix owner unwraps Wine devices and command buffers; the native driver resolves images on that device. Metadata contains no native resource pointers or callbacks.
+
+AOVs retain their frame, view, epoch, revision, region, channel, encoding, space, origin, scale, bias and capture pass. Color, HUD-less color and UI each retain their own color description. Matrices use the shared row-major row-vector convention and explicit clip range, projection jitter and Y orientation. Ray reconstruction requires actual normals, perceptual roughness, material albedos, specular hit distance and camera matrices; a populated packet does not establish provider admission.
+
+`Producer` uses the existing native context lifecycle. Reset replaces its generation token; retirement releases the recording owner while native recorded flights retain their existing leases. Device changes, reused frame identities and invalid token replies are rejected. Busy preparation remains retryable, and command or device errors are preserved.
+
+Recorded operations retain the original SDK output. Recording success describes command recording and does not establish replacement output. The adapter does not advertise frame generation through the temporal scene call. Generation requires the shared real/synthetic event and completion path, with display owned by the existing presenter and one generation owner.
+
+The native encoding contract remains `RSVulkanSceneEncodingV2`, including its actual queue and per-flight retain/release callbacks. Provider choice and preparation belong to the shared graph. The transport selects no algorithm and creates no command queue or presentation scheduler.

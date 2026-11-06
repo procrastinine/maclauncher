@@ -1,0 +1,35 @@
+#pragma once
+// Copyright (c) MacLauncher contributors. MIT license.
+#include "scene-request.h"
+// Additive wire metadata. Texture identity remains in base.images; no native
+// pointer or callback can occur in this packet. V1 and its selector stay intact.
+typedef struct RSWineSceneAovImageV2 {
+ uint32_t x,y,width,height,encoding,space,channel,origin;
+ float scale,bias;
+ uint32_t pass,reserved;
+} RSWineSceneAovImageV2;
+typedef struct RSWineSceneMetadataV2 {
+ uint32_t size,version,aovMask,aovFlags;
+ uint64_t viewId,epoch,imageRevision;
+ RSWineVulkanSceneColorV1 color,uiColor,hudlessColor;
+ float preExposure;
+ uint32_t pass,colorPass,matrixFlags;
+ float view[16],projection[16];
+ RSWineSceneAovImageV2 images[14];
+} RSWineSceneMetadataV2;
+typedef struct RSWineVulkanSceneRequestV2 {
+ RSWineVulkanSceneRequestV1 base;
+ RSWineSceneMetadataV2 metadata;
+} RSWineVulkanSceneRequestV2;
+#ifdef _WIN32
+#define RS_SCENE_CALL2 __stdcall
+#else
+#define RS_SCENE_CALL2
+#endif
+typedef int32_t (RS_SCENE_CALL2 *RSWineVulkanSceneRecordCall2)(const RSWineVulkanSceneRequestV2*);
+#undef RS_SCENE_CALL2
+#if defined(__cplusplus)
+static_assert(sizeof(RSWineSceneAovImageV2)==48,"Wire AOV metadata layout");
+static_assert(sizeof(RSWineSceneMetadataV2)==1000,"Wire scene metadata layout");
+static_assert(sizeof(RSWineVulkanSceneRequestV2)==1744,"Wire scene request layout");
+#endif

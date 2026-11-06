@@ -111,8 +111,8 @@ typedef struct RSWineVulkanSceneDeviceV1 {
     uint32_t size, version;
     uint64_t wineDevice;
     VkDevice device;
-    PFN_rsMoltenVKSceneOperationAPI api;
-    PFN_rsMoltenVKRecordSceneOperation record;
+    PFN_rsVulkanSceneOperationAPI api;
+    PFN_rsVulkanRecordSceneOperation record;
 } RSWineVulkanSceneDeviceV1;
 
 typedef struct RSWineVulkanSceneProviderV1 {

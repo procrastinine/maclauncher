@@ -11,7 +11,9 @@
 #include <string.h>
 #include "vulkan_private.h"
 #include "scene-request.h"
+#include "scene-metadata.h"
 #include "macfx-shared/reshade/native/recorded-scene.h"
+#include "scene-metadata-native.h"
 
 _Static_assert(WINE_VULKAN_DRIVER_VERSION == 47, "Matched Wine Vulkan driver required");
 _Static_assert(RS_VULKAN_SCENE_IMAGE_COUNT == RS_WINE_VULKAN_SCENE_IMAGE_COUNT, "Scene roles changed");
@@ -68,8 +70,10 @@ static VkResult create_context(const RSWineVulkanSceneContextV1 *request,struct 
     typedef int (*CreateBoundary)(const RSVulkanSceneCallbacksV1*,RSVulkanSceneCallbacksV1*);
     RSRecordedSceneConsumerAPI api;
     RSCreateRecordedSceneConsumer1 create;
+    RSCreateRecordedSceneConsumer2 create2;
+    uint32_t version;
     CreateBoundary boundary;
-    PFN_rsMoltenVKSceneStagingAPI staging;
+    PFN_rsVulkanSceneStagingAPI staging;
     Dl_info info;
     struct scene_context *value;
     VkResult status;
@@ -90,18 +94,28 @@ static VkResult create_context(const RSWineVulkanSceneContextV1 *request,struct 
     if (status!=VK_SUCCESS) { release_context(value);return status; }
     value->generation=atomic_fetch_add_explicit(&next_generation,1,memory_order_relaxed);
     if (!value->generation) { release_context(value);return VK_ERROR_TOO_MANY_OBJECTS; }
-    value->consumer.size=sizeof(value->consumer);value->consumer.version=1;
-    if (!create(value->generation,&value->consumer))
+    version=value->device.api();
+    if(version==2){
+        create2=(RSCreateRecordedSceneConsumer2)dlsym(value->library,"rsCreateRecordedSceneConsumer2");
+        boundary=(CreateBoundary)dlsym(value->library,"rsCreateVulkanSceneBoundary2");
+        if(!create2||!boundary){release_context(value);return VK_ERROR_FEATURE_NOT_PRESENT;}
+    }
+    value->consumer.size=sizeof(value->consumer);value->consumer.version=version;
+    if (!(version==2?create2(value->generation,1,&value->consumer):create(value->generation,&value->consumer)))
     { release_context(value);return VK_NOT_READY; }
-    if (value->consumer.size!=sizeof(value->consumer)||value->consumer.version!=1||!value->consumer.owner || value->consumer.callbacks.size!=sizeof(value->consumer.callbacks) ||
-        value->consumer.callbacks.version!=1 || !value->consumer.callbacks.retain ||
+    if (value->consumer.size!=sizeof(value->consumer)||value->consumer.version!=version||!value->consumer.owner || value->consumer.callbacks.size!=sizeof(value->consumer.callbacks) ||
+        value->consumer.callbacks.version!=version || !value->consumer.callbacks.retain ||
         !value->consumer.callbacks.release || !value->consumer.callbacks.encode)
     { if(value->consumer.callbacks.release)value->consumer.callbacks.release(value->consumer.callbacks.storage);release_context(value);return VK_ERROR_INITIALIZATION_FAILED; }
     if (!boundary(&value->consumer.callbacks,&value->callbacks))
     { value->consumer.callbacks.release(value->consumer.callbacks.storage);release_context(value);return VK_NOT_READY; }
     value->consumer.callbacks.release(value->consumer.callbacks.storage);
-    staging=(PFN_rsMoltenVKSceneStagingAPI)vk_funcs->p_vkGetDeviceProcAddr(value->device.device,"rsMoltenVKSceneStagingAPI");
-    value->staging=staging && staging()==1;
+    if(value->callbacks.size!=sizeof(value->callbacks)||value->callbacks.version!=version||!value->callbacks.retain||!value->callbacks.release||!value->callbacks.encode||(version==2&&!value->callbacks.completed))
+    {release_context(value);return VK_ERROR_INITIALIZATION_FAILED;}
+    staging=(PFN_rsVulkanSceneStagingAPI)vk_funcs->p_vkGetDeviceProcAddr(value->device.device,"rsVulkanSceneStagingAPI");
+    if (!staging || staging()!=1)
+        staging=(PFN_rsVulkanSceneStagingAPI)vk_funcs->p_vkGetDeviceProcAddr(value->device.device,"rsMoltenVKSceneStagingAPI");
+    value->staging=version==1 && staging && staging()==1;
     value->observer=request->observerId;value->identity=request->contextId;*output=value;
     return VK_SUCCESS;
 }
@@ -171,9 +185,15 @@ __attribute__((visibility("default"))) int32_t rsWineVulkanResolveSceneDevice1(u
     if (!device || !device->host.device) return VK_ERROR_INITIALIZATION_FAILED;
     result.size = sizeof(result); result.version = 1;
     result.wineDevice = handle; result.device = device->host.device;
-    result.api = (PFN_rsMoltenVKSceneOperationAPI)vk_funcs->p_vkGetDeviceProcAddr(result.device, "rsMoltenVKSceneOperationAPI");
-    result.record = (PFN_rsMoltenVKRecordSceneOperation)vk_funcs->p_vkGetDeviceProcAddr(result.device, "rsMoltenVKRecordSceneOperation");
-    if (!result.api || !result.record || result.api() != 1) return VK_ERROR_FEATURE_NOT_PRESENT;
+    result.api = (PFN_rsVulkanSceneOperationAPI)vk_funcs->p_vkGetDeviceProcAddr(result.device, "rsVulkanSceneOperationAPI");
+    result.record = (PFN_rsVulkanRecordSceneOperation)vk_funcs->p_vkGetDeviceProcAddr(result.device, "rsVulkanRecordSceneOperation");
+    if (!result.api || !result.record || (result.api() != 1 && result.api() != 2))
+    {
+        result.api = (PFN_rsVulkanSceneOperationAPI)vk_funcs->p_vkGetDeviceProcAddr(result.device, "rsMoltenVKSceneOperationAPI");
+        result.record = (PFN_rsVulkanRecordSceneOperation)vk_funcs->p_vkGetDeviceProcAddr(result.device, "rsMoltenVKRecordSceneOperation");
+        if (!result.api || !result.record || result.api()!=1) return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
+    if (!result.api || !result.record || (result.api() != 1 && result.api() != 2)) return VK_ERROR_FEATURE_NOT_PRESENT;
     *binding = result;
     return VK_SUCCESS;
 }
@@ -222,7 +242,7 @@ static void copy_frame(RSTemporalFrame *frame, const RSWineVulkanSceneRequestV1 
     frame->reserved = s->profile;
 }
 
-static VkResult record_scene(const RSWineVulkanSceneRequestV1 *request, BOOL wow64)
+static VkResult record_scene(const RSWineVulkanSceneRequestV1 *request, const RSWineSceneMetadataV2 *metadata, BOOL wow64)
 {
     struct vulkan_device *device;
     struct vulkan_command_buffer *commands;
@@ -232,6 +252,8 @@ static VkResult record_scene(const RSWineVulkanSceneRequestV1 *request, BOOL wow
     RSWineVulkanSceneConsumerV1 consumer = {0};
     RSVulkanSceneOperationV1 operation = {0};
     struct RSImageColorDescription color;
+    RSSceneAovs aovs = {0};
+    RSSceneMatrices matrices = {0};
     VkResult result;
     unsigned int i;
 
@@ -245,6 +267,7 @@ static VkResult record_scene(const RSWineVulkanSceneRequestV1 *request, BOOL wow
         request->imageMask & ~((1u << RS_WINE_VULKAN_SCENE_IMAGE_COUNT) - 1) ||
         !request->images[RS_VULKAN_SCENE_COLOR].image || !request->images[RS_VULKAN_SCENE_OUTPUT].image)
         return VK_ERROR_INITIALIZATION_FAILED;
+    if (metadata && !rsWineSceneMetadataDecode(request,metadata,&aovs,&matrices)) return VK_ERROR_INITIALIZATION_FAILED;
     if (wow64 && ((request->device >> 32) || (request->commandBuffer >> 32)))
         return VK_ERROR_INITIALIZATION_FAILED;
     if (!vk_funcs) return VK_ERROR_FEATURE_NOT_PRESENT;
@@ -272,7 +295,10 @@ static VkResult record_scene(const RSWineVulkanSceneRequestV1 *request, BOOL wow
         !consumer.device || consumer.device->size != sizeof(*consumer.device) || consumer.device->version != 1 ||
         consumer.device->wineDevice != request->device || consumer.device->device != device->host.device ||
         !consumer.device->api || !consumer.device->record ||
-        consumer.callbacks.size != sizeof(consumer.callbacks) || consumer.callbacks.version != 1 ||
+        consumer.callbacks.size != sizeof(consumer.callbacks) ||
+        (consumer.callbacks.version != 1 && consumer.callbacks.version != 2) ||
+        consumer.device->api() != consumer.callbacks.version ||
+        (consumer.callbacks.version==2&&!consumer.callbacks.completed) ||
         !consumer.callbacks.retain || !consumer.callbacks.release || !consumer.callbacks.encode)
     { release_provider(provider);release_context(owned);return VK_ERROR_INITIALIZATION_FAILED; }
 
@@ -283,6 +309,7 @@ static VkResult record_scene(const RSWineVulkanSceneRequestV1 *request, BOOL wow
     operation.imageMask = owned ? request->imageMask & owned_demand : request->imageMask;
     if(owned)operation.imageMask |= (1u<<RS_VULKAN_SCENE_COLOR)|(1u<<RS_VULKAN_SCENE_OUTPUT);
     copy_frame(&operation.frame, request, consumer.owner);
+    operation.frame.commandBufferKind=consumer.callbacks.version==2?1:0;
     for (i = 0; i < RS_WINE_VULKAN_SCENE_IMAGE_COUNT; ++i)
     {
         operation.images[i].image = (VkImage)request->images[i].image;
@@ -291,7 +318,8 @@ static VkResult record_scene(const RSWineVulkanSceneRequestV1 *request, BOOL wow
         operation.images[i].arrayLayer = request->images[i].arrayLayer;
     }
     if (request->colorKnown) { memcpy(&color, &request->color, sizeof(color)); operation.color = &color; }
-    operation.aovs = consumer.aovs; operation.matrices = consumer.matrices;
+    operation.aovs = metadata && metadata->aovMask ? &aovs : consumer.aovs;
+    operation.matrices = metadata && metadata->matrixFlags ? &matrices : consumer.matrices;
     operation.sourceTimeSeconds = request->sourceTimeSeconds;
     operation.callbacks = consumer.callbacks;
     result = consumer.device->record(commands->host.command_buffer, &operation);
@@ -305,7 +333,7 @@ NTSTATUS maclauncher_scene_record64(void *args)
 {
     struct maclauncher_scene_record_params *params = args;
     params->result = params->reserved==1 ? context_control((RSWineVulkanSceneContextV1 *)(UINT_PTR)params->request,FALSE) :
-        params->reserved ? VK_ERROR_INITIALIZATION_FAILED : record_scene((const RSWineVulkanSceneRequestV1 *)(UINT_PTR)params->request, FALSE);
+        params->reserved==2 ? record_scene(&((const RSWineVulkanSceneRequestV2 *)(UINT_PTR)params->request)->base, &((const RSWineVulkanSceneRequestV2 *)(UINT_PTR)params->request)->metadata, FALSE) : params->reserved ? VK_ERROR_INITIALIZATION_FAILED : record_scene((const RSWineVulkanSceneRequestV1 *)(UINT_PTR)params->request, NULL, FALSE);
     return STATUS_SUCCESS;
 }
 
@@ -314,6 +342,6 @@ NTSTATUS maclauncher_scene_record32(void *args)
     struct maclauncher_scene_record_params *params = args;
     params->result = params->request >> 32 ? VK_ERROR_INITIALIZATION_FAILED : params->reserved==1 ?
         context_control((RSWineVulkanSceneContextV1 *)UlongToPtr((UINT32)params->request),TRUE) :
-        params->reserved ? VK_ERROR_INITIALIZATION_FAILED : record_scene((const RSWineVulkanSceneRequestV1 *)UlongToPtr((UINT32)params->request), TRUE);
+        params->reserved==2 ? record_scene(&((const RSWineVulkanSceneRequestV2 *)UlongToPtr((UINT32)params->request))->base, &((const RSWineVulkanSceneRequestV2 *)UlongToPtr((UINT32)params->request))->metadata, TRUE) : params->reserved ? VK_ERROR_INITIALIZATION_FAILED : record_scene((const RSWineVulkanSceneRequestV1 *)UlongToPtr((UINT32)params->request), NULL, TRUE);
     return STATUS_SUCCESS;
 }

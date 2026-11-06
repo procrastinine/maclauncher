@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "implementation": "Original MacLauncher typed NGX scene routing",
+  "referenceOnly": {
+    "origin": "https://github.com/metalsharp/VKD3D-Proton-MacOS.git",
+    "commit": "4e89065e359f9c6c2a78170b045835d6382113d9",
+    "files": ["ngx/nvngx/nvngx.cpp", "ngx/common/lane.hpp", "patches/vkd3d-proton-moltenvk.patch", "patches/moltenvk/metalsharp-vkmt.diff"],
+    "provenance": "The reference NGX core identifies Mullion as its original source under LGPL-2.1-or-later. No reference implementation code is incorporated by these original mapping headers."
+  },
+  "headers": ["parameters.hpp", "routing.hpp", "producer.hpp"],
+  "transport": "../vulkan/scene-metadata.h",
+  "originalOutputRetained": true
+}

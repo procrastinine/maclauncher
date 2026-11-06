@@ -1,6 +1,7 @@
 /* Copyright (c) MacLauncher contributors. MIT license. */
 #include "vulkan_loader.h"
 #include "scene-request.h"
+#include "scene-metadata.h"
 
 extern BOOL maclauncher_scene_initialize(void);
 static LONG matched_unix_profile;
@@ -55,5 +56,24 @@ int32_t WINAPI MacLauncherWineVulkanSceneContext1(RSWineVulkanSceneContextV1 *co
     params.reserved = 1;
     params.result = VK_ERROR_FEATURE_NOT_PRESENT;
     status = UNIX_CALL(maclauncher_scene_record, &params);
+    return status ? VK_ERROR_INITIALIZATION_FAILED : params.result;
+}
+
+int32_t WINAPI MacLauncherWineVulkanRecordScene2(const RSWineVulkanSceneRequestV2 *request)
+{
+    struct maclauncher_scene_record_params params = {0};
+    NTSTATUS status;
+    if (!request || request->base.size != sizeof(request->base) || request->base.version != 1 ||
+        request->base.profile != RS_WINE_VULKAN_SCENE_PROFILE || !request->base.device || !request->base.commandBuffer ||
+        request->metadata.size != sizeof(request->metadata) || request->metadata.version != 2)
+        return VK_ERROR_INITIALIZATION_FAILED;
+    if (!maclauncher_scene_initialize() || !matched_profile((VkDevice)(UINT_PTR)request->base.device))
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    // Negotiate the additive selector through the existing safe probe first.
+    { struct is_available_device_function_params probe;
+      probe.device=(VkDevice)(UINT_PTR)request->base.device;probe.name="MacLauncherWineVulkanSceneMetadataABI2";
+      if ((uint32_t)UNIX_CALL(is_available_device_function,&probe)!=RS_WINE_VULKAN_SCENE_PROFILE) return VK_ERROR_FEATURE_NOT_PRESENT; }
+    params.request=(UINT_PTR)request;params.reserved=2;params.result=VK_ERROR_FEATURE_NOT_PRESENT;
+    status=UNIX_CALL(maclauncher_scene_record,&params);
     return status ? VK_ERROR_INITIALIZATION_FAILED : params.result;
 }

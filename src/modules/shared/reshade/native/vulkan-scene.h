@@ -50,6 +50,20 @@ typedef struct RSVulkanSceneEncodingV1 {
     const RSVulkanSceneImageV1* images;
     uint32_t imageMask;
 } RSVulkanSceneEncodingV1;
+// Explicit native Metal4 opt-in. The V1 prefix and callback layout are unchanged.
+// The actual driver queue and per-submission allocator/residency/resource lease
+// remain alive through matching GPU feedback, failure or abandonment. The
+// result address passed to encode remains stable through that flight's completed
+// callback; repeated recordings use separate result storage and flight leases.
+// Neither the common consumer nor its providers begin/end/submit these commands.
+typedef struct RSVulkanSceneEncodingV2 {
+    RSVulkanSceneEncodingV1 base;
+    void* commandQueue;
+    void* flightStorage;
+    void (*retainFlight)(void*);
+    void (*releaseFlight)(void*);
+} RSVulkanSceneEncodingV2;
+
 enum RSVulkanSceneCompletion {
     RS_VULKAN_SCENE_GPU_COMPLETED=0,
     RS_VULKAN_SCENE_GPU_FAILED=1,
@@ -68,6 +82,10 @@ typedef struct RSVulkanSceneCallbacksV1 {
 // returned callback table. The adapter retains consumer until its last owner
 // retires. Creation prepares no device resources and advances no frame state.
 int rsCreateVulkanSceneBoundary1(const RSVulkanSceneCallbacksV1* consumer,
+                               RSVulkanSceneCallbacksV1* output);
+// V2 requires an explicitly version-2 callback table. An old callback is never
+// invoked with a V2 packet. Its compute dependency encoders are genuine Metal4.
+int rsCreateVulkanSceneBoundary2(const RSVulkanSceneCallbacksV1* consumer,
                                RSVulkanSceneCallbacksV1* output);
 #ifdef __cplusplus
 }

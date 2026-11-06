@@ -15,10 +15,14 @@ uint32_t rsRecordedSceneConsumerAPI(void);
 // Returns one callback reference. Releasing the last recorded/completion owner
 // retires this exact ordered-scene owner without touching a later generation.
 int rsCreateRecordedSceneConsumer1(uint64_t generation,RSRecordedSceneConsumerV1*);
+// Same output layout, explicit size/version2 and commandBufferKind1. Success
+// negotiates packet semantics, not support for every plan/provider/device.
+int rsCreateRecordedSceneConsumer2(uint64_t generation,uint32_t commandBufferKind,RSRecordedSceneConsumerV1*);
 // Cached prepared-plan resource demand, expressed in the existing scene slots.
 uint32_t rsRecordedSceneImageDemand1(void);
 typedef uint32_t (*RSRecordedSceneConsumerAPI)(void);
 typedef int (*RSCreateRecordedSceneConsumer1)(uint64_t,RSRecordedSceneConsumerV1*);
+typedef int (*RSCreateRecordedSceneConsumer2)(uint64_t,uint32_t,RSRecordedSceneConsumerV1*);
 typedef uint32_t (*RSRecordedSceneImageDemand1)(void);
 typedef struct RSRecordedSceneExtentV1 {uint32_t width,height;} RSRecordedSceneExtentV1;
 // Storage capacity is not the scene's current logical processing grid.

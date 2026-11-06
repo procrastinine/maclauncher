@@ -45,6 +45,19 @@ typedef struct RSVulkanSceneOperationV1 {
     RSVulkanSceneCallbacksV1 callbacks;
 } RSVulkanSceneOperationV1;
 
+// Driver-neutral operation packets retain the V1 layout. API 1 negotiates
+// classic callback/encoding V1; API 2 requires explicitly negotiated callback V2
+// and native encoding V2 with genuine Metal4 commands, queue and flight lease.
+// Unknown versions retain the original output; no callback version is inferred
+// from symbol presence. The legacy Molten names continue to report API 1.
+uint32_t rsVulkanSceneOperationAPI(void);
+uint32_t rsVulkanSceneStagingAPI(void);
+VkResult rsVulkanRecordSceneOperation(VkCommandBuffer,const RSVulkanSceneOperationV1*);
+typedef uint32_t (*PFN_rsVulkanSceneOperationAPI)(void);
+typedef uint32_t (*PFN_rsVulkanSceneStagingAPI)(void);
+typedef VkResult (*PFN_rsVulkanRecordSceneOperation)(VkCommandBuffer,const RSVulkanSceneOperationV1*);
+
+// Existing immutable MoltenVK packages keep their original exports.
 uint32_t rsMoltenVKSceneOperationAPI(void);
 uint32_t rsMoltenVKSceneStagingAPI(void);
 // VK_SUCCESS means recorded only. Unknown/unready operations preserve original
