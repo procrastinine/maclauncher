@@ -4,6 +4,7 @@ const { execFileSync } = require('node:child_process');
 const { prepareForLaunch } = require('../src/core/runtime-preparation');
 const Bridge = require('../src/modules/crossover/runtime/steam-bridge');
 const Components = require('../src/modules/crossover/runtime/steam-client-components');
+const Upstream = require('../src/modules/shared/runtime/upstream');
 
 const id = 'maclauncher-steam-bridge', sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 function scratch(t) {
@@ -42,10 +43,10 @@ function valveArchive(root) {
   fs.mkdirSync(path.join(source, 'legacycompat'), { recursive: true });
   fs.writeFileSync(path.join(source, 'steamclient64.dll'), 'genuine x86_64 client');
   fs.writeFileSync(path.join(source, 'legacycompat/steamclient.dll'), 'genuine i386 client');
-  const archiveFile = path.join(root, 'bins_misc_ubuntu12.zip');
-  execFileSync('/usr/bin/zip', ['-q', '-X', archiveFile, 'steamclient64.dll', 'legacycompat/steamclient.dll'], { cwd: source });
-  const filename = 'bins_misc_ubuntu12.zip.' + crypto.createHash('sha1').update(fs.readFileSync(archiveFile)).digest('hex');
-  return { archiveFile, resolved: { filename, url: 'https://client-update.akamai.steamstatic.com/' + filename } };
+  const zip = path.join(root, 'bins_misc_ubuntu12.zip');
+  execFileSync('/usr/bin/zip', ['-q', '-X', zip, 'steamclient64.dll', 'legacycompat/steamclient.dll'], { cwd: source });
+  const filename = 'bins_misc_ubuntu12.zip.' + crypto.createHash('sha1').update(fs.readFileSync(zip)).digest('hex');
+  return { zip, resolved: { filename, url: 'https://client-update.akamai.steamstatic.com/' + filename } };
 }
 function offlineBridge(root, options = {}) {
   const item = bridgePackage(root), valve = valveArchive(root), requests = [];
@@ -57,13 +58,14 @@ function offlineBridge(root, options = {}) {
       fs.writeFileSync(path.join(destination, 'runtime-package.json'), JSON.stringify(item.wrapper));
       fs.cpSync(item.payload, path.join(destination, 'files'), { recursive: true });
     } } });
-  // Play and Runtimes pass the same options. The Valve archive is supplied
-  // locally here, and `received` records what the bridge passed for it.
+  // Play and Runtimes pass the same options. Valve's download is served from
+  // the local archive here, and `received` records what the bridge passed.
   const received = [];
   const install = async (userDataDir, version, extra = {}) => {
-    const original = Components.install;
-    Components.install = options => { received.push(options); return original({ ...options, resolved: valve.resolved, archiveFile: valve.archiveFile }); };
-    try { return await bridge.installRuntime({ userDataDir, version, ...extra }); } finally { Components.install = original; }
+    const original = Components.install, download = Upstream.download;
+    Components.install = options => { received.push(options); return original({ ...options, resolved: valve.resolved }); };
+    Upstream.download = async (_asset, destination) => fs.copyFileSync(valve.zip, destination);
+    try { return await bridge.installRuntime({ userDataDir, version, ...extra }); } finally { Components.install = original; Upstream.download = download; }
   };
   return { bridge, install, received, requests, item, valve };
 }
@@ -185,7 +187,7 @@ test('Runtimes lists the bridge as one managed row with its Valve files, and rem
   assert.equal(bridge.getState({ userDataDir }).sections[0].components[0].status, 'Not installed');
   assert.equal(Components.remove(userDataDir), false, 'nothing else is removed');
   // The next offer names the size of the last verified Valve download, offline.
-  assert.deepEqual(Components.lastDownload(userDataDir), { filename: valve.resolved.filename, bytes: fs.statSync(valve.archiveFile).size });
+  assert.deepEqual(Components.lastDownload(userDataDir), { filename: valve.resolved.filename, bytes: fs.statSync(valve.zip).size });
   const [offer] = await bridge.requirements({ name: 'Fixture' }, { userDataDir });
   assert.match(offer.detail, /the Steam client bridge \(0\.1 MB\) and the Windows Steam client files from Valve \(about 0\.1 MB\), then starts Steam\./);
   const running = offlineBridge(path.join(root, 'running'), { isRunning: () => true }).bridge;

@@ -75,13 +75,7 @@ function remove(userDataDir) {
   return true;
 }
 // Called only from the consented managed-install action. Discovery/status use current().
-async function install({ userDataDir, signal, onProgress, resolved, archiveFile } = {}) {
-  // A chosen archive is checked first, also when client files are current.
-  if (archiveFile) {
-    const named = /^[A-Za-z0-9][A-Za-z0-9._-]*\.zip\.([a-f0-9]{40})$/.exec(resolved?.filename || '');
-    if (!named || !fs.statSync(archiveFile).size || require('../../shared/runtime/pinned-native-manager').hashFile(archiveFile, 'sha1') !== named[1])
-      throw new Error('Valve component archive differs from its content address.');
-  }
+async function install({ userDataDir, signal, onProgress, resolved } = {}) {
   const existing = current(userDataDir); if (existing) return existing;
   if (!resolved) {
     const response = await source.request(MANIFEST, { signal, maxBytes: 2 * 1024 * 1024, maxRedirects: 0 });
@@ -97,8 +91,7 @@ async function install({ userDataDir, signal, onProgress, resolved, archiveFile 
     const stage = fs.mkdtempSync(path.join(root, '.install-'));
     try {
       const archive = path.join(stage, 'client.zip');
-      if (archiveFile) fs.copyFileSync(archiveFile, archive);
-      else await Upstream.download({ url: resolved.url, name: resolved.filename, ...(resolved.bytes ? { bytes: resolved.bytes } : {}), digest: { algorithm: 'sha1', value: expected[1] } }, archive, { signal, onProgress });
+      await Upstream.download({ url: resolved.url, name: resolved.filename, ...(resolved.bytes ? { bytes: resolved.bytes } : {}), digest: { algorithm: 'sha1', value: expected[1] } }, archive, { signal, onProgress });
       if (hashFile(archive, 'sha1') !== expected[1]) throw new Error('Valve component archive differs from its content address.');
       totalBytes += fs.statSync(archive).size;
       const listing = await execute('/usr/bin/unzip', ['-Z1', archive], { signal, timeout: 120000 });

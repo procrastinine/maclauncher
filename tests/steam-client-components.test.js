@@ -2,6 +2,7 @@ const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 const Components = require('../src/modules/crossover/runtime/steam-client-components');
+const Upstream = require('../src/modules/shared/runtime/upstream');
 function archive(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'valve-components-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -18,15 +19,20 @@ function archive(t) {
   const [resolved] = Components.resolveManifest('"client" { "any_asset" { "file" "changed-name.zip.' + sha1 + '" } }');
   return { root, zip, resolved, userDataDir: path.join(root, 'data') };
 }
+// Valve's download is served from the fixture archive.
+function offline(t, fixture) {
+  t.mock.method(Upstream, 'download', async (_asset, destination) => fs.copyFileSync(fixture.zip, destination));
+  return { userDataDir: fixture.userDataDir, resolved: fixture.resolved };
+}
 test('consented Valve install discovers client DLL names in renamed assets and nested paths', async t => {
   const fixture = archive(t);
-  const installed = await Components.install({ ...fixture, archiveFile: fixture.zip });
+  const installed = await Components.install(offline(t, fixture));
   assert.equal(installed.archiveSha1, fixture.resolved.sha1);
   assert.equal(fs.readFileSync(path.join(installed.root, installed.clients.i386), 'utf8'), 'archive inspection input: other-layout/SteamClient.dll');
   assert.equal(Components.current(fixture.userDataDir).root, installed.root);
 });
 test('a damaged content-addressed directory rolls back on failure and leaves no backup after repair', async t => {
-  const fixture = archive(t), options = { ...fixture, archiveFile: fixture.zip };
+  const fixture = archive(t), options = offline(t, fixture);
   const installed = await Components.install(options);
   const file = path.join(installed.root, installed.clients.x86_64);
   fs.writeFileSync(file, 'damaged bytes');
@@ -60,7 +66,7 @@ test('a damaged content-addressed directory rolls back on failure and leaves no 
 });
 
 test('the offline download record totals every archive before the client DLLs are found', async t => {
-  const fixture = archive(t), Upstream = require('../src/modules/shared/runtime/upstream');
+  const fixture = archive(t);
   const unrelated = path.join(fixture.root, 'unrelated.zip');
   fs.writeFileSync(path.join(fixture.root, 'unrelated.txt'), 'not the client files');
   execFileSync('/usr/bin/zip', ['-q', unrelated, 'unrelated.txt'], { cwd: fixture.root });

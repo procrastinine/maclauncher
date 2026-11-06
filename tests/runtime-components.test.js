@@ -134,21 +134,6 @@ test("Add from file reads the chosen file first and adds a shared asset only whe
   assert.equal(File.resolve(asset, root), null, "a deleted asset is fetched again by ensure(), after consent");
 });
 
-test("a chosen Valve archive is checked before the current client files are reported", async t => {
-  const Valve = require("../src/modules/crossover/runtime/steam-client-components");
-  const root = temporary(t), store = path.join(root, "runtimes/steam-client-components"), sha1 = "c".repeat(40), directory = path.join(store, sha1);
-  fs.mkdirSync(directory, { recursive: true });
-  const files = ["steamclient64.dll", "steamclient.dll"].map(name => { fs.writeFileSync(path.join(directory, name), name); return { path: name, sha256: sha256(Buffer.from(name)), size: name.length }; });
-  fs.writeFileSync(path.join(store, "active.json"), JSON.stringify({ archiveSha1: sha1, source: "https://example.test", clients: { x86_64: "steamclient64.dll", i386: "steamclient.dll" }, files }));
-  assert.equal(Valve.current(root)?.archiveSha1, sha1);
-  const wrong = path.join(root, "bins_misc_ubuntu12.zip." + sha1); fs.writeFileSync(wrong, "not this archive");
-  await assert.rejects(Valve.install({ userDataDir: root, archiveFile: wrong, resolved: { filename: path.basename(wrong), url: "https://example.test/" + path.basename(wrong) } }),
-    /differs from its content address/);
-  const empty = path.join(root, "empty"); fs.writeFileSync(empty, "");
-  await assert.rejects(Valve.install({ userDataDir: root, archiveFile: empty, resolved: { filename: path.basename(wrong) } }), /differs from its content address/);
-  assert.equal((await Valve.install({ userDataDir: root })).archiveSha1, sha1, "without a chosen file the current files are used");
-});
-
 test("a runtime archive added by hand installs the release whose SHA-256 it matches", async t => {
   const root = temporary(t), archive = path.join(root, "release.tar.gz"); fs.writeFileSync(archive, "release archive");
   const actions = [];
