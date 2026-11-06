@@ -9,7 +9,8 @@ const { frameworkArguments } = require('./helpers/android-java');
 
 test('Original Android SystemCleaner retains the JVM shared resource lifecycle', t => {
   const home = process.env.JAVA_HOME;
-  if (!home) return t.skip('Requires JAVA_HOME for Java 21');
+  // The probe compiles against the framework classes of a built Android runtime.
+  if (!home || !require('./helpers/android-java').runtimeRoot()) return t.skip('Requires JAVA_HOME for Java 21 and an Android runtime');
   const output = fs.mkdtempSync(path.join(os.tmpdir(), 'android-cleaner-'));
   t.after(() => fs.rmSync(output, { recursive: true, force: true }));
   const framework = frameworkArguments('javac', [])[1];
