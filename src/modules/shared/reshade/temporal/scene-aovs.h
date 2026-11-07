@@ -27,7 +27,9 @@ enum RSSceneAovSlot {
 enum RSSceneAovEncoding {
  RS_SCENE_AOV_LINEAR=0,RS_SCENE_AOV_XYZ_SIGNED=1,
  RS_SCENE_AOV_XYZ_UNORM=2,RS_SCENE_AOV_ROUGHNESS_FOLDED=3,
- RS_SCENE_AOV_SCALAR=4,RS_SCENE_AOV_COLOR=5
+ RS_SCENE_AOV_SCALAR=4,RS_SCENE_AOV_COLOR=5,
+ // Resource supplied, but its value encoding has not been declared.
+ RS_SCENE_AOV_UNKNOWN=0xffffffffu
 };
 enum RSSceneAovSpace {RS_SCENE_AOV_SPACE_NONE=0,RS_SCENE_AOV_SPACE_VIEW=1,RS_SCENE_AOV_SPACE_WORLD=2};
 enum RSSceneAovOrigin {RS_SCENE_AOV_TOP_LEFT=0,RS_SCENE_AOV_BOTTOM_LEFT=1};
@@ -73,6 +75,22 @@ typedef struct RSSceneAovs {
  uint32_t pass,colorPass,reserved2;
  RSSceneAovImage images[RS_SCENE_AOV_COUNT];
 } RSSceneAovs;
+// Size/version zero in a color description leaves its domain unknown; a
+// producer may still retain a known alpha convention there. Unknown encodings
+// and normal space NONE are retained, but require convention-aware consumers.
+// Hit distance may explicitly carry WORLD units; legacy NONE means view units.
+static inline int rsSceneAovConventionsKnown(const RSSceneAovs *v,unsigned slot){
+ if(!v||slot>=RS_SCENE_AOV_COUNT||!v->images[slot].texture)return 0;
+ const RSSceneAovImage *a=&v->images[slot];
+ if(a->encoding==RS_SCENE_AOV_UNKNOWN)return 0;
+ if(slot==RS_SCENE_AOV_NORMAL&&a->space==RS_SCENE_AOV_SPACE_NONE)return 0;
+ if(slot==RS_SCENE_AOV_SPECULAR_HIT_DISTANCE&&a->space==RS_SCENE_AOV_SPACE_WORLD)return 0;
+ if(slot==RS_SCENE_AOV_HUDLESS_COLOR||slot==RS_SCENE_AOV_UI_COLOR_ALPHA){
+  const struct RSImageColorDescription *c=slot==RS_SCENE_AOV_HUDLESS_COLOR?&v->hudlessColor:&v->uiColor;
+  if(c->size!=sizeof(*c)||c->version!=1||!v->colorPass||(a->pass?a->pass:v->pass)!=v->colorPass)return 0;
+ }
+ return 1;
+}
 // Bind before encoding. The core retains exact attachments through the actual
 // borrowed command completion. It never commits or waits on producer commands.
 int rsBindTemporalSceneAovs(const RSTemporalFrame*,const RSSceneAovs*);

@@ -167,7 +167,7 @@ class MetalGeneration final:public GenerationEncoder {
    // A separate overlay keeps its declared color/alpha convention until the
    // prepared GPU conversion below. Unsupported atlas or ordering contracts
    // retain the complete composited-UI route rather than dropping the UI.
-   if(sceneAovs->composedRegionKnown&&sceneAovs->composedColor==source&&!sceneAovs->composedX&&!sceneAovs->composedY&&sceneAovs->composedWidth==source.width&&sceneAovs->composedHeight==source.height&&packet.frameId==actual.frameId&&full(hud,hudImage)&&uiImage&&ui.texture&&sameColor(packet.hudlessColor)) {
+   if(rsSceneAovConventionsKnown(&packet,RS_SCENE_AOV_HUDLESS_COLOR)&&sceneAovs->composedRegionKnown&&sceneAovs->composedColor==source&&!sceneAovs->composedX&&!sceneAovs->composedY&&sceneAovs->composedWidth==source.width&&sceneAovs->composedHeight==source.height&&packet.frameId==actual.frameId&&full(hud,hudImage)&&uiImage&&ui.texture&&sameColor(packet.hudlessColor)) {
     inputs.color=hudImage;inputs.ui=source;inputs.uiMode=InterpolatorUI::Composited;
     if(!ui.x&&!ui.y&&ui.width==source.width&&ui.height==source.height&&uiImage.width==source.width&&uiImage.height==source.height&&uiImage.device==device&&uiImage.storageMode!=MTLStorageModeMemoryless&&uiImage.hazardTrackingMode!=MTLHazardTrackingModeUntracked&&(uiImage.usage&MTLTextureUsageShaderRead)){
      try {inputs.uiColor=readImageColor(packet.uiColor);inputs.outputColor=*sourceColor;inputs.outputColor.alpha=ColorAlpha::Premultiplied;inputs.ui=uiImage;inputs.uiMode=InterpolatorUI::Separate;inputs.uiFlipY=ui.origin!=unsigned(sceneOrigin);}catch(...){}

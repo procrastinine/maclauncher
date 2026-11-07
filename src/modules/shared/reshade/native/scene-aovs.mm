@@ -23,9 +23,14 @@ unsigned components(MTLPixelFormat format){switch(format){
  default:return 0;
 }}
 bool color(const RSImageColorDescription&c,bool encoded=false){try{return c.size==sizeof(c)&&(encoded||c.transfer==RS_COLOR_LINEAR)&&macfx::readImageColor(c).valid();}catch(...){return false;}}
+bool unknownColor(const RSImageColorDescription&c){return !c.size&&!c.version&&c.alpha<=RS_COLOR_OPAQUE&&!c.primaries&&!c.transfer&&!c.range&&!c.referenceWhite&&!c.peakLuminance&&!c.blackLuminance&&!c.hlgSystemGamma&&!c.flags&&!c.reserved;}
 bool tuple(id<MTLTexture>c,id<MTLTexture>d,id<MTLTexture>m){return c&&c.textureType==MTLTextureType2D&&(!d||d.device==c.device)&&(!m||m.device==c.device);}
 RSSceneAovs sanitizeHud(const RSSceneAovs&input,id<MTLDevice>device){
  auto v=input;const auto validImage=[&](const RSSceneAovImage&a){auto image=(__bridge id<MTLTexture>)a.texture;return readable(image)&&image.device==device&&a.width&&a.height&&uint64_t(a.x)+a.width<=image.width&&uint64_t(a.y)+a.height<=image.height&&a.origin<=RS_SCENE_AOV_BOTTOM_LEFT;};
+ // Unknown color contracts retain the actual views independently. They do
+ // not authorize HUD/UI separation or a color conversion.
+ if((v.images[RS_SCENE_AOV_HUDLESS_COLOR].texture&&unknownColor(v.hudlessColor))||
+    (v.images[RS_SCENE_AOV_UI_COLOR_ALPHA].texture&&unknownColor(v.uiColor)))return v;
  const auto&hud=v.images[RS_SCENE_AOV_HUDLESS_COLOR];const auto&ui=v.images[RS_SCENE_AOV_UI_COLOR_ALPHA];auto texture=(__bridge id<MTLTexture>)ui.texture;
  const auto format=texture.pixelFormat;const bool alpha=format==MTLPixelFormatRGBA8Unorm||format==MTLPixelFormatRGBA8Unorm_sRGB||format==MTLPixelFormatBGRA8Unorm||format==MTLPixelFormatBGRA8Unorm_sRGB||format==MTLPixelFormatRGBA16Float||format==MTLPixelFormatRGBA32Float||format==MTLPixelFormatRGB10A2Unorm;
  const auto hudPass=hud.pass?:v.pass,uiPass=ui.pass?:v.pass;
@@ -33,15 +38,18 @@ RSSceneAovs sanitizeHud(const RSSceneAovs&input,id<MTLDevice>device){
  return v;
 }
 bool valid(const RSSceneAovs&v,id<MTLDevice>device){
- if(v.size!=sizeof(v)||v.version!=RS_SCENE_AOV_ABI_VERSION||!v.frameId||!v.viewId||!v.epoch||v.reserved||v.reserved2||v.flags&~uint32_t(RS_SCENE_AOV_COLOR_NOISY|RS_SCENE_AOV_RADIANCE_INCLUDES_SPECULAR|RS_SCENE_AOV_COLOR_INCLUDES_SPECULAR|RS_SCENE_AOV_SPECULAR_MERGE_PENDING)||v.pass>RS_SCENE_AOV_TEMPORAL_INPUT||v.colorPass>RS_SCENE_AOV_TEMPORAL_INPUT||!color(v.color)||!std::isfinite(v.preExposure)||v.preExposure<=0)return false;
+ if(v.size!=sizeof(v)||v.version!=RS_SCENE_AOV_ABI_VERSION||!v.frameId||!v.viewId||!v.epoch||v.reserved||v.reserved2||v.flags&~uint32_t(RS_SCENE_AOV_COLOR_NOISY|RS_SCENE_AOV_RADIANCE_INCLUDES_SPECULAR|RS_SCENE_AOV_COLOR_INCLUDES_SPECULAR|RS_SCENE_AOV_SPECULAR_MERGE_PENDING)||v.pass>RS_SCENE_AOV_TEMPORAL_INPUT||v.colorPass>RS_SCENE_AOV_TEMPORAL_INPUT||!color(v.color,true)||!std::isfinite(v.preExposure)||v.preExposure<=0)return false;
  if((v.flags&(RS_SCENE_AOV_COLOR_INCLUDES_SPECULAR|RS_SCENE_AOV_SPECULAR_MERGE_PENDING))==(RS_SCENE_AOV_COLOR_INCLUDES_SPECULAR|RS_SCENE_AOV_SPECULAR_MERGE_PENDING))return false;
- if(v.images[RS_SCENE_AOV_UI_COLOR_ALPHA].texture&&!color(v.uiColor,true))return false;
+ if(v.images[RS_SCENE_AOV_HUDLESS_COLOR].texture&&!color(v.hudlessColor,true)&&!unknownColor(v.hudlessColor))return false;
+ if(v.images[RS_SCENE_AOV_UI_COLOR_ALPHA].texture&&!color(v.uiColor,true)&&!unknownColor(v.uiColor))return false;
  unsigned count=0;for(unsigned slot=0;slot<RS_SCENE_AOV_COUNT;++slot){const auto&a=v.images[slot];if(!a.texture)continue;++count;auto image=(__bridge id<MTLTexture>)a.texture;
-  if(!readable(image)||image.device!=device||!a.width||!a.height||uint64_t(a.x)+a.width>image.width||uint64_t(a.y)+a.height>image.height||a.channel>=components(image.pixelFormat)||a.origin>RS_SCENE_AOV_BOTTOM_LEFT||a.pass>RS_SCENE_AOV_TEMPORAL_INPUT||a.reserved||!std::isfinite(a.scale)||!std::isfinite(a.bias))return false;
+  if(!readable(image)||image.device!=device||!a.width||!a.height||uint64_t(a.x)+a.width>image.width||uint64_t(a.y)+a.height>image.height||a.channel>=components(image.pixelFormat)||a.origin>RS_SCENE_AOV_BOTTOM_LEFT||a.pass>RS_SCENE_AOV_TEMPORAL_INPUT||a.reserved||a.space>RS_SCENE_AOV_SPACE_WORLD||!std::isfinite(a.scale)||!std::isfinite(a.bias))return false;
   const bool scalar=slot==RS_SCENE_AOV_ROUGHNESS||slot==RS_SCENE_AOV_METALLIC||slot==RS_SCENE_AOV_SPECULAR_HIT_DISTANCE||slot==RS_SCENE_AOV_DENOISE_MASK;
   if(!scalar&&components(image.pixelFormat)<3)return false;
   if(slot==RS_SCENE_AOV_TRANSPARENCY&&components(image.pixelFormat)<4)return false;
-  if(slot==RS_SCENE_AOV_NORMAL){if((a.encoding!=RS_SCENE_AOV_XYZ_SIGNED&&a.encoding!=RS_SCENE_AOV_XYZ_UNORM)||(a.space!=RS_SCENE_AOV_SPACE_VIEW&&a.space!=RS_SCENE_AOV_SPACE_WORLD))return false;}
+  if(a.encoding==RS_SCENE_AOV_UNKNOWN)continue;
+  if(slot==RS_SCENE_AOV_NORMAL){if((a.encoding!=RS_SCENE_AOV_XYZ_SIGNED&&a.encoding!=RS_SCENE_AOV_XYZ_UNORM)||(a.space!=RS_SCENE_AOV_SPACE_NONE&&a.space!=RS_SCENE_AOV_SPACE_VIEW&&a.space!=RS_SCENE_AOV_SPACE_WORLD))return false;}
+  else if(slot==RS_SCENE_AOV_SPECULAR_HIT_DISTANCE){if(a.encoding!=RS_SCENE_AOV_SCALAR||(a.space!=RS_SCENE_AOV_SPACE_NONE&&a.space!=RS_SCENE_AOV_SPACE_VIEW&&a.space!=RS_SCENE_AOV_SPACE_WORLD))return false;}
   else if(a.space!=RS_SCENE_AOV_SPACE_NONE)return false;
   else if(slot==RS_SCENE_AOV_ROUGHNESS){if(a.encoding!=RS_SCENE_AOV_SCALAR&&a.encoding!=RS_SCENE_AOV_ROUGHNESS_FOLDED)return false;}
   else if(slot==RS_SCENE_AOV_SPECULAR_HIT_DISTANCE||slot==RS_SCENE_AOV_DENOISE_MASK||slot==RS_SCENE_AOV_METALLIC){if(a.encoding!=RS_SCENE_AOV_SCALAR)return false;}
