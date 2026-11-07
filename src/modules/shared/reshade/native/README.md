@@ -362,6 +362,21 @@ hook-installation records stay buffered until then. Writes are bounded and best
 effort. Before each write or close, their close-on-exec descriptors are checked
 against the owning process and the original regular file.
 
+With diagnostics enabled, the temporal intake also logs its inputs.
+`rsProcessTemporalFrame` and the MetalFX scaler hook write one line per frame
+for the first 120 frames of the process and for 8 frames after each capture
+trigger. A line gives the size, offset and pixel format of the color, depth,
+motion, output, exposure, reactive, transparency, HUD-less and UI images, then
+the jitter, motion-vector scale, flags, pre-exposure, frame time, camera planes
+and field of view, the camera source and the processing status.
+`rsSetTemporalCameraForNextScale` logs each camera it receives for its first 120
+calls. When a capture trigger is configured, the first frame that sees a pending
+request also writes its depth and motion textures beside the capture prefix as
+`<prefix>-intake-<frame>-depth.rgba` and `<prefix>-intake-<frame>-motion.rgba`.
+These are raw 4-byte texels in the capture file layout with zero header flags;
+the depth plane of `Depth32Float_Stencil8` is written as 32-bit depth. The
+request itself stays with the frame capture.
+
 Native warning files use the same ownership checks, together with bounded
 nonblocking advisory locking, and invalid or replaced configured files are
 dropped. Without a configured warning file, warnings go to private macOS unified
