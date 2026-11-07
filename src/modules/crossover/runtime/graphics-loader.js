@@ -53,6 +53,7 @@ function entitlements(xml) {
 async function prepare(installation, directory, { signal, execute = executeFile, cameraBridge, sceneClosure, winemac, helperLibraries = [], translatorView, userDataDir, logger = console } = {}) {
   signal?.throwIfAborted();
   const vendor = fs.realpathSync(installation.crossoverRoot), layout = wineLayout(installation), unix = `lib/wine/${layout.unixName}`;
+  if(cameraBridge?.kind === "d3dmetal-camera") helperLibraries=[...helperLibraries,cameraBridge.helper];
   const separateLoader = fs.existsSync(path.join(vendor, unix, "ntdll.so")) && fs.existsSync(path.join(vendor, unix, "wine"));
   const scene = sceneSelection(installation, sceneClosure);
   if (scene && !separateLoader) throw new Error("The selected Wine loader cannot select paired Vulkan modules.");
@@ -91,7 +92,7 @@ async function prepare(installation, directory, { signal, execute = executeFile,
     }
   }
   if (translatorView) Object.assign(links, translatorView.links);
-  if (cameraBridge && separateLoader) {
+  if (cameraBridge?.dxmt && separateLoader) {
     const Temporal = require("../temporal");
     for (const relative of Temporal.FILES) links[`lib/wine/${relative}`] = path.join(cameraBridge.dxmt.directory, relative);
     links[`lib/wine/${layout.unixName}/maclauncher-dxmt-original.so`] = cameraBridge.dxmt.native;
@@ -205,7 +206,7 @@ function environment(loader, previous = {}, { cameraBridge, installation, sceneC
       throw new Error("The private Wine library anchor changed. Prepare the graphics loader again.");
     values.DYLD_LIBRARY_PATH = [libraryOverride, previous.DYLD_LIBRARY_PATH].filter(Boolean).join(path.delimiter);
   }
-  if (cameraBridge) {
+  if (cameraBridge?.dxmt) {
     const wine = layout.unixName ? path.resolve(unix, "..") : unix, vendor = installation.crossoverRoot;
     const windows = layout.primaryWindows || require("../temporal").FILES.find(file => file.endsWith(".dll"))?.split("/")[0];
     // CrossOver otherwise redirects these PE imports to its own DXMT before
@@ -233,8 +234,13 @@ function environment(loader, previous = {}, { cameraBridge, installation, sceneC
     if (Object.keys(translatorView.links).some(name => name.endsWith('.dll'))) values.WINEDLLPATH =
       [...layout.windows.map(name => path.join(wine, name)), wine, values.WINEDLLPATH || previous.WINEDLLPATH, layout.dllRoot].filter(Boolean).join(path.delimiter);
     if (translatorView.dllOverrides.length) values.WINEDLLOVERRIDES = [values.WINEDLLOVERRIDES || previous.WINEDLLOVERRIDES, ...translatorView.dllOverrides].filter(Boolean).join(';');
-    if (cameraBridge) values.CX_GRAPHICS_BACKEND = 'wined3d';
+    if (cameraBridge?.dxmt) values.CX_GRAPHICS_BACKEND = 'wined3d';
     if (values.CX_LIBVULKAN && (values.CX_GRAPHICS_BACKEND || previous.CX_GRAPHICS_BACKEND) !== 'wined3d') delete values.CX_LIBVULKAN;
+  }
+  if(cameraBridge?.kind === "d3dmetal-camera"){
+    const wine=path.resolve(unix,"..");
+    values.WINEDLLPATH=[path.join(wine,layout.primaryWindows),wine,values.WINEDLLPATH||previous.WINEDLLPATH,path.join(installation.crossoverRoot,"lib/wine")].filter(Boolean).join(path.delimiter);
+    values.WINEDLLOVERRIDES=[values.WINEDLLOVERRIDES||previous.WINEDLLOVERRIDES,"maclauncher-temporal-camera=b"].filter(Boolean).join(";");
   }
   return values;
 }

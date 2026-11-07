@@ -17,6 +17,8 @@
 #include "color-island.hpp"
 #include "isf-node.hpp"
 #include "temporal-plan.hpp"
+#include "temporal-camera.h"
+extern "C" __attribute__((visibility("hidden"))) void rsTemporalCameraFrameBoundary();
 #include "frame-capture.hpp"
 #include "capture-file.hpp"
 #include "screenshot-image.hpp"
@@ -1202,6 +1204,7 @@ void registerPresentation(id<MTLCommandBuffer> commands,id<MTLDrawable> drawable
     if(![drawable conformsToProtocol:@protocol(CAMetalDrawable)]||encodingEffects||macfx::ownsPresentationBuffer(commands))return;
     CAMetalLayer *layer=((id<CAMetalDrawable>)drawable).layer;
     if(macfx::ownsPresentation(layer))return;
+    rsTemporalCameraFrameBoundary();
     if(!layerPresentationDemand(layer)){observeBypassedLayer(layer);return;}
     if(!acceptsNativeLayer(layer)){noteMetalDecision(reinterpret_cast<uintptr_t>((__bridge void*)layer),"present-owner-missing");return;}
     if(!claimNativePresentation(drawable)){noteMetalDecision(reinterpret_cast<uintptr_t>((__bridge void*)layer),"present-already-claimed");return;}

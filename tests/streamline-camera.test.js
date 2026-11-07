@@ -375,3 +375,20 @@ test("never-used camera Off performs no projection filesystem work or process wr
   const plain = {binding: null};GameView.watch(entry, context, "/owned/runtime", "sikarugir", plain);
  assert.equal(context.onProcessSpawn, undefined);assert.equal(context.spawnDetachedChecked, undefined);
 });
+
+test("D3DMetal resolves only the selected matched camera builtin without DXMT", t => {
+  const f=fixture(t),Temporal=require("../src/modules/crossover/temporal"),graphicsRoot=path.join(f.root,"graphics");
+  const providerRoot=path.join(graphicsRoot,"temporal/streamline");fs.cpSync(f.providerRoot,providerRoot,{recursive:true});
+  const metadataFile=path.join(providerRoot,"provider.json"),metadata=JSON.parse(fs.readFileSync(metadataFile));
+  const cameraBridge={name:"maclauncher-temporal-camera",architecture:"x86_64",windows:"x86_64-windows/maclauncher-temporal-camera.dll",unix:"x86_64-unix/maclauncher-temporal-camera.so",files:{}};
+  for(const relative of [cameraBridge.windows,cameraBridge.unix]){const file=path.join(providerRoot,relative);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,relative);cameraBridge.files[relative]=sha(relative);}
+  fs.writeFileSync(metadataFile,JSON.stringify({...metadata,cameraBridge}));
+  fs.unlinkSync(f.target);fs.writeFileSync(f.target,pe());
+  const exe=path.join(f.gameRoot,"game.exe"),bytes=pe();bytes.writeUInt16LE(2,0x96);bytes.writeUInt16LE(3,0x98+68);fs.writeFileSync(exe,bytes);
+  const entry={gamePath:f.gameRoot,runtimeData:{crossover:{sourceRoot:f.gameRoot,windowsExecutablePath:exe,executableArchitecture:"x86_64",detectionComplete:true}}};
+  const options={runtimeId:"crossover",root:graphicsRoot,install:{crossoverRoot:path.join(f.root,"vendor")},settings:{dlss:true,graphicsBackend:"d3dmetal"},host:{platform:"darwin",hardwareArch:"arm64",macOSVersion:"26.0"}};
+  const plan=Temporal.resolvePlan(entry,{},options);assert.equal(plan.kind,"d3dmetal-camera");assert.equal(plan.dxmt,undefined);assert.equal(plan.helper.name,cameraBridge.name);
+  assert.equal(Temporal.resolvePlan(entry,{}, {...options,settings:{dlss:false,graphicsBackend:"d3dmetal"}}),null);
+  assert.equal(Temporal.resolvePlan(entry,{}, {...options,runtimeId:"sikarugir"}),null);
+  fs.writeFileSync(path.join(providerRoot,cameraBridge.unix),"changed");assert.equal(Temporal.resolvePlan(entry,{},options),null);
+});

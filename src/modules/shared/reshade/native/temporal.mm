@@ -51,6 +51,39 @@ bool validCamera(const RSTemporalCamera *c){
         std::isfinite(c->frameTimeMs)&&c->frameTimeMs>=0&&c->frameTimeMs<=1000&&
         (c->flags&RS_TEMPORAL_DEPTH_INFINITE?c->farPlane==0:(std::isfinite(c->farPlane)&&c->farPlane>c->nearPlane));
 }
+// A last-resort process-scoped camera for a renderer without native resource interop.
+// State 2 prevents a later registration/viewport from replacing a consumed or
+// ambiguous camera before the producer's next presentation boundary.
+std::mutex pendingCameraMutex;
+std::atomic<unsigned> pendingCameraState{0};
+uint64_t lastPendingCameraFrame=0;
+RSTemporalCamera pendingCamera{};
+extern "C" void rsClearTemporalCameraForNextScale(){
+    if(!pendingCameraState.load(std::memory_order_acquire))return;
+    std::lock_guard<std::mutex> lock(pendingCameraMutex);
+    pendingCamera={};pendingCameraState.store(2,std::memory_order_release);
+}
+extern "C" __attribute__((visibility("hidden"))) void rsTemporalCameraFrameBoundary(){
+    if(!pendingCameraState.load(std::memory_order_acquire))return;
+    std::lock_guard<std::mutex> lock(pendingCameraMutex);
+    pendingCamera={};pendingCameraState.store(0,std::memory_order_release);
+}
+extern "C" int rsSetTemporalCameraForNextScale(const RSTemporalCamera* camera){
+    if(!validCamera(camera)){rsClearTemporalCameraForNextScale();return RS_TEMPORAL_INVALID;}
+    std::lock_guard<std::mutex> lock(pendingCameraMutex);
+    if(camera->frameId<=lastPendingCameraFrame){pendingCamera={};pendingCameraState.store(2,std::memory_order_release);return RS_TEMPORAL_INVALID;}
+    if(pendingCameraState.load(std::memory_order_relaxed)){
+        pendingCamera={};pendingCameraState.store(2,std::memory_order_release);return RS_TEMPORAL_BUSY;
+    }
+    pendingCamera=*camera;pendingCameraState.store(1,std::memory_order_release);return RS_TEMPORAL_OK;
+}
+bool takePendingCamera(RSTemporalCamera& camera){
+    if(pendingCameraState.load(std::memory_order_acquire)!=1)return false;
+    std::lock_guard<std::mutex> lock(pendingCameraMutex);
+    if(pendingCameraState.load(std::memory_order_relaxed)!=1)return false;
+    camera=pendingCamera;lastPendingCameraFrame=camera.frameId;pendingCamera={};pendingCameraState.store(2,std::memory_order_release);return true;
+}
+
 struct CameraTextures {
     void *owner=nullptr;
     __weak id color=nil,depth=nil,motion=nil;
@@ -405,6 +438,7 @@ extern "C" __attribute__((visibility("default"))) int rsCreateRecordedSceneConsu
         [](void*value,uint64_t frame,uint32_t completion,const RSTemporalResult*){auto owner=static_cast<RecordedSceneOwner*>(value);if(completion!=RS_VULKAN_SCENE_GPU_COMPLETED&&owner->latest.load(std::memory_order_acquire)==frame)owner->reset.store(true,std::memory_order_release);}};return 1;}catch(...){return 0;}
 }
 extern "C" void rsReleaseTemporalOwner(void *key){
+    if(key)rsClearTemporalCameraForNextScale();
     rsReleaseTemporalSceneMatrices(key);rsReleaseTemporalSceneAovs(key);
     macfx::releaseTemporalSceneContinuations(key);
     std::shared_ptr<SceneOwner>retired;std::shared_ptr<OrderedSceneOwner>ordered;{std::lock_guard<std::mutex> lock(ownersMutex);owners.erase(key);auto found=sceneOwners.find(key);if(found!=sceneOwners.end()){retired=std::move(found->second);sceneOwners.erase(found);}const auto plan=orderedSceneOwners.find(key);if(plan!=orderedSceneOwners.end()){ordered=std::move(plan->second);orderedSceneOwners.erase(plan);}}
@@ -501,6 +535,7 @@ void encodeMetal4Image(id scaler,SEL selector,id commands,IMP original,MLTempora
 void encodeTemporal(id scaler,SEL selector,id commands){
     MLTemporalOwner *state=objc_getAssociatedObject(scaler,&association);const auto original=state?state->original:originalEncode(scaler);if(!original)return;
     if(internalScaler||!state){invokeOriginal(scaler,selector,commands,original,false);return;}
+    RSTemporalCamera pending{};const bool hasPending=takePendingCamera(pending);
     if(state->imageKind){encodeMetal4Image(scaler,selector,commands,original,state);return;}
     if(state->denoised){encodeDenoisedTemporal(scaler,selector,commands,original,state);return;}
     const auto controls=macfx::temporalControls();const auto method=controls.method;
@@ -515,6 +550,7 @@ void encodeTemporal(id scaler,SEL selector,id commands){
     RSTemporalCamera textureCamera{};
     const bool hasTextureCamera=textureCameraCount.load(std::memory_order_acquire)&&takeTextureCamera(s.colorTexture,s.depthTexture,s.motionTexture,textureCamera);
     if(!hasCamera&&hasTextureCamera){camera=textureCamera;hasCamera=true;}
+    if(!hasCamera&&hasPending){camera=pending;hasCamera=true;}
     if(method!=state->lastMethod){rsReleaseTemporalOwner((__bridge void*)state);state->reset=state->originalReset=true;state->failedShape=0;state->reported=false;state->lastMethod=method;}
     ++state->frame;const double now=CACurrentMediaTime(),delta=state->previousTime?now-state->previousTime:1./60;state->previousTime=now;
     RSTemporalFrame f{};f.size=sizeof(f);f.version=1;f.owner=(__bridge void*)state;f.commandBuffer=(__bridge void*)commands;

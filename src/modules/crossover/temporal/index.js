@@ -86,9 +86,11 @@ function matchingSupport(context, root, { entry, runtimeId = context.runtimeId |
 function resolvePlan(entry, context = {}, { install, runtimeId = context.runtimeId || entry?.runtimeId || "crossover", settings = context.runtimeSettings || {}, host = {}, root, verify = false, allowDownload = false, automatic = false, translatorPlan = context.translatorPlan } = {}) {
   try {
     const translator = usedForApi(translatorPlan, "d3d11");
-    if (Object.hasOwn(translatorPlan?.components || {}, "d3d11") && !translator) return null;
+    const d3dmetal = runtimeId === "crossover" && settings.dlss === true &&
+      (usedForApi(translatorPlan, "d3d12")?.engine || translator?.engine || settings.graphicsBackend) === "d3dmetal";
+    if (!d3dmetal && Object.hasOwn(translatorPlan?.components || {}, "d3d11") && !translator) return null;
     if (Requirements.requirementSupport(Requirements.WINE_TEMPORAL, { ...Host.getHostCapabilities(), ...host }).supported === false ||
-      !install || !["auto", "dxmt"].includes(translator?.engine || settings.graphicsBackend || "auto")) return null;
+      !install || !d3dmetal && !["auto", "dxmt"].includes(translator?.engine || settings.graphicsBackend || "auto")) return null;
     if ((settings.dllOverrides || []).some(rule => {
       const [names, order] = String(rule).split("=");
       return order?.trim().toLowerCase() !== "b" && order?.trim().toLowerCase() !== "builtin" && names.split(",").some(name => /^(?:\*|d3d10core|d3d11|dxgi|winemetal|nvapi64|nvngx)(?:\.dll)?$/i.test(name.trim()));
@@ -102,7 +104,7 @@ function resolvePlan(entry, context = {}, { install, runtimeId = context.runtime
       const selected = libraryAdapter({sourcePath}), adapter = selected === XeSS ? "xess" : "streamline", providerRoot = path.join(root, "temporal", adapter);
       // In-game XeSS translation is a compatibility path, independent of the
       // optional shared graph. Streamline replacement remains explicitly selected.
-      if (automatic && selected !== XeSS) return [];
+      if (automatic && selected !== XeSS || d3dmetal && selected !== Streamline) return [];
       const inspected = selected.inspect(sourcePath, providerRoot);
       return inspected.available ? [{sourcePath, relativePath: path.relative(match.sourceRoot, sourcePath), sourceSha256: inspected.sourceSha256, adapter, providerRoot}] : [];
     });
@@ -111,6 +113,10 @@ function resolvePlan(entry, context = {}, { install, runtimeId = context.runtime
     const inputs = { depth:true,motionVectors:true,jitter:true,exposure:true,cameraProjection: hasProjection, source: hasProjection && hasXeSS ? "streamline+xess" : hasXeSS ? "xess" : "streamline",
       methods: [...(hasProjection ? ["fsr2", "fsr3"] : []), ...(hasXeSS ? ["metalfx"] : [])],
       routes: sources.map(row => ({source: row.adapter, depth:true,motionVectors:true,jitter:true,exposure:true,cameraProjection: row.adapter === "streamline", methods: row.adapter === "xess" ? ["metalfx"] : ["fsr2", "fsr3"]})) };
+    if(d3dmetal){
+      const helper=require("./d3dmetal-camera").helper(path.join(root,"temporal/streamline"));
+      return helper ? {kind:"d3dmetal-camera",helper,sourceRoot:match.sourceRoot,libraries:sources,inputs} : null;
+    }
     let baseRoot, selectedSupport;
     if (translator && translator.engine !== "dxmt") return null;
     if (runtimeId === "sikarugir") {
@@ -195,10 +201,10 @@ function restoreGame(entry, context, gameRoot, settings = context.runtimeSetting
   const executable = settings.executable ? path.resolve(match.sourceRoot, settings.executable) : match.windowsExecutablePath;
   restoreLibraries(libraries(match, executable).map(source => ({ relativePath: path.relative(match.sourceRoot, source) })), gameRoot, undefined, context.logger);
 }
-function environment(plan, dllRoot) { return plan ? { MACLAUNCHER_DXMT_BASE_LIBRARY: path.join(dllRoot, "x86_64-unix/maclauncher-dxmt-original.so") } : {}; }
+function environment(plan, dllRoot) { return plan?.dxmt ? { MACLAUNCHER_DXMT_BASE_LIBRARY: path.join(dllRoot, "x86_64-unix/maclauncher-dxmt-original.so") } : {}; }
 function rendererFile(plan, architecture, filename, fallback) {
   const relative = architecture + "/" + filename;
-  return plan && FILES.includes(relative) ? path.join(plan.dxmt.directory, relative) : fallback;
+  return plan?.dxmt && FILES.includes(relative) ? path.join(plan.dxmt.directory, relative) : fallback;
 }
 function cameraRequirements(entry, context, { manager, root } = {}) {
   const runtimeId = context.runtimeId || entry?.runtimeId;

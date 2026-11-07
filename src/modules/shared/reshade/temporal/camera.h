@@ -31,6 +31,17 @@ int rsSetTemporalCamera(void *scaler, void *commandBuffer, const RSTemporalCamer
 int rsSetTemporalCameraForTextures(void *owner, void *color, void *depth,
                                   void *motion, const RSTemporalCamera *);
 void rsClearTemporalCameraTextures(void *owner);
+// Fallback for a renderer without native texture interop. One process-scoped
+// camera is consumed by the next application scaler encode. Exact scaler/command
+// and texture-tuple bindings take priority and discard this fallback. A collision
+// drops both cameras; consumed/ambiguous state rejects registration until present.
+// A second scaler encode in that frame receives no fallback camera. Owner release
+// clears the fallback. Frame IDs must be newer than the last consumed camera.
+// No owner, window or texture identity is inferred.
+int rsSetTemporalCameraForNextScale(const RSTemporalCamera *);
+// Clear the fallback without reopening the current frame or resetting its last
+// consumed frame ID. The native producer-present hook reopens registration.
+void rsClearTemporalCameraForNextScale(void);
 // Read the launcher's cached temporal selection. The existing control reader
 // limits filesystem checks; callers must not implement a second polling loop.
 uint32_t rsGetTemporalMethod(void);

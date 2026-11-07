@@ -128,7 +128,7 @@ function buildEnvironment(settings, installation, directory, bottlePath, { baseE
   const vendorLibraries = engine => windows ? DLSS.hasLibraries(path.join(installation.crossoverRoot,
     ...(engine === 'dxmt' ? ['lib', 'dxmt'] : ['lib64', 'apple_gptk', 'wine']), windows)) : false;
   const dlss = DLSS.checkSelection(settings, { ...host, executableArchitecture, backend, translatorPlan,
-    dxmt: settings.dlss === true && (Boolean(cameraBridge) || (translatorPlan?.components['d3d-renderer'].used ? DLSS.hasPlanLibraries(translatorPlan, 'dxmt') : vendorLibraries('dxmt'))),
+    dxmt: settings.dlss === true && (Boolean(cameraBridge?.dxmt) || (translatorPlan?.components['d3d-renderer'].used ? DLSS.hasPlanLibraries(translatorPlan, 'dxmt') : vendorLibraries('dxmt'))),
     d3dmetal: settings.dlss === true && (translatorPlan?.components['d3d-renderer'].used ? DLSS.hasPlanLibraries(translatorPlan, 'd3dmetal') : vendorLibraries('d3dmetal')) });
   Object.assign(overrides, DLSS.environment(dlss));
   if (backend !== "auto") {

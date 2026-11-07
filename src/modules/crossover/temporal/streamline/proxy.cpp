@@ -73,16 +73,26 @@ thread_local const RSTemporalCamera *activeCamera = nullptr;
 struct CameraScope {
     RSTemporalCamera value{};
     const RSTemporalCamera *previous;
-    SetCamera set = nullptr;ClearCamera clear = nullptr;
+    SetCamera set = nullptr;ClearCamera clear = nullptr;bool deferred=false;
     explicit CameraScope(const RSTemporalCamera *next) : previous(activeCamera) {
         auto ngx = GetModuleHandleW(L"nvngx.dll");
         if (ngx) { set = reinterpret_cast<SetCamera>(GetProcAddress(ngx, "MacLauncherSetTemporalCamera"));clear = reinterpret_cast<ClearCamera>(GetProcAddress(ngx, "MacLauncherClearTemporalCamera")); }
+        if (!set || !clear) {
+            auto bridge=GetModuleHandleW(L"maclauncher-temporal-camera.dll");
+            if(!bridge)bridge=LoadLibraryW(L"maclauncher-temporal-camera.dll");
+            set=bridge?reinterpret_cast<SetCamera>(GetProcAddress(bridge,"MacLauncherSetTemporalCamera")):nullptr;
+            clear=bridge?reinterpret_cast<ClearCamera>(GetProcAddress(bridge,"MacLauncherClearTemporalCamera")):nullptr;
+            deferred=set&&clear;
+        }
         if (!set || !clear) return;
+        // The builtin bridge binds the next native encode, which occurs after
+        // Evaluate returns. Leave it pending; a second viewport is ambiguous.
+        if(deferred){if(next)set(next);else clear();return;}
         clear();activeCamera = nullptr;
         if (next) { value = *next;if (set(&value)) activeCamera = &value; }
     }
     ~CameraScope() {
-        if (!set || !clear) return;
+        if (!set || !clear || deferred) return;
         clear();activeCamera = previous;if (previous) set(previous);
     }
 };
@@ -155,6 +165,8 @@ extern "C" sl::Result slEvaluateFeature(sl::Feature feature, const sl::FrameToke
     return fn(feature, frame, inputs, count, commands);
 }
 extern "C" sl::Result slShutdown() {
+    if(auto bridge=GetModuleHandleW(L"maclauncher-temporal-camera.dll"))
+        if(auto clear=reinterpret_cast<ClearCamera>(GetProcAddress(bridge,"MacLauncherClearTemporalCamera")))clear();
     const auto fn = original<PFun_slShutdown *>("slShutdown");if (!fn) return sl::Result::eErrorMissingOrInvalidAPI;
     const auto result = fn();resourceTags.clear();AcquireSRWLockExclusive(&cacheLock);entries = {};age = 0;ReleaseSRWLockExclusive(&cacheLock);
     return result;
