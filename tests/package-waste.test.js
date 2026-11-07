@@ -58,7 +58,10 @@ test("npm source maps, browser bundles and schema sources stay out while every f
   const loaded = JSON.parse(execFileSync(process.execPath, ["-e",
     'for (const name of ["steam-user", "steam-session", "steam-appticket", "qrcode-generator"]) require(name);' +
     'process.stdout.write(JSON.stringify(Object.keys(require.cache)))'], { cwd: projectRoot, encoding: "utf8" }));
-  const files = loaded.map(file => path.relative(projectRoot, file).split(path.sep).join("/")).filter(file => file.startsWith("node_modules/"));
+  // A Git worktree can link node_modules to another checkout's installation; Node reports real paths.
+  const modulesRoot = fs.realpathSync(path.join(projectRoot, "node_modules"));
+  const files = loaded.map(file => path.relative(modulesRoot, file)).filter(file => file && !file.startsWith("..") && !path.isAbsolute(file))
+    .map(file => "node_modules/" + file.split(path.sep).join("/"));
   assert.ok(files.length > 100, "The Steam clients load their package graph");
   assert.deepEqual(files.filter(file => !selectedBy(modules, file)), [], "Loaded npm files excluded from the application");
 });
