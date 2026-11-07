@@ -180,11 +180,13 @@ Applies to games whose Direct3D 8, 9, 10 or 11 choice uses DXVK, D8VK or D9VK. I
 | `DXVK_SHADER_CACHE_PATH` | Folder for DXVK's internal shader cache. |  |
 | `DXVK_STATE_CACHE_PATH` | Folder for the pipeline state cache of DXVK 2.6 and earlier. |  |
 | `DXVK_FILTER_DEVICE_NAME` | Uses the Vulkan device whose name contains this text. |  |
-| `DXVK_ENABLE_NVAPI` | 1 reports an NVIDIA GPU so that NVAPI can load. |  |
+| `DXVK_ENABLE_NVAPI` | 1 exposes NVIDIA adapters to NVAPI. |  |
 | `DXVK_DEBUG` | Debugging mode, such as markers or validation. |  |
 
 | Locked | Reason |
 | --- | --- |
+
+For CrossOver and Sikarugir launches using DXVK's DXGI, an NVIDIA vendor override (`dxgi.customVendorId = 10de`) adds `dxgi.customDeviceDesc = "<GPU name> (DXVK)"` to `DXVK_CONFIG`. This applies to both DXVK and vkd3d-proton. The name comes from cached graphics hardware metadata; if it is unavailable or several adapter names are present, no description is added. Every existing `DXVK_CONFIG` entry is kept, and an explicit `dxgi.customDeviceDesc`, including an empty value, takes precedence. The suffix distinguishes DXGI's presentation from Wine's display driver description without changing the GPU model. NVAPI continues to report its own device name.
 
 ### vkd3d-proton
 

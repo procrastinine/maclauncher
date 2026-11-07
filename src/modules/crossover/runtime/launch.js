@@ -411,6 +411,9 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   const steamBridge = await require('./steam-bridge').prepare(entry, context, { installation: selected.install, prefixPath: bottlePath,
     architecture: selectedExecutable.executableArchitecture, environment });
   if (steamBridge) { environment = steamBridge.environment; Object.assign(overrides, steamBridge.extra); dll = environment.WINEDLLOVERRIDES; }
+  const adapterDescription = await require("../../shared/runtime/dxgi-adapter-description").prepare({ ...existingEnvironment?.environment, ...environment },
+    { translatorPlan, host, signal: context.signal });
+  Object.assign(environment, adapterDescription); Object.assign(overrides, adapterDescription);
   const workingDirectory = path.dirname(executable);
   // The drive covers the imported game folder, so paths above the executable's folder resolve.
   const driveRoot = require("../game-drive").gameDriveRoot(entry, originalRoot, executable);

@@ -17,7 +17,7 @@ module.exports = [
       { key: "DXVK_SHADER_CACHE_PATH", description: "Folder for DXVK's internal shader cache." },
       { key: "DXVK_STATE_CACHE_PATH", description: "Folder for the pipeline state cache of DXVK 2.6 and earlier." },
       { key: "DXVK_FILTER_DEVICE_NAME", description: "Uses the Vulkan device whose name contains this text." },
-      { key: "DXVK_ENABLE_NVAPI", description: "1 reports an NVIDIA GPU so that NVAPI can load." },
+      { key: "DXVK_ENABLE_NVAPI", description: "1 exposes NVIDIA adapters to NVAPI." },
       { key: "DXVK_DEBUG", description: "Debugging mode, such as markers or validation." }
     ] },
   { id: "vkd3d-proton", label: "vkd3d-proton", managerIds: ["translator-vkd3d-proton"],

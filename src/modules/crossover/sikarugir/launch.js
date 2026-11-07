@@ -359,6 +359,8 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const steamBridge = await require('../runtime/steam-bridge').prepare(entry, context, { installation: selected.install, prefixPath,
     architecture: match.executableArchitecture, environment });
   if (steamBridge) environment = steamBridge.environment;
+  Object.assign(environment, await require("../../shared/runtime/dxgi-adapter-description").prepare(environment,
+    { translatorPlan, host, signal: context.signal }));
   const registryEnvironment = existingEnvironment;
   await WineSettings.applyRegistry({ ...context.runtimeSettings, ...settings }, { executable: path.basename(executablePath),
     assertWritable: registryEnvironment ? () => Environments.assertWritableRegistry(registryEnvironment) : undefined }, args => {

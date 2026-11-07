@@ -243,15 +243,21 @@ test("Automatic keeps DXMT and chooses MoltenVK when physical Apple GPU support 
   assert.equal(explicit.vulkanBackend, "kosmickrisp"); assert.deepEqual(explicit.components, ["dxmt", "d9vk"]);
 });
 test("graphics hardware evidence is conservative, bounded to display records and cached without network", async () => {
+  assert.equal(Hardware.gpuName({ SPDisplaysDataType: [{ sppci_model: "Apple M2 Max" }] }), "Apple M2 Max");
+  assert.equal(Hardware.gpuName({ gpuDevice: [{ deviceString: "Apple M2 Max" }] }), "Apple M2 Max");
+  assert.equal(Hardware.gpuName({ gpuDevice: [{ deviceString: "First GPU" }, { deviceString: "Second GPU" }] }), null);
+  assert.equal(Hardware.gpuName({ SPDisplaysDataType: [] }), null);
   assert.equal(Hardware.physicalAppleGpu({ SPDisplaysDataType: [{ sppci_model: "Apple M4 Pro" }] }), true);
   assert.equal(Hardware.physicalAppleGpu({ SPDisplaysDataType: [{ sppci_model: "Apple Paravirtual device" }] }), false);
   assert.equal(Hardware.physicalAppleGpu({ SPDisplaysDataType: [] }), false);
   assert.equal(Hardware.physicalAppleGpu({ gpuDevice: [{ deviceString: "Apple M2 Max" }] }), true);
   Hardware.__test.reset(); let calls = 0, time = 100;
-  const dependencies = { read: async () => { calls++; return { physicalAppleGPU: false, source: "unavailable" }; }, now: () => time };
+  const dependencies = { read: async () => { calls++; return { physicalAppleGPU: false, gpuName: "Actual fixture GPU", source: "provided" }; }, now: () => time };
   const host = { platform: "darwin", hardwareArch: "arm64" };
   await Promise.all([Hardware.graphicsHardware(host, dependencies), Hardware.graphicsHardware(host, dependencies)]);
-  assert.equal(calls, 1); await Hardware.graphicsHardware(host, dependencies); assert.equal(calls, 1);
+  assert.equal(calls, 1); assert.equal((await Hardware.graphicsHardware(host, dependencies)).gpuName, "Actual fixture GPU"); assert.equal(calls, 1);
+  const named = await Hardware.graphicsHardware({ ...host, hardwareArch: "x64", physicalAppleGPU: true }, { ...dependencies, requireName: true });
+  assert.equal(named.gpuName, "Actual fixture GPU"); assert.equal(named.physicalAppleGPU, true); assert.equal(calls, 1);
   time += Hardware.__test.CACHE_MS; await Hardware.graphicsHardware(host, dependencies); assert.equal(calls, 2);
   const controller = new AbortController(); controller.abort();
   await assert.rejects(Hardware.graphicsHardware(host, { ...dependencies, signal: controller.signal }), { name: "AbortError" });
