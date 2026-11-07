@@ -46,11 +46,12 @@ module.exports = [
     label: "Steam game versions",
     cache: true,
     description: "The lists of game versions that the Steam window reads from Steam for each signed-in account. The window reads a deleted list again when it needs it.",
+    // The shared list is named by the label alone; each account's list says so.
     list({ userDataDir }) {
-      const steam = path.join(userDataDir, "steam");
-      return [path.join(steam, "catalog"), ...Components.storeEntries(path.join(steam, "accounts")).map(account => path.join(account, "catalog"))]
-        .filter(directory => fs.existsSync(directory)).map(directory => ({ id: path.relative(steam, directory), version: "Steam game versions",
-          path: directory, source: { url: "https://store.steampowered.com" }, users: ["Steam window"] }));
+      const steam = path.join(userDataDir, "steam"), shared = path.join(steam, "catalog");
+      return [shared, ...Components.storeEntries(path.join(steam, "accounts")).map(account => path.join(account, "catalog"))]
+        .filter(directory => fs.existsSync(directory)).map(directory => ({ id: path.relative(steam, directory),
+          version: directory === shared ? "" : "for a signed-in account", path: directory, source: { url: "https://store.steampowered.com" }, users: ["Steam window"] }));
     },
     remove(item, { userDataDir }) { return Components.removeOwned(item.path, path.join(userDataDir, "steam")); }
   }

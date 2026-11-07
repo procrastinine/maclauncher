@@ -278,6 +278,7 @@ test("Android system images, microG packages and store catalogs are listed and r
   assert.equal(listed["android-google-packages"].refreshable, true);
   assert.deepEqual(listed["android-store-catalogs"].items.map(item => item.version), ["F-Droid index"]);
   assert.deepEqual(listed["steam-catalogs"].items.map(item => item.id), [path.join("accounts", "abc", "catalog")]);
+  assert.deepEqual(listed["steam-catalogs"].items.map(item => item.version), ["for a signed-in account"]);
   // An image attached for a running game stays.
   fs.mkdirSync(path.join(image, "mounted", "system"));
   const attached = (await service.list()).components.find(row => row.id === "android-system-images").items[0];
