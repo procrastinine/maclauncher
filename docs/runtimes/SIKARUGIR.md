@@ -7,7 +7,7 @@ Running Windows games through Wine is a major MacLauncher feature, and Sikarugir
 - Play prepares a private Wine prefix for each game from its original files, so no wrapper application has to be built first. A Sikarugir wrapper that already exists can be used instead, and MacLauncher never deletes, recreates, moves or replaces it.
 - Every installed engine stays selectable, and each game can use a different one.
 - Each game can choose a default Direct3D engine, a translator for each Direct3D version, a Vulkan driver and video codecs from the Template's components and from [translator versions installed in Runtimes](TRANSLATORS.md), without changing the installed engine or Template. A version is installed once and shared by every game that selects it.
-- MacLauncher's [graphics effects](../graphics/SHARED_PROCESSING.md) run on Sikarugir games, and a game's own DLSS and XeSS support can feed MetalFX and the shared temporal upscalers.
+- MacLauncher's [graphics effects](../graphics/SHARED_PROCESSING.md) run on Sikarugir games. Compatible DLSS and XeSS integrations supply scene inputs for MetalFX and shared temporal methods whose required inputs are available.
 - Display, input, compatibility and diagnostics controls, a DirectDraw compatibility wrapper and per-program Windows versions are set per game.
 
 ## Requirements
@@ -157,7 +157,7 @@ DXVK and vkd3d-proton forward DLSS inputs when the selected KosmicKrisp or Molte
 
 Temporal upscalers need the game's depth and motion data, which a Windows game passes to the upscaler it calls itself. **Game temporal integration** makes use of this: it exposes MetalFX Temporal through a compatible 64-bit game's DLSS integration. It requires Apple Silicon and the selected package's NVAPI and NGX libraries. The DXMT path requires macOS 14 or later and the D3DMetal path macOS 26 or later, and native dependencies can raise either minimum. The game's own DLSS setting activates the integration, and selecting a shared Temporal upscaling method also turns it on at launch.
 
-The option is off by default. It uses the selected renderer's existing MetalFX integration without modifying the game's DLLs, and DXMT's vendor libraries are selected when this option or a shared temporal upscaler is enabled. A shared temporal selection can replace the exposed MetalFX operation with another available Metal implementation. The option does not enable DLSS frame generation or ray reconstruction, and the common ReShade effects stay available whether or not the game supports DLSS.
+The option is off by default. It uses the selected renderer's existing MetalFX integration without modifying the game's DLLs, and DXMT's vendor libraries are selected when this option or a shared temporal upscaler is enabled. A shared temporal selection replaces the exposed MetalFX operation only when matching scene resources and all of the selected provider's required inputs are available; otherwise the game's original scaler stays active. Camera-dependent methods require the [camera support](#fsr23-camera-support) below; DLSS alone supplies no camera parameters. The option does not enable DLSS frame generation or ray reconstruction, and the common ReShade effects stay available whether or not the game supports DLSS.
 
 Enabled temporal rows in the Advanced graphics settings prepare the same game integration and dependencies as the Simple temporal settings, while disabled rows add no temporal requirements.
 

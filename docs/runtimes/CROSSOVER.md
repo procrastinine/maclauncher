@@ -7,7 +7,7 @@ Running Windows games through Wine is a major MacLauncher feature, and CrossOver
 - Import and Play prepare a private bottle for each game automatically, run the game from its original files and keep that bottle when CrossOver is updated or moved. A bottle that already exists can be used instead, and MacLauncher never deletes, recreates, moves or replaces it.
 - Each game can choose a default Direct3D engine, a translator for each Direct3D version, a Vulkan driver and video codecs from CrossOver's own engines and from [translator versions installed in Runtimes](TRANSLATORS.md). A version is installed once and shared by every game that selects it.
 - Several CrossOver applications can be registered side by side, and each game can use a different one.
-- MacLauncher's [graphics effects](../graphics/SHARED_PROCESSING.md) run on CrossOver games through private copies of CrossOver's Wine loaders. A game's own DLSS and XeSS support can also feed MetalFX and the shared temporal upscalers.
+- MacLauncher's [graphics effects](../graphics/SHARED_PROCESSING.md) run on CrossOver games through private copies of CrossOver's Wine loaders. Compatible DLSS and XeSS integrations supply scene inputs for MetalFX and shared temporal methods whose required inputs are available.
 - Display, input, compatibility and diagnostics controls are set per game, and a game in an existing bottle can keep that bottle's current values.
 
 ## When CrossOver is offered
