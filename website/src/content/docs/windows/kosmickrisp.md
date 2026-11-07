@@ -30,7 +30,7 @@ Conformance means KosmicKrisp does everything Vulkan 1.4 requires, but the trans
 
 MacLauncher therefore publishes **MacLauncher KosmicKrisp**, its own build of KosmicKrisp from [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds). It takes the same Mesa source and adds the missing Vulkan features, each one implemented on Metal. Besides what the translators require, it brings sparse resources, which Direct3D's tiled resources need, along with conservative rasterization, mesh and task shaders, 64-bit floating point computed in software, pipeline statistics, and a much larger push constant space. The build comes for Apple Silicon and Intel processes alike, and both need an Apple Silicon Mac with macOS 26.
 
-The Khronos conformance belongs to the upstream driver that was submitted for testing. MacLauncher's build is based on that driver but adds to it, so it has no conformance submission of its own. Direct3D 12 games reach feature level 12_1 through vkd3d-proton on this build. That level needs rasterizer-ordered views, which vkd3d-proton builds on a Vulkan feature called pixel interlock, and MacLauncher KosmicKrisp provides it. Feature level 12_2 also needs ray tracing and variable rate shading, and no KosmicKrisp build has ray tracing.
+The Khronos conformance belongs to the upstream driver that was submitted for testing. MacLauncher's build is based on that driver but adds to it, so it has no conformance submission of its own. Direct3D 12 games reach feature level 12_1 through vkd3d-proton on this build. That level needs rasterizer-ordered views, which vkd3d-proton builds on a Vulkan feature called pixel interlock, and MacLauncher KosmicKrisp provides it. Feature level 12_2 has further requirements, including ray tracing and variable rate shading; enabling one emulated feature does not by itself raise the Direct3D feature level.
 
 ## At a glance
 
@@ -44,6 +44,14 @@ The Khronos conformance belongs to the upstream driver that was submitted for te
 | ANGLE's Vulkan renderer | No geometry or tessellation shaders, which OpenGL ES 3.2 needs | Geometry and tessellation shaders available | No geometry or tessellation shaders |
 
 The full feature comparison lives in the [KosmicKrisp reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/KOSMICKRISP.md#compatibility-with-moltenvk).
+
+## Performance and conformance
+
+MacLauncher KosmicKrisp can provide Vulkan features that Metal does not have directly by reproducing their behavior in shaders or extra GPU passes. Some of these features are needed by Direct3D translators; others add work only for applications that use them.
+
+**Performance** is the default mode. It keeps the emulations that common translators need and leaves several optional, more expensive features off. **Conformance** enables every emulation in the registry, so applications can use the additional Vulkan capabilities, at the cost of their extra shader work, memory or rendering passes. Selecting this mode does not give MacLauncher's adapted build a separate Khronos conformance certification.
+
+The choice can also be made per feature. The `KK_EMULATION` environment variable, available globally in **Runtimes** or per game in **Runtime Settings**, accepts a mode followed by individual changes, such as `performance,+float64`, to enable software double-precision arithmetic while keeping the other performance defaults. A feature that is already native on the Mac keeps its native implementation. The [performance and conformance reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/KOSMICKRISP.md#performance-and-conformance) lists every switch, its default, its cost and what becomes unavailable when it is off.
 
 ## Which build a game loads
 

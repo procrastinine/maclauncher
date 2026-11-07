@@ -22,13 +22,28 @@ A [temporal upscaler](/maclauncher/graphics/upscaling/#temporal-upscalers) rebui
 
 The DLSS, FSR and XeSS routes below need an Apple Silicon Mac and a 64-bit Windows game.
 
-### DLSS to MetalFX
+### DLSS games and the selected upscaler
 
-**Game temporal integration**, in a game's Runtime Settings, makes a game's [DLSS](https://www.nvidia.com/en-us/geforce/technologies/dlss/) option run Apple's [MetalFX](https://developer.apple.com/documentation/metalfx) Temporal upscaler. It works when the game renders with DXMT on macOS 14 or later, or with D3DMetal on macOS 26 or later. Turn DLSS on in the game's own settings to use it. If you select a temporal upscaler in MacLauncher's graphics settings, the integration turns on by itself at launch, and the game's DLSS data then feeds the upscaler you chose. DLSS frame generation and ray reconstruction aren't part of this.
+A game's [DLSS](https://www.nvidia.com/en-us/geforce/technologies/dlss/) setting can supply the scene data for MacLauncher's selected temporal upscaler. The game still provides its own color, depth, motion vectors and scaling values on each frame, but MacLauncher hands them to MetalFX, FSR or another selected method whose inputs are available. Without a selected replacement method, the integration uses MetalFX.
 
-### FSR 2 and FSR 3 from DLSS games
+There are several ways for that data to reach the shared graphics pipeline:
 
-MacLauncher's FSR 2 and FSR 3 upscalers need the game's camera data as well as depth and motion. Games that call DLSS through NVIDIA's Streamline library already hand that data over, and MacLauncher's Streamline and DXMT camera adapters pass it on. For this, DXMT has to be the game's Direct3D engine; in CrossOver it has to be chosen explicitly, not left to CrossOver's automatic choice. The camera adapters come with MacLauncher. Play downloads only the DXMT libraries they need, not another WINE engine, and Sikarugir and CrossOver share one set of these library versions under **Runtimes → Graphics → DirectX → Metal → DXMT**. If the DXMT version that a game uses doesn't match the camera adapter, the inspector says camera support is unavailable, and the game keeps rendering with that DXMT.
+| Game's translator | How the scene reaches MacLauncher |
+| --- | --- |
+| DXMT, for Direct3D 11 | The adapted DLSS call passes its scene through DXMT's native MetalFX integration. |
+| vkd3d-proton, for Direct3D 12 | The adapted DLSS call passes a temporal frame description through Vulkan to MacLauncher KosmicKrisp or a MoltenVK build with temporal-frame support. |
+| DXVK, for Direct3D 11 | DXVK's Vulkan interop provides the matching images and queue for the same temporal-frame route. |
+| D3DMetal | The native MetalFX call supplies the scene textures; a small Wine component can also pass on a Streamline camera. |
+
+These routes need matching translator and adapter libraries. For DXMT and D3DMetal, **Game temporal integration** in Runtime Settings exposes the game's DLSS option; choosing a Temporal upscaling row also requests the integration at launch. DLSS must be enabled in the game's own settings. The [frame-source reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/INPUTS_AND_ADAPTERS.md#scene-producers) describes each route and the exact data it carries.
+
+### When an upscaler needs camera data
+
+FSR 2 and FSR 3 need the game's camera parameters as well as depth and motion. Games that call DLSS through NVIDIA's Streamline library can supply those parameters, and MacLauncher's adapters pass them on through DXMT, the Vulkan temporal-frame routes or D3DMetal. A DLSS call without Streamline constants supplies no camera, so it cannot provide the inputs for a method that needs one.
+
+Camera support follows the translator that actually runs. DXMT needs an adapter matched to its native library and Windows component; if they do not match, the game keeps its chosen DXMT renderer and the inspector reports camera support as unavailable. For D3DMetal, a camera is handed to the next native scaler once and is cleared at presentation, so it cannot carry over to a later frame. Full input requirements are listed in the [temporal upscaler reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/PROVIDERS.md#scene-temporal-upscaling).
+
+These integrations supply Super Resolution inputs. They do not expose NVIDIA DLSS Frame Generation or Ray Reconstruction. MacLauncher's own [frame generation](/maclauncher/graphics/frame-generation/) is a separate choice with its own input and presentation requirements.
 
 ### XeSS games
 
