@@ -43,7 +43,8 @@ typedef struct RSTemporalResult {
     uint32_t method, reset;
     char reason[256];
 } RSTemporalResult;
-// No fallback silently substitutes a different temporal algorithm.
+// Failed selected methods use the default MetalFX method for that frame.
+// The result names the method that encoded; diagnostics report the fallback.
 int rsProcessTemporalFrame(const RSTemporalFrame *, RSTemporalResult *);
 // Direct genuine provider operation, independent of optional ordered effects.
 int rsProcessTemporalProviderFrame(const RSTemporalFrame *,RSTemporalResult *);
