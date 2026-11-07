@@ -282,7 +282,8 @@ test("Java tools reuse selected or compatible installed hosts and consent before
   let installed = { line: 17, version: "17.0.1+1", variant: "arm64", installDir: root, javaPath: path.join(root, "java") };
   const manager = { id: "java", normalizeSettings: () => ({ defaultLine: chosen ? chosenLine : null, lines: {
     17: { defaultVariant: "arm64", defaultVersion: chosenLine === 17 ? chosen : null }, 21: { defaultVariant: "arm64", defaultVersion: chosenLine === 21 ? chosen : null } } }),
-    core: { java: { LTS_LINES: [17, 21], resolveBestInstalled: ({ line, version }) => installed?.line === line && (!version || installed.version === version) ? installed : null } },
+    core: { java: { LTS_LINES: [17, 21], listInstalled: (_userDataDir, line) => installed?.line === line ? [installed] : [],
+      resolveBestInstalled: ({ line, version }) => installed?.line === line && (!version || installed.version === version) ? installed : null } },
     refreshCatalog: async ({sectionId}) => { calls.push("refresh:"+sectionId); sections.push({id:sectionId,catalog:{versions:[sectionId+".0.1+1"]}}); },
     getState: () => ({ sections: [17,21].map(line => ({id:String(line),installed:installed?.line===line?[installed]:[],
       catalog:sections.find(row=>row.id===String(line))?.catalog||{versions:[]}})) }),
