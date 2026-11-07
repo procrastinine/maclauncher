@@ -122,7 +122,7 @@ function buildEnvironment(settings, installation, directory, prefixPath, graphic
   else delete environment.WINEDLLOVERRIDES;
   const wine = graphics.executablePath || installation.executablePath;
   const server = graphics.serverPath || installation.serverPath;
-  Object.assign(environment, require("../runtime/shader-cache").environment(directory));
+  Object.assign(environment, require("../runtime/shader-cache").environment(directory, environment));
   Object.assign(environment, { HOME: path.join(directory, "home"), TMPDIR: path.join(directory, "tmp"), WINEPREFIX: prefixPath,
     WINEARCH: "win64", WINELOADER: wine, WINESERVER: server,
     PATH: [path.dirname(wine), "/usr/bin", "/bin", "/usr/sbin", "/sbin"].join(path.delimiter) });

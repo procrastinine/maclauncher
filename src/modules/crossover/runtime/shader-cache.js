@@ -1,13 +1,13 @@
 const path = require("node:path");
 const Writable = require("../../shared/writable-input");
 
-function environment(directory) {
+function environment(directory, inherited = {}) {
   const cache = path.join(directory, "cache", "mesa"), dxvk = path.join(directory, "cache", "dxvk");
   // Wine's HOME and bottle are separate from this launcher-owned runtime tree.
-  // Mesa creates its cache lazily and retains its own default size limit.
+  // Mesa creates its cache lazily. Explicit launch values keep their budget.
   Writable.assertOwnDirectory(directory, cache, { create: false });
   Writable.assertOwnDirectory(directory, dxvk, { create: false });
-  return { MESA_SHADER_CACHE_DIR: cache };
+  return { MESA_SHADER_CACHE_DIR: cache, MESA_SHADER_CACHE_MAX_SIZE: inherited.MESA_SHADER_CACHE_MAX_SIZE ?? "4G" };
 }
 function prepare(directory, prefixPath) {
   environment(directory);

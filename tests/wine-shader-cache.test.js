@@ -26,8 +26,36 @@ test("Wine routes use distinct launcher runtime caches, outside HOME and prefixe
   assert.equal(inherited.MESA_SHADER_CACHE_DIR, "/owner/home/.cache");
   assert.equal(fs.existsSync(path.join(cxRoot, "cache")), false, "environment construction does not create cache files");
   assert.equal(fs.existsSync(path.join(sgRoot, "cache")), false);
-  assert.equal(Object.hasOwn(cx.overrides, "MESA_SHADER_CACHE_MAX_SIZE"), false);
-  assert.equal(Object.hasOwn(sg.environment, "MESA_SHADER_CACHE_MAX_SIZE"), false);
+  assert.equal(cx.overrides.MESA_SHADER_CACHE_MAX_SIZE, "4G");
+  assert.equal(sg.environment.MESA_SHADER_CACHE_MAX_SIZE, "4G");
+});
+test("per-game Mesa cache budgets preserve global, game, inherited and external values", t => {
+  const own = root(t), Launch = require("../src/modules/shared/runtime/translator-environment-launch");
+  const install = { crossoverRoot: "/fixture/CrossOver", executablePath: "/fixture/bin/wine", serverPath: "/fixture/bin/wineserver", capabilities: {} };
+  const context = { settings: { launcher: { translatorEnvironment: { kosmickrisp: { MESA_SHADER_CACHE_MAX_SIZE: "6G" } } } } };
+  const entry = { translatorEnvironment: { kosmickrisp: { MESA_SHADER_CACHE_MAX_SIZE: "8G" } } };
+  const cases = [
+    { name: "absent", expected: "4G" },
+    { name: "global", expected: "6G", translatorEnvironment: Launch.forLaunch({}, context, ["kosmickrisp"]).values },
+    { name: "game", expected: "8G", translatorEnvironment: Launch.forLaunch(entry, context, ["kosmickrisp"]).values },
+    { name: "inherited", expected: "2G", baseEnvironment: { MESA_SHADER_CACHE_MAX_SIZE: "2G" } },
+    { name: "external", expected: "512M", existingEnvironment: { environment: { MESA_SHADER_CACHE_MAX_SIZE: "512M" } } },
+    { name: "empty user value", expected: "", translatorEnvironment: { MESA_SHADER_CACHE_MAX_SIZE: "" } }
+  ];
+  for (const { name, expected, ...options } of cases) {
+    const directory = path.join(own, name), prefix = path.join(directory, "prefix");
+    const input = { baseEnvironment: {}, ...options };
+    const cx = CrossOver.buildEnvironment({}, install, directory, prefix, input);
+    const sg = Sikarugir.buildEnvironment({}, install, directory, prefix, { vulkanBackend: "kosmickrisp" }, input);
+    for (const environment of [cx.environment, cx.overrides, sg.environment]) {
+      assert.equal(environment.MESA_SHADER_CACHE_MAX_SIZE, expected, name);
+      assert.equal(environment.MESA_SHADER_CACHE_DIR, path.join(directory, "cache", "mesa"), name);
+    }
+    assert.equal(Object.hasOwn(input.baseEnvironment, "MESA_SHADER_CACHE_DIR"), false);
+  }
+  const unrelated = Launch.apply({ PATH: "/usr/bin" }, {}, {}, ["kosmickrisp"]);
+  assert.equal(Object.hasOwn(unrelated, "MESA_SHADER_CACHE_DIR"), false);
+  assert.equal(Object.hasOwn(unrelated, "MESA_SHADER_CACHE_MAX_SIZE"), false, "launches without the per-game cache receive no budget default");
 });
 test("an existing cache-directory alias is rejected without writing through it", t => {
   const own = root(t), target = root(t);

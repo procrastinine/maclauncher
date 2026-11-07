@@ -154,7 +154,8 @@ function buildEnvironment(settings, installation, directory, bottlePath, { baseE
   Object.assign(overrides, WineSettings.environment(settings, { needsRosetta: installation.needsRosetta, engines: translatorPlan ? Translators.engines(translatorPlan) : {} }), translatorEnvironment);
   const dll = dllOverrides(settings);
   if (dll) overrides.WINEDLLOVERRIDES = dll;
-  Object.assign(overrides, require("./shader-cache").environment(directory));
+  Object.assign(overrides, require("./shader-cache").environment(directory,
+    { ...environment, ...existingEnvironment?.environment, ...overrides }));
   Object.assign(environment, overrides, { CX_ROOT: installation.crossoverRoot,
     CX_BOTTLE: bottlePath,
     CX_BOTTLE_PATH: path.dirname(bottlePath), WINEPREFIX: bottlePath });

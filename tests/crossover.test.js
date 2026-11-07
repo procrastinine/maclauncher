@@ -683,6 +683,7 @@ test("CrossOver transports trusted game effects through its vendor environment a
   };
   const graphicsFlags = { DXMT_ENABLE_NVEXT: "0", D3DM_ENABLE_METALFX: "0",
     MESA_SHADER_CACHE_DIR: path.join(disabled.directory, "cache", "mesa"),
+    MESA_SHADER_CACHE_MAX_SIZE: "4G",
     DXVK_SHADER_CACHE_PATH: disabled.environment.DXVK_SHADER_CACHE_PATH };
   assert.equal(disabled.args[disabled.args.indexOf("--env") + 1], expectedEnvironment(graphicsFlags));
   const effect = { DYLD_INSERT_LIBRARIES: "/owned/effects/quoted ' library.dylib", RESHADE_CONFIG: "/owned/game/ReShade.ini" };
