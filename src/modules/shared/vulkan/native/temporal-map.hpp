@@ -51,3 +51,8 @@ inline bool mvkTemporalMap(const VkTemporalFrameInfoMVK& i, uint32_t cw, uint32_
         std::isfinite(i.preExposure)&&i.preExposure>=0&&std::isfinite(f.sharpness)&&
         std::isfinite(f.frameTimeMs)&&f.frameTimeMs>=0;
 }
+// Graphics reads masks at the color origin over the render extent. A mask is
+// forwarded only at that origin and when its texture covers the region.
+inline bool mvkTemporalMaskFits(const RSTemporalFrame& f, uint32_t x, uint32_t y, uint32_t w, uint32_t h) {
+    return x==f.colorX && y==f.colorY && x<w && y<h && f.renderWidth<=w-x && f.renderHeight<=h-y;
+}

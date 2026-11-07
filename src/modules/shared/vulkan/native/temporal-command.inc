@@ -8,6 +8,7 @@
 #include <mutex>
 #include <unordered_map>
 #include <array>
+#include <tuple>
 #include <atomic>
 #include <chrono>
 #import <MetalFX/MetalFX.h>
@@ -44,6 +45,7 @@ struct MVKTemporalOwner {
     id<MTLTexture> output=nil;
     bool hasOutput=false;
     bool metadataReported=false;
+    bool masksReported=false;
     double previousTime=0;
     ~MVKTemporalOwner(){mvkTemporalPipeline().release(this);[output release];}
 };
@@ -58,11 +60,28 @@ struct MVKTemporalRecord {
     RSSceneMatrices matrices{};
     uint64_t featureId=0;
     uint32_t featureType=0,sceneFlags=0;
-    bool roughnessAlias=false;
+    bool roughnessAlias=false,masksSkipped=false;
     std::array<id<MTLTexture>,TEMPORAL_IMAGES> textures{};
+    id<MTLTexture> reactive=nil,transparency=nil;
     std::shared_ptr<MVKTemporalOwner> owner;
-    ~MVKTemporalRecord(){for(auto texture:textures)[texture release];}
+    ~MVKTemporalRecord(){for(auto texture:textures)[texture release];[reactive release];[transparency release];}
 };
+// A carrier image as a texture in the read format; nil when it cannot be read.
+static VkResult mvkTemporalTexture(MVKDevice* device,VkImage handle,VkFormat requested,id<MTLTexture>& result){
+    auto image=(MVKImage*)handle;
+    if(image->getDevice()!=device||image->getPlaneCount()!=1||image->getSampleCount()!=VK_SAMPLE_COUNT_1_BIT)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    auto texture=image->getMTLTexture();
+    if(!texture||texture.textureType!=MTLTextureType2D||texture.framebufferOnly)
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    const auto format=requested==VK_FORMAT_UNDEFINED?texture.pixelFormat:image->getPixelFormats()->getMTLPixelFormat(requested);
+    if(format==MTLPixelFormatInvalid)return VK_ERROR_FORMAT_NOT_SUPPORTED;
+    if(format!=texture.pixelFormat){
+        if(!(texture.usage&MTLTextureUsagePixelFormatView))return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        result=[texture newTextureViewWithPixelFormat:format];
+    }else result=[texture retain];
+    return result?VK_SUCCESS:VK_ERROR_FORMAT_NOT_SUPPORTED;
+}
 VkResult MVKCmdTemporalFrame::setContent(MVKCommandBuffer* commands,const VkTemporalFrameInfoMVK* info){
     _frame.reset();
     if(!mvkTemporalPipeline().process||(info->featureType!=TEMPORAL_SUPER_RESOLUTION&&info->featureType!=TEMPORAL_RAY_RECONSTRUCTION))
@@ -77,20 +96,7 @@ VkResult MVKCmdTemporalFrame::setContent(MVKCommandBuffer* commands,const VkTemp
     auto device=commands->getDevice();
     for(unsigned n=0;n<TEMPORAL_IMAGES;n++){
         if(!info->images[n])continue;
-        auto image=(MVKImage*)info->images[n];
-        if(image->getDevice()!=device||image->getPlaneCount()!=1||image->getSampleCount()!=VK_SAMPLE_COUNT_1_BIT)
-            return VK_ERROR_FEATURE_NOT_PRESENT;
-        auto texture=image->getMTLTexture();
-        if(!texture||texture.textureType!=MTLTextureType2D||texture.framebufferOnly)
-            return VK_ERROR_FEATURE_NOT_PRESENT;
-        const auto format=info->formats[n]==VK_FORMAT_UNDEFINED?texture.pixelFormat:
-            image->getPixelFormats()->getMTLPixelFormat(info->formats[n]);
-        if(format==MTLPixelFormatInvalid)return VK_ERROR_FORMAT_NOT_SUPPORTED;
-        if(format!=texture.pixelFormat){
-            if(!(texture.usage&MTLTextureUsagePixelFormatView))return VK_ERROR_FORMAT_NOT_SUPPORTED;
-            record->textures[n]=[texture newTextureViewWithPixelFormat:format];
-        }else record->textures[n]=[texture retain];
-        if(!record->textures[n])return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        if(auto result=mvkTemporalTexture(device,info->images[n],info->formats[n],record->textures[n]))return result;
     }
     auto color=record->textures[TEMPORAL_COLOR],depth=record->textures[TEMPORAL_DEPTH];
     auto motion=record->textures[TEMPORAL_MOTION],output=record->textures[TEMPORAL_OUTPUT];
@@ -110,6 +116,21 @@ VkResult MVKCmdTemporalFrame::setContent(MVKCommandBuffer* commands,const VkTemp
     }
     auto& f=record->frame;f.owner=record->owner.get();f.color=color;f.depth=depth;f.motion=motion;
     f.output=output;f.exposure=record->textures[TEMPORAL_EXPOSURE];
+    // Chained masks are optional: one that is unreadable or away from the color origin stays absent.
+    for(auto next=(const VkBaseInStructure*)info->pNext;next;next=next->pNext){
+        if(next->sType!=VK_STRUCTURE_TYPE_TEMPORAL_FRAME_MASKS_INFO_MVK)continue;
+        auto masks=(const VkTemporalFrameMasksInfoMVK*)next;
+        for(auto [handle,format,x,y,slot,target]:{std::make_tuple(masks->reactive,masks->reactiveFormat,masks->reactiveX,masks->reactiveY,&record->reactive,&f.reactive),
+                                                 std::make_tuple(masks->transparency,masks->transparencyFormat,masks->transparencyX,masks->transparencyY,&record->transparency,&f.transparency)}){
+            if(!handle)continue;
+            id<MTLTexture> texture=nil;
+            if(mvkTemporalTexture(device,handle,format,texture)!=VK_SUCCESS||!mvkTemporalMaskFits(f,x,y,texture.width,texture.height)){
+                [texture release];record->masksSkipped=true;continue;
+            }
+            *slot=texture;*target=texture;
+        }
+        break;
+    }
     commands->_hasTemporalFrame=true;
     _frame=std::move(record);return VK_SUCCESS;
 }
@@ -146,6 +167,7 @@ void MVKCmdTemporalFrame::encode(MVKCommandEncoder* encoder){
     const int matricesStatus=!_frame->matrices.flags?RS_TEMPORAL_OK:pipeline.matrices?pipeline.matrices(&f,&_frame->matrices):RS_TEMPORAL_UNAVAILABLE;
     const int aovsStatus=!hasAovs?RS_TEMPORAL_OK:pipeline.aovs?pipeline.aovs(&f,&aovs):RS_TEMPORAL_UNAVAILABLE;
     if(!owner.metadataReported&&(matricesStatus||aovsStatus)){MVKLogWarn("Temporal scene bindings: matrices %d, AOVs %d",matricesStatus,aovsStatus);owner.metadataReported=true;}
+    if(_frame->masksSkipped&&!owner.masksReported){MVKLogWarn("Temporal frame masks away from the color origin or unreadable stay absent");owner.masksReported=true;}
     RSTemporalResult result{};result.size=sizeof(result);result.version=1;
     const auto status=pipeline.process(&f,&result);
     if(!_frame->owner->reported.load(std::memory_order_relaxed)){
