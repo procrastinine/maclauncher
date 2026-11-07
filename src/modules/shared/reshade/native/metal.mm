@@ -1700,6 +1700,19 @@ id<CAMetalDrawable> nextDrawable(id object,SEL selector) {
     return drawable;
 }
 void replace(Class cls,SEL selector,IMP hook) { hooks().replace(cls,selector,hook); }
+// D3DMetal records each frame, including its MetalFX scaler call, on command
+// buffers created without retained references. An ordered temporal stage
+// encodes its own images into that buffer and requires one that retains them,
+// so while the current plan demands a temporal stage the queue returns a
+// retaining buffer. Without such a plan the translator's choice is unchanged.
+thread_local bool creatingRetainingBuffer=false;
+id<MTLCommandBuffer> unretainedCommandBuffer(id object,SEL selector) {
+    if(!creatingRetainingBuffer&&macfx::temporalPlanRequested()) {
+        creatingRetainingBuffer=true;id<MTLCommandBuffer> buffer=[(id<MTLCommandQueue>)object commandBuffer];creatingRetainingBuffer=false;
+        if(buffer)return buffer;
+    }
+    return reinterpret_cast<id<MTLCommandBuffer>(*)(id,SEL)>(original(object,selector))(object,selector);
+}
 void installMetalDeviceHooks(id<MTLDevice> device) {
     static std::atomic<bool> installed{false};static std::mutex installing;
     if(!device||installed.load(std::memory_order_acquire))return;
@@ -1716,6 +1729,7 @@ void installMetalDeviceHooks(id<MTLDevice> device) {
     replace(cls,@selector(commit),reinterpret_cast<IMP>(commit));
     replace(cls,@selector(addScheduledHandler:),reinterpret_cast<IMP>(addScheduled));
     replace(cls,@selector(renderCommandEncoderWithDescriptor:),reinterpret_cast<IMP>(captureRenderPass));
+    replace(object_getClass(queue),@selector(commandBufferWithUnretainedReferences),reinterpret_cast<IMP>(unretainedCommandBuffer));
     macfx::installSceneCopyBoundaryHooks(buffer);
     if(@available(macOS 26.0,*)) {
         Class deviceClass=object_getClass(device);

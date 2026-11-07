@@ -630,7 +630,7 @@ extern "C" void rsReleaseTemporalOwner(void *key){
     bool denoised,reactiveEnabled;
     uint64_t frame,failedShape;
     double previousTime;
-    bool reset,originalReset,reported,cameraMismatchReported;
+    bool reset,originalReset,reported,cameraMismatchReported,replacementReported;
     std::string lastMetal4Reason;
     std::mutex cameraMutex;
     RSTemporalCamera camera;
@@ -787,7 +787,11 @@ void encodeTemporal(id scaler,SEL selector,id commands){
                 // a scene-only suffix observes its actual reconstructed output.
                 f.method=RS_TEMPORAL_METALFX;f.reserved=0;
                 bool originalEncoded=false;
-                std::string reason=direct?"The ordered temporal output needs retaining unsubmitted commands and one exact producer":"The ordered temporal stage requires one complete output texture";
+                const auto buffer=(id<MTLCommandBuffer>)commands;
+                std::string reason=!direct?"The ordered temporal stage requires one complete output texture":
+                    !buffer.retainedReferences?"The ordered temporal output needs a command buffer that retains its references":
+                    buffer.status>=MTLCommandBufferStatusCommitted?"The ordered temporal output needs unsubmitted commands":
+                    "The ordered temporal output needs one exact producer in its command buffer";
                 if(admitted)try {
                     macfx::DepthFrame depth{s.depthTexture,f.frameId,macfx::FrameOrigin::TopLeft};
                     macfx::ShaderFrame context{commands,s.colorTexture,s.outputTexture,f.frameId,now*1000,f.frameTimeMs,macfx::FrameOrigin::TopLeft,macfx::SpatialColor::Perceptual,&depth};
@@ -813,6 +817,7 @@ void encodeTemporal(id scaler,SEL selector,id commands){
                             if(destination)macfx::publishTemporalSceneContinuation(commands,*destination,f,selected.execution,displayMapped);
                             else macfx::publishTemporalOutputWithDepth(commands,s.outputTexture,f.frameId,selected.execution,std::move(capture),&depth,displayMapped,&f);
                             acceptEncodedScene(reinterpret_cast<uintptr_t>((__bridge void*)state),*selected.execution,f.frameId);state->statusReported.store(true,std::memory_order_release);
+                            if(!state->replacementReported){macfx::nativeLog("Temporal scene replacement active: frame="+std::to_string(f.frameId)+(selected.execution->replacesTemporal()?" replaces the original scaler":" observes the original scaler"));state->replacementReported=true;}
                             // A transient first-frame fallback must not silence a later failure reason.
                             state->reset=false;state->originalReset=true;state->reported=false;return;
                         }reason=encoded.reason;
