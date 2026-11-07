@@ -119,7 +119,12 @@ async function prepare(installation, directory, { signal, execute = executeFile,
       links[name] = source;helpers.push({ name, source, sha256: digest(fs.readFileSync(source)) });
     }
   }
-  const localLinks = separateLoader ? { "loader-libraries/ntdll.so": `../${unix}/ntdll.so` } : {};
+  // The DXMT camera bridge opens the renderer's original native library through
+  // an alias whose real file stays in the renderer package. dyld resolves that
+  // library's @rpath/winemac.so from the real location, so the loader's own
+  // Mac driver joins the private lookup directory beside ntdll.
+  const localLinks = separateLoader ? { "loader-libraries/ntdll.so": `../${unix}/ntdll.so`,
+    ...(cameraBridge?.dxmt ? { "loader-libraries/winemac.so": `../${unix}/winemac.so` } : {}) } : {};
   const sourceHash = digest(JSON.stringify([6, sources, links, localLinks, helpers, scene?.identity, translatorView?.identity, ...(winemac ? [winemac.sha256] : [])])), store = userDataDir || directory, root = path.join(store, userDataDir ? "graphics/crossover-loaders" : "graphics-loader");
   let destination = path.join(root, sourceHash.slice(0, 24));
   Writable.assertOwnDirectory(store, root);

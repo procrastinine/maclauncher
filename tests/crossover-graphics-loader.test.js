@@ -271,10 +271,19 @@ test("D3D12 DXMT adaptation preserves the independently selected D3D11 module", 
   for(const file of ["winemetal.dll","nvapi64.dll"])put(path.join(baseRoot,"x86_64-windows",file),"base "+file);
   const selectedD3D11=put(path.join(root,"selected-dxvk/d3d11.dll"),"selected D3D11");
   const translatorView={links:{"lib/wine/x86_64-windows/d3d11.dll":selectedD3D11},env:{},libraryPaths:[],frameworkPaths:[],dllOverrides:["d3d11=n"]};
+  put(path.join(selected.crossoverRoot,"lib/wine/x86_64-unix/winemac.so"),"vendor Mac driver");
   const execute=async(command,args)=>({stdout:args[0]==="-d"?permissions:""});
   const loader=await Loader.prepare(selected,directory,{cameraBridge:plan,translatorView,execute});const closure=path.resolve(path.dirname(loader),"../lib/wine");
   assert.equal(fs.realpathSync(path.join(closure,"x86_64-windows/d3d11.dll")),selectedD3D11);
   assert.equal(fs.realpathSync(path.join(closure,"x86_64-windows/d3d12.dll")),path.join(adapter,"x86_64-windows/d3d12.dll"));
   const env=Loader.environment(loader,{},{cameraBridge:plan,installation:selected,translatorView});
   assert.match(env.WINEDLLOVERRIDES,/d3d12=b/);assert.match(env.WINEDLLOVERRIDES,/d3d11=n/);assert.doesNotMatch(env.WINEDLLOVERRIDES,/d3d11[^;]*=b/);
+  // The original native library's @rpath/winemac.so resolves to the loader's Mac driver.
+  const libraries=path.resolve(path.dirname(loader),"../loader-libraries");
+  assert.deepEqual(fs.readdirSync(libraries).sort(),["ntdll.so","winemac.so"]);
+  assert.equal(fs.readlinkSync(path.join(libraries,"winemac.so")),"../lib/wine/x86_64-unix/winemac.so");
+  assert.equal(fs.realpathSync(path.join(libraries,"winemac.so")),fs.realpathSync(path.join(closure,"x86_64-unix/winemac.so")));
+  assert.equal(env.DYLD_LIBRARY_PATH,libraries);
+  const plain=await Loader.prepare(selected,path.join(root,"plain-game"),{execute});
+  assert.deepEqual(fs.readdirSync(path.resolve(path.dirname(plain),"../loader-libraries")),["ntdll.so"]);
 });
