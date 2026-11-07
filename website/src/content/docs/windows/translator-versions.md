@@ -24,7 +24,7 @@ MacLauncher leaves CrossOver and Sikarugir as they are and keeps translators in 
 - the DXMT, DXVK, D9VK and D3DMetal libraries from Sikarugir's Template releases, which install on their own, without another WINE engine;
 - files you already have, added with **Register custom…**: a folder, an archive, a disk image, or a translator inside an installed application, such as your own copy of Apple's Game Porting Toolkit for D3DMetal.
 
-The copies that come with your CrossOver application or Sikarugir Template are choices as well, and they need no installation at all.
+The copies that come with your CrossOver application or Sikarugir Template are choices as well, and they need no installation at all. A few small companion packages from MacLauncher Builds sit beside the translators that load them: **DXVK-NVAPI** and **Vulkan DLSS forwarding** in **DirectX → Vulkan**, which carry a game's DLSS calls through DXVK or vkd3d-proton, and **MoltenVK scene support** in **Vulkan drivers**. Play installs them, after asking, when a game needs them, and each has its own versions, sizes and **Remove** button like any other download.
 
 The choice itself is made per game. **Settings** holds a default for each translator control, and a game's **Runtime Settings** can override it, so one game can use a different version from all the others. When the game starts, MacLauncher links the chosen version into that launch. CrossOver's and Sikarugir's own translators are selected through their usual settings, and other versions are linked into MacLauncher's private graphics folders for that WINE version or into the game's Windows environment. If a translator has to replace a DLL inside a bottle, the original is set aside and put back when you choose something else.
 

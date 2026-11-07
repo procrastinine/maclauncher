@@ -12,11 +12,11 @@ MacLauncher installs and switches the runtime versions that play games on your M
 
 ## The Runtimes window
 
-The **Runtimes** window is MacLauncher's version manager. Every engine, player and tool has a page there, sorted into the groups Game engines, Consoles and mobile, Compatibility, Graphics and Tools. Each page works the same way:
+The **Runtimes** window is MacLauncher's download manager. Everything MacLauncher can download has a page there, sorted into the groups Game engines, Consoles and mobile, Compatibility, Graphics and Tools. That includes the small packages other runtimes load, such as DXVK-NVAPI and Vulkan DLSS forwarding beside DXVK, CrossOver graphics integration, or MoltenVK scene support among the Vulkan drivers. Runtimes is only about downloads: settings that change how a runtime behaves, such as environment variables and plugin switches, are in [Settings](#settings). Each page works the same way:
 
 - <span id="refresh"></span>The refresh button above a version list, **Reload versions**, looks up the available versions; the first time, it reads **Load versions**. The list comes straight from each project's own releases, so a new release appears the next time you refresh, without waiting for a MacLauncher update. Apart from a download you've agreed to, this is the only time MacLauncher checks for new versions. The results are cached, so the list is still there offline.
 - <span id="install"></span>**Install** downloads the version you've selected. You can keep as many versions installed as you like, side by side.
-- <span id="remove"></span>**Remove** deletes an installed version you no longer need.
+- <span id="remove"></span>**Remove** deletes an installed version you no longer need. Each installed version shows how much disk space it takes, which helps when deciding what to remove.
 - <span id="the-default"></span>The default is the version used by games that don't ask for a specific one. A version picked for a particular game, or one the game's own files call for, takes precedence. [Choosing a runtime](/maclauncher/background/choosing-a-runtime/#versions) explains the order.
 
 Many runtimes have two sources: the upstream project's own releases, and [MacLauncher Builds](https://procrastinine.github.io/maclauncher-builds/), which provides ready-to-run macOS builds of engines that need adapting. Each source has its own version list, and everything you've installed from either one shows up together when you choose a version for a game. A few components ship inside MacLauncher itself and are marked **Included**.
@@ -39,7 +39,13 @@ You don't have to refresh before playing. If a game needs a runtime and no versi
 
 Downloads run in the background while you keep using the launcher. A download button in the Runtimes window lists everything in progress, with a progress bar and a cancel button for each.
 
-The graphics components are managed the same way, under **Runtimes → Effects**: shader collections, neural models and the upscaling and frame-generation components. See [Graphics and effects](/maclauncher/graphics/).
+The graphics components are managed the same way, under **Runtimes → Effects**: shader collections, neural models, the upscaling and frame-generation components, and the adapters that pass a game's scene data to them. See [Graphics and effects](/maclauncher/graphics/).
+
+### Downloaded files
+
+A few downloads belong to no runtime of their own: the fonts that KiriKiri and NScripter games fall back on, the soundfont and RPG Maker run-time packages that MKXP-Z uses, the GOG and Epic download helpers, Android's system image and microG, the shared libraries that runtime packages declare, and caches that MacLauncher fills, such as Steam's version lists. **Runtimes → Tools → Downloaded files** lists the ones on your Mac, largest first, with each file's size, where it came from and which runtimes or games use it.
+
+**Delete** removes a file after asking, and **Delete unused** clears out everything that nothing uses any more. **Add from file…** takes a file you downloaded yourself and adds it once MacLauncher has checked that it matches a known download, without going online. On the rows for the GOG and Epic helpers and for microG, a refresh button looks up the newest release, which the next download that needs it brings in; the refresh button at the top only reads the list on your Mac again. You never have to visit this tab before playing, though: each of these files downloads on its own, after you agree, when something needs it.
 
 ## Per-game choices
 
@@ -74,9 +80,11 @@ You can point the game at a different save folder, or reset it to the default. S
 The **Settings** window (Cmd+,) holds preferences, and the only thing in it that goes online is the **Check for Updates…** button. Its sidebar starts with a search field, followed by these sections:
 
 - **Launcher**: appearance (System, Light or Dark), whether the library shows game icons and runtime tags, the default **Network access** for new games, **Steam client on Play**, the [graphics shortcuts and screenshot folder](/maclauncher/graphics/composing-effects/#shortcuts-and-screenshots), **Check for Updates…** with the result of the last check, and **Check for updates at launch**, which is off by default.
+- <span id="environment-variables"></span>**Environment variables**: extra environment variables for the translators and runtimes that games run through, such as CrossOver, Sikarugir, DXVK, KosmicKrisp or the Android engines, with one collapsed block for each. Values set here apply to every game that uses that translator, and a game's **Runtime Settings** can change, add or remove variables for that game alone. Common variables are suggested as you type, each with a short description, and a row marked **Set by MacLauncher** shows when a value replaces one that MacLauncher sets itself.
+- **Graphics**: the [shader library](/maclauncher/graphics/shaders/#the-shader-library) and your saved [graphics presets](/maclauncher/graphics/composing-effects/#presets), on the **Shaders** and **Presets** tabs.
 - One section per game type, with its **Default runtime** and a tab for each runtime's settings. A tab shows **Modified** when its settings differ from the defaults.
 
-Changes save as you make them and show up in every open window straight away. Graphics presets and the shader library live in **Settings → Graphics**.
+Changes save as you make them and show up in every open window straight away.
 
 ## Shortcuts
 

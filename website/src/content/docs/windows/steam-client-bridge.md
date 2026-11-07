@@ -27,7 +27,7 @@ Every other game starts without it.
 1. Press **Play** on the game.
 2. If the bridge isn't installed yet, MacLauncher asks one question, **Play with Steam?** The dialog names what **Play with Steam** downloads, the Steam client bridge and the Windows Steam client files from Valve, and says that Steam starts if it isn't running, because the Steam client goes online and signs in. Choose **Play with Steam**. When the same Play also needs another download, such as a WINE engine, that download's dialog lists the bridge instead and adds an **Also connect to Steam** checkbox, selected by default.
 3. MacLauncher downloads what's missing and starts Steam if it isn't running, without asking again, unless the game's **Steam client on Play** setting is **Don't start**.
-4. The game starts. There's nothing else to press.
+4. The game starts. There's nothing else to press. For an Unreal Engine game whose top-level `.exe` only starts the real game program, the bridge starts that program directly, so Steam is connected before the game's own code runs.
 
 Once the bridge is installed, later Plays use it without a dialog while Steam is running. When Steam isn't running, your **Steam client on Play** setting in **Settings → Launcher**, or the game's own choice, decides what happens; with **Ask**, the default, MacLauncher shows the same **Play with Steam?** question, as [Versions and settings](/maclauncher/tools/versions-and-settings/#steam-client-on-play) explains.
 

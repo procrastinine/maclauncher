@@ -18,6 +18,8 @@ The library opens straight away with the details MacLauncher saved last time, an
 
 Several games dragged in at once import as one batch, with **Adding N of M** and a progress bar. A failed item doesn't stop the rest. Instead, a summary lists each item that didn't import, with the reason, a **Choose game file…** button and **Retry**.
 
+A folder that isn't a game itself, such as a downloads folder or an archive that unpacked into a few levels of subfolders, isn't a dead end. When nothing at its top level is a game, or there are several possible games, MacLauncher looks inside, up to three folders deep, and offers the games it finds, so you can add one or all of them.
+
 The window also accepts dropped shaders (`.fx`, `.glsl`, `.hook`, `.slang`, `.slangp`) and neural models (`.dlssmodel`). These go into the [shader library](/maclauncher/graphics/shaders/#the-shader-library) and the [model library](/maclauncher/graphics/neural-restoration/#getting-models) instead of the game list.
 
 ### Search, filters and sorting

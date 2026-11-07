@@ -35,7 +35,9 @@ There are several ways for that data to reach the shared graphics pipeline:
 | DXVK, for Direct3D 11 | DXVK's Vulkan interop provides the matching images and queue for the same temporal-frame route. |
 | D3DMetal | The native MetalFX call supplies the scene textures; a small Wine component can also pass on a Streamline camera. |
 
-These routes need matching translator and adapter libraries. For DXMT and D3DMetal, **Game temporal integration** in Runtime Settings exposes the game's DLSS option; choosing a Temporal upscaling row also requests the integration at launch. DLSS must be enabled in the game's own settings. The [frame-source reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/INPUTS_AND_ADAPTERS.md#scene-producers) describes each route and the exact data it carries.
+On every route, **Game temporal integration** in Runtime Settings exposes the game's DLSS option, and choosing a Temporal upscaling row also requests the integration at launch. DLSS must be enabled in the game's own settings. The routes need matching translator and adapter libraries. For DXVK and vkd3d-proton, those are two small packages from MacLauncher Builds, **DXVK-NVAPI** and **Vulkan DLSS forwarding**, which Play offers to install; with MoltenVK as the Vulkan driver, Play also picks the **MoltenVK scene support** build automatically.
+
+The selected upscaler takes over only when the game's frame carries everything it needs. When something is missing, such as the camera data that FSR 2 and 3 need, DXMT and D3DMetal keep the game's own MetalFX scaler. If the selected upscaler fails on a single frame, MetalFX Temporal fills in for that frame and the inspector's graphics status says so; the next frame tries your choice again. The [frame-source reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/INPUTS_AND_ADAPTERS.md#scene-producers) describes each route and the exact data it carries.
 
 ### When an upscaler needs camera data
 
@@ -55,6 +57,6 @@ CrossOver games that render with Vulkan and use AMD's FidelityFX API can also ha
 
 ## How the adapters treat your game files
 
-Most of these adapters have to replace a DLL that sits next to the game's executable. MacLauncher never changes the original: it makes a small, separate launch folder with copies of the executable and the replaced DLLs, while the rest of the game is used from its original folder. Files the game writes next to the adapted executable stay in that launch folder, and a game that doesn't need an adapter runs straight from its original files. If an adapter can't be prepared, the game runs without it.
+Most of these adapters have to replace a DLL that sits next to the game's executable. MacLauncher never changes the original: it makes a small, separate launch folder with copies of the executable and the replaced DLLs, while the rest of the game is used from its original folder. For an Unreal Engine game whose top-level `.exe` only starts the real game program, that program is copied into the launch folder too. Files the game writes next to the adapted executable stay in that launch folder, and a game that doesn't need an adapter runs straight from its original files. If an adapter can't be prepared, the game runs without it.
 
 Further reading: [Upscaling](/maclauncher/graphics/upscaling/), and the [CrossOver](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/CROSSOVER.md#temporal-upscaling) and [Sikarugir](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/SIKARUGIR.md#game-temporal-integration) references for every requirement.

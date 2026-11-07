@@ -282,7 +282,7 @@ The Output section also holds a performance overlay, a frame-rate cap and two pr
 
 ## Lossless Scaling setup
 
-LS1 (spatial upscaling) and LSFG (frame generation) use models from a purchased copy of [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/). These models are managed in Runtimes → Effects → **Upscaling**; MetalFX, FSR, sharpened cubic and ordinary shaders work without them. There are four ways to obtain the models:
+LS1 (spatial upscaling) and LSFG (frame generation) use models from a purchased copy of [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/). These models are managed in Runtimes → Effects → **Providers**, under **Lossless Scaling**; MetalFX, FSR, sharpened cubic and ordinary shaders work without them. There are four ways to obtain the models:
 
 - **Import Lossless Scaling DLL…** reads a local DLL without executing or changing it, including a copy installed through CrossOver.
 - **Find in Steam / CrossOver** searches conventional Steam libraries, recorded Steam libraries, Steam depot downloads and standard CrossOver bottles. The search covers only these local folders; a copy in another location uses Import.

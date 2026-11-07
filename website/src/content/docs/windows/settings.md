@@ -53,7 +53,11 @@ Sikarugir also has **DirectDraw compatibility**, an optional [cnc-ddraw](https:/
 
 **Enable BepInEx winhttp override** lets [BepInEx](https://github.com/BepInEx/BepInEx) mods that the game already contains load under WINE. MacLauncher doesn't download any mods or DLLs for it.
 
-**Wine DLL overrides** and **Environment variables** are here too, for anything the other settings don't cover. MacLauncher sets the WINE and Windows environment paths itself, and an environment variable you set overrides the matching control above.
+**Wine DLL overrides** are here too, for anything the other settings don't cover.
+
+## Environment variables
+
+Runtime Settings also has an **Environment variables** section for the translators the game uses right now: CrossOver or Sikarugir itself, and each graphics translator its settings choose, such as DXVK, DXMT, D3DMetal, vkd3d-proton, MoltenVK or KosmicKrisp. The list follows your choices as you edit, so switching the Direct3D engine shows that translator's variables instead. Global values come from **Settings → Environment variables** and are marked **From Settings**; a game can change them, add its own or remove one for itself, and **Restore** brings back the inherited value. A variable you set overrides the matching control above, and MacLauncher keeps the WINE and Windows paths it needs. The [translator environment reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/TRANSLATOR_ENVIRONMENT.md) lists the suggested variables of each translator.
 
 ## Diagnostics
 
