@@ -287,7 +287,9 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const translatorEnvironment = TranslatorEnvironment.forLaunch(entry, context, Translators.environmentIds(translatorPlan, "sikarugir")).values;
   const ngxScene = require("../temporal/ngx/connection").resolve({ requested: settings.dlss === true || DLSS.needsSceneInputs(entry.effects), runtimeId: "sikarugir", install: selected.install, translatorPlan, executableArchitecture: match.executableArchitecture });
   context.ngxSceneConnection = ngxScene;
-  const translatorView = await TranslatorFiles.prepareTranslatorFiles(translatorPlan, { userDataDir: context.userDataDir, layout: translatorPlan.layout, signal: context.signal });
+  let translatorView = await TranslatorFiles.prepareTranslatorFiles(translatorPlan, { userDataDir: context.userDataDir, layout: translatorPlan.layout, signal: context.signal });
+  const vulkanDLSS=await require("../temporal/vulkan-dlss").prepare(entry,context,settings,translatorPlan,match.executableArchitecture,translatorView);
+  translatorView=vulkanDLSS.view;
   let cameraBridge = Temporal.resolvePlan(entry, context, { install: selected.install, settings, translatorPlan, host,
     runtimeId: "sikarugir", verify: true, root: dependencies.graphicsRoot, automatic: settings.dlss !== true });
   if (cameraBridge) settings = { ...settings, dlss: true };
@@ -334,7 +336,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const viewRoot = path.join(views, `${identity}-${variant}-${translatorView.identity}`);
   Writable.assertOwnDirectory(views, viewRoot);
   const graphics = await prepareGraphicsView({ install: selected.install, settings, prefixPath, viewRoot, host,
-    environment: existingEnvironment, cameraBridge, translatorPlan, translatorView, signal: context.signal, logger: context.logger, onProgress: context.onProgress, executableArchitecture: match.executableArchitecture });
+    environment: existingEnvironment, cameraBridge, vulkanDLSS, translatorPlan, translatorView, signal: context.signal, logger: context.logger, onProgress: context.onProgress, executableArchitecture: match.executableArchitecture });
   Writable.atomicWrite(path.join(viewRoot, "prepared.json"), JSON.stringify({ inputs: [...nativeInputs, { path: path.join(translatorView.root, "prepared.json"), sha256: require("../../shared/runtime/verified-identity").fileDigest(path.join(translatorView.root, "prepared.json")).sha256 }] }) + "\n", { root: viewRoot });
   if (!existingEnvironment) {
     await ensurePrefix(selected.install, Environments.privateEnvironment(context.userDataDir, directory, path.relative(directory, prefixPath)), directory, { ...settings, windowsVersion: environmentVersion }, graphics, context,
@@ -345,6 +347,8 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   await graphics.applyPrefix?.();
   context.signal?.throwIfAborted();
   let { environment } = buildEnvironment(settings, selected.install, directory, prefixPath, graphics, { ...dependencies, translatorPlan, existingEnvironment, translatorEnvironment });
+  Object.assign(environment,require("../temporal/vulkan-dlss").environment(vulkanDLSS.enabled,environment));
+  Object.assign(environment,await require("../../shared/runtime/dxgi-adapter-description").prepare(environment,{translatorPlan,host,signal:context.signal}));
   // Apply launcher-owned optional effects only to the game, after stock Wine
   // finishes prefix initialization. User-supplied loader paths remain blocked.
   if (context.applyGameEnvironment) environment = await context.applyGameEnvironment(environment);

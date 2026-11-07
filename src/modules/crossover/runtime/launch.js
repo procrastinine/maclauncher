@@ -114,7 +114,7 @@ function bottleTemplate(settings) {
 // `translatorEnvironment` holds the values of the chosen translators'
 // environments (shared/runtime/translator-environment-launch.js). They replace
 // the values that Runtime Settings set; locked names never reach them.
-function buildEnvironment(settings, installation, directory, bottlePath, { baseEnvironment = process.env, host = {}, executableArchitecture, cameraBridge, translatorPlan, existingEnvironment, translatorEnvironment = {} } = {}) {
+function buildEnvironment(settings, installation, directory, bottlePath, { baseEnvironment = process.env, host = {}, executableArchitecture, cameraBridge, translatorPlan, vulkanDLSS, existingEnvironment, translatorEnvironment = {} } = {}) {
   const environment = { ...baseEnvironment };
   for (const name of [...PROTECTED_ENVIRONMENT].filter(name => name.startsWith("WINE") || name.startsWith("CX_"))) delete environment[name];
   for (const name of MANAGED_ENVIRONMENT) delete environment[name];
@@ -127,7 +127,7 @@ function buildEnvironment(settings, installation, directory, bottlePath, { baseE
   const windows = TranslatorFiles.cpuFolder(require("../../shared/runtime/binary-compatibility").requiredMachine(executableArchitecture)) || wineLayout(installation).primaryWindows;
   const vendorLibraries = engine => windows ? DLSS.hasLibraries(path.join(installation.crossoverRoot,
     ...(engine === 'dxmt' ? ['lib', 'dxmt'] : ['lib64', 'apple_gptk', 'wine']), windows)) : false;
-  const dlss = DLSS.checkSelection(settings, { ...host, executableArchitecture, backend, translatorPlan,
+  const dlss = DLSS.checkSelection(settings, { ...host, executableArchitecture, backend, translatorPlan, vulkan: vulkanDLSS?.enabled === true,
     dxmt: settings.dlss === true && (Boolean(cameraBridge?.dxmt) || (translatorPlan?.components['d3d-renderer'].used ? DLSS.hasPlanLibraries(translatorPlan, 'dxmt') : vendorLibraries('dxmt'))),
     d3dmetal: settings.dlss === true && (translatorPlan?.components['d3d-renderer'].used ? DLSS.hasPlanLibraries(translatorPlan, 'd3dmetal') : vendorLibraries('d3dmetal')) });
   Object.assign(overrides, DLSS.environment(dlss));
@@ -237,8 +237,10 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   timing('translators');
   settings = DLSS.withTemporalSelection(Translators.settingsForPlan(settings, translatorPlan), entry.effects, translatorPlan);
   const translatorEnvironment = TranslatorEnvironment.forLaunch(entry, context, Translators.environmentIds(translatorPlan, "crossover")).values;
-  const translatorView = TranslatorFiles.selectedDescriptions(translatorPlan).length ? await TranslatorFiles.prepareTranslatorFiles(translatorPlan,
+  let translatorView = TranslatorFiles.selectedDescriptions(translatorPlan).length ? await TranslatorFiles.prepareTranslatorFiles(translatorPlan,
     { userDataDir: context.userDataDir, layout: translatorPlan.layout, signal: context.signal }) : null;
+  const vulkanDLSS=await require("../temporal/vulkan-dlss").prepare(entry,context,settings,translatorPlan,selectedExecutable.executableArchitecture,translatorView);
+  translatorView=vulkanDLSS.view;
   const Temporal = require("../temporal");
   const ngxScene = require("../temporal/ngx/connection").resolve({ requested: settings.dlss === true || DLSS.needsSceneInputs(entry.effects), runtimeId: "crossover", install: selected.install, translatorPlan, executableArchitecture: selectedExecutable.executableArchitecture });
   context.ngxSceneConnection = ngxScene;
@@ -262,7 +264,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   let environment, overrides, dll;
   try {
     ({environment, overrides, dll} = buildEnvironment(settings, selected.install, directory, bottlePath,
-      {executableArchitecture: selectedExecutable.executableArchitecture, cameraBridge, translatorPlan, existingEnvironment, host, translatorEnvironment}));
+      {executableArchitecture: selectedExecutable.executableArchitecture, cameraBridge, translatorPlan, vulkanDLSS, existingEnvironment, host, translatorEnvironment}));
   } catch (error) {
     if (context.signal?.aborted || isAbortError(error) || settings.dlss !== true) throw error;
     // Only accept a fallback if the ordinary vendor settings validate too.
@@ -411,6 +413,8 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   const steamBridge = await require('./steam-bridge').prepare(entry, context, { installation: selected.install, prefixPath: bottlePath,
     architecture: selectedExecutable.executableArchitecture, environment });
   if (steamBridge) { environment = steamBridge.environment; Object.assign(overrides, steamBridge.extra); dll = environment.WINEDLLOVERRIDES; }
+  const vulkanEnvironment=require("../temporal/vulkan-dlss").environment(vulkanDLSS.enabled,environment);
+  Object.assign(environment,vulkanEnvironment);Object.assign(overrides,vulkanEnvironment);
   const adapterDescription = await require("../../shared/runtime/dxgi-adapter-description").prepare({ ...existingEnvironment?.environment, ...environment },
     { translatorPlan, host, signal: context.signal });
   Object.assign(environment, adapterDescription); Object.assign(overrides, adapterDescription);

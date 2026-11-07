@@ -5,7 +5,7 @@ const { inspectMachOExports } = require("../shared/runtime/macho-exports");
 const { usedForApi } = require("../shared/runtime/translator-roles");
 
 const DLLS = Object.freeze(["nvapi64", "nvngx"]);
-const ENVIRONMENT = Object.freeze(["DXMT_ENABLE_NVEXT", "D3DM_ENABLE_METALFX"]);
+const ENVIRONMENT = Object.freeze(["DXMT_ENABLE_NVEXT", "D3DM_ENABLE_METALFX", "DXVK_ENABLE_NVAPI", "DXVK_NVAPI_ALLOW_OTHER_DRIVERS", "DXVK_NVAPI_GPU_ARCH"]);
 
 function needsSceneInputs(effects) {
   const methods = require("../shared/effects/execution-requirements").analyze({effects}).methods;
@@ -34,7 +34,7 @@ function hasLibraries(directory) {
 }
 
 function checkSelection(settings, { backend, dxmt = false, d3dmetal = false,
-  hardwareArch = require("../shared/runtime/host-capabilities").getHostCapabilities().hardwareArch, macOSVersion, executableArchitecture, translatorPlan } = {}) {
+  vulkan = false, hardwareArch = require("../shared/runtime/host-capabilities").getHostCapabilities().hardwareArch, macOSVersion, executableArchitecture, translatorPlan } = {}) {
   if (settings.dlss !== true) return { enabled: false, dxmt: false, d3dmetal: false };
   if (hardwareArch !== "arm64") throw new Error("MetalFX Temporal requires Apple Silicon.");
   if (executableArchitecture && executableArchitecture !== "x86_64") throw new Error("MetalFX Temporal requires a 64-bit Windows executable.");
@@ -44,6 +44,7 @@ function checkSelection(settings, { backend, dxmt = false, d3dmetal = false,
     d3dmetal = d3dmetal && apiEngines.includes("d3dmetal");
     backend = "auto"; // Global Wine redirection is transport, not the per-API renderer.
   }
+  if (vulkan && apiEngines?.some(engine => ["dxvk", "vkd3d-proton"].includes(engine))) return { enabled: true, dxmt: false, d3dmetal: false, vulkan: true };
   if (!["auto", "dxmt", "d3dmetal"].includes(backend)) throw new Error("MetalFX Temporal requires DXMT or D3DMetal. Change Graphics or disable MetalFX Temporal.");
   macOSVersion ||= systemVersionSync();
   const supportsDxmt = dxmt && versionAtLeast(macOSVersion, "14.0.0");

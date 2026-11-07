@@ -227,7 +227,7 @@ async function registerPrefixLibraries(prefixPath, viewRoot, dllRoot, signal, la
     }
   }
 }
-async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoot, host = {}, signal, executableArchitecture, cameraBridge, helperLibraries = [], translatorPlan, translatorView, environment, context, userDataDir } = {}) {
+async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoot, host = {}, signal, executableArchitecture, cameraBridge, vulkanDLSS, helperLibraries = [], translatorPlan, translatorView, environment, context, userDataDir } = {}) {
   signal?.throwIfAborted();
   if (!translatorPlan && context) {
     const shared = require('../../../shared/runtime/wine-translators');
@@ -251,7 +251,7 @@ async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoo
   const selection = translatorPlan ? { graphicsBackend: translatorPlan.apiMode ? 'wined3d' : translatorPlan.components["d3d-renderer"].used?.engine || "auto",
     vulkanBackend: translatorPlan.components["vulkan-driver"].used?.engine || "auto", components: [] } : selectGraphics(settings, capabilities, executableArchitecture);
   const rendererRoot = path.join(support, "Frameworks", "renderer");
-  const dlss = DLSS.checkSelection(settings, { ...hostInfo, executableArchitecture, translatorPlan,
+  const dlss = DLSS.checkSelection(settings, { ...hostInfo, executableArchitecture, translatorPlan, vulkan: vulkanDLSS?.enabled===true,
     backend: selection.components.includes("dxmt") ? "dxmt" : selection.graphicsBackend === "auto" ? "wined3d" : selection.graphicsBackend,
     dxmt: settings.dlss === true && (translatorPlan ? Boolean(cameraBridge) || DLSS.hasPlanLibraries(translatorPlan, "dxmt") : capabilities.dxmt && (Boolean(cameraBridge) || DLSS.hasLibraries(path.join(rendererRoot, "dxmt", "wine", layout.primaryWindows)))),
     d3dmetal: settings.dlss === true && (translatorPlan ? DLSS.hasPlanLibraries(translatorPlan, "d3dmetal") : capabilities.d3dmetal && DLSS.hasLibraries(path.join(rendererRoot, "d3dmetal", "wine", layout.primaryWindows))) });

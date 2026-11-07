@@ -153,6 +153,8 @@ During installation, MacLauncher identifies the renderers that the selected Temp
 
 ### Game temporal integration
 
+DXVK and vkd3d-proton forward DLSS inputs when the selected KosmicKrisp or MoltenVK driver supports the temporal carrier. Play offers managed DXVK-NVAPI and NGX forwarding libraries after consent and stages them in the private Windows environment with DXVK's DXGI. The source Wine engine and game libraries remain unchanged. A virtual NVIDIA adapter admits the forwarding core; the actual driver and graphics provider decide feature support.
+
 Temporal upscalers need the game's depth and motion data, which a Windows game passes to the upscaler it calls itself. **Game temporal integration** makes use of this: it exposes MetalFX Temporal through a compatible 64-bit game's DLSS integration. It requires Apple Silicon and the selected package's NVAPI and NGX libraries. The DXMT path requires macOS 14 or later and the D3DMetal path macOS 26 or later, and native dependencies can raise either minimum. The game's own DLSS setting activates the integration, and selecting a shared Temporal upscaling method also turns it on at launch.
 
 The option is off by default. It uses the selected renderer's existing MetalFX integration without modifying the game's DLLs, and DXMT's vendor libraries are selected when this option or a shared temporal upscaler is enabled. A shared temporal selection can replace the exposed MetalFX operation with another available Metal implementation. The option does not enable DLSS frame generation or ray reconstruction, and the common ReShade effects stay available whether or not the game supports DLSS.
