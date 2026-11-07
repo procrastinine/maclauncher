@@ -78,6 +78,76 @@ test("x64 Vulkan consumers prefer KosmicKrisp on Apple Silicon and retain Molten
   assert.equal(JSON.stringify(context.settings), saved, "consumer CPU and admission preserve saved defaults");
 });
 
+test("automatic MoltenVK scene selection reuses the managed package and consented Play resumes after installation", async t => {
+  const { context, managers, dependencies } = fixture(t);
+  managers[1].present = false;
+  const scene = { id: "moltenvk-scene:scene-version", projectId: Managed.sceneProjectId, backend: "moltenvk", sceneOnly: true,
+    version: "scene-version", library: managers[0].install.executablePath, driver: managers[0].install.executablePath,
+    readable: [managers[0].install.executablePath] };
+  let present = true, listed = true, resolved = 0;
+  const uses = [], events = [];
+  context.recordRuntimeUse = row => uses.push(row);
+  t.mock.method(Managed.provider, "installed", () => []);
+  t.mock.method(Managed.sceneProvider, "installed", () => present ? [scene] : []);
+  t.mock.method(Managed.sceneProvider, "resolve", item => { resolved++; return item; });
+  const sceneManager = { id: Managed.sceneProjectId, label: "MoltenVK scene support",
+    resolveSelection: (_entry, _settings, _data, options) => ({
+      version: options.version || (listed ? scene.version : null), ready: present, discoveryRequired: !listed,
+      install: present ? { installDir: path.dirname(scene.library) } : null
+    }),
+    getState: () => ({ catalog: { versions: listed ? [scene.version] : [] } }),
+    core: { listCatalog: () => listed ? [{ version: scene.version, architecture: "x64" }] : [] },
+    async refreshCatalog() { events.push("refresh"); listed = true; },
+    installRuntime() { assert.fail("the injected preparation installer owns installation"); }
+  };
+  const owner = Managed.providers.find(item => item.projectId === Managed.sceneProjectId), originalManager = owner.manager;
+  owner.manager = sceneManager; t.after(() => { owner.manager = originalManager; });
+  const selected = { ...dependencies, adapted: undefined, adaptedManager: undefined, sceneOperations: true,
+    preferredBackend: "moltenvk", hostCapabilities: apple };
+  const saved = JSON.stringify(context.settings);
+  for (const request of ["moltenvk:auto", "auto"]) {
+    context.runtimeSettings.vulkanRuntime = request;
+    assert.equal(Vulkan.resolve(context, selected).projectId, Managed.sceneProjectId, request);
+    assert.deepEqual(Vulkan.requirements(context, selected), []);
+    assert.equal(uses.at(-1).managerId, Managed.sceneProjectId);
+    assert.equal(Vulkan.resolve(context, { ...selected, sceneOperations: false }).projectId, undefined,
+      "without scene demand, ordinary MoltenVK keeps its precedence");
+    assert.deepEqual(Vulkan.requirements(context, { ...selected, sceneOperations: false }), []);
+    present = false;
+    assert.deepEqual(Vulkan.requirements(context, selected), [{ managerId: Managed.sceneProjectId, version: scene.version,
+      requiresDownload: true, installOptions: { architecture: "x64" } }], request);
+    assert.throws(() => Vulkan.resolve(context, selected), /unavailable/, "ordinary MoltenVK must not silently consume scene inputs");
+    present = true;
+  }
+  assert.equal(resolved, 2, "managed scene resolution runs its provider's full verification");
+  for (const request of ["moltenvk:fixture", "kosmickrisp:fixture"]) {
+    managers[1].present = true;
+    context.runtimeSettings.vulkanRuntime = request;
+    assert.equal(Vulkan.resolve(context, selected).id, request, "an explicit user version wins");
+    assert.deepEqual(Vulkan.requirements(context, selected), []);
+  }
+  context.runtimeSettings.vulkanRuntime = "auto";
+  assert.equal(Vulkan.resolve(context, { ...selected, preferredBackend: "kosmickrisp" }).backend, "kosmickrisp");
+  assert.deepEqual(Vulkan.requirements(context, { ...selected, preferredBackend: "kosmickrisp" }), []);
+  managers[1].present = false;
+  context.runtimeSettings.vulkanRuntime = "moltenvk:auto";
+  present = false; listed = false;
+  assert.deepEqual(Vulkan.requirements(context, { ...selected, required: false }), [{ managerId: Managed.sceneProjectId, version: null,
+    discoveryRequired: true, requiresDownload: true, installOptions: { architecture: "x64" } }]);
+  context.confirmRuntimeInstall = async plan => { events.push("consent:" + plan.managerId); return true; };
+  const mod = { id: "moltenvk-scene-fixture", runtimeManagers: [sceneManager],
+    getRuntimeRequirements: () => Vulkan.requirements(context, selected), prepareLaunch: () => events.push("prepare") };
+  assert.equal(await Preparation.prepareForLaunch({ entry: {}, mod, info: {}, context, report() {},
+    registry: { listModuleIds: () => [mod.id], getModule: () => mod },
+    install: async (manager, input) => {
+      assert.equal(manager.id, Managed.sceneProjectId); assert.equal(input.architecture, "x64");
+      events.push("install"); present = true;
+    } }), true);
+  assert.deepEqual(events, ["consent:" + Managed.sceneProjectId, "refresh", "install", "prepare"]);
+  assert.equal(Vulkan.resolve(context, selected).projectId, Managed.sceneProjectId);
+  assert.equal(JSON.stringify(context.settings), saved, "selection and preparation keep all saved defaults");
+});
+
 test("Intel hardware and older macOS exclude installed and offered KosmicKrisp and fall back offline", t => {
   const { context, managers, dependencies, adapted } = fixture(t);
   for (const hostCapabilities of [intel, { ...apple, macOSVersion: "15.7" }]) {
