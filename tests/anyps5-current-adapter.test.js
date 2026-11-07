@@ -29,3 +29,34 @@ test('AnyPS5 conversion follows converter bytes across runtime installs and veri
  assert.equal((await prepare(replacement)).cached,false);assert.equal(f.calls(),5);
  assert.equal((await prepare(replacement)).cached,true);assert.equal(f.calls(),5);
 });
+test('AnyPS5 Play preparation reports copied files and converted modules from the relinker output',async t=>{
+ const f=fixture(t),reports=[];f.context.onProgress=state=>reports.push(state);
+ // The relinker rewrites its progress lines with carriage returns; chunks can split a line.
+ const output=['Converting eboot.elf\n\nInstruction conversion | eboot.elf | 0%\rInstruction conversion | eboot.elf | 50%\rInstruction conv','ersion | eboot.elf | 100%\n',
+  'Import analysis\nPRX conversion         | eboot.elf  |   0% (0/1)\nPRX conversion         | helper.prx |   0% (0/1)\n',
+  'Instruction scan       | helper.prx |  40%\rInstruction scan       | helper.prx | 100%\nPRX conversion         | helper.prx | 100% (1/1)\n',
+  'Write output           | eboot      | 100%\nConversion complete\n'];
+ const runCommand=async(command,args,options)=>{for(const chunk of output) options.onOutput(chunk,'stdout');return f.runCommand(command,args,options);};
+ await Prepare.prepareGame(f.entry,f.context,f.install,{runCommand});
+ const files=reports.filter(state=>state.label==='Preparing game…');
+ assert.ok(files.length>=2&&files.every(state=>state.unit==='files'&&state.total===files[0].total&&state.total>0));
+ assert.equal(files.at(-1).completed,files.at(-1).total,'the copy finishes at its full file count');
+ const conversion=reports.filter(state=>state.label==='Converting PS5 program…');
+ assert.ok(conversion.every(state=>state.phase==='prepare'&&state.unit==='modules'&&state.total===2),'the main program and its one module');
+ assert.deepEqual([...new Set(conversion.map(state=>state.completed))],[0,1,2]);
+ assert.ok(conversion.some(state=>state.step==='Instruction conversion · eboot.elf')&&conversion.some(state=>state.step==='Instruction scan · helper.prx'));
+ assert.equal(conversion.at(-1).step,undefined,'a completed conversion has no remaining step');
+ assert.ok(reports.indexOf(files.at(-1))<reports.indexOf(conversion[0]),'resources are copied before conversion starts');
+});
+test('AnyPS5 conversion progress follows the relinker module count and ignores other output',()=>{
+ const {createConversionProgress}=require('../src/modules/anyps5/conversion-progress');
+ const reports=[],progress=createConversionProgress(state=>reports.push(state),{modules:2});
+ progress.start();progress.write('Intel substitution: ANDN at 0x123e7 (5 bytes) -> stub 49 bytes\nunrelated text\n');
+ assert.deepEqual(reports,[{phase:'prepare',label:'Converting PS5 program…',completed:0,total:3,unit:'modules'}],'unchanged progress is reported once');
+ progress.write('PRX conversion | libc.prx | 11% (1/9)\n');
+ assert.deepEqual([reports.at(-1).completed,reports.at(-1).total],[2,10],'the relinker count replaces the planned module count');
+ progress.write('PRX conversion | other.prx | 0% (0/9)\n','stderr');
+ assert.equal(reports.at(-1).completed,2,'progress never moves backwards');
+ progress.write('PRX conversion | sentry.prx | 100% (9/9)\n');
+ assert.deepEqual([reports.at(-1).completed,reports.at(-1).total],[10,10]);
+});

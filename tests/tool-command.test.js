@@ -46,3 +46,12 @@ test("failed process ownership stops a tool and returns the original binding err
   }), { code: "BIND_FAILED" });
   assert.equal(await isRuntimeProcessAlive(pid), false);
 });
+test("tool output reaches a progress reader by stream, decoded across chunk boundaries, while the log keeps it", async t => {
+  const opts = options(t), seen = { stdout: "", stderr: "" };
+  // A multi-byte character split between writes still decodes once.
+  const script = "const b=Buffer.from('Converting … 1/2\\r2/2\\n');process.stdout.write(b.subarray(0,12));" +
+    "setTimeout(()=>{process.stdout.write(b.subarray(12));process.stderr.write('warning\\n');},20);";
+  await runToolCommand(process.execPath, ["-e", script], { ...opts, onOutput: (text, stream) => { seen[stream] += text; if (text.includes("2/2")) throw new Error("reader failure"); } });
+  assert.deepEqual(seen, { stdout: "Converting … 1/2\r2/2\n", stderr: "warning\n" }, "a reader that throws does not stop the tool");
+  assert.match(fs.readFileSync(opts.logPath, "utf8"), /Converting … 1\/2\r2\/2\n[\s\S]*warning/);
+});

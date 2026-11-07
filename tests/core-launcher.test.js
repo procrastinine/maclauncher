@@ -567,6 +567,27 @@ test("an unavailable optional runtime leaves one Play notice under later statuse
   assert.ok(!events.some(event => event.label === line), "the notice no longer replaces the status label");
 });
 
+test("a finished download shows the installation step that follows instead of staying at 100%", async t => {
+  // Updates are spaced past the preparation throttle, so each one is delivered as sent.
+  const events = [], pause = () => new Promise(resolve => setTimeout(resolve, 260));
+  const manager = { id: "test-runtime", label: "Test runtime", installRuntime: async ({ onProgress }) => {
+    await pause(); onProgress({ percent: 40, message: "Downloading…" });
+    await pause(); onProgress({ percent: 100, message: "Downloading…" });
+    await pause(); onProgress({ downloaded: 10, total: 10, percent: 100, message: "Checking download…" });
+    await pause(); onProgress({ downloaded: 10, total: 10, percent: 100, message: "Extracting files…" });
+    await pause(); onProgress({ downloaded: 10, total: 10, percent: 100, message: "Checking installation…" });
+    onProgress({ downloaded: 10, total: 10, percent: 100, message: "Checking installation…" });
+    await pause(); return { version: "2.0" };
+  } };
+  const { launcher, gamePath } = fixture(t, { launcher: { confirmRuntimeInstall: async () => true, onPreparationChange: event => events.push(event) },
+    mod: { runtimeManagers: [manager], ensureRuntime: () => ({ managerId: manager.id, version: "2.0" }), launchRuntime: () => ({ pid: 1 }) } });
+  await launcher.launchEntry(await launcher.resolveEntry(gamePath));
+  const install = events.filter(event => event.phase === "install");
+  assert.deepEqual(install.map(event => [event.percent, event.step]), [[undefined, undefined], [40, undefined], [100, undefined],
+    [undefined, "Checking download…"], [undefined, "Extracting files…"], [undefined, "Checking installation…"]]);
+  assert.ok(install.every(event => event.label === "Installing Test runtime…" && event.downloaded === undefined));
+});
+
 test("manual tool progress cannot leave the game stuck preparing after success or failure", async t => {
   const preparation = [];
   const { launcher, gamePath } = fixture(t, { launcher: { onPreparationChange: event => preparation.push(event) }, mod: {

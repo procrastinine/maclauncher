@@ -743,14 +743,24 @@ function createLauncher({
             install: async (manager, payload, labels = {}) => {
               // Runtime-local stages such as copy/ready are still part of installation.
               // Preserve the selected manager/version and forward only real progress.
-              let reportedPercent;
+              let reportedPercent, reportedStep;
+              const label = labels.progressLabel || `Installing ${labels.label || manager.label || manager.id}…`;
               const onProgress = state => {
                 const percent = typeof state?.percent === "number" && Number.isFinite(state.percent)
                   ? Math.max(0, Math.min(100, Math.round(state.percent))) : undefined;
+                // Once the download is complete, the manager's next step (checking,
+                // extracting, verifying) replaces the finished percentage.
+                const step = [state?.detail, state?.message].find(value => typeof value === "string" && value.trim())?.trim();
+                if ((percent === 100 || reportedPercent === 100) && step && !/^Downloading\b/i.test(step)) {
+                  reportedPercent = 100;
+                  if (step === reportedStep) return;
+                  reportedStep = step;
+                  reportPreparation({ gamePath: entry.gamePath, phase: "install", label, managerId: manager.id, version: payload.version, step });
+                  return;
+                }
                 if (percent === undefined || percent === reportedPercent) return;
                 reportedPercent = percent;
-                reportPreparation({ gamePath: entry.gamePath, phase: "install",
-                  label: labels.progressLabel || `Installing ${labels.label || manager.label || manager.id}…`, managerId: manager.id,
+                reportPreparation({ gamePath: entry.gamePath, phase: "install", label, managerId: manager.id,
                   version: payload.version, percent });
               };
               // Play already obtained consent for this plan; any other download still asks.

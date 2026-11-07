@@ -83,3 +83,13 @@ test('a Play notice stays as its own line under the changing preparation status'
   assert.match(installing, /<span class="gameLaunchFallback" role="status">No KosmicKrisp \(Intel\) version is available to download\. Using MoltenVK\.<\/span>/);
   assert.doesNotMatch(render({ phase: 'install', label: 'Installing MoltenVK…', percent: 40 }), /gameLaunchFallback/);
 });
+test('Play preparation shows converted modules of the total and the installation step after a download', () => {
+  const g = { name: 'Input', gamePath: '/input', moduleSupports: { launch: true } };
+  const render = preparation => renderToStaticMarkup(React.createElement(GameActions, { g, isRunning: false, actions: {}, inspector: true, preparation }));
+  const converting = render({ phase: 'prepare', label: 'Converting PS5 program…', completed: 3, total: 10, unit: 'modules', step: 'Instruction scan · PS5Util.prx' });
+  assert.match(converting, /role="status" title="Instruction scan · PS5Util\.prx">Converting PS5 program… 3 \/ 10 modules</);
+  assert.match(converting, /<progress aria-label="Converting PS5 program…" max="10" value="3"/);
+  const extracting = render({ phase: 'install', label: 'Installing AnyPS5…', step: 'Extracting files…' });
+  assert.match(extracting, />Installing AnyPS5… · Extracting files…</);
+  assert.doesNotMatch(extracting, /100%/);
+});

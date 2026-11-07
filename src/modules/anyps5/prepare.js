@@ -7,6 +7,7 @@ const Native = require("../shared/runtime/local-native");
 const { runToolCommand } = require("../shared/runtime/tool-command");
 const { throwIfAborted } = require("../shared/runtime/download-utils");
 const { inside, inspectBinary, readBytes, SELF_MAGICS } = require("./detect");
+const { createConversionProgress } = require("./conversion-progress");
 
 function gameDirectory(entry, context) {
   if (!/^[A-Za-z0-9_-]+$/.test(entry?.gameId || "") || !path.isAbsolute(context?.userDataDir || "")) throw new Error("AnyPS5 requires a game in the library.");
@@ -73,6 +74,8 @@ function assertOutsideSource(source,output) {
 }
 async function stageAssets(files,app0,previous,context,root) {
   const assets={};let completed=0;
+  const report=()=>context.onProgress?.({phase:"prepare",completed,total:files.length,unit:"files",label:"Preparing game…"});
+  report();
   for(const file of files) {
     throwIfAborted(context.signal);
     const output=path.join(app0,file.name), old=previous?.[file.name];let stat;
@@ -84,8 +87,9 @@ async function stageAssets(files,app0,previous,context,root) {
       if(!stat || old && Native.hashFile(output)===old.sha256) Writable.atomicCopy(file.full,output,{root});
     }
     assets[file.name]={stamp:file.stamp,sha256};
-    if(++completed%128===0) { context.onProgress?.({phase:"prepare",completed,label:"Preparing game…"});await new Promise(resolve=>setImmediate(resolve)); }
+    if(++completed%128===0) { report();await new Promise(resolve=>setImmediate(resolve)); }
   }
+  if(completed%128) report();
   return assets;
 }
 function unwrapFile(source,output,install) {
@@ -142,6 +146,8 @@ async function prepareGame(entry,context,install,dependencies={}) {
   const temporary=fs.mkdtempSync(path.join(root,".convert-")), input=path.join(temporary,"input"), output=path.join(temporary,"output");
   Writable.assertOwnDirectory(root,input);Writable.assertOwnDirectory(root,output);
   try {
+    // Modules converted of the total, counting the main program, as the relinker reports them.
+    const progress=createConversionProgress(context.onProgress,{modules:modules.length});progress.start();
     unwrapFile(program.executablePath,path.join(input,"eboot.elf"),install);
     const moduleDirectories=[...new Set(modules.map(file=>path.dirname(file.name)))].sort();
     if(!moduleDirectories.some(name=>["sce_module","sce_modules","prx"].includes(name))) moduleDirectories.push("sce_module");
@@ -153,10 +159,9 @@ async function prepareGame(entry,context,install,dependencies={}) {
       }
     }
     const logPath=path.join(root,"conversion.log");fs.writeFileSync(logPath,"");
-    context.onProgress?.({phase:"prepare",label:"Converting PS5 program…"});
     const moduleArguments=moduleDirectories.filter(name=>!["sce_module","sce_modules","prx"].includes(name)).flatMap(name=>["--module-dir",name]);
     await (dependencies.runCommand||runToolCommand)(runtimePaths(install).relinker,["--macos","--to-rosetta","--registry",...moduleArguments,path.join(input,"eboot.elf"),path.join(output,"eboot")],
-      {cwd:temporary,logPath,signal:context.signal,timeout:600000,onSpawn:child=>context.onToolProcessSpawn?.(child)});
+      {cwd:temporary,logPath,signal:context.signal,timeout:600000,onSpawn:child=>context.onToolProcessSpawn?.(child),onOutput:progress.write});
     const generated=[];
     async function publish(from,relative="") {
       for(const item of fs.readdirSync(from,{withFileTypes:true})) {
