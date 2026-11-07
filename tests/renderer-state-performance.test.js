@@ -182,8 +182,12 @@ test('library work shares availability, runs checks off main, retains previous r
   assert.deepEqual(Array.from(context.cachedState.recents[0].moduleRuntimeSupport), ['local']);
   assert.equal(probes, 1, 'inventory changes reuse main availability');
   const usable = context.cachedState.recents[0];
-  handle('runtimeState', { id: 'local', state: { installed: [{ version: 'copy', ready: true }], catalog: { versions: ['remote'] }, error: 'Proxy http://fixture:secret@proxy.invalid failed' } });
-  assert.equal(context.runtimeStateSnapshots.local.error, 'Proxy http://proxy.invalid failed', 'The actual event handler sanitizes errors before storing a snapshot');
+  const proxyUrl = new URL('http://proxy.invalid');
+  proxyUrl.username = 'fixture';
+  proxyUrl.password = 'secret';
+  assert.ok(proxyUrl.username && proxyUrl.password, 'The event carries nonempty URL credentials');
+  handle('runtimeState', { id: 'local', state: { installed: [{ version: 'copy', ready: true }], catalog: { versions: ['remote'] }, error: `Proxy ${proxyUrl.href} failed` } });
+  assert.equal(context.runtimeStateSnapshots.local.error, 'Proxy http://proxy.invalid/ failed', 'The actual event handler sanitizes errors before storing a snapshot');
   flush(); await turn();
   assert.equal(requests.length, 0, 'catalog-only changes do no game work');
   assert.equal(context.cachedState.recents[0], usable);
