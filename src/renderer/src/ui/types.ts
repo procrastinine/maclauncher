@@ -552,6 +552,8 @@ export type GamePreparation = {
   elapsed?: number;
   message?: string;
   note?: string;
+  /** A line about this Play that stays under later statuses, such as the runtime used instead of an unavailable one. */
+  notice?: string;
   stageIndex?: number;
   stageTotal?: number;
   stageComplete?: boolean;

@@ -208,13 +208,15 @@ test("KosmicKrisp choices use compact CPU labels and retain their order", t => {
   }
 });
 
-async function prepareFixture(t, { decline = false, fail, host = apple, moltenInstalled = false } = {}) {
+async function prepareFixture(t, { decline = false, fail, host = apple, moltenInstalled = false, catalog } = {}) {
   const result = fixture(t), { context, managers, managedManager, dependencies } = result;
   for (const manager of managers) manager.present = false;
   managers[0].present = moltenInstalled;
   managers[0].catalogReady = false;
   managedManager.catalogReady = false;
-  const events = [], warnings = [], offered = [], reports = [];
+  // A cached catalog of the managed package, as a Runtimes Refresh leaves it.
+  if (catalog) managedManager.getState = () => ({ catalog: { versions: [], architectureCatalogs: { x64: catalog } }, installed: [] });
+  const events = [], warnings = [], offered = [], reports = [], notices = [];
   context.logger = { warn: (...args) => warnings.push(args.join(" ")) };
   context.confirmRuntimeInstall = async plan => {
     offered.push(plan); events.push("consent:" + plan.managerId);
@@ -226,12 +228,13 @@ async function prepareFixture(t, { decline = false, fail, host = apple, moltenIn
     events.push("refresh:" + manager.id);
     assert.equal(input.architecture, "x64");
     if (manager === managedManager && fail === "refresh") throw new Error("preferred refresh failed");
-    manager.catalogReady = true;
+    // The published catalog may list no Intel build of the preferred package.
+    if (manager !== managedManager || fail !== "empty") manager.catalogReady = true;
   };
   const mod = { id: "vulkan-fixture", runtimeManagers: [...managers, managedManager],
     getRuntimeRequirements: () => Vulkan.requirements(context, selected), prepareLaunch: () => events.push("prepare") };
   const saved = JSON.stringify(context.settings);
-  assert.equal(await Preparation.prepareForLaunch({ entry: {}, mod, info: {}, context, report: state => reports.push(state),
+  assert.equal(await Preparation.prepareForLaunch({ entry: {}, mod, info: {}, context, report: state => reports.push(state), notice: line => notices.push(line),
     registry: { listModuleIds: () => [mod.id], getModule: () => mod },
     install: async (manager, input) => {
       events.push("install:" + manager.id);
@@ -240,7 +243,7 @@ async function prepareFixture(t, { decline = false, fail, host = apple, moltenIn
       manager.present = true;
     } }), true);
   assert.equal(JSON.stringify(context.settings), saved);
-  return { ...result, events, warnings, offered, reports, selected, resolved: Vulkan.resolve(context, selected) };
+  return { ...result, events, warnings, offered, reports, notices, selected, resolved: Vulkan.resolve(context, selected) };
 }
 
 test("first Intel Vulkan Play offers the managed Intel package once and installs it for either Apple Silicon launcher", async t => {
@@ -269,10 +272,34 @@ test("preferred catalog, download and install failures warn and continue with Mo
     assert.equal(result.offered.filter(plan => plan.managerId === "vulkan-moltenvk").length, 1);
     assert.equal(result.warnings.length, 1);
     assert.match(result.warnings[0], new RegExp("preferred " + fail + " failed"));
-    assert.ok(result.reports.some(state => state.phase === "prepare" && /could not be installed\. Using moltenvk\./.test(state.label)),
-      "the existing preparation status shows the fallback warning while MoltenVK consent is pending");
+    assert.deepEqual(result.notices, [`KosmicKrisp (Intel) could not be installed. preferred ${fail} failed. Using moltenvk.`],
+      "one Play notice names the offered runtime, the reason and the runtime used");
     assert.equal(result.events.at(-1), "prepare");
   });
+});
+
+test("a preferred Intel package with no published version tells the Play that MoltenVK is used", async t => {
+  const result = await prepareFixture(t, { fail: "empty" });
+  assert.deepEqual(result.events, ["consent:" + Managed.projectId, "refresh:" + Managed.projectId,
+    "consent:vulkan-moltenvk", "refresh:vulkan-moltenvk", "install:vulkan-moltenvk", "prepare"]);
+  assert.equal(result.resolved.backend, "moltenvk");
+  assert.deepEqual(result.notices, ["No KosmicKrisp (Intel) version is available to download. Using moltenvk."]);
+  assert.deepEqual(result.warnings, ["[runtimes] No KosmicKrisp (Intel) version is available to download. Using moltenvk."]);
+});
+
+test("a refreshed catalog that lists no Intel build offers only MoltenVK, while an incomplete one still offers the Intel package", async t => {
+  const fetchedAt = Date.now() - 60000;
+  const listedNone = await prepareFixture(t, { catalog: { status: "success", fetchedAt, versions: [], installableVersions: [],
+    sourceStates: { builds: { status: "success", fetchedAt }, former: { status: "success", fetchedAt } } } });
+  assert.deepEqual(listedNone.events, ["consent:vulkan-moltenvk", "refresh:vulkan-moltenvk", "install:vulkan-moltenvk", "prepare"]);
+  assert.deepEqual(listedNone.offered.map(plan => plan.managerId), ["vulkan-moltenvk"]);
+  assert.deepEqual(listedNone.notices, [], "MoltenVK is the runtime the Play offered, so nothing fell back");
+  for (const catalog of [{ status: "idle", fetchedAt: null, versions: [] },
+    { status: "success", fetchedAt, versions: [], sourceStates: { builds: { status: "error", fetchedAt: null }, former: { status: "success", fetchedAt } } }]) {
+    const unknown = await prepareFixture(t, { catalog, fail: "empty" });
+    assert.equal(unknown.offered[0].managerId, Managed.projectId, "a catalog without a complete answer leaves the offer to consented discovery");
+    assert.equal(unknown.notices.length, 1);
+  }
 });
 
 test("working MoltenVK suppresses a new offer and Intel hardware only offers MoltenVK", async t => {

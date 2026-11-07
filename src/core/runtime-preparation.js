@@ -134,7 +134,10 @@ async function runtimePlans(entry, mod, info, context, managers) {
   return [...unique.values()];
 }
 
-async function prepareForLaunch({ entry, mod, info, context, registry, runAction, install, report = () => {} }) {
+// `notice` receives a line that stays visible for the rest of this Play, such as
+// the runtime used after an optional download was unavailable.
+async function prepareForLaunch({ entry, mod, info, context, registry, runAction, install, report = () => {},
+  notice = line => report({ phase: "prepare", label: line }) }) {
   const managers = listRuntimeManagers(registry);
   let plans = await runtimePlans(entry, mod, info, context, managers);
   const approved = new Set(), refreshed = new Set(), declined = new Set();
@@ -155,9 +158,14 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
     declined.add(consentKey(plan));
     skipped(plan);
     if (plan.silentFallback) return true;
-    const label = `${managers.find(manager => manager.id === plan.managerId)?.label || plan.label || plan.managerId} could not be installed. Using ${managers.find(manager => manager.id === plan.fallback.managerId)?.label || plan.fallback.label || plan.fallback.managerId}.`;
-    context.logger?.warn?.("[runtimes] " + label, error.message);
-    report({ phase: "prepare", label, managerId: plan.managerId });
+    // The line names the runtime from the consent dialog, the reason and the runtime used instead.
+    const name = plan.label || managers.find(manager => manager.id === plan.managerId)?.label || plan.managerId;
+    const used = plan.fallback.label || managers.find(manager => manager.id === plan.fallback.managerId)?.label || plan.fallback.managerId;
+    const reason = String(error?.message || "").split("\n")[0].trim().replace(/([^.!?])$/, "$1.");
+    const line = error?.code === "RUNTIME_NO_VERSIONS" ? `No ${name} version is available to download. Using ${used}.`
+      : `${name} could not be installed.${reason ? " " + reason : ""} Using ${used}.`;
+    context.logger?.warn?.("[runtimes] " + line);
+    notice(line);
     return true;
   }
   let installations;
@@ -223,7 +231,7 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
       const key = JSON.stringify([manager.id, plan.installOptions || {}, plan.latestOnly === true]);
       try {
         if (refreshed.has(key) || typeof manager.refreshCatalog !== "function")
-          throw new Error(`No ${label} versions are available to download.`);
+          throw Object.assign(new Error(`No ${label} versions are available to download.`), { code: "RUNTIME_NO_VERSIONS" });
         refreshed.add(key);
         report({ phase: "install", label: `Finding ${label} versions…`, managerId: manager.id });
         await manager.refreshCatalog({ userDataDir: context.userDataDir, logger: context.logger, ...plan.installOptions,

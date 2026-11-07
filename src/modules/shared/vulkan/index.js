@@ -29,6 +29,16 @@ function savedChoice(context) {
   const saved = context.runtimeSettings?.vulkanRuntime;
   return typeof saved === "string" && saved ? saved : "auto";
 }
+// Whether every source of a completed catalog refresh answered for this CPU
+// and listed no build. A catalog never fetched, or a source that failed, leaves
+// the answer to consented discovery.
+function catalogListsNoBuild(manager, context, architecture) {
+  const state = manager.getState({ userDataDir: context.userDataDir, settings: context.settings?.runtimes?.[manager.id] });
+  const catalog = state.catalog?.architectureCatalogs?.[architecture] || state.catalog;
+  if (!catalog || (catalog.installableVersions || catalog.versions || []).length) return false;
+  const sources = Object.values(catalog.sourceStates || {});
+  return (sources.length ? sources : [catalog]).every(source => source?.status === "success" && Number.isFinite(source.fetchedAt));
+}
 function managedSelection(provider, context, dependencies, version, available) {
   const manager = dependencies.adaptedManager || provider.manager;
   const options = { version, verification: "status", ...(dependencies.architecture ? { architecture: dependencies.architecture } : {}) };
@@ -168,7 +178,10 @@ function requirements(context, dependencies = {}) {
         try {
           preferred = requirements({ ...context, runtimeSettings: { ...context.runtimeSettings, vulkanRuntime: managed.selectionId } }, dependencies)[0];
         } catch (error) { context.logger?.warn?.("[runtimes] The Intel KosmicKrisp package is unavailable; using MoltenVK.", error.message); }
-        if (preferred) return [{ ...preferred, optional: true, cancelLabel: "Use MoltenVK",
+        // A refreshed catalog that already lists no Intel build offers MoltenVK alone.
+        const listedNone = preferred?.discoveryRequired && catalogListsNoBuild(dependencies.adaptedManager ||
+          managed.providers.find(item => item.selectionId === managed.selectionId).manager, context, architecture);
+        if (preferred && !listedNone) return [{ ...preferred, optional: true, cancelLabel: "Use MoltenVK",
           label: offerLabel("KosmicKrisp", dependencies),
           detail: "Intel programs on Apple Silicon. Skipping uses MoltenVK.", fallback: fallback()[0] }];
       }

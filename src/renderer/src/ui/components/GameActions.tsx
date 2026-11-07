@@ -129,6 +129,7 @@ export const GameActions = memo(function GameActions({ g, isRunning, actions, in
         {!removing && <progress aria-label={preparationLabel(preparation)} max={exactCount ? total : 100}
           value={exactCount ? Math.min(completed!, total!) : percent ?? undefined}
           aria-valuetext={countLabel || undefined} />}
+        {preparation.notice && <span className="gameLaunchFallback" role="status">{preparation.notice}</span>}
       </div>}
       {/* Save tools stay usable: saves kept outside the game folder and snapshots remain available. */}
       {inspector && canLaunch && canEditSaves && !g.ephemeral && <button className="btn small" title="Save tools" onClick={() => onOpenSaveTools(g)} disabled={removing}>

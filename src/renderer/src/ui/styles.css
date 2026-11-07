@@ -2337,6 +2337,7 @@ select.input:not([multiple]) {
 .gameLaunchStatus { color: var(--muted); font-size: var(--font-sm); }
 .gameLaunchProgress { display: flex; flex: 1 1 140px; flex-direction: column; gap: 3px; min-width: 120px; max-width: 280px; font-variant-numeric: tabular-nums; }
 .gameLaunchProgress progress { width: 100%; height: 6px; accent-color: var(--accent); }
+.gameLaunchFallback { font-size: var(--font-sm); line-height: 1.3; }
 .gameLaunchSpinner { width: 16px; height: 16px; flex: none; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: gameLaunchSpin 0.8s linear infinite; }
 @keyframes gameLaunchSpin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .gameLaunchSpinner { animation-duration: 2s; } }

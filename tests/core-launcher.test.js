@@ -539,6 +539,34 @@ test("bundled runtimes install offline without a download prompt", async t => {
   assert.equal(events.at(-1).phase, "done");
 });
 
+test("an unavailable optional runtime leaves one Play notice under later statuses and in the launch result", async t => {
+  const events = [], line = "No Preferred (Intel) version is available to download. Using Fallback runtime.";
+  const preferred = { id: "preferred-runtime", label: "Preferred runtime", refreshCatalog: async () => {},
+    installRuntime: () => assert.fail("No preferred version exists") };
+  const fallback = { id: "fallback-runtime", label: "Fallback runtime", installRuntime: async ({ onProgress }) => { onProgress({ percent: 50 }); return { version: "1.0" }; } };
+  const { launcher, gamePath } = fixture(t, { launcher: { confirmRuntimeInstall: async () => true, onPreparationChange: event => events.push(event) }, mod: {
+    runtimeManagers: [preferred, fallback],
+    getRuntimeRequirements: () => [{ managerId: preferred.id, version: null, discoveryRequired: true, requiresDownload: true, optional: true,
+      label: "Preferred (Intel)", fallback: { managerId: fallback.id, version: "1.0", requiresDownload: true } }],
+    launchRuntime: async (_id, _entry, context) => {
+      // Module preparation after the fallback still carries the notice.
+      context.onProgress({ phase: "prepare", label: "Converting program…" });
+      await new Promise(resolve => setTimeout(resolve, 5));
+      return { pid: 1 };
+    }
+  } });
+  const result = await launcher.launchEntry(await launcher.resolveEntry(gamePath));
+  assert.deepEqual(result.launchNotices, [line]);
+  const first = events.findIndex(event => event.notice);
+  assert.ok(first > 0, "the notice appears once the fallback is chosen");
+  const later = events.slice(first);
+  assert.ok(later.filter(event => event.phase !== "done").every(event => event.notice === line));
+  assert.ok(["install", "prepare", "launch"].every(phase => later.some(event => event.phase === phase)),
+    "the fallback installation, module preparation and process start keep the line");
+  assert.equal(events.at(-1).phase, "done"); assert.equal(events.at(-1).notice, undefined);
+  assert.ok(!events.some(event => event.label === line), "the notice no longer replaces the status label");
+});
+
 test("manual tool progress cannot leave the game stuck preparing after success or failure", async t => {
   const preparation = [];
   const { launcher, gamePath } = fixture(t, { launcher: { onPreparationChange: event => preparation.push(event) }, mod: {

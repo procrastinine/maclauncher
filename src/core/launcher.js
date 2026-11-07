@@ -80,7 +80,19 @@ function createLauncher({
 } = {}) {
   userDataDir = path.resolve(userDataDir);
   const preparationProgress = require("./progress-reporter").createProgressReporter(onPreparationChange);
-  const reportPreparation = state => preparationProgress.report(state.gamePath, state);
+  // A notice of the current Play stays under each later status until its preparation ends.
+  const preparationNotices = new Map(), latestPreparation = new Map();
+  const reportPreparation = state => {
+    if (state.phase === "done") { preparationNotices.delete(state.gamePath); latestPreparation.delete(state.gamePath); }
+    else latestPreparation.set(state.gamePath, state);
+    const notice = state.phase !== "done" && preparationNotices.get(state.gamePath)?.join(" ");
+    preparationProgress.report(state.gamePath, notice ? { ...state, notice } : state);
+  };
+  const notePreparation = (gamePath, line) => {
+    const lines = preparationNotices.get(gamePath) || [];
+    if (!lines.includes(line)) preparationNotices.set(gamePath, [...lines, line]);
+    reportPreparation(latestPreparation.get(gamePath) || { gamePath, phase: "check", label: "Starting game…" });
+  };
   runtimeCoordinator ||= coordinatorFor(userDataDir).client();
   const gameLifecycle = require("./game-lifecycle").createGameLifecycle({ userDataDir, coordinator: runtimeCoordinator });
   let runtimeManagers;
@@ -725,6 +737,8 @@ function createLauncher({
           reportPreparation({ gamePath: entry.gamePath, phase: "check", label: "Starting game…" });
           const prepared = await prepareForLaunch({ entry, mod, info, context, registry,
             report: state => reportPreparation({ gamePath: entry.gamePath, ...state }),
+            // The line also stays in the game's details after the game starts.
+            notice: line => { launchNotices.push(line); notePreparation(entry.gamePath, line); },
             runAction: action => runAction(entry, action, {}, { settings: context.settings, runtimeId }),
             install: async (manager, payload, labels = {}) => {
               // Runtime-local stages such as copy/ready are still part of installation.

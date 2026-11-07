@@ -5,7 +5,7 @@ const Module = require('node:module');
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { build } = require('vite');
-let GameDetails, PlayButton;
+let GameDetails, PlayButton, GameActions;
 test.before(async () => {
   const bundle = await build({ configFile: false, logLevel: 'silent', build: {
     ssr: true, write: false,
@@ -22,6 +22,7 @@ test.before(async () => {
   } });
   compiled._compile(actionsBundle.output.find(c => c.type === 'chunk').code, compiled.id);
   PlayButton = compiled.exports.PlayButton;
+  GameActions = compiled.exports.GameActions;
 });
 function inspector(launch, data = {}) {
   const state = require('./library-layout-fixture').createLibraryFixture();
@@ -72,4 +73,13 @@ test('a session entry lists what it applies to, and the last remove button says 
   assert.match(several, /aria-label="Remove Document \(TextEdit\)"/);
   assert.match(several, /aria-label="Remove Studio Display \(Display\)"/);
   assert.match(render([{ id: 'w3', label: 'Document' }]), /aria-label="Remove Document and end the session"/);
+});
+test('a Play notice stays as its own line under the changing preparation status', () => {
+  const g = { name: 'Input', gamePath: '/input', moduleSupports: { launch: true } };
+  const notice = 'No KosmicKrisp (Intel) version is available to download. Using MoltenVK.';
+  const render = preparation => renderToStaticMarkup(React.createElement(GameActions, { g, isRunning: false, actions: {}, inspector: true, preparation }));
+  const installing = render({ phase: 'install', label: 'Installing MoltenVK…', percent: 40, notice });
+  assert.match(installing, /class="gameLaunchStatus" role="status"[^>]*>Installing MoltenVK… · 40%</);
+  assert.match(installing, /<span class="gameLaunchFallback" role="status">No KosmicKrisp \(Intel\) version is available to download\. Using MoltenVK\.<\/span>/);
+  assert.doesNotMatch(render({ phase: 'install', label: 'Installing MoltenVK…', percent: 40 }), /gameLaunchFallback/);
 });
