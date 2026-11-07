@@ -35,6 +35,9 @@ test('per-API bridge destinations conflict across sources while one physical bri
   assert.equal(conflict.components.d3d12.selected.id, b.description.id);
   assert.equal(conflict.components.d3d12.used, null); assert.equal(conflict.components.d3d12.fallback, true);
   assert.match(conflict.components.d3d12.reason, /external:libd3dshared\.dylib/);
+  assert.equal(conflict.components.d3d12.reasonCode, 'shared-physical-binding');
+  assert.equal(conflict.requiredTranslators, undefined, 'a known bridge collision cannot request another download');
+  assert.equal(conflict.pairingError, undefined);
   const offered = Plan.apiOptions(conflict, options).translatorD3D12Options.find(option => option.value === b.description.id);
   assert.deepEqual(offered.affectedRoles, ['d3d11', 'd3d12']);
   assert.deepEqual(offered.runtimeSettingsPatch, { translatorD3D11: b.description.id, translatorD3D12: b.description.id });
@@ -42,6 +45,8 @@ test('per-API bridge destinations conflict across sources while one physical bri
     [role.id, offered.runtimeSettingsPatch[role.settingsKey]]));
   const coherent = legacy(a.description); Plan.resolveApiRoles(coherent, { ...options, selections });
   assert.equal(coherent.apiMode, true);
+  assert.equal(coherent.requiredTranslators, undefined, 'one physical bridge needs no inferred DXGI download');
+  assert.equal(coherent.pairingError, undefined);
   const aliases = coherent.placements.filter(placement => placement.file.path.endsWith('.so'));
   assert.deepEqual(aliases.map(placement => path.basename(placement.file.path)).sort(), ['d3d11.so', 'd3d12.so']);
   assert.ok(aliases.every(placement => placement.file.realPath === b.bridge));

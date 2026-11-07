@@ -45,6 +45,9 @@ function resolvePairing(plan, { choices = [], included = [], compatibility = {},
   const ownDxgi = family === d3d12.engine;
   const ordered = ownDxgi ? [...candidates.filter(item => item.id === d3d12.id || item.root && item.root === d3d12.root), d3d12] :
     [rows.d3d11?.used, rows.d3d10?.used, rows['d3d-renderer'].used, ...candidates];
+  // A description without DXGI facts can still describe a shared bridge.
+  // Preserve its physical bindings and conflicts rather than infer a download.
+  if (ownDxgi && !ordered.some(item => item.files?.some(isDxgi))) return false;
   const partner = ordered.find(item => item?.engine === family && usable(item, 'd3d11') &&
     [...machines].every(machine => dxgiFiles(described(item, 'd3d11')).some(file => isDxgi(file) && file.machine === machine)));
   if (!partner) return missing(family, `${d3d12.engine} requires ${familyLabel} DXGI. Play installs the matching translator after confirmation.`);
