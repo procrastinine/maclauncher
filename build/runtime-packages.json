@@ -309,7 +309,11 @@
         "bytes": 59690562,
         "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/reshade%2Fv0.3.8%2Funiversal/reshade-0.3.8-universal.tar.gz"
       },
-      "tag": "reshade/v0.3.8/universal"
+      "tag": "reshade/v0.3.8/universal",
+      "source": {
+        "repository": "procrastinine/maclauncher-builds",
+        "revision": "626912ad614ab850505733a4ae9c81eb9928f214"
+      }
     },
     {
       "schemaVersion": 2,
