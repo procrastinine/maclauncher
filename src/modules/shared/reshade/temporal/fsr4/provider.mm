@@ -9,6 +9,8 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <dlfcn.h>
+#include <filesystem>
 namespace {
 using Contract = std::array<uint64_t, 48>;
 dispatch_queue_t preparationQueue() {
@@ -191,19 +193,39 @@ std::string validate(const RSTemporalFrame *f) {
     return "FSR4 requires an Apple Silicon GPU";
   return {};
 }
+std::pair<std::string, std::string> runtimePaths() {
+  const char *configuredRoot = std::getenv("FSR4_ROOT"),
+             *configuredBuild = std::getenv("FSR4_BUILD_DIR");
+  std::string root;
+  if (configuredRoot && *configuredRoot) {
+    if (configuredRoot[0] != '/') return {};
+    root = configuredRoot;
+  } else {
+    // Live method selection can first use this already-installed provider
+    // without launch-time method-specific environment variables.
+    Dl_info origin{};
+    if (!dladdr(static_cast<const void *>(&contexts), &origin) ||
+        !origin.dli_fname || origin.dli_fname[0] != '/') return {};
+    root = std::filesystem::path(origin.dli_fname).parent_path().string();
+  }
+  if (configuredBuild && *configuredBuild) {
+    if (configuredBuild[0] != '/') return {};
+    return {root, configuredBuild};
+  }
+  return {root, (std::filesystem::path(root) / "build").string()};
+}
 std::pair<std::shared_ptr<Context>, std::shared_ptr<Owner>>
 resolve(const RSTemporalFrame &f) {
-  const char *root = std::getenv("FSR4_ROOT"),
-             *build = std::getenv("FSR4_BUILD_DIR");
-  if (!root || root[0] != '/' || !build || build[0] != '/')
-    return {};
+  static const auto paths = runtimePaths();
+  const auto &root = paths.first, &build = paths.second;
+  if (root.empty() || build.empty()) return {};
   std::unique_lock lock(registryMutex, std::try_to_lock);
   if (!lock.owns_lock())
     return {};
   auto device = ((__bridge id<MTLTexture>)f.color).device;
   auto &context = contexts[(__bridge void *)device];
   if (!context)
-    context = std::make_shared<Context>(device, root, build);
+    context = std::make_shared<Context>(device, root.c_str(), build.c_str());
   auto &owner = context->owners[f.owner];
   if (!owner)
     owner = std::make_shared<Owner>();
