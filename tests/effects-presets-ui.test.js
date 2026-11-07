@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict"), path = require("node:path"), test = require("node:test"), Module = require("node:module");
 const React = require("react"), { renderToStaticMarkup } = require("react-dom/server"), { build } = require("vite");
 const { react, componentHarness } = require("./helpers/renderer-component");
-let EffectsPresetManager, EffectsPresetMenuItems, ReShadeFilterLibrary, ShaderLibraryFamily;
+let EffectsPresetManager, EffectsPresetMenuItems, ReShadeFilterLibrary, ShaderLibrary, ShaderCollections;
 async function compile(name, exported = name) {
   const result = await build({ configFile: false, logLevel: "silent", build: {
     ssr: path.join(__dirname, `../src/renderer/src/ui/components/${name}.tsx`), write: false,
@@ -11,7 +11,7 @@ async function compile(name, exported = name) {
   compiled.require = id => id === "react" ? react : Module.prototype.require.call(compiled, id);
   compiled._compile(result.output.find(chunk => chunk.type === "chunk").code, compiled.id);return compiled.exports[exported];
 }
-test.before(async () => { [EffectsPresetManager, EffectsPresetMenuItems, ReShadeFilterLibrary, ShaderLibraryFamily] = await Promise.all([compile("EffectsPresetManager"), compile("EffectsPresetPicker", "EffectsPresetMenuItems"), compile("ReShadeFilterLibrary"), compile("ShaderLibraryFamily")]); });
+test.before(async () => { [EffectsPresetManager, EffectsPresetMenuItems, ReShadeFilterLibrary, ShaderLibrary, ShaderCollections] = await Promise.all([compile("EffectsPresetManager"), compile("EffectsPresetPicker", "EffectsPresetMenuItems"), compile("ReShadeFilterLibrary"), compile("ShaderLibraryFamily", "ShaderLibrary"), compile("ShaderLibraryFamily", "ShaderCollections")]); });
 const empty = () => ({ schema: 1, mode: "advanced", video: [] });
 test("empty preset libraries accept only notice arrays and preserve valid notices", async () => {
   for (const notices of [undefined, null, {}, "unexpected", [], [{ message: "A saved preset could not be read." }]]) {
@@ -29,25 +29,27 @@ test("empty preset libraries accept only notice arrays and preserve valid notice
   }
 });
 function elements(element) { return React.isValidElement(element) ? [element, ...React.Children.toArray(element.props.children).flatMap(elements),...elements(element.props.toolbar)] : []; }
-test("one searchable shader library preserves collection identity and original filter formats", async () => {
+test("one searchable shader library keeps original filter formats, and collections keep their identity", async () => {
   const filters = [{ id: 'fx', name: 'Own ReShade', path: '/Shaders/own.fx', format: 'fx', available: true },
     { id: 'slang', name: 'Own libretro', path: '/Shaders/own.slangp', format: 'slangp', available: true },
     { id: 'mpv', name: 'Own MPV', path: '/Shaders/own.hook', format: 'libplacebo', available: true }];
   const choices = ['one', 'two'].map(id => ({ id: JSON.stringify(['original-manager', id]), sectionId: id,
     managerId: 'original-manager', label: id, section: { id, shaderFamily: 'mpv' } }));
-  const selected = [], props = { active: true, collections: choices, selectedId: choices[0].id, requestedSectionId: 'one',
-    filters, onSelectCollection: choice => selected.push(choice), children: null };
-  const family = componentHarness(ShaderLibraryFamily, props);
+  const selected = [], collections = componentHarness(ShaderCollections, { active: true, collections: choices, selectedId: choices[0].id,
+    onSelectCollection: choice => selected.push(choice), children: null });
   try {
-    const select = elements(family.render()).find(row => row.props.id === 'shader-collection');
+    const select = elements(collections.render()).find(row => row.props.id === 'shader-collection');
     select.props.onChange({ target: { value: choices[1].id } });assert.equal(selected[0], choices[1]);
-    let markup = renderToStaticMarkup(family.render());for (const label of ['Own ReShade','Own MPV','Own libretro']) assert.ok(markup.includes(label));
-    assert.doesNotMatch(markup, /shader-family-tab-/);assert.match(markup, /shader-library-search/);
-    elements(family.render()).find(row => row.props.id === 'shader-library-search').props.onChange({target:{value:'ReShade'}});
-    markup=renderToStaticMarkup(family.render());assert.match(markup,/Own ReShade/);assert.doesNotMatch(markup,/Own MPV|Own libretro/);
-    assert.deepEqual(elements(family.render()).filter(row => row.type === 'option' && choices.some(choice => choice.id === row.props.value)).map(row => row.props.value),
-      choices.map(choice => choice.id), 'the Library search never filters Collections');
-  } finally { family.close(); }
+    assert.deepEqual(elements(collections.render()).filter(row => row.type === 'option').map(row => row.props.value), choices.map(choice => choice.id));
+    assert.doesNotMatch(renderToStaticMarkup(collections.render()), /shader-library-search|Import filter/, 'Runtimes collections hold no shader table');
+  } finally { collections.close(); }
+  const library = componentHarness(ShaderLibrary, { filters });
+  try {
+    let markup = renderToStaticMarkup(library.render());for (const label of ['Own ReShade','Own MPV','Own libretro']) assert.ok(markup.includes(label));
+    assert.doesNotMatch(markup, /shader-family-tab-|shader-collection/);assert.match(markup, /shader-library-search/);
+    elements(library.render()).find(row => row.props.id === 'shader-library-search').props.onChange({target:{value:'ReShade'}});
+    markup=renderToStaticMarkup(library.render());assert.match(markup,/Own ReShade/);assert.doesNotMatch(markup,/Own MPV|Own libretro/);
+  } finally { library.close(); }
   const requested = [], table = componentHarness(ReShadeFilterLibrary, { filters, family: 'libretro', showDownloads: false,
     api: { importReShadeFilters: async family => { requested.push(family);return []; } } });
   try {
@@ -61,8 +63,8 @@ test("shader library uses shared I/O types, explicit extents and legacy navigati
   const filters = [filter('purpose-tag', {category:'upscaling'}), filter('reduction', {category:'color',outputScale:{x:.5,y:.5}}),
     filter('cnn', {outputScale:{x:2,y:2}}), filter('stage', {requestedOutputExtent:true}),
     filter('dof', {sceneInputs:['depth','projectionMatrix']}), filter('relative-fog', {modelOperation:'depth-anything-v2-small'})];
-  const props = {active:true,collections:[],filters,shaderCategory:'downscaling',onSelectCollection() {},children:null};
-  const family = componentHarness(ShaderLibraryFamily,props);
+  const props = {filters,shaderCategory:'downscaling'};
+  const family = componentHarness(ShaderLibrary,props);
   const visible = () => elements(family.render()).find(row => Array.isArray(row.props.filters)).props.filters.map(row=>row.id);
   const select = value => elements(family.render()).find(row=>row.props.id==='shader-library-type').props.onChange({target:{value}});
   try {
@@ -105,7 +107,7 @@ test("contextual templates apply an independent chain without saving or editing 
     const find = label => elements(harness.render()).find(node => node.type === "button" && React.Children.toArray(node.props.children)[0] === label);
     find(template.name).props.onClick();assert.deepEqual(applied, [template.plan]);assert.notEqual(applied[0], template.plan);
     applied[0].video[0].settings.spatialMultiplier = .5;assert.equal(template.plan.video[0].settings.spatialMultiplier, .25);
-    find("Manage presets…").props.onClick();await harness.settle();assert.deepEqual(opened, [{view: "runtimes", managerId: "graphics-presets"}]);
+    find("Manage presets…").props.onClick();await harness.settle();assert.deepEqual(opened, [{view: "settings", sectionId: "graphics:presets"}]);
     template.available = false;template.reason = "Choose a compatible neural model.";
     assert.equal(find(`${template.name} · Unavailable`).props.disabled, true);
     assert.match(renderToStaticMarkup(harness.render()), /Reconstruction \+ frame generation · 4× · Unavailable<span class="menuItemDetail">Choose a compatible neural model\.<\/span>/);
@@ -173,6 +175,9 @@ test('unified shader library preserves canonical IDs, protects managed sources a
   const name=elements(tree).find(n=>n.props.label==='Filter name: CRT');await name.props.onCommit('Living room CRT');await h.settle();assert.deepEqual(renamed,[['crt','Living room CRT']]);
   elements(h.render()).find(n=>n.props['aria-label']==='Remove filter Own shader').props.onClick();await h.settle();assert.deepEqual(removed,['uuid']);
  }finally{h.close();}
- const f=componentHarness(ShaderLibraryFamily,{active:true,collections:[],filters:[included,imported],onSelectCollection(){}});
- try{const tree=f.render(),tabs=elements(tree).filter(n=>n.props.role==='tab');assert.deepEqual(tabs.map(n=>n.props.children),['Library','Collections']);assert.equal(elements(tree).find(n=>n.props.id==='shader-collections-panel').props.hidden,true);tabs[1].props.onClick();assert.equal(elements(f.render()).find(n=>n.props.id==='shader-library-panel').props.hidden,true);}finally{f.close();}
+ // Settings → Graphics → Shaders links to the collection downloads in Runtimes; Runtimes has no shader table.
+ const f=componentHarness(ShaderLibrary,{filters:[included,imported]});
+ try{const tree=f.render();assert.equal(elements(tree).filter(n=>n.props.role==='tab').length,0);assert.match(renderToStaticMarkup(tree),/>Download shaders…<\/button>/);}finally{f.close();}
+ const c=componentHarness(ShaderCollections,{active:true,collections:[],onSelectCollection(){},children:null});
+ try{assert.match(renderToStaticMarkup(c.render()),/No collections available\./);}finally{c.close();}
 });

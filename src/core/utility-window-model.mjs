@@ -7,19 +7,24 @@ const definitions = Object.freeze({
   appAction: Object.freeze({ title: "Choose", width: 900, height: 640, minWidth: 520, minHeight: 400 })
 });
 
-// The graphics library and presets live in Runtimes ▸ Graphics. Settings
-// requests for a graphics section open the matching Runtimes library.
-function graphicsSettingsRoute(value) {
-  if (value.view !== "settings" || typeof value.sectionId !== "string" || !/^graphics(?::|$)/.test(value.sectionId)) return value;
-  const { sectionId, ...request } = value;
-  return { ...request, view: "runtimes", managerId: /^graphics:presets?(?::|$)/.test(sectionId) ? "graphics-presets" : "graphics-shader-library" };
+// The shader library and presets live in Settings → Graphics; Runtimes keeps
+// the shader collection downloads. A Runtimes request for presets, or for the
+// shader library filtered by type, opens the matching Settings section.
+function graphicsLibraryRoute(value) {
+  if (value.view !== "runtimes") return value;
+  const { managerId, sectionId, shaderCategory, ...request } = value;
+  if (managerId === "graphics-presets")
+    return { ...request, view: "settings", sectionId: typeof sectionId === "string" && sectionId ? `graphics:presets:${sectionId}` : "graphics:presets" };
+  if (managerId === "graphics-shader-library" && shaderCategory != null && shaderCategory !== "")
+    return { ...request, view: "settings", sectionId: "graphics:shaders", shaderCategory };
+  return value;
 }
 
 export function normalizeUtilityWindowRequest(value) {
   if (!value || typeof value !== "object" || typeof value.view !== "string" || !Object.hasOwn(definitions, value.view)) {
     throw new Error("Unknown launcher window.");
   }
-  value = graphicsSettingsRoute(value);
+  value = graphicsLibraryRoute(value);
   const request = { view: value.view };
   if(value.activate!==undefined){if(typeof value.activate!=="boolean")throw new Error("Choose valid window presentation.");request.activate=value.activate;}
   if (value.view === "runtimes" && value.managerId != null && value.managerId !== "") {
@@ -28,7 +33,7 @@ export function normalizeUtilityWindowRequest(value) {
     }
     request.managerId = value.managerId;
   }
-  if(value.view==="runtimes"&&value.shaderCategory!=null&&value.shaderCategory!==""){
+  if(value.view==="settings"&&value.shaderCategory!=null&&value.shaderCategory!==""){
     if(typeof value.shaderCategory!=="string"||!/^[a-z][a-z0-9-]{0,63}$/.test(value.shaderCategory))throw new Error("Invalid shader library filter.");
     request.shaderCategory=value.shaderCategory;
   }

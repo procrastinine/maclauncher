@@ -278,9 +278,20 @@ The sidebar starts with **Search settings**, followed by the sections. The first
 - **Updates**: the **Check for Updates…** button, with the result of the latest check beside it. While an update downloads, the button becomes **Cancel Download** and the result shows the progress; once the update is ready, it becomes **Restart to Update**. The button opens the same native dialogs as the menu command;
 - **Check for updates at launch**, which is off by default.
 
-**Environment variables** follows Launcher and holds the global [translator environment variables](../runtimes/TRANSLATOR_ENVIRONMENT.md#global-values): one collapsed block per runtime or translator, whose title counts its stored values, each with one table of `NAME = value` rows grouped by translator, an add row and one **Reset**. The macOS Game section follows and holds the native macOS app runtime. The other sections come from the module manifests and follow in alphabetical order. The shader library and presets, however, are in Runtimes → Effects.
+**Environment variables** follows Launcher and holds the global [translator environment variables](../runtimes/TRANSLATOR_ENVIRONMENT.md#global-values): one collapsed block per runtime or translator, whose title counts its stored values, each with one table of `NAME = value` rows grouped by translator, an add row and one **Reset**. **Graphics** follows; it holds the [shader library and the saved presets](#graphics-settings). The macOS Game section follows and holds the native macOS app runtime. The other sections come from the module manifests and follow in alphabetical order.
 
 Settings holds every setting that changes how a runtime behaves; Runtimes only downloads, removes and refreshes runtimes and chooses their default versions. The video player's runtime settings therefore also hold the plugin switches: **Use uosc**, **Timeline previews** and, under **Added plugins**, one **Use <name>** switch for each plugin added in Runtimes.
+
+#### Graphics settings
+
+**Settings → Graphics** has two tabs, **Shaders** and **Presets**, with arrow-key, Home and End navigation. Both read the graphics catalog while shown, and changes from any window appear at once.
+
+- **Shaders** holds the shader library, which **Manage filters…** in the inspector opens with its type filter set to the row's type. It is a table of every included, collection and imported shader with Name, Input → output, Origin / status and Actions columns, a search field and a type filter. In this table, **Source** expands a row to show its file path with a **Replace file…** chooser, and **Remove** leaves the files in place. Names save on Enter or when focus leaves the field, and Escape discards an edit.
+
+  **Import filter…** adds ReShade `.fx` effects, RetroArch `.slangp` presets or `.slang` shaders, and MPV/libplacebo `.glsl` or `.hook` shaders, which then appear in every game's graphics menus. Supported shader files that are dragged onto the table or the launcher, or opened with Finder's **Open With**, are imported the same way, while local `.dlssmodel` packages go to the neural model library. **Download shaders…** opens the shader collections in Runtimes → Effects → **Shaders**.
+- **Presets** selects, renames, edits, copies and deletes saved presets; **Manage presets…** in the inspector's graphics menu opens it. **Delete…** asks for confirmation in a native dialog, and games that applied the preset keep their own copies. With no saved presets, the editor opens empty.
+
+A Runtimes link from an earlier version to the presets, or to the shader library filtered by type, opens the matching Graphics settings tab.
 
 **Search settings** matches section labels, runtime names and runtime IDs and keeps the selected section open. When nothing matches, the sidebar shows **No matching sections**. Cmd-F focuses search. Up, Down, Home and End move through the sidebar, Up or Down from the search field moves to the results, and Enter opens the first result. Escape clears the search. Only the selected section's settings are rendered.
 
@@ -391,13 +402,10 @@ With nothing installed, the tab reads **No downloaded files.** Delete asks in a 
 
 #### Effects
 
-The Effects entry manages what the inspector's graphics menus can offer: upscaling and frame-generation components, imported shaders and saved presets. Its subtabs include **Providers**, **Shaders** and **Presets**.
+The Effects entry downloads what the inspector's graphics menus can offer: upscaling and frame-generation components, neural models, shader collections and the adapters that pass a game's scene data to them. Its subtabs include **Providers**, **Neural models** and **Shaders**. The shader library and the saved presets are settings and are in [Settings → Graphics](#graphics-settings).
 
 - **Providers** lists the components under **Upscaling and frame generation**, each with its availability. Lossless Scaling shows two lines with separate availability, LS1 spatial upscaling and LSFG frame generation, derived from the imported model files. Components whose files MacLauncher stores have **Manage**, which shows their management card below; each imported Lossless Scaling file names the families it provides.
-- **Shaders** holds the shader library, which **Manage filters…** in the inspector opens, and has two tabs. **Library** is a table of imported shaders with Name, Input → output, Origin / status and Actions columns, a search field and a type filter. In this table, **Source** expands a row to show its file path with a **Replace file…** chooser, and **Remove** leaves the files in place. Names save on Enter or when focus leaves the field, and Escape discards an edit.
-
-  **Import filter…** adds ReShade `.fx` effects, RetroArch `.slangp` presets or `.slang` shaders, and MPV/libplacebo `.glsl` or `.hook` shaders, which then appear in every game's graphics menus. Supported shader files that are dragged onto the launcher, or opened with Finder's **Open With**, are imported the same way, while local `.dlssmodel` packages go to the neural model library. **Collections** selects a downloadable shader collection, with its own download and version controls. It always lists every collection, because the Library search filters only imported shaders. The other Graphics tabs stay available while browsing shaders.
-- **Presets** selects, renames, edits, copies and deletes saved presets. **Delete…** asks for confirmation in a native dialog, and games that applied the preset keep their own copies. With no saved presets, the editor opens empty.
+- **Shaders** selects a downloadable shader collection under **Collection**, with its own download, version and removal controls. Installed collections add their shaders to the shader library in Settings → Graphics.
 
 ### External window
 

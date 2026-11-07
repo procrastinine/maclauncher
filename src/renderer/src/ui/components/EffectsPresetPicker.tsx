@@ -36,7 +36,7 @@ export function EffectsPresetMenuItems({ templates = [], disabled, onApply, onSa
   const [error, setError] = useState(""), labelId = useId();
   async function manage() {
     setError("");
-    try { await launcherApi()?.openUtilityWindow({ view: "runtimes", managerId: "graphics-presets" }); }
+    try { await launcherApi()?.openUtilityWindow({ view: "settings", sectionId: "graphics:presets" }); }
     catch (failure) { setError(failure instanceof Error ? failure.message : "Runtimes could not be opened."); }
   }
   return <>

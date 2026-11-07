@@ -1987,6 +1987,7 @@ export default function App() {
       {state && utilityWindowContext.view === "settings" && <SettingsView
         state={state} api={api || undefined} showIcons={showIcons} showNonDefaultTags={showNonDefaultTags}
         sectionId={state.utilityWindow?.sectionId || utilityWindowContext.sectionId}
+        shaderCategory={state.utilityWindow?.shaderCategory || utilityWindowContext.shaderCategory}
         navigationKey={state.utilityWindow?.revision}
         onSetLauncherSettings={onSetLauncherSettings} onSetModuleSettings={onSetModuleSettings}
         onAppUpdate={api?.appUpdate ? action => { void api.appUpdate(action).catch((e: any) => setError(String(e?.message || e))); } : undefined}
@@ -1996,9 +1997,7 @@ export default function App() {
         acknowledgments={acknowledgments} canOpenExternal={canOpenExternal} onOpenLink={onOpenAcknowledgmentsLink}
       />}
       {state && runtimesOpen && <RuntimesView
-        state={state} settingsApi={api}
-        shaderCategory={state.utilityWindow?.shaderCategory || utilityWindowContext.shaderCategory}
-        filterApi={api}
+        state={state} settingsApi={api} getPathForFile={api?.getPathForFile}
         runtimeManagers={runtimeManagers} runtimeUi={runtimeUi} runtimeManagerId={runtimeManagerId}
         navigationKey={state.utilityWindow?.revision}
         runtimeSectionId={runtimeSectionId} downloadTasks={downloadTasks} setRuntimeManagerId={setRuntimeManagerId}

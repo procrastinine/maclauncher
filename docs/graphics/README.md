@@ -69,7 +69,7 @@ Badges show whether a change is being saved, prepared, handed to the running gam
 
 ### Presets
 
-A preset is a saved chain that can be applied to a game. The Graphics heading's **⋯** menu lists the available presets under **Apply preset**, and it also has **Save as preset…**, which stores the current chain, and **Manage presets…**, which opens Runtimes → Effects → **Presets**. Applying a preset copies its chain into the game, so editing the preset later does not change the games it was applied to. Presets store references to the shared shaders and models they use. Preset lists update across open launcher windows, and unsaved editor drafts stay intact.
+A preset is a saved chain that can be applied to a game. The Graphics heading's **⋯** menu lists the available presets under **Apply preset**, and it also has **Save as preset…**, which stores the current chain, and **Manage presets…**, which opens Settings → Graphics → **Presets**. Applying a preset copies its chain into the game, so editing the preset later does not change the games it was applied to. Presets store references to the shared shaders and models they use. Preset lists update across open launcher windows, and unsaved editor drafts stay intact.
 
 Presets can also show what their chain costs. While a running game uses the same rows as a preset, and Details or the performance overlay measures them, the preset records the chain's total GPU time and the game's image size. The preset lists then show that last measurement. A new measurement replaces it, and editing the preset's rows removes it.
 
@@ -86,7 +86,7 @@ Every shader that the editor can use is held in one shared shader library, which
 | `.fs`, `.isf` | ISF on Metal | Declared parameters, image resources, multiple passes and persistent targets. |
 | `.hlsl` | MagpieFX on Metal | Format 4 parameters, includes, image/DDS assets, authored geometry and compute passes. |
 
-The library is managed in Runtimes → Effects → **Shaders**, which **Manage filters…** opens. Its **Library** sub-tab lists included, collection and imported shaders together, with the same names, input and output types and availability as the inspector. A shader can be renamed there, which changes only its display name, and its source details show file paths. An imported shader can also be pointed at a replacement file or removed from the library; removing it keeps the original files and the resources that depend on them.
+The library is managed in Settings → Graphics → **Shaders**, which **Manage filters…** opens with its type filter set to the row's type. It lists included, collection and imported shaders together, with the same names, input and output types and availability as the inspector. A shader can be renamed there, which changes only its display name, and its source details show file paths. An imported shader can also be pointed at a replacement file or removed from the library; removing it keeps the original files and the resources that depend on them.
 
 Shaders are added with **Import filter…**, which registers an original local file. Dropping shader or LUT files on the launcher, or opening them through Finder, also adds them to the same library. In editable fields, Enter or leaving the field saves, and Escape cancels.
 

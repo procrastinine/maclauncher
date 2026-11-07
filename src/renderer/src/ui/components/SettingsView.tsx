@@ -26,11 +26,14 @@ import { StatusBadge } from "./StatusBadge";
 import { GraphicsShortcutSettings, type GraphicsShortcutApi } from "./GraphicsShortcutSettings";
 import { TranslatorEnvironmentSettings } from "./TranslatorEnvironmentEditor";
 import { PluginSettings } from "./PluginLibrary";
+import { GraphicsLibrarySettings } from "./GraphicsLibrarySettings";
+import type { ReShadeFilterApi } from "./ReShadeFilterLibrary";
 
 type SettingsViewProps = {
   state: LauncherState;
-  api?: RuntimeSettingsApi & GraphicsShortcutApi;
+  api?: RuntimeSettingsApi & GraphicsShortcutApi & Partial<ReShadeFilterApi>;
   sectionId?: string | null;
+  shaderCategory?: string;
   navigationKey?: number;
   showIcons: boolean;
   showNonDefaultTags: boolean;
@@ -84,6 +87,7 @@ export function SettingsView({
   state,
   api,
   sectionId,
+  shaderCategory,
   navigationKey,
   showIcons,
   showNonDefaultTags,
@@ -92,8 +96,9 @@ export function SettingsView({
   onAppUpdate
 }: SettingsViewProps) {
   const modules = useMemo(() => settingsSectionModules(state.modules || []), [state.modules]);
-  // Shaders and presets are managed in Runtimes ▸ Graphics.
-  const section = (id?: string | null) => id?.replace(/^module:/, "") || "launcher";
+  // A section request names a sidebar entry, such as `module:android` or
+  // `graphics:presets:<preset id>`, whose first part selects the entry.
+  const section = (id?: string | null) => (id?.replace(/^module:/, "") || "launcher").split(":")[0];
   const [activeTab, setActiveTab] = useState(() => section(sectionId));
   useEffect(() => {
     if (sectionId) setActiveTab(section(sectionId));
@@ -104,6 +109,7 @@ export function SettingsView({
   const tabs = [{ id: "launcher", label: "Launcher", title: "Launcher" },
     ...(environments ? [{ id: "environment", label: "Environment variables", title: "Environment variables",
       keywords: environments.flatMap(item => [item.id, item.label]) }] : []),
+    { id: "graphics", label: "Graphics", title: "Graphics", keywords: ["shaders", "filters", "presets", "effects"] },
     ...modules.map(mod => ({ id: mod.id, label: mod.shortLabel || mod.label || mod.id, title: mod.label || mod.id,
       keywords: (mod.runtime?.supported || []).flatMap(id => [id, formatRuntimeLabel(id, mod)]) }))];
   const tab = tabs.some(tab => tab.id === activeTab) ? activeTab : "launcher";
@@ -163,6 +169,7 @@ export function SettingsView({
             </div>}
             {tab === "environment" && environments && api?.setTranslatorEnvironment && <TranslatorEnvironmentSettings
               declarations={environments} store={state.launcherSettings?.translatorEnvironment} onSave={api.setTranslatorEnvironment} />}
+            {tab === "graphics" && <GraphicsLibrarySettings api={api} sectionId={sectionId} shaderCategory={shaderCategory} navigationKey={navigationKey} />}
             {modules.filter(mod => mod.id === tab).map(mod => {
               const moduleSettings = state.moduleSettings?.[mod.id] || {};
               const settingsDefaults =

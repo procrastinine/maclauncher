@@ -87,7 +87,7 @@ MPV/libplacebo shaders can use the source, luma, chroma and scaling phases of mp
 
 Changes to shader selection, parameters, order and shared effects apply during playback. Replacement resources are prepared before the switch, and if an edit is rejected, the current chain stays. These updates preserve the playback position, pause state, window and fullscreen state, and a change to shared effects alone redraws a paused image without seeking. Combined native and shared changes use a coordinated display hold, whereas transitions outside that hold's presentation mode apply separately or on the next playback. Graphics bypass leaves the saved effects intact; clearing the chain is a separate action.
 
-The shaders themselves are kept in the shader library in Runtimes → Effects, which **Manage filters…** opens. Local and downloaded shaders use the same selectors. Original files stay in place, and prepared revisions pick up source edits without reusing old compiled contents.
+The shaders themselves are kept in the shader library in Settings → Graphics, which **Manage filters…** opens. Local and downloaded shaders use the same selectors. Original files stay in place, and prepared revisions pick up source edits without reusing old compiled contents.
 
 ### Neural reconstruction
 

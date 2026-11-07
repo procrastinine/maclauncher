@@ -159,14 +159,23 @@ test("utility route parsing is bounded and does not intercept existing editor ro
     assert.throws(() => normalizeUtilityWindowRequest({ view: "settings", sectionId }), /Invalid settings section/);
     assert.throws(() => normalizeUtilityWindowRequest({ view: "runtimes", sectionId }), /Invalid runtime section/);
   }
+  // The shader library and presets are in Settings → Graphics. Earlier Runtimes
+  // links to presets, or to the shader library filtered by type, open that section.
   assert.deepEqual(readUtilityWindowContext("?view=runtimes&managerId=graphics-presets&sectionId=ed5f88b7-4041"),
-    { view: "runtimes", managerId: "graphics-presets", sectionId: "ed5f88b7-4041" });
-  assert.deepEqual(readUtilityWindowContext("?view=credits&sectionId=ignored"), { view: "credits" });
-  // Settings no longer has a Graphics section; its former links open Runtimes ▸ Graphics.
-  assert.deepEqual(normalizeUtilityWindowRequest({ view: "settings", sectionId: "graphics:filters" }),
+    { view: "settings", sectionId: "graphics:presets:ed5f88b7-4041" });
+  assert.deepEqual(normalizeUtilityWindowRequest({ view: "runtimes", managerId: "graphics-presets", activate: false }),
+    { view: "settings", activate: false, sectionId: "graphics:presets" });
+  assert.deepEqual(normalizeUtilityWindowRequest({ view: "runtimes", managerId: "graphics-shader-library", shaderCategory: "image" }),
+    { view: "settings", sectionId: "graphics:shaders", shaderCategory: "image" });
+  assert.deepEqual(readUtilityWindowContext("?view=settings&sectionId=graphics:shaders&shaderCategory=upscale"),
+    { view: "settings", sectionId: "graphics:shaders", shaderCategory: "upscale" });
+  assert.throws(() => normalizeUtilityWindowRequest({ view: "settings", sectionId: "graphics:shaders", shaderCategory: "../x" }), /Invalid shader library filter/);
+  // Shader collection downloads stay in Runtimes.
+  assert.deepEqual(normalizeUtilityWindowRequest({ view: "runtimes", managerId: "graphics-shader-library" }),
     { view: "runtimes", managerId: "graphics-shader-library" });
-  assert.deepEqual(normalizeUtilityWindowRequest({ view: "settings", sectionId: "graphics:presets", activate: false }),
-    { view: "runtimes", activate: false, managerId: "graphics-presets" });
+  assert.deepEqual(normalizeUtilityWindowRequest({ view: "settings", sectionId: "graphics:presets" }),
+    { view: "settings", sectionId: "graphics:presets" });
+  assert.deepEqual(readUtilityWindowContext("?view=credits&sectionId=ignored"), { view: "credits" });
   assert.deepEqual(normalizeUtilityWindowRequest({ view: "settings", sectionId: "module:android" }),
     { view: "settings", sectionId: "module:android" });
 });

@@ -1,7 +1,6 @@
 import android from "./android/manifest.json";
 import video from "./video/manifest.json";
 import shaders from "./shared/reshade/runtime/shader-library-ui.json";
-import presets from "./shared/reshade/runtime/preset-library-ui.json";
 import components from "./shared/runtime/components-library-ui.json";
 import shaderPacks from "./shared/reshade/managed-shader-packs.json";
 import graphicsProviders from "./shared/reshade/runtime/provider-library-ui.json";
@@ -34,7 +33,8 @@ export function presentRuntimeManagers<T extends { id: string; ui?: Record<strin
 // Launcher-owned libraries hold no versions or installation records. Each joins
 // the group its metadata names once a backend manager provides that group.
 // Components (downloads without a row of their own) is the last Tools tab.
-const launcherLibraries = [presets, components];
+// The shader library and presets are settings and live in Settings → Graphics.
+const launcherLibraries = [components];
 export function withLauncherLibraries<T extends { id: string; ui?: Record<string, any> }>(managers: T[]): T[] {
   const groupsPresent = new Set(managers
     .filter(manager => (managerUi[manager.id]?.hidden ?? manager.ui?.hidden) !== true)

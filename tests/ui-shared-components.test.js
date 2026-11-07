@@ -235,23 +235,25 @@ test('Graphics providers list Lossless Scaling model families beside their compo
   const xessSection = { id: 'default', label: 'XeSS', installed: [], catalog: { status: 'idle', versions: [] } };
   const xess = { id: 'graphics-xess', label: 'XeSS', ui: { groupId: 'graphics', tabLabel: 'Graphics', sectionLabel: 'XeSS', memberOrder: 1 }, sections: [xessSection] };
   const markup = renderRuntimes([models, xess], models.id);
-  assert.match(markup, />Providers<\/button>/);
   assert.match(markup, /<button type="button" class="btn small" aria-pressed="true" aria-label="Manage Lossless Scaling">Manage<\/button>/);
   assert.match(markup, /<button type="button" class="btn small" aria-pressed="false" aria-label="Manage Intel XeSS">Manage<\/button>/);
   assert.doesNotMatch(markup, /aria-label="Manage Apple MetalFX"/, 'components without their own library have no Manage button');
   assert.match(markup, /<ul class="runtimeComponentCapabilities" aria-label="Lossless Scaling models"><li><span>LS1 spatial upscaling<\/span><span class="badge badgeAccent">Installed<\/span><\/li><li><span>LSFG frame generation<\/span><span class="badge">Not installed<\/span><\/li><\/ul>/);
   assert.doesNotMatch(markup, /aria-label="Provider"|>Upscaling</);
-  assert.match(markup, />Presets<\/button>/, 'launcher presets join the Graphics group');
+  assert.doesNotMatch(markup, />Presets<\/button>/, 'presets are settings in Settings → Graphics, not a Runtimes tab');
 });
 
 test('launcher libraries join only groups that a backend provides', () => {
   const plain = [{ id: 'engine', ui: { groupId: 'engine' } }];
   assert.equal(ui.withLauncherLibraries(plain), plain);
+  const tools = [{ id: 'innoextract', ui: { groupId: 'tools' } }];
+  const joined = ui.withLauncherLibraries(tools);
+  assert.deepEqual(joined.map(manager => manager.id), ['innoextract', 'components']);
+  assert.equal(joined[1].ui.library, 'components');
+  assert.deepEqual(ui.withLauncherLibraries(joined).map(manager => manager.id), ['innoextract', 'components']);
+  // Presets are settings in Settings → Graphics and join no Runtimes group.
   const graphics = [{ id: 'graphics-models', ui: { groupId: 'graphics' } }];
-  const joined = ui.withLauncherLibraries(graphics);
-  assert.deepEqual(joined.map(manager => manager.id), ['graphics-models', 'graphics-presets']);
-  assert.equal(joined[1].ui.library, 'presets');
-  assert.deepEqual(ui.withLauncherLibraries(joined).map(manager => manager.id), ['graphics-models', 'graphics-presets']);
+  assert.equal(ui.withLauncherLibraries(graphics), graphics);
 });
 
 test('the Lossless Scaling section reports LS1 and LSFG families separately', t => {
@@ -269,14 +271,14 @@ test('the Lossless Scaling section reports LS1 and LSFG families separately', t 
   assert.match(section.components.find(row => row.id === 'lossless').description, /LS1 spatial upscaling and LSFG frame generation/);
 });
 
-test('Settings has no Graphics section and module fields use toggles and committed inputs', () => {
+test('Settings → Graphics holds the shader library and presets, and module fields use toggles and committed inputs', () => {
   const state = createLibraryFixture();
   state.modules = [{ ...state.modules[0], settingsDefaults: { defaultRuntime: 'managed', fastStart: true, frameLimit: 60, title: 'Fixture' } }];
   const offline = () => assert.fail('Rendering must not save settings');
   const render = sectionId => renderToStaticMarkup(React.createElement(ui.SettingsView, { state, sectionId, navigationKey: 1,
     showIcons: true, showNonDefaultTags: false, onSetLauncherSettings: offline, onSetModuleSettings: offline }));
   const launcher = render('launcher');
-  assert.doesNotMatch(launcher, />Graphics<|Shader library|Graphics presets/);
+  assert.doesNotMatch(launcher, /shader-library-search|graphics-preset-name/);
   assert.match(launcher, /<label class="inlineCheck settingsToggle"><input type="checkbox" aria-label="Show game icons" checked=""\/><\/label>/);
   assert.doesNotMatch(launcher, />(On|Off)</);
   const module = render('module:fixture');
@@ -284,7 +286,8 @@ test('Settings has no Graphics section and module fields use toggles and committ
   assert.match(module, /<input aria-label="Frame Limit" type="number" inputMode="decimal" class="input" value="60"\/>/);
   assert.match(module, /<input aria-label="Title" type="text" class="input" value="Fixture"\/>/);
   assert.doesNotMatch(module, />(On|Off)</);
-  assert.doesNotMatch(render('graphics'), /Shader library|Graphics presets/);
+  assert.match(render('graphics'), /id="shader-library-search"/);
+  assert.match(render('graphics:presets'), /graphics-preset-name/);
 });
 
 const runtimeUiDefaults = { remoteOpen: {}, installedSort: {}, installVersion: {}, installVariant: {}, pendingActions: {}, messages: {}, sourceErrors: {} };
@@ -402,7 +405,7 @@ test('graphics menu presets apply copies, keep no selection and show reasons on 
       button('Save as preset…').props.onClick();
       assert.equal(saves, 1);
       button('Manage presets…').props.onClick(); await harness.settle();
-      assert.deepEqual(opened, [{ view: 'runtimes', managerId: 'graphics-presets' }]);
+      assert.deepEqual(opened, [{ view: 'settings', sectionId: 'graphics:presets' }]);
     } finally { harness.close(); }
   });
   assert.equal(listeners.size, 0);

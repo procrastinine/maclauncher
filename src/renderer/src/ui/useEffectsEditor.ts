@@ -253,7 +253,7 @@ export function useEffectsEditor({game, status, graphicsHost, running, live, onM
     catch (failure) {setError(errorText(failure));}
   }
   async function manageFilters(shaderCategory: string) {
-    try {await window.MacLauncher?.launcher.openUtilityWindow({view: "runtimes", managerId: "graphics-shader-library", shaderCategory});}
+    try {await window.MacLauncher?.launcher.openUtilityWindow({view: "settings", sectionId: "graphics:shaders", shaderCategory});}
     catch (failure) {setError(errorText(failure));}
   }
   async function addEffect(row: EffectCatalogRow) {

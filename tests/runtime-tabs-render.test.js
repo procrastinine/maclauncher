@@ -119,7 +119,7 @@ test('recommended installation uses the declared exact version without selecting
   assert.equal(blocked.props.disabled, true, 'Runtime compatibility still controls installation');
 });
 const sectionTabLabels = markup => [...markup.matchAll(/<button[^>]*id="runtime-section-tab-[^"]*"[^>]*>([^<]+)<\/button>/g)].map(match => match[1]);
-test('shader library uses one searchable list and keeps independent collection versions below imported filters', () => {
+test('Runtimes Shaders lists the downloadable collections with their own versions, without the shader table or presets', () => {
   const source = require('../src/modules/shared/reshade/runtime/shader-library-manager');
   const data = source.getState(), shaderManager = { ...data, ui: source.ui, sections: data.sections.map((section, index) => ({
     ...section, catalog: { ...section.catalog, versions: [`pack${index}-new`, `pack${index}-old`] }
@@ -128,17 +128,13 @@ test('shader library uses one searchable list and keeps independent collection v
     { id: 'slang', name: 'Own libretro', path: '/Shaders/local.slangp', format: 'slangp', available: true },
     { id: 'mpv', name: 'Own MPV', path: '/Shaders/local.glsl', format: 'libplacebo', available: true }];
   for (const index of [0, 1]) {
-    const markup = render([shaderManager], source.id, { runtimeSectionId: shaderManager.sections[index].id, shaderFilters: filters,
-      filterApi: { importReShadeFilters() { assert.fail('Rendering must not open a picker'); } } });
-    // Presets joins the Graphics group; shader collections never become tabs.
-    assert.deepEqual(sectionTabLabels(markup), ['Shaders', 'Presets']);
-    assert.match(markup,/shader-library-search/);assert.doesNotMatch(markup,/shader-family-tab-/);
-    assert.match(markup, /class="btn"[^>]*>Import filter…<\/button>/);
-    for(const label of ['Own MPV','Own ReShade','Own libretro']) assert.ok(markup.includes(label));
-    // Library and Collections are tabs; each collection keeps its own versions.
-    assert.match(markup, /role="tab" id="shader-collections-tab"[^>]*>Collections<\/button>/);
-    assert.match(markup, /<div role="tabpanel" id="shader-collections-panel"[^>]*><section class="runtimeSectionCard shaderCollections">/);
-    assert.ok(markup.indexOf('Import filter…') < markup.indexOf('id="shader-collections-panel"'));
+    const markup = render([shaderManager], source.id, { runtimeSectionId: shaderManager.sections[index].id });
+    // The shader table and presets are settings in Settings → Graphics; shader collections never become tabs.
+    assert.deepEqual(sectionTabLabels(markup), []);
+    assert.doesNotMatch(markup, /shader-library-search|Import filter…|shader-library-tab|shader-collections-tab|shader-family-tab-|graphics-presets/);
+    for (const label of filters.map(filter => filter.name)) assert.ok(!markup.includes(label));
+    // Each collection keeps its own versions.
+    assert.match(markup, /<section class="shaderLibraryFamily" aria-label="Shader collections"><section class="runtimeSectionCard shaderCollections">/);
     assert.match(markup, new RegExp(`value="pack${index}-new"`));
     assert.doesNotMatch(markup, new RegExp(`value="pack${1-index}-new"`));
     for (const section of shaderManager.sections.filter(section => section.shaderFamily === 'mpv')) assert.ok(markup.includes(section.label));
@@ -157,9 +153,9 @@ test('Graphics retains one Shaders tab and native runtime tabs for every shader 
     assert.ok(collection);
     const markup = render([graphics, shaders, vulkan], source.id, { runtimeSectionId: collection.id });
     const topTabs = markup.match(/aria-label="Effects sections">([\s\S]*?)<\/div>/)[1];
-    assert.deepEqual(sectionTabLabels(topTabs), ['Upscaling', 'Shaders', 'Presets', 'Vulkan']);
+    assert.deepEqual(sectionTabLabels(topTabs), ['Upscaling', 'Shaders', 'Vulkan']);
     assert.match(topTabs, /aria-selected="true"[\s\S]*?>Shaders<\/button>/);
-    assert.doesNotMatch(markup, /shader-family-tab-/);assert.match(markup, /shader-library-search/);
+    assert.doesNotMatch(markup, /shader-family-tab-|shader-library-search/);assert.match(markup, /id="shader-collection"/);
     assert.match(markup, new RegExp(`id="runtime-panel-${source.id}-${collection.id}"`));
     for (const section of shaders.sections) assert.ok(!topTabs.includes(`>${section.label}</button>`));
   }
@@ -184,9 +180,9 @@ test('current module presentations repair cached Android and shader metadata wit
     assert.match(markup, new RegExp(`value="${id}-version"`));
   }
   const markup = render(cached, source.id, { runtimeSectionId: shaders.sections[0].id });
-  assert.deepEqual(sectionTabLabels(markup), ['Shaders', 'Presets']);
-  assert.match(markup,/shader-library-search/);
-  assert.match(markup, /role="tab" id="shader-collections-tab"[^>]*>Collections<\/button>/);assert.match(markup, /shader-collection/);
+  assert.deepEqual(sectionTabLabels(markup), []);
+  assert.doesNotMatch(markup, /shader-library-search/);
+  assert.match(markup, /id="shader-collection"/);
   assert.deepEqual(cached, before, 'Presentation must not mutate cached manager state, versions or installation identities');
 });
 test('Runtimes is a plain native-window view while version controls remain reachable', () => {
@@ -252,6 +248,25 @@ test('scene adapters are managed downloads with their own rows', () => {
   assert.match(markup, /class="launcherSidebarItem[^>]*>Vulkan drivers<\/button>/);
   for (const source of adapters) assert.ok(render(runtimes, source.id).includes(`id="runtime-panel-${source.id}-default"`), `${source.id}: own row`);
   assert.deepEqual(runtimes, before, 'Rendering does not mutate cached identities or installation state');
+});
+test('Settings → Graphics holds the shader library and presets, and section requests select their tab', () => {
+  const fixture = require('./library-layout-fixture').createLibraryFixture();
+  const offline = () => assert.fail('Rendering a utility view must not call the backend');
+  const view = (sectionId, shaderCategory) => renderToStaticMarkup(React.createElement(SettingsView, { state: fixture, sectionId, shaderCategory,
+    showIcons: true, showNonDefaultTags: true, onSetLauncherSettings: offline, onSetModuleSettings: offline }));
+  assert.match(view(), /class="launcherSidebarItem[^>]*>Graphics<\/button>/);
+  const shaders = view('graphics');
+  assert.match(shaders, /id="graphics-shaders-tab" aria-controls="graphics-shaders-panel" aria-selected="true"/);
+  assert.match(shaders, /id="shader-library-search"/);
+  assert.match(shaders, />Import filter…<\/button>/);
+  // Shader collections are downloads; the library links to them in Runtimes.
+  assert.match(shaders, />Download shaders…<\/button>/);
+  assert.doesNotMatch(shaders, /graphics-preset-name|shader-collection/);
+  const presets = view('graphics:presets:ed5f88b7-4041');
+  assert.match(presets, /id="graphics-presets-tab" aria-controls="graphics-presets-panel" aria-selected="true"/);
+  assert.match(presets, /graphics-preset-name/);
+  assert.doesNotMatch(presets, /shader-library-search/);
+  assert.match(view('graphics:shaders', 'downscaling'), /<option value="downsample" selected="">/);
 });
 test('Settings and Credits use plain native-window content without HTML close or navigation controls', () => {
   const fixture = require('./library-layout-fixture').createLibraryFixture();

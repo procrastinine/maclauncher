@@ -814,7 +814,7 @@ test('Simple composes image filters without node cards and Off hides dependent c
   elements(tree).find(n=>n.props.id==='simple-effect-image-film').props.onChange({target:{value:'off'}});await harness.settle();
   assert.equal(changes.at(-1).video[0].enabled,false);assert.equal(changes.at(-1).video[1].enabled,true);assert.deepEqual(changes.at(-1).video[1].shader,second.shader);
   const offRow=elements(harness.render()).find(n=>n.props.id==='simple-effect-image-film');assert.equal(offRow.props.value,'off');
-  offRow.props.onChange({target:{value:'__manage'}});await harness.settle();assert.deepEqual(navigation,[{view:'runtimes',managerId:'graphics-shader-library',shaderCategory:'image'}]);
+  offRow.props.onChange({target:{value:'__manage'}});await harness.settle();assert.deepEqual(navigation,[{view:'settings',sectionId:'graphics:shaders',shaderCategory:'image'}]);
   assert.equal(changes.length,1);
  }finally{harness.close();global.window=oldWindow;}
 });

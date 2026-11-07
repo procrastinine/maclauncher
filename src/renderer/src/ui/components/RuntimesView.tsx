@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import type { DownloadTask, LauncherState, ReShadeFilter, RuntimeManagerState, RuntimeRefreshOptions, RuntimeUiState } from "../types";
+import type { DownloadTask, LauncherState, RuntimeManagerState, RuntimeRefreshOptions, RuntimeUiState } from "../types";
 import {
   architectureLabel,
   availabilityLabel,
@@ -22,19 +22,16 @@ import { RuntimeCatalogSources } from "./RuntimeCatalogSources";
 import { LauncherViewHeader } from "./LauncherViewHeader";
 import { ScrollableTabStrip } from "./ScrollableTabStrip";
 import { SearchableSidebar } from "./SearchableSidebar";
-import { ShaderLibraryFamily } from "./ShaderLibraryFamily";
+import { ShaderCollections } from "./ShaderLibraryFamily";
 import { RuntimeSetupSelector } from "./RuntimeSetupSelector";
 import { RuntimeModelTable } from "./RuntimeModelTable";
-import type { ReShadeFilterApi } from "./ReShadeFilterLibrary";
 import { presentRuntimeManagers, runtimeCategories, withLauncherLibraries } from "../../../../modules/runtime-presentations";
 import { installedRuntimeAvailability } from "../../../../core/runtime-install-availability.mjs";
 import { PluginLibrary } from "./PluginLibrary";
 import type { RuntimeSettingsApi } from "./RuntimeSettingsWindow";
-import { EffectsPresetManager } from "./EffectsPresetManager";
 import { ComponentsView } from "./ComponentsView";
 import { componentSizeText } from "./components-model";
 import { cpuLabel } from "../../../../core/cpu-labels.mjs";
-import { useGraphicsCatalog } from "../useGraphicsCatalog";
 import { ErrorText } from "./ErrorText";
 import { PopoverButton } from "./Popover";
 import { StatusBadge } from "./StatusBadge";
@@ -53,15 +50,13 @@ const EMPTY_RUNTIME_UI: RuntimeUiState[string] = {
 type RuntimesViewProps = {
   state?: LauncherState;
   settingsApi?: RuntimeSettingsApi;
-  shaderFilters?: ReShadeFilter[];
-  shaderFiltersError?: string;
-  filterApi?: Partial<ReShadeFilterApi>;
+  /** Reads the path of a file dropped on a custom runtime field. */
+  getPathForFile?: (file: File) => string | null;
   runtimeManagers: RuntimeManagerState[];
   runtimeUi: RuntimeUiState;
   runtimeManagerId: string | null;
   runtimeSectionId: string | null;
   navigationKey?: number;
-  shaderCategory?: string;
   downloadTasks: DownloadTask[];
   setRuntimeManagerId: React.Dispatch<React.SetStateAction<string | null>>;
   setRuntimeSectionId: React.Dispatch<React.SetStateAction<string | null>>;
@@ -124,14 +119,12 @@ function buildArchitecture(install: Record<string, any>, section: Record<string,
 }
 
 export function RuntimesView({
-  state, settingsApi,
-  shaderFilters, shaderFiltersError, filterApi,
+  state, settingsApi, getPathForFile,
   runtimeManagers,
   runtimeUi,
   runtimeManagerId,
   runtimeSectionId,
   navigationKey,
-  shaderCategory,
   downloadTasks,
   setRuntimeManagerId,
   setRuntimeSectionId,
@@ -163,12 +156,7 @@ export function RuntimesView({
   const activeRuntimeVersionTag = useMemo(() => runtimeVersionTagger(activeRuntimeSection), [activeRuntimeSection]);
   const shaderLibrary = activeRuntimeManager?.ui?.library === "shaders";
   const pluginLibrary = activeRuntimeManager?.ui?.library === "plugins";
-  const presetLibrary = activeRuntimeManager?.ui?.library === "presets";
   const componentLibrary = activeRuntimeManager?.ui?.library === "components";
-  // The shader library and presets read the graphics catalog while shown.
-  const graphicsCatalog = useGraphicsCatalog((shaderLibrary || presetLibrary) && !shaderFilters);
-  const filters = shaderFilters || graphicsCatalog?.shaderLibrary || graphicsCatalog?.filters || [];
-  const filtersError = shaderFilters ? shaderFiltersError : graphicsCatalog?.shaderLibraryError || graphicsCatalog?.filtersError;
   const managementPresentation = runtimeManagementPresentation(activeRuntimeSection);
   const remembered = useRef(new Map<string, { managerId: string; sectionId: string }>());
   const rememberedSections = useRef(new Map<string, string>());
@@ -368,13 +356,9 @@ export function RuntimesView({
           {isolatedItem(activeSectionTab?.id || activeRuntimeGroup?.id || "runtimes", { label: activeSectionTab?.label || activeRuntimeGroup?.label || "Runtime", reset: navigationKey }, () => <RuntimeComponentGroup key={componentGroup ? activeRuntimeGroup?.id : undefined} enabled={componentGroup} label={activeRuntimeGroup?.label || "Runtime"}
             choices={activeRuntimeChoices} selectedId={activeRuntimeChoice?.id} navigationKey={navigationKey}
             downloads={downloadTasks} onSelect={selectSection} onCancel={onCancelDownload}>
-          <ShaderLibraryFamily active={shaderLibrary} collections={activeRuntimeChoices.filter(choice => choice.manager.ui?.library === "shaders")} selectedId={activeRuntimeChoice?.id}
-            navigationKey={navigationKey} shaderCategory={shaderCategory} filters={filters} filtersError={filtersError}
-            api={filterApi} onSelectCollection={selectSection}>
-          {presetLibrary && activeRuntimeManager ? <div className="runtimeTabPanel" id={`runtime-panel-${activeRuntimeManager.id}`}>
-            <EffectsPresetManager status={graphicsCatalog} navigationKey={navigationKey}
-              selectedId={state?.utilityWindow?.managerId === activeRuntimeManager.id ? state.utilityWindow.sectionId : undefined} />
-          </div> : componentLibrary ? <ComponentsView navigationKey={navigationKey} /> : pluginLibrary && activeRuntimeManager ? <PluginLibrary key={activeRuntimeManager.id}
+          <ShaderCollections active={shaderLibrary} collections={activeRuntimeChoices.filter(choice => choice.manager.ui?.library === "shaders")} selectedId={activeRuntimeChoice?.id}
+            onSelectCollection={selectSection}>
+          {componentLibrary ? <ComponentsView navigationKey={navigationKey} /> : pluginLibrary && activeRuntimeManager ? <PluginLibrary key={activeRuntimeManager.id}
             manager={activeRuntimeManager} sections={activeRuntimeChoices.filter(choice => choice.managerId === activeRuntimeManager.id)}
             state={state} api={settingsApi} ui={activeRuntimeUi} downloads={downloadTasks}
             onInstall={onRuntimeInstall} onUninstall={onRuntimeUninstall} onOpenSource={onOpenSource} /> : activeRuntimeManager && activeRuntimeSection ? (
@@ -548,7 +532,7 @@ export function RuntimesView({
                         ui={activeRuntimeUi} busy={runtimeBusy} variant={activeRuntimeResolvedInstallVariant}
                         downloads={activeRuntimeDownloads} onOpenSource={onOpenSource}
                         onRegister={activeRuntimeSection.customRuntime && onRuntimeRegister ? runtimePath => onRuntimeRegister(activeRuntimeManager.id, activeRuntimeSection.id, runtimePath) : undefined}
-                        pathForFile={filterApi?.getPathForFile}
+                        pathForFile={getPathForFile}
                         onRefresh={options => onRuntimeRefresh(activeRuntimeManager.id, activeRuntimeSection.id, options)}
                         onSelect={(key, field, value) => updateRuntimeUiSection(activeRuntimeManager.id, key, field, value)}
                         onInstall={(version, variant, architecture) => architecture ? onRuntimeInstall(activeRuntimeManager.id, activeRuntimeSection.id, version, variant, architecture) : onRuntimeInstall(activeRuntimeManager.id, activeRuntimeSection.id, version, variant)} />
@@ -757,7 +741,7 @@ export function RuntimesView({
           ) : (
             <div className="empty">No runtime managers available.</div>
           )}
-          </ShaderLibraryFamily>
+          </ShaderCollections>
           </RuntimeComponentGroup>)}
           </div>
         </div>
