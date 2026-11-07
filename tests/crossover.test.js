@@ -126,6 +126,9 @@ test("Windows publisher launch entries follow deliberate files and precede fresh
   assert.equal(Detection.findWindowsExecutable(entry, { selectedPath: user }).windowsExecutablePath, user);
   assert.equal(Detection.findWindowsExecutable({ ...entry, importPath: user }).windowsExecutablePath, user);
   assert.equal(Detection.findWindowsExecutable({ ...entry, importPath: game }).windowsExecutablePath, game, "an explicitly imported former executable remains deliberate");
+  const required = { ...entry, importPath: game, moduleData: { ...entry.moduleData, executableRequired: true } };
+  assert.equal(Detection.findWindowsExecutable(required).windowsExecutablePath, publisher, "a required module entry leaves an imported program as identity only");
+  assert.equal(Detection.findWindowsExecutable(required, { selectedPath: user }).windowsExecutablePath, user);
   for (const [name, value] of [
     ["old receipt without launch data", {}], ["malformed receipt", "{"],
     ["missing executable", { defaultWindowsLaunch: { executable: "bin/Missing.exe" } }],
@@ -140,6 +143,7 @@ test("Windows publisher launch entries follow deliberate files and precede fresh
   }
   fs.rmSync(receiptPath);
   assert.equal(Detection.findWindowsExecutable(entry).windowsExecutablePath, moduleLauncher, "a missing optional receipt leaves ordinary selection available");
+  assert.equal(Detection.findWindowsExecutable(required).windowsExecutablePath, moduleLauncher, "a required module entry precedes an imported program");
   assert.deepEqual(entry, original, "reading launch evidence does not rewrite saved entry data");
   for (const [file, contents] of bytes) assert.deepEqual(fs.readFileSync(file), contents);
 });

@@ -52,14 +52,17 @@ test("wrapper folders, archive imports and case variants resolve one original co
   game(path.join(parent, "another"), { pe: false }); assert.equal(Mages.detectGame({ rootDir: parent, inputPath: parent }), null);
 });
 
+// A Windows GUI program with MAGES. version strings, which the Windows runtimes accept.
+function windowsProgram(strings) {
+  const value = peFixture({ version: versionResource({ strings }) });
+  value.bytes.writeUInt16LE(0x102, value.peOffset + 22);
+  value.bytes.writeUInt16LE(2, value.optional + 68);
+  return value.bytes;
+}
+
 test("MAGES. Windows playback uses its sibling launcher without changing the original Impacto program or identity", t => {
   const root = fixture(t); game(root);
-  const executable = strings => {
-    const value = peFixture({ version: versionResource({ strings }) });
-    value.bytes.writeUInt16LE(0x102, value.peOffset + 22);
-    value.bytes.writeUInt16LE(2, value.optional + 68);
-    return value.bytes;
-  };
+  const executable = windowsProgram;
   const original = path.join(root, "Game.exe"), launcher = path.join(root, "LaUnChEr.ExE");
   fs.writeFileSync(original, executable({ ProductName: "Steins;Gate", CompanyName: "MAGES." }));
   const before = Mages.detectGame({ rootDir: root, inputPath: root });
@@ -76,13 +79,40 @@ test("MAGES. Windows playback uses its sibling launcher without changing the ori
     assert.equal(after.moduleData.originalRunnerPath, original);
     assert.equal(after.gamePath, before.gamePath);
     assert.equal(after.runtimeId, "impacto");
-    assert.deepEqual({ ...after.moduleData, executablePath: original }, before.moduleData);
+    assert.equal(after.moduleData.executableRequired, true);
+    assert.deepEqual({ ...after.moduleData, executablePath: original, executableRequired: false }, before.moduleData);
     assert.deepEqual(after.detectionEvidence, before.detectionEvidence);
     const selected = Windows.findWindowsExecutable(after);
     assert.equal(selected.windowsExecutablePath, launcher);
     assert.equal(selected.executableArchitecture, "x86");
   }
   assert.deepEqual(files.map(hash), hashes);
+});
+
+test("MAGES. original-Windows Play starts a present launcher from every import and the game program without one", t => {
+  const root = fixture(t); game(root);
+  const Windows = require("../src/modules/crossover/detect");
+  const original = path.join(root, "Game.exe"), launcher = path.join(root, "Launcher.exe"), script = path.join(root, "USRDIR", "script.mpk");
+  fs.writeFileSync(original, windowsProgram({ ProductName: "Steins;Gate", CompanyName: "MAGES." }));
+  // The library records the imported path, and import decorates the entry
+  // with the Windows program that Play would start.
+  const record = inputPath => Windows.decorateEntry({ ...Mages.detectGame({ rootDir: root, inputPath }), importPath: inputPath }, { inputPath });
+  for (const inputPath of [root, original, script]) {
+    const entry = record(inputPath);
+    assert.equal(entry.moduleData.executableRequired, false);
+    assert.equal(entry.runtimeData.crossover.windowsExecutablePath, original, inputPath);
+    assert.equal(Windows.findWindowsExecutable(entry).windowsExecutablePath, original, inputPath);
+  }
+  fs.writeFileSync(launcher, windowsProgram({ ProductName: "MAGES fixture launcher", CompanyName: "MAGES." }));
+  for (const inputPath of [root, original, launcher, script]) {
+    const entry = record(inputPath);
+    assert.equal(entry.gamePath, original, "the game program stays the game's identity");
+    assert.equal(entry.moduleData.executableRequired, true);
+    assert.equal(entry.runtimeData.crossover.windowsExecutablePath, launcher, inputPath);
+    assert.equal(Windows.findWindowsExecutable(entry).windowsExecutablePath, launcher, inputPath);
+  }
+  assert.equal(Windows.findWindowsExecutable(record(original), { selectedPath: original }).windowsExecutablePath, original,
+    "an explicit executable choice still precedes the launcher");
 });
 
 test("import participates in detection budgets without reading full assets and propagates budget exhaustion", t => {

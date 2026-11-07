@@ -107,8 +107,10 @@ function inspectLayout(layout, { inputPath, detection } = {}) {
     assetDir: layout.assetDir, scriptArchivePath: script.file, systemArchivePath: system.file,
     archiveFormat: script.format, scriptFormat: "SC3", scriptCount: candidates.length,
     scriptIndexBytes: script.bytesRead, systemIndexBytes: system.bytesRead, boot,
+    // The game program beside a publisher launcher refuses to start on its own,
+    // so importing it identifies the game without choosing what Windows starts.
     ...runner, executablePath: launcher ? path.join(layout.root, launcher.name) : runner.originalRunnerPath,
-    editionId, edition, editionSource: [runner.originalRunner?.source, windows && "script.mpk!/_STARTUP_WIN.SCX", bink2 && "bink2w32.dll", steam && "steam_api.dll"].filter(Boolean).join("; "),
+    executableRequired: Boolean(launcher), editionId, edition, editionSource: [runner.originalRunner?.source, windows && "script.mpk!/_STARTUP_WIN.SCX", bink2 && "bink2w32.dll", steam && "steam_api.dll"].filter(Boolean).join("; "),
     patch, compatibility: compatibility(editionId), nativeSupport: { supported: manifest.supports.launch && editionId === "steins-gate-windows-hd",
       scope: "Original Windows HD data", reason: compatibility(editionId), impacto: IMPACTO },
     detectedVersion: "unknown", detectedVersionConfidence: "unknown",

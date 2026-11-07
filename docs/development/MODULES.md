@@ -182,6 +182,8 @@ Selecting a provider routes setup and launch through the provider's hooks instea
 
 Automatic selection keeps a module runtime that can launch the game. A runtime entry with `launch: false`, or any runtime of a module with `supports.launch: false`, never launches. When none of a module's own runtimes can launch the game, automatic selection takes the first applicable provider in provider order. The Windows module lists CrossOver before Sikarugir, so BGI, CatSystem2 and Windows Haxe builds use a registered CrossOver application when one is available and Sikarugir otherwise. An explicit provider choice is kept.
 
+An engine's detection can name the game's Windows entry in `moduleData.executablePath`. With `moduleData.executableRequired: true`, that entry is the program that starts the game, such as a publisher launcher that the game program depends on, and an imported executable then identifies the game without choosing what starts. The **Windows executable** runtime setting and a publisher entry recorded with a Steam download still take precedence.
+
 ### Capabilities and saves
 
 A provider's `supports` flags override the engine's capabilities for that runtime. An engine's save codec never applies to an unrelated runtime's storage, so a provider with an unknown save format can turn save tools off. The Windows module uses this contract for downloaded Sikarugir and local CrossOver playback: Sikarugir exposes save locations, and engine-specific save editors and cheats stay with their engine modules.

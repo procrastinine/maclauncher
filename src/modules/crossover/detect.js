@@ -128,8 +128,12 @@ function findWindowsExecutable(entry, { detection, selectedPath } = {}) {
   // entry and detection's cached game file. All pass the same file checks.
   // A game file chosen by detection, rather than by the user, counts only when it
   // is not an installer or other support program, such as a setup package.
+  // A module that marks its entry as required, such as a publisher launcher
+  // that the game program depends on, leaves an imported program file as the
+  // game's identity only.
+  const required = entry.moduleData?.executableRequired === true && typeof entry.moduleData.executablePath === "string";
   for (const file of [selectedPath,
-    stat(imported)?.isFile() ? imported : null,
+    !required && stat(imported)?.isFile() ? imported : null,
     readDefaultWindowsExecutable(root),
     imported !== root && stat(imported)?.isDirectory() && inside(imported, root) ? readDefaultWindowsExecutable(imported) : null,
     entry.moduleData?.executablePath, entry.moduleData?.exePath,
