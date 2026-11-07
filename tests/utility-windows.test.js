@@ -519,7 +519,7 @@ test("runtime import and download sheets follow the focused registered window an
   const library = new Window({}), utility = new Window({}), game = new Window({});
   const calls = [];
   const context = { mainWindow: library, launcherWindows: new Set([library, utility]), focused: utility,
-    BrowserWindow: { getFocusedWindow: () => context.focused }, shell: {},
+    BrowserWindow: { getFocusedWindow: () => context.focused }, shell: {}, followProcessActivation: () => null,
     dialog: Object.fromEntries(["showOpenDialog", "showSaveDialog", "showMessageBox"].map(method => [method,
       async (...args) => { calls.push([method, ...args]); return { canceled: false, filePaths: ["/chosen/runtime"], response: 0 }; }
     ])), path
