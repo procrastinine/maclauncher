@@ -434,7 +434,8 @@ test('both managed package layouts load Intel libraries only after final install
   const { image, X64 } = require('./fixtures/macho-image');
   const Architecture = require('../src/modules/shared/runtime/architecture');
   for (const layout of ['payload', 'project-payload']) await t.test(layout, async t => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'project-final-load-'));
+    // The loader passes real paths; macOS temporary directories sit behind /tmp and /var symlinks.
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'project-final-load-')));
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));
     const id = 'final-load-' + layout, library = image({ cpu: X64, fileType: 6 });
     const fixture = packageFor(root, { id, version: '1.0', architecture: 'x64', filesPrefix: 'files/',
