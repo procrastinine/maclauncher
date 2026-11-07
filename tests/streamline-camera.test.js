@@ -137,6 +137,14 @@ test("camera capability follows the automatic default after consent and requires
   const plan = Temporal.resolvePlan(entry, {}, options);const streamline = {depth: true, motionVectors: true, jitter: true, exposure: true, cameraProjection: true};
   assert.deepEqual(plan.inputs, {...streamline, source: "streamline", methods: ["fsr2", "fsr3"], routes: [{...streamline, source: "streamline", methods: ["fsr2", "fsr3"]}]});
   assert.equal(plan.libraries[0].relativePath, "plugins/sl.interposer.dll");
+  // A used D3D12 provider must not replace the selected D3D11 DXMT camera route.
+  const crossoverRoot=path.join(f.root,"CrossOver");put(path.join(crossoverRoot,"lib/wine/x86_64-unix/wine"),"loader");
+  const mixed=Temporal.resolvePlan(entry,{}, {...options,runtimeId:"crossover",install:{crossoverRoot},
+    settings:{dlss:true,graphicsBackend:"dxmt"},translatorPlan:{apiMode:true,components:{
+      d3d11:{used:{engine:"dxmt",root:base}},d3d12:{used:{engine:"d3dmetal"}}
+    }}});
+  assert.ok(mixed?.dxmt,"D3D11 keeps its matched DXMT producer");assert.deepEqual(mixed.inputs,plan.inputs);
+
   for (const settings of [{ graphicsBackend: "wined3d" }, { graphicsBackend: "d3dmetal" }, { graphicsBackend: "dxvk" }]) assert.equal(Temporal.resolvePlan(entry, {}, { ...options, settings }), null);
   assert.equal(Temporal.resolvePlan(entry, {}, { ...options, host: { ...options.host, macOSVersion: "13.6" } }), null);
   assert.equal(Temporal.resolvePlan(entry, {}, { ...options, host: { ...options.host, hardwareArch: "x64" } }), null);

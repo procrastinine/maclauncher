@@ -714,7 +714,7 @@ test("CrossOver transports trusted game effects through its vendor environment a
   assert.equal(preparation.length, 1, "temporal selection reuses the existing private bottle");
   assert.equal(loaderPreparations, 2);
   const Temporal = require("../src/modules/crossover/temporal"), inputs = { cameraProjection: true, source: "streamline", methods: ["fsr2", "fsr3"] };
-  t.mock.method(Temporal, "resolvePlan", () => ({ libraries: [], inputs }));t.mock.method(Temporal, "prepareGame", () => true);
+  t.mock.method(Temporal, "resolvePlan", () => ({ dxmt: {directory: path.join(directory, "camera-adapter"), native: path.join(directory, "camera-original.so")}, libraries: [], inputs }));t.mock.method(Temporal, "prepareGame", () => true);
   const cameraContext = { ...context, runtimeSettings: { ...context.runtimeSettings, graphicsBackend: "dxmt", dllOverrides: ["winhttp=n,b"] },
     applyGameEnvironment: async env => { assert.deepEqual(cameraContext.graphicsInputs, { ...inputs, architecture: installed.architectures[0] });return { ...env, ...effect }; } };
   entry.effects = temporalPlan("fsr2");
@@ -818,7 +818,7 @@ test("CrossOver loader failure disables only optional camera adaptation before a
   fs.writeFileSync(path.join(oldGameRoot, 'sl.interposer.dll'), 'old owned proxy');
   fs.writeFileSync(path.join(oldGameRoot, Streamline.RECORD), JSON.stringify({schema: 1, sourceSha256: sha('original Streamline'), proxySha256: sha('old owned proxy')}));
   entry.effects = {schema: 2, mode: 'advanced', enabled: true, video: [{id: 'scene', kind: 'temporal', enabled: true, method: 'fsr2', settings: {}}]};const saved = structuredClone(entry.effects);
-  t.mock.method(Temporal, 'resolvePlan', () => ({libraries: [{relativePath: 'sl.interposer.dll', sourcePath: source}], inputs: {cameraProjection: true, source: 'streamline', methods: ['fsr2']}}));
+  t.mock.method(Temporal, 'resolvePlan', () => ({dxmt: {directory: path.join(directory, 'camera-adapter'), native: path.join(directory, 'camera-original.so')}, libraries: [{relativePath: 'sl.interposer.dll', sourcePath: source}], inputs: {cameraProjection: true, source: 'streamline', methods: ['fsr2']}}));
   t.mock.method(Temporal, 'prepareGame', () => assert.fail('a failed loader cannot install another camera DLL'));
   const Loader = require('../src/modules/crossover/runtime/graphics-loader');let attempts = 0;
   t.mock.method(Loader, 'prepare', async () => {attempts++;throw new Error('Signing failed');});

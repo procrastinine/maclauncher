@@ -86,7 +86,7 @@ function matchingSupport(context, root, { entry, runtimeId = context.runtimeId |
 function resolvePlan(entry, context = {}, { install, runtimeId = context.runtimeId || entry?.runtimeId || "crossover", settings = context.runtimeSettings || {}, host = {}, root, verify = false, allowDownload = false, automatic = false, translatorPlan = context.translatorPlan } = {}) {
   try {
     const translator = usedForApi(translatorPlan, "d3d11");
-    const d3dmetal = runtimeId === "crossover" && settings.dlss === true &&
+    const d3dmetal = runtimeId === "crossover" && settings.dlss === true && translator?.engine !== "dxmt" &&
       (usedForApi(translatorPlan, "d3d12")?.engine || translator?.engine || settings.graphicsBackend) === "d3dmetal";
     if (!d3dmetal && Object.hasOwn(translatorPlan?.components || {}, "d3d11") && !translator) return null;
     if (Requirements.requirementSupport(Requirements.WINE_TEMPORAL, { ...Host.getHostCapabilities(), ...host }).supported === false ||
