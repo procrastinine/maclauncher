@@ -261,3 +261,20 @@ test("D3DMetal camera builtin stays in the owned loader without selecting DXMT",
   const unused=Loader.environment(loader,previous,{installation:selected});
   assert.equal(unused.WINEDLLOVERRIDES,undefined);
 });
+
+test("D3D12 DXMT adaptation preserves the independently selected D3D11 module", async t => {
+  const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),"dxmt12-loader-")));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const selected=installation(root),Temporal=require("../src/modules/crossover/temporal"),directory=path.join(root,"game"),adapter=path.join(root,"adapter"),baseRoot=path.join(root,"dxmt-base");
+  const put=(file,bytes)=>{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,bytes);return file;};
+  const plan={dxmtRoles:["d3d12"],baseRoot,dxmt:{directory:adapter,temporalD3D12API:1,native:put(path.join(baseRoot,"x86_64-unix/winemetal.so"),"original native")}};
+  for(const file of Temporal.rendererFiles(plan))put(path.join(adapter,file),"adapted "+file);
+  for(const file of ["winemetal.dll","nvapi64.dll"])put(path.join(baseRoot,"x86_64-windows",file),"base "+file);
+  const selectedD3D11=put(path.join(root,"selected-dxvk/d3d11.dll"),"selected D3D11");
+  const translatorView={links:{"lib/wine/x86_64-windows/d3d11.dll":selectedD3D11},env:{},libraryPaths:[],frameworkPaths:[],dllOverrides:["d3d11=n"]};
+  const execute=async(command,args)=>({stdout:args[0]==="-d"?permissions:""});
+  const loader=await Loader.prepare(selected,directory,{cameraBridge:plan,translatorView,execute});const closure=path.resolve(path.dirname(loader),"../lib/wine");
+  assert.equal(fs.realpathSync(path.join(closure,"x86_64-windows/d3d11.dll")),selectedD3D11);
+  assert.equal(fs.realpathSync(path.join(closure,"x86_64-windows/d3d12.dll")),path.join(adapter,"x86_64-windows/d3d12.dll"));
+  const env=Loader.environment(loader,{},{cameraBridge:plan,installation:selected,translatorView});
+  assert.match(env.WINEDLLOVERRIDES,/d3d12=b/);assert.match(env.WINEDLLOVERRIDES,/d3d11=n/);assert.doesNotMatch(env.WINEDLLOVERRIDES,/d3d11[^;]*=b/);
+});

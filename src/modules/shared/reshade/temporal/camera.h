@@ -16,6 +16,12 @@ typedef struct RSTemporalCamera {
     uint32_t reserved2[4];
 } RSTemporalCamera;
 
+// An exact scaler/command producer can forward flags, identity and timing
+// without projection by setting this bit and leaving all three planes/FOV zero.
+// This mode does not assert RS_TEMPORAL_CAMERA_VALID. Texture/next-scale camera
+// registration still requires a real projection.
+enum {RS_TEMPORAL_FRAME_METADATA_ONLY=0x80000000u};
+
 // Bind camera metadata to this exact native MetalFX scaler and uncommitted
 // command buffer, immediately before its encodeToCommandBuffer: call. Metadata
 // is copied and consumed once, including when the selected method is Game

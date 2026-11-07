@@ -94,11 +94,11 @@ async function prepare(installation, directory, { signal, execute = executeFile,
   if (translatorView) Object.assign(links, translatorView.links);
   if (cameraBridge?.dxmt && separateLoader) {
     const Temporal = require("../temporal");
-    for (const relative of Temporal.FILES) links[`lib/wine/${relative}`] = path.join(cameraBridge.dxmt.directory, relative);
+    for (const relative of Temporal.rendererFiles(cameraBridge)) links[`lib/wine/${relative}`] = path.join(cameraBridge.dxmt.directory, relative);
     links[`lib/wine/${layout.unixName}/maclauncher-dxmt-original.so`] = cameraBridge.dxmt.native;
     // The adapted PE closure retains the selected renderer's original native
     // thunk and NVIDIA capability bridge.
-    for (const name of ["winemetal", "nvapi64", "d3d10core"]) links[`lib/wine/${layout.primaryWindows}/${name}.dll`] = path.join(cameraBridge.baseRoot, layout.primaryWindows, name + ".dll");
+    for (const name of ["winemetal", "nvapi64", ...(!cameraBridge.dxmtRoles||cameraBridge.dxmtRoles.includes("d3d11")?["d3d10core"]:[])]) links[`lib/wine/${layout.primaryWindows}/${name}.dll`] = path.join(cameraBridge.baseRoot, layout.primaryWindows, name + ".dll");
   }
   if (scene) Object.assign(links, scene.links);
   if (winemac) {
@@ -214,7 +214,8 @@ function environment(loader, previous = {}, { cameraBridge, installation, sceneC
     values.CX_GRAPHICS_BACKEND = "wined3d";
     values.WINEDLLPATH = [path.join(wine, windows), wine, path.join(vendor, "lib/dxmt", windows),
       path.join(vendor, "lib/wine", windows), path.join(vendor, "lib/wine")].join(path.delimiter);
-    values.WINEDLLOVERRIDES = [previous.WINEDLLOVERRIDES, "d3d10core,d3d11,dxgi,winemetal,nvapi64,nvngx=b"].filter(Boolean).join(";");
+    const names=[...(!cameraBridge.dxmtRoles||cameraBridge.dxmtRoles.includes("d3d11")?["d3d10core","d3d11","dxgi"]:[]),"winemetal","nvapi64","nvngx",...(cameraBridge.dxmt.temporalD3D12API===1&&cameraBridge.dxmtRoles?.includes("d3d12")?["d3d12"]:[])];
+    values.WINEDLLOVERRIDES = [previous.WINEDLLOVERRIDES,names.join(",")+"=b"].filter(Boolean).join(";");
   }
   if (sceneClosure) {
     const selected = sceneSelection(installation, sceneClosure), wine = path.resolve(unix, "..");

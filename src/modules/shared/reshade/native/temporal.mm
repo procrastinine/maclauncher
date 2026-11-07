@@ -43,13 +43,15 @@ int answer(RSTemporalResult *r,uint32_t status,const char *reason){r->status=sta
 bool texture(id<MTLTexture> t,id<MTLDevice> d){return t&&t.device==d&&t.textureType==MTLTextureType2D&&t.sampleCount==1;}
 bool region(id<MTLTexture> t,uint32_t x,uint32_t y,uint32_t w,uint32_t h){return w&&h&&x<=t.width&&y<=t.height&&w<=t.width-x&&h<=t.height-y;}
 bool finite(const RSTemporalFrame &f){return std::isfinite(f.jitterX)&&std::isfinite(f.jitterY)&&std::isfinite(f.motionScaleX)&&std::isfinite(f.motionScaleY)&&std::isfinite(f.preExposure)&&f.preExposure>0&&std::isfinite(f.sharpness)&&f.sharpness>=0&&f.sharpness<=1&&std::isfinite(f.frameTimeMs)&&f.frameTimeMs>0;}
-bool validCamera(const RSTemporalCamera *c){
+bool validCamera(const RSTemporalCamera *c,bool allowFrameOnly=false){
     constexpr uint32_t allowed=RS_TEMPORAL_RESET|RS_TEMPORAL_DEPTH_REVERSED|RS_TEMPORAL_DEPTH_INFINITE|RS_TEMPORAL_HDR|RS_TEMPORAL_JITTERED_MOTION|RS_TEMPORAL_OUTPUT_MOTION;
-    return c&&c->size==sizeof(*c)&&c->version==1&&c->frameId&&!(c->flags&~allowed)&&!c->reserved&&
+    const bool frameOnly=c&&(c->flags&RS_TEMPORAL_FRAME_METADATA_ONLY);
+    const bool planes=c&&(frameOnly?(allowFrameOnly&&c->nearPlane==0&&c->farPlane==0&&c->verticalFov==0):
+        (std::isfinite(c->nearPlane)&&c->nearPlane>0&&std::isfinite(c->verticalFov)&&c->verticalFov>0&&c->verticalFov<3.14159265f&&
+         (c->flags&RS_TEMPORAL_DEPTH_INFINITE?c->farPlane==0:(std::isfinite(c->farPlane)&&c->farPlane>c->nearPlane))));
+    return c&&c->size==sizeof(*c)&&c->version==1&&c->frameId&&!(c->flags&~(allowed|(allowFrameOnly?RS_TEMPORAL_FRAME_METADATA_ONLY:0u)))&&!c->reserved&&
         !c->reserved2[0]&&!c->reserved2[1]&&!c->reserved2[2]&&!c->reserved2[3]&&
-        std::isfinite(c->nearPlane)&&c->nearPlane>0&&std::isfinite(c->verticalFov)&&c->verticalFov>0&&c->verticalFov<3.14159265f&&
-        std::isfinite(c->frameTimeMs)&&c->frameTimeMs>=0&&c->frameTimeMs<=1000&&
-        (c->flags&RS_TEMPORAL_DEPTH_INFINITE?c->farPlane==0:(std::isfinite(c->farPlane)&&c->farPlane>c->nearPlane));
+        planes&&std::isfinite(c->frameTimeMs)&&c->frameTimeMs>=0&&c->frameTimeMs<=1000;
 }
 // Temporal intake trace (RESHADE_DIAGNOSTICS). rsProcessTemporalFrame and the
 // MetalFX scaler hook write one line per frame for the first frames of the
@@ -733,9 +735,10 @@ void encodeTemporal(id scaler,SEL selector,id commands){
     if(@available(macOS 14.4,*))f.reactive=(__bridge void*)s.reactiveMaskTexture;
     f.renderWidth=uint32_t(s.inputContentWidth?:s.inputWidth);f.renderHeight=uint32_t(s.inputContentHeight?:s.inputHeight);f.outputWidth=uint32_t(s.outputWidth);f.outputHeight=uint32_t(s.outputHeight);f.maxRenderWidth=uint32_t(s.inputWidth);f.maxRenderHeight=uint32_t(s.inputHeight);
     f.jitterX=s.jitterOffsetX;f.jitterY=s.jitterOffsetY;f.motionScaleX=s.motionVectorScaleX;f.motionScaleY=s.motionVectorScaleY;f.preExposure=s.preExposure;f.sharpness=controls.sharpness;f.frameTimeMs=float(std::max(.001,std::min(delta*1000.,1000.)));f.commandBufferKind=state->kind;
-    if(hasCamera&&bool(camera.flags&RS_TEMPORAL_DEPTH_REVERSED)==bool(s.depthReversed)){
+    const bool hasFrameMetadata=hasCamera&&bool(camera.flags&RS_TEMPORAL_DEPTH_REVERSED)==bool(s.depthReversed);
+    if(hasFrameMetadata){
         const bool discontinuity=state->cameraFrame&&(state->cameraViewport!=camera.viewportId||camera.frameId!=state->cameraFrame+1);
-        f.flags|=RS_TEMPORAL_CAMERA_VALID|camera.flags|(discontinuity?RS_TEMPORAL_RESET:0);
+        f.flags|=(camera.flags&RS_TEMPORAL_FRAME_METADATA_ONLY?0u:RS_TEMPORAL_CAMERA_VALID)|(camera.flags&~RS_TEMPORAL_FRAME_METADATA_ONLY)|(discontinuity?RS_TEMPORAL_RESET:0);
         f.nearPlane=camera.nearPlane;f.farPlane=camera.farPlane;f.verticalFov=camera.verticalFov;
         f.frameId=camera.frameId;if(camera.frameTimeMs>0)f.frameTimeMs=camera.frameTimeMs;
         state->cameraFrame=camera.frameId;state->cameraViewport=camera.viewportId;
@@ -752,9 +755,9 @@ void encodeTemporal(id scaler,SEL selector,id commands){
         const std::string origin=std::string(cameraOrigin)+(hasCamera&&!(f.flags&RS_TEMPORAL_CAMERA_VALID)?"-ignored":"");
         reportIntake("scaler",f,observed,nullptr,-1,origin.c_str());
     }
-    auto destinationFrame=f;if(!(f.flags&RS_TEMPORAL_CAMERA_VALID))destinationFrame.frameId=0;
+    auto destinationFrame=f;if(!hasFrameMetadata)destinationFrame.frameId=0;
     const auto sceneDestination=macfx::effectPlanRequested()?macfx::takeTemporalSceneDestination(destinationFrame):std::optional<macfx::TemporalSceneDestination>{};
-    if(sceneDestination){if(!(f.flags&RS_TEMPORAL_CAMERA_VALID))f.frameId=sceneDestination->frameId;f.flags|=sceneDestination->flags;
+    if(sceneDestination){if(!hasFrameMetadata)f.frameId=sceneDestination->frameId;f.flags|=sceneDestination->flags;
         if(state->destinationOwner&&(state->destinationOwner!=sceneDestination->owner||state->destinationWindow!=sceneDestination->window->identity()||state->destinationFrame+1!=sceneDestination->frameId))f.flags|=RS_TEMPORAL_RESET;
         state->destinationOwner=sceneDestination->owner;state->destinationWindow=sceneDestination->window->identity();state->destinationFrame=sceneDestination->frameId;
     }else{state->destinationOwner=nullptr;state->destinationWindow=state->destinationFrame=0;}
@@ -866,7 +869,7 @@ extern "C" int rsSetTemporalCamera(void *scaler,void *commands,const RSTemporalC
     // Invalid or mismatched submissions also clear an earlier pending record.
     state->cameraPending=false;state->cameraCommands=nil;
     if(!camera)return RS_TEMPORAL_OK;
-    if(!commands||!validCamera(camera))return RS_TEMPORAL_INVALID;
+    if(!commands||!validCamera(camera,true))return RS_TEMPORAL_INVALID;
     if(hadCamera)return RS_TEMPORAL_BUSY;
     if(!state->kind&&[(__bridge id<MTLCommandBuffer>)commands status]>=MTLCommandBufferStatusCommitted)return RS_TEMPORAL_INVALID;
     state->camera=*camera;state->cameraCommands=(__bridge id)commands;state->cameraPending=true;

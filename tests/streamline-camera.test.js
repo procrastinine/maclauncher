@@ -144,6 +144,18 @@ test("camera capability follows the automatic default after consent and requires
       d3d11:{used:{engine:"dxmt",root:base}},d3d12:{used:{engine:"d3dmetal"}}
     }}});
   assert.ok(mixed?.dxmt,"D3D11 keeps its matched DXMT producer");assert.deepEqual(mixed.inputs,plan.inputs);
+  assert.equal(Temporal.rendererFile(mixed,"x86_64-windows","d3d12.dll","d3dmetal-original"),"d3dmetal-original");
+  const bridgeFile=path.join(dllRoot,"camera-bridge.json"),record=JSON.parse(fs.readFileSync(bridgeFile));
+  put(path.join(dllRoot,"x86_64-windows/d3d12.dll"),"dxmt12");record.files["x86_64-windows/d3d12.dll"]=sha("dxmt12");record.temporalD3D12API=1;put(bridgeFile,JSON.stringify(record));
+  fs.unlinkSync(f.target);
+  const directOptions={...options,runtimeId:"crossover",install:{crossoverRoot},settings:{dlss:true},translatorPlan:{apiMode:true,components:{d3d11:{used:{engine:"dxvk"}},d3d12:{used:{engine:"dxmt",root:base}}}}};
+  const direct=Temporal.resolvePlan(entry,{},directOptions);
+  assert.ok(direct?.dxmt,"Direct NGX does not depend on a Streamline plugin");assert.deepEqual(direct.dxmtRoles,["d3d12"]);assert.equal(Temporal.rendererFiles(direct).includes("x86_64-windows/d3d11.dll"),false);assert.equal(Temporal.rendererFiles(direct).includes("x86_64-windows/d3d12.dll"),true);assert.equal(direct.inputs.source,"ngx");assert.equal(direct.inputs.cameraProjection,false);assert.deepEqual(direct.inputs.methods,["metalfx"]);
+  assert.equal(Temporal.rendererFile(direct,"x86_64-windows","d3d12.dll","stock"),path.join(dllRoot,"x86_64-windows/d3d12.dll"));
+  assert.equal(Temporal.rendererFile({...direct,dxmtRoles:["d3d11"]},"x86_64-windows","d3d12.dll","stock"),"stock");
+  record.temporalD3D12API=0;put(bridgeFile,JSON.stringify(record));assert.equal(Temporal.resolvePlan(entry,{},directOptions),null);
+  fs.writeFileSync(f.target,pe());
+
 
   for (const settings of [{ graphicsBackend: "wined3d" }, { graphicsBackend: "d3dmetal" }, { graphicsBackend: "dxvk" }]) assert.equal(Temporal.resolvePlan(entry, {}, { ...options, settings }), null);
   assert.equal(Temporal.resolvePlan(entry, {}, { ...options, host: { ...options.host, macOSVersion: "13.6" } }), null);

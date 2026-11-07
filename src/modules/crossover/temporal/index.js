@@ -27,7 +27,8 @@ function adapter(root, { verify = false, macOSVersion = systemVersionSync() } = 
       Requirements.requirementSupport({ minimumMacOS: record.minimumMacOS }, { macOSVersion }).supported === false ||
       !/^[a-f0-9]{64}$/.test(record.base?.nativeSha256 || "") || !/^[a-f0-9]{64}$/.test(record.base?.thunkSha256 || "") ||
       FILES.some(file => !/^[a-f0-9]{64}$/.test(record.files?.[file]) || digest(path.join(directory, file), verify) !== record.files[file])) return null;
-    return { directory, id: record.id, tableCount: record.tableCount, base: record.base, identity: crypto.createHash("sha256").update(JSON.stringify(record)).digest("hex"), files: record.files };
+    const d3d12=record.temporalD3D12API===1&&/^[a-f0-9]{64}$/.test(record.files?.["x86_64-windows/d3d12.dll"]||"")&&digest(path.join(directory,"x86_64-windows/d3d12.dll"),verify)===record.files["x86_64-windows/d3d12.dll"];
+    return { directory, temporalD3D12API:d3d12?1:0,id: record.id, tableCount: record.tableCount, base: record.base, identity: crypto.createHash("sha256").update(JSON.stringify(record)).digest("hex"), files: record.files };
   } catch { return null; }
 }
 function payload(root, baseRoot, options = {}) {
@@ -85,7 +86,9 @@ function matchingSupport(context, root, { entry, runtimeId = context.runtimeId |
 }
 function resolvePlan(entry, context = {}, { install, runtimeId = context.runtimeId || entry?.runtimeId || "crossover", settings = context.runtimeSettings || {}, host = {}, root, verify = false, allowDownload = false, automatic = false, translatorPlan = context.translatorPlan } = {}) {
   try {
-    const translator = usedForApi(translatorPlan, "d3d11");
+    const d3d11=usedForApi(translatorPlan,"d3d11"),d3d12=usedForApi(translatorPlan,"d3d12");
+    const translator=d3d11?.engine==="dxmt"?d3d11:d3d12?.engine==="dxmt"?d3d12:d3d11;
+    const roles=[...(d3d11?.engine==="dxmt"?["d3d11"]:[]),...(d3d12?.engine==="dxmt"?["d3d12"]:[])];
     const d3dmetal = runtimeId === "crossover" && settings.dlss === true && translator?.engine !== "dxmt" &&
       (usedForApi(translatorPlan, "d3d12")?.engine || translator?.engine || settings.graphicsBackend) === "d3dmetal";
     if (!d3dmetal && Object.hasOwn(translatorPlan?.components || {}, "d3d11") && !translator) return null;
@@ -93,7 +96,7 @@ function resolvePlan(entry, context = {}, { install, runtimeId = context.runtime
       !install || !d3dmetal && !["auto", "dxmt"].includes(translator?.engine || settings.graphicsBackend || "auto")) return null;
     if ((settings.dllOverrides || []).some(rule => {
       const [names, order] = String(rule).split("=");
-      return order?.trim().toLowerCase() !== "b" && order?.trim().toLowerCase() !== "builtin" && names.split(",").some(name => /^(?:\*|d3d10core|d3d11|dxgi|winemetal|nvapi64|nvngx)(?:\.dll)?$/i.test(name.trim()));
+      return order?.trim().toLowerCase() !== "b" && order?.trim().toLowerCase() !== "builtin" && names.split(",").some(name => /^(?:\*|d3d10core|d3d11|dxgi|winemetal|nvapi64|nvngx)(?:\.dll)?$/i.test(name.trim())||roles.includes("d3d12")&&/^d3d12(?:\.dll)?$/i.test(name.trim()));
     })) return null;
     const match = Detection.cachedWindowsExecutable(entry);if (!match) return null;
     const executable = settings.executable ? path.resolve(match.sourceRoot, settings.executable) : match.windowsExecutablePath;
@@ -108,10 +111,11 @@ function resolvePlan(entry, context = {}, { install, runtimeId = context.runtime
       const inspected = selected.inspect(sourcePath, providerRoot);
       return inspected.available ? [{sourcePath, relativePath: path.relative(match.sourceRoot, sourcePath), sourceSha256: inspected.sourceSha256, adapter, providerRoot}] : [];
     });
-    if (!sources.length) return null;
+    const directNgx=settings.dlss===true&&translator?.engine==="dxmt";
+    if (!sources.length&&!directNgx) return null;
     const hasProjection = sources.some(row => row.adapter === "streamline"), hasXeSS = sources.some(row => row.adapter === "xess");
-    const inputs = { depth:true,motionVectors:true,jitter:true,exposure:true,cameraProjection: hasProjection, source: hasProjection && hasXeSS ? "streamline+xess" : hasXeSS ? "xess" : "streamline",
-      methods: [...(hasProjection ? ["fsr2", "fsr3"] : []), ...(hasXeSS ? ["metalfx"] : [])],
+    const inputs = { depth:true,motionVectors:true,jitter:true,exposure:true,cameraProjection: hasProjection, source: hasProjection && hasXeSS ? "streamline+xess" : hasXeSS ? "xess" : directNgx&&!sources.length?"ngx":"streamline",
+      methods: [...(hasProjection ? ["fsr2", "fsr3"] : []), ...(hasXeSS||directNgx&&!sources.length ? ["metalfx"] : [])],
       routes: sources.map(row => ({source: row.adapter, depth:true,motionVectors:true,jitter:true,exposure:true,cameraProjection: row.adapter === "streamline", methods: row.adapter === "xess" ? ["metalfx"] : ["fsr2", "fsr3"]})) };
     if(d3dmetal){
       const helper=require("./d3dmetal-camera").helper(path.join(root,"temporal/streamline"));
@@ -139,7 +143,8 @@ function resolvePlan(entry, context = {}, { install, runtimeId = context.runtime
         warnGraphics(context.logger, `[translators] ${context.cameraAdapterNotice}`);
         return null;
       }
-      return { dxmt, baseRoot, sourceRoot: match.sourceRoot, libraries: sources, inputs, dependency: translator.managerId ? { managerId: translator.managerId, version: translator.runtimeVersion, sourcePath: translator.root } : null };
+      if(roles.length===1&&roles[0]==="d3d12"&&dxmt.temporalD3D12API!==1)return null;
+      return { dxmt, dxmtRoles:roles.length?roles:["d3d11"],baseRoot, sourceRoot: match.sourceRoot, libraries: sources, inputs, dependency: translator.managerId ? { managerId: translator.managerId, version: translator.runtimeVersion, sourcePath: translator.root } : null };
     }
     const manager = require("./support-manager").forRuntime(runtimeId), explicit = settings.graphicsBridgeVersion && settings.graphicsBridgeVersion !== "auto" ||
       entry?.runtimeData?.[manager.id]?.version || context.settings?.runtimes?.[manager.id]?.defaultVersion;
@@ -158,7 +163,7 @@ function resolvePlan(entry, context = {}, { install, runtimeId = context.runtime
       baseRoot = selectedSupport.baseRoot;
     }
     const dxmt = payload(root, baseRoot, { verify, macOSVersion: host.macOSVersion });if (!dxmt) return null;
-    return { dxmt, baseRoot, dependency: selectedSupport?.dependency, sourceRoot: match.sourceRoot, libraries: sources,
+    return { dxmt, dxmtRoles:roles.length?roles:["d3d11"],baseRoot, dependency: selectedSupport?.dependency, sourceRoot: match.sourceRoot, libraries: sources,
       inputs };
   } catch { return null; }
 }
@@ -202,9 +207,15 @@ function restoreGame(entry, context, gameRoot, settings = context.runtimeSetting
   restoreLibraries(libraries(match, executable).map(source => ({ relativePath: path.relative(match.sourceRoot, source) })), gameRoot, undefined, context.logger);
 }
 function environment(plan, dllRoot) { return plan?.dxmt ? { MACLAUNCHER_DXMT_BASE_LIBRARY: path.join(dllRoot, "x86_64-unix/maclauncher-dxmt-original.so") } : {}; }
+function rendererFiles(plan){
+  const roles=plan?.dxmtRoles;
+  return [...FILES.filter(file=>!roles||roles.includes("d3d11")||!file.endsWith("/d3d11.dll")&&!file.endsWith("/dxgi.dll")),...(plan?.dxmt?.temporalD3D12API===1&&roles?.includes("d3d12")?["x86_64-windows/d3d12.dll"]:[])];
+}
 function rendererFile(plan, architecture, filename, fallback) {
   const relative = architecture + "/" + filename;
-  return plan?.dxmt && FILES.includes(relative) ? path.join(plan.dxmt.directory, relative) : fallback;
+  if(!plan?.dxmt)return fallback;
+  if(filename==="d3d12.dll")return architecture==="x86_64-windows"&&plan.dxmt.temporalD3D12API===1&&plan.dxmtRoles?.includes("d3d12")?path.join(plan.dxmt.directory,relative):fallback;
+  return rendererFiles(plan).includes(relative) ? path.join(plan.dxmt.directory, relative) : fallback;
 }
 function cameraRequirements(entry, context, { manager, root } = {}) {
   const runtimeId = context.runtimeId || entry?.runtimeId;
@@ -305,5 +316,5 @@ function requirements(entry, context, options = {}) {
   const scene = selected.ready && resolveScenePlan(entry, context, { install: selected.install, root: options.root });
   return [...camera, ...(scene?.requirements || [])];
 }
-module.exports = { FILES, adapter, payload, libraries, libraryAdapter, matchingSupport, resolvePlan, prepareGame, restoreGame, environment, rendererFile,
+module.exports = { FILES, rendererFiles,adapter, payload, libraries, libraryAdapter, matchingSupport, resolvePlan, prepareGame, restoreGame, environment, rendererFile,
   requirements, sceneLibraries, sceneDemand, resolveScenePlan, restoreLibraries };
