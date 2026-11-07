@@ -702,6 +702,13 @@ test("Sikarugir records which Steam client bridge a Play used", async t => {
   const launch = await Launch.prepareLaunch(entry, context, dependencies);
   assert.ok(launch.args.includes("C:\\Program Files (x86)\\Steam\\steam.exe"));
   assert.deepEqual(entry.runtimeData.sikarugir.steamBridge, { version: "1.0.0" });
+  const { bootstrap } = require('./helpers/steam-bridge-bootstrap.cjs');
+  bootstrap(entry.importPath);
+  bootstrap(path.join(entry.gamePath, 'Project/Binaries/Win64/Game.exe'), undefined, '', 'Game');
+  context.gameArguments = ['-dx12'];
+  const bridged = await Launch.prepareLaunch(entry, context, dependencies);
+  assert.deepEqual(bridged.args.slice(bridged.args.indexOf('/exec') + 1),
+    ['C:\\Program Files (x86)\\Steam\\steam.exe', 'G:\\Project\\Binaries\\Win64\\Game.exe', 'Project', '-dx12']);
   used = false;
   await Launch.prepareLaunch(entry, context, dependencies);
   assert.equal(entry.runtimeData.sikarugir.steamBridge, null);

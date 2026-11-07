@@ -1011,6 +1011,13 @@ test("CrossOver records which Steam client bridge a Play used, and the inspector
   assert.deepEqual(launch.args.slice(launch.args.indexOf("--"), launch.args.indexOf("--") + 2), ["--", "C:\\Program Files (x86)\\Steam\\steam.exe"]);
   assert.deepEqual(entry.runtimeData.crossover.steamBridge, { version: "1.0.0" });
   assert.deepEqual(await steamRows(), [{ label: "Steam", value: "Steam client bridge 1.0.0" }]);
+  const { bootstrap } = require('./helpers/steam-bridge-bootstrap.cjs');
+  bootstrap(path.join(game, 'Game.exe'));
+  bootstrap(path.join(game, 'Project/Binaries/Win64/Game.exe'), undefined, '', 'Game');
+  context.gameArguments = ['-dx12'];
+  const bridged = await Launch.prepareLaunch(entry, context, { run });
+  assert.deepEqual(bridged.args.slice(bridged.args.indexOf('--') + 1),
+    ['C:\\Program Files (x86)\\Steam\\steam.exe', 'G:\\Project\\Binaries\\Win64\\Game.exe', 'Project', '-dx12']);
   used = false;
   await Launch.prepareLaunch(entry, context, { run });
   assert.equal(entry.runtimeData.crossover.steamBridge, null);

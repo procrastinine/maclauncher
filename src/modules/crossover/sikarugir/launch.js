@@ -362,7 +362,8 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   }
   const steamBridge = await require('../runtime/steam-bridge').prepare(entry, context, { installation: selected.install, prefixPath,
     architecture: match.executableArchitecture, environment });
-  if (steamBridge) environment = steamBridge.environment;
+  const bridgeLaunch = steamBridge ? require('../runtime/steam-bridge-launch').resolve(executablePath, match.executableArchitecture) : null;
+  if (steamBridge) { environment = steamBridge.environment; executablePath = bridgeLaunch.executablePath; }
   Object.assign(environment, await require("../../shared/runtime/dxgi-adapter-description").prepare(environment,
     { translatorPlan, host, signal: context.signal }));
   const registryEnvironment = existingEnvironment;
@@ -383,7 +384,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   if (context.resolveRuntimeArguments) applicationArguments = await context.resolveRuntimeArguments({ arguments: applicationArguments,
     install: selected.install, executablePath: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture,
     graphicsBackend: graphics.graphicsBackend });
-  const args = WineSettings.desktopArguments(settings, ["start.exe", "/d", windowsWorkingDirectory, "/exec", ...(steamBridge ? [steamBridge.helper] : []), windowsExecutablePath, ...applicationArguments]);
+  const args = WineSettings.desktopArguments(settings, ["start.exe", "/d", windowsWorkingDirectory, "/exec", ...(steamBridge ? [steamBridge.helper] : []), windowsExecutablePath, ...(bridgeLaunch?.arguments || []), ...applicationArguments]);
   if (cameraBridge && cameraView) {
     GameView.remember(entry, context, "sikarugir", cameraView, recovery);
     GameView.watch(entry, context, directory, "sikarugir", cameraView);

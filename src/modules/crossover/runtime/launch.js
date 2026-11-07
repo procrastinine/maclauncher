@@ -412,7 +412,8 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   }
   const steamBridge = await require('./steam-bridge').prepare(entry, context, { installation: selected.install, prefixPath: bottlePath,
     architecture: selectedExecutable.executableArchitecture, environment });
-  if (steamBridge) { environment = steamBridge.environment; Object.assign(overrides, steamBridge.extra); dll = environment.WINEDLLOVERRIDES; }
+  const bridgeLaunch = steamBridge ? require('./steam-bridge-launch').resolve(executablePath, selectedExecutable.executableArchitecture) : null;
+  if (steamBridge) { environment = steamBridge.environment; Object.assign(overrides, steamBridge.extra); dll = environment.WINEDLLOVERRIDES; executablePath = bridgeLaunch.executablePath; }
   const vulkanEnvironment=require("../temporal/vulkan-dlss").environment(vulkanDLSS.enabled,environment);
   Object.assign(environment,vulkanEnvironment);Object.assign(overrides,vulkanEnvironment);
   const adapterDescription = await require("../../shared/runtime/dxgi-adapter-description").prepare({ ...existingEnvironment?.environment, ...environment },
@@ -440,7 +441,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   if (dll) args.push("--dll", dll);
   if (settings.wineDebug) args.push("--debugmsg", safeText(settings.wineDebug, "Wine debug channels"));
   if (settings.wineDebug) args.push("--cx-log", path.join(directory, "wine.log"));
-  args.push("--", ...(steamBridge ? [steamBridge.helper] : []), windowsExecutablePath, ...argumentsList, ...(context.gameArguments || []));
+  args.push("--", ...(steamBridge ? [steamBridge.helper] : []), windowsExecutablePath, ...(bridgeLaunch?.arguments || []), ...argumentsList, ...(context.gameArguments || []));
   if (cameraView) {
     GameView.remember(entry, context, "crossover", cameraView, recovery);
     GameView.watch(entry, context, directory, "crossover", cameraView);
