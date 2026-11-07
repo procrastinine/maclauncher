@@ -62,7 +62,12 @@ test('the adapter alone installs after normal consent and retains verified offli
  assert.equal(legacyModule.exports.adapterSelection(engine,entry,{...context,settings:{}}).legacy,true);
  fs.appendFileSync(legacy,'changed');
  assert.throws(()=>legacyModule.exports.adapterSelection(engine,entry,{...context,settings:{}}),/adapter has changed/);
- assert.equal(Manager.adapterSelection(engine,entry,{...context,settings:{runtimes:{'rlvm-adapter':{defaultVersion:'unavailable-exact-choice'}}}}).version,'unavailable-exact-choice');
+ // A saved default that is not installed uses the compatible installed package instead of the legacy library;
+ // a manual per-game choice stays exact.
+ const savedDefault=Manager.adapterSelection(engine,entry,{...context,settings:{runtimes:{'rlvm-adapter':{defaultVersion:'unavailable-exact-choice'}}}});
+ assert.deepEqual([savedDefault.ready,savedDefault.version,savedDefault.legacy],[true,record.version,undefined]);
+ const manual=Manager.adapterSelection(engine,{...entry,runtimeData:{'rlvm-adapter':{version:'unavailable-exact-choice'}}},{...context,settings:{}});
+ assert.deepEqual([manual.ready,manual.version,manual.legacy],[false,'unavailable-exact-choice',undefined]);
  fs.appendFileSync(binary,'changed');assert.equal(component.resolveSelection(entry,settings,context.userDataDir).ready,true);assert.throws(()=>Manager.resolveForLaunch(engine,entry,context),/changed|not installed|codesign|signature/i);
  assert.equal(Manager.adapterResource,undefined);
 });
