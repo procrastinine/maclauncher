@@ -1713,6 +1713,17 @@ id<MTLCommandBuffer> unretainedCommandBuffer(id object,SEL selector) {
     }
     return reinterpret_cast<id<MTLCommandBuffer>(*)(id,SEL)>(original(object,selector))(object,selector);
 }
+// Diagnostics: a failed command buffer reports each encoder's execution status
+// only when it was created with that error option.
+thread_local bool creatingStatusBuffer=false;
+id<MTLCommandBuffer> statusCommandBuffer(id object,SEL selector) {
+    if(!creatingStatusBuffer) {
+        MTLCommandBufferDescriptor *descriptor=[MTLCommandBufferDescriptor new];descriptor.retainedReferences=YES;descriptor.errorOptions=MTLCommandBufferErrorOptionEncoderExecutionStatus;
+        creatingStatusBuffer=true;id<MTLCommandBuffer> buffer=[(id<MTLCommandQueue>)object commandBufferWithDescriptor:descriptor];creatingStatusBuffer=false;
+        if(buffer)return buffer;
+    }
+    return reinterpret_cast<id<MTLCommandBuffer>(*)(id,SEL)>(original(object,selector))(object,selector);
+}
 void installMetalDeviceHooks(id<MTLDevice> device) {
     static std::atomic<bool> installed{false};static std::mutex installing;
     if(!device||installed.load(std::memory_order_acquire))return;
@@ -1730,6 +1741,7 @@ void installMetalDeviceHooks(id<MTLDevice> device) {
     replace(cls,@selector(addScheduledHandler:),reinterpret_cast<IMP>(addScheduled));
     replace(cls,@selector(renderCommandEncoderWithDescriptor:),reinterpret_cast<IMP>(captureRenderPass));
     replace(object_getClass(queue),@selector(commandBufferWithUnretainedReferences),reinterpret_cast<IMP>(unretainedCommandBuffer));
+    if(macfx::diagnosticsEnabled())replace(object_getClass(queue),@selector(commandBuffer),reinterpret_cast<IMP>(statusCommandBuffer));
     macfx::installSceneCopyBoundaryHooks(buffer);
     if(@available(macOS 26.0,*)) {
         Class deviceClass=object_getClass(device);

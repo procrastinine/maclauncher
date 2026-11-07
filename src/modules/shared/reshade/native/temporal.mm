@@ -3,6 +3,7 @@
 #include "temporal-controls.hpp"
 #include "temporal-command-order.hpp"
 #include "log.hpp"
+#include "diagnostics.hpp"
 #include "temporal-plan.hpp"
 #include "temporal-provider.hpp"
 #include "scene-frame.h"
@@ -707,6 +708,36 @@ void encodeMetal4Image(id scaler,SEL selector,id commands,IMP original,MLTempora
  if(!state->metal4)state->metal4=std::make_shared<macfx::Metal4SceneIngress>(((__bridge id<MTLTexture>)inputs.frame.color).device);auto result=state->metal4->encode(commands,inputs.frame,metadata,matrices,destination,inputs.fence,state->imageKind==2?macfx::Metal4ImageProvenance::SyntheticUnpaired:macfx::Metal4ImageProvenance::Real,state->imageKind==2?macfx::Metal4OriginalOperation{}:sdk.operation(),state->imageKind==2?nullptr:&sdk.recorded,now);if(!result.encoded)sdk.fallback(commands);if(!result.encoded&&!state->reported){macfx::nativeLog("Original Metal 4 SDK image retained: "+(inputs.sceneReason.empty()?result.reason:inputs.sceneReason+"; "+result.reason));state->reported=true;}if(result.encoded)state->reported=false;
  }catch(const std::exception&e){sdk.fallback(commands);macfx::nativeLog(std::string("Original Metal 4 SDK image retained: ")+e.what());}}@catch(NSException*e){sdk.fallback(commands);macfx::nativeLog(std::string("Original Metal 4 SDK image retained: ")+(e.reason.UTF8String?:"Invalid SDK input metadata"));}}
 }
+// Diagnostics: the ordered replacement's own work in the game's command buffer
+// carries a debug group, and the first failed buffers list each encoder's
+// execution status, so a GPU fault or timeout names the encoder involved.
+struct TemporalCommandGroup {
+    id<MTLCommandBuffer> commands=nil;
+    void begin(id<MTLCommandBuffer> value,NSString *name){end();if(value&&macfx::diagnosticsEnabled()){commands=value;[value pushDebugGroup:name];}}
+    void end(){if(commands){[commands popDebugGroup];commands=nil;}}
+    ~TemporalCommandGroup(){end();}
+};
+std::atomic<unsigned> temporalCommandErrors{0};
+void reportTemporalCommandErrors(id<MTLCommandBuffer> commands){
+    if(!commands||!macfx::diagnosticsEnabled()||temporalCommandErrors.load(std::memory_order_relaxed)>=2)return;
+    [commands addCompletedHandler:^(id<MTLCommandBuffer> done){
+        if(done.status!=MTLCommandBufferStatusError||temporalCommandErrors.fetch_add(1)>=2)return;
+        static const char *const states[]={"unknown","completed","affected","pending","faulted"};
+        NSArray *infos=done.error.userInfo[MTLCommandBufferEncoderInfoErrorKey];unsigned counts[5]{},index=0,listed=0;std::string list;
+        for(id<MTLCommandBufferEncoderInfo> info in infos){
+            const auto state=unsigned(info.errorState)<5?unsigned(info.errorState):0u;++counts[state];
+            if((state==2||state==4||info.debugSignposts.count)&&listed<16){
+                list+=" ["+std::to_string(index)+"] "+(info.label.length?info.label.UTF8String:"unlabeled")+" "+states[state];
+                if(info.debugSignposts.count)list+=" {"+std::string([info.debugSignposts componentsJoinedByString:@" > "].UTF8String)+"}";
+                ++listed;
+            }
+            ++index;
+        }
+        std::string text="Temporal replacement command buffer failed: "+std::string(done.error.localizedDescription.UTF8String?:"unknown error")+"; encoders="+std::to_string(index);
+        for(unsigned i=0;i<5;++i)if(counts[i])text+=" "+std::string(states[i])+"="+std::to_string(counts[i]);
+        macfx::nativeLog(text+(list.empty()?"":";"+list));
+    }];
+}
 void encodeTemporal(id scaler,SEL selector,id commands){
     MLTemporalOwner *state=objc_getAssociatedObject(scaler,&association);const auto original=state?state->original:originalEncode(scaler);if(!original)return;
     if(internalScaler||!state){invokeOriginal(scaler,selector,commands,original,false);return;}
@@ -786,34 +817,37 @@ void encodeTemporal(id scaler,SEL selector,id commands){
                 // reconstruction nodes still consume its raw jittered input;
                 // a scene-only suffix observes its actual reconstructed output.
                 f.method=RS_TEMPORAL_METALFX;f.reserved=0;
-                bool originalEncoded=false;
+                bool originalEncoded=false;TemporalCommandGroup group;
                 const auto buffer=(id<MTLCommandBuffer>)commands;
                 std::string reason=!direct?"The ordered temporal stage requires one complete output texture":
                     !buffer.retainedReferences?"The ordered temporal output needs a command buffer that retains its references":
                     buffer.status>=MTLCommandBufferStatusCommitted?"The ordered temporal output needs unsubmitted commands":
                     "The ordered temporal output needs one exact producer in its command buffer";
                 if(admitted)try {
+                    group.begin(buffer,@"MacLauncher temporal prepare");reportTemporalCommandErrors(buffer);
                     macfx::DepthFrame depth{s.depthTexture,f.frameId,macfx::FrameOrigin::TopLeft};
                     macfx::ShaderFrame context{commands,s.colorTexture,s.outputTexture,f.frameId,now*1000,f.frameTimeMs,macfx::FrameOrigin::TopLeft,macfx::SpatialColor::Perceptual,&depth};
                     std::shared_ptr<macfx::TemporalSceneContinuation>early;
-                    if(destination)if(auto value=macfx::temporalSceneContinuation(destination->window);value&&value->frameId()==f.frameId&&state->plan->snapshot()&&value->execution()->revision()==state->plan->snapshot()->revision){const auto ready=value->ready(commands);if(ready.encoded)early=std::move(value);else if(ready.busy){invokeOriginal(scaler,selector,commands,original,state->originalReset);state->originalReset=false;return;}}
+                    if(destination)if(auto value=macfx::temporalSceneContinuation(destination->window);value&&value->frameId()==f.frameId&&state->plan->snapshot()&&value->execution()->revision()==state->plan->snapshot()->revision){const auto ready=value->ready(commands);if(ready.encoded)early=std::move(value);else if(ready.busy){group.end();invokeOriginal(scaler,selector,commands,original,state->originalReset);state->originalReset=false;return;}}
                     if(early&&early->displayMapped()){f.preExposure=1;f.exposure=nullptr;f.flags&=~RS_TEMPORAL_AUTO_EXPOSURE;}
                     const auto attachments=macfx::temporalSceneAovs(f);
                     const auto actualColor=attachments?macfx::readImageColor(attachments->value.color):macfx::describeImageColor(f.flags&RS_TEMPORAL_HDR?macfx::ImageColorSpace::ExtendedSRGB:macfx::ImageColorSpace::LegacySDR);
                     const auto selected=early?state->plan->prepareSceneContinuation(context,&f,macfx::imageColorLabel(early->execution()->imageColor()),early->execution()->imageColor(),early->execution()->sceneSuffixSnapshot(),early->execution()->sceneOutputIdentity()):state->plan->prepareWithColorDescription(context,true,&f,macfx::imageColorLabel(actualColor),actualColor);
                     if(selected.holdPrevious||(selected.preparing&&(!selected.execution||!selected.execution->hasTemporal()))){
-                        invokeOriginal(scaler,selector,commands,original,state->originalReset);originalEncoded=true;
+                        group.end();invokeOriginal(scaler,selector,commands,original,state->originalReset);originalEncoded=true;
                         if(!destination)macfx::publishTemporalPreparation(commands,s.outputTexture,f.frameId,selected.error);state->reset=true;state->originalReset=false;return;
                     }
                     if(selected.execution&&selected.execution->hasTemporal()) {
                         // A scene-only generator observes the game's original
                         // scaler. It does not force a reconstruction choice.
-                        if(!selected.execution->replacesTemporal()){invokeOriginal(scaler,selector,commands,original,state->originalReset);originalEncoded=true;}
-                        if(s.fence){auto wait=[(id<MTLCommandBuffer>)commands computeCommandEncoder];[wait waitForFence:s.fence];[wait endEncoding];}
+                        if(!selected.execution->replacesTemporal()){group.end();invokeOriginal(scaler,selector,commands,original,state->originalReset);originalEncoded=true;}
+                        group.begin(buffer,@"MacLauncher temporal encode");
+                        if(s.fence){auto wait=[(id<MTLCommandBuffer>)commands computeCommandEncoder];wait.label=@"MacLauncher temporal fence wait";[wait waitForFence:s.fence];[wait endEncoding];}
                         auto capture=macfx::FrameCapture::begin(commands,selected.execution->replacesTemporal()?s.colorTexture:s.outputTexture,f.frameId,false,&actualColor);
                         bool displayMapped=early&&early->displayMapped();const auto encoded=selected.execution->encodeScene(context,f,&displayMapped,&depth,displayMapped);
                         if(encoded.encoded) {
-                            if(s.fence){auto update=[(id<MTLCommandBuffer>)commands computeCommandEncoder];[update updateFence:s.fence];[update endEncoding];}
+                            if(s.fence){auto update=[(id<MTLCommandBuffer>)commands computeCommandEncoder];update.label=@"MacLauncher temporal fence update";[update updateFence:s.fence];[update endEncoding];}
+                            group.end();
                             if(destination)macfx::publishTemporalSceneContinuation(commands,*destination,f,selected.execution,displayMapped);
                             else macfx::publishTemporalOutputWithDepth(commands,s.outputTexture,f.frameId,selected.execution,std::move(capture),&depth,displayMapped,&f);
                             acceptEncodedScene(reinterpret_cast<uintptr_t>((__bridge void*)state),*selected.execution,f.frameId);state->statusReported.store(true,std::memory_order_release);
@@ -824,7 +858,7 @@ void encodeTemporal(id scaler,SEL selector,id commands){
                     }else reason=selected.error;
                 }catch(const std::exception &error){reason=error.what();}
                 if(!state->reported){macfx::nativeLog("Original temporal scaler retained: "+reason);state->reported=true;}
-                state->reset=true;if(!originalEncoded)invokeOriginal(scaler,selector,commands,original,state->originalReset);state->originalReset=false;return;
+                group.end();state->reset=true;if(!originalEncoded)invokeOriginal(scaler,selector,commands,original,state->originalReset);state->originalReset=false;return;
             }else{macfx::releaseTemporalSceneContinuations((__bridge void*)state);state->plan.reset();stopEncoderStatus(reinterpret_cast<uintptr_t>((__bridge void*)state),state->statusReported);}
         }
     }
