@@ -200,8 +200,17 @@ async function ensurePrefix(installation, ownedEnvironment, directory, settings,
   const markerPath = path.join(prefixPath, "maclauncher-prefix.json");
   let marker; try { if (regularFile(markerPath)) marker = JSON.parse(fs.readFileSync(markerPath, "utf8")); } catch {}
   const completed = regularFile(path.join(prefixPath, "system.reg")) && regularFile(path.join(prefixPath, "user.reg"));
-  const runtimeChanged = marker?.runtimeIdentity !== runtimeIdentity;
-  if (completed && !runtimeChanged && marker?.windowsVersion === windowsVersion && marker?.schemaVersion === 1) return;
+  const hasRuntimeIdentity = typeof marker?.runtimeIdentity === "string" && marker.runtimeIdentity.length > 0;
+  const runtimeChanged = hasRuntimeIdentity && marker.runtimeIdentity !== runtimeIdentity;
+  if (completed && !runtimeChanged && marker?.windowsVersion === windowsVersion && marker?.schemaVersion === 1) {
+    // An unrecorded engine is unknown, not changed. Adopt its identity without
+    // setup; a later recorded identity change still upgrades before registry work.
+    if (!hasRuntimeIdentity) {
+      context.signal?.throwIfAborted();
+      Writable.atomicWrite(markerPath, JSON.stringify({ ...marker, runtimeIdentity }) + "\n", { root: directory });
+    }
+    return;
+  }
   // Initialize the engine's Windows system files before selecting game DLLs.
   // Renderer-prioritized loaders can replace libraries used by wineboot itself.
   const runtime = prefixRuntime(installation, directory);

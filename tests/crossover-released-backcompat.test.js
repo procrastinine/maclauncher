@@ -96,6 +96,11 @@ for (const runtimeId of ["crossover", "sikarugir"]) test("released " + runtimeId
     assert.equal(launch.args[launch.args.indexOf("--") + 1], launch.windowsExecutablePath);
   } else {
     assert.deepEqual(launch.args.slice(0, 5), ["start.exe", "/d", launch.windowsWorkingDirectory, "/exec", launch.windowsExecutablePath]);
+    const markerPath = path.join(profile, "maclauncher-prefix.json"), marker = JSON.parse(fs.readFileSync(markerPath, "utf8"));
+    assert.equal(typeof marker.runtimeIdentity, "string");assert.ok(marker.runtimeIdentity.length > 0);
+    const recorded = unchangedFile(markerPath);
+    await Wine.prepareLaunch(f.entry, context, dependencies);
+    assert.deepEqual(unchangedFile(markerPath), recorded, "recorded identity is reused without setup or another marker write");
     const saves = require("../src/modules/crossover/sikarugir/provider").resolveSaveLocations(f.entry, context);
     assert.equal(saves.primaryDirectory, launch.workingDirectory);assert.ok(saves.directories.some(row => row.directory === path.join(profile, "drive_c/users")));
   }
