@@ -81,5 +81,5 @@ test('DXVK uses a mapped runtime directory in a bottle with no Z drive', t => {
  assert.equal(fs.existsSync(path.join(prefix,'dosdevices','z:')),false);
  assert.deepEqual(Cache.prepare(runtime,prefix),first);
  const letter=first.DXVK_SHADER_CACHE_PATH[0].toLowerCase();assert.equal(fs.realpathSync(path.join(prefix,'dosdevices',letter+':')),fs.realpathSync(runtime));
- assert.equal(fs.existsSync(path.join(runtime,'cache')),false);
+ assert.ok(fs.statSync(path.join(runtime,'cache','dxvk')).isDirectory(), 'DXVK receives an existing cache directory on a first launch');
 });
