@@ -196,7 +196,7 @@ When CrossOver makes its own automatic choice and has not resolved which engine 
 
 ## Environment variables
 
-Each translator has global environment variables in its Runtimes tab, and a game's Runtime Settings can change them for that game. A game receives the variables of the translators that it actually uses after any fallback. [Translator environment variables](TRANSLATOR_ENVIRONMENT.md) lists each translator's suggested and locked variables.
+Each translator has global environment variables in **Settings → Environment variables**, and a game's Runtime Settings can change them for that game. A game receives the variables of the translators that it actually uses after any fallback. [Translator environment variables](TRANSLATOR_ENVIRONMENT.md) lists each translator's suggested and locked variables.
 
 ## Sources and notices
 

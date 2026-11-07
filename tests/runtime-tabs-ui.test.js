@@ -296,7 +296,7 @@ test('registry metadata exposes manageable production groups while exposing mana
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'sikarugir'), sections).map(choice => [choice.label, choice.managerId]),
       [['Sikarugir', 'sikarugir']]);
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'crossover'), sections).map(choice => [choice.label, choice.managerId]),
-      [['CrossOver', 'crossover']]);
+      [['CrossOver', 'crossover'], ['CrossOver graphics integration', 'maclauncher-crossover-winemac']]);
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'directx-metal'), sections).filter(choice => choice.label === 'DXMT')
       .map(choice => choice.managerId), ['sikarugir-graphics-bridge']);
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.label === 'Flash'), sections).map(choice => [choice.label, choice.managerId]),
@@ -315,9 +315,9 @@ test('registry metadata exposes manageable production groups while exposing mana
     assert.equal(groups.some(group => group.label === 'ILSpy' || group.label === 'ONScripter-Yuri Web'), false);
     assert.equal(resolveRuntimeTabSelection(groups, 'onsyuri', 'mac', sections).section.sectionId, 'mac');
     assert.ok(states.every(manager => ['managed', 'built-in'].includes(manager.ui.management)));
-    // Hidden managers, such as the CrossOver graphics integration, are acquired through their owner and have no tab.
+    // Every managed download has a row, including the CrossOver graphics integration that Play acquires through CrossOver.
     assert.equal(groups.flatMap(group => group.managers).length, states.filter(manager => manager.ui.management === 'managed' && manager.ui.hidden !== true).length);
-    assert.equal(groups.some(group => group.managers.some(manager => manager.id === 'maclauncher-crossover-winemac')), false);
+    assert.equal(groups.some(group => group.managers.some(manager => manager.id === 'maclauncher-crossover-winemac')), true);
     for (const id of ['mkxpz', 'butterscotch', 'hashlink']) assert.ok(groups.some(group => group.managers.some(manager => manager.id === id)));
     for (const id of ['system3', 'xsystem35', 'xsystem4', 'fna', 'krkrsdl2', 'gemrb']) {
       assert.ok(states.some(manager => manager.id === id));
@@ -459,9 +459,9 @@ test('translator member declarations separate DirectX targets, Vulkan drivers an
     sections: [{ id: 'default', label: 'Versions' }] }; });
   modelTest(`const groups=groupRuntimeManagers(${JSON.stringify(states)});
     for(const [id,label,members] of [
-      ['directx-vulkan','DirectX → Vulkan',['translator-dxvk','translator-vkd3d-proton','translator-vkd3d']],
+      ['directx-vulkan','DirectX → Vulkan',['translator-dxvk','translator-vkd3d-proton','translator-vkd3d','dxvk-nvapi','vkd3d-proton']],
       ['directx-metal','DirectX → Metal',['sikarugir-graphics-bridge','translator-d3dmetal']],
-      ['vulkan-drivers','Vulkan drivers',['vulkan-moltenvk','vulkan-kosmickrisp','maclauncher-kosmickrisp']],
+      ['vulkan-drivers','Vulkan drivers',['vulkan-moltenvk','vulkan-kosmickrisp','maclauncher-kosmickrisp','vulkan-moltenvk-scene']],
       ['codecs','Video codecs',['translator-gstreamer']]]){
       const group=groups.find(group=>group.id===id);assert.equal(group.label,label);
       assert.deepEqual(runtimeGroupSections(group,sections).map(row=>row.managerId),members);

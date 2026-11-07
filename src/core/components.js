@@ -28,6 +28,30 @@ module.exports = [
           source: { url: "https://pypi.org/project/legendary-gl/" }, users: ["Epic Games Store downloads"] }] : [];
       });
     },
-    remove(item, context) { return Components.removeOwned(item.path, tools(context)); }
+    remove(item, context) { return Components.removeOwned(item.path, tools(context)); },
+    // Refresh reads both helpers' catalogs; the next store download installs a newer helper.
+    async refresh({ signal, logger } = {}) {
+      const newest = rows => rows.map(row => String(row.version)).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))[0] || null;
+      const [gogdl, legendary] = await Promise.all([
+        require("./gogdl-tool").source.discover({ signal, logger }).then(rows => newest(rows.filter(row => row.architecture === process.arch))),
+        require("./external-store-downloads").LEGENDARY.discover({ signal, logger }).then(newest)]);
+      const found = [gogdl && `gogdl ${gogdl}`, legendary && `Legendary ${legendary}`].filter(Boolean);
+      return found.length ? `Newest: ${found.join(", ")}. The next store download installs a newer helper.` : "No helper release is listed.";
+    }
+  },
+  {
+    // The version lists of Steam games that the Steam window reads, for each
+    // account. The window reads a deleted list again when it needs it.
+    id: "steam-catalogs",
+    label: "Steam game versions",
+    cache: true,
+    description: "The lists of game versions that the Steam window reads from Steam for each signed-in account. The window reads a deleted list again when it needs it.",
+    list({ userDataDir }) {
+      const steam = path.join(userDataDir, "steam");
+      return [path.join(steam, "catalog"), ...Components.storeEntries(path.join(steam, "accounts")).map(account => path.join(account, "catalog"))]
+        .filter(directory => fs.existsSync(directory)).map(directory => ({ id: path.relative(steam, directory), version: "Steam game versions",
+          path: directory, source: { url: "https://store.steampowered.com" }, users: ["Steam window"] }));
+    },
+    remove(item, { userDataDir }) { return Components.removeOwned(item.path, path.join(userDataDir, "steam")); }
   }
 ];

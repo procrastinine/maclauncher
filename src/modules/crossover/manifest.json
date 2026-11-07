@@ -145,12 +145,8 @@
               "capability": "temporal-integration",
               "type": "boolean",
               "label": "Game temporal integration",
-              "description": "Expose the game's DLSS option through MetalFX Temporal. A shared temporal upscaler also enables this integration automatically. Requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later, with matching NVAPI/NGX libraries. DLSS must be enabled in the game settings. Changes apply on the next launch.",
+              "description": "Expose the game's DLSS option. With DXMT or D3DMetal, MetalFX Temporal performs it; this requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later, with matching NVAPI/NGX libraries. With DXVK or vkd3d-proton, a 64-bit Windows game's DLSS inputs go through DXVK-NVAPI and the NGX core to a Vulkan driver build with a temporal carrier; Play offers both libraries after consent. A shared temporal upscaler also enables this integration automatically. DLSS must be enabled in the game settings. Changes apply on the next launch.",
               "hiddenWhen": [
-                {
-                  "key": "graphicsBackend",
-                  "equals": "dxvk"
-                },
                 {
                   "key": "graphicsBackend",
                   "equals": "wined3d"
@@ -370,12 +366,8 @@
               "capability": "temporal-integration",
               "type": "boolean",
               "label": "Game temporal integration",
-              "description": "Expose the game's DLSS option through MetalFX Temporal. A shared temporal upscaler also enables this integration automatically. Requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26.4 or later, with matching NVAPI/NGX libraries. DLSS must be enabled in the game settings. Changes apply on the next launch.",
+              "description": "Expose the game's DLSS option. With DXMT or D3DMetal, MetalFX Temporal performs it; this requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26.4 or later, with matching NVAPI/NGX libraries. With DXVK or vkd3d-proton, a 64-bit Windows game's DLSS inputs go through DXVK-NVAPI and the NGX core to a Vulkan driver build with a temporal carrier; Play offers both libraries after consent. A shared temporal upscaler also enables this integration automatically. DLSS must be enabled in the game settings. Changes apply on the next launch.",
               "hiddenWhen": [
-                {
-                  "key": "graphicsBackend",
-                  "equals": "dxvk"
-                },
                 {
                   "key": "graphicsBackend",
                   "equals": "wined3d"

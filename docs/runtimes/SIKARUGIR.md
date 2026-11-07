@@ -78,7 +78,7 @@ Settings holds the defaults, and each game's Runtime Settings can override them.
 | Direct3D 12 | Wine vkd3d, D3DMetal, or a vkd3d-proton or D3DMetal version installed in Runtimes. KosmicKrisp is recommended for vkd3d-proton. |
 | Vulkan driver | The Template's automatic choice, a driver that the runtime supplies, or a specific MoltenVK or KosmicKrisp version installed in Runtimes. |
 | Video codecs | The runtime defaults or a registered GStreamer codec folder. |
-| Game temporal integration | Exposes MetalFX Temporal through a compatible 64-bit game's DLSS integration. Listed for Unity and Windows games. See [Game temporal integration](#game-temporal-integration). |
+| Game temporal integration | Exposes MetalFX Temporal through a compatible 64-bit game's DLSS integration with DXMT or D3DMetal, or forwards it with DXVK or vkd3d-proton. Listed for Unity and Windows games; hidden only for WineD3D. See [Game temporal integration](#game-temporal-integration). |
 | DirectDraw compatibility | The optional CNC-DDraw wrapper for 32-bit games with a software DirectDraw renderer. Off by default and independent of the Direct3D settings. |
 | Synchronization | Automatic, MSync or Off. MSync requires support in the selected engine. |
 | Language locale | An optional locale, such as `ja_JP.UTF-8` or `en_US.UTF-8`. |
@@ -94,7 +94,7 @@ The optional **Enable BepInEx winhttp override**, which is listed for Unity and 
 
 Runtime Settings keeps the basic launch choices above separate from four advanced groups. **Display** holds High Resolution (Retina), DPI, fullscreen capture, vertical sync and virtual desktops, and **Input** maps Option to Alt and Command to Ctrl and configures mouse capture. **Compatibility** holds Rosetta AVX advertisement together with options for particular engines: DXVK async, DXMT frame-rate presets and MetalFX spatial, D3DMetal frame limits and Metal 4, MoltenVK fast math, argument buffers and UE4 compatibility, and WineD3D configuration. Each engine's options appear only when that engine is selected. **Diagnostics**, finally, offers the Metal and DXVK HUDs, the Wine crash dialog and Wine debug channels.
 
-Environment variables for Sikarugir and its translators are set in the **Environment variables** section, as [translator environment variables](TRANSLATOR_ENVIRONMENT.md) describes. A variable there replaces the value that one of these controls sets, such as `WINEDEBUG` or `MTL_HUD_ENABLED`. Registry settings apply to the selected Windows environment on its next launch, and High Resolution and synchronization changes can require restarting the environment's Windows programs.
+Environment variables for Sikarugir and its translators have global values in **Settings → Environment variables** and a game's own values in the **Environment variables** section of its Runtime Settings, as [translator environment variables](TRANSLATOR_ENVIRONMENT.md) describes. A variable there replaces the value that one of these controls sets, such as `WINEDEBUG` or `MTL_HUD_ENABLED`. Registry settings apply to the selected Windows environment on its next launch, and High Resolution and synchronization changes can require restarting the environment's Windows programs.
 
 | Control | Values and effect |
 | --- | --- |
@@ -153,7 +153,7 @@ During installation, MacLauncher identifies the renderers that the selected Temp
 
 ### Game temporal integration
 
-DXVK and vkd3d-proton forward DLSS inputs when the selected KosmicKrisp or MoltenVK driver supports the temporal carrier. Play offers managed DXVK-NVAPI and NGX forwarding libraries after consent and stages them in the private Windows environment with DXVK's DXGI. The source Wine engine and game libraries remain unchanged. A virtual NVIDIA adapter admits the forwarding core; the actual driver and graphics provider decide feature support.
+DXVK and vkd3d-proton forward DLSS inputs when the selected KosmicKrisp or MoltenVK driver supports the temporal carrier. Play offers managed DXVK-NVAPI and NGX forwarding libraries after consent and stages them in the private Windows environment with DXVK's DXGI. Both are listed in **Runtimes → Graphics → DirectX → Vulkan**, as **DXVK-NVAPI** and **Vulkan DLSS forwarding**. The source Wine engine and game libraries remain unchanged. A virtual NVIDIA adapter admits the forwarding core; the actual driver and graphics provider decide feature support.
 
 Temporal upscalers need the game's depth and motion data, which a Windows game passes to the upscaler it calls itself. **Game temporal integration** makes use of this: it exposes MetalFX Temporal through a compatible 64-bit game's DLSS integration. It requires Apple Silicon and the selected package's NVAPI and NGX libraries. The DXMT path requires macOS 14 or later and the D3DMetal path macOS 26 or later, and native dependencies can raise either minimum. The game's own DLSS setting activates the integration, and selecting a shared Temporal upscaling method also turns it on at launch.
 

@@ -1,5 +1,6 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
 const { createProjectBuildManager } = require("../../shared/runtime/project-build-manager");
+const { withDescription } = require("../../shared/runtime/pinned-native-manager");
 const Bundled = require("../../shared/runtime/bundled-native");
 const Catalog = require("./catalog");
 const hash = file => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
@@ -90,9 +91,8 @@ function createAPIManager(projectId, dependencies = {}) {
       verifyAPI(selected, projectId);
       await Bundled.verifySignatures(selected.root, selected.declaration, { signal });
     }, dependencies });
-  // Downloaded files lists these Windows libraries (core/component-service.js).
-  return { ...manager, distributionRequired: false, ui: { hidden: true, management: "managed" },
-    componentInfo: { users: ["Graphics effects in CrossOver and Sikarugir games"], windows: true, description: definition.description },
+  return { ...withDescription(manager, definition.description), distributionRequired: false,
+    ui: { groupId: "graphics", tabLabel: "Graphics", sectionLabel: definition.label, memberOrder: projectId === "winevulkan-scene" ? 23 : 24, management: "managed" },
     resolvePayload(entry, context = {}, options = {}) {
       const selected = manager.resolveSelection(entry, context.settings, context.userDataDir, options);
       if (!selected.ready || !selected.install) return selected;

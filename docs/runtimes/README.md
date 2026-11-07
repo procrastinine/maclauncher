@@ -195,13 +195,12 @@ To run evbunpack, the backend uses an existing virtual environment at `userData/
 
 ## The Runtimes window
 
-The **Runtimes** window shows runtime managers, downloads and local application registrations, with one tab per manager. A manager's tab shows:
+The **Runtimes** window downloads, removes and refreshes runtimes and chooses their default versions, with one tab per manager. Every runtime manager has a tab of its own, including small packages that other runtimes load, such as DXVK-NVAPI and the NGX core of Vulkan DLSS forwarding beside DXVK and vkd3d-proton, CrossOver graphics integration in the CrossOver entry, MoltenVK scene support among the Vulkan drivers, and the WineVulkan scene and FidelityFX API adapters in **Effects**. Settings that change how a runtime behaves, such as translator environment variables and plugin switches, are in **Settings**. A manager's tab shows:
 
 - section tabs when the manager has several groups, such as Temurin LTS and Vineflower, NW.js and Greenworks, or Ren'Py (Python 2) and Ren'Py 8 (fixed native players remain in **Settings**)
 - the available versions, with a refresh control
-- installed versions with uninstall actions
+- installed versions with their size on disk and uninstall actions; sizes are measured for folders inside the MacLauncher data folder while the tab is shown, and registered applications elsewhere show none
 - the default version and, where supported, the variant
-- for a manager that provides a translator, a collapsed **Environment variables** section with the global [environment variables](TRANSLATOR_ENVIRONMENT.md) of that translator
 
 Active downloads appear in the download menu, which supports several concurrent downloads and offers a cancel control for each.
 
@@ -252,17 +251,17 @@ Runtime status uses the same saved preferences as Play, including versions of de
 
 ### Downloaded files
 
-**Runtimes → Tools → Downloaded files**, the last subtab of the Tools entry, manages every downloaded file that has no row of its own elsewhere in **Runtimes**. Play and the inspector never open it; each file downloads by itself, after consent, when something needs it. It covers:
+**Runtimes → Tools → Downloaded files**, the last subtab of the Tools entry, manages every downloaded file that has no runtime manager. Play and the inspector never open it; each file downloads by itself, after consent, when something needs it. It covers:
 
-- small runtime packages that other runtimes load, such as CrossOver graphics integration, the WineVulkan scene adapter, the FidelityFX API adapter and MoltenVK scene support
 - shared assets, such as the fallback fonts of KiriKiri and NScripter games and the MIDI soundfont and RPG Maker run-time packages that MKXP-Z uses
 - the GOG and Epic Games Store download helpers
+- the Android system image that AIM attaches and the microG packages of the shared Google account service
 - the shared libraries that installed runtime packages declare
-- caches that MacLauncher fills, such as translator descriptions and neural model source archives
+- caches that MacLauncher fills, such as the Steam game version lists, the F-Droid and IzzyOnDroid indexes, translator descriptions and neural model source archives
 
-The Steam client bridge and Valve's Steam client files are managed in the bridge's own **Runtimes** entry.
+The Steam client bridge and Valve's Steam client files are managed in the bridge's own **Runtimes** entry. Games that the store windows download are managed in the library.
 
-The tab lists installed files only, largest first. A row names the file and its version, the CPU architecture in the vocabulary of [Processor builds](#processor-builds), the size on disk, the source (the host it was downloaded from, **Added manually**, or **Created by MacLauncher** for a cache) and the runtimes or games that use it, by their names in **Runtimes**. The tooltip of the name holds the file's content digest. With nothing installed, the tab reads **No downloaded files.** The list reads only local files; the reload button reads them again.
+The tab lists installed files only, largest first. A download whose versions come from a catalog, such as the store download helpers and microG, has an icon-only **Refresh** control on its first row. Refresh reads the catalog and names the newest release, which the next store download or Google sign-in installs; it downloads nothing else. A row names the file and its version, the CPU architecture in the vocabulary of [Processor builds](#processor-builds), the size on disk, the source (the host it was downloaded from, **Added manually**, or **Created by MacLauncher** for a cache) and the runtimes or games that use it, by their names in **Runtimes**. The tooltip of the name holds the file's content digest. With nothing installed, the tab reads **No downloaded files.** The list reads only local files; the reload button reads them again.
 
 **Delete** asks for confirmation in a native dialog. The dialog names the runtimes or games that use the file, notes that a running game keeps the files it already loaded until it quits, and states that MacLauncher asks before downloading it again the next time something needs it; for a cache, it states that MacLauncher fills it again when needed. A shared library that installed runtimes still load cannot be deleted, and its row gives that reason; it is removed with the last runtime that uses it. **Delete unused** deletes every file that no installed runtime or game uses, after one confirmation that lists them. Removal renames a file to a trash name in its own folder and then deletes it without following links; each such folder is a declared store of storage upkeep, so a stopped removal is finished by the next upkeep pass.
 
@@ -298,7 +297,7 @@ Runtime settings are separate from runtime managers and installations, and they 
 
 Game type defaults are edited in **Settings**, and per-game overrides with the **Runtime Settings** button next to the runtime selector in the inspector. Changes are saved as soon as a field changes.
 
-Environment variables of translators have their own two levels: global values in **Runtimes** and a game's own values in its **Runtime Settings**. [Translator environment variables](TRANSLATOR_ENVIRONMENT.md) describes them.
+Environment variables of translators have their own two levels: global values in **Settings → Environment variables** and a game's own values in its **Runtime Settings**. [Translator environment variables](TRANSLATOR_ENVIRONMENT.md) describes them.
 
 ## Network access
 
@@ -354,10 +353,11 @@ Catalogs declare `installable` and, optionally, `installableVersions`, `installL
 - `remove(item, context)`, optional: deletes one item
 - `import`, optional: `{ matches(file, context), run(path, context) }`. **Add from file…** reads the chosen file once and passes `{ path, size, sha256 }` to each `matches`; the first declaration that recognizes its recorded identity runs `run`, which checks the file again while it installs it and throws a plain reason when it differs
 - `cache`, optional: `true` for data the launcher recreates
+- `refresh(context)`: required when the component's versions come from a catalog. Refresh calls it on an explicit click; it reads the catalog, downloads nothing and returns a plain message, which the tab shows
 
 An item is `{ id, version, identity, architecture, windows, path, source, users, status, removable, removeReason }`. `windows: true` marks Windows code, whose CPU is named as Windows names it. `source` is `{ url }`, `{ label }` or `"manual"`, `users` names the runtimes or games that load the item, and `removable: false` with `removeReason` keeps an item that is still required. The context holds `userDataDir`, `settings`, `logger`, `signal`, `runtimeAction(managerId, action, payload)`, `runtimeLabel(id)`, which names a runtime as **Runtimes** does, `confirmRuntimeInstall` and `downloads`. Sizes on disk, **Show in Finder** and the file chooser are provided by the launcher. A component whose `remove` places trash outside an existing store declares that folder in its owner's `derived-stores.js` with `match: TRASH`.
 
-`src/modules/shared/runtime/runtime-components.js` provides the common forms: `fromRuntimeManager(manager, { windows })` lists a manager's installed versions with their CPU builds, deletes one through the manager's uninstall action and installs a matching local archive through the manager's install action; `cacheComponent` describes one cache folder; `removeOwned` deletes one item inside its store. A pinned native manager's `installRuntime` accepts `archiveFile`, a local copy of the release archive that replaces the download and must match the release's recorded SHA-256. Every runtime manager that Runtimes does not show is declared as a component.
+`src/modules/shared/runtime/runtime-components.js` provides the common forms: `fromRuntimeManager(manager, { windows })` lists a manager's installed versions with their CPU builds, deletes one through the manager's uninstall action and installs a matching local archive through the manager's install action; `cacheComponent` describes one cache folder; `removeOwned` deletes one item inside its store. A pinned native manager's `installRuntime` accepts `archiveFile`, a local copy of the release archive that replaces the download and must match the release's recorded SHA-256. Every registry runtime manager has a tab of its own in **Runtimes**, with Refresh and removal, so no runtime manager is declared as a component.
 
 ### Pre-launch checks
 

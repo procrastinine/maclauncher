@@ -30,9 +30,9 @@ Both upstream mpv and the [decoded GPU builds](#output-paths) load the same play
 
 ### Managing plugins
 
-Plugins are managed in **Runtimes → mpv player → Plugins**, which shows each plugin's enable switch, installation status, Install or Repair action, removal control and source link together. If a plugin's installation is missing or damaged, its enable switch is disabled until installation or repair completes. A successful removal also disables the plugin, whereas a canceled removal keeps the setting.
+Plugins are downloaded and removed in **Runtimes → mpv player → Plugins**, which shows each plugin's installation status, version, Install, Repair or Update action, removal control and source link together. The switches that turn plugins on or off are settings, so they are in **Settings → Video** with the other mpv settings: **uosc controls** and **Timeline previews**, and under **Added plugins** one **Use <name>** switch for each added plugin. An added plugin's switch is disabled while its installation is missing or damaged. Installing a plugin turns it on, a successful removal turns it off, and a canceled removal keeps the setting.
 
-Other plugins can be added with **Add plugin**, which accepts a GitHub repository or file link, a Lua or JavaScript script or ZIP URL, or a local script, ZIP or plugin folder. For packages with a different layout, **Script location** sets an optional relative entry path. Added plugins then appear next to uosc and thumbfast with enable and removal controls. MacLauncher keeps its own copy of each one and leaves the original local files unchanged. Adding an updated source creates a separate version identified by its content, and a GitHub repository import also records the resolved commit.
+Other plugins can be added with **Add plugin**, which accepts a GitHub repository or file link, a Lua or JavaScript script or ZIP URL, or a local script, ZIP or plugin folder. For packages with a different layout, **Script location** sets an optional relative entry path. Added plugins then appear next to uosc and thumbfast with their removal controls. MacLauncher keeps its own copy of each one and leaves the original local files unchanged. Adding an updated source creates a separate version identified by its content, and a GitHub repository import also records the resolved commit.
 
 ### Plugin updates
 
@@ -51,7 +51,7 @@ When a plugin is already current, it reports **Up to date**. A failed update lea
 
 ### Configuration files and scripts
 
-Existing mpv configuration and scripts can be used as well. **Configuration and scripts** expands their local file and folder controls:
+Existing mpv configuration and scripts can be used as well, with these fields of the mpv settings in **Settings → Video** and in each video's mpv settings:
 
 - **Configuration folder** points to an existing mpv configuration directory with `mpv.conf`, `input.conf`, `scripts`, `script-opts`, fonts and other mpv resources.
 - **Additional configuration files** load further files in the listed order.

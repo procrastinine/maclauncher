@@ -2,7 +2,7 @@ const path = require('node:path');
 const Architecture = require('../../shared/runtime/architecture');
 const { createProjectBuildManager } = require('../../shared/runtime/project-build-manager');
 const Bundled = require('../../shared/runtime/bundled-native');
-const { compareRuntimeVersions } = require('../../shared/runtime/pinned-native-manager');
+const { compareRuntimeVersions, withDescription } = require('../../shared/runtime/pinned-native-manager');
 const { readJsonObject, writeJsonAtomic } = require('../../../core/json-files');
 
 const id = 'maclauncher-crossover-winemac';
@@ -49,9 +49,9 @@ function create({ dependencies = {}, applications = userDataDir => require('./ma
     keepSkipped(userDataDir, [...skippedReleases(userDataDir), releaseKey({ upstreamVersion: plan.release.version, buildVersion: plan.release.build })]);
   }
   function clearSkipped(userDataDir) { if (userDataDir) keepSkipped(userDataDir, []); }
-  // Downloaded files lists it (core/component-service.js).
-  const manager = { ...base, ui: { hidden: true, management: 'managed' }, distributionRequired: false,
-    componentInfo: { users: ['CrossOver'], description: 'An optional package matched to one CrossOver release and build. It adds Vulkan external memory, semaphore and fence sharing to CrossOver\'s Mac driver, and Play offers it, after consent, when that release runs a Vulkan game.' } };
+  // Its Runtimes row is in the CrossOver tab.
+  const manager = { ...withDescription(base, 'An optional package matched to one CrossOver release and build. It adds Vulkan external memory, semaphore and fence sharing to CrossOver\'s Mac driver, and Play offers it, after consent, when that release runs a Vulkan game.'),
+    ui: { groupId: 'crossover', sectionLabel: 'CrossOver graphics integration', memberOrder: 1, management: 'managed' }, distributionRequired: false };
   // One package is kept for each registered CrossOver release: the newest
   // revision. Nothing is inspected while no package is installed.
   async function prune(userDataDir) {

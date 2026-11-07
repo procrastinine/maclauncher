@@ -1,6 +1,6 @@
 # Translator environment variables
 
-Every runtime that offers a translator choice passes environment variables to the translators that a game uses: the Wine runtime and its graphics translators, the Android execution engine, ANGLE and the Vulkan driver, and the PlayStation 5 runtimes with their Vulkan driver. Each translator has global values in **Runtimes**, and these global values are the defaults of every game that uses the translator. A game's **Runtime Settings** can change, add or remove variables for that game only. Values are stored and passed exactly as written. Shell expansion, quoting and variable references such as `$HOME` have no effect. A change applies on the next launch.
+Every runtime that offers a translator choice passes environment variables to the translators that a game uses: the Wine runtime and its graphics translators, the Android execution engine, ANGLE and the Vulkan driver, and the PlayStation 5 runtimes with their Vulkan driver. Each translator has global values in **Settings → Environment variables**, and these global values are the defaults of every game that uses the translator. A game's **Runtime Settings** can change, add or remove variables for that game only. Values are stored and passed exactly as written. Shell expansion, quoting and variable references such as `$HOME` have no effect. A change applies on the next launch.
 
 ## Translators of each runtime
 
@@ -19,11 +19,20 @@ AIM has no translator choice and no translator environment. WineD3D and Wine vkd
 
 ## Global values
 
-On a runtime manager's tab in **Runtimes**, the collapsed **Environment variables** section at the top of the panel holds the global values of the translators that the manager provides. Its title shows the number of values. These values apply to every game that uses the translator. KosmicKrisp has the same global values on the **KosmicKrisp** and **MacLauncher KosmicKrisp** tabs, and ANGLE's values appear on the **MacLauncher Android** and **Mac.apk** tabs.
+**Settings → Environment variables** holds the global values of every translator, each translator once. The page has one collapsed block per runtime or translator, and each block's title shows its number of values:
+
+| Block | Translators |
+| --- | --- |
+| MacLauncher Android | MacLauncher Android, Android JVM, Android ART and ANGLE |
+| Mac.apk | Mac.apk |
+| AnyPS5, Prosper, CrossOver, Sikarugir | The runtime's own translator |
+| DXVK, vkd3d-proton, DXMT, D3DMetal, GStreamer codecs, MoltenVK, KosmicKrisp | The graphics translator or Vulkan driver |
+
+These values apply to every game that uses the translator. ANGLE's values are set in the **MacLauncher Android** block and also reach Mac.apk games. A setting change in one Settings window appears in every open launcher window at once.
 
 ## Values for one game
 
-In a game's **Runtime Settings**, the **Environment variables** section shows the values of the translators that the current settings choose. The list of translators follows the settings as they are edited, such as a different Direct3D engine, Vulkan driver or execution engine. Values from Runtimes appear together with the game's own changes, additions and removals. A game's values are stored with the game and are independent of the game type defaults in **Settings**.
+In a game's **Runtime Settings**, the **Environment variables** section shows the values of the translators that the current settings choose. The list of translators follows the settings as they are edited, such as a different Direct3D engine, Vulkan driver or execution engine. Values from Settings appear together with the game's own changes, additions and removals. A game's values are stored with the game and are independent of the game type defaults in **Settings**.
 
 ## Editor
 
@@ -31,17 +40,17 @@ Each scope has one table of rows in the form `NAME = value`, followed by one row
 
 - The value field saves when it loses focus or on Return, and Escape returns it to the saved value.
 - The add row has a name field that suggests the variables of every translator in the table, a value field and an **Add** button. Return in either field adds the variable, and Escape clears both fields.
-- A new variable joins the translator whose heading already lists it, then the translator that suggests it, and otherwise the runtime's own translator. The runtime's own translator applies to every game that the runtime launches, so on the **MacLauncher Android** tab a variable that no translator suggests reaches games with either execution engine. While a name is typed in a table with several translators, the hint under the add row names that translator, together with the variable's description when it is a suggested one.
-- The remove button (×) removes a variable. In a game, removing a value from Runtimes stores a removal for that game, which the row shows as **Removed** with the inherited value struck through.
+- A new variable joins the translator whose heading already lists it, then the translator that suggests it, and otherwise the runtime's own translator. The runtime's own translator applies to every game that the runtime launches, so in the **MacLauncher Android** block a variable that no translator suggests reaches games with either execution engine. While a name is typed in a table with several translators, the hint under the add row names that translator, together with the variable's description when it is a suggested one.
+- The remove button (×) removes a variable. In a game, removing a value from Settings stores a removal for that game, which the row shows as **Removed** with the inherited value struck through.
 - **Restore** returns a changed or removed row to its inherited value.
-- One **Reset** per scope removes every value stored there: the global values in Runtimes, or the game's own values in Runtime Settings.
+- One **Reset** per scope removes every value stored there: the global values of a block in Settings, or the game's own values in Runtime Settings.
 - A suggested variable's name shows its description as a tooltip.
 
 Each row has a badge for its source:
 
 | Badge | Meaning |
 | --- | --- |
-| From Runtimes | In a game, a value inherited from the global values in Runtimes. |
+| From Settings | In a game, a value inherited from the global values in Settings. |
 | Default | A translator's built-in value. |
 | Changed | The game replaces an inherited value. |
 | This game | A variable that only this game sets. |
@@ -54,14 +63,14 @@ A name has the form of a shell variable: a letter or underscore followed by lett
 
 MacLauncher sets some variables itself, such as the paths of a game's Windows environment, Android sandbox or save folders and the files that select a translator or Vulkan driver. These names are locked. A locked name cannot be added, and the editor explains why when it is typed. Locked names stay locked when another translator with the same names is also in use, so a value stored for one translator cannot replace a path that another translator's runtime sets.
 
-In a game, the locks of every translator in the table apply, because these translators run together. In Runtimes, the runtime's own translator follows the locks of every translator on the tab, since it runs with each of them, and any other translator follows its own locks. On the **MacLauncher Android** tab, `JAVA_TOOL_OPTIONS` can therefore be set for Android JVM although Android ART locks it, and `LD_PRELOAD` cannot be set for MacLauncher Android.
+In a game, the locks of every translator in the table apply, because these translators run together. In Settings, the runtime's own translator follows the locks of every translator that runs with it, including one whose values another block holds, such as ANGLE for Mac.apk, and any other translator follows its own locks. In the **MacLauncher Android** block, `JAVA_TOOL_OPTIONS` can therefore be set for Android JVM although Android ART locks it, and `LD_PRELOAD` cannot be set for MacLauncher Android.
 
 ## Order of values
 
 At launch, MacLauncher combines the values of the chosen translators in this order, and a later step replaces an earlier one:
 
 1. the translators' built-in defaults;
-2. the global values from Runtimes;
+2. the global values from Settings;
 3. the game's own values from Runtime Settings.
 
 Within each step, the runtime's own translator comes first, followed by the graphics translators and the Vulkan driver, so a variable that two translators set takes the later translator's value. A removal in a game takes away the inherited value, and the variable then keeps whatever value the launcher would give it without this setting. The combined values are applied before the variables that the launcher requires, so locked names always keep the launcher's value. Variables that the launcher sets from Runtime Settings, which the editor marks **Set by MacLauncher** in a warning color, take the combined value instead.
@@ -78,7 +87,7 @@ Each translator lists suggested variables with their effect. The **Launcher valu
 
 ### CrossOver
 
-Applies to every game that runs with CrossOver. Its global values are on the **CrossOver** tab of Runtimes.
+Applies to every game that runs with CrossOver. Its global values are in the **CrossOver** block of Settings → Environment variables.
 
 | Variable | Effect | Launcher value |
 | --- | --- | --- |
@@ -103,7 +112,7 @@ Applies to every game that runs with CrossOver. Its global values are on the **C
 
 ### Sikarugir
 
-Applies to every game that runs with Sikarugir. Its global values are on the **Sikarugir Wine** tab of Runtimes.
+Applies to every game that runs with Sikarugir. Its global values are in the **Sikarugir** block of Settings → Environment variables.
 
 | Variable | Effect | Launcher value |
 | --- | --- | --- |
@@ -131,7 +140,7 @@ Applies to every game that runs with Sikarugir. Its global values are on the **S
 
 ### D3DMetal
 
-Applies to games whose Direct3D 11 or 12 choice uses D3DMetal. Its global values are on the **D3DMetal** tab of Runtimes.
+Applies to games whose Direct3D 11 or 12 choice uses D3DMetal. Its global values are in the **D3DMetal** block of Settings → Environment variables.
 
 | Variable | Effect | Launcher value |
 | --- | --- | --- |
@@ -148,7 +157,7 @@ Applies to games whose Direct3D 11 or 12 choice uses D3DMetal. Its global values
 
 ### DXMT
 
-Applies to games whose Direct3D 10 or 11 choice uses DXMT. Its global values are on the **DXMT** tab of Runtimes.
+Applies to games whose Direct3D 10 or 11 choice uses DXMT. Its global values are in the **DXMT** block of Settings → Environment variables.
 
 | Variable | Effect | Launcher value |
 | --- | --- | --- |
@@ -166,7 +175,7 @@ Applies to games whose Direct3D 10 or 11 choice uses DXMT. Its global values are
 
 ### DXVK
 
-Applies to games whose Direct3D 8, 9, 10 or 11 choice uses DXVK, D8VK or D9VK. Its global values are on the **DXVK** tab of Runtimes.
+Applies to games whose Direct3D 8, 9, 10 or 11 choice uses DXVK, D8VK or D9VK. Its global values are in the **DXVK** block of Settings → Environment variables.
 
 | Variable | Effect | Launcher value |
 | --- | --- | --- |
@@ -190,7 +199,7 @@ For CrossOver and Sikarugir launches using DXVK's DXGI, an NVIDIA vendor overrid
 
 ### vkd3d-proton
 
-Applies to games whose Direct3D 12 choice uses vkd3d-proton. Its global values are on the **vkd3d-proton** tab of Runtimes.
+Applies to games whose Direct3D 12 choice uses vkd3d-proton. Its global values are in the **vkd3d-proton** block of Settings → Environment variables.
 
 | Variable | Effect | Launcher value |
 | --- | --- | --- |
@@ -209,7 +218,7 @@ Applies to games whose Direct3D 12 choice uses vkd3d-proton. Its global values a
 
 ### GStreamer codecs
 
-Applies to games whose video codec choice is a registered GStreamer folder. Its global values are on the **GStreamer codecs** tab of Runtimes.
+Applies to games whose video codec choice is a registered GStreamer folder. Its global values are in the **GStreamer codecs** block of Settings → Environment variables.
 
 | Variable | Effect | Launcher value |
 | --- | --- | --- |
@@ -224,7 +233,7 @@ Applies to games whose video codec choice is a registered GStreamer folder. Its 
 
 ### MoltenVK
 
-Applies to games whose Vulkan driver is MoltenVK. Its global values are on the **MoltenVK** tab of Runtimes.
+Applies to games whose Vulkan driver is MoltenVK. Its global values are in the **MoltenVK** block of Settings → Environment variables.
 
 | Variable | Effect | Launcher value |
 | --- | --- | --- |
@@ -253,7 +262,7 @@ Applies to games whose Vulkan driver is MoltenVK. Its global values are on the *
 
 ### KosmicKrisp
 
-Applies to games whose Vulkan driver is a KosmicKrisp build. Its global values are on the **KosmicKrisp** and **MacLauncher KosmicKrisp** tabs of Runtimes.
+Applies to games whose Vulkan driver is a KosmicKrisp build. Its global values are in the **KosmicKrisp** block of Settings → Environment variables, for every KosmicKrisp build.
 
 | Variable | Effect | Launcher value |
 | --- | --- | --- |
@@ -279,7 +288,7 @@ Applies to games whose Vulkan driver is a KosmicKrisp build. Its global values a
 
 ### MacLauncher Android
 
-Applies to every Android game that runs with MacLauncher Android, with either execution engine. Its global values are on the **MacLauncher Android** tab of Runtimes.
+Applies to every Android game that runs with MacLauncher Android, with either execution engine. Its global values are in the **MacLauncher Android** block of Settings → Environment variables.
 
 No variables are suggested. Any variable that is not locked can be added.
 
@@ -294,7 +303,7 @@ No variables are suggested. Any variable that is not locked can be added.
 
 ### Android JVM
 
-Applies to Android games whose execution engine is JVM. Its global values are on the **MacLauncher Android** tab of Runtimes.
+Applies to Android games whose execution engine is JVM. Its global values are in the **MacLauncher Android** block of Settings → Environment variables.
 
 | Variable | Effect | Launcher value |
 | --- | --- | --- |
@@ -312,7 +321,7 @@ Applies to Android games whose execution engine is JVM. Its global values are on
 
 ### Android ART
 
-Applies to Android games whose execution engine is ART. Its global values are on the **MacLauncher Android** tab of Runtimes.
+Applies to Android games whose execution engine is ART. Its global values are in the **MacLauncher Android** block of Settings → Environment variables.
 
 No variables are suggested. Any variable that is not locked can be added.
 
@@ -329,7 +338,7 @@ No variables are suggested. Any variable that is not locked can be added.
 
 ### Mac.apk
 
-Applies to every Android game that runs with Mac.apk. Its global values are on the **Mac.apk** tab of Runtimes.
+Applies to every Android game that runs with Mac.apk. Its global values are in the **Mac.apk** block of Settings → Environment variables.
 
 No variables are suggested. Any variable that is not locked can be added.
 
@@ -343,7 +352,7 @@ No variables are suggested. Any variable that is not locked can be added.
 
 ### ANGLE
 
-Applies to Android games, which draw OpenGL ES through ANGLE. Its global values are on the **MacLauncher Android** and **Mac.apk** tabs of Runtimes.
+Applies to Android games, which draw OpenGL ES through ANGLE. Its global values are in the **MacLauncher Android** block of Settings → Environment variables and apply to Mac.apk games as well.
 
 | Variable | Effect | Launcher value |
 | --- | --- | --- |
@@ -358,7 +367,7 @@ Applies to Android games, which draw OpenGL ES through ANGLE. Its global values 
 
 ### AnyPS5
 
-Applies to every PlayStation 5 game that runs with AnyPS5. Its global values are on the **AnyPS5** tab of Runtimes.
+Applies to every PlayStation 5 game that runs with AnyPS5. Its global values are in the **AnyPS5** block of Settings → Environment variables.
 
 | Variable | Effect | Launcher value |
 | --- | --- | --- |
@@ -373,7 +382,7 @@ Applies to every PlayStation 5 game that runs with AnyPS5. Its global values are
 
 ### Prosper
 
-Applies to every PlayStation 5 game that runs with Prosper. Its global values are on the **Prosper** tab of Runtimes.
+Applies to every PlayStation 5 game that runs with Prosper. Its global values are in the **Prosper** block of Settings → Environment variables.
 
 No variables are suggested. Any variable that is not locked can be added.
 

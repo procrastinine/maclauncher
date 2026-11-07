@@ -669,7 +669,7 @@ test('dependent runtime fields follow metadata in both scopes and retain hidden 
     ['rgss', 'mkxpz', 'MJIT max cache', { JITEnable: false, JITMaxCache: 200 }, { JITEnable: true }],
     ['rgss', 'mkxpz', 'Bicubic sharpness', { smoothScaling: '0', smoothScalingDown: '0', bitmapSmoothScaling: '0', bitmapSmoothScalingDown: '0', bicubicSharpness: 75 }, { bitmapSmoothScalingDown: '2' }],
     ['easyrpg', 'easyrpg', 'MIDI soundfont', { noAudio: true, soundfont: '/MIDI.sf2' }, { noAudio: false }],
-    ['crossover', 'sikarugir', 'Game temporal integration', { graphicsBackend: 'dxvk', dlss: true }, { graphicsBackend: 'dxmt' }],
+    ['crossover', 'sikarugir', 'Game temporal integration', { graphicsBackend: 'wined3d', dlss: true }, { graphicsBackend: 'dxvk' }],
     ['gamemaker', 'official-studio', 'Graphics helper', { softwareOpenGLFallback: 'disabled', graphicsHelperVersion: 'software-gl-v5-universal' }, { softwareOpenGLFallback: 'auto' }]
   ];
   for (const [moduleId, runtimeId, label, hidden, enabled] of cases) for (const scope of ['module', 'game']) {

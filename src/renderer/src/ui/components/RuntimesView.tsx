@@ -14,7 +14,7 @@ import {
 import { DownloadIcon, RefreshIcon, TrashIcon } from "../icons";
 import { groupRuntimeManagers, resolveRuntimeTabSelection, runtimeGroupSections, runtimeSectionTabs,
   runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation,
-  runtimeRemovalPresentation, runtimeMinimumNotice, runtimeInstallVersion, isRuntimeIncluded, isRuntimeManageable, isRuntimeSetupPending,
+  runtimeRemovalPresentation, runtimeMinimumNotice, runtimeInstallVersion, isRuntimeIncluded, isRuntimeSetupPending,
   translatorInstallBuild, translatorInstallRequirement } from "./runtime-tabs-model";
 import type { RuntimeTabGroup, RuntimeTabSection, RuntimeSectionTab } from "./runtime-tabs-model";
 import { HelpTip } from "./HelpTip";
@@ -32,6 +32,7 @@ import { PluginLibrary } from "./PluginLibrary";
 import type { RuntimeSettingsApi } from "./RuntimeSettingsWindow";
 import { EffectsPresetManager } from "./EffectsPresetManager";
 import { ComponentsView } from "./ComponentsView";
+import { componentSizeText } from "./components-model";
 import { cpuLabel } from "../../../../core/cpu-labels.mjs";
 import { useGraphicsCatalog } from "../useGraphicsCatalog";
 import { ErrorText } from "./ErrorText";
@@ -146,14 +147,9 @@ export function RuntimesView({
   onCancelDownload,
   onOpenSource
 }: RuntimesViewProps) {
-  const presentedManagers = useMemo(() => presentRuntimeManagers(withLauncherLibraries(runtimeManagers)), [runtimeManagers]);
-  const runtimeGroups = useMemo(() => groupRuntimeManagers(presentedManagers, runtimeCategories), [presentedManagers]);
-  // A manager without a row of its own is managed in Downloaded files.
-  const componentsLibrary = presentedManagers.find(manager => manager.ui?.library === "components");
-  const requestedManagerId = componentsLibrary && presentedManagers.some(manager => manager.id === runtimeManagerId && !isRuntimeManageable(manager))
-    ? componentsLibrary.id : runtimeManagerId;
-  const selection = useMemo(() => resolveRuntimeTabSelection(runtimeGroups, requestedManagerId,
-    runtimeSectionId, resolveRuntimeSections), [runtimeGroups, requestedManagerId, runtimeSectionId]);
+  const runtimeGroups = useMemo(() => groupRuntimeManagers(presentRuntimeManagers(withLauncherLibraries(runtimeManagers)), runtimeCategories), [runtimeManagers]);
+  const selection = useMemo(() => resolveRuntimeTabSelection(runtimeGroups, runtimeManagerId,
+    runtimeSectionId, resolveRuntimeSections), [runtimeGroups, runtimeManagerId, runtimeSectionId]);
   const activeRuntimeGroup = selection.group;
   const activeRuntimeChoices = selection.sections;
   const componentGroup = Boolean(activeRuntimeGroup?.managers.some(manager => manager.ui?.componentGroup));
@@ -286,6 +282,18 @@ export function RuntimesView({
     const label = task.detail || (task.version ? `v${task.version}` : task.label);
     return percent !== null ? `Downloading ${label} · ${percent}%` : `Downloading ${label}`;
   }, [activeRuntimeDownloads]);
+  // Each installed version shows its size on disk; the backend measures the
+  // shown manager's folders inside the profile while the section is open.
+  const [installSizes, setInstallSizes] = useState<Record<string, { bytes: number; complete: boolean }>>({});
+  const installDirs = activeRuntimeInstalled.map(install => install.installDir).filter(Boolean).join("\n");
+  useEffect(() => {
+    const api = typeof window === "undefined" ? undefined : window.MacLauncher?.launcher;
+    if (!activeRuntimeManager?.id || !installDirs || !api?.componentAction) return;
+    let current = true;
+    api.componentAction("sizes", { managerId: activeRuntimeManager.id })
+      .then(result => { if (current) setInstallSizes(previous => ({ ...previous, ...result?.sizes })); }).catch(() => {});
+    return () => { current = false; };
+  }, [activeRuntimeManager?.id, installDirs]);
   const activeRuntimeDefaultVariantLabel = activeRuntimeHasMultipleVariants
     ? activeRuntimeVariants.find(
         (variant: any) => variant.id === activeRuntimeSection?.defaultVariant
@@ -681,6 +689,8 @@ export function RuntimesView({
                                   {(!isRuntimeIncluded(inst) || inst.reference) && inst.installDir && <p className="mono">{inst.installDir}</p>}
                                 </HelpTip>}
                               </div>
+                              {inst.installDir && installSizes[inst.installDir] && <div className="dim" data-runtime-size="true">
+                                {componentSizeText({ path: inst.installDir, bytes: installSizes[inst.installDir].bytes, sizeComplete: installSizes[inst.installDir].complete })}</div>}
                               {apis.length > 0 && <div className="dim">{apis.join(", ")}</div>}
                               {typeof inst.componentSummary === "string" && inst.componentSummary &&
                                 <div className="dim" data-runtime-components="true">Includes {inst.componentSummary}</div>}

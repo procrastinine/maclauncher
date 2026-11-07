@@ -488,6 +488,8 @@
   },
   { "label": "DXVK", "url": "https://github.com/doitsujin/dxvk" },
   { "label": "DXVK-macOS", "url": "https://github.com/Gcenx/DXVK-macOS" },
+  { "label": "DXVK-NVAPI (MIT)", "url": "https://github.com/jp7677/dxvk-nvapi" },
+  { "label": "VKD3D-Proton-MacOS (NGX core of Vulkan DLSS forwarding)", "url": "https://github.com/metalsharp/VKD3D-Proton-MacOS" },
   { "label": "D8VK", "url": "https://github.com/AlpyneDreams/d8vk" },
   { "label": "D9VK", "url": "https://github.com/misyltoad/d9vk" },
   { "label": "vkd3d-proton", "url": "https://github.com/HansKristian-Work/vkd3d-proton" },

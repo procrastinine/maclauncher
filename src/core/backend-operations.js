@@ -356,7 +356,7 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     },
     // Runtimes → Components: list, remove, import and reveal; see component-service.js.
     async componentAction(action, payload) {
-      if (!["list", "remove", "import", "reveal"].includes(action)) throw new Error("Unknown component action.");
+      if (!["list", "remove", "import", "reveal", "sizes", "refresh"].includes(action)) throw new Error("Unknown component action.");
       if (shuttingDown) throw createAbortError("Launcher is closing.");
       components ||= require("./component-service").createComponentService({ userDataDir, registry, logger, callHost, downloads,
         confirmRuntimeInstall: plan => callHost("confirmRuntimeInstall", plan),

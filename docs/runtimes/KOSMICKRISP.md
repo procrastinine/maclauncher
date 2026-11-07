@@ -70,7 +70,7 @@ A MacLauncher KosmicKrisp package is installed only after its archive matches th
 
 Upstream KosmicKrisp keeps compiled pipelines across launches only through the `VkPipelineCache` data that an application or translator stores itself. MacLauncher KosmicKrisp also caches the Metal Shading Language that it generates from each shader and the Metal libraries compiled from that source, so a shader that was already translated and compiled is reused instead of being processed again. For Wine games, CrossOver and Sikarugir point Mesa's shader cache to `cache/mesa` in the game's MacLauncher runtime directory through `MESA_SHADER_CACHE_DIR`, apart from the bottle and the Wine home. KosmicKrisp derives the pipeline cache UUID from its driver build, so cache data from a different build is not reused. In MacLauncher KosmicKrisp, shader cache keys also record the enabled device features that change shader compilation.
 
-The per-game Mesa cache defaults to a `4G` budget through `MESA_SHADER_CACHE_MAX_SIZE`. An explicit value in **Runtimes**, a game's **Runtime Settings**, or an external Wine environment is preserved. KosmicKrisp's [translator environment variables](TRANSLATOR_ENVIRONMENT.md#kosmickrisp) accept values such as `8G` or `512M`. Launches without the per-game Mesa cache receive no cache-budget default.
+The per-game Mesa cache defaults to a `4G` budget through `MESA_SHADER_CACHE_MAX_SIZE`. An explicit value in **Settings → Environment variables**, a game's **Runtime Settings**, or an external Wine environment is preserved. KosmicKrisp's [translator environment variables](TRANSLATOR_ENVIRONMENT.md#kosmickrisp) accept values such as `8G` or `512M`. Launches without the per-game Mesa cache receive no cache-budget default.
 
 ### Temporal frames
 
@@ -243,7 +243,7 @@ In performance mode, an entry is off only when turning it off lowers no Direct3D
 
 For example, vkd3d-proton reports shader model 6.2 and later only when FP32 flush-to-zero, FP32 denormal preservation and independent denormal controls are all reported. Disabling either denormal entry limits vkd3d-proton to shader model 6.1, so both entries stay on in performance mode.
 
-`KK_EMULATION` is set like the other KosmicKrisp variables, globally in **Runtimes** or for one game in its **Runtime Settings**, as [translator environment variables](TRANSLATOR_ENVIRONMENT.md) describes. AnyPS5 sets a value of its own unless the game sets one ([PlayStation 5](../game-types/PS5.md)).
+`KK_EMULATION` is set like the other KosmicKrisp variables, globally in **Settings → Environment variables** or for one game in its **Runtime Settings**, as [translator environment variables](TRANSLATOR_ENVIRONMENT.md) describes. AnyPS5 sets a value of its own unless the game sets one ([PlayStation 5](../game-types/PS5.md)).
 
 ### Syntax
 
@@ -429,7 +429,7 @@ Apple's tables list tessellation (Apple3) under the Metal 3 programming model on
 
 ## Environment variables
 
-KosmicKrisp variables have global values in **Runtimes** and per-game values in **Runtime Settings**. [Translator environment variables](TRANSLATOR_ENVIRONMENT.md#kosmickrisp) lists the Mesa and KosmicKrisp variables that both builds read, among them `MESA_KK_DEBUG`, `MESA_KK_EXPERIMENTAL` and the Metal GPU capture variables. MacLauncher KosmicKrisp also reads the following:
+KosmicKrisp variables have global values in **Settings → Environment variables**, shared by both builds, and per-game values in **Runtime Settings**. [Translator environment variables](TRANSLATOR_ENVIRONMENT.md#kosmickrisp) lists the Mesa and KosmicKrisp variables that both builds read, among them `MESA_KK_DEBUG`, `MESA_KK_EXPERIMENTAL` and the Metal GPU capture variables. MacLauncher KosmicKrisp also reads the following:
 
 | Variable | Effect |
 | --- | --- |

@@ -1094,4 +1094,14 @@ function upstreamPins(rows) {
 function createPinnedNativeManager(options) {
   return require("./architecture-manager").createArchitectureManager(options, createSingleArchitectureManager);
 }
-module.exports = { createPinnedNativeManager, hashFile, compareRuntimeVersions, upstreamPins };
+// A plain description of what a manager's downloads do, shown with each of
+// its Runtimes sections.
+function withDescription(manager, description) {
+  const getState = manager.getState;
+  return { ...manager, getState(...args) {
+    const state = getState.apply(this, args);
+    return state && { ...state, sections: (state.sections || []).map(section => ({ description, ...section })) };
+  } };
+}
+
+module.exports = { createPinnedNativeManager, hashFile, compareRuntimeVersions, upstreamPins, withDescription };

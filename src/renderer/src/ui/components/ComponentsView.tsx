@@ -62,6 +62,11 @@ export function ComponentsView({ api: suppliedApi, navigationKey, initial }: {
     if (!api) return;
     await act("import", async () => { const added = await api.componentAction("import"); return added ? `Added ${added.label}.` : ""; });
   }
+  // A component whose versions come from a catalog reads it on Refresh.
+  async function refresh(component: ComponentEntry) {
+    if (!api) return;
+    await act(`refresh:${component.id}`, async () => await api.componentAction("refresh", { componentId: component.id }));
+  }
   async function reveal(component: ComponentEntry, item: ComponentItem) {
     if (!api) return;
     try { await api.componentAction("reveal", { componentId: component.id, itemId: item.id }); }
@@ -69,6 +74,9 @@ export function ComponentsView({ api: suppliedApi, navigationKey, initial }: {
   }
 
   const rows = componentRows(list), unused = unusedComponentRows(rows);
+  // One Refresh per catalog, on the first row of its component.
+  const refreshRows = new Set(rows.filter(row => row.component.refreshable).filter((row, index, all) =>
+    all.findIndex(other => other.component.id === row.component.id) === index).map(row => `${row.component.id}:${row.item.id}`));
   const failed = (list?.components || []).filter(component => component.error);
   return <div className="runtimeTabPanel componentsView" id="runtime-panel-components">
     <div className="runtimePanel">
@@ -116,6 +124,9 @@ export function ComponentsView({ api: suppliedApi, navigationKey, initial }: {
                 {!item.removable && item.removeReason && <div className="dim">{item.removeReason}</div>}
               </div>
               <div className="saveRowActions">
+                {refreshRows.has(`${component.id}:${item.id}`) && <button type="button"
+                  className={`btn iconOnly runtimeRefresh${busy === `refresh:${component.id}` ? " refreshing" : ""}`} disabled={Boolean(busy)}
+                  title={`Refresh ${component.label}`} aria-label={`Refresh ${component.label}`} onClick={() => void refresh(component)}><RefreshIcon /></button>}
                 {item.path && <button type="button" className="btn iconOnly" disabled={Boolean(busy)} title="Show in Finder"
                   aria-label={`Show ${name} in Finder`} onClick={() => void reveal(component, item)}><FolderIcon /></button>}
                 <button type="button" className="btn iconOnly danger" disabled={Boolean(busy) || !item.removable}

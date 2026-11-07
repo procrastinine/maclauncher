@@ -43,53 +43,21 @@ test("every declaration follows the contract and lists an empty profile offline"
   assert.ok(listed.components.every(row => row.error === null && Array.isArray(row.items) && row.items.length === 0));
 });
 
-// Downloaded files is the only management view of a manager without a Runtimes row.
-test("every registry runtime manager without a Runtimes row is listed in Downloaded files", async () => {
-  const { hasRuntimesRow } = await import("../src/modules/shared/runtime/runtime-rows.mjs");
+// Downloaded files lists only downloads without a runtime manager: every
+// registry manager is managed, refreshed and removed in a Runtimes row of its own.
+test("every registry runtime manager has its own Runtimes row with Refresh and Remove", () => {
   const managers = [...registry.listModuleIds().flatMap(id => registry.getModule(id)?.runtimeManagers || []), ...registry.listSharedRuntimeManagers()];
-  const rowless = [...new Set(managers.filter(manager => !hasRuntimesRow(registry.getRuntimeManagerUi(manager.id) || manager.ui)).map(manager => manager.id))];
-  for (const id of ["dxvk-nvapi", "vkd3d-proton", "maclauncher-crossover-winemac", "winevulkan-scene", "fidelityfx-api", "vulkan-moltenvk-scene"])
-    assert.ok(rowless.includes(id), id);
-  const listed = new Map(Service.declarations(registry).filter(component => component.managerId).map(component => [component.managerId, component]));
-  assert.deepEqual(rowless.filter(id => !listed.has(id)), []);
-  for (const id of rowless) assert.ok(listed.get(id).description, `${id} describes itself in componentInfo`);
-  const withRows = managers.filter(manager => hasRuntimesRow(registry.getRuntimeManagerUi(manager.id) || manager.ui)).map(manager => manager.id);
-  assert.deepEqual(withRows.filter(id => listed.has(id)), [], "a manager with its own row is not listed twice");
-});
-
-test("a runtime manager without a Runtimes row is listed from the registry without a declaration", async t => {
-  const root = temporary(t), actions = [];
-  const row = (name, extra = {}) => {
-    const installDir = path.join(root, name);
-    fs.mkdirSync(installDir); fs.writeFileSync(path.join(installDir, "library.dll"), Buffer.alloc(4096));
-    return { version: "1.2", architecture: "x64", architectures: ["x86_64"], installDir, assetUrl: `https://example.test/${name}.tar.gz`, ...extra };
-  };
-  const rows = { helper: row("helper"), library: row("library"), included: row("included", { version: "1.0", included: true }), runtime: row("runtime") };
-  const helper = { id: "fixture-helper", label: "Fixture helper", ui: { hidden: true }, getState: () => ({ installed: [rows.helper] }) };
-  const library = { id: "fixture-library", label: "Fixture library", ui: { management: "built-in" },
-    componentInfo: { description: "A fixture library.", users: ["Fixture effects"], windows: true },
-    getState: () => ({ sections: [{ id: "default", installed: [rows.library, rows.included] }] }) };
-  const listedRuntime = { id: "fixture-runtime", label: "Fixture runtime", ui: { management: "managed" }, getState: () => ({ installed: [rows.runtime] }) };
-  const fake = { listModuleIds: () => ["alpha", "beta"], getModule: id => ({ runtimeManagers: id === "alpha" ? [helper, listedRuntime] : [helper] }),
-    getModuleInfo: id => ({ alpha: { label: "Alpha Game", shortLabel: "Alpha" }, beta: { label: "Beta" } })[id],
-    listSharedRuntimeManagers: () => [library], getRuntimeManagerUi: () => null, listComponents: () => [] };
-  const service = Service.createComponentService({ userDataDir: root, registry: fake, logger: { warn() {} },
-    runtimeAction: async (...args) => { actions.push(args); return true; } });
-  const { components } = await service.list();
-  assert.equal(components.some(component => component.id === "fixture-runtime"), false);
-  const shown = Object.fromEntries(components.filter(component => component.id.startsWith("fixture-")).map(component => [component.id, component]));
-  assert.deepEqual(Object.keys(shown), ["fixture-helper", "fixture-library"]);
-  assert.equal(shown["fixture-helper"].owner, "alpha");
-  assert.deepEqual(shown["fixture-helper"].items.map(item => [item.version, item.architecture, item.windows, item.users, item.removable]),
-    [["1.2", "x64", false, ["Alpha games", "Beta games"], true]]);
-  assert.equal(shown["fixture-library"].owner, "shared");
-  assert.equal(shown["fixture-library"].description, "A fixture library.");
-  assert.deepEqual(shown["fixture-library"].items.map(item => [item.version, item.windows, item.users]), [["1.2", true, ["Fixture effects"]]]);
-  assert.ok(shown["fixture-helper"].items[0].bytes >= 4096);
-  assert.deepEqual(shown["fixture-helper"].items[0].source, { url: "https://example.test/helper.tar.gz", label: null });
-  assert.equal(await service.remove({ componentId: "fixture-helper", itemId: shown["fixture-helper"].items[0].id }), true);
-  assert.deepEqual(actions, [["fixture-helper", "uninstall", { sectionId: "default", version: "1.2", architecture: "x64", variant: undefined,
-    platformKey: undefined, installDir: path.join(root, "helper") }]]);
+  const rowless = [...new Set(managers.filter(manager => {
+    const ui = registry.getRuntimeManagerUi(manager.id) || manager.ui || {};
+    return ui.hidden === true || ui.management === "built-in";
+  }).map(manager => manager.id))];
+  assert.deepEqual(rowless, []);
+  for (const manager of managers) {
+    assert.equal(typeof manager.refreshCatalog, "function", `${manager.id} refreshes its catalog`);
+    assert.equal(typeof (manager.uninstallRuntime || manager.uninstall), "function", `${manager.id} removes its downloads`);
+  }
+  const declared = new Set(Service.declarations(registry).map(component => component.managerId).filter(Boolean));
+  assert.deepEqual([...declared], [], "no runtime manager is listed twice");
 });
 
 function fakeRegistry(components) {
@@ -270,4 +238,53 @@ test("a shared runtime library stays while an installed runtime declares it and 
   assert.deepEqual([unused.users, unused.removable], [[], true]);
   await service.remove({ componentId: "shared-package-dependencies", itemId: unused.id });
   assert.equal(fs.existsSync(store), false);
+});
+
+test("a component with a catalog offers Refresh, and a Runtimes row measures its installed versions inside the profile", async t => {
+  const root = temporary(t), outside = temporary(t), refreshed = [];
+  const component = { id: "catalogued", label: "Catalogued", list: () => [], async refresh(context) { refreshed.push(Boolean(context.userDataDir)); return "Newest: 2.0."; } };
+  const inside = path.join(root, "runtimes", "fixture", "1.0");
+  fs.mkdirSync(inside, { recursive: true }); fs.writeFileSync(path.join(inside, "runtime.bin"), Buffer.alloc(8192));
+  const manager = { id: "fixture", getState: () => ({ sections: [{ id: "default", installed: [{ version: "1.0", installDir: inside }, { version: "2.0", installDir: outside }] }] }) };
+  const service = Service.createComponentService({ userDataDir: root, logger: { warn() {} },
+    registry: { ...fakeRegistry([component, { id: "plain", label: "Plain", list: () => [] }]), listSharedRuntimeManagers: () => [manager] } });
+  const { components } = await service.list();
+  assert.deepEqual(components.filter(row => row.owner === "fixture").map(row => [row.id, row.refreshable]), [["catalogued", true], ["plain", false]]);
+  assert.equal(await service.refresh({ componentId: "catalogued" }), "Newest: 2.0.");
+  assert.deepEqual(refreshed, [true]);
+  await assert.rejects(service.refresh({ componentId: "plain" }), /no catalog/);
+  const { sizes } = await service.sizes({ managerId: "fixture" });
+  assert.deepEqual(Object.keys(sizes), [inside], "a registered folder outside the profile is not measured");
+  assert.ok(sizes[inside].bytes >= 8192); assert.equal(sizes[inside].complete, true);
+  await assert.rejects(service.sizes({ managerId: "missing" }), /not found/);
+});
+
+test("Android system images, microG packages and store catalogs are listed and removed in their own stores", async t => {
+  const root = temporary(t), sha = "a".repeat(64);
+  const image = path.join(root, "android", "system-images", sha);
+  fs.mkdirSync(path.join(image, "mounted"), { recursive: true });
+  fs.writeFileSync(path.join(image, "image.json"), JSON.stringify({ schemaVersion: 1, archiveSha256: sha }));
+  fs.writeFileSync(path.join(image, "system.dmg"), Buffer.alloc(4096));
+  const release = path.join(root, "android", "google", "packages", "0.3.9");
+  fs.mkdirSync(release, { recursive: true });
+  fs.writeFileSync(path.join(release, "release.json"), JSON.stringify({ version: "0.3.9", releaseUrl: "https://github.com/microg/GmsCore/releases/tag/v0.3.9", packages: [] }));
+  fs.mkdirSync(path.join(root, "external", "catalogs", "fdroid"), { recursive: true });
+  fs.mkdirSync(path.join(root, "steam", "accounts", "abc", "catalog"), { recursive: true });
+  const service = Service.createComponentService({ userDataDir: root, registry, logger: { warn() {} } });
+  const listed = Object.fromEntries((await service.list()).components.map(row => [row.id, row]));
+  const [systemImage] = listed["android-system-images"].items;
+  assert.equal(systemImage.identity, `SHA-256 ${sha}`); assert.equal(systemImage.removable, true); assert.ok(systemImage.bytes >= 4096);
+  assert.deepEqual(listed["android-google-packages"].items.map(item => [item.version, item.source.url]), [["microG 0.3.9", "https://github.com/microg/GmsCore/releases/tag/v0.3.9"]]);
+  assert.equal(listed["android-google-packages"].refreshable, true);
+  assert.deepEqual(listed["android-store-catalogs"].items.map(item => item.version), ["F-Droid index"]);
+  assert.deepEqual(listed["steam-catalogs"].items.map(item => item.id), [path.join("accounts", "abc", "catalog")]);
+  // An image attached for a running game stays.
+  fs.mkdirSync(path.join(image, "mounted", "system"));
+  const attached = (await service.list()).components.find(row => row.id === "android-system-images").items[0];
+  assert.equal(attached.removable, false); assert.match(attached.removeReason, /running Android game/);
+  fs.rmdirSync(path.join(image, "mounted", "system"));
+  for (const [componentId, itemId, location] of [["android-system-images", sha, image], ["android-google-packages", "0.3.9", release],
+    ["android-store-catalogs", "fdroid", path.join(root, "external", "catalogs", "fdroid")]]) {
+    assert.equal(await service.remove({ componentId, itemId }), true); assert.equal(fs.existsSync(location), false, componentId);
+  }
 });

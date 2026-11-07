@@ -3,7 +3,7 @@ const { usedForApi } = require('../../shared/runtime/translator-roles');
 const { readPeExports } = require('../../shared/runtime/pe-exports');
 const { fileDigest, fileIdentity } = require('../../shared/runtime/verified-identity');
 const Bundled = require('../../shared/runtime/bundled-native');
-const { createPinnedNativeManager, upstreamPins } = require('../../shared/runtime/pinned-native-manager');
+const { createPinnedNativeManager, upstreamPins, withDescription } = require('../../shared/runtime/pinned-native-manager');
 const { createProjectBuildManager } = require('../../shared/runtime/project-build-manager');
 const Upstream = require('../../shared/runtime/upstream');
 const { archiveFormat } = require('../../shared/runtime/release-files');
@@ -45,13 +45,13 @@ function createManagers(dependencies = {}) {
     async verifyPayload(selected) { Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency); },
     inspectRuntime({ runtimePath }) { if (readPeExports(runtimePath)?.machine !== 0x8664) throw Error('The NGX core requires x64.'); return { executablePath: runtimePath, architectures: ['x86_64'], needsRosetta: false }; }, dependencies });
   ngx.translatorEngine='vkd3d-proton'; // The managed package also supplies its matched carrier producer as a normal translator choice.
-  // Downloaded files lists both Windows libraries (core/component-service.js).
+  // Both rows sit beside DXVK and vkd3d-proton in DirectX → Vulkan.
   const info = {
     'dxvk-nvapi': "DXVK-NVAPI's nvapi64.dll. It presents an NVIDIA adapter to a Windows game that uses DXVK, so that the game's DLSS integration can start. Play offers it, after consent, with Vulkan DLSS forwarding.",
     'vkd3d-proton': "The NGX core, nvngx.dll, from MacLauncher Builds' VKD3D-Proton-MacOS package. It forwards a Windows game's DLSS inputs to the selected Vulkan driver's temporal carrier. Play offers it, after consent, with DXVK-NVAPI."
   };
-  return [nvapi, ngx].map(manager => ({ ...manager, distributionRequired: false, ui: { hidden: true, management: 'managed' },
-    componentInfo: { users: ['DLSS forwarding in CrossOver and Sikarugir games'], windows: true, description: info[manager.id] } }));
+  return [nvapi, ngx].map((manager, index) => ({ ...withDescription(manager, info[manager.id]), distributionRequired: false,
+    ui: { groupId: 'directx-vulkan', sectionLabel: manager.label, memberOrder: 5 + index, management: 'managed' } }));
 }
 const managers = createManagers();
 const carrierFiles=new Map();

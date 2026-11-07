@@ -3,7 +3,6 @@ import { sanitizeErrorMessage } from "../../../../core/runtime-errors.mjs";
 import packageInfo from "../../../../../package.json";
 import { isPrereleaseVersion } from "../ui-helpers";
 import { cpuId } from "../../../../core/cpu-labels.mjs";
-import { hasRuntimesRow } from "../../../../modules/shared/runtime/runtime-rows.mjs";
 
 // Shared by initial UI state and the source/import controls. An explicit
 // choice stays selected; automatic choices prefer stable published releases.
@@ -94,7 +93,8 @@ export function runtimeCatalogSources(catalog: Record<string, any> | null | unde
 }
 
 export function isRuntimeManageable(manager: RuntimeManagerState | null | undefined, sectionId?: string | null): boolean {
-  return Boolean(manager) && hasRuntimesRow(manager!.ui, sectionId);
+  if (!manager || manager.ui?.hidden === true || manager.ui?.management === "built-in") return false;
+  return !sectionId || manager.ui?.sectionManagement?.[sectionId] !== "built-in";
 }
 
 export function managedRuntimeSections(manager: RuntimeManagerState,

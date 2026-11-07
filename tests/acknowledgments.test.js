@@ -22,6 +22,8 @@ test('every registered runtime manager has a linked upstream project in Credits'
     'browser-woditor': 'https://frostyhowl.com/browser-woditor/',
     butterscotch: 'https://github.com/ButterscotchRunner/Butterscotch',
     crossover: 'https://www.codeweavers.com/crossover',
+    'dxvk-nvapi': 'https://github.com/jp7677/dxvk-nvapi',
+    'vkd3d-proton': 'https://github.com/metalsharp/VKD3D-Proton-MacOS',
     'maclauncher-steam-bridge': 'https://github.com/ValveSoftware/Proton',
     easyrpg: 'https://github.com/EasyRPG/Player',
     ffdec: 'https://github.com/jindrapetrik/jpexs-decompiler',
@@ -112,7 +114,9 @@ test('every registered runtime manager has a linked upstream project in Credits'
   const { definitions } = require('../src/modules/shared/runtime/translator-managers');
   for (const manager of new Map(managers.map(manager => [manager.id, manager])).values()) {
     const { id } = manager;
-    if (definitions[manager.translatorEngine]) {
+    // Translator managers link each source they declare; another manager that
+    // supplies a translator choice, such as the NGX core, links its upstream.
+    if (definitions[manager.translatorEngine] && id === `translator-${manager.translatorEngine}`) {
       const catalog = manager.getState().catalog;
       const sources = [...(catalog.sources || [catalog]).flatMap(source => [source.sourceUrl,
         ...(source.variants || []).map(variant => variant.catalog.sourceUrl)]), ...(catalog.sourceLinks || []).map(source => source.url)];

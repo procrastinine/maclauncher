@@ -229,7 +229,7 @@ test('CrossOver and Sikarugir manage one shared DXMT support download under Dire
   assert.doesNotMatch(markup, /DXMT · support/);
   for (const engine of engines) assert.doesNotMatch(render([...engines, bridge], engine.id), /class="runtimePanelTitle">DXMT<\/div>/, `${engine.id}: no separate copy`);
 });
-test('inactive scene adapters stay internally managed without Graphics tabs or phantom Presets', () => {
+test('scene adapters are managed downloads with their own rows', () => {
   const registry = require('../src/modules/registry');
   const providerUi = require('../src/modules/shared/reshade/runtime/provider-library-ui.json');
   const adapters = [...Object.values(require('../src/modules/crossover/temporal/support-manager').apiManagers),
@@ -238,29 +238,20 @@ test('inactive scene adapters stay internally managed without Graphics tabs or p
   const registered = new Set([...registry.listSharedRuntimeManagers(),
     ...registry.listModules().flatMap(module => registry.getModule(module.id).runtimeManagers || [])].map(source => source.id));
   for (const source of adapters) {
-    assert.ok(registered.has(source.id), `${source.id}: internal registration remains available`);
+    assert.ok(registered.has(source.id), `${source.id}: registered`);
     assert.equal(source.ui.management, 'managed');
-    assert.equal(providerUi[source.id].hidden, true);
-    for (const action of ['getState', 'refreshCatalog', 'installRuntime', 'resolveSelection'])
-      assert.equal(typeof source[action], 'function', `${source.id}: ${action} remains available internally`);
+    assert.equal(source.ui.hidden, undefined, `${source.id}: not hidden`);
+    assert.equal(providerUi[source.id], undefined, `${source.id}: no provider override hides it`);
+    for (const action of ['getState', 'refreshCatalog', 'installRuntime', 'uninstallRuntime', 'resolveSelection'])
+      assert.equal(typeof source[action], 'function', `${source.id}: ${action}`);
   }
-  const active = manager('graphics-models', { groupId: 'graphics', tabLabel: 'Graphics',
-    sectionLabel: 'Lossless Scaling', management: 'managed' }, { versions: ['installed-model'] }, [{ version: 'installed-model', ready: true }]);
-  for (const uiFor of [source => source.ui, () => undefined,
-    () => ({ groupId: 'graphics', tabLabel: 'Graphics', management: 'managed', hidden: false })]) {
-    const runtimes = adapters.map(source => ({ ...manager(source.id, uiFor(source)), label: source.label }));
-    const before = structuredClone(runtimes);
-    const hidden = render(runtimes);
-    assert.doesNotMatch(hidden, /class="launcherSidebarItem[^>]*>Effects<\/button>|runtime-group-panel-graphics|runtime-panel-graphics-presets/);
-    for (const source of adapters) assert.ok(!hidden.includes(source.label), `${source.id}: no inactive adapter tab`);
-    const markup = render([...runtimes, active], runtimes[0].id);
-    assert.match(markup, /class="launcherSidebarItem[^>]*>Effects<\/button>/);
-    assert.match(markup, /id="runtime-group-panel-graphics"/);
-    assert.deepEqual(sectionTabLabels(markup), ['Providers', 'Presets']);
-    assert.match(markup, /id="runtime-panel-graphics-models-default"/);
-    for (const source of adapters) assert.ok(!markup.includes(source.label), `${source.id}: active Graphics does not reveal inactive adapters`);
-    assert.deepEqual(runtimes, before, 'Current hidden metadata does not mutate cached identities or installation state');
-  }
+  const runtimes = adapters.map(source => ({ ...manager(source.id, source.ui), label: source.label }));
+  const before = structuredClone(runtimes);
+  const markup = render(runtimes);
+  assert.match(markup, /class="launcherSidebarItem[^>]*>Effects<\/button>/);
+  assert.match(markup, /class="launcherSidebarItem[^>]*>Vulkan drivers<\/button>/);
+  for (const source of adapters) assert.ok(render(runtimes, source.id).includes(`id="runtime-panel-${source.id}-default"`), `${source.id}: own row`);
+  assert.deepEqual(runtimes, before, 'Rendering does not mutate cached identities or installation state');
 });
 test('Settings and Credits use plain native-window content without HTML close or navigation controls', () => {
   const fixture = require('./library-layout-fixture').createLibraryFixture();

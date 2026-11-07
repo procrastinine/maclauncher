@@ -2,13 +2,12 @@ const fs = require("node:fs"), path = require("node:path");
 const Architecture = require("../modules/shared/runtime/architecture");
 
 // Runtimes → Tools → Downloaded files lists every downloaded file that has no
-// row of its own in Runtimes: small helpers, shared assets, packages of
-// runtimes without a list and caches the launcher fills. Core services declare
+// row of its own in Runtimes: small helpers, shared assets and caches the
+// launcher fills. Every registry runtime manager has a Runtimes row of its own,
+// with Refresh and Remove, so none is declared here. Core services declare
 // theirs in core/components.js; a module or shared namespace declares its own
-// in an optional components.js beside it (registry.listComponents()). Every
-// runtime manager the registry knows whose versions have no Runtimes row
-// (shared/runtime/runtime-rows.mjs) is listed as well, without a declaration;
-// see managerComponents below. A declaration:
+// in an optional components.js beside it (registry.listComponents()). A
+// declaration:
 //   id, label, description  stable identity and plain-language name
 //   list(context)            installed items, from local files only
 //   remove(item, context)    optional; deletes one item. The owner downloads it
@@ -19,52 +18,23 @@ const Architecture = require("../modules/shared/runtime/architecture");
 //                            again while it installs it, without network access,
 //                            and throws a plain reason when it differs
 //   cache                    optional; true for data the launcher recreates
+//   refresh(context)         required when the component's versions come from a
+//                            catalog; reads the catalog on an explicit Refresh
+//                            and returns a plain message. It downloads nothing
 // An item: { id, version, identity, architecture, windows, path, source, users,
 // status, removable, removeReason }. `source` is { url } or { label }, or
 // "manual" for an item added by hand; `users` names the runtimes or games that
 // load it; `windows` marks Windows code, whose CPU is named as Windows names it.
 // Sizes, Show in Finder, Add from file and the listing itself are generic.
+// sizes({ managerId }) also measures the installed versions of one runtime
+// manager for its Runtimes row: only folders inside the profile, each measured
+// once while its folder is unchanged.
 const ENTRY_LIMIT = 200000;
 const text = (value, limit = 512) => typeof value === "string" ? value.replace(/[\x00-\x1f\x7f]+/g, " ").trim().slice(0, limit) : "";
 
-// The registry's runtime managers in the order main lists them: module
-// managers first, then shared ones, the first manager of an id applying. Each
-// keeps the modules that declare it.
-function registryManagers(registry) {
-  const managers = new Map();
-  const add = (manager, moduleId) => {
-    if (!manager?.id) return;
-    const row = managers.get(manager.id) || managers.set(manager.id, { manager, moduleIds: [] }).get(manager.id);
-    if (moduleId && !row.moduleIds.includes(moduleId)) row.moduleIds.push(moduleId);
-  };
-  for (const id of registry.listModuleIds?.() || []) for (const manager of registry.getModule?.(id)?.runtimeManagers || []) add(manager, id);
-  for (const manager of registry.listSharedRuntimeManagers?.() || []) add(manager, null);
-  return [...managers.values()];
-}
-
-// A runtime manager without a Runtimes row of its own is listed through
-// fromRuntimeManager under its own label. Its optional `componentInfo`
-// supplies the description, the users ("Used by") and `windows: true` for
-// Windows code; without users, the game types whose modules declare the
-// manager are named.
-function managerComponents(registry) {
-  const { hasRuntimesRow } = require("../modules/shared/runtime/runtime-rows.mjs");
-  const Components = require("../modules/shared/runtime/runtime-components");
-  return registryManagers(registry).filter(({ manager }) => typeof manager.getState === "function" &&
-    !hasRuntimesRow(registry.getRuntimeManagerUi?.(manager.id) || manager.ui)).map(({ manager, moduleIds }) => {
-    const info = manager.componentInfo && typeof manager.componentInfo === "object" ? manager.componentInfo : {};
-    const users = Array.isArray(info.users) ? info.users : moduleIds.map(id => {
-      const module = registry.getModuleInfo?.(id);
-      return `${text(module?.shortLabel) || text(module?.label) || id} games`;
-    });
-    return { ...Components.fromRuntimeManager(manager, { description: text(info.description, 2048) || undefined, users, windows: info.windows === true }),
-      owner: moduleIds[0] || "shared" };
-  });
-}
-
 function declarations(registry) {
   const seen = new Set();
-  return [...require("./components"), ...(registry.listComponents?.() || []), ...managerComponents(registry)].filter(item => {
+  return [...require("./components"), ...(registry.listComponents?.() || [])].filter(item => {
     if (!item || typeof item.id !== "string" || typeof item.list !== "function" || seen.has(item.id)) return false;
     seen.add(item.id); return true;
   });
@@ -104,12 +74,26 @@ function presentItem(item, component) {
 
 // Runtime names for "Used by", from the registry's runtime managers.
 function runtimeLabels(registry) {
-  const labels = new Map(registryManagers(registry).map(({ manager }) => [manager.id, text(manager.label) || manager.id]));
+  const managers = [...(registry.listSharedRuntimeManagers?.() || []),
+    ...(registry.listModuleIds?.() || []).flatMap(id => registry.getModule?.(id)?.runtimeManagers || [])];
+  const labels = new Map();
+  for (const manager of managers) if (manager?.id && !labels.has(manager.id)) labels.set(manager.id, text(manager.label) || manager.id);
   return id => labels.get(id) || id;
 }
 
 // `confirmRuntimeInstall` and `downloads` let an import that needs a helper
 // tool, such as an installer reader, ask before downloading it as Play does.
+const measured = new Map();
+function installSize(userDataDir, directory) {
+  let stat, real;
+  try { stat = fs.lstatSync(directory); real = fs.realpathSync(directory); } catch { return null; }
+  const root = fs.realpathSync(userDataDir), relative = path.relative(root, real);
+  if (!stat.isDirectory() || !relative || relative.startsWith("..") || path.isAbsolute(relative)) return null;
+  const key = JSON.stringify([real, stat.ino, stat.mtimeMs]);
+  if (!measured.has(key)) { if (measured.size > 512) measured.clear(); measured.set(key, diskSize(real)); }
+  return measured.get(key);
+}
+
 function createComponentService({ userDataDir, registry, settings = () => ({}), logger = console, callHost, runtimeAction, running = () => ({}),
   confirmRuntimeInstall, downloads }) {
   let runtimeLabel = null;
@@ -138,7 +122,7 @@ function createComponentService({ userDataDir, registry, settings = () => ({}), 
         signal?.throwIfAborted();
         const { items, error } = await listOne(component, signal);
         result.push({ id: component.id, label: text(component.label) || component.id, description: text(component.description, 2048) || null,
-          owner: component.owner || "core", cache: component.cache === true, error,
+          owner: component.owner || "core", cache: component.cache === true, refreshable: typeof component.refresh === "function", error,
           items: items.map(item => presentItem(item, component)) });
         await new Promise(resolve => setImmediate(resolve));
       }
@@ -169,6 +153,26 @@ function createComponentService({ userDataDir, registry, settings = () => ({}), 
         return { componentId: component.id, label: text(component.label) || component.id };
       }
       throw new Error(`This file matches no download that MacLauncher records. Its SHA-256 is ${file.sha256}.`);
+    },
+    async refresh({ componentId } = {}, { signal } = {}) {
+      const { component } = await find(componentId, undefined, signal);
+      if (typeof component.refresh !== "function") throw new Error("This component has no catalog.");
+      return text(await component.refresh(context(signal)), 1024);
+    },
+    async sizes({ managerId } = {}, { signal } = {}) {
+      const managers = [...(registry.listModuleIds?.() || []).flatMap(id => registry.getModule?.(id)?.runtimeManagers || []),
+        ...(registry.listSharedRuntimeManagers?.() || [])];
+      const manager = managers.find(item => item?.id === managerId);
+      if (typeof manager?.getState !== "function") throw new Error("Runtime manager not found");
+      const state = manager.getState({ userDataDir }) || {};
+      const sizes = {};
+      for (const install of [...(state.installed || []), ...(state.sections || []).flatMap(section => section.installed || [])]) {
+        signal?.throwIfAborted();
+        if (typeof install?.installDir !== "string" || !path.isAbsolute(install.installDir) || sizes[install.installDir]) continue;
+        const size = installSize(userDataDir, install.installDir);
+        if (size) sizes[install.installDir] = size;
+      }
+      return { sizes };
     },
     async reveal({ componentId, itemId } = {}, { signal } = {}) {
       const { item } = await find(componentId, String(itemId ?? ""), signal);

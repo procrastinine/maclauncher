@@ -498,6 +498,8 @@ export type ComponentItem = {
 };
 export type ComponentEntry = {
   id: string; label: string; description: string | null; owner: string; cache: boolean; error: string | null;
+  /** The component's versions come from a catalog that Refresh reads. */
+  refreshable?: boolean;
   items: ComponentItem[];
 };
 export type ComponentList = { components: ComponentEntry[]; gameRunning: boolean };
@@ -824,6 +826,8 @@ declare global {
         componentAction(action: "list", payload?: Record<string, never>): Promise<ComponentList>;
         componentAction(action: "import", payload?: Record<string, never>): Promise<{ componentId: string; label: string } | false>;
         componentAction(action: "remove" | "reveal", payload: { componentId: string; itemId: string }): Promise<boolean>;
+        componentAction(action: "sizes", payload: { managerId: string }): Promise<{ sizes: Record<string, { bytes: number; complete: boolean }> }>;
+        componentAction(action: "refresh", payload: { componentId: string }): Promise<string>;
         moduleAction(
           gamePath: string,
           action: string,

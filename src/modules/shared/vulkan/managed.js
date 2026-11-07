@@ -2,6 +2,7 @@ const path = require("node:path");
 const execute = require("node:util").promisify(require("node:child_process").execFile);
 const Bundled = require("../runtime/bundled-native");
 const { createProjectBuildManager } = require("../runtime/project-build-manager");
+const { withDescription } = require("../runtime/pinned-native-manager");
 const repository = "procrastinine/maclauncher-builds";
 
 const projectId = "maclauncher-kosmickrisp";
@@ -86,10 +87,9 @@ function createSceneManager(dependencies = {}) {
       Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
       await Bundled.verifySignatures(selected.root, selected.declaration, { signal });
     }, dependencies });
-  // Downloaded files lists it (core/component-service.js).
-  return { ...result, translatorEngine: "moltenvk", distributionRequired: false, ui: { hidden: true, management: "managed" },
-    componentInfo: { users: ["Graphics effects in CrossOver and Sikarugir games"],
-      description: "A MoltenVK build that records a Windows game's Vulkan scene for temporal upscaling and frame generation, beside the selected Vulkan driver." } };
+  return { ...withDescription(result, "A MoltenVK build that records a Windows game's Vulkan scene for temporal upscaling and frame generation, beside the selected Vulkan driver."),
+    translatorEngine: "moltenvk", distributionRequired: false,
+    ui: { groupId: "vulkan-drivers", sectionLabel: "MoltenVK scene support", memberOrder: 25, management: "managed" } };
 }
 function createSceneProvider(selectedManager) {
   function selected(version, context, verification) {

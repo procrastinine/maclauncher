@@ -42,7 +42,8 @@ Several selected or dropped items import as one batch. While it runs, the librar
 
 When an import fails, its error names the selected item and the next step:
 
-- A folder that contains more than one possible game asks for the game file or a more specific folder.
+- A folder with no game at its top level, or with more than one possible game, lists the games that MacLauncher finds inside it. Each row names the game, its path inside the folder and its game type, with **Add**; **Add all** adds every listed game when they are separate games, and choices that select one game, such as two executables in one folder, are added one at a time. The row keeps **Choose game file…** and **Remove**, and **Retry** is left out because the folder would give the same result. **Open…** in the File menu offers the same games in its alert, with an **Add** button for each of the first three and **Add All** for separate games.
+- A folder that contains more than one possible game and nothing to offer asks for the game file or a more specific folder.
 - An unrecognized file asks for the game's application, main game file or complete folder.
 - A missing or unreadable item asks the user to locate it or check its permissions in Finder.
 - An incomplete search asks for the main game file.
@@ -277,7 +278,9 @@ The sidebar starts with **Search settings**, followed by the sections. The first
 - **Updates**: the **Check for Updates…** button, with the result of the latest check beside it. While an update downloads, the button becomes **Cancel Download** and the result shows the progress; once the update is ready, it becomes **Restart to Update**. The button opens the same native dialogs as the menu command;
 - **Check for updates at launch**, which is off by default.
 
-The macOS Game section follows Launcher and holds the native macOS app runtime. The other sections come from the module manifests and follow in alphabetical order. The shader library and presets, however, are in Runtimes → Effects.
+**Environment variables** follows Launcher and holds the global [translator environment variables](../runtimes/TRANSLATOR_ENVIRONMENT.md#global-values): one collapsed block per runtime or translator, whose title counts its stored values, each with one table of `NAME = value` rows grouped by translator, an add row and one **Reset**. The macOS Game section follows and holds the native macOS app runtime. The other sections come from the module manifests and follow in alphabetical order. The shader library and presets, however, are in Runtimes → Effects.
+
+Settings holds every setting that changes how a runtime behaves; Runtimes only downloads, removes and refreshes runtimes and chooses their default versions. The video player's runtime settings therefore also hold the plugin switches: **Use uosc**, **Timeline previews** and, under **Added plugins**, one **Use <name>** switch for each plugin added in Runtimes.
 
 **Search settings** matches section labels, runtime names and runtime IDs and keeps the selected section open. When nothing matches, the sidebar shows **No matching sections**. Cmd-F focuses search. Up, Down, Home and End move through the sidebar, Up or Down from the search field moves to the results, and Enter opens the first result. Escape clears the search. Only the selected section's settings are rendered.
 
@@ -309,7 +312,7 @@ The runtime settings window holds one game's own settings for its runtime. The g
 - Long field labels wrap. Menus use the available width and move adjacent actions to the next line when space runs out. A long selected label ends in an ellipsis, and the menu's tooltip shows the full label and its exact saved ID.
 - A dependent setting appears only when its controlling option applies, and hiding it keeps its saved value. Field descriptions and the runtime's preparation and data details open from question-mark buttons beside them, while platform requirements stay visible.
 - Local account, device and runtime choices load independently. Refresh keeps the saved selection and the existing choices while each provider updates, and a game launch uses the saved selection without the window being open.
-- A runtime with a translator choice adds an **Environment variables** section with one table for the translators that the current settings choose, grouped by translator. The list follows unsaved and saved choices alike, and the table shows the global values from Runtimes with the game's own changes, additions and removals. [Translator environment variables](../runtimes/TRANSLATOR_ENVIRONMENT.md#editor) describes the rows, badges and keys.
+- A runtime with a translator choice adds an **Environment variables** section with one table for the translators that the current settings choose, grouped by translator. The list follows unsaved and saved choices alike, and the table shows the global values from Settings with the game's own changes, additions and removals. [Translator environment variables](../runtimes/TRANSLATOR_ENVIRONMENT.md#editor) describes the rows, badges and keys.
 
 ### Runtimes window
 
@@ -357,7 +360,7 @@ Each subtab lists the versions its sources offer for download and the versions a
 - A version that cannot be installed shows the reason supplied for it.
 - A version whose installation is damaged or incomplete reads **Needs repair** in the version menu, and its Install button reads **Reinstall**. Reinstall installs the version again. As in any installation of a damaged version, the first step of its download task removes the damaged copy.
 
-The local list tells Included versions from Installed ones. Included versions ship with the app and cannot be changed, so they show Included, without Install or Remove; their versions and variants still stay selectable. Download and copy paths show no source-build setup links. Each installed version, on the other hand, has install and uninstall actions and can be set as the default version, and as the default variant where variants exist. Default and latest-version summaries leave out values already shown in the selector or by a Default badge.
+The local list tells Included versions from Installed ones. Included versions ship with the app and cannot be changed, so they show Included, without Install or Remove; their versions and variants still stay selectable. Download and copy paths show no source-build setup links. Each installed version, on the other hand, has install and uninstall actions and can be set as the default version, and as the default variant where variants exist. A version installed inside the MacLauncher data folder shows its size on disk under its name, measured while its panel is shown. Default and latest-version summaries leave out values already shown in the selector or by a Default badge.
 
 A sort menu in the Installed header orders the local list. **Newest first** and **Oldest first** compare the version that each row's label leads with, leaving out build qualifiers such as async: the component version for graphics translators, and the release version for other runtimes. Rows with equal versions are ordered by the version of the CrossOver application or Sikarugir Template that supplies them, and then by label. Graphics translator rows whose component version is not known, such as a registered folder without version metadata, come after all versioned rows in either order, sorted by label and then by location. **Path** orders rows by location, and **Default first**, offered where a runtime has a default version, places that version first.
 
@@ -367,10 +370,6 @@ Info callouts describe the selected runtime's dependencies, such as Rosetta for 
 
 The download manager menu (the down arrow) shows active downloads with progress bars and cancel actions, and closes on an outside click or Escape.
 
-#### Environment variables
-
-The panel of a runtime manager that provides a translator opens with a collapsed **Environment variables** section, whose title counts the stored values. It holds one table for all of the manager's translators: rows of `NAME = value` with remove buttons, grouped under a small heading per translator when there are several, then one row with a name field, a value field and **Add**, and one **Reset**. The name field suggests the translators' documented variables. Values save on Enter or when focus leaves the field, and Escape discards an edit or clears the add row. [Translator environment variables](../runtimes/TRANSLATOR_ENVIRONMENT.md) describes the badges, locked names and the order in which values apply.
-
 #### Local applications and custom runtimes
 
 Besides downloads, a runtime can come from an application already on the Mac or from custom files. Local applications, such as CrossOver, are listed under **Registered applications** with their versions and paths. **Add application** opens the native application picker, and **Find installed applications** refreshes local discovery without downloading anything. Each copy is a separate choice, even when two copies have the same version. **Remove** unregisters a copy and keeps its files. Defaults and per-game version choices use the same controls as downloaded runtimes.
@@ -379,15 +378,16 @@ For custom files, **Register custom…** follows the Installed list and opens a 
 
 #### Downloaded files
 
-**Downloaded files**, the last subtab of **Tools**, lists every installed downloaded file without a row of its own elsewhere in Runtimes, such as small runtime packages, shared assets, store download helpers, shared libraries and caches, largest first. Nothing in the library, the inspector or Play links to it. The header holds the title with a **?** that explains the tab, **Add from file…**, **Delete unused** and an icon-only reload button. **Add from file…** opens the native file chooser, reads **Adding…** while it runs and adds the file to the download it matches. **Delete unused** is disabled while every file is in use. Each file is a row:
+**Downloaded files**, the last subtab of **Tools**, lists every installed downloaded file that has no runtime manager, such as shared assets, store download helpers, the Android system image, microG, shared libraries and caches, largest first. Every runtime manager, including small packages that other runtimes load, has its own entry in Runtimes. Nothing in the library, the inspector or Play links to it. The header holds the title with a **?** that explains the tab, **Add from file…**, **Delete unused** and an icon-only reload button. **Add from file…** opens the native file chooser, reads **Adding…** while it runs and adds the file to the download it matches. **Delete unused** is disabled while every file is in use. Each file is a row:
 
 - its name and version, whose tooltip holds the content digest, a **?** with its description and a CPU badge in the vocabulary of [Processor builds](../runtimes/README.md#processor-builds)
 - the size on disk and the source (**Downloaded from <host>**, **Added manually** or **Created by MacLauncher**)
 - **Used by …** with runtime names as **Runtimes** shows them, or **Not used by an installed runtime**
 - for a file that installed runtimes still require, the reason it stays
+- on the first row of a download whose versions come from a catalog, an icon-only **Refresh** button that reads the catalog and reports the newest release in the status line
 - an icon-only **Show in Finder** button and an icon-only **Delete** button; Delete is disabled, with the reason as its tooltip, for a file that is still required
 
-With nothing installed, the tab reads **No downloaded files.** Delete asks in a native dialog that names the file's users, notes a running game and states that MacLauncher asks before downloading it again; for a cache, it states that MacLauncher fills it again. **Delete unused** asks once and lists every file it deletes. After an action, the list is read again and a status line confirms the result, such as **Deleted MoltenVK scene support 1.4.2.** A rejected file or failed removal appears as an inline error with its reason. All controls are native buttons in reading order, reachable with Tab.
+With nothing installed, the tab reads **No downloaded files.** Delete asks in a native dialog that names the file's users, notes a running game and states that MacLauncher asks before downloading it again; for a cache, it states that MacLauncher fills it again. **Delete unused** asks once and lists every file it deletes. After an action, the list is read again and a status line confirms the result, such as **Deleted gogdl 1.4.0.** A rejected file or failed removal appears as an inline error with its reason. All controls are native buttons in reading order, reachable with Tab.
 
 #### Effects
 
