@@ -73,7 +73,7 @@ static void bind_destination(void*storage,void*actualWindow){
 static void publish_destination(struct unixcall_mtlcommandbuffer_temporal_scale*recording,const struct WMTFXTemporalScalerProps*props){
   if(!destinationEnabled)return;
   typedef int(*WithWindow)(uint64_t,void(*)(void*,void*),void*);
-  const MLStreamlineNativeResourcesV2*value=&props->streamline;
+  const MLStreamlineNativeResourcesV2*value=(const MLStreamlineNativeResourcesV2*)&props->streamline;
   const MLStreamlineNativeResources*base=&value->base;
   void*library;WithWindow withWindow;const char*path;
   struct MLDestinationCall call={recording,base->frameId,RS_TEMPORAL_UNAVAILABLE};
@@ -126,9 +126,10 @@ static id<MTLTexture> snapshot_image(id<MTLCommandBuffer>commands,const MLStream
 static int publish_scene(struct unixcall_mtlcommandbuffer_temporal_scale *params,const struct WMTFXTemporalScalerProps *props){
   if(!destinationEnabled)return 0;
   if(clearScene)clearScene((void*)params->scaler);
-  const MLStreamlineNativeResources *source=&props->streamline.base;
+  const MLStreamlineNativeResources *source=(const MLStreamlineNativeResources*)&props->streamline;
+  const MLStreamlineNativeResourcesV2 *extended=(const MLStreamlineNativeResourcesV2*)source;
   const uint32_t pair=(1u<<RS_SCENE_AOV_HUDLESS_COLOR)|(1u<<RS_SCENE_AOV_UI_COLOR_ALPHA);
-  if(!setScene||!clearScene||!known_scene_color(&props->streamline)||!source->frameId||!source->epoch||
+  if(!setScene||!clearScene||!known_scene_color(extended)||!source->frameId||!source->epoch||
       source->frameId!=props->camera.frameId||source->viewId!=props->camera.viewportId||
       !isfinite(props->camera.frameTimeMs)||props->camera.frameTimeMs<=0)return 0;
   id<MTLCommandBuffer>commands=(id<MTLCommandBuffer>)params->cmdbuf;
@@ -146,8 +147,8 @@ static int publish_scene(struct unixcall_mtlcommandbuffer_temporal_scale *params
     // command until that command is destroyed. Core retirement is independent.
     [commands addCompletedHandler:^(id<MTLCommandBuffer>finished){(void)finished;[copies self];}];
       RSSceneAovs packet={0};packet.size=sizeof(packet);packet.version=1;packet.frameId=source->frameId;packet.viewId=source->viewId+1;packet.epoch=source->epoch;packet.imageRevision=source->imageRevision;
-      packet.color=props->streamline.sceneColor;packet.preExposure=exposure;
-      packet.pass=props->streamline.scenePass;packet.colorPass=props->streamline.sceneColorPass;
+      packet.color=extended->sceneColor;packet.preExposure=exposure;
+      packet.pass=extended->scenePass;packet.colorPass=extended->sceneColorPass;
       packet.hudlessColor=source->hudlessColor;packet.uiColor=source->uiColor;
     if(copies->hudless&&copies->ui){
       packet.images[RS_SCENE_AOV_HUDLESS_COLOR]=(RSSceneAovImage){(void*)copies->hudless,0,0,(uint32_t)copies->hudless.width,(uint32_t)copies->hudless.height,RS_SCENE_AOV_COLOR,RS_SCENE_AOV_SPACE_NONE,0,RS_SCENE_AOV_TOP_LEFT,1,0,RS_SCENE_AOV_AFTER_TRANSPARENT,0};
@@ -163,8 +164,15 @@ static int publish_scene(struct unixcall_mtlcommandbuffer_temporal_scale *params
 static int create_temporal(void *data) {
   struct unixcall_mtldevice_newfxtemporalscaler *params=data;
   const struct WMTFXTemporalScalerInfo *info=params->info.ptr;
-  if(!info->reactive_format)return originalCreate(data);
+  if(!info->reactive_format&&!info->output_resolution_motion&&!info->jittered_motion)return originalCreate(data);
   params->ret=0;
+  if(info->output_resolution_motion||info->jittered_motion){
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 270000
+    if(@available(macOS 27.0,*)){}else return 0;
+#else
+    return 0;
+#endif
+  }
   if(@available(macOS 14.4,*)){
     MTLFXTemporalScalerDescriptor *descriptor=[MTLFXTemporalScalerDescriptor new];
     descriptor.colorTextureFormat=(MTLPixelFormat)(info->color_format&~WMTPixelFormatCustomSwizzle);
@@ -175,7 +183,10 @@ static int create_temporal(void *data) {
     descriptor.outputWidth=info->output_width;descriptor.outputHeight=info->output_height;
     descriptor.inputContentMinScale=info->input_content_min_scale;descriptor.inputContentMaxScale=info->input_content_max_scale;
     descriptor.inputContentPropertiesEnabled=info->input_content_properties_enabled;descriptor.autoExposureEnabled=info->auto_exposure;
-    descriptor.reactiveMaskTextureEnabled=YES;descriptor.reactiveMaskTextureFormat=(MTLPixelFormat)(info->reactive_format&~WMTPixelFormatCustomSwizzle);
+    descriptor.reactiveMaskTextureEnabled=info->reactive_format!=0;descriptor.reactiveMaskTextureFormat=(MTLPixelFormat)(info->reactive_format&~WMTPixelFormatCustomSwizzle);
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 270000
+    if(@available(macOS 27.0,*)){descriptor.outputResolutionMotionVectorsEnabled=info->output_resolution_motion;descriptor.jitteredMotionVectorsEnabled=info->jittered_motion;}
+#endif
     if(@available(macOS 15.0,*))descriptor.requiresSynchronousInitialization=info->requires_synchronous_initialization;
     params->ret=(obj_handle_t)[descriptor newTemporalScalerWithDevice:(id<MTLDevice>)params->device];
     [descriptor release];
