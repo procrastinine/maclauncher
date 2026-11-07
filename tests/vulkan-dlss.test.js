@@ -50,3 +50,10 @@ test('carrier transport detection follows the selected driver file and invalidat
  fs.writeFileSync(f.files['driver.dylib'],'compiled driver: temporal-sr\0');assert.equal(DLSS.carrierDriver(f.plan).engine,'kosmickrisp');
  fs.writeFileSync(f.files['driver.dylib'],'stock driver');assert.equal(DLSS.carrierDriver(f.plan),null);
 });
+
+test('virtual NVIDIA device and architecture consistently identify Turing',()=>{
+ const env=DLSS.environment(true);
+ assert.equal(env.DXVK_NVAPI_GPU_ARCH,'TU100');
+ assert.match(env.DXVK_CONFIG,/(?:^|; )dxgi\.customDeviceId = 1e07(?:;|$)/);
+ assert.match(env.DXVK_CONFIG,/(?:^|; )dxgi\.customVendorId = 10de(?:;|$)/);
+});

@@ -115,6 +115,6 @@ function environment(enabled, values = {}) {
   // This is the virtual DXVK/NVAPI identity used to admit the owned NGX core,
   // not a physical NVIDIA device or an advertisement of native NVIDIA work.
   return { DXVK_ENABLE_NVAPI: '1', DXVK_NVAPI_ALLOW_OTHER_DRIVERS: '1', DXVK_NVAPI_GPU_ARCH: 'TU100',
-    DXVK_CONFIG: [config, 'dxgi.customVendorId = 10de', 'dxgi.customDeviceId = 2684', 'dxgi.hideNvidiaGpu = False'].filter(Boolean).join('; ') };
+    DXVK_CONFIG: [config, 'dxgi.customVendorId = 10de', 'dxgi.customDeviceId = 1e07', 'dxgi.hideNvidiaGpu = False'].filter(Boolean).join('; ') };
 }
 module.exports = { managers, createManagers, findLibrary, carrierDriver, requested, requirements, prepare, environment };
