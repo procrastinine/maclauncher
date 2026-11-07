@@ -47,3 +47,25 @@ test('Electron archive input safety rejects escapes while accepting members with
     else assert.equal(Host.readHost({ repoRoot: root, arch: 'arm64', archivePath: archive }).record.asset.sha256, sha);
   }
 });
+
+test('a linked node_modules root is read through its installation while an aliased Electron package stays rejected', t => {
+  const root = fs.realpathSync(temporary(t)), version = require('electron/package.json').version, archive = path.join(root, 'publisher.zip');
+  const checkout = path.join(root, 'checkout'), install = path.join(root, 'install'), worktree = path.join(root, 'worktree');
+  require('./helpers/zip-fixture').writeZipArchive(archive, [{ name: 'publisher-member', data: 'publisher bytes' }]);
+  const sha = require('node:crypto').createHash('sha256').update(fs.readFileSync(archive)).digest('hex');
+  const electron = path.join(checkout, 'node_modules/electron'); fs.mkdirSync(electron, { recursive: true });
+  fs.writeFileSync(path.join(electron, 'package.json'), JSON.stringify({ name: 'electron', version }));
+  fs.writeFileSync(path.join(electron, 'checksums.json'), JSON.stringify({ ['electron-v' + version + '-darwin-arm64.zip']: sha }));
+  for (const repo of [worktree, install]) {
+    fs.mkdirSync(repo);
+    fs.writeFileSync(path.join(repo, 'package.json'), JSON.stringify({ devDependencies: { electron: version } }));
+    fs.writeFileSync(path.join(repo, 'pnpm-lock.yaml'), require('js-yaml').dump({ importers: { '.': { devDependencies: { electron: { specifier: version, version } } } },
+      packages: { ['electron@' + version]: { resolution: { integrity: 'sha512-AA==' } } } }));
+  }
+  fs.symlinkSync(path.join(checkout, 'node_modules'), path.join(worktree, 'node_modules'));
+  const selected = Host.readHost({ repoRoot: worktree, arch: 'arm64', archivePath: archive });
+  assert.equal(selected.record.asset.sha256, sha);
+  assert.equal(selected.root, electron);
+  fs.mkdirSync(path.join(install, 'node_modules')); fs.symlinkSync(electron, path.join(install, 'node_modules/electron'));
+  assert.throws(() => Host.readHost({ repoRoot: install, arch: 'arm64', archivePath: archive }), /symlinks/);
+});

@@ -9,7 +9,11 @@ const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 
 function readHost({ repoRoot = ROOT, arch = process.arch, archivePath, cacheRoot } = {}) {
   repoRoot = path.resolve(repoRoot);
-  const packageFile = path.join(repoRoot, 'node_modules/electron/package.json');
+  // A Git worktree can link node_modules to another checkout's installation. Only that link is resolved; the
+  // Electron package below it stays free of aliases, and the publisher archive digest remains the input check.
+  let modules = path.join(repoRoot, 'node_modules');
+  try { modules = fs.realpathSync(modules); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  const packageFile = path.join(modules, 'electron/package.json');
   const metadata = B.readRegular(packageFile, B.LIMITS.manifestBytes), pkg = JSON.parse(metadata.bytes);
   const configured = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')).devDependencies?.electron;
   const lock = require('js-yaml').load(fs.readFileSync(path.join(repoRoot, 'pnpm-lock.yaml'), 'utf8'));
