@@ -53,6 +53,52 @@ test('unresolved vendor automatic, unknown engines and independent D3D12/driver 
  }
  assert.equal(Binding.usedTranslatorPlan(null),undefined);
 });
+test('launch translator records retain file identities and placements without inspection tables or repeated provider files',async t=>{
+ const f=fixture(t),crypto=require('node:crypto');
+ const put=name=>{const file=path.join(f.root,name);fs.writeFileSync(file,'selected '+name);return file;};
+ const inspections={peImports:['inspectionSentinel.dll'],unixImports:[{symbol:'inspectionSentinel'}],
+  slices:[{dependencies:[{path:'inspectionSentinel.dylib'}],imports:[{symbol:'inspectionSentinel'}]}]};
+ const files=['d3d11.dll','d3d12.dll','bridge.so','unused.dll'].map(name=>({path:put(name),relative:name,
+  format:name.endsWith('.dll')?'pe':'macho',form:'builtin',...(name.endsWith('.dll')?{machine:0x8664}:{cpuSlices:['x86_64']}),...inspections}));
+ const used={...description('d3d-renderer','d3dmetal','selected','managed'),files,
+  managerId:'translator-d3dmetal',runtimeVersion:'selected-version',buildKey:'selected-build',
+  source:{kind:'managed',id:'selected-source',label:'Selected package',inspectionTables:inspections},
+  videoPreparation:{bindings:inspections},inspectionTables:inspections};
+ const plan={runtime:'crossover',apiMode:true,components:{'d3d-renderer':{used:null},d3d10:{used:null},d3d11:{used},d3d12:{used}},
+  placements:files.slice(0,3).map((file,index)=>({file,description:used,roles:index===2?['d3d11','d3d12']:[index===0?'d3d11':'d3d12']})),
+  groups:[{id:'d3d11+d3d12',roles:['d3d11','d3d12'],reason:'UI-only'}],compatibility:{selected:inspections}};
+ const before=JSON.stringify(plan),env=await ReShade.prepare(f.entry,{...f.options,translatorPlan:plan});
+ const launchFile=path.join(path.dirname(env.RESHADE_EFFECT_PLAN),'launch.json'),launch=JSON.parse(fs.readFileSync(launchFile)),record=launch.translatorPlan;
+ assert.equal(JSON.stringify(plan),before,'recording does not change the verified in-memory plan');
+ assert.deepEqual(Object.keys(record).sort(),['apiMode','components','groups','placements','runtime']);
+ assert.equal(Object.hasOwn(record.components,'d3d-renderer'),false);assert.deepEqual(record.components.d3d10,{used:null});
+ assert.deepEqual(record.components.d3d11.used.files.map(file=>path.basename(file.path)),['d3d11.dll','bridge.so']);
+ assert.deepEqual(record.components.d3d12.used.files.map(file=>path.basename(file.path)),['d3d12.dll','bridge.so']);
+ const metadata=['id','component','engine','version','source','root','form','managerId','runtimeVersion','buildKey'];
+ for(const row of Object.values(record.components).filter(row=>row.used))assert.deepEqual(Object.keys(row.used).sort(),[...metadata,'files'].sort());
+ for(const placement of record.placements){
+  assert.deepEqual(Object.keys(placement).sort(),['description','file','roles']);
+  assert.deepEqual(Object.keys(placement.description).sort(),[...metadata].sort());
+  assert.deepEqual(placement.description.source,{kind:'managed',id:'selected-source',label:'Selected package'});
+  const expected=plan.placements.find(item=>item.file.path===placement.file.path);
+  assert.deepEqual(placement.roles,expected.roles);
+  const bytes=fs.readFileSync(placement.file.path);
+  assert.deepEqual(Object.keys(placement.file.identity).sort(),['mode','sha256','size']);
+  assert.equal(placement.file.identity.sha256,crypto.createHash('sha256').update(bytes).digest('hex'));
+  assert.equal(placement.file.identity.size,bytes.length);
+ }
+ const fileKeys=['path','relative','format','form','machine','cpuSlices','identity'];
+ const check=value=>{if(!value||typeof value!=='object')return;for(const [key,child]of Object.entries(value)){
+  assert.ok(!['peImports','unixImports','slices','dependencies','imports','inspectionTables','videoPreparation','compatibility'].includes(key),key+' belongs in the inspection cache');check(child);
+ }};check(record);
+ for(const file of [...Object.values(record.components).flatMap(row=>row.used?.files||[]),...record.placements.map(row=>row.file)])
+  assert.ok(Object.keys(file).every(key=>fileKeys.includes(key)),'only file identity and placement facts are retained');
+ assert.equal(JSON.stringify(record).includes('unused.dll'),false);assert.equal(JSON.stringify(record).includes('inspectionSentinel'),false);
+ Object.assign(launch,{phase:'spawned',pid:71});fs.writeFileSync(launchFile,JSON.stringify(launch));
+ const info=Effects.info(f.entry,{...f.options,running:true,runningPids:[71]});
+ assert.deepEqual(info.translatorPlan,record);assert.deepEqual(info.activeLaunch.translatorPlan,record);
+});
+
 test('running graphics bind the used plan and supplier guides instead of new saved choices',async t=>{
  const f=fixture(t),used=description('d3d-renderer','dxmt','active','included'),next=description('d3d-renderer','wined3d','next','included');
  const active=poisonSelection(Plan.resolvePlan({choices:[used],selections:{'d3d-renderer':'active'}})),future=poisonSelection(Plan.resolvePlan({choices:[next],selections:{'d3d-renderer':'next'}}));

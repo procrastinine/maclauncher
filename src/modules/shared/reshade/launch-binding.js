@@ -16,6 +16,36 @@ function usedTranslatorPlan(plan) {
     groups: (plan.groups || []).map(({id, roles}) => ({id, roles}))
   } : {})};
 }
+// The launch receipt records the resolved files, not the inspection cache.
+// Placement providers carry identity metadata without repeating their files.
+function recordedTranslatorPlan(plan) {
+  const used = usedTranslatorPlan(plan);
+  if (!used) return undefined;
+  const fields = (value, keys) => Object.fromEntries(keys.filter(key => Object.hasOwn(value, key)).map(key => [key, value[key]]));
+  const description = value => {
+    const result = fields(value, ['id', 'component', 'engine', 'settingsEngine', 'version', 'runtimeVersion', 'managerId',
+      'variant', 'sectionId', 'buildKey', 'architecture', 'root', 'entryPoint', 'form', 'backend', 'included', 'templateComponent', 'apis', 'macosFloor']);
+    if (typeof value.source === 'string') result.source = value.source;
+    else if (value.source) result.source = fields(value.source, ['kind', 'id', 'label', 'runtime']);
+    return result;
+  };
+  const identities = new Map();
+  const file = value => {
+    const result = fields(value, ['path', 'realPath', 'relative', 'format', 'form', 'machine', 'architecture', 'cpuSlices', 'macosFloor', 'apis', 'inherited']);
+    if (!identities.has(value.path)) {
+      try { identities.set(value.path, require('../runtime/verified-identity').fileDigest(value.path)); }
+      catch { identities.set(value.path, null); }
+    }
+    result.identity = identities.get(value.path);
+    return result;
+  };
+  return { ...used, components: Object.fromEntries(Object.entries(used.components).map(([component, row]) =>
+    [component, { used: row.used ? { ...description(row.used), files: (used.apiMode && component.startsWith('d3d') ?
+      used.placements.filter(placement => placement.roles.includes(component)).map(placement => placement.file) :
+      plan.compatibility?.[row.used.id]?.files || row.used.files || []).map(file) } : null }])),
+    ...(used.apiMode ? { placements: used.placements.map(placement => ({ file: file(placement.file),
+      description: description(placement.description), roles: [...placement.roles] })) } : {}) };
+}
 function payloadFiles(entry, userDataDir, launchId) {
   if (!launchIdentity(launchId)) throw new Error("The graphics launch identity is invalid.");
   const root = path.join(userDataDir, "graphics", "payload-bindings");
@@ -201,5 +231,5 @@ function bind(entry, pid, {userDataDir} = {}) {
   if(launch.effectPlanLiveResources?.xess)require("../runtime/gpu-compute-broker").bind(launch.effectPlanLiveResources.xess,pid);
   return true;
 }
-module.exports = {usedTranslatorPlan, matches, read, bind, isCurrent, supportsPlan, nodeUnavailableReason,resolveNeuralNode, modelForNode, allowsModel, allowsNeural, acceptsNeuralModels, resolveModel, attachmentUnavailable,
+module.exports = {usedTranslatorPlan, recordedTranslatorPlan, matches, read, bind, isCurrent, supportsPlan, nodeUnavailableReason,resolveNeuralNode, modelForNode, allowsModel, allowsNeural, acceptsNeuralModels, resolveModel, attachmentUnavailable,
   preparePayload, payload, resolvePayload};

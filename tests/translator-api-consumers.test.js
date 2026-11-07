@@ -30,6 +30,9 @@ test('per-API DLSS uses final D3D11/12 bindings while global Wine transport stay
   const { plan, dxmt } = fixture(t);
   assert.equal(DLSS.hasPlanLibraries(plan, 'dxmt'), true);
   assert.equal(DLSS.hasPlanLibraries(plan, 'd3dmetal'), true);
+  const recorded = Binding.recordedTranslatorPlan(plan);
+  assert.equal(DLSS.hasPlanLibraries(recorded, 'dxmt'), true);
+  assert.equal(DLSS.hasPlanLibraries(recorded, 'd3dmetal'), true);
   const options = { backend: 'wined3d', hardwareArch: 'arm64', macOSVersion: '26.0', executableArchitecture: 'x86_64',
     dxmt: true, d3dmetal: true, translatorPlan: plan };
   assert.deepEqual(DLSS.checkSelection({ dlss: true }, options), { enabled: true, dxmt: true, d3dmetal: true });

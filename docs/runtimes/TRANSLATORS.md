@@ -175,6 +175,8 @@ When a translator cannot load, Play uses the same engine from the selected Cross
 
 ## Inspector
 
+The graphics launch record retains the resolved translator identities, selected files with content hashes, and their API placements. PE import tables and Mach-O dependency and symbol tables remain in the shared inspection cache.
+
 For CrossOver and Sikarugir games alike, the inspector shows one row for each Direct3D version from 8 to 12, the Vulkan driver and video codecs, in the form **selected → used**. The Vulkan driver used ends with the CPU build that the Wine process loads, such as **Intel (Rosetta)** or **Apple Silicon**, as described in [CPU build labels](#cpu-build-labels). Play records its rows together with the translator settings and the Wine installation they were resolved for. While those are unchanged, the inspector shows the recorded rows, including the results of Play's file checks. Before the first launch, after a translator setting changes, or after a different Wine installation is selected, the rows come from the current settings and the installed descriptions. When the selected runtime is not installed, the recorded rows remain. Until the game's current rows arrive, a game with recorded rows shows a single pending **Translators** line instead of rows that may describe other settings. If the runtime returns no status, the line reads **Unavailable**. A plain reason appears under a row only when the two sides differ:
 
 | Situation | Reason shown |

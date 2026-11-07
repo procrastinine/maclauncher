@@ -332,7 +332,7 @@ async function prepare(entry, options = {}) {
       // Missing adapter metadata defaults to the launcher process ABI, not the hardware CPU.
       graphicsArchitecture: options.graphicsArchitecture || options.graphicsInputs?.architecture || process.arch,
       graphicsInputs: options.graphicsInputs || null,
-      ...(options.translatorPlan ? {translatorPlan: options.translatorPlan} : {})});
+      ...(options.translatorPlan ? {translatorPlan: LaunchBinding.recordedTranslatorPlan(options.translatorPlan)} : {})});
     // The saved plan revision this launch prepared, for its graphics status.
     if (stored.source !== "invalid" && stored.revision) launch.effectPlanRevision = stored.revision;
     const optionalChannel = (warning, message, prepare) => {
