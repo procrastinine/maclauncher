@@ -63,6 +63,25 @@ function fixture(t) {
   function provider(marker = 2) { const file = path.join(providerRoot, "sl.interposer.dll");fs.writeFileSync(file, pe(names, marker));fs.writeFileSync(path.join(providerRoot, "provider.json"), JSON.stringify({ schema: 1, library: "sl.interposer.dll", sha256: sha(fs.readFileSync(file)), exports: PE.inspect(file) })); }
   provider();return { root, sourcePath, providerRoot, gameRoot, relativePath, target, provider };
 }
+test("Streamline selects a complete compatible export profile without relaxing ordinals", t => {
+  const f = fixture(t), primaryNames = [...names, "slSetTagForFrame"], primary = path.join(f.providerRoot, "sl.interposer.dll");
+  fs.writeFileSync(primary, pe(primaryNames, 4));
+  const directory = path.join(f.providerRoot, "compat/older");fs.mkdirSync(directory, {recursive: true});
+  const library = path.join(directory, "sl.interposer.dll");fs.writeFileSync(library, pe(names, 5));
+  const profile = {schema: 1, directory: "compat/older", library: "sl.interposer.dll", sha256: sha(fs.readFileSync(library)), exports: PE.inspect(library)};
+  const manifest = {schema: 1, library: "sl.interposer.dll", sha256: sha(fs.readFileSync(primary)), exports: PE.inspect(primary), profiles: [profile]};
+  const metadata = path.join(f.providerRoot, "provider.json");fs.writeFileSync(metadata, JSON.stringify(manifest));
+  assert.equal(Streamline.provider(f.providerRoot).library, fs.realpathSync(primary), "default helper selection keeps the primary profile");
+  const result = Streamline.prepare(f);assert.equal(result.available, true);assert.equal(result.provider.library, fs.realpathSync(library));
+  assert.equal(fs.readFileSync(f.target)[4095], 5);Streamline.restore(f);
+  manifest.profiles[0].exports = profile.exports.map(row => ({...row, ordinal: row.ordinal + 1}));
+  fs.writeFileSync(metadata, JSON.stringify(manifest));assert.equal(Streamline.inspect(f.sourcePath, f.providerRoot).available, false);
+  manifest.profiles[0] = {...profile, directory: "../outside"};
+  const outside = path.join(f.root, "outside");fs.mkdirSync(outside);fs.copyFileSync(library, path.join(outside, "sl.interposer.dll"));
+  fs.writeFileSync(metadata, JSON.stringify(manifest));assert.equal(Streamline.inspect(f.sourcePath, f.providerRoot).available, false);
+  fs.rmSync(directory, {recursive: true});fs.symlinkSync(outside, directory);manifest.profiles[0] = profile;
+  fs.writeFileSync(metadata, JSON.stringify(manifest));assert.equal(Streamline.inspect(f.sourcePath, f.providerRoot).available, false);
+});
 test("Streamline adapter replaces only the private leaf, keeps original DLL beside it, and restores without editing the source", t => {
   const f = fixture(t), before = fs.readFileSync(f.sourcePath), result = Streamline.prepare(f);
   assert.equal(result.available, true);assert.equal(result.cameraProjection, true);assert.deepEqual(result.methods, ["fsr2", "fsr3"]);

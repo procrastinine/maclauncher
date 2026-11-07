@@ -5,18 +5,26 @@ const PE = require("./pe-exports");
 const ORIGINAL = "maclauncher_streamline_original.dll", RECORD = ".maclauncher-streamline.json";
 const hash = file => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 const sameExports = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, index) => item.name === b[index].name && item.ordinal === b[index].ordinal);
-function provider(root) {
+function provider(root, expected) {
   try {
-    const record = JSON.parse(fs.readFileSync(path.join(root, "provider.json"), "utf8")), library = path.join(root, "sl.interposer.dll");
-    if (record.schema !== 1 || record.library !== "sl.interposer.dll" || !/^[a-f0-9]{64}$/.test(record.sha256) || hash(library) !== record.sha256 || !sameExports(PE.inspect(library), record.exports)) return null;
-    return { ...record, library };
+    const record = JSON.parse(fs.readFileSync(path.join(root, "provider.json"), "utf8"));
+    const realRoot = fs.realpathSync(root);
+    for (const candidate of [{...record, directory: ""}, ...(Array.isArray(record.profiles) ? record.profiles : [])]) {
+      if (candidate.schema !== 1 || candidate.library !== "sl.interposer.dll" || typeof candidate.directory !== "string") continue;
+      if (expected && !sameExports(expected, candidate.exports)) continue;
+      const directory = fs.realpathSync(path.resolve(root, candidate.directory));
+      if (directory !== realRoot && !directory.startsWith(realRoot + path.sep)) continue;
+      const library = path.join(directory, candidate.library), stat = fs.lstatSync(library);
+      if (!stat.isFile() || stat.isSymbolicLink() || !/^[a-f0-9]{64}$/.test(candidate.sha256) || hash(library) !== candidate.sha256 || !sameExports(PE.inspect(library), candidate.exports)) continue;
+      return {...candidate, library};
+    }
+    return null;
   } catch { return null; }
 }
 function inspect(sourcePath, providerRoot) {
-  const payload = provider(providerRoot);
-  if (!payload) return { available: false, reason: "The Streamline camera adapter is unavailable." };
   const exports = PE.inspect(sourcePath);
-  if (!sameExports(exports, payload.exports)) return { available: false, reason: "This Streamline interface is not supported by the camera adapter." };
+  const payload = provider(providerRoot,exports);
+  if (!exports||!payload) return { available: false, reason: "This Streamline interface is not supported by the camera adapter." };
   return { available: true, sourcePath, sourceSha256: hash(sourcePath), provider: payload,
     cameraProjection: true, source: "streamline", methods: ["fsr2", "fsr3"] };
 }

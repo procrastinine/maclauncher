@@ -94,16 +94,16 @@ bool intakeDumpFormat(MTLPixelFormat format,MTLBlitOption&option){
         default:return false;
     }
 }
-void intakeDump(id<MTLCommandBuffer> commands,id<MTLTexture> texture,id<MTLFence> fence,const std::string&file){
+void intakeDump(id<MTLCommandBuffer> commands,id<MTLTexture> texture,id<MTLFence> fence,const std::string&file,uint32_t x,uint32_t y,uint32_t width,uint32_t height){
     MTLBlitOption option;
-    if(!commands||!texture||commands.status>=MTLCommandBufferStatusCommitted||texture.device!=commands.device||texture.textureType!=MTLTextureType2D||texture.sampleCount!=1||!intakeDumpFormat(texture.pixelFormat,option)){
+    if(!commands||!texture||commands.status>=MTLCommandBufferStatusCommitted||texture.device!=commands.device||texture.textureType!=MTLTextureType2D||texture.sampleCount!=1||!region(texture,x,y,width,height)||!intakeDumpFormat(texture.pixelFormat,option)){
         macfx::nativeLog("Temporal intake dump skipped: "+file+" "+intakeTexture(texture));return;
     }
-    const unsigned width=unsigned(texture.width),height=unsigned(texture.height),stride=(width*4+255)&~255u;
+    const unsigned stride=(width*4+255)&~255u;
     if(!macfx::captureLayout(width,height,stride))return;
     id<MTLBuffer> bytes=[commands.device newBufferWithLength:size_t(stride)*height options:MTLResourceStorageModeShared];if(!bytes)return;
     auto copy=[commands blitCommandEncoder];if(!copy)return;
-    @try{if(fence)[copy waitForFence:fence];[copy copyFromTexture:texture sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(width,height,1)
+    @try{if(fence)[copy waitForFence:fence];[copy copyFromTexture:texture sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(x,y,0) sourceSize:MTLSizeMake(width,height,1)
         toBuffer:bytes destinationOffset:0 destinationBytesPerRow:stride destinationBytesPerImage:size_t(stride)*height options:option];}
     @finally{[copy endEncoding];}
     const std::string name=file;
@@ -135,8 +135,9 @@ IntakeObservation observeIntake(const RSTemporalFrame*f,id<MTLCommandBuffer> com
     }
     if(dump&&commands&&!f->commandBufferKind){
         const auto prefix=macfx::nativeConfig().capture.prefix+"-intake-"+std::to_string(f->frameId);
-        intakeDump(commands,(__bridge id<MTLTexture>)f->depth,fence,prefix+"-depth.rgba");
-        intakeDump(commands,(__bridge id<MTLTexture>)f->motion,fence,prefix+"-motion.rgba");
+        intakeDump(commands,(__bridge id<MTLTexture>)f->depth,fence,prefix+"-depth.rgba",f->depthX,f->depthY,f->renderWidth,f->renderHeight);
+        const bool displayMotion=f->flags&RS_TEMPORAL_OUTPUT_MOTION;
+        intakeDump(commands,(__bridge id<MTLTexture>)f->motion,fence,prefix+"-motion.rgba",f->motionX,f->motionY,displayMotion?f->outputWidth:f->renderWidth,displayMotion?f->outputHeight:f->renderHeight);
     }
     return observed;
 }
@@ -777,13 +778,16 @@ void encodeTemporal(id scaler,SEL selector,id commands){
             if(state->plan&&state->plan->requiresTemporal()) {
                 const auto&destination=sceneDestination;
                 const bool direct=!state->kind&&!f.outputX&&!f.outputY&&f.outputWidth==s.outputTexture.width&&f.outputHeight==s.outputTexture.height;
-                const bool admitted=direct&&(destination||macfx::reserveTemporalOutput(commands,s.outputTexture));
+                // A game's scaler output is usually an intermediate scene
+                // image. Its exact owner/frame/output already identify this
+                // producer; CAMetalDrawable identity belongs to presentation.
+                const bool admitted=direct&&(destination||macfx::reserveExplicitTemporalOutput(commands,s.outputTexture,f.owner,f.frameId));
                 // This boundary is the game's real MetalFX producer. Saved
                 // reconstruction nodes still consume its raw jittered input;
                 // a scene-only suffix observes its actual reconstructed output.
                 f.method=RS_TEMPORAL_METALFX;f.reserved=0;
                 bool originalEncoded=false;
-                std::string reason="The ordered temporal stage requires one complete, directly presented scene output";
+                std::string reason=direct?"The ordered temporal output needs retaining unsubmitted commands and one exact producer":"The ordered temporal stage requires one complete output texture";
                 if(admitted)try {
                     macfx::DepthFrame depth{s.depthTexture,f.frameId,macfx::FrameOrigin::TopLeft};
                     macfx::ShaderFrame context{commands,s.colorTexture,s.outputTexture,f.frameId,now*1000,f.frameTimeMs,macfx::FrameOrigin::TopLeft,macfx::SpatialColor::Perceptual,&depth};

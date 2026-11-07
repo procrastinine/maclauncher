@@ -27,25 +27,25 @@ template<class T> T original(const char *name) {
     InitOnceExecuteOnce(&initialized, initialize, nullptr, nullptr);
     return originalModule ? reinterpret_cast<T>(GetProcAddress(originalModule, name)) : nullptr;
 }
-struct Entry { uint64_t age = 0; uint32_t frame = 0, viewport = 0; bool valid = false; RSTemporalCamera value{}; };
+struct Entry { uint64_t age = 0; uint32_t frame = 0, viewport = 0; bool valid = false; RSTemporalCamera value{}; bool deferredPublished=false; };
 std::array<Entry, 128> entries;
 SRWLOCK cacheLock = SRWLOCK_INIT;
 uint64_t age = 0;
 maclauncher_streamline::ResourceTags resourceTags;
-void remember(uint32_t frame, uint32_t viewport, const RSTemporalCamera *value) {
+void remember(uint32_t frame, uint32_t viewport, const RSTemporalCamera *value,bool deferredPublished=false) {
     AcquireSRWLockExclusive(&cacheLock);
     Entry *target = &entries[0];
     for (auto &entry : entries) {
         if (entry.age && entry.frame == frame && entry.viewport == viewport) { target = &entry;break; }
         if (entry.age < target->age) target = &entry;
     }
-    *target = { ++age, frame, viewport, value != nullptr, value ? *value : RSTemporalCamera{} };
+    *target = { ++age, frame, viewport, value != nullptr, value ? *value : RSTemporalCamera{},deferredPublished };
     ReleaseSRWLockExclusive(&cacheLock);
 }
-bool lookup(uint32_t frame, uint32_t viewport, RSTemporalCamera &value) {
+bool lookup(uint32_t frame, uint32_t viewport, RSTemporalCamera &value,bool*deferredPublished=nullptr) {
     bool found = false;AcquireSRWLockShared(&cacheLock);
     for (const auto &entry : entries) if (entry.age && entry.frame == frame && entry.viewport == viewport) {
-        found = entry.valid;if (found) value = entry.value;break;
+        found = entry.valid;if (found) value = entry.value;if(deferredPublished)*deferredPublished=entry.deferredPublished;break;
     }
     ReleaseSRWLockShared(&cacheLock);return found;
 }
@@ -74,7 +74,7 @@ struct CameraScope {
     RSTemporalCamera value{};
     const RSTemporalCamera *previous;
     SetCamera set = nullptr;ClearCamera clear = nullptr;bool deferred=false;
-    explicit CameraScope(const RSTemporalCamera *next) : previous(activeCamera) {
+    explicit CameraScope(const RSTemporalCamera *next,bool deferredOnly=false,bool deferredPublished=false) : previous(activeCamera) {
         auto ngx = GetModuleHandleW(L"nvngx.dll");
         if (ngx) { set = reinterpret_cast<SetCamera>(GetProcAddress(ngx, "MacLauncherSetTemporalCamera"));clear = reinterpret_cast<ClearCamera>(GetProcAddress(ngx, "MacLauncherClearTemporalCamera")); }
         if (!set || !clear) {
@@ -85,9 +85,10 @@ struct CameraScope {
             deferred=set&&clear;
         }
         if (!set || !clear) return;
+        if(deferredOnly&&!deferred){set=nullptr;clear=nullptr;return;}
         // The builtin bridge binds the next native encode, which occurs after
         // Evaluate returns. Leave it pending; a second viewport is ambiguous.
-        if(deferred){if(next)set(next);else clear();return;}
+        if(deferred){if(!deferredPublished){if(next)set(next);else clear();}return;}
         clear();activeCamera = nullptr;
         if (next) { value = *next;if (set(&value)) activeCamera = &value; }
     }
@@ -133,7 +134,11 @@ extern "C" sl::Result slSetConstants(const sl::Constants &values, const sl::Fram
     RSTemporalCamera camera{};const bool valid = maclauncher_streamline::camera(values, frameId, viewId, camera);
     const auto result = fn(values, frame, view);
     resourceTags.beginFrame(frameId,viewId,valid&&result==sl::Result::eOk);
-    remember(frameId, viewId, valid && result == sl::Result::eOk ? &camera : nullptr);
+    // Direct NGX callers may use Streamline only for constants/Reflex. Its
+    // native next-scale bridge needs these constants before the later encode;
+    // the exact NGX/DXMT paths still bind only around their own evaluation.
+    CameraScope pending(valid&&result==sl::Result::eOk?&camera:nullptr,true);
+    remember(frameId, viewId, valid && result == sl::Result::eOk ? &camera : nullptr,pending.deferred);
     return result;
 }
 extern "C" sl::Result slSetD3DDevice(void *device){
@@ -146,21 +151,24 @@ extern "C" sl::Result slSetTag(const sl::ViewportHandle &view,const sl::Resource
     auto captured=resourceTags.capture(tags,count,commands);
     const auto result=fn(view,tags,count,commands);resourceTags.rememberCaptured(false,0,uint32_t(view),std::move(captured),result==sl::Result::eOk);return result;
 }
+#if !defined(MACLAUNCHER_HAS_SL_SET_TAG_FOR_FRAME) || MACLAUNCHER_HAS_SL_SET_TAG_FOR_FRAME
 extern "C" sl::Result slSetTagForFrame(const sl::FrameToken &frame,const sl::ViewportHandle &view,const sl::ResourceTag *tags,uint32_t count,sl::CommandBuffer *commands){
     const auto fn=original<PFun_slSetTagForFrame*>("slSetTagForFrame");if(!fn)return sl::Result::eErrorMissingOrInvalidAPI;
     auto captured=resourceTags.capture(tags,count,commands);
     const auto result=fn(frame,view,tags,count,commands);resourceTags.rememberCaptured(true,uint32_t(frame),uint32_t(view),std::move(captured),result==sl::Result::eOk);return result;
 }
+#endif
 extern "C" sl::Result slEvaluateFeature(sl::Feature feature, const sl::FrameToken &frame, const sl::BaseStructure **inputs, uint32_t count, sl::CommandBuffer *commands) {
     const auto fn = original<PFun_slEvaluateFeature *>("slEvaluateFeature");if (!fn) return sl::Result::eErrorMissingOrInvalidAPI;
     if (feature != sl::kFeatureDLSS) return fn(feature, frame, inputs, count, commands);
     uint32_t viewId = 0;RSTemporalCamera camera{};
     const bool hasView=viewport(inputs,count,viewId);
     if(!hasView)resourceTags.invalidateEvaluation();
-    const bool valid = hasView && lookup(uint32_t(frame), viewId, camera);
+    bool deferredPublished=false;
+    const bool valid = hasView && lookup(uint32_t(frame), viewId, camera,&deferredPublished);
     const auto tagged=hasView?resourceTags.take(uint32_t(frame),viewId,inputs,count,commands):maclauncher_streamline::TaggedFrame{};
     const auto resources=maclauncher_streamline::resources(tagged);
-    CameraScope scope(valid ? &camera : nullptr);
+    CameraScope scope(valid ? &camera : nullptr,false,deferredPublished);
     ResourceScope resourceScope(valid&&resources.epoch?&resources:nullptr);
     return fn(feature, frame, inputs, count, commands);
 }
