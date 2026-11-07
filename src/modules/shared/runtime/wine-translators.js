@@ -115,7 +115,7 @@ function runtimeManagers() {
   const registry = require('../../registry');
   return [...registry.listSharedRuntimeManagers(), ...registry.listModuleIds().flatMap(id => registry.getModule(id)?.runtimeManagers || [])];
 }
-function managedTranslators(context, runtime, managers = runtimeManagers(), architecture) {
+function managedTranslators(context, runtime, managers = runtimeManagers(), architecture, describe = Description.describeTranslator) {
   const choices = [], consumer = Architecture.targetArchitecture(architecture);
   for (const manager of managers.filter(manager => manager.translatorEngine || manager.translator?.engine)) {
     const inspect = () => {
@@ -128,9 +128,11 @@ function managedTranslators(context, runtime, managers = runtimeManagers(), arch
       let description = install.translator || install.installationMetadata?.translator;
       if (!description) {
         try {
-          description = install.translator || install.installationMetadata?.translator || Description.describeTranslator(install.translatorRoot || install.payloadRoot || install.root || install.installDir,
+          description = describe(install.translatorRoot || install.payloadRoot || install.root || install.installDir,
             { engine: manager.translatorEngine || manager.translator.engine, version: install.versionLabel || install.version, source: manager.id });
         } catch (error) { warn(context.logger, `[translators] ${manager.label || manager.id}: ${error.message}`); continue; }
+        // A description that is still being prepared joins the next read.
+        if (!description) continue;
       }
       if (description.source?.runtime === 'crossover' && runtime !== 'crossover') continue;
       const root = install.translatorRoot || install.payloadRoot || (install.installDir && path.join(install.installDir, install.installationMetadata?.translatorRelative || '')) || install.root;
@@ -250,6 +252,33 @@ async function describedIncluded(install, runtime, context) {
   }
   return includedInventory;
 }
+// Managed translator installs without a recorded description are read like
+// included ones: from the facts retained under the profile, prepared once when
+// missing, so a new backend lane or launcher start reads no translator
+// binaries. A description that could not be retained is read directly.
+async function describedManaged(context, runtime, managers, architecture) {
+  if (!context.userDataDir) return managedTranslators(context, runtime, managers, architecture);
+  const pending = new Map(), attempted = new Set(), options = { userDataDir: context.userDataDir, logger: context.logger };
+  const describe = (root, selection) => {
+    const value = Description.cachedTranslator(root, { ...selection, ...options }), key = JSON.stringify([root, selection]);
+    if (value) return value;
+    if (attempted.has(key)) return Description.describeTranslator(root, selection);
+    if (!pending.has(key)) pending.set(key, () => Description.prepareTranslator(root, { ...selection, ...options }));
+    return null;
+  };
+  for (;;) {
+    const choices = managedTranslators(context, runtime, managers, architecture, describe);
+    const missing = [...pending].filter(([key]) => !attempted.has(key));
+    if (!missing.length) return choices;
+    for (const [key, prepare] of missing) {
+      attempted.add(key);
+      context.signal?.throwIfAborted();
+      // A failure is reported by the direct read on the next pass.
+      try { await prepare(); } catch {}
+      await new Promise(resolve => setImmediate(resolve));
+    }
+  }
+}
 async function inventoryFacts(install, runtime, context, dependencies) {
   const { managers } = dependencies;
   if (!dependencies.choices) for (const manager of managers.filter(item => item.translatorEngine || item.translator?.engine))
@@ -257,7 +286,7 @@ async function inventoryFacts(install, runtime, context, dependencies) {
   const includedInventory = await describedIncluded(install, runtime, context);
   if (dependencies.choices) return { includedInventory, choices: dependencies.choices };
   const Component = require('./component-runtime');
-  const choices = managedTranslators(context, runtime, managers, includedInventory.layout?.architecture || dependencies.consumerArchitecture);
+  const choices = await describedManaged(context, runtime, managers, includedInventory.layout?.architecture || dependencies.consumerArchitecture);
   const seen = new Set(choices.map(item => item.id));
   for (const manager of managers.filter(item => item.referenceManagerIds?.length))
     for (const item of Component.referencedComponents(manager.translatorEngine || manager.translator.engine, context)) {
