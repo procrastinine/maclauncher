@@ -355,7 +355,9 @@ test("each explicit Java line uses its own installed versions despite Java 25 de
   assert.deepEqual(fs.readFileSync(jarPath), before);
 });
 
-test("a missing preferred Java 25 patch is checked against the catalog instead of substituting another installed patch", async t => {
+// Owner rule (2026-11-06): a usable installed runtime is used without a download
+// consent; only an explicit per-game choice stays exact.
+test("a missing preferred Java 25 patch uses an installed patch on the same line without a download", async t => {
   const { userDataDir, jarPath, variant } = fixture(t);
   install(userDataDir, 25, "25.0.4.1+1", variant);
   const entry = { runtimeId: "java", gamePath: jarPath, moduleData: { jarPath, runtimeLine: 25, requiredJava: 25 }, runtimeData: {} };
@@ -363,9 +365,9 @@ test("a missing preferred Java 25 patch is checked against the catalog instead o
     25: { defaultVersion: "25.0.99+1", defaultVariant: variant }
   } } } } };
   forbidNetwork(t);
-  assert.equal(Java.actions.runtimeStatus(entry, {}, context).ready, false);
-  const plan = await Java.ensureRuntime(entry, context);
-  assert.deepEqual([plan.version, plan.discoveryRequired, plan.installOptions.line], [null, true, 25]);
+  const status = Java.actions.runtimeStatus(entry, {}, context);
+  assert.equal(status.ready, true);assert.equal(status.resolvedVersion, "25.0.4.1+1");
+  assert.equal(await Java.ensureRuntime(entry, context), null);
   entry.runtimeData.java = { version: "25.0.4.1+1" };
   assert.equal(await Java.ensureRuntime(entry, context), null);
 });
