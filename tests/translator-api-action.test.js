@@ -364,14 +364,16 @@ test('standalone D3DMetal and DXMT API12 choices resolve and place their matchin
     assert.equal(plan.components.d3d10.used.engine, engine); assert.equal(plan.components.d3d11.used.engine, engine);
     const expected = runtime === 'crossover' ? roots[engine] : path.join(templateRoot, RELATIVE_PATHS.renderers, engine);
     assert.equal(plan.dxgiBinding.description.root, expected);
-    assert.equal(Translators.settingsForPlan(settings, plan).graphicsBackend, 'wined3d');
+    // A coherent D3DMetal placement keeps CrossOver's selector for its NGX redirect.
+    const backend = runtime === 'crossover' && engine === 'd3dmetal' ? 'd3dmetal' : 'wined3d';
+    assert.equal(Translators.settingsForPlan(settings, plan).graphicsBackend, backend);
     const view = await Files.prepareTranslatorFiles(plan, { userDataDir: context.userDataDir, layout: plan.layout });
     for (const name of ['dxgi', 'd3d10core', 'd3d11', 'd3d12', 'd3d12core']) {
       assert.ok(view.dllOverrides.includes(name + '=b'));
       assert.equal(fs.realpathSync(view.links[`lib/wine/x86_64-windows/${name}.dll`]), path.join(expected, `x86_64-windows/${name}.dll`));
     }
     assert.equal(fs.realpathSync(view.links['lib/wine/x86_64-unix/winemetal.so']), path.join(expected, 'x86_64-unix/winemetal.so'));
-    assert.equal(view.env.CX_GRAPHICS_BACKEND, runtime === 'crossover' ? 'wined3d' : undefined);
+    assert.equal(view.env.CX_GRAPHICS_BACKEND, runtime === 'crossover' ? backend : undefined);
   }
 });
 
