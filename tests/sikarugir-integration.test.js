@@ -399,7 +399,8 @@ test("Stop ends only the selected private prefix and keeps independently spawned
     const root=process.env.WINEPREFIX;
     process.on('SIGTERM',()=>{fs.writeFileSync(path.join(root,'windows-closed'),'yes');process.exit(0)});
     fs.writeFileSync(path.join(root,'windows-environment.json'),JSON.stringify({dlls:process.env.WINEDLLPATH,
-      libraries:process.env.DYLD_LIBRARY_PATH,frameworks:process.env.DYLD_FRAMEWORK_PATH}));
+      libraries:process.env.DYLD_LIBRARY_PATH,frameworks:process.env.DYLD_FRAMEWORK_PATH,
+      fallbackLibraries:process.env.DYLD_FALLBACK_LIBRARY_PATH,fallbackFrameworks:process.env.DYLD_FALLBACK_FRAMEWORK_PATH}));
     fs.writeFileSync(path.join(root,'windows-ready'),'yes');${untilTestEnds}`;
   write(install.executablePath, `#!${process.execPath}\nconst fs=require('node:fs'),path=require('node:path'),{spawn}=require('node:child_process');
     fs.writeFileSync(path.join(process.env.WINEPREFIX,'wine-arguments.json'),JSON.stringify(process.argv.slice(2)));
@@ -442,9 +443,13 @@ test("Stop ends only the selected private prefix and keeps independently spawned
       const privateDllRoot = path.join(entry.runtimeData.sikarugir.viewRoot, "wine", "lib", "wine");
       assert.deepEqual(environment.dlls.split(path.delimiter), [path.join(privateDllRoot, "i386-windows"),
         path.join(privateDllRoot, "x86_64-windows"), privateDllRoot, fs.realpathSync(path.join(install.engineRoot, "lib", "wine"))]);
-      assert.ok(environment.libraries?.includes(path.join(entry.runtimeData.sikarugir.viewRoot, "wine", "lib", "wine", "x86_64-unix")),
+      // Only the private ntdll override is a library override; Wine's own and vendor libraries are fallbacks.
+      assert.deepEqual(environment.libraries?.split(path.delimiter), [path.join(entry.runtimeData.sikarugir.viewRoot, "wine", "loader-libraries")],
+        "the private ntdll override must survive the protected supervisor shell");
+      assert.ok(environment.fallbackLibraries?.split(path.delimiter).includes(path.join(privateDllRoot, "x86_64-unix")),
         "private graphics library paths must survive the protected supervisor shell");
-      assert.ok(environment.frameworks?.includes(fs.realpathSync(path.join(install.templateRoot, "Frameworks"))));
+      assert.ok(!environment.frameworks, "vendor frameworks never override system frameworks");
+      assert.ok(environment.fallbackFrameworks?.split(path.delimiter).includes(fs.realpathSync(path.join(install.templateRoot, "Frameworks"))));
       assert.equal(child.exitCode, null, "the wrapper remains alive after Wine's initial process exits");
       assert.equal(core.getLaunchContext(entry).isGameRunning(), true);
     }
