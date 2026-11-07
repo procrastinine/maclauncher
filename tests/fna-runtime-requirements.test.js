@@ -83,11 +83,12 @@ function createRuntime(f, packages, events = []) {
     }
   }}});
 }
-function playFixture(t, f, runtime, version, events, approve = true) {
+// The saved default version selects the host unless `manual` pins it for the game.
+function playFixture(t, f, runtime, version, events, approve = true, manual = false) {
   const source = path.join(f.root, "Game");fs.mkdirSync(source);
   const assembly = writeAssembly(path.join(source, "Game.exe"));
   writeAssembly(path.join(source, "FNA.dll"), {name: "FNA", references: [], entryPoint: false});
-  const entry = {gameId: "fixture-game", moduleId: "fna", gamePath: assembly, runtimeData: {fna: {version}}};
+  const entry = {gameId: "fixture-game", moduleId: "fna", gamePath: assembly, runtimeData: manual ? {fna: {version}} : {}};
   const settings = {runtimes: {fna: {defaultVersion: version}}};
   t.mock.method(Manager, "resolveSelection", (...args) => runtime.resolveSelection(...args));
   t.mock.method(Manager, "getState", (...args) => runtime.getState(...args));
@@ -115,15 +116,26 @@ test("FNA requires the actual profile capability while keeping profile integrity
 test("FNA installed old hosts resolve unready and capable local hosts remain usable offline", t => {
   const f = fixture(t), events = [], runtime = createRuntime(f, [], events);
   register(runtime, f, "1.0.0");
-  const requested = {runtimeData: {fna: {version: "1.0.0"}}}, saved = {runtimes: {fna: {defaultVersion: "1.0.0"}}};
+  const requested = {runtimeData: {}}, saved = {runtimes: {fna: {defaultVersion: "1.0.0"}}};
   const pending = runtime.resolveSelection(requested, saved, f.userDataDir);
   assert.equal(pending.ready, false);assert.equal(pending.version, null);assert.equal(pending.discoveryRequired, true);
   assert.equal(pending.requestedVersion, "1.0.0");assert.equal(runtime.getState({userDataDir: f.userDataDir}).installed[0].ready, false);
   register(runtime, f, "2.0.0", {originalGamePaths: true});
   const selected = runtime.resolveSelection(requested, saved, f.userDataDir);
   assert.equal(selected.version, "2.0.0");assert.equal(selected.ready, true);assert.equal(selected.requestedVersion, "1.0.0");
-  assert.deepEqual(requested.runtimeData, {fna: {version: "1.0.0"}});assert.equal(saved.runtimes.fna.defaultVersion, "1.0.0");
+  assert.deepEqual(requested.runtimeData, {});assert.equal(saved.runtimes.fna.defaultVersion, "1.0.0");
   assert.deepEqual(events, []);
+});
+
+test("a manual per-game FNA pin to an old host is kept and Play reports it without replacing it", async t => {
+  const f = fixture(t), events = [], runtime = createRuntime(f, [packageRecord("2.0.0", {originalGamePaths: true})], events);
+  register(runtime, f, "1.0.0");register(runtime, f, "2.0.0", {originalGamePaths: true});
+  const pinned = runtime.resolveSelection({runtimeData: {fna: {version: "1.0.0"}}}, {}, f.userDataDir);
+  assert.equal(pinned.version, "1.0.0");assert.equal(pinned.ready, false);assert.equal(pinned.selectionSource, "manual");
+  const play = playFixture(t, f, runtime, "1.0.0", events, true, true), snapshot = JSON.stringify([play.entry, play.settings]);
+  await assert.rejects(play.prepare(), error => error.code === "RUNTIME_VERSION_UNRESOLVED" && /FNA.*"1\.0\.0".*updated FNA runtime/.test(error.message));
+  assert.deepEqual(events, [], "a manual pin is never replaced by discovery, consent or installation");
+  assert.equal(JSON.stringify([play.entry, play.settings]), snapshot);
 });
 
 test("consented FNA Play discovers and installs a capable future package then reuses it offline", async t => {
@@ -161,7 +173,7 @@ test("catalog feature claims do not override an installed FNA profile missing th
   assert.equal(events.filter(event => event === "catalog").length, 1);
   assert.equal(runtime.core.listDiscoveredCatalog({userDataDir: f.userDataDir})[0].projectPackage.capabilities.originalGamePaths, true);
   events.length = 0;
-  const selected = runtime.resolveSelection({runtimeData: {fna: {version: "1.0.0"}}}, {}, f.userDataDir);
+  const selected = runtime.resolveSelection({runtimeData: {}}, {runtimes: {fna: {defaultVersion: "1.0.0"}}}, f.userDataDir);
   assert.equal(selected.ready, false);assert.equal(selected.version, null);assert.equal(selected.discoveryRequired, true);
   assert.deepEqual(events, []);
 });
