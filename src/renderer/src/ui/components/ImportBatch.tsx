@@ -21,11 +21,13 @@ export function useImportBatches(api: ImportApi | undefined) {
       setBatches(previous => previous.map(batch => batch.id === id ? { id, ...progress } : batch));
     });
   }
-  async function resolve(batch: Batch, index: number, choose: boolean) {
+  // A failure is resolved by a chosen file (true), a retry (false) or the
+  // games found inside its folder (their paths).
+  async function resolve(batch: Batch, index: number, choose: boolean | string[]) {
     if (!api) return;
     setBatches(previous => previous.map(row => row.id === batch.id ? { ...row, resolving: index } : row));
     try {
-      const paths = choose ? await api.openGameDialog() : [batch.failures[index].inputPath];
+      const paths = Array.isArray(choose) ? choose : choose ? await api.openGameDialog() : [batch.failures[index].inputPath];
       if (!paths.length) return;
       const result = await runImportBatch(paths, path => api.addRecent(path));
       setBatches(previous => previous.map(row => row.id === batch.id ? { ...row, ...resolveImportFailure(row, index, result) } : row));
@@ -63,7 +65,9 @@ export function ImportBatches({ batches, jobs, onCancel, resolve, dismiss, remov
 }
 
 // A damaged or incomplete game cannot be fixed by choosing another file or
-// trying again, so its row offers Show in Finder and Remove only.
+// trying again, so its row offers Show in Finder and Remove only. A folder
+// whose subfolders hold games lists each one with Add, and Add all when they
+// are separate games; trying the folder again would find the same.
 type FailureProps = Pick<Props, "resolve" | "dismiss"> & Pick<ReturnType<typeof useImportBatches>, "remove" | "reveal"> & { batches: Batch[] };
 function ImportFailures({ batches, resolve, dismiss, remove, reveal }: FailureProps) {
   const busy = batches.some(batch => batch.resolving !== undefined);
@@ -74,20 +78,33 @@ function ImportFailures({ batches, resolve, dismiss, remove, reveal }: FailurePr
       <button className="btn small" disabled={busy} onClick={() => batches.forEach(batch => dismiss(batch.id))}>Dismiss</button>
     </div>
     <ul className="importBatchFailures">
-      {batches.flatMap(batch => batch.failures.map((failure, index) => <li key={`${batch.id}:${index}:${failure.inputPath}`}>
-        <div><strong>{itemName(failure.inputPath)}</strong><div className="dim">{formatUserError(failure.reason)}</div></div>
+      {batches.flatMap(batch => batch.failures.map((failure, index) => {
+        const found = failure.nestedGames || [], separate = new Set(found.map(game => game.gamePath)).size === found.length;
+        return <li key={`${batch.id}:${index}:${failure.inputPath}`}>
+        <div><strong>{itemName(failure.inputPath)}</strong><div className="dim">{formatUserError(failure.reason)}</div>
+          {found.length > 0 && <ul className="importBatchFound" aria-label={`Games found in ${itemName(failure.inputPath)}`}>
+            {found.map(game => <li key={game.inputPath}>
+              <span><strong>{game.name}</strong> <span className="dim">{game.relativePath}{game.label ? ` · ${game.label}` : ""}</span></span>
+              <button className="btn small" disabled={busy} aria-label={`Add ${game.relativePath}`}
+                onClick={() => void resolve(batch, index, [game.inputPath])}>Add</button>
+            </li>)}
+          </ul>}
+        </div>
         <div className="importBatchActions">
           {failure.code === "DETECTION_INVALID_INPUT" ? <>
             <button className="btn small" onClick={() => reveal(failure.inputPath)}>Show in Finder</button>
           </> : <>
+            {found.length > 1 && separate && <button className="btn small" disabled={busy}
+              onClick={() => void resolve(batch, index, found.map(game => game.inputPath))}>Add all</button>}
             <button className="btn small" disabled={busy} onClick={() => void resolve(batch, index, true)}>
               {batch.resolving === index ? "Adding…" : "Choose game file…"}</button>
-            <button className="btn small" disabled={busy} onClick={() => void resolve(batch, index, false)}>Retry</button>
+            {!found.length && <button className="btn small" disabled={busy} onClick={() => void resolve(batch, index, false)}>Retry</button>}
           </>}
           <button className="btn small" disabled={busy} aria-label={`Remove ${itemName(failure.inputPath)} from this list`}
             onClick={() => remove(batch, index)}>Remove</button>
         </div>
-      </li>))}
+      </li>;
+      }))}
     </ul>
   </section>;
 }

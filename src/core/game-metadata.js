@@ -16,6 +16,7 @@ const Installers = require("../modules/shared/installers");
 const GameAvailability = require("./game-availability");
 const EphemeralEntries = require("./ephemeral-entries");
 const Relocation = require("./game-relocation");
+const NestedImport = require("./nested-import");
 const GameCommands = require("../main/game-command");
 const { prepareModuleInput, atomicWrite, assertOwnDirectory } = require("../modules/shared/writable-input");
 const { throwIfAborted, isAbortError } = require("../modules/shared/runtime/download-utils");
@@ -217,6 +218,12 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
     } catch (error) {
       if (typeof error?.detail === "string") {
         try { logger.warn?.("[import] could not add", inputPath, error.detail)?.catch?.(() => {}); } catch {}
+      }
+      // A folder with no game at its top level, or several, offers the games
+      // its subfolders hold. The failed import itself adds nothing.
+      if (typeof registry.explainDetectionAsync === "function" && !isAbortError(error)) {
+        const nestedGames = await NestedImport.findNestedGames(inputPath, error, { detect: registry.explainDetectionAsync, signal: options.signal });
+        if (nestedGames.length) error.nestedGames = nestedGames;
       }
       // A failed or cancelled import of a new game leaves no launcher folder.
       // A completed container unpack stays for the next import to reuse, and a

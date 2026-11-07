@@ -12,7 +12,8 @@ async function probe() {
     parentPort.postMessage({ result: result || null });
   } catch (error) {
     parentPort.postMessage({ error: String(error.message || error), ...(typeof error.code === "string" ? { errorCode: error.code } : {}),
-      ...(typeof error.detail === "string" ? { errorDetail: error.detail } : {}) });
+      ...(typeof error.detail === "string" ? { errorDetail: error.detail } : {}),
+      ...(Array.isArray(error.choices) ? { errorChoices: error.choices.filter(choice => typeof choice === "string") } : {}) });
   }
 }
 

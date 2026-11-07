@@ -21,6 +21,20 @@ class DetectionError extends Error {
   }
 }
 
+// A conflict may name its choices: the absolute paths of the files, folders or
+// app bundles that each select one of the possible games.
+function conflictChoices(error) {
+  if (error?.code !== "DETECTION_CONFLICT" || !Array.isArray(error.choices)) return null;
+  const choices = [...new Set(error.choices.filter(choice => typeof choice === "string" && path.isAbsolute(choice)))];
+  return choices.length > 1 ? choices : null;
+}
+function conflictError(message, choices) {
+  const error = new DetectionError(message, "DETECTION_CONFLICT");
+  error.choices = choices;
+  if (!conflictChoices(error)) delete error.choices;
+  return error;
+}
+
 function isInside(root, candidate) {
   const relative = path.relative(root, candidate);
   return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
@@ -442,7 +456,7 @@ function runWorker(session, task) {
       settled = true;
       clearTimeout(timer);
       if (message.error) reject(Object.assign(new Error(message.error), message.errorCode ? { code: message.errorCode } : {},
-        message.errorDetail ? { detail: message.errorDetail } : {})); else resolve(message.result);
+        message.errorDetail ? { detail: message.errorDetail } : {}, message.errorChoices ? { choices: message.errorChoices } : {})); else resolve(message.result);
     });
     worker.once("error", error => { settled = true; clearTimeout(timer); reject(error); });
     worker.once("exit", code => { clearTimeout(timer); if (!settled) reject(new Error(`Detection worker exited without a result (${code}).`)); });
@@ -523,7 +537,8 @@ function chooseCandidate(candidates) {
   }
   const sorted = Array.from(unique.values()).sort((a, b) => b.score - a.score || a.moduleId.localeCompare(b.moduleId));
   const strongest = sorted.filter(candidate => candidate.score === sorted[0].score);
-  if (strongest.length > 1) throw new DetectionError(`Ambiguous game input: ${strongest.map(candidate => `${candidate.label} (${candidate.detected.gamePath})`).join("; ")}. Select an individual game file or a more specific folder.`, "DETECTION_CONFLICT");
+  if (strongest.length > 1) throw conflictError(`Ambiguous game input: ${strongest.map(candidate => `${candidate.label} (${candidate.detected.gamePath})`).join("; ")}. Select an individual game file or a more specific folder.`,
+    strongest.map(candidate => candidate.inputPath));
   return strongest[0];
 }
 
@@ -562,7 +577,7 @@ function* detectionContexts(session) {
 }
 
 function chooseChildApp(candidates) {
-  if (candidates.length > 1) throw new DetectionError("Multiple game apps found. Select an individual app bundle.", "DETECTION_CONFLICT");
+  if (candidates.length > 1) throw conflictError("Multiple game apps found. Select an individual app bundle.", candidates.map(candidate => candidate.inputPath));
   return candidates[0] || null;
 }
 
@@ -570,7 +585,7 @@ function reportFor(session, candidates, selected = null, error = null) {
   return { format: "maclauncher-detection-v1", input: session.input, detected: selected?.detected || null, selectedModuleId: selected?.moduleId || null,
     candidates, versions: candidates.map(candidate => ({ moduleId: candidate.moduleId, ...candidate.version })), trace: session.trace,
     metrics: session.metrics, limits: session.limits, ...(error ? { error: { code: error.code || "DETECTION_ERROR", message: error.message,
-      ...(typeof error.detail === "string" ? { detail: error.detail } : {}) } } : {}) };
+      ...(typeof error.detail === "string" ? { detail: error.detail } : {}), ...(conflictChoices(error) ? { choices: conflictChoices(error) } : {}) } } : {}) };
 }
 
 // The message is the module's plain reason for the import message; its detail,
@@ -733,7 +748,8 @@ async function explainDetectionAsync(inputPath, modules, options = {}) {
 }
 
 function resultOrThrow(report) {
-  if (report.error) throw Object.assign(new DetectionError(report.error.message, report.error.code, report), report.error.detail ? { detail: report.error.detail } : {});
+  if (report.error) throw Object.assign(new DetectionError(report.error.message, report.error.code, report), report.error.detail ? { detail: report.error.detail } : {},
+    report.error.choices ? { choices: report.error.choices } : {});
   return report.detected;
 }
 

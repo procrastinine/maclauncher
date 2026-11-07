@@ -217,7 +217,8 @@ function detectGame(context) {
       }
       candidates.sort((a, b) => b.priority - a.priority);
       const strongest = candidates.filter(candidate => candidate.priority === candidates[0].priority);
-      if (strongest.length > 1) throw Object.assign(new Error("Multiple Windows executables were found in this folder. Select one .exe file to identify the game."), { code: "DETECTION_CONFLICT" });
+      if (strongest.length > 1) throw Object.assign(new Error("Multiple Windows executables were found in this folder. Select one .exe file to identify the game."),
+        { code: "DETECTION_CONFLICT", choices: strongest.map(candidate => candidate.executable.windowsExecutablePath) });
       match = strongest[0]?.executable;
     }
   }

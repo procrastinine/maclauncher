@@ -11,12 +11,13 @@ function errorRecord(error) {
   return { message: String(error?.message || error), name: error?.name || "Error",
     ...(error?.code != null ? { code: error.code } : {}),
     ...(error?.stack ? { stack: error.stack } : {}),
-    ...(error?.detection ? { detection: error.detection } : {}) };
+    ...(error?.detection ? { detection: error.detection } : {}),
+    ...(Array.isArray(error?.nestedGames) ? { nestedGames: error.nestedGames } : {}) };
 }
 function restoreError(record = {}) {
   const error = new Error(record.message || "Backend operation failed.");
   error.name = record.name || "Error";
-  for (const key of ["code", "stack", "detection"]) if (record[key] != null) error[key] = record[key];
+  for (const key of ["code", "stack", "detection", "nestedGames"]) if (record[key] != null) error[key] = record[key];
   return error;
 }
 

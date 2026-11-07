@@ -117,3 +117,28 @@ test('a finished batch closes after 30 seconds while failed, running and hovered
     batches.close();
   } finally { for(const notice of notices.values())notice.harness?.close();mock.timers.reset(); }
 });
+
+test('a folder whose subfolders hold games lists each with Add, and Add all only for separate games', async () => {
+  const React=require('react'),{renderToStaticMarkup}=require('react-dom/server');
+  const shared={jobs:[],addPaths:()=>{},onCancel:()=>{},resolve:()=>{},dismiss:()=>{}};
+  const separate=[{inputPath:'/games/Collection/Alpha',relativePath:'Alpha',gamePath:'/games/Collection/Alpha',name:'Alpha',label:'Fixture Game'},
+    {inputPath:'/games/Collection/Beta',relativePath:'Beta',gamePath:'/games/Collection/Beta',name:'Beta',label:'Fixture Game'}];
+  const choices=[{inputPath:'/games/Sample/build/Main.exe',relativePath:'build/Main.exe',gamePath:'/games/Sample/build',name:'Main',label:'Windows Game'},
+    {inputPath:'/games/Sample/build/Tool.exe',relativePath:'build/Tool.exe',gamePath:'/games/Sample/build',name:'Tool',label:'Windows Game'}];
+  const html=renderToStaticMarkup(React.createElement(component.ImportBatches,{...shared,batches:[{id:1,total:2,completed:2,added:0,currentPath:null,failures:[
+    {inputPath:'/games/Collection',reason:'“Collection” has no game at its top level.',code:'DETECTION_UNSUPPORTED',nestedGames:separate},
+    {inputPath:'/games/Sample',reason:'“Sample” has no game at its top level.',code:'DETECTION_UNSUPPORTED',nestedGames:choices}]}]}));
+  const [collection,sample]=html.split('<li><div>').slice(1);
+  assert.match(collection,/aria-label="Games found in Collection"/);assert.match(collection,/Alpha.*Fixture Game/s);
+  assert.equal((collection.match(/>Add</g)||[]).length,2);assert.match(collection,/>Add all</);assert.doesNotMatch(collection,/>Retry</);
+  assert.match(sample,/build\/Main\.exe · Windows Game/);assert.doesNotMatch(sample,/>Add all</,'choices for one game are alternatives');
+  // Add imports the chosen path, and the failure gives way to its result.
+  const {componentHarness}=require('./helpers/renderer-component'),added=[];
+  const h=componentHarness(()=>component.useImportBatches({openGameDialog:async()=>[],addRecent:async p=>{added.push(p);
+    if(p==='/games/Collection')throw {message:'No game at its top level.',code:'DETECTION_UNSUPPORTED',nestedGames:separate};}}),{});
+  await h.render().addPaths(['/games/Collection']);
+  let state=h.render();assert.deepEqual(state.batches[0].failures[0].nestedGames,separate);
+  await state.resolve(state.batches[0],0,separate.map(game=>game.inputPath));state=h.render();
+  assert.deepEqual(added,['/games/Collection','/games/Collection/Alpha','/games/Collection/Beta']);
+  assert.equal(state.batches[0].added,2);assert.equal(state.batches[0].failures.length,0);h.close();
+});

@@ -12,8 +12,14 @@ function userImportError(error, input) {
   try { if (fs.statSync(input).isDirectory()) kind = extension === ".app" ? "Mac application" : "folder"; } catch {}
   const item = `“${name}”`;
   const code = error?.code;
+  const nested = Array.isArray(error?.nestedGames) ? error.nestedGames : [];
+  const found = nested.length === 1 ? "one game" : `${nested.length} possible games`;
   let message;
-  if (code === "DETECTION_CONFLICT") {
+  if (nested.length && code === "DETECTION_CONFLICT") {
+    message = `${item} contains more than one possible game. MacLauncher found ${found} in it.`;
+  } else if (nested.length) {
+    message = `${item} has no game at its top level. MacLauncher found ${found} in its subfolders.`;
+  } else if (code === "DETECTION_CONFLICT") {
     message = `${item} contains more than one possible game. Add the game file or a more specific folder.`;
   } else if (code === "DETECTION_INVALID_INPUT") {
     // The module recognized the input format and names what is damaged or missing.
@@ -38,6 +44,7 @@ function userImportError(error, input) {
   const result = new Error(message, { cause: error });
   if (code != null) result.code = code;
   if (error?.detection) result.detection = error.detection;
+  if (nested.length) result.nestedGames = nested;
   if (error?.stack) result.stack += `\nCaused by: ${error.stack}`;
   return result;
 }

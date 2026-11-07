@@ -3458,7 +3458,20 @@ async function openGamesFromMenu() {
       try { await gameImports.import(filePath); }
       catch (error) {
         if (isAbortError(error)) continue;
-        await dialog.showMessageBox({ type: "error", message: "Could not add game", detail: error.message });
+        const nested = Array.isArray(error?.nestedGames) ? error.nestedGames : [];
+        if (!nested.length) { await dialog.showMessageBox({ type: "error", message: "Could not add game", detail: error.message }); continue; }
+        // The games found inside the folder are offered by name. Add All adds
+        // separate games; choices that select one game share its game path.
+        const separate = new Set(nested.map(game => game.gamePath)).size === nested.length;
+        const choices = nested.slice(0, 3), all = nested.length > 1 && separate ? ["Add All"] : [];
+        const { response } = await dialog.showMessageBox({ type: "question", message: "Add a game from this folder?",
+          detail: [error.message, "", ...nested.map(game => `${game.relativePath}${game.label ? ` (${game.label})` : ""}`)].join("\n"),
+          buttons: [...choices.map(game => `Add ${path.basename(game.relativePath)}`), ...all, "Cancel"], cancelId: choices.length + all.length, defaultId: 0 });
+        const selected = response < choices.length ? [choices[response]] : response === choices.length && all.length ? nested : [];
+        for (const game of selected) {
+          try { await gameImports.import(game.inputPath); }
+          catch (failure) { if (!isAbortError(failure)) await dialog.showMessageBox({ type: "error", message: "Could not add game", detail: failure.message }); }
+        }
       }
     }
   } catch (error) {
@@ -3473,7 +3486,9 @@ ipcMain.handle("launcher:addRecent", async (_event, inputPath) => {
   try { return { entry: await gameImports.import(inputPath) }; }
   catch (error) {
     return { error: { message: String(error?.message || error), ...(typeof error?.code === "string" ? { code: error.code } : {}),
-      ...(error?.name === "AbortError" ? { name: "AbortError" } : {}) } };
+      ...(error?.name === "AbortError" ? { name: "AbortError" } : {}),
+      ...(Array.isArray(error?.nestedGames) ? { nestedGames: error.nestedGames.map(game => ({ inputPath: game.inputPath, relativePath: game.relativePath,
+        gamePath: game.gamePath, name: game.name, label: game.label })) } : {}) } };
   }
 });
 ipcMain.handle("launcher:cancelImport", (_event, inputPath) => gameImports.cancel(inputPath));

@@ -86,8 +86,10 @@ function detectGame(context) {
     const candidates = entries.filter(item => (item.isFile() || item.isSymbolicLink()) && PROGRAM.test(item.name))
       .map(item => inspect(path.join(root, item.name), true)).filter(Boolean);
     const programs = candidates.filter(item => !item.foreign);
-    if (programs.length && candidates.some(item => item.foreign)) throw Object.assign(new Error("DOS and Windows programs were found. Select the game's executable or batch launcher."), { code: "DETECTION_CONFLICT" });
-    if (programs.length > 1) throw Object.assign(new Error("Several DOS programs were found. Select the game's EXE, COM or BAT file."), { code: "DETECTION_CONFLICT" });
+    if (programs.length && candidates.some(item => item.foreign)) throw Object.assign(new Error("DOS and Windows programs were found. Select the game's executable or batch launcher."),
+      { code: "DETECTION_CONFLICT", choices: candidates.map(item => item.executablePath) });
+    if (programs.length > 1) throw Object.assign(new Error("Several DOS programs were found. Select the game's EXE, COM or BAT file."),
+      { code: "DETECTION_CONFLICT", choices: programs.map(item => item.executablePath) });
     program = programs[0];
   }
   if (!program) return null;
