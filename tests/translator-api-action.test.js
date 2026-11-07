@@ -267,7 +267,11 @@ test('real Sikarugir API graphics view applies exact planned builtin and Unix so
       assert.equal(fs.lstatSync(target).isSymbolicLink(), true); assert.equal(fs.realpathSync(target), fs.realpathSync(file.path));
     }
   }
-  assert.ok(graphics.dllOverrides.includes('d3d9=n,b')); assert.ok(graphics.env.DYLD_LIBRARY_PATH.split(path.delimiter).includes(privateUnix));
+  assert.ok(graphics.dllOverrides.includes('d3d9=n,b'));
+  assert.equal(graphics.env.DYLD_LIBRARY_PATH, graphics.libraryOverride);
+  assert.deepEqual(fs.readdirSync(graphics.libraryOverride), ['ntdll.so']);
+  assert.equal(fs.realpathSync(path.join(graphics.libraryOverride, 'ntdll.so')), fs.realpathSync(path.join(privateUnix, 'ntdll.so')));
+  assert.ok(graphics.env.DYLD_FALLBACK_LIBRARY_PATH.split(path.delimiter).includes(privateUnix));
   const original = WineSettings.environment; let calls = 0;
   t.mock.method(WineSettings, 'environment', (settings, options) => { calls++; return original(settings, options); });
   const built = SikaLaunch.buildEnvironment(Translators.settingsForPlan(settings, plan), install, path.join(f.root, 'state'), prefixPath, graphics,

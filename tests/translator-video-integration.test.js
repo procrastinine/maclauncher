@@ -96,14 +96,28 @@ async function environmentFor(f, plan, view, context) {
   if (f.runtime === 'sikarugir') {
     const graphics = await SikaGraphics.prepareGraphicsView({ install: f.install, settings, translatorPlan: plan, translatorView: view,
       context, userDataDir: context.userDataDir, viewRoot: path.join(context.userDataDir, 'graphics/sikarugir-video'), prefixPath: prefix, host: f.host, executableArchitecture: 'x86_64' });
-    return SikaLaunch.buildEnvironment(settings, f.install, path.join(f.root, 'game-state'), prefix, graphics, { translatorPlan: plan, baseEnvironment: {} }).environment;
+    const environment = SikaLaunch.buildEnvironment(settings, f.install, path.join(f.root, 'game-state'), prefix, graphics, { translatorPlan: plan, baseEnvironment: {} }).environment;
+    assert.equal(environment.DYLD_LIBRARY_PATH, graphics.libraryOverride);
+    assert.ok(environment.DYLD_FALLBACK_LIBRARY_PATH.split(path.delimiter).includes(path.dirname(f.core)));
+    assert.ok(environment.DYLD_FALLBACK_FRAMEWORK_PATH.split(path.delimiter).includes(path.join(f.templateRoot, 'Frameworks')));
+    return environment;
   }
   const stock = { GST_PLUGIN_SYSTEM_PATH_1_0: path.dirname(f.systemPlugin), GST_PLUGIN_SCANNER_1_0: f.scanner, GST_REGISTRY_1_0: path.join(f.root, 'stock-registry') };
   const built = CrossLaunch.buildEnvironment(settings, f.install, path.join(f.root, 'game-state'), prefix, { translatorPlan: plan, baseEnvironment: stock, executableArchitecture: 'x86_64', host: f.host });
   // The launch seam merges this same prepared environment into both outputs.
   for (const output of [built.environment, built.overrides]) Object.assign(output, view.env);
   assert.equal(built.environment.GST_PLUGIN_PATH_1_0, built.overrides.GST_PLUGIN_PATH_1_0);
-  const loaderValues = CrossLoader.environment(f.install.loaderPath, built.environment, { installation: f.install, translatorView: view });
+  const loader = await CrossLoader.prepare(f.install, path.join(f.root, 'game-state'), { userDataDir: context.userDataDir, translatorView: view,
+    execute: async (command, args) => {
+      assert.equal(command, '/usr/bin/codesign');
+      return { stdout: args[0] === '-d' ? '<?xml version="1.0"?><plist version="1.0"><dict></dict></plist>' : '' };
+    } });
+  const loaderValues = CrossLoader.environment(loader, built.environment, { installation: f.install, translatorView: view });
+  const anchor = path.resolve(path.dirname(loader), '../loader-libraries');
+  assert.equal(loaderValues.DYLD_LIBRARY_PATH, anchor);
+  assert.deepEqual(fs.readdirSync(anchor), ['ntdll.so']);
+  assert.equal(fs.realpathSync(path.join(anchor, 'ntdll.so')),
+    fs.realpathSync(path.resolve(path.dirname(loader), '../lib/wine', plan.layout.unixName, 'ntdll.so')));
   return { ...built.environment, ...loaderValues };
 }
 
