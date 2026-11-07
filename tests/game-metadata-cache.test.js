@@ -426,3 +426,21 @@ test("cleaned automatic window titles remain editable across warm and forced met
   assert.equal((await f.service.refreshEntry(edited, f.settings)).name, "My garden");
   assert.equal((await f.service.refreshEntry(edited, f.settings, { force: true })).name, "My garden");
 });
+
+test("a stale Windows project title refreshes on scan while an edited library name stays", async t => {
+  const f = fixture(t), mod = f.registry.getModule(), detect = f.registry.detectGameAsync;
+  f.registry.detectGameAsync = async (...args) => ({ ...await detect(...args), gameType: "windows", name: "FSD" });
+  mod.resolveGameMetadata = () => ({ name: "FSD" });
+  const first = await f.service.refreshEntry(f.entry, f.settings);
+  const file = path.join(f.userDataDir, "games", "fixture", "metadata.json");
+  const stale = JSON.parse(fs.readFileSync(file)); stale.profile = "old-title-policy"; stale.automaticName = "FSD"; stale.facts.name = "FSD";
+  const receipt = path.join(f.gamePath, ".maclauncher-steam.json");
+  fs.writeFileSync(receipt, JSON.stringify({ complete: true, platform: "windows", appId: 548430, name: "Deep Rock Galactic" }));
+  fs.writeFileSync(file, JSON.stringify(stale));
+  const edited = await f.service.refreshEntry({ ...first, name: "My dwarves" }, f.settings);
+  assert.equal(edited.name, "My dwarves");
+  fs.writeFileSync(file, JSON.stringify(stale));
+  const refreshed = await f.service.refreshEntry({ ...first, name: "FSD" }, f.settings);
+  assert.equal(refreshed.name, "Deep Rock Galactic");
+  assert.equal((await f.service.refreshEntry(refreshed, f.settings)).name, "Deep Rock Galactic");
+});

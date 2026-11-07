@@ -45,7 +45,7 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
   }
   // Source metadata changes in a development checkout invalidate old analysis.
   const sourceFiles = [__filename, require.resolve("./game-icons"), require.resolve("./icon-utils"), require.resolve("./icon-extraction"),
-    require.resolve("./save-locations"), require.resolve("./game-name"), require.resolve("../modules/registry"), require.resolve("../modules/detection"), require.resolve("../modules/shared/web/release-root"),
+    require.resolve("./save-locations"), require.resolve("./game-name"), require.resolve("../modules/shared/runtime/windows-title"), require.resolve("../modules/registry"), require.resolve("../modules/detection"), require.resolve("../modules/shared/web/release-root"),
     require.resolve("../modules/shared/writable-input"),
     ...["index.js", "inno.js", "inno-header.js", "runtime/innoextract-manager.js"].map(name => path.join(__dirname, "../modules/shared/installers", name)),
     ...registry.listModuleIds().flatMap(id => {
@@ -152,8 +152,8 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
         merged = { ...merged, ...metadata, moduleData: { ...merged.moduleData, ...metadata.moduleData } };
         if (typeof mod?.mergeEntry === "function") merged = mod.mergeEntry(existing || (importing ? null : entry), merged, settings, { userDataDir });
       }
-      merged = applyGameName(merged, { metadata: Boolean(metadata?.name) });
-      const automaticName = applyGameName({ ...merged, name: metadata?.name || detected.name }, { metadata: Boolean(metadata?.name) }).name;
+      merged = applyGameName(merged, { metadata: Boolean(metadata?.name), userDataDir, userName: customName });
+      const automaticName = applyGameName({ ...merged, name: metadata?.name || detected.name }, { metadata: Boolean(metadata?.name), userDataDir }).name;
       if (customName) merged.name = customName;
       const icon = await selectIcon(merged, mod, settings, signal);
       prepareModuleInput(merged, registry, { settings, userDataDir, logger, app, ui, signal, onProgress, readOnly: !importing });

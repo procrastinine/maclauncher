@@ -11,7 +11,11 @@ const identifier = name => /^[a-z\d_.-]+$/.test(name) || /[a-z][A-Z]|[A-Z]{2,}[a
 
 // A title supplied by a game wins over an artifact identifier. Folder titles are
 // never replaced by an unrelated executable found beside the actual game data.
-function resolveGameName(entry, { metadata = false } = {}) {
+function resolveGameName(entry, { metadata = false, userDataDir, userName } = {}) {
+  if (typeof userName === "string" && userName.trim()) return userName.trim();
+  if (entry?.nameSource?.type === "user" && entry.name?.trim()) return entry.name.trim();
+  const windows = require("../modules/shared/runtime/windows-title").windowsTitle(entry || {}, { userDataDir });
+  if (windows) return windows;
   metadata ||= entry?.nameSource?.type === "metadata";
   const raw = typeof entry?.name === "string" ? entry.name.trim() : "";
   const source = entry?.importPath || entry?.gamePath || "";
