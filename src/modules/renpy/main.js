@@ -128,7 +128,8 @@ const resolveEntrySdkVersion = Custom.createSelector(SdkRuntimeManager, function
     // Installed SDKs live in the launcher data directory; without it only saved choices apply.
     fallback: userDataDir ? SdkRuntimeManager.getState({ settings: settings?.runtimes?.sdk, userDataDir }).sections?.find(section => section.id === (major === 7 ? "v7" : "v8"))?.defaultVersion : null });
   return installedRuntimeVersion({ ...selection, compatibility: SdkRuntimeManager.versionCompatibility,
-    installed: userDataDir ? SdkRuntimeManager.core.listInstalled(userDataDir, major) : [] }) || selection.version;
+    // An undetected major reads the same v8 section that supplied the default above.
+    installed: userDataDir ? SdkRuntimeManager.core.listInstalled(userDataDir, major === 7 ? 7 : 8) : [] }) || selection.version;
 }, { context: ([entry, settings, userDataDir]) => ({ entry: userDataDir ? entry : null, settings: userDataDir ? settings : null, userDataDir,
   options: { recommended: () => userDataDir ? recommendedSdkVersion(entry) : null } }), required: true,
   result: selection => selection.version });
