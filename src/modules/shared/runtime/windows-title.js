@@ -57,7 +57,9 @@ function windowsTitle(entry, { userDataDir } = {}) {
   const data = entry.moduleData || {}, recorded = entry.runtimeData?.crossover;
   const source = entry.importPath || entry.gamePath;
   const executable = data.originalRunnerPath || data.executablePath || recorded?.windowsExecutablePath || (/\.exe$/i.test(source || "") ? source : null);
-  if (entry.gameType !== "windows" && !/\.exe$/i.test(source || "") && !data.originalRunner?.strings) return null;
+  // Windows games and modules that title games from PE metadata share this precedence. Another engine detected
+  // from a Windows carrier (an RPG Maker Game.exe, a packed Tyrano or Godot executable) keeps its authored title.
+  if (!data.originalRunner?.strings && (entry.gameType ? entry.gameType !== "windows" : !/\.exe$/i.test(source || ""))) return null;
   let root = entry.releaseRootDir || entry.contentRootDir || entry.gamePath;
   try { if (!fs.statSync(root).isDirectory()) root = path.dirname(root); } catch { root = executable ? path.dirname(executable) : null; }
   if (!root) return null;

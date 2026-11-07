@@ -77,6 +77,8 @@ test("Windows Steam manifests and cached app-ID names precede folders without a 
   const install = path.join(root, "steamapps", "common", "Other install"); fs.mkdirSync(install, { recursive: true });
   fs.writeFileSync(path.join(root, "steamapps", "appmanifest_7.acf"), '"AppState" { "appid" "7" "name" "Installed Steam title" "installdir" "Other install" }');
   assert.equal(resolveGameName({ name: "internal", gameType: "windows", gamePath: install }), "Installed Steam title");
+  assert.equal(resolveGameName({ name: "Authored engine title", gameType: "web", gamePath: executable, contentRootDir: root }), "Authored engine title",
+    "another engine detected from a Windows executable keeps its own title");
 });
 
 test("Windows PE product and description are fallbacks and Unreal shipping metadata is never a title", t => {
