@@ -277,6 +277,52 @@ test('Direct3D 12 and DXGI stay ABI paired on both Wine routes, including incomp
   }
 });
 
+test('Direct3D 10/11 without its own DXGI never loads beside another build of DXGI', async t => {
+  const f = fixture(t), Files = require('../src/modules/shared/runtime/translator-files');
+  // CrossOver's DXVK ships Direct3D 9-11 for Wine's DXGI; the managed DXVK ships its own DXGI.
+  const cx = component(f, 'crossover-dxvk', 'dxvk', { d3d9: [], d3d10: ['d3d10core.dll', 'd3d11.dll'], d3d10_1: ['d3d10core.dll', 'd3d11.dll'],
+    d3d10core: ['d3d11.dll'], d3d11: ['dxgi.dll'] });
+  const wine = component(f, 'stock-wine', 'wined3d', { d3d9: [], d3d10core: ['dxgi.dll'], d3d11: ['dxgi.dll'], dxgi: [] });
+  const stock12 = component(f, 'stock-vkd3d', 'vkd3d', { d3d12: ['dxgi.dll'] }, [], { component: 'd3d12' });
+  const dxvk = component(f, 'dxvk-311', 'dxvk', { d3d8: ['d3d9.dll'], d3d9: [], d3d10core: ['d3d11.dll'], d3d11: ['dxgi.dll'], dxgi: [] });
+  const proton = component(f, 'proton-31', 'vkd3d-proton', { d3d12: ['dxgi.dll'] }, [], { component: 'd3d12' });
+  const included = [cx, wine, stock12], choices = [dxvk, proton], checked = compatibility([...included, ...choices]);
+  const resolve = selections => Plan.resolveApiRoles(
+    Plan.resolvePlan({ runtime: 'crossover', selections: { 'd3d-renderer': cx.id, d3d12: selections.d3d12 }, included, choices }),
+    { selections, included, choices, compatibility: checked });
+  const source = (plan, name) => plan.placements.find(item => path.basename(item.file.path) === name)?.description.id;
+  // A saved CrossOver DXVK API10/11 choice cannot share vkd3d-proton's DXVK DXGI.
+  const saved = resolve({ d3d8: dxvk.id, d3d9: cx.id, d3d10: cx.id, d3d11: cx.id, d3d12: proton.id });
+  assert.equal(saved.pairingError, undefined);
+  for (const role of ['d3d10', 'd3d11']) {
+    assert.equal(saved.components[role].selected.id, cx.id); assert.equal(saved.components[role].used.id, dxvk.id);
+    assert.equal(saved.components[role].reasonCode, 'dxgi-pairing'); assert.match(saved.components[role].reason, /requires DXVK DXGI/);
+  }
+  assert.equal(saved.components.d3d9.used.id, cx.id);
+  assert.deepEqual(['d3d10core.dll', 'd3d11.dll', 'dxgi.dll'].map(name => source(saved, name)), [dxvk.id, dxvk.id, dxvk.id]);
+  assert.equal(source(saved, 'd3d9.dll'), cx.id); assert.equal(source(saved, 'd3d12.dll'), proton.id);
+  const view = await Files.prepareTranslatorFiles(saved, { userDataDir: path.join(f.root, 'saved'), layout: { architecture: 'x86_64', unixName: 'x86_64-unix' } });
+  for (const name of ['d3d11.dll', 'dxgi.dll']) assert.equal(fs.realpathSync(view.links[`lib/wine/x86_64-windows/${name}`]), path.join(dxvk.root, name));
+  assert.equal(view.links['lib/wine/x86_64-windows/d3d10.dll'], undefined);
+  // The default engine with only a vkd3d-proton choice follows the same DXGI;
+  // DXVK's Direct3D 8 would need its own Direct3D 9, so it stays unplaced.
+  const projected = resolve({ d3d12: proton.id });
+  assert.equal(projected.apiMode, true); assert.equal(projected.pairingError, undefined);
+  assert.equal(projected.components.d3d11.used.id, dxvk.id); assert.equal(projected.components.d3d8.used, null);
+  assert.equal(source(projected, 'd3d9.dll'), cx.id); assert.equal(source(projected, 'dxgi.dll'), dxvk.id);
+  // An explicit managed API11 choice keeps its DXGI beside CrossOver's Direct3D 9.
+  const managed11 = resolve({ d3d11: dxvk.id, d3d12: '' });
+  assert.equal(managed11.pairingError, undefined); assert.equal(managed11.components.d3d11.fallback, false);
+  assert.deepEqual(['d3d11.dll', 'dxgi.dll', 'd3d9.dll'].map(name => source(managed11, name)), [dxvk.id, dxvk.id, cx.id]);
+  // Without a DXGI provider, or with Wine's own DXGI, CrossOver's DXVK stays selected.
+  const automatic12 = resolve({ d3d9: cx.id, d3d10: cx.id, d3d11: cx.id, d3d12: '' });
+  assert.equal(automatic12.dxgiBinding, undefined); assert.equal(automatic12.components.d3d11.used.id, cx.id);
+  const wine12 = resolve({ d3d11: cx.id, d3d12: stock12.id });
+  assert.equal(wine12.dxgiBinding.description.id, wine.id);
+  assert.equal(wine12.components.d3d11.used.id, cx.id); assert.equal(wine12.components.d3d11.fallback, false);
+  assert.equal(source(wine12, 'd3d11.dll'), cx.id); assert.equal(source(wine12, 'dxgi.dll'), wine.id);
+});
+
 test('D3D12 engines select their own package DXGI with automatic rows and incompatible saved versions', t => {
   const f = fixture(t);
   for (const engine of ['d3dmetal', 'dxmt']) {

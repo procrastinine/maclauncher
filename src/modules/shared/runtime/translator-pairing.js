@@ -75,11 +75,17 @@ function resolvePairing(plan, { choices = [], included = [], compatibility = {},
   }
   const updates = [];
   for (const role of Roles.DIRECT3D_ROLES.filter(role => role.id !== 'd3d12')) {
-    const row = rows[role.id], implicit = !explicit(row);
+    const row = rows[role.id], implicit = !explicit(row), usesDxgi = ['d3d10', 'd3d11'].includes(role.id);
+    // Direct3D 8/9 do not use DXGI. A row already restored to avoid a library
+    // conflict keeps that library instead of recreating the conflict.
+    if (!usesDxgi && row.reasonCode === 'shared-physical-binding') continue;
     const ownsDxgi = row.used && filesForRole(row.used, role).some(isDxgi);
+    // Direct3D 10/11 libraries reach DXGI through their own build's private
+    // interfaces. A package without its own DXGI, such as CrossOver's DXVK,
+    // is built for Wine's DXGI and cannot load beside another DXGI.
     const matching = row.used && (ownsDxgi ? filesForRole(row.used, role).filter(isDxgi).every(file =>
-      binding.some(other => (other.realPath || other.path) === (file.realPath || file.path))) : row.used.engine === family);
-    if (matching || !implicit && !ownsDxgi) continue;
+      binding.some(other => (other.realPath || other.path) === (file.realPath || file.path))) : usesDxgi ? family === 'wined3d' : row.used.engine === family);
+    if (matching || !implicit && !ownsDxgi && !usesDxgi) continue;
     const replacement = usable(partner, role.id) && (!partner.apis?.length || partner.apis.some(api => role.apis.includes(api))) ? described(partner, role.id) : null;
     if (!replacement && !['d3d10', 'd3d11'].includes(role.id)) continue;
     if (!replacement) {
