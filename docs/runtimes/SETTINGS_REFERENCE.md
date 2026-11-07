@@ -1086,7 +1086,7 @@ Runtimes tabs: mpv player → Player (managed); mpv player → Plugins (managed)
 | Timeline previews | On/Off | On | Generate thumbnail previews while hovering over the timeline with thumbfast. When the plugin is missing, Play offers it as an optional download, and Skip continues playback without previews. Requires uosc or another thumbfast-compatible interface. |
 | Configuration folder | Path (with picker) |  | Optional mpv configuration folder containing mpv.conf, input.conf, scripts, script-opts, fonts and other mpv resources. The selected folder is read directly. |
 | Additional configuration files | List |  | Absolute paths, one per line. Files load in order after the configuration folder. mpv include entries can reference further configuration and resources. |
-| Additional scripts | List |  | Absolute paths to Lua or JavaScript scripts, or mpv script folders, one per line. The original files stay in place. |
+| Additional scripts | List |  | Absolute paths to Lua or JavaScript scripts, or mpv script folders, one per line. The original files stay in place and load as they are, and each video can list its own. Runtimes → mpv player → Plugins keeps managed copies with updates instead. |
 | Input configuration | Path (with picker) |  | Optional input.conf file for custom keyboard and mouse bindings. Playback configuration changes apply on the next Play. |
 
 Inspector details: Container.

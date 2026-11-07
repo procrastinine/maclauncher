@@ -280,7 +280,7 @@ The sidebar starts with **Search settings**, followed by the sections. The first
 
 **Environment variables** follows Launcher and holds the global [translator environment variables](../runtimes/TRANSLATOR_ENVIRONMENT.md#global-values): one collapsed block per runtime or translator, whose title counts its stored values, each with one table of `NAME = value` rows grouped by translator, an add row and one **Reset**. **Graphics** follows; it holds the [shader library and the saved presets](#graphics-settings). The macOS Game section follows and holds the native macOS app runtime. The other sections come from the module manifests and follow in alphabetical order.
 
-Settings holds every setting that changes how a runtime behaves; Runtimes only downloads, removes and refreshes runtimes and chooses their default versions. The video player's runtime settings therefore also hold the plugin switches: **Use uosc**, **Timeline previews** and, under **Added plugins**, one **Use <name>** switch for each plugin added in Runtimes.
+Settings holds every setting that changes how a runtime behaves; Runtimes only downloads, removes and refreshes runtimes and chooses their default versions. The video player's runtime settings therefore also hold the plugin switches: **uosc controls**, **Timeline previews** and, under **Added plugins**, one **Use <name>** switch for each plugin added in Runtimes. Its **Additional scripts** list names scripts that load from their own location; adding a plugin in Runtimes stores a managed copy instead.
 
 #### Graphics settings
 

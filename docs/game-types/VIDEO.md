@@ -55,7 +55,7 @@ Existing mpv configuration and scripts can be used as well, with these fields of
 
 - **Configuration folder** points to an existing mpv configuration directory with `mpv.conf`, `input.conf`, `scripts`, `script-opts`, fonts and other mpv resources.
 - **Additional configuration files** load further files in the listed order.
-- **Additional scripts** loads Lua or JavaScript files and mpv script folders.
+- **Additional scripts** loads Lua or JavaScript files and mpv script folders from where they are. Unlike a plugin added in **Runtimes → mpv player → Plugins**, which MacLauncher copies, verifies and updates, these files are read in place and can differ for each video.
 - **Input configuration** selects a separate file for keyboard and mouse bindings.
 
 Local files and folders can be selected with the Browse and Add controls or typed into a list, one absolute path per line, and selected files stay in their original locations. Configuration and plugin changes apply on the next playback. Configuration entries, script options and resource paths are described in the [mpv manual](https://mpv.io/manual/stable/#files).
