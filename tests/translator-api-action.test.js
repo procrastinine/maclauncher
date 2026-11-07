@@ -313,6 +313,34 @@ test('translator schema follows canonical role order and explains CrossOver glob
   assert.deepEqual(context.runtimeSettings, {});
 });
 
+test('resolved vkd3d-proton replaces stock DXGI in the actual private loader inputs on both routes', async t => {
+  const f = fixture(t), windows = 'wine/lib/wine/x86_64-windows';
+  for (const name of ['d3d9', 'd3d10core', 'd3d11', 'dxgi', 'd3d12', 'libvkd3d-1']) f.put(`${windows}/${name}.dll`, dll());
+  for (const name of ['d3d9', 'd3d10core', 'd3d11', 'dxgi']) f.put(`paired-dxvk/${name}.dll`, dll({ builtin: false }));
+  f.put('proton/d3d12.dll', dll({ builtin: false }));
+  const manager = (id, engine, folder) => {
+    const root = path.join(f.root, folder), installed = { version: '1', architecture: 'x64', translatorRoot: root, installDir: root,
+      translator: Description.describeTranslator(root, { engine, component: engine === 'vkd3d-proton' ? 'd3d12' : 'd3d-renderer' }) };
+    return { id, translatorEngine: engine, getState: () => ({ installed: [installed] }), resolveSelection: () => ({ ready: true, install: installed }) };
+  };
+  const dxvk = manager('paired-dxvk', 'dxvk', 'paired-dxvk'), proton = manager('paired-proton', 'vkd3d-proton', 'proton');
+  for (const runtime of ['crossover', 'sikarugir']) {
+    const context = { ...f.context({ environmentReference: 'private', translatorD3D12: 'paired-proton:1' }), runtimeId: runtime };
+    const plan = await Translators.resolve(f.install, runtime, context, { host: f.host, executableArchitecture: 'x86_64', managers: [dxvk, proton] });
+    assert.equal(plan.components.d3d12.used.engine, 'vkd3d-proton');
+    assert.equal(plan.dxgiBinding.description.id, 'paired-dxvk:1');
+    assert.equal(Translators.requirement(plan, context, { managers: [dxvk, proton] }), null);
+    const view = await Files.prepareTranslatorFiles(plan, { userDataDir: context.userDataDir, layout: plan.layout });
+    assert.ok(view.dllOverrides.includes('dxgi=n,b')); assert.ok(view.dllOverrides.includes('d3d12=n,b'));
+    assert.equal(view.native.find(file => file.name === 'dxgi.dll').source, path.join(f.root, 'paired-dxvk/dxgi.dll'));
+    assert.equal(view.native.find(file => file.name === 'd3d12.dll').source, path.join(f.root, 'proton/d3d12.dll'));
+    assert.equal(view.native.some(file => file.name === 'libvkd3d-1.dll'), false);
+    assert.equal(Object.keys(view.links).some(file => /\/(?:dxgi|d3d12)\.dll$/.test(file)), false);
+    const missing = await Translators.resolve(f.install, runtime, { ...context }, { host: f.host, executableArchitecture: 'x86_64', managers: [proton] });
+    assert.deepEqual(missing.requiredTranslators, ['dxvk']);
+  }
+});
+
 test('source-owned stock WineD3D API11 includes its DXGI binding while Wine vkd3d stays distinct', t => {
   const f = fixture(t), windows = 'wine/lib/wine/x86_64-windows';
   const d3d11 = f.put(windows + '/d3d11.dll', dll()), dxgi = f.put(windows + '/dxgi.dll', dll());

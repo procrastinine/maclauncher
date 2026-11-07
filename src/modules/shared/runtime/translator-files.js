@@ -19,6 +19,7 @@ function selectedDescriptions(plan) {
       if (role !== 'd3d-renderer' && row.used)
         add(row.used, Boolean(row.inherited && !row.fallback));
     for (const description of plan.additional || []) add(description, Boolean(description.inherited));
+    if (plan.dxgiBinding) add(plan.dxgiBinding.description, false);
     return [...selected.entries()].map(([key, description]) => ({ ...description, files: ['vulkan-driver', 'video'].includes(description.component) ? description.files : (plan.placements || [])
       .filter(placement => (placement.description.id || placement.description.root || placement.description) === key)
       .map(placement => {
@@ -47,6 +48,7 @@ function filesIdentity(descriptions) {
 }
 /** Shared, content-keyed links to ordinary runtime installations. No per-game payload copies. */
 async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logger = console } = {}, previousIdentity) {
+  if (plan.pairingError) throw new Error(plan.pairingError);
   const selected = selectedDescriptions(plan), links = {}, native = [], dllOverrides = [], env = {};
   const inputs = filesIdentity(selected);
   // Advance a stale generation deterministically; active paths are never moved or replaced.

@@ -275,6 +275,22 @@ function optionsPlan(input, context) {
   return Plan.resolveApiRoles(Plan.resolvePlan(input), { ...input,
     selections: Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id, context.runtimeSettings?.[role.settingsKey]])) });
 }
+function requirement(plan, context, { managers = runtimeManagers() } = {}) {
+  const engine = plan.requiredTranslators?.[0];
+  if (!engine) {
+    if (plan.pairingError) throw new Error(plan.pairingError);
+    return null;
+  }
+  const manager = managers.find(item => (item.translatorEngine || item.translator?.engine) === engine);
+  if (!manager) throw new Error(plan.pairingError);
+  const architecture = Architecture.targetArchitecture(plan.layout?.architecture);
+  const installOptions = architecture ? { architecture } : {};
+  const selected = manager.resolveSelection(null, context.settings, context.userDataDir, { ...installOptions, verification: 'status' });
+  if (selected.ready) throw new Error(`${plan.pairingError} The installed ${manager.label || engine} has no compatible libraries. Choose a compatible translator in Runtime Settings.`);
+  if (!selected.version && !selected.discoveryRequired) throw new Error(selected.reason || plan.pairingError);
+  return { managerId: manager.id, version: selected.version || null, requiresDownload: true, installOptions,
+    ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), detail: plan.pairingError };
+}
 function environmentContext(context, install) {
   const value = context.runtimeSettings?.environmentReference;
   if (value === undefined) return context;
@@ -295,7 +311,7 @@ async function resolve(install, runtime, context, { executableArchitecture, host
   const record = await Binary.wineCompatibilityRecord(install), compatibility = {};
   for (const description of [...input.included, ...input.choices]) compatibility[description.id] = Binary.compatibility(description, record,
     { executableArchitecture, macOSVersion: host.macOSVersion || systemVersionSync() });
-  const roleRequested = Roles.DIRECT3D_ROLES.some(role => role.id !== 'd3d12' && context.runtimeSettings?.[role.settingsKey]);
+  const roleRequested = Roles.DIRECT3D_ROLES.some(role => context.runtimeSettings?.[role.settingsKey]);
   const actual = item => {
     const files = !roleRequested && compatibility[item.id]?.files || item.files.map(file => fs.existsSync(file.path) ? Description.inspectFile(file) : file);
     compatibility[item.id].inspectedFiles = files;
@@ -485,4 +501,4 @@ function inspectorRows(plan, { host } = {}) {
       ...(row.conflictRoles?.length ? { conflictRoles: row.conflictRoles } : {}) };
   }));
 }
-module.exports = { SETTINGS, includedTranslators, includedSummary, describedIncluded, managedTranslators, inventory, optionsInventory, optionsPlan, resolve, engines, environmentIds, settingsForPlan, wineRoot, withSettings, optionLists, inspectorRows, presentInspectorRows, planInputs, samePlanInputs, environmentContext };
+module.exports = { SETTINGS, includedTranslators, includedSummary, describedIncluded, managedTranslators, inventory, optionsInventory, optionsPlan, requirement, resolve, engines, environmentIds, settingsForPlan, wineRoot, withSettings, optionLists, inspectorRows, presentInspectorRows, planInputs, samePlanInputs, environmentContext };

@@ -78,16 +78,16 @@ function createProvider({ manager, launch = Launch, platform = process.platform,
       if (reference) {
         if (reference.kind !== "sikarugir-wrapper") throw new Error("Choose a Sikarugir wrapper for this runtime.");
         context.wineEnvironment = Environments.readEnvironment(reference);
-        await Translators.resolve(context.wineEnvironment.install, "sikarugir", context, { entry, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
-        return null;
+        const plan = await Translators.resolve(context.wineEnvironment.install, "sikarugir", context, { entry, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
+        return Translators.requirement(plan, context);
       }
       const selected = await runtimeManager().resolveForPlay(entry, context);
       if (selected.ready) {
         if (!selected.install) return null;
         const prepared = Translators.environmentContext(context, selected.install);
         if (prepared.wineEnvironment) context.wineEnvironment = prepared.wineEnvironment;
-        await Translators.resolve(prepared.wineEnvironment?.install || selected.install, "sikarugir", context, { entry, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
-        return null;
+        const plan = await Translators.resolve(prepared.wineEnvironment?.install || selected.install, "sikarugir", context, { entry, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
+        return Translators.requirement(plan, context);
       }
       if (!selected.version && !selected.discoveryRequired) throw new Error(selected.reason || "No compatible Sikarugir version is available.");
       return { managerId: "sikarugir", version: selected.version || null, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: selected.installOptions || {},

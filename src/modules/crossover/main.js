@@ -117,8 +117,8 @@ async function ensureRuntime(entry, context) {
   if (!selected.ready) throw new Error(selected.reason);
   const prepared = Translators.environmentContext(context, selected.install);
   if (prepared.wineEnvironment) context.wineEnvironment = prepared.wineEnvironment;
-  await Translators.resolve(prepared.wineEnvironment?.install || selected.install, "crossover", context, { entry, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
-  return null;
+  const plan = await Translators.resolve(prepared.wineEnvironment?.install || selected.install, "crossover", context, { entry, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
+  return Translators.requirement(plan, context);
 }
 async function launchRuntime(runtimeId, entry, context) {
   if (runtimeId !== "crossover") return null;

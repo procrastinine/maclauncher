@@ -2,6 +2,7 @@ const { COMPONENTS, label } = require('./translator-description');
 const AUTOMATIC = 'automatic', INHERIT = 'inherit';
 const UNAVAILABLE_CHOICE_LABEL = 'Saved selection (unavailable)';
 const Roles = require('./translator-roles');
+const Pairing = require('./translator-pairing');
 const fs = require('node:fs'), path = require('node:path');
 const { fileDigest } = require('./verified-identity');
 
@@ -9,6 +10,7 @@ const { fileDigest } = require('./verified-identity');
 function fallbackNotice(reasonCode, { roles = [] } = {}) {
   if (reasonCode === 'missing-choice') return "This saved choice is unavailable. The runtime's current fallback will be used.";
   if (reasonCode === 'runtime-global-automatic') return 'CrossOver keeps its automatic renderer until every Direct3D row has a usable choice.';
+  if (reasonCode === 'dxgi-pairing') return 'Direct3D 12 and DXGI must use matching translator implementations.';
   if (reasonCode === 'shared-physical-binding') return roles.length
     ? `This choice needs its own copy of a library that the ${roles.join(' and ')} choice provides, and a game can load only one copy.`
     : 'This choice needs a library that another Direct3D choice already provides, and a game can load only one copy.';
@@ -124,8 +126,14 @@ function physicalPlacements(plan) {
   for (const role of Roles.DIRECT3D_ROLES) {
     const description = plan.components[role.id]?.used;
     if (!description) continue;
-    for (const file of filesForRole(description, role)) place(file, description, [role.id]);
+    for (const file of filesForRole(description, role)) {
+      if (plan.dxgiBinding && Pairing.isDxgi(file)) continue;
+      place(file, description, [role.id]);
+    }
   }
+  if (plan.dxgiBinding) for (const file of plan.dxgiBinding.files) place(file, plan.dxgiBinding.description,
+    [...plan.dxgiBinding.roles, ...Roles.DIRECT3D_ROLES.filter(role => plan.components[role.id]?.used?.id === plan.dxgiBinding.description.id &&
+      filesForRole(plan.components[role.id].used, role).some(Pairing.isDxgi)).map(role => role.id)]);
   for (const description of (plan.additional || []).filter(item => !item.apis?.length))
     for (const file of description.files || []) place(file, description, []);
   return { placements: [...placements.values()], conflicts };
@@ -162,7 +170,9 @@ function resolveApiRoles(plan, { selections = {}, choices = [], included = [], c
   // backend is WineD3D, so an API without a placed library uses this renderer.
   if (plan.runtime === 'crossover') plan.builtinRenderer = included.find(item => item.component === 'd3d-renderer' && item.engine === 'wined3d') || null;
   const original = Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id, { ...plan.components[role.id] }]));
-  const requested = Roles.DIRECT3D_ROLES.some(role => role.id !== 'd3d12' && selections[role.id]);
+  const pairingRequested = ['vkd3d-proton', 'vkd3d'].includes(plan.components.d3d12.used?.engine) ||
+    included.some(item => item.engine === 'vkd3d') && plan.components['d3d-renderer'].used?.engine === 'dxvk';
+  const requested = pairingRequested || Roles.DIRECT3D_ROLES.some(role => selections[role.id]);
   if (!requested) { plan.groups = apiGroups(plan); return plan; }
   for (const role of Roles.DIRECT3D_ROLES) {
     const value = selections[role.id]; if (!value) continue;
@@ -181,6 +191,8 @@ function resolveApiRoles(plan, { selections = {}, choices = [], included = [], c
     const row = plan.components[role.id], files = row.used && apiCompatibility[role.id]?.[row.used.id]?.files;
     if (files) row.used = { ...row.used, files };
   }
+  const pair = () => Pairing.resolvePairing(plan, { choices, included, compatibility, apiCompatibility, filesForRole });
+  let paired = pair();
   plan.apiMode = true;
   let physical = physicalPlacements(plan);
   if (physical.conflicts.length) {
@@ -195,11 +207,12 @@ function resolveApiRoles(plan, { selections = {}, choices = [], included = [], c
       row.fallback = true; row.reasonCode = 'shared-physical-binding'; row.reason = `Shared physical binding conflict: ${conflicts.map(item => item.key).join(', ')}`;
       row.conflictRoles = Roles.DIRECT3D_ROLES.filter(other => other.id !== role.id && conflicts.some(item => item.roles.includes(other.id))).map(other => other.label);
     }
+    paired = pair() || paired;
     physical = physicalPlacements(plan);
   }
   const changed = Roles.DIRECT3D_ROLES.some(role => identity(plan.components[role.id].used) !== identity(original[role.id].used));
   const unresolved = Roles.DIRECT3D_ROLES.some(role => !plan.components[role.id].used);
-  if ((plan.runtime === 'crossover' && !plan.components['d3d-renderer'].used && changed && unresolved) || physical.conflicts.length) {
+  if ((plan.runtime === 'crossover' && !plan.components['d3d-renderer'].used && changed && unresolved && !paired) || physical.conflicts.length) {
     for (const role of Roles.DIRECT3D_ROLES) {
       const row = plan.components[role.id];
       if (identity(row.used) !== identity(original[role.id].used)) {
@@ -211,7 +224,9 @@ function resolveApiRoles(plan, { selections = {}, choices = [], included = [], c
     }
     plan.apiMode = false;
   }
-  if (!changed) plan.apiMode = false;
+  if (paired && !physical.conflicts.length) plan.apiMode = true;
+  if (!changed && !paired) plan.apiMode = false;
+  if (paired && physical.conflicts.length) plan.pairingError = 'The Direct3D 12 and DXGI pairing still has conflicting library bindings.';
   if (plan.apiMode) plan.additional = (plan.additional || []).filter(item => !item.apis?.length ||
     Roles.DIRECT3D_ROLES.some(role => identity(plan.components[role.id].used) === identity(item)));
   plan.placements = plan.apiMode ? physical.placements : [];
@@ -306,7 +321,7 @@ function resolvePlan({ runtime = 'crossover', selections = {}, choices = [], inc
 }
 function fallbackWarnings(plan) {
   return [...new Set(Object.values(plan.components).filter(row => row.fallback).map(row => {
-    const message = row.reasonCode === 'load-impossible' ? row.reason : fallbackNotice(row.reasonCode || 'recorded-fallback');
+    const message = ['load-impossible', 'dxgi-pairing'].includes(row.reasonCode) ? row.reason : fallbackNotice(row.reasonCode || 'recorded-fallback');
     return `${row.selected ? label(row.selected) : UNAVAILABLE_CHOICE_LABEL}: ${String(message).replace(/[.!?]+\s*$/, '')}. Using ${row.used ? label(row.used) : plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "the Template's automatic choice"}.`;
   }))];
 }

@@ -177,7 +177,7 @@ test('per-API unknown scope stays accessible and real historical projects coexis
   assert.ok(options.translatorD3D9Options.some(option => option.value === modern.id)); assert.equal(historical.engine, 'd8vk');
 });
 
-test('per-API CrossOver automatic guard permits complete concrete bindings while retaining partial automatic composition', t => {
+test('CrossOver automatic rows follow the DXGI provider required by a selected vkd3d-proton', t => {
   const f = fixture(t), dxvk = component(f, 'complete-dxvk', 'dxvk', {
     d3d8: [], d3d9: [], d3d10core: ['dxgi.dll'], d3d11: ['dxgi.dll'], dxgi: []
   });
@@ -196,10 +196,10 @@ test('per-API CrossOver automatic guard permits complete concrete bindings while
   assert.equal(activeOptions.translatorD3D9Options.find(option => option.value === dxvk.id).reason, undefined);
   const partial = legacy(null, 'crossover');
   Plan.resolveApiRoles(partial, { ...options, selections: { d3d9: dxvk.id, d3d12: vkd3d.id } });
-  assert.equal(partial.apiMode, false); assert.deepEqual(partial.placements, []);
+  assert.equal(partial.apiMode, true);
   assert.equal(partial.components.d3d9.selected.id, dxvk.id); assert.equal(partial.components.d3d12.selected.id, vkd3d.id);
-  assert.ok(Roles.DIRECT3D_ROLES.every(role => partial.components[role.id].used === null));
-  assert.equal(partial.components.d3d9.fallback, true); assert.match(partial.components.d3d9.reason, /global backend|automatic composition/);
+  assert.ok(Roles.DIRECT3D_ROLES.every(role => partial.components[role.id].used.id === (role.id === 'd3d12' ? vkd3d.id : dxvk.id)));
+  assert.equal(partial.components.d3d9.fallback, false);
 });
 
 test('per-API linked groups follow shared physical placements instead of a common package identity', t => {
@@ -211,9 +211,9 @@ test('per-API linked groups follow shared physical placements instead of a commo
   const plan = legacy(null, 'crossover');
   Plan.resolveApiRoles(plan, { selections, choices: [dxvk, vkd3d], compatibility: compatibility([dxvk, vkd3d]) });
   assert.equal(plan.apiMode, true);
-  assert.deepEqual(plan.groups.map(group => group.roles), [['d3d8'], ['d3d9'], ['d3d10', 'd3d11'], ['d3d12']]);
-  assert.deepEqual(plan.groups.map(group => group.id), ['d3d8', 'd3d9', 'd3d10+d3d11', 'd3d12']);
-  assert.match(plan.groups.find(group => group.id === 'd3d10+d3d11').reason, /physical/);
+  assert.deepEqual(plan.groups.map(group => group.roles), [['d3d8'], ['d3d9'], ['d3d10', 'd3d11', 'd3d12']]);
+  assert.deepEqual(plan.groups.map(group => group.id), ['d3d8', 'd3d9', 'd3d10+d3d11+d3d12']);
+  assert.match(plan.groups.find(group => group.id === 'd3d10+d3d11+d3d12').reason, /physical/);
   const coarse = legacy(dxvk); Plan.resolveApiRoles(coarse, {});
   assert.deepEqual(coarse.groups[0].roles, ['d3d8', 'd3d9', 'd3d10', 'd3d11']);
   const automatic = legacy(null, 'crossover'); Plan.resolveApiRoles(automatic, {});
@@ -230,5 +230,72 @@ test('per-API linked groups follow shared physical placements instead of a commo
   const retained = legacy(null, 'crossover');
   Plan.resolveApiRoles(retained, { selections, choices: [atomic, vkd3d], compatibility: compatibility([atomic, vkd3d]) });
   assert.equal(retained.apiMode, true);
-  assert.deepEqual(retained.groups.map(group => group.roles), [['d3d8', 'd3d9', 'd3d10', 'd3d11'], ['d3d12']]);
+  assert.deepEqual(retained.groups.map(group => group.roles), [['d3d8', 'd3d9', 'd3d10', 'd3d11', 'd3d12']]);
+});
+
+test('Direct3D 12 and DXGI stay ABI paired on both Wine routes, including incompatible saved choices', async t => {
+  const f = fixture(t), Files = require('../src/modules/shared/runtime/translator-files');
+  const wine = component(f, 'stock-wine', 'wined3d', { d3d9: [], d3d10core: ['dxgi.dll'], d3d11: ['dxgi.dll'], dxgi: [] });
+  const stock12 = component(f, 'stock-vkd3d', 'vkd3d', { d3d12: ['dxgi.dll'] }, [], { component: 'd3d12' });
+  const dxvk = component(f, 'dxvk-pair', 'dxvk', { d3d9: [], d3d10core: ['dxgi.dll'], d3d11: ['dxgi.dll'], dxgi: [] });
+  const proton = component(f, 'proton-pair', 'vkd3d-proton', { d3d12: ['dxgi.dll'] }, [], { component: 'd3d12' });
+  const included = [wine, stock12], choices = [dxvk, proton], checked = compatibility([...included, ...choices]);
+  for (const runtime of ['crossover', 'sikarugir']) {
+    const resolve = (selections, renderer = null, available = choices) => Plan.resolveApiRoles(
+      Plan.resolvePlan({ runtime, selections: { ...(renderer ? { 'd3d-renderer': renderer.id } : {}), d3d12: selections.d3d12 }, included, choices: available }),
+      { selections, included, choices: available, compatibility: checked });
+    const plan = resolve({ d3d12: proton.id });
+    assert.equal(plan.apiMode, true); assert.equal(plan.pairingError, undefined);
+    assert.equal(plan.components.d3d12.used.id, proton.id);
+    assert.equal(plan.components.d3d11.used.id, dxvk.id);
+    assert.equal(plan.placements.find(item => path.basename(item.file.path) === 'dxgi.dll').description.id, dxvk.id);
+    const layout = { architecture: 'x86_64', unixName: 'x86_64-unix' };
+    const view = await Files.prepareTranslatorFiles(plan, { userDataDir: path.join(f.root, runtime), layout });
+    assert.equal(fs.realpathSync(view.links['lib/wine/x86_64-windows/dxgi.dll']), path.join(dxvk.root, 'dxgi.dll'));
+    assert.equal(fs.realpathSync(view.links['lib/wine/x86_64-windows/d3d12.dll']), path.join(proton.root, 'd3d12.dll'));
+    const incompatible = resolve({ d3d12: proton.id, d3d11: wine.id });
+    assert.equal(incompatible.components.d3d11.selected.id, wine.id);
+    assert.equal(incompatible.components.d3d11.used.id, dxvk.id);
+    assert.equal(incompatible.components.d3d11.reasonCode, 'dxgi-pairing');
+    assert.match(incompatible.components.d3d11.reason, /requires DXVK DXGI/);
+    const reverse = resolve({ d3d12: stock12.id, d3d11: dxvk.id });
+    assert.equal(reverse.components.d3d12.used.id, stock12.id);
+    assert.equal(reverse.components.d3d11.selected.id, dxvk.id);
+    assert.equal(reverse.components.d3d11.used.id, wine.id);
+    assert.equal(reverse.dxgiBinding.description.id, wine.id);
+    assert.match(reverse.components.d3d11.reason, /requires Wine's DXGI/);
+    const automatic12 = resolve({ d3d11: dxvk.id }, dxvk);
+    assert.equal(automatic12.components.d3d12.used.id, proton.id);
+    const missingProton = resolve({ d3d11: dxvk.id }, dxvk, [dxvk]);
+    assert.deepEqual(missingProton.requiredTranslators, ['vkd3d-proton']);
+    const missingDxvk = resolve({ d3d12: proton.id }, null, [proton]);
+    assert.deepEqual(missingDxvk.requiredTranslators, ['dxvk']);
+    await assert.rejects(Files.prepareTranslatorFiles(missingDxvk, { userDataDir: path.join(f.root, 'blocked'), layout }), /requires DXVK DXGI/);
+    assert.equal(fs.existsSync(path.join(f.root, 'blocked')), false);
+  }
+});
+
+test('a missing DXGI pair uses ordinary consented runtime installation and resumes preparation', async t => {
+  const f = fixture(t), Translators = require('../src/modules/shared/runtime/wine-translators');
+  const { prepareForLaunch } = require('../src/core/runtime-preparation');
+  const { createPinnedNativeManager } = require('../src/modules/shared/runtime/pinned-native-manager');
+  const events = [], id = 'fixture-paired-dxvk', version = '3.1.1'; let installed = false;
+  const manager = createPinnedNativeManager({ id, label: 'DXVK', discoverCatalog: async () => {
+    events.push('catalog'); return [{ version, upstreamRevision: 'fixture-dxvk', asset: { filename: 'dxvk.zip', url: 'https://example.test/dxvk.zip', sha256: 'a'.repeat(64) } }];
+  } });
+  manager.translatorEngine = 'dxvk';
+  const context = { runtimeId: 'crossover', settings: {}, userDataDir: path.join(f.root, 'profile'),
+    confirmRuntimeInstall: async () => { events.push('consent'); return true; } };
+  const mod = { id: 'pair-fixture', runtimeManagers: [manager], ensureRuntime() {
+    events.push(installed ? 'ready' : 'missing');
+    return Translators.requirement(installed ? {} : { requiredTranslators: ['dxvk'], layout: { architecture: 'x86_64' },
+      pairingError: 'vkd3d-proton requires DXVK DXGI.' }, context, { managers: [manager] });
+  }, prepareLaunch() { assert.equal(this.ensureRuntime(), null); } };
+  const registry = { listModules: () => [{ id: mod.id }], getModule: () => mod };
+  assert.equal(await prepareForLaunch({ entry: {}, mod, info: { runtime: {} }, registry, context,
+    install: async (selected, options) => { assert.equal(selected.id, id); assert.equal(options.version, version);
+      assert.equal(options.architecture, 'x64'); events.push('install'); installed = true; }, runAction: () => assert.fail('No prefix actions') }), true);
+  assert.ok(events.indexOf('consent') < events.indexOf('catalog'));
+  assert.ok(events.indexOf('catalog') < events.indexOf('install'));
+  assert.ok(events.indexOf('install') < events.indexOf('ready'));
 });
