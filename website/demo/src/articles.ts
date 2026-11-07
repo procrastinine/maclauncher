@@ -51,6 +51,9 @@ export const ARTICLES = {
   runtimeDefault: versions("The default version", "the-default"),
   ownCopies: versions("Your own copies", "your-own-copies"),
   downloadsList: versions("Downloads", "downloads"),
+  downloadedFiles: versions("Downloaded files", "downloaded-files"),
+  environmentVariables: versions("Environment variables", "environment-variables"),
+  gameEnvironment: page("Environment variables in WINE games", "windows/settings/#environment-variables"),
   perGame: versions("Per-game choices", "per-game-choices"),
   runtimeAndVersion: versions("Runtime and version", "runtime-and-version"),
   runtimeSettings: versions("Runtime settings", "runtime-settings"),
@@ -78,6 +81,12 @@ export const ARTICLES = {
   updates: page("How MacLauncher is updated", "help/faq/#how-is-maclauncher-updated"),
   windowsGames: page("Windows games through WINE", "games/windows/"),
   windowsGraphics: page("Graphics effects in WINE games", "windows/effects-and-upscaling/#effects"),
+  dlssGames: page("DLSS games and the selected upscaler", "windows/effects-and-upscaling/#dlss-games-and-the-selected-upscaler"),
+  fidelityFx: page("FidelityFX in Vulkan games on CrossOver", "windows/effects-and-upscaling/#fidelityfx-in-vulkan-games-on-crossover"),
+  translatorVersions: page("Translator versions", "windows/translator-versions/"),
+  kosmicKrisp: page("KosmicKrisp", "windows/kosmickrisp/"),
+  steamBridge: page("Steam client bridge", "windows/steam-client-bridge/"),
+  videos: page("Videos", "games/more/#videos"),
   games: page("Games and runtimes", "games/"),
 
   graphics: page("Graphics and effects", "graphics/"),
@@ -311,12 +320,14 @@ export const ACTION_ARTICLES: Record<string, Article[]> = {
 const SETTINGS_ARTICLES: Record<string, Article[]> = {
   networkAccess: [ARTICLES.networkAccess], startSteamClient: [ARTICLES.steamClient],
   library: [ARTICLES.search, ARTICLES.favorites], checkForUpdatesAtLaunch: [ARTICLES.updates],
-  graphicsShortcuts: [ARTICLES.graphicsShortcuts], graphicsScreenshotFolder: [ARTICLES.graphicsShortcuts]
+  graphicsShortcuts: [ARTICLES.graphicsShortcuts], graphicsScreenshotFolder: [ARTICLES.graphicsShortcuts],
+  translatorEnvironment: [ARTICLES.environmentVariables, ARTICLES.gameEnvironment]
 };
 // Runtime manager actions.
 const RUNTIME_ACTION_ARTICLES: Record<string, Article[]> = {
   refreshCatalog: [ARTICLES.refresh], install: [ARTICLES.install], setup: [ARTICLES.install], uninstall: [ARTICLES.remove],
-  setDefault: [ARTICLES.runtimeDefault, ARTICLES.versions], registerCustom: [ARTICLES.ownCopies], import: [ARTICLES.ownCopies]
+  setDefault: [ARTICLES.runtimeDefault, ARTICLES.versions], registerCustom: [ARTICLES.ownCopies], import: [ARTICLES.ownCopies],
+  "downloaded-files": [ARTICLES.downloadedFiles]
 };
 // Module tool actions by name pattern; anything else is a game tool.
 const TOOL_RULES: Array<[RegExp, Article[]]> = [
@@ -332,10 +343,15 @@ const CHEAT_MODULES: Record<string, Article> = { mv: ARTICLES.rpgMakerCheats, mz
 // Runtimes pages with a section of their own, by manager id prefix; the
 // longest matching prefix wins.
 const MANAGER_ARTICLES: Record<string, Article[]> = {
-  "graphics-presets": [ARTICLES.presets], "graphics-shader": [ARTICLES.shaderLibrary, ARTICLES.shaders],
+  "graphics-presets": [ARTICLES.presets], "graphics-shader": [ARTICLES.shaders, ARTICLES.shaderLibrary],
   "graphics-models": [ARTICLES.losslessFiles], "graphics-neural-models": [ARTICLES.gettingModels, ARTICLES.neuralModels],
   "graphics-xess": [upscaling("Intel XeSS", "xess")], innoextract: [ARTICLES.installers],
-  "sikarugir-graphics-bridge": [ARTICLES.windowsGraphics]
+  "sikarugir-graphics-bridge": [ARTICLES.windowsGraphics], "maclauncher-crossover-winemac": [ARTICLES.windowsGraphics],
+  "dxvk-nvapi": [ARTICLES.dlssGames, ARTICLES.translatorVersions], "vkd3d-proton": [ARTICLES.dlssGames, ARTICLES.translatorVersions],
+  translator: [ARTICLES.translatorVersions], "vulkan-moltenvk-scene": [ARTICLES.fidelityFx, ARTICLES.dlssGames],
+  "winevulkan-scene": [ARTICLES.fidelityFx], "fidelityfx-api": [ARTICLES.fidelityFx],
+  "vulkan-kosmickrisp": [ARTICLES.kosmicKrisp], "maclauncher-kosmickrisp": [ARTICLES.kosmicKrisp], "vulkan-moltenvk": [ARTICLES.kosmicKrisp],
+  "maclauncher-steam-bridge": [ARTICLES.steamBridge], mpv: [ARTICLES.videos], "uosc-helper": [ARTICLES.videos], components: [ARTICLES.downloadedFiles]
 };
 // Runtimes sidebar groups that gather many game types' managers.
 const GROUP_ARTICLES: Record<string, Article[]> = { graphics: [ARTICLES.graphics], tools: [ARTICLES.decompilers] };
@@ -359,6 +375,9 @@ function windowArticles(topic: DemoTopic): Article[] {
     case "settings":
       if (topic.moduleId) return [...(value ? runtimeArticles(value, topic.moduleId) : [engine(topic.moduleId)]), ARTICLES.runtimeSettings, ARTICLES.settings];
       if (value === "launcher") return [ARTICLES.settings, ARTICLES.networkAccess, ARTICLES.steamClient, ARTICLES.updates];
+      if (value === "environment") return [ARTICLES.environmentVariables, ARTICLES.gameEnvironment, ARTICLES.settings];
+      if (value === "graphics") return [ARTICLES.shaderLibrary, ARTICLES.shaders, ARTICLES.settings];
+      if (value === "presets") return [ARTICLES.presets, ARTICLES.settings];
       return [ARTICLES.settings, ARTICLES.perGame];
     case "external":
       if (value) return [...(EXTERNAL_TABS[value] || [ARTICLES.downloads, ARTICLES.accounts]), ARTICLES.external];
@@ -384,6 +403,7 @@ export function articlesFor(topic: DemoTopic): Article[] {
       case "runtime-settings":
         if (topic.id === "arguments") return [ARTICLES.launchArguments];
         if (topic.id === "network") return [ARTICLES.networkAccess];
+        if (topic.id === "environment") return [ARTICLES.gameEnvironment, ARTICLES.environmentVariables];
         if (topic.id === "module") return [ARTICLES.settings];
         return [ARTICLES.runtimeSettings, ...runtimeArticles(topic.id, topic.moduleId)];
       case "play": return [ARTICLES.play, ARTICLES.launch, engine(topic.moduleId)];

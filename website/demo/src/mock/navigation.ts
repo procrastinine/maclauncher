@@ -23,19 +23,24 @@ export function runtimeTopic(state: LauncherState, kind: string, managerId: stri
 const after = (value: string, prefix: string) => value.startsWith(prefix) ? value.slice(prefix.length) : "";
 
 const READERS: Record<string, Reader> = {
-  // A game type's section, then one of its runtime tabs.
+  // A game type's section, then one of its runtime tabs. Launcher,
+  // Environment variables and Graphics belong to no game type; Graphics names
+  // its Shaders or Presets tab.
   settings(_state, { section, tab }, previous) {
     const moduleId = after(section, "settings-panel-");
     if (!moduleId || moduleId === "launcher") return { kind: "section", id: "settings", detail: "launcher" };
+    if (moduleId === "environment") return { kind: "section", id: "settings", detail: "environment" };
+    if (moduleId === "graphics") return { kind: "section", id: "settings", detail: after(tab, "graphics-").replace(/-tab$/, "") === "presets" ? "presets" : "graphics" };
     const runtimeId = previous?.section === section ? after(tab, `settings-runtime-tab-${moduleId}-`) : "";
     return { kind: "section", id: "settings", moduleId, detail: runtimeId || undefined };
   },
-  // A section tab names its manager; a group without tabs has one.
+  // A section tab names its manager, and a tab that groups several managers,
+  // such as Providers, names the first one it shows; a group without tabs has one.
   runtimes(state, { section, tab }) {
     let managerId = "";
     try {
       const [owner, kind] = JSON.parse(decodeURIComponent(after(tab, "runtime-section-tab-")));
-      if (kind !== "group") managerId = owner;
+      managerId = kind === "group" ? runtimeManagers(state).find(manager => manager.ui?.sectionGroupId === owner)?.id || "" : owner;
     } catch {}
     const group = after(section, "runtime-group-panel-");
     managerId ||= runtimeManagers(state).find(manager => (manager.ui?.groupId || manager.id) === group)?.id || group;

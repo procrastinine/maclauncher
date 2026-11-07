@@ -9,6 +9,7 @@ import type {
 } from "../../../../src/renderer/src/ui/types";
 import { normalizeUtilityWindowRequest, utilityWindowDefinition } from "../../../../src/core/utility-window-model.mjs";
 import { ACTIONS as SHORTCUT_ACTIONS } from "../../../../src/modules/shared/graphics-shortcuts.mjs";
+import { normalizeValues, withValues } from "../../../../src/modules/shared/runtime/translator-environment.mjs";
 import { createExternalStores } from "./external";
 import { runtimeTopic } from "./navigation";
 import type { DemoStore } from "./store";
@@ -22,6 +23,8 @@ type Answer = { result: unknown } | { error: string };
 export type DemoSettingsActions = Record<string, Answer>;
 /** One example entry's own action answers (such as a playlist's videos), by game path and action. */
 export type DemoGameActions = Record<string, Record<string, Answer>>;
+/** Runtimes → Tools → Downloaded files as the launcher's component listing returned it for the demo profile. */
+export type DemoComponents = { components: Array<{ id: string; items: Array<{ id: string }> } & Record<string, unknown>>; gameRunning: boolean };
 
 type Handlers = { [K in keyof LauncherApi]?: LauncherApi[K] };
 type Section = Record<string, any>;
@@ -41,6 +44,11 @@ const EXAMPLE_VERSIONS: Record<string, string[]> = {
 // through its Build menu. Any other runtime with per-CPU lists publishes
 // builds for the launcher's CPU only.
 const EXAMPLE_BUILDS: Record<string, string[]> = { butterscotch: ["arm64", "x64"] };
+// The demo has no files on disk, so each installed version shows one example
+// size in Runtimes.
+const EXAMPLE_INSTALL_BYTES = 64 * 1024 * 1024;
+// Settings sidebar entries that belong to no game type.
+const SETTINGS_SECTIONS = new Set(["launcher", "environment", "graphics"]);
 
 // Module actions that only read state. The inspector and Settings call them
 // on their own, so they get no article, and one without a recorded answer
@@ -80,7 +88,8 @@ const sameBuild = (row: Section, build: Section) => row.version === build.versio
   (!row.architecture || !build.architecture || row.architecture === build.architecture);
 
 export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, settingsActions: DemoSettingsActions,
-  gameActions: DemoGameActions): LauncherApi {
+  gameActions: DemoGameActions, components: DemoComponents): LauncherApi {
+  let downloaded = components;
   const external = createExternalStores();
   const answered = (answer: Answer | undefined) =>
     !answer ? null : "error" in answer ? Promise.reject(new Error(answer.error)) : resolved(answer.result);
@@ -177,11 +186,13 @@ export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, sett
 
     openUtilityWindow: request => {
       const { view, managerId, sectionId, shaderCategory } = normalizeUtilityWindowRequest(request);
-      // Settings names a game type's section as SettingsView reads it.
-      const section = view === "settings" && typeof sectionId === "string" ? sectionId.replace(/^module:/, "") : "";
-      const moduleId = section !== "launcher" ? section : "";
+      // Settings names a game type's section as SettingsView reads it; its own
+      // sections, such as Graphics, name no game type.
+      const section = view === "settings" && typeof sectionId === "string" ? sectionId.replace(/^module:/, "").split(":")[0] : "";
+      const own = SETTINGS_SECTIONS.has(section);
+      const moduleId = section && !own ? section : "";
       store.topic(view === "runtimes" && typeof managerId === "string" && managerId ? runtimeTopic(store.state, "window", managerId)
-        : { kind: "window", id: view, ...(moduleId ? { moduleId } : {}) });
+        : { kind: "window", id: view, ...(moduleId ? { moduleId } : {}), ...(own ? { detail: section } : {}) });
       const search = Object.fromEntries(Object.entries({ view, managerId, sectionId, shaderCategory })
         .filter((item): item is [string, string] => typeof item[1] === "string" && item[1] !== ""));
       store.openWindow({ title: utilityWindowDefinition(view)?.title || view, search });
@@ -226,6 +237,14 @@ export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, sett
     setGameRuntimeSettings: (gamePath, runtimeId, settings) => {
       updateGame(gamePath, entry => ({ runtimeSettings: { ...entry.runtimeSettings, [runtimeId]: settings } }));
       store.topic({ kind: "runtime-settings", id: runtimeId, moduleId: moduleOf(gamePath) });
+      return resolved(true);
+    },
+    setGameTranslatorEnvironment: (gamePath, translatorId, values) => {
+      const declaration = store.state.translatorEnvironments?.find(item => item.id === translatorId);
+      if (!declaration) return Promise.reject(new Error("Unknown translator."));
+      const normalized = normalizeValues(values, { declarations: [declaration] });
+      updateGame(gamePath, entry => ({ translatorEnvironment: withValues(entry.translatorEnvironment, translatorId, normalized) }));
+      store.topic({ kind: "runtime-settings", id: "environment", moduleId: moduleOf(gamePath) });
       return resolved(true);
     },
     setGameRuntimeData: (gamePath, runtimeId, patch) => {
@@ -287,6 +306,9 @@ export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, sett
     },
     resetGameEffects: gamePath => { updateGame(gamePath, () => ({ effects: null })); store.topic({ kind: "effect", id: "clear" }); return resolved(true); },
     listEffectsPresets: () => resolved([]),
+    // Settings → Graphics → Presets edits a chain for the window host, as the launcher does.
+    getEffectsPresetEditor: plan => resolved({ ...graphics.hosts.window.info, plan: plan || graphics.hosts.window.info.plan }),
+    getEffectsPresetParameters: nodeId => resolved({ key: nodeId, parameters: [] }),
     getEffectsPresetNotices: () => resolved([]),
 
     // Runtimes and settings.
@@ -357,6 +379,36 @@ export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, sett
       return resolved(true);
     },
     setModuleRuntimeSettings: (moduleId, runtimeId) => { store.topic({ kind: "runtime-settings", id: runtimeId, moduleId }); return resolved(true); },
+    // Settings → Environment variables and a game's Runtime Settings store
+    // values the way the launcher does.
+    setTranslatorEnvironment: (translatorId, values) => {
+      const declaration = store.state.translatorEnvironments?.find(item => item.id === translatorId);
+      if (!declaration) return Promise.reject(new Error("Unknown translator."));
+      const normalized = normalizeValues(values, { declarations: [declaration] });
+      store.update(state => ({ ...state, launcherSettings: { ...state.launcherSettings,
+        translatorEnvironment: withValues(state.launcherSettings?.translatorEnvironment, translatorId, normalized) } }));
+      store.topic({ kind: "settings", id: "translatorEnvironment" });
+      return resolved(true);
+    },
+    // Downloaded files and the sizes of installed versions. Listing and
+    // measuring are reads, so they name no topic.
+    componentAction: ((action: string, payload?: Record<string, string>) => {
+      if (action === "list") return resolved(downloaded);
+      if (action === "sizes") {
+        const manager = store.state.runtimeManagers[String(payload?.managerId || "")] as Section | undefined;
+        const installed = [...(manager?.installed || []), ...(manager?.sections || []).flatMap((section: Section) => section.installed || [])];
+        return resolved({ sizes: Object.fromEntries(installed.filter((item: Section) => typeof item.installDir === "string")
+          .map((item: Section) => [item.installDir, { bytes: EXAMPLE_INSTALL_BYTES, complete: true }])) });
+      }
+      store.topic({ kind: "runtime-action", id: "downloaded-files" });
+      if (action === "remove") {
+        downloaded = { ...downloaded, components: downloaded.components.map(component => component.id !== payload?.componentId ? component
+          : { ...component, items: component.items.filter(item => String(item.id) !== String(payload?.itemId)) }) };
+        return resolved(true);
+      }
+      if (action === "refresh") return resolved("");
+      return resolved(action === "reveal");
+    }) as LauncherApi["componentAction"],
 
     // External stores.
     steamState: () => resolved(external.steamState()),

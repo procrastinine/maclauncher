@@ -2,8 +2,8 @@
 // own code: the module registry supplies every game type and its runtime
 // choices, the Node backend each runtime manager's state for an empty profile,
 // and the graphics modules the effect catalog. A few examples add what an
-// empty profile lacks: a game on a disconnected drive and installed runtime
-// versions, one of them damaged. Run `pnpm run demo:data` in
+// empty profile lacks: a game on a disconnected drive, installed runtime
+// versions, one of them damaged, and a downloaded file. Run `pnpm run demo:data` in
 // a prepared checkout (one whose included helpers are built) after module,
 // runtime or effect changes; the website build reports stale data.
 "use strict";
@@ -31,6 +31,9 @@ const EXTERNAL_DRIVE = { moduleId: "unity", folder: "/Volumes/Games" };
 // the same versions.
 const EXAMPLE_INSTALLS = { managerId: "scummvm", defaultVersion: "2.9.1", installs: [
   { version: "2.9.1", ready: false, status: "damaged" }, { version: "2.9.0", ready: true, status: "ready" }] };
+// An example cache that the Steam window fills, so Runtimes → Tools →
+// Downloaded files lists one file through the launcher's own listing.
+const EXAMPLE_DOWNLOADED = { folder: "steam/catalog", file: "versions.json", contents: "{}\n" };
 
 // The demo shows what this checkout builds, just as docs/ describes the
 // current source. The graphics features declared in features.json are added to
@@ -235,6 +238,11 @@ async function main() {
       if (descriptor?.stateAction) await record(info.id, descriptor.stateAction, { refresh: false });
     }
   }
+  // Downloaded files as the launcher lists them, with the example cache.
+  const downloaded = path.join(profile, EXAMPLE_DOWNLOADED.folder);
+  fs.mkdirSync(downloaded, { recursive: true });
+  fs.writeFileSync(path.join(downloaded, EXAMPLE_DOWNLOADED.file), EXAMPLE_DOWNLOADED.contents);
+  const components = await operations.componentAction("list", {});
   // Check for Updates as a new profile shows it: this version, not checked yet.
   const updater = createAppUpdater({ userDataDir: profile, currentVersion: require(path.join(repoRoot, "package.json")).version,
     packaged: true, appPath: "/Applications/MacLauncher.app", source: { discover: async () => [] } });
@@ -246,13 +254,15 @@ async function main() {
     runtimeManagers,
     runtimeDefaults: {},
     launcherSettings: {},
+    // Settings → Environment variables lists every translator's variables.
+    translatorEnvironments: Modules.listTranslatorEnvironments(),
     running: {},
     downloads: [],
     appUpdate: updater.snapshot(),
     debug: false,
     logPath: "/Users/Shared/MacLauncher Demo/logs/maclauncher.log"
   };
-  fs.writeFileSync(output, JSON.stringify(scrub({ state, graphics, settingsActions, gameActions })));
+  fs.writeFileSync(output, JSON.stringify(scrub({ state, graphics, settingsActions, gameActions, components })));
 }
 
 main().then(() => {
