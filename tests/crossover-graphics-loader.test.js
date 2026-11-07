@@ -161,62 +161,26 @@ test("CrossOver graphics preparation preserves older single-loader layouts witho
   assert.deepEqual(Loader.environment(loader), { WINELOADER: loader, CX_WINELOADER: loader });
   assert.equal(await Loader.prepare(selected, directory, { execute: () => assert.fail("cache should be reused") }), loader);
 });
-test("private Vulkan selection binds the exact paired modules and x64 driver without changing the Direct3D backend", async t => {
-  const crypto = require("node:crypto"), root = fs.mkdtempSync(path.join(os.tmpdir(), "crossover-scene-loader-"));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const selected = installation(root), directory = path.join(root, "game"), profile = require("../src/modules/crossover/temporal/catalog").VULKAN_PROFILE;
-  const write = (file, bytes) => { fs.mkdirSync(path.dirname(file), { recursive: true });fs.writeFileSync(file, bytes);return file; };
-  const hash = file => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex"), modules = {}, runtimeFiles = [];
-  for (const architecture of ["x86_64-unix", "x86_64-windows", "i386-windows"]) {
-    const name = "winevulkan." + (architecture.endsWith("unix") ? "so" : "dll"), relative = "lib/wine/" + architecture + "/" + name;
-    const original = write(path.join(selected.crossoverRoot, relative), "vendor " + architecture);
-    runtimeFiles.push({ relative, sha256: hash(original) });
-    const file = write(path.join(root, "paired", architecture, name), "owned " + architecture);modules[architecture] = { path: file, sha256: hash(file) };
-  }
-  for (const name of ["win32u.so", "winemac.so"]) {
-    const relative = "lib/wine/x86_64-unix/" + name, file = write(path.join(selected.crossoverRoot, relative), "vendor " + name);
-    runtimeFiles.push({ relative, sha256: hash(file) });
-  }
-  const native = Buffer.alloc(56);
-  for (const [offset, value] of [[0, 0xfeedfacf], [4, 0x01000007], [12, 6], [16, 1], [20, 24], [32, 0x32], [36, 24], [40, 1], [44, 0x0d0000], [48, 0x0d0000]]) native.writeUInt32LE(value, offset);
-  const childLoader = Buffer.from(native);childLoader.writeUInt32LE(2, 12);
-  write(path.join(selected.crossoverRoot, "lib/wine/x86_64-unix/wine"), childLoader);
-  const driver = write(path.join(root, "driver", "libMoltenVK-scene.dylib"), native);
-  const closure = { profile: profile.id, runtimeProfile: { id: profile.id, driverVersion: profile.driverVersion, unixCallCount: profile.unixCallCount, files: runtimeFiles },
-    modules, driver: { path: driver, sha256: hash(driver) } };
-  const execute = async (_command, args) => ({ stdout: args[0] === "-d" ? permissions : "" });
-  const loader = await Loader.prepare(selected, directory, { execute, sceneClosure: closure }), prepared = path.resolve(path.dirname(loader), "..");
-  assert.equal(fs.realpathSync(path.join(prepared, "lib/wine/x86_64-unix/libMoltenVK.dylib")), fs.realpathSync(driver));
-  for (const [architecture, item] of Object.entries(modules)) assert.equal(fs.realpathSync(path.join(prepared, "lib/wine", architecture, path.basename(item.path))), fs.realpathSync(item.path));
-  const previous = { CX_GRAPHICS_BACKEND: "d3dmetal", CX_ACTIVE_GRAPHICS_BACKEND: "dxmt", WINED3DMETAL: "1", WINEDXVK: "0", WINEDLLPATH: "/existing/modules", WINEDLLOVERRIDES: "other=n,b" };
-  const values = Loader.environment(loader, previous, { installation: selected, sceneClosure: closure });
-  for (const key of ["CX_GRAPHICS_BACKEND", "CX_ACTIVE_GRAPHICS_BACKEND", "WINED3DMETAL", "WINEDXVK"]) assert.equal(Object.hasOwn(values, key), false);
-  assert.match(values.WINEDLLPATH, /existing\/modules/);assert.equal(values.WINEDLLOVERRIDES, "other=n,b;winevulkan=b");
-  assert.equal(await Loader.prepare(selected, directory, { sceneClosure: closure, execute: () => assert.fail("unchanged closure must reuse its loader") }), loader);
-  const arm = Buffer.from(native);arm.writeUInt32LE(0x0100000c, 4);fs.writeFileSync(driver, arm);
-  assert.throws(() => Loader.sceneSelection(selected, { ...closure, driver: { path: driver, sha256: hash(driver) } }), /architecture/);
-  fs.writeFileSync(driver, native);fs.appendFileSync(modules["i386-windows"].path, " changed");
-  await assert.rejects(Loader.prepare(selected, directory, { execute, sceneClosure: closure }), /closure changed/);
-  assert.equal(fs.readFileSync(path.join(selected.crossoverRoot, "lib/wine/i386-windows/winevulkan.dll"), "utf8"), "vendor i386-windows");
-});
 test("Graphics Off does no scene package or original-library discovery", () => {
   const Temporal = require("../src/modules/crossover/temporal"), unavailable = new Proxy({}, { get() { assert.fail("Off must not inspect packages"); } });
   assert.equal(Temporal.resolveScenePlan({}, {}, { install: { crossoverRoot: "/unreadable/vendor" }, requested: false, support: unavailable, vulkan: unavailable }), null);
 });
-test("an automatic launch with the FidelityFX Vulkan library gets no scene package work while the route records no frames", t => {
-  const Temporal = require("../src/modules/crossover/temporal"), Catalog = require("../src/modules/crossover/temporal/catalog");
-  const Detection = require("../src/modules/crossover/detect"), crypto = require("node:crypto");
+test("an automatic launch with a FidelityFX library gets no FidelityFX package work on a driver without temporal frames", t => {
+  const Temporal = require("../src/modules/crossover/temporal"), Profile = require("../src/modules/crossover/temporal/catalog").FIDELITYFX_PROFILE;
+  const Detection = require("../src/modules/crossover/detect"), PE = require("../src/modules/crossover/temporal/streamline/pe-exports");
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-ffx-scene-"));t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const library = path.join(root, "amd_fidelityfx_vk.dll");fs.writeFileSync(library, "game FidelityFX library");fs.writeFileSync(path.join(root, "Game.exe"), "game");
-  const original = Catalog.FIDELITYFX_PROFILE;t.after(() => { Catalog.FIDELITYFX_PROFILE = original; });
-  Catalog.FIDELITYFX_PROFILE = { ...original, referenceSha256: crypto.createHash("sha256").update(fs.readFileSync(library)).digest("hex") };
+  fs.writeFileSync(path.join(root, Profile.libraries.vk), "game FidelityFX library");fs.writeFileSync(path.join(root, "Game.exe"), "game");
+  // The runtime's own MoltenVK declares no temporal frame carrier.
+  const driver = path.join(root, "libMoltenVK.dylib");fs.writeFileSync(driver, "runtime MoltenVK");
   t.mock.method(Detection, "cachedWindowsExecutable", () => ({ sourceRoot: root, windowsExecutablePath: path.join(root, "Game.exe") }));
-  const unavailable = new Proxy({}, { get() { assert.fail("the FidelityFX route must not offer or link scene packages"); } });
+  t.mock.method(PE, "inspect", () => Profile.exports.map((name, index) => ({ name, ordinal: index + 1 })));
+  const unavailable = new Proxy({}, { get() { assert.fail("the route must not offer or link the FidelityFX package"); } });
   const entry = { effects: { schema: 2, mode: "advanced", enabled: true, video: [{ id: "scene", kind: "temporal", method: "metalfx", enabled: true, settings: {} }] } };
   assert.equal(Temporal.sceneLibraries(entry).length, 1, "the game's FidelityFX library is recognized");
+  const translatorPlan = { components: { "vulkan-driver": { inherited: true, used: { engine: "moltenvk", files: [{ format: "macho", path: driver }] } } } };
   const context = {};
-  assert.equal(Temporal.resolveScenePlan(entry, context, { install: { crossoverRoot: root }, support: unavailable, vulkan: unavailable }), null);
-  assert.match(context.graphicsBridgeFailure.reason, /records no scene frames/);
+  assert.equal(Temporal.resolveScenePlan(entry, context, { support: unavailable, translatorPlan }), null);
+  assert.match(context.graphicsBridgeFailure.reason, /forwards temporal frames/);
 });
 test("image filters, scaling and image-pair generation never acquire or activate the scene API", t => {
   const Temporal = require("../src/modules/crossover/temporal"), ReShade = require("../src/modules/shared/reshade");

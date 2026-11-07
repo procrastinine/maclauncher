@@ -3,7 +3,7 @@ const Sources = require("../sources");
 const Detection = require("../detect"), Streamline = require("./streamline"), XeSS = require("./xess"), FidelityFX = require("./fidelityfx");
 function libraryAdapter(library) {
   const name = path.basename(library?.relativePath || library?.sourcePath || "").toLowerCase();
-  if (library?.adapter === "fidelityfx" || name === require("./catalog").FIDELITYFX_PROFILE.library) return FidelityFX;
+  if (library?.adapter === "fidelityfx" || FidelityFX.backendOf(name)) return FidelityFX;
   return library?.adapter === "xess" || name === "libxess_dx11.dll" ? XeSS : Streamline;
 }
 const { systemVersionSync } = require("../../shared/runtime/bundled-native");
@@ -224,6 +224,7 @@ function cameraRequirements(entry, context, { manager, root } = {}) {
   return plan?.requiresDownload ? [{ ...plan.download, installOptions: { sectionId: "default" },
     detail: "Downloads matching DXMT support libraries for the game's temporal API. The selected Wine engine remains unchanged." }] : [];
 }
+// The game's FidelityFX API libraries beside its executable or in its common plugin folders.
 function sceneLibraries(entry, settings = {}) {
   const match = Detection.cachedWindowsExecutable(entry);if (!match) return [];
   const executable = settings.executable ? path.resolve(match.sourceRoot, settings.executable) : match.windowsExecutablePath;
@@ -231,13 +232,12 @@ function sceneLibraries(entry, settings = {}) {
   const directories = new Set([path.dirname(executable), match.sourceRoot]);
   for (const directory of [...directories]) for (const child of ["plugins", "Plugins", "FidelityFX", "FSR"])
     directories.add(path.join(directory, child));
-  const profile = require("./catalog").FIDELITYFX_PROFILE, result = [];
-  for (const directory of directories) {
-    const file = path.join(directory, profile.library);
+  const result = [], PE = require("./streamline/pe-exports");
+  for (const directory of directories) for (const name of Object.values(require("./catalog").FIDELITYFX_PROFILE.libraries)) {
+    const file = path.join(directory, name);
     try {
-      if (!Detection.inside(fs.realpathSync(match.sourceRoot), fs.realpathSync(file)) || digest(file) !== profile.referenceSha256) continue;
-      result.push({ adapter: "fidelityfx", sourcePath: file, sourceSha256: profile.referenceSha256,
-        relativePath: path.relative(match.sourceRoot, file) });
+      if (!Detection.inside(fs.realpathSync(match.sourceRoot), fs.realpathSync(file)) || !FidelityFX.apiExports(PE.inspect(file))) continue;
+      result.push({ adapter: "fidelityfx", backend: FidelityFX.backendOf(file), sourcePath: file, sourceSha256: digest(file), relativePath: path.relative(match.sourceRoot, file) });
     } catch {}
   }
   return result;
@@ -246,70 +246,44 @@ function sceneLibraries(entry, settings = {}) {
 function sceneDemand(entry, context = {}, {root} = {}) {
   return require("../../shared/effects/scene-demand").sceneDemand(entry, context, {root, graphicsHost: "window", graphicsArchitecture: "x86_64"});
 }
-function resolveScenePlan(entry, context = {}, { install, settings = context.runtimeSettings || {}, verify = false,
-  requested, root,
-  support, vulkan, translatorPlan = context.translatorPlan } = {}) {
-  // Pure demand precedes DLL inspection, package reads and private preparation.
-  if (requested === false || !install?.crossoverRoot || !path.isAbsolute(install.crossoverRoot)) return null;
+// FidelityFX upscale dispatches recorded as MacLauncher temporal frames: a
+// Vulkan game's on a carrier-capable Vulkan driver, a Direct3D 12 game's
+// through VKD3D-Proton's MetalFX command-list interface on that driver.
+function resolveScenePlan(entry, context = {}, { settings = context.runtimeSettings || {}, verify = false,
+  requested, root, support, translatorPlan = context.translatorPlan, hasCarrier } = {}) {
+  // Pure demand precedes DLL inspection and package reads.
+  if (requested === false) return null;
   const demanded = sceneDemand(entry, context, {root});
   if (!demanded.length) return null;
   context.signal?.throwIfAborted();
-  if ((settings.dllOverrides || []).some(rule => {
-    const [names, order] = String(rule).split("=");
-    return !["b", "builtin"].includes(order?.trim().toLowerCase()) && names.split(",").some(name => /^(?:\*|winevulkan)(?:\.dll)?$/i.test(name.trim()));
-  })) return null;
-  const driver = translatorPlan?.components["vulkan-driver"];
-  if (driver?.used?.engine === "kosmickrisp" || driver?.used && !driver.inherited) {
-    context.graphicsBridgeFailure = { provider: "crossover-vulkan", reason: "WineVulkan scene support is unavailable with the selected Vulkan driver override." };
+  const driver = require("./vulkan-dlss").carrierDriver(translatorPlan, hasCarrier);
+  const sources = sceneLibraries(entry, settings).filter(item => item.backend === "vk" || usedForApi(translatorPlan, "d3d12")?.engine === "vkd3d-proton");
+  if (!sources.length) return null;
+  // Without a translator plan the driver is checked at launch. A carrier driver
+  // that this Play downloads (wine-translators.js vulkanPending) forwards once installed.
+  if (!driver && translatorPlan && !translatorPlan.vulkanPending) {
+    context.graphicsBridgeFailure = { provider: "fidelityfx", reason: "FidelityFX frames reach graphics only on a Vulkan driver that forwards temporal frames." };
     return null;
   }
-  const sources = sceneLibraries(entry, settings);if (!sources.length) return null;
-  if (!require("./catalog").FIDELITYFX_PROFILE.recordsSceneFrames) {
-    context.graphicsBridgeFailure = { provider: "crossover-vulkan", reason: "The FidelityFX Vulkan route records no scene frames, so the game keeps its own FidelityFX upscaling." };
-    return null;
-  }
-  support ||= require("./support-manager");vulkan ||= require("../../shared/vulkan/managed");
-  const verification = verify ? "full" : "status", selections = {};
-  for (const id of ["winevulkan-scene", "fidelityfx-api"]) selections[id] = support.apiManagers[id].resolvePayload(entry, context, { verification });
-  const driverSelection = vulkan.sceneManager.resolveSelection(entry, context.settings, context.userDataDir, { verification });
-  const required = Object.entries(selections).map(([id, selected]) => ({ id, selected, manager: support.apiManagers[id] }));
-  required.push({ id: vulkan.sceneProjectId, selected: driverSelection, manager: vulkan.sceneManager });
-  const requirements = required.filter(item => !item.selected.ready && (item.selected.version || item.selected.discoveryRequired)).map(item => ({ managerId: item.id,
-    version: item.selected.version || null, ...(item.selected.discoveryRequired ? { discoveryRequired: true } : {}), requiresDownload: true, installOptions: { sectionId: "default" },
-    detail: "Installs matching Vulkan scene support. The selected Windows renderer and original game libraries are preserved." }));
-  const result = { libraries: sources, sceneRequirements: demanded, packageReady: false, activationReady: false, requirements,
-    reason: "The matched loaded Wine profile and actual Vulkan device handshake are pending." };
-  if (required.some(item => !item.selected.ready || !item.selected.install)) return result;
-  try {
-    const drivers = require("../../shared/vulkan").installed(context, { managers: [], adapted: vulkan.sceneProvider, architecture: "x64" });
-    const available = drivers.find(item => item.version === driverSelection.version);
-    if (!available) return { ...result, requirements: [], reason: "The installed scene driver has no compatible x86_64 library." };
-    const driver = vulkan.sceneProvider.resolve(available, context), wine = selections["winevulkan-scene"], ffx = selections["fidelityfx-api"];
-    const modules = Object.fromEntries(Object.entries(wine.provider.libraries).map(([architecture, relative]) => {
-      const file = wine.install.manifest.files.find(item => item.path === relative);
-      return [architecture, { path: path.join(wine.install.payloadRoot, relative), sha256: file.sha256 }];
-    }));
-    const driverFile = driver.install.manifest.files.find(item => item.path === driver.descriptor.library);
-    const sceneClosure = { profile: wine.provider.profile, runtimeProfile: wine.provider.runtimeProfile, modules,
-      driver: { path: driver.library, sha256: driverFile.sha256 } };
-    // This verifies the declared runtime/payload closure, not the loaded native
-    // interface. Context BEGIN owns the marker/factory/real-device handshake.
-    require("../runtime/graphics-loader").sceneSelection(install, sceneClosure);
-    return { ...result, packageReady: true, sceneClosure, providerRoot: ffx.install.payloadRoot,
-      libraries: sources.map(item => ({ ...item, proxySha256: ffx.provider.sha256, providerRoot: ffx.install.payloadRoot })),
-      dependencies: required.map(item => ({ managerId: item.id, version: item.selected.version,
-        sourcePath: item.selected.install.installDir })) };
-  } catch (error) {
-    if (context.signal?.aborted || isAbortError(error)) throw error;
-    return { ...result, requirements: [], reason: String(error.message || error) };
-  }
+  support ||= require("./support-manager");
+  const manager = support.apiManagers["fidelityfx-api"], selected = manager.resolvePayload(entry, context, { verification: verify ? "full" : "status" });
+  const result = { libraries: sources, sceneRequirements: demanded, packageReady: false, driver: driver?.engine || null,
+    requirements: !selected.ready && (selected.version || selected.discoveryRequired) ? [{ managerId: "fidelityfx-api", version: selected.version || null,
+      ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), requiresDownload: true, installOptions: { sectionId: "default" },
+      detail: "Installs the FidelityFX API adapter. The game's own FidelityFX library is kept beside it." }] : [] };
+  if (!selected.ready || !selected.install || !driver) return result;
+  const payloadRoot = selected.install.payloadRoot, libraries = sources.filter(item => FidelityFX.inspect(item.sourcePath, payloadRoot).available);
+  if (!libraries.length) return { ...result, reason: "The FidelityFX API adapter has no proxy for the game's libraries." };
+  return { ...result, packageReady: true, providerRoot: payloadRoot,
+    libraries: libraries.map(item => ({ ...item, proxySha256: FidelityFX.provider(payloadRoot).backends[item.backend].sha256, providerRoot: payloadRoot })),
+    dependencies: [{ managerId: "fidelityfx-api", version: selected.version, sourcePath: selected.install.installDir }] };
 }
 function requirements(entry, context, options = {}) {
   const camera = cameraRequirements(entry, context, options), runtimeId = context.runtimeId || entry?.runtimeId;
   // The Vulkan scene adapter matches CrossOver's winevulkan modules.
   if (Sources.get(runtimeId)?.invocation !== "crossover") return camera;
   const manager = options.manager || require("../runtime/manager"), selected = manager.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
-  const scene = selected.ready && resolveScenePlan(entry, context, { install: selected.install, root: options.root });
+  const scene = selected.ready && resolveScenePlan(entry, context, { root: options.root });
   return [...camera, ...(scene?.requirements || [])];
 }
 module.exports = { FILES, rendererFiles,adapter, payload, libraries, libraryAdapter, matchingSupport, resolvePlan, prepareGame, restoreGame, environment, rendererFile,

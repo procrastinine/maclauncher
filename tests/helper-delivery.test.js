@@ -80,20 +80,24 @@ test("Sikarugir provider returns its fresh-profile discovery plan without refres
   assert.equal(Harness.network.requests.length, before);
 });
 
-test("all three scene adapters retain discovery plans for a selected scene effect once the FidelityFX route records frames", t => {
-  const root = profile(t), Catalog = require("../src/modules/crossover/temporal/catalog"), previous = Catalog.FIDELITYFX_PROFILE;
-  const bytes = Buffer.from("original scene API fixture"), crypto = require("node:crypto");
-  Catalog.FIDELITYFX_PROFILE = {...previous, referenceSha256:crypto.createHash("sha256").update(bytes).digest("hex"), recordsSceneFrames:true};
-  t.after(() => { Catalog.FIDELITYFX_PROFILE = previous; });
-  fs.writeFileSync(path.join(root, previous.library), bytes);
+test("a game's FidelityFX library offers the FidelityFX API adapter on a carrier driver", t => {
+  const root = profile(t), Profile = require("../src/modules/crossover/temporal/catalog").FIDELITYFX_PROFILE;
+  const PE = require("../src/modules/crossover/temporal/streamline/pe-exports"), Temporal = require("../src/modules/crossover/temporal");
+  fs.writeFileSync(path.join(root, Profile.libraries.vk), "FidelityFX API fixture");
+  t.mock.method(PE, "inspect", () => Profile.exports.map((name, index) => ({ name, ordinal: index + 1 })));
   const entry = {gamePath:root, runtimeData:{crossover:{sourceRoot:root, windowsExecutablePath:path.join(root,"game.exe"),executableArchitecture:"x86_64"}},
     effects:{schema:2,mode:"advanced",enabled:true,video:[{id:"scene",kind:"temporal",method:"metalfx",enabled:true,settings:{}}]}};
-  const selection = () => ({ready:false, version:null, discoveryRequired:true});
-  const apiManagers = Object.fromEntries(["winevulkan-scene","fidelityfx-api"].map(id => [id,{resolvePayload:selection}]));
-  const plan = require("../src/modules/crossover/temporal").resolveScenePlan(entry, {}, {
-    install:{crossoverRoot:root}, support:{apiManagers}, vulkan:{sceneProjectId:"vulkan-moltenvk-scene",sceneManager:{resolveSelection:selection}}});
-  assert.deepEqual(plan.requirements.map(row => row.managerId), ["winevulkan-scene","fidelityfx-api","vulkan-moltenvk-scene"]);
-  assert.ok(plan.requirements.every(row => row.discoveryRequired && row.version === null));
+  const support = {apiManagers:{"fidelityfx-api":{resolvePayload:() => ({ready:false, version:null, discoveryRequired:true})}}};
+  const translatorPlan = {components:{"vulkan-driver":{used:{engine:"kosmickrisp", files:[{format:"macho", path:path.join(root,"driver.dylib")}]}}}};
+  const plan = Temporal.resolveScenePlan(entry, {}, {support, translatorPlan, hasCarrier: () => true});
+  assert.equal(plan.driver, "kosmickrisp");
+  assert.deepEqual(plan.libraries.map(row => [row.backend, row.relativePath]), [["vk", Profile.libraries.vk]]);
+  assert.deepEqual(plan.requirements.map(row => [row.managerId, row.version, row.discoveryRequired]), [["fidelityfx-api", null, true]]);
+  const context = {};
+  assert.equal(Temporal.resolveScenePlan(entry, context, {support, translatorPlan, hasCarrier: () => false}), null);
+  assert.match(context.graphicsBridgeFailure.reason, /forwards temporal frames/);
+  t.mock.method(PE, "inspect", () => Profile.exports.slice(1).map((name, index) => ({ name, ordinal: index + 1 })));
+  assert.equal(Temporal.resolveScenePlan(entry, {}, {support, translatorPlan, hasCarrier: () => true}), null);
 });
 
 test("preferred Vulkan and explicit MacLauncher KosmicKrisp are downloadable from an empty profile", t => {

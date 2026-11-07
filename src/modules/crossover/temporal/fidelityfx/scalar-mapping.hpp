@@ -5,8 +5,8 @@
 #include <cmath>
 
 namespace maclauncher::fidelityfx {
-// The native frame and the fixed-width Wine frame share these scalar fields.
-// Resource handles, owner identities, callbacks and clocks belong to callers.
+// A temporal frame's scalar fields from one upscale dispatch. Resource
+// handles, identities and clocks belong to callers.
 template<class Frame>
 bool mapUpscaleScalars(const ffxCreateContextDescUpscale&create,
                        const ffxDispatchDescUpscale&dispatch,Frame&frame){

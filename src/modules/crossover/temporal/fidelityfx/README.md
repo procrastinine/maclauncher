@@ -1,36 +1,45 @@
 # FidelityFX API adapter
 
-The proxy preserves the five FidelityFX API 1.0.1 exports and original context,
-descriptor, callback and return-code behavior. The declared SDK is 1.1.4;
-the original DLL's embedded file version is 1.0.1.41314. These are separate versions.
+The proxy keeps the five FidelityFX API 1.0.1 exports and loads the game's own
+library, renamed beside it, for every context, configuration, query and frame
+generation call. The declared SDK is 1.1.4; the reference DLL's embedded file
+version is 1.0.1.41314. These are separate versions.
 
-The build uses the exact SDK and SDL commits declared in `source.json`:
+Each upscale dispatch on a context whose device forwards MacLauncher temporal
+frames is recorded as one `VkTemporalFrameInfoMVK` (`vk_temporal_frame.h` in
+MacLauncher Builds' VKD3D-Proton producer), with the reactive and
+transparency-and-composition masks in a chained `VkTemporalFrameMasksInfoMVK`.
+MacLauncher's selected upscaler then writes the dispatch's output:
+
+- Vulkan backend: the proxy reads the physical device's `driverInfo` at context
+  creation. When it names `temporal-sr` and the device has
+  `vkCmdPipelineBarrier2`, each dispatch records the frame in its command
+  buffer, followed by a plain barrier. The context's feature id is released in
+  the next recorded frame after the context is destroyed.
+- Direct3D 12 backend: the proxy records each dispatch through
+  `ID3D12GraphicsCommandListMetalFX::TemporalUpscale` (`vkd3d_metalfx.h`). The
+  context's scaler is destroyed with the context.
+
+A dispatch that cannot be recorded runs the original. `carrier.hpp` maps a
+dispatch onto `VKD3D_METALFX_TEMPORAL_DESC`; `scalar-mapping.hpp` holds the
+scalar and flag conventions, including camera planes for inverted and infinite
+depth.
+
+MacLauncher Builds builds the proxies with
+`producers/package-support/src/modules/crossover/temporal/fidelityfx/build.mjs`.
+It uses the exact FidelityFX SDK and Vulkan-Headers commits declared in the
+`source.json` beside it, and the carrier headers of the VKD3D-Proton producer.
+Each backend compiles separately, because the SDK's Vulkan and Direct3D 12
+headers declare the same frame generation keys:
 
 ```sh
-node build.mjs --sdk-source SDK_CHECKOUT --vulkan-source SDL_CHECKOUT \
-  --compiler MINGW_CLANGXX --backend vk --out OUTPUT_DIRECTORY
+node build.mjs --sdk-source SDK_CHECKOUT --vulkan-source VULKAN_HEADERS_CHECKOUT \
+  --carrier-headers VKD3D_PROTON_PRODUCER --compiler MINGW_CLANGXX --out OUTPUT_DIRECTORY
 ```
 
-The default original is read from the pinned SDK's Git object at its declared
-relative path and verified against its SHA-256. A sparse checkout needs no
-separately installed reference DLL. `--reference ORIGINAL_DLL` accepts an explicit
-original with the same five-export interface and preserves its ordinals. SDK
-source correspondence is recorded only when those bytes match the declared
-original; other explicit references retain their own checksum identity.
-
-The output contains the proxy, a byte-preserved renamed original, original
-licenses and a universal native scene-source archive. `provider.json` records
-the original export table, checksums and source identities. The additional
-observation-table export does not replace an SDK export.
-
-The managed package version is declared separately in `source.json`. Its API
-version is checked against the original DLL's recorded file-version profile.
-`payload/` contains the runtime manifest, consumed provider descriptor, proxy,
-preserved reference and notices. `runtime-package.json` is the standard package
-declaration for `tools/runtime-package.mjs` in MacLauncher Builds. Compiler
-inputs, object files and the native source archive remain outside `payload/`.
-
-The native producer requires unwrapped Vulkan handles and a prepared consumer
-for the recorded scene-operation API. Windows Vulkan handles and callbacks
-remain in their original ABI. Original SDK GPU work is retained. D3D12 resource
-and command-list interop requires its own implementation-side adapter.
+Each backend's reference library is read from the pinned SDK's Git object at its
+declared path and verified against its SHA-256; its export table and ordinals
+become the proxy's. `payload/` contains the runtime manifest, the provider
+descriptor (schema 2, one entry per backend), both proxies and notices.
+`runtime-package.json` is the standard package declaration for
+`tools/runtime-package.mjs` in MacLauncher Builds.

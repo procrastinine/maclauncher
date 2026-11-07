@@ -1,12 +1,9 @@
 const SOURCE_URL = "https://github.com/Sikarugir-App/Template/releases";
-// Runtime contracts are separate from excluded producer recipes/source inputs.
-const VULKAN_PROFILE = Object.freeze({ id: "crossover-26.3.0-winevulkan-scene-v1",
-  driverVersion: 47, unixCallCount: 674, marker: 0x2630002f });
-// recordsSceneFrames: the proxy's WineVulkan observer finds no recording
-// export in the adapted winevulkan modules, so the route hands no frame to the
-// shared processor and Play neither offers nor links its scene packages.
-const FIDELITYFX_PROFILE = Object.freeze({ id: "fidelityfx-api-1.0.1-sdk1.1.4", library: "amd_fidelityfx_vk.dll", recordsSceneFrames: false,
-  original: "maclauncher_fidelityfx_vk_original.dll", referenceSha256: "a1624cc4238fef046f30c4d80ce3f47be63fc5f5373f49e3ee9edb9960f54c78",
+// The FidelityFX API 1.0.1 profile: one proxy per backend library, each
+// loading the game's own library under its original's name.
+const FIDELITYFX_PROFILE = Object.freeze({ id: "fidelityfx-api-1.0.1-sdk1.1.4",
+  libraries: Object.freeze({ vk: "amd_fidelityfx_vk.dll", dx12: "amd_fidelityfx_dx12.dll" }),
+  originals: Object.freeze({ vk: "maclauncher_fidelityfx_vk_original.dll", dx12: "maclauncher_fidelityfx_dx12_original.dll" }),
   exports: Object.freeze(["ffxConfigure", "ffxCreateContext", "ffxDestroyContext", "ffxDispatch", "ffxQuery"]) });
 function withSettingsOptions(manifest) {
   const entries = Object.fromEntries(Object.entries(manifest.runtime.entries).map(([id, runtime]) => [id, { ...runtime,
@@ -14,4 +11,4 @@ function withSettingsOptions(manifest) {
       options: [{ value: "auto", label: "Automatic" }], optionsAction: "listGraphicsBridgeVersions", optionsKey: "graphicsBridgeVersions" } : field) } }]));
   return { ...manifest, runtime: { ...manifest.runtime, entries } };
 }
-module.exports = { SOURCE_URL, VULKAN_PROFILE, FIDELITYFX_PROFILE, withSettingsOptions };
+module.exports = { SOURCE_URL, FIDELITYFX_PROFILE, withSettingsOptions };

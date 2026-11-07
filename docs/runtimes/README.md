@@ -200,7 +200,7 @@ To run evbunpack, the backend uses an existing virtual environment at `userData/
 
 ## The Runtimes window
 
-The **Runtimes** window downloads, removes and refreshes runtimes and chooses their default versions, with one tab per manager. Every runtime manager has a tab of its own, including small packages that other runtimes load, such as DXVK-NVAPI and the NGX core of Vulkan DLSS forwarding beside DXVK and vkd3d-proton, CrossOver graphics integration in the CrossOver entry, MoltenVK scene support among the Vulkan drivers, and the WineVulkan scene and FidelityFX API adapters in **Effects**. Settings that change how a runtime behaves, such as translator environment variables and plugin switches, are in **Settings**. A manager's tab shows:
+The **Runtimes** window downloads, removes and refreshes runtimes and chooses their default versions, with one tab per manager. Every runtime manager has a tab of its own, including small packages that other runtimes load, such as DXVK-NVAPI and the NGX core of Vulkan DLSS forwarding beside DXVK and vkd3d-proton, CrossOver graphics integration in the CrossOver entry, MoltenVK scene support among the Vulkan drivers, and the FidelityFX API adapter in **Effects**. Settings that change how a runtime behaves, such as translator environment variables and plugin switches, are in **Settings**. A manager's tab shows:
 
 - section tabs when the manager has several groups, such as Temurin LTS and Vineflower, NW.js and Greenworks, or Ren'Py (Python 2) and Ren'Py 8 (fixed native players remain in **Settings**)
 - the available versions, with a refresh control

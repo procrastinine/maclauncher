@@ -245,8 +245,8 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   const Temporal = require("../temporal");
   const ngxScene = require("../temporal/ngx/connection").resolve({ requested: settings.dlss === true || DLSS.needsSceneInputs(entry.effects), runtimeId: "crossover", install: selected.install, translatorPlan, executableArchitecture: selectedExecutable.executableArchitecture });
   context.ngxSceneConnection = ngxScene;
-  const scenePlan = Temporal.resolveScenePlan(entry, context, { install: selected.install, settings, translatorPlan, verify: true, root: graphicsRoot });
-  let sceneClosure = scenePlan?.packageReady ? scenePlan.sceneClosure : null;
+  const scenePlan = Temporal.resolveScenePlan(entry, context, { settings, translatorPlan, verify: true, root: graphicsRoot });
+  let sceneReady = Boolean(scenePlan?.packageReady);
   // A Vulkan scene source does not request a different Direct3D renderer.
   if (scenePlan) settings = { ...settings, dlss: context.runtimeSettings?.dlss === true || settings.dlssOptional === true };
   let cameraBridge = Temporal.resolvePlan(entry, context,
@@ -286,36 +286,22 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   const GraphicsLoader = require("./graphics-loader");
   let winemac = await require('./winemac').select(selected.install, context);
   let loader, loaderFailure;
-  const restoreScene = cause => {
-    if (!cameraView || !scenePlan) return;
-    Temporal.restoreLibraries(scenePlan.libraries, cameraView.gameRoot, cause, context.logger);
-    GameView.prepared(cameraView, { libraries: cameraBridge?.libraries || [] });
-  };
   const prepareLoader = async () => {
-    try { return await GraphicsLoader.prepare(selected.install, directory, { signal: context.signal, cameraBridge, sceneClosure, winemac, translatorView, userDataDir: context.userDataDir }); }
+    try { return await GraphicsLoader.prepare(selected.install, directory, { signal: context.signal, cameraBridge, winemac, translatorView, userDataDir: context.userDataDir }); }
     catch (error) {
       if (context.signal?.aborted || isAbortError(error)) throw error;
       if (winemac) { winemac = null; return prepareLoader(); }
-      if (sceneClosure) {
-        sceneClosure = null;
-        restoreScene(error);
-        context.graphicsBridgeFailure = { provider: "crossover-vulkan", reason: String(error.message || error) };
-        warnGraphics(context.logger, "CrossOver Vulkan scene support could not be prepared. Using the selected vendor renderer.", context.graphicsBridgeFailure.reason);
-        try { return await GraphicsLoader.prepare(selected.install, directory, { signal: context.signal, cameraBridge, translatorView, userDataDir: context.userDataDir }); }
-        catch (failure) { if (context.signal?.aborted || isAbortError(failure)) throw failure;error = failure; }
-      }
       if (translatorView && Object.keys(translatorView.links).length) throw error;
       loaderFailure = error;return null;
     }
   };
   const requestedCameraBridge = Boolean(cameraBridge);
-  if (cameraBridge || sceneClosure) {
-    // Verify the optional native closure before replacing a private game DLL.
-    // A loader failure must leave the ordinary vendor game path available.
-    loader = await prepareLoader();
-    if (!loader) { cameraBridge = null;sceneClosure = null; }
-    else try {
-      const plans = [...(cameraBridge ? [{ kind: "camera", plan: cameraBridge }] : []), ...(sceneClosure ? [{ kind: "scene", plan: scenePlan }] : [])];
+  if (cameraBridge || sceneReady) {
+    // Verify the camera bridge's native closure before replacing a private game
+    // DLL. A loader failure must leave the ordinary vendor game path available.
+    if (cameraBridge) { loader = await prepareLoader();if (!loader) cameraBridge = null; }
+    if (cameraBridge || sceneReady) try {
+      const plans = [...(cameraBridge ? [{ kind: "camera", plan: cameraBridge }] : []), ...(sceneReady ? [{ kind: "scene", plan: scenePlan }] : [])];
       const program = require('./steam-bridge-launch').declaredProgram(executable, originalRoot, selectedExecutable.executableArchitecture);
       cameraView = await GameView.camera(directory, originalRoot, executable, { libraries: plans.flatMap(item => item.plan.libraries), programs: program ? [program] : [] }, recovery, context.signal);
       const preparedLibraries = [];
@@ -327,7 +313,8 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
           warnGraphics(context.logger, "CrossOver temporal integration could not be prepared. Using its original game API.", error.message);
         }
         if (ready) preparedLibraries.push(...item.plan.libraries);
-        else { if (item.kind === "camera") cameraBridge = null;else sceneClosure = null;loader = null; }
+        else if (item.kind === "camera") { cameraBridge = null;loader = null; }
+        else sceneReady = false;
       }
       if (preparedLibraries.length) {GameView.prepared(cameraView, { libraries: preparedLibraries });GameView.remember(entry, context, "crossover", cameraView, recovery);gameRoot = cameraView.gameRoot;executablePath = cameraView.executablePath;}
       else {GameView.discard(cameraView);cameraView = null;}
@@ -335,7 +322,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
       GameView.discard(cameraView);
       if (context.signal?.aborted || isAbortError(error) || error.code === "STREAMLINE_RESTORE_FAILED") throw error;
       warnGraphics(context.logger, "CrossOver camera integration could not be prepared. Using the selected vendor graphics backend.", error?.message || String(error));
-      cameraBridge = null;sceneClosure = null;cameraView = null;
+      cameraBridge = null;sceneReady = false;cameraView = null;
     }
     if (requestedCameraBridge && !cameraBridge) {
       loader = null;
@@ -375,27 +362,14 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     if ((overrides.CX_GRAPHICS_BACKEND || environment.CX_GRAPHICS_BACKEND) !== 'wined3d') { delete overrides.CX_LIBVULKAN; delete environment.CX_LIBVULKAN; }
     if (translatorView.dllOverrides.length) { dll = [dll, ...translatorView.dllOverrides].filter(Boolean).join(';'); overrides.WINEDLLOVERRIDES = dll; environment.WINEDLLOVERRIDES = dll; }
   }
-  if (overrides.DYLD_INSERT_LIBRARIES || cameraBridge || sceneClosure || winemac || translatorView && Object.keys(translatorView.links).length) {
+  if (overrides.DYLD_INSERT_LIBRARIES || cameraBridge || winemac || translatorView && Object.keys(translatorView.links).length) {
     if (!loader && !loaderFailure) loader = await prepareLoader();
     if (loader) {
-      const values = () => ({ overrides: GraphicsLoader.environment(loader, overrides, { cameraBridge, sceneClosure, translatorView, installation: selected.install }),
-        environment: GraphicsLoader.environment(loader, environment, { cameraBridge, sceneClosure, translatorView, installation: selected.install }) });
-      let prepared;
-      try { prepared = values(); }
-      catch (error) {
-        if (context.signal?.aborted || isAbortError(error) || !sceneClosure) throw error;
-        sceneClosure = null;
-        restoreScene(error);
-        context.graphicsBridgeFailure = { provider: "crossover-vulkan", reason: String(error.message || error) };
-        warnGraphics(context.logger, "CrossOver Vulkan scene support changed before launch. Using the selected vendor renderer.", context.graphicsBridgeFailure.reason);
-        loader = await prepareLoader();if (loader) prepared = values();
-      }
-      if (prepared) {
-        Object.assign(overrides, prepared.overrides);Object.assign(environment, prepared.environment);
-        if (cameraBridge || sceneClosure) dll = overrides.WINEDLLOVERRIDES;
-        const cameraEnvironment = Temporal.environment(cameraBridge, path.resolve(path.dirname(loader), "../lib/wine"));
-        Object.assign(overrides, cameraEnvironment);Object.assign(environment, cameraEnvironment);
-      }
+      Object.assign(overrides, GraphicsLoader.environment(loader, overrides, { cameraBridge, translatorView, installation: selected.install }));
+      Object.assign(environment, GraphicsLoader.environment(loader, environment, { cameraBridge, translatorView, installation: selected.install }));
+      if (cameraBridge) dll = overrides.WINEDLLOVERRIDES;
+      const cameraEnvironment = Temporal.environment(cameraBridge, path.resolve(path.dirname(loader), "../lib/wine"));
+      Object.assign(overrides, cameraEnvironment);Object.assign(environment, cameraEnvironment);
     }
   }
   if (loaderFailure) {

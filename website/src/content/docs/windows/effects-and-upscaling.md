@@ -51,9 +51,9 @@ These integrations supply Super Resolution inputs. They do not expose NVIDIA DLS
 
 Games that use Intel's XeSS through its Direct3D 11 library can have their XeSS requests run through MetalFX. MacLauncher's XeSS adapter does this automatically, under the same DXMT conditions as the camera adapters.
 
-### FidelityFX in Vulkan games on CrossOver
+### FidelityFX games on CrossOver
 
-CrossOver games that render with Vulkan and use AMD's FidelityFX API keep their own FidelityFX upscaling, because MacLauncher can't read their scene. Play doesn't offer or install anything for them, and when your graphics settings use scene data, the game's launch notes that it keeps its own FidelityFX upscaling.
+Games that ship AMD's FidelityFX API library, for Vulkan or Direct3D 12, can have their FidelityFX upscaling run by MacLauncher's selected upscaler instead. This needs the FidelityFX API adapter from MacLauncher Builds, which Play offers to install, and a Vulkan driver that passes the game's frames on: MacLauncher KosmicKrisp or MoltenVK scene support. Direct3D 12 games also need MacLauncher's vkd3d-proton. MacLauncher prepares it only when your graphics settings use scene data. When a frame can't be passed on, the game's own FidelityFX runs.
 
 ## How the adapters treat your game files
 

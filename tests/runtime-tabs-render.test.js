@@ -231,7 +231,7 @@ test('scene adapters are managed downloads with their own rows', () => {
   const providerUi = require('../src/modules/shared/reshade/runtime/provider-library-ui.json');
   const adapters = [...Object.values(require('../src/modules/crossover/temporal/support-manager').apiManagers),
     require('../src/modules/shared/vulkan/managed').sceneManager];
-  assert.deepEqual(adapters.map(source => source.id).sort(), ['fidelityfx-api', 'vulkan-moltenvk-scene', 'winevulkan-scene']);
+  assert.deepEqual(adapters.map(source => source.id).sort(), ['fidelityfx-api', 'vulkan-moltenvk-scene']);
   const registered = new Set([...registry.listSharedRuntimeManagers(),
     ...registry.listModules().flatMap(module => registry.getModule(module.id).runtimeManagers || [])].map(source => source.id));
   for (const source of adapters) {
