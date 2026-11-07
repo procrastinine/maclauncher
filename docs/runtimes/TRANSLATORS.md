@@ -131,6 +131,8 @@ For a Vulkan driver override in CrossOver, the selected Vulkan library is placed
 
 Sikarugir loads the same selected components through its private graphics view and Vulkan driver description. Its Wine engine, its Template and the engine of a registered wrapper stay in place. Selected video codecs reach both runtimes through `GST_PLUGIN_PATH`.
 
+Translator dependencies and vendor support libraries are found through `DYLD_FALLBACK_LIBRARY_PATH` and `DYLD_FALLBACK_FRAMEWORK_PATH`, so they do not replace macOS system libraries loaded by Apple frameworks. The private Wine loader's `DYLD_LIBRARY_PATH` override contains only the anchor for its already initialized `ntdll.so`. [Chromium in Wine](WEB_RUNTIMES.md#chromium-in-wine) describes how a bundled browser without the necessary Windows resource-sharing API uses WineD3D and its own ANGLE Direct3D 9 implementation.
+
 ## Translator options
 
 The **Compatibility** and **Diagnostics** groups of Runtime Settings for CrossOver and Sikarugir include options for particular engines. Each option belongs to one engine. At launch, it sets its environment variable only when the game actually uses that engine, for one of its Direct3D APIs or as its Vulkan driver, so a fallback to another engine leaves the option unused. When per-API choices use several Direct3D engines, the options of each engine apply. **Runtime default** leaves the variable unset, and the engine keeps its own default. An entry with the same name under **Environment variables** takes precedence over the option.

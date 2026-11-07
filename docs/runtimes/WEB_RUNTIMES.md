@@ -44,6 +44,14 @@ NW.js projects link the original HTML, scripts and assets. The launcher writes i
 
 Before an NW.js installation is used, MacLauncher checks its extracted app bundle and installed framework aliases. A damaged installation stays visible in **Runtimes** but does not satisfy Play. After launch, both NW.js modes confirm that the native game window loaded the expected document, matching the wrapper, app origin and requested index page, before reporting success.
 
+## Chromium in Wine
+
+A web game can also keep its bundled Windows browser and run through [Sikarugir](SIKARUGIR.md). Older Chromium builds can share graphics resources through Windows APIs that the selected Wine engine does not provide. For a bundled NW.js application with no explicit graphics-backend arguments or external Wine environment, MacLauncher checks the browser, its ANGLE libraries and Wine's Vulkan bridge. Missing inspection data leaves the original choices unchanged; a declared `vkGetMemoryWin32HandleKHR` interface alone does not establish that resource sharing works.
+
+When that interface is absent and the bundled browser supports the legacy ANGLE Direct3D 9 path, Play selects WineD3D for both Direct3D 8 and Direct3D 9. This requires matching Wine builtin libraries with executable `Direct3DCreate8` and `Direct3DCreate9` exports, because Direct3D 8 can depend on the same provider's Direct3D 9 library. An explicit choice for either API takes precedence. With WineD3D actually selected for Direct3D 9, the launch adds `--disable-d3d11`, so Chromium uses its bundled ANGLE Direct3D 9 implementation without DXVK's Windows shared-resource transport. The game files and saved translator choices stay unchanged.
+
+An explicit browser backend argument in the launch arguments or `package.json` takes precedence, including `--use-angle`, `--use-gl`, `--use-vulkan` and `--disable-d3d11`. The automatic adaptation neither replaces these arguments nor disables GPU rendering or WebGL.
+
 ## NW.js (Patched)
 
 The `nwjs-patched` runtime uses the same NW.js installations and adds MacLauncher's compatibility patches:
