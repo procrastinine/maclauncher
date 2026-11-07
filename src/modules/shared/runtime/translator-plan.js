@@ -211,15 +211,13 @@ function resolveApiRoles(plan, { selections = {}, choices = [], included = [], c
     physical = physicalPlacements(plan);
   }
   const changed = Roles.DIRECT3D_ROLES.some(role => identity(plan.components[role.id].used) !== identity(original[role.id].used));
-  const unresolved = Roles.DIRECT3D_ROLES.some(role => !plan.components[role.id].used);
-  if ((plan.runtime === 'crossover' && !plan.components['d3d-renderer'].used && changed && unresolved && !paired) || physical.conflicts.length) {
+  if (physical.conflicts.length) {
     for (const role of Roles.DIRECT3D_ROLES) {
       const row = plan.components[role.id];
       if (identity(row.used) !== identity(original[role.id].used)) {
         row.used = original[role.id].used; row.fallback = true;
-        row.reasonCode = plan.runtime === 'crossover' ? 'runtime-global-automatic' : 'shared-physical-binding';
-        row.reason = plan.runtime === 'crossover' ? 'CrossOver uses one global backend. The existing automatic composition is retained for this linked selection.' :
-          'The requested libraries share a physical binding. The existing coherent composition is retained.';
+        row.reasonCode = 'shared-physical-binding';
+        row.reason = `Shared physical binding conflict: ${physical.conflicts.map(item => item.key).join(', ')}`;
       }
     }
     plan.apiMode = false;
@@ -263,11 +261,8 @@ function apiOptions(plan, { choices = [], included = [], environment = null, sel
       const patch = Object.fromEntries(affected.map(other => [other.settingsKey, serves(item, other) ? item.id : AUTOMATIC]));
       const value = saved && saved !== AUTOMATIC && saved !== INHERIT && current.selected?.id === item.id ? saved : item.id;
       patch[role.settingsKey] = value;
-      const unresolvedGlobal = plan.runtime === 'crossover' && !plan.components['d3d-renderer'].used && !plan.apiMode && Roles.DIRECT3D_ROLES.some(other =>
-        affected.some(row => row.id === other.id) ? !serves(item, other) : !plan.components[other.id]?.used &&
-          !(selections[other.id] && plan.components[other.id]?.selected && plan.components[other.id].reasonCode === 'runtime-global-automatic'));
-      const heldBack = unresolvedGlobal || current.selected?.id === item.id && current.fallback && (!current.used || !sameComponent(item, current.used, role));
-      const reason = heldBack ? unresolvedGlobal ? 'runtime-global-automatic' : current.reasonCode || 'fallback' : affected.length > 1 ? 'shared-physical-binding' : undefined;
+      const heldBack = current.selected?.id === item.id && current.fallback && (!current.used || !sameComponent(item, current.used, role));
+      const reason = heldBack ? current.reasonCode || 'fallback' : affected.length > 1 ? 'shared-physical-binding' : undefined;
       const notice = heldBack ? fallbackNotice(reason, { roles: current.conflictRoles }) : undefined;
       rows.push({ value, label: label(item), apis: item.apis, source: item.source, form: item.form, scopeKnown: Boolean(item.apis?.length), reason, heldBack: Boolean(heldBack), notice,
         groupId: affected.map(item => item.id).join('+'), affectedRoles: affected.map(item => item.id), runtimeSettingsPatch: patch });

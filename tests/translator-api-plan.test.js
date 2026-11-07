@@ -89,9 +89,9 @@ test('per-API legacy projection leaves saved choice and global automatic behavio
   assert.equal(plan.components.d3d11.used.id, dxmt.id); assert.equal(plan.components.d3d8.used, null);
   const auto = legacy(null, 'crossover');
   Plan.resolveApiRoles(auto, { selections: { d3d11: dxmt.id }, included: [dxmt], compatibility: compatibility([dxmt]) });
-  assert.equal(auto.components.d3d11.selected.id, dxmt.id); assert.equal(auto.components.d3d11.used, null);
-  assert.equal(auto.components.d3d11.fallback, true); assert.match(auto.components.d3d11.reason, /global backend|automatic composition/);
-  assert.equal(auto.apiMode, false); assert.deepEqual(auto.placements, []);
+  assert.equal(auto.components.d3d11.selected.id, dxmt.id); assert.equal(auto.components.d3d11.used.id, dxmt.id);
+  assert.equal(auto.components.d3d11.fallback, false);
+  assert.equal(auto.apiMode, true); assert.ok(auto.placements.length);
 });
 
 test('per-API D3D9 DXVK and D3D11 DXMT separate unused DXGI and Unix thunk companions using actual imports', t => {
@@ -301,6 +301,36 @@ test('D3D12 engines select their own package DXGI with automatic rows and incomp
       assert.equal(explicit.components.d3d12.fallback, false);
       assert.equal(explicit.dxgiBinding.description.id, selected.id);
     }
+  }
+});
+
+test('explicit API10 or API11 owns its complete DXGI and Unix closure over the aggregate and conflicting API choices', t => {
+  const f = fixture(t), modules = { d3d10core: ['dxgi.dll', 'winemetal.dll'], d3d11: ['dxgi.dll', 'winemetal.dll'], dxgi: ['winemetal.dll'], winemetal: [] };
+  const older = component(f, 'crossover-dxmt072', 'dxmt', modules, ['winemetal'], { version: '0.72' });
+  const selected = component(f, 'sikarugir-dxmt080', 'dxmt', modules, ['winemetal'], { version: '0.80', source: { runtime: 'sikarugir', label: 'Sikarugir Template 1.0.24' } });
+  const checked = compatibility([older, selected]);
+  for (const runtime of ['crossover', 'sikarugir']) for (const role of ['d3d10', 'd3d11']) for (const aggregate of [null, older]) {
+    const plan = legacy(aggregate, runtime);
+    Plan.resolveApiRoles(plan, { selections: { [role]: selected.id }, included: [older], choices: [selected], compatibility: checked });
+    assert.equal(plan.apiMode, true); assert.equal(plan.pairingError, undefined);
+    assert.equal(plan.dxgiBinding.description.id, selected.id);
+    for (const id of ['d3d10', 'd3d11']) { assert.equal(plan.components[id].used.id, selected.id); assert.equal(plan.components[id].fallback, false); }
+    assert.ok(plan.placements.every(item => item.file.path.startsWith(selected.root + path.sep)));
+    for (const name of ['dxgi.dll', 'winemetal.dll', 'winemetal.so']) assert.ok(plan.placements.some(item => path.basename(item.file.path) === name));
+  }
+  const conflict = legacy(older, 'crossover');
+  Plan.resolveApiRoles(conflict, { selections: { d3d10: older.id, d3d11: selected.id }, included: [older], choices: [selected], compatibility: checked });
+  assert.equal(conflict.components.d3d10.selected.id, older.id); assert.equal(conflict.components.d3d10.used.id, selected.id);
+  assert.equal(conflict.components.d3d10.reasonCode, 'dxgi-pairing'); assert.match(conflict.components.d3d10.reason, /DXGI/);
+});
+
+test('standalone API8 and API9 choices do not require concrete choices for unrelated APIs', t => {
+  const f = fixture(t), dxvk = component(f, 'standalone-dxvk', 'dxvk', { d3d8: ['d3d9.dll'], d3d9: [] });
+  for (const runtime of ['crossover', 'sikarugir']) for (const role of ['d3d8', 'd3d9']) {
+    const plan = legacy(null, runtime);
+    Plan.resolveApiRoles(plan, { choices: [dxvk], selections: { [role]: dxvk.id }, compatibility: compatibility([dxvk]) });
+    assert.equal(plan.apiMode, true); assert.equal(plan.components[role].used.id, dxvk.id);
+    assert.equal(plan.components[role].fallback, false); assert.equal(plan.components.d3d11.used, null);
   }
 });
 

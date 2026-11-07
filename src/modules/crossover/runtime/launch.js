@@ -127,9 +127,10 @@ function buildEnvironment(settings, installation, directory, bottlePath, { baseE
   const windows = TranslatorFiles.cpuFolder(require("../../shared/runtime/binary-compatibility").requiredMachine(executableArchitecture)) || wineLayout(installation).primaryWindows;
   const vendorLibraries = engine => windows ? DLSS.hasLibraries(path.join(installation.crossoverRoot,
     ...(engine === 'dxmt' ? ['lib', 'dxmt'] : ['lib64', 'apple_gptk', 'wine']), windows)) : false;
+  const resolvedGraphics = translatorPlan?.apiMode || translatorPlan?.components['d3d-renderer'].used;
   const dlss = DLSS.checkSelection(settings, { ...host, executableArchitecture, backend, translatorPlan, vulkan: vulkanDLSS?.enabled === true,
-    dxmt: settings.dlss === true && (Boolean(cameraBridge?.dxmt) || (translatorPlan?.components['d3d-renderer'].used ? DLSS.hasPlanLibraries(translatorPlan, 'dxmt') : vendorLibraries('dxmt'))),
-    d3dmetal: settings.dlss === true && (translatorPlan?.components['d3d-renderer'].used ? DLSS.hasPlanLibraries(translatorPlan, 'd3dmetal') : vendorLibraries('d3dmetal')) });
+    dxmt: settings.dlss === true && (Boolean(cameraBridge?.dxmt) || (resolvedGraphics ? DLSS.hasPlanLibraries(translatorPlan, 'dxmt') : vendorLibraries('dxmt'))),
+    d3dmetal: settings.dlss === true && (resolvedGraphics ? DLSS.hasPlanLibraries(translatorPlan, 'd3dmetal') : vendorLibraries('d3dmetal')) });
   Object.assign(overrides, DLSS.environment(dlss));
   if (backend !== "auto") {
     overrides.CX_GRAPHICS_BACKEND = backend;

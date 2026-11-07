@@ -32,14 +32,15 @@ function markup(t, entry, manifest, status) {
   return renderToStaticMarkup(React.createElement(React.Fragment, null, ...elements(harness.render()).filter(node => node.props.className === 'detailRow')));
 }
 
-test('actual plan settings and inspector share held-back and missing-choice display messages without mutating saved intent', t => {
+test('actual plan settings and inspector accept standalone choices and share missing-choice messages without mutating saved intent', t => {
   const dxvk = component(t, 'dxvk', 'included-dxvk', 'd3d9'), dxmt = component(t, 'dxmt', 'included-dxmt', 'd3d11');
   const held = Plan.resolvePlan({ runtime: 'crossover' });
   Plan.resolveApiRoles(held, { included: [dxvk], selections: { d3d9: dxvk.id } });
   const heldBefore = structuredClone(held), heldOptions = Plan.apiOptions(held, { included: [dxvk], selections: { d3d9: dxvk.id } });
   const heldOption = heldOptions.translatorD3D9Options.find(option => option.value === dxvk.id), heldRow = Wine.inspectorRows(held).find(row => row.component === 'd3d9');
-  assert.equal(heldOption.heldBack, true); assert.equal(heldRow.reasonCode, 'runtime-global-automatic');
-  assert.equal(heldRow.reason, heldOption.notice); assert.equal(heldRow.reason, Plan.fallbackNotice(heldRow.reasonCode));
+  assert.equal(heldOption.heldBack, false); assert.equal(heldRow.reasonCode, null);
+  assert.equal(heldRow.reason, null); assert.equal(heldOption.notice, undefined);
+  assert.equal(heldRow.used, Description.label(dxvk));
   assert.deepEqual(held, heldBefore); assert.equal(held.components.d3d9.value, dxvk.id);
   const missingValue = 'translator-fixture:opaque-missing-build';
   const missing = Plan.resolvePlan({ runtime: 'sikarugir', included: [dxmt], selections: { 'd3d-renderer': dxmt.id } });

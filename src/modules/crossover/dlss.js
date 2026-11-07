@@ -38,7 +38,8 @@ function checkSelection(settings, { backend, dxmt = false, d3dmetal = false,
   if (settings.dlss !== true) return { enabled: false, dxmt: false, d3dmetal: false };
   if (hardwareArch !== "arm64") throw new Error("MetalFX Temporal requires Apple Silicon.");
   if (executableArchitecture && executableArchitecture !== "x86_64") throw new Error("MetalFX Temporal requires a 64-bit Windows executable.");
-  const apiEngines = translatorPlan?.apiMode ? [usedForApi(translatorPlan, "d3d11")?.engine, usedForApi(translatorPlan, "d3d12")?.engine] : null;
+  const resolvedEngines = translatorPlan && [usedForApi(translatorPlan, "d3d11")?.engine, usedForApi(translatorPlan, "d3d12")?.engine];
+  const apiEngines = translatorPlan?.apiMode || resolvedEngines?.some(Boolean) ? resolvedEngines : null;
   if (apiEngines) {
     dxmt = dxmt && apiEngines.includes("dxmt");
     d3dmetal = d3dmetal && apiEngines.includes("d3dmetal");

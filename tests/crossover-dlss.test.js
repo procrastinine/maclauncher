@@ -104,6 +104,19 @@ test("DLSS uses installed matched libraries, selected graphics and real host req
   assert.throws(() => run({ graphicsBackend: "dxmt", dlss: true }), /unavailable/);
 });
 
+test("temporal eligibility uses resolved engine families for foreign references in aggregate and API plans", () => {
+  const reference = { id: 'sikarugir:template-1.0.24:dxmt080', engine: 'dxmt', source: { runtime: 'sikarugir' } };
+  for (const runtime of ['crossover', 'sikarugir']) for (const apiMode of [false, true]) {
+    const plan = { runtime, apiMode, components: apiMode ? { d3d11: { used: reference }, d3d12: { used: null } } :
+      { 'd3d-renderer': { used: reference }, d3d12: { used: null } } };
+    assert.deepEqual(DLSS.checkSelection({ dlss: true }, { backend: reference.id, translatorPlan: plan, dxmt: true,
+      hardwareArch: 'arm64', macOSVersion: '26.0', executableArchitecture: 'x86_64' }), { enabled: true, dxmt: true, d3dmetal: false });
+    const unsupported = { ...plan, components: { 'd3d-renderer': { used: { engine: 'dxvk' } } } };
+    assert.throws(() => DLSS.checkSelection({ dlss: true }, { backend: 'dxmt', translatorPlan: unsupported, dxmt: true,
+      hardwareArch: 'arm64', macOSVersion: '26.0', executableArchitecture: 'x86_64' }), /unavailable/);
+  }
+});
+
 test("turning DLSS off clears inherited flags without changing graphics or requiring libraries", () => {
   const install = { crossoverRoot: "/absent/CrossOver" };
   const result = CrossOver.buildEnvironment({ graphicsBackend: "wined3d", dlss: false }, install, "/game", "/game/bottle",

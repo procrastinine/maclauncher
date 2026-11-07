@@ -75,7 +75,7 @@ test('D8 options fold complete equivalent API closures while retaining partial d
   assert.equal(linkedOptions.find(row => row.value === narrow.id).runtimeSettingsPatch.translatorD3D11, 'automatic');
 });
 
-test('D8 has one Automatic row and describes only choices actually held back by global Automatic', t => {
+test('D8 has one Automatic row and standalone candidates are available without filling other APIs', t => {
   const root = scratch(t), dxvk = component(root, 'dxvk', [8, 9, 10, 11]), vkd3d = component(root, 'vkd3d', [12], { engine: 'vkd3d', component: 'd3d12' });
   const included = [dxvk, vkd3d], plan = projected('crossover', included), settings = {};
   const options = Plan.apiOptions(plan, { included, selections: settings });
@@ -86,7 +86,7 @@ test('D8 has one Automatic row and describes only choices actually held back by 
   }
   assert.deepEqual(settings, {}); assert.equal(plan.apiMode, undefined);
   const candidate = options.translatorD3D11Options.find(row => row.value === dxvk.id);
-  assert.equal(candidate.reason, 'runtime-global-automatic'); assert.equal(candidate.heldBack, true);
+  assert.notEqual(candidate.reason, 'runtime-global-automatic'); assert.equal(candidate.heldBack, false);
   const selections = Object.fromEntries(['d3d8', 'd3d9', 'd3d10', 'd3d11'].map(role => [role, dxvk.id]));
   const partial = projected('crossover', included); Plan.resolveApiRoles(partial, { included, selections });
   const remaining = Plan.apiOptions(partial, { included, selections }).translatorD3D12Options.find(row => row.value === vkd3d.id);
@@ -99,7 +99,7 @@ test('D8 has one Automatic row and describes only choices actually held back by 
   assert.ok(unknown); assert.deepEqual(unknown.runtimeSettingsPatch, { translatorD3D9: 'future:opaque:choice' });
 });
 
-test('D8 actual action and manifest render one refresh, one group notice, and one held-back sentence', async t => {
+test('D8 actual action and manifest render one refresh with no stale global Automatic warning', async t => {
   const root = scratch(t), wine = path.join(root, 'wine');
   for (const name of ['wine', 'wineserver', 'wineloader']) put(wine, 'bin/' + name, image({ cpu: X64, fileType: 2 }));
   put(wine, 'lib/wine/x86_64-unix/ntdll.so', image({ cpu: X64, symbols: ['wine_unix_call'] }));
@@ -118,7 +118,7 @@ test('D8 actual action and manifest render one refresh, one group notice, and on
     settings: {}, userDataDir: path.join(root, 'profile'), logger: { warn() {} } });
   assert.equal(result.translatorD3D11Options.filter(row => row.value.endsWith(':d3dmetal')).length, 1);
   const selected = result.translatorD3D11Options.find(row => row.value === values.translatorD3D11);
-  assert.equal(selected.heldBack, true);
+  assert.equal(selected.heldBack, false); assert.equal(selected.notice, undefined);
   result.notice = 'Included choices appear after the runtime is installed.';
   const schema = main.manifest.runtime.entries.crossover.settings, saves = [], requests = [];
   const state = { modules: [main.manifest], runtimeDefaults: {}, recents: [] };
@@ -130,7 +130,7 @@ test('D8 actual action and manifest render one refresh, one group notice, and on
     harness.render(); const tree = await harness.settle(), markup = renderToStaticMarkup(tree);
     assert.equal(requests.filter(args => args[1] === 'listTranslatorOptions').length, 1); assert.equal((markup.match(/aria-label="Refresh choices"/g) || []).length, 1);
     assert.equal((markup.match(/Included choices appear after the runtime is installed\./g) || []).length, 1);
-    assert.equal((markup.match(new RegExp('<div class="dim">' + selected.notice.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '</div>', 'g')) || []).length, 1);
+    assert.doesNotMatch(markup, /keeps its automatic renderer until every Direct3D row/);
     assert.doesNotMatch(markup, /CrossOver shared automatic choice|global backend|Shared physical|API binding|Existing selection: Automatic/);
     assert.equal(saves.length, 0, 'opening settings never migrates saved values');
     const control = nodes(tree).find(node => node.props?.['aria-label'] === 'Direct3D 11');

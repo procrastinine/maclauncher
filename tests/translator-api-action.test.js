@@ -154,13 +154,13 @@ test('real API resolver and both Wine environment builders compose all actual us
   for (const engines of calls) assert.deepEqual(new Set(engines['d3d-renderer']), new Set(['dxvk', 'dxmt']));
 });
 
-test('real per-API resolver keeps unresolved CrossOver Automatic honest without selecting every API', async t => {
+test('real per-API resolver applies a standalone API9 choice while other APIs remain automatic', async t => {
   const f = fixture(t), context = f.context({ translatorD3D9: 'fixture-dxvk:native' });
   const plan = await Translators.resolve(f.install, 'crossover', context, { host: f.host, executableArchitecture: 'x86_64', managers: [f.manager] });
-  assert.equal(context.translatorPlan, plan); assert.equal(plan.apiMode, false);
-  assert.equal(plan.components.d3d9.selected.id, 'fixture-dxvk:native'); assert.equal(plan.components.d3d9.used, null);
-  assert.equal(plan.components.d3d9.fallback, true); assert.match(plan.components.d3d9.reason, /global backend/);
-  assert.equal(Translators.settingsForPlan(context.runtimeSettings, plan).graphicsBackend || 'auto', 'auto');
+  assert.equal(context.translatorPlan, plan); assert.equal(plan.apiMode, true);
+  assert.equal(plan.components.d3d9.selected.id, 'fixture-dxvk:native'); assert.equal(plan.components.d3d9.used.id, 'fixture-dxvk:native');
+  assert.equal(plan.components.d3d9.fallback, false); assert.equal(plan.components.d3d11.used, null);
+  assert.equal(Translators.settingsForPlan(context.runtimeSettings, plan).graphicsBackend, 'wined3d');
   assert.equal(Object.hasOwn(context.runtimeSettings, 'translatorD3D11'), false);
 });
 
@@ -374,6 +374,46 @@ test('standalone D3DMetal and DXMT API12 choices resolve and place their matchin
     }
     assert.equal(fs.realpathSync(view.links['lib/wine/x86_64-unix/winemetal.so']), path.join(expected, 'x86_64-unix/winemetal.so'));
     assert.equal(view.env.CX_GRAPHICS_BACKEND, runtime === 'crossover' ? backend : undefined);
+  }
+});
+
+test('foreign DXMT 0.80 references own DXGI and winemetal over a 0.72 default and enable temporal libraries', async t => {
+  const f = fixture(t), root = path.join(f.root, 'sikarugir-template-1.0.24/dxmt');
+  for (const name of ['d3d10core', 'd3d11', 'dxgi', 'nvapi64', 'nvngx'])
+    f.put(path.relative(f.root, path.join(root, 'x86_64-windows', name + '.dll')), dll({ metalImport: ['d3d10core', 'd3d11', 'dxgi'].includes(name) }));
+  f.put(path.relative(f.root, path.join(root, 'x86_64-windows/winemetal.dll')), dll({ metalExport: true }));
+  f.put(path.relative(f.root, path.join(root, 'x86_64-unix/winemetal.so')), image({ cpu: X64, symbols: ['wine_metal_entry'] }));
+  f.put(path.relative(f.root, path.join(root, 'version')), '0.80'); f.put('wine/lib/dxmt/version', '0.72');
+  f.put('wine/share/wine/nls/c_932.nls', 'fixture locale data');
+  const templateRoot = path.join(f.root, 'default-template'), { RELATIVE_PATHS } = require('../src/modules/crossover/sikarugir/graphics/closure');
+  const oldTemplate = path.join(templateRoot, RELATIVE_PATHS.renderers, 'dxmt');
+  fs.mkdirSync(path.dirname(oldTemplate), { recursive: true }); fs.cpSync(path.join(f.root, 'wine/lib/dxmt'), oldTemplate, { recursive: true });
+  const install = { ...f.install, templateRoot };
+  const reference = Description.describeTranslator(root, { engine: 'dxmt', id: 'sikarugir:template-1.0.24:dxmt080',
+    source: { runtime: 'sikarugir', label: 'Sikarugir Template 1.0.24' } });
+  const DLSS = require('../src/modules/crossover/dlss');
+  for (const runtime of ['crossover', 'sikarugir']) for (const aggregate of ['', 'included:d3d-renderer:dxmt', reference.id]) {
+    const settings = { environmentReference: 'private', dlss: true, translatorRenderer: aggregate,
+      ...(aggregate === reference.id ? {} : { translatorD3D10: reference.id, translatorD3D11: reference.id }) }, context = { ...f.context(settings), runtimeId: runtime };
+    const plan = await Translators.resolve(install, runtime, context, { host: f.host, executableArchitecture: 'x86_64', choices: [reference], managers: [] });
+    assert.equal(Boolean(plan.apiMode), aggregate !== reference.id); assert.equal(plan.components.d3d11.used.id, reference.id);
+    if (plan.apiMode) assert.equal(plan.dxgiBinding.description.root, root);
+    assert.equal(DLSS.hasPlanLibraries(plan, 'dxmt'), true);
+    const view = await Files.prepareTranslatorFiles(plan, { userDataDir: context.userDataDir, layout: plan.layout });
+    for (const name of ['d3d11.dll', 'dxgi.dll', 'winemetal.dll'])
+      assert.equal(fs.realpathSync(view.links['lib/wine/x86_64-windows/' + name]), path.join(root, 'x86_64-windows', name));
+    assert.equal(fs.realpathSync(view.links['lib/wine/x86_64-unix/winemetal.so']), path.join(root, 'x86_64-unix/winemetal.so'));
+    const effective = Translators.settingsForPlan(settings, plan);
+    const built = CrossLaunch.buildEnvironment(effective, install, path.join(f.root, 'launch'), path.join(f.root, 'prefix'),
+      { host: f.host, translatorPlan: plan, executableArchitecture: 'x86_64', baseEnvironment: {} });
+    assert.equal(built.environment.DXMT_ENABLE_NVEXT, '1'); assert.equal(built.environment.D3DM_ENABLE_METALFX, '0');
+    if (runtime === 'sikarugir') {
+      const graphics = await require('../src/modules/crossover/sikarugir/graphics').prepareGraphicsView({ install, settings: effective,
+        translatorPlan: plan, translatorView: view, context, userDataDir: context.userDataDir,
+        viewRoot: path.join(context.userDataDir, 'dxmt-view', aggregate || 'automatic'), prefixPath: path.join(f.root, 'prefix'),
+        host: f.host, executableArchitecture: 'x86_64' });
+      assert.equal(graphics.env.DXMT_ENABLE_NVEXT, '1');
+    }
   }
 });
 
