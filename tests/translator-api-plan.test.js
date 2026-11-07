@@ -13,9 +13,9 @@ function fixture(t) {
     const file = path.join(root, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes); return file;
   } };
 }
-function dll(imports = []) {
-  const f = peFixture({ is64: true }), start = 0x800, rva = offset => 0x2000 + offset;
-  f.bytes.writeUInt16LE(0x2002, f.peOffset + 22); f.bytes.write('Wine builtin DLL\0', 64);
+function dll(imports = [], { is64 = true, builtin = true } = {}) {
+  const f = peFixture({ is64 }), start = 0x800, rva = offset => 0x2000 + offset;
+  f.bytes.writeUInt16LE(0x2002, f.peOffset + 22); if (builtin) f.bytes.write('Wine builtin DLL\0', 64);
   if (!imports.length) return f.bytes;
   f.bytes.writeUInt32LE(rva(start), f.directories + 8); f.bytes.writeUInt32LE((imports.length + 1) * 20, f.directories + 12);
   let cursor = start + (imports.length + 1) * 20;
@@ -23,7 +23,10 @@ function dll(imports = []) {
     const at = f.raw + start + index * 20, lookup = cursor, iat = cursor + 16; cursor += 32;
     f.bytes.writeUInt32LE(rva(lookup), at); f.bytes.writeUInt32LE(rva(iat), at + 16);
     f.bytes.writeUInt32LE(rva(cursor), at + 12); f.bytes.write(name + '\0', f.raw + cursor); cursor += Buffer.byteLength(name) + 1;
-    for (const offset of [lookup, iat]) f.bytes.writeBigUInt64LE(0x8000000000000001n, f.raw + offset);
+    for (const offset of [lookup, iat]) {
+      if (is64) f.bytes.writeBigUInt64LE(0x8000000000000001n, f.raw + offset);
+      else f.bytes.writeUInt32LE(0x80000001, f.raw + offset);
+    }
   });
   return f.bytes;
 }
@@ -40,6 +43,42 @@ function compatibility(descriptions) {
     { layout: { architecture: 'x86_64' }, modules: {} }, { executableArchitecture: 'x86_64', macOSVersion: '26.0' })]));
 }
 const names = files => files.map(file => path.basename(file.path)).sort();
+
+test('Sikarugir WineD3D 10 and DXVK 3.1.1 retain the real D3D8 dependency when splitting D3D9', async t => {
+  const f = fixture(t);
+  const describe = (name, engine, version, modules) => {
+    for (const [module, imports] of Object.entries(modules)) f.put(`${name}/${module}.dll`, dll(imports, { is64: false, builtin: engine === 'wined3d' }));
+    return Description.describeTranslator(path.join(f.root, name), { id: name, engine, component: 'd3d-renderer', version,
+      source: { label: engine === 'wined3d' ? 'Sikarugir Template 1.0.24' : 'dxvk' } });
+  };
+  // Authored PE imports reproduce the selected installed files' API edges.
+  const wine = { ...describe('wine10', 'wined3d', '10.0', { d3d8: ['wined3d.dll'], d3d9: ['wined3d.dll'],
+    d3d10: ['d3d10core.dll', 'd3dcompiler_39.dll', 'dxgi.dll', 'wined3d.dll'], d3d10core: ['dxgi.dll'],
+    d3d11: ['dxgi.dll', 'wined3d.dll'], dxgi: ['wined3d.dll'] }), included: true };
+  const dxvk = describe('dxvk311', 'dxvk', '3.1.1', { d3d8: ['d3d9.dll'], d3d9: [], d3d10core: ['d3d11.dll'], d3d11: ['dxgi.dll'], dxgi: [] });
+  const input = { runtime: 'sikarugir', included: [wine], choices: [dxvk] };
+  const resolve = selections => Plan.resolveApiRoles(Plan.resolvePlan({ ...input, selections: { 'd3d-renderer': dxvk.id } }), { ...input, selections });
+  const refused = resolve({ d3d9: wine.id });
+  assert.equal(refused.components.d3d9.reason, 'Shared physical binding conflict: pe:332:d3d9.dll');
+  assert.deepEqual(refused.components.d3d9.conflictRoles, ['Direct3D 8']);
+  assert.deepEqual(names(Plan.filesForRole(dxvk, Roles.ROLES.find(role => role.id === 'd3d8'))), ['d3d8.dll', 'd3d9.dll']);
+  assert.deepEqual(names(Plan.filesForRole(wine, Roles.ROLES.find(role => role.id === 'd3d9'))), ['d3d9.dll']);
+  const plan = resolve({ d3d8: wine.id, d3d9: wine.id });
+  assert.equal(plan.apiMode, true);
+  for (const role of ['d3d8', 'd3d9', 'd3d10', 'd3d11']) {
+    assert.equal(plan.components[role].used.engine, ['d3d8', 'd3d9'].includes(role) ? 'wined3d' : 'dxvk');
+    assert.equal(plan.components[role].fallback, false);
+  }
+  assert.equal(plan.placements.filter(row => path.basename(row.file.path) === 'd3d9.dll').length, 1);
+  assert.equal(plan.placements.find(row => path.basename(row.file.path) === 'd3d9.dll').file.form, 'builtin');
+  for (const name of ['d3d10core.dll', 'd3d11.dll', 'dxgi.dll']) assert.equal(plan.placements.find(row => path.basename(row.file.path) === name).description.id, dxvk.id);
+  const view = await require('../src/modules/shared/runtime/translator-files').prepareTranslatorFiles(plan,
+    { userDataDir: path.join(f.root, 'profile'), layout: { architecture: 'x86_64', unixName: 'x86_64-unix' } });
+  assert.ok(view.dllOverrides.includes('d3d9=b'));
+  assert.ok(view.dllOverrides.includes('d3d11=n,b'));
+  assert.ok(view.dllOverrides.includes('dxgi=n,b'));
+  assert.equal(view.native.some(file => file.name === 'd3d9.dll'), false);
+});
 
 test('per-API legacy projection leaves saved choice and global automatic behavior unchanged', t => {
   const f = fixture(t), dxmt = component(f, 'included-dxmt', 'dxmt', { d3d11: ['winemetal.dll'], winemetal: [] }, ['winemetal']);

@@ -753,7 +753,7 @@ test("MV selects legacy ANGLE D3D9 with WineD3D for missing Win32 sharing, prese
   const { composeRuntimeProviders } = require("../src/modules/shared/runtime/providers");
   const { createLauncher } = require("../src/core/launcher");
   const directory = fixture(t), entry = game(directory), install = installation(directory), dependencies = adapters(install);
-  function library(file, exports, { builtin = false, markers = [], isDll = true, is64 = false } = {}) {
+  function library(file, exports, { builtin = false, markers = [], isDll = true, is64 = false, imports = [] } = {}) {
     const f = peFixture({ is64 });
     f.bytes.writeUInt16LE(isDll ? 0x2002 : 2, f.peOffset + 22);
     f.bytes.writeUInt16LE(2, f.optional + 68);
@@ -771,6 +771,20 @@ test("MV selects legacy ANGLE D3D9 with WineD3D for missing Win32 sharing, prese
       f.bytes.write(name + "\0", f.raw + nameOffset); nameOffset += name.length + 1;
     });
     f.bytes.write(markers.join("\0") + "\0", f.raw + 0xc00);
+    if (imports.length) {
+      const start = 0x900, rva = offset => 0x2000 + offset;
+      f.bytes.writeUInt32LE(rva(start), f.directories + 8); f.bytes.writeUInt32LE((imports.length + 1) * 20, f.directories + 12);
+      let cursor = start + (imports.length + 1) * 20;
+      imports.forEach((name, index) => {
+        const at = f.raw + start + index * 20, lookup = cursor, iat = cursor + 16; cursor += 32;
+        f.bytes.writeUInt32LE(rva(lookup), at); f.bytes.writeUInt32LE(rva(iat), at + 16);
+        f.bytes.writeUInt32LE(rva(cursor), at + 12); f.bytes.write(name + "\0", f.raw + cursor); cursor += name.length + 1;
+        for (const offset of [lookup, iat]) {
+          if (is64) f.bytes.writeBigUInt64LE(0x8000000000000001n, f.raw + offset);
+          else f.bytes.writeUInt32LE(0x80000001, f.raw + offset);
+        }
+      });
+    }
     fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, f.bytes);
   }
   const unix = path.join(install.wineRoot, "lib/wine/x86_64-unix");
@@ -779,7 +793,7 @@ test("MV selects legacy ANGLE D3D9 with WineD3D for missing Win32 sharing, prese
   fs.writeFileSync(path.join(unix, "ntdll.so"), native);
   for (const name of ["winevulkan.so", "win32u.so"]) fs.writeFileSync(path.join(unix, name), Buffer.concat([native, Buffer.from("vkCreateInstance\0")]));
   library(path.join(install.wineRoot, "lib/wine/i386-windows/winevulkan.dll"), ["vkGetDeviceProcAddr", "vkGetInstanceProcAddr"], { builtin: true });
-  for (const is64 of [false, true]) library(path.join(install.wineRoot, "lib/wine", is64 ? "x86_64-windows" : "i386-windows", "d3d9.dll"), ["Direct3DCreate9"], { builtin: true, is64 });
+  for (const is64 of [false, true]) for (const api of [8, 9]) library(path.join(install.wineRoot, "lib/wine", is64 ? "x86_64-windows" : "i386-windows", `d3d${api}.dll`), [`Direct3DCreate${api}`], { builtin: true, is64, imports: ['wined3d.dll'] });
   const browserPath = path.join(entry.gamePath, "Game.exe");
   library(browserPath, [], { isDll: false, markers: ["disable-d3d11"] });
   library(path.join(entry.gamePath, "libEGL.dll"), ["eglInitialize"]);
@@ -793,23 +807,28 @@ test("MV selects legacy ANGLE D3D9 with WineD3D for missing Win32 sharing, prese
   const runtimeSettings = { environmentReference: "private", arguments: ["--locale=en"], translatorRenderer: "fixture-dxvk" };
   const context = launcher.getGameLaunchContext(entry, {}, { runtimeId: "sikarugir", runtimeSettings });
   const dxvkRoot = path.join(directory, "dxvk");
-  for (const name of ["d3d9.dll", "d3d11.dll"]) library(path.join(dxvkRoot, name), ["Direct3DCreate9"]);
-  const dxvk = require("../src/modules/shared/runtime/translator-description").describeTranslator(dxvkRoot, { id: "fixture-dxvk", engine: "dxvk", component: "d3d-renderer" });
+  for (const [name, imports] of Object.entries({ 'd3d8.dll': ['d3d9.dll'], 'd3d9.dll': [], 'd3d10core.dll': ['d3d11.dll'], 'd3d11.dll': ['dxgi.dll'], 'dxgi.dll': [] })) library(path.join(dxvkRoot, name), ["Direct3DCreate9"], { imports });
+  const dxvk = require("../src/modules/shared/runtime/translator-description").describeTranslator(dxvkRoot, { id: "fixture-dxvk", engine: "dxvk", version: '3.1.1', component: "d3d-renderer" });
   dependencies.resolveTranslators = (install, runtime, context, options) => require("../src/modules/shared/runtime/wine-translators").resolve(install, runtime, context, { ...options, choices: [dxvk], managers: [] });
   const previousGraphics = dependencies.prepareGraphicsView;
-  dependencies.prepareGraphicsView = async options => ({ ...await previousGraphics(options), graphicsBackend: "wined3d", dllOverrides: [] });
+  dependencies.prepareGraphicsView = async options => ({ ...await previousGraphics(options), graphicsBackend: "wined3d", dllOverrides: options.translatorView.dllOverrides });
   const prepared = await Launch.prepareLaunch(entry, context, dependencies);
   assert.deepEqual(prepared.args.slice(-5), [prepared.windowsExecutablePath, "--disable-d3d11", "--locale=en", "--seed", "4"]);
   assert.equal(context.translatorPlan.components.d3d9.used.engine, "wined3d");
   assert.equal(context.translatorPlan.components.d3d9.fallback, false);
   assert.equal(context.translatorPlan.components.d3d9.used.files.find(file => file.format === "pe").machine, 0x14c);
-  assert.equal(context.translatorPlan.components.d3d11.used.engine, "dxvk", "the existing per-API selector changes only D3D9");
+  assert.equal(context.translatorPlan.components.d3d8.used.engine, "wined3d", "the D3D8 dependency group stays coherent with WineD3D9");
+  for (const api of ['d3d10', 'd3d11']) assert.equal(context.translatorPlan.components[api].used.engine, "dxvk");
+  assert.match(prepared.environment.WINEDLLOVERRIDES, /(?:^|;)d3d9=b(?:;|$)/);
+  assert.match(prepared.environment.WINEDLLOVERRIDES, /(?:^|;)d3d11=n,b(?:;|$)/);
+  assert.match(prepared.environment.WINEDLLOVERRIDES, /(?:^|;)dxgi=n,b(?:;|$)/);
   assert.equal(dependencies.calls.some(call => call.args.includes("--disable-d3d11")), false, "prefix and registry helpers never receive browser switches");
   assert.equal(fs.readFileSync(manifestPath, "utf8"), manifest);
   assert.equal(fs.readFileSync(entry.indexHtml, "utf8"), "original html");
   assert.equal(entry.launchArguments, "--seed 4");
   assert.deepEqual(context.runtimeSettings.arguments, ["--locale=en"]);
   assert.equal(runtimeSettings.translatorD3D9, undefined, "module defaults never modify saved runtime settings");
+  assert.equal(runtimeSettings.translatorD3D8, undefined);
   assert.equal(entry.runtimeData.sikarugir.translatorPlanInputs.settings.translatorD3D9, "", "applied rows remain keyed to the original requested settings");
   const launch = { install, executablePath: path.join(entry.gamePath, "Game.exe"), executableArchitecture: "x86", graphicsBackend: "dxvk", arguments: ["--seed", "4"] };
   for (const arguments_ of [["--use-angle=vulkan"], ["--use-angle", "d3d11"], ["--use-gl=desktop"], ["--disable-d3d11"], ["--disable-gpu"], ["--disable-webgl"]]) {
@@ -829,11 +848,17 @@ test("MV selects legacy ANGLE D3D9 with WineD3D for missing Win32 sharing, prese
   const selection = { settings: runtimeSettings, install, executablePath: browserPath, executableArchitecture: "x86" };
   for (const reference of [undefined, null, "", "private"]) {
     const settings = { ...runtimeSettings, environmentReference: reference };
-    assert.equal((await context.resolveRuntimeSettings({ ...selection, settings })).translatorD3D9, "included:d3d-renderer:wined3d");
+    const selected = await context.resolveRuntimeSettings({ ...selection, settings });
+    for (const key of ['translatorD3D8', 'translatorD3D9']) assert.equal(selected[key], "included:d3d-renderer:wined3d");
     assert.equal(settings.translatorD3D9, undefined);
   }
+  const pinned = { ...runtimeSettings, translatorD3D9: 'included:d3d-renderer:wined3d', translatorD3D11: 'chosen-eleven' };
+  const selected = await context.resolveRuntimeSettings({ ...selection, settings: pinned });
+  assert.equal(selected.translatorD3D9, pinned.translatorD3D9, "an explicit compatible D3D9 choice is retained");
+  assert.equal(selected.translatorD3D11, pinned.translatorD3D11, "explicit other API choices beat the aggregate/default");
+  assert.equal(selected.translatorD3D8, 'included:d3d-renderer:wined3d');
   const external = { kind: "sikarugir-wrapper", path: directory };
-  for (const settings of [{ ...runtimeSettings, translatorD3D9: "chosen-dxvk" }, { ...runtimeSettings, arguments: ["--disable-webgl"] },
+  for (const settings of [{ ...runtimeSettings, translatorD3D9: "chosen-dxvk" }, { ...runtimeSettings, translatorD3D8: "chosen-eight" }, { ...runtimeSettings, arguments: ["--disable-webgl"] },
     { ...runtimeSettings, environmentReference: external }, { ...runtimeSettings, environmentReference: JSON.stringify(external) }]) {
     assert.deepEqual(await context.resolveRuntimeSettings({ ...selection, settings }), settings);
   }

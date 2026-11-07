@@ -74,15 +74,18 @@ function legacyD3D9(entry, context, launch) {
 const WINE_D3D = "included:d3d-renderer:wined3d";
 function resolveRuntimeSettings(entry, context, launch) {
   const settings = launch.settings;
-  // A saved per-API choice is explicit. The module supplies only the missing
-  // default; it never rewrites that choice or an external wrapper's settings.
-  if (settings.translatorD3D9 || environmentReference(settings.environmentReference) !== null) return settings;
+  // D3D8 can import its renderer's D3D9 library, so supply one coherent default
+  // for both APIs. Explicit per-API choices and external settings take priority.
+  if ([settings.translatorD3D8, settings.translatorD3D9].some(value => value && value !== WINE_D3D) ||
+      environmentReference(settings.environmentReference) !== null) return settings;
   const args = [...(Array.isArray(settings.arguments) ? settings.arguments : []), ...(context.gameArguments || [])];
   if (!legacyD3D9(entry, context, { ...launch, arguments: args })) return settings;
   const layout = wineLayout(launch.install), windows = launch.executableArchitecture === "x86" ? "i386-windows" : "x86_64-windows";
-  const d3d9 = binary(path.join(layout.dllRoot, windows, "d3d9.dll"), "pe");
-  if (!d3d9?.builtin || d3d9.architecture !== launch.executableArchitecture || !codeExport(d3d9, "Direct3DCreate9")) return settings;
-  return { ...settings, translatorD3D9: WINE_D3D };
+  for (const api of [8, 9]) {
+    const library = binary(path.join(layout.dllRoot, windows, `d3d${api}.dll`), "pe");
+    if (!library?.builtin || library.architecture !== launch.executableArchitecture || !codeExport(library, `Direct3DCreate${api}`)) return settings;
+  }
+  return { ...settings, translatorD3D8: WINE_D3D, translatorD3D9: WINE_D3D };
 }
 function resolveRuntimeArguments(entry, context, launch) {
   const args = launch.arguments;
