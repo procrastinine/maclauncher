@@ -152,6 +152,26 @@ void reportIntake(const char*route,const RSTemporalFrame&f,const IntakeObservati
         f.nearPlane,f.farPlane,f.verticalFov,camera,code,r?r->encoded:0u,r?r->reason:"");
     macfx::nativeLog(text);
 }
+// Every status or method change of one feature (owner), at any frame, so a
+// provider that starts failing after the traced frames still shows. Bounded
+// per feature; a released feature starts again.
+constexpr unsigned intakeStatusChanges=256;
+struct IntakeStatus {int code=-2;uint32_t method=0;unsigned changes=0;};
+std::mutex intakeStatusMutex;
+std::unordered_map<const void*,IntakeStatus> intakeStatuses;
+void reportIntakeStatus(const RSTemporalFrame&f,const RSTemporalResult*r,int code){
+    if(!macfx::nativeConfig().diagnostics.enabled||!f.owner)return;
+    IntakeStatus previous;bool last=false;
+    {std::lock_guard lock(intakeStatusMutex);auto&state=intakeStatuses[f.owner];
+        if(state.code==code&&state.method==f.method)return;
+        if(state.changes>=intakeStatusChanges){state.code=code;state.method=f.method;return;}
+        previous=state;state.code=code;state.method=f.method;last=++state.changes==intakeStatusChanges;}
+    char text[1024];
+    snprintf(text,sizeof(text),"Temporal intake status owner=%p frame=%llu method=%u/%u status=%d encoded=%u reason=%s (was method %u status %d)%s",
+        f.owner,(unsigned long long)f.frameId,f.method,f.reserved,code,r?r->encoded:0u,r?r->reason:"",previous.method,previous.code,last?"; further changes of this feature are not logged":"");
+    macfx::nativeLog(text);
+}
+void forgetIntakeStatus(const void*owner){if(!owner)return;std::lock_guard lock(intakeStatusMutex);intakeStatuses.erase(owner);}
 void reportNextScaleCamera(const RSTemporalCamera*c,int status){
     if(!macfx::nativeConfig().diagnostics.enabled)return;
     unsigned remaining=cameraTraceRemaining.load(std::memory_order_relaxed);
@@ -514,7 +534,9 @@ static int processTemporalFrame(const RSTemporalFrame*f,const RSImageColorDescri
 extern "C" int rsProcessTemporalFrame(const RSTemporalFrame*f,RSTemporalResult*r){
     const auto observed=observeIntake(f,f&&f->size>=sizeof(*f)&&!f->commandBufferKind?(__bridge id<MTLCommandBuffer>)f->commandBuffer:nil);
     const int code=processTemporalFrame(f,nullptr,r);
-    if(observed.traced)reportIntake("frame",*f,observed,r&&r->size>=sizeof(*r)?r:nullptr,code,f->flags&RS_TEMPORAL_CAMERA_VALID?"frame":"none");
+    const auto result=r&&r->size>=sizeof(*r)?r:nullptr;
+    if(observed.traced)reportIntake("frame",*f,observed,result,code,f->flags&RS_TEMPORAL_CAMERA_VALID?"frame":"none");
+    if(f&&f->size>=sizeof(*f)&&f->version==1)reportIntakeStatus(*f,result,code);
     return code;
 }
 extern "C" uint32_t rsTemporalProviderMethodMask(void){return (1u<<RS_TEMPORAL_METALFX)|(1u<<RS_TEMPORAL_FSR2)|(1u<<RS_TEMPORAL_FSR3)|(1u<<RS_TEMPORAL_FSR4)|(1u<<RS_TEMPORAL_XESS)|(1u<<RS_TEMPORAL_ASR)|(1u<<RS_TEMPORAL_SGSR2)|(1u<<RS_TEMPORAL_METALFX_DENOISED);}
@@ -558,6 +580,7 @@ extern "C" __attribute__((visibility("default"))) int rsCreateRecordedSceneConsu
 }
 extern "C" void rsReleaseTemporalOwner(void *key){
     if(key)rsClearTemporalCameraForNextScale();
+    forgetIntakeStatus(key);
     rsReleaseTemporalSceneMatrices(key);rsReleaseTemporalSceneAovs(key);
     macfx::releaseTemporalSceneContinuations(key);
     std::shared_ptr<SceneOwner>retired;std::shared_ptr<OrderedSceneOwner>ordered;{std::lock_guard<std::mutex> lock(ownersMutex);owners.erase(key);auto found=sceneOwners.find(key);if(found!=sceneOwners.end()){retired=std::move(found->second);sceneOwners.erase(found);}const auto plan=orderedSceneOwners.find(key);if(plan!=orderedSceneOwners.end()){ordered=std::move(plan->second);orderedSceneOwners.erase(plan);}}
@@ -772,7 +795,7 @@ void encodeTemporal(id scaler,SEL selector,id commands){
     const bool unsupportedFence=s.fence&&state->kind;
     if(!unsupportedFence&&shape!=state->failedShape){
         if(s.fence){auto wait=[(id<MTLCommandBuffer>)commands computeCommandEncoder];[wait waitForFence:s.fence];[wait endEncoding];}
-        macfx::encodeTemporalProvider(&f,&result);
+        macfx::encodeTemporalProvider(&f,&result);reportIntakeStatus(f,&result,int(result.status));
     }
     if(!unsupportedFence&&shape!=state->failedShape&&result.status==RS_TEMPORAL_OK&&result.encoded){
         if(s.fence){auto update=[(id<MTLCommandBuffer>)commands computeCommandEncoder];[update updateFence:s.fence];[update endEncoding];}
