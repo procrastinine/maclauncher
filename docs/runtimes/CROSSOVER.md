@@ -149,7 +149,7 @@ The same DXMT conditions apply to an automatic in-game XeSS compatibility adapta
 
 ### Vulkan scene support
 
-A CrossOver game that renders with Vulkan and uses AMD's FidelityFX API can supply its scene to MacLauncher's scene effects through a separate route. MacLauncher prepares this route only when the game's graphics settings use scene inputs, such as depth or motion, and the game includes the FidelityFX API 1.0.1 Vulkan library, `amd_fidelityfx_vk.dll`, from FidelityFX SDK 1.1.4. MacLauncher looks for that library beside the executable, at the top of the game folder and in their `plugins`, `Plugins`, `FidelityFX` and `FSR` subfolders, and accepts it only when its checksum matches.
+A route for CrossOver games that render with Vulkan and use AMD's FidelityFX API supplies no scene frames to MacLauncher's scene effects. Its FidelityFX proxy forwards every call to the game's original library, and the game's own FidelityFX output stays in place; the proxy's WineVulkan recording interface does not match the adapted `winevulkan` modules, so nothing is recorded. MacLauncher prepares this route only when the game's graphics settings use scene inputs, such as depth or motion, and the game includes the FidelityFX API 1.0.1 Vulkan library, `amd_fidelityfx_vk.dll`, from FidelityFX SDK 1.1.4. MacLauncher looks for that library beside the executable, at the top of the game folder and in their `plugins`, `Plugins`, `FidelityFX` and `FSR` subfolders, and accepts it only when its checksum matches.
 
 The route uses three MacLauncher Builds packages, and Play offers to install any that are missing:
 

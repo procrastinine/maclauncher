@@ -53,7 +53,7 @@ Games that use Intel's XeSS through its Direct3D 11 library can have their XeSS 
 
 ### FidelityFX in Vulkan games on CrossOver
 
-CrossOver games that render with Vulkan and use AMD's FidelityFX API can also hand their scene to MacLauncher. This route needs three packages from MacLauncher Builds, which Play offers to install: a WineVulkan scene adapter, a FidelityFX API adapter and a MoltenVK build with scene support. MacLauncher prepares it only when your graphics settings use scene data and the game includes the matching FidelityFX library. The WineVulkan adapter is built for CrossOver 26.3, and it's used only with a CrossOver whose WINE Vulkan files match it. Keep the game's **Vulkan driver** on CrossOver's automatic choice for this route.
+CrossOver games that render with Vulkan and use AMD's FidelityFX API keep their own FidelityFX upscaling: MacLauncher's FidelityFX route doesn't pass their scene to MacLauncher's effects. This route needs three packages from MacLauncher Builds, which Play offers to install: a WineVulkan scene adapter, a FidelityFX API adapter and a MoltenVK build with scene support. MacLauncher prepares it only when your graphics settings use scene data and the game includes the matching FidelityFX library. The WineVulkan adapter is built for CrossOver 26.3, and it's used only with a CrossOver whose WINE Vulkan files match it. Keep the game's **Vulkan driver** on CrossOver's automatic choice for this route.
 
 ## How the adapters treat your game files
 
