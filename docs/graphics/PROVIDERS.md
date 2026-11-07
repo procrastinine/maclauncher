@@ -50,6 +50,8 @@ Some models and shaders have an intrinsic scale. That scale describes only the r
 
 Scene-temporal upscaling is temporal upscaling guided by the renderer, so these operations consume real renderer guides. A captured final image does not supply those guides, even when the same runtime can run image effects or color-pair frame generation. Whether a method can run therefore depends on the scene data the runtime actually supplies, and there is no list of eligible games or engines.
 
+A game's upscaling API and the selected provider are separate choices. DLSS Super Resolution evaluations can reach the shared processor through vkd3d-proton or DXVK with a compatible Vulkan driver, while DXMT and D3DMetal supply their native MetalFX inputs. Each route passes the game's own data to the selected provider, including MetalFX, FSR or another method whose requirements are met. Streamline constants can add camera parameters, but no route infers them from DLSS alone. Separate HUD-less/UI attachments and full scene matrices remain absent unless the producer explicitly forwards them. [Scene producers](INPUTS_AND_ADAPTERS.md#scene-producers) lists what each route carries.
+
 | Method | Algorithm | Required scene inputs | Output and platform |
 | --- | --- | --- | --- |
 | MetalFX Temporal | Native MetalFX temporal reconstruction | Color, matching depth and motion, and jitter and exposure conventions | Requested output size; a supported MetalFX device on macOS 13 or later. |
