@@ -2136,10 +2136,10 @@ select.input:not([multiple]) {
 }
 
 /* Translator environment editors: compact NAME = value rows with their state. */
-.runtimeEnvironment { border: 1px solid var(--border); border-radius: 8px; min-width: 0; }
-.runtimeEnvironment > summary { cursor: default; padding: 6px 10px; font-weight: 500; }
-.runtimeEnvironmentCount { color: var(--muted); font-weight: 400; }
-.runtimeEnvironmentBody { display: flex; flex-direction: column; gap: 8px; padding: 0 10px 10px; min-width: 0; }
+.translatorEnvironmentBlock { border: 1px solid var(--border); border-radius: 8px; min-width: 0; }
+.translatorEnvironmentBlock > summary { cursor: default; padding: 6px 10px; font-weight: 500; }
+.translatorEnvironmentCount { color: var(--muted); font-weight: 400; }
+.translatorEnvironmentBlockBody { display: flex; flex-direction: column; gap: 8px; padding: 0 10px 10px; min-width: 0; }
 .translatorEnvironmentIntro { margin: 0; font-size: var(--font-xs); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .translatorEnvironmentTable { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .translatorEnvironmentRows { display: flex; flex-direction: column; gap: 2px; }
@@ -2217,10 +2217,8 @@ select.input:not([multiple]) {
 .pluginAddForm details { color: var(--muted); font-size: var(--font-sm); }
 .pluginAddForm details label { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; }
 .pluginLibraryIntroduction { margin: 0 0 14px; color: var(--muted); font-size: var(--font-md); line-height: 1.5; }
-.pluginLibrary .settingsStack { gap: 12px; }
 .pluginCard { padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); min-width: 0; }
-.pluginCardControl .settingsRow { margin: 0; }
-.pluginCardControl .settingsLabel, .pluginCardTitle { color: var(--text); font-weight: 500; }
+.pluginCardTitle { color: var(--text); font-weight: 500; }
 .pluginCardDescription { color: var(--muted); font-size: var(--font-md); line-height: 1.5; margin: 8px 0 12px; }
 .pluginCardFooter, .pluginCardIdentity, .pluginCardActions { display: flex; align-items: center; gap: 10px; }
 .pluginCardFooter { justify-content: space-between; flex-wrap: wrap; }
@@ -2230,10 +2228,6 @@ select.input:not([multiple]) {
 .pluginStatus.repair, .pluginCardIssue { color: var(--warning, var(--muted)); }
 .pluginVersion { color: var(--muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .pluginCardIssue { margin: 10px 0 0; font-size: var(--font-sm); line-height: 1.5; }
-.pluginConfiguration > summary { padding: 8px 0 0; color: var(--text); font-weight: 500; cursor: pointer; }
-.pluginConfigurationDescription { margin: 4px 0 2px; font-size: var(--font-sm); color: var(--muted); line-height: 1.5; }
-.pluginConfigurationField { min-width: 0; padding-top: 2px; }
-.pluginConfigurationField .settingsControl > .input { flex: 1; min-width: 140px; }
 
 .settingsDisplayRow { align-items: start; }
 .settingsDisplayTable { width: 100%; border-collapse: collapse; font-size: var(--font-sm); }

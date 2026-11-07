@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useRef, useState } from "react";
-import { editorRows, knownVariable, lockedRule, lockingDeclarations, managerDeclarations, normalizeValues, readValues, variableOwner,
+import { editorRows, knownVariable, lockedRule, lockingDeclarations, normalizeValues, readValues, settingsBlocks, variableOwner,
   type TranslatorEnvironmentDeclaration,
   type TranslatorEnvironmentRow as Row, type TranslatorEnvironmentStore, type TranslatorEnvironmentValues } from "../../../../modules/shared/runtime/translator-environment.mjs";
 import { CommitTextInput } from "./CommitInput";
@@ -11,7 +11,7 @@ import { XIcon } from "../icons";
 type Scope = "global" | "game";
 type Save = (id: string, values: TranslatorEnvironmentValues | null) => Promise<unknown>;
 
-const SOURCE_LABELS: Record<string, string> = { default: "Default", global: "From Runtimes" };
+const SOURCE_LABELS: Record<string, string> = { default: "Default", global: "From Settings" };
 
 // The values stored at a scope for one translator, without names that its
 // locking translators lock. A locked name is shown as set by MacLauncher and
@@ -25,9 +25,11 @@ function ownValues(locks: readonly TranslatorEnvironmentDeclaration[], store: Tr
 // the runtime's own translator. A new name goes to its owner (variableOwner):
 // the group that already lists it, then the translator that suggests it, and
 // otherwise the runtime's own group, which applies to every game the runtime
-// launches. Values are stored exactly as typed and apply on the next launch.
-export function TranslatorEnvironmentTable({ declarations, scope, globalStore, gameStore, disabled = false, onSave }: {
-  declarations: TranslatorEnvironmentDeclaration[]; scope: Scope;
+// launches. `companions` are the runtime's translators shown in another table,
+// whose locks still apply to the runtime's own values. Values are stored
+// exactly as typed and apply on the next launch.
+export function TranslatorEnvironmentTable({ declarations, companions = [], scope, globalStore, gameStore, disabled = false, onSave }: {
+  declarations: TranslatorEnvironmentDeclaration[]; companions?: TranslatorEnvironmentDeclaration[]; scope: Scope;
   globalStore?: TranslatorEnvironmentStore; gameStore?: TranslatorEnvironmentStore;
   disabled?: boolean; onSave: Save;
 }) {
@@ -46,7 +48,7 @@ export function TranslatorEnvironmentTable({ declarations, scope, globalStore, g
   const known = (variable: string, preferred?: TranslatorEnvironmentDeclaration) =>
     (preferred && knownVariable(preferred, variable)) || declarations.map(item => knownVariable(item, variable)).find(Boolean) || null;
   const ownerOf = (variable: string) => variableOwner(declarations, variable, { scope, global: globalStore, game: gameStore });
-  const locks = (declaration: TranslatorEnvironmentDeclaration) => lockingDeclarations(declarations, declaration, { scope });
+  const locks = (declaration: TranslatorEnvironmentDeclaration) => lockingDeclarations([...declarations, ...companions], declaration, { scope });
   const typedLocked = typed ? lockedRule(locks(ownerOf(typed) || declarations[0]), typed) : null;
   const typedKnown = typed ? known(typed) : null;
   const typedOwner = typed && declarations.length > 1 ? ownerOf(typed) : null;
@@ -95,7 +97,7 @@ export function TranslatorEnvironmentTable({ declarations, scope, globalStore, g
     try { for (const declaration of stored) await onSave(declaration.id, null); }
     catch (failure: any) { setError(String(failure?.message || failure)); }
   }
-  const resetLabel = scope === "game" ? "Use the values from Runtimes for this game" : "Remove every value set here";
+  const resetLabel = scope === "game" ? "Use the values from Settings for this game" : "Remove every value set here";
   const clearAdd = (event: React.KeyboardEvent, focus = false) => {
     if (event.key !== "Escape" || !(name || value)) return;
     event.preventDefault(); event.stopPropagation(); setName(""); setValue("");
@@ -131,7 +133,7 @@ export function TranslatorEnvironmentTable({ declarations, scope, globalStore, g
             <span className="translatorEnvironmentActions">
               {(row.state === "changed" || removed)
                 ? <button type="button" className="btn small" disabled={disabled} aria-label={`Restore ${row.name}`}
-                  title={`Restore the ${row.inheritedSource === "global" ? "value from Runtimes" : "default value"}`}
+                  title={`Restore the ${row.inheritedSource === "global" ? "value from Settings" : "default value"}`}
                   onClick={() => void restore(declaration, row)}>Restore</button>
                 : <button type="button" className="btn small iconOnly" disabled={disabled} aria-label={`Remove ${row.name}`}
                   title={row.state === "inherited" ? `Remove ${row.name} for ${scope === "game" ? "this game" : "all games"}` : `Remove ${row.name}`}
@@ -168,22 +170,28 @@ export function TranslatorEnvironmentTable({ declarations, scope, globalStore, g
 const countValues = (declarations: TranslatorEnvironmentDeclaration[], store?: TranslatorEnvironmentStore) =>
   declarations.reduce((count, declaration) => count + Object.values(readValues(store?.[declaration.id])).filter(value => value !== null).length, 0);
 
-// The Runtimes window's global values for the translators a runtime manager
-// provides, collapsed under a summary with the number of values.
-export function RuntimeTranslatorEnvironments({ managerId, declarations, store, onSave }: {
-  managerId: string; declarations?: TranslatorEnvironmentDeclaration[]; store?: TranslatorEnvironmentStore; onSave: Save;
+// Settings → Environment variables: the global values of every translator.
+// Each block (settingsBlocks) is collapsed under its translator's name and the
+// number of its values.
+export function TranslatorEnvironmentSettings({ declarations, store, onSave }: {
+  declarations?: TranslatorEnvironmentDeclaration[]; store?: TranslatorEnvironmentStore; onSave: Save;
 }) {
-  const own = managerDeclarations(declarations, managerId);
-  if (!own.length) return null;
-  const count = countValues(own, store);
-  return <details className="runtimeEnvironment" aria-label="Environment variables">
-    <summary>Environment variables{count > 0 && <span className="runtimeEnvironmentCount"> ({count})</span>}</summary>
-    <div className="runtimeEnvironmentBody">
-      <div className="dim translatorEnvironmentIntro">Passed to every game that uses {own.length === 1 ? own[0].label : "these translators"}. A game's Runtime Settings can change, add or remove them.
-        <HelpTip label="About environment variables"><p>Values are passed exactly as written, without shell expansion. Changes apply on the next launch.</p></HelpTip></div>
-      <TranslatorEnvironmentTable declarations={own} scope="global" globalStore={store} onSave={onSave} />
-    </div>
-  </details>;
+  const blocks = settingsBlocks(declarations);
+  return <div className="settingsSection">
+    <div className="settingsTitle">Environment variables
+      <HelpTip label="About environment variables"><p>Each translator passes these values to every game that uses it, and a game's Runtime Settings can change, add or remove them for that game.
+        Values are passed exactly as written, without shell expansion, and changes apply on the next launch.</p></HelpTip></div>
+    {blocks.length ? blocks.map(block => {
+      const count = countValues(block.declarations, store);
+      return <details key={block.id} className="translatorEnvironmentBlock" aria-label={`${block.label} environment variables`}>
+        <summary>{block.label}{count > 0 && <span className="translatorEnvironmentCount"> ({count})</span>}</summary>
+        <div className="translatorEnvironmentBlockBody">
+          {block.description && <div className="dim translatorEnvironmentIntro">{block.description}</div>}
+          <TranslatorEnvironmentTable declarations={block.declarations} companions={block.companions} scope="global" globalStore={store} onSave={onSave} />
+        </div>
+      </details>;
+    }) : <div className="dim">No translator has environment variables.</div>}
+  </div>;
 }
 
 // A game's Runtime Settings section for the translators its settings choose.
@@ -212,7 +220,7 @@ export function GameTranslatorEnvironment({ declarations, globalStore, gameStore
   const chosen = [...new Set(ids)].map(id => byId.get(String(id))).filter((item): item is TranslatorEnvironmentDeclaration => Boolean(item));
   return <section className="settingsStack translatorEnvironmentSection" aria-label="Environment variables">
     <div className="settingsLabel" role="heading" aria-level={3}>Environment variables
-      <HelpTip label="About environment variables"><p>Values here replace the values from Runtimes for this game. Values are passed exactly as written, without shell expansion, and apply on the next launch.</p></HelpTip></div>
+      <HelpTip label="About environment variables"><p>Values here replace the values from Settings → Environment variables for this game. Values are passed exactly as written, without shell expansion, and apply on the next launch.</p></HelpTip></div>
     <ErrorText error={error} inline />
     {!source && !error && <div className="dim">Loading translators…</div>}
     {source && !chosen.length && <div className="dim">No translator environment applies with these settings.</div>}

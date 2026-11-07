@@ -43,14 +43,53 @@ test("every declaration follows the contract and lists an empty profile offline"
   assert.ok(listed.components.every(row => row.error === null && Array.isArray(row.items) && row.items.length === 0));
 });
 
-// Runtimes hides these managers, so Components is their only management view.
-test("every runtime manager without a Runtimes row is declared as a component", () => {
-  const providerUi = require("../src/modules/shared/reshade/runtime/provider-library-ui.json");
-  const managers = [...registry.listSharedRuntimeManagers(), ...registry.listModuleIds().flatMap(id => registry.getModule(id)?.runtimeManagers || [])];
-  const hidden = [...new Set(managers.filter(manager => (providerUi[manager.id]?.hidden ?? manager.ui?.hidden) === true).map(manager => manager.id))];
-  assert.ok(hidden.length > 0);
-  const declared = new Set(Service.declarations(registry).map(component => component.managerId).filter(Boolean));
-  assert.deepEqual(hidden.filter(id => !declared.has(id)), []);
+// Downloaded files is the only management view of a manager without a Runtimes row.
+test("every registry runtime manager without a Runtimes row is listed in Downloaded files", async () => {
+  const { hasRuntimesRow } = await import("../src/modules/shared/runtime/runtime-rows.mjs");
+  const managers = [...registry.listModuleIds().flatMap(id => registry.getModule(id)?.runtimeManagers || []), ...registry.listSharedRuntimeManagers()];
+  const rowless = [...new Set(managers.filter(manager => !hasRuntimesRow(registry.getRuntimeManagerUi(manager.id) || manager.ui)).map(manager => manager.id))];
+  for (const id of ["dxvk-nvapi", "vkd3d-proton", "maclauncher-crossover-winemac", "winevulkan-scene", "fidelityfx-api", "vulkan-moltenvk-scene"])
+    assert.ok(rowless.includes(id), id);
+  const listed = new Map(Service.declarations(registry).filter(component => component.managerId).map(component => [component.managerId, component]));
+  assert.deepEqual(rowless.filter(id => !listed.has(id)), []);
+  for (const id of rowless) assert.ok(listed.get(id).description, `${id} describes itself in componentInfo`);
+  const withRows = managers.filter(manager => hasRuntimesRow(registry.getRuntimeManagerUi(manager.id) || manager.ui)).map(manager => manager.id);
+  assert.deepEqual(withRows.filter(id => listed.has(id)), [], "a manager with its own row is not listed twice");
+});
+
+test("a runtime manager without a Runtimes row is listed from the registry without a declaration", async t => {
+  const root = temporary(t), actions = [];
+  const row = (name, extra = {}) => {
+    const installDir = path.join(root, name);
+    fs.mkdirSync(installDir); fs.writeFileSync(path.join(installDir, "library.dll"), Buffer.alloc(4096));
+    return { version: "1.2", architecture: "x64", architectures: ["x86_64"], installDir, assetUrl: `https://example.test/${name}.tar.gz`, ...extra };
+  };
+  const rows = { helper: row("helper"), library: row("library"), included: row("included", { version: "1.0", included: true }), runtime: row("runtime") };
+  const helper = { id: "fixture-helper", label: "Fixture helper", ui: { hidden: true }, getState: () => ({ installed: [rows.helper] }) };
+  const library = { id: "fixture-library", label: "Fixture library", ui: { management: "built-in" },
+    componentInfo: { description: "A fixture library.", users: ["Fixture effects"], windows: true },
+    getState: () => ({ sections: [{ id: "default", installed: [rows.library, rows.included] }] }) };
+  const listedRuntime = { id: "fixture-runtime", label: "Fixture runtime", ui: { management: "managed" }, getState: () => ({ installed: [rows.runtime] }) };
+  const fake = { listModuleIds: () => ["alpha", "beta"], getModule: id => ({ runtimeManagers: id === "alpha" ? [helper, listedRuntime] : [helper] }),
+    getModuleInfo: id => ({ alpha: { label: "Alpha Game", shortLabel: "Alpha" }, beta: { label: "Beta" } })[id],
+    listSharedRuntimeManagers: () => [library], getRuntimeManagerUi: () => null, listComponents: () => [] };
+  const service = Service.createComponentService({ userDataDir: root, registry: fake, logger: { warn() {} },
+    runtimeAction: async (...args) => { actions.push(args); return true; } });
+  const { components } = await service.list();
+  assert.equal(components.some(component => component.id === "fixture-runtime"), false);
+  const shown = Object.fromEntries(components.filter(component => component.id.startsWith("fixture-")).map(component => [component.id, component]));
+  assert.deepEqual(Object.keys(shown), ["fixture-helper", "fixture-library"]);
+  assert.equal(shown["fixture-helper"].owner, "alpha");
+  assert.deepEqual(shown["fixture-helper"].items.map(item => [item.version, item.architecture, item.windows, item.users, item.removable]),
+    [["1.2", "x64", false, ["Alpha games", "Beta games"], true]]);
+  assert.equal(shown["fixture-library"].owner, "shared");
+  assert.equal(shown["fixture-library"].description, "A fixture library.");
+  assert.deepEqual(shown["fixture-library"].items.map(item => [item.version, item.windows, item.users]), [["1.2", true, ["Fixture effects"]]]);
+  assert.ok(shown["fixture-helper"].items[0].bytes >= 4096);
+  assert.deepEqual(shown["fixture-helper"].items[0].source, { url: "https://example.test/helper.tar.gz", label: null });
+  assert.equal(await service.remove({ componentId: "fixture-helper", itemId: shown["fixture-helper"].items[0].id }), true);
+  assert.deepEqual(actions, [["fixture-helper", "uninstall", { sectionId: "default", version: "1.2", architecture: "x64", variant: undefined,
+    platformKey: undefined, installDir: path.join(root, "helper") }]]);
 });
 
 function fakeRegistry(components) {

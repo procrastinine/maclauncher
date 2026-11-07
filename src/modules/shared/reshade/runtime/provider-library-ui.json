@@ -1,7 +1,4 @@
 {
   "graphics-models": {"sectionGroupId":"providers","sectionGroupLabel":"Providers","sectionLabel":"Lossless Scaling","componentId":"lossless"},
-  "graphics-xess": {"sectionGroupId":"providers","sectionGroupLabel":"Providers","sectionLabel":"XeSS","componentId":"xess"},
-  "winevulkan-scene": {"hidden":true},
-  "fidelityfx-api": {"hidden":true},
-  "vulkan-moltenvk-scene": {"hidden":true}
+  "graphics-xess": {"sectionGroupId":"providers","sectionGroupLabel":"Providers","sectionLabel":"XeSS","componentId":"xess"}
 }

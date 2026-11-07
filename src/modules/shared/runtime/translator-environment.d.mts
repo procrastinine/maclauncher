@@ -34,6 +34,9 @@ export function editorRows(declaration: TranslatorEnvironmentDeclaration,
   values?: { scope?: "global" | "game"; global?: unknown; game?: unknown }): TranslatorEnvironmentRow[];
 export function managerDeclarations(declarations: readonly TranslatorEnvironmentDeclaration[] | null | undefined,
   managerId: string): TranslatorEnvironmentDeclaration[];
+export type TranslatorEnvironmentBlock = { id: string; label: string; description?: string;
+  declarations: TranslatorEnvironmentDeclaration[]; companions: TranslatorEnvironmentDeclaration[] };
+export function settingsBlocks(declarations: readonly TranslatorEnvironmentDeclaration[] | null | undefined): TranslatorEnvironmentBlock[];
 export function variableOwner(declarations: readonly TranslatorEnvironmentDeclaration[] | null | undefined, name: string,
   values?: { scope?: "global" | "game"; global?: unknown; game?: unknown }): TranslatorEnvironmentDeclaration | null;
 export function lockingDeclarations(declarations: readonly TranslatorEnvironmentDeclaration[] | null | undefined,

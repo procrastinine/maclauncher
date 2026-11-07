@@ -5,8 +5,10 @@ const Architecture = require("../modules/shared/runtime/architecture");
 // row of its own in Runtimes: small helpers, shared assets, packages of
 // runtimes without a list and caches the launcher fills. Core services declare
 // theirs in core/components.js; a module or shared namespace declares its own
-// in an optional components.js beside it (registry.listComponents()). A
-// declaration:
+// in an optional components.js beside it (registry.listComponents()). Every
+// runtime manager the registry knows whose versions have no Runtimes row
+// (shared/runtime/runtime-rows.mjs) is listed as well, without a declaration;
+// see managerComponents below. A declaration:
 //   id, label, description  stable identity and plain-language name
 //   list(context)            installed items, from local files only
 //   remove(item, context)    optional; deletes one item. The owner downloads it
@@ -25,9 +27,44 @@ const Architecture = require("../modules/shared/runtime/architecture");
 const ENTRY_LIMIT = 200000;
 const text = (value, limit = 512) => typeof value === "string" ? value.replace(/[\x00-\x1f\x7f]+/g, " ").trim().slice(0, limit) : "";
 
+// The registry's runtime managers in the order main lists them: module
+// managers first, then shared ones, the first manager of an id applying. Each
+// keeps the modules that declare it.
+function registryManagers(registry) {
+  const managers = new Map();
+  const add = (manager, moduleId) => {
+    if (!manager?.id) return;
+    const row = managers.get(manager.id) || managers.set(manager.id, { manager, moduleIds: [] }).get(manager.id);
+    if (moduleId && !row.moduleIds.includes(moduleId)) row.moduleIds.push(moduleId);
+  };
+  for (const id of registry.listModuleIds?.() || []) for (const manager of registry.getModule?.(id)?.runtimeManagers || []) add(manager, id);
+  for (const manager of registry.listSharedRuntimeManagers?.() || []) add(manager, null);
+  return [...managers.values()];
+}
+
+// A runtime manager without a Runtimes row of its own is listed through
+// fromRuntimeManager under its own label. Its optional `componentInfo`
+// supplies the description, the users ("Used by") and `windows: true` for
+// Windows code; without users, the game types whose modules declare the
+// manager are named.
+function managerComponents(registry) {
+  const { hasRuntimesRow } = require("../modules/shared/runtime/runtime-rows.mjs");
+  const Components = require("../modules/shared/runtime/runtime-components");
+  return registryManagers(registry).filter(({ manager }) => typeof manager.getState === "function" &&
+    !hasRuntimesRow(registry.getRuntimeManagerUi?.(manager.id) || manager.ui)).map(({ manager, moduleIds }) => {
+    const info = manager.componentInfo && typeof manager.componentInfo === "object" ? manager.componentInfo : {};
+    const users = Array.isArray(info.users) ? info.users : moduleIds.map(id => {
+      const module = registry.getModuleInfo?.(id);
+      return `${text(module?.shortLabel) || text(module?.label) || id} games`;
+    });
+    return { ...Components.fromRuntimeManager(manager, { description: text(info.description, 2048) || undefined, users, windows: info.windows === true }),
+      owner: moduleIds[0] || "shared" };
+  });
+}
+
 function declarations(registry) {
   const seen = new Set();
-  return [...require("./components"), ...(registry.listComponents?.() || [])].filter(item => {
+  return [...require("./components"), ...(registry.listComponents?.() || []), ...managerComponents(registry)].filter(item => {
     if (!item || typeof item.id !== "string" || typeof item.list !== "function" || seen.has(item.id)) return false;
     seen.add(item.id); return true;
   });
@@ -67,10 +104,7 @@ function presentItem(item, component) {
 
 // Runtime names for "Used by", from the registry's runtime managers.
 function runtimeLabels(registry) {
-  const managers = [...(registry.listSharedRuntimeManagers?.() || []),
-    ...(registry.listModuleIds?.() || []).flatMap(id => registry.getModule?.(id)?.runtimeManagers || [])];
-  const labels = new Map();
-  for (const manager of managers) if (manager?.id && !labels.has(manager.id)) labels.set(manager.id, text(manager.label) || manager.id);
+  const labels = new Map(registryManagers(registry).map(({ manager }) => [manager.id, text(manager.label) || manager.id]));
   return id => labels.get(id) || id;
 }
 

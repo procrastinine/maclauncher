@@ -14,7 +14,7 @@ import {
 import { DownloadIcon, RefreshIcon, TrashIcon } from "../icons";
 import { groupRuntimeManagers, resolveRuntimeTabSelection, runtimeGroupSections, runtimeSectionTabs,
   runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation,
-  runtimeRemovalPresentation, runtimeMinimumNotice, runtimeInstallVersion, isRuntimeIncluded, isRuntimeSetupPending,
+  runtimeRemovalPresentation, runtimeMinimumNotice, runtimeInstallVersion, isRuntimeIncluded, isRuntimeManageable, isRuntimeSetupPending,
   translatorInstallBuild, translatorInstallRequirement } from "./runtime-tabs-model";
 import type { RuntimeTabGroup, RuntimeTabSection, RuntimeSectionTab } from "./runtime-tabs-model";
 import { HelpTip } from "./HelpTip";
@@ -40,7 +40,6 @@ import { StatusBadge } from "./StatusBadge";
 import { RuntimeComponentGroup } from "./RuntimeComponentGroup";
 import { DownloadProgress } from "./DownloadProgress";
 import { isolatedItem } from "./ItemBoundary";
-import { RuntimeTranslatorEnvironments } from "./TranslatorEnvironmentEditor";
 
 const EMPTY_RUNTIME_UI: RuntimeUiState[string] = {
   remoteOpen: {},
@@ -147,9 +146,14 @@ export function RuntimesView({
   onCancelDownload,
   onOpenSource
 }: RuntimesViewProps) {
-  const runtimeGroups = useMemo(() => groupRuntimeManagers(presentRuntimeManagers(withLauncherLibraries(runtimeManagers)), runtimeCategories), [runtimeManagers]);
-  const selection = useMemo(() => resolveRuntimeTabSelection(runtimeGroups, runtimeManagerId,
-    runtimeSectionId, resolveRuntimeSections), [runtimeGroups, runtimeManagerId, runtimeSectionId]);
+  const presentedManagers = useMemo(() => presentRuntimeManagers(withLauncherLibraries(runtimeManagers)), [runtimeManagers]);
+  const runtimeGroups = useMemo(() => groupRuntimeManagers(presentedManagers, runtimeCategories), [presentedManagers]);
+  // A manager without a row of its own is managed in Downloaded files.
+  const componentsLibrary = presentedManagers.find(manager => manager.ui?.library === "components");
+  const requestedManagerId = componentsLibrary && presentedManagers.some(manager => manager.id === runtimeManagerId && !isRuntimeManageable(manager))
+    ? componentsLibrary.id : runtimeManagerId;
+  const selection = useMemo(() => resolveRuntimeTabSelection(runtimeGroups, requestedManagerId,
+    runtimeSectionId, resolveRuntimeSections), [runtimeGroups, requestedManagerId, runtimeSectionId]);
   const activeRuntimeGroup = selection.group;
   const activeRuntimeChoices = selection.sections;
   const componentGroup = Boolean(activeRuntimeGroup?.managers.some(manager => manager.ui?.componentGroup));
@@ -499,9 +503,6 @@ export function RuntimesView({
                   </div>
 
                   <div className="runtimeSectionBody">
-                    {settingsApi?.setTranslatorEnvironment && <RuntimeTranslatorEnvironments managerId={activeRuntimeManager.id}
-                      declarations={state?.translatorEnvironments} store={state?.launcherSettings?.translatorEnvironment}
-                      onSave={settingsApi.setTranslatorEnvironment} />}
                     {itemGroups.length > 0 && <div className="detailRow detailControlRow"><label htmlFor="runtime-item-group" className="detailLabel">Operation</label>
                       <select id="runtime-item-group" className="input" value={selectedItemGroup}
                         onChange={event=>setItemGroup({section:groupKey,id:event.target.value})}>

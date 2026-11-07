@@ -147,11 +147,30 @@ export function editorRows(declaration, { scope = "global", global, game } = {})
   });
 }
 
-// The translators on a runtime manager's Runtimes tab. The runtime's own
-// translator, whose id is the manager id, comes first.
+// The translators of one runtime manager. The runtime's own translator, whose
+// id is the manager id, comes first.
 export function managerDeclarations(declarations, managerId) {
   const listed = (declarations || []).filter(item => item?.managerIds?.includes(managerId));
   return [...listed.filter(item => item.id === managerId), ...listed.filter(item => item.id !== managerId)];
+}
+
+// The blocks of Settings → Environment variables. A runtime's own translator,
+// whose id is one of its manager ids, opens a block with the translators that
+// run with it (managerDeclarations); every other translator has a block of its
+// own. A translator is shown once, in the first block that lists it, and
+// `companions` keeps the runtime's other translators, whose locks still apply
+// to the runtime's own values (lockingDeclarations).
+export function settingsBlocks(declarations) {
+  const list = declarations || [], shown = new Set(), blocks = [];
+  const block = (owner, group) => {
+    const rows = group.filter(item => !shown.has(item.id));
+    for (const item of rows) shown.add(item.id);
+    blocks.push({ id: owner.id, label: owner.label, ...(owner.description ? { description: owner.description } : {}),
+      declarations: rows, companions: group.filter(item => !rows.includes(item)) });
+  };
+  for (const item of list) if (item?.managerIds?.includes(item.id) && !shown.has(item.id)) block(item, managerDeclarations(list, item.id));
+  for (const item of list) if (item?.id && !shown.has(item.id)) block(item, [item]);
+  return blocks;
 }
 
 // The translator that stores a variable in a table of `declarations`, the

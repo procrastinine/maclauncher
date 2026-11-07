@@ -40,30 +40,51 @@ function runtimesView(managerId, state, settingsApi) {
     state, settingsApi }));
 }
 
-test('the Runtimes window lists the global values of the selected translator in a collapsed section near the top', () => {
+function settingsView(state, api) {
+  return renderToStaticMarkup(React.createElement(C.SettingsView, { state: { modules: [], recents: [], ...state, launcherSettings: { ...state.launcherSettings } },
+    api, sectionId: 'environment', showIcons: true, showNonDefaultTags: false, onSetLauncherSettings() {}, onSetModuleSettings() {} }));
+}
+
+test('Settings lists the global values of every translator once, each in a collapsed block, and Runtimes lists none', () => {
   const state = { translatorEnvironments: declarations(),
-    launcherSettings: { translatorEnvironment: { dxvk: { DXVK_HUD: 'fps', CUSTOM_PATH: '$HOME/literal "quoted"' } } } };
+    launcherSettings: { translatorEnvironment: { dxvk: { DXVK_HUD: 'fps', CUSTOM_PATH: '$HOME/literal "quoted"' },
+      'android-jvm': { JDK_JAVA_OPTIONS: '-Xmx4g' }, angle: { MTL_HUD_ENABLED: '1' } } } };
   const api = { setModuleRuntimeSettings: async () => {}, setGameRuntimeSettings: async () => {}, setTranslatorEnvironment: async () => {} };
-  const markup = runtimesView('translator-dxvk', state, api);
-  assert.match(markup, /<div class="runtimeSectionBody"><details class="runtimeEnvironment" aria-label="Environment variables"><summary>Environment variables<span class="runtimeEnvironmentCount"> \(2\)<\/span><\/summary>/,
-    'the collapsed section opens the runtime section and counts the values');
+  const markup = settingsView(state, api);
+  assert.match(markup, /id="settings-panel-environment"/, 'Environment variables is a section of its own');
+  assert.match(markup, /<div class="settingsTitle">Environment variables/);
+  assert.match(markup, /<details class="translatorEnvironmentBlock" aria-label="DXVK environment variables"><summary>DXVK<span class="translatorEnvironmentCount"> \(2\)<\/span><\/summary>/,
+    'a collapsed block names its translator and counts the values');
+  assert.match(markup, /Applies to games whose Direct3D 8, 9, 10 or 11 choice uses DXVK/, 'a block opens with what its values apply to');
   assert.match(markup, />DXVK_HUD<\/span>/); assert.match(markup, /aria-label="DXVK_HUD value"[^>]*value="fps"|value="fps"[^>]*aria-label="DXVK_HUD value"/);
   assert.ok(markup.includes('value="$HOME/literal &quot;quoted&quot;"'), 'values render literally');
   assert.match(markup, /title="Set by DXVK HUD in Runtime Settings\. This value replaces it\.">Set by MacLauncher</);
   assert.match(markup, /<option value="DXVK_CONFIG">/); assert.doesNotMatch(markup, /<option value="DXVK_HUD">/, 'present names are not suggested again');
-  assert.match(markup, /aria-label="Remove CUSTOM_PATH"/); assert.match(markup, /aria-label="New variable name"/);
-  assert.equal((markup.match(/>Reset</g) || []).length, 1, 'one Reset for the scope');
-  assert.doesNotMatch(markup, /class="translatorEnvironmentGroup"/, 'a single translator needs no group headings');
-  assert.match(runtimesView('maclauncher-kosmickrisp', state, api), /Passed to every game that uses KosmicKrisp\./);
-  // Android's tab holds three translators in one table, grouped by translator.
-  const android = runtimesView('android', { ...state, launcherSettings: { translatorEnvironment: { 'android-jvm': { JDK_JAVA_OPTIONS: '-Xmx4g' }, angle: { MTL_HUD_ENABLED: '1' } } } }, api);
-  assert.equal((android.match(/<details class="runtimeEnvironment"/g) || []).length, 1);
-  assert.match(android, /class="translatorEnvironmentGroup"[^>]*>Android JVM<[\s\S]*JDK_JAVA_OPTIONS[\s\S]*class="translatorEnvironmentGroup"[^>]*>ANGLE<[\s\S]*MTL_HUD_ENABLED/);
-  assert.doesNotMatch(android, />Android ART</, 'translators without values have no heading');
-  const wine = runtimesView('crossover', state, api);
-  assert.match(wine, /<summary>Environment variables<\/summary>/, 'no count without values'); assert.match(wine, /No variables\./);
-  assert.doesNotMatch(runtimesView('fixture-manager', state, api), /Environment variables/);
-  assert.doesNotMatch(runtimesView('translator-dxvk', state, { setModuleRuntimeSettings: async () => {}, setGameRuntimeSettings: async () => {} }), /Environment variables/);
+  const blocks = (markup.match(/<details class="translatorEnvironmentBlock"/g) || []).length;
+  assert.equal(blocks, new Set(declarations().map(item => item.id)).size - 3, 'the Android engines and ANGLE share the MacLauncher Android block');
+  assert.equal((markup.match(/>Reset</g) || []).length, blocks, 'one Reset for each block');
+  assert.equal((markup.match(/class="translatorEnvironmentGroup"[^>]*>ANGLE</g) || []).length, 1, 'a translator of two runtimes is shown once');
+  assert.match(markup, /<summary>MacLauncher Android<span class="translatorEnvironmentCount"> \(2\)<\/span><\/summary>/);
+  assert.match(markup, /class="translatorEnvironmentGroup"[^>]*>Android JVM<[\s\S]*JDK_JAVA_OPTIONS[\s\S]*class="translatorEnvironmentGroup"[^>]*>ANGLE<[\s\S]*MTL_HUD_ENABLED/);
+  assert.doesNotMatch(markup, />Android ART</, 'translators without values have no heading');
+  assert.match(markup, /<summary>CrossOver<\/summary>/, 'no count without values'); assert.match(markup, /No variables\./);
+  assert.doesNotMatch(settingsView(state, { setModuleRuntimeSettings: async () => {}, setGameRuntimeSettings: async () => {} }), /Environment variables/,
+    'without the setting action the section is absent');
+  assert.doesNotMatch(runtimesView('translator-dxvk', state, api), /Environment variables|DXVK_HUD/, 'Runtimes only downloads, removes and chooses defaults');
+});
+
+test('a runtime block keeps the locks of its translators that another block shows', async t => {
+  const { settingsBlocks } = require('../src/modules/shared/runtime/translator-environment.mjs');
+  const macapk = settingsBlocks(declarations()).find(block => block.id === 'macapk');
+  assert.deepEqual(macapk.declarations.map(item => item.id), ['macapk']); assert.deepEqual(macapk.companions.map(item => item.id), ['angle']);
+  const saves = [];
+  const h = componentHarness(C.TranslatorEnvironmentTable, { declarations: macapk.declarations, companions: macapk.companions, scope: 'global',
+    globalStore: {}, onSave: async (id, values) => { saves.push([id, values]); } });
+  t.after(() => h.close());
+  labelled(h.render(), 'New variable name').props.onChange({ currentTarget: { value: 'KL_ANGLE_BACKEND' } });
+  const tree = h.render();
+  assert.equal(nodes(tree).find(node => node.type === 'button' && node.props.type === 'submit').props.disabled, true);
+  assert.doesNotMatch(renderToStaticMarkup(tree), /translatorEnvironmentGroup/, 'companions add no rows');
 });
 
 test('one table edits every translator of a game: rows change, remove and restore in their own translator and new names find their owner', async t => {
@@ -79,7 +100,7 @@ test('one table edits every translator of a game: rows change, remove and restor
   assert.match(markup, />CrossOver<[\s\S]*>SHARED<[\s\S]*>WINEDEBUG<[\s\S]*>DXVK<[\s\S]*>DXVK_HUD</, 'rows are grouped under their translators');
   assert.doesNotMatch(markup, /translatorEnvironmentGroup[^>]*>KosmicKrisp</);
   assert.match(markup, /title="Set by Wine debug channels in Runtime Settings\. This value replaces it\.">Set by MacLauncher</);
-  assert.match(markup, />From Runtimes</); assert.match(markup, />Changed</);
+  assert.match(markup, />From Settings</); assert.match(markup, />Changed</);
   assert.doesNotMatch(markup, /Earlier setting|Replaces launcher value|Not applied/);
   labelled(tree, 'Remove WINEDEBUG').props.onClick(); await tick();
   assert.deepEqual(saves.at(-1), ['crossover', { SHARED: 'game', WINEDEBUG: null }], 'removing an inherited value stores a removal');
@@ -116,12 +137,12 @@ test('one table edits every translator of a game: rows change, remove and restor
   labelled(h.render(), 'New variable name').props.onKeyDown({ key: 'Escape', preventDefault() {}, stopPropagation() { escaped = true; } });
   assert.equal(escaped, true); assert.equal(labelled(h.render(), 'New variable name').props.value, '', 'Escape clears the add form');
   const reset = nodes(h.render()).find(node => node.type === 'button' && node.props.children === 'Reset');
-  assert.equal(reset.props['aria-label'], 'Use the values from Runtimes for this game');
+  assert.equal(reset.props['aria-label'], 'Use the values from Settings for this game');
   saves.length = 0; await reset.props.onClick(); await tick();
   assert.deepEqual(saves, [['crossover', null]], 'Reset clears every translator that stores values for the game');
 });
 
-test('on the MacLauncher Android tab an unknown name goes to the runtime and each engine keeps its own locks', async t => {
+test('in the MacLauncher Android block an unknown name goes to the runtime and each engine keeps its own locks', async t => {
   const { managerDeclarations } = require('../src/modules/shared/runtime/translator-environment.mjs');
   const saves = [];
   const h = componentHarness(C.TranslatorEnvironmentTable, { declarations: managerDeclarations(declarations(), 'android'), scope: 'global',

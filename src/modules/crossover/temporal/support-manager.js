@@ -7,8 +7,10 @@ function createManager(options) { return require("../../shared/runtime/translato
 
 const WineVulkan = Catalog.VULKAN_PROFILE, FidelityFX = Catalog.FIDELITYFX_PROFILE;
 const API_PROJECTS = Object.freeze({
-  "winevulkan-scene": { label: "WineVulkan scene adapter", source: "https://www.codeweavers.com/crossover/source" },
-  "fidelityfx-api": { label: "FidelityFX API adapter", source: "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK" }
+  "winevulkan-scene": { label: "WineVulkan scene adapter", source: "https://www.codeweavers.com/crossover/source",
+    description: "Adapted winevulkan modules that record a Windows game's Vulkan scene for graphics effects while forwarding its original calls." },
+  "fidelityfx-api": { label: "FidelityFX API adapter", source: "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",
+    description: "A proxy for a Windows game's FidelityFX library that keeps its exports and the original library's GPU work." }
 });
 const apiVerified = new Map();
 function apiDescriptor(manifest, projectId) {
@@ -88,8 +90,9 @@ function createAPIManager(projectId, dependencies = {}) {
       verifyAPI(selected, projectId);
       await Bundled.verifySignatures(selected.root, selected.declaration, { signal });
     }, dependencies });
-  return { ...manager, distributionRequired: false,
-    ui: { groupId: "graphics", tabLabel: "Graphics", sectionLabel: definition.label, memberOrder: projectId === "winevulkan-scene" ? 23 : 24, management: "managed" },
+  // Downloaded files lists these Windows libraries (core/component-service.js).
+  return { ...manager, distributionRequired: false, ui: { hidden: true, management: "managed" },
+    componentInfo: { users: ["Graphics effects in CrossOver and Sikarugir games"], windows: true, description: definition.description },
     resolvePayload(entry, context = {}, options = {}) {
       const selected = manager.resolveSelection(entry, context.settings, context.userDataDir, options);
       if (!selected.ready || !selected.install) return selected;

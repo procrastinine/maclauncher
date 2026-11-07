@@ -86,8 +86,10 @@ function createSceneManager(dependencies = {}) {
       Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
       await Bundled.verifySignatures(selected.root, selected.declaration, { signal });
     }, dependencies });
-  return { ...result, translatorEngine: "moltenvk", distributionRequired: false,
-    ui: { groupId: "vulkan-drivers", sectionLabel: "MoltenVK scene support", memberOrder: 25, management: "managed" } };
+  // Downloaded files lists it (core/component-service.js).
+  return { ...result, translatorEngine: "moltenvk", distributionRequired: false, ui: { hidden: true, management: "managed" },
+    componentInfo: { users: ["Graphics effects in CrossOver and Sikarugir games"],
+      description: "A MoltenVK build that records a Windows game's Vulkan scene for temporal upscaling and frame generation, beside the selected Vulkan driver." } };
 }
 function createSceneProvider(selectedManager) {
   function selected(version, context, verification) {

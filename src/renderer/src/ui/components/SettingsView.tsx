@@ -24,6 +24,8 @@ import { CommitNumberInput, CommitTextInput } from "./CommitInput";
 import { Toggle } from "./FieldRow";
 import { StatusBadge } from "./StatusBadge";
 import { GraphicsShortcutSettings, type GraphicsShortcutApi } from "./GraphicsShortcutSettings";
+import { TranslatorEnvironmentSettings } from "./TranslatorEnvironmentEditor";
+import { PluginSettings } from "./PluginLibrary";
 
 type SettingsViewProps = {
   state: LauncherState;
@@ -97,7 +99,11 @@ export function SettingsView({
     if (sectionId) setActiveTab(section(sectionId));
   }, [sectionId, navigationKey]);
   const [activeRuntimes, setActiveRuntimes] = useState<Record<string, string>>({});
+  // Global translator environment variables have a section of their own.
+  const environments = api?.setTranslatorEnvironment && state.translatorEnvironments?.length ? state.translatorEnvironments : null;
   const tabs = [{ id: "launcher", label: "Launcher", title: "Launcher" },
+    ...(environments ? [{ id: "environment", label: "Environment variables", title: "Environment variables",
+      keywords: environments.flatMap(item => [item.id, item.label]) }] : []),
     ...modules.map(mod => ({ id: mod.id, label: mod.shortLabel || mod.label || mod.id, title: mod.label || mod.id,
       keywords: (mod.runtime?.supported || []).flatMap(id => [id, formatRuntimeLabel(id, mod)]) }))];
   const tab = tabs.some(tab => tab.id === activeTab) ? activeTab : "launcher";
@@ -155,6 +161,8 @@ export function SettingsView({
               <AppUpdateRows update={state.appUpdate} checkAtLaunch={state.launcherSettings.checkForUpdatesAtLaunch === true}
                 onAction={onAppUpdate} onSetLauncherSettings={onSetLauncherSettings} />
             </div>}
+            {tab === "environment" && environments && api?.setTranslatorEnvironment && <TranslatorEnvironmentSettings
+              declarations={environments} store={state.launcherSettings?.translatorEnvironment} onSave={api.setTranslatorEnvironment} />}
             {modules.filter(mod => mod.id === tab).map(mod => {
               const moduleSettings = state.moduleSettings?.[mod.id] || {};
               const settingsDefaults =
@@ -325,6 +333,7 @@ export function SettingsView({
                         <RuntimeSettingsWindow key={`${mod.id}:${selectedRuntime.id}`}
                           api={api} state={state} error={null} inline
                           context={{ scope: "module", moduleId: mod.id, runtimeId: selectedRuntime.id }} />
+                        <PluginSettings state={state} api={api} moduleId={mod.id} runtimeId={selectedRuntime.id} />
                         {accountDescriptors
                           .filter(descriptor => descriptor.runtimeIds?.includes(selectedRuntime.id))
                           .map(descriptor => <ModuleAccountsPanel key={descriptor.stateAction} moduleId={mod.id}

@@ -49,7 +49,9 @@ function create({ dependencies = {}, applications = userDataDir => require('./ma
     keepSkipped(userDataDir, [...skippedReleases(userDataDir), releaseKey({ upstreamVersion: plan.release.version, buildVersion: plan.release.build })]);
   }
   function clearSkipped(userDataDir) { if (userDataDir) keepSkipped(userDataDir, []); }
-  const manager = { ...base, ui: { hidden: true, management: 'managed' }, distributionRequired: false };
+  // Downloaded files lists it (core/component-service.js).
+  const manager = { ...base, ui: { hidden: true, management: 'managed' }, distributionRequired: false,
+    componentInfo: { users: ['CrossOver'], description: 'An optional package matched to one CrossOver release and build. It adds Vulkan external memory, semaphore and fence sharing to CrossOver\'s Mac driver, and Play offers it, after consent, when that release runs a Vulkan game.' } };
   // One package is kept for each registered CrossOver release: the newest
   // revision. Nothing is inspected while no package is installed.
   async function prune(userDataDir) {
