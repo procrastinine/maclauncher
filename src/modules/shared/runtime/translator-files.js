@@ -31,14 +31,18 @@ function selectedDescriptions(plan) {
     row.used && (plan.runtime === 'sikarugir' || !row.inherited || row.fallback))
     .map(([, row]) => ({ ...row.used, inherited: row.inherited })), ...(plan?.additional || [])];
 }
-// CrossOver's graphics backend switch can route one included renderer on its
-// own. Libraries placed through the private Wine tree need the wined3d backend,
-// which bypasses that switch, so once any Direct3D library is placed, every
-// selected Direct3D library is placed, including an included renderer.
+// Mixed renderers bypass CrossOver's global selector through wined3d. A
+// coherent D3DMetal selection keeps its selector for CrossOver's NGX redirect,
+// while the private Wine tree still supplies the selected libraries.
 const placedDirect3D = item => ['d3d-renderer', 'd3d12'].includes(item.component) &&
   !(item.included && item.component === 'd3d-renderer') && item.engine !== 'vkd3d';
 function placesDirect3D(plan, selected = selectedDescriptions(plan)) {
   return plan?.runtime === 'crossover' && (Boolean(plan.apiMode) || selected.some(placedDirect3D));
+}
+function placedGraphicsBackend(plan, selected = selectedDescriptions(plan)) {
+  const renderers = selected.filter(item => ['d3d-renderer', 'd3d12'].includes(item.component) && item.files.length);
+  return plan?.runtime === 'crossover' && renderers.some(item => item.engine === 'd3dmetal') &&
+    renderers.every(item => ['d3dmetal', 'wined3d'].includes(item.engine)) ? 'd3dmetal' : 'wined3d';
 }
 function filesIdentity(descriptions) {
   return descriptions.map(item => [item.id, item.files.map(file => [file.path, fs.existsSync(file.path) ? fileDigest(file.path).sha256 : null]),
@@ -79,7 +83,7 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logge
   }
   try {
   const placed = placesDirect3D(plan, selected);
-  if (placed) env.CX_GRAPHICS_BACKEND = 'wined3d';
+  if (placed) env.CX_GRAPHICS_BACKEND = placedGraphicsBackend(plan, selected);
   // A separately selected Direct3D 12 library replaces the renderer's own.
   const separateD3D12 = !plan.apiMode && plan.components?.d3d12?.used;
   for (const item of selected) {
@@ -184,4 +188,4 @@ async function applyNativeLibraries(view, prefixPath, { signal } = {}) {
   }
   Writable.atomicWrite(ledgerPath, JSON.stringify(next) + '\n', { root: prefixPath });
 }
-module.exports = { placesDirect3D, selectedDescriptions, filesIdentity, prepareTranslatorFiles, applyNativeLibraries, cpuFolder };
+module.exports = { placesDirect3D, placedGraphicsBackend, selectedDescriptions, filesIdentity, prepareTranslatorFiles, applyNativeLibraries, cpuFolder };

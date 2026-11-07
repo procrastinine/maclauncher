@@ -103,3 +103,46 @@ test('A separately placed Direct3D 12 library also places the included CrossOver
   assert.equal(Files.placesDirect3D({ runtime: 'crossover', components: { 'd3d-renderer': row(included) } }), false);
   assert.equal(alone.env.CX_GRAPHICS_BACKEND, 'dxvk'); assert.deepEqual(alone.links, {});
 });
+
+test('D3DMetal placements retain the vendor DLSS backend on global and per-API launches', async t => {
+  const root = scratch(t), component = path.join(root, 'metal');
+  for (const name of ['d3d11', 'd3d12', 'dxgi', 'nvngx', 'nvapi64']) put(component, `${name}.dll`, dll());
+  const metal = { ...Description.describeTranslator(component, { engine: 'd3dmetal' }), included: true };
+  const wine = Description.describeTranslator(path.dirname(put(path.join(root, 'wine'), 'd3d9.dll', dll())), { engine: 'wined3d' });
+  const dxvk = Description.describeTranslator(path.dirname(put(path.join(root, 'dxvk'), 'd3d9.dll', dll(false))), { engine: 'dxvk' });
+  const api = other => ({ runtime: 'crossover', apiMode: true, components: {
+    'd3d-renderer': row(metal), 'vulkan-driver': row(null), d3d11: row(metal), d3d12: row(metal),
+    ...(other ? { d3d9: row(other) } : {})
+  }, placements: [
+    ...metal.files.map(file => placement(metal, file, ['d3d11', 'd3d12'])),
+    ...(other ? other.files.map(file => placement(other, file, ['d3d9'])) : [])
+  ] });
+  const cases = [
+    ['global', { runtime: 'crossover', components: { 'd3d-renderer': row(metal), 'vulkan-driver': row(null) } }, 'd3dmetal'],
+    ['per-api', api(), 'd3dmetal'],
+    ['per-api-wined3d9', api(wine), 'd3dmetal'],
+    ['per-api-dxvk9', api(dxvk), 'wined3d'],
+    ['separate-d3d12', { runtime: 'crossover', components: {
+      'd3d-renderer': row(metal), 'vulkan-driver': row(null), d3d12: row({ ...metal, component: 'd3d12' })
+    } }, 'd3dmetal']
+  ];
+  const Translators = require('../src/modules/shared/runtime/wine-translators');
+  const CrossOver = require('../src/modules/crossover/runtime/launch');
+  for (const [name, plan, backend] of cases) await t.test(name, async () => {
+    const view = await Files.prepareTranslatorFiles(plan, { userDataDir: path.join(root, name), layout });
+    assert.equal(view.env.CX_GRAPHICS_BACKEND, backend);
+    const settings = Translators.settingsForPlan({ dlss: true }, plan);
+    assert.equal(settings.graphicsBackend, backend, 'bottle preparation and final launch agree');
+    const built = CrossOver.buildEnvironment(settings, { crossoverRoot: root }, root, path.join(root, 'bottle'), {
+      translatorPlan: plan, executableArchitecture: 'x86_64', baseEnvironment: {},
+      host: { hardwareArch: 'arm64', macOSVersion: '26.0' }
+    });
+    assert.equal(built.overrides.D3DM_ENABLE_METALFX, '1');
+    assert.equal(built.overrides.DXMT_ENABLE_NVEXT, '0');
+    assert.equal(built.overrides.CX_GRAPHICS_BACKEND, backend);
+    if (name !== 'global') {
+      for (const dll of ['nvngx', 'nvapi64', 'd3d12', 'dxgi']) assert.ok(view.dllOverrides.includes(`${dll}=b`));
+      assert.equal(fs.realpathSync(view.links['lib/wine/x86_64-windows/nvngx.dll']), path.join(component, 'nvngx.dll'));
+    } else assert.deepEqual(view.links, {});
+  });
+});
