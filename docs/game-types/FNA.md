@@ -51,6 +51,8 @@ Graphics selection is automatic. Runtime Settings provide:
 
 Portable managed games run with automatic framework substitution and IL conversion. Windows Forms, WPF, native Windows DLLs and 32-bit CLR execution, however, need the [Windows runtimes](#crossover-and-sikarugir-wine), and the native FNA runtime has no XNA video decoder. C# decompilation is available for every inspected managed assembly either way.
 
+The FNA runtime is listed only for a game whose recorded inspection allows the FNA host. A game that uses Windows Forms, WPF or System.Drawing graphics, requires a 32-bit CLR, contains mixed-mode code, reaches a dependency with native or architecture-specific code, uses an XNA service that FNA lacks, or has a dependency that could not be inspected, offers the Windows runtimes instead, and the first compatible one is its default. A record without an inspection result keeps the FNA runtime.
+
 The checks for Windows desktop APIs cover Windows Forms, WPF dispatchers and System.Drawing graphics, while the portable drawing structs remain usable. The `32BITREQUIRED` header flag is kept as recorded: it declares the CLR process architecture that a game requires, but on its own it does not prove a native pointer layout. Games that convert callback pointers to 32-bit integers or import x86 Windows DLLs need compatible API implementations and calling conventions, and portable IL conversion does not provide these.
 
 ## Decompilation
@@ -90,7 +92,7 @@ Some FNA games are published as macOS apps that ship their own executable, which
 
 ### CrossOver and Sikarugir (Wine)
 
-Compatible x86 and x64 Windows exports can use [Sikarugir (Wine)](../runtimes/SIKARUGIR.md) or an available [CrossOver](../runtimes/CROSSOVER.md) application instead. These runtimes also cover games whose Windows-only dependencies prevent native FNA playback. They keep their own private writable files and Windows environments, and C# decompilation stays available with them. [Windows Game](WINDOWS.md#windows-executables-in-other-game-types) describes how they are offered.
+Compatible x86 and x64 Windows exports can use [Sikarugir (Wine)](../runtimes/SIKARUGIR.md) or an available [CrossOver](../runtimes/CROSSOVER.md) application instead. These runtimes also cover games whose Windows-only dependencies prevent native FNA playback, as [compatibility limits](#compatibility-limits) describes. Both run .NET Framework programs on the [Wine Mono](https://gitlab.winehq.org/mono/wine-mono) runtime that their Wine installation provides to each new Windows environment. Wine Mono resolves XNA 4.0 references to its own XNA assemblies, which are built on FNA, so Play installs no Microsoft XNA or .NET Framework redistributable and does not run the installers that some games ship for them. They keep their own private writable files and Windows environments, and C# decompilation stays available with them. [Windows Game](WINDOWS.md#windows-executables-in-other-game-types) describes how they are offered.
 
 ## Module source
 

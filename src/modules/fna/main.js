@@ -43,6 +43,11 @@ function preflight(entry, context = {}) {
   if (options.useRuntimeFramework === false && Number(String(info.detectedVersion).split(".")[0]) < 25) throw new Error("This game uses an older SDL 2 FNA backend. Enable the selected FNA framework.");
   return info;
 }
+// Recorded inspection results that the FNA host can run. Other results, such
+// as Windows Forms, a 32-bit CLR or mixed-mode code, stop preflight, so those
+// games use a Windows runtime instead. A record without a result keeps FNA.
+const FNA_COMPATIBILITY = new Set(["managed-fna", "requires-xna-adapter"]);
+const fnaCanRun = entry => !entry?.moduleData?.compatibility || FNA_COMPATIBILITY.has(entry.moduleData.compatibility);
 function runtimeStatus(entry, context) {
   const selected = manager.resolveSelection(entry, context.settings, context.userDataDir);
   try {
@@ -145,7 +150,8 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     return selected.ready ? null : { managerId: manager.id, version: selected.version, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), requiresDownload: requirement?.requiresDownload !== false,
       installOptions: {...selected.installOptions, ...(selected.architecture ? {architecture: selected.architecture} : {})} };
   },
-  canLaunchRuntime: (runtimeId, entry) => runtimeId !== "native" || Boolean(entry.nativeAppPath),
+  filterRuntimeSupport: (entry, supported) => fnaCanRun(entry) ? supported : supported.filter(id => id !== "fna"),
+  canLaunchRuntime: (runtimeId, entry) => runtimeId === "native" ? Boolean(entry.nativeAppPath) : runtimeId !== "fna" || fnaCanRun(entry),
   launchRuntime: async (runtimeId, entry, context) => {
     if (runtimeId === "native") {
       if (!entry.nativeAppPath) throw new Error("This game does not include an author's macOS app.");

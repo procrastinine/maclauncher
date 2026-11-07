@@ -465,3 +465,55 @@ test("FNA downloaded profiles allow additional payload files while retaining the
   fs.appendFileSync(metadata, " "); assert.equal(Profile.verifyRuntime(install).dotnetVersion, DOTNET_VERSION); fs.writeFileSync(metadata, bytes);
   fs.writeFileSync(path.join(payload, "native/lib/libSDL3.0.dylib"), "modified"); assert.equal(Profile.verifyRuntime(install).dotnetVersion, DOTNET_VERSION);
 });
+
+test("FNA offers its route only for recorded inspections that its host can run", () => {
+  const supported = ["fna", "native", "crossover", "sikarugir"];
+  for (const compatibility of ["managed-fna", "requires-xna-adapter", undefined]) {
+    const entry = { moduleData: compatibility ? { compatibility } : {} };
+    assert.deepEqual(Fna.filterRuntimeSupport(entry, supported), supported, String(compatibility));
+    assert.equal(Fna.canLaunchRuntime("fna", entry), true, String(compatibility));
+  }
+  for (const compatibility of ["requires-platform-adapter", "requires-32-bit-host", "mixed-mode-unsupported",
+    "dependency-native-code-unsupported", "dependency-inspection-incomplete", "unsupported-xna-services"]) {
+    const entry = { moduleData: { compatibility } };
+    assert.deepEqual(Fna.filterRuntimeSupport(entry, supported), ["native", "crossover", "sikarugir"], compatibility);
+    assert.equal(Fna.canLaunchRuntime("fna", entry), false, compatibility);
+    assert.equal(Fna.canLaunchRuntime("native", entry), false);
+    assert.equal(Fna.canLaunchRuntime("native", { ...entry, nativeAppPath: "/Games/Game.app" }), true);
+  }
+});
+
+test("XNA Windows games that need Windows APIs default to a Windows runtime and keep their FNA identity", t => {
+  const Modules = require("../src/modules/registry"), { createLauncher } = require("../src/core/launcher");
+  const CrossOver = require("../src/modules/crossover/runtime/manager");
+  const root = fixture(t);
+  // A Windows GUI executable whose managed metadata references XNA 4.
+  const windowsGame = (name, options) => {
+    const folder = path.join(root, name); fs.mkdirSync(folder);
+    const bytes = managedAssembly({ name, framework: ".NETFramework,Version=v4.0,Profile=Client", ...options });
+    bytes.writeUInt16LE(0x102, 150); bytes.writeUInt16LE(2, 220);
+    fs.writeFileSync(path.join(folder, name + ".exe"), bytes);
+    return folder;
+  };
+  const xna = [{ name: "Microsoft.Xna.Framework", version: [4, 0, 0, 0] }];
+  const desktop = windowsGame("Desktop", { references: xna, flags: 3, types: [{ namespace: "System.Windows.Forms", name: "Form" }] });
+  const portable = windowsGame("Portable", { references: xna });
+  const launcher = createLauncher({ userDataDir: path.join(root, "userData"), registry: Modules });
+  const route = folder => {
+    const entry = Modules.detectGame(folder), mod = Modules.getModule(entry.moduleId), info = Modules.getModuleInfo(entry.moduleId);
+    return { entry, runtimeId: launcher.resolveRuntimeForEntry(entry.runtimeId, mod, info, entry, {}, {}), checks: launcher.resolveEntryChecks(entry, {}) };
+  };
+  for (const available of [false, true]) {
+    t.mock.method(CrossOver, "isAvailable", () => available);
+    const { entry, runtimeId, checks } = route(desktop);
+    assert.equal(entry.moduleId, "fna"); assert.equal(entry.moduleData.engineKind, "xna");
+    assert.equal(entry.moduleData.compatibility, "requires-platform-adapter");
+    assert.equal(runtimeId, available ? "crossover" : "sikarugir");
+    assert.equal(checks.runtimeId, runtimeId); assert.equal(checks.launch, true);
+    assert.ok(!checks.runtimeSupport.includes("fna"));
+    const kept = route(portable);
+    assert.equal(kept.entry.moduleData.compatibility, "requires-xna-adapter");
+    assert.equal(kept.runtimeId, "fna"); assert.ok(kept.checks.runtimeSupport.includes("sikarugir"));
+    CrossOver.isAvailable.mock.restore();
+  }
+});
