@@ -127,3 +127,26 @@ test("editor rows show inherited, changed, added and removed values with their s
   const locked = Contract.editorRows(dxvk, { scope: "global", global: { WINEPREFIX: "/stored" } });
   assert.equal(locked.find(row => row.name === "WINEPREFIX").locked.reason, "Bottle path.");
 });
+
+test('KosmicKrisp emulation suggestions match the documented source contract and preserve per-game values', () => {
+  const input = require('../src/modules/shared/vulkan/translator-environment').find(row => row.id === 'kosmickrisp');
+  const kk = Contract.normalizeDeclaration(input);
+  const suggestion = kk.keys.find(row => row.key === 'KK_EMULATION');
+  assert.ok(suggestion, 'The existing editor declaration suggests KK_EMULATION');
+  assert.doesNotMatch(kk.keys.find(row => row.key === 'MESA_KK_DEBUG').description, /\bnir\b/);
+  assert.deepEqual(kk.defaults, {}, 'The suggestion introduces no global default or feature policy');
+  const doc = fs.readFileSync(path.join(__dirname, '../docs/runtimes/TRANSLATOR_ENVIRONMENT.md'), 'utf8');
+  const row = doc.split('\n').find(line => line.startsWith('| `KK_EMULATION` |'));
+  assert.ok(row);assert.match(row, /KOSMICKRISP\.md#performance-and-conformance/);
+  for (const syntax of ['performance','conformance','+name','-name','-VK_extension_name','apple7','apple11','mode=7','mode=11']) {
+    assert.ok(suggestion.description.includes(syntax), syntax);
+    assert.ok(row.includes(syntax), syntax);
+  }
+  const debugRow = doc.split('\n').find(line => line.startsWith('| `MESA_KK_DEBUG` |'));
+  assert.doesNotMatch(debugRow, /\bnir\b/);
+  const value = 'conformance,+float64,-denorm_preserve,-VK_EXT_mesh_shader,apple10,mode=11';
+  const values = Contract.normalizeValues({KK_EMULATION:value}, {declarations:[kk]});
+  assert.deepEqual(Contract.launchValues([kk], ['kosmickrisp'], {
+    global:{kosmickrisp:{KK_EMULATION:'performance'}},game:{kosmickrisp:values}
+  }).values, {KK_EMULATION:value}, 'The generic environment path keeps the user value literal and lets the game override the global value');
+});

@@ -255,7 +255,8 @@ Applies to games whose Vulkan driver is a KosmicKrisp build. Its global values a
 
 | Variable | Effect | Launcher value |
 | --- | --- | --- |
-| `MESA_KK_DEBUG` | Driver debugging flags: nir, msl, force_robustness or force_per_vertex_buffer. |  |
+| `MESA_KK_DEBUG` | Driver debugging flags: msl, force_robustness or force_per_vertex_buffer. |  |
+| `KK_EMULATION` | Comma-separated emulation selection: optional initial `performance` or `conformance`, `+name`/`-name`, `-VK_extension_name` to hide an extension, and `apple7` through `apple11` or `mode=7` through `mode=11` chip presets. See [Performance and conformance](KOSMICKRISP.md#performance-and-conformance). |  |
 | `MESA_KK_EXPERIMENTAL` | Experimental features: custom_border, image_view_min_lod, optimize_e5b9g9r9 or all. The driver's default is custom_border,image_view_min_lod. |  |
 | `MESA_KK_DISABLE_WORKAROUNDS` | Workaround numbers to turn off, separated by commas, or all. |  |
 | `MESA_KK_GPU_CAPTURE` | true records a Metal GPU capture. |  |

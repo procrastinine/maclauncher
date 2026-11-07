@@ -35,7 +35,8 @@ module.exports = [
   { id: "kosmickrisp", label: "KosmicKrisp", managerIds: ["vulkan-kosmickrisp", "maclauncher-kosmickrisp"],
     description: "Applies to games whose Vulkan driver is a KosmicKrisp build.",
     keys: [
-      { key: "MESA_KK_DEBUG", description: "Driver debugging flags: nir, msl, force_robustness or force_per_vertex_buffer." },
+      { key: "MESA_KK_DEBUG", description: "Driver debugging flags: msl, force_robustness or force_per_vertex_buffer." },
+      { key: "KK_EMULATION", description: "Comma-separated emulation selection: optional initial performance or conformance; +name/-name; -VK_extension_name to hide an extension; apple7 through apple11 or mode=7 through mode=11 chip presets." },
       { key: "MESA_KK_EXPERIMENTAL", description: "Experimental features: custom_border, image_view_min_lod, optimize_e5b9g9r9 or all. The driver's default is custom_border,image_view_min_lod." },
       { key: "MESA_KK_DISABLE_WORKAROUNDS", description: "Workaround numbers to turn off, separated by commas, or all." },
       { key: "MESA_KK_GPU_CAPTURE", description: "true records a Metal GPU capture." },
